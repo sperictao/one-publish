@@ -49,4 +49,9 @@ src-tauri/target/
 .claude/cache/
 .claude/*.local
 .ace-tool/
+
+# Codex
+.workflow/
+
+# Other
 scripts/
