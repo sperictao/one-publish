@@ -4,6 +4,10 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import { open } from "@tauri-apps/plugin-dialog";
 import { toast } from "sonner";
 
+// Hooks
+import { useAppState } from "@/hooks/useAppState";
+import type { PublishConfigStore } from "@/lib/store";
+
 // Layout Components
 import { CollapsiblePanel } from "@/components/layout/CollapsiblePanel";
 import { RepositoryList } from "@/components/layout/RepositoryList";
@@ -44,7 +48,7 @@ import {
 } from "lucide-react";
 
 // Types
-import type { Repository, Branch } from "@/types/repository";
+import type { Repository } from "@/types/repository";
 
 interface ProjectInfo {
   root_path: string;
@@ -162,69 +166,58 @@ const PRESETS = [
 ];
 
 function App() {
-  // Layout State
+  // 使用持久化的应用状态
+  const {
+    isLoading: isStateLoading,
+    repositories,
+    selectedRepoId,
+    addRepository,
+    selectRepository,
+    leftPanelWidth,
+    middlePanelWidth,
+    setLeftPanelWidth,
+    setMiddlePanelWidth,
+    selectedPreset,
+    isCustomMode,
+    customConfig,
+    setSelectedPreset,
+    setIsCustomMode,
+    setCustomConfig,
+  } = useAppState();
+
+  // Layout State (local only - collapse state doesn't need persistence)
   const [leftPanelCollapsed, setLeftPanelCollapsed] = useState(false);
   const [middlePanelCollapsed, setMiddlePanelCollapsed] = useState(false);
-
-  // Panel widths (resizable)
-  const [leftPanelWidth, setLeftPanelWidth] = useState(220);
-  const [middlePanelWidth, setMiddlePanelWidth] = useState(280);
 
   // Min/Max constraints
   const MIN_PANEL_WIDTH = 150;
   const MAX_PANEL_WIDTH = 400;
 
   // Resize handlers
-  const handleLeftPanelResize = useCallback((delta: number) => {
-    setLeftPanelWidth((prev) => {
-      const newWidth = prev + delta;
-      return Math.max(MIN_PANEL_WIDTH, Math.min(MAX_PANEL_WIDTH, newWidth));
-    });
-  }, []);
-
-  const handleMiddlePanelResize = useCallback((delta: number) => {
-    setMiddlePanelWidth((prev) => {
-      const newWidth = prev + delta;
-      return Math.max(MIN_PANEL_WIDTH, Math.min(MAX_PANEL_WIDTH, newWidth));
-    });
-  }, []);
-
-  // Repository State
-  const [repositories, setRepositories] = useState<Repository[]>([
-    {
-      id: "1",
-      name: "ApplicationMiddlePla...",
-      path: ".../repos/ApplicationMiddlePlatform/",
-      currentBranch: "main",
-      branches: [
-        { name: "main", isMain: true, isCurrent: true, path: "/repos/ApplicationMiddlePlatform/" },
-        { name: "develop", isMain: false, isCurrent: false, path: "/repos/ApplicationMiddlePlatform/" },
-      ],
+  const handleLeftPanelResize = useCallback(
+    (delta: number) => {
+      const newWidth = Math.max(
+        MIN_PANEL_WIDTH,
+        Math.min(MAX_PANEL_WIDTH, leftPanelWidth + delta)
+      );
+      setLeftPanelWidth(newWidth);
     },
-    {
-      id: "2",
-      name: "OnePublish",
-      path: ".../erictao/source/repos/OnePublish/",
-      currentBranch: "main",
-      branches: [
-        { name: "main", isMain: true, isCurrent: true, path: "/Users/erictao/source/repos/OnePublish", commitCount: 1 },
-      ],
-    },
-  ]);
-  const [selectedRepoId, setSelectedRepoId] = useState<string | null>("2");
+    [leftPanelWidth, setLeftPanelWidth]
+  );
 
-  // Project State
+  const handleMiddlePanelResize = useCallback(
+    (delta: number) => {
+      const newWidth = Math.max(
+        MIN_PANEL_WIDTH,
+        Math.min(MAX_PANEL_WIDTH, middlePanelWidth + delta)
+      );
+      setMiddlePanelWidth(newWidth);
+    },
+    [middlePanelWidth, setMiddlePanelWidth]
+  );
+
+  // Project State (runtime only)
   const [projectInfo, setProjectInfo] = useState<ProjectInfo | null>(null);
-  const [selectedPreset, setSelectedPreset] = useState<string>("release-fd");
-  const [customConfig, setCustomConfig] = useState<PublishConfig>({
-    configuration: "Release",
-    runtime: "",
-    self_contained: false,
-    output_dir: "",
-    use_profile: false,
-    profile_name: "",
-  });
-  const [isCustomMode, setIsCustomMode] = useState(false);
   const [isPublishing, setIsPublishing] = useState(false);
   const [publishResult, setPublishResult] = useState<PublishResult | null>(null);
   const [outputLog, setOutputLog] = useState<string>("");
@@ -235,10 +228,10 @@ function App() {
 
   // Load project info when repo changes
   useEffect(() => {
-    if (selectedRepo) {
-      scanProject(selectedRepo.path.replace("...", "/Users/erictao"));
+    if (selectedRepo && !isStateLoading) {
+      scanProject(selectedRepo.path);
     }
-  }, [selectedRepoId]);
+  }, [selectedRepoId, isStateLoading]);
 
   // Setup window drag functionality for Tauri 2.x
   useEffect(() => {
@@ -302,23 +295,36 @@ function App() {
         name,
         path,
         currentBranch: "main",
-        branches: [
-          { name: "main", isMain: true, isCurrent: true, path },
-        ],
+        branches: [{ name: "main", isMain: true, isCurrent: true, path }],
       };
-      setRepositories((prev) => [...prev, newRepo]);
-      setSelectedRepoId(newRepo.id);
-      toast.success("仓库已添加", { description: name });
+      try {
+        await addRepository(newRepo);
+        toast.success("仓库已添加", { description: name });
+      } catch (err) {
+        toast.error("添加仓库失败", { description: String(err) });
+      }
     }
   };
+
+  // Convert store config to publish config
+  const storeConfigToPublishConfig = (
+    config: PublishConfigStore
+  ): PublishConfig => ({
+    configuration: config.configuration,
+    runtime: config.runtime,
+    self_contained: config.selfContained,
+    output_dir: config.outputDir,
+    use_profile: config.useProfile,
+    profile_name: config.profileName,
+  });
 
   // Get current publish config
   const getCurrentConfig = useCallback((): PublishConfig => {
     if (isCustomMode) {
-      return customConfig;
+      return storeConfigToPublishConfig(customConfig);
     }
     const preset = PRESETS.find((p) => p.id === selectedPreset);
-    if (!preset) return customConfig;
+    if (!preset) return storeConfigToPublishConfig(customConfig);
 
     const outputDir = projectInfo
       ? `${projectInfo.root_path}/publish/${selectedPreset}`
@@ -380,14 +386,24 @@ function App() {
     }
   };
 
-  // Collapse icon component
-  const CollapseIcon = () => (
-    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
-      <rect x="2" y="2" width="12" height="12" rx="2" stroke="currentColor" strokeWidth="1.5" fill="none" />
-      <line x1="6" y1="2" x2="6" y2="14" stroke="currentColor" strokeWidth="1.5" />
-      <path d="M11 6L8 8L11 10" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-  );
+  // Handle custom config updates
+  const handleCustomConfigUpdate = (
+    updates: Partial<PublishConfigStore>
+  ) => {
+    setCustomConfig({ ...customConfig, ...updates });
+  };
+
+  // Show loading state
+  if (isStateLoading) {
+    return (
+      <div className="flex h-screen items-center justify-center bg-background">
+        <div className="flex flex-col items-center gap-4">
+          <Loader2 className="h-8 w-8 animate-spin text-primary" />
+          <span className="text-muted-foreground">加载中...</span>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex h-screen flex-col bg-background">
@@ -402,7 +418,7 @@ function App() {
           <RepositoryList
             repositories={repositories}
             selectedRepoId={selectedRepoId}
-            onSelectRepo={setSelectedRepoId}
+            onSelectRepo={selectRepository}
             onAddRepo={handleAddRepo}
             onSettings={() => toast.info("设置功能开发中")}
             onCollapse={() => setLeftPanelCollapsed(true)}
@@ -487,311 +503,322 @@ function App() {
             <div className="mx-auto max-w-3xl space-y-6">
               {/* Project Info Card */}
               <Card>
-              <CardHeader className="pb-3">
-                <div className="flex items-center justify-between">
-                  <div>
+                <CardHeader className="pb-3">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <CardTitle className="text-lg flex items-center gap-2">
+                        <Folder className="h-5 w-5" />
+                        项目信息
+                      </CardTitle>
+                      <CardDescription>
+                        {selectedRepo ? selectedRepo.name : "未选择仓库"}
+                      </CardDescription>
+                    </div>
+                    <div className="flex gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() =>
+                          selectedRepo && scanProject(selectedRepo.path)
+                        }
+                        disabled={isScanning || !selectedRepo}
+                      >
+                        {isScanning ? (
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                        ) : (
+                          <RefreshCw className="h-4 w-4" />
+                        )}
+                        <span className="ml-1">刷新</span>
+                      </Button>
+                    </div>
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  {projectInfo ? (
+                    <div className="space-y-2 text-sm">
+                      <div className="flex items-center gap-2">
+                        <CheckCircle2 className="h-4 w-4 text-green-500" />
+                        <span className="text-muted-foreground">
+                          项目根目录:
+                        </span>
+                        <code className="bg-muted px-2 py-0.5 rounded text-xs">
+                          {projectInfo.root_path}
+                        </code>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <CheckCircle2 className="h-4 w-4 text-green-500" />
+                        <span className="text-muted-foreground">项目文件:</span>
+                        <code className="bg-muted px-2 py-0.5 rounded text-xs">
+                          {projectInfo.project_file}
+                        </code>
+                      </div>
+                      {projectInfo.publish_profiles.length > 0 && (
+                        <div className="flex items-start gap-2">
+                          <CheckCircle2 className="h-4 w-4 text-green-500 mt-0.5" />
+                          <span className="text-muted-foreground">
+                            发布配置:
+                          </span>
+                          <div className="flex flex-wrap gap-1">
+                            {projectInfo.publish_profiles.map((profile) => (
+                              <span
+                                key={profile}
+                                className="bg-primary/10 text-primary px-2 py-0.5 rounded text-xs"
+                              >
+                                {profile}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-2 text-muted-foreground">
+                      <XCircle className="h-4 w-4 text-destructive" />
+                      <span>
+                        {selectedRepo
+                          ? "当前仓库不是 .NET 项目"
+                          : "请从左侧选择一个仓库"}
+                      </span>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+
+              {/* Publish Configuration Card */}
+              {projectInfo && (
+                <Card>
+                  <CardHeader className="pb-3">
                     <CardTitle className="text-lg flex items-center gap-2">
-                      <Folder className="h-5 w-5" />
-                      项目信息
+                      <Settings className="h-5 w-5" />
+                      发布配置
                     </CardTitle>
                     <CardDescription>
-                      {selectedRepo ? selectedRepo.name : "未选择仓库"}
+                      选择预设配置或自定义发布参数
                     </CardDescription>
-                  </div>
-                  <div className="flex gap-2">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => selectedRepo && scanProject(selectedRepo.path.replace("...", "/Users/erictao"))}
-                      disabled={isScanning || !selectedRepo}
-                    >
-                      {isScanning ? (
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                      ) : (
-                        <RefreshCw className="h-4 w-4" />
-                      )}
-                      <span className="ml-1">刷新</span>
-                    </Button>
-                  </div>
-                </div>
-              </CardHeader>
-              <CardContent>
-                {projectInfo ? (
-                  <div className="space-y-2 text-sm">
-                    <div className="flex items-center gap-2">
-                      <CheckCircle2 className="h-4 w-4 text-green-500" />
-                      <span className="text-muted-foreground">项目根目录:</span>
-                      <code className="bg-muted px-2 py-0.5 rounded text-xs">
-                        {projectInfo.root_path}
-                      </code>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    {/* Mode Toggle */}
+                    <div className="flex items-center justify-between">
+                      <Label htmlFor="custom-mode">自定义模式</Label>
+                      <Switch
+                        id="custom-mode"
+                        checked={isCustomMode}
+                        onCheckedChange={setIsCustomMode}
+                      />
                     </div>
-                    <div className="flex items-center gap-2">
-                      <CheckCircle2 className="h-4 w-4 text-green-500" />
-                      <span className="text-muted-foreground">项目文件:</span>
-                      <code className="bg-muted px-2 py-0.5 rounded text-xs">
-                        {projectInfo.project_file}
-                      </code>
-                    </div>
-                    {projectInfo.publish_profiles.length > 0 && (
-                      <div className="flex items-start gap-2">
-                        <CheckCircle2 className="h-4 w-4 text-green-500 mt-0.5" />
-                        <span className="text-muted-foreground">发布配置:</span>
-                        <div className="flex flex-wrap gap-1">
-                          {projectInfo.publish_profiles.map((profile) => (
-                            <span
-                              key={profile}
-                              className="bg-primary/10 text-primary px-2 py-0.5 rounded text-xs"
-                            >
-                              {profile}
-                            </span>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                ) : (
-                  <div className="flex items-center gap-2 text-muted-foreground">
-                    <XCircle className="h-4 w-4 text-destructive" />
-                    <span>
-                      {selectedRepo
-                        ? "当前仓库不是 .NET 项目"
-                        : "请从左侧选择一个仓库"}
-                    </span>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
 
-            {/* Publish Configuration Card */}
-            {projectInfo && (
-              <Card>
-                <CardHeader className="pb-3">
-                  <CardTitle className="text-lg flex items-center gap-2">
-                    <Settings className="h-5 w-5" />
-                    发布配置
-                  </CardTitle>
-                  <CardDescription>选择预设配置或自定义发布参数</CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  {/* Mode Toggle */}
-                  <div className="flex items-center justify-between">
-                    <Label htmlFor="custom-mode">自定义模式</Label>
-                    <Switch
-                      id="custom-mode"
-                      checked={isCustomMode}
-                      onCheckedChange={setIsCustomMode}
-                    />
-                  </div>
-
-                  {!isCustomMode ? (
-                    /* Preset Selection */
-                    <div className="space-y-2">
-                      <Label>选择预设配置</Label>
-                      <Select
-                        value={selectedPreset}
-                        onValueChange={setSelectedPreset}
-                      >
-                        <SelectTrigger>
-                          <SelectValue placeholder="选择发布配置" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectGroup>
-                            <SelectLabel>Release 配置</SelectLabel>
-                            {PRESETS.filter((p) => p.id.startsWith("release")).map(
-                              (preset) => (
-                                <SelectItem key={preset.id} value={preset.id}>
-                                  <div className="flex flex-col">
-                                    <span>{preset.name}</span>
-                                    <span className="text-xs text-muted-foreground">
-                                      {preset.description}
-                                    </span>
-                                  </div>
-                                </SelectItem>
-                              )
-                            )}
-                          </SelectGroup>
-                          <SelectGroup>
-                            <SelectLabel>Debug 配置</SelectLabel>
-                            {PRESETS.filter((p) => p.id.startsWith("debug")).map(
-                              (preset) => (
-                                <SelectItem key={preset.id} value={preset.id}>
-                                  <div className="flex flex-col">
-                                    <span>{preset.name}</span>
-                                    <span className="text-xs text-muted-foreground">
-                                      {preset.description}
-                                    </span>
-                                  </div>
-                                </SelectItem>
-                              )
-                            )}
-                          </SelectGroup>
-                          {projectInfo.publish_profiles.length > 0 && (
+                    {!isCustomMode ? (
+                      /* Preset Selection */
+                      <div className="space-y-2">
+                        <Label>选择预设配置</Label>
+                        <Select
+                          value={selectedPreset}
+                          onValueChange={setSelectedPreset}
+                        >
+                          <SelectTrigger>
+                            <SelectValue placeholder="选择发布配置" />
+                          </SelectTrigger>
+                          <SelectContent>
                             <SelectGroup>
-                              <SelectLabel>项目发布配置</SelectLabel>
-                              {projectInfo.publish_profiles.map((profile) => (
-                                <SelectItem
-                                  key={`profile-${profile}`}
-                                  value={`profile-${profile}`}
-                                >
-                                  {profile}
+                              <SelectLabel>Release 配置</SelectLabel>
+                              {PRESETS.filter((p) =>
+                                p.id.startsWith("release")
+                              ).map((preset) => (
+                                <SelectItem key={preset.id} value={preset.id}>
+                                  <div className="flex flex-col">
+                                    <span>{preset.name}</span>
+                                    <span className="text-xs text-muted-foreground">
+                                      {preset.description}
+                                    </span>
+                                  </div>
                                 </SelectItem>
                               ))}
                             </SelectGroup>
-                          )}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  ) : (
-                    /* Custom Configuration */
-                    <div className="grid grid-cols-2 gap-4">
-                      <div className="space-y-2">
-                        <Label htmlFor="configuration">配置类型</Label>
-                        <Select
-                          value={customConfig.configuration}
-                          onValueChange={(v) =>
-                            setCustomConfig((prev) => ({ ...prev, configuration: v }))
-                          }
-                        >
-                          <SelectTrigger id="configuration">
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="Release">Release</SelectItem>
-                            <SelectItem value="Debug">Debug</SelectItem>
+                            <SelectGroup>
+                              <SelectLabel>Debug 配置</SelectLabel>
+                              {PRESETS.filter((p) =>
+                                p.id.startsWith("debug")
+                              ).map((preset) => (
+                                <SelectItem key={preset.id} value={preset.id}>
+                                  <div className="flex flex-col">
+                                    <span>{preset.name}</span>
+                                    <span className="text-xs text-muted-foreground">
+                                      {preset.description}
+                                    </span>
+                                  </div>
+                                </SelectItem>
+                              ))}
+                            </SelectGroup>
+                            {projectInfo.publish_profiles.length > 0 && (
+                              <SelectGroup>
+                                <SelectLabel>项目发布配置</SelectLabel>
+                                {projectInfo.publish_profiles.map((profile) => (
+                                  <SelectItem
+                                    key={`profile-${profile}`}
+                                    value={`profile-${profile}`}
+                                  >
+                                    {profile}
+                                  </SelectItem>
+                                ))}
+                              </SelectGroup>
+                            )}
                           </SelectContent>
                         </Select>
                       </div>
-
-                      <div className="space-y-2">
-                        <Label htmlFor="runtime">运行时</Label>
-                        <Select
-                          value={customConfig.runtime || "none"}
-                          onValueChange={(v) =>
-                            setCustomConfig((prev) => ({
-                              ...prev,
-                              runtime: v === "none" ? "" : v,
-                            }))
-                          }
-                        >
-                          <SelectTrigger id="runtime">
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="none">框架依赖</SelectItem>
-                            <SelectItem value="win-x64">Windows x64</SelectItem>
-                            <SelectItem value="osx-arm64">macOS ARM64</SelectItem>
-                            <SelectItem value="osx-x64">macOS x64</SelectItem>
-                            <SelectItem value="linux-x64">Linux x64</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </div>
-
-                      <div className="col-span-2 space-y-2">
-                        <Label htmlFor="output-dir">输出目录</Label>
-                        <Input
-                          id="output-dir"
-                          value={customConfig.output_dir}
-                          onChange={(e) =>
-                            setCustomConfig((prev) => ({
-                              ...prev,
-                              output_dir: e.target.value,
-                            }))
-                          }
-                          placeholder="留空使用默认目录"
-                        />
-                      </div>
-
-                      <div className="col-span-2 flex items-center gap-2">
-                        <Switch
-                          id="self-contained"
-                          checked={customConfig.self_contained}
-                          onCheckedChange={(checked) =>
-                            setCustomConfig((prev) => ({
-                              ...prev,
-                              self_contained: checked,
-                            }))
-                          }
-                          disabled={!customConfig.runtime}
-                        />
-                        <Label htmlFor="self-contained">自包含部署</Label>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Current Config Preview */}
-                  <div className="mt-4 p-3 bg-muted rounded-lg">
-                    <div className="text-xs text-muted-foreground mb-2">
-                      将执行的命令:
-                    </div>
-                    <code className="text-xs font-mono break-all">
-                      dotnet publish "{projectInfo.project_file}" -c{" "}
-                      {getCurrentConfig().configuration}
-                      {getCurrentConfig().runtime &&
-                        ` --runtime ${getCurrentConfig().runtime}`}
-                      {getCurrentConfig().self_contained && " --self-contained"}
-                      {getCurrentConfig().output_dir &&
-                        ` -o "${getCurrentConfig().output_dir}"`}
-                    </code>
-                  </div>
-
-                  {/* Publish Button */}
-                  <Button
-                    className="w-full"
-                    size="lg"
-                    onClick={executePublish}
-                    disabled={!projectInfo || isPublishing}
-                  >
-                    {isPublishing ? (
-                      <>
-                        <Loader2 className="h-5 w-5 mr-2 animate-spin" />
-                        发布中...
-                      </>
                     ) : (
-                      <>
-                        <Play className="h-5 w-5 mr-2" />
-                        执行发布
-                      </>
-                    )}
-                  </Button>
-                </CardContent>
-              </Card>
-            )}
+                      /* Custom Configuration */
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="space-y-2">
+                          <Label htmlFor="configuration">配置类型</Label>
+                          <Select
+                            value={customConfig.configuration}
+                            onValueChange={(v) =>
+                              handleCustomConfigUpdate({ configuration: v })
+                            }
+                          >
+                            <SelectTrigger id="configuration">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="Release">Release</SelectItem>
+                              <SelectItem value="Debug">Debug</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
 
-            {/* Output Log Card */}
-            {(outputLog || publishResult) && (
-              <Card>
-                <CardHeader className="pb-3">
-                  <CardTitle className="text-lg flex items-center gap-2">
-                    <Terminal className="h-5 w-5" />
-                    输出日志
-                    {publishResult && (
-                      <span
-                        className={`ml-2 text-sm font-normal ${
-                          publishResult.success
-                            ? "text-green-500"
-                            : "text-destructive"
-                        }`}
-                      >
-                        {publishResult.success ? "成功" : "失败"}
-                      </span>
+                        <div className="space-y-2">
+                          <Label htmlFor="runtime">运行时</Label>
+                          <Select
+                            value={customConfig.runtime || "none"}
+                            onValueChange={(v) =>
+                              handleCustomConfigUpdate({
+                                runtime: v === "none" ? "" : v,
+                              })
+                            }
+                          >
+                            <SelectTrigger id="runtime">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="none">框架依赖</SelectItem>
+                              <SelectItem value="win-x64">
+                                Windows x64
+                              </SelectItem>
+                              <SelectItem value="osx-arm64">
+                                macOS ARM64
+                              </SelectItem>
+                              <SelectItem value="osx-x64">macOS x64</SelectItem>
+                              <SelectItem value="linux-x64">
+                                Linux x64
+                              </SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+
+                        <div className="col-span-2 space-y-2">
+                          <Label htmlFor="output-dir">输出目录</Label>
+                          <Input
+                            id="output-dir"
+                            value={customConfig.outputDir}
+                            onChange={(e) =>
+                              handleCustomConfigUpdate({
+                                outputDir: e.target.value,
+                              })
+                            }
+                            placeholder="留空使用默认目录"
+                          />
+                        </div>
+
+                        <div className="col-span-2 flex items-center gap-2">
+                          <Switch
+                            id="self-contained"
+                            checked={customConfig.selfContained}
+                            onCheckedChange={(checked) =>
+                              handleCustomConfigUpdate({
+                                selfContained: checked,
+                              })
+                            }
+                            disabled={!customConfig.runtime}
+                          />
+                          <Label htmlFor="self-contained">自包含部署</Label>
+                        </div>
+                      </div>
                     )}
-                  </CardTitle>
-                  {publishResult?.success && (
-                    <CardDescription>
-                      输出目录: {publishResult.output_dir} ({publishResult.file_count}{" "}
-                      个文件)
-                    </CardDescription>
-                  )}
-                </CardHeader>
-                <CardContent>
-                  <div className="bg-gray-950 text-gray-100 p-4 rounded-lg font-mono text-xs max-h-80 overflow-auto">
-                    <pre className="whitespace-pre-wrap">
-                      {outputLog || publishResult?.error || "无输出"}
-                    </pre>
-                  </div>
-                </CardContent>
-              </Card>
-            )}
+
+                    {/* Current Config Preview */}
+                    <div className="mt-4 p-3 bg-muted rounded-lg">
+                      <div className="text-xs text-muted-foreground mb-2">
+                        将执行的命令:
+                      </div>
+                      <code className="text-xs font-mono break-all">
+                        dotnet publish "{projectInfo.project_file}" -c{" "}
+                        {getCurrentConfig().configuration}
+                        {getCurrentConfig().runtime &&
+                          ` --runtime ${getCurrentConfig().runtime}`}
+                        {getCurrentConfig().self_contained && " --self-contained"}
+                        {getCurrentConfig().output_dir &&
+                          ` -o "${getCurrentConfig().output_dir}"`}
+                      </code>
+                    </div>
+
+                    {/* Publish Button */}
+                    <Button
+                      className="w-full"
+                      size="lg"
+                      onClick={executePublish}
+                      disabled={!projectInfo || isPublishing}
+                    >
+                      {isPublishing ? (
+                        <>
+                          <Loader2 className="h-5 w-5 mr-2 animate-spin" />
+                          发布中...
+                        </>
+                      ) : (
+                        <>
+                          <Play className="h-5 w-5 mr-2" />
+                          执行发布
+                        </>
+                      )}
+                    </Button>
+                  </CardContent>
+                </Card>
+              )}
+
+              {/* Output Log Card */}
+              {(outputLog || publishResult) && (
+                <Card>
+                  <CardHeader className="pb-3">
+                    <CardTitle className="text-lg flex items-center gap-2">
+                      <Terminal className="h-5 w-5" />
+                      输出日志
+                      {publishResult && (
+                        <span
+                          className={`ml-2 text-sm font-normal ${
+                            publishResult.success
+                              ? "text-green-500"
+                              : "text-destructive"
+                          }`}
+                        >
+                          {publishResult.success ? "成功" : "失败"}
+                        </span>
+                      )}
+                    </CardTitle>
+                    {publishResult?.success && (
+                      <CardDescription>
+                        输出目录: {publishResult.output_dir} (
+                        {publishResult.file_count} 个文件)
+                      </CardDescription>
+                    )}
+                  </CardHeader>
+                  <CardContent>
+                    <div className="bg-gray-950 text-gray-100 p-4 rounded-lg font-mono text-xs max-h-80 overflow-auto">
+                      <pre className="whitespace-pre-wrap">
+                        {outputLog || publishResult?.error || "无输出"}
+                      </pre>
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
             </div>
           </div>
         </div>

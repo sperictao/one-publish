@@ -1,6 +1,7 @@
 // Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
 
 pub mod commands;
+pub mod store;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -12,7 +13,14 @@ pub fn run() {
         .plugin(tauri_plugin_shell::init())
         .invoke_handler(tauri::generate_handler![
             commands::scan_project,
-            commands::execute_publish
+            commands::execute_publish,
+            store::get_app_state,
+            store::save_app_state,
+            store::add_repository,
+            store::remove_repository,
+            store::update_repository,
+            store::update_ui_state,
+            store::update_publish_state
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

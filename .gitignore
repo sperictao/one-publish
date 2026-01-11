@@ -48,3 +48,5 @@ src-tauri/target/
 .claude/logs/
 .claude/cache/
 .claude/*.local
+.ace-tool/
+scripts/

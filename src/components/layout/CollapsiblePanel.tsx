@@ -12,7 +12,7 @@ interface CollapsiblePanelProps {
 export function CollapsiblePanel({
   children,
   collapsed,
-  side,
+  side: _side,
   width = "240px",
   className,
 }: CollapsiblePanelProps) {
