@@ -82,6 +82,20 @@ pub struct AppState {
     /// 自定义配置
     #[serde(default)]
     pub custom_config: PublishConfigStore,
+    /// 是否最小化到托盘
+    #[serde(default = "default_minimize_to_tray")]
+    pub minimize_to_tray_on_close: bool,
+    /// UI 语言
+    #[serde(default = "default_language")]
+    pub language: String,
+}
+
+fn default_minimize_to_tray() -> bool {
+    true
+}
+
+fn default_language() -> String {
+    "zh".to_string()
 }
 
 fn default_left_panel_width() -> i32 {
@@ -106,6 +120,8 @@ impl Default for AppState {
             selected_preset: default_preset(),
             is_custom_mode: false,
             custom_config: PublishConfigStore::default(),
+            minimize_to_tray_on_close: default_minimize_to_tray(),
+            language: default_language(),
         }
     }
 }
@@ -274,4 +290,33 @@ pub async fn update_publish_state(
     }
 
     update_state(state)
+}
+
+/// 更新偏好设置（语言、托盘行为等）
+#[tauri::command]
+pub async fn update_preferences(
+    app: tauri::AppHandle,
+    language: Option<String>,
+    minimize_to_tray_on_close: Option<bool>,
+) -> Result<AppState, String> {
+    let mut state = get_state();
+
+    if let Some(lang) = language {
+        state.language = lang;
+    }
+
+    if let Some(minimize) = minimize_to_tray_on_close {
+        state.minimize_to_tray_on_close = minimize;
+    }
+
+    update_state(state.clone())?;
+
+    // 语言变化需要刷新托盘菜单以便实时更新文案
+    if language.is_some() {
+        if let Err(err) = crate::tray::update_tray_menu(app.clone()).await {
+            log::warn!("刷新托盘菜单失败: {}", err);
+        }
+    }
+
+    Ok(state)
 }
