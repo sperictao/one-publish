@@ -300,6 +300,7 @@ pub async fn update_preferences(
     minimize_to_tray_on_close: Option<bool>,
 ) -> Result<AppState, String> {
     let mut state = get_state();
+    let language_changed = language.is_some();
 
     if let Some(lang) = language {
         state.language = lang;
@@ -312,7 +313,7 @@ pub async fn update_preferences(
     update_state(state.clone())?;
 
     // 语言变化需要刷新托盘菜单以便实时更新文案
-    if language.is_some() {
+    if language_changed {
         if let Err(err) = crate::tray::update_tray_menu(app.clone()).await {
             log::warn!("刷新托盘菜单失败: {}", err);
         }
