@@ -8,6 +8,7 @@ import {
   updatePublishState,
   addRepository as apiAddRepository,
   removeRepository as apiRemoveRepository,
+  updatePreferences,
   type AppState,
   type PublishConfigStore,
   defaultAppState,
@@ -25,6 +26,9 @@ export function useAppState() {
   // 用于防抖的 timer refs
   const uiDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const publishDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const preferenceDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(
+    null
+  );
 
   // 初始化加载状态
   useEffect(() => {
@@ -47,6 +51,8 @@ export function useAppState() {
     return () => {
       if (uiDebounceRef.current) clearTimeout(uiDebounceRef.current);
       if (publishDebounceRef.current) clearTimeout(publishDebounceRef.current);
+      if (preferenceDebounceRef.current)
+        clearTimeout(preferenceDebounceRef.current);
     };
   }, []);
 
@@ -77,6 +83,27 @@ export function useAppState() {
       }
       uiDebounceRef.current = setTimeout(() => {
         updateUIState(params).catch(console.error);
+      }, DEBOUNCE_DELAY);
+    },
+    []
+  );
+
+  // 更新通用偏好（语言、托盘行为）
+  const setPreferences = useCallback(
+    (params: { language?: string; minimizeToTrayOnClose?: boolean }) => {
+      setState((prev) => ({
+        ...prev,
+        ...(params.language !== undefined && { language: params.language }),
+        ...(params.minimizeToTrayOnClose !== undefined && {
+          minimizeToTrayOnClose: params.minimizeToTrayOnClose,
+        }),
+      }));
+
+      if (preferenceDebounceRef.current) {
+        clearTimeout(preferenceDebounceRef.current);
+      }
+      preferenceDebounceRef.current = setTimeout(() => {
+        updatePreferences(params).catch(console.error);
       }, DEBOUNCE_DELAY);
     },
     []
@@ -185,6 +212,22 @@ export function useAppState() {
     [setPublishState]
   );
 
+  // 更新语言
+  const setLanguage = useCallback(
+    (language: string) => {
+      setPreferences({ language });
+    },
+    [setPreferences]
+  );
+
+  // 更新最小化到托盘
+  const setMinimizeToTrayOnClose = useCallback(
+    (value: boolean) => {
+      setPreferences({ minimizeToTrayOnClose: value });
+    },
+    [setPreferences]
+  );
+
   return {
     // 状态
     state,
@@ -211,5 +254,11 @@ export function useAppState() {
     setSelectedPreset,
     setIsCustomMode,
     setCustomConfig,
+
+    // 偏好设置
+    language: state.language,
+    minimizeToTrayOnClose: state.minimizeToTrayOnClose,
+    setLanguage,
+    setMinimizeToTrayOnClose,
   };
 }

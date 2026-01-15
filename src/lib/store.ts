@@ -22,6 +22,8 @@ export interface AppState {
   selectedPreset: string;
   isCustomMode: boolean;
   customConfig: PublishConfigStore;
+  minimizeToTrayOnClose: boolean;
+  language: string;
 }
 
 // 默认状态
@@ -40,6 +42,8 @@ export const defaultAppState: AppState = {
     useProfile: false,
     profileName: "",
   },
+  minimizeToTrayOnClose: true,
+  language: "zh",
 };
 
 /**
@@ -102,4 +106,14 @@ export async function updatePublishState(params: {
   customConfig?: PublishConfigStore;
 }): Promise<void> {
   await invoke("update_publish_state", params);
+}
+
+/**
+ * 更新通用偏好（语言、托盘行为）
+ */
+export async function updatePreferences(params: {
+  language?: string;
+  minimizeToTrayOnClose?: boolean;
+}): Promise<AppState> {
+  return await invoke<AppState>("update_preferences", params);
 }
