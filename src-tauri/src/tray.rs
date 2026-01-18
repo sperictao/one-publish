@@ -151,6 +151,14 @@ pub fn init_tray(app: &AppHandle) -> Result<(), tauri::Error> {
         }
     }
 
+    // Windows 使用彩色图标
+    #[cfg(target_os = "windows")]
+    {
+        if let Some(icon) = windows_tray_icon() {
+            tray_builder = tray_builder.icon(icon);
+        }
+    }
+
     // 构建托盘图标
     tray_builder.build(app)?;
 
@@ -167,6 +175,20 @@ fn macos_tray_icon() -> Option<Image<'static>> {
         Ok(icon) => Some(icon),
         Err(err) => {
             log::warn!("加载 macOS 托盘图标失败: {}", err);
+            None
+        }
+    }
+}
+
+/// Windows 平台加载彩色图标
+#[cfg(target_os = "windows")]
+fn windows_tray_icon() -> Option<Image<'static>> {
+    const ICON_BYTES: &[u8] = include_bytes!("../icons/tray/windows/tray_icon.png");
+
+    match Image::from_bytes(ICON_BYTES) {
+        Ok(icon) => Some(icon),
+        Err(err) => {
+            log::warn!("加载 Windows 托盘图标失败: {}", err);
             None
         }
     }
