@@ -13,6 +13,7 @@ import { CollapsiblePanel } from "@/components/layout/CollapsiblePanel";
 import { RepositoryList } from "@/components/layout/RepositoryList";
 import { BranchPanel } from "@/components/layout/BranchPanel";
 import { ResizeHandle } from "@/components/layout/ResizeHandle";
+import { SettingsDialog } from "@/components/layout/SettingsDialog";
 
 // UI Components
 import { Button } from "@/components/ui/button";
@@ -45,8 +46,6 @@ import {
   Loader2,
   RefreshCw,
   GitBranch,
-  Languages,
-  Minimize2,
 } from "lucide-react";
 
 // Types
@@ -194,6 +193,7 @@ function App() {
   // Layout State (local only - collapse state doesn't need persistence)
   const [leftPanelCollapsed, setLeftPanelCollapsed] = useState(false);
   const [middlePanelCollapsed, setMiddlePanelCollapsed] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
 
   // Min/Max constraints
   const MIN_PANEL_WIDTH = 150;
@@ -229,12 +229,9 @@ function App() {
   const [outputLog, setOutputLog] = useState<string>("");
   const [isScanning, setIsScanning] = useState(false);
 
-  // Scroll to settings card from side menu
+  // Open settings dialog
   const handleOpenSettings = useCallback(() => {
-    document.getElementById("app-settings")?.scrollIntoView({
-      behavior: "smooth",
-      block: "start",
-    });
+    setSettingsOpen(true);
   }, []);
 
   // Get selected repository
@@ -515,53 +512,6 @@ function App() {
           {/* Content area */}
           <div className="flex-1 overflow-auto p-6">
             <div className="mx-auto max-w-3xl space-y-6">
-              {/* Application Settings */}
-              <Card id="app-settings">
-                <CardHeader className="pb-3">
-                  <CardTitle className="text-lg flex items-center gap-2">
-                    <Languages className="h-5 w-5" />
-                    应用设置
-                  </CardTitle>
-                  <CardDescription>配置语言与托盘行为</CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <div className="space-y-2">
-                    <Label>界面语言</Label>
-                    <Select value={language} onValueChange={setLanguage}>
-                      <SelectTrigger>
-                        <SelectValue placeholder="选择语言" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="zh">简体中文</SelectItem>
-                        <SelectItem value="en">English</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-
-                  <div className="flex items-center justify-between">
-                    <div className="space-y-1">
-                      <div className="flex items-center gap-2">
-                        <Minimize2 className="h-4 w-4 text-muted-foreground" />
-                        <Label
-                          className="cursor-pointer"
-                          htmlFor="minimize-to-tray"
-                        >
-                          关闭窗口时最小化到托盘
-                        </Label>
-                      </div>
-                      <p className="text-xs text-muted-foreground">
-                        启用后点击关闭按钮会隐藏窗口，继续驻留托盘。
-                      </p>
-                    </div>
-                    <Switch
-                      id="minimize-to-tray"
-                      checked={minimizeToTrayOnClose}
-                      onCheckedChange={setMinimizeToTrayOnClose}
-                    />
-                  </div>
-                </CardContent>
-              </Card>
-
               {/* Project Info Card */}
               <Card>
                 <CardHeader className="pb-3">
@@ -884,6 +834,16 @@ function App() {
           </div>
         </div>
       </div>
+
+      {/* Settings Dialog */}
+      <SettingsDialog
+        open={settingsOpen}
+        onOpenChange={setSettingsOpen}
+        language={language}
+        onLanguageChange={setLanguage}
+        minimizeToTrayOnClose={minimizeToTrayOnClose}
+        onMinimizeToTrayOnCloseChange={setMinimizeToTrayOnClose}
+      />
     </div>
   );
 }
