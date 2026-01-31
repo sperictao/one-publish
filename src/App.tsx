@@ -199,6 +199,26 @@ function App() {
   // 应用主题
   useTheme(theme);
 
+  // 快捷键处理（待实现事件监听）
+  // useShortcuts({
+  //   onRefresh: () => {
+  //     // 刷新项目
+  //     if (selectedRepo && !isStateLoading) {
+  //       scanProject(selectedRepo.path);
+  //     }
+  //   },
+  //   onPublish: () => {
+  //     // 执行发布
+  //     if (!isPublishing && projectInfo) {
+  //       executePublish();
+  //     }
+  //   },
+  //   onOpenSettings: () => {
+  //     // 打开设置
+  //     setSettingsOpen(true);
+  //   },
+  // });
+
   // Layout State (local only - collapse state doesn't need persistence)
   const [leftPanelCollapsed, setLeftPanelCollapsed] = useState(false);
   const [middlePanelCollapsed, setMiddlePanelCollapsed] = useState(false);

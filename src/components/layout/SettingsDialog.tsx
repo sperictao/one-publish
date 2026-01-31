@@ -32,6 +32,7 @@ import {
 import { useState } from "react";
 import { checkUpdate, installUpdate } from "@/lib/store";
 import type { UpdateInfo } from "@/lib/store";
+import { open } from "@tauri-apps/plugin-dialog";
 
 interface SettingsDialogProps {
   open: boolean;
@@ -83,6 +84,21 @@ export function SettingsDialog({
     } catch (err) {
       console.error("安装更新失败:", err);
       setIsInstallingUpdate(false);
+    }
+  };
+
+  const handleSelectDirectory = async () => {
+    try {
+      const selected = await open({
+        directory: true,
+        multiple: false,
+        title: "选择默认发布目录",
+      });
+      if (selected) {
+        onDefaultOutputDirChange(selected as string);
+      }
+    } catch (err) {
+      console.error("选择目录失败:", err);
     }
   };
 
@@ -219,6 +235,14 @@ export function SettingsDialog({
                 onChange={(e) => onDefaultOutputDirChange(e.target.value)}
                 placeholder="留空使用项目默认目录"
               />
+              <Button
+                variant="outline"
+                size="icon"
+                onClick={handleSelectDirectory}
+                title="选择目录"
+              >
+                <FolderOpen className="h-4 w-4" />
+              </Button>
             </div>
             <p className="text-xs text-muted-foreground">
               支持相对路径（如 ./publish）或绝对路径

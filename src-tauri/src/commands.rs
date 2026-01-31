@@ -282,9 +282,8 @@ pub struct UpdateInfo {
 /// 检查更新
 #[tauri::command]
 pub async fn check_update(_app: AppHandle) -> Result<UpdateInfo, String> {
-    // TODO: 实现更新检查功能
-    // 当前 Tauri 2.x 的 updater API 可能需要进一步研究
-    // 先返回一个 mock 结果
+    // TODO: 实现 Tauri 2.x updater API 集成
+    // 当前返回 mock 数据
     Ok(UpdateInfo {
         current_version: env!("CARGO_PKG_VERSION").to_string(),
         available_version: None,
@@ -296,8 +295,7 @@ pub async fn check_update(_app: AppHandle) -> Result<UpdateInfo, String> {
 /// 执行更新并重启
 #[tauri::command]
 pub async fn install_update(_app: AppHandle) -> Result<String, String> {
-    // TODO: 实现更新安装功能
-    Err("更新功能暂未实现".to_string())
+    Err("更新功能暂未实现，需要配置更新服务器".to_string())
 }
 
 /// 获取当前版本
