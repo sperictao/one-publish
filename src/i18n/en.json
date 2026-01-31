@@ -1,0 +1,91 @@
+{
+  "settings": {
+    "title": "Settings",
+    "description": "Configure language, appearance, output directory and other preferences"
+  },
+  "version": {
+    "title": "Version Info",
+    "current": "Current Version: v{}",
+    "new": "New version available: v{}",
+    "none": "No updates available",
+    "check": "Check Update",
+    "update": "Update",
+    "notes": "Release Notes",
+    "clickToCheck": "Click to check for latest version info"
+  },
+  "language": {
+    "label": "Interface Language",
+    "placeholder": "Select language",
+    "chinese": "Simplified Chinese",
+    "english": "English"
+  },
+  "theme": {
+    "label": "Appearance Theme",
+    "placeholder": "Select theme",
+    "auto": "Follow System",
+    "light": "Light",
+    "dark": "Dark"
+  },
+  "outputDir": {
+    "label": "Default Output Directory",
+    "placeholder": "Leave empty to use project default directory",
+    "support": "Supports relative paths (like ./publish) or absolute paths"
+  },
+  "tray": {
+    "label": "Minimize to tray when closing window",
+    "description": "When enabled, clicking close button will hide the window and keep it in tray."
+  },
+  "shortcuts": {
+    "title": "Keyboard Shortcuts",
+    "description": "Available global shortcuts",
+    "button": "View Shortcuts",
+    "refresh": "Refresh Project",
+    "publish": "Execute Publish",
+    "settings": "Open Settings"
+  },
+  "project": {
+    "title": "Project Info",
+    "description": "{{name}}",
+    "root": "Project root: {{path}}",
+    "file": "Project file: {{path}}",
+    "profiles": "Publish Profiles:",
+    "not": "Current repo is not a .NET project",
+    "notSelected": "Please select a repo from the left"
+  },
+  "config": {
+    "title": "Publish Configuration",
+    "description": "Select preset or customize publish parameters",
+    "customMode": "Custom Mode",
+    "presets": "Select preset configuration",
+    "refresh": "Refresh",
+    "execute": "Execute Publish",
+    "publishing": "Publishing...",
+    "releaseFd": "Release - Framework Dependent",
+    "releaseFdDesc": "Recommended for dev/testing",
+    "releaseWin": "Release - Windows x64",
+    "releaseWinDesc": "Self-contained deployment",
+    "releaseOsxA": "Release - macOS ARM64",
+    "releaseOsxADesc": "Apple Silicon",
+    "releaseOsxX": "Release - macOS x64",
+    "releaseOsxXDesc": "Intel Mac",
+    "releaseLinux": "Release - Linux x64",
+    "releaseLinuxDesc": "Self-contained deployment",
+    "debugFd": "Debug - Framework Dependent",
+    "debugFdDesc": "Debug mode",
+    "debugWin": "Debug - Windows x64",
+    "debugWinDesc": "Self-contained deployment",
+    "debugOsxA": "Debug - macOS ARM64",
+    "debugOsxADesc": "Apple Silicon",
+    "debugOsxX": "Debug - macOS x64",
+    "debugOsxXDesc": "Intel Mac",
+    "debugLinux": "Debug - Linux x64",
+    "debugLinuxDesc": "Self-contained deployment"
+  },
+  "publish": {
+    "command": "Command to execute:",
+    "success": "Published successfully!",
+    "output": "Output directory: {{dir}}",
+    "failed": "Publish failed",
+    "error": "Error: {{error}}"
+  }
+}

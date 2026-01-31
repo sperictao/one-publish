@@ -27,18 +27,19 @@ import {
   RefreshCw,
   Download,
   Info,
-  Keyboard,
 } from "lucide-react";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { checkUpdate, installUpdate } from "@/lib/store";
 import type { UpdateInfo } from "@/lib/store";
 import { open } from "@tauri-apps/plugin-dialog";
+import { useI18n, t } from "@/hooks/useI18n";
+import type { Language } from "@/hooks/useI18n";
 
 interface SettingsDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  language: string;
-  onLanguageChange: (language: string) => void;
+  language: Language;
+  onLanguageChange: (language: Language) => void;
   minimizeToTrayOnClose: boolean;
   onMinimizeToTrayOnCloseChange: (value: boolean) => void;
   defaultOutputDir: string;
@@ -64,6 +65,7 @@ export function SettingsDialog({
   const [updateInfo, setUpdateInfo] = useState<UpdateInfo | null>(null);
   const [isCheckingUpdate, setIsCheckingUpdate] = useState(false);
   const [isInstallingUpdate, setIsInstallingUpdate] = useState(false);
+  const { translations } = useI18n();
 
   const handleCheckUpdate = async () => {
     setIsCheckingUpdate(true);
@@ -92,7 +94,7 @@ export function SettingsDialog({
       const selected = await open({
         directory: true,
         multiple: false,
-        title: "选择默认发布目录",
+        title: translations.outputDir?.label || "选择默认发布目录",
       });
       if (selected) {
         onDefaultOutputDirChange(selected as string);
@@ -108,10 +110,10 @@ export function SettingsDialog({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Languages className="h-5 w-5" />
-            应用设置
+            {translations.settings?.title || "应用设置"}
           </DialogTitle>
           <DialogDescription>
-            配置语言、外观、输出目录等偏好设置
+            {translations.settings?.description || "配置语言、外观、输出目录等偏好设置"}
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-6 py-4 max-h-[70vh] overflow-y-auto">
@@ -119,21 +121,21 @@ export function SettingsDialog({
           <div className="space-y-2">
             <Label className="flex items-center gap-2">
               <Info className="h-4 w-4" />
-              版本信息
+              {translations.version?.title || "版本信息"}
             </Label>
             <div className="flex items-center justify-between p-3 bg-muted rounded-lg">
               <div className="space-y-1">
                 <div className="text-sm font-medium">
-                  当前版本: v{updateInfo?.currentVersion || "1.0.0"}
+                  {t("version.current", updateInfo?.currentVersion || "1.0.0")}
                 </div>
                 {updateInfo?.hasUpdate && (
                   <div className="text-sm text-green-600 dark:text-green-400">
-                    有新版本: v{updateInfo.availableVersion}
+                    {t("version.new", updateInfo.availableVersion || "")}
                   </div>
                 )}
                 {!updateInfo && (
                   <div className="text-xs text-muted-foreground">
-                    点击检查更新以获取最新版本信息
+                    {translations.version?.clickToCheck || "点击检查更新以获取最新版本信息"}
                   </div>
                 )}
               </div>
@@ -149,7 +151,7 @@ export function SettingsDialog({
                   ) : (
                     <RefreshCw className="h-4 w-4" />
                   )}
-                  <span className="ml-1">检查更新</span>
+                  <span className="ml-1">{translations.version?.check || "检查更新"}</span>
                 </Button>
                 {updateInfo?.hasUpdate && (
                   <Button
@@ -163,14 +165,16 @@ export function SettingsDialog({
                     ) : (
                       <Download className="h-4 w-4" />
                     )}
-                    <span className="ml-1">更新</span>
+                    <span className="ml-1">{translations.version?.update || "更新"}</span>
                   </Button>
                 )}
               </div>
             </div>
             {updateInfo?.releaseNotes && (
               <div className="p-3 bg-muted rounded-lg text-xs max-h-40 overflow-y-auto">
-                <div className="font-medium mb-1">更新说明:</div>
+                <div className="font-medium mb-1">
+                  {translations.version?.notes || "更新说明:"}
+                </div>
                 <div className="whitespace-pre-wrap">{updateInfo.releaseNotes}</div>
               </div>
             )}
@@ -178,14 +182,18 @@ export function SettingsDialog({
 
           {/* Language Selection */}
           <div className="space-y-2">
-            <Label>界面语言</Label>
+            <Label>{translations.language?.label || "界面语言"}</Label>
             <Select value={language} onValueChange={onLanguageChange}>
               <SelectTrigger>
-                <SelectValue placeholder="选择语言" />
+                <SelectValue placeholder={translations.language?.placeholder || "选择语言"} />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="zh">简体中文</SelectItem>
-                <SelectItem value="en">English</SelectItem>
+                <SelectItem value="zh">
+                  {translations.language?.chinese || "简体中文"}
+                </SelectItem>
+                <SelectItem value="en">
+                  {translations.language?.english || "English"}
+                </SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -194,29 +202,29 @@ export function SettingsDialog({
           <div className="space-y-2">
             <Label className="flex items-center gap-2">
               <Palette className="h-4 w-4" />
-              外观主题
+              {translations.theme?.label || "外观主题"}
             </Label>
             <Select value={theme} onValueChange={onThemeChange}>
               <SelectTrigger>
-                <SelectValue placeholder="选择主题" />
+                <SelectValue placeholder={translations.theme?.placeholder || "选择主题"} />
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="auto">
                   <div className="flex items-center gap-2">
                     <Monitor className="h-4 w-4" />
-                    <span>跟随系统</span>
+                    <span>{translations.theme?.auto || "跟随系统"}</span>
                   </div>
                 </SelectItem>
                 <SelectItem value="light">
                   <div className="flex items-center gap-2">
                     <Sun className="h-4 w-4" />
-                    <span>亮色</span>
+                    <span>{translations.theme?.light || "亮色"}</span>
                   </div>
                 </SelectItem>
                 <SelectItem value="dark">
                   <div className="flex items-center gap-2">
                     <Moon className="h-4 w-4" />
-                    <span>暗色</span>
+                    <span>{translations.theme?.dark || "暗色"}</span>
                   </div>
                 </SelectItem>
               </SelectContent>
@@ -227,13 +235,13 @@ export function SettingsDialog({
           <div className="space-y-2">
             <Label className="flex items-center gap-2">
               <FolderOpen className="h-4 w-4" />
-              默认发布目录
+              {translations.outputDir?.label || "默认发布目录"}
             </Label>
             <div className="flex gap-2">
               <Input
                 value={defaultOutputDir}
                 onChange={(e) => onDefaultOutputDirChange(e.target.value)}
-                placeholder="留空使用项目默认目录"
+                placeholder={translations.outputDir?.placeholder || "留空使用项目默认目录"}
               />
               <Button
                 variant="outline"
@@ -245,7 +253,7 @@ export function SettingsDialog({
               </Button>
             </div>
             <p className="text-xs text-muted-foreground">
-              支持相对路径（如 ./publish）或绝对路径
+              {translations.outputDir?.support || "支持相对路径（如 ./publish）或绝对路径"}
             </p>
           </div>
 
@@ -255,11 +263,11 @@ export function SettingsDialog({
               <div className="flex items-center gap-2">
                 <Minimize2 className="h-4 w-4 text-muted-foreground" />
                 <Label className="cursor-pointer" htmlFor="minimize-to-tray">
-                  关闭窗口时最小化到托盘
+                  {translations.tray?.label || "关闭窗口时最小化到托盘"}
                 </Label>
               </div>
               <p className="text-xs text-muted-foreground">
-                启用后点击关闭按钮会隐藏窗口，继续驻留托盘。
+                {translations.tray?.description || "启用后点击关闭按钮会隐藏窗口，继续驻留托盘。"}
               </p>
             </div>
             <Switch
@@ -275,8 +283,8 @@ export function SettingsDialog({
             className="w-full"
             onClick={onOpenShortcuts}
           >
-            <Keyboard className="h-4 w-4 mr-2" />
-            查看快捷键
+            <Info className="h-4 w-4 mr-2" />
+            {translations.shortcuts?.button || "查看快捷键"}
           </Button>
         </div>
       </DialogContent>

@@ -1,0 +1,91 @@
+{
+  "settings": {
+    "title": "应用设置",
+    "description": "配置语言、外观、输出目录等偏好设置"
+  },
+  "version": {
+    "title": "版本信息",
+    "current": "当前版本: v{}",
+    "new": "有新版本: v{}",
+    "none": "没有可用的更新",
+    "check": "检查更新",
+    "update": "更新",
+    "notes": "更新说明",
+    "clickToCheck": "点击检查更新以获取最新版本信息"
+  },
+  "language": {
+    "label": "界面语言",
+    "placeholder": "选择语言",
+    "chinese": "简体中文",
+    "english": "English"
+  },
+  "theme": {
+    "label": "外观主题",
+    "placeholder": "选择主题",
+    "auto": "跟随系统",
+    "light": "亮色",
+    "dark": "暗色"
+  },
+  "outputDir": {
+    "label": "默认发布目录",
+    "placeholder": "留空使用项目默认目录",
+    "support": "支持相对路径（如 ./publish）或绝对路径"
+  },
+  "tray": {
+    "label": "关闭窗口时最小化到托盘",
+    "description": "启用后点击关闭按钮会隐藏窗口，继续驻留托盘。"
+  },
+  "shortcuts": {
+    "title": "快捷键",
+    "description": "可用的全局快捷键",
+    "button": "查看快捷键",
+    "refresh": "刷新项目",
+    "publish": "执行发布",
+    "settings": "打开设置"
+  },
+  "project": {
+    "title": "项目信息",
+    "description": "{{name}}",
+    "root": "项目根目录: {{path}}",
+    "file": "项目文件: {{path}}",
+    "profiles": "发布配置:",
+    "not": "当前仓库不是 .NET 项目",
+    "notSelected": "请从左侧选择一个仓库"
+  },
+  "config": {
+    "title": "发布配置",
+    "description": "选择预设配置或自定义发布参数",
+    "customMode": "自定义模式",
+    "presets": "选择预设配置",
+    "refresh": "刷新",
+    "execute": "执行发布",
+    "publishing": "发布中...",
+    "releaseFd": "Release - 框架依赖",
+    "releaseFdDesc": "推荐用于开发/测试",
+    "releaseWin": "Release - Windows x64",
+    "releaseWinDesc": "自包含部署",
+    "releaseOsxA": "Release - macOS ARM64",
+    "releaseOsxADesc": "Apple Silicon",
+    "releaseOsxX": "Release - macOS x64",
+    "releaseOsxXDesc": "Intel Mac",
+    "releaseLinux": "Release - Linux x64",
+    "releaseLinuxDesc": "自包含部署",
+    "debugFd": "Debug - 框架依赖",
+    "debugFdDesc": "调试模式",
+    "debugWin": "Debug - Windows x64",
+    "debugWinDesc": "自包含部署",
+    "debugOsxA": "Debug - macOS ARM64",
+    "debugOsxADesc": "Apple Silicon",
+    "debugOsxX": "Debug - macOS x64",
+    "debugOsxXDesc": "Intel Mac",
+    "debugLinux": "Debug - Linux x64",
+    "debugLinuxDesc": "自包含部署"
+  },
+  "publish": {
+    "command": "将执行的命令:",
+    "success": "发布成功!",
+    "output": "输出目录: {{dir}}",
+    "failed": "发布失败",
+    "error": "错误: {{error}}"
+  }
+}

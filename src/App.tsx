@@ -8,6 +8,7 @@ import { toast } from "sonner";
 import { useAppState } from "@/hooks/useAppState";
 import { useTheme } from "@/hooks/useTheme";
 import { useShortcuts } from "@/hooks/useShortcuts";
+import { useI18n } from "@/hooks/useI18n";
 import type { PublishConfigStore } from "@/lib/store";
 
 // Layout Components
@@ -187,11 +188,9 @@ function App() {
     setSelectedPreset,
     setIsCustomMode,
     setCustomConfig,
-    language,
     minimizeToTrayOnClose,
     defaultOutputDir,
     theme,
-    setLanguage,
     setMinimizeToTrayOnClose,
     setDefaultOutputDir,
     setTheme,
@@ -199,6 +198,9 @@ function App() {
 
   // 应用主题
   useTheme(theme);
+
+  // 国际化
+  const { language, setLanguage } = useI18n();
 
   // 快捷键处理
   useShortcuts({
