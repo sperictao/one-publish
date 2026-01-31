@@ -6,6 +6,7 @@ import { toast } from "sonner";
 
 // Hooks
 import { useAppState } from "@/hooks/useAppState";
+import { useTheme } from "@/hooks/useTheme";
 import type { PublishConfigStore } from "@/lib/store";
 
 // Layout Components
@@ -14,6 +15,7 @@ import { RepositoryList } from "@/components/layout/RepositoryList";
 import { BranchPanel } from "@/components/layout/BranchPanel";
 import { ResizeHandle } from "@/components/layout/ResizeHandle";
 import { SettingsDialog } from "@/components/layout/SettingsDialog";
+import { ShortcutsDialog } from "@/components/layout/ShortcutsDialog";
 
 // UI Components
 import { Button } from "@/components/ui/button";
@@ -186,14 +188,22 @@ function App() {
     setCustomConfig,
     language,
     minimizeToTrayOnClose,
+    defaultOutputDir,
+    theme,
     setLanguage,
     setMinimizeToTrayOnClose,
+    setDefaultOutputDir,
+    setTheme,
   } = useAppState();
+
+  // 应用主题
+  useTheme(theme);
 
   // Layout State (local only - collapse state doesn't need persistence)
   const [leftPanelCollapsed, setLeftPanelCollapsed] = useState(false);
   const [middlePanelCollapsed, setMiddlePanelCollapsed] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [shortcutsOpen, setShortcutsOpen] = useState(false);
 
   // Min/Max constraints
   const MIN_PANEL_WIDTH = 150;
@@ -332,14 +342,28 @@ function App() {
   // Get current publish config
   const getCurrentConfig = useCallback((): PublishConfig => {
     if (isCustomMode) {
-      return storeConfigToPublishConfig(customConfig);
+      // 自定义模式，如果用户没有指定输出目录，使用默认目录
+      const config = storeConfigToPublishConfig(customConfig);
+      if (!config.output_dir && defaultOutputDir) {
+        return { ...config, output_dir: defaultOutputDir };
+      }
+      return config;
     }
     const preset = PRESETS.find((p) => p.id === selectedPreset);
-    if (!preset) return storeConfigToPublishConfig(customConfig);
+    if (!preset) {
+      const config = storeConfigToPublishConfig(customConfig);
+      return {
+        ...config,
+        output_dir: config.output_dir || defaultOutputDir || "",
+      };
+    }
 
-    const outputDir = projectInfo
-      ? `${projectInfo.root_path}/publish/${selectedPreset}`
-      : "";
+    // 预设模式：优先使用默认目录，否则使用项目特定目录
+    const outputDir = defaultOutputDir
+      ? defaultOutputDir
+      : projectInfo
+        ? `${projectInfo.root_path}/publish/${selectedPreset}`
+        : "";
 
     return {
       ...preset.config,
@@ -347,7 +371,7 @@ function App() {
       use_profile: false,
       profile_name: "",
     };
-  }, [isCustomMode, customConfig, selectedPreset, projectInfo]);
+  }, [isCustomMode, customConfig, selectedPreset, projectInfo, defaultOutputDir]);
 
   // Execute publish
   const executePublish = async () => {
@@ -835,6 +859,12 @@ function App() {
         </div>
       </div>
 
+      {/* Shortcuts Dialog */}
+      <ShortcutsDialog
+        open={shortcutsOpen}
+        onOpenChange={setShortcutsOpen}
+      />
+
       {/* Settings Dialog */}
       <SettingsDialog
         open={settingsOpen}
@@ -843,6 +873,11 @@ function App() {
         onLanguageChange={setLanguage}
         minimizeToTrayOnClose={minimizeToTrayOnClose}
         onMinimizeToTrayOnCloseChange={setMinimizeToTrayOnClose}
+        defaultOutputDir={defaultOutputDir}
+        onDefaultOutputDirChange={setDefaultOutputDir}
+        theme={theme}
+        onThemeChange={setTheme}
+        onOpenShortcuts={() => setShortcutsOpen(true)}
       />
     </div>
   );

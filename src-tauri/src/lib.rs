@@ -1,6 +1,7 @@
 // Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
 
 pub mod commands;
+pub mod shortcuts;
 pub mod store;
 pub mod tray;
 
@@ -14,6 +15,8 @@ pub fn run() {
         .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_shell::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
+        .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
             // 当尝试启动第二个实例时，显示主窗口
             log::info!("检测到第二个实例启动，显示主窗口");
@@ -36,6 +39,11 @@ pub fn run() {
             // 初始化系统托盘
             if let Err(err) = tray::init_tray(app.handle()) {
                 log::error!("初始化系统托盘失败: {}", err);
+            }
+
+            // 注册全局快捷键
+            if let Err(err) = shortcuts::register_shortcuts(app.handle()) {
+                log::error!("注册全局快捷键失败: {}", err);
             }
 
             Ok(())
@@ -73,6 +81,10 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             commands::scan_project,
             commands::execute_publish,
+            commands::check_update,
+            commands::install_update,
+            commands::get_current_version,
+            commands::get_shortcuts_help,
             store::get_app_state,
             store::save_app_state,
             store::add_repository,

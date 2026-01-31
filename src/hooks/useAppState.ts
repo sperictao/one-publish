@@ -88,15 +88,24 @@ export function useAppState() {
     []
   );
 
-  // 更新通用偏好（语言、托盘行为）
+  // 更新通用偏好（语言、托盘行为、主题等）
   const setPreferences = useCallback(
-    (params: { language?: string; minimizeToTrayOnClose?: boolean }) => {
+    (params: {
+      language?: string;
+      minimizeToTrayOnClose?: boolean;
+      defaultOutputDir?: string;
+      theme?: "light" | "dark" | "auto";
+    }) => {
       setState((prev) => ({
         ...prev,
         ...(params.language !== undefined && { language: params.language }),
         ...(params.minimizeToTrayOnClose !== undefined && {
           minimizeToTrayOnClose: params.minimizeToTrayOnClose,
         }),
+        ...(params.defaultOutputDir !== undefined && {
+          defaultOutputDir: params.defaultOutputDir,
+        }),
+        ...(params.theme !== undefined && { theme: params.theme }),
       }));
 
       if (preferenceDebounceRef.current) {
@@ -228,6 +237,22 @@ export function useAppState() {
     [setPreferences]
   );
 
+  // 更新默认发布目录
+  const setDefaultOutputDir = useCallback(
+    (dir: string) => {
+      setPreferences({ defaultOutputDir: dir });
+    },
+    [setPreferences]
+  );
+
+  // 更新主题
+  const setTheme = useCallback(
+    (theme: "light" | "dark" | "auto") => {
+      setPreferences({ theme });
+    },
+    [setPreferences]
+  );
+
   return {
     // 状态
     state,
@@ -258,7 +283,11 @@ export function useAppState() {
     // 偏好设置
     language: state.language,
     minimizeToTrayOnClose: state.minimizeToTrayOnClose,
+    defaultOutputDir: state.defaultOutputDir,
+    theme: state.theme,
     setLanguage,
     setMinimizeToTrayOnClose,
+    setDefaultOutputDir,
+    setTheme,
   };
 }

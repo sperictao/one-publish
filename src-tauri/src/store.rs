@@ -88,6 +88,12 @@ pub struct AppState {
     /// UI 语言
     #[serde(default = "default_language")]
     pub language: String,
+    /// 默认发布目录
+    #[serde(default)]
+    pub default_output_dir: String,
+    /// 主题设置: "light", "dark", "auto"
+    #[serde(default = "default_theme")]
+    pub theme: String,
 }
 
 fn default_minimize_to_tray() -> bool {
@@ -96,6 +102,10 @@ fn default_minimize_to_tray() -> bool {
 
 fn default_language() -> String {
     "zh".to_string()
+}
+
+fn default_theme() -> String {
+    "auto".to_string()
 }
 
 fn default_left_panel_width() -> i32 {
@@ -122,6 +132,8 @@ impl Default for AppState {
             custom_config: PublishConfigStore::default(),
             minimize_to_tray_on_close: default_minimize_to_tray(),
             language: default_language(),
+            default_output_dir: String::new(),
+            theme: default_theme(),
         }
     }
 }
@@ -292,12 +304,14 @@ pub async fn update_publish_state(
     update_state(state)
 }
 
-/// 更新偏好设置（语言、托盘行为等）
+/// 更新偏好设置（语言、托盘行为、主题等）
 #[tauri::command]
 pub async fn update_preferences(
     app: tauri::AppHandle,
     language: Option<String>,
     minimize_to_tray_on_close: Option<bool>,
+    default_output_dir: Option<String>,
+    theme: Option<String>,
 ) -> Result<AppState, String> {
     let mut state = get_state();
     let language_changed = language.is_some();
@@ -308,6 +322,14 @@ pub async fn update_preferences(
 
     if let Some(minimize) = minimize_to_tray_on_close {
         state.minimize_to_tray_on_close = minimize;
+    }
+
+    if let Some(output_dir) = default_output_dir {
+        state.default_output_dir = output_dir;
+    }
+
+    if let Some(thm) = theme {
+        state.theme = thm;
     }
 
     update_state(state.clone())?;

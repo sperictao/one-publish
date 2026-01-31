@@ -3,6 +3,7 @@
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
+use tauri::AppHandle;
 use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::process::Command;
 
@@ -267,4 +268,46 @@ pub async fn execute_publish(
             file_count: 0,
         })
     }
+}
+
+/// 版本信息
+#[derive(Debug, Serialize, Deserialize)]
+pub struct UpdateInfo {
+    pub current_version: String,
+    pub available_version: Option<String>,
+    pub has_update: bool,
+    pub release_notes: Option<String>,
+}
+
+/// 检查更新
+#[tauri::command]
+pub async fn check_update(_app: AppHandle) -> Result<UpdateInfo, String> {
+    // TODO: 实现更新检查功能
+    // 当前 Tauri 2.x 的 updater API 可能需要进一步研究
+    // 先返回一个 mock 结果
+    Ok(UpdateInfo {
+        current_version: env!("CARGO_PKG_VERSION").to_string(),
+        available_version: None,
+        has_update: false,
+        release_notes: None,
+    })
+}
+
+/// 执行更新并重启
+#[tauri::command]
+pub async fn install_update(_app: AppHandle) -> Result<String, String> {
+    // TODO: 实现更新安装功能
+    Err("更新功能暂未实现".to_string())
+}
+
+/// 获取当前版本
+#[tauri::command]
+pub fn get_current_version() -> String {
+    env!("CARGO_PKG_VERSION").to_string()
+}
+
+/// 获取快捷键帮助
+#[tauri::command]
+pub fn get_shortcuts_help() -> Vec<crate::shortcuts::ShortcutHelp> {
+    crate::shortcuts::get_shortcuts_help()
 }

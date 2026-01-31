@@ -24,6 +24,8 @@ export interface AppState {
   customConfig: PublishConfigStore;
   minimizeToTrayOnClose: boolean;
   language: string;
+  defaultOutputDir: string;
+  theme: "light" | "dark" | "auto";
 }
 
 // 默认状态
@@ -44,6 +46,8 @@ export const defaultAppState: AppState = {
   },
   minimizeToTrayOnClose: true,
   language: "zh",
+  defaultOutputDir: "",
+  theme: "auto",
 };
 
 /**
@@ -109,11 +113,72 @@ export async function updatePublishState(params: {
 }
 
 /**
- * 更新通用偏好（语言、托盘行为）
+ * 更新通用偏好（语言、托盘行为、主题等）
  */
 export async function updatePreferences(params: {
   language?: string;
   minimizeToTrayOnClose?: boolean;
+  defaultOutputDir?: string;
+  theme?: "light" | "dark" | "auto";
 }): Promise<AppState> {
-  return await invoke<AppState>("update_preferences", params);
+  return await invoke<AppState>("update_preferences", {
+    ...params,
+    default_output_dir: params.defaultOutputDir,
+  });
+}
+
+// ==================== 版本更新相关 ====================
+
+export interface UpdateInfo {
+  currentVersion: string;
+  availableVersion: string | null;
+  hasUpdate: boolean;
+  releaseNotes: string | null;
+}
+
+/**
+ * 检查更新
+ */
+export async function checkUpdate(): Promise<UpdateInfo> {
+  const result = await invoke<{
+    current_version: string;
+    available_version: string | null;
+    has_update: boolean;
+    release_notes: string | null;
+  }>("check_update");
+
+  return {
+    currentVersion: result.current_version,
+    availableVersion: result.available_version,
+    hasUpdate: result.has_update,
+    releaseNotes: result.release_notes,
+  };
+}
+
+/**
+ * 安装更新
+ */
+export async function installUpdate(): Promise<string> {
+  return await invoke<string>("install_update");
+}
+
+/**
+ * 获取当前版本
+ */
+export async function getCurrentVersion(): Promise<string> {
+  return await invoke<string>("get_current_version");
+}
+
+// ==================== 快捷键相关 ====================
+
+export interface ShortcutHelp {
+  key: string;
+  description: string;
+}
+
+/**
+ * 获取快捷键帮助
+ */
+export async function getShortcutsHelp(): Promise<ShortcutHelp[]> {
+  return await invoke<ShortcutHelp[]>("get_shortcuts_help");
 }
