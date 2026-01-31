@@ -11,7 +11,6 @@ export interface ShortcutHandlers {
 /**
  * 快捷键管理 Hook
  * 监听全局快捷键事件并触发相应的处理函数
- * 注意：当前快捷键已在后端注册，事件监听功能待实现
  */
 export function useShortcuts(handlers: ShortcutHandlers) {
   useEffect(() => {
@@ -22,37 +21,37 @@ export function useShortcuts(handlers: ShortcutHandlers) {
 
       // 监听刷新快捷键
       if (handlers.onRefresh) {
-        listen('global-shortcut-cmd-r', () => {
+        listen('shortcut-refresh', () => {
           console.log('Refresh shortcut triggered');
           handlers.onRefresh?.();
         }).then((unlisten) => {
           unlisteners.push(unlisten);
-        }).catch(() => {
-          // 事件可能尚未实现，忽略错误
+        }).catch((err) => {
+          console.error('Failed to listen for refresh shortcut:', err);
         });
       }
 
       // 监听发布快捷键
       if (handlers.onPublish) {
-        listen('global-shortcut-cmd-p', () => {
+        listen('shortcut-publish', () => {
           console.log('Publish shortcut triggered');
           handlers.onPublish?.();
         }).then((unlisten) => {
           unlisteners.push(unlisten);
-        }).catch(() => {
-          // 事件可能尚未实现，忽略错误
+        }).catch((err) => {
+          console.error('Failed to listen for publish shortcut:', err);
         });
       }
 
       // 监听设置快捷键
       if (handlers.onOpenSettings) {
-        listen('global-shortcut-cmd-comma', () => {
+        listen('shortcut-settings', () => {
           console.log('Settings shortcut triggered');
           handlers.onOpenSettings?.();
         }).then((unlisten) => {
           unlisteners.push(unlisten);
-        }).catch(() => {
-          // 事件可能尚未实现，忽略错误
+        }).catch((err) => {
+          console.error('Failed to listen for settings shortcut:', err);
         });
       }
 

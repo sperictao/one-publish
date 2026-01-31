@@ -2,8 +2,8 @@
 //!
 //! 处理应用的全局快捷键功能
 
-use tauri::{AppHandle, Emitter};
-use tauri_plugin_global_shortcut::{GlobalShortcutExt, Shortcut, ShortcutEvent};
+use tauri::AppHandle;
+use tauri_plugin_global_shortcut::GlobalShortcutExt;
 
 /// 注册全局快捷键
 pub fn register_shortcuts(app: &AppHandle) -> Result<(), Box<dyn std::error::Error>> {

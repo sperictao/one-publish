@@ -7,6 +7,7 @@ import { toast } from "sonner";
 // Hooks
 import { useAppState } from "@/hooks/useAppState";
 import { useTheme } from "@/hooks/useTheme";
+import { useShortcuts } from "@/hooks/useShortcuts";
 import type { PublishConfigStore } from "@/lib/store";
 
 // Layout Components
@@ -199,25 +200,25 @@ function App() {
   // 应用主题
   useTheme(theme);
 
-  // 快捷键处理（待实现事件监听）
-  // useShortcuts({
-  //   onRefresh: () => {
-  //     // 刷新项目
-  //     if (selectedRepo && !isStateLoading) {
-  //       scanProject(selectedRepo.path);
-  //     }
-  //   },
-  //   onPublish: () => {
-  //     // 执行发布
-  //     if (!isPublishing && projectInfo) {
-  //       executePublish();
-  //     }
-  //   },
-  //   onOpenSettings: () => {
-  //     // 打开设置
-  //     setSettingsOpen(true);
-  //   },
-  // });
+  // 快捷键处理
+  useShortcuts({
+    onRefresh: () => {
+      // 刷新项目
+      if (selectedRepo && !isStateLoading) {
+        scanProject(selectedRepo.path);
+      }
+    },
+    onPublish: () => {
+      // 执行发布
+      if (!isPublishing && projectInfo) {
+        executePublish();
+      }
+    },
+    onOpenSettings: () => {
+      // 打开设置
+      setSettingsOpen(true);
+    },
+  });
 
   // Layout State (local only - collapse state doesn't need persistence)
   const [leftPanelCollapsed, setLeftPanelCollapsed] = useState(false);
