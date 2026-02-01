@@ -7,9 +7,9 @@ Status legend:
 
 ## Phase 0: Engineering Foundation
 
-- [todo] TASK-0001 Roadmap + PRD/TDD templates + tracking structure (docs/roadmap/tasks/TASK-0001.md)
-- [todo] TASK-0002 Frontend unit tests (Vitest) + first tests (docs/roadmap/tasks/TASK-0002.md)
-- [todo] TASK-0003 Rust unit tests + testable command/planning layer (docs/roadmap/tasks/TASK-0003.md)
+- [done] TASK-0001 Roadmap + PRD/TDD templates + tracking structure (docs/roadmap/tasks/TASK-0001.md)
+- [done] TASK-0002 Frontend unit tests (Vitest) + first tests (docs/roadmap/tasks/TASK-0002.md)
+- [done] TASK-0003 Rust unit tests + testable command/planning layer (docs/roadmap/tasks/TASK-0003.md)
 - [todo] TASK-0004 Minimal e2e smoke test (docs/roadmap/tasks/TASK-0004.md)
 
 ## Phase 1: Publish Core Abstraction
