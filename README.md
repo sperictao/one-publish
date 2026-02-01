@@ -71,6 +71,10 @@ one-publish/
 └── tsconfig.json          # TypeScript 配置
 ```
 
+## 设计理念
+
+OnePublish 的产品与工程设计理念见：`docs/design-philosophy.md`。
+
 ## 使用方法
 
 1. 启动应用后，会自动扫描当前目录下的 .NET 项目
