@@ -73,7 +73,8 @@ one-publish/
 
 ## 设计理念
 
-OnePublish 的产品与工程设计理念见：`docs/design-philosophy.md`。
+- 产品/工程设计理念：`docs/design-philosophy.md`
+- 渐进式升级路线图：`docs/roadmap/MASTER_PLAN.md`
 
 ## 使用方法
 
