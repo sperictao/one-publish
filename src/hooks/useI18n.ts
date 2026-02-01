@@ -17,6 +17,11 @@ const translations = {
 // 缓存翻译（JSON 为嵌套结构）
 let translationsCache: Record<Language, any> = {} as any;
 
+// test-only helper
+export function __setTranslationsCacheForTest(cache: Record<Language, any>) {
+  translationsCache = cache;
+}
+
 /**
  * 加载翻译文件
  */

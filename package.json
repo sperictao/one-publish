@@ -9,7 +9,10 @@
     "tauri": "tauri",
     "dev:renderer": "vite",
     "build:renderer": "vite build",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:ui": "vitest --ui",
+    "test:watch": "vitest"
   },
   "keywords": [],
   "author": "",
@@ -17,17 +20,22 @@
   "devDependencies": {
     "@resvg/resvg-js": "^2.6.2",
     "@tauri-apps/cli": "^2.8.0",
+    "@testing-library/jest-dom": "^6.9.1",
+    "@testing-library/react": "^16.3.2",
     "@types/node": "^20.0.0",
     "@types/react": "^18.2.0",
     "@types/react-dom": "^18.2.0",
     "@vitejs/plugin-react": "^4.2.0",
+    "@vitest/ui": "^4.0.18",
     "autoprefixer": "^10.4.20",
+    "jsdom": "^27.4.0",
     "png-to-ico": "^3.0.1",
     "postcss": "^8.4.49",
     "sharp": "^0.34.5",
     "tailwindcss": "^3.4.17",
     "typescript": "^5.3.0",
-    "vite": "^7.3.0"
+    "vite": "^7.3.0",
+    "vitest": "^4.0.18"
   },
   "dependencies": {
     "@radix-ui/react-dialog": "^1.1.15",
