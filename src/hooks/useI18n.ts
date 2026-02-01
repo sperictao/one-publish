@@ -14,13 +14,13 @@ const translations = {
   en: () => import("@/i18n/en.json"),
 };
 
-// 缓存翻译
-let translationsCache: Record<Language, Record<string, string>> = {} as any;
+// 缓存翻译（JSON 为嵌套结构）
+let translationsCache: Record<Language, any> = {} as any;
 
 /**
  * 加载翻译文件
  */
-async function loadTranslations(lang: Language): Promise<Record<string, string>> {
+async function loadTranslations(lang: Language): Promise<any> {
   if (translationsCache[lang]) {
     return translationsCache[lang];
   }
@@ -41,7 +41,15 @@ function t(key: string, params?: Record<string, string | number>): string {
     return key;
   }
 
-  let text = translations[key] || key;
+  let text = key;
+
+  const value = key
+    .split(".")
+    .reduce<any>((acc, part) => (acc ? acc[part] : undefined), translations);
+
+  if (typeof value === "string") {
+    text = value;
+  }
 
   // 替换参数 {{key}}
   if (params) {
@@ -61,7 +69,7 @@ export function useI18n() {
   const [language, setLanguageState] = useState<Language>(() => {
     return (localStorage.getItem("app-language") || DEFAULT_LANGUAGE) as Language;
   });
-  const [translations, setTranslations] = useState<Record<string, string>>({});
+  const [translations, setTranslations] = useState<any>({});
 
   // 加载翻译
   useEffect(() => {

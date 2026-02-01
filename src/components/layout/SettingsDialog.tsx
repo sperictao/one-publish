@@ -28,12 +28,20 @@ import {
   Download,
   Info,
 } from "lucide-react";
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { checkUpdate, installUpdate } from "@/lib/store";
 import type { UpdateInfo } from "@/lib/store";
-import { open } from "@tauri-apps/plugin-dialog";
+import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import { useI18n, t } from "@/hooks/useI18n";
 import type { Language } from "@/hooks/useI18n";
+
+function formatMessage(template: string, ...args: Array<string | number>) {
+  let out = template;
+  args.forEach((arg) => {
+    out = out.replace("{}", String(arg));
+  });
+  return out;
+}
 
 interface SettingsDialogProps {
   open: boolean;
@@ -50,7 +58,7 @@ interface SettingsDialogProps {
 }
 
 export function SettingsDialog({
-  open,
+  open: isOpen,
   onOpenChange,
   language,
   onLanguageChange,
@@ -91,7 +99,7 @@ export function SettingsDialog({
 
   const handleSelectDirectory = async () => {
     try {
-      const selected = await open({
+      const selected = await openDialog({
         directory: true,
         multiple: false,
         title: translations.outputDir?.label || "选择默认发布目录",
@@ -105,7 +113,7 @@ export function SettingsDialog({
   };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={isOpen} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-[500px]">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
@@ -126,11 +134,14 @@ export function SettingsDialog({
             <div className="flex items-center justify-between p-3 bg-muted rounded-lg">
               <div className="space-y-1">
                 <div className="text-sm font-medium">
-                  {t("version.current", updateInfo?.currentVersion || "1.0.0")}
+                  {formatMessage(
+                    t("version.current"),
+                    updateInfo?.currentVersion || "1.0.0",
+                  )}
                 </div>
                 {updateInfo?.hasUpdate && (
                   <div className="text-sm text-green-600 dark:text-green-400">
-                    {t("version.new", updateInfo.availableVersion || "")}
+                    {formatMessage(t("version.new"), updateInfo.availableVersion || "")}
                   </div>
                 )}
                 {!updateInfo && (
