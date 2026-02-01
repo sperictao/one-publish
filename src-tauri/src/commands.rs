@@ -169,41 +169,17 @@ pub async fn execute_publish(
         return Err(format!("项目文件不存在: {}", project_path));
     }
 
-    // Build the dotnet publish command
-    let mut args = vec!["publish".to_string(), project_path.clone()];
+    let plan = crate::publish::build_dotnet_publish_plan(&project_path, &config);
 
-    if config.use_profile && !config.profile_name.is_empty() {
-        // Use publish profile
-        args.push(format!("/p:PublishProfile={}", config.profile_name));
-    } else {
-        // Use command line arguments
-        args.push("-c".to_string());
-        args.push(config.configuration.clone());
-
-        if !config.runtime.is_empty() {
-            args.push("--runtime".to_string());
-            args.push(config.runtime.clone());
-        }
-
-        if config.self_contained {
-            args.push("--self-contained".to_string());
-        }
-
-        if !config.output_dir.is_empty() {
-            args.push("-o".to_string());
-            args.push(config.output_dir.clone());
-        }
-    }
-
-    log::info!("Executing: dotnet {}", args.join(" "));
+    log::info!("Executing: {} {}", plan.program, plan.args.join(" "));
 
     // Execute dotnet publish
-    let mut child = Command::new("dotnet")
-        .args(&args)
+    let mut child = Command::new(&plan.program)
+        .args(&plan.args)
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .spawn()
-        .map_err(|e| format!("无法启动 dotnet 命令: {}", e))?;
+        .map_err(|e| format!("无法启动 {} 命令: {}", plan.program, e))?;
 
     let stdout = child.stdout.take().unwrap();
     let stderr = child.stderr.take().unwrap();
