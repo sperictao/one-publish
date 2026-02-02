@@ -138,16 +138,17 @@ fn scan_publish_profiles(project_file: &Path) -> Vec<String> {
 }
 
 #[tauri::command]
-pub async fn scan_project(start_path: Option<String>) -> Result<ProjectInfo, String> {
+pub async fn scan_project(start_path: Option<String>) -> Result<ProjectInfo, crate::errors::AppError> {
     let search_path = match start_path {
         Some(p) => PathBuf::from(p),
-        None => std::env::current_dir().map_err(|e| e.to_string())?,
+        None => std::env::current_dir().map_err(|e| crate::errors::AppError::unknown(e.to_string()))?,
     };
 
-    let root_path = find_project_root(&search_path).ok_or("无法找到项目根目录（*.sln 文件）")?;
+    let root_path = find_project_root(&search_path)
+        .ok_or_else(|| crate::errors::AppError::unknown("cannot find project root (.sln)"))?;
 
-    let project_file =
-        find_project_file(&root_path).ok_or("找不到项目文件 (*.csproj)")?;
+    let project_file = find_project_file(&root_path)
+        .ok_or_else(|| crate::errors::AppError::unknown("cannot find project file (.csproj)"))?;
 
     let publish_profiles = scan_publish_profiles(&project_file);
 
@@ -162,11 +163,14 @@ pub async fn scan_project(start_path: Option<String>) -> Result<ProjectInfo, Str
 pub async fn execute_publish(
     project_path: String,
     config: PublishConfig,
-) -> Result<PublishResult, String> {
+) -> Result<PublishResult, crate::errors::AppError> {
     let project_file = PathBuf::from(&project_path);
 
     if !project_file.exists() {
-        return Err(format!("项目文件不存在: {}", project_path));
+        return Err(crate::errors::AppError::unknown(format!(
+            "project file does not exist: {}",
+            project_path
+        )));
     }
 
     let plan = crate::publish::build_dotnet_publish_plan(&project_path, &config);
@@ -179,7 +183,10 @@ pub async fn execute_publish(
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .spawn()
-        .map_err(|e| format!("无法启动 {} 命令: {}", plan.program, e))?;
+        .map_err(|e| crate::errors::AppError::unknown(format!(
+            "failed to spawn {}: {}",
+            plan.program, e
+        )))?;
 
     let stdout = child.stdout.take().unwrap();
     let stderr = child.stderr.take().unwrap();
@@ -200,7 +207,10 @@ pub async fn execute_publish(
         output_lines.push(format!("[stderr] {}", line));
     }
 
-    let status = child.wait().await.map_err(|e| e.to_string())?;
+    let status = child
+        .wait()
+        .await
+        .map_err(|e| crate::errors::AppError::unknown(e.to_string()))?;
 
     let output = output_lines.join("\n");
 

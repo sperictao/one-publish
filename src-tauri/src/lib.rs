@@ -2,6 +2,7 @@
 
 pub mod commands;
 pub mod compiler;
+pub mod errors;
 pub mod plan;
 pub mod publish;
 pub mod shortcuts;
