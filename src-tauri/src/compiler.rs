@@ -66,6 +66,20 @@ mod tests {
   }
 
   #[test]
+  fn java_spec_compiles() {
+    let spec = PublishSpec {
+      version: SPEC_VERSION,
+      provider_id: "java".to_string(),
+      project_path: "/tmp/build.gradle".to_string(),
+      parameters: BTreeMap::new(),
+    };
+
+    let plan = compile(&spec).expect("compile");
+    assert_eq!(plan.steps.len(), 1);
+    assert_eq!(plan.steps[0].id, "gradle.build");
+  }
+
+  #[test]
   fn plan_json_roundtrip() {
     let spec = PublishSpec {
       version: SPEC_VERSION,

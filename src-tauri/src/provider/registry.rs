@@ -15,6 +15,7 @@ impl ProviderRegistry {
         Box::new(DotnetProvider::new()),
         Box::new(CargoProvider::new()),
         Box::new(GoProvider::new()),
+        Box::new(JavaProvider::new()),
       ],
     }
   }
@@ -111,6 +112,33 @@ impl Provider for GoProvider {
   }
 }
 
+struct JavaProvider {
+  manifest: ProviderManifest,
+}
+
+impl JavaProvider {
+  fn new() -> Self {
+    Self {
+      manifest: ProviderManifest {
+        id: "java".to_string(),
+        display_name: "java".to_string(),
+        version: "1".to_string(),
+      },
+    }
+  }
+}
+
+impl Provider for JavaProvider {
+  fn manifest(&self) -> &ProviderManifest {
+    &self.manifest
+  }
+
+  fn compile(&self, spec: &PublishSpec) -> Result<ExecutionPlan, CompileError> {
+    // Minimal slice: treat Java builds as Gradle wrapper builds.
+    compile_single_step(spec, "gradle.build", "./gradlew build")
+  }
+}
+
 fn compile_single_step(
   spec: &PublishSpec,
   step_id: &str,
@@ -186,6 +214,13 @@ mod tests {
     let r = ProviderRegistry::new();
     let p = r.get("go").expect("provider");
     assert_eq!(p.manifest().id, "go");
+  }
+
+  #[test]
+  fn registry_resolves_java_provider() {
+    let r = ProviderRegistry::new();
+    let p = r.get("java").expect("provider");
+    assert_eq!(p.manifest().id, "java");
   }
 
   #[test]
