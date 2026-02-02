@@ -3,6 +3,7 @@
 pub mod commands;
 pub mod publish;
 pub mod shortcuts;
+pub mod spec;
 pub mod store;
 pub mod tray;
 
