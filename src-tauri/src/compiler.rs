@@ -52,6 +52,20 @@ mod tests {
   }
 
   #[test]
+  fn go_spec_compiles() {
+    let spec = PublishSpec {
+      version: SPEC_VERSION,
+      provider_id: "go".to_string(),
+      project_path: "/tmp/go.mod".to_string(),
+      parameters: BTreeMap::new(),
+    };
+
+    let plan = compile(&spec).expect("compile");
+    assert_eq!(plan.steps.len(), 1);
+    assert_eq!(plan.steps[0].id, "go.build");
+  }
+
+  #[test]
   fn plan_json_roundtrip() {
     let spec = PublishSpec {
       version: SPEC_VERSION,
