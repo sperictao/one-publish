@@ -38,6 +38,20 @@ mod tests {
   }
 
   #[test]
+  fn cargo_spec_compiles() {
+    let spec = PublishSpec {
+      version: SPEC_VERSION,
+      provider_id: "cargo".to_string(),
+      project_path: "/tmp/Cargo.toml".to_string(),
+      parameters: BTreeMap::new(),
+    };
+
+    let plan = compile(&spec).expect("compile");
+    assert_eq!(plan.steps.len(), 1);
+    assert_eq!(plan.steps[0].id, "cargo.build");
+  }
+
+  #[test]
   fn plan_json_roundtrip() {
     let spec = PublishSpec {
       version: SPEC_VERSION,
