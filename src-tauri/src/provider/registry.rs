@@ -11,7 +11,11 @@ pub struct ProviderRegistry {
 impl ProviderRegistry {
   pub fn new() -> Self {
     Self {
-      providers: vec![Box::new(DotnetProvider::new()), Box::new(CargoProvider::new())],
+      providers: vec![
+        Box::new(DotnetProvider::new()),
+        Box::new(CargoProvider::new()),
+        Box::new(GoProvider::new()),
+      ],
     }
   }
 
@@ -77,11 +81,33 @@ impl Provider for CargoProvider {
   }
 
   fn compile(&self, spec: &PublishSpec) -> Result<ExecutionPlan, CompileError> {
-    compile_single_step(
-      spec,
-      "cargo.build",
-      "cargo build",
-    )
+    compile_single_step(spec, "cargo.build", "cargo build")
+  }
+}
+
+struct GoProvider {
+  manifest: ProviderManifest,
+}
+
+impl GoProvider {
+  fn new() -> Self {
+    Self {
+      manifest: ProviderManifest {
+        id: "go".to_string(),
+        display_name: "go".to_string(),
+        version: "1".to_string(),
+      },
+    }
+  }
+}
+
+impl Provider for GoProvider {
+  fn manifest(&self) -> &ProviderManifest {
+    &self.manifest
+  }
+
+  fn compile(&self, spec: &PublishSpec) -> Result<ExecutionPlan, CompileError> {
+    compile_single_step(spec, "go.build", "go build")
   }
 }
 
@@ -153,6 +179,13 @@ mod tests {
     let r = ProviderRegistry::new();
     let p = r.get("cargo").expect("provider");
     assert_eq!(p.manifest().id, "cargo");
+  }
+
+  #[test]
+  fn registry_resolves_go_provider() {
+    let r = ProviderRegistry::new();
+    let p = r.get("go").expect("provider");
+    assert_eq!(p.manifest().id, "go");
   }
 
   #[test]
