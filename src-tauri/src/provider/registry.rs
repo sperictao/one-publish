@@ -11,7 +11,7 @@ pub struct ProviderRegistry {
 impl ProviderRegistry {
   pub fn new() -> Self {
     Self {
-      providers: vec![Box::new(DotnetProvider::new())],
+      providers: vec![Box::new(DotnetProvider::new()), Box::new(CargoProvider::new())],
     }
   }
 
@@ -47,33 +47,75 @@ impl Provider for DotnetProvider {
   }
 
   fn compile(&self, spec: &PublishSpec) -> Result<ExecutionPlan, CompileError> {
-    if spec.version != SPEC_VERSION {
-      return Err(CompileError::UnsupportedSpecVersion(spec.version));
-    }
-
-    let mut payload = BTreeMap::<String, serde_json::Value>::new();
-    payload.insert(
-      "project_path".to_string(),
-      serde_json::Value::String(spec.project_path.clone()),
-    );
-    payload.insert(
-      "parameters".to_string(),
-      spec_value_to_json(SpecValue::Map(spec.parameters.clone())),
-    );
-
-    let step = PlanStep {
-      id: "dotnet.publish".to_string(),
-      title: "dotnet publish".to_string(),
-      kind: "process".to_string(),
-      payload,
-    };
-
-    Ok(ExecutionPlan {
-      version: PLAN_VERSION,
-      spec: spec.clone(),
-      steps: vec![step],
-    })
+    compile_single_step(
+      spec,
+      "dotnet.publish",
+      "dotnet publish",
+    )
   }
+}
+
+struct CargoProvider {
+  manifest: ProviderManifest,
+}
+
+impl CargoProvider {
+  fn new() -> Self {
+    Self {
+      manifest: ProviderManifest {
+        id: "cargo".to_string(),
+        display_name: "cargo".to_string(),
+        version: "1".to_string(),
+      },
+    }
+  }
+}
+
+impl Provider for CargoProvider {
+  fn manifest(&self) -> &ProviderManifest {
+    &self.manifest
+  }
+
+  fn compile(&self, spec: &PublishSpec) -> Result<ExecutionPlan, CompileError> {
+    compile_single_step(
+      spec,
+      "cargo.build",
+      "cargo build",
+    )
+  }
+}
+
+fn compile_single_step(
+  spec: &PublishSpec,
+  step_id: &str,
+  title: &str,
+) -> Result<ExecutionPlan, CompileError> {
+  if spec.version != SPEC_VERSION {
+    return Err(CompileError::UnsupportedSpecVersion(spec.version));
+  }
+
+  let mut payload = BTreeMap::<String, serde_json::Value>::new();
+  payload.insert(
+    "project_path".to_string(),
+    serde_json::Value::String(spec.project_path.clone()),
+  );
+  payload.insert(
+    "parameters".to_string(),
+    spec_value_to_json(SpecValue::Map(spec.parameters.clone())),
+  );
+
+  let step = PlanStep {
+    id: step_id.to_string(),
+    title: title.to_string(),
+    kind: "process".to_string(),
+    payload,
+  };
+
+  Ok(ExecutionPlan {
+    version: PLAN_VERSION,
+    spec: spec.clone(),
+    steps: vec![step],
+  })
 }
 
 fn spec_value_to_json(v: SpecValue) -> serde_json::Value {
@@ -104,6 +146,13 @@ mod tests {
     let r = ProviderRegistry::new();
     let p = r.get("dotnet").expect("provider");
     assert_eq!(p.manifest().id, "dotnet");
+  }
+
+  #[test]
+  fn registry_resolves_cargo_provider() {
+    let r = ProviderRegistry::new();
+    let p = r.get("cargo").expect("provider");
+    assert_eq!(p.manifest().id, "cargo");
   }
 
   #[test]
