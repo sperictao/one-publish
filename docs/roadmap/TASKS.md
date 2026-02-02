@@ -14,7 +14,8 @@ Status legend:
 
 ## Phase 1: Publish Core Abstraction
 
-- [doing] TASK-0101 PublishSpec model (docs/roadmap/tasks/TASK-0101.md)
+- [done] TASK-0101 PublishSpec model (docs/roadmap/tasks/TASK-0101.md)
+- [doing] TASK-0102 ExecutionPlan compiler (docs/roadmap/tasks/TASK-0102.md)
 - [todo] TASK-0102 ExecutionPlan compiler (docs/roadmap/tasks/TASK-0102.md)
 - [todo] TASK-0103 Unified logging + error taxonomy (docs/roadmap/tasks/TASK-0103.md)
 

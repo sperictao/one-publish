@@ -1,6 +1,8 @@
 // Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
 
 pub mod commands;
+pub mod compiler;
+pub mod plan;
 pub mod publish;
 pub mod shortcuts;
 pub mod spec;
