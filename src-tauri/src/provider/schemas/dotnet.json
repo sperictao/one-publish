@@ -1,0 +1,60 @@
+{
+  "parameters": {
+    "configuration": {
+      "type": "string",
+      "flag": "--configuration",
+      "description": "Build configuration (Debug or Release)"
+    },
+    "runtime": {
+      "type": "string",
+      "flag": "--runtime",
+      "description": "Target runtime (e.g., win-x64, osx-x64, linux-x64)"
+    },
+    "framework": {
+      "type": "string",
+      "flag": "--framework",
+      "description": "Target framework (e.g., net8.0, net9.0)"
+    },
+    "output": {
+      "type": "string",
+      "flag": "--output",
+      "description": "Output directory"
+    },
+    "self_contained": {
+      "type": "boolean",
+      "flag": "--self-contained",
+      "description": "Publish the .NET runtime with the application"
+    },
+    "no_build": {
+      "type": "boolean",
+      "flag": "--no-build",
+      "description": "Do not build the project before publishing"
+    },
+    "no_restore": {
+      "type": "boolean",
+      "flag": "--no-restore",
+      "description": "Do not restore the project before building"
+    },
+    "verbosity": {
+      "type": "string",
+      "flag": "--verbosity",
+      "description": "Set the MSBuild verbosity level (quiet, minimal, normal, detailed, diagnostic)"
+    },
+    "no_logo": {
+      "type": "boolean",
+      "flag": "--no-logo",
+      "description": "Display startup banner or not"
+    },
+    "properties": {
+      "type": "map",
+      "flag": "-p",
+      "prefix": "-p:",
+      "description": "MSBuild properties (e.g., -p:Version=1.2.3)"
+    },
+    "define": {
+      "type": "array",
+      "flag": "--define",
+      "description": "Defines conditional compilation symbols"
+    }
+  }
+}

@@ -7,6 +7,7 @@ pub enum ErrorKind {
   Unknown,
   UnsupportedProvider,
   UnsupportedSpecVersion,
+  RenderError,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -39,6 +40,11 @@ impl From<CompileError> for AppError {
         kind: ErrorKind::UnsupportedProvider,
         message: format!("unsupported provider: {p}"),
         details: None,
+      },
+      CompileError::RenderError(msg) => Self {
+        kind: ErrorKind::RenderError,
+        message: format!("parameter render error: {}", msg),
+        details: Some(msg),
       },
     }
   }

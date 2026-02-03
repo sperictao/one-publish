@@ -1,5 +1,6 @@
 use super::{Provider, ProviderManifest};
-use crate::compiler::{CompileError};
+use crate::compiler::CompileError;
+use crate::parameter::{load_schema_from_file, ParameterSchema, RenderError};
 use crate::plan::{ExecutionPlan, PlanStep, PLAN_VERSION};
 use crate::spec::{PublishSpec, SpecValue, SPEC_VERSION};
 use std::collections::BTreeMap;
@@ -30,6 +31,16 @@ impl ProviderRegistry {
   }
 }
 
+fn get_schema_path(provider_id: &str) -> String {
+  // Build path to schema file
+  let schema_path = format!(
+    "{}/src/provider/schemas/{}.json",
+    env!("CARGO_MANIFEST_DIR"),
+    provider_id
+  );
+  schema_path
+}
+
 struct DotnetProvider {
   manifest: ProviderManifest,
 }
@@ -49,6 +60,11 @@ impl DotnetProvider {
 impl Provider for DotnetProvider {
   fn manifest(&self) -> &ProviderManifest {
     &self.manifest
+  }
+
+  fn get_schema(&self) -> Result<ParameterSchema, RenderError> {
+    let schema_path = get_schema_path("dotnet");
+    load_schema_from_file(schema_path.as_ref())
   }
 
   fn compile(&self, spec: &PublishSpec) -> Result<ExecutionPlan, CompileError> {
@@ -81,6 +97,11 @@ impl Provider for CargoProvider {
     &self.manifest
   }
 
+  fn get_schema(&self) -> Result<ParameterSchema, RenderError> {
+    let schema_path = get_schema_path("cargo");
+    load_schema_from_file(schema_path.as_ref())
+  }
+
   fn compile(&self, spec: &PublishSpec) -> Result<ExecutionPlan, CompileError> {
     compile_single_step(spec, "cargo.build", "cargo build")
   }
@@ -107,6 +128,11 @@ impl Provider for GoProvider {
     &self.manifest
   }
 
+  fn get_schema(&self) -> Result<ParameterSchema, RenderError> {
+    let schema_path = get_schema_path("go");
+    load_schema_from_file(schema_path.as_ref())
+  }
+
   fn compile(&self, spec: &PublishSpec) -> Result<ExecutionPlan, CompileError> {
     compile_single_step(spec, "go.build", "go build")
   }
@@ -131,6 +157,11 @@ impl JavaProvider {
 impl Provider for JavaProvider {
   fn manifest(&self) -> &ProviderManifest {
     &self.manifest
+  }
+
+  fn get_schema(&self) -> Result<ParameterSchema, RenderError> {
+    let schema_path = get_schema_path("java");
+    load_schema_from_file(schema_path.as_ref())
   }
 
   fn compile(&self, spec: &PublishSpec) -> Result<ExecutionPlan, CompileError> {
@@ -235,5 +266,37 @@ mod tests {
       CompileError::UnsupportedProvider(id) => assert_eq!(id, "nope"),
       _ => panic!("unexpected error"),
     }
+  }
+
+  #[test]
+  fn dotnet_provider_loads_schema() {
+    let p = DotnetProvider::new();
+    let schema = p.get_schema().expect("schema");
+    assert!(schema.parameters.contains_key("configuration"));
+    assert!(schema.parameters.contains_key("runtime"));
+  }
+
+  #[test]
+  fn cargo_provider_loads_schema() {
+    let p = CargoProvider::new();
+    let schema = p.get_schema().expect("schema");
+    assert!(schema.parameters.contains_key("release"));
+    assert!(schema.parameters.contains_key("target"));
+  }
+
+  #[test]
+  fn go_provider_loads_schema() {
+    let p = GoProvider::new();
+    let schema = p.get_schema().expect("schema");
+    assert!(schema.parameters.contains_key("output"));
+    assert!(schema.parameters.contains_key("tags"));
+  }
+
+  #[test]
+  fn java_provider_loads_schema() {
+    let p = JavaProvider::new();
+    let schema = p.get_schema().expect("schema");
+    assert!(schema.parameters.contains_key("task"));
+    assert!(schema.parameters.contains_key("offline"));
   }
 }

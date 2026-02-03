@@ -1,0 +1,49 @@
+{
+  "parameters": {
+    "release": {
+      "type": "boolean",
+      "flag": "--release",
+      "description": "Build artifacts in release mode, with optimizations"
+    },
+    "target": {
+      "type": "string",
+      "flag": "--target",
+      "description": "Target triple for the compilation (e.g., x86_64-apple-darwin)"
+    },
+    "features": {
+      "type": "array",
+      "flag": "--features",
+      "description": "Space-separated list of features to activate"
+    },
+    "all_features": {
+      "type": "boolean",
+      "flag": "--all-features",
+      "description": "Activate all available features"
+    },
+    "no_default_features": {
+      "type": "boolean",
+      "flag": "--no-default-features",
+      "description": "Do not activate the `default` feature"
+    },
+    "target_dir": {
+      "type": "string",
+      "flag": "--target-dir",
+      "description": "Directory for all generated artifacts"
+    },
+    "message_format": {
+      "type": "string",
+      "flag": "--message-format",
+      "description": "Error message format (human, json, short)"
+    },
+    "verbose": {
+      "type": "boolean",
+      "flag": "--verbose",
+      "description": "Use verbose output"
+    },
+    "quiet": {
+      "type": "boolean",
+      "flag": "--quiet",
+      "description": "No output printed to stdout"
+    }
+  }
+}

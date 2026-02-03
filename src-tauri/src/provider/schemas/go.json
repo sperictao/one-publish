@@ -1,0 +1,51 @@
+{
+  "parameters": {
+    "output": {
+      "type": "string",
+      "flag": "-o",
+      "description": "Output file or directory"
+    },
+    "target": {
+      "type": "string",
+      "flag": "",
+      "prefix": "GOOS=",
+      "description": "Target operating system (e.g., linux, darwin, windows)"
+    },
+    "arch": {
+      "type": "string",
+      "flag": "",
+      "prefix": "GOARCH=",
+      "description": "Target architecture (e.g., amd64, arm64, 386)"
+    },
+    "tags": {
+      "type": "array",
+      "flag": "-tags",
+      "description": "Build tags"
+    },
+    "ldflags": {
+      "type": "string",
+      "flag": "-ldflags",
+      "description": "Linker flags"
+    },
+    "race": {
+      "type": "boolean",
+      "flag": "-race",
+      "description": "Enable data race detection"
+    },
+    "v": {
+      "type": "boolean",
+      "flag": "-v",
+      "description": "Print the names of packages as they are compiled"
+    },
+    "work": {
+      "type": "string",
+      "flag": "-work",
+      "description": "Print the name of the temporary work directory and do not delete it"
+    },
+    "trimpath": {
+      "type": "boolean",
+      "flag": "-trimpath",
+      "description": "Remove all file system paths from the resulting executable"
+    }
+  }
+}

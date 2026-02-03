@@ -27,7 +27,7 @@ Status legend:
 
 ## Phase 3: 100% Parameter Expressiveness
 
-- [todo] TASK-0301 Parameter schema + renderer (docs/roadmap/tasks/TASK-0301.md)
+- [done] TASK-0301 Parameter schema + renderer (docs/roadmap/tasks/TASK-0301.md)
 - [todo] TASK-0302 Advanced parameter editor (docs/roadmap/tasks/TASK-0302.md)
 - [todo] TASK-0303 Command import (optional) (docs/roadmap/tasks/TASK-0303.md)
 

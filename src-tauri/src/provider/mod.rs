@@ -1,6 +1,7 @@
 pub mod registry;
 
 use crate::compiler::CompileError;
+use crate::parameter::{ParameterSchema, RenderError};
 use crate::plan::ExecutionPlan;
 use crate::spec::PublishSpec;
 use serde::{Deserialize, Serialize};
@@ -14,6 +15,8 @@ pub struct ProviderManifest {
 
 pub trait Provider: Send + Sync {
   fn manifest(&self) -> &ProviderManifest;
+
+  fn get_schema(&self) -> Result<ParameterSchema, RenderError>;
 
   fn compile(&self, spec: &PublishSpec) -> Result<ExecutionPlan, CompileError>;
 }

@@ -1,0 +1,56 @@
+{
+  "parameters": {
+    "task": {
+      "type": "string",
+      "flag": "",
+      "description": "Gradle task (e.g., build, test, publish)"
+    },
+    "configuration": {
+      "type": "string",
+      "flag": "",
+      "prefix": "-D",
+      "description": "Build configuration (e.g., debug, release)"
+    },
+    "properties": {
+      "type": "map",
+      "flag": "",
+      "prefix": "-D",
+      "description": "Project properties (e.g., -Dversion=1.2.3)"
+    },
+    "offline": {
+      "type": "boolean",
+      "flag": "--offline",
+      "description": "Execute the build without accessing network resources"
+    },
+    "quiet": {
+      "type": "boolean",
+      "flag": "--quiet",
+      "description": "Log errors only"
+    },
+    "info": {
+      "type": "boolean",
+      "flag": "--info",
+      "description": "Show logging of project state at INFO level"
+    },
+    "debug": {
+      "type": "boolean",
+      "flag": "--debug",
+      "description": "Show logging of project state at DEBUG level"
+    },
+    "stacktrace": {
+      "type": "boolean",
+      "flag": "--stacktrace",
+      "description": "Print out the stacktrace for exceptions"
+    },
+    "rerun_tasks": {
+      "type": "string",
+      "flag": "--rerun-tasks",
+      "description": "Specify the tasks to be re-executed"
+    },
+    "exclude_task": {
+      "type": "array",
+      "flag": "--exclude-task",
+      "description": "Specify tasks to be excluded from execution"
+    }
+  }
+}
