@@ -17,19 +17,13 @@ Status legend:
 - [done] TASK-0101 PublishSpec model (docs/roadmap/tasks/TASK-0101.md)
 - [done] TASK-0102 ExecutionPlan compiler (docs/roadmap/tasks/TASK-0102.md)
 - [done] TASK-0103 Unified logging + error taxonomy (docs/roadmap/tasks/TASK-0103.md)
-- [done] TASK-0201 Provider interface + manifest + loader (docs/roadmap/tasks/TASK-0201.md)
-- [done] TASK-0202 Rust provider (cargo) (docs/roadmap/tasks/TASK-0202.md)
-- [done] TASK-0203 Go provider (docs/roadmap/tasks/TASK-0203.md)
-- [doing] TASK-0204 Java provider (docs/roadmap/tasks/TASK-0204.md)
-- [todo] TASK-0102 ExecutionPlan compiler (docs/roadmap/tasks/TASK-0102.md)
-- [todo] TASK-0103 Unified logging + error taxonomy (docs/roadmap/tasks/TASK-0103.md)
 
 ## Phase 2: Language Providers
 
-- [todo] TASK-0201 Provider interface + manifest + loader (docs/roadmap/tasks/TASK-0201.md)
-- [todo] TASK-0202 Rust provider (cargo) (docs/roadmap/tasks/TASK-0202.md)
-- [todo] TASK-0203 Go provider (docs/roadmap/tasks/TASK-0203.md)
-- [todo] TASK-0204 Java provider (docs/roadmap/tasks/TASK-0204.md)
+- [done] TASK-0201 Provider interface + manifest + loader (docs/roadmap/tasks/TASK-0201.md)
+- [done] TASK-0202 Rust provider (cargo) (docs/roadmap/tasks/TASK-0202.md)
+- [done] TASK-0203 Go provider (docs/roadmap/tasks/TASK-0203.md)
+- [done] TASK-0204 Java provider (docs/roadmap/tasks/TASK-0204.md)
 
 ## Phase 3: 100% Parameter Expressiveness
 
