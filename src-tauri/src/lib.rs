@@ -91,6 +91,7 @@ pub fn run() {
             commands::install_update,
             commands::get_current_version,
             commands::get_shortcuts_help,
+            commands::get_provider_schema,
             store::get_app_state,
             store::save_app_state,
             store::add_repository,

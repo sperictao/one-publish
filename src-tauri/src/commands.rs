@@ -1,5 +1,6 @@
 // Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
 
+use crate::provider::registry::ProviderRegistry;
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
@@ -294,4 +295,19 @@ pub fn get_current_version() -> String {
 #[tauri::command]
 pub fn get_shortcuts_help() -> Vec<crate::shortcuts::ShortcutHelp> {
     crate::shortcuts::get_shortcuts_help()
+}
+
+/// 获取 Provider 的参数 Schema
+#[tauri::command]
+pub async fn get_provider_schema(
+    provider_id: String,
+) -> Result<crate::parameter::ParameterSchema, crate::errors::AppError> {
+    let registry = ProviderRegistry::new();
+    let provider = registry
+        .get(&provider_id)
+        .map_err(|e| crate::errors::AppError::from(e))?;
+    let schema = provider.get_schema().map_err(|e| {
+        crate::errors::AppError::unknown(format!("failed to load schema: {}", e))
+    })?;
+    Ok(schema)
 }
