@@ -50,8 +50,14 @@ export interface SpecMap {
 
 /**
  * Simplified parameter value for UI (JSON-serializable)
+ * Using interface to support recursive types
  */
-export type ParameterValue = null | boolean | number | string | ParameterValue[] | Record<string, ParameterValue>;
+export interface ParameterValueObject {
+  [key: string]: ParameterValue;
+}
+export interface ParameterValueArray extends Array<ParameterValue> {}
+
+export type ParameterValue = null | boolean | number | string | ParameterValueArray | ParameterValueObject;
 
 /**
  * Convert ParameterValue to SpecValue
