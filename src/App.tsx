@@ -19,6 +19,9 @@ import { ResizeHandle } from "@/components/layout/ResizeHandle";
 import { SettingsDialog } from "@/components/layout/SettingsDialog";
 import { ShortcutsDialog } from "@/components/layout/ShortcutsDialog";
 
+// Publish Components
+import { CommandImportDialog } from "@/components/publish/CommandImportDialog";
+
 // UI Components
 import { Button } from "@/components/ui/button";
 import {
@@ -50,6 +53,7 @@ import {
   Loader2,
   RefreshCw,
   GitBranch,
+  Import,
 } from "lucide-react";
 
 // Types
@@ -227,6 +231,7 @@ function App() {
   const [middlePanelCollapsed, setMiddlePanelCollapsed] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
+  const [commandImportOpen, setCommandImportOpen] = useState(false);
 
   // Min/Max constraints
   const MIN_PANEL_WIDTH = 150;
@@ -451,6 +456,37 @@ function App() {
     setCustomConfig({ ...customConfig, ...updates });
   };
 
+  // Handle command import
+  const handleCommandImport = (spec: any) => {
+    // Map parsed parameters to custom config
+    const params = spec.parameters || {};
+
+    const updates: Partial<PublishConfigStore> = {};
+
+    // Map common parameter names
+    if (params.configuration) {
+      updates.configuration = params.configuration;
+    }
+    if (params.runtime) {
+      updates.runtime = params.runtime;
+    }
+    if (params.output) {
+      updates.outputDir = params.output;
+    }
+    if (typeof params.self_contained === "boolean") {
+      updates.selfContained = params.self_contained;
+    }
+
+    // Apply updates
+    handleCustomConfigUpdate(updates);
+
+    // Switch to custom mode if not already
+    setIsCustomMode(true);
+    toast.success("参数已导入", {
+      description: `已从命令导入 ${Object.keys(updates).length} 个参数`,
+    });
+  };
+
   // Show loading state
   if (isStateLoading) {
     return (
@@ -646,13 +682,26 @@ function App() {
               {projectInfo && (
                 <Card>
                   <CardHeader className="pb-3">
-                    <CardTitle className="text-lg flex items-center gap-2">
-                      <Settings className="h-5 w-5" />
-                      发布配置
-                    </CardTitle>
-                    <CardDescription>
-                      选择预设配置或自定义发布参数
-                    </CardDescription>
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <CardTitle className="text-lg flex items-center gap-2">
+                          <Settings className="h-5 w-5" />
+                          发布配置
+                        </CardTitle>
+                        <CardDescription>
+                          选择预设配置或自定义发布参数
+                        </CardDescription>
+                      </div>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setCommandImportOpen(true)}
+                        disabled={!projectInfo}
+                      >
+                        <Import className="h-4 w-4 mr-1" />
+                        从命令导入
+                      </Button>
+                    </div>
                   </CardHeader>
                   <CardContent className="space-y-4">
                     {/* Mode Toggle */}
@@ -902,6 +951,17 @@ function App() {
         onThemeChange={setTheme}
         onOpenShortcuts={() => setShortcutsOpen(true)}
       />
+
+      {/* Command Import Dialog */}
+      {projectInfo && (
+        <CommandImportDialog
+          open={commandImportOpen}
+          onOpenChange={setCommandImportOpen}
+          providerId="dotnet"
+          projectPath={projectInfo.project_file}
+          onImport={handleCommandImport}
+        />
+      )}
     </div>
   );
 }

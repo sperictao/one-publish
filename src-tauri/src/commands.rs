@@ -1,5 +1,6 @@
 // Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
 
+use crate::command_parser::CommandParser;
 use crate::provider::registry::ProviderRegistry;
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
@@ -310,4 +311,28 @@ pub async fn get_provider_schema(
         crate::errors::AppError::unknown(format!("failed to load schema: {}", e))
     })?;
     Ok(schema)
+}
+
+/// 从命令导入配置
+#[tauri::command]
+pub async fn import_from_command(
+    command: String,
+    provider_id: String,
+    project_path: String,
+) -> Result<crate::spec::PublishSpec, crate::errors::AppError> {
+    let registry = ProviderRegistry::new();
+    let provider = registry
+        .get(&provider_id)
+        .map_err(|e| crate::errors::AppError::from(e))?;
+
+    let schema = provider.get_schema().map_err(|e| {
+        crate::errors::AppError::unknown(format!("failed to load schema: {}", e))
+    })?;
+
+    let parser = CommandParser::new(provider_id);
+    let spec = parser
+        .parse_command(&command, project_path, &schema)
+        .map_err(|e| crate::errors::AppError::unknown(format!("parse error: {}", e)))?;
+
+    Ok(spec)
 }
