@@ -13,6 +13,15 @@ export interface PublishConfigStore {
   profileName: string;
 }
 
+// 配置文件类型（用于配置导入导出）
+export interface ConfigProfile {
+  name: string;
+  providerId: string;
+  parameters: Record<string, any>;
+  createdAt: string;
+  isSystemDefault: boolean;
+}
+
 // 应用状态类型
 export interface AppState {
   repositories: Repository[];
@@ -26,6 +35,7 @@ export interface AppState {
   language: string;
   defaultOutputDir: string;
   theme: "light" | "dark" | "auto";
+  profiles: ConfigProfile[];
 }
 
 // 默认状态
@@ -48,6 +58,7 @@ export const defaultAppState: AppState = {
   language: "zh",
   defaultOutputDir: "",
   theme: "auto",
+  profiles: [],
 };
 
 /**
@@ -181,4 +192,64 @@ export interface ShortcutHelp {
  */
 export async function getShortcutsHelp(): Promise<ShortcutHelp[]> {
   return await invoke<ShortcutHelp[]>("get_shortcuts_help");
+}
+
+// ==================== 配置导入导出相关 ====================
+
+export interface ConfigExport {
+  version: number;
+  exportedAt: string;
+  profiles: ConfigProfile[];
+}
+
+/**
+ * 获取所有配置文件
+ */
+export async function getProfiles(): Promise<ConfigProfile[]> {
+  return await invoke<ConfigProfile[]>("get_profiles");
+}
+
+/**
+ * 保存配置文件
+ */
+export async function saveProfile(params: {
+  name: string;
+  providerId: string;
+  parameters: Record<string, any>;
+}): Promise<AppState> {
+  return await invoke<AppState>("save_profile", params);
+}
+
+/**
+ * 删除配置文件
+ */
+export async function deleteProfile(name: string): Promise<AppState> {
+  return await invoke<AppState>("delete_profile", { name });
+}
+
+/**
+ * 导出配置到文件
+ */
+export async function exportConfig(params: {
+  profiles: ConfigProfile[];
+  filePath: string;
+}): Promise<string> {
+  return await invoke<string>("export_config", {
+    profiles: params.profiles,
+    file_path: params.filePath,
+  });
+}
+
+/**
+ * 从文件导入配置
+ */
+export async function importConfig(filePath: string): Promise<ConfigExport> {
+  return await invoke<ConfigExport>("import_config", { file_path: filePath });
+}
+
+/**
+ * 应用导入的配置
+ */
+export async function applyImportedConfig(profiles: ConfigProfile[]): Promise<void> {
+  await invoke("apply_imported_config", { profiles });
 }

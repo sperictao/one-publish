@@ -21,6 +21,7 @@ import { ShortcutsDialog } from "@/components/layout/ShortcutsDialog";
 
 // Publish Components
 import { CommandImportDialog } from "@/components/publish/CommandImportDialog";
+import { ConfigDialog } from "@/components/publish/ConfigDialog";
 
 // UI Components
 import { Button } from "@/components/ui/button";
@@ -232,6 +233,7 @@ function App() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const [commandImportOpen, setCommandImportOpen] = useState(false);
+  const [configDialogOpen, setConfigDialogOpen] = useState(false);
 
   // Min/Max constraints
   const MIN_PANEL_WIDTH = 150;
@@ -484,6 +486,36 @@ function App() {
     setIsCustomMode(true);
     toast.success("参数已导入", {
       description: `已从命令导入 ${Object.keys(updates).length} 个参数`,
+    });
+  };
+
+  const handleLoadProfile = (profile: any) => {
+    // Convert profile parameters to custom config
+    const params = profile.parameters || {};
+
+    const updates: Partial<PublishConfigStore> = {};
+
+    // Map common parameter names
+    if (params.configuration) {
+      updates.configuration = params.configuration;
+    }
+    if (params.runtime) {
+      updates.runtime = params.runtime;
+    }
+    if (params.output) {
+      updates.outputDir = params.output;
+    }
+    if (typeof params.self_contained === "boolean") {
+      updates.selfContained = params.self_contained;
+    }
+
+    // Apply updates
+    handleCustomConfigUpdate(updates);
+
+    // Switch to custom mode if not already
+    setIsCustomMode(true);
+    toast.success("配置文件已加载", {
+      description: `已加载配置文件: ${profile.name}`,
     });
   };
 
@@ -950,6 +982,7 @@ function App() {
         theme={theme}
         onThemeChange={setTheme}
         onOpenShortcuts={() => setShortcutsOpen(true)}
+        onOpenConfig={() => setConfigDialogOpen(true)}
       />
 
       {/* Command Import Dialog */}
@@ -962,6 +995,20 @@ function App() {
           onImport={handleCommandImport}
         />
       )}
+
+      {/* Config Dialog */}
+      <ConfigDialog
+        open={configDialogOpen}
+        onOpenChange={setConfigDialogOpen}
+        onLoadProfile={handleLoadProfile}
+        currentProviderId="dotnet"
+        currentParameters={{
+          configuration: customConfig.configuration,
+          runtime: customConfig.runtime,
+          output: customConfig.outputDir,
+          self_contained: customConfig.selfContained,
+        }}
+      />
     </div>
   );
 }

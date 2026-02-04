@@ -27,6 +27,7 @@ import {
   RefreshCw,
   Download,
   Info,
+  Sliders,
 } from "lucide-react";
 import { useState } from "react";
 import { checkUpdate, installUpdate } from "@/lib/store";
@@ -55,6 +56,7 @@ interface SettingsDialogProps {
   theme: "light" | "dark" | "auto";
   onThemeChange: (theme: "light" | "dark" | "auto") => void;
   onOpenShortcuts?: () => void;
+  onOpenConfig?: () => void;
 }
 
 export function SettingsDialog({
@@ -69,6 +71,7 @@ export function SettingsDialog({
   theme,
   onThemeChange,
   onOpenShortcuts,
+  onOpenConfig,
 }: SettingsDialogProps) {
   const [updateInfo, setUpdateInfo] = useState<UpdateInfo | null>(null);
   const [isCheckingUpdate, setIsCheckingUpdate] = useState(false);
@@ -296,6 +299,16 @@ export function SettingsDialog({
           >
             <Info className="h-4 w-4 mr-2" />
             {translations.shortcuts?.button || "查看快捷键"}
+          </Button>
+
+          {/* Config Management */}
+          <Button
+            variant="outline"
+            className="w-full"
+            onClick={onOpenConfig}
+          >
+            <Sliders className="h-4 w-4 mr-2" />
+            {translations.config?.button || "配置管理"}
           </Button>
         </div>
       </DialogContent>
