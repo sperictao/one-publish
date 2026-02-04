@@ -4,6 +4,7 @@ pub mod command_parser;
 pub mod commands;
 pub mod compiler;
 pub mod config_export;
+pub mod environment;
 pub mod errors;
 pub mod parameter;
 pub mod plan;
@@ -13,6 +14,8 @@ pub mod shortcuts;
 pub mod spec;
 pub mod store;
 pub mod tray;
+
+pub use environment::{check_environment, FixAction, FixResult, FixType};
 
 use tauri::Manager;
 
@@ -98,6 +101,8 @@ pub fn run() {
             commands::export_config,
             commands::import_config,
             commands::apply_imported_config,
+            commands::run_environment_check,
+            commands::apply_fix,
             store::get_app_state,
             store::save_app_state,
             store::add_repository,

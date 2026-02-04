@@ -2,6 +2,7 @@
 
 use crate::command_parser::CommandParser;
 use crate::config_export::{ConfigExport, ConfigProfile};
+use crate::environment::{check_environment, FixAction, FixResult, FixType};
 use crate::provider::registry::ProviderRegistry;
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
@@ -412,5 +413,60 @@ pub async fn apply_imported_config(
         .map_err(|e| crate::errors::AppError::unknown(format!("保存配置失败: {}", e)))?;
 
     Ok(())
+}
+
+/// Run environment check
+#[tauri::command]
+pub async fn run_environment_check() -> Result<crate::environment::EnvironmentCheckResult, crate::errors::AppError> {
+    check_environment()
+        .await
+        .map_err(|e| crate::errors::AppError::unknown(format!("environment check failed: {}", e)))
+}
+
+/// Apply a fix action
+#[tauri::command]
+pub async fn apply_fix(action: FixAction) -> Result<FixResult, crate::errors::AppError> {
+    match action.action_type {
+        FixType::OpenUrl => {
+            let url = action
+                .url
+                .ok_or_else(|| crate::errors::AppError::unknown("URL is required for OpenUrl fix"))?;
+
+            // Use tauri_plugin_opener to open the URL
+            open::that(&url)
+                .map_err(|e| crate::errors::AppError::unknown(format!("failed to open URL: {}", e)))?;
+
+            Ok(FixResult::OpenedUrl(url))
+        }
+        FixType::RunCommand => {
+            let command_str = action.command.ok_or_else(|| {
+                crate::errors::AppError::unknown("Command is required for RunCommand fix")
+            })?;
+
+            // Note: We don't actually run commands for security reasons.
+            // We just return the command for the user to run manually.
+            // In the future, we could add a confirmation dialog and use shell plugin.
+
+            Ok(FixResult::CommandExecuted {
+                stdout: format!(
+                    "Command: {}\n\nFor security, please run this command manually.",
+                    command_str
+                ),
+                stderr: String::new(),
+                exit_code: 0,
+            })
+        }
+        FixType::CopyCommand => {
+            let command_str = action.command.ok_or_else(|| {
+                crate::errors::AppError::unknown("Command is required for CopyCommand fix")
+            })?;
+
+            // TODO: Copy to clipboard using tauri_plugin_clipboard
+            Ok(FixResult::CopiedToClipboard(command_str))
+        }
+        FixType::Manual => {
+            Ok(FixResult::Manual(action.label))
+        }
+    }
 }
 
