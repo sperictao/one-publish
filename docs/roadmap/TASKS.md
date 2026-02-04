@@ -33,7 +33,7 @@ Status legend:
 
 ## Phase 4: Commercial Features
 
-- [todo] TASK-0401 Config import/export (docs/roadmap/tasks/TASK-0401.md)
+- [doing] TASK-0401 Config import/export (docs/roadmap/tasks/TASK-0401.md) - Backend API complete
 - [todo] TASK-0402 Environment probing + guided fixes (docs/roadmap/tasks/TASK-0402.md)
 - [todo] TASK-0403 Packaging + signing abstraction (docs/roadmap/tasks/TASK-0403.md)
 - [todo] TASK-0404 Updater pipeline (docs/roadmap/tasks/TASK-0404.md)

@@ -44,6 +44,17 @@ pub struct PublishConfigStore {
     pub profile_name: String,
 }
 
+/// 配置文件（用于 import/export）
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ConfigProfile {
+    pub name: String,
+    pub provider_id: String,
+    pub parameters: serde_json::Value,
+    pub created_at: String,
+    pub is_system_default: bool,
+}
+
 impl Default for PublishConfigStore {
     fn default() -> Self {
         Self {
@@ -94,6 +105,9 @@ pub struct AppState {
     /// 主题设置: "light", "dark", "auto"
     #[serde(default = "default_theme")]
     pub theme: String,
+    /// 保存的配置文件
+    #[serde(default)]
+    pub profiles: Vec<ConfigProfile>,
 }
 
 fn default_minimize_to_tray() -> bool {
@@ -134,6 +148,7 @@ impl Default for AppState {
             language: default_language(),
             default_output_dir: String::new(),
             theme: default_theme(),
+            profiles: Vec::new(),
         }
     }
 }
@@ -343,3 +358,55 @@ pub async fn update_preferences(
 
     Ok(state)
 }
+
+/// 获取保存的配置文件
+#[tauri::command]
+pub async fn get_profiles() -> Result<Vec<ConfigProfile>, String> {
+    let state = get_state();
+    Ok(state.profiles)
+}
+
+/// 保存当前配置为配置文件
+#[tauri::command]
+pub async fn save_profile(
+    name: String,
+    provider_id: String,
+    parameters: serde_json::Value,
+) -> Result<AppState, String> {
+    let mut state = get_state();
+
+    // 检查是否已存在同名配置文件
+    if state.profiles.iter().any(|p| p.name == name) {
+        return Err(format!("配置文件 '{}' 已存在", name));
+    }
+
+    let profile = ConfigProfile {
+        name: name.clone(),
+        provider_id,
+        parameters,
+        created_at: chrono::Utc::now().to_rfc3339(),
+        is_system_default: false,
+    };
+
+    state.profiles.push(profile);
+    update_state(state.clone())?;
+    Ok(state)
+}
+
+/// 删除配置文件
+#[tauri::command]
+pub async fn delete_profile(name: String) -> Result<AppState, String> {
+    let mut state = get_state();
+
+    // 不允许删除系统默认配置文件
+    if let Some(profile) = state.profiles.iter().find(|p| p.name == name) {
+        if profile.is_system_default {
+            return Err("不能删除系统默认配置文件".to_string());
+        }
+    }
+
+    state.profiles.retain(|p| p.name != name);
+    update_state(state.clone())?;
+    Ok(state)
+}
+

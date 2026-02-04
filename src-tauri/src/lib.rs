@@ -3,6 +3,7 @@
 pub mod command_parser;
 pub mod commands;
 pub mod compiler;
+pub mod config_export;
 pub mod errors;
 pub mod parameter;
 pub mod plan;
@@ -94,6 +95,9 @@ pub fn run() {
             commands::get_shortcuts_help,
             commands::get_provider_schema,
             commands::import_from_command,
+            commands::export_config,
+            commands::import_config,
+            commands::apply_imported_config,
             store::get_app_state,
             store::save_app_state,
             store::add_repository,
@@ -102,6 +106,9 @@ pub fn run() {
             store::update_ui_state,
             store::update_publish_state,
             store::update_preferences,
+            store::get_profiles,
+            store::save_profile,
+            store::delete_profile,
             tray::update_tray_menu
         ])
         .run(tauri::generate_context!())
