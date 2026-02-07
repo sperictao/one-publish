@@ -41,5 +41,5 @@ Status legend:
 ## Phase 5: Release Operations UX
 
 - [done] TASK-0501 Updater config visibility + quick open (docs/roadmap/tasks/TASK-0501.md)
-- [todo] TASK-0502 Signed release checklist wizard (docs/roadmap/tasks/TASK-0502.md)
-- [todo] TASK-0503 Preflight report export (docs/roadmap/tasks/TASK-0503.md)
+- [done] TASK-0502 Signed release checklist wizard (docs/roadmap/tasks/TASK-0502.md)
+- [done] TASK-0503 Preflight report export (docs/roadmap/tasks/TASK-0503.md)
