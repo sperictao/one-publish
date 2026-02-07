@@ -36,6 +36,28 @@ pub async fn check_dotnet() -> Result<ProviderStatus, Box<dyn std::error::Error>
     }
 }
 
+/// Detect .NET-specific issues
+pub fn detect_dotnet_issues(status: &ProviderStatus) -> Vec<EnvironmentIssue> {
+    let mut issues = Vec::new();
+
+    if !status.installed {
+        issues.push(create_missing_dotnet_issue());
+        return issues;
+    }
+
+    let Some(version) = status.version.as_deref() else {
+        return issues;
+    };
+
+    if super::types::parse_semver(version).is_some()
+        && super::types::compare_versions(version, MIN_DOTNET_VERSION) < 0
+    {
+        issues.push(create_outdated_dotnet_issue(version, MIN_DOTNET_VERSION));
+    }
+
+    issues
+}
+
 /// Create issue for missing .NET SDK
 pub fn create_missing_dotnet_issue() -> EnvironmentIssue {
     EnvironmentIssue::new(
@@ -109,7 +131,7 @@ fn get_dotnet_install_fixes() -> Vec<FixAction> {
     {
         vec![
             FixAction {
-                action_type: FixType::RunCommand,
+                action_type: FixType::OpenUrl,
                 label: "Open Microsoft instructions".to_string(),
                 command: None,
                 url: Some("https://learn.microsoft.com/en-us/dotnet/core/install/linux".to_string()),

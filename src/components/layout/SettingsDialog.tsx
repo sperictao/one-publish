@@ -28,9 +28,17 @@ import {
   Download,
   Info,
   Sliders,
+  FileText,
+  FileCog,
 } from "lucide-react";
 import { useState } from "react";
-import { checkUpdate, installUpdate } from "@/lib/store";
+import {
+  checkUpdate,
+  installUpdate,
+  getUpdaterHelpPaths,
+  getUpdaterConfigHealth,
+  openUpdaterHelp,
+} from "@/lib/store";
 import type { UpdateInfo } from "@/lib/store";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import { useI18n, t } from "@/hooks/useI18n";
@@ -57,6 +65,9 @@ interface SettingsDialogProps {
   onThemeChange: (theme: "light" | "dark" | "auto") => void;
   onOpenShortcuts?: () => void;
   onOpenConfig?: () => void;
+  environmentStatus?: "unknown" | "ready" | "warning" | "blocked";
+  environmentCheckedAt?: string;
+  onOpenEnvironment?: () => void;
 }
 
 export function SettingsDialog({
@@ -72,10 +83,22 @@ export function SettingsDialog({
   onThemeChange,
   onOpenShortcuts,
   onOpenConfig,
+  environmentStatus = "unknown",
+  environmentCheckedAt,
+  onOpenEnvironment,
 }: SettingsDialogProps) {
   const [updateInfo, setUpdateInfo] = useState<UpdateInfo | null>(null);
   const [isCheckingUpdate, setIsCheckingUpdate] = useState(false);
   const [isInstallingUpdate, setIsInstallingUpdate] = useState(false);
+  const [isOpeningUpdaterHelp, setIsOpeningUpdaterHelp] = useState(false);
+  const [updaterHelpPaths, setUpdaterHelpPaths] = useState<{
+    docsPath: string;
+    templatePath: string;
+  } | null>(null);
+  const [updaterConfigHealth, setUpdaterConfigHealth] = useState<{
+    configured: boolean;
+    message: string;
+  } | null>(null);
   const { translations } = useI18n();
 
   const handleCheckUpdate = async () => {
@@ -83,6 +106,19 @@ export function SettingsDialog({
     try {
       const info = await checkUpdate();
       setUpdateInfo(info);
+
+      const health = await getUpdaterConfigHealth();
+      setUpdaterConfigHealth(health);
+
+      if (
+        info.message?.includes("更新源未配置") ||
+        info.message?.includes("updater")
+      ) {
+        const paths = await getUpdaterHelpPaths();
+        setUpdaterHelpPaths(paths);
+      } else {
+        setUpdaterHelpPaths(null);
+      }
     } catch (err) {
       console.error("检查更新失败:", err);
     } finally {
@@ -90,12 +126,36 @@ export function SettingsDialog({
     }
   };
 
+  const handleOpenUpdaterHelp = async (target: "docs" | "template") => {
+    setIsOpeningUpdaterHelp(true);
+    try {
+      await openUpdaterHelp(target);
+    } catch (err) {
+      console.error("打开 updater 帮助失败:", err);
+    } finally {
+      setIsOpeningUpdaterHelp(false);
+    }
+  };
+
   const handleInstallUpdate = async () => {
     setIsInstallingUpdate(true);
     try {
-      await installUpdate();
+      const message = await installUpdate();
+      const info = await checkUpdate();
+      setUpdateInfo({
+        ...info,
+        message: message || info.message,
+      });
     } catch (err) {
       console.error("安装更新失败:", err);
+      setUpdateInfo((prev) => ({
+        currentVersion: prev?.currentVersion || "1.0.0",
+        availableVersion: prev?.availableVersion || null,
+        hasUpdate: prev?.hasUpdate || false,
+        releaseNotes: prev?.releaseNotes || null,
+        message: String(err),
+      }));
+    } finally {
       setIsInstallingUpdate(false);
     }
   };
@@ -150,6 +210,57 @@ export function SettingsDialog({
                 {!updateInfo && (
                   <div className="text-xs text-muted-foreground">
                     {translations.version?.clickToCheck || "点击检查更新以获取最新版本信息"}
+                  </div>
+                )}
+                {updateInfo && !updateInfo.hasUpdate && !updateInfo.message && (
+                  <div className="text-xs text-muted-foreground">
+                    {translations.version?.none || "没有可用的更新"}
+                  </div>
+                )}
+                {updateInfo?.message && (
+                  <div className="text-xs text-muted-foreground">
+                    {updateInfo.message}
+                  </div>
+                )}
+                {updaterConfigHealth && (
+                  <div
+                    className={`text-xs ${
+                      updaterConfigHealth.configured
+                        ? "text-green-600"
+                        : "text-yellow-600"
+                    }`}
+                  >
+                    {translations.version?.configStatus || "配置状态"}: {updaterConfigHealth.message}
+                  </div>
+                )}
+                {updaterHelpPaths && (
+                  <div className="flex flex-col gap-2 pt-1">
+                    <div className="text-xs text-muted-foreground font-mono break-all">
+                      {updaterHelpPaths.docsPath}
+                    </div>
+                    <div className="text-xs text-muted-foreground font-mono break-all">
+                      {updaterHelpPaths.templatePath}
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={isOpeningUpdaterHelp}
+                      onClick={() => handleOpenUpdaterHelp("docs")}
+                    >
+                      <FileText className="h-4 w-4 mr-1" />
+                      {translations.version?.openGuide || "打开配置指南"}
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={isOpeningUpdaterHelp}
+                      onClick={() => handleOpenUpdaterHelp("template")}
+                    >
+                      <FileCog className="h-4 w-4 mr-1" />
+                      {translations.version?.openTemplate || "打开模板文件"}
+                    </Button>
+                    </div>
                   </div>
                 )}
               </div>
@@ -289,6 +400,40 @@ export function SettingsDialog({
               checked={minimizeToTrayOnClose}
               onCheckedChange={onMinimizeToTrayOnCloseChange}
             />
+          </div>
+
+          {/* Environment Check */}
+          <div className="space-y-2">
+            <Label className="flex items-center gap-2">
+              <Info className="h-4 w-4" />
+              {translations.environment?.title || "环境检查"}
+            </Label>
+            <div className="flex items-center justify-between p-3 bg-muted rounded-lg">
+              <div className="space-y-1">
+                <div className="text-sm font-medium">
+                  {translations.environment?.status || "环境状态"}:{" "}
+                  {environmentStatus === "ready"
+                    ? translations.environment?.ready || "已就绪"
+                    : environmentStatus === "warning"
+                      ? translations.environment?.warning || "存在警告"
+                      : environmentStatus === "blocked"
+                        ? translations.environment?.blocked || "存在阻断问题"
+                        : translations.environment?.unknown || "未检查"}
+                </div>
+                {environmentCheckedAt && (
+                  <div className="text-xs text-muted-foreground">
+                    {environmentCheckedAt}
+                  </div>
+                )}
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={onOpenEnvironment}
+              >
+                {translations.environment?.title || "环境检查"}
+              </Button>
+            </div>
           </div>
 
           {/* Keyboard Shortcuts */}

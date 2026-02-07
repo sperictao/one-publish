@@ -1,6 +1,7 @@
 // Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
 
 use crate::command_parser::CommandParser;
+use crate::artifact::{PackageFormat, PackageResult, SignMethod, SignResult};
 use crate::config_export::{ConfigExport, ConfigProfile};
 use crate::environment::{check_environment, FixAction, FixResult, FixType};
 use crate::provider::registry::ProviderRegistry;
@@ -8,8 +9,10 @@ use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
 use tauri::AppHandle;
+use tauri_plugin_updater::{Error as UpdaterError, UpdaterExt};
 use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::process::Command;
+use tokio::time::{timeout, Duration};
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct ProjectInfo {
@@ -267,25 +270,183 @@ pub struct UpdateInfo {
     pub available_version: Option<String>,
     pub has_update: bool,
     pub release_notes: Option<String>,
+    pub message: Option<String>,
 }
 
-/// 检查更新
-#[tauri::command]
-pub async fn check_update(_app: AppHandle) -> Result<UpdateInfo, String> {
-    // TODO: 实现 Tauri 2.x updater API 集成
-    // 当前返回 mock 数据
-    Ok(UpdateInfo {
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UpdaterHelpPaths {
+    pub docs_path: String,
+    pub template_path: String,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UpdaterConfigHealth {
+    pub configured: bool,
+    pub message: String,
+}
+
+fn no_update_info(message: Option<String>) -> UpdateInfo {
+    UpdateInfo {
         current_version: env!("CARGO_PKG_VERSION").to_string(),
         available_version: None,
         has_update: false,
         release_notes: None,
+        message,
+    }
+}
+
+fn map_updater_error(err: UpdaterError) -> String {
+    match err {
+        UpdaterError::EmptyEndpoints => {
+            "更新源未配置，请在 tauri.conf.json 中设置 updater 的 endpoints 与 pubkey".to_string()
+        }
+        UpdaterError::InsecureTransportProtocol => {
+            "更新地址必须使用 https 协议（或在开发环境显式允许非安全协议）".to_string()
+        }
+        _ => err.to_string(),
+    }
+}
+
+fn resolve_updater_help_paths() -> Result<(PathBuf, PathBuf), String> {
+    let mut roots = Vec::new();
+
+    if let Ok(cwd) = std::env::current_dir() {
+        roots.push(cwd);
+    }
+
+    if let Ok(exe_path) = std::env::current_exe() {
+        if let Some(parent) = exe_path.parent() {
+            roots.push(parent.to_path_buf());
+        }
+    }
+
+    for root in roots {
+        let mut current = root;
+        loop {
+            let docs = current.join("docs").join("updater").join("SETUP.md");
+            let template = current
+                .join("src-tauri")
+                .join("tauri.conf.updater.example.json");
+
+            if docs.exists() && template.exists() {
+                return Ok((docs, template));
+            }
+
+            if !current.pop() {
+                break;
+            }
+        }
+    }
+
+    Err("未找到 updater 指南文件，请在源码仓库中运行该功能".to_string())
+}
+
+#[tauri::command]
+pub fn get_updater_help_paths() -> Result<UpdaterHelpPaths, crate::errors::AppError> {
+    let (docs, template) =
+        resolve_updater_help_paths().map_err(crate::errors::AppError::unknown)?;
+
+    Ok(UpdaterHelpPaths {
+        docs_path: docs.to_string_lossy().to_string(),
+        template_path: template.to_string_lossy().to_string(),
     })
+}
+
+#[tauri::command]
+pub fn get_updater_config_health(app: AppHandle) -> UpdaterConfigHealth {
+    match app.updater() {
+        Ok(_) => UpdaterConfigHealth {
+            configured: true,
+            message: "updater 配置已就绪".to_string(),
+        },
+        Err(err) => UpdaterConfigHealth {
+            configured: false,
+            message: format!("更新源未配置或不可用: {}", map_updater_error(err)),
+        },
+    }
+}
+
+#[tauri::command]
+pub fn open_updater_help(target: String) -> Result<String, crate::errors::AppError> {
+    let (docs, template) =
+        resolve_updater_help_paths().map_err(crate::errors::AppError::unknown)?;
+
+    let path = match target.as_str() {
+        "docs" => docs,
+        "template" => template,
+        _ => {
+            return Err(crate::errors::AppError::unknown(format!(
+                "unsupported updater help target: {}",
+                target
+            )))
+        }
+    };
+
+    open::that(&path).map_err(|e| {
+        crate::errors::AppError::unknown(format!("failed to open updater help file: {}", e))
+    })?;
+
+    Ok(path.to_string_lossy().to_string())
+}
+
+/// 检查更新
+#[tauri::command]
+pub async fn check_update(app: AppHandle) -> Result<UpdateInfo, String> {
+    let updater = match app.updater() {
+        Ok(updater) => updater,
+        Err(err) => {
+            return Ok(no_update_info(Some(format!(
+                "更新源未配置或不可用: {}",
+                map_updater_error(err)
+            ))));
+        }
+    };
+
+    match updater.check().await {
+        Ok(Some(update)) => Ok(UpdateInfo {
+            current_version: update.current_version,
+            available_version: Some(update.version),
+            has_update: true,
+            release_notes: update.body,
+            message: Some("发现可用更新".to_string()),
+        }),
+        Ok(None) => Ok(no_update_info(Some("当前已是最新版本".to_string()))),
+        Err(err) => Ok(no_update_info(Some(format!(
+            "检查更新失败: {}",
+            map_updater_error(err)
+        )))),
+    }
 }
 
 /// 执行更新并重启
 #[tauri::command]
-pub async fn install_update(_app: AppHandle) -> Result<String, String> {
-    Err("更新功能暂未实现，需要配置更新服务器".to_string())
+pub async fn install_update(app: AppHandle) -> Result<String, String> {
+    let updater = app
+        .updater()
+        .map_err(|err| format!("更新源未配置或不可用: {}", map_updater_error(err)))?;
+
+    let maybe_update = updater
+        .check()
+        .await
+        .map_err(|err| format!("检查更新失败: {}", map_updater_error(err)))?;
+
+    let Some(update) = maybe_update else {
+        return Ok("当前已是最新版本，无需安装".to_string());
+    };
+
+    let target_version = update.version.clone();
+
+    update
+        .download_and_install(|_, _| {}, || {})
+        .await
+        .map_err(|err| format!("安装更新失败: {}", map_updater_error(err)))?;
+
+    Ok(format!(
+        "更新安装完成（v{}）。请重启应用以生效。",
+        target_version
+    ))
 }
 
 /// 获取当前版本
@@ -417,8 +578,10 @@ pub async fn apply_imported_config(
 
 /// Run environment check
 #[tauri::command]
-pub async fn run_environment_check() -> Result<crate::environment::EnvironmentCheckResult, crate::errors::AppError> {
-    check_environment()
+pub async fn run_environment_check(
+    provider_ids: Option<Vec<String>>,
+) -> Result<crate::environment::EnvironmentCheckResult, crate::errors::AppError> {
+    check_environment(provider_ids)
         .await
         .map_err(|e| crate::errors::AppError::unknown(format!("environment check failed: {}", e)))
 }
@@ -443,17 +606,24 @@ pub async fn apply_fix(action: FixAction) -> Result<FixResult, crate::errors::Ap
                 crate::errors::AppError::unknown("Command is required for RunCommand fix")
             })?;
 
-            // Note: We don't actually run commands for security reasons.
-            // We just return the command for the user to run manually.
-            // In the future, we could add a confirmation dialog and use shell plugin.
+            let (program, args) = validate_and_parse_fix_command(&command_str)?;
+
+            log::info!("Applying fix via command: {} {}", program, args.join(" "));
+
+            let output = timeout(
+                Duration::from_secs(10 * 60),
+                Command::new(&program).args(&args).output(),
+            )
+            .await
+            .map_err(|_| crate::errors::AppError::unknown("command timed out"))?
+            .map_err(|e| crate::errors::AppError::unknown(format!("failed to run command: {}", e)))?;
+
+            crate::environment::invalidate_environment_cache();
 
             Ok(FixResult::CommandExecuted {
-                stdout: format!(
-                    "Command: {}\n\nFor security, please run this command manually.",
-                    command_str
-                ),
-                stderr: String::new(),
-                exit_code: 0,
+                stdout: String::from_utf8_lossy(&output.stdout).to_string(),
+                stderr: String::from_utf8_lossy(&output.stderr).to_string(),
+                exit_code: output.status.code().unwrap_or(-1),
             })
         }
         FixType::CopyCommand => {
@@ -470,3 +640,152 @@ pub async fn apply_fix(action: FixAction) -> Result<FixResult, crate::errors::Ap
     }
 }
 
+/// Package an output directory into a single artifact file.
+#[tauri::command]
+pub async fn package_artifact(
+    input_dir: String,
+    output_path: String,
+    format: Option<PackageFormat>,
+    include_root_dir: Option<bool>,
+) -> Result<PackageResult, crate::errors::AppError> {
+    let format = format.unwrap_or(PackageFormat::Zip);
+    let include_root_dir = include_root_dir.unwrap_or(true);
+
+    crate::artifact::package_directory(
+        Path::new(&input_dir),
+        Path::new(&output_path),
+        format,
+        include_root_dir,
+    )
+    .await
+    .map_err(|e| crate::errors::AppError::unknown(format!("package failed: {}", e)))
+}
+
+/// Sign an artifact file using a supported signing method.
+#[tauri::command]
+pub async fn sign_artifact(
+    artifact_path: String,
+    method: SignMethod,
+    output_path: Option<String>,
+    key_id: Option<String>,
+) -> Result<SignResult, crate::errors::AppError> {
+    crate::artifact::sign_artifact(
+        Path::new(&artifact_path),
+        method,
+        output_path.as_deref().map(Path::new),
+        key_id.as_deref(),
+    )
+    .await
+    .map_err(|e| crate::errors::AppError::unknown(format!("sign failed: {}", e)))
+}
+
+fn validate_and_parse_fix_command(
+    command_str: &str,
+) -> Result<(String, Vec<String>), crate::errors::AppError> {
+    let trimmed = command_str.trim();
+    if trimmed.is_empty() {
+        return Err(crate::errors::AppError::unknown("command is empty"));
+    }
+
+    if trimmed.contains('\n')
+        || trimmed.contains('\r')
+        || trimmed.contains('|')
+        || trimmed.contains('&')
+        || trimmed.contains(';')
+        || trimmed.contains('>')
+        || trimmed.contains('<')
+    {
+        return Err(crate::errors::AppError::unknown(
+            "unsupported command: contains unsafe shell characters",
+        ));
+    }
+
+    if trimmed.contains('"') || trimmed.contains('\'') {
+        return Err(crate::errors::AppError::unknown(
+            "unsupported command: quoting is not allowed",
+        ));
+    }
+
+    let parts: Vec<&str> = trimmed.split_whitespace().collect();
+    let Some((program, args)) = parts.split_first() else {
+        return Err(crate::errors::AppError::unknown("command is empty"));
+    };
+
+    if *program == "sudo" {
+        return Err(crate::errors::AppError::unknown(
+            "unsupported command: sudo is not allowed",
+        ));
+    }
+
+    // Keep the allowlist intentionally small; only support built-in guided fixes.
+    match *program {
+        "brew" => {
+            if args.first() != Some(&"install") {
+                return Err(crate::errors::AppError::unknown(
+                    "unsupported brew command (only `brew install ...` is allowed)",
+                ));
+            }
+        }
+        "winget" => {
+            if args.first() != Some(&"install") {
+                return Err(crate::errors::AppError::unknown(
+                    "unsupported winget command (only `winget install ...` is allowed)",
+                ));
+            }
+        }
+        "rustup" => {
+            if args.first() != Some(&"update") {
+                return Err(crate::errors::AppError::unknown(
+                    "unsupported rustup command (only `rustup update` is allowed)",
+                ));
+            }
+        }
+        _ => {
+            return Err(crate::errors::AppError::unknown(format!(
+                "unsupported command: `{}` is not allowed",
+                program
+            )));
+        }
+    }
+
+    Ok((
+        program.to_string(),
+        args.iter().map(|s| s.to_string()).collect(),
+    ))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn updater_empty_endpoints_error_is_actionable() {
+        let msg = map_updater_error(UpdaterError::EmptyEndpoints);
+        assert!(msg.contains("updater"));
+        assert!(msg.contains("endpoints"));
+        assert!(msg.contains("pubkey"));
+    }
+
+    #[test]
+    fn updater_insecure_transport_error_is_actionable() {
+        let msg = map_updater_error(UpdaterError::InsecureTransportProtocol);
+        assert!(msg.contains("https"));
+    }
+
+    #[test]
+    fn fix_command_parsing_allows_brew_install() {
+        let (program, args) =
+            validate_and_parse_fix_command("brew install rustup").expect("brew install");
+
+        assert_eq!(program, "brew");
+        assert_eq!(args, vec!["install".to_string(), "rustup".to_string()]);
+    }
+
+    #[test]
+    fn fix_command_parsing_rejects_unsafe_separator() {
+        let err = validate_and_parse_fix_command("brew install rust; rm -rf /")
+            .expect_err("unsafe command should fail");
+
+        assert!(err.message.contains("unsafe shell characters"));
+    }
+}

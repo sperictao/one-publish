@@ -161,7 +161,8 @@ impl EnvironmentCheckResult {
         self.is_ready = self
             .issues
             .iter()
-            .all(|issue| issue.severity != IssueSeverity::Critical);
+            .all(|issue| issue.severity != IssueSeverity::Critical)
+            && self.providers.iter().all(|p| p.installed);
     }
 }
 
@@ -361,6 +362,21 @@ mod tests {
             "Cargo not found".to_string(),
         ));
 
+        assert!(!result.is_ready);
+    }
+
+    #[test]
+    fn test_check_ready_considers_provider_installation() {
+        let mut result = EnvironmentCheckResult::new();
+
+        result = result.with_provider(ProviderStatus {
+            provider_id: "dotnet".to_string(),
+            installed: false,
+            version: None,
+            path: None,
+        });
+
+        result.check_ready();
         assert!(!result.is_ready);
     }
 }

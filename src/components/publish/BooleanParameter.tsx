@@ -18,7 +18,11 @@ export function BooleanParameter({ definition, value, onChange }: BooleanParamet
         </Label>
         {definition.description && (
           <div className="group relative inline-block">
-            <HelpCircle className="h-4 w-4 text-muted-foreground cursor-help" />
+            <HelpCircle
+              className="h-4 w-4 text-muted-foreground cursor-help"
+              aria-label="Help"
+              aria-hidden={false}
+            />
             <div className="absolute left-0 bottom-full mb-2 hidden group-hover:block w-64 p-2 bg-popover text-popover-foreground text-sm rounded shadow-lg z-10">
               {definition.description}
             </div>

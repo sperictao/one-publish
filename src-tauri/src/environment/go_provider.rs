@@ -35,6 +35,28 @@ pub async fn check_go() -> Result<ProviderStatus, Box<dyn std::error::Error>> {
     }
 }
 
+/// Detect Go-specific issues
+pub fn detect_go_issues(status: &ProviderStatus) -> Vec<EnvironmentIssue> {
+    let mut issues = Vec::new();
+
+    if !status.installed {
+        issues.push(create_missing_go_issue());
+        return issues;
+    }
+
+    let Some(version) = status.version.as_deref() else {
+        return issues;
+    };
+
+    if super::types::parse_semver(version).is_some()
+        && super::types::compare_versions(version, MIN_GO_VERSION) < 0
+    {
+        issues.push(create_outdated_go_issue(version, MIN_GO_VERSION));
+    }
+
+    issues
+}
+
 /// Parse Go version from command output
 /// Output format: "go version go1.21.0 darwin/arm64"
 fn parse_go_version(output: &[u8]) -> String {
@@ -127,8 +149,8 @@ fn get_go_install_fixes() -> Vec<FixAction> {
     {
         vec![
             FixAction {
-                action_type: FixType::RunCommand,
-                label: "Install via snap".to_string(),
+                action_type: FixType::CopyCommand,
+                label: "Copy snap install command".to_string(),
                 command: Some("snap install go --classic".to_string()),
                 url: None,
             },

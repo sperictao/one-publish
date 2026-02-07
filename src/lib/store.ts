@@ -145,6 +145,17 @@ export interface UpdateInfo {
   availableVersion: string | null;
   hasUpdate: boolean;
   releaseNotes: string | null;
+  message: string | null;
+}
+
+export interface UpdaterHelpPaths {
+  docsPath: string;
+  templatePath: string;
+}
+
+export interface UpdaterConfigHealth {
+  configured: boolean;
+  message: string;
 }
 
 /**
@@ -156,6 +167,7 @@ export async function checkUpdate(): Promise<UpdateInfo> {
     available_version: string | null;
     has_update: boolean;
     release_notes: string | null;
+    message: string | null;
   }>("check_update");
 
   return {
@@ -163,6 +175,7 @@ export async function checkUpdate(): Promise<UpdateInfo> {
     availableVersion: result.available_version,
     hasUpdate: result.has_update,
     releaseNotes: result.release_notes,
+    message: result.message,
   };
 }
 
@@ -171,6 +184,27 @@ export async function checkUpdate(): Promise<UpdateInfo> {
  */
 export async function installUpdate(): Promise<string> {
   return await invoke<string>("install_update");
+}
+
+/**
+ * 获取 updater 指南与模板路径
+ */
+export async function getUpdaterHelpPaths(): Promise<UpdaterHelpPaths> {
+  return await invoke<UpdaterHelpPaths>("get_updater_help_paths");
+}
+
+/**
+ * 获取 updater 配置健康状态
+ */
+export async function getUpdaterConfigHealth(): Promise<UpdaterConfigHealth> {
+  return await invoke<UpdaterConfigHealth>("get_updater_config_health");
+}
+
+/**
+ * 打开 updater 指南或模板
+ */
+export async function openUpdaterHelp(target: "docs" | "template"): Promise<string> {
+  return await invoke<string>("open_updater_help", { target });
 }
 
 /**

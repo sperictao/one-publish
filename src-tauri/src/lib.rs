@@ -4,6 +4,7 @@ pub mod command_parser;
 pub mod commands;
 pub mod compiler;
 pub mod config_export;
+pub mod artifact;
 pub mod environment;
 pub mod errors;
 pub mod parameter;
@@ -27,6 +28,7 @@ pub fn run() {
         .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_shell::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
             // 当尝试启动第二个实例时，显示主窗口
@@ -94,6 +96,9 @@ pub fn run() {
             commands::execute_publish,
             commands::check_update,
             commands::install_update,
+            commands::get_updater_help_paths,
+            commands::get_updater_config_health,
+            commands::open_updater_help,
             commands::get_current_version,
             commands::get_shortcuts_help,
             commands::get_provider_schema,
@@ -103,6 +108,8 @@ pub fn run() {
             commands::apply_imported_config,
             commands::run_environment_check,
             commands::apply_fix,
+            commands::package_artifact,
+            commands::sign_artifact,
             store::get_app_state,
             store::save_app_state,
             store::add_repository,

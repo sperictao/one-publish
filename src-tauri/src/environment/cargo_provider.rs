@@ -5,7 +5,7 @@ use std::process::Command;
 
 /// Minimum required cargo version
 const MIN_CARGO_VERSION: &str = "1.70.0";
-const PROVIDER_ID: &str = "rust";
+const PROVIDER_ID: &str = "cargo";
 
 /// Check Rust/Cargo installation
 pub async fn check_cargo() -> Result<ProviderStatus, Box<dyn std::error::Error>> {
@@ -36,17 +36,24 @@ pub async fn check_cargo() -> Result<ProviderStatus, Box<dyn std::error::Error>>
     }
 }
 
-/// Detect Rust-specific issues
-async fn detect_rust_issues(version: &str, path: &Option<String>) -> Vec<EnvironmentIssue> {
+/// Detect Cargo-specific issues
+pub fn detect_cargo_issues(status: &ProviderStatus) -> Vec<EnvironmentIssue> {
     let mut issues = Vec::new();
 
+    if !status.installed {
+        issues.push(create_missing_cargo_issue());
+        return issues;
+    }
+
+    let Some(version) = status.version.as_deref() else {
+        return issues;
+    };
+
     // Check version
-    if let Some(parsed) = super::types::parse_semver(version) {
-        if super::types::parse_semver(MIN_CARGO_VERSION).map_or(false, |min| {
-            (parsed.0, parsed.1, parsed.2) < (min.0, min.1, min.2)
-        }) {
-            issues.push(create_outdated_cargo_issue(version, MIN_CARGO_VERSION));
-        }
+    if super::types::parse_semver(version).is_some()
+        && super::types::compare_versions(version, MIN_CARGO_VERSION) < 0
+    {
+        issues.push(create_outdated_cargo_issue(version, MIN_CARGO_VERSION));
     }
 
     issues
@@ -95,8 +102,8 @@ fn get_cargo_install_fixes() -> Vec<FixAction> {
                 url: None,
             },
             FixAction {
-                action_type: FixType::RunCommand,
-                label: "Install via rustup".to_string(),
+                action_type: FixType::CopyCommand,
+                label: "Copy rustup install command".to_string(),
                 command: Some("curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh".to_string()),
                 url: None,
             },
@@ -131,8 +138,8 @@ fn get_cargo_install_fixes() -> Vec<FixAction> {
     {
         vec![
             FixAction {
-                action_type: FixType::RunCommand,
-                label: "Install via rustup".to_string(),
+                action_type: FixType::CopyCommand,
+                label: "Copy rustup install command".to_string(),
                 command: Some("curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh".to_string()),
                 url: None,
             },
@@ -164,7 +171,7 @@ mod tests {
     fn test_create_missing_cargo_issue() {
         let issue = create_missing_cargo_issue();
         assert_eq!(issue.severity, IssueSeverity::Critical);
-        assert_eq!(issue.provider_id, "rust");
+        assert_eq!(issue.provider_id, "cargo");
         assert_eq!(issue.issue_type, IssueType::MissingTool);
         assert!(!issue.fixes.is_empty());
     }

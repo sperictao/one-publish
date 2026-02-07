@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { open } from "@tauri-apps/plugin-dialog";
@@ -18,10 +18,12 @@ import { BranchPanel } from "@/components/layout/BranchPanel";
 import { ResizeHandle } from "@/components/layout/ResizeHandle";
 import { SettingsDialog } from "@/components/layout/SettingsDialog";
 import { ShortcutsDialog } from "@/components/layout/ShortcutsDialog";
+import { EnvironmentCheckDialog } from "@/components/environment/EnvironmentCheckDialog";
 
 // Publish Components
 import { CommandImportDialog } from "@/components/publish/CommandImportDialog";
 import { ConfigDialog } from "@/components/publish/ConfigDialog";
+import { ArtifactActions } from "@/components/publish/ArtifactActions";
 
 // UI Components
 import { Button } from "@/components/ui/button";
@@ -59,6 +61,10 @@ import {
 
 // Types
 import type { Repository } from "@/types/repository";
+import {
+  runEnvironmentCheck,
+  type EnvironmentCheckResult,
+} from "@/lib/environment";
 
 interface ProjectInfo {
   root_path: string;
@@ -234,6 +240,13 @@ function App() {
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const [commandImportOpen, setCommandImportOpen] = useState(false);
   const [configDialogOpen, setConfigDialogOpen] = useState(false);
+  const [environmentDialogOpen, setEnvironmentDialogOpen] = useState(false);
+  const [environmentDefaultProviderIds, setEnvironmentDefaultProviderIds] =
+    useState<string[]>(["dotnet"]);
+  const [environmentInitialResult, setEnvironmentInitialResult] =
+    useState<EnvironmentCheckResult | null>(null);
+  const [environmentLastResult, setEnvironmentLastResult] =
+    useState<EnvironmentCheckResult | null>(null);
 
   // Min/Max constraints
   const MIN_PANEL_WIDTH = 150;
@@ -276,6 +289,17 @@ function App() {
 
   // Get selected repository
   const selectedRepo = repositories.find((r) => r.id === selectedRepoId) || null;
+
+  const environmentStatus = useMemo(() => {
+    if (!environmentLastResult) return "unknown" as const;
+    if (environmentLastResult.issues.some((i) => i.severity === "critical")) {
+      return "blocked" as const;
+    }
+    if (environmentLastResult.issues.some((i) => i.severity === "warning")) {
+      return "warning" as const;
+    }
+    return "ready" as const;
+  }, [environmentLastResult]);
 
   // Load project info when repo changes
   useEffect(() => {
@@ -408,6 +432,32 @@ function App() {
     if (!projectInfo) {
       toast.error("请先选择项目目录");
       return;
+    }
+
+    // 发布前环境检查：仅检查当前发布 Provider（当前为 dotnet）
+    try {
+      const env = await runEnvironmentCheck(["dotnet"]);
+      setEnvironmentLastResult(env);
+
+      const critical = env.issues.find((i) => i.severity === "critical");
+      if (critical) {
+        toast.error("环境未就绪，已阻止发布", {
+          description: critical.description,
+        });
+        setEnvironmentDefaultProviderIds(["dotnet"]);
+        setEnvironmentInitialResult(env);
+        setEnvironmentDialogOpen(true);
+        return;
+      }
+
+      const warning = env.issues.find((i) => i.severity === "warning");
+      if (warning) {
+        toast.warning("环境存在警告", {
+          description: warning.description,
+        });
+      }
+    } catch (err) {
+      toast.error("环境检查失败", { description: String(err) });
     }
 
     setIsPublishing(true);
@@ -943,10 +993,13 @@ function App() {
                       )}
                     </CardTitle>
                     {publishResult?.success && (
-                      <CardDescription>
-                        输出目录: {publishResult.output_dir} (
-                        {publishResult.file_count} 个文件)
-                      </CardDescription>
+                      <>
+                        <CardDescription>
+                          输出目录: {publishResult.output_dir} (
+                          {publishResult.file_count} 个文件)
+                        </CardDescription>
+                        <ArtifactActions outputDir={publishResult.output_dir} />
+                      </>
                     )}
                   </CardHeader>
                   <CardContent>
@@ -969,6 +1022,18 @@ function App() {
         onOpenChange={setShortcutsOpen}
       />
 
+      {/* Environment Check Dialog */}
+      <EnvironmentCheckDialog
+        open={environmentDialogOpen}
+        onOpenChange={(v) => {
+          setEnvironmentDialogOpen(v);
+          if (!v) setEnvironmentInitialResult(null);
+        }}
+        defaultProviderIds={environmentDefaultProviderIds}
+        initialResult={environmentInitialResult}
+        onChecked={(res) => setEnvironmentLastResult(res)}
+      />
+
       {/* Settings Dialog */}
       <SettingsDialog
         open={settingsOpen}
@@ -983,6 +1048,13 @@ function App() {
         onThemeChange={setTheme}
         onOpenShortcuts={() => setShortcutsOpen(true)}
         onOpenConfig={() => setConfigDialogOpen(true)}
+        environmentStatus={environmentStatus}
+        environmentCheckedAt={environmentLastResult?.checked_at}
+        onOpenEnvironment={() => {
+          setEnvironmentDefaultProviderIds(["dotnet"]);
+          setEnvironmentInitialResult(null);
+          setEnvironmentDialogOpen(true);
+        }}
       />
 
       {/* Command Import Dialog */}

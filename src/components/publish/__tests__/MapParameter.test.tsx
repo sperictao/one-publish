@@ -63,9 +63,7 @@ describe('MapParameter', () => {
       />
     );
 
-    const removeButtons = screen.getAllByRole('button').filter(
-      (btn) => btn.querySelector('svg')
-    );
+    const removeButtons = screen.getAllByRole('button', { name: /remove entry/i });
     fireEvent.click(removeButtons[0]);
 
     const updatedValue = handleChange.mock.calls[0][0];

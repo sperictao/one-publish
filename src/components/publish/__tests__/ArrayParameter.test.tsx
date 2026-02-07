@@ -62,9 +62,7 @@ describe('ArrayParameter', () => {
       />
     );
 
-    const removeButtons = screen.getAllByRole('button').filter(
-      (btn) => btn.querySelector('svg')
-    );
+    const removeButtons = screen.getAllByRole('button', { name: /remove item/i });
     fireEvent.click(removeButtons[0]);
 
     expect(handleChange).toHaveBeenCalledWith(['item2']);

@@ -35,6 +35,34 @@ pub async fn check_java() -> Result<ProviderStatus, Box<dyn std::error::Error>> 
     }
 }
 
+/// Detect Java-specific issues
+pub fn detect_java_issues(status: &ProviderStatus) -> Vec<EnvironmentIssue> {
+    let mut issues = Vec::new();
+
+    if !status.installed {
+        issues.push(create_missing_java_issue());
+        return issues;
+    }
+
+    let Some(version) = status.version.as_deref() else {
+        return issues;
+    };
+
+    let Ok(current_major) = version.parse::<u32>() else {
+        return issues;
+    };
+
+    let Ok(min_major) = MIN_JAVA_VERSION.parse::<u32>() else {
+        return issues;
+    };
+
+    if current_major < min_major {
+        issues.push(create_outdated_java_issue(version, MIN_JAVA_VERSION));
+    }
+
+    issues
+}
+
 /// Parse Java version from command output
 /// Output goes to stderr for `java -version`
 /// Format: "openjdk version "17.0.2" 2022-01-18" or "java version "1.8.0_345""
@@ -150,13 +178,13 @@ fn get_java_install_fixes() -> Vec<FixAction> {
     {
         vec![
             FixAction {
-                action_type: FixType::RunCommand,
-                label: "Install via apt (Ubuntu/Debian)".to_string(),
+                action_type: FixType::CopyCommand,
+                label: "Copy apt install command".to_string(),
                 command: Some("sudo apt install openjdk-17-jdk".to_string()),
                 url: None,
             },
             FixAction {
-                action_type: FixType:OpenUrl,
+                action_type: FixType::OpenUrl,
                 label: "Download JDK for Linux".to_string(),
                 command: None,
                 url: Some("https://adoptium.net/".to_string()),
