@@ -84,6 +84,11 @@ one-publish/
 4. 点击"执行发布"开始发布过程
 5. 查看输出日志了解发布结果
 
+## Updater（更新管线）
+
+- 配置说明：`docs/updater/SETUP.md`
+- 生产模板：`src-tauri/tauri.conf.updater.example.json`
+
 ## 许可证
 
 MIT

@@ -34,6 +34,12 @@ Status legend:
 ## Phase 4: Commercial Features
 
 - [done] TASK-0401 Config import/export (docs/roadmap/tasks/TASK-0401.md)
-- [doing] TASK-0402 Environment probing + guided fixes (docs/roadmap/tasks/TASK-0402.md)
-- [todo] TASK-0403 Packaging + signing abstraction (docs/roadmap/tasks/TASK-0403.md)
-- [todo] TASK-0404 Updater pipeline (docs/roadmap/tasks/TASK-0404.md)
+- [done] TASK-0402 Environment probing + guided fixes (docs/roadmap/tasks/TASK-0402.md)
+- [done] TASK-0403 Packaging + signing abstraction (docs/roadmap/tasks/TASK-0403.md)
+- [done] TASK-0404 Updater pipeline (docs/roadmap/tasks/TASK-0404.md)
+
+## Phase 5: Release Operations UX
+
+- [done] TASK-0501 Updater config visibility + quick open (docs/roadmap/tasks/TASK-0501.md)
+- [todo] TASK-0502 Signed release checklist wizard (docs/roadmap/tasks/TASK-0502.md)
+- [todo] TASK-0503 Preflight report export (docs/roadmap/tasks/TASK-0503.md)

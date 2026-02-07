@@ -47,3 +47,8 @@ Guiding decision: parameter coverage is achieved via schema-driven advanced mode
 - Task 0402: Environment probing + guided fixes
 - Task 0403: Packaging + signing abstraction
 - Task 0404: Updater pipeline
+
+### Phase 5: Release Operations UX
+- Task 0501: Updater config visibility + quick open
+- Task 0502: Signed release checklist wizard
+- Task 0503: Preflight report export (environment + artifact + updater)
