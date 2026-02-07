@@ -1,0 +1,10 @@
+{
+  "plugins": {
+    "updater": {
+      "pubkey": "REPLACE_WITH_MINISIGN_PUBKEY",
+      "endpoints": [
+        "https://updates.example.com/one-publish/latest.json"
+      ]
+    }
+  }
+}
