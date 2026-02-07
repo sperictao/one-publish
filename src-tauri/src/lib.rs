@@ -104,6 +104,7 @@ pub fn run() {
             commands::get_provider_schema,
             commands::import_from_command,
             commands::export_config,
+            commands::export_preflight_report,
             commands::import_config,
             commands::apply_imported_config,
             commands::run_environment_check,

@@ -6,6 +6,7 @@ use crate::config_export::{ConfigExport, ConfigProfile};
 use crate::environment::{check_environment, FixAction, FixResult, FixType};
 use crate::provider::registry::ProviderRegistry;
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
 use tauri::AppHandle;
@@ -521,6 +522,119 @@ pub async fn export_config(
     Ok(file_path)
 }
 
+fn render_preflight_markdown(report: &Value) -> Result<String, crate::errors::AppError> {
+    let generated_at = report
+        .get("generatedAt")
+        .and_then(Value::as_str)
+        .unwrap_or("unknown");
+
+    let summary = report.get("summary").and_then(Value::as_object);
+    let passed = summary
+        .and_then(|s| s.get("passed"))
+        .and_then(Value::as_u64)
+        .unwrap_or(0);
+    let warning = summary
+        .and_then(|s| s.get("warning"))
+        .and_then(Value::as_u64)
+        .unwrap_or(0);
+    let failed = summary
+        .and_then(|s| s.get("failed"))
+        .and_then(Value::as_u64)
+        .unwrap_or(0);
+    let blocking_ready = summary
+        .and_then(|s| s.get("blockingReady"))
+        .and_then(Value::as_bool)
+        .unwrap_or(false);
+
+    let mut lines = vec![
+        "# Preflight Report".to_string(),
+        String::new(),
+        format!("- Generated At: {}", generated_at),
+        format!("- Blocking Ready: {}", if blocking_ready { "yes" } else { "no" }),
+        format!("- Passed: {}", passed),
+        format!("- Warnings: {}", warning),
+        format!("- Failed: {}", failed),
+        String::new(),
+        "## Checklist".to_string(),
+    ];
+
+    let checklist = report
+        .get("checklist")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+
+    if checklist.is_empty() {
+        lines.push("- (no checklist items)".to_string());
+    } else {
+        for (idx, item) in checklist.iter().enumerate() {
+            let title = item
+                .get("title")
+                .and_then(Value::as_str)
+                .unwrap_or("untitled");
+            let status = item
+                .get("status")
+                .and_then(Value::as_str)
+                .unwrap_or("unknown");
+            let detail = item
+                .get("detail")
+                .and_then(Value::as_str)
+                .unwrap_or("")
+                .replace('\n', " ");
+
+            lines.push(format!("- [{}] {} ({})", idx + 1, title, status));
+            if !detail.trim().is_empty() {
+                lines.push(format!("  - Detail: {}", detail.trim()));
+            }
+        }
+    }
+
+    let raw = serde_json::to_string_pretty(report)
+        .map_err(|e| crate::errors::AppError::unknown(format!("serialization error: {}", e)))?;
+
+    lines.extend([
+        String::new(),
+        "## Raw Snapshot".to_string(),
+        String::new(),
+        "```json".to_string(),
+        raw,
+        "```".to_string(),
+    ]);
+
+    Ok(lines.join("\n"))
+}
+
+#[tauri::command]
+pub async fn export_preflight_report(
+    report: Value,
+    file_path: String,
+) -> Result<String, crate::errors::AppError> {
+    if !report.is_object() {
+        return Err(crate::errors::AppError::unknown(
+            "preflight report payload must be an object",
+        ));
+    }
+
+    let ext = Path::new(&file_path)
+        .extension()
+        .and_then(|e| e.to_str())
+        .map(|s| s.to_ascii_lowercase())
+        .unwrap_or_else(|| "json".to_string());
+
+    let content = if ext == "md" || ext == "markdown" {
+        render_preflight_markdown(&report)?
+    } else {
+        serde_json::to_string_pretty(&report).map_err(|e| {
+            crate::errors::AppError::unknown(format!("serialization error: {}", e))
+        })?
+    };
+
+    std::fs::write(&file_path, content)
+        .map_err(|e| crate::errors::AppError::unknown(format!("write error: {}", e)))?;
+
+    Ok(file_path)
+}
+
 /// 导入配置从文件
 #[tauri::command]
 pub async fn import_config(
@@ -757,6 +871,40 @@ fn validate_and_parse_fix_command(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn preflight_markdown_contains_summary_and_checklist() {
+        let report = json!({
+            "generatedAt": "2026-02-07T10:00:00Z",
+            "summary": {
+                "passed": 3,
+                "warning": 1,
+                "failed": 0,
+                "blockingReady": true
+            },
+            "checklist": [
+                {
+                    "title": "Environment",
+                    "status": "pass",
+                    "detail": "ready"
+                },
+                {
+                    "title": "Updater",
+                    "status": "warning",
+                    "detail": "missing endpoints"
+                }
+            ]
+        });
+
+        let markdown = render_preflight_markdown(&report).expect("markdown");
+
+        assert!(markdown.contains("# Preflight Report"));
+        assert!(markdown.contains("- Blocking Ready: yes"));
+        assert!(markdown.contains("- [1] Environment (pass)"));
+        assert!(markdown.contains("- [2] Updater (warning)"));
+        assert!(markdown.contains("## Raw Snapshot"));
+    }
 
     #[test]
     fn updater_empty_endpoints_error_is_actionable() {

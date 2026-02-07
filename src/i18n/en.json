@@ -120,5 +120,65 @@
     "output": "Output directory: {{dir}}",
     "failed": "Publish failed",
     "error": "Error: {{error}}"
+  },
+  "releaseChecklist": {
+    "title": "Signed Release Checklist",
+    "description": "Verify release gates step by step before distribution.",
+    "ready": "Signed release gates are satisfied",
+    "notReady": "Signed release gates are incomplete",
+    "prev": "Previous",
+    "next": "Next",
+    "close": "Done",
+    "summary": {
+      "passed": "Passed",
+      "warning": "Warnings",
+      "failed": "Failed"
+    },
+    "status": {
+      "pass": "Pass",
+      "warning": "Warning",
+      "fail": "Fail",
+      "pending": "Pending"
+    },
+    "actions": {
+      "openEnvironment": "Open environment check",
+      "openSettings": "Open settings"
+    },
+    "steps": {
+      "environment": {
+        "title": "Environment",
+        "description": "Ensure no critical toolchain issues on this machine",
+        "pendingDetail": "No environment result yet. Run an environment check first."
+      },
+      "publish": {
+        "title": "Publish",
+        "description": "Confirm publish command completed with output",
+        "pendingDetail": "Publish has not been executed.",
+        "failedDetail": "Publish failed. Fix it before continuing."
+      },
+      "package": {
+        "title": "Package",
+        "description": "Package output directory into a distributable ZIP artifact",
+        "pendingDetail": "Click \"Package ZIP\" in the output log card.",
+        "blockedDetail": "Publish must succeed first."
+      },
+      "sign": {
+        "title": "Sign",
+        "description": "Generate a detached signature for the artifact",
+        "pendingDetail": "Click \"Sign (GPG)\" in the output log card.",
+        "blockedDetail": "Packaging must finish first."
+      },
+      "updater": {
+        "title": "Updater",
+        "description": "Verify updater channel configuration",
+        "loadingDetail": "Checking updater configuration...",
+        "pendingDetail": "Updater status is not available yet."
+      }
+    },
+    "export": "Export Preflight Report",
+    "exporting": "Exporting...",
+    "exportSuccess": "Preflight report exported",
+    "exportFailed": "Failed to export preflight report",
+    "exportDialogTitle": "Export preflight report"
   }
 }

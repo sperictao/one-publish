@@ -23,7 +23,11 @@ import { EnvironmentCheckDialog } from "@/components/environment/EnvironmentChec
 // Publish Components
 import { CommandImportDialog } from "@/components/publish/CommandImportDialog";
 import { ConfigDialog } from "@/components/publish/ConfigDialog";
-import { ArtifactActions } from "@/components/publish/ArtifactActions";
+import {
+  ArtifactActions,
+  type ArtifactActionState,
+} from "@/components/publish/ArtifactActions";
+import { ReleaseChecklistDialog } from "@/components/release/ReleaseChecklistDialog";
 
 // UI Components
 import { Button } from "@/components/ui/button";
@@ -57,6 +61,7 @@ import {
   RefreshCw,
   GitBranch,
   Import,
+  ListChecks,
 } from "lucide-react";
 
 // Types
@@ -247,6 +252,12 @@ function App() {
     useState<EnvironmentCheckResult | null>(null);
   const [environmentLastResult, setEnvironmentLastResult] =
     useState<EnvironmentCheckResult | null>(null);
+  const [releaseChecklistOpen, setReleaseChecklistOpen] = useState(false);
+  const [artifactActionState, setArtifactActionState] =
+    useState<ArtifactActionState>({
+      packageResult: null,
+      signResult: null,
+    });
 
   // Min/Max constraints
   const MIN_PANEL_WIDTH = 150;
@@ -300,6 +311,15 @@ function App() {
     }
     return "ready" as const;
   }, [environmentLastResult]);
+
+  const openEnvironmentDialog = useCallback(
+    (initialResult: EnvironmentCheckResult | null = null) => {
+      setEnvironmentDefaultProviderIds(["dotnet"]);
+      setEnvironmentInitialResult(initialResult);
+      setEnvironmentDialogOpen(true);
+    },
+    []
+  );
 
   // Load project info when repo changes
   useEffect(() => {
@@ -444,9 +464,7 @@ function App() {
         toast.error("环境未就绪，已阻止发布", {
           description: critical.description,
         });
-        setEnvironmentDefaultProviderIds(["dotnet"]);
-        setEnvironmentInitialResult(env);
-        setEnvironmentDialogOpen(true);
+        openEnvironmentDialog(env);
         return;
       }
 
@@ -463,6 +481,8 @@ function App() {
     setIsPublishing(true);
     setPublishResult(null);
     setOutputLog("");
+    setReleaseChecklistOpen(false);
+    setArtifactActionState({ packageResult: null, signResult: null });
 
     const config = getCurrentConfig();
 
@@ -998,7 +1018,20 @@ function App() {
                           输出目录: {publishResult.output_dir} (
                           {publishResult.file_count} 个文件)
                         </CardDescription>
-                        <ArtifactActions outputDir={publishResult.output_dir} />
+                        <ArtifactActions
+                          outputDir={publishResult.output_dir}
+                          onStateChange={setArtifactActionState}
+                        />
+                        <Button
+                          type="button"
+                          variant="secondary"
+                          size="sm"
+                          className="w-fit"
+                          onClick={() => setReleaseChecklistOpen(true)}
+                        >
+                          <ListChecks className="h-4 w-4 mr-1" />
+                          打开签名发布清单
+                        </Button>
                       </>
                     )}
                   </CardHeader>
@@ -1050,11 +1083,18 @@ function App() {
         onOpenConfig={() => setConfigDialogOpen(true)}
         environmentStatus={environmentStatus}
         environmentCheckedAt={environmentLastResult?.checked_at}
-        onOpenEnvironment={() => {
-          setEnvironmentDefaultProviderIds(["dotnet"]);
-          setEnvironmentInitialResult(null);
-          setEnvironmentDialogOpen(true);
-        }}
+        onOpenEnvironment={() => openEnvironmentDialog(null)}
+      />
+
+      <ReleaseChecklistDialog
+        open={releaseChecklistOpen}
+        onOpenChange={setReleaseChecklistOpen}
+        publishResult={publishResult}
+        environmentResult={environmentLastResult}
+        packageResult={artifactActionState.packageResult}
+        signResult={artifactActionState.signResult}
+        onOpenEnvironment={() => openEnvironmentDialog(environmentLastResult)}
+        onOpenSettings={handleOpenSettings}
       />
 
       {/* Command Import Dialog */}

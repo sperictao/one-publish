@@ -21,11 +21,17 @@ function formatBytes(bytes: number) {
   return `${gb.toFixed(2)} GB`;
 }
 
-export interface ArtifactActionsProps {
-  outputDir: string;
+export interface ArtifactActionState {
+  packageResult: PackageResult | null;
+  signResult: SignResult | null;
 }
 
-export function ArtifactActions({ outputDir }: ArtifactActionsProps) {
+export interface ArtifactActionsProps {
+  outputDir: string;
+  onStateChange?: (state: ArtifactActionState) => void;
+}
+
+export function ArtifactActions({ outputDir, onStateChange }: ArtifactActionsProps) {
   const [packaging, setPackaging] = useState(false);
   const [signing, setSigning] = useState(false);
   const [packageResult, setPackageResult] = useState<PackageResult | null>(null);
@@ -37,6 +43,10 @@ export function ArtifactActions({ outputDir }: ArtifactActionsProps) {
     setPackaging(false);
     setSigning(false);
   }, [outputDir]);
+
+  useEffect(() => {
+    onStateChange?.({ packageResult, signResult });
+  }, [onStateChange, packageResult, signResult]);
 
   const defaultZipPath = useMemo(() => {
     const trimmed = outputDir.replace(/[\\/]+$/, "");
@@ -145,4 +155,3 @@ export function ArtifactActions({ outputDir }: ArtifactActionsProps) {
     </div>
   );
 }
-

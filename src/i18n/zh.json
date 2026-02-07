@@ -120,5 +120,65 @@
     "output": "输出目录: {{dir}}",
     "failed": "发布失败",
     "error": "错误: {{error}}"
+  },
+  "releaseChecklist": {
+    "title": "签名发布清单",
+    "description": "按步骤核对发布条件，确保产物可分发且可验证。",
+    "ready": "签名发布条件已满足",
+    "notReady": "签名发布条件未满足",
+    "prev": "上一步",
+    "next": "下一步",
+    "close": "完成",
+    "summary": {
+      "passed": "已通过",
+      "warning": "警告",
+      "failed": "失败"
+    },
+    "status": {
+      "pass": "通过",
+      "warning": "警告",
+      "fail": "失败",
+      "pending": "待处理"
+    },
+    "actions": {
+      "openEnvironment": "打开环境检查",
+      "openSettings": "打开设置"
+    },
+    "steps": {
+      "environment": {
+        "title": "环境检查",
+        "description": "确认发布机器不存在阻断问题",
+        "pendingDetail": "还没有环境检查结果，建议先执行一次环境检查。"
+      },
+      "publish": {
+        "title": "发布结果",
+        "description": "确认发布命令执行成功并产出目标目录",
+        "pendingDetail": "尚未执行发布。",
+        "failedDetail": "发布失败，请先修复后重试。"
+      },
+      "package": {
+        "title": "产物打包",
+        "description": "将发布目录打包为可分发的 ZIP 产物",
+        "pendingDetail": "请在输出日志卡片点击“打包 ZIP”。",
+        "blockedDetail": "需先完成发布。"
+      },
+      "sign": {
+        "title": "签名校验",
+        "description": "为产物生成 detached signature",
+        "pendingDetail": "请在输出日志卡片点击“签名 (GPG)”。",
+        "blockedDetail": "需先完成打包。"
+      },
+      "updater": {
+        "title": "Updater 配置",
+        "description": "确认应用更新通道配置可用",
+        "loadingDetail": "正在检测 updater 配置...",
+        "pendingDetail": "尚未获取 updater 状态。"
+      }
+    },
+    "export": "导出预检报告",
+    "exporting": "导出中...",
+    "exportSuccess": "预检报告已导出",
+    "exportFailed": "导出预检报告失败",
+    "exportDialogTitle": "导出预检报告"
   }
 }
