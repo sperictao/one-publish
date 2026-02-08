@@ -70,3 +70,9 @@ Guiding decision: parameter coverage is achieved via schema-driven advanced mode
 - Task 0802: One-click snapshot open from run history
 - Task 0803: Re-run from history record (spec restore + execute)
 - Task 0804: Failure signature grouping + quick diagnostics
+
+### Phase 9: Diagnostics Deepening & Team Handoff
+- Task 0901: Failure group drill-down panel (representative runs + quick copy)
+- Task 0902: Diagnostics bundle export for failure groups
+- Task 0903: History filters + retention policy settings
+- Task 0904: Successful run handoff snippet generator (CI/CLI)

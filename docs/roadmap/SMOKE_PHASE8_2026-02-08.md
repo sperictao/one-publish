@@ -11,6 +11,7 @@
 - go：`go1.25.6`
 - java：未安装（`java -version` 失败）
 - gradle：未安装（`gradle: not found`）
+- 回归产物目录：`docs/roadmap/artifacts/phase8-regression-2026-02-08/`
 
 ## 自动化验证
 
@@ -18,16 +19,32 @@
 
 - 命令：`pnpm -s typecheck`
 - 结果：通过
+- 日志：`docs/roadmap/artifacts/phase8-regression-2026-02-08/typecheck.log`
 
 - 命令：`pnpm -s test`
-- 结果：通过（`7` 个测试文件，`27` 个用例）
-  - 包含新增：`src/lib/__tests__/failureSignature.test.ts`
+- 结果：通过（`8` 个测试文件，`30` 个用例）
+  - 包含新增：`src/lib/__tests__/failureSignature.test.ts`、`src/lib/__tests__/failureGroups.test.ts`
   - 覆盖：失败上下文提取、签名归一化、签名推导、已持久化签名回放
+- 日志：`docs/roadmap/artifacts/phase8-regression-2026-02-08/vitest.log`
 
 ### 2) Rust 侧回归
 
 - 命令：`cd src-tauri && cargo test -q`
 - 结果：通过（`80` 个测试）
+- 日志：`docs/roadmap/artifacts/phase8-regression-2026-02-08/cargo-test.log`
+
+### 3) Provider CLI 烟测（命令行）
+
+- dotnet：`file_count=5`
+- cargo：`file_count=3`
+- go：`binary_size=2387874`
+- 汇总日志：`docs/roadmap/artifacts/phase8-regression-2026-02-08/provider-smoke-summary.log`
+
+### 4) 渲染层回归说明（dev:renderer）
+
+- `pnpm dev:renderer` 下无 Tauri runtime，直接调用 `getCurrentWindow()` 会报错。
+- 已在 `src/App.tsx` 的窗口拖拽 `useEffect` 中增加 `if (!(window as any).__TAURI__) return;` 守卫，避免非 Tauri 环境白屏。
+- 浏览器采集日志：`docs/roadmap/artifacts/phase8-regression-2026-02-08/renderer-console.log`
 
 ## Phase 8 关键验收路径（手工）
 
@@ -59,4 +76,5 @@
 ## 结论
 
 - Phase 8 的 3 个任务在代码与自动化校验层面均已闭环。
+- 渲染层非 Tauri 场景已通过 guard 修复稳定性问题，可继续用于前端快速回归。
 - 由于当前环境缺少 Java/Gradle，Java Provider 的同类失败分组建议在安装 JDK 17+ 后补充一次手工回归。
