@@ -26,10 +26,14 @@ pub struct Repository {
     pub id: String,
     pub name: String,
     pub path: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub project_file: Option<String>,
     pub current_branch: String,
     pub branches: Vec<Branch>,
     #[serde(default)]
     pub is_main: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub provider_id: Option<String>,
 }
 
 /// 发布配置

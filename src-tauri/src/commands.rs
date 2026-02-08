@@ -6,6 +6,7 @@ use crate::environment::{check_environment, FixAction, FixResult, FixType};
 use crate::provider::registry::ProviderRegistry;
 use crate::provider::ProviderManifest;
 use crate::spec::{PublishSpec, SpecValue, SPEC_VERSION};
+use crate::store::Branch;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::BTreeMap;
@@ -154,6 +155,261 @@ fn scan_publish_profiles(project_file: &Path) -> Vec<String> {
     profiles.sort();
     profiles
 }
+
+fn has_extension_file(path: &Path, extension: &str) -> bool {
+    let Ok(entries) = std::fs::read_dir(path) else {
+        return false;
+    };
+
+    entries.flatten().any(|entry| {
+        entry.path().is_file()
+            && entry
+                .path()
+                .extension()
+                .and_then(|ext| ext.to_str())
+                .map(|ext| ext.eq_ignore_ascii_case(extension))
+                .unwrap_or(false)
+    })
+}
+
+fn has_file(path: &Path, file_name: &str) -> bool {
+    path.join(file_name).is_file()
+}
+
+fn detect_provider_from_path(path: &Path) -> Option<&'static str> {
+    let dotnet_detected = has_extension_file(path, "sln")
+        || has_extension_file(path, "csproj")
+        || has_extension_file(&path.join("src"), "csproj")
+        || has_extension_file(&path.join("UI"), "csproj");
+
+    if dotnet_detected {
+        return Some("dotnet");
+    }
+
+    if has_file(path, "Cargo.toml") {
+        return Some("cargo");
+    }
+
+    if has_file(path, "go.mod") {
+        return Some("go");
+    }
+
+    let java_markers = [
+        "build.gradle",
+        "build.gradle.kts",
+        "settings.gradle",
+        "settings.gradle.kts",
+        "pom.xml",
+        "gradlew",
+    ];
+
+    if java_markers.iter().any(|marker| has_file(path, marker)) {
+        return Some("java");
+    }
+
+    None
+}
+
+fn format_git_command_failure(command: &str, stderr: &[u8]) -> String {
+    let error = String::from_utf8_lossy(stderr).trim().to_string();
+
+    if error.is_empty() {
+        return format!("git {} command failed", command);
+    }
+
+    format!("git {} command failed: {}", command, error)
+}
+
+#[tauri::command]
+pub async fn detect_repository_provider(path: String) -> Result<String, crate::errors::AppError> {
+    let repo_path = PathBuf::from(&path);
+
+    if !repo_path.exists() {
+        return Err(crate::errors::AppError::unknown(format!(
+            "repository path does not exist: {}",
+            path
+        )));
+    }
+
+    if !repo_path.is_dir() {
+        return Err(crate::errors::AppError::unknown(format!(
+            "repository path is not a directory: {}",
+            path
+        )));
+    }
+
+    detect_provider_from_path(&repo_path)
+        .map(ToString::to_string)
+        .ok_or_else(|| {
+            crate::errors::AppError::unknown("cannot detect provider from repository path")
+        })
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RepositoryBranchScanResult {
+    pub branches: Vec<Branch>,
+    pub current_branch: String,
+}
+
+#[tauri::command]
+pub async fn scan_repository_branches(
+    path: String,
+) -> Result<RepositoryBranchScanResult, crate::errors::AppError> {
+    let repo_path = PathBuf::from(&path);
+
+    if !repo_path.exists() {
+        return Err(crate::errors::AppError::unknown(format!(
+            "repository path does not exist: {}",
+            path
+        )));
+    }
+
+    if !repo_path.is_dir() {
+        return Err(crate::errors::AppError::unknown(format!(
+            "repository path is not a directory: {}",
+            path
+        )));
+    }
+
+    let remote_output = Command::new("git")
+        .arg("-C")
+        .arg(&path)
+        .arg("remote")
+        .output()
+        .await
+        .map_err(|err| {
+            crate::errors::AppError::unknown(format!("failed to execute git remote: {}", err))
+        })?;
+
+    if !remote_output.status.success() {
+        return Err(crate::errors::AppError::unknown(format_git_command_failure(
+            "remote",
+            &remote_output.stderr,
+        )));
+    }
+
+    let has_remote = String::from_utf8_lossy(&remote_output.stdout)
+        .lines()
+        .any(|line| !line.trim().is_empty());
+
+    if has_remote {
+        let fetch_output = Command::new("git")
+            .arg("-C")
+            .arg(&path)
+            .arg("fetch")
+            .arg("--all")
+            .arg("--prune")
+            .output()
+            .await
+            .map_err(|err| {
+                crate::errors::AppError::unknown(format!(
+                    "failed to execute git fetch: {}",
+                    err
+                ))
+            })?;
+
+        if !fetch_output.status.success() {
+            return Err(crate::errors::AppError::unknown(format_git_command_failure(
+                "fetch",
+                &fetch_output.stderr,
+            )));
+        }
+    }
+
+    let output = Command::new("git")
+        .arg("-C")
+        .arg(&path)
+        .arg("branch")
+        .arg("--list")
+        .arg("--no-color")
+        .output()
+        .await
+        .map_err(|err| {
+            crate::errors::AppError::unknown(format!("failed to execute git branch: {}", err))
+        })?;
+
+    if !output.status.success() {
+        return Err(crate::errors::AppError::unknown(format_git_command_failure(
+            "branch",
+            &output.stderr,
+        )));
+    }
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let mut branches: Vec<Branch> = stdout
+        .lines()
+        .filter_map(|line| {
+            let raw = line.trim();
+            if raw.is_empty() {
+                return None;
+            }
+
+            let is_current = raw.starts_with('*');
+            let name = raw.trim_start_matches('*').trim().to_string();
+            if name.is_empty() {
+                return None;
+            }
+
+            Some(Branch {
+                is_main: matches!(name.as_str(), "main" | "master"),
+                is_current,
+                path: path.clone(),
+                name,
+                commit_count: None,
+            })
+        })
+        .collect();
+
+    if branches.is_empty() {
+        return Err(crate::errors::AppError::unknown(
+            "no git branches found in repository",
+        ));
+    }
+
+    let mut current_branch = branches
+        .iter()
+        .find(|branch| branch.is_current)
+        .map(|branch| branch.name.clone())
+        .unwrap_or_default();
+
+    if current_branch.is_empty() {
+        let head_output = Command::new("git")
+            .arg("-C")
+            .arg(&path)
+            .arg("rev-parse")
+            .arg("--abbrev-ref")
+            .arg("HEAD")
+            .output()
+            .await
+            .map_err(|err| {
+                crate::errors::AppError::unknown(format!(
+                    "failed to detect current branch: {}",
+                    err
+                ))
+            })?;
+
+        if head_output.status.success() {
+            current_branch = String::from_utf8_lossy(&head_output.stdout)
+                .trim()
+                .to_string();
+        }
+    }
+
+    if current_branch.is_empty() {
+        current_branch = branches[0].name.clone();
+    }
+
+    for branch in branches.iter_mut() {
+        branch.is_current = branch.name == current_branch;
+    }
+
+    Ok(RepositoryBranchScanResult {
+        branches,
+        current_branch,
+    })
+}
+
 #[tauri::command]
 pub async fn scan_project(
     start_path: Option<String>,

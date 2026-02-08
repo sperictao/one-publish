@@ -4,9 +4,11 @@ export interface Repository {
   id: string;
   name: string;
   path: string;
+  projectFile?: string;
   currentBranch: string;
   branches: Branch[];
   isMain?: boolean;
+  providerId?: string;
 }
 
 export interface Branch {

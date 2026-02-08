@@ -1,7 +1,7 @@
 // Store API - 与 Rust 后端持久化模块交互
 
 import { invoke } from "@tauri-apps/api/core";
-import type { Repository } from "@/types/repository";
+import type { Branch, Repository } from "@/types/repository";
 import type { ParameterSchema } from "@/types/parameters";
 
 // 发布配置存储类型
@@ -192,6 +192,29 @@ export async function getProviderSchema(
   providerId: string
 ): Promise<ParameterSchema> {
   return await invoke<ParameterSchema>("get_provider_schema", { providerId });
+}
+
+/**
+ * 自动检测仓库 Provider
+ */
+export async function detectRepositoryProvider(path: string): Promise<string> {
+  return await invoke<string>("detect_repository_provider", { path });
+}
+
+export interface RepositoryBranchScanResult {
+  branches: Branch[];
+  currentBranch: string;
+}
+
+/**
+ * 刷新仓库分支列表
+ */
+export async function scanRepositoryBranches(
+  path: string
+): Promise<RepositoryBranchScanResult> {
+  return await invoke<RepositoryBranchScanResult>("scan_repository_branches", {
+    path,
+  });
 }
 
 // ==================== 版本更新相关 ====================

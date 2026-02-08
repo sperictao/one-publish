@@ -93,6 +93,8 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             commands::scan_project,
+            commands::detect_repository_provider,
+            commands::scan_repository_branches,
             commands::execute_publish,
             commands::execute_provider_publish,
             commands::cancel_provider_publish,
