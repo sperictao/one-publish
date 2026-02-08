@@ -61,6 +61,6 @@ Status legend:
 ## Phase 8: Run Intelligence & Recovery
 
 - [done] TASK-0801 Local execution history timeline (last 20 runs) (docs/roadmap/tasks/TASK-0801.md)
-- [todo] TASK-0802 One-click snapshot open from run history (docs/roadmap/tasks/TASK-0802.md)
-- [todo] TASK-0803 Re-run from history record (spec restore + execute) (docs/roadmap/tasks/TASK-0803.md)
+- [done] TASK-0802 One-click snapshot open from run history (docs/roadmap/tasks/TASK-0802.md)
+- [done] TASK-0803 Re-run from history record (spec restore + execute) (docs/roadmap/tasks/TASK-0803.md)
 - [todo] TASK-0804 Failure signature grouping + quick diagnostics (docs/roadmap/tasks/TASK-0804.md)
