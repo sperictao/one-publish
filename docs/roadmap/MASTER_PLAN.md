@@ -76,3 +76,10 @@ Guiding decision: parameter coverage is achieved via schema-driven advanced mode
 - Task 0902: Diagnostics bundle export for failure groups
 - Task 0903: History filters + retention policy settings
 - Task 0904: Successful run handoff snippet generator (CI/CLI)
+
+### Phase 10: Collaboration Signal & Timeline Intelligence
+- Task 1001: History time-window filter (24h/7d/30d)
+- Task 1002: One-click issue draft from diagnostics bundle
+- Task 1003: History export (CSV/JSON) for team reporting
+- Task 1004: Saved filter presets for recurring triage workflows
+

@@ -188,6 +188,9 @@ interface FailureGroupBundlePayload {
   records: FailureGroupBundleRecordPayload[];
 }
 
+type HistoryFilterStatus = "all" | "success" | "failed" | "cancelled";
+type HistoryFilterWindow = "all" | "24h" | "7d" | "30d";
+
 const SPEC_VERSION = 1;
 
 // Preset configurations
@@ -434,9 +437,10 @@ function App() {
     useState<ProviderPublishSpec | null>(null);
   const [executionHistory, setExecutionHistory] = useState<ExecutionRecord[]>([]);
   const [historyFilterProvider, setHistoryFilterProvider] = useState("all");
-  const [historyFilterStatus, setHistoryFilterStatus] = useState<
-    "all" | "success" | "failed" | "cancelled"
-  >("all");
+  const [historyFilterStatus, setHistoryFilterStatus] =
+    useState<HistoryFilterStatus>("all");
+  const [historyFilterWindow, setHistoryFilterWindow] =
+    useState<HistoryFilterWindow>("all");
   const [historyFilterKeyword, setHistoryFilterKeyword] = useState("");
   const [selectedFailureGroupKey, setSelectedFailureGroupKey] =
     useState<string | null>(null);
@@ -475,6 +479,15 @@ function App() {
 
   const filteredExecutionHistory = useMemo(() => {
     const keyword = historyFilterKeyword.trim().toLowerCase();
+    const now = Date.now();
+    const windowStartMs =
+      historyFilterWindow === "24h"
+        ? now - 24 * 60 * 60 * 1000
+        : historyFilterWindow === "7d"
+          ? now - 7 * 24 * 60 * 60 * 1000
+          : historyFilterWindow === "30d"
+            ? now - 30 * 24 * 60 * 60 * 1000
+            : null;
 
     return executionHistory.filter((record) => {
       if (historyFilterProvider !== "all" && record.providerId !== historyFilterProvider) {
@@ -492,6 +505,13 @@ function App() {
         (record.success || record.cancelled)
       ) {
         return false;
+      }
+
+      if (windowStartMs !== null) {
+        const finishedAt = Date.parse(record.finishedAt);
+        if (Number.isNaN(finishedAt) || finishedAt < windowStartMs) {
+          return false;
+        }
       }
 
       if (!keyword) {
@@ -514,6 +534,7 @@ function App() {
     executionHistory,
     historyFilterProvider,
     historyFilterStatus,
+    historyFilterWindow,
     historyFilterKeyword,
   ]);
 
@@ -2348,7 +2369,7 @@ function App() {
                     </CardDescription>
                   </CardHeader>
                   <CardContent className="space-y-3">
-                    <div className="grid gap-2 md:grid-cols-3">
+                    <div className="grid gap-2 md:grid-cols-4">
                       <Select
                         value={historyFilterProvider}
                         onValueChange={setHistoryFilterProvider}
@@ -2368,9 +2389,7 @@ function App() {
                       <Select
                         value={historyFilterStatus}
                         onValueChange={(value) =>
-                          setHistoryFilterStatus(
-                            value as "all" | "success" | "failed" | "cancelled"
-                          )
+                          setHistoryFilterStatus(value as HistoryFilterStatus)
                         }
                       >
                         <SelectTrigger className="h-8">
@@ -2381,6 +2400,22 @@ function App() {
                           <SelectItem value="success">成功</SelectItem>
                           <SelectItem value="failed">失败</SelectItem>
                           <SelectItem value="cancelled">已取消</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <Select
+                        value={historyFilterWindow}
+                        onValueChange={(value) =>
+                          setHistoryFilterWindow(value as HistoryFilterWindow)
+                        }
+                      >
+                        <SelectTrigger className="h-8">
+                          <SelectValue placeholder="时间窗口" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="all">全部时间</SelectItem>
+                          <SelectItem value="24h">最近 24 小时</SelectItem>
+                          <SelectItem value="7d">最近 7 天</SelectItem>
+                          <SelectItem value="30d">最近 30 天</SelectItem>
                         </SelectContent>
                       </Select>
                       <Input
@@ -2398,11 +2433,13 @@ function App() {
                         onClick={() => {
                           setHistoryFilterProvider("all");
                           setHistoryFilterStatus("all");
+                          setHistoryFilterWindow("all");
                           setHistoryFilterKeyword("");
                         }}
                         disabled={
                           historyFilterProvider === "all" &&
                           historyFilterStatus === "all" &&
+                          historyFilterWindow === "all" &&
                           historyFilterKeyword.length === 0
                         }
                       >

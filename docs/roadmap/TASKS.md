@@ -72,3 +72,11 @@ Status legend:
 - [done] TASK-0903 History filters + retention policy settings (docs/roadmap/tasks/TASK-0903.md)
 - [done] TASK-0904 Successful run handoff snippet generator (CI/CLI) (docs/roadmap/tasks/TASK-0904.md)
 
+
+## Phase 10: Collaboration Signal & Timeline Intelligence
+
+- [done] TASK-1001 History time-window filter (24h/7d/30d) (docs/roadmap/tasks/TASK-1001.md)
+- [todo] TASK-1002 One-click issue draft from diagnostics bundle (docs/roadmap/tasks/TASK-1002.md)
+- [todo] TASK-1003 History export (CSV/JSON) for team reporting (docs/roadmap/tasks/TASK-1003.md)
+- [todo] TASK-1004 Saved filter presets for recurring triage workflows (docs/roadmap/tasks/TASK-1004.md)
+
