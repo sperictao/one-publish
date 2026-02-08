@@ -10,6 +10,7 @@ use crate::store::Branch;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::BTreeMap;
+use std::io::ErrorKind as IoErrorKind;
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
 use std::sync::{
@@ -220,28 +221,121 @@ fn format_git_command_failure(command: &str, stderr: &[u8]) -> String {
     format!("git {} command failed: {}", command, error)
 }
 
+fn classify_repository_path_error(kind: IoErrorKind) -> &'static str {
+    match kind {
+        IoErrorKind::NotFound => "path_not_found",
+        IoErrorKind::NotADirectory => "not_directory",
+        IoErrorKind::PermissionDenied => "permission_denied",
+        _ => "read_failed",
+    }
+}
+
+fn classify_git_execution_error(kind: IoErrorKind) -> &'static str {
+    match kind {
+        IoErrorKind::NotFound => "git_missing",
+        IoErrorKind::PermissionDenied => "permission_denied",
+        _ => "unknown",
+    }
+}
+
+fn classify_process_spawn_error(kind: IoErrorKind) -> &'static str {
+    match kind {
+        IoErrorKind::NotFound => "tool_missing",
+        IoErrorKind::PermissionDenied => "permission_denied",
+        _ => "publish_spawn_failed",
+    }
+}
+
+fn classify_process_wait_error(kind: IoErrorKind) -> &'static str {
+    match kind {
+        IoErrorKind::PermissionDenied => "permission_denied",
+        _ => "publish_wait_failed",
+    }
+}
+
+fn classify_git_branch_scan_error(stderr: &str) -> &'static str {
+    let normalized = stderr.to_lowercase();
+
+    if normalized.contains("not a git repository")
+        || normalized.contains("不是 git 仓库")
+        || normalized.contains("不是一个git仓库")
+    {
+        return "not_git_repo";
+    }
+
+    if normalized.contains("detected dubious ownership") {
+        return "dubious_ownership";
+    }
+
+    if normalized.contains("permission denied")
+        || normalized.contains("operation not permitted")
+        || normalized.contains("访问被拒绝")
+        || normalized.contains("权限")
+    {
+        return "permission_denied";
+    }
+
+    if normalized.contains("unable to access")
+        || normalized.contains("failed to connect")
+        || normalized.contains("could not resolve host")
+        || normalized.contains("connection timed out")
+        || normalized.contains("connection refused")
+        || normalized.contains("unable to connect")
+        || normalized.contains("unable to look up")
+        || normalized.contains("couldn't connect to server")
+        || normalized.contains("network is unreachable")
+        || normalized.contains("could not read from remote repository")
+        || normalized.contains("could not read username")
+        || normalized.contains("authentication failed")
+        || normalized.contains("publickey")
+        || normalized.contains("repository not found")
+        || normalized.contains("proxy connect aborted")
+        || normalized.contains("无法连接")
+        || normalized.contains("连接超时")
+        || normalized.contains("连接被拒绝")
+        || normalized.contains("无法访问远程仓库")
+        || normalized.contains("无法从远程仓库读取")
+        || normalized.contains("无法解析主机")
+        || normalized.contains("网络不可达")
+    {
+        return "cannot_connect_repo";
+    }
+
+    "unknown"
+}
+
 #[tauri::command]
 pub async fn detect_repository_provider(path: String) -> Result<String, crate::errors::AppError> {
     let repo_path = PathBuf::from(&path);
 
     if !repo_path.exists() {
-        return Err(crate::errors::AppError::unknown(format!(
-            "repository path does not exist: {}",
-            path
-        )));
+        return Err(crate::errors::AppError::unknown_with_code(
+            format!("repository path does not exist: {}", path),
+            "path_not_found",
+        ));
     }
 
     if !repo_path.is_dir() {
-        return Err(crate::errors::AppError::unknown(format!(
-            "repository path is not a directory: {}",
-            path
-        )));
+        return Err(crate::errors::AppError::unknown_with_code(
+            format!("repository path is not a directory: {}", path),
+            "not_directory",
+        ));
+    }
+
+    if let Err(err) = std::fs::read_dir(&repo_path) {
+        return Err(crate::errors::AppError::unknown_with_code(
+            format!("failed to read repository directory: {}", err),
+            classify_repository_path_error(err.kind()),
+        ));
     }
 
     detect_provider_from_path(&repo_path)
         .map(ToString::to_string)
         .ok_or_else(|| {
-            crate::errors::AppError::unknown("cannot detect provider from repository path")
+            crate::errors::AppError::unknown_with_code(
+                "cannot detect provider from repository path",
+                "unsupported_provider",
+            )
         })
 }
 
@@ -252,6 +346,99 @@ pub struct RepositoryBranchScanResult {
     pub current_branch: String,
 }
 
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RepositoryBranchConnectivityResult {
+    pub can_connect: bool,
+}
+
+#[tauri::command]
+pub async fn check_repository_branch_connectivity(
+    path: String,
+    current_branch: Option<String>,
+) -> RepositoryBranchConnectivityResult {
+    let repo_path = PathBuf::from(&path);
+
+    if !repo_path.exists() || !repo_path.is_dir() {
+        return RepositoryBranchConnectivityResult { can_connect: false };
+    }
+
+    let mut branch_name = current_branch
+        .map(|branch| branch.trim().to_string())
+        .unwrap_or_default();
+
+    if branch_name.is_empty() {
+        let head_output = match Command::new("git")
+            .arg("-C")
+            .arg(&path)
+            .arg("rev-parse")
+            .arg("--abbrev-ref")
+            .arg("HEAD")
+            .output()
+            .await
+        {
+            Ok(output) if output.status.success() => output,
+            _ => return RepositoryBranchConnectivityResult { can_connect: false },
+        };
+
+        branch_name = String::from_utf8_lossy(&head_output.stdout)
+            .trim()
+            .to_string();
+    }
+
+    if branch_name.is_empty() || branch_name == "HEAD" {
+        return RepositoryBranchConnectivityResult { can_connect: false };
+    }
+
+    let upstream_output = match Command::new("git")
+        .arg("-C")
+        .arg(&path)
+        .arg("rev-parse")
+        .arg("--abbrev-ref")
+        .arg("--symbolic-full-name")
+        .arg(format!("{}@{{upstream}}", branch_name))
+        .output()
+        .await
+    {
+        Ok(output) if output.status.success() => output,
+        _ => return RepositoryBranchConnectivityResult { can_connect: false },
+    };
+
+    let upstream = String::from_utf8_lossy(&upstream_output.stdout)
+        .trim()
+        .to_string();
+    let Some((remote, remote_branch)) = upstream.split_once('/') else {
+        return RepositoryBranchConnectivityResult { can_connect: false };
+    };
+
+    if remote.is_empty() || remote_branch.is_empty() {
+        return RepositoryBranchConnectivityResult { can_connect: false };
+    }
+
+    let remote_branch_ref = format!("refs/heads/{}", remote_branch);
+    let ls_remote_output = match timeout(
+        Duration::from_secs(5),
+        Command::new("git")
+            .arg("-C")
+            .arg(&path)
+            .arg("ls-remote")
+            .arg("--exit-code")
+            .arg("--heads")
+            .arg(remote)
+            .arg(&remote_branch_ref)
+            .output(),
+    )
+    .await
+    {
+        Ok(Ok(output)) => output,
+        _ => return RepositoryBranchConnectivityResult { can_connect: false },
+    };
+
+    RepositoryBranchConnectivityResult {
+        can_connect: ls_remote_output.status.success() && !ls_remote_output.stdout.is_empty(),
+    }
+}
+
 #[tauri::command]
 pub async fn scan_repository_branches(
     path: String,
@@ -259,17 +446,17 @@ pub async fn scan_repository_branches(
     let repo_path = PathBuf::from(&path);
 
     if !repo_path.exists() {
-        return Err(crate::errors::AppError::unknown(format!(
-            "repository path does not exist: {}",
-            path
-        )));
+        return Err(crate::errors::AppError::unknown_with_code(
+            format!("repository path does not exist: {}", path),
+            "path_not_found",
+        ));
     }
 
     if !repo_path.is_dir() {
-        return Err(crate::errors::AppError::unknown(format!(
-            "repository path is not a directory: {}",
-            path
-        )));
+        return Err(crate::errors::AppError::unknown_with_code(
+            format!("repository path is not a directory: {}", path),
+            "not_directory",
+        ));
     }
 
     let remote_output = Command::new("git")
@@ -279,14 +466,18 @@ pub async fn scan_repository_branches(
         .output()
         .await
         .map_err(|err| {
-            crate::errors::AppError::unknown(format!("failed to execute git remote: {}", err))
+            crate::errors::AppError::unknown_with_code(
+                format!("failed to execute git remote: {}", err),
+                classify_git_execution_error(err.kind()),
+            )
         })?;
 
     if !remote_output.status.success() {
-        return Err(crate::errors::AppError::unknown(format_git_command_failure(
-            "remote",
-            &remote_output.stderr,
-        )));
+        let stderr = String::from_utf8_lossy(&remote_output.stderr).trim().to_string();
+        return Err(crate::errors::AppError::unknown_with_code(
+            format_git_command_failure("remote", &remote_output.stderr),
+            classify_git_branch_scan_error(&stderr),
+        ));
     }
 
     let has_remote = String::from_utf8_lossy(&remote_output.stdout)
@@ -303,17 +494,18 @@ pub async fn scan_repository_branches(
             .output()
             .await
             .map_err(|err| {
-                crate::errors::AppError::unknown(format!(
-                    "failed to execute git fetch: {}",
-                    err
-                ))
+                crate::errors::AppError::unknown_with_code(
+                    format!("failed to execute git fetch: {}", err),
+                    classify_git_execution_error(err.kind()),
+                )
             })?;
 
         if !fetch_output.status.success() {
-            return Err(crate::errors::AppError::unknown(format_git_command_failure(
-                "fetch",
-                &fetch_output.stderr,
-            )));
+            let stderr = String::from_utf8_lossy(&fetch_output.stderr).trim().to_string();
+            return Err(crate::errors::AppError::unknown_with_code(
+                format_git_command_failure("fetch", &fetch_output.stderr),
+                classify_git_branch_scan_error(&stderr),
+            ));
         }
     }
 
@@ -326,14 +518,18 @@ pub async fn scan_repository_branches(
         .output()
         .await
         .map_err(|err| {
-            crate::errors::AppError::unknown(format!("failed to execute git branch: {}", err))
+            crate::errors::AppError::unknown_with_code(
+                format!("failed to execute git branch: {}", err),
+                classify_git_execution_error(err.kind()),
+            )
         })?;
 
     if !output.status.success() {
-        return Err(crate::errors::AppError::unknown(format_git_command_failure(
-            "branch",
-            &output.stderr,
-        )));
+        let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+        return Err(crate::errors::AppError::unknown_with_code(
+            format_git_command_failure("branch", &output.stderr),
+            classify_git_branch_scan_error(&stderr),
+        ));
     }
 
     let stdout = String::from_utf8_lossy(&output.stdout);
@@ -362,8 +558,9 @@ pub async fn scan_repository_branches(
         .collect();
 
     if branches.is_empty() {
-        return Err(crate::errors::AppError::unknown(
+        return Err(crate::errors::AppError::unknown_with_code(
             "no git branches found in repository",
+            "no_branches",
         ));
     }
 
@@ -383,10 +580,10 @@ pub async fn scan_repository_branches(
             .output()
             .await
             .map_err(|err| {
-                crate::errors::AppError::unknown(format!(
-                    "failed to detect current branch: {}",
-                    err
-                ))
+                crate::errors::AppError::unknown_with_code(
+                    format!("failed to detect current branch: {}", err),
+                    classify_git_execution_error(err.kind()),
+                )
             })?;
 
         if head_output.status.success() {
@@ -416,14 +613,35 @@ pub async fn scan_project(
 ) -> Result<ProjectInfo, crate::errors::AppError> {
     let search_path = match start_path {
         Some(p) => PathBuf::from(p),
-        None => {
-            std::env::current_dir().map_err(|e| crate::errors::AppError::unknown(e.to_string()))?
-        }
+        None => std::env::current_dir().map_err(|e| {
+            crate::errors::AppError::unknown_with_code(
+                format!("failed to resolve current directory: {}", e),
+                "current_dir_failed",
+            )
+        })?,
     };
-    let root_path = find_project_root(&search_path)
-        .ok_or_else(|| crate::errors::AppError::unknown("cannot find project root (.sln)"))?;
-    let project_file = find_project_file(&root_path)
-        .ok_or_else(|| crate::errors::AppError::unknown("cannot find project file (.csproj)"))?;
+
+    if !search_path.exists() {
+        return Err(crate::errors::AppError::unknown_with_code(
+            format!("scan start path does not exist: {}", search_path.display()),
+            "path_not_found",
+        ));
+    }
+
+    let root_path = find_project_root(&search_path).ok_or_else(|| {
+        crate::errors::AppError::unknown_with_code(
+            "cannot find project root (.sln)",
+            "project_root_not_found",
+        )
+    })?;
+
+    let project_file = find_project_file(&root_path).ok_or_else(|| {
+        crate::errors::AppError::unknown_with_code(
+            "cannot find project file (.csproj)",
+            "project_file_not_found",
+        )
+    })?;
+
     let publish_profiles = scan_publish_profiles(&project_file);
     Ok(ProjectInfo {
         root_path: root_path.to_string_lossy().to_string(),
@@ -439,10 +657,10 @@ pub async fn execute_publish(
 ) -> Result<PublishResult, crate::errors::AppError> {
     let project_file = PathBuf::from(&project_path);
     if !project_file.exists() {
-        return Err(crate::errors::AppError::unknown(format!(
-            "project file does not exist: {}",
-            project_path
-        )));
+        return Err(crate::errors::AppError::unknown_with_code(
+            format!("project file does not exist: {}", project_path),
+            "project_path_not_found",
+        ));
     }
     let spec = build_dotnet_spec_from_config(project_path, config);
     execute_publish_spec(&app, spec).await
@@ -454,10 +672,10 @@ pub async fn execute_provider_publish(
 ) -> Result<PublishResult, crate::errors::AppError> {
     let project_path = PathBuf::from(&spec.project_path);
     if !project_path.exists() {
-        return Err(crate::errors::AppError::unknown(format!(
-            "project path does not exist: {}",
-            spec.project_path
-        )));
+        return Err(crate::errors::AppError::unknown_with_code(
+            format!("project path does not exist: {}", spec.project_path),
+            "project_path_not_found",
+        ));
     }
     execute_publish_spec(&app, spec).await
 }
@@ -473,7 +691,10 @@ pub async fn cancel_provider_publish() -> Result<bool, crate::errors::AppError> 
     running.cancel_requested.store(true, Ordering::SeqCst);
     let mut child = running.child.lock().await;
     child.start_kill().map_err(|err| {
-        crate::errors::AppError::unknown(format!("failed to cancel publish: {}", err))
+        crate::errors::AppError::unknown_with_code(
+            format!("failed to cancel publish: {}", err),
+            "publish_cancel_failed",
+        )
     })?;
     Ok(true)
 }
@@ -515,8 +736,9 @@ async fn execute_publish_spec(
     {
         let running = running_execution_slot().lock().await;
         if running.is_some() {
-            return Err(crate::errors::AppError::unknown(
+            return Err(crate::errors::AppError::unknown_with_code(
                 "another publish execution is already running",
+                "publish_already_running",
             ));
         }
     }
@@ -558,7 +780,10 @@ async fn execute_publish_spec(
         command.current_dir(dir);
     }
     let mut child = command.spawn().map_err(|e| {
-        crate::errors::AppError::unknown(format!("failed to spawn {}: {}", program, e))
+        crate::errors::AppError::unknown_with_code(
+            format!("failed to spawn {}: {}", program, e),
+            classify_process_spawn_error(e.kind()),
+        )
     })?;
     let command_line = if args.is_empty() {
         format!("$ {}", program)
@@ -602,14 +827,20 @@ async fn execute_publish_spec(
         let status = {
             let mut running_child = child.lock().await;
             running_child.wait().await.map_err(|err| {
-                crate::errors::AppError::unknown(format!("failed to wait publish process: {}", err))
+                crate::errors::AppError::unknown_with_code(
+                    format!("failed to wait publish process: {}", err),
+                    classify_process_wait_error(err.kind()),
+                )
             })?
         };
         for reader in readers {
             let _ = reader.await;
         }
         let streamed_lines = collector.await.map_err(|err| {
-            crate::errors::AppError::unknown(format!("failed to collect publish logs: {}", err))
+            crate::errors::AppError::unknown_with_code(
+                format!("failed to collect publish logs: {}", err),
+                "publish_log_collect_failed",
+            )
         })?;
         output_lines.extend(streamed_lines);
         let cancelled = cancel_requested.load(Ordering::SeqCst);
@@ -717,14 +948,21 @@ async fn clear_running_execution(session_id: &str) {
 fn resolve_plan_command(
     plan: &crate::plan::ExecutionPlan,
 ) -> Result<(String, Vec<String>), crate::errors::AppError> {
-    let first_step = plan
-        .steps
-        .first()
-        .ok_or_else(|| crate::errors::AppError::unknown("execution plan has no step"))?;
+    let first_step = plan.steps.first().ok_or_else(|| {
+        crate::errors::AppError::unknown_with_code(
+            "execution plan has no step",
+            "plan_missing_step",
+        )
+    })?;
     let mut parts = first_step.title.split_whitespace();
     let program = parts
         .next()
-        .ok_or_else(|| crate::errors::AppError::unknown("execution step title is empty"))?
+        .ok_or_else(|| {
+            crate::errors::AppError::unknown_with_code(
+                "execution step title is empty",
+                "plan_invalid_step_title",
+            )
+        })?
         .to_string();
     let args = parts.map(|item| item.to_string()).collect();
     Ok((program, args))
@@ -737,8 +975,9 @@ fn resolve_java_program(
         return Ok(program.to_string());
     }
     let Some(dir) = working_dir else {
-        return Err(crate::errors::AppError::unknown(
+        return Err(crate::errors::AppError::unknown_with_code(
             "java provider requires a project directory",
+            "java_project_dir_required",
         ));
     };
     #[cfg(target_os = "windows")]
@@ -752,10 +991,13 @@ fn resolve_java_program(
     if crate::environment::command_exists("gradle") {
         return Ok("gradle".to_string());
     }
-    Err(crate::errors::AppError::unknown(format!(
-        "gradle wrapper not found at {} and `gradle` is not available in PATH",
-        wrapper_path.to_string_lossy()
-    )))
+    Err(crate::errors::AppError::unknown_with_code(
+        format!(
+            "gradle wrapper not found at {} and `gradle` is not available in PATH",
+            wrapper_path.to_string_lossy()
+        ),
+        "java_gradle_not_found",
+    ))
 }
 fn resolve_working_dir(spec: &PublishSpec) -> Option<PathBuf> {
     let path = PathBuf::from(&spec.project_path);
@@ -1904,9 +2146,12 @@ pub async fn apply_imported_config(
 pub async fn run_environment_check(
     provider_ids: Option<Vec<String>>,
 ) -> Result<crate::environment::EnvironmentCheckResult, crate::errors::AppError> {
-    check_environment(provider_ids)
-        .await
-        .map_err(|e| crate::errors::AppError::unknown(format!("environment check failed: {}", e)))
+    check_environment(provider_ids).await.map_err(|e| {
+        crate::errors::AppError::unknown_with_code(
+            format!("environment check failed: {}", e),
+            "environment_check_failed",
+        )
+    })
 }
 /// Apply a fix action
 #[tauri::command]

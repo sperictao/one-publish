@@ -95,6 +95,7 @@ pub fn run() {
             commands::scan_project,
             commands::detect_repository_provider,
             commands::scan_repository_branches,
+            commands::check_repository_branch_connectivity,
             commands::execute_publish,
             commands::execute_provider_publish,
             commands::cancel_provider_publish,

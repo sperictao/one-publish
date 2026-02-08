@@ -27,37 +27,11 @@ import {
   Pencil,
   Trash2,
   RefreshCw,
+  FolderGit2,
+  GitBranch,
 } from "lucide-react";
 import type { Branch, Repository } from "@/types/repository";
 import { useI18n } from "@/hooks/useI18n";
-
-// Custom repo icon matching the screenshot
-function RepoIcon({ className }: { className?: string }) {
-  return (
-    <svg
-      width="16"
-      height="16"
-      viewBox="0 0 16 16"
-      fill="none"
-      xmlns="http://www.w3.org/2000/svg"
-      className={className}
-    >
-      <rect
-        x="2"
-        y="2"
-        width="12"
-        height="12"
-        rx="2"
-        stroke="currentColor"
-        strokeWidth="1.5"
-        fill="none"
-      />
-      <line x1="6" y1="2" x2="6" y2="14" stroke="currentColor" strokeWidth="1.5" />
-      <circle cx="10" cy="6" r="1.5" fill="currentColor" />
-      <circle cx="10" cy="10" r="1.5" fill="currentColor" />
-    </svg>
-  );
-}
 
 // Collapse toggle icon
 function CollapseIcon() {
@@ -101,12 +75,13 @@ interface RepositoryListProps {
   onRemoveRepo: (repo: Repository) => Promise<void> | void;
   onDetectProvider: (
     path: string,
-    options?: { silent?: boolean }
+    options?: { silentSuccess?: boolean }
   ) => Promise<string | null>;
   onRefreshBranches: (
     path: string,
     options?: { silentSuccess?: boolean }
   ) => Promise<{ branches: Branch[]; currentBranch: string } | null>;
+  branchConnectivityByRepoId: Record<string, boolean>;
   onSettings: () => void;
   onCollapse?: () => void;
 }
@@ -121,6 +96,7 @@ export function RepositoryList({
   onRemoveRepo,
   onDetectProvider,
   onRefreshBranches,
+  branchConnectivityByRepoId,
   onSettings,
   onCollapse,
 }: RepositoryListProps) {
@@ -285,7 +261,9 @@ export function RepositoryList({
     const detect = async () => {
       setIsDetectingProvider(true);
       try {
-        const providerId = await onDetectProvider(detectPath, { silent: true });
+        const providerId = await onDetectProvider(detectPath, {
+          silentSuccess: true,
+        });
         if (!cancelled && providerId) {
           setEditProviderId(providerId);
         }
@@ -525,25 +503,51 @@ export function RepositoryList({
       <div className="flex-1 overflow-auto space-y-2 px-3 py-2">
         {filteredRepos.map((repo) => {
           const isActionMenuOpen = actionMenuRepoId === repo.id;
+          const isSelected = selectedRepoId === repo.id;
+          const currentBranchName =
+            repo.currentBranch?.trim() ||
+            repoT.currentBranchUnknown ||
+            "未知分支";
+          const canConnectBranch = branchConnectivityByRepoId[repo.id] ?? false;
 
           return (
             <button
               key={repo.id}
               className={cn(
-                "group flex w-full items-start gap-2 rounded-lg border px-3 py-2.5 text-left transition-colors hover:bg-accent",
-                selectedRepoId === repo.id
-                  ? "border-border bg-accent"
-                  : "border-transparent hover:border-border"
+                "group relative flex w-full items-start gap-2 rounded-xl border px-3 py-2.5 text-left",
+                "transition-[transform,box-shadow,border-color,background-color] duration-300 [transition-timing-function:cubic-bezier(0.22,1,0.36,1)]",
+                "hover:-translate-y-[1px] hover:bg-accent/80 hover:shadow-sm",
+                isSelected
+                  ? "border-border bg-accent shadow-sm ring-1 ring-border/40"
+                  : "border-transparent hover:border-border/80"
               )}
               onClick={() => {
                 setActionMenuRepoId(null);
                 onSelectRepo(repo.id);
               }}
             >
-              <RepoIcon className="mt-0.5 h-4 w-4 flex-shrink-0 text-muted-foreground" />
+              <span
+                className={cn(
+                  "mt-0.5 flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-md border transition-colors duration-300 [transition-timing-function:cubic-bezier(0.22,1,0.36,1)]",
+                  isSelected
+                    ? "border-primary/30 bg-primary/10"
+                    : "border-transparent bg-muted/45 group-hover:border-border/70 group-hover:bg-background"
+                )}
+              >
+                <FolderGit2
+                  className={cn(
+                    "h-4 w-4 transition-colors duration-300 [transition-timing-function:cubic-bezier(0.22,1,0.36,1)]",
+                    isSelected
+                      ? "text-primary"
+                      : "text-muted-foreground group-hover:text-foreground"
+                  )}
+                />
+              </span>
               <div className="min-w-0 flex-1">
                 <div className="flex items-center justify-between gap-2">
-                  <span className="truncate text-sm font-medium">{repo.name}</span>
+                  <span className="truncate text-sm font-medium tracking-tight">
+                    {repo.name}
+                  </span>
                   <div
                     className="relative flex-shrink-0"
                     onClick={(event) => {
@@ -554,10 +558,10 @@ export function RepositoryList({
                       variant="ghost"
                       size="icon"
                       className={cn(
-                        "h-5 w-5 transition-opacity",
+                        "h-5 w-5 transition-all duration-300 [transition-timing-function:cubic-bezier(0.22,1,0.36,1)]",
                         isActionMenuOpen
-                          ? "opacity-100"
-                          : "opacity-0 group-hover:opacity-100"
+                          ? "translate-y-0 opacity-100"
+                          : "-translate-y-0.5 opacity-0 group-hover:translate-y-0 group-hover:opacity-100"
                       )}
                       title={repoT.moreActions || "更多操作"}
                       onClick={(event) => {
@@ -600,9 +604,24 @@ export function RepositoryList({
                     )}
                   </div>
                 </div>
-                <span className="block truncate text-xs text-muted-foreground">
-                  {repo.path}
-                </span>
+                <div className="mt-1 min-w-0">
+                  <span
+                    className={cn(
+                      "inline-flex max-w-full items-center gap-1.5 rounded-full border px-2 py-0.5 text-[11px] leading-4 transition-colors duration-300 [transition-timing-function:cubic-bezier(0.22,1,0.36,1)]",
+                      canConnectBranch
+                        ? "border-emerald-500/35 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300"
+                        : "border-muted-foreground/25 bg-muted/35 text-muted-foreground"
+                    )}
+                    title={
+                      canConnectBranch
+                        ? repoT.branchConnectable || "分支可连接"
+                        : repoT.branchUnreachable || "分支不可连接"
+                    }
+                  >
+                    <GitBranch className="h-3 w-3 flex-shrink-0" />
+                    <span className="truncate">{currentBranchName}</span>
+                  </span>
+                </div>
               </div>
             </button>
           );

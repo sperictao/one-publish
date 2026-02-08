@@ -206,6 +206,10 @@ export interface RepositoryBranchScanResult {
   currentBranch: string;
 }
 
+export interface RepositoryBranchConnectivityResult {
+  canConnect: boolean;
+}
+
 /**
  * 刷新仓库分支列表
  */
@@ -215,6 +219,22 @@ export async function scanRepositoryBranches(
   return await invoke<RepositoryBranchScanResult>("scan_repository_branches", {
     path,
   });
+}
+
+/**
+ * 检查当前分支与远端连接状态
+ */
+export async function checkRepositoryBranchConnectivity(
+  path: string,
+  currentBranch?: string
+): Promise<RepositoryBranchConnectivityResult> {
+  return await invoke<RepositoryBranchConnectivityResult>(
+    "check_repository_branch_connectivity",
+    {
+      path,
+      currentBranch: currentBranch?.trim() || null,
+    }
+  );
 }
 
 // ==================== 版本更新相关 ====================

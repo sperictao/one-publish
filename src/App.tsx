@@ -12,6 +12,7 @@ import { useShortcuts } from "@/hooks/useShortcuts";
 import { useI18n, type Language } from "@/hooks/useI18n";
 import {
   addExecutionRecord,
+  checkRepositoryBranchConnectivity,
   detectRepositoryProvider,
   getExecutionHistory,
   getProviderSchema,
@@ -465,7 +466,91 @@ function extractInvokeErrorMessage(error: unknown): string {
   return String(error);
 }
 
+function extractInvokeErrorCode(error: unknown): string | null {
+  const extractCodeFromObject = (value: unknown): string | null => {
+    if (!value || typeof value !== "object") {
+      return null;
+    }
+
+    const payload = value as {
+      code?: unknown;
+      data?: unknown;
+      details?: unknown;
+    };
+
+    if (typeof payload.code === "string" && payload.code.trim().length > 0) {
+      return payload.code.trim().toLowerCase();
+    }
+
+    if (payload.data && typeof payload.data === "object") {
+      const nestedCode = (payload.data as { code?: unknown }).code;
+      if (typeof nestedCode === "string" && nestedCode.trim().length > 0) {
+        return nestedCode.trim().toLowerCase();
+      }
+    }
+
+    if (payload.details && typeof payload.details === "object") {
+      const nestedCode = (payload.details as { code?: unknown }).code;
+      if (typeof nestedCode === "string" && nestedCode.trim().length > 0) {
+        return nestedCode.trim().toLowerCase();
+      }
+    }
+
+    return null;
+  };
+
+  if (typeof error === "string") {
+    const trimmed = error.trim();
+    if (trimmed.startsWith("{") && trimmed.endsWith("}")) {
+      try {
+        return extractCodeFromObject(JSON.parse(trimmed));
+      } catch {
+        return null;
+      }
+    }
+
+    return null;
+  }
+
+  return extractCodeFromObject(error);
+}
+
 function analyzeBranchRefreshFailure(error: unknown): BranchRefreshFailureReason {
+  const errorCode = extractInvokeErrorCode(error);
+  if (errorCode) {
+    if (errorCode === "path_not_found") {
+      return "path_not_found";
+    }
+
+    if (errorCode === "not_directory") {
+      return "not_directory";
+    }
+
+    if (errorCode === "git_missing") {
+      return "git_missing";
+    }
+
+    if (errorCode === "cannot_connect_repo") {
+      return "cannot_connect_repo";
+    }
+
+    if (errorCode === "not_git_repo") {
+      return "not_git_repo";
+    }
+
+    if (errorCode === "permission_denied") {
+      return "permission_denied";
+    }
+
+    if (errorCode === "dubious_ownership") {
+      return "dubious_ownership";
+    }
+
+    if (errorCode === "no_branches") {
+      return "no_branches";
+    }
+  }
+
   const normalized = extractInvokeErrorMessage(error).toLowerCase();
 
   if (normalized.includes("repository path does not exist")) {
@@ -535,6 +620,255 @@ function analyzeBranchRefreshFailure(error: unknown): BranchRefreshFailureReason
 
   if (normalized.includes("no git branches found")) {
     return "no_branches";
+  }
+
+  return "unknown";
+}
+
+type ProviderDetectFailureReason =
+  | "path_not_found"
+  | "not_directory"
+  | "permission_denied"
+  | "unsupported_provider"
+  | "read_failed"
+  | "unknown";
+
+function analyzeProviderDetectFailure(error: unknown): ProviderDetectFailureReason {
+  const errorCode = extractInvokeErrorCode(error);
+  if (errorCode) {
+    if (errorCode === "path_not_found") {
+      return "path_not_found";
+    }
+
+    if (errorCode === "not_directory") {
+      return "not_directory";
+    }
+
+    if (errorCode === "permission_denied") {
+      return "permission_denied";
+    }
+
+    if (errorCode === "unsupported_provider") {
+      return "unsupported_provider";
+    }
+
+    if (errorCode === "read_failed") {
+      return "read_failed";
+    }
+  }
+
+  const normalized = extractInvokeErrorMessage(error).toLowerCase();
+
+  if (normalized.includes("repository path does not exist")) {
+    return "path_not_found";
+  }
+
+  if (normalized.includes("repository path is not a directory")) {
+    return "not_directory";
+  }
+
+  if (
+    normalized.includes("permission denied") ||
+    normalized.includes("operation not permitted") ||
+    normalized.includes("访问被拒绝") ||
+    normalized.includes("无权限") ||
+    normalized.includes("权限")
+  ) {
+    return "permission_denied";
+  }
+
+  if (normalized.includes("cannot detect provider from repository path")) {
+    return "unsupported_provider";
+  }
+
+  if (
+    normalized.includes("failed to read repository directory") ||
+    normalized.includes("input/output error") ||
+    normalized.includes("i/o error") ||
+    normalized.includes("设备未就绪")
+  ) {
+    return "read_failed";
+  }
+
+  return "unknown";
+}
+
+type ProjectScanFailureReason =
+  | "path_not_found"
+  | "project_root_not_found"
+  | "project_file_not_found"
+  | "permission_denied"
+  | "current_dir_failed"
+  | "unknown";
+
+function analyzeProjectScanFailure(error: unknown): ProjectScanFailureReason {
+  const errorCode = extractInvokeErrorCode(error);
+  if (errorCode) {
+    if (errorCode === "path_not_found") {
+      return "path_not_found";
+    }
+
+    if (errorCode === "project_root_not_found") {
+      return "project_root_not_found";
+    }
+
+    if (errorCode === "project_file_not_found") {
+      return "project_file_not_found";
+    }
+
+    if (errorCode === "permission_denied") {
+      return "permission_denied";
+    }
+
+    if (errorCode === "current_dir_failed") {
+      return "current_dir_failed";
+    }
+  }
+
+  const normalized = extractInvokeErrorMessage(error).toLowerCase();
+
+  if (normalized.includes("scan start path does not exist")) {
+    return "path_not_found";
+  }
+
+  if (normalized.includes("cannot find project root")) {
+    return "project_root_not_found";
+  }
+
+  if (normalized.includes("cannot find project file")) {
+    return "project_file_not_found";
+  }
+
+  if (
+    normalized.includes("permission denied") ||
+    normalized.includes("operation not permitted") ||
+    normalized.includes("访问被拒绝") ||
+    normalized.includes("权限")
+  ) {
+    return "permission_denied";
+  }
+
+  if (normalized.includes("failed to resolve current directory")) {
+    return "current_dir_failed";
+  }
+
+  return "unknown";
+}
+
+type PublishExecutionFailureReason =
+  | "already_running"
+  | "project_path_not_found"
+  | "unsupported_provider"
+  | "render_error"
+  | "tool_missing"
+  | "permission_denied"
+  | "plan_invalid"
+  | "java_gradle_missing"
+  | "process_failed"
+  | "unknown";
+
+function analyzePublishExecutionFailure(error: unknown): PublishExecutionFailureReason {
+  const errorCode = extractInvokeErrorCode(error);
+  if (errorCode) {
+    if (errorCode === "publish_already_running") {
+      return "already_running";
+    }
+
+    if (errorCode === "project_path_not_found") {
+      return "project_path_not_found";
+    }
+
+    if (errorCode === "unsupported_provider") {
+      return "unsupported_provider";
+    }
+
+    if (errorCode === "render_error") {
+      return "render_error";
+    }
+
+    if (errorCode === "tool_missing") {
+      return "tool_missing";
+    }
+
+    if (errorCode === "permission_denied") {
+      return "permission_denied";
+    }
+
+    if (
+      errorCode === "plan_missing_step" ||
+      errorCode === "plan_invalid_step_title" ||
+      errorCode === "java_project_dir_required"
+    ) {
+      return "plan_invalid";
+    }
+
+    if (errorCode === "java_gradle_not_found") {
+      return "java_gradle_missing";
+    }
+
+    if (
+      errorCode === "publish_spawn_failed" ||
+      errorCode === "publish_wait_failed" ||
+      errorCode === "publish_log_collect_failed"
+    ) {
+      return "process_failed";
+    }
+  }
+
+  const normalized = extractInvokeErrorMessage(error).toLowerCase();
+
+  if (normalized.includes("another publish execution is already running")) {
+    return "already_running";
+  }
+
+  if (normalized.includes("project path does not exist")) {
+    return "project_path_not_found";
+  }
+
+  if (normalized.includes("unsupported provider")) {
+    return "unsupported_provider";
+  }
+
+  if (normalized.includes("parameter render error")) {
+    return "render_error";
+  }
+
+  if (
+    normalized.includes("failed to spawn") &&
+    (normalized.includes("no such file or directory") || normalized.includes("os error 2"))
+  ) {
+    return "tool_missing";
+  }
+
+  if (
+    normalized.includes("permission denied") ||
+    normalized.includes("operation not permitted") ||
+    normalized.includes("访问被拒绝") ||
+    normalized.includes("权限")
+  ) {
+    return "permission_denied";
+  }
+
+  if (
+    normalized.includes("execution plan has no step") ||
+    normalized.includes("execution step title is empty")
+  ) {
+    return "plan_invalid";
+  }
+
+  if (
+    normalized.includes("gradle wrapper not found") ||
+    normalized.includes("java provider requires a project directory")
+  ) {
+    return "java_gradle_missing";
+  }
+
+  if (
+    normalized.includes("failed to spawn") ||
+    normalized.includes("failed to wait publish process") ||
+    normalized.includes("failed to collect publish logs")
+  ) {
+    return "process_failed";
   }
 
   return "unknown";
@@ -811,6 +1145,9 @@ function App() {
     useState<string | null>(null);
   const [outputLog, setOutputLog] = useState<string>("");
   const [isScanning, setIsScanning] = useState(false);
+  const [branchConnectivityByRepoId, setBranchConnectivityByRepoId] = useState<
+    Record<string, boolean>
+  >({});
 
   // Open settings dialog
   const handleOpenSettings = useCallback(() => {
@@ -819,6 +1156,45 @@ function App() {
 
   // Get selected repository
   const selectedRepo = repositories.find((r) => r.id === selectedRepoId) || null;
+
+  useEffect(() => {
+    let cancelled = false;
+
+    if (repositories.length === 0) {
+      setBranchConnectivityByRepoId({});
+      return;
+    }
+
+    const checkBranchConnectivity = async () => {
+      const entries = await Promise.all(
+        repositories.map(async (repo) => {
+          try {
+            const result = await checkRepositoryBranchConnectivity(
+              repo.path,
+              repo.currentBranch
+            );
+            return [repo.id, result.canConnect] as const;
+          } catch {
+            return [repo.id, false] as const;
+          }
+        })
+      );
+
+      if (cancelled) {
+        return;
+      }
+
+      setBranchConnectivityByRepoId(
+        Object.fromEntries(entries) as Record<string, boolean>
+      );
+    };
+
+    void checkBranchConnectivity();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [repositories]);
 
   const availableProviders =
     providers.length > 0 ? providers : FALLBACK_PROVIDERS;
@@ -1055,7 +1431,10 @@ function App() {
     if (!selectedRepo || isStateLoading) return;
 
     if (activeProviderId === "dotnet") {
-      scanProject(selectedRepo.path);
+      scanProject(selectedRepo.path, {
+        silentSuccess: true,
+        silentFailure: true,
+      });
       return;
     }
 
@@ -1095,23 +1474,89 @@ function App() {
   }, []);
 
   // Scan for project
-  const scanProject = useCallback(async (path?: string) => {
-    setIsScanning(true);
-    try {
-      const info = await invoke<ProjectInfo>("scan_project", {
-        startPath: path,
-      });
-      setProjectInfo(info);
-      toast.success(appT.scanProjectSuccess || "项目检测成功", {
-        description: `${appT.foundProject || "找到项目"}: ${info.project_file}`,
-      });
-    } catch (err) {
-      // Silently fail for now - project might not be a .NET project
-      setProjectInfo(null);
-    } finally {
-      setIsScanning(false);
-    }
-  }, []);
+  const scanProject = useCallback(
+    async (
+      path?: string,
+      options?: { silentSuccess?: boolean; silentFailure?: boolean }
+    ) => {
+      const silentSuccess = options?.silentSuccess ?? false;
+      const silentFailure = options?.silentFailure ?? false;
+
+      setIsScanning(true);
+      try {
+        const info = await invoke<ProjectInfo>("scan_project", {
+          startPath: path,
+        });
+        setProjectInfo(info);
+
+        if (!silentSuccess) {
+          toast.success(appT.scanProjectSuccess || "项目检测成功", {
+            description: `${appT.foundProject || "找到项目"}: ${info.project_file}`,
+          });
+        }
+      } catch (err) {
+        setProjectInfo(null);
+
+        if (silentFailure) {
+          return;
+        }
+
+        const rawErrorMessage = extractInvokeErrorMessage(err);
+        const failureReason = analyzeProjectScanFailure(err);
+
+        if (failureReason === "path_not_found") {
+          toast.error(appT.scanProjectPathNotFound || "Project Root 路径不存在", {
+            description:
+              appT.scanProjectPathNotFoundDesc || "请确认 Project Root 路径存在且可访问。",
+          });
+          return;
+        }
+
+        if (failureReason === "project_root_not_found") {
+          toast.error(appT.scanProjectRootNotFound || "未检测到项目根目录", {
+            description:
+              appT.scanProjectRootNotFoundDesc ||
+              "未找到 .sln 文件，请确认当前目录或上级目录包含解决方案文件。",
+          });
+          return;
+        }
+
+        if (failureReason === "project_file_not_found") {
+          toast.error(appT.scanProjectFileNotFound || "未检测到项目文件", {
+            description:
+              appT.scanProjectFileNotFoundDesc ||
+              "已找到解决方案，但未发现 .csproj 文件，请检查项目结构。",
+          });
+          return;
+        }
+
+        if (failureReason === "permission_denied") {
+          toast.error(appT.scanProjectPermissionDenied || "缺少目录访问权限", {
+            description:
+              appT.scanProjectPermissionDeniedDesc ||
+              "请检查当前用户对 Project Root 及其父目录的读取权限。",
+          });
+          return;
+        }
+
+        if (failureReason === "current_dir_failed") {
+          toast.error(appT.scanProjectCurrentDirFailed || "读取当前目录失败", {
+            description:
+              appT.scanProjectCurrentDirFailedDesc ||
+              "请确认应用运行目录有效，或手动指定 Project Root 后重试。",
+          });
+          return;
+        }
+
+        toast.error(appT.scanProjectFailed || "项目检测失败", {
+          description: rawErrorMessage,
+        });
+      } finally {
+        setIsScanning(false);
+      }
+    },
+    [appT]
+  );
 
   // Add repository
   const handleAddRepo = async () => {
@@ -1222,21 +1667,19 @@ function App() {
   );
 
   const handleDetectRepoProvider = useCallback(
-    async (path: string, options?: { silent?: boolean }) => {
-      const silent = options?.silent ?? false;
+    async (path: string, options?: { silentSuccess?: boolean }) => {
+      const silentSuccess = options?.silentSuccess ?? false;
       const nextPath = path.trim();
 
       if (!nextPath) {
-        if (!silent) {
-          toast.error(appT.repositoryPathRequired || "请输入仓库路径");
-        }
+        toast.error(appT.repositoryPathRequired || "请输入 Project Root 路径");
         return null;
       }
 
       try {
         const providerId = await detectRepositoryProvider(nextPath);
 
-        if (!silent) {
+        if (!silentSuccess) {
           toast.success(appT.providerDetected || "已自动检测 Provider", {
             description: providerId,
           });
@@ -1244,11 +1687,55 @@ function App() {
 
         return providerId;
       } catch (err) {
-        if (!silent) {
-          toast.error(appT.detectProviderFailed || "自动检测 Provider 失败", {
-            description: String(err),
+        const rawErrorMessage = extractInvokeErrorMessage(err);
+        const failureReason = analyzeProviderDetectFailure(err);
+
+        if (failureReason === "path_not_found") {
+          toast.error(appT.providerDetectPathNotFound || "仓库路径不存在", {
+            description:
+              appT.providerDetectPathNotFoundDesc || "请确认 Project Root 路径存在且可访问。",
           });
+          return null;
         }
+
+        if (failureReason === "not_directory") {
+          toast.error(appT.providerDetectNotDirectory || "Project Root 不是目录", {
+            description:
+              appT.providerDetectNotDirectoryDesc || "请填写项目根目录，而不是文件路径。",
+          });
+          return null;
+        }
+
+        if (failureReason === "permission_denied") {
+          toast.error(appT.providerDetectPermissionDenied || "缺少目录访问权限", {
+            description:
+              appT.providerDetectPermissionDeniedDesc ||
+              "请检查当前用户对 Project Root 的读取权限后重试。",
+          });
+          return null;
+        }
+
+        if (failureReason === "unsupported_provider") {
+          toast.error(appT.providerDetectUnsupported || "未识别到支持的 Provider", {
+            description:
+              appT.providerDetectUnsupportedDesc ||
+              "可手动选择 Provider，或确认项目根目录下包含可识别的构建文件。",
+          });
+          return null;
+        }
+
+        if (failureReason === "read_failed") {
+          toast.error(appT.providerDetectReadFailed || "读取项目目录失败", {
+            description:
+              appT.providerDetectReadFailedDesc ||
+              "请检查磁盘状态、网络盘连接和目录可访问性后重试。",
+          });
+          return null;
+        }
+
+        toast.error(appT.detectProviderFailed || "自动检测 Provider 失败", {
+          description: rawErrorMessage,
+        });
         return null;
       }
     },
@@ -1261,7 +1748,7 @@ function App() {
       const nextPath = path.trim();
 
       if (!nextPath) {
-        toast.error(appT.repositoryPathRequired || "请输入仓库路径");
+        toast.error(appT.repositoryPathRequired || "请输入 Project Root 路径");
         return null;
       }
 
@@ -1569,7 +2056,9 @@ function App() {
           });
         }
       } catch (err) {
-        toast.error(appT.environmentCheckFailed || "环境检查失败", { description: String(err) });
+        toast.error(appT.environmentCheckFailed || "环境检查失败", {
+          description: extractInvokeErrorMessage(err),
+        });
       }
 
       setLastExecutedSpec(spec);
@@ -1615,20 +2104,75 @@ function App() {
         });
         persistExecutionRecord(record);
       } catch (err) {
-        const errorMsg = String(err);
+        const rawErrorMessage = extractInvokeErrorMessage(err);
+        const failureReason = analyzePublishExecutionFailure(err);
+
         const failedResult: PublishResult = {
           provider_id: spec.provider_id,
           success: false,
           cancelled: false,
           output: "",
-          error: errorMsg,
+          error: rawErrorMessage,
           output_dir: "",
           file_count: 0,
         };
         setPublishResult(failedResult);
-        toast.error(appT.publishExecutionError || "发布执行错误", {
-          description: errorMsg,
-        });
+
+        if (failureReason === "already_running") {
+          toast.error(appT.publishAlreadyRunning || "已有发布任务正在执行", {
+            description:
+              appT.publishAlreadyRunningDesc || "请等待当前任务结束，或先取消后再重试。",
+          });
+        } else if (failureReason === "project_path_not_found") {
+          toast.error(appT.publishProjectPathNotFound || "项目路径不存在", {
+            description:
+              appT.publishProjectPathNotFoundDesc ||
+              "请确认 Project Root / Project File 路径正确后重试。",
+          });
+        } else if (failureReason === "unsupported_provider") {
+          toast.error(appT.publishProviderUnsupported || "不支持的 Provider", {
+            description:
+              appT.publishProviderUnsupportedDesc ||
+              "请确认 Provider 配置有效，或在编辑弹窗重新选择 Provider。",
+          });
+        } else if (failureReason === "render_error") {
+          toast.error(appT.publishRenderFailed || "参数渲染失败", {
+            description:
+              appT.publishRenderFailedDesc || "请检查当前参数配置是否符合 Provider 要求。",
+          });
+        } else if (failureReason === "tool_missing") {
+          toast.error(appT.publishToolMissing || "缺少构建命令", {
+            description:
+              appT.publishToolMissingDesc ||
+              "请安装对应构建工具，并确保命令已加入 PATH。",
+          });
+        } else if (failureReason === "permission_denied") {
+          toast.error(appT.publishPermissionDenied || "缺少执行权限", {
+            description:
+              appT.publishPermissionDeniedDesc ||
+              "请检查项目目录与构建命令的执行权限后重试。",
+          });
+        } else if (failureReason === "plan_invalid") {
+          toast.error(appT.publishPlanInvalid || "发布计划无效", {
+            description:
+              appT.publishPlanInvalidDesc || "当前发布命令计划不可执行，请检查 Provider 与参数。",
+          });
+        } else if (failureReason === "java_gradle_missing") {
+          toast.error(appT.publishGradleMissing || "未检测到 Gradle", {
+            description:
+              appT.publishGradleMissingDesc ||
+              "请确保项目下存在 gradlew，或在环境中安装 gradle。",
+          });
+        } else if (failureReason === "process_failed") {
+          toast.error(appT.publishProcessFailed || "发布进程执行失败", {
+            description:
+              appT.publishProcessFailedDesc || "发布进程启动或等待失败，请稍后重试。",
+          });
+        } else {
+          toast.error(appT.publishExecutionError || "发布执行错误", {
+            description: rawErrorMessage,
+          });
+        }
 
         const record = buildExecutionRecord({
           spec,
@@ -1643,7 +2187,7 @@ function App() {
         setIsCancellingPublish(false);
       }
     },
-    [buildExecutionRecord, openEnvironmentDialog, persistExecutionRecord]
+    [appT, publishT, buildExecutionRecord, openEnvironmentDialog, persistExecutionRecord]
   );
 
   const copyText = useCallback(async (text: string, label: string) => {
@@ -1926,7 +2470,17 @@ function App() {
         toast.message(appT.noRunningPublishTask || "当前没有运行中的发布任务");
       }
     } catch (err) {
-      toast.error(appT.cancelPublishFailed || "取消发布失败", { description: String(err) });
+      const errorCode = extractInvokeErrorCode(err);
+      if (errorCode === "publish_cancel_failed") {
+        toast.error(appT.cancelPublishFailed || "取消发布失败", {
+          description:
+            appT.cancelPublishFailedDesc || "取消信号发送失败，请检查进程状态后重试。",
+        });
+      } else {
+        toast.error(appT.cancelPublishFailed || "取消发布失败", {
+          description: extractInvokeErrorMessage(err),
+        });
+      }
     } finally {
       setIsCancellingPublish(false);
     }
@@ -2472,6 +3026,7 @@ function App() {
             onRemoveRepo={handleRemoveRepo}
             onDetectProvider={handleDetectRepoProvider}
             onRefreshBranches={handleRefreshRepoBranches}
+            branchConnectivityByRepoId={branchConnectivityByRepoId}
             onSettings={handleOpenSettings}
             onCollapse={() => setLeftPanelCollapsed(true)}
           />

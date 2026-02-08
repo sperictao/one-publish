@@ -16,6 +16,8 @@ pub struct AppError {
     pub message: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub details: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub code: Option<String>,
 }
 
 impl AppError {
@@ -24,6 +26,16 @@ impl AppError {
             kind: ErrorKind::Unknown,
             message: message.into(),
             details: None,
+            code: None,
+        }
+    }
+
+    pub fn unknown_with_code(message: impl Into<String>, code: impl Into<String>) -> Self {
+        Self {
+            kind: ErrorKind::Unknown,
+            message: message.into(),
+            details: None,
+            code: Some(code.into()),
         }
     }
 }
@@ -35,16 +47,19 @@ impl From<CompileError> for AppError {
                 kind: ErrorKind::UnsupportedSpecVersion,
                 message: format!("unsupported spec version: {v}"),
                 details: None,
+                code: Some("unsupported_spec_version".to_string()),
             },
             CompileError::UnsupportedProvider(p) => Self {
                 kind: ErrorKind::UnsupportedProvider,
                 message: format!("unsupported provider: {p}"),
                 details: None,
+                code: Some("unsupported_provider".to_string()),
             },
             CompileError::RenderError(msg) => Self {
                 kind: ErrorKind::RenderError,
                 message: format!("parameter render error: {}", msg),
                 details: Some(msg),
+                code: Some("render_error".to_string()),
             },
         }
     }
@@ -58,8 +73,10 @@ mod tests {
     fn maps_compile_error_to_kind() {
         let e: AppError = CompileError::UnsupportedProvider("x".to_string()).into();
         assert_eq!(e.kind, ErrorKind::UnsupportedProvider);
+        assert_eq!(e.code.as_deref(), Some("unsupported_provider"));
 
         let e: AppError = CompileError::UnsupportedSpecVersion(999).into();
         assert_eq!(e.kind, ErrorKind::UnsupportedSpecVersion);
+        assert_eq!(e.code.as_deref(), Some("unsupported_spec_version"));
     }
 }
