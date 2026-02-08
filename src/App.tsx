@@ -433,6 +433,7 @@ function App() {
   const [isExportingSnapshot, setIsExportingSnapshot] = useState(false);
   const [isExportingFailureBundle, setIsExportingFailureBundle] =
     useState(false);
+  const [isExportingHistory, setIsExportingHistory] = useState(false);
   const [publishResult, setPublishResult] = useState<PublishResult | null>(null);
   const [lastExecutedSpec, setLastExecutedSpec] =
     useState<ProviderPublishSpec | null>(null);
@@ -1423,6 +1424,62 @@ function App() {
     }
   };
 
+  const exportExecutionHistory = async () => {
+    if (filteredExecutionHistory.length === 0) {
+      toast.error("当前没有可导出的执行历史");
+      return;
+    }
+
+    const timestamp = new Date().toISOString().replace(/[:]/g, "-");
+    const defaultDir = selectedRepo?.path || "";
+    const defaultPath = defaultDir
+      ? `${defaultDir}/execution-history-${timestamp}.csv`
+      : `execution-history-${timestamp}.csv`;
+
+    const selected = await save({
+      title: "导出执行历史",
+      defaultPath,
+      filters: [
+        { name: "CSV", extensions: ["csv"] },
+        { name: "JSON", extensions: ["json"] },
+      ],
+    });
+
+    if (!selected) {
+      return;
+    }
+
+    const history = filteredExecutionHistory.map((record) => ({
+      id: record.id,
+      providerId: record.providerId,
+      projectPath: record.projectPath,
+      startedAt: record.startedAt,
+      finishedAt: record.finishedAt,
+      success: record.success,
+      cancelled: record.cancelled,
+      outputDir: record.outputDir ?? null,
+      error: record.error ?? null,
+      commandLine: record.commandLine ?? null,
+      snapshotPath: record.snapshotPath ?? null,
+      failureSignature: record.failureSignature ?? null,
+      fileCount: record.fileCount,
+    }));
+
+    setIsExportingHistory(true);
+    try {
+      const outputPath = await invoke<string>("export_execution_history", {
+        history,
+        filePath: selected,
+      });
+
+      toast.success("执行历史已导出", { description: outputPath });
+    } catch (err) {
+      toast.error("导出执行历史失败", { description: String(err) });
+    } finally {
+      setIsExportingHistory(false);
+    }
+  };
+
   // Handle custom config updates
   const handleCustomConfigUpdate = (
     updates: Partial<PublishConfigStore>
@@ -2400,6 +2457,23 @@ function App() {
                         ? ` · 当前筛选 ${filteredExecutionHistory.length}/${executionHistory.length}`
                         : ""}
                     </CardDescription>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="w-fit"
+                      onClick={exportExecutionHistory}
+                      disabled={isExportingHistory || filteredExecutionHistory.length === 0}
+                    >
+                      {isExportingHistory ? (
+                        <>
+                          <Loader2 className="mr-1 h-3 w-3 animate-spin" />
+                          导出中...
+                        </>
+                      ) : (
+                        "导出历史"
+                      )}
+                    </Button>
                   </CardHeader>
                   <CardContent className="space-y-3">
                     <div className="grid gap-2 md:grid-cols-4">

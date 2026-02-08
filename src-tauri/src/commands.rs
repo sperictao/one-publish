@@ -1197,6 +1197,118 @@ pub async fn export_failure_group_bundle(
     Ok(file_path)
 }
 
+fn csv_escape(value: &str) -> String {
+    if value.contains(',') || value.contains('"') || value.contains('\n') || value.contains('\r') {
+        format!("\"{}\"", value.replace('"', "\"\""))
+    } else {
+        value.to_string()
+    }
+}
+
+fn record_string(record: &serde_json::Map<String, Value>, camel: &str, snake: &str) -> String {
+    record
+        .get(camel)
+        .or_else(|| record.get(snake))
+        .and_then(Value::as_str)
+        .unwrap_or("")
+        .to_string()
+}
+
+fn render_execution_history_csv(history: &[Value]) -> Result<String, crate::errors::AppError> {
+    let header = [
+        "id",
+        "providerId",
+        "status",
+        "finishedAt",
+        "projectPath",
+        "failureSignature",
+        "commandLine",
+        "error",
+        "snapshotPath",
+        "fileCount",
+    ]
+    .join(",");
+
+    let mut lines = vec![header];
+
+    for item in history {
+        let Some(record) = item.as_object() else {
+            return Err(crate::errors::AppError::unknown(
+                "execution history item must be an object",
+            ));
+        };
+
+        let success = record
+            .get("success")
+            .and_then(Value::as_bool)
+            .unwrap_or(false);
+        let cancelled = record
+            .get("cancelled")
+            .and_then(Value::as_bool)
+            .unwrap_or(false);
+        let status = if success {
+            "success"
+        } else if cancelled {
+            "cancelled"
+        } else {
+            "failed"
+        };
+
+        let file_count = record
+            .get("fileCount")
+            .or_else(|| record.get("file_count"))
+            .and_then(Value::as_u64)
+            .map(|value| value.to_string())
+            .unwrap_or_else(|| "0".to_string());
+
+        let row = vec![
+            record_string(record, "id", "id"),
+            record_string(record, "providerId", "provider_id"),
+            status.to_string(),
+            record_string(record, "finishedAt", "finished_at"),
+            record_string(record, "projectPath", "project_path"),
+            record_string(record, "failureSignature", "failure_signature"),
+            record_string(record, "commandLine", "command_line"),
+            record_string(record, "error", "error"),
+            record_string(record, "snapshotPath", "snapshot_path"),
+            file_count,
+        ];
+
+        let escaped = row
+            .into_iter()
+            .map(|value| csv_escape(&value))
+            .collect::<Vec<_>>()
+            .join(",");
+        lines.push(escaped);
+    }
+
+    Ok(lines.join("
+"))
+}
+
+#[tauri::command]
+pub async fn export_execution_history(
+    history: Vec<Value>,
+    file_path: String,
+) -> Result<String, crate::errors::AppError> {
+    let ext = Path::new(&file_path)
+        .extension()
+        .and_then(|e| e.to_str())
+        .map(|s| s.to_ascii_lowercase())
+        .unwrap_or_else(|| "json".to_string());
+
+    let content = if ext == "csv" {
+        render_execution_history_csv(&history)?
+    } else {
+        serde_json::to_string_pretty(&history)
+            .map_err(|e| crate::errors::AppError::unknown(format!("serialization error: {}", e)))?
+    };
+
+    std::fs::write(&file_path, content)
+        .map_err(|e| crate::errors::AppError::unknown(format!("write error: {}", e)))?;
+    Ok(file_path)
+}
+
 fn find_latest_snapshot_in_output_dir(
     output_dir: &str,
 ) -> Result<PathBuf, crate::errors::AppError> {
@@ -1708,6 +1820,40 @@ mod tests {
         assert!(markdown.contains("Snapshot: (not exported, output dir: /tmp/out)"));
         assert!(markdown.contains("## Raw Bundle"));
     }
+    #[test]
+    fn execution_history_csv_contains_status_and_signature() {
+        let history = vec![
+            json!({
+                "id": "rec-1",
+                "providerId": "dotnet",
+                "projectPath": "/tmp/app.csproj",
+                "finishedAt": "2026-02-08T10:00:00Z",
+                "success": false,
+                "cancelled": false,
+                "failureSignature": "sdk missing",
+                "commandLine": "$ dotnet publish /tmp/app.csproj",
+                "error": "SDK not found",
+                "snapshotPath": "/tmp/out/execution-snapshot-1.md",
+                "fileCount": 0
+            }),
+            json!({
+                "id": "rec-2",
+                "providerId": "go",
+                "projectPath": "/tmp/go",
+                "finishedAt": "2026-02-08T11:00:00Z",
+                "success": true,
+                "cancelled": false,
+                "fileCount": 1
+            }),
+        ];
+
+        let csv = render_execution_history_csv(&history).expect("csv");
+        assert!(csv.contains("id,providerId,status,finishedAt,projectPath"));
+        assert!(csv.contains("rec-1,dotnet,failed,2026-02-08T10:00:00Z"));
+        assert!(csv.contains("rec-2,go,success,2026-02-08T11:00:00Z"));
+        assert!(csv.contains("sdk missing"));
+    }
+
     #[test]
     fn updater_empty_endpoints_error_is_actionable() {
         let msg = map_updater_error(UpdaterError::EmptyEndpoints);
