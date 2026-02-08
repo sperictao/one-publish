@@ -11,8 +11,11 @@ import { useTheme } from "@/hooks/useTheme";
 import { useShortcuts } from "@/hooks/useShortcuts";
 import { useI18n } from "@/hooks/useI18n";
 import {
+  addExecutionRecord,
+  getExecutionHistory,
   getProviderSchema,
   listProviders,
+  type ExecutionRecord,
   type PublishConfigStore,
   type ProviderManifest,
 } from "@/lib/store";
@@ -390,6 +393,7 @@ function App() {
   const [publishResult, setPublishResult] = useState<PublishResult | null>(null);
   const [lastExecutedSpec, setLastExecutedSpec] =
     useState<ProviderPublishSpec | null>(null);
+  const [executionHistory, setExecutionHistory] = useState<ExecutionRecord[]>([]);
   const [outputLog, setOutputLog] = useState<string>("");
   const [isScanning, setIsScanning] = useState(false);
 
@@ -486,6 +490,16 @@ function App() {
       mounted = false;
     };
   }, [activeProviderId, providerSchemas]);
+
+  useEffect(() => {
+    getExecutionHistory()
+      .then((history) => {
+        setExecutionHistory(history);
+      })
+      .catch((err) => {
+        console.error("加载执行历史失败:", err);
+      });
+  }, []);
 
   useEffect(() => {
     if (!(window as any).__TAURI__) {
@@ -645,6 +659,46 @@ function App() {
     };
   }, [isCustomMode, customConfig, selectedPreset, projectInfo, defaultOutputDir]);
 
+  const persistExecutionRecord = useCallback((record: ExecutionRecord) => {
+    addExecutionRecord(record)
+      .then((history) => {
+        setExecutionHistory(history);
+      })
+      .catch((err) => {
+        console.error("保存执行历史失败:", err);
+      });
+  }, []);
+
+  const buildExecutionRecord = useCallback(
+    (params: {
+      spec: ProviderPublishSpec;
+      startedAt: string;
+      finishedAt: string;
+      result: PublishResult;
+      output: string;
+    }): ExecutionRecord => {
+      const commandLine =
+        params.output
+          .split("\n")
+          .find((line) => line.startsWith("$ ")) || null;
+
+      return {
+        id: `${Date.now()}-${Math.random().toString(16).slice(2, 8)}`,
+        providerId: params.spec.provider_id,
+        projectPath: params.spec.project_path,
+        startedAt: params.startedAt,
+        finishedAt: params.finishedAt,
+        success: params.result.success,
+        cancelled: params.result.cancelled,
+        outputDir: params.result.output_dir || null,
+        error: params.result.error,
+        commandLine,
+        fileCount: params.result.file_count,
+      };
+    },
+    []
+  );
+
   // Execute publish
   const executePublish = async () => {
     if (!selectedRepo) {
@@ -725,6 +779,8 @@ function App() {
     setReleaseChecklistOpen(false);
     setArtifactActionState({ packageResult: null, signResult: null });
 
+    const executionStartedAt = new Date().toISOString();
+
     try {
       const result = await invoke<PublishResult>("execute_provider_publish", {
         spec,
@@ -748,9 +804,18 @@ function App() {
           description: result.error || "未知错误",
         });
       }
+
+      const record = buildExecutionRecord({
+        spec,
+        startedAt: executionStartedAt,
+        finishedAt: new Date().toISOString(),
+        result,
+        output: result.output,
+      });
+      persistExecutionRecord(record);
     } catch (err) {
       const errorMsg = String(err);
-      setPublishResult({
+      const failedResult: PublishResult = {
         provider_id: activeProviderId,
         success: false,
         cancelled: false,
@@ -758,10 +823,20 @@ function App() {
         error: errorMsg,
         output_dir: "",
         file_count: 0,
-      });
+      };
+      setPublishResult(failedResult);
       toast.error("发布执行错误", {
         description: errorMsg,
       });
+
+      const record = buildExecutionRecord({
+        spec,
+        startedAt: executionStartedAt,
+        finishedAt: new Date().toISOString(),
+        result: failedResult,
+        output: "",
+      });
+      persistExecutionRecord(record);
     } finally {
       setIsPublishing(false);
       setIsCancellingPublish(false);
@@ -1620,6 +1695,48 @@ function App() {
                         {outputLog || publishResult?.error || "无输出"}
                       </pre>
                     </div>
+                  </CardContent>
+                </Card>
+              )}
+
+              {executionHistory.length > 0 && (
+                <Card>
+                  <CardHeader className="pb-3">
+                    <CardTitle className="text-lg">最近执行历史</CardTitle>
+                    <CardDescription>本地保留最近 20 条发布记录</CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-2">
+                    {executionHistory.slice(0, 6).map((record) => (
+                      <div
+                        key={record.id}
+                        className="rounded-md border px-3 py-2 text-sm"
+                      >
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="font-medium">{record.providerId}</span>
+                          <span
+                            className={`text-xs ${
+                              record.success
+                                ? "text-green-600"
+                                : record.cancelled
+                                  ? "text-amber-600"
+                                  : "text-red-600"
+                            }`}
+                          >
+                            {record.success
+                              ? "成功"
+                              : record.cancelled
+                                ? "已取消"
+                                : "失败"}
+                          </span>
+                        </div>
+                        <div className="text-xs text-muted-foreground truncate">
+                          {record.projectPath}
+                        </div>
+                        <div className="text-xs text-muted-foreground">
+                          完成时间: {new Date(record.finishedAt).toLocaleString()}
+                        </div>
+                      </div>
+                    ))}
                   </CardContent>
                 </Card>
               )}

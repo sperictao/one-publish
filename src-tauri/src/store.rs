@@ -55,6 +55,30 @@ pub struct ConfigProfile {
     pub is_system_default: bool,
 }
 
+/// 执行历史记录
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ExecutionRecord {
+    pub id: String,
+    pub provider_id: String,
+    pub project_path: String,
+    pub started_at: String,
+    pub finished_at: String,
+    pub success: bool,
+    #[serde(default)]
+    pub cancelled: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub output_dir: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub error: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub command_line: Option<String>,
+    #[serde(default)]
+    pub file_count: usize,
+}
+
+const MAX_EXECUTION_HISTORY: usize = 20;
+
 impl Default for PublishConfigStore {
     fn default() -> Self {
         Self {
@@ -108,6 +132,9 @@ pub struct AppState {
     /// 保存的配置文件
     #[serde(default)]
     pub profiles: Vec<ConfigProfile>,
+    /// 最近执行历史
+    #[serde(default)]
+    pub execution_history: Vec<ExecutionRecord>,
 }
 
 fn default_minimize_to_tray() -> bool {
@@ -149,6 +176,7 @@ impl Default for AppState {
             default_output_dir: String::new(),
             theme: default_theme(),
             profiles: Vec::new(),
+            execution_history: Vec::new(),
         }
     }
 }
@@ -407,4 +435,28 @@ pub async fn delete_profile(name: String) -> Result<AppState, String> {
     state.profiles.retain(|p| p.name != name);
     update_state(state.clone())?;
     Ok(state)
+}
+
+fn append_execution_history(history: &mut Vec<ExecutionRecord>, record: ExecutionRecord) {
+    history.insert(0, record);
+    if history.len() > MAX_EXECUTION_HISTORY {
+        history.truncate(MAX_EXECUTION_HISTORY);
+    }
+}
+
+/// 获取执行历史
+#[tauri::command]
+pub async fn get_execution_history() -> Result<Vec<ExecutionRecord>, String> {
+    let state = get_state();
+    Ok(state.execution_history)
+}
+
+/// 追加执行历史记录（最多保留最近 20 条）
+#[tauri::command]
+pub async fn add_execution_record(record: ExecutionRecord) -> Result<Vec<ExecutionRecord>, String> {
+    let mut state = get_state();
+    append_execution_history(&mut state.execution_history, record);
+    let history = state.execution_history.clone();
+    update_state(state)?;
+    Ok(history)
 }

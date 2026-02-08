@@ -23,6 +23,20 @@ export interface ConfigProfile {
   isSystemDefault: boolean;
 }
 
+export interface ExecutionRecord {
+  id: string;
+  providerId: string;
+  projectPath: string;
+  startedAt: string;
+  finishedAt: string;
+  success: boolean;
+  cancelled: boolean;
+  outputDir?: string | null;
+  error?: string | null;
+  commandLine?: string | null;
+  fileCount: number;
+}
+
 // 应用状态类型
 export interface AppState {
   repositories: Repository[];
@@ -37,6 +51,7 @@ export interface AppState {
   defaultOutputDir: string;
   theme: "light" | "dark" | "auto";
   profiles: ConfigProfile[];
+  executionHistory: ExecutionRecord[];
 }
 
 // 默认状态
@@ -60,6 +75,7 @@ export const defaultAppState: AppState = {
   defaultOutputDir: "",
   theme: "auto",
   profiles: [],
+  executionHistory: [],
 };
 
 /**
@@ -319,4 +335,23 @@ export async function importConfig(filePath: string): Promise<ConfigExport> {
  */
 export async function applyImportedConfig(profiles: ConfigProfile[]): Promise<void> {
   await invoke("apply_imported_config", { profiles });
+}
+
+
+// ==================== 执行历史相关 ====================
+
+/**
+ * 获取执行历史记录（最近 20 条）
+ */
+export async function getExecutionHistory(): Promise<ExecutionRecord[]> {
+  return await invoke<ExecutionRecord[]>("get_execution_history");
+}
+
+/**
+ * 追加执行历史记录
+ */
+export async function addExecutionRecord(
+  record: ExecutionRecord
+): Promise<ExecutionRecord[]> {
+  return await invoke<ExecutionRecord[]>("add_execution_record", { record });
 }

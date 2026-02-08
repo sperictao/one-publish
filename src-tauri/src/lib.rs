@@ -126,6 +126,8 @@ pub fn run() {
             store::get_profiles,
             store::save_profile,
             store::delete_profile,
+            store::get_execution_history,
+            store::add_execution_record,
             tray::update_tray_menu
         ])
         .run(tauri::generate_context!())
