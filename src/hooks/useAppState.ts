@@ -8,6 +8,7 @@ import {
   updatePublishState,
   addRepository as apiAddRepository,
   removeRepository as apiRemoveRepository,
+  updateRepository as apiUpdateRepository,
   updatePreferences,
   type AppState,
   type PublishConfigStore,
@@ -178,6 +179,18 @@ export function useAppState() {
     }
   }, []);
 
+  // 更新仓库
+  const updateRepository = useCallback(async (repo: Repository) => {
+    try {
+      const newState = await apiUpdateRepository(repo);
+      setState(newState);
+      return newState;
+    } catch (err) {
+      console.error("更新仓库失败:", err);
+      throw err;
+    }
+  }, []);
+
   // 选中仓库的便捷方法
   const selectRepository = useCallback(
     (repoId: string | null) => {
@@ -276,6 +289,7 @@ export function useAppState() {
     selectedRepoId: state.selectedRepoId,
     addRepository,
     removeRepository,
+    updateRepository,
     selectRepository,
 
     // UI 状态

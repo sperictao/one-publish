@@ -12,10 +12,12 @@ import { useShortcuts } from "@/hooks/useShortcuts";
 import { useI18n, type Language } from "@/hooks/useI18n";
 import {
   addExecutionRecord,
+  detectRepositoryProvider,
   getExecutionHistory,
   getProviderSchema,
   listProviders,
   openExecutionSnapshot,
+  scanRepositoryBranches,
   setExecutionRecordSnapshot,
   type ExecutionRecord,
   type PublishConfigStore,
@@ -405,6 +407,139 @@ function filterExecutionHistory(
   });
 }
 
+function remapPathPrefix(path: string, oldPrefix: string, newPrefix: string): string {
+  if (!oldPrefix || oldPrefix === newPrefix) {
+    return path;
+  }
+
+  if (path === oldPrefix) {
+    return newPrefix;
+  }
+
+  if (path.startsWith(`${oldPrefix}/`) || path.startsWith(`${oldPrefix}\\`)) {
+    return `${newPrefix}${path.slice(oldPrefix.length)}`;
+  }
+
+  return path;
+}
+
+
+type BranchRefreshFailureReason =
+  | "path_not_found"
+  | "not_directory"
+  | "git_missing"
+  | "cannot_connect_repo"
+  | "not_git_repo"
+  | "permission_denied"
+  | "dubious_ownership"
+  | "no_branches"
+  | "unknown";
+
+function extractInvokeErrorMessage(error: unknown): string {
+  if (typeof error === "string") {
+    return error;
+  }
+
+  if (error && typeof error === "object") {
+    const payload = error as {
+      message?: unknown;
+      details?: unknown;
+      error?: unknown;
+    };
+
+    const parts = [payload.message, payload.details, payload.error]
+      .filter((part): part is string => typeof part === "string" && part.trim().length > 0)
+      .map((part) => part.trim());
+
+    if (parts.length > 0) {
+      return parts.join(" | ");
+    }
+
+    try {
+      return JSON.stringify(error);
+    } catch {
+      return String(error);
+    }
+  }
+
+  return String(error);
+}
+
+function analyzeBranchRefreshFailure(error: unknown): BranchRefreshFailureReason {
+  const normalized = extractInvokeErrorMessage(error).toLowerCase();
+
+  if (normalized.includes("repository path does not exist")) {
+    return "path_not_found";
+  }
+
+  if (normalized.includes("repository path is not a directory")) {
+    return "not_directory";
+  }
+
+  if (
+    normalized.includes("failed to execute git") &&
+    (normalized.includes("no such file or directory") ||
+      normalized.includes("os error 2") ||
+      normalized.includes("系统找不到指定的文件"))
+  ) {
+    return "git_missing";
+  }
+
+  if (
+    normalized.includes("unable to access") ||
+    normalized.includes("failed to connect") ||
+    normalized.includes("could not resolve host") ||
+    normalized.includes("connection timed out") ||
+    normalized.includes("connection refused") ||
+    normalized.includes("unable to connect") ||
+    normalized.includes("unable to look up") ||
+    normalized.includes("couldn't connect to server") ||
+    normalized.includes("network is unreachable") ||
+    normalized.includes("could not read from remote repository") ||
+    normalized.includes("could not read username") ||
+    normalized.includes("authentication failed") ||
+    normalized.includes("publickey") ||
+    normalized.includes("repository not found") ||
+    normalized.includes("proxy connect aborted") ||
+    normalized.includes("无法连接") ||
+    normalized.includes("连接超时") ||
+    normalized.includes("连接被拒绝") ||
+    normalized.includes("无法访问远程仓库") ||
+    normalized.includes("无法从远程仓库读取") ||
+    normalized.includes("无法解析主机") ||
+    normalized.includes("网络不可达")
+  ) {
+    return "cannot_connect_repo";
+  }
+
+  if (
+    normalized.includes("not a git repository") ||
+    normalized.includes("不是 git 仓库") ||
+    normalized.includes("不是一个git仓库")
+  ) {
+    return "not_git_repo";
+  }
+
+  if (normalized.includes("detected dubious ownership")) {
+    return "dubious_ownership";
+  }
+
+  if (
+    normalized.includes("permission denied") ||
+    normalized.includes("operation not permitted") ||
+    normalized.includes("访问被拒绝") ||
+    normalized.includes("权限")
+  ) {
+    return "permission_denied";
+  }
+
+  if (normalized.includes("no git branches found")) {
+    return "no_branches";
+  }
+
+  return "unknown";
+}
+
 function App() {
   // 使用持久化的应用状态
   const {
@@ -412,6 +547,8 @@ function App() {
     repositories,
     selectedRepoId,
     addRepository,
+    removeRepository,
+    updateRepository,
     selectRepository,
     leftPanelWidth,
     middlePanelWidth,
@@ -1001,6 +1138,226 @@ function App() {
       }
     }
   };
+
+  const handleRemoveRepo = useCallback(
+    async (repo: Repository) => {
+      const confirmed = window.confirm(
+        (appT.removeRepositoryConfirm || "确认移除仓库「{{name}}」？").replace(
+          "{{name}}",
+          repo.name
+        )
+      );
+
+      if (!confirmed) {
+        return;
+      }
+
+      try {
+        await removeRepository(repo.id);
+        toast.success(appT.repositoryRemoved || "仓库已移除", {
+          description: repo.name,
+        });
+      } catch (err) {
+        toast.error(appT.removeRepositoryFailed || "移除仓库失败", {
+          description: String(err),
+        });
+      }
+    },
+    [appT, removeRepository]
+  );
+
+  const handleEditRepo = useCallback(
+    async (repo: Repository) => {
+      const targetRepo = repositories.find((item) => item.id === repo.id);
+
+      if (!targetRepo) {
+        toast.error(appT.repositoryNotFound || "未找到目标仓库");
+        return false;
+      }
+
+      const nextName = repo.name.trim();
+      const nextPath = repo.path.trim();
+      const nextProjectFile = repo.projectFile?.trim() || "";
+      const nextCurrentBranch = repo.currentBranch.trim();
+      const nextProviderId = repo.providerId?.trim() || "";
+
+      if (!nextName || !nextPath) {
+        toast.error(appT.repositoryInfoInvalid || "仓库名称和路径不能为空");
+        return false;
+      }
+
+      const normalizedRepo: Repository = {
+        ...repo,
+        name: nextName,
+        path: nextPath,
+        projectFile:
+          remapPathPrefix(nextProjectFile, targetRepo.path, nextPath) || undefined,
+        currentBranch: nextCurrentBranch || targetRepo.currentBranch,
+        providerId: nextProviderId || undefined,
+        branches: repo.branches.map((branch) => ({
+          ...branch,
+          path: remapPathPrefix(branch.path, targetRepo.path, nextPath),
+        })),
+      };
+
+      try {
+        await updateRepository(normalizedRepo);
+
+        if (selectedRepoId === repo.id && nextProviderId) {
+          setActiveProviderId(nextProviderId);
+        }
+
+        toast.success(appT.repositoryUpdated || "仓库信息已更新", {
+          description: nextName,
+        });
+        return true;
+      } catch (err) {
+        toast.error(appT.updateRepositoryFailed || "更新仓库失败", {
+          description: String(err),
+        });
+        return false;
+      }
+    },
+    [appT, repositories, selectedRepoId, setActiveProviderId, updateRepository]
+  );
+
+  const handleDetectRepoProvider = useCallback(
+    async (path: string, options?: { silent?: boolean }) => {
+      const silent = options?.silent ?? false;
+      const nextPath = path.trim();
+
+      if (!nextPath) {
+        if (!silent) {
+          toast.error(appT.repositoryPathRequired || "请输入仓库路径");
+        }
+        return null;
+      }
+
+      try {
+        const providerId = await detectRepositoryProvider(nextPath);
+
+        if (!silent) {
+          toast.success(appT.providerDetected || "已自动检测 Provider", {
+            description: providerId,
+          });
+        }
+
+        return providerId;
+      } catch (err) {
+        if (!silent) {
+          toast.error(appT.detectProviderFailed || "自动检测 Provider 失败", {
+            description: String(err),
+          });
+        }
+        return null;
+      }
+    },
+    [appT]
+  );
+
+  const handleRefreshRepoBranches = useCallback(
+    async (path: string, options?: { silentSuccess?: boolean }) => {
+      const silentSuccess = options?.silentSuccess ?? false;
+      const nextPath = path.trim();
+
+      if (!nextPath) {
+        toast.error(appT.repositoryPathRequired || "请输入仓库路径");
+        return null;
+      }
+
+      try {
+        const result = await scanRepositoryBranches(nextPath);
+        const branchCountLabel = appT.branchesCountUnit || "个分支";
+
+        if (!silentSuccess) {
+          toast.success(appT.branchesRefreshed || "分支列表已刷新", {
+            description: `${result.branches.length}${branchCountLabel}`,
+          });
+        }
+
+        return result;
+      } catch (err) {
+        const rawErrorMessage = extractInvokeErrorMessage(err);
+        const failureReason = analyzeBranchRefreshFailure(err);
+
+        if (failureReason === "path_not_found") {
+          toast.error(appT.branchPullPathNotFound || "仓库路径不存在", {
+            description:
+              appT.branchPullPathNotFoundDesc || "请确认仓库路径存在且可访问。",
+          });
+          return null;
+        }
+
+        if (failureReason === "not_directory") {
+          toast.error(appT.branchPullNotDirectory || "仓库路径不是目录", {
+            description:
+              appT.branchPullNotDirectoryDesc || "请确认填写的是仓库目录而非文件路径。",
+          });
+          return null;
+        }
+
+        if (failureReason === "git_missing") {
+          toast.error(appT.branchPullGitMissing || "未检测到 Git 命令", {
+            description:
+              appT.branchPullGitMissingDesc ||
+              "请先安装 Git，并确保 git 已加入 PATH。",
+          });
+          return null;
+        }
+
+        if (failureReason === "cannot_connect_repo") {
+          toast.error(appT.branchPullCannotConnect || "无法连接 Git 仓库", {
+            description:
+              appT.branchPullCannotConnectDesc ||
+              "请检查网络代理、仓库地址和凭据后重试。",
+          });
+          return null;
+        }
+
+        if (failureReason === "not_git_repo") {
+          toast.error(appT.branchPullNotGitRepo || "该目录不是 Git 仓库", {
+            description:
+              appT.branchPullNotGitRepoDesc ||
+              "请确认目录包含 .git，或先执行 git init。",
+          });
+          return null;
+        }
+
+        if (failureReason === "permission_denied") {
+          toast.error(appT.branchPullPermissionDenied || "缺少仓库访问权限", {
+            description:
+              appT.branchPullPermissionDeniedDesc ||
+              "请检查当前用户对仓库目录和 .git 目录的读权限。",
+          });
+          return null;
+        }
+
+        if (failureReason === "dubious_ownership") {
+          toast.error(appT.branchPullDubiousOwnership || "仓库所有权校验失败", {
+            description:
+              appT.branchPullDubiousOwnershipDesc ||
+              "Git 检测到目录所有权异常，请按提示配置 safe.directory。",
+          });
+          return null;
+        }
+
+        if (failureReason === "no_branches") {
+          toast.error(appT.branchPullNoBranches || "未读取到分支", {
+            description:
+              appT.branchPullNoBranchesDesc ||
+              "当前仓库没有可用分支，请先创建并提交至少一个分支。",
+          });
+          return null;
+        }
+
+        toast.error(appT.refreshBranchesFailed || "拉取分支失败", {
+          description: rawErrorMessage,
+        });
+        return null;
+      }
+    },
+    [appT]
+  );
 
   // Convert store config to publish config
   const storeConfigToPublishConfig = (
@@ -2105,8 +2462,16 @@ function App() {
           <RepositoryList
             repositories={repositories}
             selectedRepoId={selectedRepoId}
+            providers={availableProviders.map((provider) => ({
+              ...provider,
+              label: formatProviderLabel(provider),
+            }))}
             onSelectRepo={selectRepository}
             onAddRepo={handleAddRepo}
+            onEditRepo={handleEditRepo}
+            onRemoveRepo={handleRemoveRepo}
+            onDetectProvider={handleDetectRepoProvider}
+            onRefreshBranches={handleRefreshRepoBranches}
             onSettings={handleOpenSettings}
             onCollapse={() => setLeftPanelCollapsed(true)}
           />
