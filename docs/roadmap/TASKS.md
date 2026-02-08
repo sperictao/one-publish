@@ -80,3 +80,11 @@ Status legend:
 - [done] TASK-1003 History export (CSV/JSON) for team reporting (docs/roadmap/tasks/TASK-1003.md)
 - [done] TASK-1004 Saved filter presets for recurring triage workflows (docs/roadmap/tasks/TASK-1004.md)
 
+
+## Phase 11: Team Workflow Integration
+
+- [done] TASK-1101 Issue draft template variables + reusable sections (docs/roadmap/tasks/TASK-1101.md)
+- [todo] TASK-1102 Diagnostics package index page generation (docs/roadmap/tasks/TASK-1102.md)
+- [todo] TASK-1103 Export schedule preset for daily triage report (docs/roadmap/tasks/TASK-1103.md)
+- [todo] TASK-1104 Lightweight approval checklist before rerun (docs/roadmap/tasks/TASK-1104.md)
+

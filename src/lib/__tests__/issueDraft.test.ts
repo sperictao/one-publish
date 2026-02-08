@@ -20,7 +20,7 @@ describe("issueDraft", () => {
       ],
     });
 
-    expect(draft).toContain("## Failure Summary");
+    expect(draft).toContain("## Bug Summary");
     expect(draft).toContain("- provider: dotnet");
     expect(draft).toContain("- signature: sdk missing");
     expect(draft).toContain("- frequency: 4");
@@ -43,5 +43,23 @@ describe("issueDraft", () => {
     });
 
     expect(draft).toContain("snapshot: (not exported, output dir: /tmp/cargo/target)");
+  });
+
+  it("支持模板切换与可选章节", () => {
+    const draft = buildFailureIssueDraft({
+      providerId: "dotnet",
+      signature: "sdk missing",
+      frequency: 1,
+      template: "incident",
+      includeImpact: true,
+      includeWorkaround: true,
+      includeOwner: true,
+      records: [],
+    });
+
+    expect(draft).toContain("## Incident Summary");
+    expect(draft).toContain("## Impact");
+    expect(draft).toContain("## Workaround");
+    expect(draft).toContain("## Owner");
   });
 });

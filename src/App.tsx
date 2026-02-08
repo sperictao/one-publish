@@ -91,7 +91,10 @@ import {
   buildShellHandoffSnippet,
   type HandoffSnippetFormat,
 } from "@/lib/handoffSnippet";
-import { buildFailureIssueDraft } from "@/lib/issueDraft";
+import {
+  buildFailureIssueDraft,
+  type IssueDraftTemplate,
+} from "@/lib/issueDraft";
 import {
   loadHistoryFilterPresets,
   saveHistoryFilterPresets,
@@ -456,6 +459,13 @@ function App() {
     useState("none");
   const [selectedFailureGroupKey, setSelectedFailureGroupKey] =
     useState<string | null>(null);
+  const [issueDraftTemplate, setIssueDraftTemplate] =
+    useState<IssueDraftTemplate>("bug");
+  const [issueDraftSections, setIssueDraftSections] = useState({
+    impact: true,
+    workaround: true,
+    owner: false,
+  });
   const [currentExecutionRecordId, setCurrentExecutionRecordId] =
     useState<string | null>(null);
   const [outputLog, setOutputLog] = useState<string>("");
@@ -1136,6 +1146,10 @@ function App() {
         signature: group.signature,
         frequency: group.count,
         representativeCommand: representative.commandLine,
+        template: issueDraftTemplate,
+        includeImpact: issueDraftSections.impact,
+        includeWorkaround: issueDraftSections.workaround,
+        includeOwner: issueDraftSections.owner,
         records: group.records.map((record) => ({
           id: record.id,
           finishedAt: record.finishedAt,
@@ -1149,7 +1163,7 @@ function App() {
 
       await copyText(draft, "Issue 草稿");
     },
-    [copyText]
+    [copyText, issueDraftSections, issueDraftTemplate]
   );
 
   const copyRecordCommand = useCallback(
@@ -2454,6 +2468,62 @@ function App() {
                   <CardContent className="space-y-3">
                     <div className="rounded bg-muted px-2 py-1 font-mono text-xs break-all">
                       {selectedFailureGroup.signature}
+                    </div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Select
+                        value={issueDraftTemplate}
+                        onValueChange={(value) =>
+                          setIssueDraftTemplate(value as IssueDraftTemplate)
+                        }
+                      >
+                        <SelectTrigger className="h-8 w-[180px]">
+                          <SelectValue placeholder="Issue 模板" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="bug">Bug 模板</SelectItem>
+                          <SelectItem value="incident">Incident 模板</SelectItem>
+                          <SelectItem value="postmortem">Postmortem 模板</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant={issueDraftSections.impact ? "default" : "outline"}
+                        onClick={() =>
+                          setIssueDraftSections((prev) => ({
+                            ...prev,
+                            impact: !prev.impact,
+                          }))
+                        }
+                      >
+                        Impact
+                      </Button>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant={issueDraftSections.workaround ? "default" : "outline"}
+                        onClick={() =>
+                          setIssueDraftSections((prev) => ({
+                            ...prev,
+                            workaround: !prev.workaround,
+                          }))
+                        }
+                      >
+                        Workaround
+                      </Button>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant={issueDraftSections.owner ? "default" : "outline"}
+                        onClick={() =>
+                          setIssueDraftSections((prev) => ({
+                            ...prev,
+                            owner: !prev.owner,
+                          }))
+                        }
+                      >
+                        Owner
+                      </Button>
                     </div>
                     <div className="flex flex-wrap gap-2">
                       <Button

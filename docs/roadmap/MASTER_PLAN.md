@@ -82,4 +82,9 @@ Guiding decision: parameter coverage is achieved via schema-driven advanced mode
 - Task 1002: One-click issue draft from diagnostics bundle
 - Task 1003: History export (CSV/JSON) for team reporting
 - Task 1004: Saved filter presets for recurring triage workflows
+### Phase 11: Team Workflow Integration
+- Task 1101: Issue draft template variables + reusable sections
+- Task 1102: Diagnostics package index page generation
+- Task 1103: Export schedule preset for daily triage report
+- Task 1104: Lightweight approval checklist before rerun
 
