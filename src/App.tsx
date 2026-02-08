@@ -1,7 +1,8 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import { open } from "@tauri-apps/plugin-dialog";
+import { open, save } from "@tauri-apps/plugin-dialog";
 import { toast } from "sonner";
 
 // Hooks
@@ -68,6 +69,7 @@ import {
   GitBranch,
   Import,
   ListChecks,
+  Square,
 } from "lucide-react";
 
 // Types
@@ -97,6 +99,7 @@ interface PublishConfig {
 interface PublishResult {
   provider_id: string;
   success: boolean;
+  cancelled: boolean;
   output: string;
   error: string | null;
   output_dir: string;
@@ -114,6 +117,36 @@ interface ImportFeedback {
   providerId: string;
   mappedKeys: string[];
   unmappedKeys: string[];
+}
+
+interface PublishLogChunkEvent {
+  sessionId: string;
+  line: string;
+}
+
+interface ExecutionSnapshotPayload {
+  generatedAt: string;
+  providerId: string;
+  spec: ProviderPublishSpec;
+  command: {
+    line: string;
+  };
+  environmentSummary: {
+    providerIds: string[];
+    warningCount: number;
+    criticalCount: number;
+  };
+  result: {
+    success: boolean;
+    cancelled: boolean;
+    error: string | null;
+    outputDir: string;
+    fileCount: number;
+  };
+  output: {
+    lineCount: number;
+    log: string;
+  };
 }
 
 const SPEC_VERSION = 1;
@@ -352,7 +385,11 @@ function App() {
   // Project State (runtime only)
   const [projectInfo, setProjectInfo] = useState<ProjectInfo | null>(null);
   const [isPublishing, setIsPublishing] = useState(false);
+  const [isCancellingPublish, setIsCancellingPublish] = useState(false);
+  const [isExportingSnapshot, setIsExportingSnapshot] = useState(false);
   const [publishResult, setPublishResult] = useState<PublishResult | null>(null);
+  const [lastExecutedSpec, setLastExecutedSpec] =
+    useState<ProviderPublishSpec | null>(null);
   const [outputLog, setOutputLog] = useState<string>("");
   const [isScanning, setIsScanning] = useState(false);
 
@@ -449,6 +486,33 @@ function App() {
       mounted = false;
     };
   }, [activeProviderId, providerSchemas]);
+
+  useEffect(() => {
+    if (!(window as any).__TAURI__) {
+      return;
+    }
+
+    let unlisten: (() => void) | null = null;
+
+    listen<PublishLogChunkEvent>("provider-publish-log", (event) => {
+      const line = event.payload?.line?.trimEnd();
+      if (!line) return;
+
+      setOutputLog((prev) => (prev ? `${prev}\n${line}` : line));
+    })
+      .then((dispose) => {
+        unlisten = dispose;
+      })
+      .catch((err) => {
+        console.error("监听发布日志失败:", err);
+      });
+
+    return () => {
+      if (unlisten) {
+        unlisten();
+      }
+    };
+  }, []);
 
   // Load project info when repo or provider changes
   useEffect(() => {
@@ -654,6 +718,7 @@ function App() {
       toast.error("环境检查失败", { description: String(err) });
     }
 
+    setLastExecutedSpec(spec);
     setIsPublishing(true);
     setPublishResult(null);
     setOutputLog("");
@@ -674,6 +739,10 @@ function App() {
             ? `输出目录: ${result.output_dir}`
             : "命令执行成功",
         });
+      } else if (result.cancelled) {
+        toast.warning("发布已取消", {
+          description: result.error || "用户取消了执行任务",
+        });
       } else {
         toast.error("发布失败", {
           description: result.error || "未知错误",
@@ -684,6 +753,7 @@ function App() {
       setPublishResult({
         provider_id: activeProviderId,
         success: false,
+        cancelled: false,
         output: "",
         error: errorMsg,
         output_dir: "",
@@ -694,6 +764,100 @@ function App() {
       });
     } finally {
       setIsPublishing(false);
+      setIsCancellingPublish(false);
+    }
+  };
+
+  const cancelPublish = async () => {
+    if (!isPublishing || isCancellingPublish) {
+      return;
+    }
+
+    setIsCancellingPublish(true);
+    try {
+      const cancelled = await invoke<boolean>("cancel_provider_publish");
+      if (cancelled) {
+        toast.message("正在取消发布...");
+      } else {
+        toast.message("当前没有运行中的发布任务");
+      }
+    } catch (err) {
+      toast.error("取消发布失败", { description: String(err) });
+    } finally {
+      setIsCancellingPublish(false);
+    }
+  };
+
+  const exportExecutionSnapshot = async () => {
+    if (!publishResult || !lastExecutedSpec) {
+      toast.error("暂无可导出的执行快照");
+      return;
+    }
+
+    const timestamp = new Date().toISOString().replace(/[:]/g, "-");
+    const defaultPath = publishResult.output_dir
+      ? `${publishResult.output_dir}/execution-snapshot-${timestamp}.md`
+      : `execution-snapshot-${timestamp}.md`;
+
+    const selected = await save({
+      title: "导出执行快照",
+      defaultPath,
+      filters: [
+        { name: "Markdown", extensions: ["md"] },
+        { name: "JSON", extensions: ["json"] },
+      ],
+    });
+
+    if (!selected) return;
+
+    const commandLine =
+      outputLog
+        .split("\n")
+        .find((line) => line.startsWith("$ ")) || "(not captured)";
+    const providerStatuses = environmentLastResult?.providers || [];
+    const warningCount = (environmentLastResult?.issues || []).filter(
+      (item) => item.severity === "warning"
+    ).length;
+    const criticalCount = (environmentLastResult?.issues || []).filter(
+      (item) => item.severity === "critical"
+    ).length;
+
+    const snapshot: ExecutionSnapshotPayload = {
+      generatedAt: new Date().toISOString(),
+      providerId: publishResult.provider_id,
+      spec: lastExecutedSpec,
+      command: {
+        line: commandLine,
+      },
+      environmentSummary: {
+        providerIds: providerStatuses.map((status: { provider_id: string }) => status.provider_id),
+        warningCount,
+        criticalCount,
+      },
+      result: {
+        success: publishResult.success,
+        cancelled: publishResult.cancelled,
+        error: publishResult.error,
+        outputDir: publishResult.output_dir,
+        fileCount: publishResult.file_count,
+      },
+      output: {
+        lineCount: outputLog ? outputLog.split("\n").length : 0,
+        log: outputLog,
+      },
+    };
+
+    setIsExportingSnapshot(true);
+    try {
+      const outputPath = await invoke<string>("export_execution_snapshot", {
+        filePath: selected,
+        snapshot,
+      });
+      toast.success("执行快照已导出", { description: outputPath });
+    } catch (err) {
+      toast.error("导出执行快照失败", { description: String(err) });
+    } finally {
+      setIsExportingSnapshot(false);
     }
   };
 
@@ -1229,6 +1393,27 @@ function App() {
                         </>
                       )}
                     </Button>
+                    {isPublishing && (
+                      <Button
+                        type="button"
+                        variant="destructive"
+                        className="w-full"
+                        onClick={cancelPublish}
+                        disabled={isCancellingPublish}
+                      >
+                        {isCancellingPublish ? (
+                          <>
+                            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                            取消中...
+                          </>
+                        ) : (
+                          <>
+                            <Square className="h-4 w-4 mr-2" />
+                            取消发布
+                          </>
+                        )}
+                      </Button>
+                    )}
                   </CardContent>
                 </Card>
               )}
@@ -1305,6 +1490,27 @@ function App() {
                         </>
                       )}
                     </Button>
+                    {isPublishing && (
+                      <Button
+                        type="button"
+                        variant="destructive"
+                        className="w-full"
+                        onClick={cancelPublish}
+                        disabled={isCancellingPublish}
+                      >
+                        {isCancellingPublish ? (
+                          <>
+                            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                            取消中...
+                          </>
+                        ) : (
+                          <>
+                            <Square className="h-4 w-4 mr-2" />
+                            取消发布
+                          </>
+                        )}
+                      </Button>
+                    )}
                   </CardContent>
                 </Card>
               )}
@@ -1349,13 +1555,38 @@ function App() {
                           className={`ml-2 text-sm font-normal ${
                             publishResult.success
                               ? "text-green-500"
-                              : "text-destructive"
+                              : publishResult.cancelled
+                                ? "text-amber-500"
+                                : "text-destructive"
                           }`}
                         >
-                          {publishResult.success ? "成功" : "失败"}
+                          {publishResult.success
+                            ? "成功"
+                            : publishResult.cancelled
+                              ? "已取消"
+                              : "失败"}
                         </span>
                       )}
                     </CardTitle>
+                    {publishResult && (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="w-fit"
+                        onClick={exportExecutionSnapshot}
+                        disabled={isExportingSnapshot}
+                      >
+                        {isExportingSnapshot ? (
+                          <>
+                            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                            导出中...
+                          </>
+                        ) : (
+                          "导出执行快照"
+                        )}
+                      </Button>
+                    )}
                     {publishResult?.success && publishResult.output_dir && (
                       <>
                         <CardDescription>

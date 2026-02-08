@@ -37,8 +37,12 @@ pub fn register_shortcuts(app: &AppHandle) -> Result<(), Box<dyn std::error::Err
     app.global_shortcut().register(shortcut_comma)?;
     log::debug!("已注册快捷键: {}", shortcut_comma);
 
-    log::info!("全局快捷键已注册: {} (刷新), {} (发布), {} (设置)",
-               shortcut_r, shortcut_p, shortcut_comma);
+    log::info!(
+        "全局快捷键已注册: {} (刷新), {} (发布), {} (设置)",
+        shortcut_r,
+        shortcut_p,
+        shortcut_comma
+    );
 
     Ok(())
 }

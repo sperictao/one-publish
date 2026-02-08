@@ -1,14 +1,14 @@
-pub mod types;
 pub mod cargo_provider;
 pub mod dotnet_provider;
 pub mod go_provider;
 pub mod java_provider;
+pub mod types;
 
-pub use types::*;
 pub use cargo_provider::check_cargo;
 pub use dotnet_provider::check_dotnet;
 pub use go_provider::check_go;
 pub use java_provider::check_java;
+pub use types::*;
 
 use std::collections::{HashMap, HashSet};
 use std::sync::{Mutex, OnceLock};

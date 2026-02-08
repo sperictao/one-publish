@@ -24,14 +24,12 @@ pub async fn check_java() -> Result<ProviderStatus, Box<dyn std::error::Error>> 
 
             Ok(status)
         }
-        Err(_) => {
-            Ok(ProviderStatus {
-                provider_id: PROVIDER_ID.to_string(),
-                installed: false,
-                version: None,
-                path,
-            })
-        }
+        Err(_) => Ok(ProviderStatus {
+            provider_id: PROVIDER_ID.to_string(),
+            installed: false,
+            version: None,
+            path,
+        }),
     }
 }
 
@@ -73,11 +71,7 @@ fn parse_java_version(output: &[u8]) -> String {
         .find_map(|line| {
             if line.contains("version") {
                 // Extract version like "17.0.2" or "1.8.0_345"
-                let version = line
-                    .split('"')
-                    .nth(1)
-                    .unwrap_or("")
-                    .to_string();
+                let version = line.split('"').nth(1).unwrap_or("").to_string();
 
                 // Convert "1.8.0_345" to "8" for comparison
                 if version.starts_with("1.") {
@@ -124,7 +118,10 @@ pub fn create_outdated_java_issue(current: &str, recommended: &str) -> Environme
         IssueSeverity::Warning,
         PROVIDER_ID.to_string(),
         IssueType::OutdatedVersion,
-        format!("Java version outdated. Current: {}, Recommended: {}+", current, recommended),
+        format!(
+            "Java version outdated. Current: {}, Recommended: {}+",
+            current, recommended
+        ),
     )
     .with_current_value(current.to_string())
     .with_expected_value(format!("{}+", recommended))

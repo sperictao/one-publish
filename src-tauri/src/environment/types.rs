@@ -47,7 +47,11 @@ pub struct FixAction {
 #[serde(tag = "result", content = "data")]
 pub enum FixResult {
     OpenedUrl(String),
-    CommandExecuted { stdout: String, stderr: String, exit_code: i32 },
+    CommandExecuted {
+        stdout: String,
+        stderr: String,
+        exit_code: i32,
+    },
     CopiedToClipboard(String),
     Manual(String),
 }
@@ -292,7 +296,7 @@ pub fn compare_versions(v1: &str, v2: &str) -> i32 {
                 }
             }
         }
-        (Some(_), None) => 1, // v1 is valid, v2 is invalid
+        (Some(_), None) => 1,  // v1 is valid, v2 is invalid
         (None, Some(_)) => -1, // v1 is invalid, v2 is valid
         (None, None) => 0,     // both invalid
     }

@@ -49,12 +49,18 @@ impl ParameterRenderer {
         Ok(Self::new(schema))
     }
 
-    pub fn render(&self, params: &BTreeMap<String, crate::spec::SpecValue>) -> Result<RenderedCommand, RenderError> {
+    pub fn render(
+        &self,
+        params: &BTreeMap<String, crate::spec::SpecValue>,
+    ) -> Result<RenderedCommand, RenderError> {
         let mut args = Vec::new();
         let env = Vec::new();
 
         for (key, value) in params {
-            let def = self.schema.parameters.get(key)
+            let def = self
+                .schema
+                .parameters
+                .get(key)
                 .ok_or_else(|| RenderError::UnknownParameter(key.clone()))?;
 
             match def.param_type {
@@ -68,7 +74,13 @@ impl ParameterRenderer {
         Ok(RenderedCommand { args, env })
     }
 
-    fn render_boolean(&self, def: &ParameterDefinition, _key: &str, value: &crate::spec::SpecValue, args: &mut Vec<String>) -> Result<(), RenderError> {
+    fn render_boolean(
+        &self,
+        def: &ParameterDefinition,
+        _key: &str,
+        value: &crate::spec::SpecValue,
+        args: &mut Vec<String>,
+    ) -> Result<(), RenderError> {
         match value {
             crate::spec::SpecValue::Bool(true) => {
                 args.push(def.flag.clone());
@@ -89,7 +101,13 @@ impl ParameterRenderer {
         Ok(())
     }
 
-    fn render_string(&self, def: &ParameterDefinition, key: &str, value: &crate::spec::SpecValue, args: &mut Vec<String>) -> Result<(), RenderError> {
+    fn render_string(
+        &self,
+        def: &ParameterDefinition,
+        key: &str,
+        value: &crate::spec::SpecValue,
+        args: &mut Vec<String>,
+    ) -> Result<(), RenderError> {
         match value {
             crate::spec::SpecValue::String(s) => {
                 args.push(def.flag.clone());
@@ -112,7 +130,13 @@ impl ParameterRenderer {
         Ok(())
     }
 
-    fn render_array(&self, def: &ParameterDefinition, key: &str, value: &crate::spec::SpecValue, args: &mut Vec<String>) -> Result<(), RenderError> {
+    fn render_array(
+        &self,
+        def: &ParameterDefinition,
+        key: &str,
+        value: &crate::spec::SpecValue,
+        args: &mut Vec<String>,
+    ) -> Result<(), RenderError> {
         match value {
             crate::spec::SpecValue::List(items) => {
                 for item in items {
@@ -147,8 +171,16 @@ impl ParameterRenderer {
         Ok(())
     }
 
-    fn render_map(&self, def: &ParameterDefinition, key: &str, value: &crate::spec::SpecValue, args: &mut Vec<String>) -> Result<(), RenderError> {
-        let prefix = def.prefix.as_ref()
+    fn render_map(
+        &self,
+        def: &ParameterDefinition,
+        key: &str,
+        value: &crate::spec::SpecValue,
+        args: &mut Vec<String>,
+    ) -> Result<(), RenderError> {
+        let prefix = def
+            .prefix
+            .as_ref()
             .ok_or_else(|| RenderError::MissingPrefix(key.to_string()))?;
 
         match value {
@@ -203,14 +235,19 @@ pub enum RenderError {
     MissingPrefix(String),
 
     #[error("invalid map value for '{parameter}' key '{key}': {value}")]
-    InvalidMapValue { parameter: String, key: String, value: String },
+    InvalidMapValue {
+        parameter: String,
+        key: String,
+        value: String,
+    },
 }
 
 pub fn load_schema_from_file(path: &Path) -> Result<ParameterSchema, RenderError> {
     let content = std::fs::read_to_string(path)
         .map_err(|e| RenderError::UnknownParameter(format!("failed to read schema file: {}", e)))?;
-    let schema: ParameterSchema = serde_json::from_str(&content)
-        .map_err(|e| RenderError::UnknownParameter(format!("failed to parse schema JSON: {}", e)))?;
+    let schema: ParameterSchema = serde_json::from_str(&content).map_err(|e| {
+        RenderError::UnknownParameter(format!("failed to parse schema JSON: {}", e))
+    })?;
     Ok(schema)
 }
 
@@ -222,37 +259,49 @@ mod tests {
     fn create_test_schema() -> ParameterSchema {
         let mut parameters = BTreeMap::new();
 
-        parameters.insert("release".to_string(), ParameterDefinition {
-            param_type: ParameterType::Boolean,
-            flag: "--release".to_string(),
-            multiple: None,
-            prefix: None,
-            description: Some("Build in release mode".to_string()),
-        });
+        parameters.insert(
+            "release".to_string(),
+            ParameterDefinition {
+                param_type: ParameterType::Boolean,
+                flag: "--release".to_string(),
+                multiple: None,
+                prefix: None,
+                description: Some("Build in release mode".to_string()),
+            },
+        );
 
-        parameters.insert("target".to_string(), ParameterDefinition {
-            param_type: ParameterType::String,
-            flag: "--target".to_string(),
-            multiple: None,
-            prefix: None,
-            description: Some("Target triple".to_string()),
-        });
+        parameters.insert(
+            "target".to_string(),
+            ParameterDefinition {
+                param_type: ParameterType::String,
+                flag: "--target".to_string(),
+                multiple: None,
+                prefix: None,
+                description: Some("Target triple".to_string()),
+            },
+        );
 
-        parameters.insert("features".to_string(), ParameterDefinition {
-            param_type: ParameterType::Array,
-            flag: "--features".to_string(),
-            multiple: None,
-            prefix: None,
-            description: Some("List of features".to_string()),
-        });
+        parameters.insert(
+            "features".to_string(),
+            ParameterDefinition {
+                param_type: ParameterType::Array,
+                flag: "--features".to_string(),
+                multiple: None,
+                prefix: None,
+                description: Some("List of features".to_string()),
+            },
+        );
 
-        parameters.insert("defines".to_string(), ParameterDefinition {
-            param_type: ParameterType::Map,
-            flag: "".to_string(),
-            multiple: None,
-            prefix: Some("--define=".to_string()),
-            description: Some("Preprocessor defines".to_string()),
-        });
+        parameters.insert(
+            "defines".to_string(),
+            ParameterDefinition {
+                param_type: ParameterType::Map,
+                flag: "".to_string(),
+                multiple: None,
+                prefix: Some("--define=".to_string()),
+                description: Some("Preprocessor defines".to_string()),
+            },
+        );
 
         ParameterSchema { parameters }
     }
@@ -303,7 +352,10 @@ mod tests {
         let renderer = ParameterRenderer::new(schema);
 
         let mut params = BTreeMap::new();
-        params.insert("target".to_string(), SpecValue::String("x86_64-apple-darwin".to_string()));
+        params.insert(
+            "target".to_string(),
+            SpecValue::String("x86_64-apple-darwin".to_string()),
+        );
 
         let result = renderer.render(&params).expect("render");
         assert_eq!(result.args, vec!["--target", "x86_64-apple-darwin"]);
@@ -315,16 +367,19 @@ mod tests {
         let renderer = ParameterRenderer::new(schema);
 
         let mut params = BTreeMap::new();
-        params.insert("features".to_string(), SpecValue::List(vec![
-            SpecValue::String("feature1".to_string()),
-            SpecValue::String("feature2".to_string()),
-        ]));
+        params.insert(
+            "features".to_string(),
+            SpecValue::List(vec![
+                SpecValue::String("feature1".to_string()),
+                SpecValue::String("feature2".to_string()),
+            ]),
+        );
 
         let result = renderer.render(&params).expect("render");
-        assert_eq!(result.args, vec![
-            "--features", "feature1",
-            "--features", "feature2"
-        ]);
+        assert_eq!(
+            result.args,
+            vec!["--features", "feature1", "--features", "feature2"]
+        );
     }
 
     #[test]
@@ -366,7 +421,10 @@ mod tests {
         let renderer = ParameterRenderer::new(schema);
 
         let mut params = BTreeMap::new();
-        params.insert("release".to_string(), SpecValue::String("not a bool".to_string()));
+        params.insert(
+            "release".to_string(),
+            SpecValue::String("not a bool".to_string()),
+        );
 
         let result = renderer.render(&params);
         assert!(result.is_err());
@@ -382,7 +440,10 @@ mod tests {
 
         let mut params = BTreeMap::new();
         params.insert("release".to_string(), SpecValue::Bool(true));
-        params.insert("target".to_string(), SpecValue::String("x86_64".to_string()));
+        params.insert(
+            "target".to_string(),
+            SpecValue::String("x86_64".to_string()),
+        );
         params.insert("defines".to_string(), SpecValue::Map(inner));
 
         let result = renderer.render(&params).expect("render");

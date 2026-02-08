@@ -44,26 +44,34 @@ async fn package_zip(
     let input_dir = input_dir.to_path_buf();
     let output_path = output_path.to_path_buf();
 
-    tokio::task::spawn_blocking(move || package_zip_sync(&input_dir, &output_path, include_root_dir))
-        .await
-        .context("failed to join packaging task")?
+    tokio::task::spawn_blocking(move || {
+        package_zip_sync(&input_dir, &output_path, include_root_dir)
+    })
+    .await
+    .context("failed to join packaging task")?
 }
 
-fn package_zip_sync(input_dir: &Path, output_path: &Path, include_root_dir: bool) -> Result<PackageResult> {
+fn package_zip_sync(
+    input_dir: &Path,
+    output_path: &Path,
+    include_root_dir: bool,
+) -> Result<PackageResult> {
     if !input_dir.exists() {
-        return Err(anyhow!("input directory does not exist: {}", input_dir.display()));
+        return Err(anyhow!(
+            "input directory does not exist: {}",
+            input_dir.display()
+        ));
     }
     if !input_dir.is_dir() {
-        return Err(anyhow!("input path is not a directory: {}", input_dir.display()));
+        return Err(anyhow!(
+            "input path is not a directory: {}",
+            input_dir.display()
+        ));
     }
 
     if let Some(parent) = output_path.parent() {
-        fs::create_dir_all(parent).with_context(|| {
-            format!(
-                "failed to create output directory: {}",
-                parent.display()
-            )
-        })?;
+        fs::create_dir_all(parent)
+            .with_context(|| format!("failed to create output directory: {}", parent.display()))?;
     }
 
     let root_name = input_dir
@@ -81,7 +89,8 @@ fn package_zip_sync(input_dir: &Path, output_path: &Path, include_root_dir: bool
     let mut file_count = 0usize;
 
     for entry in WalkDir::new(input_dir).follow_links(false) {
-        let entry = entry.with_context(|| format!("failed to read entry under {}", input_dir.display()))?;
+        let entry =
+            entry.with_context(|| format!("failed to read entry under {}", input_dir.display()))?;
         if !entry.file_type().is_file() {
             continue;
         }

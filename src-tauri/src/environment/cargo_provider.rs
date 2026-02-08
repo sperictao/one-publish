@@ -25,14 +25,12 @@ pub async fn check_cargo() -> Result<ProviderStatus, Box<dyn std::error::Error>>
 
             Ok(status)
         }
-        Err(_) => {
-            Ok(ProviderStatus {
-                provider_id: PROVIDER_ID.to_string(),
-                installed: false,
-                version: None,
-                path,
-            })
-        }
+        Err(_) => Ok(ProviderStatus {
+            provider_id: PROVIDER_ID.to_string(),
+            installed: false,
+            version: None,
+            path,
+        }),
     }
 }
 
@@ -78,7 +76,10 @@ fn create_outdated_cargo_issue(current: &str, recommended: &str) -> EnvironmentI
         IssueSeverity::Warning,
         PROVIDER_ID.to_string(),
         IssueType::OutdatedVersion,
-        format!("cargo version outdated. Current: {}, Recommended: {}+", current, recommended),
+        format!(
+            "cargo version outdated. Current: {}, Recommended: {}+",
+            current, recommended
+        ),
     )
     .with_current_value(current.to_string())
     .with_expected_value(format!("{}+", recommended))
@@ -104,7 +105,9 @@ fn get_cargo_install_fixes() -> Vec<FixAction> {
             FixAction {
                 action_type: FixType::CopyCommand,
                 label: "Copy rustup install command".to_string(),
-                command: Some("curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh".to_string()),
+                command: Some(
+                    "curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh".to_string(),
+                ),
                 url: None,
             },
             FixAction {
@@ -140,7 +143,9 @@ fn get_cargo_install_fixes() -> Vec<FixAction> {
             FixAction {
                 action_type: FixType::CopyCommand,
                 label: "Copy rustup install command".to_string(),
-                command: Some("curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh".to_string()),
+                command: Some(
+                    "curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh".to_string(),
+                ),
                 url: None,
             },
             FixAction {
@@ -189,6 +194,8 @@ mod tests {
         let fixes = get_cargo_install_fixes();
         assert!(!fixes.is_empty());
         // Check that at least one fix is provided
-        assert!(fixes.iter().any(|f| f.action_type == FixType::RunCommand || f.action_type == FixType::OpenUrl));
+        assert!(fixes
+            .iter()
+            .any(|f| f.action_type == FixType::RunCommand || f.action_type == FixType::OpenUrl));
     }
 }

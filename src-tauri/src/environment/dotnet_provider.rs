@@ -25,14 +25,12 @@ pub async fn check_dotnet() -> Result<ProviderStatus, Box<dyn std::error::Error>
 
             Ok(status)
         }
-        Err(_) => {
-            Ok(ProviderStatus {
-                provider_id: PROVIDER_ID.to_string(),
-                installed: false,
-                version: None,
-                path,
-            })
-        }
+        Err(_) => Ok(ProviderStatus {
+            provider_id: PROVIDER_ID.to_string(),
+            installed: false,
+            version: None,
+            path,
+        }),
     }
 }
 
@@ -77,7 +75,10 @@ pub fn create_outdated_dotnet_issue(current: &str, recommended: &str) -> Environ
         IssueSeverity::Warning,
         PROVIDER_ID.to_string(),
         IssueType::OutdatedVersion,
-        format!(".NET SDK version outdated. Current: {}, Recommended: {}+", current, recommended),
+        format!(
+            ".NET SDK version outdated. Current: {}, Recommended: {}+",
+            current, recommended
+        ),
     )
     .with_current_value(current.to_string())
     .with_expected_value(format!("{}+", recommended))
@@ -134,7 +135,9 @@ fn get_dotnet_install_fixes() -> Vec<FixAction> {
                 action_type: FixType::OpenUrl,
                 label: "Open Microsoft instructions".to_string(),
                 command: None,
-                url: Some("https://learn.microsoft.com/en-us/dotnet/core/install/linux".to_string()),
+                url: Some(
+                    "https://learn.microsoft.com/en-us/dotnet/core/install/linux".to_string(),
+                ),
             },
             FixAction {
                 action_type: FixType::OpenUrl,

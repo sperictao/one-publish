@@ -189,8 +189,7 @@ fn save_to_file(state: &AppState) -> Result<(), String> {
         fs::create_dir_all(parent).map_err(|e| format!("创建目录失败: {}", e))?;
     }
 
-    let json =
-        serde_json::to_string_pretty(state).map_err(|e| format!("序列化失败: {}", e))?;
+    let json = serde_json::to_string_pretty(state).map_err(|e| format!("序列化失败: {}", e))?;
     fs::write(&path, json).map_err(|e| format!("写入文件失败: {}", e))?;
     Ok(())
 }
@@ -409,4 +408,3 @@ pub async fn delete_profile(name: String) -> Result<AppState, String> {
     update_state(state.clone())?;
     Ok(state)
 }
-

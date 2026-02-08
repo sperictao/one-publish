@@ -24,14 +24,12 @@ pub async fn check_go() -> Result<ProviderStatus, Box<dyn std::error::Error>> {
 
             Ok(status)
         }
-        Err(_) => {
-            Ok(ProviderStatus {
-                provider_id: PROVIDER_ID.to_string(),
-                installed: false,
-                version: None,
-                path,
-            })
-        }
+        Err(_) => Ok(ProviderStatus {
+            provider_id: PROVIDER_ID.to_string(),
+            installed: false,
+            version: None,
+            path,
+        }),
     }
 }
 
@@ -67,7 +65,11 @@ fn parse_go_version(output: &[u8]) -> String {
             if line.contains("go version") {
                 // Extract version like "go1.21.0" from "go version go1.21.0 darwin/arm64"
                 line.split_whitespace()
-                    .find(|part| part.starts_with("go1") || part.starts_with("go2") || part.starts_with("go3"))
+                    .find(|part| {
+                        part.starts_with("go1")
+                            || part.starts_with("go2")
+                            || part.starts_with("go3")
+                    })
                     .map(|s| s.trim_start_matches("go").to_string())
             } else {
                 None
@@ -95,7 +97,10 @@ pub fn create_outdated_go_issue(current: &str, recommended: &str) -> Environment
         IssueSeverity::Warning,
         PROVIDER_ID.to_string(),
         IssueType::OutdatedVersion,
-        format!("Go version outdated. Current: {}, Recommended: {}+", current, recommended),
+        format!(
+            "Go version outdated. Current: {}, Recommended: {}+",
+            current, recommended
+        ),
     )
     .with_current_value(current.to_string())
     .with_expected_value(format!("{}+", recommended))

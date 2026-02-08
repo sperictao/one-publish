@@ -1,8 +1,8 @@
 use crate::spec::{PublishSpec, SpecValue};
+use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use std::path::PathBuf;
-use chrono::{DateTime, Utc};
 
 const CONFIG_VERSION: u32 = 1;
 
@@ -88,9 +88,9 @@ pub fn validate_import(config: &ConfigExport) -> Result<(), ImportError> {
             .map_err(|_| ImportError::ProviderNotFound(profile.provider_id.clone()))?;
 
         // Validate parameters against schema
-        let schema = provider.get_schema().map_err(|e| {
-            ImportError::ValidationFailed(format!("failed to load schema: {}", e))
-        })?;
+        let schema = provider
+            .get_schema()
+            .map_err(|e| ImportError::ValidationFailed(format!("failed to load schema: {}", e)))?;
 
         for (key, value) in &profile.parameters {
             // Warn about unknown parameters but don't fail
@@ -120,8 +120,7 @@ fn validate_parameter_type(
             if !value.is_boolean() {
                 return Err(ImportError::ValidationFailed(format!(
                     "parameter '{}' should be boolean, got {}",
-                    key,
-                    value
+                    key, value
                 )));
             }
         }
@@ -129,8 +128,7 @@ fn validate_parameter_type(
             if !value.is_string() {
                 return Err(ImportError::ValidationFailed(format!(
                     "parameter '{}' should be string, got {}",
-                    key,
-                    value
+                    key, value
                 )));
             }
         }
@@ -138,8 +136,7 @@ fn validate_parameter_type(
             if !value.is_array() {
                 return Err(ImportError::ValidationFailed(format!(
                     "parameter '{}' should be array, got {}",
-                    key,
-                    value
+                    key, value
                 )));
             }
         }
@@ -147,8 +144,7 @@ fn validate_parameter_type(
             if !value.is_object() {
                 return Err(ImportError::ValidationFailed(format!(
                     "parameter '{}' should be object, got {}",
-                    key,
-                    value
+                    key, value
                 )));
             }
         }
