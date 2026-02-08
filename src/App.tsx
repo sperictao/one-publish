@@ -9,7 +9,7 @@ import { toast } from "sonner";
 import { useAppState } from "@/hooks/useAppState";
 import { useTheme } from "@/hooks/useTheme";
 import { useShortcuts } from "@/hooks/useShortcuts";
-import { useI18n } from "@/hooks/useI18n";
+import { useI18n, type Language } from "@/hooks/useI18n";
 import {
   addExecutionRecord,
   getExecutionHistory,
@@ -423,6 +423,7 @@ function App() {
     setSelectedPreset,
     setIsCustomMode,
     setCustomConfig,
+    language: preferenceLanguage,
     minimizeToTrayOnClose,
     defaultOutputDir,
     theme,
@@ -431,13 +432,102 @@ function App() {
     setDefaultOutputDir,
     setTheme,
     setExecutionHistoryLimit,
+    setLanguage: setPreferenceLanguage,
   } = useAppState();
 
   // 应用主题
   useTheme(theme);
 
   // 国际化
-  const { language, setLanguage } = useI18n();
+  const { language, setLanguage: setI18nLanguage, translations } = useI18n();
+  const projectT = translations.project || {};
+  const configT = translations.config || {};
+  const publishT = translations.publish || {};
+  const appT = translations.app || {};
+  const historyT = translations.history || {};
+  const failureT = translations.failure || {};
+  const rerunT = translations.rerun || {};
+
+  const presetTextMap = useMemo(
+    () => ({
+      "release-fd": {
+        name: configT.releaseFd || "Release - 框架依赖",
+        description: configT.releaseFdDesc || "推荐用于开发/测试",
+      },
+      "release-win-x64": {
+        name: configT.releaseWin || "Release - Windows x64",
+        description: configT.releaseWinDesc || "自包含部署",
+      },
+      "release-osx-arm64": {
+        name: configT.releaseOsxA || "Release - macOS ARM64",
+        description: configT.releaseOsxADesc || "Apple Silicon",
+      },
+      "release-osx-x64": {
+        name: configT.releaseOsxX || "Release - macOS x64",
+        description: configT.releaseOsxXDesc || "Intel Mac",
+      },
+      "release-linux-x64": {
+        name: configT.releaseLinux || "Release - Linux x64",
+        description: configT.releaseLinuxDesc || "自包含部署",
+      },
+      "debug-fd": {
+        name: configT.debugFd || "Debug - 框架依赖",
+        description: configT.debugFdDesc || "调试模式",
+      },
+      "debug-win-x64": {
+        name: configT.debugWin || "Debug - Windows x64",
+        description: configT.debugWinDesc || "自包含部署",
+      },
+      "debug-osx-arm64": {
+        name: configT.debugOsxA || "Debug - macOS ARM64",
+        description: configT.debugOsxADesc || "Apple Silicon",
+      },
+      "debug-osx-x64": {
+        name: configT.debugOsxX || "Debug - macOS x64",
+        description: configT.debugOsxXDesc || "Intel Mac",
+      },
+      "debug-linux-x64": {
+        name: configT.debugLinux || "Debug - Linux x64",
+        description: configT.debugLinuxDesc || "自包含部署",
+      },
+    }),
+    [configT]
+  );
+
+  const getPresetText = useCallback(
+    (presetId: string, fallbackName: string, fallbackDescription: string) => {
+      const presetText =
+        presetTextMap[presetId as keyof typeof presetTextMap] || null;
+      return {
+        name: presetText?.name || fallbackName,
+        description: presetText?.description || fallbackDescription,
+      };
+    },
+    [presetTextMap]
+  );
+
+  const normalizedPreferenceLanguage: Language =
+    preferenceLanguage === "en" ? "en" : "zh";
+
+  const handleLanguageChange = useCallback(
+    async (nextLanguage: Language) => {
+      if (nextLanguage === language) {
+        return;
+      }
+
+      setPreferenceLanguage(nextLanguage);
+      await setI18nLanguage(nextLanguage);
+    },
+    [language, setPreferenceLanguage, setI18nLanguage]
+  );
+
+  useEffect(() => {
+    if (isStateLoading || language === normalizedPreferenceLanguage) {
+      return;
+    }
+
+    void setI18nLanguage(normalizedPreferenceLanguage);
+  }, [isStateLoading, language, normalizedPreferenceLanguage, setI18nLanguage]);
 
   const [providers, setProviders] = useState<ProviderManifest[]>([]);
   const [activeProviderId, setActiveProviderId] = useState("dotnet");
@@ -875,8 +965,8 @@ function App() {
         startPath: path,
       });
       setProjectInfo(info);
-      toast.success("项目检测成功", {
-        description: `找到项目: ${info.project_file}`,
+      toast.success(appT.scanProjectSuccess || "项目检测成功", {
+        description: `${appT.foundProject || "找到项目"}: ${info.project_file}`,
       });
     } catch (err) {
       // Silently fail for now - project might not be a .NET project
@@ -891,7 +981,7 @@ function App() {
     const selected = await open({
       directory: true,
       multiple: false,
-      title: "选择仓库目录",
+      title: appT.selectRepositoryDirectory || "选择仓库目录",
     });
     if (selected) {
       const path = selected as string;
@@ -905,9 +995,9 @@ function App() {
       };
       try {
         await addRepository(newRepo);
-        toast.success("仓库已添加", { description: name });
+        toast.success(appT.repositoryAdded || "仓库已添加", { description: name });
       } catch (err) {
-        toast.error("添加仓库失败", { description: String(err) });
+        toast.error(appT.addRepositoryFailed || "添加仓库失败", { description: String(err) });
       }
     }
   };
@@ -1108,7 +1198,7 @@ function App() {
 
         const critical = env.issues.find((i) => i.severity === "critical");
         if (critical) {
-          toast.error("环境未就绪，已阻止发布", {
+          toast.error(appT.environmentBlocked || "环境未就绪，已阻止发布", {
             description: critical.description,
           });
           openEnvironmentDialog(env, [spec.provider_id]);
@@ -1117,12 +1207,12 @@ function App() {
 
         const warning = env.issues.find((i) => i.severity === "warning");
         if (warning) {
-          toast.warning("环境存在警告", {
+          toast.warning(appT.environmentWarning || "环境存在警告", {
             description: warning.description,
           });
         }
       } catch (err) {
-        toast.error("环境检查失败", { description: String(err) });
+        toast.error(appT.environmentCheckFailed || "环境检查失败", { description: String(err) });
       }
 
       setLastExecutedSpec(spec);
@@ -1144,18 +1234,18 @@ function App() {
         setOutputLog(result.output);
 
         if (result.success) {
-          toast.success("发布成功!", {
+          toast.success(publishT.success || "发布成功!", {
             description: result.output_dir
-              ? `输出目录: ${result.output_dir}`
-              : "命令执行成功",
+              ? `${publishT.output || "输出目录"}: ${result.output_dir}`
+              : appT.commandExecuted || "命令执行成功",
           });
         } else if (result.cancelled) {
-          toast.warning("发布已取消", {
-            description: result.error || "用户取消了执行任务",
+          toast.warning(appT.publishCancelled || "发布已取消", {
+            description: result.error || appT.userCancelledTask || "用户取消了执行任务",
           });
         } else {
-          toast.error("发布失败", {
-            description: result.error || "未知错误",
+          toast.error(publishT.failed || "发布失败", {
+            description: result.error || appT.unknownError || "未知错误",
           });
         }
 
@@ -1179,7 +1269,7 @@ function App() {
           file_count: 0,
         };
         setPublishResult(failedResult);
-        toast.error("发布执行错误", {
+        toast.error(appT.publishExecutionError || "发布执行错误", {
           description: errorMsg,
         });
 
@@ -1202,7 +1292,8 @@ function App() {
   const copyText = useCallback(async (text: string, label: string) => {
     const normalized = text.trim();
     if (!normalized) {
-      toast.error(`缺少可复制的${label}`);
+      toast.error((appT.missingCopyTarget || "缺少可复制的{{label}}")
+        .replace("{{label}}", label));
       return;
     }
 
@@ -1222,13 +1313,13 @@ function App() {
         document.body.removeChild(input);
 
         if (!copied) {
-          throw new Error("复制失败");
+          throw new Error(appT.copyFailed || "复制失败");
         }
       }
 
-      toast.success(`${label}已复制`);
+      toast.success((appT.copySuccess || "{{label}}已复制").replace("{{label}}", label));
     } catch (err) {
-      toast.error(`复制${label}失败`, { description: String(err) });
+      toast.error((appT.copyFailedWithLabel || "复制{{label}}失败").replace("{{label}}", label), { description: String(err) });
     }
   }, []);
 
@@ -1246,7 +1337,7 @@ function App() {
 
   const copyGroupSignature = useCallback(
     async (group: FailureGroup) => {
-      await copyText(group.signature, "失败签名");
+      await copyText(group.signature, failureT.signatureLabel || "失败签名");
     },
     [copyText]
   );
@@ -1274,7 +1365,7 @@ function App() {
         })),
       });
 
-      await copyText(draft, "Issue 草稿");
+      await copyText(draft, failureT.issueDraftLabel || "Issue 草稿");
     },
     [copyText, issueDraftSections, issueDraftTemplate]
   );
@@ -1282,11 +1373,11 @@ function App() {
   const copyRecordCommand = useCallback(
     async (record: ExecutionRecord) => {
       if (!record.commandLine) {
-        toast.error("该记录缺少命令行信息");
+        toast.error(failureT.missingCommandLine || "该记录缺少命令行信息");
         return;
       }
 
-      await copyText(record.commandLine, "命令行");
+      await copyText(record.commandLine, failureT.commandLineLabel || "命令行");
     },
     [copyText]
   );
@@ -1294,13 +1385,13 @@ function App() {
   const copyHandoffSnippet = useCallback(
     async (record: ExecutionRecord, format: HandoffSnippetFormat) => {
       if (!record.success) {
-        toast.error("仅成功记录支持生成交接片段");
+        toast.error(historyT.handoffOnlySuccess || "仅成功记录支持生成交接片段");
         return;
       }
 
       const spec = extractSpecFromRecord(record);
       if (!spec) {
-        toast.error("该记录缺少可恢复的发布参数");
+        toast.error(historyT.missingRecoverableSpec || "该记录缺少可恢复的发布参数");
         return;
       }
 
@@ -1317,7 +1408,9 @@ function App() {
 
       await copyText(
         snippet,
-        format === "shell" ? "Shell 交接片段" : "GitHub Actions 交接片段"
+        format === "shell"
+          ? historyT.shellSnippetLabel || "Shell 交接片段"
+          : historyT.ghaSnippetLabel || "GitHub Actions 交接片段"
       );
     },
     [copyText, extractSpecFromRecord]
@@ -1335,9 +1428,9 @@ function App() {
         setExecutionHistory(history);
       }
 
-      toast.success("已打开执行快照", { description: openedPath });
+      toast.success(historyT.snapshotOpened || "已打开执行快照", { description: openedPath });
     } catch (err) {
-      toast.error("打开执行快照失败", { description: String(err) });
+      toast.error(historyT.openSnapshotFailed || "打开执行快照失败", { description: String(err) });
     }
   }, []);
 
@@ -1345,8 +1438,8 @@ function App() {
     async (record: ExecutionRecord) => {
       const spec = extractSpecFromRecord(record);
       if (!spec) {
-        toast.error("历史记录缺少可恢复的发布参数", {
-          description: "请使用最新版本重新执行一次后再重跑",
+        toast.error(historyT.historyMissingRecoverableSpec || "历史记录缺少可恢复的发布参数", {
+          description: historyT.historyMissingRecoverableSpecHint || "请使用最新版本重新执行一次后再重跑",
         });
         return;
       }
@@ -1395,7 +1488,7 @@ function App() {
       !rerunChecklistState.environment ||
       !rerunChecklistState.output
     ) {
-      toast.error("请先完成重跑前确认清单");
+      toast.error(rerunT.requireChecklist || "请先完成重跑前确认清单");
       return;
     }
 
@@ -1412,7 +1505,7 @@ function App() {
   // Execute publish
   const executePublish = async () => {
     if (!selectedRepo) {
-      toast.error("请先选择仓库");
+      toast.error(appT.selectRepositoryFirst || "请先选择仓库");
       return;
     }
 
@@ -1420,7 +1513,7 @@ function App() {
 
     if (activeProviderId === "dotnet") {
       if (!projectInfo) {
-        toast.error("请先选择 .NET 项目");
+        toast.error(appT.selectDotnetProjectFirst || "请先选择 .NET 项目");
         return;
       }
 
@@ -1471,12 +1564,12 @@ function App() {
     try {
       const cancelled = await invoke<boolean>("cancel_provider_publish");
       if (cancelled) {
-        toast.message("正在取消发布...");
+        toast.message(appT.cancellingPublish || "正在取消发布...");
       } else {
-        toast.message("当前没有运行中的发布任务");
+        toast.message(appT.noRunningPublishTask || "当前没有运行中的发布任务");
       }
     } catch (err) {
-      toast.error("取消发布失败", { description: String(err) });
+      toast.error(appT.cancelPublishFailed || "取消发布失败", { description: String(err) });
     } finally {
       setIsCancellingPublish(false);
     }
@@ -1484,7 +1577,7 @@ function App() {
 
   const exportExecutionSnapshot = async () => {
     if (!publishResult || !lastExecutedSpec) {
-      toast.error("暂无可导出的执行快照");
+      toast.error(historyT.noSnapshotToExport || "暂无可导出的执行快照");
       return;
     }
 
@@ -1494,7 +1587,7 @@ function App() {
       : `execution-snapshot-${timestamp}.md`;
 
     const selected = await save({
-      title: "导出执行快照",
+      title: historyT.exportSnapshotTitle || "导出执行快照",
       defaultPath,
       filters: [
         { name: "Markdown", extensions: ["md"] },
@@ -1556,9 +1649,9 @@ function App() {
         setExecutionHistory(history);
       }
 
-      toast.success("执行快照已导出", { description: outputPath });
+      toast.success(historyT.snapshotExported || "执行快照已导出", { description: outputPath });
     } catch (err) {
-      toast.error("导出执行快照失败", { description: String(err) });
+      toast.error(historyT.exportSnapshotFailed || "导出执行快照失败", { description: String(err) });
     } finally {
       setIsExportingSnapshot(false);
     }
@@ -1566,7 +1659,7 @@ function App() {
 
   const exportFailureGroupBundle = async () => {
     if (!selectedFailureGroup) {
-      toast.error("请先选择失败分组");
+      toast.error(failureT.selectFailureGroupFirst || "请先选择失败分组");
       return;
     }
 
@@ -1581,7 +1674,7 @@ function App() {
       : `failure-group-bundle-${timestamp}.md`;
 
     const selected = await save({
-      title: "导出失败组诊断包",
+      title: failureT.exportBundleTitle || "导出失败组诊断包",
       defaultPath,
       filters: [
         { name: "Markdown", extensions: ["md"] },
@@ -1621,9 +1714,9 @@ function App() {
       });
 
       trackBundleExport(outputPath);
-      toast.success("失败组诊断包已导出", { description: outputPath });
+      toast.success(failureT.bundleExported || "失败组诊断包已导出", { description: outputPath });
     } catch (err) {
-      toast.error("导出失败组诊断包失败", { description: String(err) });
+      toast.error(failureT.exportBundleFailed || "导出失败组诊断包失败", { description: String(err) });
     } finally {
       setIsExportingFailureBundle(false);
     }
@@ -1639,7 +1732,9 @@ function App() {
     const records = options?.records ?? filteredExecutionHistory;
     if (records.length === 0) {
       toast.error(
-        options?.records ? "预设下没有可导出的执行历史" : "当前没有可导出的执行历史"
+        options?.records
+          ? historyT.noPresetHistoryToExport || "预设下没有可导出的执行历史"
+          : historyT.noHistoryToExport || "当前没有可导出的执行历史"
       );
       return;
     }
@@ -1664,7 +1759,7 @@ function App() {
             ];
 
     const selected = await save({
-      title: options?.title ?? "导出执行历史",
+      title: options?.title ?? (historyT.exportHistoryTitle || "导出执行历史"),
       defaultPath,
       filters,
     });
@@ -1697,11 +1792,11 @@ function App() {
       });
 
       trackHistoryExport(outputPath);
-      toast.success(options?.successMessage ?? "执行历史已导出", {
+      toast.success(options?.successMessage ?? (historyT.historyExported || "执行历史已导出"), {
         description: outputPath,
       });
     } catch (err) {
-      toast.error("导出执行历史失败", { description: String(err) });
+      toast.error(historyT.exportHistoryFailed || "导出执行历史失败", { description: String(err) });
     } finally {
       setIsExportingHistory(false);
     }
@@ -1709,12 +1804,12 @@ function App() {
 
   const exportDailyTriageReport = async () => {
     if (!dailyTriagePreset.enabled) {
-      toast.message("每日排障预设已禁用");
+      toast.message(historyT.dailyPresetDisabled || "每日排障预设已禁用");
       return;
     }
 
     if (dailyTriageRecords.length === 0) {
-      toast.error("日报预设下没有可导出的执行历史");
+      toast.error(historyT.noDailyHistoryToExport || "日报预设下没有可导出的执行历史");
       return;
     }
 
@@ -1727,9 +1822,9 @@ function App() {
     await exportExecutionHistory({
       records: dailyTriageRecords,
       format: dailyTriagePreset.format,
-      title: "导出每日排障报告",
+      title: historyT.exportDailyReportTitle || "导出每日排障报告",
       filePrefix: "daily-triage-report",
-      successMessage: "每日排障报告已导出",
+      successMessage: historyT.dailyReportExported || "每日排障报告已导出",
     });
   };
 
@@ -1739,8 +1834,8 @@ function App() {
       recentBundleExports.length > 0 ||
       recentHistoryExports.length > 0;
     if (!hasAnyLinks) {
-      toast.error("暂无可索引的诊断导出记录", {
-        description: "请先导出诊断包、历史或执行快照",
+      toast.error(historyT.noDiagnosticsToIndex || "暂无可索引的诊断导出记录", {
+        description: historyT.noDiagnosticsToIndexHint || "请先导出诊断包、历史或执行快照",
       });
       return;
     }
@@ -1752,7 +1847,7 @@ function App() {
       : `diagnostics-index-${timestamp}.md`;
 
     const selected = await save({
-      title: "导出诊断索引",
+      title: historyT.exportDiagnosticsIndexTitle || "导出诊断索引",
       defaultPath,
       filters: [
         { name: "Markdown", extensions: ["md"] },
@@ -1788,9 +1883,9 @@ function App() {
         filePath: selected,
       });
 
-      toast.success("诊断索引已导出", { description: outputPath });
+      toast.success(historyT.diagnosticsIndexExported || "诊断索引已导出", { description: outputPath });
     } catch (err) {
-      toast.error("导出诊断索引失败", { description: String(err) });
+      toast.error(historyT.exportDiagnosticsIndexFailed || "导出诊断索引失败", { description: String(err) });
     } finally {
       setIsExportingDiagnosticsIndex(false);
     }
@@ -1805,7 +1900,7 @@ function App() {
 
       const preset = historyFilterPresets.find((item) => item.id === presetId);
       if (!preset) {
-        toast.error("未找到筛选预设");
+        toast.error(historyT.presetNotFound || "未找到筛选预设");
         return;
       }
 
@@ -1819,10 +1914,10 @@ function App() {
   );
 
   const saveCurrentHistoryPreset = useCallback(() => {
-    const defaultName = `筛选预设 ${historyFilterPresets.length + 1}`;
+    const defaultName = (historyT.presetNamePrefix || "筛选预设") + ` ${historyFilterPresets.length + 1}`;
     const input =
       typeof window !== "undefined"
-        ? window.prompt("输入筛选预设名称", defaultName)
+        ? window.prompt(historyT.promptPresetName || "输入筛选预设名称", defaultName)
         : defaultName;
     if (!input) {
       return;
@@ -1830,7 +1925,7 @@ function App() {
 
     const name = input.trim();
     if (!name) {
-      toast.error("筛选预设名称不能为空");
+      toast.error(historyT.presetNameRequired || "筛选预设名称不能为空");
       return;
     }
 
@@ -1859,7 +1954,7 @@ function App() {
     });
 
     setSelectedHistoryPresetId(presetId);
-    toast.success("筛选预设已保存", { description: name });
+    toast.success(historyT.presetSaved || "筛选预设已保存", { description: name });
   }, [
     historyFilterKeyword,
     historyFilterPresets,
@@ -1870,7 +1965,7 @@ function App() {
 
   const deleteSelectedHistoryPreset = useCallback(() => {
     if (selectedHistoryPresetId === "none") {
-      toast.error("请先选择要删除的筛选预设");
+      toast.error(historyT.selectPresetToDelete || "请先选择要删除的筛选预设");
       return;
     }
 
@@ -1883,7 +1978,7 @@ function App() {
     );
     setSelectedHistoryPresetId("none");
 
-    toast.success("筛选预设已删除", {
+    toast.success(historyT.presetDeleted || "筛选预设已删除", {
       description: current?.name || "",
     });
   }, [historyFilterPresets, selectedHistoryPresetId]);
@@ -1933,21 +2028,21 @@ function App() {
     }
 
     if (mapping.mappedKeys.length === 0 && mapping.unmappedKeys.length > 0) {
-      toast.error("未找到可映射参数", {
-        description: `未映射字段: ${mapping.unmappedKeys.join(", ")}`,
+      toast.error(appT.noMappableParameters || "未找到可映射参数", {
+        description: `${appT.unmappedFields || "未映射字段"}: ${mapping.unmappedKeys.join(", ")}`,
       });
       return;
     }
 
     if (mapping.unmappedKeys.length > 0) {
-      toast.message("参数已部分导入", {
-        description: `已映射 ${mapping.mappedKeys.length} 个字段，未映射 ${mapping.unmappedKeys.length} 个字段`,
+      toast.message(appT.partialImport || "参数已部分导入", {
+        description: `${appT.mappedFields || "已映射"} ${mapping.mappedKeys.length} ${appT.fieldsUnit || "个字段"}，${appT.unmappedFields || "未映射字段"} ${mapping.unmappedKeys.length} ${appT.fieldsUnit || "个字段"}`,
       });
       return;
     }
 
-    toast.success("参数已导入", {
-      description: `已映射 ${mapping.mappedKeys.length} 个字段`,
+    toast.success(appT.parametersImported || "参数已导入", {
+      description: `${appT.mappedFields || "已映射"} ${mapping.mappedKeys.length} ${appT.fieldsUnit || "个字段"}`,
     });
   };
 
@@ -1980,8 +2075,8 @@ function App() {
       }));
     }
 
-    toast.success("配置文件已加载", {
-      description: `已加载配置文件: ${profile.name}`,
+    toast.success(appT.profileLoaded || "配置文件已加载", {
+      description: `${appT.loadedProfile || "已加载配置文件"}: ${profile.name}`,
     });
   };
 
@@ -1991,7 +2086,7 @@ function App() {
       <div className="flex h-screen items-center justify-center bg-background">
         <div className="flex flex-col items-center gap-4">
           <Loader2 className="h-8 w-8 animate-spin text-primary" />
-          <span className="text-muted-foreground">加载中...</span>
+          <span className="text-muted-foreground">{appT.loading || "加载中..."}</span>
         </div>
       </div>
     );
@@ -2030,8 +2125,8 @@ function App() {
         >
           <BranchPanel
             repository={selectedRepo}
-            onRefresh={() => toast.info("刷新分支列表")}
-            onCreateBranch={() => toast.info("创建分支功能开发中")}
+            onRefresh={() => toast.info(appT.refreshBranches || "刷新分支列表")}
+            onCreateBranch={() => toast.info(appT.createBranchComingSoon || "创建分支功能开发中")}
             onCollapse={() => setMiddlePanelCollapsed(true)}
             showExpandButton={leftPanelCollapsed}
             onExpandRepo={() => setLeftPanelCollapsed(false)}
@@ -2065,7 +2160,7 @@ function App() {
                         e.stopPropagation();
                         setLeftPanelCollapsed(false);
                       }}
-                      title="展开仓库列表"
+                      title={appT.expandRepoList || "展开仓库列表"}
                       data-tauri-no-drag
                     >
                       <Folder className="h-4 w-4" />
@@ -2079,7 +2174,7 @@ function App() {
                       e.stopPropagation();
                       setMiddlePanelCollapsed(false);
                     }}
-                    title="展开分支列表"
+                    title={appT.expandBranchList || "展开分支列表"}
                     data-tauri-no-drag
                   >
                     <GitBranch className="h-4 w-4" />
@@ -2100,10 +2195,10 @@ function App() {
                     <div>
                       <CardTitle className="text-lg flex items-center gap-2">
                         <Folder className="h-5 w-5" />
-                        项目信息
+                        {projectT.title || "项目信息"}
                       </CardTitle>
                       <CardDescription>
-                        {selectedRepo ? selectedRepo.name : "未选择仓库"}
+                        {selectedRepo ? selectedRepo.name : projectT.notSelected || "未选择仓库"}
                       </CardDescription>
                     </div>
                     <div className="flex flex-wrap items-center gap-2">
@@ -2112,7 +2207,7 @@ function App() {
                         onValueChange={setActiveProviderId}
                       >
                         <SelectTrigger className="w-[190px] h-9">
-                          <SelectValue placeholder="选择 Provider" />
+                          <SelectValue placeholder={appT.selectProvider || "选择 Provider"} />
                         </SelectTrigger>
                         <SelectContent>
                           {availableProviders.map((provider) => (
@@ -2142,7 +2237,7 @@ function App() {
                         ) : (
                           <RefreshCw className="h-4 w-4" />
                         )}
-                        <span className="ml-1">刷新</span>
+                        <span className="ml-1">{configT.refresh || "刷新"}</span>
                       </Button>
                     </div>
                   </div>
@@ -2153,7 +2248,7 @@ function App() {
                       <div className="flex items-center gap-2">
                         <CheckCircle2 className="h-4 w-4 text-green-500" />
                         <span className="text-muted-foreground">
-                          项目根目录:
+                          {appT.projectRootLabel || "项目根目录:"}
                         </span>
                         <code className="bg-muted px-2 py-0.5 rounded text-xs">
                           {projectInfo.root_path}
@@ -2161,7 +2256,7 @@ function App() {
                       </div>
                       <div className="flex items-center gap-2">
                         <CheckCircle2 className="h-4 w-4 text-green-500" />
-                        <span className="text-muted-foreground">项目文件:</span>
+                        <span className="text-muted-foreground">{appT.projectFileLabel || "项目文件:"}</span>
                         <code className="bg-muted px-2 py-0.5 rounded text-xs">
                           {projectInfo.project_file}
                         </code>
@@ -2170,7 +2265,7 @@ function App() {
                         <div className="flex items-start gap-2">
                           <CheckCircle2 className="h-4 w-4 text-green-500 mt-0.5" />
                           <span className="text-muted-foreground">
-                            发布配置:
+                            {projectT.profiles || "发布配置:"}
                           </span>
                           <div className="flex flex-wrap gap-1">
                             {projectInfo.publish_profiles.map((profile) => (
@@ -2189,13 +2284,13 @@ function App() {
                     <div className="space-y-2 text-sm">
                       <div className="flex items-center gap-2">
                         <CheckCircle2 className="h-4 w-4 text-green-500" />
-                        <span className="text-muted-foreground">仓库路径:</span>
+                        <span className="text-muted-foreground">{appT.repositoryPathLabel || "仓库路径:"}</span>
                         <code className="bg-muted px-2 py-0.5 rounded text-xs">
                           {selectedRepo.path}
                         </code>
                       </div>
                       <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-amber-700 text-xs">
-                        当前 Provider: {activeProviderLabel}。可进行环境检查、命令解析、参数编辑与通用执行。
+                        {(appT.providerReadyMessage || "当前 Provider: {{provider}}。可进行环境检查、命令解析、参数编辑与通用执行。").replace("{{provider}}", activeProviderLabel)}
                       </div>
                     </div>
                   ) : (
@@ -2203,8 +2298,8 @@ function App() {
                       <XCircle className="h-4 w-4 text-destructive" />
                       <span>
                         {selectedRepo
-                          ? "当前仓库不是 .NET 项目"
-                          : "请从左侧选择一个仓库"}
+                          ? projectT.not || "当前仓库不是 .NET 项目"
+                          : projectT.notSelected || "请从左侧选择一个仓库"}
                       </span>
                     </div>
                   )}
@@ -2219,10 +2314,10 @@ function App() {
                       <div>
                         <CardTitle className="text-lg flex items-center gap-2">
                           <Settings className="h-5 w-5" />
-                          发布配置
+                          {configT.title || "发布配置"}
                         </CardTitle>
                         <CardDescription>
-                          选择预设配置或自定义发布参数
+                          {configT.description || "选择预设配置或自定义发布参数"}
                         </CardDescription>
                       </div>
                       <Button
@@ -2232,14 +2327,14 @@ function App() {
                         disabled={!selectedRepo}
                       >
                         <Import className="h-4 w-4 mr-1" />
-                        从命令导入
+                        {appT.importFromCommand || "从命令导入"}
                       </Button>
                     </div>
                   </CardHeader>
                   <CardContent className="space-y-4">
                     {/* Mode Toggle */}
                     <div className="flex items-center justify-between">
-                      <Label htmlFor="custom-mode">自定义模式</Label>
+                      <Label htmlFor="custom-mode">{configT.customMode || "自定义模式"}</Label>
                       <Switch
                         id="custom-mode"
                         checked={isCustomMode}
@@ -2250,48 +2345,64 @@ function App() {
                     {!isCustomMode ? (
                       /* Preset Selection */
                       <div className="space-y-2">
-                        <Label>选择预设配置</Label>
+                        <Label>{configT.presets || "选择预设配置"}</Label>
                         <Select
                           value={selectedPreset}
                           onValueChange={setSelectedPreset}
                         >
                           <SelectTrigger>
-                            <SelectValue placeholder="选择发布配置" />
+                            <SelectValue placeholder={appT.selectPublishConfig || "选择发布配置"} />
                           </SelectTrigger>
                           <SelectContent>
                             <SelectGroup>
-                              <SelectLabel>Release 配置</SelectLabel>
+                              <SelectLabel>{appT.releaseConfigs || "Release 配置"}</SelectLabel>
                               {PRESETS.filter((p) =>
                                 p.id.startsWith("release")
-                              ).map((preset) => (
-                                <SelectItem key={preset.id} value={preset.id}>
-                                  <div className="flex flex-col">
-                                    <span>{preset.name}</span>
-                                    <span className="text-xs text-muted-foreground">
-                                      {preset.description}
-                                    </span>
-                                  </div>
-                                </SelectItem>
-                              ))}
+                              ).map((preset) => {
+                                const presetText = getPresetText(
+                                  preset.id,
+                                  preset.name,
+                                  preset.description
+                                );
+
+                                return (
+                                  <SelectItem key={preset.id} value={preset.id}>
+                                    <div className="flex flex-col">
+                                      <span>{presetText.name}</span>
+                                      <span className="text-xs text-muted-foreground">
+                                        {presetText.description}
+                                      </span>
+                                    </div>
+                                  </SelectItem>
+                                );
+                              })}
                             </SelectGroup>
                             <SelectGroup>
-                              <SelectLabel>Debug 配置</SelectLabel>
+                              <SelectLabel>{appT.debugConfigs || "Debug 配置"}</SelectLabel>
                               {PRESETS.filter((p) =>
                                 p.id.startsWith("debug")
-                              ).map((preset) => (
-                                <SelectItem key={preset.id} value={preset.id}>
-                                  <div className="flex flex-col">
-                                    <span>{preset.name}</span>
-                                    <span className="text-xs text-muted-foreground">
-                                      {preset.description}
-                                    </span>
-                                  </div>
-                                </SelectItem>
-                              ))}
+                              ).map((preset) => {
+                                const presetText = getPresetText(
+                                  preset.id,
+                                  preset.name,
+                                  preset.description
+                                );
+
+                                return (
+                                  <SelectItem key={preset.id} value={preset.id}>
+                                    <div className="flex flex-col">
+                                      <span>{presetText.name}</span>
+                                      <span className="text-xs text-muted-foreground">
+                                        {presetText.description}
+                                      </span>
+                                    </div>
+                                  </SelectItem>
+                                );
+                              })}
                             </SelectGroup>
                             {projectInfo.publish_profiles.length > 0 && (
                               <SelectGroup>
-                                <SelectLabel>项目发布配置</SelectLabel>
+                                <SelectLabel>{appT.projectPublishProfiles || "项目发布配置"}</SelectLabel>
                                 {projectInfo.publish_profiles.map((profile) => (
                                   <SelectItem
                                     key={`profile-${profile}`}
@@ -2309,7 +2420,7 @@ function App() {
                       /* Custom Configuration */
                       <div className="grid grid-cols-2 gap-4">
                         <div className="space-y-2">
-                          <Label htmlFor="configuration">配置类型</Label>
+                          <Label htmlFor="configuration">{appT.configurationType || "配置类型"}</Label>
                           <Select
                             value={customConfig.configuration}
                             onValueChange={(v) =>
@@ -2327,7 +2438,7 @@ function App() {
                         </div>
 
                         <div className="space-y-2">
-                          <Label htmlFor="runtime">运行时</Label>
+                          <Label htmlFor="runtime">{appT.runtimeLabel || "运行时"}</Label>
                           <Select
                             value={customConfig.runtime || "none"}
                             onValueChange={(v) =>
@@ -2340,7 +2451,7 @@ function App() {
                               <SelectValue />
                             </SelectTrigger>
                             <SelectContent>
-                              <SelectItem value="none">框架依赖</SelectItem>
+                              <SelectItem value="none">{appT.frameworkDependent || "框架依赖"}</SelectItem>
                               <SelectItem value="win-x64">
                                 Windows x64
                               </SelectItem>
@@ -2356,7 +2467,7 @@ function App() {
                         </div>
 
                         <div className="col-span-2 space-y-2">
-                          <Label htmlFor="output-dir">输出目录</Label>
+                          <Label htmlFor="output-dir">{appT.outputDirLabel || "输出目录"}</Label>
                           <Input
                             id="output-dir"
                             value={customConfig.outputDir}
@@ -2365,7 +2476,7 @@ function App() {
                                 outputDir: e.target.value,
                               })
                             }
-                            placeholder="留空使用默认目录"
+                            placeholder={appT.outputDirPlaceholder || "留空使用默认目录"}
                           />
                         </div>
 
@@ -2380,7 +2491,7 @@ function App() {
                             }
                             disabled={!customConfig.runtime}
                           />
-                          <Label htmlFor="self-contained">自包含部署</Label>
+                          <Label htmlFor="self-contained">{appT.selfContained || "自包含部署"}</Label>
                         </div>
                       </div>
                     )}
@@ -2388,7 +2499,7 @@ function App() {
                     {/* Current Config Preview */}
                     <div className="mt-4 p-3 bg-muted rounded-lg">
                       <div className="text-xs text-muted-foreground mb-2">
-                        将执行的命令:
+                        {publishT.command || "将执行的命令:"}
                       </div>
                       <code className="text-xs font-mono break-all">
                         dotnet publish "{projectInfo.project_file}" -c{" "}
@@ -2411,12 +2522,12 @@ function App() {
                       {isPublishing ? (
                         <>
                           <Loader2 className="h-5 w-5 mr-2 animate-spin" />
-                          发布中...
+                          {configT.publishing || "发布中..."}
                         </>
                       ) : (
                         <>
                           <Play className="h-5 w-5 mr-2" />
-                          执行发布
+                          {configT.execute || "执行发布"}
                         </>
                       )}
                     </Button>
@@ -2431,12 +2542,12 @@ function App() {
                         {isCancellingPublish ? (
                           <>
                             <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                            取消中...
+                            {appT.cancelling || "取消中..."}
                           </>
                         ) : (
                           <>
                             <Square className="h-4 w-4 mr-2" />
-                            取消发布
+                            {appT.cancelPublish || "取消发布"}
                           </>
                         )}
                       </Button>
@@ -2452,10 +2563,10 @@ function App() {
                       <div>
                         <CardTitle className="text-lg flex items-center gap-2">
                           <Settings className="h-5 w-5" />
-                          发布配置
+                          {configT.title || "发布配置"}
                         </CardTitle>
                         <CardDescription>
-                          {activeProviderLabel} Provider 已就绪（支持参数映射与通用执行）
+                          {(appT.providerConfigReady || "{{provider}} Provider 已就绪（支持参数映射与通用执行）").replace("{{provider}}", activeProviderLabel)}
                         </CardDescription>
                       </div>
                       <Button
@@ -2464,13 +2575,13 @@ function App() {
                         onClick={() => setCommandImportOpen(true)}
                       >
                         <Import className="h-4 w-4 mr-1" />
-                        从命令导入
+                        {appT.importFromCommand || "从命令导入"}
                       </Button>
                     </div>
                   </CardHeader>
                   <CardContent className="space-y-3">
                     <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-amber-700 text-sm">
-                      当前已支持 {activeProviderLabel} 的命令导入映射、参数编辑与通用执行。
+                      {(appT.providerConfigHint || "当前已支持 {{provider}} 的命令导入映射、参数编辑与通用执行。").replace("{{provider}}", activeProviderLabel)}
                     </div>
                     {activeProviderSchema ? (
                       <ParameterEditor
@@ -2481,12 +2592,12 @@ function App() {
                     ) : (
                       <div className="flex items-center gap-2 text-sm text-muted-foreground">
                         <Loader2 className="h-4 w-4 animate-spin" />
-                        正在加载 Provider 参数定义...
+                        {appT.loadingProviderSchema || "正在加载 Provider 参数定义..."}
                       </div>
                     )}
                     <div className="rounded-md bg-muted p-3">
                       <div className="text-xs text-muted-foreground mb-2">
-                        当前参数快照（可保存为配置文件）:
+                        {appT.parameterSnapshot || "当前参数快照（可保存为配置文件）:"}
                       </div>
                       <pre className="text-xs font-mono overflow-auto max-h-40">
                         {JSON.stringify(activeProviderParameters, null, 2)}
@@ -2497,7 +2608,7 @@ function App() {
                       variant="outline"
                       onClick={() => openEnvironmentDialog(null, [activeProviderId])}
                     >
-                      打开环境检查
+                      {appT.openEnvironmentCheck || "打开环境检查"}
                     </Button>
                     <Button
                       className="w-full"
@@ -2508,12 +2619,12 @@ function App() {
                       {isPublishing ? (
                         <>
                           <Loader2 className="h-5 w-5 mr-2 animate-spin" />
-                          发布中...
+                          {configT.publishing || "发布中..."}
                         </>
                       ) : (
                         <>
                           <Play className="h-5 w-5 mr-2" />
-                          执行发布
+                          {configT.execute || "执行发布"}
                         </>
                       )}
                     </Button>
@@ -2528,12 +2639,12 @@ function App() {
                         {isCancellingPublish ? (
                           <>
                             <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                            取消中...
+                            {appT.cancelling || "取消中..."}
                           </>
                         ) : (
                           <>
                             <Square className="h-4 w-4 mr-2" />
-                            取消发布
+                            {appT.cancelPublish || "取消发布"}
                           </>
                         )}
                       </Button>
@@ -2547,7 +2658,7 @@ function App() {
                   <CardHeader className="pb-3">
                     <CardTitle className="text-lg flex items-center gap-2">
                       <Import className="h-5 w-5" />
-                      命令导入映射结果
+                      {appT.commandImportResult || "命令导入映射结果"}
                     </CardTitle>
                     <CardDescription>
                       Provider: {formatProviderLabel(activeProvider)}
@@ -2555,16 +2666,16 @@ function App() {
                   </CardHeader>
                   <CardContent className="space-y-2 text-sm">
                     <div className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-emerald-700">
-                      已映射字段 ({activeImportFeedback.mappedKeys.length}):{" "}
+                      {(appT.mappedFieldsLabel || "已映射字段") + ` (${activeImportFeedback.mappedKeys.length}):`} 
                       {activeImportFeedback.mappedKeys.length > 0
                         ? activeImportFeedback.mappedKeys.join(", ")
-                        : "无"}
+                        : appT.none || "无"}
                     </div>
                     <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-amber-700">
-                      未映射字段 ({activeImportFeedback.unmappedKeys.length}):{" "}
+                      {(appT.unmappedFieldsLabel || "未映射字段") + ` (${activeImportFeedback.unmappedKeys.length}):`} 
                       {activeImportFeedback.unmappedKeys.length > 0
                         ? activeImportFeedback.unmappedKeys.join(", ")
-                        : "无"}
+                        : appT.none || "无"}
                     </div>
                   </CardContent>
                 </Card>
@@ -2576,7 +2687,7 @@ function App() {
                   <CardHeader className="pb-3">
                     <CardTitle className="text-lg flex items-center gap-2">
                       <Terminal className="h-5 w-5" />
-                      输出日志
+                      {appT.outputLogTitle || "输出日志"}
                       {publishResult && (
                         <span
                           className={`ml-2 text-sm font-normal ${
@@ -2588,10 +2699,10 @@ function App() {
                           }`}
                         >
                           {publishResult.success
-                            ? "成功"
+                            ? appT.statusSuccess || "成功"
                             : publishResult.cancelled
-                              ? "已取消"
-                              : "失败"}
+                              ? appT.statusCancelled || "已取消"
+                              : appT.statusFailed || "失败"}
                         </span>
                       )}
                     </CardTitle>
@@ -2607,18 +2718,18 @@ function App() {
                         {isExportingSnapshot ? (
                           <>
                             <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                            导出中...
+                            {appT.exporting || "导出中..."}
                           </>
                         ) : (
-                          "导出执行快照"
+                          appT.exportSnapshot || "导出执行快照"
                         )}
                       </Button>
                     )}
                     {publishResult?.success && publishResult.output_dir && (
                       <>
                         <CardDescription>
-                          输出目录: {publishResult.output_dir} (
-                          {publishResult.file_count} 个文件)
+                          {(appT.outputDirectoryLabel || "输出目录")}: {publishResult.output_dir} (
+                          {publishResult.file_count} {appT.fileCountUnit || "个文件"})
                         </CardDescription>
                         {publishResult.provider_id === "dotnet" && (
                           <>
@@ -2634,7 +2745,7 @@ function App() {
                               onClick={() => setReleaseChecklistOpen(true)}
                             >
                               <ListChecks className="h-4 w-4 mr-1" />
-                              打开签名发布清单
+                              {appT.openReleaseChecklist || "打开签名发布清单"}
                             </Button>
                           </>
                         )}
@@ -2644,7 +2755,7 @@ function App() {
                   <CardContent>
                     <div className="bg-gray-950 text-gray-100 p-4 rounded-lg font-mono text-xs max-h-80 overflow-auto">
                       <pre className="whitespace-pre-wrap">
-                        {outputLog || publishResult?.error || "无输出"}
+                        {outputLog || publishResult?.error || appT.noOutput || "无输出"}
                       </pre>
                     </div>
                   </CardContent>
@@ -2654,9 +2765,9 @@ function App() {
               {failureGroups.length > 0 && (
                 <Card>
                   <CardHeader className="pb-3">
-                    <CardTitle className="text-lg">失败诊断聚合</CardTitle>
+                    <CardTitle className="text-lg">{failureT.groupTitle || "失败诊断聚合"}</CardTitle>
                     <CardDescription>
-                      相同失败签名自动归并，支持分组钻取与快速复制
+                      {failureT.groupDescription || "相同失败签名自动归并，支持分组钻取与快速复制"}
                     </CardDescription>
                   </CardHeader>
                   <CardContent className="space-y-2">
@@ -2671,18 +2782,18 @@ function App() {
                           <div className="flex items-center justify-between gap-2">
                             <span className="font-medium">{group.providerId}</span>
                             <span className="text-xs text-muted-foreground">
-                              最近 {group.count} 次
+                              {(failureT.recentCount || "最近 {{count}} 次").replace("{{count}}", String(group.count))}
                             </span>
                           </div>
                           <div className="mt-1 rounded bg-muted px-2 py-1 font-mono text-xs break-all">
                             {group.signature}
                           </div>
                           <div className="mt-1 text-xs text-muted-foreground">
-                            最新时间: {new Date(group.latestRecord.finishedAt).toLocaleString()}
+                            {(failureT.latestTime || "最新时间")}: {new Date(group.latestRecord.finishedAt).toLocaleString()}
                           </div>
                           {group.latestRecord.error && (
                             <div className="text-xs text-muted-foreground break-all">
-                              最新错误: {group.latestRecord.error}
+                              {(failureT.latestError || "最新错误")}: {group.latestRecord.error}
                             </div>
                           )}
                           <div className="mt-2 flex flex-wrap gap-2">
@@ -2692,7 +2803,7 @@ function App() {
                               variant={isSelected ? "default" : "outline"}
                               onClick={() => setSelectedFailureGroupKey(group.key)}
                             >
-                              {isSelected ? "已选中" : "查看详情"}
+                              {isSelected ? failureT.selected || "已选中" : failureT.viewDetails || "查看详情"}
                             </Button>
                             <Button
                               type="button"
@@ -2701,7 +2812,7 @@ function App() {
                               onClick={() => void copyGroupSignature(group)}
                             >
                               <Copy className="mr-1 h-3 w-3" />
-                              复制签名
+                              {failureT.copySignature || "复制签名"}
                             </Button>
                             <Button
                               type="button"
@@ -2715,7 +2826,7 @@ function App() {
                                 !group.latestRecord.outputDir
                               }
                             >
-                              打开代表快照
+                              {failureT.openRepresentativeSnapshot || "打开代表快照"}
                             </Button>
                             <Button
                               type="button"
@@ -2724,7 +2835,7 @@ function App() {
                               onClick={() => void rerunFromHistory(group.latestRecord)}
                               disabled={isPublishing}
                             >
-                              重跑代表记录
+                              {failureT.rerunRepresentative || "重跑代表记录"}
                             </Button>
                           </div>
                         </div>
@@ -2737,9 +2848,11 @@ function App() {
               {selectedFailureGroup && (
                 <Card>
                   <CardHeader className="pb-3">
-                    <CardTitle className="text-lg">失败组详情</CardTitle>
+                    <CardTitle className="text-lg">{failureT.detailTitle || "失败组详情"}</CardTitle>
                     <CardDescription>
-                      {selectedFailureGroup.providerId} · 最近 {selectedFailureGroup.count} 次失败（按完成时间倒序）
+                      {(failureT.detailDescription || "{{provider}} · 最近 {{count}} 次失败（按完成时间倒序）")
+                        .replace("{{provider}}", selectedFailureGroup.providerId)
+                        .replace("{{count}}", String(selectedFailureGroup.count))}
                     </CardDescription>
                   </CardHeader>
                   <CardContent className="space-y-3">
@@ -2754,12 +2867,12 @@ function App() {
                         }
                       >
                         <SelectTrigger className="h-8 w-[180px]">
-                          <SelectValue placeholder="Issue 模板" />
+                          <SelectValue placeholder={failureT.issueTemplate || "Issue 模板"} />
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="bug">Bug 模板</SelectItem>
-                          <SelectItem value="incident">Incident 模板</SelectItem>
-                          <SelectItem value="postmortem">Postmortem 模板</SelectItem>
+                          <SelectItem value="bug">{failureT.bugTemplate || "Bug 模板"}</SelectItem>
+                          <SelectItem value="incident">{failureT.incidentTemplate || "Incident 模板"}</SelectItem>
+                          <SelectItem value="postmortem">{failureT.postmortemTemplate || "Postmortem 模板"}</SelectItem>
                         </SelectContent>
                       </Select>
                       <Button
@@ -2810,7 +2923,7 @@ function App() {
                         onClick={() => void copyGroupSignature(selectedFailureGroup)}
                       >
                         <Copy className="mr-1 h-3 w-3" />
-                        复制签名
+                        {failureT.copySignature || "复制签名"}
                       </Button>
                       <Button
                         type="button"
@@ -2824,7 +2937,7 @@ function App() {
                         disabled={!representativeFailureRecord?.commandLine}
                       >
                         <Copy className="mr-1 h-3 w-3" />
-                        复制代表命令
+                        {failureT.copyRepresentativeCommand || "复制代表命令"}
                       </Button>
                       <Button
                         type="button"
@@ -2832,7 +2945,7 @@ function App() {
                         variant="outline"
                         onClick={() => void copyFailureIssueDraft(selectedFailureGroup)}
                       >
-                        复制 Issue 草稿
+                        {failureT.copyIssueDraft || "复制 Issue 草稿"}
                       </Button>
                       <Button
                         type="button"
@@ -2844,10 +2957,10 @@ function App() {
                         {isExportingFailureBundle ? (
                           <>
                             <Loader2 className="mr-1 h-3 w-3 animate-spin" />
-                            导出中...
+                            {appT.exporting || "导出中..."}
                           </>
                         ) : (
-                          "导出诊断包"
+                          failureT.exportBundle || "导出诊断包"
                         )}
                       </Button>
                     </div>
@@ -2858,7 +2971,10 @@ function App() {
                       >
                         <div className="flex items-center justify-between gap-2">
                           <span className="font-medium">
-                            {index === 0 ? "最新失败记录" : `历史失败记录 #${index + 1}`}
+                            {index === 0
+                              ? failureT.latestFailureRecord || "最新失败记录"
+                              : (failureT.historyFailureRecord || "历史失败记录 #{{index}}")
+                                  .replace("{{index}}", String(index + 1))}
                           </span>
                           <span className="text-xs text-muted-foreground">
                             {new Date(record.finishedAt).toLocaleString()}
@@ -2868,11 +2984,11 @@ function App() {
                           {record.projectPath}
                         </div>
                         <div className="mt-1 rounded bg-muted px-2 py-1 font-mono text-xs break-all">
-                          {record.commandLine || "(无命令行记录)"}
+                          {record.commandLine || failureT.noCommandLine || "(无命令行记录)"}
                         </div>
                         {record.error && (
                           <div className="mt-1 text-xs text-muted-foreground break-all">
-                            错误: {record.error}
+                            {(failureT.errorLabel || "错误")}: {record.error}
                           </div>
                         )}
                         <div className="mt-2 flex flex-wrap gap-2">
@@ -2884,7 +3000,7 @@ function App() {
                             disabled={!record.commandLine}
                           >
                             <Copy className="mr-1 h-3 w-3" />
-                            复制命令
+                            {failureT.copyCommand || "复制命令"}
                           </Button>
                           <Button
                             type="button"
@@ -2893,7 +3009,7 @@ function App() {
                             onClick={() => void openSnapshotFromRecord(record)}
                             disabled={!record.snapshotPath && !record.outputDir}
                           >
-                            打开快照
+                            {failureT.openSnapshot || "打开快照"}
                           </Button>
                           <Button
                             type="button"
@@ -2902,7 +3018,7 @@ function App() {
                             onClick={() => void rerunFromHistory(record)}
                             disabled={isPublishing}
                           >
-                            重跑记录
+                            {failureT.rerunRecord || "重跑记录"}
                           </Button>
                         </div>
                       </div>
@@ -2914,11 +3030,11 @@ function App() {
               {executionHistory.length > 0 && (
                 <Card>
                   <CardHeader className="pb-3">
-                    <CardTitle className="text-lg">最近执行历史</CardTitle>
+                    <CardTitle className="text-lg">{historyT.title || "最近执行历史"}</CardTitle>
                     <CardDescription>
-                      本地保留最近 {executionHistoryLimit} 条发布记录
+                      {(historyT.description || "本地保留最近 {{count}} 条发布记录").replace("{{count}}", String(executionHistoryLimit))}
                       {filteredExecutionHistory.length !== executionHistory.length
-                        ? ` · 当前筛选 ${filteredExecutionHistory.length}/${executionHistory.length}`
+                        ? ` · ${(historyT.currentFilter || "当前筛选")} ${filteredExecutionHistory.length}/${executionHistory.length}`
                         : ""}
                     </CardDescription>
                     <div className="flex flex-wrap gap-2">
@@ -2935,10 +3051,10 @@ function App() {
                         {isExportingHistory ? (
                           <>
                             <Loader2 className="mr-1 h-3 w-3 animate-spin" />
-                            导出中...
+                            {appT.exporting || "导出中..."}
                           </>
                         ) : (
-                          "导出历史"
+                          historyT.exportHistory || "导出历史"
                         )}
                       </Button>
                       <Button
@@ -2952,10 +3068,10 @@ function App() {
                         {isExportingHistory ? (
                           <>
                             <Loader2 className="mr-1 h-3 w-3 animate-spin" />
-                            导出中...
+                            {appT.exporting || "导出中..."}
                           </>
                         ) : (
-                          "一键导出日报"
+                          historyT.exportDailyReport || "一键导出日报"
                         )}
                       </Button>
                       <Button
@@ -2969,10 +3085,10 @@ function App() {
                         {isExportingDiagnosticsIndex ? (
                           <>
                             <Loader2 className="mr-1 h-3 w-3 animate-spin" />
-                            生成中...
+                            {historyT.generating || "生成中..."}
                           </>
                         ) : (
-                          "导出诊断索引"
+                          historyT.exportDiagnosticsIndex || "导出诊断索引"
                         )}
                       </Button>
                     </div>
@@ -2984,10 +3100,10 @@ function App() {
                         onValueChange={setHistoryFilterProvider}
                       >
                         <SelectTrigger className="h-8">
-                          <SelectValue placeholder="筛选 Provider" />
+                          <SelectValue placeholder={historyT.filterProvider || "筛选 Provider"} />
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="all">全部 Provider</SelectItem>
+                          <SelectItem value="all">{historyT.allProviders || "全部 Provider"}</SelectItem>
                           {historyProviderOptions.map((providerId) => (
                             <SelectItem key={providerId} value={providerId}>
                               {providerId}
@@ -3002,13 +3118,13 @@ function App() {
                         }
                       >
                         <SelectTrigger className="h-8">
-                          <SelectValue placeholder="筛选状态" />
+                          <SelectValue placeholder={historyT.filterStatus || "筛选状态"} />
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="all">全部状态</SelectItem>
-                          <SelectItem value="success">成功</SelectItem>
-                          <SelectItem value="failed">失败</SelectItem>
-                          <SelectItem value="cancelled">已取消</SelectItem>
+                          <SelectItem value="all">{historyT.allStatuses || "全部状态"}</SelectItem>
+                          <SelectItem value="success">{appT.statusSuccess || "成功"}</SelectItem>
+                          <SelectItem value="failed">{appT.statusFailed || "失败"}</SelectItem>
+                          <SelectItem value="cancelled">{appT.statusCancelled || "已取消"}</SelectItem>
                         </SelectContent>
                       </Select>
                       <Select
@@ -3018,20 +3134,20 @@ function App() {
                         }
                       >
                         <SelectTrigger className="h-8">
-                          <SelectValue placeholder="时间窗口" />
+                          <SelectValue placeholder={historyT.timeWindow || "时间窗口"} />
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="all">全部时间</SelectItem>
-                          <SelectItem value="24h">最近 24 小时</SelectItem>
-                          <SelectItem value="7d">最近 7 天</SelectItem>
-                          <SelectItem value="30d">最近 30 天</SelectItem>
+                          <SelectItem value="all">{historyT.allTime || "全部时间"}</SelectItem>
+                          <SelectItem value="24h">{historyT.last24Hours || "最近 24 小时"}</SelectItem>
+                          <SelectItem value="7d">{historyT.last7Days || "最近 7 天"}</SelectItem>
+                          <SelectItem value="30d">{historyT.last30Days || "最近 30 天"}</SelectItem>
                         </SelectContent>
                       </Select>
                       <Input
                         className="h-8"
                         value={historyFilterKeyword}
                         onChange={(e) => setHistoryFilterKeyword(e.target.value)}
-                        placeholder="关键词（签名/错误/命令）"
+                        placeholder={historyT.keywordPlaceholder || "关键词（签名/错误/命令）"}
                       />
                     </div>
                     <div className="flex flex-wrap items-center gap-2">
@@ -3040,10 +3156,10 @@ function App() {
                         onValueChange={applyHistoryPreset}
                       >
                         <SelectTrigger className="h-8 w-[220px]">
-                          <SelectValue placeholder="选择筛选预设" />
+                          <SelectValue placeholder={historyT.selectPreset || "选择筛选预设"} />
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="none">(不使用预设)</SelectItem>
+                          <SelectItem value="none">{historyT.noPreset || "(不使用预设)"}</SelectItem>
                           {historyFilterPresets.map((preset) => (
                             <SelectItem key={preset.id} value={preset.id}>
                               {preset.name}
@@ -3057,7 +3173,7 @@ function App() {
                         variant="outline"
                         onClick={saveCurrentHistoryPreset}
                       >
-                        保存为预设
+                        {historyT.saveAsPreset || "保存为预设"}
                       </Button>
                       <Button
                         type="button"
@@ -3066,14 +3182,14 @@ function App() {
                         onClick={deleteSelectedHistoryPreset}
                         disabled={selectedHistoryPresetId === "none"}
                       >
-                        删除预设
+                        {historyT.deletePreset || "删除预设"}
                       </Button>
                     </div>
                     <div className="space-y-2 rounded-md border bg-muted/30 p-3">
                       <div className="flex flex-wrap items-center justify-between gap-2">
-                        <p className="text-sm font-medium">每日排障预设</p>
+                        <p className="text-sm font-medium">{historyT.dailyPresetTitle || "每日排障预设"}</p>
                         <div className="flex items-center gap-2">
-                          <span className="text-xs text-muted-foreground">启用</span>
+                          <span className="text-xs text-muted-foreground">{historyT.enabled || "启用"}</span>
                           <Switch
                             checked={dailyTriagePreset.enabled}
                             onCheckedChange={(checked) =>
@@ -3096,10 +3212,10 @@ function App() {
                           }
                         >
                           <SelectTrigger className="h-8">
-                            <SelectValue placeholder="Provider" />
+                            <SelectValue placeholder={historyT.provider || "Provider"} />
                           </SelectTrigger>
                           <SelectContent>
-                            <SelectItem value="all">全部 Provider</SelectItem>
+                            <SelectItem value="all">{historyT.allProviders || "全部 Provider"}</SelectItem>
                             {historyProviderOptions.map((providerId) => (
                               <SelectItem key={`triage-${providerId}`} value={providerId}>
                                 {providerId}
@@ -3117,13 +3233,13 @@ function App() {
                           }
                         >
                           <SelectTrigger className="h-8">
-                            <SelectValue placeholder="状态" />
+                            <SelectValue placeholder={historyT.status || "状态"} />
                           </SelectTrigger>
                           <SelectContent>
-                            <SelectItem value="all">全部状态</SelectItem>
-                            <SelectItem value="success">成功</SelectItem>
-                            <SelectItem value="failed">失败</SelectItem>
-                            <SelectItem value="cancelled">已取消</SelectItem>
+                            <SelectItem value="all">{historyT.allStatuses || "全部状态"}</SelectItem>
+                            <SelectItem value="success">{appT.statusSuccess || "成功"}</SelectItem>
+                            <SelectItem value="failed">{appT.statusFailed || "失败"}</SelectItem>
+                            <SelectItem value="cancelled">{appT.statusCancelled || "已取消"}</SelectItem>
                           </SelectContent>
                         </Select>
                         <Select
@@ -3136,13 +3252,13 @@ function App() {
                           }
                         >
                           <SelectTrigger className="h-8">
-                            <SelectValue placeholder="时间窗口" />
+                            <SelectValue placeholder={historyT.timeWindow || "时间窗口"} />
                           </SelectTrigger>
                           <SelectContent>
-                            <SelectItem value="all">全部时间</SelectItem>
-                            <SelectItem value="24h">最近 24 小时</SelectItem>
-                            <SelectItem value="7d">最近 7 天</SelectItem>
-                            <SelectItem value="30d">最近 30 天</SelectItem>
+                            <SelectItem value="all">{historyT.allTime || "全部时间"}</SelectItem>
+                            <SelectItem value="24h">{historyT.last24Hours || "最近 24 小时"}</SelectItem>
+                            <SelectItem value="7d">{historyT.last7Days || "最近 7 天"}</SelectItem>
+                            <SelectItem value="30d">{historyT.last30Days || "最近 30 天"}</SelectItem>
                           </SelectContent>
                         </Select>
                         <Select
@@ -3155,7 +3271,7 @@ function App() {
                           }
                         >
                           <SelectTrigger className="h-8">
-                            <SelectValue placeholder="格式" />
+                            <SelectValue placeholder={historyT.format || "格式"} />
                           </SelectTrigger>
                           <SelectContent>
                             <SelectItem value="csv">CSV</SelectItem>
@@ -3171,12 +3287,12 @@ function App() {
                               keyword: event.target.value,
                             }))
                           }
-                          placeholder="日报关键词（可选）"
+                          placeholder={historyT.dailyKeyword || "日报关键词（可选）"}
                         />
                       </div>
                       <div className="text-xs text-muted-foreground">
-                        当前预设命中 {dailyTriageRecords.length} 条记录
-                        {dailyTriagePreset.enabled ? "" : "（已禁用）"}
+                        {(historyT.dailyPresetMatches || "当前预设命中 {{count}} 条记录").replace("{{count}}", String(dailyTriageRecords.length))}
+                        {dailyTriagePreset.enabled ? "" : historyT.disabled || "（已禁用）"}
                       </div>
                       <Button
                         type="button"
@@ -3186,7 +3302,7 @@ function App() {
                           setDailyTriagePreset(DEFAULT_DAILY_TRIAGE_PRESET)
                         }
                       >
-                        恢复日报默认预设
+                        {historyT.resetDailyPreset || "恢复日报默认预设"}
                       </Button>
                     </div>
                     <div className="flex justify-end">
@@ -3208,13 +3324,13 @@ function App() {
                           historyFilterKeyword.length === 0
                         }
                       >
-                        清空筛选
+                        {historyT.clearFilters || "清空筛选"}
                       </Button>
                     </div>
 
                     {filteredExecutionHistory.length === 0 ? (
                       <div className="rounded-md border border-dashed px-3 py-4 text-sm text-muted-foreground">
-                        当前筛选条件下无执行记录
+                        {historyT.noRecords || "当前筛选条件下无执行记录"}
                       </div>
                     ) : (
                       filteredExecutionHistory.slice(0, 6).map((record) => (
@@ -3234,17 +3350,17 @@ function App() {
                               }`}
                             >
                               {record.success
-                                ? "成功"
+                                ? appT.statusSuccess || "成功"
                                 : record.cancelled
-                                  ? "已取消"
-                                  : "失败"}
+                                  ? appT.statusCancelled || "已取消"
+                                  : appT.statusFailed || "失败"}
                             </span>
                           </div>
                           <div className="text-xs text-muted-foreground truncate">
                             {record.projectPath}
                           </div>
                           <div className="text-xs text-muted-foreground">
-                            完成时间: {new Date(record.finishedAt).toLocaleString()}
+                            {(historyT.completedAt || "完成时间")}: {new Date(record.finishedAt).toLocaleString()}
                           </div>
                           <div className="mt-2 flex flex-wrap gap-2">
                             <Button
@@ -3254,7 +3370,7 @@ function App() {
                               onClick={() => void openSnapshotFromRecord(record)}
                               disabled={!record.snapshotPath && !record.outputDir}
                             >
-                              打开快照
+                              {failureT.openSnapshot || "打开快照"}
                             </Button>
                             <Button
                               type="button"
@@ -3263,7 +3379,7 @@ function App() {
                               onClick={() => void rerunFromHistory(record)}
                               disabled={isPublishing}
                             >
-                              重新执行
+                              {historyT.rerun || "重新执行"}
                             </Button>
                             {record.success && (
                               <>
@@ -3275,7 +3391,7 @@ function App() {
                                     void copyHandoffSnippet(record, "shell")
                                   }
                                 >
-                                  复制 Shell 片段
+                                  {historyT.copyShellSnippet || "复制 Shell 片段"}
                                 </Button>
                                 <Button
                                   type="button"
@@ -3285,7 +3401,7 @@ function App() {
                                     void copyHandoffSnippet(record, "github-actions")
                                   }
                                 >
-                                  复制 GHA 片段
+                                  {historyT.copyGhaSnippet || "复制 GHA 片段"}
                                 </Button>
                               </>
                             )}
@@ -3324,7 +3440,7 @@ function App() {
         open={settingsOpen}
         onOpenChange={setSettingsOpen}
         language={language}
-        onLanguageChange={setLanguage}
+        onLanguageChange={handleLanguageChange}
         minimizeToTrayOnClose={minimizeToTrayOnClose}
         onMinimizeToTrayOnCloseChange={setMinimizeToTrayOnClose}
         defaultOutputDir={defaultOutputDir}
@@ -3354,41 +3470,41 @@ function App() {
       >
         <DialogContent className="sm:max-w-[520px]">
           <DialogHeader>
-            <DialogTitle>重跑前确认清单</DialogTitle>
+            <DialogTitle>{rerunT.title || "重跑前确认清单"}</DialogTitle>
             <DialogDescription>
-              请确认以下检查项，避免在敏感分支或错误目标上触发重跑。
+              {rerunT.description || "请确认以下检查项，避免在敏感分支或错误目标上触发重跑。"}
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-3">
             <div className="rounded-md border bg-muted/30 p-3 text-sm space-y-1">
               <div>
-                <span className="text-muted-foreground">Provider:</span>{" "}
-                {pendingRerunRecord?.providerId || "(未知)"}
+                <span className="text-muted-foreground">{rerunT.provider || "Provider:"}</span>{" "}
+                {pendingRerunRecord?.providerId || rerunT.unknown || "(未知)"}
               </div>
               <div>
-                <span className="text-muted-foreground">当前分支:</span>{" "}
-                {selectedRepo?.currentBranch || "(未知)"}
+                <span className="text-muted-foreground">{rerunT.currentBranch || "当前分支:"}</span>{" "}
+                {selectedRepo?.currentBranch || rerunT.unknown || "(未知)"}
               </div>
               <div>
-                <span className="text-muted-foreground">环境状态:</span>{" "}
+                <span className="text-muted-foreground">{rerunT.environmentStatus || "环境状态:"}</span>{" "}
                 {environmentStatus === "ready"
-                  ? "已就绪"
+                  ? rerunT.ready || "已就绪"
                   : environmentStatus === "warning"
-                    ? "存在警告"
+                    ? rerunT.warning || "存在警告"
                     : environmentStatus === "blocked"
-                      ? "存在阻断问题"
-                      : "未检查"}
+                      ? rerunT.blocked || "存在阻断问题"
+                      : rerunT.notChecked || "未检查"}
               </div>
               <div>
-                <span className="text-muted-foreground">输出目标:</span>{" "}
-                {pendingRerunRecord?.outputDir || "(未记录)"}
+                <span className="text-muted-foreground">{rerunT.outputTarget || "输出目标:"}</span>{" "}
+                {pendingRerunRecord?.outputDir || rerunT.unrecorded || "(未记录)"}
               </div>
             </div>
 
             <div className="space-y-2">
               <div className="flex items-center justify-between rounded-md border px-3 py-2">
                 <Label htmlFor="rerun-check-branch" className="text-sm">
-                  我已确认当前分支允许重跑
+                  {rerunT.branchCheck || "我已确认当前分支允许重跑"}
                 </Label>
                 <Switch
                   id="rerun-check-branch"
@@ -3403,7 +3519,7 @@ function App() {
               </div>
               <div className="flex items-center justify-between rounded-md border px-3 py-2">
                 <Label htmlFor="rerun-check-env" className="text-sm">
-                  我已确认环境状态满足预期
+                  {rerunT.environmentCheck || "我已确认环境状态满足预期"}
                 </Label>
                 <Switch
                   id="rerun-check-env"
@@ -3418,7 +3534,7 @@ function App() {
               </div>
               <div className="flex items-center justify-between rounded-md border px-3 py-2">
                 <Label htmlFor="rerun-check-output" className="text-sm">
-                  我已确认输出目标目录与日志窗口
+                  {rerunT.outputCheck || "我已确认输出目标目录与日志窗口"}
                 </Label>
                 <Switch
                   id="rerun-check-output"
@@ -3435,7 +3551,7 @@ function App() {
           </div>
           <DialogFooter>
             <Button variant="ghost" onClick={closeRerunChecklistDialog}>
-              取消
+              {rerunT.cancel || "取消"}
             </Button>
             <Button
               onClick={() => void confirmRerunWithChecklist()}
@@ -3445,7 +3561,7 @@ function App() {
                 !rerunChecklistState.output
               }
             >
-              确认并重跑
+              {rerunT.confirm || "确认并重跑"}
             </Button>
           </DialogFooter>
         </DialogContent>

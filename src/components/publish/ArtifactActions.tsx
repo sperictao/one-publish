@@ -9,6 +9,7 @@ import {
   type PackageResult,
   type SignResult,
 } from "@/lib/artifact";
+import { useI18n } from "@/hooks/useI18n";
 
 function formatBytes(bytes: number) {
   if (!Number.isFinite(bytes)) return "-";
@@ -33,6 +34,8 @@ export interface ArtifactActionsProps {
 
 export function ArtifactActions({ outputDir, onStateChange }: ArtifactActionsProps) {
   const [packaging, setPackaging] = useState(false);
+  const { translations } = useI18n();
+  const artifactT = translations.artifact || {};
   const [signing, setSigning] = useState(false);
   const [packageResult, setPackageResult] = useState<PackageResult | null>(null);
   const [signResult, setSignResult] = useState<SignResult | null>(null);
@@ -56,7 +59,7 @@ export function ArtifactActions({ outputDir, onStateChange }: ArtifactActionsPro
   const handlePackage = async () => {
     try {
       const selected = await save({
-        title: "保存打包文件",
+        title: artifactT.savePackageTitle || "保存打包文件",
         defaultPath: defaultZipPath,
         filters: [{ name: "Zip", extensions: ["zip"] }],
       });
@@ -71,9 +74,9 @@ export function ArtifactActions({ outputDir, onStateChange }: ArtifactActionsPro
       });
 
       setPackageResult(res);
-      toast.success("打包完成", { description: res.artifact_path });
+      toast.success(artifactT.packageDone || "打包完成", { description: res.artifact_path });
     } catch (err) {
-      toast.error("打包失败", { description: String(err) });
+      toast.error(artifactT.packageFailed || "打包失败", { description: String(err) });
     } finally {
       setPackaging(false);
     }
@@ -90,14 +93,14 @@ export function ArtifactActions({ outputDir, onStateChange }: ArtifactActionsPro
       setSignResult(res);
 
       if (res.success) {
-        toast.success("签名完成", { description: res.signature_path });
+        toast.success(artifactT.signDone || "签名完成", { description: res.signature_path });
       } else {
-        toast.error("签名失败", {
+        toast.error(artifactT.signFailed || "签名失败", {
           description: res.stderr || `exitCode: ${res.exit_code}`,
         });
       }
     } catch (err) {
-      toast.error("签名失败", { description: String(err) });
+      toast.error(artifactT.signFailed || "签名失败", { description: String(err) });
     } finally {
       setSigning(false);
     }
@@ -113,7 +116,7 @@ export function ArtifactActions({ outputDir, onStateChange }: ArtifactActionsPro
           onClick={handlePackage}
           disabled={!outputDir || packaging}
         >
-          {packaging ? "打包中..." : "打包 ZIP"}
+          {packaging ? artifactT.packaging || "打包中..." : artifactT.packageZip || "打包 ZIP"}
         </Button>
 
         <Button
@@ -123,7 +126,7 @@ export function ArtifactActions({ outputDir, onStateChange }: ArtifactActionsPro
           onClick={handleSign}
           disabled={!packageResult || signing}
         >
-          {signing ? "签名中..." : "签名 (GPG)"}
+          {signing ? artifactT.signing || "签名中..." : artifactT.signGpg || "签名 (GPG)"}
         </Button>
       </div>
 

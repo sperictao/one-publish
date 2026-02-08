@@ -7,25 +7,56 @@ export type Language = "zh" | "en";
 
 // 默认语言
 const DEFAULT_LANGUAGE: Language = "zh";
+const LANGUAGE_STORAGE_KEY = "app-language";
+const LANGUAGE_CHANGED_EVENT = "app-language-changed";
 
 // 导入翻译文件
-const translations = {
+type TranslationTree = Record<string, any>;
+type TranslationModule = { default: TranslationTree };
+
+const translations: Record<Language, () => Promise<TranslationModule>> = {
   zh: () => import("@/i18n/zh.json"),
   en: () => import("@/i18n/en.json"),
 };
 
 // 缓存翻译（JSON 为嵌套结构）
-let translationsCache: Record<Language, any> = {} as any;
+let translationsCache: Partial<Record<Language, TranslationTree>> = {};
+
+function normalizeLanguage(value: string | null): Language {
+  return value === "en" ? "en" : DEFAULT_LANGUAGE;
+}
+
+function getStoredLanguage(): Language {
+  return normalizeLanguage(localStorage.getItem(LANGUAGE_STORAGE_KEY));
+}
+
+function writeStoredLanguage(language: Language): boolean {
+  const current = localStorage.getItem(LANGUAGE_STORAGE_KEY);
+  if (current === language) {
+    return false;
+  }
+
+  localStorage.setItem(LANGUAGE_STORAGE_KEY, language);
+  return true;
+}
+
+function emitLanguageChanged(language: Language) {
+  window.dispatchEvent(
+    new CustomEvent<Language>(LANGUAGE_CHANGED_EVENT, { detail: language })
+  );
+}
 
 // test-only helper
-export function __setTranslationsCacheForTest(cache: Record<Language, any>) {
+export function __setTranslationsCacheForTest(
+  cache: Partial<Record<Language, TranslationTree>>
+) {
   translationsCache = cache;
 }
 
 /**
  * 加载翻译文件
  */
-async function loadTranslations(lang: Language): Promise<any> {
+async function loadTranslations(lang: Language): Promise<TranslationTree> {
   if (translationsCache[lang]) {
     return translationsCache[lang];
   }
@@ -39,7 +70,7 @@ async function loadTranslations(lang: Language): Promise<any> {
  * 获取翻译（带参数替换）
  */
 function t(key: string, params?: Record<string, string | number>): string {
-  const lang = (localStorage.getItem("app-language") || DEFAULT_LANGUAGE) as Language;
+  const lang = getStoredLanguage();
   const translations = translationsCache[lang];
 
   if (!translations) {
@@ -71,27 +102,76 @@ function t(key: string, params?: Record<string, string | number>): string {
  * 国际化 Hook
  */
 export function useI18n() {
-  const [language, setLanguageState] = useState<Language>(() => {
-    return (localStorage.getItem("app-language") || DEFAULT_LANGUAGE) as Language;
+  const [language, setLanguageState] = useState<Language>(getStoredLanguage);
+  const [translations, setTranslations] = useState<TranslationTree>(() => {
+    return translationsCache[getStoredLanguage()] || {};
   });
-  const [translations, setTranslations] = useState<any>({});
 
   // 加载翻译
   useEffect(() => {
-    loadTranslations(language).then(setTranslations);
+    let isMounted = true;
+
+    loadTranslations(language).then((nextTranslations) => {
+      if (isMounted) {
+        setTranslations(nextTranslations);
+      }
+    });
+
+    return () => {
+      isMounted = false;
+    };
   }, [language]);
+
+  // 首次加载或外部同步后，统一修正本地存储中的语言值
+  useEffect(() => {
+    writeStoredLanguage(language);
+  }, [language]);
+
+  useEffect(() => {
+    const handleLanguageChanged = (event: Event) => {
+      const nextLanguage = normalizeLanguage(
+        (event as CustomEvent<Language>).detail ?? getStoredLanguage()
+      );
+
+      setLanguageState(nextLanguage);
+    };
+
+    const handleStorage = (event: StorageEvent) => {
+      if (event.key !== LANGUAGE_STORAGE_KEY) {
+        return;
+      }
+
+      setLanguageState(getStoredLanguage());
+    };
+
+    window.addEventListener(
+      LANGUAGE_CHANGED_EVENT,
+      handleLanguageChanged as EventListener
+    );
+    window.addEventListener("storage", handleStorage);
+
+    return () => {
+      window.removeEventListener(
+        LANGUAGE_CHANGED_EVENT,
+        handleLanguageChanged as EventListener
+      );
+      window.removeEventListener("storage", handleStorage);
+    };
+  }, []);
 
   // 切换语言
   const setLanguage = useCallback(async (lang: Language) => {
-    localStorage.setItem("app-language", lang);
-    setLanguageState(lang);
-    const newTranslations = await loadTranslations(lang);
-    setTranslations(newTranslations);
+    const nextLanguage = normalizeLanguage(lang);
+    const isStorageChanged = writeStoredLanguage(nextLanguage);
 
-    // 重新加载页面以应用新语言
-    if (window.location.pathname !== "/") {
-      window.location.reload();
+    if (isStorageChanged) {
+      emitLanguageChanged(nextLanguage);
     }
+
+    setLanguageState(nextLanguage);
+
+    const newTranslations = await loadTranslations(nextLanguage);
+    setTranslations(newTranslations);
   }, []);
 
   return {

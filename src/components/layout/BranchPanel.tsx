@@ -10,6 +10,7 @@ import {
   Folder,
 } from "lucide-react";
 import type { Repository } from "@/types/repository";
+import { useI18n } from "@/hooks/useI18n";
 
 // Collapse toggle icon
 function CollapseIcon() {
@@ -46,6 +47,8 @@ export function BranchPanel({
   onExpandRepo,
 }: BranchPanelProps) {
   const [searchQuery, setSearchQuery] = useState("");
+  const { translations } = useI18n();
+  const branchT = translations.branchPanel || {};
 
   if (!repository) {
     return (
@@ -68,7 +71,7 @@ export function BranchPanel({
                   e.stopPropagation();
                   onExpandRepo();
                 }}
-                title="展开仓库列表"
+                title={branchT.expandRepoList || "展开仓库列表"}
                 data-tauri-no-drag
               >
                 <Folder className="h-4 w-4" />
@@ -89,7 +92,7 @@ export function BranchPanel({
                   e.stopPropagation();
                   onCollapse();
                 }}
-                title="收起面板"
+                title={branchT.collapsePanel || "收起面板"}
                 data-tauri-no-drag
               >
                 <CollapseIcon />
@@ -102,14 +105,14 @@ export function BranchPanel({
           <div className="relative">
             <Search className="absolute left-2 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
             <Input
-              placeholder="搜索 worktree"
+              placeholder={branchT.searchWorktree || "搜索 worktree"}
               disabled
               className="h-8 pl-8 text-sm"
             />
           </div>
         </div>
         <div className="flex flex-1 items-center justify-center text-sm text-muted-foreground">
-          请选择一个仓库
+          {branchT.selectRepository || "请选择一个仓库"}
         </div>
       </div>
     );
@@ -139,7 +142,7 @@ export function BranchPanel({
                 e.stopPropagation();
                 onExpandRepo();
               }}
-              title="展开仓库列表"
+              title={branchT.expandRepoList || "展开仓库列表"}
               data-tauri-no-drag
             >
               <Folder className="h-4 w-4" />
@@ -153,7 +156,7 @@ export function BranchPanel({
               e.stopPropagation();
               onCreateBranch?.();
             }}
-            title="新建 worktree"
+            title={branchT.newWorktree || "新建 worktree"}
             data-tauri-no-drag
           >
             <Plus className="h-4 w-4" />
@@ -166,7 +169,7 @@ export function BranchPanel({
               e.stopPropagation();
               onRefresh?.();
             }}
-            title="刷新"
+            title={branchT.refresh || "刷新"}
             data-tauri-no-drag
           >
             <RefreshCw className="h-4 w-4" />
@@ -180,7 +183,7 @@ export function BranchPanel({
                 e.stopPropagation();
                 onCollapse();
               }}
-              title="收起面板"
+              title={branchT.collapsePanel || "收起面板"}
               data-tauri-no-drag
             >
               <CollapseIcon />
@@ -194,7 +197,7 @@ export function BranchPanel({
         <div className="relative">
           <Search className="absolute left-2 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input
-            placeholder="搜索 worktree"
+            placeholder={branchT.searchWorktree || "搜索 worktree"}
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             className="h-8 pl-8 text-sm"
@@ -225,7 +228,7 @@ export function BranchPanel({
                 </span>
                 {branch.isMain && (
                   <span className="rounded bg-green-500/20 px-1.5 py-0.5 text-[10px] font-medium text-green-600 dark:text-green-400">
-                    MAIN
+                    {branchT.mainBadge || "MAIN"}
                   </span>
                 )}
               </div>

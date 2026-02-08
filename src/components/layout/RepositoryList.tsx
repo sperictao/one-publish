@@ -9,6 +9,7 @@ import {
   ChevronDown,
 } from "lucide-react";
 import type { Repository } from "@/types/repository";
+import { useI18n } from "@/hooks/useI18n";
 
 // Custom repo icon matching the screenshot
 function RepoIcon({ className }: { className?: string }) {
@@ -65,6 +66,8 @@ export function RepositoryList({
 }: RepositoryListProps) {
   const [searchQuery, setSearchQuery] = useState("");
   const [filterExpanded, setFilterExpanded] = useState(true);
+  const { translations } = useI18n();
+  const repoT = translations.repositoryList || {};
 
   const filteredRepos = repositories.filter(
     (repo) =>
@@ -89,7 +92,7 @@ export function RepositoryList({
                 e.stopPropagation();
                 onCollapse();
               }}
-              title="收起面板"
+              title={repoT.collapsePanel || "收起面板"}
               data-tauri-no-drag
             >
               <CollapseIcon />
@@ -104,7 +107,7 @@ export function RepositoryList({
           className="flex items-center gap-1 text-sm font-medium hover:text-primary"
           onClick={() => setFilterExpanded(!filterExpanded)}
         >
-          <span>全部</span>
+          <span>{repoT.all || "全部"}</span>
           <span className="rounded bg-muted px-1.5 py-0.5 text-xs text-muted-foreground">
             {repositories.length}
           </span>
@@ -123,7 +126,7 @@ export function RepositoryList({
             e.stopPropagation();
             onAddRepo();
           }}
-          title="添加仓库"
+          title={repoT.addRepository || "添加仓库"}
           data-tauri-no-drag
         >
           <Plus className="h-4 w-4" />
@@ -135,7 +138,7 @@ export function RepositoryList({
         <div className="relative">
           <Search className="absolute left-2 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input
-            placeholder="搜索仓库"
+            placeholder={repoT.searchRepository || "搜索仓库"}
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             className="h-8 pl-8 text-sm"
@@ -189,7 +192,7 @@ export function RepositoryList({
           onClick={onAddRepo}
         >
           <Plus className="h-3 w-3" />
-          <span>添加仓库</span>
+          <span>{repoT.addRepository || "添加仓库"}</span>
         </button>
         <Button
           variant="ghost"

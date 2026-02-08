@@ -14,6 +14,7 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Loader2, Terminal } from "lucide-react";
+import { useI18n } from "@/hooks/useI18n";
 
 const COMMAND_EXAMPLES: Record<string, string> = {
   dotnet: "dotnet publish MyProject.csproj -c Release -r win-x64 --self-contained",
@@ -49,13 +50,15 @@ export function CommandImportDialog({
   const [isParsing, setIsParsing] = useState(false);
   const [parsedSpec, setParsedSpec] = useState<any>(null);
   const [error, setError] = useState<string | null>(null);
+  const { translations } = useI18n();
+  const commandT = translations.commandImport || {};
 
   const commandExample = COMMAND_EXAMPLES[providerId] || COMMAND_EXAMPLES.dotnet;
   const providerLabel = getProviderLabel(providerId);
 
   const handleParse = async () => {
     if (!command.trim()) {
-      toast.error("请输入命令");
+      toast.error(commandT.enterCommand || "请输入命令");
       return;
     }
 
@@ -70,11 +73,11 @@ export function CommandImportDialog({
         projectPath,
       });
       setParsedSpec(spec);
-      toast.success("命令解析成功");
+      toast.success(commandT.parseSuccess || "命令解析成功");
     } catch (err) {
       const errorMsg = String(err);
       setError(errorMsg);
-      toast.error("解析失败", { description: errorMsg });
+      toast.error(commandT.parseFailed || "解析失败", { description: errorMsg });
     } finally {
       setIsParsing(false);
     }
@@ -100,26 +103,26 @@ export function CommandImportDialog({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Terminal className="h-5 w-5" />
-            从命令导入
+            {commandT.title || "从命令导入"}
           </DialogTitle>
           <DialogDescription>
-            粘贴你的构建命令，自动提取参数
+            {commandT.description || "粘贴你的构建命令，自动提取参数"}
           </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4 py-4">
           <div className="space-y-2">
-            <Label htmlFor="command-input">构建命令</Label>
+            <Label htmlFor="command-input">{commandT.commandLabel || "构建命令"}</Label>
             <Textarea
               id="command-input"
-              placeholder={`示例: ${commandExample}`}
+              placeholder={`${commandT.examplePrefix || "示例"}: ${commandExample}`}
               value={command}
               onChange={(e) => setCommand(e.target.value)}
               rows={4}
               className="font-mono text-sm"
             />
             <p className="text-xs text-muted-foreground">
-              当前 Provider: {providerLabel}（支持: dotnet, cargo, go, gradle）
+              {(commandT.currentProvider || "当前 Provider: {{provider}}（支持: dotnet, cargo, go, gradle）").replace("{{provider}}", providerLabel)}
             </p>
           </div>
 
@@ -131,23 +134,23 @@ export function CommandImportDialog({
             {isParsing ? (
               <>
                 <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                解析中...
+                {commandT.parsing || "解析中..."}
               </>
             ) : (
-              "解析命令"
+              commandT.parseCommand || "解析命令"
             )}
           </Button>
 
           {error && (
             <div className="p-3 bg-destructive/10 text-destructive rounded-lg text-sm">
-              <p className="font-semibold mb-1">解析失败</p>
+              <p className="font-semibold mb-1">{commandT.parseFailed || "解析失败"}</p>
               <p className="text-xs">{error}</p>
             </div>
           )}
 
           {parsedSpec && (
             <div className="space-y-2">
-              <Label>提取的参数</Label>
+              <Label>{commandT.extractedParameters || "提取的参数"}</Label>
               <div className="p-3 bg-muted rounded-lg">
                 <pre className="text-xs font-mono overflow-auto max-h-40">
                   {JSON.stringify(parsedSpec.parameters, null, 2)}
@@ -159,10 +162,10 @@ export function CommandImportDialog({
 
         <DialogFooter>
           <Button variant="outline" onClick={handleClose}>
-            取消
+            {commandT.cancel || "取消"}
           </Button>
           <Button onClick={handleImport} disabled={!parsedSpec}>
-            导入参数
+            {commandT.importParameters || "导入参数"}
           </Button>
         </DialogFooter>
       </DialogContent>

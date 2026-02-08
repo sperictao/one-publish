@@ -9,6 +9,7 @@ import { Keyboard } from "lucide-react";
 import { useEffect, useState } from "react";
 import { getShortcutsHelp } from "@/lib/store";
 import type { ShortcutHelp } from "@/lib/store";
+import { useI18n } from "@/hooks/useI18n";
 
 interface ShortcutsDialogProps {
   open: boolean;
@@ -20,6 +21,8 @@ export function ShortcutsDialog({
   onOpenChange,
 }: ShortcutsDialogProps) {
   const [shortcuts, setShortcuts] = useState<ShortcutHelp[]>([]);
+  const { translations } = useI18n();
+  const shortcutT = translations.shortcuts || {};
 
   useEffect(() => {
     if (open) {
@@ -35,10 +38,10 @@ export function ShortcutsDialog({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Keyboard className="h-5 w-5" />
-            快捷键
+            {shortcutT.title || "快捷键"}
           </DialogTitle>
           <DialogDescription>
-            可用的全局快捷键
+            {shortcutT.description || "可用的全局快捷键"}
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-2 py-4">
@@ -55,7 +58,7 @@ export function ShortcutsDialog({
           ))}
           {shortcuts.length === 0 && (
             <p className="text-sm text-muted-foreground text-center py-4">
-              暂无快捷键
+              {shortcutT.empty || "暂无快捷键"}
             </p>
           )}
         </div>

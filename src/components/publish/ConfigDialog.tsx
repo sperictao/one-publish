@@ -50,7 +50,9 @@ export function ConfigDialog({
   currentProviderId,
   currentParameters,
 }: ConfigDialogProps) {
-  const { translations } = useI18n();
+  const { translations, language } = useI18n();
+  const profileT = translations.profiles || {};
+  const dateLocale = language === "en" ? "en-US" : "zh-CN";
   const [profiles, setProfiles] = useState<ConfigProfile[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [newProfileName, setNewProfileName] = useState("");
@@ -64,7 +66,7 @@ export function ConfigDialog({
       setProfiles(data);
     } catch (err) {
       console.error("加载配置文件失败:", err);
-      toast.error("加载配置文件失败");
+      toast.error(profileT.loadFailed || "加载配置文件失败");
     } finally {
       setIsLoading(false);
     }
@@ -80,7 +82,7 @@ export function ConfigDialog({
   // 保存当前配置为新配置文件
   const handleSaveProfile = async () => {
     if (!newProfileName.trim()) {
-      toast.error("请输入配置文件名称");
+      toast.error(profileT.enterProfileName || "请输入配置文件名称");
       return;
     }
 
@@ -91,31 +93,31 @@ export function ConfigDialog({
         providerId: currentProviderId,
         parameters: currentParameters,
       });
-      toast.success("配置文件保存成功");
+      toast.success(profileT.saveSuccess || "配置文件保存成功");
       setNewProfileName("");
       await loadProfiles();
     } catch (err: any) {
       console.error("保存配置文件失败:", err);
-      toast.error(err || "保存配置文件失败");
+      toast.error(err || profileT.saveFailed || "保存配置文件失败");
     } finally {
       setIsSaving(false);
     }
   };
 
   // 删除配置文件
-  const handleDeleteProfile = async (name: string) => {
-    if (name.includes("系统默认")) {
-      toast.error("不能删除系统默认配置文件");
+  const handleDeleteProfile = async (profile: ConfigProfile) => {
+    if (profile.isSystemDefault) {
+      toast.error(profileT.cannotDeleteDefault || "不能删除系统默认配置文件");
       return;
     }
 
     try {
-      await deleteProfile(name);
-      toast.success("配置文件删除成功");
+      await deleteProfile(profile.name);
+      toast.success(profileT.deleteSuccess || "配置文件删除成功");
       await loadProfiles();
     } catch (err) {
       console.error("删除配置文件失败:", err);
-      toast.error("删除配置文件失败");
+      toast.error(profileT.deleteFailed || "删除配置文件失败");
     }
   };
 
@@ -143,11 +145,11 @@ export function ConfigDialog({
           profiles,
           filePath: filePath as string,
         });
-        toast.success("配置导出成功");
+        toast.success(profileT.exportSuccess || "配置导出成功");
       }
     } catch (err) {
       console.error("导出配置失败:", err);
-      toast.error("导出配置失败");
+      toast.error(profileT.exportFailed || "导出配置失败");
     }
   };
 
@@ -170,19 +172,23 @@ export function ConfigDialog({
 
           // 显示导入预览
           const confirm = window.confirm(
-            `即将导入 ${config.profiles.length} 个配置文件:\n${config.profiles
-              .map((p) => `- ${p.name}`)
-              .join("\n")}\n\n确认导入？`,
+            (profileT.importConfirm ||
+              "即将导入 {{count}} 个配置文件:\n{{profiles}}\n\n确认导入？")
+              .replace("{{count}}", String(config.profiles.length))
+              .replace(
+                "{{profiles}}",
+                config.profiles.map((p) => `- ${p.name}`).join("\n")
+              )
           );
 
           if (confirm) {
             await applyImportedConfig(config.profiles);
-            toast.success("配置导入成功");
+            toast.success(profileT.importSuccess || "配置导入成功");
             await loadProfiles();
           }
         } catch (err: any) {
           console.error("导入配置失败:", err);
-          toast.error(err || "导入配置失败");
+          toast.error(err || profileT.importFailed || "导入配置失败");
         } finally {
           setIsLoading(false);
         }
@@ -192,15 +198,14 @@ export function ConfigDialog({
     }
   };
 
-  const t = translations.config || {};
-
+  
   return (
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-[600px] max-h-[80vh] flex flex-col">
         <DialogHeader>
-          <DialogTitle>{t.title || "配置管理"}</DialogTitle>
+          <DialogTitle>{profileT.title || "配置管理"}</DialogTitle>
           <DialogDescription>
-            {t.description || "管理、导入、导出发布配置文件"}
+            {profileT.description || "管理、导入、导出发布配置文件"}
           </DialogDescription>
         </DialogHeader>
 
@@ -209,20 +214,20 @@ export function ConfigDialog({
           <div className="flex gap-2">
             <Button variant="outline" onClick={handleExportConfig} className="flex-1">
               <Download className="h-4 w-4 mr-2" />
-              {t.export || "导出配置"}
+              {profileT.export || "导出配置"}
             </Button>
             <Button variant="outline" onClick={handleImportConfig} className="flex-1">
               <Upload className="h-4 w-4 mr-2" />
-              {t.import || "导入配置"}
+              {profileT.import || "导入配置"}
             </Button>
           </div>
 
           {/* 保存当前配置 */}
           <div className="space-y-2">
-            <Label>{t.saveCurrent || "保存当前配置"}</Label>
+            <Label>{profileT.saveCurrent || "保存当前配置"}</Label>
             <div className="flex gap-2">
               <Input
-                placeholder={t.profileNamePlaceholder || "输入配置文件名称"}
+                placeholder={profileT.profileNamePlaceholder || "输入配置文件名称"}
                 value={newProfileName}
                 onChange={(e) => setNewProfileName(e.target.value)}
                 onKeyDown={(e) => {
@@ -243,7 +248,7 @@ export function ConfigDialog({
 
           {/* 配置文件列表 */}
           <div className="space-y-2">
-            <Label>{t.savedProfiles || "已保存的配置"}</Label>
+            <Label>{profileT.savedProfiles || "已保存的配置"}</Label>
             {isLoading && profiles.length === 0 ? (
               <div className="flex items-center justify-center p-8">
                 <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
@@ -251,7 +256,7 @@ export function ConfigDialog({
             ) : profiles.length === 0 ? (
               <div className="text-center p-8 text-muted-foreground border rounded-lg">
                 <AlertCircle className="h-8 w-8 mx-auto mb-2" />
-                <p>{t.noProfiles || "暂无保存的配置文件"}</p>
+                <p>{profileT.noProfiles || "暂无保存的配置文件"}</p>
               </div>
             ) : (
               <div className="space-y-2">
@@ -264,12 +269,12 @@ export function ConfigDialog({
                             <h4 className="font-medium">{profile.name}</h4>
                             {profile.isSystemDefault && (
                               <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-primary text-primary-foreground">
-                                默认
+                                {profileT.defaultTag || "默认"}
                               </span>
                             )}
                           </div>
                           <div className="text-sm text-muted-foreground">
-                            {profile.providerId} · {new Date(profile.createdAt).toLocaleDateString("zh-CN")}
+                            {profile.providerId} · {new Date(profile.createdAt).toLocaleDateString(dateLocale)}
                           </div>
                         </div>
                         <div className="flex gap-2">
@@ -279,13 +284,13 @@ export function ConfigDialog({
                             onClick={() => handleLoadProfile(profile)}
                           >
                             <Play className="h-4 w-4 mr-1" />
-                            {t.load || "加载"}
+                            {profileT.load || "加载"}
                           </Button>
                           {!profile.isSystemDefault && (
                             <Button
                               variant="ghost"
                               size="sm"
-                              onClick={() => handleDeleteProfile(profile.name)}
+                              onClick={() => handleDeleteProfile(profile)}
                             >
                               <Trash2 className="h-4 w-4" />
                             </Button>
