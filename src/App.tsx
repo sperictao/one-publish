@@ -91,6 +91,7 @@ import {
   buildShellHandoffSnippet,
   type HandoffSnippetFormat,
 } from "@/lib/handoffSnippet";
+import { buildFailureIssueDraft } from "@/lib/issueDraft";
 import {
   getRepresentativeRecord,
   groupExecutionFailures,
@@ -1097,6 +1098,30 @@ function App() {
   const copyGroupSignature = useCallback(
     async (group: FailureGroup) => {
       await copyText(group.signature, "失败签名");
+    },
+    [copyText]
+  );
+
+  const copyFailureIssueDraft = useCallback(
+    async (group: FailureGroup) => {
+      const representative = getRepresentativeRecord(group);
+      const draft = buildFailureIssueDraft({
+        providerId: group.providerId,
+        signature: group.signature,
+        frequency: group.count,
+        representativeCommand: representative.commandLine,
+        records: group.records.map((record) => ({
+          id: record.id,
+          finishedAt: record.finishedAt,
+          projectPath: record.projectPath,
+          error: record.error,
+          commandLine: record.commandLine,
+          snapshotPath: record.snapshotPath,
+          outputDir: record.outputDir,
+        })),
+      });
+
+      await copyText(draft, "Issue 草稿");
     },
     [copyText]
   );
@@ -2279,6 +2304,14 @@ function App() {
                       >
                         <Copy className="mr-1 h-3 w-3" />
                         复制代表命令
+                      </Button>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        onClick={() => void copyFailureIssueDraft(selectedFailureGroup)}
+                      >
+                        复制 Issue 草稿
                       </Button>
                       <Button
                         type="button"
