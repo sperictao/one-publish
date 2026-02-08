@@ -76,6 +76,8 @@ pub struct ExecutionRecord {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub snapshot_path: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub failure_signature: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub spec: Option<serde_json::Value>,
     #[serde(default)]
     pub file_count: usize,

@@ -35,6 +35,7 @@ export interface ExecutionRecord {
   error?: string | null;
   commandLine?: string | null;
   snapshotPath?: string | null;
+  failureSignature?: string | null;
   spec?: unknown;
   fileCount: number;
 }

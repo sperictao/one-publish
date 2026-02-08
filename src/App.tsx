@@ -154,6 +154,14 @@ interface ExecutionSnapshotPayload {
   };
 }
 
+interface FailureGroup {
+  key: string;
+  providerId: string;
+  signature: string;
+  count: number;
+  latestRecord: ExecutionRecord;
+}
+
 const SPEC_VERSION = 1;
 
 // Preset configurations
@@ -263,8 +271,74 @@ function formatProviderLabel(provider: ProviderManifest): string {
   return provider.displayName || provider.id;
 }
 
-function App() {
+function extractFailureContext(output: string): string | null {
+  const lines = output
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean);
 
+  const keywordCandidate = lines.find((line) => {
+    const normalized = line.toLowerCase();
+    return (
+      normalized.includes("error") ||
+      normalized.includes("exception") ||
+      normalized.includes("failed") ||
+      normalized.includes("panic")
+    );
+  });
+
+  if (keywordCandidate) {
+    return keywordCandidate;
+  }
+
+  return lines.find((line) => line.startsWith("[stderr]")) || null;
+}
+
+function normalizeFailureSignature(raw: string): string {
+  return raw
+    .trim()
+    .toLowerCase()
+    .replace(/[a-z]:[\\/][^\s"'`]+/gi, "<path>")
+    .replace(/(?:\/[^\/\s"'`]+){2,}/g, "<path>")
+    .replace(/0x[0-9a-f]+/gi, "<hex>")
+    .replace(/\b\d+\b/g, "<num>")
+    .replace(/["'`][^"'`]+["'`]/g, "<value>")
+    .replace(/\s+/g, " ")
+    .slice(0, 160);
+}
+
+function deriveFailureSignature(params: {
+  error?: string | null;
+  output?: string;
+}): string | null {
+  const raw =
+    params.error?.trim() ||
+    (params.output ? extractFailureContext(params.output) : null) ||
+    null;
+
+  if (!raw) {
+    return null;
+  }
+
+  const normalized = normalizeFailureSignature(raw);
+  return normalized || null;
+}
+
+function resolveFailureSignature(record: ExecutionRecord): string | null {
+  if (
+    typeof record.failureSignature === "string" &&
+    record.failureSignature.trim().length > 0
+  ) {
+    return record.failureSignature.trim();
+  }
+
+  return deriveFailureSignature({
+    error: record.error,
+    output: record.commandLine || "",
+  });
+}
+
+function App() {
   // 使用持久化的应用状态
   const {
     isLoading: isStateLoading,
@@ -422,6 +496,52 @@ function App() {
     lastImportFeedback?.providerId === activeProviderId
       ? lastImportFeedback
       : null;
+
+  const failureGroups = useMemo<FailureGroup[]>(() => {
+    const grouped = new Map<string, FailureGroup>();
+
+    for (const record of executionHistory) {
+      if (record.success || record.cancelled) {
+        continue;
+      }
+
+      const signature = resolveFailureSignature(record);
+      if (!signature) {
+        continue;
+      }
+
+      const key = `${record.providerId}::${signature}`;
+      const existing = grouped.get(key);
+      if (!existing) {
+        grouped.set(key, {
+          key,
+          providerId: record.providerId,
+          signature,
+          count: 1,
+          latestRecord: record,
+        });
+        continue;
+      }
+
+      existing.count += 1;
+      if (
+        new Date(record.finishedAt).getTime() >
+        new Date(existing.latestRecord.finishedAt).getTime()
+      ) {
+        existing.latestRecord = record;
+      }
+    }
+
+    return Array.from(grouped.values()).sort((a, b) => {
+      if (b.count !== a.count) {
+        return b.count - a.count;
+      }
+      return (
+        new Date(b.latestRecord.finishedAt).getTime() -
+        new Date(a.latestRecord.finishedAt).getTime()
+      );
+    });
+  }, [executionHistory]);
 
   const environmentStatus = useMemo(() => {
     if (!environmentLastResult) return "unknown" as const;
@@ -687,6 +807,13 @@ function App() {
         params.output
           .split("\n")
           .find((line) => line.startsWith("$ ")) || null;
+      const failureSignature =
+        !params.result.success && !params.result.cancelled
+          ? deriveFailureSignature({
+              error: params.result.error,
+              output: params.output,
+            })
+          : null;
 
       return {
         id: `${Date.now()}-${Math.random().toString(16).slice(2, 8)}`,
@@ -700,6 +827,7 @@ function App() {
         error: params.result.error,
         commandLine,
         snapshotPath: null,
+        failureSignature,
         spec: params.spec,
         fileCount: params.result.file_count,
       };
@@ -1844,6 +1972,68 @@ function App() {
                         {outputLog || publishResult?.error || "无输出"}
                       </pre>
                     </div>
+                  </CardContent>
+                </Card>
+              )}
+
+              {failureGroups.length > 0 && (
+                <Card>
+                  <CardHeader className="pb-3">
+                    <CardTitle className="text-lg">失败诊断聚合</CardTitle>
+                    <CardDescription>
+                      相同失败签名自动归并，优先展示高频问题
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-2">
+                    {failureGroups.slice(0, 6).map((group) => (
+                      <div
+                        key={group.key}
+                        className="rounded-md border px-3 py-2 text-sm"
+                      >
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="font-medium">{group.providerId}</span>
+                          <span className="text-xs text-muted-foreground">
+                            最近 {group.count} 次
+                          </span>
+                        </div>
+                        <div className="mt-1 rounded bg-muted px-2 py-1 font-mono text-xs break-all">
+                          {group.signature}
+                        </div>
+                        <div className="mt-1 text-xs text-muted-foreground">
+                          最新时间: {new Date(group.latestRecord.finishedAt).toLocaleString()}
+                        </div>
+                        {group.latestRecord.error && (
+                          <div className="text-xs text-muted-foreground break-all">
+                            最新错误: {group.latestRecord.error}
+                          </div>
+                        )}
+                        <div className="mt-2 flex gap-2">
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            onClick={() =>
+                              void openSnapshotFromRecord(group.latestRecord)
+                            }
+                            disabled={
+                              !group.latestRecord.snapshotPath &&
+                              !group.latestRecord.outputDir
+                            }
+                          >
+                            打开代表快照
+                          </Button>
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="secondary"
+                            onClick={() => void rerunFromHistory(group.latestRecord)}
+                            disabled={isPublishing}
+                          >
+                            重跑代表记录
+                          </Button>
+                        </div>
+                      </div>
+                    ))}
                   </CardContent>
                 </Card>
               )}
