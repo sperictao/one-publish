@@ -15,6 +15,21 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Loader2, Terminal } from "lucide-react";
 
+const COMMAND_EXAMPLES: Record<string, string> = {
+  dotnet: "dotnet publish MyProject.csproj -c Release -r win-x64 --self-contained",
+  cargo: "cargo build --release --target x86_64-unknown-linux-gnu",
+  go: "go build -o ./bin/app ./cmd/app",
+  java: "./gradlew build --info",
+};
+
+function getProviderLabel(providerId: string) {
+  if (providerId === "dotnet") return ".NET (dotnet)";
+  if (providerId === "cargo") return "Rust (cargo)";
+  if (providerId === "go") return "Go";
+  if (providerId === "java") return "Java (gradle)";
+  return providerId;
+}
+
 interface CommandImportDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -34,6 +49,9 @@ export function CommandImportDialog({
   const [isParsing, setIsParsing] = useState(false);
   const [parsedSpec, setParsedSpec] = useState<any>(null);
   const [error, setError] = useState<string | null>(null);
+
+  const commandExample = COMMAND_EXAMPLES[providerId] || COMMAND_EXAMPLES.dotnet;
+  const providerLabel = getProviderLabel(providerId);
 
   const handleParse = async () => {
     if (!command.trim()) {
@@ -94,14 +112,14 @@ export function CommandImportDialog({
             <Label htmlFor="command-input">构建命令</Label>
             <Textarea
               id="command-input"
-              placeholder={`示例: dotnet publish MyProject.csproj -c Release -r win-x64 --self-contained`}
+              placeholder={`示例: ${commandExample}`}
               value={command}
               onChange={(e) => setCommand(e.target.value)}
               rows={4}
               className="font-mono text-sm"
             />
             <p className="text-xs text-muted-foreground">
-              支持的构建工具: dotnet, cargo, go, gradle
+              当前 Provider: {providerLabel}（支持: dotnet, cargo, go, gradle）
             </p>
           </div>
 

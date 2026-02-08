@@ -9,7 +9,12 @@ import { useAppState } from "@/hooks/useAppState";
 import { useTheme } from "@/hooks/useTheme";
 import { useShortcuts } from "@/hooks/useShortcuts";
 import { useI18n } from "@/hooks/useI18n";
-import type { PublishConfigStore } from "@/lib/store";
+import {
+  getProviderSchema,
+  listProviders,
+  type PublishConfigStore,
+  type ProviderManifest,
+} from "@/lib/store";
 
 // Layout Components
 import { CollapsiblePanel } from "@/components/layout/CollapsiblePanel";
@@ -23,6 +28,7 @@ import { EnvironmentCheckDialog } from "@/components/environment/EnvironmentChec
 // Publish Components
 import { CommandImportDialog } from "@/components/publish/CommandImportDialog";
 import { ConfigDialog } from "@/components/publish/ConfigDialog";
+import { ParameterEditor } from "@/components/publish/ParameterEditor";
 import {
   ArtifactActions,
   type ArtifactActionState,
@@ -70,6 +76,8 @@ import {
   runEnvironmentCheck,
   type EnvironmentCheckResult,
 } from "@/lib/environment";
+import { mapImportedSpecByProvider } from "@/lib/commandImportMapping";
+import type { ParameterSchema, ParameterValue } from "@/types/parameters";
 
 interface ProjectInfo {
   root_path: string;
@@ -87,12 +95,28 @@ interface PublishConfig {
 }
 
 interface PublishResult {
+  provider_id: string;
   success: boolean;
   output: string;
   error: string | null;
   output_dir: string;
   file_count: number;
 }
+
+interface ProviderPublishSpec {
+  version: number;
+  provider_id: string;
+  project_path: string;
+  parameters: Record<string, unknown>;
+}
+
+interface ImportFeedback {
+  providerId: string;
+  mappedKeys: string[];
+  unmappedKeys: string[];
+}
+
+const SPEC_VERSION = 1;
 
 // Preset configurations
 const PRESETS = [
@@ -186,7 +210,23 @@ const PRESETS = [
   },
 ];
 
+const FALLBACK_PROVIDERS: ProviderManifest[] = [
+  { id: "dotnet", displayName: "dotnet", version: "1" },
+  { id: "cargo", displayName: "cargo", version: "1" },
+  { id: "go", displayName: "go", version: "1" },
+  { id: "java", displayName: "java", version: "1" },
+];
+
+function formatProviderLabel(provider: ProviderManifest): string {
+  if (provider.id === "dotnet") return ".NET (dotnet)";
+  if (provider.id === "cargo") return "Rust (cargo)";
+  if (provider.id === "go") return "Go";
+  if (provider.id === "java") return "Java (gradle)";
+  return provider.displayName || provider.id;
+}
+
 function App() {
+
   // 使用持久化的应用状态
   const {
     isLoading: isStateLoading,
@@ -218,22 +258,45 @@ function App() {
   // 国际化
   const { language, setLanguage } = useI18n();
 
+  const [providers, setProviders] = useState<ProviderManifest[]>([]);
+  const [activeProviderId, setActiveProviderId] = useState("dotnet");
+  const [providerSchemas, setProviderSchemas] = useState<
+    Record<string, ParameterSchema>
+  >({});
+  const [providerParameters, setProviderParameters] = useState<
+    Record<string, Record<string, ParameterValue>>
+  >({});
+  const [lastImportFeedback, setLastImportFeedback] =
+    useState<ImportFeedback | null>(null);
+
   // 快捷键处理
   useShortcuts({
     onRefresh: () => {
-      // 刷新项目
-      if (selectedRepo && !isStateLoading) {
+      if (
+        selectedRepo &&
+        !isStateLoading &&
+        activeProviderId === "dotnet"
+      ) {
         scanProject(selectedRepo.path);
       }
     },
     onPublish: () => {
-      // 执行发布
-      if (!isPublishing && projectInfo) {
+      if (isPublishing) {
+        return;
+      }
+
+      if (activeProviderId === "dotnet") {
+        if (projectInfo) {
+          executePublish();
+        }
+        return;
+      }
+
+      if (selectedRepo) {
         executePublish();
       }
     },
     onOpenSettings: () => {
-      // 打开设置
       setSettingsOpen(true);
     },
   });
@@ -301,6 +364,20 @@ function App() {
   // Get selected repository
   const selectedRepo = repositories.find((r) => r.id === selectedRepoId) || null;
 
+  const availableProviders =
+    providers.length > 0 ? providers : FALLBACK_PROVIDERS;
+  const activeProvider =
+    availableProviders.find((p) => p.id === activeProviderId) ||
+    availableProviders[0] ||
+    FALLBACK_PROVIDERS[0];
+  const activeProviderLabel = formatProviderLabel(activeProvider);
+  const activeProviderSchema = providerSchemas[activeProviderId];
+  const activeProviderParameters = providerParameters[activeProviderId] || {};
+  const activeImportFeedback =
+    lastImportFeedback?.providerId === activeProviderId
+      ? lastImportFeedback
+      : null;
+
   const environmentStatus = useMemo(() => {
     if (!environmentLastResult) return "unknown" as const;
     if (environmentLastResult.issues.some((i) => i.severity === "critical")) {
@@ -312,21 +389,78 @@ function App() {
     return "ready" as const;
   }, [environmentLastResult]);
 
+  const commandImportProjectPath = useMemo(() => {
+    if (projectInfo?.project_file) return projectInfo.project_file;
+    return selectedRepo?.path || "";
+  }, [projectInfo, selectedRepo]);
+
   const openEnvironmentDialog = useCallback(
-    (initialResult: EnvironmentCheckResult | null = null) => {
-      setEnvironmentDefaultProviderIds(["dotnet"]);
+    (
+      initialResult: EnvironmentCheckResult | null = null,
+      providerIds: string[] = [activeProviderId]
+    ) => {
+      setEnvironmentDefaultProviderIds(providerIds);
       setEnvironmentInitialResult(initialResult);
       setEnvironmentDialogOpen(true);
     },
-    []
+    [activeProviderId]
   );
 
-  // Load project info when repo changes
   useEffect(() => {
-    if (selectedRepo && !isStateLoading) {
+    let mounted = true;
+
+    listProviders()
+      .then((items) => {
+        if (!mounted) return;
+        if (items.length > 0) {
+          setProviders(items);
+          if (!items.some((item) => item.id === activeProviderId)) {
+            setActiveProviderId(items[0].id);
+          }
+        }
+      })
+      .catch((err) => {
+        console.error("加载 Provider 列表失败:", err);
+      });
+
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (providerSchemas[activeProviderId]) return;
+
+    let mounted = true;
+
+    getProviderSchema(activeProviderId)
+      .then((schema) => {
+        if (!mounted) return;
+        setProviderSchemas((prev) => ({
+          ...prev,
+          [activeProviderId]: schema,
+        }));
+      })
+      .catch((err) => {
+        console.error("加载 Provider Schema 失败:", err);
+      });
+
+    return () => {
+      mounted = false;
+    };
+  }, [activeProviderId, providerSchemas]);
+
+  // Load project info when repo or provider changes
+  useEffect(() => {
+    if (!selectedRepo || isStateLoading) return;
+
+    if (activeProviderId === "dotnet") {
       scanProject(selectedRepo.path);
+      return;
     }
-  }, [selectedRepoId, isStateLoading]);
+
+    setProjectInfo(null);
+  }, [selectedRepoId, isStateLoading, activeProviderId]);
 
   // Setup window drag functionality for Tauri 2.x
   useEffect(() => {
@@ -449,14 +583,56 @@ function App() {
 
   // Execute publish
   const executePublish = async () => {
-    if (!projectInfo) {
-      toast.error("请先选择项目目录");
+    if (!selectedRepo) {
+      toast.error("请先选择仓库");
       return;
     }
 
-    // 发布前环境检查：仅检查当前发布 Provider（当前为 dotnet）
+    let spec: ProviderPublishSpec;
+
+    if (activeProviderId === "dotnet") {
+      if (!projectInfo) {
+        toast.error("请先选择 .NET 项目");
+        return;
+      }
+
+      const config = getCurrentConfig();
+      const parameters: Record<string, unknown> = {};
+
+      if (config.use_profile && config.profile_name) {
+        parameters.properties = {
+          PublishProfile: config.profile_name,
+        };
+      } else {
+        parameters.configuration = config.configuration;
+        if (config.runtime) {
+          parameters.runtime = config.runtime;
+        }
+        if (config.self_contained) {
+          parameters.self_contained = true;
+        }
+        if (config.output_dir) {
+          parameters.output = config.output_dir;
+        }
+      }
+
+      spec = {
+        version: SPEC_VERSION,
+        provider_id: "dotnet",
+        project_path: projectInfo.project_file,
+        parameters,
+      };
+    } else {
+      spec = {
+        version: SPEC_VERSION,
+        provider_id: activeProviderId,
+        project_path: selectedRepo.path,
+        parameters: activeProviderParameters,
+      };
+    }
+
     try {
-      const env = await runEnvironmentCheck(["dotnet"]);
+      const env = await runEnvironmentCheck([activeProviderId]);
       setEnvironmentLastResult(env);
 
       const critical = env.issues.find((i) => i.severity === "critical");
@@ -464,7 +640,7 @@ function App() {
         toast.error("环境未就绪，已阻止发布", {
           description: critical.description,
         });
-        openEnvironmentDialog(env);
+        openEnvironmentDialog(env, [activeProviderId]);
         return;
       }
 
@@ -484,12 +660,9 @@ function App() {
     setReleaseChecklistOpen(false);
     setArtifactActionState({ packageResult: null, signResult: null });
 
-    const config = getCurrentConfig();
-
     try {
-      const result = await invoke<PublishResult>("execute_publish", {
-        projectPath: projectInfo.project_file,
-        config,
+      const result = await invoke<PublishResult>("execute_provider_publish", {
+        spec,
       });
 
       setPublishResult(result);
@@ -497,7 +670,9 @@ function App() {
 
       if (result.success) {
         toast.success("发布成功!", {
-          description: `输出目录: ${result.output_dir}`,
+          description: result.output_dir
+            ? `输出目录: ${result.output_dir}`
+            : "命令执行成功",
         });
       } else {
         toast.error("发布失败", {
@@ -507,6 +682,7 @@ function App() {
     } catch (err) {
       const errorMsg = String(err);
       setPublishResult({
+        provider_id: activeProviderId,
         success: false,
         output: "",
         error: errorMsg,
@@ -528,62 +704,91 @@ function App() {
     setCustomConfig({ ...customConfig, ...updates });
   };
 
+  const handleProviderParametersChange = useCallback(
+    (parameters: Record<string, ParameterValue>) => {
+      setProviderParameters((prev) => ({
+        ...prev,
+        [activeProviderId]: parameters,
+      }));
+    },
+    [activeProviderId]
+  );
+
   // Handle command import
   const handleCommandImport = (spec: any) => {
-    // Map parsed parameters to custom config
-    const params = spec.parameters || {};
+    const importedProviderId =
+      spec?.provider_id || spec?.providerId || activeProviderId;
+    const schema = providerSchemas[importedProviderId];
+    const mapping = mapImportedSpecByProvider(spec, activeProviderId, {
+      supportedKeys: schema ? Object.keys(schema.parameters) : undefined,
+    });
 
-    const updates: Partial<PublishConfigStore> = {};
+    setLastImportFeedback({
+      providerId: mapping.providerId,
+      mappedKeys: mapping.mappedKeys,
+      unmappedKeys: mapping.unmappedKeys,
+    });
 
-    // Map common parameter names
-    if (params.configuration) {
-      updates.configuration = params.configuration;
-    }
-    if (params.runtime) {
-      updates.runtime = params.runtime;
-    }
-    if (params.output) {
-      updates.outputDir = params.output;
-    }
-    if (typeof params.self_contained === "boolean") {
-      updates.selfContained = params.self_contained;
+    if (mapping.providerId === "dotnet") {
+      if (Object.keys(mapping.dotnetUpdates).length > 0) {
+        handleCustomConfigUpdate(mapping.dotnetUpdates);
+        setIsCustomMode(true);
+      }
+    } else {
+      setProviderParameters((prev) => ({
+        ...prev,
+        [mapping.providerId]: mapping.providerParameters,
+      }));
     }
 
-    // Apply updates
-    handleCustomConfigUpdate(updates);
+    if (mapping.mappedKeys.length === 0 && mapping.unmappedKeys.length > 0) {
+      toast.error("未找到可映射参数", {
+        description: `未映射字段: ${mapping.unmappedKeys.join(", ")}`,
+      });
+      return;
+    }
 
-    // Switch to custom mode if not already
-    setIsCustomMode(true);
+    if (mapping.unmappedKeys.length > 0) {
+      toast.message("参数已部分导入", {
+        description: `已映射 ${mapping.mappedKeys.length} 个字段，未映射 ${mapping.unmappedKeys.length} 个字段`,
+      });
+      return;
+    }
+
     toast.success("参数已导入", {
-      description: `已从命令导入 ${Object.keys(updates).length} 个参数`,
+      description: `已映射 ${mapping.mappedKeys.length} 个字段`,
     });
   };
 
   const handleLoadProfile = (profile: any) => {
-    // Convert profile parameters to custom config
-    const params = profile.parameters || {};
+    const profileProviderId =
+      profile.providerId || profile.provider_id || activeProviderId;
+    const schema = providerSchemas[profileProviderId];
+    const mapping = mapImportedSpecByProvider(
+      {
+        providerId: profileProviderId,
+        parameters: profile.parameters || {},
+      },
+      profileProviderId,
+      {
+        supportedKeys: schema ? Object.keys(schema.parameters) : undefined,
+      }
+    );
 
-    const updates: Partial<PublishConfigStore> = {};
-
-    // Map common parameter names
-    if (params.configuration) {
-      updates.configuration = params.configuration;
-    }
-    if (params.runtime) {
-      updates.runtime = params.runtime;
-    }
-    if (params.output) {
-      updates.outputDir = params.output;
-    }
-    if (typeof params.self_contained === "boolean") {
-      updates.selfContained = params.self_contained;
+    if (profileProviderId !== activeProviderId) {
+      setActiveProviderId(profileProviderId);
     }
 
-    // Apply updates
-    handleCustomConfigUpdate(updates);
+    if (mapping.providerId === "dotnet") {
+      handleCustomConfigUpdate(mapping.dotnetUpdates);
+      setIsCustomMode(true);
+    } else {
+      setProviderParameters((prev) => ({
+        ...prev,
+        [mapping.providerId]: mapping.providerParameters,
+      }));
+    }
 
-    // Switch to custom mode if not already
-    setIsCustomMode(true);
     toast.success("配置文件已加载", {
       description: `已加载配置文件: ${profile.name}`,
     });
@@ -710,14 +915,36 @@ function App() {
                         {selectedRepo ? selectedRepo.name : "未选择仓库"}
                       </CardDescription>
                     </div>
-                    <div className="flex gap-2">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Select
+                        value={activeProviderId}
+                        onValueChange={setActiveProviderId}
+                      >
+                        <SelectTrigger className="w-[190px] h-9">
+                          <SelectValue placeholder="选择 Provider" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {availableProviders.map((provider) => (
+                            <SelectItem key={provider.id} value={provider.id}>
+                              {formatProviderLabel(provider)}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+
                       <Button
                         variant="outline"
                         size="sm"
                         onClick={() =>
-                          selectedRepo && scanProject(selectedRepo.path)
+                          selectedRepo &&
+                          activeProviderId === "dotnet" &&
+                          scanProject(selectedRepo.path)
                         }
-                        disabled={isScanning || !selectedRepo}
+                        disabled={
+                          isScanning ||
+                          !selectedRepo ||
+                          activeProviderId !== "dotnet"
+                        }
                       >
                         {isScanning ? (
                           <Loader2 className="h-4 w-4 animate-spin" />
@@ -767,6 +994,19 @@ function App() {
                         </div>
                       )}
                     </div>
+                  ) : activeProviderId !== "dotnet" && selectedRepo ? (
+                    <div className="space-y-2 text-sm">
+                      <div className="flex items-center gap-2">
+                        <CheckCircle2 className="h-4 w-4 text-green-500" />
+                        <span className="text-muted-foreground">仓库路径:</span>
+                        <code className="bg-muted px-2 py-0.5 rounded text-xs">
+                          {selectedRepo.path}
+                        </code>
+                      </div>
+                      <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-amber-700 text-xs">
+                        当前 Provider: {activeProviderLabel}。可进行环境检查、命令解析、参数编辑与通用执行。
+                      </div>
+                    </div>
                   ) : (
                     <div className="flex items-center gap-2 text-muted-foreground">
                       <XCircle className="h-4 w-4 text-destructive" />
@@ -781,7 +1021,7 @@ function App() {
               </Card>
 
               {/* Publish Configuration Card */}
-              {projectInfo && (
+              {selectedRepo && activeProviderId === "dotnet" && projectInfo && (
                 <Card>
                   <CardHeader className="pb-3">
                     <div className="flex items-center justify-between">
@@ -798,7 +1038,7 @@ function App() {
                         variant="outline"
                         size="sm"
                         onClick={() => setCommandImportOpen(true)}
-                        disabled={!projectInfo}
+                        disabled={!selectedRepo}
                       >
                         <Import className="h-4 w-4 mr-1" />
                         从命令导入
@@ -993,6 +1233,110 @@ function App() {
                 </Card>
               )}
 
+              {selectedRepo && activeProviderId !== "dotnet" && (
+                <Card>
+                  <CardHeader className="pb-3">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <CardTitle className="text-lg flex items-center gap-2">
+                          <Settings className="h-5 w-5" />
+                          发布配置
+                        </CardTitle>
+                        <CardDescription>
+                          {activeProviderLabel} Provider 已就绪（支持参数映射与通用执行）
+                        </CardDescription>
+                      </div>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setCommandImportOpen(true)}
+                      >
+                        <Import className="h-4 w-4 mr-1" />
+                        从命令导入
+                      </Button>
+                    </div>
+                  </CardHeader>
+                  <CardContent className="space-y-3">
+                    <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-amber-700 text-sm">
+                      当前已支持 {activeProviderLabel} 的命令导入映射、参数编辑与通用执行。
+                    </div>
+                    {activeProviderSchema ? (
+                      <ParameterEditor
+                        schema={activeProviderSchema}
+                        parameters={activeProviderParameters}
+                        onChange={handleProviderParametersChange}
+                      />
+                    ) : (
+                      <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                        正在加载 Provider 参数定义...
+                      </div>
+                    )}
+                    <div className="rounded-md bg-muted p-3">
+                      <div className="text-xs text-muted-foreground mb-2">
+                        当前参数快照（可保存为配置文件）:
+                      </div>
+                      <pre className="text-xs font-mono overflow-auto max-h-40">
+                        {JSON.stringify(activeProviderParameters, null, 2)}
+                      </pre>
+                    </div>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => openEnvironmentDialog(null, [activeProviderId])}
+                    >
+                      打开环境检查
+                    </Button>
+                    <Button
+                      className="w-full"
+                      size="lg"
+                      onClick={executePublish}
+                      disabled={isPublishing}
+                    >
+                      {isPublishing ? (
+                        <>
+                          <Loader2 className="h-5 w-5 mr-2 animate-spin" />
+                          发布中...
+                        </>
+                      ) : (
+                        <>
+                          <Play className="h-5 w-5 mr-2" />
+                          执行发布
+                        </>
+                      )}
+                    </Button>
+                  </CardContent>
+                </Card>
+              )}
+
+              {selectedRepo && activeImportFeedback && (
+                <Card>
+                  <CardHeader className="pb-3">
+                    <CardTitle className="text-lg flex items-center gap-2">
+                      <Import className="h-5 w-5" />
+                      命令导入映射结果
+                    </CardTitle>
+                    <CardDescription>
+                      Provider: {formatProviderLabel(activeProvider)}
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-2 text-sm">
+                    <div className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-emerald-700">
+                      已映射字段 ({activeImportFeedback.mappedKeys.length}):{" "}
+                      {activeImportFeedback.mappedKeys.length > 0
+                        ? activeImportFeedback.mappedKeys.join(", ")
+                        : "无"}
+                    </div>
+                    <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-amber-700">
+                      未映射字段 ({activeImportFeedback.unmappedKeys.length}):{" "}
+                      {activeImportFeedback.unmappedKeys.length > 0
+                        ? activeImportFeedback.unmappedKeys.join(", ")
+                        : "无"}
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+
               {/* Output Log Card */}
               {(outputLog || publishResult) && (
                 <Card>
@@ -1012,26 +1356,30 @@ function App() {
                         </span>
                       )}
                     </CardTitle>
-                    {publishResult?.success && (
+                    {publishResult?.success && publishResult.output_dir && (
                       <>
                         <CardDescription>
                           输出目录: {publishResult.output_dir} (
                           {publishResult.file_count} 个文件)
                         </CardDescription>
-                        <ArtifactActions
-                          outputDir={publishResult.output_dir}
-                          onStateChange={setArtifactActionState}
-                        />
-                        <Button
-                          type="button"
-                          variant="secondary"
-                          size="sm"
-                          className="w-fit"
-                          onClick={() => setReleaseChecklistOpen(true)}
-                        >
-                          <ListChecks className="h-4 w-4 mr-1" />
-                          打开签名发布清单
-                        </Button>
+                        {publishResult.provider_id === "dotnet" && (
+                          <>
+                            <ArtifactActions
+                              outputDir={publishResult.output_dir}
+                              onStateChange={setArtifactActionState}
+                            />
+                            <Button
+                              type="button"
+                              variant="secondary"
+                              size="sm"
+                              className="w-fit"
+                              onClick={() => setReleaseChecklistOpen(true)}
+                            >
+                              <ListChecks className="h-4 w-4 mr-1" />
+                              打开签名发布清单
+                            </Button>
+                          </>
+                        )}
                       </>
                     )}
                   </CardHeader>
@@ -1083,7 +1431,7 @@ function App() {
         onOpenConfig={() => setConfigDialogOpen(true)}
         environmentStatus={environmentStatus}
         environmentCheckedAt={environmentLastResult?.checked_at}
-        onOpenEnvironment={() => openEnvironmentDialog(null)}
+        onOpenEnvironment={() => openEnvironmentDialog(null, [activeProviderId])}
       />
 
       <ReleaseChecklistDialog
@@ -1093,17 +1441,17 @@ function App() {
         environmentResult={environmentLastResult}
         packageResult={artifactActionState.packageResult}
         signResult={artifactActionState.signResult}
-        onOpenEnvironment={() => openEnvironmentDialog(environmentLastResult)}
+        onOpenEnvironment={() => openEnvironmentDialog(environmentLastResult, [activeProviderId])}
         onOpenSettings={handleOpenSettings}
       />
 
       {/* Command Import Dialog */}
-      {projectInfo && (
+      {selectedRepo && commandImportProjectPath && (
         <CommandImportDialog
           open={commandImportOpen}
           onOpenChange={setCommandImportOpen}
-          providerId="dotnet"
-          projectPath={projectInfo.project_file}
+          providerId={activeProviderId}
+          projectPath={commandImportProjectPath}
           onImport={handleCommandImport}
         />
       )}
@@ -1113,13 +1461,17 @@ function App() {
         open={configDialogOpen}
         onOpenChange={setConfigDialogOpen}
         onLoadProfile={handleLoadProfile}
-        currentProviderId="dotnet"
-        currentParameters={{
-          configuration: customConfig.configuration,
-          runtime: customConfig.runtime,
-          output: customConfig.outputDir,
-          self_contained: customConfig.selfContained,
-        }}
+        currentProviderId={activeProviderId}
+        currentParameters={
+          activeProviderId === "dotnet"
+            ? {
+                configuration: customConfig.configuration,
+                runtime: customConfig.runtime,
+                output: customConfig.outputDir,
+                self_contained: customConfig.selfContained,
+              }
+            : activeProviderParameters
+        }
       />
     </div>
   );

@@ -1,10 +1,10 @@
 // Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
 
+pub mod artifact;
 pub mod command_parser;
 pub mod commands;
 pub mod compiler;
 pub mod config_export;
-pub mod artifact;
 pub mod environment;
 pub mod errors;
 pub mod parameter;
@@ -94,6 +94,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             commands::scan_project,
             commands::execute_publish,
+            commands::execute_provider_publish,
             commands::check_update,
             commands::install_update,
             commands::get_updater_help_paths,
@@ -101,6 +102,7 @@ pub fn run() {
             commands::open_updater_help,
             commands::get_current_version,
             commands::get_shortcuts_help,
+            commands::list_providers,
             commands::get_provider_schema,
             commands::import_from_command,
             commands::export_config,

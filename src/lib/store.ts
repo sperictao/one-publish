@@ -2,6 +2,7 @@
 
 import { invoke } from "@tauri-apps/api/core";
 import type { Repository } from "@/types/repository";
+import type { ParameterSchema } from "@/types/parameters";
 
 // 发布配置存储类型
 export interface PublishConfigStore {
@@ -136,6 +137,38 @@ export async function updatePreferences(params: {
     ...params,
     default_output_dir: params.defaultOutputDir,
   });
+}
+
+// ==================== Provider 相关 ====================
+
+export interface ProviderManifest {
+  id: string;
+  displayName: string;
+  version: string;
+}
+
+/**
+ * 获取 Provider 列表
+ */
+export async function listProviders(): Promise<ProviderManifest[]> {
+  const manifests = await invoke<
+    Array<{ id: string; display_name: string; version: string }>
+  >("list_providers");
+
+  return manifests.map((item) => ({
+    id: item.id,
+    displayName: item.display_name,
+    version: item.version,
+  }));
+}
+
+/**
+ * 获取指定 Provider 的参数 Schema
+ */
+export async function getProviderSchema(
+  providerId: string
+): Promise<ParameterSchema> {
+  return await invoke<ParameterSchema>("get_provider_schema", { providerId });
 }
 
 // ==================== 版本更新相关 ====================

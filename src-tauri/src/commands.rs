@@ -1,17 +1,19 @@
 // Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
 
-use crate::command_parser::CommandParser;
 use crate::artifact::{PackageFormat, PackageResult, SignMethod, SignResult};
+use crate::command_parser::CommandParser;
 use crate::config_export::{ConfigExport, ConfigProfile};
 use crate::environment::{check_environment, FixAction, FixResult, FixType};
 use crate::provider::registry::ProviderRegistry;
+use crate::provider::ProviderManifest;
+use crate::spec::{PublishSpec, SpecValue, SPEC_VERSION};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
 use tauri::AppHandle;
 use tauri_plugin_updater::{Error as UpdaterError, UpdaterExt};
-use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::process::Command;
 use tokio::time::{timeout, Duration};
 
@@ -34,6 +36,7 @@ pub struct PublishConfig {
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct PublishResult {
+    pub provider_id: String,
     pub success: bool,
     pub output: String,
     pub error: Option<String>,
@@ -146,10 +149,14 @@ fn scan_publish_profiles(project_file: &Path) -> Vec<String> {
 }
 
 #[tauri::command]
-pub async fn scan_project(start_path: Option<String>) -> Result<ProjectInfo, crate::errors::AppError> {
+pub async fn scan_project(
+    start_path: Option<String>,
+) -> Result<ProjectInfo, crate::errors::AppError> {
     let search_path = match start_path {
         Some(p) => PathBuf::from(p),
-        None => std::env::current_dir().map_err(|e| crate::errors::AppError::unknown(e.to_string()))?,
+        None => {
+            std::env::current_dir().map_err(|e| crate::errors::AppError::unknown(e.to_string()))?
+        }
     };
 
     let root_path = find_project_root(&search_path)
@@ -181,87 +188,256 @@ pub async fn execute_publish(
         )));
     }
 
-    let plan = crate::publish::build_dotnet_publish_plan(&project_path, &config);
+    let spec = build_dotnet_spec_from_config(project_path, config);
+    execute_publish_spec(spec).await
+}
 
-    log::info!("Executing: {} {}", plan.program, plan.args.join(" "));
-
-    // Execute dotnet publish
-    let mut child = Command::new(&plan.program)
-        .args(&plan.args)
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .spawn()
-        .map_err(|e| crate::errors::AppError::unknown(format!(
-            "failed to spawn {}: {}",
-            plan.program, e
-        )))?;
-
-    let stdout = child.stdout.take().unwrap();
-    let stderr = child.stderr.take().unwrap();
-
-    let mut output_lines = Vec::new();
-
-    // Read stdout
-    let stdout_reader = BufReader::new(stdout);
-    let mut stdout_lines = stdout_reader.lines();
-    while let Ok(Some(line)) = stdout_lines.next_line().await {
-        output_lines.push(line);
+#[tauri::command]
+pub async fn execute_provider_publish(
+    spec: PublishSpec,
+) -> Result<PublishResult, crate::errors::AppError> {
+    let project_path = PathBuf::from(&spec.project_path);
+    if !project_path.exists() {
+        return Err(crate::errors::AppError::unknown(format!(
+            "project path does not exist: {}",
+            spec.project_path
+        )));
     }
 
-    // Read stderr
-    let stderr_reader = BufReader::new(stderr);
-    let mut stderr_lines = stderr_reader.lines();
-    while let Ok(Some(line)) = stderr_lines.next_line().await {
+    execute_publish_spec(spec).await
+}
+
+fn build_dotnet_spec_from_config(project_path: String, config: PublishConfig) -> PublishSpec {
+    let mut parameters = BTreeMap::<String, SpecValue>::new();
+
+    if config.use_profile && !config.profile_name.is_empty() {
+        let mut properties = BTreeMap::<String, SpecValue>::new();
+        properties.insert(
+            "PublishProfile".to_string(),
+            SpecValue::String(config.profile_name),
+        );
+        parameters.insert("properties".to_string(), SpecValue::Map(properties));
+    } else {
+        parameters.insert(
+            "configuration".to_string(),
+            SpecValue::String(config.configuration),
+        );
+
+        if !config.runtime.is_empty() {
+            parameters.insert("runtime".to_string(), SpecValue::String(config.runtime));
+        }
+
+        if config.self_contained {
+            parameters.insert("self_contained".to_string(), SpecValue::Bool(true));
+        }
+
+        if !config.output_dir.is_empty() {
+            parameters.insert("output".to_string(), SpecValue::String(config.output_dir));
+        }
+    }
+
+    PublishSpec {
+        version: SPEC_VERSION,
+        provider_id: "dotnet".to_string(),
+        project_path,
+        parameters,
+    }
+}
+
+async fn execute_publish_spec(spec: PublishSpec) -> Result<PublishResult, crate::errors::AppError> {
+    let plan = crate::compiler::compile(&spec).map_err(crate::errors::AppError::from)?;
+    let registry = ProviderRegistry::new();
+    let provider = registry
+        .get(&spec.provider_id)
+        .map_err(crate::errors::AppError::from)?;
+    let schema = provider
+        .get_schema()
+        .map_err(|e| crate::errors::AppError::from(crate::compiler::CompileError::from(e)))?;
+    let renderer = crate::parameter::ParameterRenderer::new(schema);
+    let rendered = renderer
+        .render(&spec.parameters)
+        .map_err(|e| crate::errors::AppError::from(crate::compiler::CompileError::from(e)))?;
+
+    let (program, mut args) = resolve_plan_command(&plan)?;
+    if spec.provider_id == "dotnet" {
+        args.push(spec.project_path.clone());
+    }
+    args.extend(rendered.args);
+
+    let working_dir = resolve_working_dir(&spec);
+    log::info!(
+        "Executing provider plan: provider={} program={} args={}",
+        spec.provider_id,
+        program,
+        args.join(" ")
+    );
+
+    let mut command = Command::new(&program);
+    command
+        .args(&args)
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped());
+
+    if let Some(dir) = &working_dir {
+        command.current_dir(dir);
+    }
+
+    let output = command.output().await.map_err(|e| {
+        crate::errors::AppError::unknown(format!("failed to spawn {}: {}", program, e))
+    })?;
+
+    let command_line = if args.is_empty() {
+        format!("$ {}", program)
+    } else {
+        format!("$ {} {}", program, args.join(" "))
+    };
+
+    let mut output_lines = vec![command_line];
+    let stdout_text = String::from_utf8_lossy(&output.stdout).to_string();
+    if !stdout_text.trim().is_empty() {
+        output_lines.push(stdout_text.trim_end().to_string());
+    }
+
+    let stderr_text = String::from_utf8_lossy(&output.stderr).to_string();
+    for line in stderr_text.lines() {
         output_lines.push(format!("[stderr] {}", line));
     }
 
-    let status = child
-        .wait()
-        .await
-        .map_err(|e| crate::errors::AppError::unknown(e.to_string()))?;
-
-    let output = output_lines.join("\n");
-
-    // Determine output directory
-    let output_dir = if !config.output_dir.is_empty() {
-        config.output_dir.clone()
-    } else if let Some(parent) = project_file.parent() {
-        parent
-            .join("bin")
-            .join(&config.configuration)
-            .join("publish")
-            .to_string_lossy()
-            .to_string()
-    } else {
-        String::new()
-    };
-
-    // Count files in output directory
-    let file_count = if !output_dir.is_empty() && Path::new(&output_dir).exists() {
-        std::fs::read_dir(&output_dir)
-            .map(|entries| entries.count())
-            .unwrap_or(0)
+    let output_text = output_lines.join("\n");
+    let output_dir = infer_output_dir(&spec);
+    let file_count = if output.status.success() {
+        count_output_files(&output_dir)
     } else {
         0
     };
 
-    if status.success() {
+    if output.status.success() {
         Ok(PublishResult {
+            provider_id: spec.provider_id,
             success: true,
-            output,
+            output: output_text,
             error: None,
             output_dir,
             file_count,
         })
     } else {
         Ok(PublishResult {
+            provider_id: spec.provider_id,
             success: false,
-            output,
-            error: Some(format!("发布失败，退出代码: {:?}", status.code())),
+            output: output_text,
+            error: Some(format!("发布失败，退出代码: {:?}", output.status.code())),
             output_dir,
-            file_count: 0,
+            file_count,
         })
     }
+}
+
+fn resolve_plan_command(
+    plan: &crate::plan::ExecutionPlan,
+) -> Result<(String, Vec<String>), crate::errors::AppError> {
+    let first_step = plan
+        .steps
+        .first()
+        .ok_or_else(|| crate::errors::AppError::unknown("execution plan has no step"))?;
+
+    let mut parts = first_step.title.split_whitespace();
+    let program = parts
+        .next()
+        .ok_or_else(|| crate::errors::AppError::unknown("execution step title is empty"))?
+        .to_string();
+    let args = parts.map(|item| item.to_string()).collect();
+
+    Ok((program, args))
+}
+
+fn resolve_working_dir(spec: &PublishSpec) -> Option<PathBuf> {
+    let path = PathBuf::from(&spec.project_path);
+
+    match spec.provider_id.as_str() {
+        "dotnet" => path.parent().map(|p| p.to_path_buf()),
+        _ => {
+            if path.is_dir() {
+                Some(path)
+            } else {
+                path.parent().map(|p| p.to_path_buf())
+            }
+        }
+    }
+}
+
+fn infer_output_dir(spec: &PublishSpec) -> String {
+    match spec.provider_id.as_str() {
+        "dotnet" => {
+            if let Some(output) = read_parameter_string(&spec.parameters, "output") {
+                return output;
+            }
+
+            if let Some(parent) = Path::new(&spec.project_path).parent() {
+                let configuration = read_parameter_string(&spec.parameters, "configuration")
+                    .unwrap_or_else(|| "Release".to_string());
+                return parent
+                    .join("bin")
+                    .join(configuration)
+                    .join("publish")
+                    .to_string_lossy()
+                    .to_string();
+            }
+
+            String::new()
+        }
+        "cargo" => {
+            if let Some(target_dir) = read_parameter_string(&spec.parameters, "target_dir") {
+                return target_dir;
+            }
+
+            if let Some(project_dir) = resolve_working_dir(spec) {
+                let profile = if read_parameter_bool(&spec.parameters, "release") {
+                    "release"
+                } else {
+                    "debug"
+                };
+                return project_dir
+                    .join("target")
+                    .join(profile)
+                    .to_string_lossy()
+                    .to_string();
+            }
+
+            String::new()
+        }
+        "go" => read_parameter_string(&spec.parameters, "output").unwrap_or_default(),
+        "java" => resolve_working_dir(spec)
+            .map(|dir| dir.join("build").join("libs").to_string_lossy().to_string())
+            .unwrap_or_default(),
+        _ => String::new(),
+    }
+}
+
+fn read_parameter_string(parameters: &BTreeMap<String, SpecValue>, key: &str) -> Option<String> {
+    match parameters.get(key) {
+        Some(SpecValue::String(value)) if !value.is_empty() => Some(value.clone()),
+        Some(SpecValue::Number(value)) => Some(value.to_string()),
+        _ => None,
+    }
+}
+
+fn read_parameter_bool(parameters: &BTreeMap<String, SpecValue>, key: &str) -> bool {
+    matches!(parameters.get(key), Some(SpecValue::Bool(true)))
+}
+
+fn count_output_files(output_dir: &str) -> usize {
+    if output_dir.is_empty() {
+        return 0;
+    }
+
+    let path = Path::new(output_dir);
+    if !path.is_dir() {
+        return 0;
+    }
+
+    std::fs::read_dir(path)
+        .map(|entries| entries.count())
+        .unwrap_or(0)
 }
 
 /// 版本信息
@@ -462,6 +638,12 @@ pub fn get_shortcuts_help() -> Vec<crate::shortcuts::ShortcutHelp> {
     crate::shortcuts::get_shortcuts_help()
 }
 
+#[tauri::command]
+pub fn list_providers() -> Vec<ProviderManifest> {
+    let registry = ProviderRegistry::new();
+    registry.manifests()
+}
+
 /// 获取 Provider 的参数 Schema
 #[tauri::command]
 pub async fn get_provider_schema(
@@ -470,10 +652,10 @@ pub async fn get_provider_schema(
     let registry = ProviderRegistry::new();
     let provider = registry
         .get(&provider_id)
-        .map_err(|e| crate::errors::AppError::from(e))?;
-    let schema = provider.get_schema().map_err(|e| {
-        crate::errors::AppError::unknown(format!("failed to load schema: {}", e))
-    })?;
+        .map_err(crate::errors::AppError::from)?;
+    let schema = provider
+        .get_schema()
+        .map_err(|e| crate::errors::AppError::unknown(format!("failed to load schema: {}", e)))?;
     Ok(schema)
 }
 
@@ -487,11 +669,11 @@ pub async fn import_from_command(
     let registry = ProviderRegistry::new();
     let provider = registry
         .get(&provider_id)
-        .map_err(|e| crate::errors::AppError::from(e))?;
+        .map_err(crate::errors::AppError::from)?;
 
-    let schema = provider.get_schema().map_err(|e| {
-        crate::errors::AppError::unknown(format!("failed to load schema: {}", e))
-    })?;
+    let schema = provider
+        .get_schema()
+        .map_err(|e| crate::errors::AppError::unknown(format!("failed to load schema: {}", e)))?;
 
     let parser = CommandParser::new(provider_id);
     let spec = parser
@@ -550,7 +732,10 @@ fn render_preflight_markdown(report: &Value) -> Result<String, crate::errors::Ap
         "# Preflight Report".to_string(),
         String::new(),
         format!("- Generated At: {}", generated_at),
-        format!("- Blocking Ready: {}", if blocking_ready { "yes" } else { "no" }),
+        format!(
+            "- Blocking Ready: {}",
+            if blocking_ready { "yes" } else { "no" }
+        ),
         format!("- Passed: {}", passed),
         format!("- Warnings: {}", warning),
         format!("- Failed: {}", failed),
@@ -624,9 +809,8 @@ pub async fn export_preflight_report(
     let content = if ext == "md" || ext == "markdown" {
         render_preflight_markdown(&report)?
     } else {
-        serde_json::to_string_pretty(&report).map_err(|e| {
-            crate::errors::AppError::unknown(format!("serialization error: {}", e))
-        })?
+        serde_json::to_string_pretty(&report)
+            .map_err(|e| crate::errors::AppError::unknown(format!("serialization error: {}", e)))?
     };
 
     std::fs::write(&file_path, content)
@@ -637,9 +821,7 @@ pub async fn export_preflight_report(
 
 /// 导入配置从文件
 #[tauri::command]
-pub async fn import_config(
-    file_path: String,
-) -> Result<ConfigExport, crate::errors::AppError> {
+pub async fn import_config(file_path: String) -> Result<ConfigExport, crate::errors::AppError> {
     let content = std::fs::read_to_string(&file_path)
         .map_err(|e| crate::errors::AppError::unknown(format!("read error: {}", e)))?;
 
@@ -669,7 +851,11 @@ pub async fn apply_imported_config(
 
         // 转换 parameters: BTreeMap -> serde_json::Value::Object
         let parameters = serde_json::Value::Object(
-            profile.parameters.into_iter().map(|(k, v)| (k, v)).collect()
+            profile
+                .parameters
+                .into_iter()
+                .map(|(k, v)| (k, v))
+                .collect(),
         );
 
         // 转换为 store::ConfigProfile 格式
@@ -705,13 +891,14 @@ pub async fn run_environment_check(
 pub async fn apply_fix(action: FixAction) -> Result<FixResult, crate::errors::AppError> {
     match action.action_type {
         FixType::OpenUrl => {
-            let url = action
-                .url
-                .ok_or_else(|| crate::errors::AppError::unknown("URL is required for OpenUrl fix"))?;
+            let url = action.url.ok_or_else(|| {
+                crate::errors::AppError::unknown("URL is required for OpenUrl fix")
+            })?;
 
             // Use tauri_plugin_opener to open the URL
-            open::that(&url)
-                .map_err(|e| crate::errors::AppError::unknown(format!("failed to open URL: {}", e)))?;
+            open::that(&url).map_err(|e| {
+                crate::errors::AppError::unknown(format!("failed to open URL: {}", e))
+            })?;
 
             Ok(FixResult::OpenedUrl(url))
         }
@@ -730,7 +917,9 @@ pub async fn apply_fix(action: FixAction) -> Result<FixResult, crate::errors::Ap
             )
             .await
             .map_err(|_| crate::errors::AppError::unknown("command timed out"))?
-            .map_err(|e| crate::errors::AppError::unknown(format!("failed to run command: {}", e)))?;
+            .map_err(|e| {
+                crate::errors::AppError::unknown(format!("failed to run command: {}", e))
+            })?;
 
             crate::environment::invalidate_environment_cache();
 
@@ -748,9 +937,7 @@ pub async fn apply_fix(action: FixAction) -> Result<FixResult, crate::errors::Ap
             // TODO: Copy to clipboard using tauri_plugin_clipboard
             Ok(FixResult::CopiedToClipboard(command_str))
         }
-        FixType::Manual => {
-            Ok(FixResult::Manual(action.label))
-        }
+        FixType::Manual => Ok(FixResult::Manual(action.label)),
     }
 }
 
@@ -872,6 +1059,86 @@ fn validate_and_parse_fix_command(
 mod tests {
     use super::*;
     use serde_json::json;
+
+    fn base_dotnet_config() -> PublishConfig {
+        PublishConfig {
+            configuration: "Release".to_string(),
+            runtime: String::new(),
+            self_contained: false,
+            output_dir: String::new(),
+            use_profile: false,
+            profile_name: String::new(),
+        }
+    }
+
+    #[test]
+    fn build_dotnet_spec_maps_profile_to_properties() {
+        let mut config = base_dotnet_config();
+        config.use_profile = true;
+        config.profile_name = "FolderProfile".to_string();
+
+        let spec = build_dotnet_spec_from_config("/tmp/app.csproj".to_string(), config);
+
+        let properties = spec.parameters.get("properties").expect("properties");
+        match properties {
+            SpecValue::Map(map) => {
+                assert_eq!(
+                    map.get("PublishProfile"),
+                    Some(&SpecValue::String("FolderProfile".to_string()))
+                );
+            }
+            _ => panic!("expected properties map"),
+        }
+    }
+
+    #[test]
+    fn resolve_plan_command_uses_first_step_title() {
+        let plan = crate::plan::ExecutionPlan {
+            version: crate::plan::PLAN_VERSION,
+            spec: PublishSpec {
+                version: SPEC_VERSION,
+                provider_id: "cargo".to_string(),
+                project_path: "/tmp/demo".to_string(),
+                parameters: BTreeMap::new(),
+            },
+            steps: vec![crate::plan::PlanStep {
+                id: "cargo.build".to_string(),
+                title: "cargo build".to_string(),
+                kind: "process".to_string(),
+                payload: BTreeMap::new(),
+            }],
+        };
+
+        let (program, args) = resolve_plan_command(&plan).expect("command");
+        assert_eq!(program, "cargo");
+        assert_eq!(args, vec!["build".to_string()]);
+    }
+
+    #[test]
+    fn infer_output_dir_for_cargo_release_defaults_to_target_release() {
+        let mut params = BTreeMap::new();
+        params.insert("release".to_string(), SpecValue::Bool(true));
+
+        let spec = PublishSpec {
+            version: SPEC_VERSION,
+            provider_id: "cargo".to_string(),
+            project_path: "/tmp/demo-project".to_string(),
+            parameters: params,
+        };
+
+        let output_dir = infer_output_dir(&spec);
+        assert!(output_dir.ends_with("target/release") || output_dir.ends_with("target\\release"));
+    }
+
+    #[test]
+    fn list_providers_includes_core_toolchains() {
+        let ids: Vec<String> = list_providers().into_iter().map(|p| p.id).collect();
+
+        assert!(ids.contains(&"dotnet".to_string()));
+        assert!(ids.contains(&"cargo".to_string()));
+        assert!(ids.contains(&"go".to_string()));
+        assert!(ids.contains(&"java".to_string()));
+    }
 
     #[test]
     fn preflight_markdown_contains_summary_and_checklist() {
