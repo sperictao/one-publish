@@ -64,3 +64,9 @@ Guiding decision: parameter coverage is achieved via schema-driven advanced mode
 - Task 0703: Streaming execution logs + cancel support
 - Task 0704: Execution snapshot export (spec + command + environment)
 
+
+### Phase 8: Run Intelligence & Recovery
+- Task 0801: Local execution history timeline (last 20 runs)
+- Task 0802: One-click snapshot open from run history
+- Task 0803: Re-run from history record (spec restore + execute)
+- Task 0804: Failure signature grouping + quick diagnostics

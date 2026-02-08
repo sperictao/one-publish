@@ -56,3 +56,11 @@ Status legend:
 - [done] TASK-0702 Prefix/env token parsing fidelity for command import (docs/roadmap/tasks/TASK-0702.md)
 - [done] TASK-0703 Streaming execution logs + cancel support (docs/roadmap/tasks/TASK-0703.md)
 - [done] TASK-0704 Execution snapshot export (docs/roadmap/tasks/TASK-0704.md)
+
+
+## Phase 8: Run Intelligence & Recovery
+
+- [done] TASK-0801 Local execution history timeline (last 20 runs) (docs/roadmap/tasks/TASK-0801.md)
+- [todo] TASK-0802 One-click snapshot open from run history (docs/roadmap/tasks/TASK-0802.md)
+- [todo] TASK-0803 Re-run from history record (spec restore + execute) (docs/roadmap/tasks/TASK-0803.md)
+- [todo] TASK-0804 Failure signature grouping + quick diagnostics (docs/roadmap/tasks/TASK-0804.md)
