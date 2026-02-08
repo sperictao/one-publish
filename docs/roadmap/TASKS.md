@@ -64,3 +64,11 @@ Status legend:
 - [done] TASK-0802 One-click snapshot open from run history (docs/roadmap/tasks/TASK-0802.md)
 - [done] TASK-0803 Re-run from history record (spec restore + execute) (docs/roadmap/tasks/TASK-0803.md)
 - [done] TASK-0804 Failure signature grouping + quick diagnostics (docs/roadmap/tasks/TASK-0804.md)
+
+## Phase 9: Diagnostics Deepening & Team Handoff
+
+- [done] TASK-0901 Failure group drill-down panel (representative runs + quick copy) (docs/roadmap/tasks/TASK-0901.md)
+- [todo] TASK-0902 Diagnostics bundle export for failure groups (docs/roadmap/tasks/TASK-0902.md)
+- [todo] TASK-0903 History filters + retention policy settings (docs/roadmap/tasks/TASK-0903.md)
+- [todo] TASK-0904 Successful run handoff snippet generator (CI/CLI) (docs/roadmap/tasks/TASK-0904.md)
+

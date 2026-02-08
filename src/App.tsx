@@ -75,6 +75,7 @@ import {
   Import,
   ListChecks,
   Square,
+  Copy,
 } from "lucide-react";
 
 // Types
@@ -84,7 +85,12 @@ import {
   type EnvironmentCheckResult,
 } from "@/lib/environment";
 import { mapImportedSpecByProvider } from "@/lib/commandImportMapping";
-import { deriveFailureSignature, resolveFailureSignature } from "@/lib/failureSignature";
+import { deriveFailureSignature } from "@/lib/failureSignature";
+import {
+  getRepresentativeRecord,
+  groupExecutionFailures,
+  type FailureGroup,
+} from "@/lib/failureGroups";
 import type { ParameterSchema, ParameterValue } from "@/types/parameters";
 
 interface ProjectInfo {
@@ -153,14 +159,6 @@ interface ExecutionSnapshotPayload {
     lineCount: number;
     log: string;
   };
-}
-
-interface FailureGroup {
-  key: string;
-  providerId: string;
-  signature: string;
-  count: number;
-  latestRecord: ExecutionRecord;
 }
 
 const SPEC_VERSION = 1;
@@ -404,6 +402,8 @@ function App() {
   const [lastExecutedSpec, setLastExecutedSpec] =
     useState<ProviderPublishSpec | null>(null);
   const [executionHistory, setExecutionHistory] = useState<ExecutionRecord[]>([]);
+  const [selectedFailureGroupKey, setSelectedFailureGroupKey] =
+    useState<string | null>(null);
   const [currentExecutionRecordId, setCurrentExecutionRecordId] =
     useState<string | null>(null);
   const [outputLog, setOutputLog] = useState<string>("");
@@ -431,51 +431,23 @@ function App() {
       ? lastImportFeedback
       : null;
 
-  const failureGroups = useMemo<FailureGroup[]>(() => {
-    const grouped = new Map<string, FailureGroup>();
+  const failureGroups = useMemo<FailureGroup[]>(
+    () => groupExecutionFailures(executionHistory),
+    [executionHistory]
+  );
 
-    for (const record of executionHistory) {
-      if (record.success || record.cancelled) {
-        continue;
-      }
+  const selectedFailureGroup = useMemo(
+    () =>
+      failureGroups.find((group) => group.key === selectedFailureGroupKey) ||
+      null,
+    [failureGroups, selectedFailureGroupKey]
+  );
 
-      const signature = resolveFailureSignature(record);
-      if (!signature) {
-        continue;
-      }
-
-      const key = `${record.providerId}::${signature}`;
-      const existing = grouped.get(key);
-      if (!existing) {
-        grouped.set(key, {
-          key,
-          providerId: record.providerId,
-          signature,
-          count: 1,
-          latestRecord: record,
-        });
-        continue;
-      }
-
-      existing.count += 1;
-      if (
-        new Date(record.finishedAt).getTime() >
-        new Date(existing.latestRecord.finishedAt).getTime()
-      ) {
-        existing.latestRecord = record;
-      }
-    }
-
-    return Array.from(grouped.values()).sort((a, b) => {
-      if (b.count !== a.count) {
-        return b.count - a.count;
-      }
-      return (
-        new Date(b.latestRecord.finishedAt).getTime() -
-        new Date(a.latestRecord.finishedAt).getTime()
-      );
-    });
-  }, [executionHistory]);
+  const representativeFailureRecord = useMemo(
+    () =>
+      selectedFailureGroup ? getRepresentativeRecord(selectedFailureGroup) : null,
+    [selectedFailureGroup]
+  );
 
   const environmentStatus = useMemo(() => {
     if (!environmentLastResult) return "unknown" as const;
@@ -560,6 +532,22 @@ function App() {
   }, []);
 
   useEffect(() => {
+    if (failureGroups.length === 0) {
+      if (selectedFailureGroupKey !== null) {
+        setSelectedFailureGroupKey(null);
+      }
+      return;
+    }
+
+    if (
+      !selectedFailureGroupKey ||
+      !failureGroups.some((group) => group.key === selectedFailureGroupKey)
+    ) {
+      setSelectedFailureGroupKey(failureGroups[0].key);
+    }
+  }, [failureGroups, selectedFailureGroupKey]);
+
+  useEffect(() => {
     if (!(window as any).__TAURI__) {
       return;
     }
@@ -600,6 +588,10 @@ function App() {
 
   // Setup window drag functionality for Tauri 2.x
   useEffect(() => {
+    if (!(window as any).__TAURI__) {
+      return;
+    }
+
     const appWindow = getCurrentWindow();
 
     const handleMouseDown = (e: MouseEvent) => {
@@ -956,6 +948,58 @@ function App() {
       }
     },
     [buildExecutionRecord, openEnvironmentDialog, persistExecutionRecord]
+  );
+
+  const copyText = useCallback(async (text: string, label: string) => {
+    const normalized = text.trim();
+    if (!normalized) {
+      toast.error(`缺少可复制的${label}`);
+      return;
+    }
+
+    try {
+      if (typeof navigator !== "undefined" && navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(normalized);
+      } else {
+        const input = document.createElement("textarea");
+        input.value = normalized;
+        input.style.position = "fixed";
+        input.style.opacity = "0";
+        document.body.appendChild(input);
+        input.focus();
+        input.select();
+
+        const copied = document.execCommand("copy");
+        document.body.removeChild(input);
+
+        if (!copied) {
+          throw new Error("复制失败");
+        }
+      }
+
+      toast.success(`${label}已复制`);
+    } catch (err) {
+      toast.error(`复制${label}失败`, { description: String(err) });
+    }
+  }, []);
+
+  const copyGroupSignature = useCallback(
+    async (group: FailureGroup) => {
+      await copyText(group.signature, "失败签名");
+    },
+    [copyText]
+  );
+
+  const copyRecordCommand = useCallback(
+    async (record: ExecutionRecord) => {
+      if (!record.commandLine) {
+        toast.error("该记录缺少命令行信息");
+        return;
+      }
+
+      await copyText(record.commandLine, "命令行");
+    },
+    [copyText]
   );
 
   const openSnapshotFromRecord = useCallback(async (record: ExecutionRecord) => {
@@ -1915,55 +1959,173 @@ function App() {
                   <CardHeader className="pb-3">
                     <CardTitle className="text-lg">失败诊断聚合</CardTitle>
                     <CardDescription>
-                      相同失败签名自动归并，优先展示高频问题
+                      相同失败签名自动归并，支持分组钻取与快速复制
                     </CardDescription>
                   </CardHeader>
                   <CardContent className="space-y-2">
-                    {failureGroups.slice(0, 6).map((group) => (
+                    {failureGroups.slice(0, 6).map((group) => {
+                      const isSelected = group.key === selectedFailureGroupKey;
+
+                      return (
+                        <div
+                          key={group.key}
+                          className="rounded-md border px-3 py-2 text-sm"
+                        >
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="font-medium">{group.providerId}</span>
+                            <span className="text-xs text-muted-foreground">
+                              最近 {group.count} 次
+                            </span>
+                          </div>
+                          <div className="mt-1 rounded bg-muted px-2 py-1 font-mono text-xs break-all">
+                            {group.signature}
+                          </div>
+                          <div className="mt-1 text-xs text-muted-foreground">
+                            最新时间: {new Date(group.latestRecord.finishedAt).toLocaleString()}
+                          </div>
+                          {group.latestRecord.error && (
+                            <div className="text-xs text-muted-foreground break-all">
+                              最新错误: {group.latestRecord.error}
+                            </div>
+                          )}
+                          <div className="mt-2 flex flex-wrap gap-2">
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant={isSelected ? "default" : "outline"}
+                              onClick={() => setSelectedFailureGroupKey(group.key)}
+                            >
+                              {isSelected ? "已选中" : "查看详情"}
+                            </Button>
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="outline"
+                              onClick={() => void copyGroupSignature(group)}
+                            >
+                              <Copy className="mr-1 h-3 w-3" />
+                              复制签名
+                            </Button>
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="outline"
+                              onClick={() =>
+                                void openSnapshotFromRecord(group.latestRecord)
+                              }
+                              disabled={
+                                !group.latestRecord.snapshotPath &&
+                                !group.latestRecord.outputDir
+                              }
+                            >
+                              打开代表快照
+                            </Button>
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="secondary"
+                              onClick={() => void rerunFromHistory(group.latestRecord)}
+                              disabled={isPublishing}
+                            >
+                              重跑代表记录
+                            </Button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </CardContent>
+                </Card>
+              )}
+
+              {selectedFailureGroup && (
+                <Card>
+                  <CardHeader className="pb-3">
+                    <CardTitle className="text-lg">失败组详情</CardTitle>
+                    <CardDescription>
+                      {selectedFailureGroup.providerId} · 最近 {selectedFailureGroup.count} 次失败（按完成时间倒序）
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-3">
+                    <div className="rounded bg-muted px-2 py-1 font-mono text-xs break-all">
+                      {selectedFailureGroup.signature}
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        onClick={() => void copyGroupSignature(selectedFailureGroup)}
+                      >
+                        <Copy className="mr-1 h-3 w-3" />
+                        复制签名
+                      </Button>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        onClick={() =>
+                          representativeFailureRecord
+                            ? void copyRecordCommand(representativeFailureRecord)
+                            : undefined
+                        }
+                        disabled={!representativeFailureRecord?.commandLine}
+                      >
+                        <Copy className="mr-1 h-3 w-3" />
+                        复制代表命令
+                      </Button>
+                    </div>
+                    {selectedFailureGroup.records.slice(0, 6).map((record, index) => (
                       <div
-                        key={group.key}
+                        key={record.id}
                         className="rounded-md border px-3 py-2 text-sm"
                       >
                         <div className="flex items-center justify-between gap-2">
-                          <span className="font-medium">{group.providerId}</span>
+                          <span className="font-medium">
+                            {index === 0 ? "最新失败记录" : `历史失败记录 #${index + 1}`}
+                          </span>
                           <span className="text-xs text-muted-foreground">
-                            最近 {group.count} 次
+                            {new Date(record.finishedAt).toLocaleString()}
                           </span>
                         </div>
+                        <div className="text-xs text-muted-foreground truncate">
+                          {record.projectPath}
+                        </div>
                         <div className="mt-1 rounded bg-muted px-2 py-1 font-mono text-xs break-all">
-                          {group.signature}
+                          {record.commandLine || "(无命令行记录)"}
                         </div>
-                        <div className="mt-1 text-xs text-muted-foreground">
-                          最新时间: {new Date(group.latestRecord.finishedAt).toLocaleString()}
-                        </div>
-                        {group.latestRecord.error && (
-                          <div className="text-xs text-muted-foreground break-all">
-                            最新错误: {group.latestRecord.error}
+                        {record.error && (
+                          <div className="mt-1 text-xs text-muted-foreground break-all">
+                            错误: {record.error}
                           </div>
                         )}
-                        <div className="mt-2 flex gap-2">
+                        <div className="mt-2 flex flex-wrap gap-2">
                           <Button
                             type="button"
                             size="sm"
                             variant="outline"
-                            onClick={() =>
-                              void openSnapshotFromRecord(group.latestRecord)
-                            }
-                            disabled={
-                              !group.latestRecord.snapshotPath &&
-                              !group.latestRecord.outputDir
-                            }
+                            onClick={() => void copyRecordCommand(record)}
+                            disabled={!record.commandLine}
                           >
-                            打开代表快照
+                            <Copy className="mr-1 h-3 w-3" />
+                            复制命令
+                          </Button>
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            onClick={() => void openSnapshotFromRecord(record)}
+                            disabled={!record.snapshotPath && !record.outputDir}
+                          >
+                            打开快照
                           </Button>
                           <Button
                             type="button"
                             size="sm"
                             variant="secondary"
-                            onClick={() => void rerunFromHistory(group.latestRecord)}
+                            onClick={() => void rerunFromHistory(record)}
                             disabled={isPublishing}
                           >
-                            重跑代表记录
+                            重跑记录
                           </Button>
                         </div>
                       </div>
