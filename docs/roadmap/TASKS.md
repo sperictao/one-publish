@@ -43,3 +43,9 @@ Status legend:
 - [done] TASK-0501 Updater config visibility + quick open (docs/roadmap/tasks/TASK-0501.md)
 - [done] TASK-0502 Signed release checklist wizard (docs/roadmap/tasks/TASK-0502.md)
 - [done] TASK-0503 Preflight report export (docs/roadmap/tasks/TASK-0503.md)
+
+## Phase 6: Multi-Provider UX Bridge
+
+- [done] TASK-0601 Provider selector + context-aware diagnostics bridge (docs/roadmap/tasks/TASK-0601.md)
+- [done] TASK-0602 Provider-specific config mapping in command import (docs/roadmap/tasks/TASK-0602.md)
+- [done] TASK-0603 Generic provider execution pipeline (docs/roadmap/tasks/TASK-0603.md)

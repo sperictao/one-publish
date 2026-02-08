@@ -52,3 +52,9 @@ Guiding decision: parameter coverage is achieved via schema-driven advanced mode
 - Task 0501: Updater config visibility + quick open
 - Task 0502: Signed release checklist wizard
 - Task 0503: Preflight report export (environment + artifact + updater)
+
+### Phase 6: Multi-Provider UX Bridge
+- Task 0601: Provider selector + context-aware diagnostics bridge
+- Task 0602: Provider-specific config mapping in command import
+- Task 0603: Generic provider execution pipeline (spec/plan-driven)
+
