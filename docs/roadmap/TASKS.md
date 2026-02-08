@@ -49,3 +49,10 @@ Status legend:
 - [done] TASK-0601 Provider selector + context-aware diagnostics bridge (docs/roadmap/tasks/TASK-0601.md)
 - [done] TASK-0602 Provider-specific config mapping in command import (docs/roadmap/tasks/TASK-0602.md)
 - [done] TASK-0603 Generic provider execution pipeline (docs/roadmap/tasks/TASK-0603.md)
+
+## Phase 7: Execution Reliability & DevEx
+
+- [done] TASK-0701 Java execution preconditions + gradle wrapper fallback (docs/roadmap/tasks/TASK-0701.md)
+- [done] TASK-0702 Prefix/env token parsing fidelity for command import (docs/roadmap/tasks/TASK-0702.md)
+- [done] TASK-0703 Streaming execution logs + cancel support (docs/roadmap/tasks/TASK-0703.md)
+- [done] TASK-0704 Execution snapshot export (docs/roadmap/tasks/TASK-0704.md)

@@ -58,3 +58,9 @@ Guiding decision: parameter coverage is achieved via schema-driven advanced mode
 - Task 0602: Provider-specific config mapping in command import
 - Task 0603: Generic provider execution pipeline (spec/plan-driven)
 
+### Phase 7: Execution Reliability & DevEx
+- Task 0701: Java execution preconditions + gradle wrapper fallback
+- Task 0702: Prefix/env token parsing fidelity for command import
+- Task 0703: Streaming execution logs + cancel support
+- Task 0704: Execution snapshot export (spec + command + environment)
+
