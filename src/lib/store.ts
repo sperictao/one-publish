@@ -55,6 +55,7 @@ export interface AppState {
   theme: "light" | "dark" | "auto";
   profiles: ConfigProfile[];
   executionHistory: ExecutionRecord[];
+  executionHistoryLimit: number;
 }
 
 // 默认状态
@@ -79,6 +80,7 @@ export const defaultAppState: AppState = {
   theme: "auto",
   profiles: [],
   executionHistory: [],
+  executionHistoryLimit: 20,
 };
 
 /**
@@ -151,10 +153,12 @@ export async function updatePreferences(params: {
   minimizeToTrayOnClose?: boolean;
   defaultOutputDir?: string;
   theme?: "light" | "dark" | "auto";
+  executionHistoryLimit?: number;
 }): Promise<AppState> {
   return await invoke<AppState>("update_preferences", {
     ...params,
     default_output_dir: params.defaultOutputDir,
+    execution_history_limit: params.executionHistoryLimit,
   });
 }
 

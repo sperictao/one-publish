@@ -313,9 +313,11 @@ function App() {
     minimizeToTrayOnClose,
     defaultOutputDir,
     theme,
+    executionHistoryLimit,
     setMinimizeToTrayOnClose,
     setDefaultOutputDir,
     setTheme,
+    setExecutionHistoryLimit,
   } = useAppState();
 
   // 应用主题
@@ -426,6 +428,11 @@ function App() {
   const [lastExecutedSpec, setLastExecutedSpec] =
     useState<ProviderPublishSpec | null>(null);
   const [executionHistory, setExecutionHistory] = useState<ExecutionRecord[]>([]);
+  const [historyFilterProvider, setHistoryFilterProvider] = useState("all");
+  const [historyFilterStatus, setHistoryFilterStatus] = useState<
+    "all" | "success" | "failed" | "cancelled"
+  >("all");
+  const [historyFilterKeyword, setHistoryFilterKeyword] = useState("");
   const [selectedFailureGroupKey, setSelectedFailureGroupKey] =
     useState<string | null>(null);
   const [currentExecutionRecordId, setCurrentExecutionRecordId] =
@@ -455,9 +462,59 @@ function App() {
       ? lastImportFeedback
       : null;
 
-  const failureGroups = useMemo<FailureGroup[]>(
-    () => groupExecutionFailures(executionHistory),
+  const historyProviderOptions = useMemo(
+    () =>
+      Array.from(new Set(executionHistory.map((record) => record.providerId))).sort(),
     [executionHistory]
+  );
+
+  const filteredExecutionHistory = useMemo(() => {
+    const keyword = historyFilterKeyword.trim().toLowerCase();
+
+    return executionHistory.filter((record) => {
+      if (historyFilterProvider !== "all" && record.providerId !== historyFilterProvider) {
+        return false;
+      }
+
+      if (historyFilterStatus === "success" && !record.success) {
+        return false;
+      }
+      if (historyFilterStatus === "cancelled" && !record.cancelled) {
+        return false;
+      }
+      if (
+        historyFilterStatus === "failed" &&
+        (record.success || record.cancelled)
+      ) {
+        return false;
+      }
+
+      if (!keyword) {
+        return true;
+      }
+
+      const haystack = [
+        record.providerId,
+        record.projectPath,
+        record.error || "",
+        record.commandLine || "",
+        record.failureSignature || "",
+      ]
+        .join("\n")
+        .toLowerCase();
+
+      return haystack.includes(keyword);
+    });
+  }, [
+    executionHistory,
+    historyFilterProvider,
+    historyFilterStatus,
+    historyFilterKeyword,
+  ]);
+
+  const failureGroups = useMemo<FailureGroup[]>(
+    () => groupExecutionFailures(filteredExecutionHistory),
+    [filteredExecutionHistory]
   );
 
   const selectedFailureGroup = useMemo(
@@ -554,6 +611,10 @@ function App() {
         console.error("加载执行历史失败:", err);
       });
   }, []);
+
+  useEffect(() => {
+    setExecutionHistory((prev) => prev.slice(0, executionHistoryLimit));
+  }, [executionHistoryLimit]);
 
   useEffect(() => {
     if (failureGroups.length === 0) {
@@ -2242,60 +2303,133 @@ function App() {
                 <Card>
                   <CardHeader className="pb-3">
                     <CardTitle className="text-lg">最近执行历史</CardTitle>
-                    <CardDescription>本地保留最近 20 条发布记录</CardDescription>
+                    <CardDescription>
+                      本地保留最近 {executionHistoryLimit} 条发布记录
+                      {filteredExecutionHistory.length !== executionHistory.length
+                        ? ` · 当前筛选 ${filteredExecutionHistory.length}/${executionHistory.length}`
+                        : ""}
+                    </CardDescription>
                   </CardHeader>
-                  <CardContent className="space-y-2">
-                    {executionHistory.slice(0, 6).map((record) => (
-                      <div
-                        key={record.id}
-                        className="rounded-md border px-3 py-2 text-sm"
+                  <CardContent className="space-y-3">
+                    <div className="grid gap-2 md:grid-cols-3">
+                      <Select
+                        value={historyFilterProvider}
+                        onValueChange={setHistoryFilterProvider}
                       >
-                        <div className="flex items-center justify-between gap-2">
-                          <span className="font-medium">{record.providerId}</span>
-                          <span
-                            className={`text-xs ${
-                              record.success
-                                ? "text-green-600"
-                                : record.cancelled
-                                  ? "text-amber-600"
-                                  : "text-red-600"
-                            }`}
-                          >
-                            {record.success
-                              ? "成功"
-                              : record.cancelled
-                                ? "已取消"
-                                : "失败"}
-                          </span>
-                        </div>
-                        <div className="text-xs text-muted-foreground truncate">
-                          {record.projectPath}
-                        </div>
-                        <div className="text-xs text-muted-foreground">
-                          完成时间: {new Date(record.finishedAt).toLocaleString()}
-                        </div>
-                        <div className="mt-2 flex gap-2">
-                          <Button
-                            type="button"
-                            size="sm"
-                            variant="outline"
-                            onClick={() => void openSnapshotFromRecord(record)}
-                            disabled={!record.snapshotPath && !record.outputDir}
-                          >
-                            打开快照
-                          </Button>
-                          <Button
-                            type="button"
-                            size="sm"
-                            variant="secondary"
-                            onClick={() => void rerunFromHistory(record)}
-                            disabled={isPublishing}
-                          >
-                            重新执行
-                          </Button>
-                        </div>
+                        <SelectTrigger className="h-8">
+                          <SelectValue placeholder="筛选 Provider" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="all">全部 Provider</SelectItem>
+                          {historyProviderOptions.map((providerId) => (
+                            <SelectItem key={providerId} value={providerId}>
+                              {providerId}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <Select
+                        value={historyFilterStatus}
+                        onValueChange={(value) =>
+                          setHistoryFilterStatus(
+                            value as "all" | "success" | "failed" | "cancelled"
+                          )
+                        }
+                      >
+                        <SelectTrigger className="h-8">
+                          <SelectValue placeholder="筛选状态" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="all">全部状态</SelectItem>
+                          <SelectItem value="success">成功</SelectItem>
+                          <SelectItem value="failed">失败</SelectItem>
+                          <SelectItem value="cancelled">已取消</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <Input
+                        className="h-8"
+                        value={historyFilterKeyword}
+                        onChange={(e) => setHistoryFilterKeyword(e.target.value)}
+                        placeholder="关键词（签名/错误/命令）"
+                      />
+                    </div>
+                    <div className="flex justify-end">
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => {
+                          setHistoryFilterProvider("all");
+                          setHistoryFilterStatus("all");
+                          setHistoryFilterKeyword("");
+                        }}
+                        disabled={
+                          historyFilterProvider === "all" &&
+                          historyFilterStatus === "all" &&
+                          historyFilterKeyword.length === 0
+                        }
+                      >
+                        清空筛选
+                      </Button>
+                    </div>
+
+                    {filteredExecutionHistory.length === 0 ? (
+                      <div className="rounded-md border border-dashed px-3 py-4 text-sm text-muted-foreground">
+                        当前筛选条件下无执行记录
                       </div>
-                    ))}
+                    ) : (
+                      filteredExecutionHistory.slice(0, 6).map((record) => (
+                        <div
+                          key={record.id}
+                          className="rounded-md border px-3 py-2 text-sm"
+                        >
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="font-medium">{record.providerId}</span>
+                            <span
+                              className={`text-xs ${
+                                record.success
+                                  ? "text-green-600"
+                                  : record.cancelled
+                                    ? "text-amber-600"
+                                    : "text-red-600"
+                              }`}
+                            >
+                              {record.success
+                                ? "成功"
+                                : record.cancelled
+                                  ? "已取消"
+                                  : "失败"}
+                            </span>
+                          </div>
+                          <div className="text-xs text-muted-foreground truncate">
+                            {record.projectPath}
+                          </div>
+                          <div className="text-xs text-muted-foreground">
+                            完成时间: {new Date(record.finishedAt).toLocaleString()}
+                          </div>
+                          <div className="mt-2 flex gap-2">
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="outline"
+                              onClick={() => void openSnapshotFromRecord(record)}
+                              disabled={!record.snapshotPath && !record.outputDir}
+                            >
+                              打开快照
+                            </Button>
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="secondary"
+                              onClick={() => void rerunFromHistory(record)}
+                              disabled={isPublishing}
+                            >
+                              重新执行
+                            </Button>
+                          </div>
+                        </div>
+                      ))
+                    )}
                   </CardContent>
                 </Card>
               )}
@@ -2332,6 +2466,8 @@ function App() {
         onMinimizeToTrayOnCloseChange={setMinimizeToTrayOnClose}
         defaultOutputDir={defaultOutputDir}
         onDefaultOutputDirChange={setDefaultOutputDir}
+        executionHistoryLimit={executionHistoryLimit}
+        onExecutionHistoryLimitChange={setExecutionHistoryLimit}
         theme={theme}
         onThemeChange={setTheme}
         onOpenShortcuts={() => setShortcutsOpen(true)}

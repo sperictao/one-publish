@@ -95,6 +95,7 @@ export function useAppState() {
       minimizeToTrayOnClose?: boolean;
       defaultOutputDir?: string;
       theme?: "light" | "dark" | "auto";
+      executionHistoryLimit?: number;
     }) => {
       setState((prev) => ({
         ...prev,
@@ -106,6 +107,9 @@ export function useAppState() {
           defaultOutputDir: params.defaultOutputDir,
         }),
         ...(params.theme !== undefined && { theme: params.theme }),
+        ...(params.executionHistoryLimit !== undefined && {
+          executionHistoryLimit: params.executionHistoryLimit,
+        }),
       }));
 
       if (preferenceDebounceRef.current) {
@@ -253,6 +257,14 @@ export function useAppState() {
     [setPreferences]
   );
 
+  // 更新历史保留数量
+  const setExecutionHistoryLimit = useCallback(
+    (limit: number) => {
+      setPreferences({ executionHistoryLimit: limit });
+    },
+    [setPreferences]
+  );
+
   return {
     // 状态
     state,
@@ -285,9 +297,11 @@ export function useAppState() {
     minimizeToTrayOnClose: state.minimizeToTrayOnClose,
     defaultOutputDir: state.defaultOutputDir,
     theme: state.theme,
+    executionHistoryLimit: state.executionHistoryLimit,
     setLanguage,
     setMinimizeToTrayOnClose,
     setDefaultOutputDir,
     setTheme,
+    setExecutionHistoryLimit,
   };
 }

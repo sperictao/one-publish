@@ -61,6 +61,8 @@ interface SettingsDialogProps {
   onMinimizeToTrayOnCloseChange: (value: boolean) => void;
   defaultOutputDir: string;
   onDefaultOutputDirChange: (dir: string) => void;
+  executionHistoryLimit: number;
+  onExecutionHistoryLimitChange: (limit: number) => void;
   theme: "light" | "dark" | "auto";
   onThemeChange: (theme: "light" | "dark" | "auto") => void;
   onOpenShortcuts?: () => void;
@@ -79,6 +81,8 @@ export function SettingsDialog({
   onMinimizeToTrayOnCloseChange,
   defaultOutputDir,
   onDefaultOutputDirChange,
+  executionHistoryLimit,
+  onExecutionHistoryLimitChange,
   theme,
   onThemeChange,
   onOpenShortcuts,
@@ -379,6 +383,31 @@ export function SettingsDialog({
             </div>
             <p className="text-xs text-muted-foreground">
               {translations.outputDir?.support || "支持相对路径（如 ./publish）或绝对路径"}
+            </p>
+          </div>
+
+          {/* Execution History Retention */}
+          <div className="space-y-2">
+            <Label className="flex items-center gap-2">
+              <Info className="h-4 w-4" />
+              执行历史保留上限
+            </Label>
+            <Input
+              type="number"
+              min={5}
+              max={200}
+              value={executionHistoryLimit}
+              onChange={(e) => {
+                const next = Math.trunc(Number(e.target.value));
+                if (Number.isNaN(next)) {
+                  return;
+                }
+                const normalized = Math.min(200, Math.max(5, next));
+                onExecutionHistoryLimitChange(normalized);
+              }}
+            />
+            <p className="text-xs text-muted-foreground">
+              可设置 5~200 条，超出范围会自动修正并即时生效。
             </p>
           </div>
 

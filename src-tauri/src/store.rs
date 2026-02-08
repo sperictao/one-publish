@@ -83,7 +83,23 @@ pub struct ExecutionRecord {
     pub file_count: usize,
 }
 
-const MAX_EXECUTION_HISTORY: usize = 20;
+const DEFAULT_EXECUTION_HISTORY_LIMIT: usize = 20;
+const MIN_EXECUTION_HISTORY_LIMIT: usize = 5;
+const MAX_EXECUTION_HISTORY_LIMIT: usize = 200;
+
+fn default_execution_history_limit() -> usize {
+    DEFAULT_EXECUTION_HISTORY_LIMIT
+}
+
+fn normalize_execution_history_limit(limit: usize) -> usize {
+    limit.clamp(MIN_EXECUTION_HISTORY_LIMIT, MAX_EXECUTION_HISTORY_LIMIT)
+}
+
+fn trim_execution_history(history: &mut Vec<ExecutionRecord>, limit: usize) {
+    if history.len() > limit {
+        history.truncate(limit);
+    }
+}
 
 impl Default for PublishConfigStore {
     fn default() -> Self {
@@ -138,6 +154,9 @@ pub struct AppState {
     /// 保存的配置文件
     #[serde(default)]
     pub profiles: Vec<ConfigProfile>,
+    /// 最近执行历史保留上限
+    #[serde(default = "default_execution_history_limit")]
+    pub execution_history_limit: usize,
     /// 最近执行历史
     #[serde(default)]
     pub execution_history: Vec<ExecutionRecord>,
@@ -182,6 +201,7 @@ impl Default for AppState {
             default_output_dir: String::new(),
             theme: default_theme(),
             profiles: Vec::new(),
+            execution_history_limit: default_execution_history_limit(),
             execution_history: Vec::new(),
         }
     }
@@ -196,11 +216,18 @@ fn get_config_path() -> PathBuf {
 }
 
 /// 从文件加载状态
+fn sanitize_state(mut state: AppState) -> AppState {
+    state.execution_history_limit =
+        normalize_execution_history_limit(state.execution_history_limit);
+    trim_execution_history(&mut state.execution_history, state.execution_history_limit);
+    state
+}
+
 fn load_from_file() -> AppState {
     let path = get_config_path();
     if let Ok(content) = fs::read_to_string(&path) {
         match serde_json::from_str::<AppState>(&content) {
-            Ok(state) => state,
+            Ok(state) => sanitize_state(state),
             Err(err) => {
                 log::warn!(
                     "解析配置文件失败，将使用默认配置。路径: {}, 错误: {}",
@@ -242,10 +269,11 @@ pub fn get_state() -> AppState {
 
 /// 更新状态
 pub fn update_state(new_state: AppState) -> Result<(), String> {
-    save_to_file(&new_state)?;
+    let normalized = sanitize_state(new_state);
+    save_to_file(&normalized)?;
 
     let mut guard = state_store().write().expect("写入状态锁失败");
-    *guard = new_state;
+    *guard = normalized;
     Ok(())
 }
 
@@ -360,6 +388,7 @@ pub async fn update_preferences(
     minimize_to_tray_on_close: Option<bool>,
     default_output_dir: Option<String>,
     theme: Option<String>,
+    execution_history_limit: Option<usize>,
 ) -> Result<AppState, String> {
     let mut state = get_state();
     let language_changed = language.is_some();
@@ -378,6 +407,11 @@ pub async fn update_preferences(
 
     if let Some(thm) = theme {
         state.theme = thm;
+    }
+
+    if let Some(limit) = execution_history_limit {
+        state.execution_history_limit = normalize_execution_history_limit(limit);
+        trim_execution_history(&mut state.execution_history, state.execution_history_limit);
     }
 
     update_state(state.clone())?;
@@ -443,11 +477,13 @@ pub async fn delete_profile(name: String) -> Result<AppState, String> {
     Ok(state)
 }
 
-fn append_execution_history(history: &mut Vec<ExecutionRecord>, record: ExecutionRecord) {
+fn append_execution_history(
+    history: &mut Vec<ExecutionRecord>,
+    record: ExecutionRecord,
+    execution_history_limit: usize,
+) {
     history.insert(0, record);
-    if history.len() > MAX_EXECUTION_HISTORY {
-        history.truncate(MAX_EXECUTION_HISTORY);
-    }
+    trim_execution_history(history, execution_history_limit);
 }
 
 /// 获取执行历史
@@ -457,11 +493,12 @@ pub async fn get_execution_history() -> Result<Vec<ExecutionRecord>, String> {
     Ok(state.execution_history)
 }
 
-/// 追加执行历史记录（最多保留最近 20 条）
+/// 追加执行历史记录（按配置保留最近 N 条）
 #[tauri::command]
 pub async fn add_execution_record(record: ExecutionRecord) -> Result<Vec<ExecutionRecord>, String> {
     let mut state = get_state();
-    append_execution_history(&mut state.execution_history, record);
+    let history_limit = state.execution_history_limit;
+    append_execution_history(&mut state.execution_history, record, history_limit);
     let history = state.execution_history.clone();
     update_state(state)?;
     Ok(history)
