@@ -197,6 +197,23 @@ interface FailureGroupBundlePayload {
   records: FailureGroupBundleRecordPayload[];
 }
 
+interface DiagnosticsIndexPayload {
+  generatedAt: string;
+  summary: {
+    historyCount: number;
+    filteredHistoryCount: number;
+    failureGroupCount: number;
+    snapshotCount: number;
+    bundleCount: number;
+    historyExportCount: number;
+  };
+  links: {
+    snapshots: string[];
+    bundles: string[];
+    historyExports: string[];
+  };
+}
+
 type HistoryFilterStatus = "all" | "success" | "failed" | "cancelled";
 type HistoryFilterWindow = "all" | "24h" | "7d" | "30d";
 
@@ -442,6 +459,10 @@ function App() {
   const [isExportingFailureBundle, setIsExportingFailureBundle] =
     useState(false);
   const [isExportingHistory, setIsExportingHistory] = useState(false);
+  const [isExportingDiagnosticsIndex, setIsExportingDiagnosticsIndex] =
+    useState(false);
+  const [recentBundleExports, setRecentBundleExports] = useState<string[]>([]);
+  const [recentHistoryExports, setRecentHistoryExports] = useState<string[]>([]);
   const [publishResult, setPublishResult] = useState<PublishResult | null>(null);
   const [lastExecutedSpec, setLastExecutedSpec] =
     useState<ProviderPublishSpec | null>(null);
@@ -559,6 +580,18 @@ function App() {
     historyFilterWindow,
     historyFilterKeyword,
   ]);
+
+  const snapshotPaths = useMemo(
+    () =>
+      Array.from(
+        new Set(
+          executionHistory
+            .map((record) => record.snapshotPath?.trim())
+            .filter((value): value is string => Boolean(value))
+        )
+      ),
+    [executionHistory]
+  );
 
   const failureGroups = useMemo<FailureGroup[]>(
     () => groupExecutionFailures(filteredExecutionHistory),
@@ -1131,6 +1164,18 @@ function App() {
     }
   }, []);
 
+  const trackBundleExport = useCallback((outputPath: string) => {
+    setRecentBundleExports((prev) =>
+      [outputPath, ...prev.filter((item) => item !== outputPath)].slice(0, 20)
+    );
+  }, []);
+
+  const trackHistoryExport = useCallback((outputPath: string) => {
+    setRecentHistoryExports((prev) =>
+      [outputPath, ...prev.filter((item) => item !== outputPath)].slice(0, 20)
+    );
+  }, []);
+
   const copyGroupSignature = useCallback(
     async (group: FailureGroup) => {
       await copyText(group.signature, "失败签名");
@@ -1455,6 +1500,7 @@ function App() {
         filePath: selected,
       });
 
+      trackBundleExport(outputPath);
       toast.success("失败组诊断包已导出", { description: outputPath });
     } catch (err) {
       toast.error("导出失败组诊断包失败", { description: String(err) });
@@ -1511,11 +1557,75 @@ function App() {
         filePath: selected,
       });
 
+      trackHistoryExport(outputPath);
       toast.success("执行历史已导出", { description: outputPath });
     } catch (err) {
       toast.error("导出执行历史失败", { description: String(err) });
     } finally {
       setIsExportingHistory(false);
+    }
+  };
+
+  const exportDiagnosticsIndex = async () => {
+    const hasAnyLinks =
+      snapshotPaths.length > 0 ||
+      recentBundleExports.length > 0 ||
+      recentHistoryExports.length > 0;
+    if (!hasAnyLinks) {
+      toast.error("暂无可索引的诊断导出记录", {
+        description: "请先导出诊断包、历史或执行快照",
+      });
+      return;
+    }
+
+    const timestamp = new Date().toISOString().replace(/[:]/g, "-");
+    const defaultDir = selectedRepo?.path || "";
+    const defaultPath = defaultDir
+      ? `${defaultDir}/diagnostics-index-${timestamp}.md`
+      : `diagnostics-index-${timestamp}.md`;
+
+    const selected = await save({
+      title: "导出诊断索引",
+      defaultPath,
+      filters: [
+        { name: "Markdown", extensions: ["md"] },
+        { name: "HTML", extensions: ["html"] },
+      ],
+    });
+
+    if (!selected) {
+      return;
+    }
+
+    const indexPayload: DiagnosticsIndexPayload = {
+      generatedAt: new Date().toISOString(),
+      summary: {
+        historyCount: executionHistory.length,
+        filteredHistoryCount: filteredExecutionHistory.length,
+        failureGroupCount: failureGroups.length,
+        snapshotCount: snapshotPaths.length,
+        bundleCount: recentBundleExports.length,
+        historyExportCount: recentHistoryExports.length,
+      },
+      links: {
+        snapshots: snapshotPaths,
+        bundles: recentBundleExports,
+        historyExports: recentHistoryExports,
+      },
+    };
+
+    setIsExportingDiagnosticsIndex(true);
+    try {
+      const outputPath = await invoke<string>("export_diagnostics_index", {
+        index: indexPayload,
+        filePath: selected,
+      });
+
+      toast.success("诊断索引已导出", { description: outputPath });
+    } catch (err) {
+      toast.error("导出诊断索引失败", { description: String(err) });
+    } finally {
+      setIsExportingDiagnosticsIndex(false);
     }
   };
 
@@ -2644,23 +2754,44 @@ function App() {
                         ? ` · 当前筛选 ${filteredExecutionHistory.length}/${executionHistory.length}`
                         : ""}
                     </CardDescription>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      className="w-fit"
-                      onClick={exportExecutionHistory}
-                      disabled={isExportingHistory || filteredExecutionHistory.length === 0}
-                    >
-                      {isExportingHistory ? (
-                        <>
-                          <Loader2 className="mr-1 h-3 w-3 animate-spin" />
-                          导出中...
-                        </>
-                      ) : (
-                        "导出历史"
-                      )}
-                    </Button>
+                    <div className="flex flex-wrap gap-2">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="w-fit"
+                        onClick={exportExecutionHistory}
+                        disabled={
+                          isExportingHistory || filteredExecutionHistory.length === 0
+                        }
+                      >
+                        {isExportingHistory ? (
+                          <>
+                            <Loader2 className="mr-1 h-3 w-3 animate-spin" />
+                            导出中...
+                          </>
+                        ) : (
+                          "导出历史"
+                        )}
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="w-fit"
+                        onClick={exportDiagnosticsIndex}
+                        disabled={isExportingDiagnosticsIndex}
+                      >
+                        {isExportingDiagnosticsIndex ? (
+                          <>
+                            <Loader2 className="mr-1 h-3 w-3 animate-spin" />
+                            生成中...
+                          </>
+                        ) : (
+                          "导出诊断索引"
+                        )}
+                      </Button>
+                    </div>
                   </CardHeader>
                   <CardContent className="space-y-3">
                     <div className="grid gap-2 md:grid-cols-4">

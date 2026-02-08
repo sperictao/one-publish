@@ -1056,7 +1056,6 @@ pub async fn export_execution_snapshot(
     Ok(file_path)
 }
 
-
 fn render_failure_group_bundle_markdown(bundle: &Value) -> Result<String, crate::errors::AppError> {
     let generated_at = bundle
         .get("generatedAt")
@@ -1071,10 +1070,7 @@ fn render_failure_group_bundle_markdown(bundle: &Value) -> Result<String, crate:
         .get("signature")
         .and_then(Value::as_str)
         .unwrap_or("(unknown)");
-    let frequency = bundle
-        .get("frequency")
-        .and_then(Value::as_u64)
-        .unwrap_or(0);
+    let frequency = bundle.get("frequency").and_then(Value::as_u64).unwrap_or(0);
     let representative_record_id = bundle
         .get("representativeRecordId")
         .or_else(|| bundle.get("representative_record_id"))
@@ -1102,7 +1098,10 @@ fn render_failure_group_bundle_markdown(bundle: &Value) -> Result<String, crate:
         lines.push("- (no records)".to_string());
     } else {
         for (index, record) in records.iter().enumerate() {
-            let record_id = record.get("id").and_then(Value::as_str).unwrap_or("unknown");
+            let record_id = record
+                .get("id")
+                .and_then(Value::as_str)
+                .unwrap_or("unknown");
             let finished_at = record
                 .get("finishedAt")
                 .or_else(|| record.get("finished_at"))
@@ -1165,8 +1164,7 @@ fn render_failure_group_bundle_markdown(bundle: &Value) -> Result<String, crate:
         "```".to_string(),
     ]);
 
-    Ok(lines.join("
-"))
+    Ok(lines.join("\n"))
 }
 
 #[tauri::command]
@@ -1282,8 +1280,7 @@ fn render_execution_history_csv(history: &[Value]) -> Result<String, crate::erro
         lines.push(escaped);
     }
 
-    Ok(lines.join("
-"))
+    Ok(lines.join("\n"))
 }
 
 #[tauri::command]
@@ -1301,6 +1298,193 @@ pub async fn export_execution_history(
         render_execution_history_csv(&history)?
     } else {
         serde_json::to_string_pretty(&history)
+            .map_err(|e| crate::errors::AppError::unknown(format!("serialization error: {}", e)))?
+    };
+
+    std::fs::write(&file_path, content)
+        .map_err(|e| crate::errors::AppError::unknown(format!("write error: {}", e)))?;
+    Ok(file_path)
+}
+
+fn collect_link_paths(index: &Value, category: &str) -> Vec<String> {
+    index
+        .get("links")
+        .and_then(Value::as_object)
+        .and_then(|links| links.get(category))
+        .and_then(Value::as_array)
+        .map(|items| {
+            items
+                .iter()
+                .filter_map(Value::as_str)
+                .map(|value| value.trim())
+                .filter(|value| !value.is_empty())
+                .map(|value| value.to_string())
+                .collect::<Vec<_>>()
+        })
+        .unwrap_or_default()
+}
+
+fn summary_u64(index: &Value, key: &str) -> u64 {
+    index
+        .get("summary")
+        .and_then(Value::as_object)
+        .and_then(|summary| summary.get(key))
+        .and_then(Value::as_u64)
+        .unwrap_or(0)
+}
+
+fn markdown_link(path: &str) -> String {
+    let label = path
+        .replace('\\', "\\\\")
+        .replace('[', "\\[")
+        .replace(']', "\\]");
+    format!("[{}](<{}>)", label, path)
+}
+fn render_diagnostics_index_markdown(index: &Value) -> Result<String, crate::errors::AppError> {
+    let generated_at = index
+        .get("generatedAt")
+        .and_then(Value::as_str)
+        .unwrap_or("unknown");
+
+    let snapshots = collect_link_paths(index, "snapshots");
+    let bundles = collect_link_paths(index, "bundles");
+    let history_exports = collect_link_paths(index, "historyExports");
+
+    let mut lines = vec![
+        "# Diagnostics Index".to_string(),
+        String::new(),
+        format!("- Generated At: {}", generated_at),
+        format!("- History Records: {}", summary_u64(index, "historyCount")),
+        format!(
+            "- Filtered Records: {}",
+            summary_u64(index, "filteredHistoryCount")
+        ),
+        format!(
+            "- Failure Groups: {}",
+            summary_u64(index, "failureGroupCount")
+        ),
+        format!("- Snapshot Links: {}", snapshots.len()),
+        format!("- Bundle Links: {}", bundles.len()),
+        format!("- History Exports: {}", history_exports.len()),
+    ];
+
+    let mut append_links = |title: &str, items: &[String]| {
+        lines.push(String::new());
+        lines.push(format!("## {}", title));
+        if items.is_empty() {
+            lines.push("- (none)".to_string());
+        } else {
+            for item in items {
+                lines.push(format!("- {}", markdown_link(item)));
+            }
+        }
+    };
+
+    append_links("Snapshot Exports", &snapshots);
+    append_links("Bundle Exports", &bundles);
+    append_links("History Exports", &history_exports);
+
+    let raw = serde_json::to_string_pretty(index)
+        .map_err(|e| crate::errors::AppError::unknown(format!("serialization error: {}", e)))?;
+    lines.extend([
+        String::new(),
+        "## Raw Index".to_string(),
+        String::new(),
+        "```json".to_string(),
+        raw,
+        "```".to_string(),
+    ]);
+
+    Ok(lines.join("\n"))
+}
+
+fn html_escape(value: &str) -> String {
+    value
+        .replace('&', "&amp;")
+        .replace('<', "&lt;")
+        .replace('>', "&gt;")
+        .replace('"', "&quot;")
+        .replace('\'', "&#39;")
+}
+
+fn render_diagnostics_index_html(index: &Value) -> String {
+    let generated_at = index
+        .get("generatedAt")
+        .and_then(Value::as_str)
+        .unwrap_or("unknown");
+
+    let snapshots = collect_link_paths(index, "snapshots");
+    let bundles = collect_link_paths(index, "bundles");
+    let history_exports = collect_link_paths(index, "historyExports");
+
+    let render_list = |title: &str, items: &[String]| {
+        let mut out = format!("<h2>{}</h2><ul>", html_escape(title));
+        if items.is_empty() {
+            out.push_str("<li>(none)</li>");
+        } else {
+            for item in items {
+                let escaped = html_escape(item);
+                out.push_str(&format!("<li><a href=\"{}\">{}</a></li>", escaped, escaped));
+            }
+        }
+        out.push_str("</ul>");
+        out
+    };
+
+    [
+        "<!doctype html>".to_string(),
+        "<html><head><meta charset=\"utf-8\"><title>Diagnostics Index</title></head><body>"
+            .to_string(),
+        "<h1>Diagnostics Index</h1>".to_string(),
+        format!(
+            "<p><strong>Generated At:</strong> {}</p>",
+            html_escape(generated_at)
+        ),
+        "<ul>".to_string(),
+        format!(
+            "<li>History Records: {}</li>",
+            summary_u64(index, "historyCount")
+        ),
+        format!(
+            "<li>Filtered Records: {}</li>",
+            summary_u64(index, "filteredHistoryCount")
+        ),
+        format!(
+            "<li>Failure Groups: {}</li>",
+            summary_u64(index, "failureGroupCount")
+        ),
+        "</ul>".to_string(),
+        render_list("Snapshot Exports", &snapshots),
+        render_list("Bundle Exports", &bundles),
+        render_list("History Exports", &history_exports),
+        "</body></html>".to_string(),
+    ]
+    .join("\n")
+}
+
+#[tauri::command]
+pub async fn export_diagnostics_index(
+    index: Value,
+    file_path: String,
+) -> Result<String, crate::errors::AppError> {
+    if !index.is_object() {
+        return Err(crate::errors::AppError::unknown(
+            "diagnostics index payload must be an object",
+        ));
+    }
+
+    let ext = Path::new(&file_path)
+        .extension()
+        .and_then(|e| e.to_str())
+        .map(|s| s.to_ascii_lowercase())
+        .unwrap_or_else(|| "json".to_string());
+
+    let content = if ext == "md" || ext == "markdown" {
+        render_diagnostics_index_markdown(&index)?
+    } else if ext == "html" || ext == "htm" {
+        render_diagnostics_index_html(&index)
+    } else {
+        serde_json::to_string_pretty(&index)
             .map_err(|e| crate::errors::AppError::unknown(format!("serialization error: {}", e)))?
     };
 
@@ -1852,6 +2036,54 @@ mod tests {
         assert!(csv.contains("rec-1,dotnet,failed,2026-02-08T10:00:00Z"));
         assert!(csv.contains("rec-2,go,success,2026-02-08T11:00:00Z"));
         assert!(csv.contains("sdk missing"));
+    }
+
+    #[test]
+    fn diagnostics_index_markdown_contains_clickable_links_and_summary() {
+        let index = json!({
+            "generatedAt": "2026-02-08T12:00:00Z",
+            "summary": {
+                "historyCount": 4,
+                "filteredHistoryCount": 2,
+                "failureGroupCount": 1
+            },
+            "links": {
+                "snapshots": ["/tmp/out/execution-snapshot 1.md"],
+                "bundles": ["/tmp/out/failure-group-bundle.md"],
+                "historyExports": []
+            }
+        });
+
+        let markdown = render_diagnostics_index_markdown(&index).expect("markdown");
+        assert!(markdown.contains("# Diagnostics Index"));
+        assert!(markdown.contains("- History Records: 4"));
+        assert!(markdown.contains("- Snapshot Links: 1"));
+        assert!(markdown
+            .contains("[/tmp/out/execution-snapshot 1.md](</tmp/out/execution-snapshot 1.md>)"));
+        assert!(markdown.contains("## Raw Index"));
+    }
+
+    #[test]
+    fn diagnostics_index_html_escapes_links() {
+        let index = json!({
+            "generatedAt": "2026-02-08T12:00:00Z",
+            "summary": {
+                "historyCount": 2,
+                "filteredHistoryCount": 1,
+                "failureGroupCount": 1
+            },
+            "links": {
+                "snapshots": ["/tmp/out/a&b.md"],
+                "bundles": ["/tmp/out/<bundle>.md"],
+                "historyExports": []
+            }
+        });
+
+        let html = render_diagnostics_index_html(&index);
+        assert!(html.contains("<h1>Diagnostics Index</h1>"));
+        assert!(html.contains("href=\"/tmp/out/a&amp;b.md\""));
+        assert!(html.contains("href=\"/tmp/out/&lt;bundle&gt;.md\""));
+        assert!(html.contains("<li>(none)</li>"));
     }
 
     #[test]
