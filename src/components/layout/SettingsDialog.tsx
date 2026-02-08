@@ -30,6 +30,7 @@ import {
   Sliders,
   FileText,
   FileCog,
+  ListChecks,
 } from "lucide-react";
 import { useState } from "react";
 import {
@@ -63,6 +64,8 @@ interface SettingsDialogProps {
   onDefaultOutputDirChange: (dir: string) => void;
   executionHistoryLimit: number;
   onExecutionHistoryLimitChange: (limit: number) => void;
+  preRerunChecklistEnabled: boolean;
+  onPreRerunChecklistEnabledChange: (value: boolean) => void;
   theme: "light" | "dark" | "auto";
   onThemeChange: (theme: "light" | "dark" | "auto") => void;
   onOpenShortcuts?: () => void;
@@ -83,6 +86,8 @@ export function SettingsDialog({
   onDefaultOutputDirChange,
   executionHistoryLimit,
   onExecutionHistoryLimitChange,
+  preRerunChecklistEnabled,
+  onPreRerunChecklistEnabledChange,
   theme,
   onThemeChange,
   onOpenShortcuts,
@@ -409,6 +414,26 @@ export function SettingsDialog({
             <p className="text-xs text-muted-foreground">
               可设置 5~200 条，超出范围会自动修正并即时生效。
             </p>
+          </div>
+
+          {/* Rerun Checklist Toggle */}
+          <div className="flex items-center justify-between">
+            <div className="space-y-1">
+              <div className="flex items-center gap-2">
+                <ListChecks className="h-4 w-4 text-muted-foreground" />
+                <Label className="cursor-pointer" htmlFor="rerun-checklist-enabled">
+                  重跑前确认清单
+                </Label>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                启用后，点击“重跑记录”会先检查分支、环境和输出目标确认项。
+              </p>
+            </div>
+            <Switch
+              id="rerun-checklist-enabled"
+              checked={preRerunChecklistEnabled}
+              onCheckedChange={onPreRerunChecklistEnabledChange}
+            />
           </div>
 
           {/* Minimize to Tray Toggle */}

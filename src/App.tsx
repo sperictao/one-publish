@@ -63,6 +63,14 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
   Folder,
   Play,
   Settings,
@@ -96,8 +104,13 @@ import {
   type IssueDraftTemplate,
 } from "@/lib/issueDraft";
 import {
+  DEFAULT_DAILY_TRIAGE_PRESET,
+  loadDailyTriagePreset,
   loadHistoryFilterPresets,
+  saveDailyTriagePreset,
   saveHistoryFilterPresets,
+  type DailyTriagePreset,
+  type HistoryExportFormat,
   type HistoryFilterPreset,
 } from "@/lib/historyFilterPresets";
 import {
@@ -105,6 +118,10 @@ import {
   groupExecutionFailures,
   type FailureGroup,
 } from "@/lib/failureGroups";
+import {
+  loadRerunChecklistPreference,
+  saveRerunChecklistPreference,
+} from "@/lib/rerunChecklistPreference";
 import type { ParameterSchema, ParameterValue } from "@/types/parameters";
 
 interface ProjectInfo {
@@ -326,6 +343,68 @@ function formatProviderLabel(provider: ProviderManifest): string {
   return provider.displayName || provider.id;
 }
 
+interface HistoryFilterState {
+  provider: string;
+  status: HistoryFilterStatus;
+  window: HistoryFilterWindow;
+  keyword: string;
+}
+
+function filterExecutionHistory(
+  records: ExecutionRecord[],
+  filter: HistoryFilterState,
+  now = Date.now()
+): ExecutionRecord[] {
+  const keyword = filter.keyword.trim().toLowerCase();
+  const windowStartMs =
+    filter.window === "24h"
+      ? now - 24 * 60 * 60 * 1000
+      : filter.window === "7d"
+        ? now - 7 * 24 * 60 * 60 * 1000
+        : filter.window === "30d"
+          ? now - 30 * 24 * 60 * 60 * 1000
+          : null;
+
+  return records.filter((record) => {
+    if (filter.provider !== "all" && record.providerId !== filter.provider) {
+      return false;
+    }
+
+    if (filter.status === "success" && !record.success) {
+      return false;
+    }
+    if (filter.status === "cancelled" && !record.cancelled) {
+      return false;
+    }
+    if (filter.status === "failed" && (record.success || record.cancelled)) {
+      return false;
+    }
+
+    if (windowStartMs !== null) {
+      const finishedAt = Date.parse(record.finishedAt);
+      if (Number.isNaN(finishedAt) || finishedAt < windowStartMs) {
+        return false;
+      }
+    }
+
+    if (!keyword) {
+      return true;
+    }
+
+    const haystack = [
+      record.providerId,
+      record.projectPath,
+      record.error || "",
+      record.commandLine || "",
+      record.failureSignature || "",
+    ]
+      .join("\n")
+      .toLowerCase();
+
+    return haystack.includes(keyword);
+  });
+}
+
 function App() {
   // 使用持久化的应用状态
   const {
@@ -418,6 +497,17 @@ function App() {
   const [environmentLastResult, setEnvironmentLastResult] =
     useState<EnvironmentCheckResult | null>(null);
   const [releaseChecklistOpen, setReleaseChecklistOpen] = useState(false);
+  const [isRerunChecklistEnabled, setIsRerunChecklistEnabled] = useState(
+    () => loadRerunChecklistPreference().enabled
+  );
+  const [rerunChecklistOpen, setRerunChecklistOpen] = useState(false);
+  const [pendingRerunRecord, setPendingRerunRecord] =
+    useState<ExecutionRecord | null>(null);
+  const [rerunChecklistState, setRerunChecklistState] = useState({
+    branch: false,
+    environment: false,
+    output: false,
+  });
   const [artifactActionState, setArtifactActionState] =
     useState<ArtifactActionState>({
       packageResult: null,
@@ -476,6 +566,9 @@ function App() {
   const [historyFilterPresets, setHistoryFilterPresets] = useState<
     HistoryFilterPreset[]
   >([]);
+  const [dailyTriagePreset, setDailyTriagePreset] = useState<DailyTriagePreset>(
+    () => loadDailyTriagePreset()
+  );
   const [selectedHistoryPresetId, setSelectedHistoryPresetId] =
     useState("none");
   const [selectedFailureGroupKey, setSelectedFailureGroupKey] =
@@ -520,66 +613,33 @@ function App() {
     [executionHistory]
   );
 
-  const filteredExecutionHistory = useMemo(() => {
-    const keyword = historyFilterKeyword.trim().toLowerCase();
-    const now = Date.now();
-    const windowStartMs =
-      historyFilterWindow === "24h"
-        ? now - 24 * 60 * 60 * 1000
-        : historyFilterWindow === "7d"
-          ? now - 7 * 24 * 60 * 60 * 1000
-          : historyFilterWindow === "30d"
-            ? now - 30 * 24 * 60 * 60 * 1000
-            : null;
+  const filteredExecutionHistory = useMemo(
+    () =>
+      filterExecutionHistory(executionHistory, {
+        provider: historyFilterProvider,
+        status: historyFilterStatus,
+        window: historyFilterWindow,
+        keyword: historyFilterKeyword,
+      }),
+    [
+      executionHistory,
+      historyFilterProvider,
+      historyFilterStatus,
+      historyFilterWindow,
+      historyFilterKeyword,
+    ]
+  );
 
-    return executionHistory.filter((record) => {
-      if (historyFilterProvider !== "all" && record.providerId !== historyFilterProvider) {
-        return false;
-      }
-
-      if (historyFilterStatus === "success" && !record.success) {
-        return false;
-      }
-      if (historyFilterStatus === "cancelled" && !record.cancelled) {
-        return false;
-      }
-      if (
-        historyFilterStatus === "failed" &&
-        (record.success || record.cancelled)
-      ) {
-        return false;
-      }
-
-      if (windowStartMs !== null) {
-        const finishedAt = Date.parse(record.finishedAt);
-        if (Number.isNaN(finishedAt) || finishedAt < windowStartMs) {
-          return false;
-        }
-      }
-
-      if (!keyword) {
-        return true;
-      }
-
-      const haystack = [
-        record.providerId,
-        record.projectPath,
-        record.error || "",
-        record.commandLine || "",
-        record.failureSignature || "",
-      ]
-        .join("\n")
-        .toLowerCase();
-
-      return haystack.includes(keyword);
-    });
-  }, [
-    executionHistory,
-    historyFilterProvider,
-    historyFilterStatus,
-    historyFilterWindow,
-    historyFilterKeyword,
-  ]);
+  const dailyTriageRecords = useMemo(
+    () =>
+      filterExecutionHistory(executionHistory, {
+        provider: dailyTriagePreset.provider,
+        status: dailyTriagePreset.status,
+        window: dailyTriagePreset.window,
+        keyword: dailyTriagePreset.keyword,
+      }),
+    [executionHistory, dailyTriagePreset]
+  );
 
   const snapshotPaths = useMemo(
     () =>
@@ -698,6 +758,14 @@ function App() {
   useEffect(() => {
     saveHistoryFilterPresets(historyFilterPresets);
   }, [historyFilterPresets]);
+
+  useEffect(() => {
+    saveDailyTriagePreset(dailyTriagePreset);
+  }, [dailyTriagePreset]);
+
+  useEffect(() => {
+    saveRerunChecklistPreference({ enabled: isRerunChecklistEnabled });
+  }, [isRerunChecklistEnabled]);
 
   useEffect(() => {
     if (
@@ -1273,7 +1341,7 @@ function App() {
     }
   }, []);
 
-  const rerunFromHistory = useCallback(
+  const executeRerunFromRecord = useCallback(
     async (record: ExecutionRecord) => {
       const spec = extractSpecFromRecord(record);
       if (!spec) {
@@ -1288,6 +1356,58 @@ function App() {
     },
     [extractSpecFromRecord, restoreSpecToEditor, runPublishWithSpec]
   );
+
+  const rerunFromHistory = useCallback(
+    async (record: ExecutionRecord) => {
+      if (!isRerunChecklistEnabled) {
+        await executeRerunFromRecord(record);
+        return;
+      }
+
+      setPendingRerunRecord(record);
+      setRerunChecklistState({
+        branch: false,
+        environment: false,
+        output: false,
+      });
+      setRerunChecklistOpen(true);
+    },
+    [executeRerunFromRecord, isRerunChecklistEnabled]
+  );
+
+  const closeRerunChecklistDialog = useCallback(() => {
+    setRerunChecklistOpen(false);
+    setPendingRerunRecord(null);
+    setRerunChecklistState({
+      branch: false,
+      environment: false,
+      output: false,
+    });
+  }, []);
+
+  const confirmRerunWithChecklist = useCallback(async () => {
+    if (!pendingRerunRecord) {
+      return;
+    }
+
+    if (
+      !rerunChecklistState.branch ||
+      !rerunChecklistState.environment ||
+      !rerunChecklistState.output
+    ) {
+      toast.error("请先完成重跑前确认清单");
+      return;
+    }
+
+    const record = pendingRerunRecord;
+    closeRerunChecklistDialog();
+    await executeRerunFromRecord(record);
+  }, [
+    closeRerunChecklistDialog,
+    executeRerunFromRecord,
+    pendingRerunRecord,
+    rerunChecklistState,
+  ]);
 
   // Execute publish
   const executePublish = async () => {
@@ -1509,32 +1629,51 @@ function App() {
     }
   };
 
-  const exportExecutionHistory = async () => {
-    if (filteredExecutionHistory.length === 0) {
-      toast.error("当前没有可导出的执行历史");
+  const exportExecutionHistory = async (options?: {
+    records?: ExecutionRecord[];
+    format?: HistoryExportFormat;
+    title?: string;
+    filePrefix?: string;
+    successMessage?: string;
+  }) => {
+    const records = options?.records ?? filteredExecutionHistory;
+    if (records.length === 0) {
+      toast.error(
+        options?.records ? "预设下没有可导出的执行历史" : "当前没有可导出的执行历史"
+      );
       return;
     }
 
+    const format = options?.format;
     const timestamp = new Date().toISOString().replace(/[:]/g, "-");
+    const extension = format ?? "csv";
+    const prefix = options?.filePrefix ?? "execution-history";
     const defaultDir = selectedRepo?.path || "";
     const defaultPath = defaultDir
-      ? `${defaultDir}/execution-history-${timestamp}.csv`
-      : `execution-history-${timestamp}.csv`;
+      ? `${defaultDir}/${prefix}-${timestamp}.${extension}`
+      : `${prefix}-${timestamp}.${extension}`;
+
+    const filters =
+      format === "csv"
+        ? [{ name: "CSV", extensions: ["csv"] }]
+        : format === "json"
+          ? [{ name: "JSON", extensions: ["json"] }]
+          : [
+              { name: "CSV", extensions: ["csv"] },
+              { name: "JSON", extensions: ["json"] },
+            ];
 
     const selected = await save({
-      title: "导出执行历史",
+      title: options?.title ?? "导出执行历史",
       defaultPath,
-      filters: [
-        { name: "CSV", extensions: ["csv"] },
-        { name: "JSON", extensions: ["json"] },
-      ],
+      filters,
     });
 
     if (!selected) {
       return;
     }
 
-    const history = filteredExecutionHistory.map((record) => ({
+    const history = records.map((record) => ({
       id: record.id,
       providerId: record.providerId,
       projectPath: record.projectPath,
@@ -1558,12 +1697,40 @@ function App() {
       });
 
       trackHistoryExport(outputPath);
-      toast.success("执行历史已导出", { description: outputPath });
+      toast.success(options?.successMessage ?? "执行历史已导出", {
+        description: outputPath,
+      });
     } catch (err) {
       toast.error("导出执行历史失败", { description: String(err) });
     } finally {
       setIsExportingHistory(false);
     }
+  };
+
+  const exportDailyTriageReport = async () => {
+    if (!dailyTriagePreset.enabled) {
+      toast.message("每日排障预设已禁用");
+      return;
+    }
+
+    if (dailyTriageRecords.length === 0) {
+      toast.error("日报预设下没有可导出的执行历史");
+      return;
+    }
+
+    setHistoryFilterProvider(dailyTriagePreset.provider);
+    setHistoryFilterStatus(dailyTriagePreset.status);
+    setHistoryFilterWindow(dailyTriagePreset.window);
+    setHistoryFilterKeyword(dailyTriagePreset.keyword);
+    setSelectedHistoryPresetId("none");
+
+    await exportExecutionHistory({
+      records: dailyTriageRecords,
+      format: dailyTriagePreset.format,
+      title: "导出每日排障报告",
+      filePrefix: "daily-triage-report",
+      successMessage: "每日排障报告已导出",
+    });
   };
 
   const exportDiagnosticsIndex = async () => {
@@ -2760,7 +2927,7 @@ function App() {
                         variant="outline"
                         size="sm"
                         className="w-fit"
-                        onClick={exportExecutionHistory}
+                        onClick={() => void exportExecutionHistory()}
                         disabled={
                           isExportingHistory || filteredExecutionHistory.length === 0
                         }
@@ -2772,6 +2939,23 @@ function App() {
                           </>
                         ) : (
                           "导出历史"
+                        )}
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="w-fit"
+                        onClick={exportDailyTriageReport}
+                        disabled={!dailyTriagePreset.enabled || isExportingHistory}
+                      >
+                        {isExportingHistory ? (
+                          <>
+                            <Loader2 className="mr-1 h-3 w-3 animate-spin" />
+                            导出中...
+                          </>
+                        ) : (
+                          "一键导出日报"
                         )}
                       </Button>
                       <Button
@@ -2883,6 +3067,126 @@ function App() {
                         disabled={selectedHistoryPresetId === "none"}
                       >
                         删除预设
+                      </Button>
+                    </div>
+                    <div className="space-y-2 rounded-md border bg-muted/30 p-3">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <p className="text-sm font-medium">每日排障预设</p>
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs text-muted-foreground">启用</span>
+                          <Switch
+                            checked={dailyTriagePreset.enabled}
+                            onCheckedChange={(checked) =>
+                              setDailyTriagePreset((prev) => ({
+                                ...prev,
+                                enabled: checked,
+                              }))
+                            }
+                          />
+                        </div>
+                      </div>
+                      <div className="grid gap-2 md:grid-cols-5">
+                        <Select
+                          value={dailyTriagePreset.provider}
+                          onValueChange={(value) =>
+                            setDailyTriagePreset((prev) => ({
+                              ...prev,
+                              provider: value,
+                            }))
+                          }
+                        >
+                          <SelectTrigger className="h-8">
+                            <SelectValue placeholder="Provider" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="all">全部 Provider</SelectItem>
+                            {historyProviderOptions.map((providerId) => (
+                              <SelectItem key={`triage-${providerId}`} value={providerId}>
+                                {providerId}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <Select
+                          value={dailyTriagePreset.status}
+                          onValueChange={(value) =>
+                            setDailyTriagePreset((prev) => ({
+                              ...prev,
+                              status: value as HistoryFilterStatus,
+                            }))
+                          }
+                        >
+                          <SelectTrigger className="h-8">
+                            <SelectValue placeholder="状态" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="all">全部状态</SelectItem>
+                            <SelectItem value="success">成功</SelectItem>
+                            <SelectItem value="failed">失败</SelectItem>
+                            <SelectItem value="cancelled">已取消</SelectItem>
+                          </SelectContent>
+                        </Select>
+                        <Select
+                          value={dailyTriagePreset.window}
+                          onValueChange={(value) =>
+                            setDailyTriagePreset((prev) => ({
+                              ...prev,
+                              window: value as HistoryFilterWindow,
+                            }))
+                          }
+                        >
+                          <SelectTrigger className="h-8">
+                            <SelectValue placeholder="时间窗口" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="all">全部时间</SelectItem>
+                            <SelectItem value="24h">最近 24 小时</SelectItem>
+                            <SelectItem value="7d">最近 7 天</SelectItem>
+                            <SelectItem value="30d">最近 30 天</SelectItem>
+                          </SelectContent>
+                        </Select>
+                        <Select
+                          value={dailyTriagePreset.format}
+                          onValueChange={(value) =>
+                            setDailyTriagePreset((prev) => ({
+                              ...prev,
+                              format: value as HistoryExportFormat,
+                            }))
+                          }
+                        >
+                          <SelectTrigger className="h-8">
+                            <SelectValue placeholder="格式" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="csv">CSV</SelectItem>
+                            <SelectItem value="json">JSON</SelectItem>
+                          </SelectContent>
+                        </Select>
+                        <Input
+                          className="h-8"
+                          value={dailyTriagePreset.keyword}
+                          onChange={(event) =>
+                            setDailyTriagePreset((prev) => ({
+                              ...prev,
+                              keyword: event.target.value,
+                            }))
+                          }
+                          placeholder="日报关键词（可选）"
+                        />
+                      </div>
+                      <div className="text-xs text-muted-foreground">
+                        当前预设命中 {dailyTriageRecords.length} 条记录
+                        {dailyTriagePreset.enabled ? "" : "（已禁用）"}
+                      </div>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="secondary"
+                        onClick={() =>
+                          setDailyTriagePreset(DEFAULT_DAILY_TRIAGE_PRESET)
+                        }
+                      >
+                        恢复日报默认预设
                       </Button>
                     </div>
                     <div className="flex justify-end">
@@ -3027,6 +3331,8 @@ function App() {
         onDefaultOutputDirChange={setDefaultOutputDir}
         executionHistoryLimit={executionHistoryLimit}
         onExecutionHistoryLimitChange={setExecutionHistoryLimit}
+        preRerunChecklistEnabled={isRerunChecklistEnabled}
+        onPreRerunChecklistEnabledChange={setIsRerunChecklistEnabled}
         theme={theme}
         onThemeChange={setTheme}
         onOpenShortcuts={() => setShortcutsOpen(true)}
@@ -3035,6 +3341,115 @@ function App() {
         environmentCheckedAt={environmentLastResult?.checked_at}
         onOpenEnvironment={() => openEnvironmentDialog(null, [activeProviderId])}
       />
+
+      <Dialog
+        open={rerunChecklistOpen}
+        onOpenChange={(open) => {
+          if (open) {
+            setRerunChecklistOpen(true);
+            return;
+          }
+          closeRerunChecklistDialog();
+        }}
+      >
+        <DialogContent className="sm:max-w-[520px]">
+          <DialogHeader>
+            <DialogTitle>重跑前确认清单</DialogTitle>
+            <DialogDescription>
+              请确认以下检查项，避免在敏感分支或错误目标上触发重跑。
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div className="rounded-md border bg-muted/30 p-3 text-sm space-y-1">
+              <div>
+                <span className="text-muted-foreground">Provider:</span>{" "}
+                {pendingRerunRecord?.providerId || "(未知)"}
+              </div>
+              <div>
+                <span className="text-muted-foreground">当前分支:</span>{" "}
+                {selectedRepo?.currentBranch || "(未知)"}
+              </div>
+              <div>
+                <span className="text-muted-foreground">环境状态:</span>{" "}
+                {environmentStatus === "ready"
+                  ? "已就绪"
+                  : environmentStatus === "warning"
+                    ? "存在警告"
+                    : environmentStatus === "blocked"
+                      ? "存在阻断问题"
+                      : "未检查"}
+              </div>
+              <div>
+                <span className="text-muted-foreground">输出目标:</span>{" "}
+                {pendingRerunRecord?.outputDir || "(未记录)"}
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <div className="flex items-center justify-between rounded-md border px-3 py-2">
+                <Label htmlFor="rerun-check-branch" className="text-sm">
+                  我已确认当前分支允许重跑
+                </Label>
+                <Switch
+                  id="rerun-check-branch"
+                  checked={rerunChecklistState.branch}
+                  onCheckedChange={(checked) =>
+                    setRerunChecklistState((prev) => ({
+                      ...prev,
+                      branch: checked,
+                    }))
+                  }
+                />
+              </div>
+              <div className="flex items-center justify-between rounded-md border px-3 py-2">
+                <Label htmlFor="rerun-check-env" className="text-sm">
+                  我已确认环境状态满足预期
+                </Label>
+                <Switch
+                  id="rerun-check-env"
+                  checked={rerunChecklistState.environment}
+                  onCheckedChange={(checked) =>
+                    setRerunChecklistState((prev) => ({
+                      ...prev,
+                      environment: checked,
+                    }))
+                  }
+                />
+              </div>
+              <div className="flex items-center justify-between rounded-md border px-3 py-2">
+                <Label htmlFor="rerun-check-output" className="text-sm">
+                  我已确认输出目标目录与日志窗口
+                </Label>
+                <Switch
+                  id="rerun-check-output"
+                  checked={rerunChecklistState.output}
+                  onCheckedChange={(checked) =>
+                    setRerunChecklistState((prev) => ({
+                      ...prev,
+                      output: checked,
+                    }))
+                  }
+                />
+              </div>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="ghost" onClick={closeRerunChecklistDialog}>
+              取消
+            </Button>
+            <Button
+              onClick={() => void confirmRerunWithChecklist()}
+              disabled={
+                !rerunChecklistState.branch ||
+                !rerunChecklistState.environment ||
+                !rerunChecklistState.output
+              }
+            >
+              确认并重跑
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <ReleaseChecklistDialog
         open={releaseChecklistOpen}

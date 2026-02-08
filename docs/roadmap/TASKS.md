@@ -85,6 +85,6 @@ Status legend:
 
 - [done] TASK-1101 Issue draft template variables + reusable sections (docs/roadmap/tasks/TASK-1101.md)
 - [done] TASK-1102 Diagnostics package index page generation (docs/roadmap/tasks/TASK-1102.md)
-- [todo] TASK-1103 Export schedule preset for daily triage report (docs/roadmap/tasks/TASK-1103.md)
-- [todo] TASK-1104 Lightweight approval checklist before rerun (docs/roadmap/tasks/TASK-1104.md)
+- [done] TASK-1103 Export schedule preset for daily triage report (docs/roadmap/tasks/TASK-1103.md)
+- [done] TASK-1104 Lightweight approval checklist before rerun (docs/roadmap/tasks/TASK-1104.md)
 
