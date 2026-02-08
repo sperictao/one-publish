@@ -87,6 +87,11 @@ import {
 import { mapImportedSpecByProvider } from "@/lib/commandImportMapping";
 import { deriveFailureSignature } from "@/lib/failureSignature";
 import {
+  buildGitHubActionsSnippet,
+  buildShellHandoffSnippet,
+  type HandoffSnippetFormat,
+} from "@/lib/handoffSnippet";
+import {
   getRepresentativeRecord,
   groupExecutionFailures,
   type FailureGroup,
@@ -1085,6 +1090,38 @@ function App() {
       await copyText(record.commandLine, "命令行");
     },
     [copyText]
+  );
+
+  const copyHandoffSnippet = useCallback(
+    async (record: ExecutionRecord, format: HandoffSnippetFormat) => {
+      if (!record.success) {
+        toast.error("仅成功记录支持生成交接片段");
+        return;
+      }
+
+      const spec = extractSpecFromRecord(record);
+      if (!spec) {
+        toast.error("该记录缺少可恢复的发布参数");
+        return;
+      }
+
+      const snippet =
+        format === "shell"
+          ? buildShellHandoffSnippet({
+              spec,
+              commandLine: record.commandLine,
+            })
+          : buildGitHubActionsSnippet({
+              spec,
+              commandLine: record.commandLine,
+            });
+
+      await copyText(
+        snippet,
+        format === "shell" ? "Shell 交接片段" : "GitHub Actions 交接片段"
+      );
+    },
+    [copyText, extractSpecFromRecord]
   );
 
   const openSnapshotFromRecord = useCallback(async (record: ExecutionRecord) => {
@@ -2407,7 +2444,7 @@ function App() {
                           <div className="text-xs text-muted-foreground">
                             完成时间: {new Date(record.finishedAt).toLocaleString()}
                           </div>
-                          <div className="mt-2 flex gap-2">
+                          <div className="mt-2 flex flex-wrap gap-2">
                             <Button
                               type="button"
                               size="sm"
@@ -2426,6 +2463,30 @@ function App() {
                             >
                               重新执行
                             </Button>
+                            {record.success && (
+                              <>
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() =>
+                                    void copyHandoffSnippet(record, "shell")
+                                  }
+                                >
+                                  复制 Shell 片段
+                                </Button>
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() =>
+                                    void copyHandoffSnippet(record, "github-actions")
+                                  }
+                                >
+                                  复制 GHA 片段
+                                </Button>
+                              </>
+                            )}
                           </div>
                         </div>
                       ))
