@@ -161,6 +161,28 @@ interface ExecutionSnapshotPayload {
   };
 }
 
+interface FailureGroupBundleRecordPayload {
+  id: string;
+  providerId: string;
+  projectPath: string;
+  startedAt: string;
+  finishedAt: string;
+  outputDir: string | null;
+  error: string | null;
+  commandLine: string | null;
+  snapshotPath: string | null;
+  fileCount: number;
+}
+
+interface FailureGroupBundlePayload {
+  generatedAt: string;
+  providerId: string;
+  signature: string;
+  frequency: number;
+  representativeRecordId: string;
+  records: FailureGroupBundleRecordPayload[];
+}
+
 const SPEC_VERSION = 1;
 
 // Preset configurations
@@ -398,6 +420,8 @@ function App() {
   const [isPublishing, setIsPublishing] = useState(false);
   const [isCancellingPublish, setIsCancellingPublish] = useState(false);
   const [isExportingSnapshot, setIsExportingSnapshot] = useState(false);
+  const [isExportingFailureBundle, setIsExportingFailureBundle] =
+    useState(false);
   const [publishResult, setPublishResult] = useState<PublishResult | null>(null);
   const [lastExecutedSpec, setLastExecutedSpec] =
     useState<ProviderPublishSpec | null>(null);
@@ -1188,6 +1212,70 @@ function App() {
       toast.error("导出执行快照失败", { description: String(err) });
     } finally {
       setIsExportingSnapshot(false);
+    }
+  };
+
+  const exportFailureGroupBundle = async () => {
+    if (!selectedFailureGroup) {
+      toast.error("请先选择失败分组");
+      return;
+    }
+
+    const timestamp = new Date().toISOString().replace(/[:]/g, "-");
+    const representativeRecord = representativeFailureRecord;
+    const defaultDir =
+      selectedFailureGroup.latestRecord.outputDir ||
+      selectedRepo?.path ||
+      "";
+    const defaultPath = defaultDir
+      ? `${defaultDir}/failure-group-bundle-${timestamp}.md`
+      : `failure-group-bundle-${timestamp}.md`;
+
+    const selected = await save({
+      title: "导出失败组诊断包",
+      defaultPath,
+      filters: [
+        { name: "Markdown", extensions: ["md"] },
+        { name: "JSON", extensions: ["json"] },
+      ],
+    });
+
+    if (!selected || !representativeRecord) {
+      return;
+    }
+
+    const bundle: FailureGroupBundlePayload = {
+      generatedAt: new Date().toISOString(),
+      providerId: selectedFailureGroup.providerId,
+      signature: selectedFailureGroup.signature,
+      frequency: selectedFailureGroup.count,
+      representativeRecordId: representativeRecord.id,
+      records: selectedFailureGroup.records.map((record) => ({
+        id: record.id,
+        providerId: record.providerId,
+        projectPath: record.projectPath,
+        startedAt: record.startedAt,
+        finishedAt: record.finishedAt,
+        outputDir: record.outputDir ?? null,
+        error: record.error ?? null,
+        commandLine: record.commandLine ?? null,
+        snapshotPath: record.snapshotPath ?? null,
+        fileCount: record.fileCount,
+      })),
+    };
+
+    setIsExportingFailureBundle(true);
+    try {
+      const outputPath = await invoke<string>("export_failure_group_bundle", {
+        bundle,
+        filePath: selected,
+      });
+
+      toast.success("失败组诊断包已导出", { description: outputPath });
+    } catch (err) {
+      toast.error("导出失败组诊断包失败", { description: String(err) });
+    } finally {
+      setIsExportingFailureBundle(false);
     }
   };
 
@@ -2072,6 +2160,22 @@ function App() {
                       >
                         <Copy className="mr-1 h-3 w-3" />
                         复制代表命令
+                      </Button>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="secondary"
+                        onClick={exportFailureGroupBundle}
+                        disabled={isExportingFailureBundle}
+                      >
+                        {isExportingFailureBundle ? (
+                          <>
+                            <Loader2 className="mr-1 h-3 w-3 animate-spin" />
+                            导出中...
+                          </>
+                        ) : (
+                          "导出诊断包"
+                        )}
                       </Button>
                     </div>
                     {selectedFailureGroup.records.slice(0, 6).map((record, index) => (

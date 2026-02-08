@@ -1056,6 +1056,147 @@ pub async fn export_execution_snapshot(
     Ok(file_path)
 }
 
+
+fn render_failure_group_bundle_markdown(bundle: &Value) -> Result<String, crate::errors::AppError> {
+    let generated_at = bundle
+        .get("generatedAt")
+        .and_then(Value::as_str)
+        .unwrap_or("unknown");
+    let provider_id = bundle
+        .get("providerId")
+        .or_else(|| bundle.get("provider_id"))
+        .and_then(Value::as_str)
+        .unwrap_or("unknown");
+    let signature = bundle
+        .get("signature")
+        .and_then(Value::as_str)
+        .unwrap_or("(unknown)");
+    let frequency = bundle
+        .get("frequency")
+        .and_then(Value::as_u64)
+        .unwrap_or(0);
+    let representative_record_id = bundle
+        .get("representativeRecordId")
+        .or_else(|| bundle.get("representative_record_id"))
+        .and_then(Value::as_str)
+        .unwrap_or("unknown");
+    let records = bundle
+        .get("records")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+
+    let mut lines = vec![
+        "# Failure Group Diagnostics Bundle".to_string(),
+        String::new(),
+        format!("- Generated At: {}", generated_at),
+        format!("- Provider: {}", provider_id),
+        format!("- Signature: {}", signature),
+        format!("- Frequency: {}", frequency),
+        format!("- Representative Record: {}", representative_record_id),
+        String::new(),
+        "## Representative Runs".to_string(),
+    ];
+
+    if records.is_empty() {
+        lines.push("- (no records)".to_string());
+    } else {
+        for (index, record) in records.iter().enumerate() {
+            let record_id = record.get("id").and_then(Value::as_str).unwrap_or("unknown");
+            let finished_at = record
+                .get("finishedAt")
+                .or_else(|| record.get("finished_at"))
+                .and_then(Value::as_str)
+                .unwrap_or("unknown");
+            let project_path = record
+                .get("projectPath")
+                .or_else(|| record.get("project_path"))
+                .and_then(Value::as_str)
+                .unwrap_or("unknown");
+            let command_line = record
+                .get("commandLine")
+                .or_else(|| record.get("command_line"))
+                .and_then(Value::as_str)
+                .map(|value| value.trim())
+                .filter(|value| !value.is_empty())
+                .unwrap_or("(not captured)");
+            let error = record
+                .get("error")
+                .and_then(Value::as_str)
+                .map(|value| value.replace('\n', " "))
+                .unwrap_or_default();
+            let snapshot_path = record
+                .get("snapshotPath")
+                .or_else(|| record.get("snapshot_path"))
+                .and_then(Value::as_str)
+                .map(str::trim)
+                .filter(|value| !value.is_empty());
+            let output_dir = record
+                .get("outputDir")
+                .or_else(|| record.get("output_dir"))
+                .and_then(Value::as_str)
+                .map(str::trim)
+                .filter(|value| !value.is_empty());
+
+            lines.push(format!("- [{}] {} ({})", index + 1, finished_at, record_id));
+            lines.push(format!("  - Project: {}", project_path));
+            lines.push(format!("  - Command: {}", command_line));
+            if !error.trim().is_empty() {
+                lines.push(format!("  - Error: {}", error.trim()));
+            }
+            if let Some(path) = snapshot_path {
+                lines.push(format!("  - Snapshot: {}", path));
+            } else if let Some(dir) = output_dir {
+                lines.push(format!("  - Snapshot: (not exported, output dir: {})", dir));
+            } else {
+                lines.push("  - Snapshot: (not exported)".to_string());
+            }
+        }
+    }
+
+    let raw = serde_json::to_string_pretty(bundle)
+        .map_err(|e| crate::errors::AppError::unknown(format!("serialization error: {}", e)))?;
+    lines.extend([
+        String::new(),
+        "## Raw Bundle".to_string(),
+        String::new(),
+        "```json".to_string(),
+        raw,
+        "```".to_string(),
+    ]);
+
+    Ok(lines.join("
+"))
+}
+
+#[tauri::command]
+pub async fn export_failure_group_bundle(
+    bundle: Value,
+    file_path: String,
+) -> Result<String, crate::errors::AppError> {
+    if !bundle.is_object() {
+        return Err(crate::errors::AppError::unknown(
+            "failure group bundle payload must be an object",
+        ));
+    }
+
+    let ext = Path::new(&file_path)
+        .extension()
+        .and_then(|e| e.to_str())
+        .map(|s| s.to_ascii_lowercase())
+        .unwrap_or_else(|| "json".to_string());
+    let content = if ext == "md" || ext == "markdown" {
+        render_failure_group_bundle_markdown(&bundle)?
+    } else {
+        serde_json::to_string_pretty(&bundle)
+            .map_err(|e| crate::errors::AppError::unknown(format!("serialization error: {}", e)))?
+    };
+
+    std::fs::write(&file_path, content)
+        .map_err(|e| crate::errors::AppError::unknown(format!("write error: {}", e)))?;
+    Ok(file_path)
+}
+
 fn find_latest_snapshot_in_output_dir(
     output_dir: &str,
 ) -> Result<PathBuf, crate::errors::AppError> {
@@ -1529,6 +1670,43 @@ mod tests {
         assert!(markdown.contains("## Spec"));
         assert!(markdown.contains("## Result"));
         assert!(markdown.contains("## Log"));
+    }
+    #[test]
+    fn failure_group_bundle_markdown_contains_signature_and_snapshots() {
+        let bundle = json!({
+            "generatedAt": "2026-02-08T10:00:00Z",
+            "providerId": "dotnet",
+            "signature": "dotnet sdk missing",
+            "frequency": 3,
+            "representativeRecordId": "rec-2",
+            "records": [
+                {
+                    "id": "rec-2",
+                    "projectPath": "/tmp/app.csproj",
+                    "finishedAt": "2026-02-08T10:05:00Z",
+                    "commandLine": "$ dotnet publish /tmp/app.csproj",
+                    "error": "SDK not found",
+                    "snapshotPath": "/tmp/out/execution-snapshot-2026-02-08.md",
+                    "outputDir": "/tmp/out"
+                },
+                {
+                    "id": "rec-1",
+                    "projectPath": "/tmp/app.csproj",
+                    "finishedAt": "2026-02-08T09:55:00Z",
+                    "commandLine": "$ dotnet publish /tmp/app.csproj",
+                    "error": "SDK not found",
+                    "snapshotPath": null,
+                    "outputDir": "/tmp/out"
+                }
+            ]
+        });
+        let markdown = render_failure_group_bundle_markdown(&bundle).expect("markdown");
+        assert!(markdown.contains("# Failure Group Diagnostics Bundle"));
+        assert!(markdown.contains("- Signature: dotnet sdk missing"));
+        assert!(markdown.contains("- Frequency: 3"));
+        assert!(markdown.contains("- Snapshot: /tmp/out/execution-snapshot-2026-02-08.md"));
+        assert!(markdown.contains("Snapshot: (not exported, output dir: /tmp/out)"));
+        assert!(markdown.contains("## Raw Bundle"));
     }
     #[test]
     fn updater_empty_endpoints_error_is_actionable() {

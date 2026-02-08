@@ -109,6 +109,7 @@ pub fn run() {
             commands::export_config,
             commands::export_preflight_report,
             commands::export_execution_snapshot,
+            commands::export_failure_group_bundle,
             commands::open_execution_snapshot,
             commands::import_config,
             commands::apply_imported_config,

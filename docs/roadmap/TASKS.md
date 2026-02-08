@@ -68,7 +68,7 @@ Status legend:
 ## Phase 9: Diagnostics Deepening & Team Handoff
 
 - [done] TASK-0901 Failure group drill-down panel (representative runs + quick copy) (docs/roadmap/tasks/TASK-0901.md)
-- [todo] TASK-0902 Diagnostics bundle export for failure groups (docs/roadmap/tasks/TASK-0902.md)
+- [done] TASK-0902 Diagnostics bundle export for failure groups (docs/roadmap/tasks/TASK-0902.md)
 - [todo] TASK-0903 History filters + retention policy settings (docs/roadmap/tasks/TASK-0903.md)
 - [todo] TASK-0904 Successful run handoff snippet generator (CI/CLI) (docs/roadmap/tasks/TASK-0904.md)
 
