@@ -15,6 +15,8 @@ import {
   getExecutionHistory,
   getProviderSchema,
   listProviders,
+  openExecutionSnapshot,
+  setExecutionRecordSnapshot,
   type ExecutionRecord,
   type PublishConfigStore,
   type ProviderManifest,
@@ -394,6 +396,8 @@ function App() {
   const [lastExecutedSpec, setLastExecutedSpec] =
     useState<ProviderPublishSpec | null>(null);
   const [executionHistory, setExecutionHistory] = useState<ExecutionRecord[]>([]);
+  const [currentExecutionRecordId, setCurrentExecutionRecordId] =
+    useState<string | null>(null);
   const [outputLog, setOutputLog] = useState<string>("");
   const [isScanning, setIsScanning] = useState(false);
 
@@ -660,6 +664,8 @@ function App() {
   }, [isCustomMode, customConfig, selectedPreset, projectInfo, defaultOutputDir]);
 
   const persistExecutionRecord = useCallback((record: ExecutionRecord) => {
+    setCurrentExecutionRecordId(record.id);
+
     addExecutionRecord(record)
       .then((history) => {
         setExecutionHistory(history);
@@ -693,10 +699,235 @@ function App() {
         outputDir: params.result.output_dir || null,
         error: params.result.error,
         commandLine,
+        snapshotPath: null,
+        spec: params.spec,
         fileCount: params.result.file_count,
       };
     },
     []
+  );
+
+  const extractSpecFromRecord = useCallback(
+    (record: ExecutionRecord): ProviderPublishSpec | null => {
+      const raw = record.spec;
+      if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
+        return null;
+      }
+
+      const payload = raw as Record<string, unknown>;
+      const providerId = payload.provider_id;
+      const projectPath = payload.project_path;
+      if (typeof providerId !== "string" || typeof projectPath !== "string") {
+        return null;
+      }
+
+      const version =
+        typeof payload.version === "number" ? payload.version : SPEC_VERSION;
+      const parametersRaw = payload.parameters;
+      const parameters =
+        parametersRaw &&
+        typeof parametersRaw === "object" &&
+        !Array.isArray(parametersRaw)
+          ? (parametersRaw as Record<string, unknown>)
+          : {};
+
+      return {
+        version,
+        provider_id: providerId,
+        project_path: projectPath,
+        parameters,
+      };
+    },
+    []
+  );
+
+  const restoreSpecToEditor = useCallback(
+    (spec: ProviderPublishSpec) => {
+      setActiveProviderId(spec.provider_id);
+
+      if (spec.provider_id === "dotnet") {
+        const parameters = spec.parameters || {};
+        const propertiesRaw = parameters.properties;
+        const properties =
+          propertiesRaw &&
+          typeof propertiesRaw === "object" &&
+          !Array.isArray(propertiesRaw)
+            ? (propertiesRaw as Record<string, unknown>)
+            : null;
+        const profileName =
+          properties && typeof properties.PublishProfile === "string"
+            ? properties.PublishProfile
+            : "";
+
+        if (profileName) {
+          setCustomConfig({
+            ...customConfig,
+            configuration: "Release",
+            runtime: "",
+            selfContained: false,
+            outputDir:
+              typeof parameters.output === "string" ? parameters.output : "",
+            useProfile: true,
+            profileName,
+          });
+        } else {
+          setCustomConfig({
+            ...customConfig,
+            configuration:
+              typeof parameters.configuration === "string"
+                ? parameters.configuration
+                : "Release",
+            runtime: typeof parameters.runtime === "string" ? parameters.runtime : "",
+            selfContained: parameters.self_contained === true,
+            outputDir:
+              typeof parameters.output === "string" ? parameters.output : "",
+            useProfile: false,
+            profileName: "",
+          });
+        }
+
+        setIsCustomMode(true);
+      } else {
+        setProviderParameters((prev) => ({
+          ...prev,
+          [spec.provider_id]: spec.parameters as Record<string, ParameterValue>,
+        }));
+      }
+    },
+    [customConfig, setCustomConfig, setIsCustomMode]
+  );
+
+  const runPublishWithSpec = useCallback(
+    async (spec: ProviderPublishSpec) => {
+      try {
+        const env = await runEnvironmentCheck([spec.provider_id]);
+        setEnvironmentLastResult(env);
+
+        const critical = env.issues.find((i) => i.severity === "critical");
+        if (critical) {
+          toast.error("环境未就绪，已阻止发布", {
+            description: critical.description,
+          });
+          openEnvironmentDialog(env, [spec.provider_id]);
+          return;
+        }
+
+        const warning = env.issues.find((i) => i.severity === "warning");
+        if (warning) {
+          toast.warning("环境存在警告", {
+            description: warning.description,
+          });
+        }
+      } catch (err) {
+        toast.error("环境检查失败", { description: String(err) });
+      }
+
+      setLastExecutedSpec(spec);
+      setCurrentExecutionRecordId(null);
+      setIsPublishing(true);
+      setPublishResult(null);
+      setOutputLog("");
+      setReleaseChecklistOpen(false);
+      setArtifactActionState({ packageResult: null, signResult: null });
+
+      const executionStartedAt = new Date().toISOString();
+
+      try {
+        const result = await invoke<PublishResult>("execute_provider_publish", {
+          spec,
+        });
+
+        setPublishResult(result);
+        setOutputLog(result.output);
+
+        if (result.success) {
+          toast.success("发布成功!", {
+            description: result.output_dir
+              ? `输出目录: ${result.output_dir}`
+              : "命令执行成功",
+          });
+        } else if (result.cancelled) {
+          toast.warning("发布已取消", {
+            description: result.error || "用户取消了执行任务",
+          });
+        } else {
+          toast.error("发布失败", {
+            description: result.error || "未知错误",
+          });
+        }
+
+        const record = buildExecutionRecord({
+          spec,
+          startedAt: executionStartedAt,
+          finishedAt: new Date().toISOString(),
+          result,
+          output: result.output,
+        });
+        persistExecutionRecord(record);
+      } catch (err) {
+        const errorMsg = String(err);
+        const failedResult: PublishResult = {
+          provider_id: spec.provider_id,
+          success: false,
+          cancelled: false,
+          output: "",
+          error: errorMsg,
+          output_dir: "",
+          file_count: 0,
+        };
+        setPublishResult(failedResult);
+        toast.error("发布执行错误", {
+          description: errorMsg,
+        });
+
+        const record = buildExecutionRecord({
+          spec,
+          startedAt: executionStartedAt,
+          finishedAt: new Date().toISOString(),
+          result: failedResult,
+          output: "",
+        });
+        persistExecutionRecord(record);
+      } finally {
+        setIsPublishing(false);
+        setIsCancellingPublish(false);
+      }
+    },
+    [buildExecutionRecord, openEnvironmentDialog, persistExecutionRecord]
+  );
+
+  const openSnapshotFromRecord = useCallback(async (record: ExecutionRecord) => {
+    try {
+      const openedPath = await openExecutionSnapshot({
+        snapshotPath: record.snapshotPath ?? null,
+        outputDir: record.outputDir ?? null,
+      });
+
+      if (!record.snapshotPath || record.snapshotPath !== openedPath) {
+        const history = await setExecutionRecordSnapshot(record.id, openedPath);
+        setExecutionHistory(history);
+      }
+
+      toast.success("已打开执行快照", { description: openedPath });
+    } catch (err) {
+      toast.error("打开执行快照失败", { description: String(err) });
+    }
+  }, []);
+
+  const rerunFromHistory = useCallback(
+    async (record: ExecutionRecord) => {
+      const spec = extractSpecFromRecord(record);
+      if (!spec) {
+        toast.error("历史记录缺少可恢复的发布参数", {
+          description: "请使用最新版本重新执行一次后再重跑",
+        });
+        return;
+      }
+
+      restoreSpecToEditor(spec);
+      await runPublishWithSpec(spec);
+    },
+    [extractSpecFromRecord, restoreSpecToEditor, runPublishWithSpec]
   );
 
   // Execute publish
@@ -749,98 +980,7 @@ function App() {
       };
     }
 
-    try {
-      const env = await runEnvironmentCheck([activeProviderId]);
-      setEnvironmentLastResult(env);
-
-      const critical = env.issues.find((i) => i.severity === "critical");
-      if (critical) {
-        toast.error("环境未就绪，已阻止发布", {
-          description: critical.description,
-        });
-        openEnvironmentDialog(env, [activeProviderId]);
-        return;
-      }
-
-      const warning = env.issues.find((i) => i.severity === "warning");
-      if (warning) {
-        toast.warning("环境存在警告", {
-          description: warning.description,
-        });
-      }
-    } catch (err) {
-      toast.error("环境检查失败", { description: String(err) });
-    }
-
-    setLastExecutedSpec(spec);
-    setIsPublishing(true);
-    setPublishResult(null);
-    setOutputLog("");
-    setReleaseChecklistOpen(false);
-    setArtifactActionState({ packageResult: null, signResult: null });
-
-    const executionStartedAt = new Date().toISOString();
-
-    try {
-      const result = await invoke<PublishResult>("execute_provider_publish", {
-        spec,
-      });
-
-      setPublishResult(result);
-      setOutputLog(result.output);
-
-      if (result.success) {
-        toast.success("发布成功!", {
-          description: result.output_dir
-            ? `输出目录: ${result.output_dir}`
-            : "命令执行成功",
-        });
-      } else if (result.cancelled) {
-        toast.warning("发布已取消", {
-          description: result.error || "用户取消了执行任务",
-        });
-      } else {
-        toast.error("发布失败", {
-          description: result.error || "未知错误",
-        });
-      }
-
-      const record = buildExecutionRecord({
-        spec,
-        startedAt: executionStartedAt,
-        finishedAt: new Date().toISOString(),
-        result,
-        output: result.output,
-      });
-      persistExecutionRecord(record);
-    } catch (err) {
-      const errorMsg = String(err);
-      const failedResult: PublishResult = {
-        provider_id: activeProviderId,
-        success: false,
-        cancelled: false,
-        output: "",
-        error: errorMsg,
-        output_dir: "",
-        file_count: 0,
-      };
-      setPublishResult(failedResult);
-      toast.error("发布执行错误", {
-        description: errorMsg,
-      });
-
-      const record = buildExecutionRecord({
-        spec,
-        startedAt: executionStartedAt,
-        finishedAt: new Date().toISOString(),
-        result: failedResult,
-        output: "",
-      });
-      persistExecutionRecord(record);
-    } finally {
-      setIsPublishing(false);
-      setIsCancellingPublish(false);
-    }
+    await runPublishWithSpec(spec);
   };
 
   const cancelPublish = async () => {
@@ -928,6 +1068,15 @@ function App() {
         filePath: selected,
         snapshot,
       });
+
+      if (currentExecutionRecordId) {
+        const history = await setExecutionRecordSnapshot(
+          currentExecutionRecordId,
+          outputPath
+        );
+        setExecutionHistory(history);
+      }
+
       toast.success("执行快照已导出", { description: outputPath });
     } catch (err) {
       toast.error("导出执行快照失败", { description: String(err) });
@@ -1734,6 +1883,26 @@ function App() {
                         </div>
                         <div className="text-xs text-muted-foreground">
                           完成时间: {new Date(record.finishedAt).toLocaleString()}
+                        </div>
+                        <div className="mt-2 flex gap-2">
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            onClick={() => void openSnapshotFromRecord(record)}
+                            disabled={!record.snapshotPath && !record.outputDir}
+                          >
+                            打开快照
+                          </Button>
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="secondary"
+                            onClick={() => void rerunFromHistory(record)}
+                            disabled={isPublishing}
+                          >
+                            重新执行
+                          </Button>
                         </div>
                       </div>
                     ))}

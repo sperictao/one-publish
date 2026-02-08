@@ -34,6 +34,8 @@ export interface ExecutionRecord {
   outputDir?: string | null;
   error?: string | null;
   commandLine?: string | null;
+  snapshotPath?: string | null;
+  spec?: unknown;
   fileCount: number;
 }
 
@@ -337,7 +339,6 @@ export async function applyImportedConfig(profiles: ConfigProfile[]): Promise<vo
   await invoke("apply_imported_config", { profiles });
 }
 
-
 // ==================== 执行历史相关 ====================
 
 /**
@@ -354,4 +355,30 @@ export async function addExecutionRecord(
   record: ExecutionRecord
 ): Promise<ExecutionRecord[]> {
   return await invoke<ExecutionRecord[]>("add_execution_record", { record });
+}
+
+/**
+ * 更新执行记录对应的快照路径
+ */
+export async function setExecutionRecordSnapshot(
+  recordId: string,
+  snapshotPath: string
+): Promise<ExecutionRecord[]> {
+  return await invoke<ExecutionRecord[]>("set_execution_record_snapshot", {
+    record_id: recordId,
+    snapshot_path: snapshotPath,
+  });
+}
+
+/**
+ * 打开执行快照文件（优先记录路径，回退到输出目录自动解析）
+ */
+export async function openExecutionSnapshot(params: {
+  snapshotPath?: string | null;
+  outputDir?: string | null;
+}): Promise<string> {
+  return await invoke<string>("open_execution_snapshot", {
+    snapshot_path: params.snapshotPath ?? null,
+    output_dir: params.outputDir ?? null,
+  });
 }

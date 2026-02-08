@@ -1028,10 +1028,7 @@ fn render_execution_snapshot_markdown(snapshot: &Value) -> Result<String, crate:
             "```".to_string(),
         ]);
     }
-    Ok(lines.join(
-        "
-",
-    ))
+    Ok(lines.join("\n"))
 }
 #[tauri::command]
 pub async fn export_execution_snapshot(
@@ -1058,6 +1055,111 @@ pub async fn export_execution_snapshot(
         .map_err(|e| crate::errors::AppError::unknown(format!("write error: {}", e)))?;
     Ok(file_path)
 }
+
+fn find_latest_snapshot_in_output_dir(
+    output_dir: &str,
+) -> Result<PathBuf, crate::errors::AppError> {
+    if output_dir.trim().is_empty() {
+        return Err(crate::errors::AppError::unknown(
+            "记录中没有可用的输出目录，请先导出快照",
+        ));
+    }
+
+    let dir = PathBuf::from(output_dir);
+    if !dir.is_dir() {
+        return Err(crate::errors::AppError::unknown(format!(
+            "输出目录不存在: {}",
+            dir.to_string_lossy()
+        )));
+    }
+
+    let mut latest: Option<(std::time::SystemTime, PathBuf)> = None;
+    for entry in std::fs::read_dir(&dir)
+        .map_err(|e| crate::errors::AppError::unknown(format!("读取输出目录失败: {}", e)))?
+    {
+        let entry = entry
+            .map_err(|e| crate::errors::AppError::unknown(format!("读取目录项失败: {}", e)))?;
+        let path = entry.path();
+        if !path.is_file() {
+            continue;
+        }
+
+        let Some(name) = path.file_name().and_then(|value| value.to_str()) else {
+            continue;
+        };
+        if !name.starts_with("execution-snapshot-") {
+            continue;
+        }
+
+        let Some(ext) = path.extension().and_then(|value| value.to_str()) else {
+            continue;
+        };
+        let ext = ext.to_ascii_lowercase();
+        if ext != "md" && ext != "markdown" && ext != "json" {
+            continue;
+        }
+
+        let modified = entry
+            .metadata()
+            .and_then(|meta| meta.modified())
+            .unwrap_or(std::time::SystemTime::UNIX_EPOCH);
+
+        match &latest {
+            Some((current, _)) if modified <= *current => {}
+            _ => latest = Some((modified, path)),
+        }
+    }
+
+    latest.map(|(_, path)| path).ok_or_else(|| {
+        crate::errors::AppError::unknown(format!(
+            "未在输出目录找到执行快照，请先导出快照: {}",
+            dir.to_string_lossy()
+        ))
+    })
+}
+
+#[tauri::command]
+pub async fn open_execution_snapshot(
+    snapshot_path: Option<String>,
+    output_dir: Option<String>,
+) -> Result<String, crate::errors::AppError> {
+    let path = if let Some(snapshot_path) = snapshot_path {
+        let trimmed = snapshot_path.trim();
+        if trimmed.is_empty() {
+            if let Some(output_dir) = output_dir {
+                find_latest_snapshot_in_output_dir(&output_dir)?
+            } else {
+                return Err(crate::errors::AppError::unknown(
+                    "记录中没有快照路径，请先导出快照",
+                ));
+            }
+        } else {
+            let candidate = PathBuf::from(trimmed);
+            if candidate.is_file() {
+                candidate
+            } else if let Some(output_dir) = output_dir {
+                find_latest_snapshot_in_output_dir(&output_dir)?
+            } else {
+                return Err(crate::errors::AppError::unknown(format!(
+                    "快照文件不存在: {}",
+                    trimmed
+                )));
+            }
+        }
+    } else if let Some(output_dir) = output_dir {
+        find_latest_snapshot_in_output_dir(&output_dir)?
+    } else {
+        return Err(crate::errors::AppError::unknown(
+            "记录中没有可用的快照路径和输出目录",
+        ));
+    };
+
+    open::that(&path)
+        .map_err(|e| crate::errors::AppError::unknown(format!("打开快照失败: {}", e)))?;
+
+    Ok(path.to_string_lossy().to_string())
+}
+
 /// 导入配置从文件
 #[tauri::command]
 pub async fn import_config(file_path: String) -> Result<ConfigExport, crate::errors::AppError> {

@@ -109,6 +109,7 @@ pub fn run() {
             commands::export_config,
             commands::export_preflight_report,
             commands::export_execution_snapshot,
+            commands::open_execution_snapshot,
             commands::import_config,
             commands::apply_imported_config,
             commands::run_environment_check,
@@ -128,6 +129,7 @@ pub fn run() {
             store::delete_profile,
             store::get_execution_history,
             store::add_execution_record,
+            store::set_execution_record_snapshot,
             tray::update_tray_menu
         ])
         .run(tauri::generate_context!())

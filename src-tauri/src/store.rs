@@ -73,6 +73,10 @@ pub struct ExecutionRecord {
     pub error: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub command_line: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub snapshot_path: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub spec: Option<serde_json::Value>,
     #[serde(default)]
     pub file_count: usize,
 }
@@ -456,6 +460,32 @@ pub async fn get_execution_history() -> Result<Vec<ExecutionRecord>, String> {
 pub async fn add_execution_record(record: ExecutionRecord) -> Result<Vec<ExecutionRecord>, String> {
     let mut state = get_state();
     append_execution_history(&mut state.execution_history, record);
+    let history = state.execution_history.clone();
+    update_state(state)?;
+    Ok(history)
+}
+
+/// 更新执行记录关联的快照路径
+#[tauri::command]
+pub async fn set_execution_record_snapshot(
+    record_id: String,
+    snapshot_path: String,
+) -> Result<Vec<ExecutionRecord>, String> {
+    let mut state = get_state();
+    let mut found = false;
+
+    for record in &mut state.execution_history {
+        if record.id == record_id {
+            record.snapshot_path = Some(snapshot_path.clone());
+            found = true;
+            break;
+        }
+    }
+
+    if !found {
+        return Err(format!("未找到执行记录: {}", record_id));
+    }
+
     let history = state.execution_history.clone();
     update_state(state)?;
     Ok(history)
