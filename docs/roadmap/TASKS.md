@@ -78,5 +78,5 @@ Status legend:
 - [done] TASK-1001 History time-window filter (24h/7d/30d) (docs/roadmap/tasks/TASK-1001.md)
 - [done] TASK-1002 One-click issue draft from diagnostics bundle (docs/roadmap/tasks/TASK-1002.md)
 - [done] TASK-1003 History export (CSV/JSON) for team reporting (docs/roadmap/tasks/TASK-1003.md)
-- [todo] TASK-1004 Saved filter presets for recurring triage workflows (docs/roadmap/tasks/TASK-1004.md)
+- [done] TASK-1004 Saved filter presets for recurring triage workflows (docs/roadmap/tasks/TASK-1004.md)
 

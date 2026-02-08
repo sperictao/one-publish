@@ -93,6 +93,11 @@ import {
 } from "@/lib/handoffSnippet";
 import { buildFailureIssueDraft } from "@/lib/issueDraft";
 import {
+  loadHistoryFilterPresets,
+  saveHistoryFilterPresets,
+  type HistoryFilterPreset,
+} from "@/lib/historyFilterPresets";
+import {
   getRepresentativeRecord,
   groupExecutionFailures,
   type FailureGroup,
@@ -444,6 +449,11 @@ function App() {
   const [historyFilterWindow, setHistoryFilterWindow] =
     useState<HistoryFilterWindow>("all");
   const [historyFilterKeyword, setHistoryFilterKeyword] = useState("");
+  const [historyFilterPresets, setHistoryFilterPresets] = useState<
+    HistoryFilterPreset[]
+  >([]);
+  const [selectedHistoryPresetId, setSelectedHistoryPresetId] =
+    useState("none");
   const [selectedFailureGroupKey, setSelectedFailureGroupKey] =
     useState<string | null>(null);
   const [currentExecutionRecordId, setCurrentExecutionRecordId] =
@@ -638,7 +648,22 @@ function App() {
       .catch((err) => {
         console.error("加载执行历史失败:", err);
       });
+
+    setHistoryFilterPresets(loadHistoryFilterPresets());
   }, []);
+
+  useEffect(() => {
+    saveHistoryFilterPresets(historyFilterPresets);
+  }, [historyFilterPresets]);
+
+  useEffect(() => {
+    if (
+      selectedHistoryPresetId !== "none" &&
+      !historyFilterPresets.some((preset) => preset.id === selectedHistoryPresetId)
+    ) {
+      setSelectedHistoryPresetId("none");
+    }
+  }, [historyFilterPresets, selectedHistoryPresetId]);
 
   useEffect(() => {
     setExecutionHistory((prev) => prev.slice(0, executionHistoryLimit));
@@ -1479,6 +1504,98 @@ function App() {
       setIsExportingHistory(false);
     }
   };
+
+  const applyHistoryPreset = useCallback(
+    (presetId: string) => {
+      if (presetId === "none") {
+        setSelectedHistoryPresetId("none");
+        return;
+      }
+
+      const preset = historyFilterPresets.find((item) => item.id === presetId);
+      if (!preset) {
+        toast.error("未找到筛选预设");
+        return;
+      }
+
+      setHistoryFilterProvider(preset.provider);
+      setHistoryFilterStatus(preset.status);
+      setHistoryFilterWindow(preset.window);
+      setHistoryFilterKeyword(preset.keyword);
+      setSelectedHistoryPresetId(preset.id);
+    },
+    [historyFilterPresets]
+  );
+
+  const saveCurrentHistoryPreset = useCallback(() => {
+    const defaultName = `筛选预设 ${historyFilterPresets.length + 1}`;
+    const input =
+      typeof window !== "undefined"
+        ? window.prompt("输入筛选预设名称", defaultName)
+        : defaultName;
+    if (!input) {
+      return;
+    }
+
+    const name = input.trim();
+    if (!name) {
+      toast.error("筛选预设名称不能为空");
+      return;
+    }
+
+    const existingPreset = historyFilterPresets.find((item) => item.name === name);
+    const presetId =
+      existingPreset?.id || `${Date.now()}-${Math.random().toString(16).slice(2, 8)}`;
+
+    const preset: HistoryFilterPreset = {
+      id: presetId,
+      name,
+      provider: historyFilterProvider,
+      status: historyFilterStatus,
+      window: historyFilterWindow,
+      keyword: historyFilterKeyword,
+    };
+
+    setHistoryFilterPresets((prev) => {
+      const existingIndex = prev.findIndex((item) => item.id === presetId);
+      if (existingIndex >= 0) {
+        const next = [...prev];
+        next[existingIndex] = preset;
+        return next;
+      }
+
+      return [preset, ...prev].slice(0, 20);
+    });
+
+    setSelectedHistoryPresetId(presetId);
+    toast.success("筛选预设已保存", { description: name });
+  }, [
+    historyFilterKeyword,
+    historyFilterPresets,
+    historyFilterProvider,
+    historyFilterStatus,
+    historyFilterWindow,
+  ]);
+
+  const deleteSelectedHistoryPreset = useCallback(() => {
+    if (selectedHistoryPresetId === "none") {
+      toast.error("请先选择要删除的筛选预设");
+      return;
+    }
+
+    const current = historyFilterPresets.find(
+      (preset) => preset.id === selectedHistoryPresetId
+    );
+
+    setHistoryFilterPresets((prev) =>
+      prev.filter((preset) => preset.id !== selectedHistoryPresetId)
+    );
+    setSelectedHistoryPresetId("none");
+
+    toast.success("筛选预设已删除", {
+      description: current?.name || "",
+    });
+  }, [historyFilterPresets, selectedHistoryPresetId]);
 
   // Handle custom config updates
   const handleCustomConfigUpdate = (
@@ -2532,6 +2649,41 @@ function App() {
                         placeholder="关键词（签名/错误/命令）"
                       />
                     </div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Select
+                        value={selectedHistoryPresetId}
+                        onValueChange={applyHistoryPreset}
+                      >
+                        <SelectTrigger className="h-8 w-[220px]">
+                          <SelectValue placeholder="选择筛选预设" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="none">(不使用预设)</SelectItem>
+                          {historyFilterPresets.map((preset) => (
+                            <SelectItem key={preset.id} value={preset.id}>
+                              {preset.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        onClick={saveCurrentHistoryPreset}
+                      >
+                        保存为预设
+                      </Button>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="ghost"
+                        onClick={deleteSelectedHistoryPreset}
+                        disabled={selectedHistoryPresetId === "none"}
+                      >
+                        删除预设
+                      </Button>
+                    </div>
                     <div className="flex justify-end">
                       <Button
                         type="button"
@@ -2542,6 +2694,7 @@ function App() {
                           setHistoryFilterStatus("all");
                           setHistoryFilterWindow("all");
                           setHistoryFilterKeyword("");
+                          setSelectedHistoryPresetId("none");
                         }}
                         disabled={
                           historyFilterProvider === "all" &&
