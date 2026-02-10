@@ -241,7 +241,12 @@
     "saving": "保存中...",
     "cancel": "取消",
     "projectFile": "Project File",
-    "projectFilePlaceholder": "可选：请输入项目文件路径（如 .csproj）"
+    "projectFilePlaceholder": "可选：请输入项目文件路径（如 .csproj）",
+    "projectFileManualInput": "手动输入...",
+    "projectFileNone": "未设置",
+    "projectFileScanHint": "可从自动扫描结果中选择，或切换到手动输入。",
+    "scanProjectFiles": "扫描项目文件",
+    "scanningProjectFiles": "扫描中..."
   },
   "commandImport": {
     "title": "从命令导入",
@@ -291,7 +296,15 @@
     "savedProfiles": "已保存的配置",
     "noProfiles": "暂无保存的配置文件",
     "defaultTag": "默认",
-    "load": "加载"
+    "load": "加载",
+    "quickCreateTitle": "创建发布配置",
+    "quickCreateDescription": "填写与自定义模式一致的参数并保存为发布配置。",
+    "quickCreateName": "配置名称",
+    "quickCreateTemplate": "预置模板",
+    "quickCreateTemplateCustomGroup": "自定义配置",
+    "quickCreateTemplateCustom": "自定义配置（空表单）",
+    "quickCreateAction": "创建并保存",
+    "quickCreateSaving": "保存中..."
   },
   "app": {
     "loading": "加载中...",
@@ -562,6 +575,19 @@
     "cancel": "取消",
     "confirm": "确认并重跑",
     "requireChecklist": "请先完成重跑前确认清单"
+  },
+  "configPanel": {
+    "searchConfig": "搜索配置",
+    "newConfig": "新建配置",
+    "refresh": "刷新配置",
+    "recentlyUsed": "最近使用",
+    "releaseGroup": "Release 配置",
+    "debugGroup": "Debug 配置",
+    "profileGroup": "项目发布配置",
+    "noProfiles": "暂无自定义配置",
+    "expandConfigList": "展开配置列表",
+    "collapsePanel": "收起面板",
+    "expandRepoList": "展开仓库列表"
   },
   "common": {
     "close": "关闭"

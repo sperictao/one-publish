@@ -6,48 +6,56 @@
 /* shadcn/ui Theme Variables */
 @layer base {
   :root {
-    --background: 0 0% 100%;
-    --foreground: 240 10% 3.9%;
-    --card: 0 0% 100%;
-    --card-foreground: 240 10% 3.9%;
-    --popover: 0 0% 100%;
-    --popover-foreground: 240 10% 3.9%;
-    --primary: 210 100% 56%;
+    --background: 30 15% 98%;
+    --foreground: 24 10% 10%;
+    --card: 30 15% 99%;
+    --card-foreground: 24 10% 10%;
+    --popover: 30 15% 99%;
+    --popover-foreground: 24 10% 10%;
+    --primary: 220 72% 50%;
     --primary-foreground: 0 0% 100%;
-    --secondary: 240 4.8% 95.9%;
-    --secondary-foreground: 240 5.9% 10%;
-    --muted: 240 4.8% 95.9%;
-    --muted-foreground: 240 3.8% 46.1%;
-    --accent: 240 4.8% 95.9%;
-    --accent-foreground: 240 5.9% 10%;
-    --destructive: 0 84.2% 60.2%;
+    --secondary: 30 8% 94%;
+    --secondary-foreground: 24 8% 15%;
+    --muted: 30 8% 94%;
+    --muted-foreground: 24 5% 46%;
+    --accent: 30 8% 94%;
+    --accent-foreground: 24 8% 15%;
+    --destructive: 0 72% 51%;
     --destructive-foreground: 0 0% 98%;
-    --border: 240 5.9% 90%;
-    --input: 240 5.9% 90%;
-    --ring: 210 100% 56%;
+    --border: 30 8% 88%;
+    --input: 30 8% 88%;
+    --ring: 220 72% 50%;
     --radius: 0.5rem;
+    --success: 152 60% 40%;
+    --success-foreground: 0 0% 100%;
+    --warning: 38 92% 50%;
+    --warning-foreground: 24 10% 10%;
   }
 
   .dark {
-    --background: 240 5% 12%;
-    --foreground: 0 0% 98%;
-    --card: 240 5% 16%;
-    --card-foreground: 0 0% 98%;
-    --popover: 240 5% 16%;
-    --popover-foreground: 0 0% 98%;
-    --primary: 210 100% 54%;
+    --background: 24 8% 10%;
+    --foreground: 30 10% 95%;
+    --card: 24 8% 13%;
+    --card-foreground: 30 10% 95%;
+    --popover: 24 8% 13%;
+    --popover-foreground: 30 10% 95%;
+    --primary: 220 72% 58%;
     --primary-foreground: 0 0% 100%;
-    --secondary: 240 5% 18%;
-    --secondary-foreground: 0 0% 98%;
-    --muted: 240 5% 18%;
-    --muted-foreground: 240 5% 64.9%;
-    --accent: 240 5% 18%;
-    --accent-foreground: 0 0% 98%;
-    --destructive: 0 62.8% 30.6%;
+    --secondary: 24 6% 18%;
+    --secondary-foreground: 30 10% 95%;
+    --muted: 24 6% 18%;
+    --muted-foreground: 30 6% 60%;
+    --accent: 24 6% 18%;
+    --accent-foreground: 30 10% 95%;
+    --destructive: 0 62% 35%;
     --destructive-foreground: 0 0% 98%;
-    --border: 240 5% 24%;
-    --input: 240 5% 24%;
-    --ring: 210 100% 54%;
+    --border: 24 6% 22%;
+    --input: 24 6% 22%;
+    --ring: 220 72% 58%;
+    --success: 152 50% 45%;
+    --success-foreground: 0 0% 100%;
+    --warning: 38 80% 55%;
+    --warning-foreground: 0 0% 100%;
   }
 }
 
@@ -108,4 +116,426 @@ html.dark {
 /* Focus styles */
 *:focus-visible {
   @apply outline-2 outline-blue-500 outline-offset-2;
+}
+
+/* ============================================
+   Apple Liquid Glass Design System
+   ============================================ */
+
+/* Liquid Glass CSS Variables */
+:root {
+  --glass-bg: rgba(255, 253, 250, 0.62);
+  --glass-bg-hover: rgba(255, 253, 250, 0.72);
+  --glass-bg-active: rgba(255, 253, 250, 0.82);
+  --glass-border: rgba(0, 0, 0, 0.12);
+  --glass-border-subtle: rgba(0, 0, 0, 0.08);
+  --glass-shadow: 0 2px 16px rgba(0, 0, 0, 0.08), 0 0 1px rgba(0, 0, 0, 0.12);
+  --glass-shadow-lg: 0 8px 32px rgba(0, 0, 0, 0.12), 0 0 1px rgba(0, 0, 0, 0.15);
+  --glass-shadow-selected: 0 4px 24px rgba(0, 0, 0, 0.1), 0 0 0 1px rgba(0, 0, 0, 0.08) inset;
+  --glass-specular: linear-gradient(135deg, rgba(255, 255, 255, 0.4) 0%, rgba(255, 255, 255, 0.05) 50%, transparent 100%);
+  --glass-panel-bg: rgba(250, 249, 247, 0.78);
+  --glass-divider: rgba(0, 0, 0, 0.1);
+  --glass-input-bg: rgba(0, 0, 0, 0.05);
+  --glass-overlay: rgba(0, 0, 0, 0.18);
+  --glass-code-bg: rgba(0, 0, 0, 0.06);
+  --glass-kbd-bg: rgba(0, 0, 0, 0.06);
+  --glass-kbd-border: rgba(0, 0, 0, 0.12);
+  --glass-inset-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.06);
+}
+
+.dark {
+  --glass-bg: rgba(255, 255, 255, 0.08);
+  --glass-bg-hover: rgba(255, 255, 255, 0.12);
+  --glass-bg-active: rgba(255, 255, 255, 0.16);
+  --glass-border: rgba(255, 255, 255, 0.18);
+  --glass-border-subtle: rgba(255, 255, 255, 0.1);
+  --glass-shadow: 0 2px 16px rgba(0, 0, 0, 0.25), 0 0 1px rgba(255, 255, 255, 0.06);
+  --glass-shadow-lg: 0 8px 32px rgba(0, 0, 0, 0.35), 0 0 1px rgba(255, 255, 255, 0.1);
+  --glass-shadow-selected: 0 4px 24px rgba(0, 0, 0, 0.3), 0 0 0 1px rgba(255, 255, 255, 0.12) inset;
+  --glass-specular: linear-gradient(135deg, rgba(255, 255, 255, 0.1) 0%, rgba(255, 255, 255, 0.02) 50%, transparent 100%);
+  --glass-panel-bg: rgba(30, 30, 35, 0.82);
+  --glass-divider: rgba(255, 255, 255, 0.1);
+  --glass-input-bg: rgba(255, 255, 255, 0.06);
+  --glass-overlay: rgba(0, 0, 0, 0.45);
+  --glass-code-bg: rgba(255, 255, 255, 0.08);
+  --glass-kbd-bg: rgba(255, 255, 255, 0.1);
+  --glass-kbd-border: rgba(255, 255, 255, 0.15);
+  --glass-inset-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.2);
+}
+
+/* Glass Panel - base container */
+.glass-panel {
+  background: var(--glass-panel-bg);
+  backdrop-filter: blur(40px) saturate(180%);
+  -webkit-backdrop-filter: blur(40px) saturate(180%);
+}
+
+/* Glass Surface - interactive elements */
+.glass-surface {
+  background: var(--glass-bg);
+  backdrop-filter: blur(20px) saturate(150%);
+  -webkit-backdrop-filter: blur(20px) saturate(150%);
+  border: 1px solid var(--glass-border);
+  box-shadow: var(--glass-shadow);
+  position: relative;
+  overflow: hidden;
+}
+
+.glass-surface::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: var(--glass-specular);
+  pointer-events: none;
+  border-radius: inherit;
+}
+
+/* Glass Surface - selected state */
+.glass-surface-selected {
+  background: var(--glass-bg-active);
+  backdrop-filter: blur(24px) saturate(180%);
+  -webkit-backdrop-filter: blur(24px) saturate(180%);
+  border: 1px solid var(--glass-border);
+  box-shadow: var(--glass-shadow-selected);
+  position: relative;
+}
+
+.glass-surface-selected::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: var(--glass-specular);
+  pointer-events: none;
+  border-radius: inherit;
+}
+
+/* Glass Divider - replaces hard borders */
+.glass-divider {
+  border-color: var(--glass-divider);
+}
+
+/* Glass Input */
+.glass-input {
+  background: var(--glass-input-bg);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border: 1px solid var(--glass-border-subtle);
+  box-shadow: var(--glass-inset-shadow);
+  transition: all 0.3s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.glass-input:focus-within {
+  background: var(--glass-bg);
+  border-color: var(--glass-border);
+  box-shadow: 0 0 0 3px hsl(var(--primary) / 0.12), var(--glass-shadow);
+}
+
+/* Glass Card - card container with subtle specular */
+.glass-card {
+  background: var(--glass-panel-bg);
+  backdrop-filter: blur(24px) saturate(160%);
+  -webkit-backdrop-filter: blur(24px) saturate(160%);
+  border: 1px solid var(--glass-border);
+  box-shadow: var(--glass-shadow);
+  position: relative;
+  overflow: hidden;
+}
+
+.glass-card::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.15) 0%, rgba(255, 255, 255, 0.02) 50%, transparent 100%);
+  pointer-events: none;
+  border-radius: inherit;
+}
+
+.dark .glass-card::before {
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.04) 0%, rgba(255, 255, 255, 0.01) 50%, transparent 100%);
+}
+
+/* Subtle pulse animation for connectivity indicator */
+@keyframes subtle-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+
+.subtle-pulse {
+  animation: subtle-pulse 2.5s ease-in-out infinite;
+}
+
+/* Gentle breathe animation for capsule badges */
+@keyframes capsule-breathe {
+  0%, 100% { opacity: 1; box-shadow: 0 0 0 0 transparent; }
+  50% { opacity: 0.65; box-shadow: 0 0 14px rgba(16, 185, 129, 0.35), 0 0 4px rgba(16, 185, 129, 0.2); }
+}
+
+.capsule-breathe {
+  animation: capsule-breathe 2.8s ease-in-out infinite;
+}
+
+/* Glass shimmer - specular light sweep */
+@keyframes glass-shimmer {
+  0% { transform: translateX(-100%) rotate(15deg); }
+  100% { transform: translateX(200%) rotate(15deg); }
+}
+
+/* ============================================
+   Apple-Style Motion System
+   ============================================ */
+
+/* --- Spring Timing Functions --- */
+/* Apple uses physics-based spring curves throughout iOS/macOS.
+   These cubic-bezier approximations match the feel. */
+
+/* Standard spring: natural deceleration with slight overshoot */
+/* cubic-bezier(0.34, 1.56, 0.64, 1) — for scale/position */
+/* Smooth ease: fluid deceleration without overshoot */
+/* cubic-bezier(0.2, 0.8, 0.2, 1) — for opacity/color */
+
+/* --- Glass Press Scale --- */
+/* Apple's tactile feedback: elements compress on press, spring back on release */
+.glass-press {
+  transition: transform 0.2s cubic-bezier(0.2, 0.8, 0.2, 1),
+              box-shadow 0.2s cubic-bezier(0.2, 0.8, 0.2, 1),
+              background 0.2s cubic-bezier(0.2, 0.8, 0.2, 1);
+  will-change: transform;
+}
+
+.glass-press:active {
+  transform: scale(0.97);
+  transition-duration: 0.1s;
+}
+
+/* --- Glass Hover Lift (enhanced) --- */
+/* Apple's depth-through-motion: elements lift toward the user on hover */
+.glass-hover-lift {
+  transition: transform 0.35s cubic-bezier(0.34, 1.56, 0.64, 1),
+              box-shadow 0.35s cubic-bezier(0.2, 0.8, 0.2, 1),
+              background 0.25s cubic-bezier(0.2, 0.8, 0.2, 1),
+              border-color 0.25s cubic-bezier(0.2, 0.8, 0.2, 1);
+  will-change: transform, box-shadow;
+}
+
+.glass-hover-lift:hover {
+  transform: translateY(-1px);
+  box-shadow: var(--glass-shadow-lg);
+}
+
+.glass-hover-lift:active {
+  transform: translateY(0) scale(0.98);
+  box-shadow: var(--glass-shadow);
+  transition-duration: 0.1s;
+}
+
+/* --- Glass Interactive --- */
+/* Combined hover-lift + press-scale for interactive cards/buttons */
+.glass-interactive {
+  transition: transform 0.35s cubic-bezier(0.34, 1.56, 0.64, 1),
+              box-shadow 0.35s cubic-bezier(0.2, 0.8, 0.2, 1),
+              background 0.25s cubic-bezier(0.2, 0.8, 0.2, 1),
+              border-color 0.25s cubic-bezier(0.2, 0.8, 0.2, 1),
+              opacity 0.25s cubic-bezier(0.2, 0.8, 0.2, 1);
+  will-change: transform, box-shadow;
+}
+
+.glass-interactive:hover {
+  transform: translateY(-1px);
+  box-shadow: var(--glass-shadow-lg);
+}
+
+.glass-interactive:active {
+  transform: translateY(0) scale(0.97);
+  box-shadow: var(--glass-shadow);
+  transition: transform 0.1s cubic-bezier(0.2, 0.8, 0.2, 1),
+              box-shadow 0.1s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+/* --- Glass Shimmer on Hover --- */
+/* Specular light sweep across glass surfaces */
+.glass-shimmer-hover {
+  position: relative;
+  overflow: hidden;
+}
+
+.glass-shimmer-hover::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    105deg,
+    transparent 40%,
+    rgba(255, 255, 255, 0.15) 45%,
+    rgba(255, 255, 255, 0.25) 50%,
+    rgba(255, 255, 255, 0.15) 55%,
+    transparent 60%
+  );
+  background-size: 200% 100%;
+  background-position: 200% 0;
+  pointer-events: none;
+  border-radius: inherit;
+  transition: background-position 0s;
+  opacity: 0;
+}
+
+.glass-shimmer-hover:hover::after {
+  opacity: 1;
+  background-position: -200% 0;
+  transition: background-position 0.8s cubic-bezier(0.2, 0.8, 0.2, 1),
+              opacity 0.15s ease;
+}
+
+.dark .glass-shimmer-hover::after {
+  background: linear-gradient(
+    105deg,
+    transparent 40%,
+    rgba(255, 255, 255, 0.04) 45%,
+    rgba(255, 255, 255, 0.08) 50%,
+    rgba(255, 255, 255, 0.04) 55%,
+    transparent 60%
+  );
+  background-size: 200% 100%;
+  background-position: 200% 0;
+}
+
+/* --- List Item Stagger --- */
+/* Apple's staggered list entrance: each item delays slightly */
+.glass-stagger > * {
+  animation: stagger-fade-in 0.35s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+@keyframes stagger-fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.glass-stagger > *:nth-child(1) { animation-delay: 0ms; }
+.glass-stagger > *:nth-child(2) { animation-delay: 30ms; }
+.glass-stagger > *:nth-child(3) { animation-delay: 60ms; }
+.glass-stagger > *:nth-child(4) { animation-delay: 90ms; }
+.glass-stagger > *:nth-child(5) { animation-delay: 120ms; }
+.glass-stagger > *:nth-child(6) { animation-delay: 150ms; }
+.glass-stagger > *:nth-child(7) { animation-delay: 180ms; }
+.glass-stagger > *:nth-child(8) { animation-delay: 210ms; }
+.glass-stagger > *:nth-child(n+9) { animation-delay: 240ms; }
+
+/* --- Focus Ring Animation --- */
+/* Apple's animated focus ring: scales in with spring */
+.glass-focus-ring:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px hsl(var(--primary) / 0.15);
+  animation: glass-focus-pulse 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+@keyframes glass-focus-pulse {
+  0% { box-shadow: 0 0 0 0px hsl(var(--primary) / 0.4); }
+  100% { box-shadow: 0 0 0 3px hsl(var(--primary) / 0.15); }
+}
+
+/* --- Smooth State Transitions --- */
+/* Global transition for color/background/border changes */
+.glass-transition {
+  transition: color 0.2s cubic-bezier(0.2, 0.8, 0.2, 1),
+              background-color 0.2s cubic-bezier(0.2, 0.8, 0.2, 1),
+              border-color 0.2s cubic-bezier(0.2, 0.8, 0.2, 1),
+              box-shadow 0.2s cubic-bezier(0.2, 0.8, 0.2, 1),
+              opacity 0.2s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+/* --- Reduced Motion --- */
+/* Respect system accessibility preference */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+
+  .glass-hover-lift:hover,
+  .glass-interactive:hover {
+    transform: none;
+  }
+
+  .glass-press:active,
+  .glass-hover-lift:active,
+  .glass-interactive:active {
+    transform: none;
+  }
+
+  .glass-shimmer-hover::after {
+    display: none;
+  }
+
+  .glass-stagger > * {
+    animation: none;
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* --- Scrollbar Auto-hide --- */
+/* Apple-style scrollbar: visible only when scrolling */
+.glass-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: transparent transparent;
+  transition: scrollbar-color 0.3s;
+}
+
+.glass-scrollbar:hover {
+  scrollbar-color: hsl(var(--muted-foreground) / 0.3) transparent;
+}
+
+.glass-scrollbar::-webkit-scrollbar-thumb {
+  background: transparent;
+  border-radius: 3px;
+  transition: background 0.3s;
+}
+
+.glass-scrollbar:hover::-webkit-scrollbar-thumb {
+  background: hsl(var(--muted-foreground) / 0.3);
+}
+
+.glass-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: hsl(var(--muted-foreground) / 0.5);
+}
+
+/* Card top accent line */
+.glass-card::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 12px;
+  right: 12px;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, hsl(var(--primary) / 0.2), transparent);
+  pointer-events: none;
+  border-radius: 1px;
+}
+
+/* Status badge system */
+.status-success {
+  color: hsl(var(--success));
+  background: hsl(var(--success) / 0.1);
+  border: 1px solid hsl(var(--success) / 0.2);
+}
+
+.status-failed {
+  color: hsl(var(--destructive));
+  background: hsl(var(--destructive) / 0.1);
+  border: 1px solid hsl(var(--destructive) / 0.2);
+}
+
+.status-cancelled {
+  color: hsl(var(--warning));
+  background: hsl(var(--warning) / 0.1);
+  border: 1px solid hsl(var(--warning) / 0.2);
 }

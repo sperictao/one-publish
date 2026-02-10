@@ -57,7 +57,7 @@ export function BranchPanel({
         <div
           data-tauri-drag-region
           className={cn(
-            "flex h-10 items-center justify-end border-b px-2",
+            "flex h-10 items-center justify-end border-b border-[var(--glass-divider)] px-2",
             showExpandButton && "pl-[100px]"
           )}
         >
@@ -101,8 +101,8 @@ export function BranchPanel({
           </div>
         </div>
         {/* Search (disabled) */}
-        <div className="border-b px-3 py-2">
-          <div className="relative">
+        <div className="border-b border-[var(--glass-divider)] px-3 py-2">
+          <div className="glass-input relative rounded-xl">
             <Search className="absolute left-2 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
             <Input
               placeholder={branchT.searchWorktree || "搜索 worktree"}
@@ -128,7 +128,7 @@ export function BranchPanel({
       <div
         data-tauri-drag-region
         className={cn(
-          "flex h-10 items-center justify-end border-b px-2",
+          "flex h-10 items-center justify-end border-b border-[var(--glass-divider)] px-2",
           showExpandButton && "pl-[100px]"
         )}
       >
@@ -193,8 +193,8 @@ export function BranchPanel({
       </div>
 
       {/* Search */}
-      <div className="border-b px-3 py-2">
-        <div className="relative">
+      <div className="border-b border-[var(--glass-divider)] px-3 py-2">
+        <div className="glass-input relative rounded-xl">
           <Search className="absolute left-2 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input
             placeholder={branchT.searchWorktree || "搜索 worktree"}
@@ -206,13 +206,14 @@ export function BranchPanel({
       </div>
 
       {/* Branch List */}
-      <div className="flex-1 overflow-auto">
+      <div className="flex-1 overflow-auto glass-scrollbar">
+        <div className="glass-stagger">
         {filteredBranches.map((branch) => (
           <div
             key={branch.name}
             className={cn(
-              "flex items-start gap-2 border-b px-3 py-3 transition-colors hover:bg-accent cursor-pointer",
-              branch.isCurrent && "bg-accent/50"
+              "flex items-start gap-2 border-b border-[var(--glass-divider)] px-3 py-3 glass-transition hover:bg-[var(--glass-bg)] cursor-pointer",
+              branch.isCurrent && "glass-surface-selected rounded-lg mx-1 border-0"
             )}
           >
             <GitBranch
@@ -244,6 +245,7 @@ export function BranchPanel({
             )}
           </div>
         ))}
+        </div>
       </div>
     </div>
   );

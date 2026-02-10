@@ -44,14 +44,14 @@ export function ShortcutsDialog({
             {shortcutT.description || "可用的全局快捷键"}
           </DialogDescription>
         </DialogHeader>
-        <div className="space-y-2 py-4">
+        <div className="space-y-2 py-4 glass-stagger">
           {shortcuts.map((shortcut, index) => (
             <div
               key={index}
-              className="flex items-center justify-between p-3 bg-muted rounded-lg"
+              className="flex items-center justify-between p-3 bg-[var(--glass-input-bg)] rounded-xl glass-transition"
             >
               <span className="text-sm">{shortcut.description}</span>
-              <kbd className="px-2 py-1 text-xs font-semibold text-gray-800 bg-gray-100 border border-gray-300 rounded dark:bg-gray-700 dark:text-gray-200 dark:border-gray-600">
+              <kbd className="px-2 py-1 text-xs font-semibold bg-[var(--glass-kbd-bg)] border border-[var(--glass-kbd-border)] rounded-lg">
                 {shortcut.key}
               </kbd>
             </div>

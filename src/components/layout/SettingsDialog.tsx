@@ -434,7 +434,7 @@ export function SettingsDialog({
           <Info className="h-4 w-4" />
           {translations.environment?.title || "环境检查"}
         </Label>
-        <div className="flex items-center justify-between gap-3 rounded-lg bg-muted p-3">
+        <div className="flex items-center justify-between gap-3 rounded-xl bg-[var(--glass-input-bg)] border border-[var(--glass-border-subtle)] p-3">
           <div className="space-y-1">
             <div className="text-sm font-medium">
               {translations.environment?.status || "环境状态"}: {" "}
@@ -487,10 +487,10 @@ export function SettingsDialog({
           {shortcutItems.map((shortcut) => (
             <div
               key={shortcut.key}
-              className="flex items-center justify-between rounded-lg bg-muted px-3 py-2"
+              className="flex items-center justify-between rounded-xl bg-[var(--glass-input-bg)] px-3 py-2 glass-transition"
             >
               <span className="text-sm">{shortcut.description}</span>
-              <kbd className="rounded border border-border bg-background px-2 py-1 text-xs font-semibold">
+              <kbd className="rounded-lg border border-[var(--glass-kbd-border)] bg-[var(--glass-kbd-bg)] px-2 py-1 text-xs font-semibold">
                 {shortcut.key}
               </kbd>
             </div>
@@ -512,7 +512,7 @@ export function SettingsDialog({
 
   const renderConfigSettings = () => (
     <div className="space-y-6">
-      <div className="rounded-lg border border-border/70 bg-muted/30 p-4">
+      <div className="rounded-xl border border-[var(--glass-border-subtle)] bg-[var(--glass-input-bg)] p-4">
         <div className="space-y-3">
           <div className="space-y-1">
             <div className="text-sm font-medium">
@@ -543,7 +543,7 @@ export function SettingsDialog({
           <Info className="h-4 w-4" />
           {translations.version?.title || "版本信息"}
         </Label>
-        <div className="flex flex-col gap-3 rounded-lg bg-muted p-3 sm:flex-row sm:items-start sm:justify-between">
+        <div className="flex flex-col gap-3 rounded-xl bg-[var(--glass-input-bg)] border border-[var(--glass-border-subtle)] p-3 sm:flex-row sm:items-start sm:justify-between">
           <div className="space-y-1">
             <div className="text-sm font-medium">
               {formatMessage(
@@ -647,7 +647,7 @@ export function SettingsDialog({
       </div>
 
       {updateInfo?.releaseNotes && (
-        <div className="max-h-40 overflow-y-auto rounded-lg bg-muted p-3 text-xs">
+        <div className="max-h-40 overflow-y-auto rounded-xl bg-[var(--glass-input-bg)] p-3 text-xs">
           <div className="mb-1 font-medium">
             {translations.version?.notes || "更新说明:"}
           </div>
@@ -678,7 +678,7 @@ export function SettingsDialog({
 
   return (
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[860px]">
+      <DialogContent className="sm:max-w-[860px] h-[72vh] grid-rows-[auto_1fr]">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Languages className="h-5 w-5" />
@@ -689,8 +689,8 @@ export function SettingsDialog({
           </DialogDescription>
         </DialogHeader>
 
-        <div className="grid gap-4 py-4 sm:grid-cols-[190px_minmax(0,1fr)]">
-          <aside className="rounded-lg border bg-muted/30 p-2">
+        <div className="grid gap-4 py-4 sm:grid-cols-[190px_minmax(0,1fr)] min-h-0">
+          <aside className="glass-surface rounded-2xl p-2 min-h-0 overflow-y-auto">
             <nav className="flex gap-1 overflow-x-auto pb-1 sm:flex-col sm:overflow-visible sm:pb-0">
               {categoryItems.map((item) => {
                 const Icon = item.icon;
@@ -702,10 +702,10 @@ export function SettingsDialog({
                     type="button"
                     aria-current={isActive ? "page" : undefined}
                     className={cn(
-                      "flex min-w-[110px] items-center gap-2 rounded-md px-3 py-2 text-left text-sm transition-colors sm:min-w-0",
+                      "glass-press flex min-w-[110px] items-center gap-2 rounded-xl px-3 py-2 text-left text-sm glass-transition sm:min-w-0",
                       isActive
-                        ? "bg-background text-foreground shadow-sm"
-                        : "text-muted-foreground hover:bg-background/70 hover:text-foreground"
+                        ? "bg-[var(--glass-bg-active)] text-foreground shadow-[var(--glass-shadow)]"
+                        : "text-muted-foreground hover:bg-[var(--glass-bg)] hover:text-foreground"
                     )}
                     onClick={() => setActiveCategory(item.id)}
                   >
@@ -717,8 +717,8 @@ export function SettingsDialog({
             </nav>
           </aside>
 
-          <section className="max-h-[70vh] overflow-y-auto rounded-lg border bg-background p-4">
-            <div className="mb-4 space-y-1 border-b pb-3">
+          <section className="overflow-y-auto glass-scrollbar rounded-2xl border border-[var(--glass-border-subtle)] bg-[var(--glass-bg)] p-4 min-h-0">
+            <div className="mb-4 space-y-1 border-b border-[var(--glass-divider)] pb-3">
               <h3 className="text-sm font-semibold">{activeCategoryItem.label}</h3>
               <p className="text-xs text-muted-foreground">
                 {activeCategoryItem.description}

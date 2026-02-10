@@ -416,7 +416,7 @@ export function ReleaseChecklistDialog({
           </DialogDescription>
         </DialogHeader>
 
-        <div className="rounded-md border p-3 text-xs sm:text-sm flex flex-wrap gap-2 sm:gap-3">
+        <div className="rounded-xl border border-[var(--glass-border-subtle)] bg-[var(--glass-input-bg)] p-3 text-xs sm:text-sm flex flex-wrap gap-2 sm:gap-3">
           <span className="rounded border px-2 py-1">
             {(checklistTranslations.summary?.passed || "已通过") + `: ${passedCount}`}
           </span>
@@ -436,8 +436,8 @@ export function ReleaseChecklistDialog({
           </span>
         </div>
 
-        <div className="grid gap-4 md:grid-cols-[240px_1fr] overflow-y-auto pr-1">
-          <div className="space-y-2">
+        <div className="grid gap-4 md:grid-cols-[240px_1fr] overflow-y-auto glass-scrollbar pr-1">
+          <div className="space-y-2 glass-stagger">
             {checklistItems.map((item, index) => {
               const style = statusStyles(item.status);
               const statusLabel =
@@ -447,10 +447,10 @@ export function ReleaseChecklistDialog({
                   type="button"
                   key={item.id}
                   onClick={() => setActiveStepIndex(index)}
-                  className={`w-full text-left rounded-md border p-3 transition-colors ${
+                  className={`glass-press w-full text-left rounded-xl border p-3 glass-transition ${
                     index === activeStepIndex
-                      ? "border-primary bg-primary/5"
-                      : "hover:bg-muted"
+                      ? "border-primary bg-primary/5 glass-surface-selected"
+                      : "border-[var(--glass-border-subtle)] hover:bg-[var(--glass-bg)]"
                   }`}
                 >
                   <div className="flex items-center justify-between gap-2">
@@ -469,7 +469,7 @@ export function ReleaseChecklistDialog({
             })}
           </div>
 
-          <div className="rounded-md border p-4 space-y-4">
+          <div className="rounded-xl border border-[var(--glass-border-subtle)] p-4 space-y-4">
             <div className="space-y-1">
               <div className="flex items-center justify-between gap-2">
                 <h3 className="text-base font-semibold">{activeStep.title}</h3>
@@ -480,7 +480,7 @@ export function ReleaseChecklistDialog({
               <p className="text-sm text-muted-foreground">{activeStep.description}</p>
             </div>
 
-            <div className="rounded-md bg-muted p-3 text-xs font-mono whitespace-pre-wrap break-all">
+            <div className="rounded-xl bg-[var(--glass-code-bg)] p-3 text-xs font-mono whitespace-pre-wrap break-all">
               {activeStep.detail}
             </div>
 

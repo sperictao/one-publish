@@ -254,7 +254,7 @@ export function ConfigDialog({
                 <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
               </div>
             ) : profiles.length === 0 ? (
-              <div className="text-center p-8 text-muted-foreground border rounded-lg">
+              <div className="text-center p-8 text-muted-foreground glass-surface rounded-2xl">
                 <AlertCircle className="h-8 w-8 mx-auto mb-2" />
                 <p>{profileT.noProfiles || "暂无保存的配置文件"}</p>
               </div>

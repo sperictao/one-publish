@@ -19,7 +19,7 @@ export function CollapsiblePanel({
   return (
     <div
       className={cn(
-        "relative flex flex-col border-r bg-card transition-all duration-300 ease-in-out overflow-hidden",
+        "relative flex flex-col border-r border-[var(--glass-divider)] glass-panel transition-all duration-300 ease-in-out overflow-hidden",
         collapsed && "w-0 min-w-0 border-r-0",
         className
       )}

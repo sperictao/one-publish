@@ -262,7 +262,7 @@ export function EnvironmentCheckDialog({
             </DialogDescription>
           </DialogHeader>
 
-          <div className="space-y-4 py-2 overflow-y-auto pr-1">
+          <div className="space-y-4 py-2 overflow-y-auto glass-scrollbar pr-1">
             <div className="space-y-2">
               <Label>{translations.environment?.scope || "检查范围"}</Label>
               <div className="grid grid-cols-2 gap-3">
@@ -271,7 +271,7 @@ export function EnvironmentCheckDialog({
                   return (
                     <div
                       key={p.id}
-                      className="flex items-center justify-between rounded-md border p-3"
+                      className="flex items-center justify-between rounded-xl border border-[var(--glass-border-subtle)] bg-[var(--glass-input-bg)] p-3"
                     >
                       <div className="space-y-0.5">
                         <div className="text-sm font-medium">{p.label}</div>
@@ -289,7 +289,7 @@ export function EnvironmentCheckDialog({
               </div>
             </div>
 
-            <div className="flex items-center justify-between rounded-md border p-3">
+            <div className="flex items-center justify-between rounded-xl border border-[var(--glass-border-subtle)] bg-[var(--glass-input-bg)] p-3">
               <div className="space-y-1">
                 <div className="text-sm font-medium">
                   {translations.environment?.status || "环境状态"}
@@ -323,7 +323,7 @@ export function EnvironmentCheckDialog({
             </div>
 
             {error && (
-              <div className="rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">
+              <div className="rounded-xl border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">
                 {error}
               </div>
             )}
@@ -336,7 +336,7 @@ export function EnvironmentCheckDialog({
                     {result.providers.map((p) => (
                       <div
                         key={p.provider_id}
-                        className="flex items-center justify-between rounded-md border p-3 text-sm"
+                        className="flex items-center justify-between rounded-xl border border-[var(--glass-border-subtle)] bg-[var(--glass-input-bg)] p-3 text-sm"
                       >
                         <div className="flex items-center gap-2">
                           {p.installed ? (
@@ -360,7 +360,7 @@ export function EnvironmentCheckDialog({
                 <div className="space-y-2">
                   <Label>{translations.environment?.issues || "发现的问题"}</Label>
                   {issues.length === 0 ? (
-                    <div className="rounded-md border p-3 text-sm text-muted-foreground">
+                    <div className="rounded-xl border border-[var(--glass-border-subtle)] p-3 text-sm text-muted-foreground">
                       {translations.environment?.noIssues || "未发现问题"}
                     </div>
                   ) : (
@@ -368,7 +368,7 @@ export function EnvironmentCheckDialog({
                       {issues.map((issue, idx) => (
                         <div
                           key={`${issue.provider_id}-${issue.issue_type}-${idx}`}
-                          className="rounded-md border p-3"
+                          className="rounded-xl border border-[var(--glass-border-subtle)] p-3"
                         >
                           <div className="flex items-start justify-between gap-3">
                             <div className="space-y-1">
@@ -437,7 +437,7 @@ export function EnvironmentCheckDialog({
                 {fixResultText && (
                   <div className="space-y-2">
                     <Label>{translations.environment?.result || "执行结果"}</Label>
-                    <pre className="rounded-md border bg-muted p-3 text-xs whitespace-pre-wrap max-h-56 overflow-auto">
+                    <pre className="rounded-xl border border-[var(--glass-border-subtle)] bg-[var(--glass-code-bg)] p-3 text-xs whitespace-pre-wrap max-h-56 overflow-auto">
                       {fixResultText}
                     </pre>
                   </div>
@@ -469,7 +469,7 @@ export function EnvironmentCheckDialog({
 
           <div className="space-y-2">
             <Label>{translations.environment?.commandPreview || "命令预览"}</Label>
-            <pre className="rounded-md border bg-muted p-3 text-xs whitespace-pre-wrap max-h-40 overflow-auto">
+            <pre className="rounded-xl border border-[var(--glass-border-subtle)] bg-[var(--glass-code-bg)] p-3 text-xs whitespace-pre-wrap max-h-40 overflow-auto">
               {pendingRun?.command || ""}
             </pre>
           </div>

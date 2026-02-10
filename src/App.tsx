@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useMemo } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import { open, save } from "@tauri-apps/plugin-dialog";
+import { ask, open, save } from "@tauri-apps/plugin-dialog";
 import { toast } from "sonner";
 
 // Hooks
@@ -15,11 +15,16 @@ import {
   checkRepositoryBranchConnectivity,
   detectRepositoryProvider,
   getExecutionHistory,
+  getProfiles,
+  saveProfile,
+  deleteProfile,
   getProviderSchema,
+  scanProjectFiles,
   listProviders,
   openExecutionSnapshot,
   scanRepositoryBranches,
   setExecutionRecordSnapshot,
+  type ConfigProfile,
   type ExecutionRecord,
   type PublishConfigStore,
   type ProviderManifest,
@@ -28,7 +33,7 @@ import {
 // Layout Components
 import { CollapsiblePanel } from "@/components/layout/CollapsiblePanel";
 import { RepositoryList } from "@/components/layout/RepositoryList";
-import { BranchPanel } from "@/components/layout/BranchPanel";
+import { PublishConfigPanel } from "@/components/layout/PublishConfigPanel";
 import { ResizeHandle } from "@/components/layout/ResizeHandle";
 import { SettingsDialog } from "@/components/layout/SettingsDialog";
 import { ShortcutsDialog } from "@/components/layout/ShortcutsDialog";
@@ -78,15 +83,12 @@ import {
   Play,
   Settings,
   Terminal,
-  CheckCircle2,
-  XCircle,
   Loader2,
-  RefreshCw,
-  GitBranch,
   Import,
   ListChecks,
   Square,
   Copy,
+  Save,
 } from "lucide-react";
 
 // Types
@@ -236,11 +238,49 @@ interface DiagnosticsIndexPayload {
 
 type HistoryFilterStatus = "all" | "success" | "failed" | "cancelled";
 type HistoryFilterWindow = "all" | "24h" | "7d" | "30d";
+type DotnetCustomConfigDraft = Pick<
+  PublishConfigStore,
+  "configuration" | "runtime" | "outputDir" | "selfContained"
+>;
+
+interface DotnetPreset {
+  id: string;
+  name: string;
+  description: string;
+  config: {
+    configuration: string;
+    runtime: string;
+    self_contained: boolean;
+  };
+}
 
 const SPEC_VERSION = 1;
+const QUICK_CREATE_CUSTOM_TEMPLATE_ID = "custom";
+const EMPTY_DOTNET_CUSTOM_CONFIG_DRAFT: DotnetCustomConfigDraft = {
+  configuration: "Release",
+  runtime: "",
+  outputDir: "",
+  selfContained: false,
+};
+
+const toDotnetCustomConfigDraftFromPreset = (
+  preset: DotnetPreset
+): DotnetCustomConfigDraft => ({
+  configuration: preset.config.configuration,
+  runtime: preset.config.runtime,
+  outputDir: "",
+  selfContained: preset.config.self_contained,
+});
+
+const toDotnetProfileParameters = (config: DotnetCustomConfigDraft) => ({
+  configuration: config.configuration,
+  runtime: config.runtime,
+  output: config.outputDir,
+  self_contained: config.selfContained,
+});
 
 // Preset configurations
-const PRESETS = [
+const PRESETS: DotnetPreset[] = [
   {
     id: "release-fd",
     name: "Release - 框架依赖",
@@ -424,6 +464,28 @@ function remapPathPrefix(path: string, oldPrefix: string, newPrefix: string): st
   return path;
 }
 
+
+function normalizePathForMatch(path: string): string {
+  return path.replace(/\\/g, "/").replace(/\/+$/, "").toLowerCase();
+}
+
+function isRecordInRepository(record: ExecutionRecord, repo: Repository): boolean {
+  if (record.repoId && record.repoId === repo.id) {
+    return true;
+  }
+
+  const normalizedRepoPath = normalizePathForMatch(repo.path);
+  const normalizedRecordPath = normalizePathForMatch(record.projectPath || "");
+
+  if (!normalizedRepoPath || !normalizedRecordPath) {
+    return false;
+  }
+
+  return (
+    normalizedRecordPath === normalizedRepoPath ||
+    normalizedRecordPath.startsWith(`${normalizedRepoPath}/`)
+  );
+}
 
 type BranchRefreshFailureReason =
   | "path_not_found"
@@ -911,13 +973,13 @@ function App() {
 
   // 国际化
   const { language, setLanguage: setI18nLanguage, translations } = useI18n();
-  const projectT = translations.project || {};
   const configT = translations.config || {};
   const publishT = translations.publish || {};
   const appT = translations.app || {};
   const historyT = translations.history || {};
   const failureT = translations.failure || {};
   const rerunT = translations.rerun || {};
+  const profileT = translations.profiles || {};
 
   const presetTextMap = useMemo(
     () => ({
@@ -1050,6 +1112,204 @@ function App() {
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const [commandImportOpen, setCommandImportOpen] = useState(false);
   const [configDialogOpen, setConfigDialogOpen] = useState(false);
+  const [profiles, setProfiles] = useState<ConfigProfile[]>([]);
+  const [activeProfileName, setActiveProfileName] = useState<string | null>(null);
+  const [quickCreateProfileOpen, setQuickCreateProfileOpen] = useState(false);
+  const [quickCreateProfileName, setQuickCreateProfileName] = useState("");
+  const [quickCreateTemplateId, setQuickCreateTemplateId] = useState(
+    QUICK_CREATE_CUSTOM_TEMPLATE_ID
+  );
+  const [quickCreateProfileDraft, setQuickCreateProfileDraft] =
+    useState<DotnetCustomConfigDraft>(EMPTY_DOTNET_CUSTOM_CONFIG_DRAFT);
+  const [quickCreateProfileSaving, setQuickCreateProfileSaving] = useState(false);
+
+  // Recently used config keys (persisted in localStorage, scoped by repo id)
+  const RECENT_CONFIGS_KEY = "one-publish:recentConfigs";
+  const FAVORITE_CONFIGS_KEY = "one-publish:favoriteConfigs";
+  const LEGACY_CONFIG_SCOPE = "__legacy__";
+  const MAX_RECENT = 6;
+
+  const parseScopedConfigKeys = useCallback((storageKey: string) => {
+    try {
+      const raw = localStorage.getItem(storageKey);
+      if (!raw) {
+        return {} as Record<string, string[]>;
+      }
+
+      const parsed = JSON.parse(raw);
+
+      if (Array.isArray(parsed)) {
+        const legacy = parsed.filter((item): item is string => typeof item === "string");
+        if (legacy.length === 0) {
+          return {} as Record<string, string[]>;
+        }
+        return { [LEGACY_CONFIG_SCOPE]: legacy };
+      }
+
+      if (!parsed || typeof parsed !== "object") {
+        return {} as Record<string, string[]>;
+      }
+
+      return Object.entries(parsed as Record<string, unknown>).reduce<Record<string, string[]>>(
+        (acc, [repoId, keys]) => {
+          if (!Array.isArray(keys)) {
+            return acc;
+          }
+
+          const normalized = keys.filter(
+            (item): item is string => typeof item === "string"
+          );
+
+          if (normalized.length > 0) {
+            acc[repoId] = normalized;
+          }
+
+          return acc;
+        },
+        {}
+      );
+    } catch {
+      return {} as Record<string, string[]>;
+    }
+  }, []);
+
+  const persistScopedConfigKeys = useCallback(
+    (storageKey: string, data: Record<string, string[]>) => {
+      try {
+        localStorage.setItem(storageKey, JSON.stringify(data));
+      } catch {
+        // noop
+      }
+    },
+    []
+  );
+
+  const [recentConfigByRepo, setRecentConfigByRepo] = useState<Record<string, string[]>>(() =>
+    parseScopedConfigKeys(RECENT_CONFIGS_KEY)
+  );
+  const [favoriteConfigByRepo, setFavoriteConfigByRepo] = useState<Record<string, string[]>>(() =>
+    parseScopedConfigKeys(FAVORITE_CONFIGS_KEY)
+  );
+
+  useEffect(() => {
+    if (!selectedRepoId) {
+      return;
+    }
+
+    setRecentConfigByRepo((prev) => {
+      const legacy = prev[LEGACY_CONFIG_SCOPE];
+      if (!legacy || prev[selectedRepoId]) {
+        return prev;
+      }
+
+      const next = {
+        ...prev,
+        [selectedRepoId]: legacy,
+      };
+      delete next[LEGACY_CONFIG_SCOPE];
+      persistScopedConfigKeys(RECENT_CONFIGS_KEY, next);
+      return next;
+    });
+
+    setFavoriteConfigByRepo((prev) => {
+      const legacy = prev[LEGACY_CONFIG_SCOPE];
+      if (!legacy || prev[selectedRepoId]) {
+        return prev;
+      }
+
+      const next = {
+        ...prev,
+        [selectedRepoId]: legacy,
+      };
+      delete next[LEGACY_CONFIG_SCOPE];
+      persistScopedConfigKeys(FAVORITE_CONFIGS_KEY, next);
+      return next;
+    });
+  }, [selectedRepoId, persistScopedConfigKeys]);
+
+  const recentConfigKeys = useMemo(() => {
+    if (!selectedRepoId) {
+      return [];
+    }
+    return recentConfigByRepo[selectedRepoId] ?? [];
+  }, [recentConfigByRepo, selectedRepoId]);
+
+  const favoriteConfigKeys = useMemo(() => {
+    if (!selectedRepoId) {
+      return [];
+    }
+    return favoriteConfigByRepo[selectedRepoId] ?? [];
+  }, [favoriteConfigByRepo, selectedRepoId]);
+
+  const pushRecentConfig = useCallback(
+    (key: string, repoId: string | null = selectedRepoId) => {
+      if (!repoId) {
+        return;
+      }
+
+      setRecentConfigByRepo((prev) => {
+        const scoped = prev[repoId] ?? [];
+        const nextScoped = [key, ...scoped.filter((k) => k !== key)].slice(0, MAX_RECENT);
+        const next = {
+          ...prev,
+          [repoId]: nextScoped,
+        };
+        persistScopedConfigKeys(RECENT_CONFIGS_KEY, next);
+        return next;
+      });
+    },
+    [selectedRepoId, persistScopedConfigKeys]
+  );
+
+  const removeRecentConfig = useCallback(
+    (key: string, repoId: string | null = selectedRepoId) => {
+      if (!repoId) {
+        return;
+      }
+
+      setRecentConfigByRepo((prev) => {
+        const scoped = prev[repoId] ?? [];
+        const next = {
+          ...prev,
+          [repoId]: scoped.filter((k) => k !== key),
+        };
+        persistScopedConfigKeys(RECENT_CONFIGS_KEY, next);
+        return next;
+      });
+    },
+    [selectedRepoId, persistScopedConfigKeys]
+  );
+
+  const toggleFavoriteConfig = useCallback(
+    (key: string, repoId: string | null = selectedRepoId) => {
+      if (!repoId) {
+        return;
+      }
+
+      const scoped = favoriteConfigByRepo[repoId] ?? [];
+      const isFavorite = scoped.includes(key);
+
+      setFavoriteConfigByRepo((prev) => {
+        const current = prev[repoId] ?? [];
+        const nextScoped = isFavorite
+          ? current.filter((k) => k !== key)
+          : [key, ...current.filter((k) => k !== key)];
+
+        const next = {
+          ...prev,
+          [repoId]: nextScoped,
+        };
+        persistScopedConfigKeys(FAVORITE_CONFIGS_KEY, next);
+        return next;
+      });
+
+      if (!isFavorite) {
+        pushRecentConfig(key, repoId);
+      }
+    },
+    [selectedRepoId, favoriteConfigByRepo, persistScopedConfigKeys, pushRecentConfig]
+  );
+
   const [environmentDialogOpen, setEnvironmentDialogOpen] = useState(false);
   const [environmentDefaultProviderIds, setEnvironmentDefaultProviderIds] =
     useState<string[]>(["dotnet"]);
@@ -1144,7 +1404,6 @@ function App() {
   const [currentExecutionRecordId, setCurrentExecutionRecordId] =
     useState<string | null>(null);
   const [outputLog, setOutputLog] = useState<string>("");
-  const [isScanning, setIsScanning] = useState(false);
   const [branchConnectivityByRepoId, setBranchConnectivityByRepoId] = useState<
     Record<string, boolean>
   >({});
@@ -1210,22 +1469,34 @@ function App() {
       ? lastImportFeedback
       : null;
 
+  const scopedExecutionHistory = useMemo(() => {
+    if (!selectedRepo) {
+      return [];
+    }
+
+    return executionHistory.filter((record) =>
+      isRecordInRepository(record, selectedRepo)
+    );
+  }, [executionHistory, selectedRepo]);
+
   const historyProviderOptions = useMemo(
     () =>
-      Array.from(new Set(executionHistory.map((record) => record.providerId))).sort(),
-    [executionHistory]
+      Array.from(
+        new Set(scopedExecutionHistory.map((record) => record.providerId))
+      ).sort(),
+    [scopedExecutionHistory]
   );
 
   const filteredExecutionHistory = useMemo(
     () =>
-      filterExecutionHistory(executionHistory, {
+      filterExecutionHistory(scopedExecutionHistory, {
         provider: historyFilterProvider,
         status: historyFilterStatus,
         window: historyFilterWindow,
         keyword: historyFilterKeyword,
       }),
     [
-      executionHistory,
+      scopedExecutionHistory,
       historyFilterProvider,
       historyFilterStatus,
       historyFilterWindow,
@@ -1235,25 +1506,25 @@ function App() {
 
   const dailyTriageRecords = useMemo(
     () =>
-      filterExecutionHistory(executionHistory, {
+      filterExecutionHistory(scopedExecutionHistory, {
         provider: dailyTriagePreset.provider,
         status: dailyTriagePreset.status,
         window: dailyTriagePreset.window,
         keyword: dailyTriagePreset.keyword,
       }),
-    [executionHistory, dailyTriagePreset]
+    [scopedExecutionHistory, dailyTriagePreset]
   );
 
   const snapshotPaths = useMemo(
     () =>
       Array.from(
         new Set(
-          executionHistory
+          scopedExecutionHistory
             .map((record) => record.snapshotPath?.trim())
             .filter((value): value is string => Boolean(value))
         )
       ),
-    [executionHistory]
+    [scopedExecutionHistory]
   );
 
   const failureGroups = useMemo<FailureGroup[]>(
@@ -1302,6 +1573,68 @@ function App() {
     [activeProviderId]
   );
 
+  // Load profiles from backend (defined before the init useEffect that calls it)
+  const loadProfiles = useCallback(async () => {
+    try {
+      const data = await getProfiles();
+      setProfiles(data);
+    } catch (err) {
+      console.error("加载配置文件列表失败:", err);
+    }
+  }, []);
+
+  const openQuickCreateProfileDialog = useCallback(() => {
+    setQuickCreateProfileName("");
+    setQuickCreateTemplateId(QUICK_CREATE_CUSTOM_TEMPLATE_ID);
+    setQuickCreateProfileDraft(EMPTY_DOTNET_CUSTOM_CONFIG_DRAFT);
+    setQuickCreateProfileOpen(true);
+  }, []);
+
+  const handleQuickCreateProfileOpenChange = useCallback((open: boolean) => {
+    setQuickCreateProfileOpen(open);
+    if (!open) {
+      setQuickCreateProfileName("");
+      setQuickCreateTemplateId(QUICK_CREATE_CUSTOM_TEMPLATE_ID);
+      setQuickCreateProfileSaving(false);
+    }
+  }, []);
+
+  const quickCreateReleaseTemplates = useMemo(
+    () => PRESETS.filter((preset) => preset.id.startsWith("release")),
+    []
+  );
+
+  const quickCreateDebugTemplates = useMemo(
+    () => PRESETS.filter((preset) => preset.id.startsWith("debug")),
+    []
+  );
+
+  const applyQuickCreateTemplate = useCallback((templateId: string) => {
+    setQuickCreateTemplateId(templateId);
+
+    if (templateId === QUICK_CREATE_CUSTOM_TEMPLATE_ID) {
+      setQuickCreateProfileDraft(EMPTY_DOTNET_CUSTOM_CONFIG_DRAFT);
+      return;
+    }
+
+    const matchedPreset = PRESETS.find((preset) => preset.id === templateId);
+    if (!matchedPreset) {
+      setQuickCreateTemplateId(QUICK_CREATE_CUSTOM_TEMPLATE_ID);
+      setQuickCreateProfileDraft(EMPTY_DOTNET_CUSTOM_CONFIG_DRAFT);
+      return;
+    }
+
+    setQuickCreateProfileDraft(toDotnetCustomConfigDraftFromPreset(matchedPreset));
+  }, []);
+
+  const updateQuickCreateProfileDraft = useCallback(
+    (updates: Partial<DotnetCustomConfigDraft>) => {
+      setQuickCreateTemplateId(QUICK_CREATE_CUSTOM_TEMPLATE_ID);
+      setQuickCreateProfileDraft((prev) => ({ ...prev, ...updates }));
+    },
+    []
+  );
+
   useEffect(() => {
     let mounted = true;
 
@@ -1318,6 +1651,8 @@ function App() {
       .catch((err) => {
         console.error("加载 Provider 列表失败:", err);
       });
+
+    loadProfiles();
 
     return () => {
       mounted = false;
@@ -1482,7 +1817,6 @@ function App() {
       const silentSuccess = options?.silentSuccess ?? false;
       const silentFailure = options?.silentFailure ?? false;
 
-      setIsScanning(true);
       try {
         const info = await invoke<ProjectInfo>("scan_project", {
           startPath: path,
@@ -1551,8 +1885,6 @@ function App() {
         toast.error(appT.scanProjectFailed || "项目检测失败", {
           description: rawErrorMessage,
         });
-      } finally {
-        setIsScanning(false);
       }
     },
     [appT]
@@ -1568,6 +1900,22 @@ function App() {
     if (selected) {
       const path = selected as string;
       const name = path.split("/").pop() || "Unknown";
+
+      // Detect provider before adding — block unsupported project types
+      try {
+        await detectRepositoryProvider(path);
+      } catch {
+        toast.error(
+          appT.providerDetectUnsupported || "未识别到支持的 Provider",
+          {
+            description:
+              appT.providerDetectUnsupportedDesc ||
+              "可手动选择 Provider，或确认项目根目录下包含可识别的构建文件。",
+          }
+        );
+        return;
+      }
+
       const newRepo: Repository = {
         id: Date.now().toString(),
         name,
@@ -1586,11 +1934,12 @@ function App() {
 
   const handleRemoveRepo = useCallback(
     async (repo: Repository) => {
-      const confirmed = window.confirm(
+      const confirmed = await ask(
         (appT.removeRepositoryConfirm || "确认移除仓库「{{name}}」？").replace(
           "{{name}}",
           repo.name
-        )
+        ),
+        { title: appT.removeRepository || "移除仓库", kind: "warning" }
       );
 
       if (!confirmed) {
@@ -1740,6 +2089,21 @@ function App() {
       }
     },
     [appT]
+  );
+
+  const handleScanProjectFiles = useCallback(
+    async (path: string): Promise<string[]> => {
+      const nextPath = path.trim();
+      if (!nextPath) {
+        return [];
+      }
+      try {
+        return await scanProjectFiles(nextPath);
+      } catch {
+        return [];
+      }
+    },
+    []
   );
 
   const handleRefreshRepoBranches = useCallback(
@@ -1907,6 +2271,7 @@ function App() {
   const buildExecutionRecord = useCallback(
     (params: {
       spec: ProviderPublishSpec;
+      repoId: string | null;
       startedAt: string;
       finishedAt: string;
       result: PublishResult;
@@ -1926,6 +2291,7 @@ function App() {
 
       return {
         id: `${Date.now()}-${Math.random().toString(16).slice(2, 8)}`,
+        repoId: params.repoId,
         providerId: params.spec.provider_id,
         projectPath: params.spec.project_path,
         startedAt: params.startedAt,
@@ -2034,8 +2400,47 @@ function App() {
     [customConfig, setCustomConfig, setIsCustomMode]
   );
 
+  const getRecentConfigKeyForCurrentSelection = useCallback(() => {
+    if (activeProviderId !== "dotnet") {
+      return null;
+    }
+
+    if (isCustomMode) {
+      return activeProfileName ? `userprofile:${activeProfileName}` : null;
+    }
+
+    if (selectedPreset.startsWith("profile-")) {
+      return `pubxml:${selectedPreset.slice("profile-".length)}`;
+    }
+
+    return `preset:${selectedPreset}`;
+  }, [activeProviderId, isCustomMode, activeProfileName, selectedPreset]);
+
+  const getRecentConfigKeyFromSpec = useCallback(
+    (spec: ProviderPublishSpec) => {
+      if (spec.provider_id !== "dotnet") {
+        return null;
+      }
+
+      const propertiesRaw = spec.parameters?.properties;
+      if (
+        propertiesRaw &&
+        typeof propertiesRaw === "object" &&
+        !Array.isArray(propertiesRaw)
+      ) {
+        const profileName = (propertiesRaw as Record<string, unknown>).PublishProfile;
+        if (typeof profileName === "string" && profileName.trim()) {
+          return `pubxml:${profileName.trim()}`;
+        }
+      }
+
+      return null;
+    },
+    []
+  );
+
   const runPublishWithSpec = useCallback(
-    async (spec: ProviderPublishSpec) => {
+    async (spec: ProviderPublishSpec, recentConfigKey?: string | null) => {
       try {
         const env = await runEnvironmentCheck([spec.provider_id]);
         setEnvironmentLastResult(env);
@@ -2072,6 +2477,10 @@ function App() {
       const executionStartedAt = new Date().toISOString();
 
       try {
+        if (recentConfigKey) {
+          pushRecentConfig(recentConfigKey);
+        }
+
         const result = await invoke<PublishResult>("execute_provider_publish", {
           spec,
         });
@@ -2097,6 +2506,7 @@ function App() {
 
         const record = buildExecutionRecord({
           spec,
+          repoId: selectedRepoId,
           startedAt: executionStartedAt,
           finishedAt: new Date().toISOString(),
           result,
@@ -2176,6 +2586,7 @@ function App() {
 
         const record = buildExecutionRecord({
           spec,
+          repoId: selectedRepoId,
           startedAt: executionStartedAt,
           finishedAt: new Date().toISOString(),
           result: failedResult,
@@ -2187,7 +2598,15 @@ function App() {
         setIsCancellingPublish(false);
       }
     },
-    [appT, publishT, buildExecutionRecord, openEnvironmentDialog, persistExecutionRecord]
+    [
+      appT,
+      publishT,
+      buildExecutionRecord,
+      openEnvironmentDialog,
+      persistExecutionRecord,
+      pushRecentConfig,
+      selectedRepoId,
+    ]
   );
 
   const copyText = useCallback(async (text: string, label: string) => {
@@ -2346,9 +2765,14 @@ function App() {
       }
 
       restoreSpecToEditor(spec);
-      await runPublishWithSpec(spec);
+      await runPublishWithSpec(spec, getRecentConfigKeyFromSpec(spec));
     },
-    [extractSpecFromRecord, restoreSpecToEditor, runPublishWithSpec]
+    [
+      extractSpecFromRecord,
+      getRecentConfigKeyFromSpec,
+      restoreSpecToEditor,
+      runPublishWithSpec,
+    ]
   );
 
   const rerunFromHistory = useCallback(
@@ -2453,7 +2877,8 @@ function App() {
       };
     }
 
-    await runPublishWithSpec(spec);
+    const recentConfigKey = getRecentConfigKeyForCurrentSelection();
+    await runPublishWithSpec(spec, recentConfigKey);
   };
 
   const cancelPublish = async () => {
@@ -2681,6 +3106,7 @@ function App() {
 
     const history = records.map((record) => ({
       id: record.id,
+      repoId: record.repoId ?? null,
       providerId: record.providerId,
       projectPath: record.projectPath,
       startedAt: record.startedAt,
@@ -2773,7 +3199,7 @@ function App() {
     const indexPayload: DiagnosticsIndexPayload = {
       generatedAt: new Date().toISOString(),
       summary: {
-        historyCount: executionHistory.length,
+        historyCount: scopedExecutionHistory.length,
         filteredHistoryCount: filteredExecutionHistory.length,
         failureGroupCount: failureGroups.length,
         snapshotCount: snapshotPaths.length,
@@ -2957,6 +3383,140 @@ function App() {
     });
   };
 
+  const handleSelectPresetValueChange = useCallback(
+    (presetValue: string) => {
+      setSelectedPreset(presetValue);
+      setIsCustomMode(false);
+      setActiveProfileName(null);
+    },
+    [setSelectedPreset, setIsCustomMode]
+  );
+
+  // Handle selecting a preset from the config panel
+  const handleSelectPresetFromPanel = useCallback(
+    (presetId: string) => {
+      handleSelectPresetValueChange(presetId);
+    },
+    [handleSelectPresetValueChange]
+  );
+
+  // Handle selecting a .pubxml project publish profile from the config panel
+  const handleSelectProjectProfile = useCallback(
+    (profileName: string) => {
+      handleSelectPresetValueChange(`profile-${profileName}`);
+    },
+    [handleSelectPresetValueChange]
+  );
+
+  // Handle selecting a profile from the config panel
+  const handleSelectProfileFromPanel = useCallback(
+    (profile: ConfigProfile) => {
+      setActiveProfileName(profile.name);
+      // Reuse existing handleLoadProfile logic
+      const profileProviderId =
+        profile.providerId || activeProviderId;
+      const schema = providerSchemas[profileProviderId];
+      const mapping = mapImportedSpecByProvider(
+        {
+          providerId: profileProviderId,
+          parameters: profile.parameters || {},
+        },
+        profileProviderId,
+        {
+          supportedKeys: schema ? Object.keys(schema.parameters) : undefined,
+        }
+      );
+
+      if (profileProviderId !== activeProviderId) {
+        setActiveProviderId(profileProviderId);
+      }
+
+      if (mapping.providerId === "dotnet") {
+        handleCustomConfigUpdate(mapping.dotnetUpdates);
+        setIsCustomMode(true);
+      } else {
+        setProviderParameters((prev) => ({
+          ...prev,
+          [mapping.providerId]: mapping.providerParameters,
+        }));
+      }
+
+      toast.success(appT.profileLoaded || "配置文件已加载", {
+        description: `${appT.loadedProfile || "已加载配置文件"}: ${profile.name}`,
+      });
+    },
+    [activeProviderId, providerSchemas, appT, handleCustomConfigUpdate, setIsCustomMode]
+  );
+
+  const handleQuickCreateProfileSave = useCallback(async () => {
+    const profileName = quickCreateProfileName.trim();
+    if (!profileName) {
+      toast.error(profileT.enterProfileName || "请输入配置文件名称");
+      return;
+    }
+
+    if (quickCreateProfileSaving) {
+      return;
+    }
+
+    setQuickCreateProfileSaving(true);
+
+    try {
+      const parameters = toDotnetProfileParameters(quickCreateProfileDraft);
+      await saveProfile({
+        name: profileName,
+        providerId: "dotnet",
+        parameters,
+      });
+
+      await loadProfiles();
+
+      handleSelectProfileFromPanel({
+        name: profileName,
+        providerId: "dotnet",
+        parameters,
+        createdAt: new Date().toISOString(),
+        isSystemDefault: false,
+      });
+      pushRecentConfig(`userprofile:${profileName}`);
+
+      toast.success(profileT.saveSuccess || "配置文件保存成功");
+      handleQuickCreateProfileOpenChange(false);
+    } catch (err) {
+      console.error("保存配置文件失败:", err);
+      toast.error(
+        extractInvokeErrorMessage(err) || profileT.saveFailed || "保存配置文件失败"
+      );
+    } finally {
+      setQuickCreateProfileSaving(false);
+    }
+  }, [
+    quickCreateProfileName,
+    quickCreateProfileSaving,
+    quickCreateProfileDraft,
+    profileT,
+    loadProfiles,
+    handleSelectProfileFromPanel,
+    pushRecentConfig,
+    handleQuickCreateProfileOpenChange,
+  ]);
+
+  // Handle deleting a profile from the config panel
+  const handleDeleteProfileFromPanel = useCallback(
+    async (name: string) => {
+      try {
+        await deleteProfile(name);
+        await loadProfiles();
+        if (activeProfileName === name) {
+          setActiveProfileName(null);
+        }
+      } catch (err) {
+        console.error("删除配置文件失败:", err);
+      }
+    },
+    [loadProfiles, activeProfileName]
+  );
+
   const handleLoadProfile = (profile: any) => {
     const profileProviderId =
       profile.providerId || profile.provider_id || activeProviderId;
@@ -3025,6 +3585,7 @@ function App() {
             onEditRepo={handleEditRepo}
             onRemoveRepo={handleRemoveRepo}
             onDetectProvider={handleDetectRepoProvider}
+            onScanProjectFiles={handleScanProjectFiles}
             onRefreshBranches={handleRefreshRepoBranches}
             branchConnectivityByRepoId={branchConnectivityByRepoId}
             onSettings={handleOpenSettings}
@@ -3037,19 +3598,33 @@ function App() {
           <ResizeHandle onResize={handleLeftPanelResize} />
         )}
 
-        {/* Middle Panel - Branch List */}
+        {/* Middle Panel - Publish Config */}
         <CollapsiblePanel
           collapsed={middlePanelCollapsed}
           side="left"
           width={`${middlePanelWidth}px`}
         >
-          <BranchPanel
-            repository={selectedRepo}
-            onRefresh={() => toast.info(appT.refreshBranches || "刷新分支列表")}
-            onCreateBranch={() => toast.info(appT.createBranchComingSoon || "创建分支功能开发中")}
+          <PublishConfigPanel
+            presets={PRESETS}
+            selectedPreset={selectedPreset}
+            isCustomMode={isCustomMode}
+            onSelectPreset={handleSelectPresetFromPanel}
+            profiles={profiles}
+            activeProfileName={activeProfileName}
+            onSelectProfile={handleSelectProfileFromPanel}
+            onCreateProfile={openQuickCreateProfileDialog}
+            onRefreshProfiles={loadProfiles}
+            onDeleteProfile={handleDeleteProfileFromPanel}
+            projectPublishProfiles={projectInfo?.publish_profiles || []}
+            onSelectProjectProfile={handleSelectProjectProfile}
+            recentConfigKeys={recentConfigKeys}
+            favoriteConfigKeys={favoriteConfigKeys}
+            onToggleFavoriteConfig={toggleFavoriteConfig}
+            onRemoveRecentConfig={removeRecentConfig}
             onCollapse={() => setMiddlePanelCollapsed(true)}
             showExpandButton={leftPanelCollapsed}
             onExpandRepo={() => setLeftPanelCollapsed(false)}
+            getPresetText={getPresetText}
           />
         </CollapsiblePanel>
 
@@ -3061,12 +3636,12 @@ function App() {
         {/* Right Panel - Main Content */}
         <div className="flex-1 flex flex-col overflow-hidden">
           {/* Drag region header */}
-          <div className="h-10 flex-shrink-0 border-b bg-card/30 flex">
+          <div className="h-10 flex-shrink-0 border-b border-[var(--glass-divider)] bg-[var(--glass-panel-bg)]/30 flex">
             {/* Left column for expand buttons - only show when branch panel is collapsed */}
             {middlePanelCollapsed && (
               <div
                 data-tauri-drag-region
-                className={`flex items-center justify-end px-2 border-r ${
+                className={`flex items-center justify-end px-2 border-r border-[var(--glass-divider)] ${
                   leftPanelCollapsed ? "pl-[100px]" : ""
                 }`}
               >
@@ -3094,10 +3669,10 @@ function App() {
                       e.stopPropagation();
                       setMiddlePanelCollapsed(false);
                     }}
-                    title={appT.expandBranchList || "展开分支列表"}
+                    title={(translations.configPanel || {}).expandConfigList || "展开配置列表"}
                     data-tauri-no-drag
                   >
-                    <GitBranch className="h-4 w-4" />
+                    <Settings className="h-4 w-4" />
                   </Button>
                 </div>
               </div>
@@ -3106,126 +3681,8 @@ function App() {
             <div data-tauri-drag-region className="flex-1" />
           </div>
           {/* Content area */}
-          <div className="flex-1 overflow-auto p-6">
+          <div className="flex-1 overflow-auto glass-scrollbar p-6 bg-gradient-to-b from-transparent via-[var(--glass-input-bg)] to-transparent">
             <div className="mx-auto max-w-3xl space-y-6">
-              {/* Project Info Card */}
-              <Card>
-                <CardHeader className="pb-3">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <CardTitle className="text-lg flex items-center gap-2">
-                        <Folder className="h-5 w-5" />
-                        {projectT.title || "项目信息"}
-                      </CardTitle>
-                      <CardDescription>
-                        {selectedRepo ? selectedRepo.name : projectT.notSelected || "未选择仓库"}
-                      </CardDescription>
-                    </div>
-                    <div className="flex flex-wrap items-center gap-2">
-                      <Select
-                        value={activeProviderId}
-                        onValueChange={setActiveProviderId}
-                      >
-                        <SelectTrigger className="w-[190px] h-9">
-                          <SelectValue placeholder={appT.selectProvider || "选择 Provider"} />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {availableProviders.map((provider) => (
-                            <SelectItem key={provider.id} value={provider.id}>
-                              {formatProviderLabel(provider)}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() =>
-                          selectedRepo &&
-                          activeProviderId === "dotnet" &&
-                          scanProject(selectedRepo.path)
-                        }
-                        disabled={
-                          isScanning ||
-                          !selectedRepo ||
-                          activeProviderId !== "dotnet"
-                        }
-                      >
-                        {isScanning ? (
-                          <Loader2 className="h-4 w-4 animate-spin" />
-                        ) : (
-                          <RefreshCw className="h-4 w-4" />
-                        )}
-                        <span className="ml-1">{configT.refresh || "刷新"}</span>
-                      </Button>
-                    </div>
-                  </div>
-                </CardHeader>
-                <CardContent>
-                  {projectInfo ? (
-                    <div className="space-y-2 text-sm">
-                      <div className="flex items-center gap-2">
-                        <CheckCircle2 className="h-4 w-4 text-green-500" />
-                        <span className="text-muted-foreground">
-                          {appT.projectRootLabel || "项目根目录:"}
-                        </span>
-                        <code className="bg-muted px-2 py-0.5 rounded text-xs">
-                          {projectInfo.root_path}
-                        </code>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <CheckCircle2 className="h-4 w-4 text-green-500" />
-                        <span className="text-muted-foreground">{appT.projectFileLabel || "项目文件:"}</span>
-                        <code className="bg-muted px-2 py-0.5 rounded text-xs">
-                          {projectInfo.project_file}
-                        </code>
-                      </div>
-                      {projectInfo.publish_profiles.length > 0 && (
-                        <div className="flex items-start gap-2">
-                          <CheckCircle2 className="h-4 w-4 text-green-500 mt-0.5" />
-                          <span className="text-muted-foreground">
-                            {projectT.profiles || "发布配置:"}
-                          </span>
-                          <div className="flex flex-wrap gap-1">
-                            {projectInfo.publish_profiles.map((profile) => (
-                              <span
-                                key={profile}
-                                className="bg-primary/10 text-primary px-2 py-0.5 rounded text-xs"
-                              >
-                                {profile}
-                              </span>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  ) : activeProviderId !== "dotnet" && selectedRepo ? (
-                    <div className="space-y-2 text-sm">
-                      <div className="flex items-center gap-2">
-                        <CheckCircle2 className="h-4 w-4 text-green-500" />
-                        <span className="text-muted-foreground">{appT.repositoryPathLabel || "仓库路径:"}</span>
-                        <code className="bg-muted px-2 py-0.5 rounded text-xs">
-                          {selectedRepo.path}
-                        </code>
-                      </div>
-                      <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-amber-700 text-xs">
-                        {(appT.providerReadyMessage || "当前 Provider: {{provider}}。可进行环境检查、命令解析、参数编辑与通用执行。").replace("{{provider}}", activeProviderLabel)}
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="flex items-center gap-2 text-muted-foreground">
-                      <XCircle className="h-4 w-4 text-destructive" />
-                      <span>
-                        {selectedRepo
-                          ? projectT.not || "当前仓库不是 .NET 项目"
-                          : projectT.notSelected || "请从左侧选择一个仓库"}
-                      </span>
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
-
               {/* Publish Configuration Card */}
               {selectedRepo && activeProviderId === "dotnet" && projectInfo && (
                 <Card>
@@ -3268,7 +3725,7 @@ function App() {
                         <Label>{configT.presets || "选择预设配置"}</Label>
                         <Select
                           value={selectedPreset}
-                          onValueChange={setSelectedPreset}
+                          onValueChange={handleSelectPresetValueChange}
                         >
                           <SelectTrigger>
                             <SelectValue placeholder={appT.selectPublishConfig || "选择发布配置"} />
@@ -3417,7 +3874,7 @@ function App() {
                     )}
 
                     {/* Current Config Preview */}
-                    <div className="mt-4 p-3 bg-muted rounded-lg">
+                    <div className="mt-4 p-3 bg-[var(--glass-input-bg)] rounded-xl border border-[var(--glass-border-subtle)]">
                       <div className="text-xs text-muted-foreground mb-2">
                         {publishT.command || "将执行的命令:"}
                       </div>
@@ -3500,7 +3957,7 @@ function App() {
                     </div>
                   </CardHeader>
                   <CardContent className="space-y-3">
-                    <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-amber-700 text-sm">
+                    <div className="rounded-xl border border-amber-200/60 bg-amber-50/80 px-3 py-2 text-amber-700 text-sm">
                       {(appT.providerConfigHint || "当前已支持 {{provider}} 的命令导入映射、参数编辑与通用执行。").replace("{{provider}}", activeProviderLabel)}
                     </div>
                     {activeProviderSchema ? (
@@ -3515,7 +3972,7 @@ function App() {
                         {appT.loadingProviderSchema || "正在加载 Provider 参数定义..."}
                       </div>
                     )}
-                    <div className="rounded-md bg-muted p-3">
+                    <div className="rounded-xl bg-[var(--glass-input-bg)] p-3">
                       <div className="text-xs text-muted-foreground mb-2">
                         {appT.parameterSnapshot || "当前参数快照（可保存为配置文件）:"}
                       </div>
@@ -3585,13 +4042,13 @@ function App() {
                     </CardDescription>
                   </CardHeader>
                   <CardContent className="space-y-2 text-sm">
-                    <div className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-emerald-700">
+                    <div className="rounded-xl border border-emerald-200/60 bg-emerald-50/80 px-3 py-2 text-emerald-700">
                       {(appT.mappedFieldsLabel || "已映射字段") + ` (${activeImportFeedback.mappedKeys.length}):`} 
                       {activeImportFeedback.mappedKeys.length > 0
                         ? activeImportFeedback.mappedKeys.join(", ")
                         : appT.none || "无"}
                     </div>
-                    <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-amber-700">
+                    <div className="rounded-xl border border-amber-200/60 bg-amber-50/80 px-3 py-2 text-amber-700">
                       {(appT.unmappedFieldsLabel || "未映射字段") + ` (${activeImportFeedback.unmappedKeys.length}):`} 
                       {activeImportFeedback.unmappedKeys.length > 0
                         ? activeImportFeedback.unmappedKeys.join(", ")
@@ -3612,9 +4069,9 @@ function App() {
                         <span
                           className={`ml-2 text-sm font-normal ${
                             publishResult.success
-                              ? "text-green-500"
+                              ? "text-success"
                               : publishResult.cancelled
-                                ? "text-amber-500"
+                                ? "text-warning"
                                 : "text-destructive"
                           }`}
                         >
@@ -3697,7 +4154,7 @@ function App() {
                       return (
                         <div
                           key={group.key}
-                          className="rounded-md border px-3 py-2 text-sm"
+                          className="rounded-xl border border-[var(--glass-border-subtle)] px-3 py-2 text-sm"
                         >
                           <div className="flex items-center justify-between gap-2">
                             <span className="font-medium">{group.providerId}</span>
@@ -3705,7 +4162,7 @@ function App() {
                               {(failureT.recentCount || "最近 {{count}} 次").replace("{{count}}", String(group.count))}
                             </span>
                           </div>
-                          <div className="mt-1 rounded bg-muted px-2 py-1 font-mono text-xs break-all">
+                          <div className="mt-1 rounded-lg bg-[var(--glass-code-bg)] px-2 py-1 font-mono text-xs break-all">
                             {group.signature}
                           </div>
                           <div className="mt-1 text-xs text-muted-foreground">
@@ -3776,7 +4233,7 @@ function App() {
                     </CardDescription>
                   </CardHeader>
                   <CardContent className="space-y-3">
-                    <div className="rounded bg-muted px-2 py-1 font-mono text-xs break-all">
+                    <div className="rounded-lg bg-[var(--glass-code-bg)] px-2 py-1 font-mono text-xs break-all">
                       {selectedFailureGroup.signature}
                     </div>
                     <div className="flex flex-wrap items-center gap-2">
@@ -3887,7 +4344,7 @@ function App() {
                     {selectedFailureGroup.records.slice(0, 6).map((record, index) => (
                       <div
                         key={record.id}
-                        className="rounded-md border px-3 py-2 text-sm"
+                        className="rounded-xl border border-[var(--glass-border-subtle)] px-3 py-2 text-sm"
                       >
                         <div className="flex items-center justify-between gap-2">
                           <span className="font-medium">
@@ -3903,7 +4360,7 @@ function App() {
                         <div className="text-xs text-muted-foreground truncate">
                           {record.projectPath}
                         </div>
-                        <div className="mt-1 rounded bg-muted px-2 py-1 font-mono text-xs break-all">
+                        <div className="mt-1 rounded-lg bg-[var(--glass-code-bg)] px-2 py-1 font-mono text-xs break-all">
                           {record.commandLine || failureT.noCommandLine || "(无命令行记录)"}
                         </div>
                         {record.error && (
@@ -3947,73 +4404,18 @@ function App() {
                 </Card>
               )}
 
-              {executionHistory.length > 0 && (
+              {scopedExecutionHistory.length > 0 && (
                 <Card>
                   <CardHeader className="pb-3">
                     <CardTitle className="text-lg">{historyT.title || "最近执行历史"}</CardTitle>
                     <CardDescription>
                       {(historyT.description || "本地保留最近 {{count}} 条发布记录").replace("{{count}}", String(executionHistoryLimit))}
-                      {filteredExecutionHistory.length !== executionHistory.length
-                        ? ` · ${(historyT.currentFilter || "当前筛选")} ${filteredExecutionHistory.length}/${executionHistory.length}`
+                      {filteredExecutionHistory.length !== scopedExecutionHistory.length
+                        ? ` · ${(historyT.currentFilter || "当前筛选")} ${filteredExecutionHistory.length}/${scopedExecutionHistory.length}`
                         : ""}
                     </CardDescription>
-                    <div className="flex flex-wrap gap-2">
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        className="w-fit"
-                        onClick={() => void exportExecutionHistory()}
-                        disabled={
-                          isExportingHistory || filteredExecutionHistory.length === 0
-                        }
-                      >
-                        {isExportingHistory ? (
-                          <>
-                            <Loader2 className="mr-1 h-3 w-3 animate-spin" />
-                            {appT.exporting || "导出中..."}
-                          </>
-                        ) : (
-                          historyT.exportHistory || "导出历史"
-                        )}
-                      </Button>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        className="w-fit"
-                        onClick={exportDailyTriageReport}
-                        disabled={!dailyTriagePreset.enabled || isExportingHistory}
-                      >
-                        {isExportingHistory ? (
-                          <>
-                            <Loader2 className="mr-1 h-3 w-3 animate-spin" />
-                            {appT.exporting || "导出中..."}
-                          </>
-                        ) : (
-                          historyT.exportDailyReport || "一键导出日报"
-                        )}
-                      </Button>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        className="w-fit"
-                        onClick={exportDiagnosticsIndex}
-                        disabled={isExportingDiagnosticsIndex}
-                      >
-                        {isExportingDiagnosticsIndex ? (
-                          <>
-                            <Loader2 className="mr-1 h-3 w-3 animate-spin" />
-                            {historyT.generating || "生成中..."}
-                          </>
-                        ) : (
-                          historyT.exportDiagnosticsIndex || "导出诊断索引"
-                        )}
-                      </Button>
-                    </div>
                   </CardHeader>
-                  <CardContent className="space-y-3">
+                  <CardContent className="space-y-4">
                     <div className="grid gap-2 md:grid-cols-4">
                       <Select
                         value={historyFilterProvider}
@@ -4105,9 +4507,9 @@ function App() {
                         {historyT.deletePreset || "删除预设"}
                       </Button>
                     </div>
-                    <div className="space-y-2 rounded-md border bg-muted/30 p-3">
-                      <div className="flex flex-wrap items-center justify-between gap-2">
-                        <p className="text-sm font-medium">{historyT.dailyPresetTitle || "每日排障预设"}</p>
+                    <details className="group rounded-xl border border-[var(--glass-border-subtle)] bg-[var(--glass-input-bg)]">
+                      <summary className="flex cursor-pointer items-center justify-between p-3 text-sm font-medium select-none">
+                        <span>{historyT.dailyPresetTitle || "每日排障预设"}</span>
                         <div className="flex items-center gap-2">
                           <span className="text-xs text-muted-foreground">{historyT.enabled || "启用"}</span>
                           <Switch
@@ -4120,8 +4522,9 @@ function App() {
                             }
                           />
                         </div>
-                      </div>
-                      <div className="grid gap-2 md:grid-cols-5">
+                      </summary>
+                      <div className="border-t border-[var(--glass-divider)] p-3 space-y-2">
+                        <div className="grid gap-2 md:grid-cols-5">
                         <Select
                           value={dailyTriagePreset.provider}
                           onValueChange={(value) =>
@@ -4224,8 +4627,64 @@ function App() {
                       >
                         {historyT.resetDailyPreset || "恢复日报默认预设"}
                       </Button>
-                    </div>
-                    <div className="flex justify-end">
+                      </div>
+                    </details>
+                    <div className="flex items-center justify-between border-t border-[var(--glass-divider)] pt-3">
+                      <div className="flex flex-wrap gap-2">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          className="w-fit"
+                          onClick={() => void exportExecutionHistory()}
+                          disabled={
+                            isExportingHistory || filteredExecutionHistory.length === 0
+                          }
+                        >
+                          {isExportingHistory ? (
+                            <>
+                              <Loader2 className="mr-1 h-3 w-3 animate-spin" />
+                              {appT.exporting || "导出中..."}
+                            </>
+                          ) : (
+                            historyT.exportHistory || "导出历史"
+                          )}
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          className="w-fit"
+                          onClick={exportDailyTriageReport}
+                          disabled={!dailyTriagePreset.enabled || isExportingHistory}
+                        >
+                          {isExportingHistory ? (
+                            <>
+                              <Loader2 className="mr-1 h-3 w-3 animate-spin" />
+                              {appT.exporting || "导出中..."}
+                            </>
+                          ) : (
+                            historyT.exportDailyReport || "一键导出日报"
+                          )}
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          className="w-fit"
+                          onClick={exportDiagnosticsIndex}
+                          disabled={isExportingDiagnosticsIndex}
+                        >
+                          {isExportingDiagnosticsIndex ? (
+                            <>
+                              <Loader2 className="mr-1 h-3 w-3 animate-spin" />
+                              {historyT.generating || "生成中..."}
+                            </>
+                          ) : (
+                            historyT.exportDiagnosticsIndex || "导出诊断索引"
+                          )}
+                        </Button>
+                      </div>
                       <Button
                         type="button"
                         size="sm"
@@ -4249,24 +4708,24 @@ function App() {
                     </div>
 
                     {filteredExecutionHistory.length === 0 ? (
-                      <div className="rounded-md border border-dashed px-3 py-4 text-sm text-muted-foreground">
+                      <div className="rounded-xl border border-dashed border-[var(--glass-border-subtle)] px-3 py-4 text-sm text-muted-foreground">
                         {historyT.noRecords || "当前筛选条件下无执行记录"}
                       </div>
                     ) : (
                       filteredExecutionHistory.slice(0, 6).map((record) => (
                         <div
                           key={record.id}
-                          className="rounded-md border px-3 py-2 text-sm"
+                          className="rounded-xl border border-[var(--glass-border-subtle)] px-3 py-2 text-sm"
                         >
                           <div className="flex items-center justify-between gap-2">
                             <span className="font-medium">{record.providerId}</span>
                             <span
-                              className={`text-xs ${
+                              className={`text-xs rounded-md px-1.5 py-0.5 ${
                                 record.success
-                                  ? "text-green-600"
+                                  ? "status-success"
                                   : record.cancelled
-                                    ? "text-amber-600"
-                                    : "text-red-600"
+                                    ? "status-cancelled"
+                                    : "status-failed"
                               }`}
                             >
                               {record.success
@@ -4396,7 +4855,7 @@ function App() {
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-3">
-            <div className="rounded-md border bg-muted/30 p-3 text-sm space-y-1">
+            <div className="rounded-xl border border-[var(--glass-border-subtle)] bg-[var(--glass-input-bg)] p-3 text-sm space-y-1">
               <div>
                 <span className="text-muted-foreground">{rerunT.provider || "Provider:"}</span>{" "}
                 {pendingRerunRecord?.providerId || rerunT.unknown || "(未知)"}
@@ -4422,7 +4881,7 @@ function App() {
             </div>
 
             <div className="space-y-2">
-              <div className="flex items-center justify-between rounded-md border px-3 py-2">
+              <div className="flex items-center justify-between rounded-xl border border-[var(--glass-border-subtle)] px-3 py-2">
                 <Label htmlFor="rerun-check-branch" className="text-sm">
                   {rerunT.branchCheck || "我已确认当前分支允许重跑"}
                 </Label>
@@ -4437,7 +4896,7 @@ function App() {
                   }
                 />
               </div>
-              <div className="flex items-center justify-between rounded-md border px-3 py-2">
+              <div className="flex items-center justify-between rounded-xl border border-[var(--glass-border-subtle)] px-3 py-2">
                 <Label htmlFor="rerun-check-env" className="text-sm">
                   {rerunT.environmentCheck || "我已确认环境状态满足预期"}
                 </Label>
@@ -4452,7 +4911,7 @@ function App() {
                   }
                 />
               </div>
-              <div className="flex items-center justify-between rounded-md border px-3 py-2">
+              <div className="flex items-center justify-between rounded-xl border border-[var(--glass-border-subtle)] px-3 py-2">
                 <Label htmlFor="rerun-check-output" className="text-sm">
                   {rerunT.outputCheck || "我已确认输出目标目录与日志窗口"}
                 </Label>
@@ -4509,20 +4968,260 @@ function App() {
         />
       )}
 
+      <Dialog
+        open={quickCreateProfileOpen}
+        onOpenChange={handleQuickCreateProfileOpenChange}
+      >
+        <DialogContent className="sm:max-w-[520px]">
+          <DialogHeader>
+            <DialogTitle>
+              {profileT.quickCreateTitle || "创建发布配置"}
+            </DialogTitle>
+            <DialogDescription>
+              {profileT.quickCreateDescription || "填写与自定义模式一致的参数并保存为发布配置。"}
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label>{profileT.quickCreateTemplate || "预置模板"}</Label>
+              <div className="space-y-3">
+                <div className="space-y-2">
+                  <div className="text-xs font-medium text-muted-foreground">
+                    {profileT.quickCreateTemplateCustomGroup || "自定义配置"}
+                  </div>
+                  <label
+                    className="flex cursor-pointer items-start gap-2 rounded-lg border border-[var(--glass-divider)] px-3 py-2 hover:bg-[var(--glass-bg)]"
+                    htmlFor={`quick-template-${QUICK_CREATE_CUSTOM_TEMPLATE_ID}`}
+                  >
+                    <input
+                      id={`quick-template-${QUICK_CREATE_CUSTOM_TEMPLATE_ID}`}
+                      type="radio"
+                      name="quick-profile-template"
+                      className="mt-1"
+                      checked={quickCreateTemplateId === QUICK_CREATE_CUSTOM_TEMPLATE_ID}
+                      onChange={() => applyQuickCreateTemplate(QUICK_CREATE_CUSTOM_TEMPLATE_ID)}
+                    />
+                    <span className="text-sm">
+                      {profileT.quickCreateTemplateCustom || "自定义配置（空表单）"}
+                    </span>
+                  </label>
+                </div>
+
+                <div className="space-y-2">
+                  <div className="text-xs font-medium text-muted-foreground">
+                    {appT.releaseConfigs || "Release 配置"}
+                  </div>
+                  {quickCreateReleaseTemplates.map((preset) => {
+                    const presetText = getPresetText(
+                      preset.id,
+                      preset.name,
+                      preset.description
+                    );
+
+                    return (
+                      <label
+                        key={`quick-release-${preset.id}`}
+                        className="flex cursor-pointer items-start gap-2 rounded-lg border border-[var(--glass-divider)] px-3 py-2 hover:bg-[var(--glass-bg)]"
+                        htmlFor={`quick-template-${preset.id}`}
+                      >
+                        <input
+                          id={`quick-template-${preset.id}`}
+                          type="radio"
+                          name="quick-profile-template"
+                          className="mt-1"
+                          checked={quickCreateTemplateId === preset.id}
+                          onChange={() => applyQuickCreateTemplate(preset.id)}
+                        />
+                        <span className="flex flex-col text-sm">
+                          <span>{presetText.name}</span>
+                          <span className="text-xs text-muted-foreground">
+                            {presetText.description}
+                          </span>
+                        </span>
+                      </label>
+                    );
+                  })}
+                </div>
+
+                <div className="space-y-2">
+                  <div className="text-xs font-medium text-muted-foreground">
+                    {appT.debugConfigs || "Debug 配置"}
+                  </div>
+                  {quickCreateDebugTemplates.map((preset) => {
+                    const presetText = getPresetText(
+                      preset.id,
+                      preset.name,
+                      preset.description
+                    );
+
+                    return (
+                      <label
+                        key={`quick-debug-${preset.id}`}
+                        className="flex cursor-pointer items-start gap-2 rounded-lg border border-[var(--glass-divider)] px-3 py-2 hover:bg-[var(--glass-bg)]"
+                        htmlFor={`quick-template-${preset.id}`}
+                      >
+                        <input
+                          id={`quick-template-${preset.id}`}
+                          type="radio"
+                          name="quick-profile-template"
+                          className="mt-1"
+                          checked={quickCreateTemplateId === preset.id}
+                          onChange={() => applyQuickCreateTemplate(preset.id)}
+                        />
+                        <span className="flex flex-col text-sm">
+                          <span>{presetText.name}</span>
+                          <span className="text-xs text-muted-foreground">
+                            {presetText.description}
+                          </span>
+                        </span>
+                      </label>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="quick-profile-name">
+                {profileT.quickCreateName || "配置名称"}
+              </Label>
+              <Input
+                id="quick-profile-name"
+                placeholder={profileT.profileNamePlaceholder || "输入配置文件名称"}
+                value={quickCreateProfileName}
+                onChange={(e) => setQuickCreateProfileName(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && !quickCreateProfileSaving) {
+                    e.preventDefault();
+                    handleQuickCreateProfileSave();
+                  }
+                }}
+              />
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="quick-profile-configuration">
+                  {appT.configurationType || "配置类型"}
+                </Label>
+                <Select
+                  value={quickCreateProfileDraft.configuration}
+                  onValueChange={(value) =>
+                    updateQuickCreateProfileDraft({ configuration: value })
+                  }
+                >
+                  <SelectTrigger id="quick-profile-configuration">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="Release">Release</SelectItem>
+                    <SelectItem value="Debug">Debug</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="quick-profile-runtime">
+                  {appT.runtimeLabel || "运行时"}
+                </Label>
+                <Select
+                  value={quickCreateProfileDraft.runtime || "none"}
+                  onValueChange={(value) =>
+                    updateQuickCreateProfileDraft({
+                      runtime: value === "none" ? "" : value,
+                    })
+                  }
+                >
+                  <SelectTrigger id="quick-profile-runtime">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">
+                      {appT.frameworkDependent || "框架依赖"}
+                    </SelectItem>
+                    <SelectItem value="win-x64">Windows x64</SelectItem>
+                    <SelectItem value="osx-arm64">macOS ARM64</SelectItem>
+                    <SelectItem value="osx-x64">macOS x64</SelectItem>
+                    <SelectItem value="linux-x64">Linux x64</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="col-span-2 space-y-2">
+                <Label htmlFor="quick-profile-output">
+                  {appT.outputDirLabel || "输出目录"}
+                </Label>
+                <Input
+                  id="quick-profile-output"
+                  value={quickCreateProfileDraft.outputDir}
+                  onChange={(e) =>
+                    updateQuickCreateProfileDraft({ outputDir: e.target.value })
+                  }
+                  placeholder={appT.outputDirPlaceholder || "留空使用默认目录"}
+                />
+              </div>
+
+              <div className="col-span-2 flex items-center gap-2">
+                <Switch
+                  id="quick-profile-self-contained"
+                  checked={quickCreateProfileDraft.selfContained}
+                  onCheckedChange={(checked) =>
+                    updateQuickCreateProfileDraft({ selfContained: checked })
+                  }
+                  disabled={!quickCreateProfileDraft.runtime}
+                />
+                <Label htmlFor="quick-profile-self-contained">
+                  {appT.selfContained || "自包含部署"}
+                </Label>
+              </div>
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => handleQuickCreateProfileOpenChange(false)}
+              disabled={quickCreateProfileSaving}
+            >
+              {rerunT.cancel || "取消"}
+            </Button>
+            <Button
+              type="button"
+              onClick={handleQuickCreateProfileSave}
+              disabled={quickCreateProfileSaving || !quickCreateProfileName.trim()}
+            >
+              {quickCreateProfileSaving ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  {profileT.quickCreateSaving || "保存中..."}
+                </>
+              ) : (
+                <>
+                  <Save className="h-4 w-4 mr-2" />
+                  {profileT.quickCreateAction || "创建并保存"}
+                </>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       {/* Config Dialog */}
       <ConfigDialog
         open={configDialogOpen}
-        onOpenChange={setConfigDialogOpen}
+        onOpenChange={(open) => {
+          setConfigDialogOpen(open);
+          if (!open) {
+            loadProfiles();
+          }
+        }}
         onLoadProfile={handleLoadProfile}
         currentProviderId={activeProviderId}
         currentParameters={
           activeProviderId === "dotnet"
-            ? {
-                configuration: customConfig.configuration,
-                runtime: customConfig.runtime,
-                output: customConfig.outputDir,
-                self_contained: customConfig.selfContained,
-              }
+            ? toDotnetProfileParameters(customConfig)
             : activeProviderParameters
         }
       />

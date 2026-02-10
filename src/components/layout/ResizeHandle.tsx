@@ -64,25 +64,25 @@ export function ResizeHandle({
   return (
     <div
       className={cn(
-        "group relative flex-shrink-0 transition-colors flex flex-col",
+        "group relative flex-shrink-0 glass-transition flex flex-col",
         direction === "horizontal"
-          ? "w-1 cursor-col-resize hover:bg-primary/20"
-          : "h-1 cursor-row-resize hover:bg-primary/20",
-        isDragging && "bg-primary/30",
+          ? "w-1 cursor-col-resize hover:bg-[var(--glass-bg-hover)]"
+          : "h-1 cursor-row-resize hover:bg-[var(--glass-bg-hover)]",
+        isDragging && "bg-[var(--glass-bg-active)]",
         className
       )}
       onMouseDown={handleMouseDown}
     >
       {/* Header section with border to connect horizontal lines */}
       {direction === "horizontal" && headerHeight && (
-        <div data-tauri-drag-region className={cn(headerHeight, "flex-shrink-0 border-b")} />
+        <div data-tauri-drag-region className={cn(headerHeight, "flex-shrink-0 border-b border-[var(--glass-divider)]")} />
       )}
       {/* Remaining space */}
       <div className="flex-1" />
       {/* Visual indicator on hover */}
       <div
         className={cn(
-          "absolute opacity-0 group-hover:opacity-100 transition-opacity bg-primary/50",
+          "absolute opacity-0 group-hover:opacity-100 transition-opacity bg-primary/40",
           direction === "horizontal"
             ? "top-0 bottom-0 left-0 w-0.5"
             : "left-0 right-0 top-0 h-0.5",

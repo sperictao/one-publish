@@ -241,7 +241,12 @@
     "saving": "Saving...",
     "cancel": "Cancel",
     "projectFile": "Project File",
-    "projectFilePlaceholder": "Optional: enter project file path (e.g. .csproj)"
+    "projectFilePlaceholder": "Optional: enter project file path (e.g. .csproj)",
+    "projectFileManualInput": "Manual input...",
+    "projectFileNone": "Not set",
+    "projectFileScanHint": "Select from scanned results or switch to manual input.",
+    "scanProjectFiles": "Scan project files",
+    "scanningProjectFiles": "Scanning..."
   },
   "commandImport": {
     "title": "Import from Command",
@@ -291,7 +296,15 @@
     "savedProfiles": "Saved Profiles",
     "noProfiles": "No saved profiles",
     "defaultTag": "Default",
-    "load": "Load"
+    "load": "Load",
+    "quickCreateTitle": "Create publish profile",
+    "quickCreateDescription": "Fill the same fields as custom mode and save them as a publish profile.",
+    "quickCreateName": "Profile name",
+    "quickCreateTemplate": "Preset template",
+    "quickCreateTemplateCustomGroup": "Custom",
+    "quickCreateTemplateCustom": "Custom (empty form)",
+    "quickCreateAction": "Create and save",
+    "quickCreateSaving": "Saving..."
   },
   "app": {
     "loading": "Loading...",
@@ -562,6 +575,19 @@
     "cancel": "Cancel",
     "confirm": "Confirm and rerun",
     "requireChecklist": "Please complete the pre-rerun checklist first"
+  },
+  "configPanel": {
+    "searchConfig": "Search configs",
+    "newConfig": "New config",
+    "refresh": "Refresh configs",
+    "recentlyUsed": "Recently Used",
+    "releaseGroup": "Release Presets",
+    "debugGroup": "Debug Presets",
+    "profileGroup": "Project Profiles",
+    "noProfiles": "No custom profiles yet",
+    "expandConfigList": "Expand config list",
+    "collapsePanel": "Collapse panel",
+    "expandRepoList": "Expand repository list"
   },
   "common": {
     "close": "Close"

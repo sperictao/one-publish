@@ -35,6 +35,14 @@ module.exports = {
           DEFAULT: "hsl(var(--destructive))",
           foreground: "hsl(var(--destructive-foreground))",
         },
+        success: {
+          DEFAULT: "hsl(var(--success))",
+          foreground: "hsl(var(--success-foreground))",
+        },
+        warning: {
+          DEFAULT: "hsl(var(--warning))",
+          foreground: "hsl(var(--warning-foreground))",
+        },
         border: "hsl(var(--border))",
         input: "hsl(var(--input))",
         ring: "hsl(var(--ring))",
@@ -47,6 +55,16 @@ module.exports = {
       },
       fontFamily: {
         sans: [
+          "-apple-system",
+          "BlinkMacSystemFont",
+          '"Segoe UI"',
+          "Roboto",
+          '"Helvetica Neue"',
+          "Arial",
+          "sans-serif",
+        ],
+        display: [
+          "SF Pro Display",
           "-apple-system",
           "BlinkMacSystemFont",
           '"Segoe UI"',
@@ -68,6 +86,14 @@ module.exports = {
       animation: {
         "fade-in": "fadeIn 0.5s ease-out",
         "slide-up": "slideUp 0.5s ease-out",
+        // Apple-style spring animations
+        "spring-in": "springIn 0.5s cubic-bezier(0.34, 1.56, 0.64, 1) both",
+        "spring-scale": "springScale 0.4s cubic-bezier(0.34, 1.56, 0.64, 1) both",
+        "glass-in": "glassIn 0.4s cubic-bezier(0.2, 0.8, 0.2, 1) both",
+        "glass-out": "glassOut 0.25s cubic-bezier(0.4, 0, 1, 1) both",
+        "stagger-in": "staggerIn 0.35s cubic-bezier(0.2, 0.8, 0.2, 1) both",
+        "shimmer": "shimmer 2s ease-in-out",
+        "focus-ring": "focusRing 0.3s cubic-bezier(0.34, 1.56, 0.64, 1) both",
       },
       keyframes: {
         fadeIn: {
@@ -78,6 +104,39 @@ module.exports = {
           "0%": { transform: "translateY(20px)", opacity: "0" },
           "100%": { transform: "translateY(0)", opacity: "1" },
         },
+        springIn: {
+          "0%": { transform: "scale(0.9) translateY(8px)", opacity: "0" },
+          "100%": { transform: "scale(1) translateY(0)", opacity: "1" },
+        },
+        springScale: {
+          "0%": { transform: "scale(0.95)", opacity: "0" },
+          "100%": { transform: "scale(1)", opacity: "1" },
+        },
+        glassIn: {
+          "0%": { transform: "scale(0.96)", opacity: "0", backdropFilter: "blur(0px)" },
+          "100%": { transform: "scale(1)", opacity: "1", backdropFilter: "blur(24px)" },
+        },
+        glassOut: {
+          "0%": { transform: "scale(1)", opacity: "1" },
+          "100%": { transform: "scale(0.96)", opacity: "0" },
+        },
+        staggerIn: {
+          "0%": { transform: "translateY(6px)", opacity: "0" },
+          "100%": { transform: "translateY(0)", opacity: "1" },
+        },
+        shimmer: {
+          "0%": { backgroundPosition: "-200% 0" },
+          "100%": { backgroundPosition: "200% 0" },
+        },
+        focusRing: {
+          "0%": { boxShadow: "0 0 0 0px hsl(var(--primary) / 0.4)" },
+          "100%": { boxShadow: "0 0 0 3px hsl(var(--primary) / 0.12)" },
+        },
+      },
+      transitionTimingFunction: {
+        "apple-spring": "cubic-bezier(0.34, 1.56, 0.64, 1)",
+        "apple-ease": "cubic-bezier(0.2, 0.8, 0.2, 1)",
+        "apple-bounce": "cubic-bezier(0.175, 0.885, 0.32, 1.275)",
       },
     },
   },

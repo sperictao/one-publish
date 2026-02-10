@@ -142,7 +142,7 @@ export function CommandImportDialog({
           </Button>
 
           {error && (
-            <div className="p-3 bg-destructive/10 text-destructive rounded-lg text-sm">
+            <div className="p-3 bg-destructive/8 text-destructive rounded-xl border border-destructive/20 text-sm">
               <p className="font-semibold mb-1">{commandT.parseFailed || "解析失败"}</p>
               <p className="text-xs">{error}</p>
             </div>
@@ -151,7 +151,7 @@ export function CommandImportDialog({
           {parsedSpec && (
             <div className="space-y-2">
               <Label>{commandT.extractedParameters || "提取的参数"}</Label>
-              <div className="p-3 bg-muted rounded-lg">
+              <div className="p-3 bg-[var(--glass-input-bg)] rounded-xl">
                 <pre className="text-xs font-mono overflow-auto max-h-40">
                   {JSON.stringify(parsedSpec.parameters, null, 2)}
                 </pre>
