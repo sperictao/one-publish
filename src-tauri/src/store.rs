@@ -3,6 +3,7 @@
 //! 使用 JSON 文件存储应用配置，位于 `~/.one-publish/config.json`
 
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::fs;
 use std::path::PathBuf;
 use std::sync::{OnceLock, RwLock};
@@ -64,6 +65,8 @@ pub struct ConfigProfile {
 #[serde(rename_all = "camelCase")]
 pub struct ExecutionRecord {
     pub id: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub repo_id: Option<String>,
     pub provider_id: String,
     pub project_path: String,
     pub started_at: String,
@@ -100,9 +103,25 @@ fn normalize_execution_history_limit(limit: usize) -> usize {
 }
 
 fn trim_execution_history(history: &mut Vec<ExecutionRecord>, limit: usize) {
-    if history.len() > limit {
-        history.truncate(limit);
+    let mut scoped_count: HashMap<String, usize> = HashMap::new();
+    let mut retained: Vec<ExecutionRecord> = Vec::with_capacity(history.len());
+
+    for record in history.iter() {
+        let scope_key = record
+            .repo_id
+            .clone()
+            .unwrap_or_else(|| "__legacy__".to_string());
+        let count = scoped_count.entry(scope_key).or_insert(0);
+
+        if *count >= limit {
+            continue;
+        }
+
+        retained.push(record.clone());
+        *count += 1;
     }
+
+    *history = retained;
 }
 
 impl Default for PublishConfigStore {

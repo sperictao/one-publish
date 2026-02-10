@@ -25,6 +25,7 @@ export interface ConfigProfile {
 
 export interface ExecutionRecord {
   id: string;
+  repoId?: string | null;
   providerId: string;
   projectPath: string;
   startedAt: string;
@@ -199,6 +200,13 @@ export async function getProviderSchema(
  */
 export async function detectRepositoryProvider(path: string): Promise<string> {
   return await invoke<string>("detect_repository_provider", { path });
+}
+
+/**
+ * 扫描仓库目录下的项目文件列表
+ */
+export async function scanProjectFiles(path: string): Promise<string[]> {
+  return await invoke<string[]>("scan_project_files", { path });
 }
 
 export interface RepositoryBranchScanResult {

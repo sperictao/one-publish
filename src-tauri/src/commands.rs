@@ -459,18 +459,27 @@ pub async fn scan_repository_branches(
         ));
     }
 
-    let remote_output = Command::new("git")
-        .arg("-C")
-        .arg(&path)
-        .arg("remote")
-        .output()
-        .await
-        .map_err(|err| {
-            crate::errors::AppError::unknown_with_code(
-                format!("failed to execute git remote: {}", err),
-                classify_git_execution_error(err.kind()),
-            )
-        })?;
+    let remote_output = timeout(
+        Duration::from_secs(5),
+        Command::new("git")
+            .arg("-C")
+            .arg(&path)
+            .arg("remote")
+            .output(),
+    )
+    .await
+    .map_err(|_| {
+        crate::errors::AppError::unknown_with_code(
+            "git remote timed out after 5s",
+            "timeout",
+        )
+    })?
+    .map_err(|err| {
+        crate::errors::AppError::unknown_with_code(
+            format!("failed to execute git remote: {}", err),
+            classify_git_execution_error(err.kind()),
+        )
+    })?;
 
     if !remote_output.status.success() {
         let stderr = String::from_utf8_lossy(&remote_output.stderr).trim().to_string();
@@ -485,20 +494,29 @@ pub async fn scan_repository_branches(
         .any(|line| !line.trim().is_empty());
 
     if has_remote {
-        let fetch_output = Command::new("git")
-            .arg("-C")
-            .arg(&path)
-            .arg("fetch")
-            .arg("--all")
-            .arg("--prune")
-            .output()
-            .await
-            .map_err(|err| {
-                crate::errors::AppError::unknown_with_code(
-                    format!("failed to execute git fetch: {}", err),
-                    classify_git_execution_error(err.kind()),
-                )
-            })?;
+        let fetch_output = timeout(
+            Duration::from_secs(5),
+            Command::new("git")
+                .arg("-C")
+                .arg(&path)
+                .arg("fetch")
+                .arg("--all")
+                .arg("--prune")
+                .output(),
+        )
+        .await
+        .map_err(|_| {
+            crate::errors::AppError::unknown_with_code(
+                "git fetch timed out after 5s",
+                "timeout",
+            )
+        })?
+        .map_err(|err| {
+            crate::errors::AppError::unknown_with_code(
+                format!("failed to execute git fetch: {}", err),
+                classify_git_execution_error(err.kind()),
+            )
+        })?;
 
         if !fetch_output.status.success() {
             let stderr = String::from_utf8_lossy(&fetch_output.stderr).trim().to_string();
@@ -509,20 +527,29 @@ pub async fn scan_repository_branches(
         }
     }
 
-    let output = Command::new("git")
-        .arg("-C")
-        .arg(&path)
-        .arg("branch")
-        .arg("--list")
-        .arg("--no-color")
-        .output()
-        .await
-        .map_err(|err| {
-            crate::errors::AppError::unknown_with_code(
-                format!("failed to execute git branch: {}", err),
-                classify_git_execution_error(err.kind()),
-            )
-        })?;
+    let output = timeout(
+        Duration::from_secs(5),
+        Command::new("git")
+            .arg("-C")
+            .arg(&path)
+            .arg("branch")
+            .arg("--list")
+            .arg("--no-color")
+            .output(),
+    )
+    .await
+    .map_err(|_| {
+        crate::errors::AppError::unknown_with_code(
+            "git branch timed out after 5s",
+            "timeout",
+        )
+    })?
+    .map_err(|err| {
+        crate::errors::AppError::unknown_with_code(
+            format!("failed to execute git branch: {}", err),
+            classify_git_execution_error(err.kind()),
+        )
+    })?;
 
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
@@ -571,20 +598,29 @@ pub async fn scan_repository_branches(
         .unwrap_or_default();
 
     if current_branch.is_empty() {
-        let head_output = Command::new("git")
-            .arg("-C")
-            .arg(&path)
-            .arg("rev-parse")
-            .arg("--abbrev-ref")
-            .arg("HEAD")
-            .output()
-            .await
-            .map_err(|err| {
-                crate::errors::AppError::unknown_with_code(
-                    format!("failed to detect current branch: {}", err),
-                    classify_git_execution_error(err.kind()),
-                )
-            })?;
+        let head_output = timeout(
+            Duration::from_secs(5),
+            Command::new("git")
+                .arg("-C")
+                .arg(&path)
+                .arg("rev-parse")
+                .arg("--abbrev-ref")
+                .arg("HEAD")
+                .output(),
+        )
+        .await
+        .map_err(|_| {
+            crate::errors::AppError::unknown_with_code(
+                "git rev-parse timed out after 5s",
+                "timeout",
+            )
+        })?
+        .map_err(|err| {
+            crate::errors::AppError::unknown_with_code(
+                format!("failed to detect current branch: {}", err),
+                classify_git_execution_error(err.kind()),
+            )
+        })?;
 
         if head_output.status.success() {
             current_branch = String::from_utf8_lossy(&head_output.stdout)
@@ -605,6 +641,86 @@ pub async fn scan_repository_branches(
         branches,
         current_branch,
     })
+}
+
+/// Collect all recognizable project files under a repository root.
+///
+/// Scans well-known subdirectories (UI/, root, src/) for project files whose
+/// extension matches the detected provider (e.g. `.csproj` for dotnet,
+/// `Cargo.toml` for cargo). Returns a sorted, deduplicated list of absolute
+/// paths. An empty list is valid – it simply means nothing was found.
+#[tauri::command]
+pub async fn scan_project_files(path: String) -> Result<Vec<String>, crate::errors::AppError> {
+    let root = PathBuf::from(&path);
+    if !root.is_dir() {
+        return Err(crate::errors::AppError::unknown_with_code(
+            format!("path is not a directory: {}", path),
+            "not_directory",
+        ));
+    }
+
+    let provider = detect_provider_from_path(&root);
+    let extensions: &[&str] = match provider {
+        Some("dotnet") => &["csproj", "sln"],
+        Some("cargo") => &["toml"],    // Cargo.toml
+        Some("go") => &["mod"],        // go.mod
+        Some("java") => &["gradle", "kts", "xml"],
+        _ => &[],
+    };
+
+    // Special-case files to match by exact name (not just extension)
+    let exact_names: &[&str] = match provider {
+        Some("cargo") => &["Cargo.toml"],
+        Some("go") => &["go.mod"],
+        Some("java") => &["build.gradle", "build.gradle.kts", "settings.gradle", "settings.gradle.kts", "pom.xml"],
+        _ => &[],
+    };
+
+    let mut results: Vec<String> = Vec::new();
+
+    let scan_dirs = [
+        root.join("UI"),
+        root.clone(),
+        root.join("src"),
+    ];
+
+    for dir in &scan_dirs {
+        if !dir.is_dir() {
+            continue;
+        }
+        if let Ok(entries) = std::fs::read_dir(dir) {
+            for entry in entries.flatten() {
+                let entry_path = entry.path();
+                if !entry_path.is_file() {
+                    continue;
+                }
+
+                let matched = if !exact_names.is_empty() {
+                    // For providers with exact name matching
+                    entry_path
+                        .file_name()
+                        .and_then(|n| n.to_str())
+                        .map(|name| exact_names.iter().any(|&en| name == en))
+                        .unwrap_or(false)
+                } else {
+                    // For providers with extension matching (e.g. dotnet)
+                    entry_path
+                        .extension()
+                        .and_then(|ext| ext.to_str())
+                        .map(|ext| extensions.iter().any(|&e| ext.eq_ignore_ascii_case(e)))
+                        .unwrap_or(false)
+                };
+
+                if matched {
+                    results.push(entry_path.to_string_lossy().to_string());
+                }
+            }
+        }
+    }
+
+    results.sort();
+    results.dedup();
+    Ok(results)
 }
 
 #[tauri::command]
