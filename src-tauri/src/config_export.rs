@@ -12,6 +12,8 @@ pub struct ConfigProfile {
     pub name: String,
     pub provider_id: String,
     pub parameters: BTreeMap<String, serde_json::Value>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub profile_group: Option<String>,
     pub created_at: DateTime<Utc>,
     pub is_system_default: bool,
 }
@@ -22,6 +24,7 @@ impl Default for ConfigProfile {
             name: "Default".to_string(),
             provider_id: "dotnet".to_string(),
             parameters: BTreeMap::new(),
+            profile_group: None,
             created_at: Utc::now(),
             is_system_default: false,
         }
@@ -228,6 +231,7 @@ mod tests {
                 );
                 map
             },
+            profile_group: None,
             created_at: Utc::now(),
             is_system_default: false,
         };
@@ -258,6 +262,7 @@ mod tests {
             name: "Test".to_string(),
             provider_id: "invalid_provider".to_string(),
             parameters: BTreeMap::new(),
+            profile_group: None,
             created_at: Utc::now(),
             is_system_default: false,
         };
@@ -284,6 +289,7 @@ mod tests {
                 );
                 map
             },
+            profile_group: None,
             created_at: Utc::now(),
             is_system_default: false,
         };

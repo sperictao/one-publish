@@ -56,6 +56,8 @@ pub struct ConfigProfile {
     pub name: String,
     pub provider_id: String,
     pub parameters: serde_json::Value,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub profile_group: Option<String>,
     pub created_at: String,
     pub is_system_default: bool,
 }
@@ -462,6 +464,7 @@ pub async fn save_profile(
     name: String,
     provider_id: String,
     parameters: serde_json::Value,
+    profile_group: Option<String>,
 ) -> Result<AppState, String> {
     let mut state = get_state();
 
@@ -470,10 +473,15 @@ pub async fn save_profile(
         return Err(format!("配置文件 '{}' 已存在", name));
     }
 
+    let normalized_profile_group = profile_group
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty());
+
     let profile = ConfigProfile {
         name: name.clone(),
         provider_id,
         parameters,
+        profile_group: normalized_profile_group,
         created_at: chrono::Utc::now().to_rfc3339(),
         is_system_default: false,
     };

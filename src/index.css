@@ -163,6 +163,12 @@ html.dark {
   --glass-inset-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.2);
 }
 
+/* Hide selected row separators without overlay masks */
+.config-list-row.config-item-selected,
+.config-list-row:has(+ .config-item-selected) {
+  border-bottom-color: transparent;
+}
+
 /* Glass Panel - base container */
 .glass-panel {
   background: var(--glass-panel-bg);

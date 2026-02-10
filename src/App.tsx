@@ -10,6 +10,7 @@ import { useAppState } from "@/hooks/useAppState";
 import { useTheme } from "@/hooks/useTheme";
 import { useShortcuts } from "@/hooks/useShortcuts";
 import { useI18n, type Language } from "@/hooks/useI18n";
+import { cn } from "@/lib/utils";
 import {
   addExecutionRecord,
   checkRepositoryBranchConnectivity,
@@ -89,6 +90,7 @@ import {
   Square,
   Copy,
   Save,
+  Check,
 } from "lucide-react";
 
 // Types
@@ -256,6 +258,8 @@ interface DotnetPreset {
 
 const SPEC_VERSION = 1;
 const QUICK_CREATE_CUSTOM_TEMPLATE_ID = "custom";
+const QUICK_CREATE_PROFILE_GROUP_DEFAULT = "__default__";
+const QUICK_CREATE_PROFILE_GROUP_CUSTOM = "__custom__";
 const EMPTY_DOTNET_CUSTOM_CONFIG_DRAFT: DotnetCustomConfigDraft = {
   configuration: "Release",
   runtime: "",
@@ -1121,6 +1125,11 @@ function App() {
   );
   const [quickCreateProfileDraft, setQuickCreateProfileDraft] =
     useState<DotnetCustomConfigDraft>(EMPTY_DOTNET_CUSTOM_CONFIG_DRAFT);
+  const [quickCreateProfileGroup, setQuickCreateProfileGroup] = useState(
+    QUICK_CREATE_PROFILE_GROUP_DEFAULT
+  );
+  const [quickCreateProfileCustomGroup, setQuickCreateProfileCustomGroup] =
+    useState("");
   const [quickCreateProfileSaving, setQuickCreateProfileSaving] = useState(false);
 
   // Recently used config keys (persisted in localStorage, scoped by repo id)
@@ -1587,6 +1596,8 @@ function App() {
     setQuickCreateProfileName("");
     setQuickCreateTemplateId(QUICK_CREATE_CUSTOM_TEMPLATE_ID);
     setQuickCreateProfileDraft(EMPTY_DOTNET_CUSTOM_CONFIG_DRAFT);
+    setQuickCreateProfileGroup(QUICK_CREATE_PROFILE_GROUP_DEFAULT);
+    setQuickCreateProfileCustomGroup("");
     setQuickCreateProfileOpen(true);
   }, []);
 
@@ -1595,19 +1606,52 @@ function App() {
     if (!open) {
       setQuickCreateProfileName("");
       setQuickCreateTemplateId(QUICK_CREATE_CUSTOM_TEMPLATE_ID);
+      setQuickCreateProfileGroup(QUICK_CREATE_PROFILE_GROUP_DEFAULT);
+      setQuickCreateProfileCustomGroup("");
       setQuickCreateProfileSaving(false);
     }
   }, []);
 
-  const quickCreateReleaseTemplates = useMemo(
-    () => PRESETS.filter((preset) => preset.id.startsWith("release")),
-    []
+  const quickCreateTemplateOptions = useMemo(
+    () => [
+      {
+        id: QUICK_CREATE_CUSTOM_TEMPLATE_ID,
+        name: profileT.quickCreateTemplateCustom || "自定义配置（空表单）",
+        description: "",
+      },
+      ...PRESETS.map((preset) => {
+        const presetText = getPresetText(
+          preset.id,
+          preset.name,
+          preset.description
+        );
+
+        return {
+          id: preset.id,
+          name: presetText.name,
+          description: presetText.description,
+        };
+      }),
+    ],
+    [getPresetText, profileT.quickCreateTemplateCustom]
   );
 
-  const quickCreateDebugTemplates = useMemo(
-    () => PRESETS.filter((preset) => preset.id.startsWith("debug")),
-    []
-  );
+  const quickCreateProfileGroupOptions = useMemo(() => {
+    const groupSet = new Set(
+      profiles
+        .map((profile) => profile.profileGroup?.trim() || "")
+        .filter(
+          (value) =>
+            value.length > 0 &&
+            value !== QUICK_CREATE_PROFILE_GROUP_DEFAULT &&
+            value !== QUICK_CREATE_PROFILE_GROUP_CUSTOM
+        )
+    );
+
+    return Array.from(groupSet).sort((left, right) =>
+      left.localeCompare(right, language === "en" ? "en" : "zh-CN")
+    );
+  }, [profiles, language]);
 
   const applyQuickCreateTemplate = useCallback((templateId: string) => {
     setQuickCreateTemplateId(templateId);
@@ -3455,6 +3499,21 @@ function App() {
       return;
     }
 
+    const resolvedProfileGroup =
+      quickCreateProfileGroup === QUICK_CREATE_PROFILE_GROUP_DEFAULT
+        ? ""
+        : quickCreateProfileGroup === QUICK_CREATE_PROFILE_GROUP_CUSTOM
+          ? quickCreateProfileCustomGroup.trim()
+          : quickCreateProfileGroup.trim();
+
+    if (
+      quickCreateProfileGroup === QUICK_CREATE_PROFILE_GROUP_CUSTOM &&
+      !resolvedProfileGroup
+    ) {
+      toast.error(profileT.enterProfileGroup || "请输入发布配置组名称");
+      return;
+    }
+
     if (quickCreateProfileSaving) {
       return;
     }
@@ -3467,6 +3526,7 @@ function App() {
         name: profileName,
         providerId: "dotnet",
         parameters,
+        profileGroup: resolvedProfileGroup || undefined,
       });
 
       await loadProfiles();
@@ -3475,6 +3535,7 @@ function App() {
         name: profileName,
         providerId: "dotnet",
         parameters,
+        profileGroup: resolvedProfileGroup || undefined,
         createdAt: new Date().toISOString(),
         isSystemDefault: false,
       });
@@ -3492,6 +3553,8 @@ function App() {
     }
   }, [
     quickCreateProfileName,
+    quickCreateProfileGroup,
+    quickCreateProfileCustomGroup,
     quickCreateProfileSaving,
     quickCreateProfileDraft,
     profileT,
@@ -4972,7 +5035,7 @@ function App() {
         open={quickCreateProfileOpen}
         onOpenChange={handleQuickCreateProfileOpenChange}
       >
-        <DialogContent className="sm:max-w-[520px]">
+        <DialogContent className="sm:max-w-[840px]">
           <DialogHeader>
             <DialogTitle>
               {profileT.quickCreateTitle || "创建发布配置"}
@@ -4983,104 +5046,63 @@ function App() {
           </DialogHeader>
 
           <div className="space-y-4">
-            <div className="space-y-2">
+            <fieldset className="space-y-2.5">
               <Label>{profileT.quickCreateTemplate || "预置模板"}</Label>
-              <div className="space-y-3">
-                <div className="space-y-2">
-                  <div className="text-xs font-medium text-muted-foreground">
-                    {profileT.quickCreateTemplateCustomGroup || "自定义配置"}
-                  </div>
-                  <label
-                    className="flex cursor-pointer items-start gap-2 rounded-lg border border-[var(--glass-divider)] px-3 py-2 hover:bg-[var(--glass-bg)]"
-                    htmlFor={`quick-template-${QUICK_CREATE_CUSTOM_TEMPLATE_ID}`}
-                  >
-                    <input
-                      id={`quick-template-${QUICK_CREATE_CUSTOM_TEMPLATE_ID}`}
-                      type="radio"
-                      name="quick-profile-template"
-                      className="mt-1"
-                      checked={quickCreateTemplateId === QUICK_CREATE_CUSTOM_TEMPLATE_ID}
-                      onChange={() => applyQuickCreateTemplate(QUICK_CREATE_CUSTOM_TEMPLATE_ID)}
-                    />
-                    <span className="text-sm">
-                      {profileT.quickCreateTemplateCustom || "自定义配置（空表单）"}
-                    </span>
-                  </label>
-                </div>
+              <div className="grid max-h-[240px] grid-cols-2 gap-2 overflow-y-auto pr-1 md:grid-cols-4">
+                {quickCreateTemplateOptions.map((option) => {
+                  const isSelected = quickCreateTemplateId === option.id;
 
-                <div className="space-y-2">
-                  <div className="text-xs font-medium text-muted-foreground">
-                    {appT.releaseConfigs || "Release 配置"}
-                  </div>
-                  {quickCreateReleaseTemplates.map((preset) => {
-                    const presetText = getPresetText(
-                      preset.id,
-                      preset.name,
-                      preset.description
-                    );
-
-                    return (
-                      <label
-                        key={`quick-release-${preset.id}`}
-                        className="flex cursor-pointer items-start gap-2 rounded-lg border border-[var(--glass-divider)] px-3 py-2 hover:bg-[var(--glass-bg)]"
-                        htmlFor={`quick-template-${preset.id}`}
-                      >
-                        <input
-                          id={`quick-template-${preset.id}`}
-                          type="radio"
-                          name="quick-profile-template"
-                          className="mt-1"
-                          checked={quickCreateTemplateId === preset.id}
-                          onChange={() => applyQuickCreateTemplate(preset.id)}
-                        />
-                        <span className="flex flex-col text-sm">
-                          <span>{presetText.name}</span>
-                          <span className="text-xs text-muted-foreground">
-                            {presetText.description}
-                          </span>
+                  return (
+                    <label
+                      key={`quick-template-${option.id}`}
+                      title={
+                        option.description
+                          ? `${option.name} - ${option.description}`
+                          : option.name
+                      }
+                      className={cn(
+                        "group relative flex cursor-pointer items-center gap-2 rounded-lg border px-2.5 py-2 transition-all duration-150",
+                        isSelected
+                          ? "border-primary/45 bg-primary/10 shadow-[0_6px_16px_hsl(var(--primary)/0.12)]"
+                          : "border-[var(--glass-divider)] bg-[var(--glass-bg)] hover:border-primary/30 hover:bg-[var(--glass-bg-hover)]"
+                      )}
+                      htmlFor={`quick-template-${option.id}`}
+                    >
+                      <input
+                        id={`quick-template-${option.id}`}
+                        type="radio"
+                        name="quick-profile-template"
+                        className="sr-only"
+                        checked={isSelected}
+                        onChange={() => applyQuickCreateTemplate(option.id)}
+                      />
+                      <div className="min-w-0 flex-1">
+                        <div className="truncate text-sm font-medium leading-5">
+                          {option.name}
+                        </div>
+                        {option.description && (
+                          <div className="truncate text-[11px] text-muted-foreground">
+                            {option.description}
+                          </div>
+                        )}
+                      </div>
+                      <div className="flex items-start">
+                        <span
+                          className={cn(
+                            "mt-0.5 inline-flex h-4 w-4 flex-shrink-0 items-center justify-center rounded-full border transition-colors duration-200",
+                            isSelected
+                              ? "border-primary bg-primary text-primary-foreground"
+                              : "border-[var(--glass-divider)] bg-background/70 text-transparent group-hover:border-primary/45"
+                          )}
+                        >
+                          <Check className="h-3 w-3" />
                         </span>
-                      </label>
-                    );
-                  })}
-                </div>
-
-                <div className="space-y-2">
-                  <div className="text-xs font-medium text-muted-foreground">
-                    {appT.debugConfigs || "Debug 配置"}
-                  </div>
-                  {quickCreateDebugTemplates.map((preset) => {
-                    const presetText = getPresetText(
-                      preset.id,
-                      preset.name,
-                      preset.description
-                    );
-
-                    return (
-                      <label
-                        key={`quick-debug-${preset.id}`}
-                        className="flex cursor-pointer items-start gap-2 rounded-lg border border-[var(--glass-divider)] px-3 py-2 hover:bg-[var(--glass-bg)]"
-                        htmlFor={`quick-template-${preset.id}`}
-                      >
-                        <input
-                          id={`quick-template-${preset.id}`}
-                          type="radio"
-                          name="quick-profile-template"
-                          className="mt-1"
-                          checked={quickCreateTemplateId === preset.id}
-                          onChange={() => applyQuickCreateTemplate(preset.id)}
-                        />
-                        <span className="flex flex-col text-sm">
-                          <span>{presetText.name}</span>
-                          <span className="text-xs text-muted-foreground">
-                            {presetText.description}
-                          </span>
-                        </span>
-                      </label>
-                    );
-                  })}
-                </div>
+                      </div>
+                    </label>
+                  );
+                })}
               </div>
-            </div>
+            </fieldset>
 
             <div className="space-y-2">
               <Label htmlFor="quick-profile-name">
@@ -5098,6 +5120,46 @@ function App() {
                   }
                 }}
               />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="quick-profile-group">
+                {profileT.quickCreateGroup || "发布配置组"}
+              </Label>
+              <Select
+                value={quickCreateProfileGroup}
+                onValueChange={setQuickCreateProfileGroup}
+              >
+                <SelectTrigger id="quick-profile-group">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={QUICK_CREATE_PROFILE_GROUP_DEFAULT}>
+                    {profileT.quickCreateGroupDefault || "默认分组"}
+                  </SelectItem>
+                  {quickCreateProfileGroupOptions.map((group) => (
+                    <SelectItem key={`quick-profile-group-${group}`} value={group}>
+                      {group}
+                    </SelectItem>
+                  ))}
+                  <SelectItem value={QUICK_CREATE_PROFILE_GROUP_CUSTOM}>
+                    {profileT.quickCreateGroupCustom || "自定义分组"}
+                  </SelectItem>
+                </SelectContent>
+              </Select>
+              {quickCreateProfileGroup === QUICK_CREATE_PROFILE_GROUP_CUSTOM && (
+                <Input
+                  id="quick-profile-group-custom"
+                  value={quickCreateProfileCustomGroup}
+                  onChange={(e) =>
+                    setQuickCreateProfileCustomGroup(e.target.value)
+                  }
+                  placeholder={
+                    profileT.quickCreateGroupCustomPlaceholder ||
+                    "输入自定义发布配置组名称"
+                  }
+                />
+              )}
             </div>
 
             <div className="grid grid-cols-2 gap-4">

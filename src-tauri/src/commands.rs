@@ -2248,6 +2248,7 @@ pub async fn apply_imported_config(
             name: profile.name,
             provider_id: profile.provider_id,
             parameters,
+            profile_group: profile.profile_group,
             created_at: profile.created_at.to_rfc3339(),
             is_system_default: profile.is_system_default,
         };

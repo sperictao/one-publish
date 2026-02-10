@@ -19,6 +19,7 @@ export interface ConfigProfile {
   name: string;
   providerId: string;
   parameters: Record<string, any>;
+  profileGroup?: string;
   createdAt: string;
   isSystemDefault: boolean;
 }
@@ -357,6 +358,7 @@ export async function saveProfile(params: {
   name: string;
   providerId: string;
   parameters: Record<string, any>;
+  profileGroup?: string;
 }): Promise<AppState> {
   return await invoke<AppState>("save_profile", params);
 }

@@ -300,11 +300,16 @@
     "quickCreateTitle": "Create publish profile",
     "quickCreateDescription": "Fill the same fields as custom mode and save them as a publish profile.",
     "quickCreateName": "Profile name",
+    "quickCreateGroup": "Profile group",
+    "quickCreateGroupDefault": "Default group",
+    "quickCreateGroupCustom": "Custom group",
+    "quickCreateGroupCustomPlaceholder": "Enter custom profile group name",
     "quickCreateTemplate": "Preset template",
     "quickCreateTemplateCustomGroup": "Custom",
     "quickCreateTemplateCustom": "Custom (empty form)",
     "quickCreateAction": "Create and save",
-    "quickCreateSaving": "Saving..."
+    "quickCreateSaving": "Saving...",
+    "enterProfileGroup": "Please enter a profile group name"
   },
   "app": {
     "loading": "Loading...",
@@ -584,6 +589,7 @@
     "releaseGroup": "Release Presets",
     "debugGroup": "Debug Presets",
     "profileGroup": "Project Profiles",
+    "defaultProfileGroup": "Default Group",
     "noProfiles": "No custom profiles yet",
     "expandConfigList": "Expand config list",
     "collapsePanel": "Collapse panel",

@@ -300,11 +300,16 @@
     "quickCreateTitle": "创建发布配置",
     "quickCreateDescription": "填写与自定义模式一致的参数并保存为发布配置。",
     "quickCreateName": "配置名称",
+    "quickCreateGroup": "发布配置组",
+    "quickCreateGroupDefault": "默认分组",
+    "quickCreateGroupCustom": "自定义分组",
+    "quickCreateGroupCustomPlaceholder": "输入自定义发布配置组名称",
     "quickCreateTemplate": "预置模板",
     "quickCreateTemplateCustomGroup": "自定义配置",
     "quickCreateTemplateCustom": "自定义配置（空表单）",
     "quickCreateAction": "创建并保存",
-    "quickCreateSaving": "保存中..."
+    "quickCreateSaving": "保存中...",
+    "enterProfileGroup": "请输入发布配置组名称"
   },
   "app": {
     "loading": "加载中...",
@@ -584,6 +589,7 @@
     "releaseGroup": "Release 配置",
     "debugGroup": "Debug 配置",
     "profileGroup": "项目发布配置",
+    "defaultProfileGroup": "默认分组",
     "noProfiles": "暂无自定义配置",
     "expandConfigList": "展开配置列表",
     "collapsePanel": "收起面板",

@@ -163,8 +163,8 @@ function ConfigItem({
   return (
     <div
       className={cn(
-        "flex items-start gap-2 border-b border-[var(--glass-divider)] px-3 py-2.5 glass-transition hover:bg-[var(--glass-bg)] cursor-pointer",
-        isSelected && "glass-surface-selected rounded-lg mx-1 border-0"
+        "config-list-row flex items-start gap-2 border-b border-[var(--glass-divider)] px-3 py-2.5 glass-transition hover:bg-[var(--glass-bg)] cursor-pointer",
+        isSelected && "config-item-selected relative z-10 rounded-lg mx-1 bg-[var(--glass-bg-active)] ring-1 ring-[var(--glass-border-subtle)] hover:bg-[var(--glass-bg-active)]"
       )}
       onClick={onClick}
     >
@@ -203,8 +203,8 @@ function ProfileItem({
   return (
     <div
       className={cn(
-        "group flex items-start gap-2 border-b border-[var(--glass-divider)] px-3 py-2.5 glass-transition hover:bg-[var(--glass-bg)] cursor-pointer",
-        isSelected && "glass-surface-selected rounded-lg mx-1 border-0"
+        "config-list-row group flex items-start gap-2 border-b border-[var(--glass-divider)] px-3 py-2.5 glass-transition hover:bg-[var(--glass-bg)] cursor-pointer",
+        isSelected && "config-item-selected relative z-10 rounded-lg mx-1 bg-[var(--glass-bg-active)] ring-1 ring-[var(--glass-border-subtle)] hover:bg-[var(--glass-bg-active)]"
       )}
       onClick={onClick}
     >
@@ -366,7 +366,8 @@ export function PublishConfigPanel({
     if (!query) return true;
     return (
       p.name.toLowerCase().includes(query) ||
-      p.providerId.toLowerCase().includes(query)
+      p.providerId.toLowerCase().includes(query) ||
+      (p.profileGroup || "").toLowerCase().includes(query)
     );
   });
 
@@ -376,7 +377,31 @@ export function PublishConfigPanel({
     return name.toLowerCase().includes(query);
   });
 
-  const projectProfileGroupCount = filteredProjectProfiles.length + filteredProfiles.length;
+  const groupedFilteredProfiles = useMemo(() => {
+    const defaultGroupName = t.defaultProfileGroup || "默认分组";
+    const groupMap = new Map<string, ConfigProfile[]>();
+
+    for (const profile of filteredProfiles) {
+      const groupName = profile.profileGroup?.trim() || defaultGroupName;
+      const group = groupMap.get(groupName);
+      if (group) {
+        group.push(profile);
+      } else {
+        groupMap.set(groupName, [profile]);
+      }
+    }
+
+    return Array.from(groupMap.entries())
+      .map(([groupName, items]) => ({ groupName, items }))
+      .sort((left, right) => {
+        if (left.groupName === defaultGroupName) return -1;
+        if (right.groupName === defaultGroupName) return 1;
+        return left.groupName.localeCompare(right.groupName);
+      });
+  }, [filteredProfiles, t.defaultProfileGroup]);
+
+  const projectProfileGroupCount =
+    filteredProjectProfiles.length + filteredProfiles.length;
 
   return (
     <div className="flex h-full flex-col">
@@ -475,8 +500,8 @@ export function PublishConfigPanel({
                 <div
                   key={`recent-${item.key}`}
                   className={cn(
-                    "group flex items-start gap-2 border-b border-[var(--glass-divider)] px-3 py-2 glass-transition hover:bg-[var(--glass-bg)] cursor-pointer",
-                    item.isSelected && "glass-surface-selected rounded-lg mx-1 border-0"
+                    "config-list-row group flex items-start gap-2 border-b border-[var(--glass-divider)] px-3 py-2 glass-transition hover:bg-[var(--glass-bg)] cursor-pointer",
+                    item.isSelected && "config-item-selected relative z-10 rounded-lg mx-1 bg-[var(--glass-bg-active)] ring-1 ring-[var(--glass-border-subtle)] hover:bg-[var(--glass-bg-active)]"
                   )}
                   onClick={item.onClick}
                 >
@@ -504,7 +529,6 @@ export function PublishConfigPanel({
                   </Button>
                 </div>
               ))}
-              <div className="mx-3 border-b border-[var(--glass-divider)]" />
             </div>
           )}
 
@@ -570,8 +594,8 @@ export function PublishConfigPanel({
                 <div
                   key={`pubxml-${name}`}
                   className={cn(
-                    "flex items-start gap-2 border-b border-[var(--glass-divider)] px-3 py-2.5 glass-transition hover:bg-[var(--glass-bg)] cursor-pointer",
-                    !isCustomMode && selectedPreset === `profile-${name}` && "glass-surface-selected rounded-lg mx-1 border-0"
+                    "config-list-row flex items-start gap-2 border-b border-[var(--glass-divider)] px-3 py-2.5 glass-transition hover:bg-[var(--glass-bg)] cursor-pointer",
+                    !isCustomMode && selectedPreset === `profile-${name}` && "config-item-selected relative z-10 rounded-lg mx-1 bg-[var(--glass-bg-active)] ring-1 ring-[var(--glass-border-subtle)] hover:bg-[var(--glass-bg-active)]"
                   )}
                   onClick={() => onSelectProjectProfile(name)}
                 >
@@ -587,19 +611,26 @@ export function PublishConfigPanel({
               );
             })}
             {/* User-saved ConfigProfile items */}
-            {filteredProfiles.map((profile) => (
-              <ProfileItem
-                key={profile.name}
-                profile={profile}
-                configKey={`userprofile:${profile.name}`}
-                isSelected={
-                  isCustomMode && activeProfileName === profile.name
-                }
-                isFavorite={favoriteSet.has(`userprofile:${profile.name}`)}
-                onClick={() => onSelectProfile(profile)}
-                onToggleFavorite={onToggleFavoriteConfig}
-                onDelete={() => onDeleteProfile(profile.name)}
-              />
+            {groupedFilteredProfiles.map((group) => (
+              <div key={`userprofile-group-${group.groupName}`}>
+                <div className="px-3 pb-1 pt-2 text-[11px] font-medium text-muted-foreground">
+                  {group.groupName}
+                </div>
+                {group.items.map((profile) => (
+                  <ProfileItem
+                    key={profile.name}
+                    profile={profile}
+                    configKey={`userprofile:${profile.name}`}
+                    isSelected={
+                      isCustomMode && activeProfileName === profile.name
+                    }
+                    isFavorite={favoriteSet.has(`userprofile:${profile.name}`)}
+                    onClick={() => onSelectProfile(profile)}
+                    onToggleFavorite={onToggleFavoriteConfig}
+                    onDelete={() => onDeleteProfile(profile.name)}
+                  />
+                ))}
+              </div>
             ))}
             {projectProfileGroupCount === 0 && (
               <div className="px-3 py-4 text-center text-xs text-muted-foreground">

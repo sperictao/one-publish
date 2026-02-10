@@ -598,11 +598,11 @@ export function RepositoryList({
               <button
                 key={repo.id}
                 className={cn(
-                  "glass-hover-lift group relative flex w-full items-start gap-2.5 rounded-2xl px-3 py-2.5 text-left",
+                  "group relative flex w-full items-start gap-2.5 rounded-2xl px-3 py-2.5 text-left transition-colors duration-300",
                   isActionMenuOpen && "z-30",
                   isSelected
-                    ? "glass-surface-selected"
-                    : "border border-[var(--glass-border-subtle)]/40 bg-[var(--glass-bg)]/30 shadow-[0_1px_4px_rgba(0,0,0,0.03)] transition-all duration-300 hover:border-[var(--glass-border-subtle)] hover:bg-[var(--glass-bg)] hover:shadow-[var(--glass-shadow)]"
+                    ? "glass-hover-lift glass-surface-selected"
+                    : "glass-hover-lift border border-transparent bg-transparent shadow-none hover:border-[var(--glass-border-subtle)] hover:bg-[var(--glass-bg)] hover:shadow-[var(--glass-shadow)]"
                 )}
                 onClick={() => {
                   setActionMenuRepoId(null);
