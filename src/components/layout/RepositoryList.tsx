@@ -287,12 +287,6 @@ export function RepositoryList({
                 repoT.currentBranchUnknown ||
                 "未知分支";
               const canConnectBranch = branchConnectivityByRepoId[repo.id] ?? false;
-              const providerLabel = repo.providerId
-                ? providers.find((provider) => provider.id === repo.providerId)?.label ||
-                  providers.find((provider) => provider.id === repo.providerId)?.displayName ||
-                  repo.providerId
-                : null;
-
               return (
                 <div
                   key={repo.id}
@@ -353,11 +347,6 @@ export function RepositoryList({
                         </p>
                       </div>
                       <div className="flex flex-shrink-0 items-center gap-1">
-                        {providerLabel && (
-                          <span className="rounded-full border border-[var(--glass-tag-border)] bg-[var(--glass-tag-bg)] px-2 py-0.5 text-[10px] font-medium uppercase leading-none tracking-[0.08em] text-muted-foreground/62 shadow-[var(--glass-tag-highlight)]">
-                            {providerLabel}
-                          </span>
-                        )}
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>
                             <Button
