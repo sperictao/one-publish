@@ -34,23 +34,9 @@ function CollapseIcon() {
   );
 }
 
-// Preset type matching App.tsx PRESETS structure
-interface Preset {
-  id: string;
-  name: string;
-  description: string;
-  config: {
-    configuration: string;
-    runtime: string;
-    self_contained: boolean;
-  };
-}
-
 export interface PublishConfigPanelProps {
-  presets: Preset[];
   selectedPreset: string;
   isCustomMode: boolean;
-  onSelectPreset: (presetId: string) => void;
   profiles: ConfigProfile[];
   activeProfileName: string | null;
   onSelectProfile: (profile: ConfigProfile) => void;
@@ -66,11 +52,6 @@ export interface PublishConfigPanelProps {
   onCollapse?: () => void;
   showExpandButton?: boolean;
   onExpandRepo?: () => void;
-  getPresetText: (
-    presetId: string,
-    fallbackName: string,
-    fallbackDescription: string
-  ) => { name: string; description: string };
 }
 
 // Collapsible group sub-component
@@ -142,46 +123,6 @@ function FavoriteButton({
   );
 }
 
-// Preset config item
-function ConfigItem({
-  configKey,
-  name,
-  description,
-  isSelected,
-  isFavorite,
-  onClick,
-  onToggleFavorite,
-}: {
-  configKey: string;
-  name: string;
-  description: string;
-  isSelected: boolean;
-  isFavorite: boolean;
-  onClick: () => void;
-  onToggleFavorite: (configKey: string) => void;
-}) {
-  return (
-    <div
-      className={cn(
-        "config-list-row flex items-start gap-2 border-b border-[var(--glass-divider)] px-3 py-2.5 glass-transition hover:bg-[var(--glass-bg)] cursor-pointer",
-        isSelected && "config-item-selected relative z-10 rounded-lg mx-1 bg-[var(--glass-bg-active)] ring-1 ring-[var(--glass-border-subtle)] hover:bg-[var(--glass-bg-active)]"
-      )}
-      onClick={onClick}
-    >
-      <FavoriteButton
-        isFavorite={isFavorite}
-        onToggle={() => onToggleFavorite(configKey)}
-      />
-      <div className="min-w-0 flex-1">
-        <span className="block truncate text-sm font-medium">{name}</span>
-        <span className="block truncate text-xs text-muted-foreground mt-0.5">
-          {description}
-        </span>
-      </div>
-    </div>
-  );
-}
-
 // User profile item with delete button on hover
 function ProfileItem({
   profile,
@@ -203,7 +144,7 @@ function ProfileItem({
   return (
     <div
       className={cn(
-        "config-list-row group flex items-start gap-2 border-b border-[var(--glass-divider)] px-3 py-2.5 glass-transition hover:bg-[var(--glass-bg)] cursor-pointer",
+        "config-list-row group flex items-start gap-2 px-3 py-2.5 glass-transition hover:bg-[var(--glass-bg)] cursor-pointer",
         isSelected && "config-item-selected relative z-10 rounded-lg mx-1 bg-[var(--glass-bg-active)] ring-1 ring-[var(--glass-border-subtle)] hover:bg-[var(--glass-bg-active)]"
       )}
       onClick={onClick}
@@ -241,10 +182,8 @@ function ProfileItem({
 }
 
 export function PublishConfigPanel({
-  presets,
   selectedPreset,
   isCustomMode,
-  onSelectPreset,
   profiles,
   activeProfileName,
   onSelectProfile,
@@ -260,7 +199,6 @@ export function PublishConfigPanel({
   onCollapse,
   showExpandButton,
   onExpandRepo,
-  getPresetText,
 }: PublishConfigPanelProps) {
   const [searchQuery, setSearchQuery] = useState("");
   const { translations } = useI18n();
@@ -273,10 +211,6 @@ export function PublishConfigPanel({
   );
 
   // Build lookup maps for resolving recent keys
-  const presetMap = useMemo(
-    () => new Map(presets.map((p) => [p.id, p])),
-    [presets]
-  );
   const profileMap = useMemo(
     () => new Map(profiles.map((p) => [p.name, p])),
     [profiles]
@@ -301,18 +235,7 @@ export function PublishConfigPanel({
       const [type, ...rest] = rk.split(":");
       const id = rest.join(":");
 
-      if (type === "preset") {
-        const preset = presetMap.get(id);
-        if (!preset) continue;
-        const text = getPresetText(preset.id, preset.name, preset.description);
-        items.push({
-          key: rk,
-          name: text.name,
-          description: text.description,
-          isSelected: !isCustomMode && selectedPreset === id,
-          onClick: () => onSelectPreset(id),
-        });
-      } else if (type === "pubxml") {
+      if (type === "pubxml") {
         if (!pubxmlSet.has(id)) continue;
         items.push({
           key: rk,
@@ -335,31 +258,15 @@ export function PublishConfigPanel({
     }
     return items;
   }, [
-    recentConfigKeys, presetMap, profileMap, pubxmlSet,
-    isCustomMode, selectedPreset, activeProfileName, getPresetText,
-    onSelectPreset, onSelectProjectProfile, onSelectProfile,
+    recentConfigKeys,
+    profileMap,
+    pubxmlSet,
+    isCustomMode,
+    selectedPreset,
+    activeProfileName,
+    onSelectProjectProfile,
+    onSelectProfile,
   ]);
-
-  // Filter presets
-  const releasePresets = presets.filter((p) => {
-    if (!p.id.startsWith("release")) return false;
-    if (!query) return true;
-    const text = getPresetText(p.id, p.name, p.description);
-    return (
-      text.name.toLowerCase().includes(query) ||
-      text.description.toLowerCase().includes(query)
-    );
-  });
-
-  const debugPresets = presets.filter((p) => {
-    if (!p.id.startsWith("debug")) return false;
-    if (!query) return true;
-    const text = getPresetText(p.id, p.name, p.description);
-    return (
-      text.name.toLowerCase().includes(query) ||
-      text.description.toLowerCase().includes(query)
-    );
-  });
 
   // Filter profiles
   const filteredProfiles = profiles.filter((p) => {
@@ -400,8 +307,7 @@ export function PublishConfigPanel({
       });
   }, [filteredProfiles, t.defaultProfileGroup]);
 
-  const projectProfileGroupCount =
-    filteredProjectProfiles.length + filteredProfiles.length;
+  const hasProjectProfiles = projectPublishProfiles.length > 0;
 
   return (
     <div className="flex h-full flex-col">
@@ -500,7 +406,7 @@ export function PublishConfigPanel({
                 <div
                   key={`recent-${item.key}`}
                   className={cn(
-                    "config-list-row group flex items-start gap-2 border-b border-[var(--glass-divider)] px-3 py-2 glass-transition hover:bg-[var(--glass-bg)] cursor-pointer",
+                    "config-list-row group flex items-start gap-2 px-3 py-2 glass-transition hover:bg-[var(--glass-bg)] cursor-pointer",
                     item.isSelected && "config-item-selected relative z-10 rounded-lg mx-1 bg-[var(--glass-bg-active)] ring-1 ring-[var(--glass-border-subtle)] hover:bg-[var(--glass-bg-active)]"
                   )}
                   onClick={item.onClick}
@@ -532,60 +438,12 @@ export function PublishConfigPanel({
             </div>
           )}
 
-          {/* Release group */}
-          <ConfigGroup
-            title={t.releaseGroup || "Release 配置"}
-            count={releasePresets.length}
-            defaultExpanded={true}
-            visible={releasePresets.length > 0}
-          >
-            {releasePresets.map((preset) => {
-              const text = getPresetText(preset.id, preset.name, preset.description);
-              return (
-                <ConfigItem
-                  key={preset.id}
-                  configKey={`preset:${preset.id}`}
-                  name={text.name}
-                  description={text.description}
-                  isSelected={!isCustomMode && selectedPreset === preset.id}
-                  isFavorite={favoriteSet.has(`preset:${preset.id}`)}
-                  onClick={() => onSelectPreset(preset.id)}
-                  onToggleFavorite={onToggleFavoriteConfig}
-                />
-              );
-            })}
-          </ConfigGroup>
-
-          {/* Debug group */}
-          <ConfigGroup
-            title={t.debugGroup || "Debug 配置"}
-            count={debugPresets.length}
-            defaultExpanded={false}
-            visible={debugPresets.length > 0}
-          >
-            {debugPresets.map((preset) => {
-              const text = getPresetText(preset.id, preset.name, preset.description);
-              return (
-                <ConfigItem
-                  key={preset.id}
-                  configKey={`preset:${preset.id}`}
-                  name={text.name}
-                  description={text.description}
-                  isSelected={!isCustomMode && selectedPreset === preset.id}
-                  isFavorite={favoriteSet.has(`preset:${preset.id}`)}
-                  onClick={() => onSelectPreset(preset.id)}
-                  onToggleFavorite={onToggleFavoriteConfig}
-                />
-              );
-            })}
-          </ConfigGroup>
-
-          {/* Project profiles group */}
+          {/* Project profiles group (.pubxml only) */}
           <ConfigGroup
             title={t.profileGroup || "项目发布配置"}
-            count={projectProfileGroupCount}
+            count={filteredProjectProfiles.length}
             defaultExpanded={true}
-            visible={true}
+            visible={hasProjectProfiles && filteredProjectProfiles.length > 0}
           >
             {/* .pubxml project publish profiles */}
             {filteredProjectProfiles.map((name) => {
@@ -594,7 +452,7 @@ export function PublishConfigPanel({
                 <div
                   key={`pubxml-${name}`}
                   className={cn(
-                    "config-list-row flex items-start gap-2 border-b border-[var(--glass-divider)] px-3 py-2.5 glass-transition hover:bg-[var(--glass-bg)] cursor-pointer",
+                    "config-list-row flex items-start gap-2 px-3 py-2.5 glass-transition hover:bg-[var(--glass-bg)] cursor-pointer",
                     !isCustomMode && selectedPreset === `profile-${name}` && "config-item-selected relative z-10 rounded-lg mx-1 bg-[var(--glass-bg-active)] ring-1 ring-[var(--glass-border-subtle)] hover:bg-[var(--glass-bg-active)]"
                   )}
                   onClick={() => onSelectProjectProfile(name)}
@@ -610,34 +468,38 @@ export function PublishConfigPanel({
                 </div>
               );
             })}
-            {/* User-saved ConfigProfile items */}
-            {groupedFilteredProfiles.map((group) => (
-              <div key={`userprofile-group-${group.groupName}`}>
-                <div className="px-3 pb-1 pt-2 text-[11px] font-medium text-muted-foreground">
-                  {group.groupName}
-                </div>
-                {group.items.map((profile) => (
-                  <ProfileItem
-                    key={profile.name}
-                    profile={profile}
-                    configKey={`userprofile:${profile.name}`}
-                    isSelected={
-                      isCustomMode && activeProfileName === profile.name
-                    }
-                    isFavorite={favoriteSet.has(`userprofile:${profile.name}`)}
-                    onClick={() => onSelectProfile(profile)}
-                    onToggleFavorite={onToggleFavoriteConfig}
-                    onDelete={() => onDeleteProfile(profile.name)}
-                  />
-                ))}
-              </div>
-            ))}
-            {projectProfileGroupCount === 0 && (
-              <div className="px-3 py-4 text-center text-xs text-muted-foreground">
-                {t.noProfiles || "暂无自定义配置"}
-              </div>
-            )}
           </ConfigGroup>
+
+          {/* User-saved ConfigProfile items (grouped by profileGroup) */}
+          {groupedFilteredProfiles.map((group) => (
+            <ConfigGroup
+              key={`userprofile-group-${group.groupName}`}
+              title={group.groupName}
+              count={group.items.length}
+              defaultExpanded={true}
+              visible={true}
+            >
+              {group.items.map((profile) => (
+                <ProfileItem
+                  key={profile.name}
+                  profile={profile}
+                  configKey={`userprofile:${profile.name}`}
+                  isSelected={
+                    isCustomMode && activeProfileName === profile.name
+                  }
+                  isFavorite={favoriteSet.has(`userprofile:${profile.name}`)}
+                  onClick={() => onSelectProfile(profile)}
+                  onToggleFavorite={onToggleFavoriteConfig}
+                  onDelete={() => onDeleteProfile(profile.name)}
+                />
+              ))}
+            </ConfigGroup>
+          ))}
+          {filteredProfiles.length === 0 && (
+            <div className="px-3 py-4 text-center text-xs text-muted-foreground">
+              {t.noProfiles || "暂无自定义配置"}
+            </div>
+          )}
         </div>
       </div>
     </div>

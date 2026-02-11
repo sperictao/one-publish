@@ -3474,14 +3474,6 @@ function App() {
     [setSelectedPreset, setIsCustomMode]
   );
 
-  // Handle selecting a preset from the config panel
-  const handleSelectPresetFromPanel = useCallback(
-    (presetId: string) => {
-      handleSelectPresetValueChange(presetId);
-    },
-    [handleSelectPresetValueChange]
-  );
-
   // Handle selecting a .pubxml project publish profile from the config panel
   const handleSelectProjectProfile = useCallback(
     (profileName: string) => {
@@ -3710,10 +3702,8 @@ function App() {
           width={`${middlePanelWidth}px`}
         >
           <PublishConfigPanel
-            presets={PRESETS}
             selectedPreset={selectedPreset}
             isCustomMode={isCustomMode}
-            onSelectPreset={handleSelectPresetFromPanel}
             profiles={profiles}
             activeProfileName={activeProfileName}
             onSelectProfile={handleSelectProfileFromPanel}
@@ -3729,7 +3719,6 @@ function App() {
             onCollapse={() => setMiddlePanelCollapsed(true)}
             showExpandButton={leftPanelCollapsed}
             onExpandRepo={() => setLeftPanelCollapsed(false)}
-            getPresetText={getPresetText}
           />
         </CollapsiblePanel>
 
