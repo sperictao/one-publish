@@ -233,6 +233,10 @@ export function useFloatingRepoCard({
         "--repo-morph-stretch": floatingDynamics.morphStretch.toFixed(3),
         "--repo-shadow-offset-x": `${floatingDynamics.shadowOffsetX.toFixed(2)}px`,
         "--repo-shadow-offset-y": `${floatingDynamics.shadowOffsetY.toFixed(2)}px`,
+        "--repo-specular-sweep": floatingDynamics.specularSweep.toFixed(3),
+        "--repo-specular-angle": `${floatingDynamics.specularAngle.toFixed(1)}deg`,
+        "--repo-caustic-x": floatingDynamics.causticX.toFixed(3),
+        "--repo-caustic-y": floatingDynamics.causticY.toFixed(3),
       }) as CSSProperties,
     [
       floatingDynamics.trailOffsetX,
@@ -244,6 +248,10 @@ export function useFloatingRepoCard({
       floatingDynamics.morphStretch,
       floatingDynamics.shadowOffsetX,
       floatingDynamics.shadowOffsetY,
+      floatingDynamics.specularSweep,
+      floatingDynamics.specularAngle,
+      floatingDynamics.causticX,
+      floatingDynamics.causticY,
       selectedGlowLevel,
     ]
   );

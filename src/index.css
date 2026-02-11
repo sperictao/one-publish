@@ -311,6 +311,10 @@ html.dark {
   --repo-morph-stretch: 0;
   --repo-shadow-offset-x: 0px;
   --repo-shadow-offset-y: 0px;
+  --repo-specular-sweep: 0.5;
+  --repo-specular-angle: 90deg;
+  --repo-caustic-x: 0.16;
+  --repo-caustic-y: 0;
   position: absolute;
   border-radius: 1.25rem;
   border: 1px solid rgba(255, 255, 255, 0.45);
@@ -320,7 +324,9 @@ html.dark {
     0 4px 10px rgba(98, 108, 145, 0.08),
     0 0 40px rgba(98, 108, 145, 0.06),
     inset 0 1px 0 rgba(255, 255, 255, 0.7),
-    inset 0 0 12px rgba(255, 255, 255, 0.12);
+    inset 0 0 12px rgba(255, 255, 255, 0.12),
+    calc(var(--repo-shadow-offset-x) * 2.5) calc(var(--repo-shadow-offset-y) * 2.5) 18px rgba(255, 186, 73, 0.12),
+    calc(var(--repo-shadow-offset-x) * -2.5) calc(var(--repo-shadow-offset-y) * -2.5) 18px rgba(120, 160, 255, 0.12);
   backdrop-filter: blur(24px) saturate(180%);
   -webkit-backdrop-filter: blur(24px) saturate(180%);
   overflow: hidden;
@@ -356,7 +362,9 @@ html.dark {
     0 0 40px rgba(98, 108, 145, 0.06),
     inset 0 1px 0 rgba(255, 255, 255, 0.74),
     inset 0 0 12px rgba(255, 255, 255, 0.12),
-    0 0 calc(16px + 12px * var(--repo-selected-glow)) rgba(108, 140, 255, calc(0.08 + 0.12 * var(--repo-selected-glow)));
+    0 0 calc(16px + 12px * var(--repo-selected-glow)) rgba(108, 140, 255, calc(0.08 + 0.12 * var(--repo-selected-glow))),
+    calc(var(--repo-shadow-offset-x) * 2.5) calc(var(--repo-shadow-offset-y) * 2.5) 18px rgba(255, 186, 73, 0.12),
+    calc(var(--repo-shadow-offset-x) * -2.5) calc(var(--repo-shadow-offset-y) * -2.5) 18px rgba(120, 160, 255, 0.12);
 }
 
 .repo-floating-card::before {
@@ -364,6 +372,8 @@ html.dark {
   position: absolute;
   inset: 0;
   background:
+    linear-gradient(var(--repo-specular-angle), transparent calc(var(--repo-specular-sweep) * 100% - 3%), rgba(255, 255, 255, 0.38) calc(var(--repo-specular-sweep) * 100%), transparent calc(var(--repo-specular-sweep) * 100% + 3%)),
+    radial-gradient(60% 40% at calc(var(--repo-caustic-x) * 100%) calc(var(--repo-caustic-y) * 100%), rgba(255, 255, 255, 0.18) 0%, rgba(255, 255, 255, 0) 70%),
     radial-gradient(80% 50% at calc(var(--repo-highlight-x) * 100%) calc(var(--repo-highlight-y) * 100%), rgba(255, 255, 255, 0.35) 0%, rgba(255, 255, 255, 0) 75%),
     linear-gradient(180deg, rgba(255, 255, 255, 0.18) 0%, rgba(255, 255, 255, 0) 68%);
   pointer-events: none;
@@ -377,7 +387,9 @@ html.dark {
     0 4px 10px rgba(0, 0, 0, 0.2),
     0 0 40px rgba(0, 0, 0, 0.1),
     inset 0 1px 0 rgba(255, 255, 255, 0.08),
-    inset 0 0 12px rgba(255, 255, 255, 0.04);
+    inset 0 0 12px rgba(255, 255, 255, 0.04),
+    calc(var(--repo-shadow-offset-x) * 2.5) calc(var(--repo-shadow-offset-y) * 2.5) 18px rgba(255, 186, 73, 0.09),
+    calc(var(--repo-shadow-offset-x) * -2.5) calc(var(--repo-shadow-offset-y) * -2.5) 18px rgba(120, 160, 255, 0.10);
 }
 
 .dark .repo-floating-card::after {
@@ -397,11 +409,15 @@ html.dark {
     0 0 40px rgba(0, 0, 0, 0.1),
     inset 0 1px 0 rgba(255, 255, 255, 0.1),
     inset 0 0 12px rgba(255, 255, 255, 0.04),
-    0 0 calc(14px + 12px * var(--repo-selected-glow)) rgba(93, 126, 232, calc(0.12 + 0.18 * var(--repo-selected-glow)));
+    0 0 calc(14px + 12px * var(--repo-selected-glow)) rgba(93, 126, 232, calc(0.12 + 0.18 * var(--repo-selected-glow))),
+    calc(var(--repo-shadow-offset-x) * 2.5) calc(var(--repo-shadow-offset-y) * 2.5) 18px rgba(255, 186, 73, 0.09),
+    calc(var(--repo-shadow-offset-x) * -2.5) calc(var(--repo-shadow-offset-y) * -2.5) 18px rgba(120, 160, 255, 0.10);
 }
 
 .dark .repo-floating-card::before {
   background:
+    linear-gradient(var(--repo-specular-angle), transparent calc(var(--repo-specular-sweep) * 100% - 3%), rgba(255, 255, 255, 0.12) calc(var(--repo-specular-sweep) * 100%), transparent calc(var(--repo-specular-sweep) * 100% + 3%)),
+    radial-gradient(60% 40% at calc(var(--repo-caustic-x) * 100%) calc(var(--repo-caustic-y) * 100%), rgba(255, 255, 255, 0.06) 0%, rgba(255, 255, 255, 0) 70%),
     radial-gradient(80% 50% at calc(var(--repo-highlight-x) * 100%) calc(var(--repo-highlight-y) * 100%), rgba(255, 255, 255, 0.1) 0%, rgba(255, 255, 255, 0) 72%),
     linear-gradient(180deg, rgba(255, 255, 255, 0.06) 0%, rgba(255, 255, 255, 0) 68%);
 }

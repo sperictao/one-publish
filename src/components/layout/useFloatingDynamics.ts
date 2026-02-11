@@ -13,6 +13,10 @@ export interface FloatingCardDynamics {
   morphStretch: number;
   shadowOffsetX: number;
   shadowOffsetY: number;
+  specularSweep: number;
+  specularAngle: number;
+  causticX: number;
+  causticY: number;
 }
 
 const createNeutralDynamics = (): FloatingCardDynamics => ({
@@ -27,6 +31,10 @@ const createNeutralDynamics = (): FloatingCardDynamics => ({
   morphStretch: 0,
   shadowOffsetX: 0,
   shadowOffsetY: 0,
+  specularSweep: 0.5,
+  specularAngle: 90,
+  causticX: 0.16,
+  causticY: 0,
 });
 
 interface UseFloatingDynamicsOptions {
@@ -59,7 +67,9 @@ export function useFloatingDynamics({
           prev.tiltX === 0 && prev.tiltY === 0 && prev.trailOpacity === 0 &&
           prev.trailOffsetX === 0 && prev.trailOffsetY === 0 && prev.trailScale === 1 &&
           prev.highlightX === 0.16 && prev.highlightY === 0 &&
-          prev.morphStretch === 0 && prev.shadowOffsetX === 0 && prev.shadowOffsetY === 0
+          prev.morphStretch === 0 && prev.shadowOffsetX === 0 && prev.shadowOffsetY === 0 &&
+          prev.specularSweep === 0.5 && prev.specularAngle === 90 &&
+          prev.causticX === 0.16 && prev.causticY === 0
             ? prev
             : createNeutralDynamics()
         );
@@ -89,6 +99,8 @@ export function useFloatingDynamics({
 
       lastDynamicsFrameTimeRef.current = now;
 
+      const moveAngleRad = Math.atan2(deltaY, deltaX);
+
       setFloatingDynamics((prev) => ({
         tiltX: Math.max(-1.6, Math.min(1.6, -deltaY / 36)),
         tiltY: Math.max(-2.2, Math.min(2.2, deltaX / 28)),
@@ -101,6 +113,10 @@ export function useFloatingDynamics({
         morphStretch: Math.min(1, distance / 200),
         shadowOffsetX: Math.max(-4, Math.min(4, -deltaX * 0.08)),
         shadowOffsetY: Math.max(-3, Math.min(3, -deltaY * 0.06)),
+        specularSweep: Math.max(0.05, Math.min(0.95, 0.5 + Math.cos(moveAngleRad) * Math.min(0.45, distance / 180))),
+        specularAngle: ((moveAngleRad * 180 / Math.PI + 90) % 360 + 360) % 360,
+        causticX: prev.causticX,
+        causticY: prev.causticY,
       }));
 
       if (floatingDynamicsResetTimeoutRef.current !== null && typeof window !== "undefined") {
@@ -195,13 +211,23 @@ export function useFloatingDynamics({
   const updateHighlight = useCallback(
     (normalizedX: number, normalizedY: number) => {
       setFloatingDynamics((prev) => {
+        const nextCausticX = prev.causticX + (normalizedX - prev.causticX) * 0.35;
+        const nextCausticY = prev.causticY + (normalizedY - prev.causticY) * 0.35;
         if (
           Math.abs(prev.highlightX - normalizedX) < 0.005 &&
-          Math.abs(prev.highlightY - normalizedY) < 0.005
+          Math.abs(prev.highlightY - normalizedY) < 0.005 &&
+          Math.abs(prev.causticX - nextCausticX) < 0.003 &&
+          Math.abs(prev.causticY - nextCausticY) < 0.003
         ) {
           return prev;
         }
-        return { ...prev, highlightX: normalizedX, highlightY: normalizedY };
+        return {
+          ...prev,
+          highlightX: normalizedX,
+          highlightY: normalizedY,
+          causticX: nextCausticX,
+          causticY: nextCausticY,
+        };
       });
     },
     []
