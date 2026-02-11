@@ -35,6 +35,8 @@ pub struct Repository {
     pub is_main: bool,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub provider_id: Option<String>,
+    #[serde(default)]
+    pub publish_config: RepoPublishConfig,
 }
 
 /// 发布配置
@@ -136,6 +138,40 @@ impl Default for PublishConfigStore {
             use_profile: false,
             profile_name: String::new(),
         }
+    }
+}
+
+/// 仓库级发布配置（隔离到每个仓库）
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RepoPublishConfig {
+    #[serde(default = "default_preset")]
+    pub selected_preset: String,
+    #[serde(default)]
+    pub is_custom_mode: bool,
+    #[serde(default)]
+    pub custom_config: PublishConfigStore,
+    #[serde(default)]
+    pub profiles: Vec<ConfigProfile>,
+}
+
+impl Default for RepoPublishConfig {
+    fn default() -> Self {
+        Self {
+            selected_preset: default_preset(),
+            is_custom_mode: false,
+            custom_config: PublishConfigStore::default(),
+            profiles: Vec::new(),
+        }
+    }
+}
+
+impl RepoPublishConfig {
+    /// 判断是否全部为默认值
+    fn is_default(&self) -> bool {
+        self.selected_preset == default_preset()
+            && !self.is_custom_mode
+            && self.profiles.is_empty()
     }
 }
 
@@ -245,6 +281,35 @@ fn sanitize_state(mut state: AppState) -> AppState {
     state.execution_history_limit =
         normalize_execution_history_limit(state.execution_history_limit);
     trim_execution_history(&mut state.execution_history, state.execution_history_limit);
+
+    // 一次性迁移：将全局发布配置下沉到各仓库
+    let global_has_value = state.selected_preset != default_preset()
+        || state.is_custom_mode
+        || !state.profiles.is_empty();
+
+    if global_has_value && !state.repositories.is_empty() {
+        let global_config = RepoPublishConfig {
+            selected_preset: state.selected_preset.clone(),
+            is_custom_mode: state.is_custom_mode,
+            custom_config: state.custom_config.clone(),
+            profiles: state.profiles.clone(),
+        };
+
+        for repo in &mut state.repositories {
+            if repo.publish_config.is_default() {
+                repo.publish_config = global_config.clone();
+            }
+        }
+
+        // 重置全局字段为默认值
+        state.selected_preset = default_preset();
+        state.is_custom_mode = false;
+        state.custom_config = PublishConfigStore::default();
+        state.profiles = Vec::new();
+
+        log::info!("已将全局发布配置迁移到各仓库");
+    }
+
     state
 }
 
@@ -383,23 +448,30 @@ pub async fn update_ui_state(
     update_state(state)
 }
 
-/// 更新发布配置状态
+/// 更新发布配置状态（按仓库隔离）
 #[tauri::command]
 pub async fn update_publish_state(
+    repo_id: String,
     selected_preset: Option<String>,
     is_custom_mode: Option<bool>,
     custom_config: Option<PublishConfigStore>,
 ) -> Result<(), String> {
     let mut state = get_state();
 
+    let repo = state
+        .repositories
+        .iter_mut()
+        .find(|r| r.id == repo_id)
+        .ok_or_else(|| format!("未找到仓库: {}", repo_id))?;
+
     if let Some(preset) = selected_preset {
-        state.selected_preset = preset;
+        repo.publish_config.selected_preset = preset;
     }
     if let Some(mode) = is_custom_mode {
-        state.is_custom_mode = mode;
+        repo.publish_config.is_custom_mode = mode;
     }
     if let Some(config) = custom_config {
-        state.custom_config = config;
+        repo.publish_config.custom_config = config;
     }
 
     update_state(state)
@@ -451,16 +523,22 @@ pub async fn update_preferences(
     Ok(state)
 }
 
-/// 获取保存的配置文件
+/// 获取保存的配置文件（按仓库隔离）
 #[tauri::command]
-pub async fn get_profiles() -> Result<Vec<ConfigProfile>, String> {
+pub async fn get_profiles(repo_id: String) -> Result<Vec<ConfigProfile>, String> {
     let state = get_state();
-    Ok(state.profiles)
+    let repo = state
+        .repositories
+        .iter()
+        .find(|r| r.id == repo_id)
+        .ok_or_else(|| format!("未找到仓库: {}", repo_id))?;
+    Ok(repo.publish_config.profiles.clone())
 }
 
-/// 保存当前配置为配置文件
+/// 保存当前配置为配置文件（按仓库隔离）
 #[tauri::command]
 pub async fn save_profile(
+    repo_id: String,
     name: String,
     provider_id: String,
     parameters: serde_json::Value,
@@ -468,8 +546,14 @@ pub async fn save_profile(
 ) -> Result<AppState, String> {
     let mut state = get_state();
 
+    let repo = state
+        .repositories
+        .iter_mut()
+        .find(|r| r.id == repo_id)
+        .ok_or_else(|| format!("未找到仓库: {}", repo_id))?;
+
     // 检查是否已存在同名配置文件
-    if state.profiles.iter().any(|p| p.name == name) {
+    if repo.publish_config.profiles.iter().any(|p| p.name == name) {
         return Err(format!("配置文件 '{}' 已存在", name));
     }
 
@@ -486,24 +570,30 @@ pub async fn save_profile(
         is_system_default: false,
     };
 
-    state.profiles.push(profile);
+    repo.publish_config.profiles.push(profile);
     update_state(state.clone())?;
     Ok(state)
 }
 
-/// 删除配置文件
+/// 删除配置文件（按仓库隔离）
 #[tauri::command]
-pub async fn delete_profile(name: String) -> Result<AppState, String> {
+pub async fn delete_profile(repo_id: String, name: String) -> Result<AppState, String> {
     let mut state = get_state();
 
+    let repo = state
+        .repositories
+        .iter_mut()
+        .find(|r| r.id == repo_id)
+        .ok_or_else(|| format!("未找到仓库: {}", repo_id))?;
+
     // 不允许删除系统默认配置文件
-    if let Some(profile) = state.profiles.iter().find(|p| p.name == name) {
+    if let Some(profile) = repo.publish_config.profiles.iter().find(|p| p.name == name) {
         if profile.is_system_default {
             return Err("不能删除系统默认配置文件".to_string());
         }
     }
 
-    state.profiles.retain(|p| p.name != name);
+    repo.publish_config.profiles.retain(|p| p.name != name);
     update_state(state.clone())?;
     Ok(state)
 }

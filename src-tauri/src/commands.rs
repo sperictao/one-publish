@@ -2223,15 +2223,24 @@ pub async fn import_config(file_path: String) -> Result<ConfigExport, crate::err
         .map_err(|e| crate::errors::AppError::unknown(format!("validation error: {}", e)))?;
     Ok(config)
 }
-/// 应用导入的配置
+/// 应用导入的配置（按仓库隔离）
 #[tauri::command]
 pub async fn apply_imported_config(
+    repo_id: String,
     profiles: Vec<ConfigProfile>,
 ) -> Result<(), crate::errors::AppError> {
     let mut state = crate::store::get_state();
+    let repo = state
+        .repositories
+        .iter_mut()
+        .find(|r| r.id == repo_id)
+        .ok_or_else(|| {
+            crate::errors::AppError::unknown(format!("未找到仓库: {}", repo_id))
+        })?;
+
     for profile in profiles {
         // 检查是否已存在同名配置文件
-        if state.profiles.iter().any(|p| p.name == profile.name) {
+        if repo.publish_config.profiles.iter().any(|p| p.name == profile.name) {
             log::warn!("配置文件 '{}' 已存在，跳过导入", profile.name);
             continue;
         }
@@ -2252,7 +2261,7 @@ pub async fn apply_imported_config(
             created_at: profile.created_at.to_rfc3339(),
             is_system_default: profile.is_system_default,
         };
-        state.profiles.push(store_profile);
+        repo.publish_config.profiles.push(store_profile);
     }
     crate::store::update_state(state)
         .map_err(|e| crate::errors::AppError::unknown(format!("保存配置失败: {}", e)))?;

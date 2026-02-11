@@ -1,7 +1,7 @@
 // useAppState - 应用状态管理 Hook
 // 提供持久化的应用状态，包括仓库列表、UI 状态和发布配置
 
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import {
   getAppState,
   updateUIState,
@@ -13,8 +13,9 @@ import {
   type AppState,
   type PublishConfigStore,
   defaultAppState,
+  defaultRepoPublishConfig,
 } from "@/lib/store";
-import type { Repository } from "@/types/repository";
+import type { Repository, RepoPublishConfig } from "@/types/repository";
 
 // 防抖延迟时间（毫秒）
 const DEBOUNCE_DELAY = 500;
@@ -56,6 +57,18 @@ export function useAppState() {
         clearTimeout(preferenceDebounceRef.current);
     };
   }, []);
+
+  // 从当前选中仓库派生发布配置
+  const currentRepo = useMemo(
+    () =>
+      state.repositories.find((r) => r.id === state.selectedRepoId) ?? null,
+    [state.repositories, state.selectedRepoId]
+  );
+
+  const currentPublishConfig: RepoPublishConfig = useMemo(
+    () => currentRepo?.publishConfig ?? defaultRepoPublishConfig,
+    [currentRepo]
+  );
 
   // 更新 UI 状态（带防抖）
   const setUIState = useCallback(
@@ -123,36 +136,53 @@ export function useAppState() {
     []
   );
 
-  // 更新发布配置状态（带防抖）
+  // 更新发布配置状态（按仓库隔离，带防抖）
   const setPublishState = useCallback(
     (params: {
       selectedPreset?: string;
       isCustomMode?: boolean;
       customConfig?: PublishConfigStore;
     }) => {
-      // 立即更新本地状态
-      setState((prev) => ({
-        ...prev,
-        ...(params.selectedPreset !== undefined && {
-          selectedPreset: params.selectedPreset,
-        }),
-        ...(params.isCustomMode !== undefined && {
-          isCustomMode: params.isCustomMode,
-        }),
-        ...(params.customConfig !== undefined && {
-          customConfig: params.customConfig,
-        }),
-      }));
+      // 乐观更新本地状态：更新 repositories 数组中对应仓库的 publishConfig
+      setState((prev) => {
+        const repoId = prev.selectedRepoId;
+        if (!repoId) return prev;
+
+        return {
+          ...prev,
+          repositories: prev.repositories.map((repo) => {
+            if (repo.id !== repoId) return repo;
+            return {
+              ...repo,
+              publishConfig: {
+                ...repo.publishConfig,
+                ...(params.selectedPreset !== undefined && {
+                  selectedPreset: params.selectedPreset,
+                }),
+                ...(params.isCustomMode !== undefined && {
+                  isCustomMode: params.isCustomMode,
+                }),
+                ...(params.customConfig !== undefined && {
+                  customConfig: params.customConfig,
+                }),
+              },
+            };
+          }),
+        };
+      });
 
       // 防抖保存到后端
       if (publishDebounceRef.current) {
         clearTimeout(publishDebounceRef.current);
       }
       publishDebounceRef.current = setTimeout(() => {
-        updatePublishState(params).catch(console.error);
+        const currentState = state;
+        const repoId = currentState.selectedRepoId;
+        if (!repoId) return;
+        updatePublishState({ repoId, ...params }).catch(console.error);
       }, DEBOUNCE_DELAY);
     },
-    []
+    [state.selectedRepoId]
   );
 
   // 添加仓库
@@ -298,10 +328,10 @@ export function useAppState() {
     setLeftPanelWidth,
     setMiddlePanelWidth,
 
-    // 发布配置
-    selectedPreset: state.selectedPreset,
-    isCustomMode: state.isCustomMode,
-    customConfig: state.customConfig,
+    // 发布配置（从当前仓库的 publishConfig 派生）
+    selectedPreset: currentPublishConfig.selectedPreset,
+    isCustomMode: currentPublishConfig.isCustomMode,
+    customConfig: currentPublishConfig.customConfig,
     setSelectedPreset,
     setIsCustomMode,
     setCustomConfig,

@@ -40,6 +40,7 @@ interface ConfigDialogProps {
   onOpenChange: (open: boolean) => void;
   onLoadProfile: (profile: ConfigProfile) => void;
   currentProviderId: string;
+  repoId: string | null;
   currentParameters: Record<string, any>;
 }
 
@@ -48,6 +49,7 @@ export function ConfigDialog({
   onOpenChange,
   onLoadProfile,
   currentProviderId,
+  repoId,
   currentParameters,
 }: ConfigDialogProps) {
   const { translations, language } = useI18n();
@@ -60,9 +62,13 @@ export function ConfigDialog({
 
   // 加载配置文件列表
   const loadProfiles = async () => {
+    if (!repoId) {
+      setProfiles([]);
+      return;
+    }
     setIsLoading(true);
     try {
-      const data = await getProfiles();
+      const data = await getProfiles(repoId);
       setProfiles(data);
     } catch (err) {
       console.error("加载配置文件失败:", err);
@@ -77,10 +83,11 @@ export function ConfigDialog({
     if (isOpen) {
       loadProfiles();
     }
-  }, [isOpen]);
+  }, [isOpen, repoId]);
 
   // 保存当前配置为新配置文件
   const handleSaveProfile = async () => {
+    if (!repoId) return;
     if (!newProfileName.trim()) {
       toast.error(profileT.enterProfileName || "请输入配置文件名称");
       return;
@@ -89,6 +96,7 @@ export function ConfigDialog({
     setIsSaving(true);
     try {
       await saveProfile({
+        repoId,
         name: newProfileName,
         providerId: currentProviderId,
         parameters: currentParameters,
@@ -106,13 +114,14 @@ export function ConfigDialog({
 
   // 删除配置文件
   const handleDeleteProfile = async (profile: ConfigProfile) => {
+    if (!repoId) return;
     if (profile.isSystemDefault) {
       toast.error(profileT.cannotDeleteDefault || "不能删除系统默认配置文件");
       return;
     }
 
     try {
-      await deleteProfile(profile.name);
+      await deleteProfile(repoId, profile.name);
       toast.success(profileT.deleteSuccess || "配置文件删除成功");
       await loadProfiles();
     } catch (err) {
@@ -155,6 +164,7 @@ export function ConfigDialog({
 
   // 导入配置
   const handleImportConfig = async () => {
+    if (!repoId) return;
     try {
       const filePath = await openDialog({
         filters: [
@@ -182,7 +192,7 @@ export function ConfigDialog({
           );
 
           if (confirm) {
-            await applyImportedConfig(config.profiles);
+            await applyImportedConfig(repoId, config.profiles);
             toast.success(profileT.importSuccess || "配置导入成功");
             await loadProfiles();
           }
@@ -198,7 +208,7 @@ export function ConfigDialog({
     }
   };
 
-  
+
   return (
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-[600px] max-h-[80vh] flex flex-col">
@@ -216,7 +226,7 @@ export function ConfigDialog({
               <Download className="h-4 w-4 mr-2" />
               {profileT.export || "导出配置"}
             </Button>
-            <Button variant="outline" onClick={handleImportConfig} className="flex-1">
+            <Button variant="outline" onClick={handleImportConfig} className="flex-1" disabled={!repoId}>
               <Upload className="h-4 w-4 mr-2" />
               {profileT.import || "导入配置"}
             </Button>
@@ -235,8 +245,9 @@ export function ConfigDialog({
                     handleSaveProfile();
                   }
                 }}
+                disabled={!repoId}
               />
-              <Button onClick={handleSaveProfile} disabled={isSaving || !newProfileName.trim()}>
+              <Button onClick={handleSaveProfile} disabled={isSaving || !newProfileName.trim() || !repoId}>
                 {isSaving ? (
                   <Loader2 className="h-4 w-4 animate-spin" />
                 ) : (

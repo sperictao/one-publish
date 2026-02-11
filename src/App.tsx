@@ -25,6 +25,7 @@ import {
   openExecutionSnapshot,
   scanRepositoryBranches,
   setExecutionRecordSnapshot,
+  defaultRepoPublishConfig,
   type ConfigProfile,
   type ExecutionRecord,
   type PublishConfigStore,
@@ -1584,13 +1585,17 @@ function App() {
 
   // Load profiles from backend (defined before the init useEffect that calls it)
   const loadProfiles = useCallback(async () => {
+    if (!selectedRepoId) {
+      setProfiles([]);
+      return;
+    }
     try {
-      const data = await getProfiles();
+      const data = await getProfiles(selectedRepoId);
       setProfiles(data);
     } catch (err) {
       console.error("加载配置文件列表失败:", err);
     }
-  }, []);
+  }, [selectedRepoId]);
 
   const openQuickCreateProfileDialog = useCallback(() => {
     setQuickCreateProfileName("");
@@ -1702,6 +1707,11 @@ function App() {
       mounted = false;
     };
   }, []);
+
+  // 切换仓库时重新加载 profiles
+  useEffect(() => {
+    loadProfiles();
+  }, [loadProfiles]);
 
   useEffect(() => {
     if (providerSchemas[activeProviderId]) return;
@@ -1966,6 +1976,7 @@ function App() {
         path,
         currentBranch: "main",
         branches: [{ name: "main", isMain: true, isCurrent: true, path }],
+        publishConfig: { ...defaultRepoPublishConfig },
       };
       try {
         await addRepository(newRepo);
@@ -3523,6 +3534,8 @@ function App() {
   );
 
   const handleQuickCreateProfileSave = useCallback(async () => {
+    if (!selectedRepoId) return;
+
     const profileName = quickCreateProfileName.trim();
     if (!profileName) {
       toast.error(profileT.enterProfileName || "请输入配置文件名称");
@@ -3553,6 +3566,7 @@ function App() {
     try {
       const parameters = toDotnetProfileParameters(quickCreateProfileDraft);
       await saveProfile({
+        repoId: selectedRepoId!,
         name: profileName,
         providerId: "dotnet",
         parameters,
@@ -3582,6 +3596,7 @@ function App() {
       setQuickCreateProfileSaving(false);
     }
   }, [
+    selectedRepoId,
     quickCreateProfileName,
     quickCreateProfileGroup,
     quickCreateProfileCustomGroup,
@@ -3597,8 +3612,9 @@ function App() {
   // Handle deleting a profile from the config panel
   const handleDeleteProfileFromPanel = useCallback(
     async (name: string) => {
+      if (!selectedRepoId) return;
       try {
-        await deleteProfile(name);
+        await deleteProfile(selectedRepoId, name);
         await loadProfiles();
         if (activeProfileName === name) {
           setActiveProfileName(null);
@@ -3611,7 +3627,7 @@ function App() {
         console.error("删除配置文件失败:", err);
       }
     },
-    [loadProfiles, activeProfileName, isCustomMode, setIsCustomMode, setSelectedPreset]
+    [selectedRepoId, loadProfiles, activeProfileName, isCustomMode, setIsCustomMode, setSelectedPreset]
   );
 
   const handleLoadProfile = (profile: any) => {
@@ -5306,6 +5322,7 @@ function App() {
         }}
         onLoadProfile={handleLoadProfile}
         currentProviderId={activeProviderId}
+        repoId={selectedRepoId}
         currentParameters={
           activeProviderId === "dotnet"
             ? toDotnetProfileParameters(customConfig)

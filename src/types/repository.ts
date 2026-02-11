@@ -1,5 +1,14 @@
 // Repository and branch types
 
+import type { PublishConfigStore, ConfigProfile } from "@/lib/store";
+
+export interface RepoPublishConfig {
+  selectedPreset: string;
+  isCustomMode: boolean;
+  customConfig: PublishConfigStore;
+  profiles: ConfigProfile[];
+}
+
 export interface Repository {
   id: string;
   name: string;
@@ -9,6 +18,7 @@ export interface Repository {
   branches: Branch[];
   isMain?: boolean;
   providerId?: string;
+  publishConfig: RepoPublishConfig;
 }
 
 export interface Branch {

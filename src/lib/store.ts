@@ -1,7 +1,7 @@
 // Store API - 与 Rust 后端持久化模块交互
 
 import { invoke } from "@tauri-apps/api/core";
-import type { Branch, Repository } from "@/types/repository";
+import type { Branch, Repository, RepoPublishConfig } from "@/types/repository";
 import type { ParameterSchema } from "@/types/parameters";
 
 // 发布配置存储类型
@@ -48,6 +48,7 @@ export interface AppState {
   selectedRepoId: string | null;
   leftPanelWidth: number;
   middlePanelWidth: number;
+  // 以下全局字段仅用于向后兼容反序列化，前端不再使用
   selectedPreset: string;
   isCustomMode: boolean;
   customConfig: PublishConfigStore;
@@ -83,6 +84,21 @@ export const defaultAppState: AppState = {
   profiles: [],
   executionHistory: [],
   executionHistoryLimit: 20,
+};
+
+// 仓库级发布配置默认值
+export const defaultRepoPublishConfig: RepoPublishConfig = {
+  selectedPreset: "release-fd",
+  isCustomMode: false,
+  customConfig: {
+    configuration: "Release",
+    runtime: "",
+    selfContained: false,
+    outputDir: "",
+    useProfile: false,
+    profileName: "",
+  },
+  profiles: [],
 };
 
 /**
@@ -137,9 +153,10 @@ export async function updateUIState(params: {
 }
 
 /**
- * 更新发布配置状态
+ * 更新发布配置状态（按仓库隔离）
  */
 export async function updatePublishState(params: {
+  repoId: string;
   selectedPreset?: string;
   isCustomMode?: boolean;
   customConfig?: PublishConfigStore;
@@ -345,16 +362,17 @@ export interface ConfigExport {
 }
 
 /**
- * 获取所有配置文件
+ * 获取所有配置文件（按仓库隔离）
  */
-export async function getProfiles(): Promise<ConfigProfile[]> {
-  return await invoke<ConfigProfile[]>("get_profiles");
+export async function getProfiles(repoId: string): Promise<ConfigProfile[]> {
+  return await invoke<ConfigProfile[]>("get_profiles", { repoId });
 }
 
 /**
- * 保存配置文件
+ * 保存配置文件（按仓库隔离）
  */
 export async function saveProfile(params: {
+  repoId: string;
   name: string;
   providerId: string;
   parameters: Record<string, any>;
@@ -364,10 +382,10 @@ export async function saveProfile(params: {
 }
 
 /**
- * 删除配置文件
+ * 删除配置文件（按仓库隔离）
  */
-export async function deleteProfile(name: string): Promise<AppState> {
-  return await invoke<AppState>("delete_profile", { name });
+export async function deleteProfile(repoId: string, name: string): Promise<AppState> {
+  return await invoke<AppState>("delete_profile", { repoId, name });
 }
 
 /**
@@ -391,10 +409,10 @@ export async function importConfig(filePath: string): Promise<ConfigExport> {
 }
 
 /**
- * 应用导入的配置
+ * 应用导入的配置（按仓库隔离）
  */
-export async function applyImportedConfig(profiles: ConfigProfile[]): Promise<void> {
-  await invoke("apply_imported_config", { profiles });
+export async function applyImportedConfig(repoId: string, profiles: ConfigProfile[]): Promise<void> {
+  await invoke("apply_imported_config", { repoId, profiles });
 }
 
 // ==================== 执行历史相关 ====================
