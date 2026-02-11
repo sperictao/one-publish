@@ -2276,6 +2276,21 @@ function App() {
       }
       return config;
     }
+
+    if (selectedPreset.startsWith("profile-")) {
+      const profileName = selectedPreset.slice("profile-".length).trim();
+      if (profileName) {
+        return {
+          configuration: "Release",
+          runtime: "",
+          self_contained: false,
+          output_dir: "",
+          use_profile: true,
+          profile_name: profileName,
+        };
+      }
+    }
+
     const preset = PRESETS.find((p) => p.id === selectedPreset);
     if (!preset) {
       const config = storeConfigToPublishConfig(customConfig);
@@ -2299,6 +2314,29 @@ function App() {
       profile_name: "",
     };
   }, [isCustomMode, customConfig, selectedPreset, projectInfo, defaultOutputDir]);
+
+  const dotnetPublishPreviewCommand = useMemo(() => {
+    if (!projectInfo) {
+      return "";
+    }
+
+    const config = getCurrentConfig();
+    const baseCommand = `dotnet publish "${projectInfo.project_file}"`;
+
+    if (config.use_profile && config.profile_name) {
+      return `${baseCommand} -p:PublishProfile="${config.profile_name}"`;
+    }
+
+    return [
+      baseCommand,
+      `-c ${config.configuration}`,
+      config.runtime ? `--runtime ${config.runtime}` : null,
+      config.self_contained ? "--self-contained" : null,
+      config.output_dir ? `-o "${config.output_dir}"` : null,
+    ]
+      .filter((part): part is string => Boolean(part))
+      .join(" ");
+  }, [getCurrentConfig, projectInfo]);
 
   const persistExecutionRecord = useCallback((record: ExecutionRecord) => {
     setCurrentExecutionRecordId(record.id);
@@ -3572,12 +3610,16 @@ function App() {
         await loadProfiles();
         if (activeProfileName === name) {
           setActiveProfileName(null);
+          if (isCustomMode) {
+            setIsCustomMode(false);
+            setSelectedPreset(PRESETS[0]?.id ?? "release-fd");
+          }
         }
       } catch (err) {
         console.error("删除配置文件失败:", err);
       }
     },
-    [loadProfiles, activeProfileName]
+    [loadProfiles, activeProfileName, isCustomMode, setIsCustomMode, setSelectedPreset]
   );
 
   const handleLoadProfile = (profile: any) => {
@@ -3942,13 +3984,7 @@ function App() {
                         {publishT.command || "将执行的命令:"}
                       </div>
                       <code className="text-xs font-mono break-all">
-                        dotnet publish "{projectInfo.project_file}" -c{" "}
-                        {getCurrentConfig().configuration}
-                        {getCurrentConfig().runtime &&
-                          ` --runtime ${getCurrentConfig().runtime}`}
-                        {getCurrentConfig().self_contained && " --self-contained"}
-                        {getCurrentConfig().output_dir &&
-                          ` -o "${getCurrentConfig().output_dir}"`}
+                        {dotnetPublishPreviewCommand}
                       </code>
                     </div>
 
