@@ -141,6 +141,16 @@ html.dark {
   --glass-kbd-bg: rgba(0, 0, 0, 0.06);
   --glass-kbd-border: rgba(0, 0, 0, 0.12);
   --glass-inset-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.06);
+  --glass-icon-bg: rgba(255, 255, 255, 0.4);
+  --glass-icon-highlight: inset 0 1px 0 rgba(255, 255, 255, 0.6);
+  --glass-tag-bg: rgba(255, 255, 255, 0.36);
+  --glass-tag-border: rgba(255, 255, 255, 0.55);
+  --glass-tag-highlight: inset 0 1px 0 rgba(255, 255, 255, 0.55);
+  --glass-branch-connected-bg: rgba(5, 150, 105, 0.2);
+  --glass-branch-connected-text: rgb(4, 120, 87);
+  --glass-branch-disconnected-bg: rgba(255, 255, 255, 0.34);
+  --glass-branch-disconnected-border: rgba(255, 255, 255, 0.55);
+  --glass-branch-disconnected-highlight: inset 0 1px 0 rgba(255, 255, 255, 0.5);
 }
 
 .dark {
@@ -161,6 +171,16 @@ html.dark {
   --glass-kbd-bg: rgba(255, 255, 255, 0.1);
   --glass-kbd-border: rgba(255, 255, 255, 0.15);
   --glass-inset-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.2);
+  --glass-icon-bg: rgba(255, 255, 255, 0.08);
+  --glass-icon-highlight: inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  --glass-tag-bg: rgba(255, 255, 255, 0.1);
+  --glass-tag-border: rgba(255, 255, 255, 0.15);
+  --glass-tag-highlight: inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  --glass-branch-connected-bg: rgba(16, 185, 129, 0.25);
+  --glass-branch-connected-text: rgb(110, 231, 183);
+  --glass-branch-disconnected-bg: rgba(255, 255, 255, 0.08);
+  --glass-branch-disconnected-border: rgba(255, 255, 255, 0.15);
+  --glass-branch-disconnected-highlight: inset 0 1px 0 rgba(255, 255, 255, 0.06);
 }
 
 /* Hide selected row separators without overlay masks */
@@ -286,18 +306,26 @@ html.dark {
   --repo-trail-y: 0px;
   --repo-trail-scale: 1;
   --repo-selected-glow: 0;
+  --repo-highlight-x: 0.16;
+  --repo-highlight-y: 0;
+  --repo-morph-stretch: 0;
+  --repo-shadow-offset-x: 0px;
+  --repo-shadow-offset-y: 0px;
   position: absolute;
-  border-radius: 1rem;
-  border: 1px solid rgba(255, 255, 255, 0.62);
-  background: linear-gradient(145deg, rgba(255, 255, 255, 0.68) 0%, rgba(246, 245, 255, 0.42) 100%);
+  border-radius: 1.25rem;
+  border: 1px solid rgba(255, 255, 255, 0.45);
+  background: linear-gradient(145deg, rgba(255, 255, 255, 0.58) 0%, hsl(var(--background) / 0.18) 50%, rgba(246, 245, 255, 0.38) 100%);
   box-shadow:
-    0 10px 24px rgba(98, 108, 145, 0.16),
-    0 2px 6px rgba(98, 108, 145, 0.1),
-    inset 0 1px 0 rgba(255, 255, 255, 0.7);
-  backdrop-filter: blur(24px) saturate(165%);
-  -webkit-backdrop-filter: blur(24px) saturate(165%);
+    calc(0px + var(--repo-shadow-offset-x)) calc(10px + var(--repo-shadow-offset-y)) 24px rgba(98, 108, 145, 0.16),
+    0 4px 10px rgba(98, 108, 145, 0.08),
+    0 0 40px rgba(98, 108, 145, 0.06),
+    inset 0 1px 0 rgba(255, 255, 255, 0.7),
+    inset 0 0 12px rgba(255, 255, 255, 0.12);
+  backdrop-filter: blur(24px) saturate(180%);
+  -webkit-backdrop-filter: blur(24px) saturate(180%);
   overflow: hidden;
-  transition: box-shadow 0.22s cubic-bezier(0.22, 1, 0.36, 1);
+  filter: blur(calc(var(--repo-morph-stretch) * 0.5px));
+  transition: box-shadow 0.32s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .repo-floating-card::after {
@@ -317,15 +345,17 @@ html.dark {
   transform: translate3d(var(--repo-trail-x), var(--repo-trail-y), 0) scale(var(--repo-trail-scale));
   filter: blur(13px);
   transition:
-    opacity 0.24s cubic-bezier(0.22, 1, 0.36, 1),
-    transform 0.24s cubic-bezier(0.22, 1, 0.36, 1);
+    opacity 0.36s cubic-bezier(0.16, 1, 0.3, 1),
+    transform 0.36s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .repo-floating-card[data-selected="true"] {
   box-shadow:
-    0 12px 24px rgba(98, 108, 145, 0.18),
-    0 2px 8px rgba(98, 108, 145, 0.12),
+    calc(0px + var(--repo-shadow-offset-x)) calc(12px + var(--repo-shadow-offset-y)) 24px rgba(98, 108, 145, 0.18),
+    0 4px 12px rgba(98, 108, 145, 0.1),
+    0 0 40px rgba(98, 108, 145, 0.06),
     inset 0 1px 0 rgba(255, 255, 255, 0.74),
+    inset 0 0 12px rgba(255, 255, 255, 0.12),
     0 0 calc(16px + 12px * var(--repo-selected-glow)) rgba(108, 140, 255, calc(0.08 + 0.12 * var(--repo-selected-glow)));
 }
 
@@ -334,18 +364,20 @@ html.dark {
   position: absolute;
   inset: 0;
   background:
-    radial-gradient(80% 50% at 16% 0%, rgba(255, 255, 255, 0.35) 0%, rgba(255, 255, 255, 0) 75%),
+    radial-gradient(80% 50% at calc(var(--repo-highlight-x) * 100%) calc(var(--repo-highlight-y) * 100%), rgba(255, 255, 255, 0.35) 0%, rgba(255, 255, 255, 0) 75%),
     linear-gradient(180deg, rgba(255, 255, 255, 0.18) 0%, rgba(255, 255, 255, 0) 68%);
   pointer-events: none;
 }
 
 .dark .repo-floating-card {
-  border-color: rgba(255, 255, 255, 0.14);
-  background: linear-gradient(145deg, rgba(52, 57, 76, 0.7) 0%, rgba(35, 39, 54, 0.62) 100%);
+  border-color: rgba(255, 255, 255, 0.12);
+  background: linear-gradient(145deg, rgba(52, 57, 76, 0.62) 0%, hsl(var(--background) / 0.22) 50%, rgba(35, 39, 54, 0.52) 100%);
   box-shadow:
-    0 10px 24px rgba(0, 0, 0, 0.34),
-    0 2px 8px rgba(0, 0, 0, 0.24),
-    inset 0 1px 0 rgba(255, 255, 255, 0.08);
+    calc(0px + var(--repo-shadow-offset-x)) calc(10px + var(--repo-shadow-offset-y)) 24px rgba(0, 0, 0, 0.34),
+    0 4px 10px rgba(0, 0, 0, 0.2),
+    0 0 40px rgba(0, 0, 0, 0.1),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08),
+    inset 0 0 12px rgba(255, 255, 255, 0.04);
 }
 
 .dark .repo-floating-card::after {
@@ -360,15 +392,17 @@ html.dark {
 
 .dark .repo-floating-card[data-selected="true"] {
   box-shadow:
-    0 10px 24px rgba(0, 0, 0, 0.4),
-    0 2px 8px rgba(0, 0, 0, 0.28),
+    calc(0px + var(--repo-shadow-offset-x)) calc(10px + var(--repo-shadow-offset-y)) 24px rgba(0, 0, 0, 0.4),
+    0 4px 12px rgba(0, 0, 0, 0.24),
+    0 0 40px rgba(0, 0, 0, 0.1),
     inset 0 1px 0 rgba(255, 255, 255, 0.1),
+    inset 0 0 12px rgba(255, 255, 255, 0.04),
     0 0 calc(14px + 12px * var(--repo-selected-glow)) rgba(93, 126, 232, calc(0.12 + 0.18 * var(--repo-selected-glow)));
 }
 
 .dark .repo-floating-card::before {
   background:
-    radial-gradient(80% 50% at 16% 0%, rgba(255, 255, 255, 0.1) 0%, rgba(255, 255, 255, 0) 72%),
+    radial-gradient(80% 50% at calc(var(--repo-highlight-x) * 100%) calc(var(--repo-highlight-y) * 100%), rgba(255, 255, 255, 0.1) 0%, rgba(255, 255, 255, 0) 72%),
     linear-gradient(180deg, rgba(255, 255, 255, 0.06) 0%, rgba(255, 255, 255, 0) 68%);
 }
 
@@ -387,7 +421,7 @@ html.dark {
    These cubic-bezier approximations match the feel. */
 
 /* Standard spring: natural deceleration with slight overshoot */
-/* cubic-bezier(0.34, 1.56, 0.64, 1) — for scale/position */
+/* cubic-bezier(0.32, 1.08, 0.56, 1) — for scale/position */
 /* Smooth ease: fluid deceleration without overshoot */
 /* cubic-bezier(0.2, 0.8, 0.2, 1) — for opacity/color */
 
@@ -408,10 +442,10 @@ html.dark {
 /* --- Glass Hover Lift (enhanced) --- */
 /* Apple's depth-through-motion: elements lift toward the user on hover */
 .glass-hover-lift {
-  transition: transform 0.35s cubic-bezier(0.34, 1.56, 0.64, 1),
-              box-shadow 0.35s cubic-bezier(0.2, 0.8, 0.2, 1),
-              background 0.25s cubic-bezier(0.2, 0.8, 0.2, 1),
-              border-color 0.25s cubic-bezier(0.2, 0.8, 0.2, 1);
+  transition: transform 0.42s cubic-bezier(0.32, 1.08, 0.56, 1),
+              box-shadow 0.42s cubic-bezier(0.2, 0.8, 0.2, 1),
+              background 0.30s cubic-bezier(0.2, 0.8, 0.2, 1),
+              border-color 0.30s cubic-bezier(0.2, 0.8, 0.2, 1);
   will-change: transform, box-shadow;
 }
 
@@ -429,11 +463,11 @@ html.dark {
 /* --- Glass Interactive --- */
 /* Combined hover-lift + press-scale for interactive cards/buttons */
 .glass-interactive {
-  transition: transform 0.35s cubic-bezier(0.34, 1.56, 0.64, 1),
-              box-shadow 0.35s cubic-bezier(0.2, 0.8, 0.2, 1),
-              background 0.25s cubic-bezier(0.2, 0.8, 0.2, 1),
-              border-color 0.25s cubic-bezier(0.2, 0.8, 0.2, 1),
-              opacity 0.25s cubic-bezier(0.2, 0.8, 0.2, 1);
+  transition: transform 0.42s cubic-bezier(0.32, 1.08, 0.56, 1),
+              box-shadow 0.42s cubic-bezier(0.2, 0.8, 0.2, 1),
+              background 0.30s cubic-bezier(0.2, 0.8, 0.2, 1),
+              border-color 0.30s cubic-bezier(0.2, 0.8, 0.2, 1),
+              opacity 0.30s cubic-bezier(0.2, 0.8, 0.2, 1);
   will-change: transform, box-shadow;
 }
 
@@ -528,7 +562,7 @@ html.dark {
 .glass-focus-ring:focus-visible {
   outline: none;
   box-shadow: 0 0 0 3px hsl(var(--primary) / 0.15);
-  animation: glass-focus-pulse 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+  animation: glass-focus-pulse 0.3s cubic-bezier(0.32, 1.08, 0.56, 1);
 }
 
 @keyframes glass-focus-pulse {
