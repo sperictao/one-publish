@@ -33,3 +33,6 @@
 - 生成图标需 macOS 的 `iconutil`；运行脚本可能覆盖 `src-tauri/icons` 下同名文件。
 - 勿提交密钥、证书或发布配置；如需本地环境变量，请使用私有 `.env` 并确保不入库。
 - Tauri CSP 已启用，新增前端资源或 IPC 通道前请检查协议范围与来源安全性。
+
+## Lessons Learned
+- 修复 macOS 交通灯位置问题时，先确认是否由 `tauri-plugin-decorum` 在 `resize/fullscreen` 回调里按默认值重排，避免应用层与插件层同时抢写导致抖动。
