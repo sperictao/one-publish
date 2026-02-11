@@ -1,4 +1,12 @@
-import { useEffect, useState, type FormEvent } from "react";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type FormEvent,
+} from "react";
 import { cn } from "@/lib/utils";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -89,6 +97,14 @@ interface RepositoryListProps {
   onCollapse?: () => void;
 }
 
+interface FloatingCardRect {
+  top: number;
+  left: number;
+  width: number;
+  height: number;
+  visible: boolean;
+}
+
 export function RepositoryList({
   repositories,
   selectedRepoId,
@@ -121,6 +137,21 @@ export function RepositoryList({
   const [projectFileOptions, setProjectFileOptions] = useState<string[]>([]);
   const [isScanningProjectFiles, setIsScanningProjectFiles] = useState(false);
   const [isProjectFileManual, setIsProjectFileManual] = useState(false);
+  const [hoveredRepoId, setHoveredRepoId] = useState<string | null>(null);
+  const [floatingRect, setFloatingRect] = useState<FloatingCardRect>({
+    top: 0,
+    left: 0,
+    width: 0,
+    height: 0,
+    visible: false,
+  });
+  const listRef = useRef<HTMLDivElement | null>(null);
+  const floatingCardRef = useRef<HTMLDivElement | null>(null);
+  const rowRefs = useRef<Record<string, HTMLButtonElement | null>>({});
+  const hoveredRepoIdRef = useRef<string | null>(null);
+  const lastHoveredRepoIdRef = useRef<string | null>(null);
+  const isReducedMotionRef = useRef(false);
+  const cardTargetRepoIdRef = useRef<string | null>(null);
   const { translations } = useI18n();
   const repoT = translations.repositoryList || {};
 
@@ -129,11 +160,22 @@ export function RepositoryList({
   const NO_PROJECT_FILE_VALUE = "__none__";
   const DEFAULT_BRANCH_VALUE = "master";
 
-  const filteredRepos = repositories.filter(
-    (repo) =>
-      repo.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      repo.path.toLowerCase().includes(searchQuery.toLowerCase())
+  const filteredRepos = useMemo(
+    () =>
+      repositories.filter(
+        (repo) =>
+          repo.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+          repo.path.toLowerCase().includes(searchQuery.toLowerCase())
+      ),
+    [repositories, searchQuery]
   );
+
+  const filteredRepoIdsSignature = useMemo(
+    () => filteredRepos.map((repo) => repo.id).join("|"),
+    [filteredRepos]
+  );
+
+  const cardTargetRepoId = hoveredRepoId ?? selectedRepoId ?? null;
 
   const providerOptions = (() => {
     const uniqueOptions = Array.from(
@@ -189,6 +231,188 @@ export function RepositoryList({
 
     return DEFAULT_BRANCH_VALUE;
   };
+
+  const setRepoRowRef = useCallback(
+    (repoId: string) => (node: HTMLButtonElement | null) => {
+      if (node) {
+        rowRefs.current[repoId] = node;
+        return;
+      }
+
+      delete rowRefs.current[repoId];
+    },
+    []
+  );
+
+  const updateFloatingRect = useCallback((targetRepoId: string | null) => {
+    if (!targetRepoId) {
+      setFloatingRect((prev) => (prev.visible ? { ...prev, visible: false } : prev));
+      return;
+    }
+
+    const listElement = listRef.current;
+    const rowElement = rowRefs.current[targetRepoId];
+
+    if (!listElement || !rowElement) {
+      setFloatingRect((prev) => (prev.visible ? { ...prev, visible: false } : prev));
+      return;
+    }
+
+    const listRect = listElement.getBoundingClientRect();
+    const rowRect = rowElement.getBoundingClientRect();
+    const nextTop = rowRect.top - listRect.top + listElement.scrollTop;
+    const nextLeft = rowRect.left - listRect.left + listElement.scrollLeft;
+    const nextWidth = rowRect.width;
+    const nextHeight = rowRect.height;
+
+    setFloatingRect((prev) => {
+      const hasSameGeometry =
+        Math.abs(prev.top - nextTop) < 0.5 &&
+        Math.abs(prev.left - nextLeft) < 0.5 &&
+        Math.abs(prev.width - nextWidth) < 0.5 &&
+        Math.abs(prev.height - nextHeight) < 0.5;
+
+      if (prev.visible && hasSameGeometry) {
+        return prev;
+      }
+
+      return {
+        top: nextTop,
+        left: nextLeft,
+        width: nextWidth,
+        height: nextHeight,
+        visible: true,
+      };
+    });
+  }, []);
+
+  const triggerSelectedBounce = useCallback(() => {
+    if (isReducedMotionRef.current) {
+      return;
+    }
+
+    const cardElement = floatingCardRef.current;
+    if (!cardElement) {
+      return;
+    }
+
+    cardElement.getAnimations().forEach((animation) => {
+      animation.cancel();
+    });
+
+    cardElement.animate(
+      [
+        { transform: "translateY(0) scale(1)" },
+        { transform: "translateY(-2px) scale(1.01)", offset: 0.4 },
+        { transform: "translateY(0) scale(0.995)", offset: 0.72 },
+        { transform: "translateY(0) scale(1)" },
+      ],
+      {
+        duration: 390,
+        easing: "cubic-bezier(0.34, 1.56, 0.64, 1)",
+      }
+    );
+  }, []);
+
+  const handleRepoMouseEnter = useCallback(
+    (repoId: string) => {
+      const previousHoveredRepoId = hoveredRepoIdRef.current;
+      lastHoveredRepoIdRef.current = previousHoveredRepoId;
+      hoveredRepoIdRef.current = repoId;
+      setHoveredRepoId(repoId);
+
+      const enteredSelectedRepo = repoId === selectedRepoId;
+      const enteredFromOutside = lastHoveredRepoIdRef.current === null;
+      const enteredFromNonSelectedRepo =
+        lastHoveredRepoIdRef.current !== null &&
+        lastHoveredRepoIdRef.current !== selectedRepoId;
+
+      if (enteredSelectedRepo && (enteredFromOutside || enteredFromNonSelectedRepo)) {
+        triggerSelectedBounce();
+      }
+    },
+    [selectedRepoId, triggerSelectedBounce]
+  );
+
+  const handleListMouseLeave = useCallback(() => {
+    const previousHoveredRepoId = hoveredRepoIdRef.current;
+    lastHoveredRepoIdRef.current = previousHoveredRepoId;
+
+    if (previousHoveredRepoId && previousHoveredRepoId === selectedRepoId) {
+      triggerSelectedBounce();
+    }
+
+    hoveredRepoIdRef.current = null;
+    setHoveredRepoId(null);
+  }, [selectedRepoId, triggerSelectedBounce]);
+
+  const handleListScroll = useCallback(() => {
+    updateFloatingRect(cardTargetRepoIdRef.current);
+  }, [updateFloatingRect]);
+
+  useEffect(() => {
+    if (typeof window === "undefined" || typeof window.matchMedia !== "function") {
+      return;
+    }
+
+    const mediaQuery = window.matchMedia("(prefers-reduced-motion: reduce)");
+    const updatePreference = () => {
+      isReducedMotionRef.current = mediaQuery.matches;
+    };
+
+    updatePreference();
+
+    if (typeof mediaQuery.addEventListener === "function") {
+      mediaQuery.addEventListener("change", updatePreference);
+      return () => {
+        mediaQuery.removeEventListener("change", updatePreference);
+      };
+    }
+
+    mediaQuery.addListener(updatePreference);
+    return () => {
+      mediaQuery.removeListener(updatePreference);
+    };
+  }, []);
+
+  useEffect(() => {
+    cardTargetRepoIdRef.current = cardTargetRepoId;
+  }, [cardTargetRepoId]);
+
+  useEffect(() => {
+    if (!hoveredRepoId) {
+      return;
+    }
+
+    const hoveredRepoExists = filteredRepos.some((repo) => repo.id === hoveredRepoId);
+    if (hoveredRepoExists) {
+      return;
+    }
+
+    hoveredRepoIdRef.current = null;
+    setHoveredRepoId(null);
+  }, [filteredRepos, hoveredRepoId]);
+
+  useLayoutEffect(() => {
+    updateFloatingRect(cardTargetRepoId);
+  }, [cardTargetRepoId, filteredRepoIdsSignature, updateFloatingRect]);
+
+  useEffect(() => {
+    const listElement = listRef.current;
+    if (!listElement || typeof ResizeObserver === "undefined") {
+      return;
+    }
+
+    const observer = new ResizeObserver(() => {
+      updateFloatingRect(cardTargetRepoIdRef.current);
+    });
+
+    observer.observe(listElement);
+
+    return () => {
+      observer.disconnect();
+    };
+  }, [updateFloatingRect]);
 
   useEffect(() => {
     if (!actionMenuRepoId) {
@@ -562,8 +786,29 @@ export function RepositoryList({
         </div>
       </div>
 
-      {/* Repository List - glass cards */}
-      <div className="scrollbar-fade glass-scrollbar relative flex-1 overflow-auto space-y-1.5 px-2.5 py-2">
+      {/* Repository List - shared floating glass card */}
+      <div
+        ref={listRef}
+        className="scrollbar-fade glass-scrollbar relative flex-1 overflow-auto px-2.5 py-2"
+        onMouseLeave={handleListMouseLeave}
+        onScroll={handleListScroll}
+      >
+        <div
+          ref={floatingCardRef}
+          aria-hidden
+          className={cn(
+            "glass-surface-selected pointer-events-none !absolute z-0 rounded-2xl transition-[top,left,width,height,opacity,transform,box-shadow] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]",
+            floatingRect.visible ? "opacity-100" : "opacity-0"
+          )}
+          style={{
+            position: "absolute",
+            top: floatingRect.top,
+            left: floatingRect.left,
+            width: floatingRect.width,
+            height: floatingRect.height,
+          }}
+        />
+
         {filteredRepos.length === 0 ? (
           /* Empty state - glass container */
           <div className="flex h-full flex-col items-center justify-center gap-3 px-4 py-8">
@@ -580,149 +825,152 @@ export function RepositoryList({
             </div>
           </div>
         ) : (
-          filteredRepos.map((repo) => {
-            const isActionMenuOpen = actionMenuRepoId === repo.id;
-            const isSelected = selectedRepoId === repo.id;
-            const currentBranchName =
-              repo.currentBranch?.trim() ||
-              repoT.currentBranchUnknown ||
-              "未知分支";
-            const canConnectBranch = branchConnectivityByRepoId[repo.id] ?? false;
-            const providerLabel = repo.providerId
-              ? providers.find((p) => p.id === repo.providerId)?.label ||
-                providers.find((p) => p.id === repo.providerId)?.displayName ||
-                repo.providerId
-              : null;
+          <div className="space-y-1.5">
+            {filteredRepos.map((repo) => {
+              const isActionMenuOpen = actionMenuRepoId === repo.id;
+              const isSelected = selectedRepoId === repo.id;
+              const currentBranchName =
+                repo.currentBranch?.trim() ||
+                repoT.currentBranchUnknown ||
+                "未知分支";
+              const canConnectBranch = branchConnectivityByRepoId[repo.id] ?? false;
+              const providerLabel = repo.providerId
+                ? providers.find((p) => p.id === repo.providerId)?.label ||
+                  providers.find((p) => p.id === repo.providerId)?.displayName ||
+                  repo.providerId
+                : null;
 
-            return (
-              <button
-                key={repo.id}
-                className={cn(
-                  "group relative flex w-full items-start gap-2.5 rounded-2xl px-3 py-2.5 text-left transition-colors duration-300",
-                  isActionMenuOpen && "z-30",
-                  isSelected
-                    ? "glass-hover-lift glass-surface-selected"
-                    : "glass-hover-lift border border-transparent bg-transparent shadow-none hover:border-[var(--glass-border-subtle)] hover:bg-[var(--glass-bg)] hover:shadow-[var(--glass-shadow)]"
-                )}
-                onClick={() => {
-                  setActionMenuRepoId(null);
-                  onSelectRepo(repo.id);
-                }}
-              >
-                {/* Icon - glass container */}
-                <span
+              return (
+                <button
+                  key={repo.id}
+                  ref={setRepoRowRef(repo.id)}
                   className={cn(
-                    "mt-0.5 flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-xl transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]",
-                    isSelected
-                      ? "scale-105 bg-primary/12 shadow-[0_0_12px_hsl(var(--primary)/0.2)]"
-                      : "bg-[var(--glass-input-bg)] group-hover:scale-105 group-hover:bg-primary/8"
+                    "group relative z-10 flex w-full items-start gap-2.5 rounded-2xl border border-transparent bg-transparent px-3 py-2.5 text-left shadow-none transition-colors duration-300",
+                    isActionMenuOpen && "z-30",
                   )}
+                  onMouseEnter={() => {
+                    handleRepoMouseEnter(repo.id);
+                  }}
+                  onClick={() => {
+                    setActionMenuRepoId(null);
+                    onSelectRepo(repo.id);
+                  }}
                 >
-                  <FolderGit2
+                  {/* Icon - glass container */}
+                  <span
                     className={cn(
-                      "h-4 w-4 transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]",
+                      "mt-0.5 flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-xl transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]",
                       isSelected
-                        ? "scale-110 text-primary drop-shadow-[0_0_4px_hsl(var(--primary)/0.3)]"
-                        : "text-muted-foreground/60 group-hover:text-primary group-hover:drop-shadow-[0_0_3px_hsl(var(--primary)/0.15)]"
+                        ? "scale-105 bg-primary/12 shadow-[0_0_12px_hsl(var(--primary)/0.2)]"
+                        : "bg-[var(--glass-input-bg)] group-hover:scale-105 group-hover:bg-primary/8"
                     )}
-                  />
-                </span>
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-center justify-between gap-2">
-                    <div className="min-w-0 flex-1">
-                      <span className={cn(
-                        "block truncate text-[13px] font-medium tracking-tight transition-colors duration-300",
-                        isSelected ? "text-foreground" : "text-foreground/80"
-                      )}>
-                        {repo.name}
-                      </span>
-                    </div>
-                    <div className="flex flex-shrink-0 items-center gap-1">
-                      {providerLabel && (
-                        <span className="rounded-md bg-[var(--glass-input-bg)] px-1.5 py-0.5 text-[9px] font-medium uppercase leading-none tracking-wide text-muted-foreground/60">
-                          {providerLabel}
-                        </span>
+                  >
+                    <FolderGit2
+                      className={cn(
+                        "h-4 w-4 transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]",
+                        isSelected
+                          ? "scale-110 text-primary drop-shadow-[0_0_4px_hsl(var(--primary)/0.3)]"
+                          : "text-muted-foreground/60 group-hover:text-primary group-hover:drop-shadow-[0_0_3px_hsl(var(--primary)/0.15)]"
                       )}
-                      <div
-                        className="relative"
-                        onClick={(event) => {
-                          event.stopPropagation();
-                        }}
-                      >
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className={cn(
-                            "h-5 w-5 rounded-lg transition-all duration-300",
-                            isActionMenuOpen
-                              ? "translate-y-0 bg-[var(--glass-bg)] opacity-100"
-                              : "-translate-y-0.5 opacity-0 group-hover:translate-y-0 group-hover:opacity-70"
-                          )}
-                          title={repoT.moreActions || "更多操作"}
+                    />
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="min-w-0 flex-1">
+                        <span className={cn(
+                          "block truncate text-[13px] font-medium tracking-tight transition-colors duration-300",
+                          isSelected ? "text-foreground" : "text-foreground/80"
+                        )}>
+                          {repo.name}
+                        </span>
+                      </div>
+                      <div className="flex flex-shrink-0 items-center gap-1">
+                        {providerLabel && (
+                          <span className="rounded-md bg-[var(--glass-input-bg)] px-1.5 py-0.5 text-[9px] font-medium uppercase leading-none tracking-wide text-muted-foreground/60">
+                            {providerLabel}
+                          </span>
+                        )}
+                        <div
+                          className="relative"
                           onClick={(event) => {
                             event.stopPropagation();
-                            setActionMenuRepoId((prev) =>
-                              prev === repo.id ? null : repo.id
-                            );
                           }}
                         >
-                          <MoreHorizontal className="h-3 w-3" />
-                        </Button>
-
-                        {isActionMenuOpen && (
-                          <div
-                            className="absolute right-0 top-7 z-20 flex min-w-[130px] flex-col rounded-xl border border-[var(--glass-border)] bg-[var(--glass-panel-bg)] p-1 shadow-[var(--glass-shadow-lg)] backdrop-blur-xl animate-in fade-in slide-in-from-top-1 zoom-in-95 duration-150"
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className={cn(
+                              "h-5 w-5 rounded-lg transition-all duration-300",
+                              isActionMenuOpen
+                                ? "translate-y-0 bg-[var(--glass-bg)] opacity-100"
+                                : "-translate-y-0.5 opacity-0 group-hover:translate-y-0 group-hover:opacity-70"
+                            )}
+                            title={repoT.moreActions || "更多操作"}
                             onClick={(event) => {
                               event.stopPropagation();
+                              setActionMenuRepoId((prev) =>
+                                prev === repo.id ? null : repo.id
+                              );
                             }}
                           >
-                            <button
-                              className="flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-xs transition-all duration-150 hover:bg-[var(--glass-bg-hover)] active:scale-[0.97]"
-                              onClick={() => {
-                                openEditDialog(repo);
+                            <MoreHorizontal className="h-3 w-3" />
+                          </Button>
+
+                          {isActionMenuOpen && (
+                            <div
+                              className="absolute right-0 top-7 z-20 flex min-w-[130px] flex-col rounded-xl border border-[var(--glass-border)] bg-[var(--glass-panel-bg)] p-1 shadow-[var(--glass-shadow-lg)] backdrop-blur-xl animate-in fade-in slide-in-from-top-1 zoom-in-95 duration-150"
+                              onClick={(event) => {
+                                event.stopPropagation();
                               }}
                             >
-                              <Pencil className="h-3.5 w-3.5 text-muted-foreground/70" />
-                              <span>{repoT.edit || "编辑"}</span>
-                            </button>
-                            <div className="mx-2 my-0.5 h-px bg-[var(--glass-divider)]" />
-                            <button
-                              className="flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-xs text-destructive transition-all duration-150 hover:bg-destructive/10 active:scale-[0.97]"
-                              onClick={() => {
-                                setActionMenuRepoId(null);
-                                void onRemoveRepo(repo);
-                              }}
-                            >
-                              <Trash2 className="h-3.5 w-3.5" />
-                              <span>{repoT.remove || "移除"}</span>
-                            </button>
-                          </div>
-                        )}
+                              <button
+                                className="flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-xs transition-all duration-150 hover:bg-[var(--glass-bg-hover)] active:scale-[0.97]"
+                                onClick={() => {
+                                  openEditDialog(repo);
+                                }}
+                              >
+                                <Pencil className="h-3.5 w-3.5 text-muted-foreground/70" />
+                                <span>{repoT.edit || "编辑"}</span>
+                              </button>
+                              <div className="mx-2 my-0.5 h-px bg-[var(--glass-divider)]" />
+                              <button
+                                className="flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-xs text-destructive transition-all duration-150 hover:bg-destructive/10 active:scale-[0.97]"
+                                onClick={() => {
+                                  setActionMenuRepoId(null);
+                                  void onRemoveRepo(repo);
+                                }}
+                              >
+                                <Trash2 className="h-3.5 w-3.5" />
+                                <span>{repoT.remove || "移除"}</span>
+                              </button>
+                            </div>
+                          )}
+                        </div>
                       </div>
                     </div>
+                    <div className="mt-1.5 min-w-0">
+                      <span
+                        className={cn(
+                          "inline-flex max-w-full items-center gap-1.5 rounded-full px-2 py-0.5 text-[11px] leading-4 transition-all duration-300",
+                          canConnectBranch
+                            ? "capsule-breathe bg-emerald-600/20 text-emerald-700 dark:bg-emerald-500/25 dark:text-emerald-300"
+                            : "bg-[var(--glass-input-bg)] text-muted-foreground/60"
+                        )}
+                        title={
+                          canConnectBranch
+                            ? repoT.branchConnectable || "分支可连接"
+                            : repoT.branchUnreachable || "分支不可连接"
+                        }
+                      >
+                        <GitBranch className="h-3 w-3 flex-shrink-0" />
+                        <span className="truncate">{currentBranchName}</span>
+                      </span>
+                    </div>
                   </div>
-                  <div className="mt-1.5 min-w-0">
-                    <span
-                      className={cn(
-                        "inline-flex max-w-full items-center gap-1.5 rounded-full px-2 py-0.5 text-[11px] leading-4 transition-all duration-300",
-                        canConnectBranch
-                          ? "capsule-breathe bg-emerald-600/20 text-emerald-700 dark:bg-emerald-500/25 dark:text-emerald-300"
-                          : "bg-[var(--glass-input-bg)] text-muted-foreground/60"
-                      )}
-                      title={
-                        canConnectBranch
-                          ? repoT.branchConnectable || "分支可连接"
-                          : repoT.branchUnreachable || "分支不可连接"
-                      }
-                    >
-                      <GitBranch className="h-3 w-3 flex-shrink-0" />
-                      <span className="truncate">{currentBranchName}</span>
-                    </span>
-                  </div>
-                </div>
-              </button>
-            );
-          })
+                </button>
+              );
+            })}
+          </div>
         )}
       </div>
 
