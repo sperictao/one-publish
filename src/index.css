@@ -272,12 +272,104 @@ html.dark {
 
 /* Gentle breathe animation for capsule badges */
 @keyframes capsule-breathe {
-  0%, 100% { opacity: 1; box-shadow: 0 0 0 0 transparent; }
-  50% { opacity: 0.65; box-shadow: 0 0 14px rgba(16, 185, 129, 0.35), 0 0 4px rgba(16, 185, 129, 0.2); }
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.72; transform: scale(0.98); }
 }
 
 .capsule-breathe {
   animation: capsule-breathe 2.8s ease-in-out infinite;
+}
+
+.repo-floating-card {
+  --repo-trail-opacity: 0;
+  --repo-trail-x: 0px;
+  --repo-trail-y: 0px;
+  --repo-trail-scale: 1;
+  --repo-selected-glow: 0;
+  position: absolute;
+  border-radius: 1rem;
+  border: 1px solid rgba(255, 255, 255, 0.62);
+  background: linear-gradient(145deg, rgba(255, 255, 255, 0.68) 0%, rgba(246, 245, 255, 0.42) 100%);
+  box-shadow:
+    0 10px 24px rgba(98, 108, 145, 0.16),
+    0 2px 6px rgba(98, 108, 145, 0.1),
+    inset 0 1px 0 rgba(255, 255, 255, 0.7);
+  backdrop-filter: blur(24px) saturate(165%);
+  -webkit-backdrop-filter: blur(24px) saturate(165%);
+  overflow: hidden;
+  transition: box-shadow 0.22s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.repo-floating-card::after {
+  content: "";
+  position: absolute;
+  inset: -2px;
+  border-radius: inherit;
+  pointer-events: none;
+  background: linear-gradient(
+    118deg,
+    rgba(146, 177, 255, 0.26) 0%,
+    rgba(176, 202, 255, 0.2) 36%,
+    rgba(200, 186, 255, 0.22) 72%,
+    rgba(220, 210, 255, 0.1) 100%
+  );
+  opacity: var(--repo-trail-opacity);
+  transform: translate3d(var(--repo-trail-x), var(--repo-trail-y), 0) scale(var(--repo-trail-scale));
+  filter: blur(13px);
+  transition:
+    opacity 0.24s cubic-bezier(0.22, 1, 0.36, 1),
+    transform 0.24s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.repo-floating-card[data-selected="true"] {
+  box-shadow:
+    0 12px 24px rgba(98, 108, 145, 0.18),
+    0 2px 8px rgba(98, 108, 145, 0.12),
+    inset 0 1px 0 rgba(255, 255, 255, 0.74),
+    0 0 calc(16px + 12px * var(--repo-selected-glow)) rgba(108, 140, 255, calc(0.08 + 0.12 * var(--repo-selected-glow)));
+}
+
+.repo-floating-card::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(80% 50% at 16% 0%, rgba(255, 255, 255, 0.35) 0%, rgba(255, 255, 255, 0) 75%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.18) 0%, rgba(255, 255, 255, 0) 68%);
+  pointer-events: none;
+}
+
+.dark .repo-floating-card {
+  border-color: rgba(255, 255, 255, 0.14);
+  background: linear-gradient(145deg, rgba(52, 57, 76, 0.7) 0%, rgba(35, 39, 54, 0.62) 100%);
+  box-shadow:
+    0 10px 24px rgba(0, 0, 0, 0.34),
+    0 2px 8px rgba(0, 0, 0, 0.24),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08);
+}
+
+.dark .repo-floating-card::after {
+  background: linear-gradient(
+    118deg,
+    rgba(88, 126, 214, 0.34) 0%,
+    rgba(103, 143, 226, 0.26) 36%,
+    rgba(133, 120, 211, 0.24) 72%,
+    rgba(136, 131, 212, 0.14) 100%
+  );
+}
+
+.dark .repo-floating-card[data-selected="true"] {
+  box-shadow:
+    0 10px 24px rgba(0, 0, 0, 0.4),
+    0 2px 8px rgba(0, 0, 0, 0.28),
+    inset 0 1px 0 rgba(255, 255, 255, 0.1),
+    0 0 calc(14px + 12px * var(--repo-selected-glow)) rgba(93, 126, 232, calc(0.12 + 0.18 * var(--repo-selected-glow)));
+}
+
+.dark .repo-floating-card::before {
+  background:
+    radial-gradient(80% 50% at 16% 0%, rgba(255, 255, 255, 0.1) 0%, rgba(255, 255, 255, 0) 72%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.06) 0%, rgba(255, 255, 255, 0) 68%);
 }
 
 /* Glass shimmer - specular light sweep */
