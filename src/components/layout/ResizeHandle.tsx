@@ -8,6 +8,8 @@ interface ResizeHandleProps {
   className?: string;
   /** Height of the header section that needs border-b */
   headerHeight?: string;
+  /** Whether to show border-b on the header spacer (default: true) */
+  showHeaderBorder?: boolean;
 }
 
 export function ResizeHandle({
@@ -16,6 +18,7 @@ export function ResizeHandle({
   direction = "horizontal",
   className,
   headerHeight = "h-10",
+  showHeaderBorder = true,
 }: ResizeHandleProps) {
   const [isDragging, setIsDragging] = useState(false);
   const [startPos, setStartPos] = useState(0);
@@ -73,9 +76,9 @@ export function ResizeHandle({
       )}
       onMouseDown={handleMouseDown}
     >
-      {/* Header section with border to connect horizontal lines */}
+      {/* Header spacer to align with adjacent panel headers */}
       {direction === "horizontal" && headerHeight && (
-        <div data-tauri-drag-region className={cn(headerHeight, "flex-shrink-0 border-b border-[var(--glass-divider)]")} />
+        <div data-tauri-drag-region className={cn(headerHeight, "flex-shrink-0", showHeaderBorder && "border-b border-[var(--glass-divider)]")} />
       )}
       {/* Remaining space */}
       <div className="flex-1" />

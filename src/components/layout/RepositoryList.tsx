@@ -168,7 +168,7 @@ export function RepositoryList({
     <div className="flex h-full flex-col">
       <div
         data-tauri-drag-region
-        className="flex h-10 items-center justify-between border-b border-[var(--glass-divider)] pl-[100px] pr-2"
+        className="flex h-10 items-center justify-between pl-[100px] pr-2"
       >
         <div className="flex items-center gap-1.5" data-tauri-no-drag>
           <div className="flex h-5 w-5 items-center justify-center rounded-md bg-primary/10">
@@ -197,7 +197,7 @@ export function RepositoryList({
         </div>
       </div>
 
-      <div className="flex items-center justify-between border-b border-[var(--glass-divider)] px-3 py-2">
+      <div className="flex items-center justify-between px-3 py-2">
         <button
           type="button"
           className="glass-surface flex items-center gap-1.5 rounded-full px-3 py-1 text-sm font-medium transition-all duration-300 hover:bg-[var(--glass-bg-hover)]"
@@ -228,7 +228,7 @@ export function RepositoryList({
         </button>
       </div>
 
-      <div className="border-b border-[var(--glass-divider)] px-3 py-2">
+      <div className="px-3 py-1.5">
         <div className="group/search glass-input relative rounded-xl">
           <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground/50 transition-colors duration-300 group-focus-within/search:text-primary" />
           <Input
@@ -416,7 +416,7 @@ export function RepositoryList({
         onRefreshBranches={onRefreshBranches}
       />
 
-      <div className="relative flex items-center justify-between border-t border-[var(--glass-divider)] px-3 py-2">
+      <div className="relative flex items-center justify-between px-3 py-2">
         <div className="pointer-events-none absolute -top-6 left-0 right-0 h-6 bg-gradient-to-t from-[var(--glass-panel-bg)] to-transparent" />
         <button
           type="button"

@@ -19,6 +19,8 @@ pub mod tray;
 pub use environment::{check_environment, FixAction, FixResult, FixType};
 
 use tauri::Manager;
+#[cfg(target_os = "macos")]
+use tauri_plugin_decorum::WebviewWindowExt;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -30,6 +32,7 @@ pub fn run() {
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
+        .plugin(tauri_plugin_decorum::init())
         .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
             // 当尝试启动第二个实例时，显示主窗口
             log::info!("检测到第二个实例启动，显示主窗口");
@@ -49,6 +52,13 @@ pub fn run() {
             }
         }))
         .setup(|app| {
+            // 设置 macOS 交通灯位置
+            #[cfg(target_os = "macos")]
+            {
+                let main_window = app.get_webview_window("main").unwrap();
+                main_window.set_traffic_lights_inset(18.0, 32.0).unwrap();
+            }
+
             // 初始化系统托盘
             if let Err(err) = tray::init_tray(app.handle()) {
                 log::error!("初始化系统托盘失败: {}", err);

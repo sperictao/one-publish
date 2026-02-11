@@ -3681,34 +3681,40 @@ function App() {
       {/* Main Content - Three Column Layout (no separate title bar) */}
       <div className="flex flex-1 overflow-hidden">
         {/* Left Panel - Repository List */}
-        <CollapsiblePanel
-          collapsed={leftPanelCollapsed}
-          side="left"
-          width={`${leftPanelWidth}px`}
-        >
-          <RepositoryList
-            repositories={repositories}
-            selectedRepoId={selectedRepoId}
-            providers={availableProviders.map((provider) => ({
-              ...provider,
-              label: formatProviderLabel(provider),
-            }))}
-            onSelectRepo={selectRepository}
-            onAddRepo={handleAddRepo}
-            onEditRepo={handleEditRepo}
-            onRemoveRepo={handleRemoveRepo}
-            onDetectProvider={handleDetectRepoProvider}
-            onScanProjectFiles={handleScanProjectFiles}
-            onRefreshBranches={handleRefreshRepoBranches}
-            branchConnectivityByRepoId={branchConnectivityByRepoId}
-            onSettings={handleOpenSettings}
-            onCollapse={() => setLeftPanelCollapsed(true)}
-          />
-        </CollapsiblePanel>
+        <div className={cn(
+          "flex flex-col p-2 transition-all duration-300 ease-in-out",
+          leftPanelCollapsed && "p-0"
+        )}>
+          <CollapsiblePanel
+            collapsed={leftPanelCollapsed}
+            side="left"
+            width={`${leftPanelWidth}px`}
+            className="glass-card rounded-2xl h-full"
+          >
+            <RepositoryList
+              repositories={repositories}
+              selectedRepoId={selectedRepoId}
+              providers={availableProviders.map((provider) => ({
+                ...provider,
+                label: formatProviderLabel(provider),
+              }))}
+              onSelectRepo={selectRepository}
+              onAddRepo={handleAddRepo}
+              onEditRepo={handleEditRepo}
+              onRemoveRepo={handleRemoveRepo}
+              onDetectProvider={handleDetectRepoProvider}
+              onScanProjectFiles={handleScanProjectFiles}
+              onRefreshBranches={handleRefreshRepoBranches}
+              branchConnectivityByRepoId={branchConnectivityByRepoId}
+              onSettings={handleOpenSettings}
+              onCollapse={() => setLeftPanelCollapsed(true)}
+            />
+          </CollapsiblePanel>
+        </div>
 
         {/* Left Resize Handle */}
         {!leftPanelCollapsed && (
-          <ResizeHandle onResize={handleLeftPanelResize} />
+          <ResizeHandle onResize={handleLeftPanelResize} showHeaderBorder={false} />
         )}
 
         {/* Middle Panel - Publish Config */}
