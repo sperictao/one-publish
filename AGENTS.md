@@ -36,3 +36,4 @@
 
 ## Lessons Learned
 - 修复 macOS 交通灯位置问题时，先确认是否由 `tauri-plugin-decorum` 在 `resize/fullscreen` 回调里按默认值重排，避免应用层与插件层同时抢写导致抖动。
+- 调整左栏视觉时，默认只改容器层（外壳与列表背景）；仓库行卡片（含 `repo-floating-card`）除非需求明确，不得修改其边框、阴影、悬浮与选中行为。
