@@ -165,7 +165,7 @@ export function RepositoryList({
   }, []);
 
   return (
-    <div className="flex h-full flex-col">
+    <div className="repo-list-root flex h-full flex-col">
       <div
         data-tauri-drag-region
         className="flex h-10 items-center justify-between pl-[100px] pr-2"
@@ -242,7 +242,7 @@ export function RepositoryList({
 
       <div
         ref={listRef}
-        className="scrollbar-fade glass-scrollbar relative flex-1 overflow-auto px-2.5 py-2"
+        className="repo-list-scroll scrollbar-fade glass-scrollbar relative flex-1 overflow-auto px-2.5 py-2"
         onPointerEnter={handleListPointerEnter}
         onPointerMove={handleListPointerMove}
         onMouseLeave={handleListMouseLeave}
@@ -279,7 +279,7 @@ export function RepositoryList({
             </div>
           </div>
         ) : (
-          <div className="space-y-1.5">
+          <div className="repo-list-grid space-y-1.5">
             {filteredRepos.map((repo) => {
               const isSelected = selectedRepoId === repo.id;
               const currentBranchName =

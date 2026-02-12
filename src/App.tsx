@@ -3689,7 +3689,7 @@ function App() {
             collapsed={leftPanelCollapsed}
             side="left"
             width={`${leftPanelWidth}px`}
-            className="glass-card rounded-2xl h-full"
+            className="glass-card repo-sidebar-shell h-full rounded-2xl"
           >
             <RepositoryList
               repositories={repositories}
