@@ -3718,31 +3718,39 @@ function App() {
         )}
 
         {/* Middle Panel - Publish Config */}
-        <CollapsiblePanel
-          collapsed={middlePanelCollapsed}
-          side="left"
-          width={`${middlePanelWidth}px`}
+        <div
+          className={cn(
+            "flex flex-col p-2 transition-all duration-300 ease-in-out",
+            middlePanelCollapsed && "p-0"
+          )}
         >
-          <PublishConfigPanel
-            selectedPreset={selectedPreset}
-            isCustomMode={isCustomMode}
-            profiles={profiles}
-            activeProfileName={activeProfileName}
-            onSelectProfile={handleSelectProfileFromPanel}
-            onCreateProfile={openQuickCreateProfileDialog}
-            onRefreshProfiles={loadProfiles}
-            onDeleteProfile={handleDeleteProfileFromPanel}
-            projectPublishProfiles={projectInfo?.publish_profiles || []}
-            onSelectProjectProfile={handleSelectProjectProfile}
-            recentConfigKeys={recentConfigKeys}
-            favoriteConfigKeys={favoriteConfigKeys}
-            onToggleFavoriteConfig={toggleFavoriteConfig}
-            onRemoveRecentConfig={removeRecentConfig}
-            onCollapse={() => setMiddlePanelCollapsed(true)}
-            showExpandButton={leftPanelCollapsed}
-            onExpandRepo={() => setLeftPanelCollapsed(false)}
-          />
-        </CollapsiblePanel>
+          <CollapsiblePanel
+            collapsed={middlePanelCollapsed}
+            side="left"
+            width={`${middlePanelWidth}px`}
+            className="glass-card repo-sidebar-shell h-full rounded-2xl"
+          >
+            <PublishConfigPanel
+              selectedPreset={selectedPreset}
+              isCustomMode={isCustomMode}
+              profiles={profiles}
+              activeProfileName={activeProfileName}
+              onSelectProfile={handleSelectProfileFromPanel}
+              onCreateProfile={openQuickCreateProfileDialog}
+              onRefreshProfiles={loadProfiles}
+              onDeleteProfile={handleDeleteProfileFromPanel}
+              projectPublishProfiles={projectInfo?.publish_profiles || []}
+              onSelectProjectProfile={handleSelectProjectProfile}
+              recentConfigKeys={recentConfigKeys}
+              favoriteConfigKeys={favoriteConfigKeys}
+              onToggleFavoriteConfig={toggleFavoriteConfig}
+              onRemoveRecentConfig={removeRecentConfig}
+              onCollapse={() => setMiddlePanelCollapsed(true)}
+              showExpandButton={leftPanelCollapsed}
+              onExpandRepo={() => setLeftPanelCollapsed(false)}
+            />
+          </CollapsiblePanel>
+        </div>
 
         {/* Middle Resize Handle */}
         {!middlePanelCollapsed && (
@@ -3750,57 +3758,58 @@ function App() {
         )}
 
         {/* Right Panel - Main Content */}
-        <div className="flex-1 flex flex-col overflow-hidden">
-          {/* Drag region header */}
-          <div className="h-10 flex-shrink-0 border-b border-[var(--glass-divider)] bg-[var(--glass-panel-bg)]/30 flex">
-            {/* Left column for expand buttons - only show when branch panel is collapsed */}
-            {middlePanelCollapsed && (
-              <div
-                data-tauri-drag-region
-                className={`flex items-center justify-end px-2 border-r border-[var(--glass-divider)] ${
-                  leftPanelCollapsed ? "pl-[100px]" : ""
-                }`}
-              >
-                <div className="flex items-center gap-0.5" data-tauri-no-drag>
-                  {leftPanelCollapsed && (
+        <div className="flex-1 flex flex-col p-2">
+          <div className="glass-card repo-sidebar-shell flex h-full flex-col overflow-hidden rounded-2xl">
+            {/* Drag region header */}
+            <div className="h-10 flex-shrink-0 bg-[var(--glass-panel-bg)]/30 flex">
+              {/* Left column for expand buttons - only show when branch panel is collapsed */}
+              {middlePanelCollapsed && (
+                <div
+                  data-tauri-drag-region
+                  className={`flex items-center justify-end px-2 ${
+                    leftPanelCollapsed ? "pl-[100px]" : ""
+                  }`}
+                >
+                  <div className="flex items-center gap-0.5" data-tauri-no-drag>
+                    {leftPanelCollapsed && (
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-6 w-6"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setLeftPanelCollapsed(false);
+                        }}
+                        title={appT.expandRepoList || "展开仓库列表"}
+                        data-tauri-no-drag
+                      >
+                        <Folder className="h-4 w-4" />
+                      </Button>
+                    )}
                     <Button
                       variant="ghost"
                       size="icon"
                       className="h-6 w-6"
                       onClick={(e) => {
                         e.stopPropagation();
-                        setLeftPanelCollapsed(false);
+                        setMiddlePanelCollapsed(false);
                       }}
-                      title={appT.expandRepoList || "展开仓库列表"}
+                      title={(translations.configPanel || {}).expandConfigList || "展开配置列表"}
                       data-tauri-no-drag
                     >
-                      <Folder className="h-4 w-4" />
+                      <Settings className="h-4 w-4" />
                     </Button>
-                  )}
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-6 w-6"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setMiddlePanelCollapsed(false);
-                    }}
-                    title={(translations.configPanel || {}).expandConfigList || "展开配置列表"}
-                    data-tauri-no-drag
-                  >
-                    <Settings className="h-4 w-4" />
-                  </Button>
+                  </div>
                 </div>
-              </div>
-            )}
-            {/* Main drag region */}
-            <div data-tauri-drag-region className="flex-1" />
-          </div>
-          {/* Content area */}
-          <div className="flex-1 overflow-auto glass-scrollbar p-6 bg-gradient-to-b from-transparent via-[var(--glass-input-bg)] to-transparent">
-            <div className="mx-auto max-w-3xl space-y-6">
-              {/* Publish Configuration Card */}
-              {selectedRepo && activeProviderId === "dotnet" && projectInfo && (
+              )}
+              {/* Main drag region */}
+              <div data-tauri-drag-region className="flex-1" />
+            </div>
+            {/* Content area */}
+            <div className="repo-list-scroll glass-scrollbar relative flex-1 overflow-auto">
+              <div className="mx-auto max-w-3xl space-y-6 p-6">
+                {/* Publish Configuration Card */}
+                {selectedRepo && activeProviderId === "dotnet" && projectInfo && (
                 <Card>
                   <CardHeader className="pb-3">
                     <div className="flex items-center justify-between">
@@ -4901,6 +4910,7 @@ function App() {
                   </CardContent>
                 </Card>
               )}
+              </div>
             </div>
           </div>
         </div>

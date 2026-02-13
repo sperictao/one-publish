@@ -203,6 +203,8 @@ export function PublishConfigPanel({
   const [searchQuery, setSearchQuery] = useState("");
   const { translations } = useI18n();
   const t = translations.configPanel || {};
+  const headerButtonClass =
+    "h-6 w-6 rounded-lg text-muted-foreground/60 hover:bg-[var(--glass-bg)] hover:text-foreground";
 
   const query = searchQuery.toLowerCase();
   const favoriteSet = useMemo(
@@ -315,7 +317,7 @@ export function PublishConfigPanel({
       <div
         data-tauri-drag-region
         className={cn(
-          "flex h-10 items-center justify-end border-b border-[var(--glass-divider)] px-2",
+          "flex h-10 items-center justify-end px-2",
           showExpandButton && "pl-[100px]"
         )}
       >
@@ -324,7 +326,7 @@ export function PublishConfigPanel({
             <Button
               variant="ghost"
               size="icon"
-              className="h-6 w-6"
+              className={headerButtonClass}
               onClick={(e) => {
                 e.stopPropagation();
                 onExpandRepo();
@@ -338,7 +340,7 @@ export function PublishConfigPanel({
           <Button
             variant="ghost"
             size="icon"
-            className="h-6 w-6"
+            className={headerButtonClass}
             onClick={(e) => {
               e.stopPropagation();
               onCreateProfile();
@@ -351,7 +353,7 @@ export function PublishConfigPanel({
           <Button
             variant="ghost"
             size="icon"
-            className="h-6 w-6"
+            className={headerButtonClass}
             onClick={(e) => {
               e.stopPropagation();
               onRefreshProfiles();
@@ -365,7 +367,7 @@ export function PublishConfigPanel({
             <Button
               variant="ghost"
               size="icon"
-              className="h-6 w-6"
+              className={headerButtonClass}
               onClick={(e) => {
                 e.stopPropagation();
                 onCollapse();
@@ -380,20 +382,20 @@ export function PublishConfigPanel({
       </div>
 
       {/* Search */}
-      <div className="border-b border-[var(--glass-divider)] px-3 py-2">
-        <div className="glass-input relative rounded-xl">
-          <Search className="absolute left-2 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+      <div className="px-3 py-1.5">
+        <div className="group/search glass-input relative rounded-xl">
+          <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground/50 transition-colors duration-300 group-focus-within/search:text-primary" />
           <Input
             placeholder={t.searchConfig || "搜索配置"}
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="h-8 pl-8 text-sm"
+            className="h-8 border-none bg-transparent pl-8 text-sm shadow-none focus-visible:ring-0"
           />
         </div>
       </div>
 
       {/* Config List */}
-      <div className="flex-1 overflow-auto glass-scrollbar">
+      <div className="repo-list-scroll glass-scrollbar relative flex-1 overflow-auto px-2.5 py-2">
         <div className="glass-stagger">
           {/* Recently Used (non-collapsible, only when not searching) */}
           {!query && recentItems.length > 0 && (
