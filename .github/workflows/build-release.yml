@@ -55,7 +55,7 @@ jobs:
           targets: ${{ matrix.os == 'macos-latest' && 'aarch64-apple-darwin,x86_64-apple-darwin' || '' }}
 
       - name: Import Apple Developer Certificate
-        if: matrix.os == 'macos-latest'
+        if: matrix.os == 'macos-latest' && secrets.APPLE_CERTIFICATE != '' && secrets.APPLE_CERTIFICATE_PASSWORD != '' && secrets.KEYCHAIN_PASSWORD != ''
         env:
           APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
           APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
@@ -71,7 +71,7 @@ jobs:
           security find-identity -v -p codesigning "build.keychain"
 
       - name: Import Windows Certificate
-        if: matrix.os == 'windows-latest'
+        if: matrix.os == 'windows-latest' && secrets.WINDOWS_CERTIFICATE != '' && secrets.WINDOWS_CERTIFICATE_PASSWORD != ''
         env:
           WINDOWS_CERTIFICATE: ${{ secrets.WINDOWS_CERTIFICATE }}
           WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
@@ -96,11 +96,20 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Build
+      - name: Build (macOS signed)
+        if: matrix.os == 'macos-latest' && secrets.APPLE_ID != '' && secrets.APPLE_PASSWORD != '' && secrets.APPLE_SIGNING_IDENTITY != ''
         env:
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
           APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+        run: pnpm tauri build ${{ matrix.tauri_args }}
+
+      - name: Build (macOS unsigned)
+        if: matrix.os == 'macos-latest' && (secrets.APPLE_ID == '' || secrets.APPLE_PASSWORD == '' || secrets.APPLE_SIGNING_IDENTITY == '')
+        run: pnpm tauri build ${{ matrix.tauri_args }}
+
+      - name: Build
+        if: matrix.os != 'macos-latest'
         run: pnpm tauri build ${{ matrix.tauri_args }}
 
       - name: Upload bundles

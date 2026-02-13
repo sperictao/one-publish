@@ -3,6 +3,7 @@ import path from "node:path";
 
 const workflowPath = path.resolve(".github/workflows/build-release.yml");
 const content = fs.readFileSync(workflowPath, "utf8");
+const lines = content.split(/\r?\n/);
 
 const setupNodeIndex = content.indexOf("- name: Setup Node");
 const setupPnpmIndex = content.indexOf("- name: Setup pnpm");
@@ -17,4 +18,67 @@ if (setupPnpmIndex > setupNodeIndex) {
   );
 }
 
-console.log("PASS: Setup pnpm 在 Setup Node 之前。");
+const getStepIf = (stepName) => {
+  const marker = `- name: ${stepName}`;
+  const stepStart = lines.findIndex((line) => line.trim() === marker);
+  if (stepStart === -1) {
+    return null;
+  }
+
+  for (let index = stepStart + 1; index < lines.length; index += 1) {
+    const line = lines[index];
+    const trimmed = line.trim();
+    if (trimmed.startsWith("- name:")) {
+      break;
+    }
+    if (trimmed.startsWith("if:")) {
+      return trimmed.slice(3).trim();
+    }
+  }
+
+  return null;
+};
+
+const assertIfContains = (stepName, requiredFragments) => {
+  const condition = getStepIf(stepName);
+  if (!condition) {
+    throw new Error(`复现成功：${stepName} 缺少 if 条件保护。`);
+  }
+
+  for (const fragment of requiredFragments) {
+    if (!condition.includes(fragment)) {
+      throw new Error(
+        `复现成功：${stepName} 的 if 条件缺少 "${fragment}"，当前为 "${condition}"。`
+      );
+    }
+  }
+};
+
+assertIfContains("Import Apple Developer Certificate", [
+  "matrix.os == 'macos-latest'",
+  "secrets.APPLE_CERTIFICATE != ''",
+  "secrets.APPLE_CERTIFICATE_PASSWORD != ''",
+  "secrets.KEYCHAIN_PASSWORD != ''",
+]);
+
+assertIfContains("Import Windows Certificate", [
+  "matrix.os == 'windows-latest'",
+  "secrets.WINDOWS_CERTIFICATE != ''",
+  "secrets.WINDOWS_CERTIFICATE_PASSWORD != ''",
+]);
+
+assertIfContains("Build (macOS signed)", [
+  "matrix.os == 'macos-latest'",
+  "secrets.APPLE_ID != ''",
+  "secrets.APPLE_PASSWORD != ''",
+  "secrets.APPLE_SIGNING_IDENTITY != ''",
+]);
+
+assertIfContains("Build (macOS unsigned)", [
+  "matrix.os == 'macos-latest'",
+  "secrets.APPLE_ID == ''",
+  "secrets.APPLE_PASSWORD == ''",
+  "secrets.APPLE_SIGNING_IDENTITY == ''",
+]);
+
+console.log("PASS: build-release workflow 通过顺序与 secrets 保护检查。");
