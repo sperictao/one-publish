@@ -56,29 +56,22 @@ const assertIfContains = (stepName, requiredFragments) => {
 
 assertIfContains("Import Apple Developer Certificate", [
   "matrix.os == 'macos-latest'",
-  "secrets.APPLE_CERTIFICATE != ''",
-  "secrets.APPLE_CERTIFICATE_PASSWORD != ''",
-  "secrets.KEYCHAIN_PASSWORD != ''",
+  "env.HAS_APPLE_CERT == 'true'",
 ]);
 
 assertIfContains("Import Windows Certificate", [
   "matrix.os == 'windows-latest'",
-  "secrets.WINDOWS_CERTIFICATE != ''",
-  "secrets.WINDOWS_CERTIFICATE_PASSWORD != ''",
+  "env.HAS_WINDOWS_CERT == 'true'",
 ]);
 
 assertIfContains("Build (macOS signed)", [
   "matrix.os == 'macos-latest'",
-  "secrets.APPLE_ID != ''",
-  "secrets.APPLE_PASSWORD != ''",
-  "secrets.APPLE_SIGNING_IDENTITY != ''",
+  "env.HAS_APPLE_SIGNING == 'true'",
 ]);
 
 assertIfContains("Build (macOS unsigned)", [
   "matrix.os == 'macos-latest'",
-  "secrets.APPLE_ID == ''",
-  "secrets.APPLE_PASSWORD == ''",
-  "secrets.APPLE_SIGNING_IDENTITY == ''",
+  "env.HAS_APPLE_SIGNING != 'true'",
 ]);
 
 console.log("PASS: build-release workflow 通过顺序与 secrets 保护检查。");

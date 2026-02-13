@@ -13,6 +13,10 @@ jobs:
   build:
     name: build-${{ matrix.os }}
     runs-on: ${{ matrix.os }}
+    env:
+      HAS_APPLE_CERT: ${{ secrets.APPLE_CERTIFICATE != '' && secrets.APPLE_CERTIFICATE_PASSWORD != '' && secrets.KEYCHAIN_PASSWORD != '' }}
+      HAS_WINDOWS_CERT: ${{ secrets.WINDOWS_CERTIFICATE != '' && secrets.WINDOWS_CERTIFICATE_PASSWORD != '' }}
+      HAS_APPLE_SIGNING: ${{ secrets.APPLE_ID != '' && secrets.APPLE_PASSWORD != '' && secrets.APPLE_SIGNING_IDENTITY != '' }}
     strategy:
       fail-fast: false
       matrix:
@@ -55,7 +59,7 @@ jobs:
           targets: ${{ matrix.os == 'macos-latest' && 'aarch64-apple-darwin,x86_64-apple-darwin' || '' }}
 
       - name: Import Apple Developer Certificate
-        if: matrix.os == 'macos-latest' && secrets.APPLE_CERTIFICATE != '' && secrets.APPLE_CERTIFICATE_PASSWORD != '' && secrets.KEYCHAIN_PASSWORD != ''
+        if: matrix.os == 'macos-latest' && env.HAS_APPLE_CERT == 'true'
         env:
           APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
           APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
@@ -71,7 +75,7 @@ jobs:
           security find-identity -v -p codesigning "build.keychain"
 
       - name: Import Windows Certificate
-        if: matrix.os == 'windows-latest' && secrets.WINDOWS_CERTIFICATE != '' && secrets.WINDOWS_CERTIFICATE_PASSWORD != ''
+        if: matrix.os == 'windows-latest' && env.HAS_WINDOWS_CERT == 'true'
         env:
           WINDOWS_CERTIFICATE: ${{ secrets.WINDOWS_CERTIFICATE }}
           WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
@@ -97,7 +101,7 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Build (macOS signed)
-        if: matrix.os == 'macos-latest' && secrets.APPLE_ID != '' && secrets.APPLE_PASSWORD != '' && secrets.APPLE_SIGNING_IDENTITY != ''
+        if: matrix.os == 'macos-latest' && env.HAS_APPLE_SIGNING == 'true'
         env:
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
@@ -105,7 +109,7 @@ jobs:
         run: pnpm tauri build ${{ matrix.tauri_args }}
 
       - name: Build (macOS unsigned)
-        if: matrix.os == 'macos-latest' && (secrets.APPLE_ID == '' || secrets.APPLE_PASSWORD == '' || secrets.APPLE_SIGNING_IDENTITY == '')
+        if: matrix.os == 'macos-latest' && env.HAS_APPLE_SIGNING != 'true'
         run: pnpm tauri build ${{ matrix.tauri_args }}
 
       - name: Build
