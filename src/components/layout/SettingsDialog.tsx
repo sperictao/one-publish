@@ -255,7 +255,7 @@ export function SettingsDialog({
     } catch (err) {
       console.error("安装更新失败:", err);
       setUpdateInfo((prev) => ({
-        currentVersion: prev?.currentVersion || "1.0.0",
+        currentVersion: prev?.currentVersion || "0.1.0",
         availableVersion: prev?.availableVersion || null,
         hasUpdate: prev?.hasUpdate || false,
         releaseNotes: prev?.releaseNotes || null,
@@ -548,7 +548,7 @@ export function SettingsDialog({
             <div className="text-sm font-medium">
               {formatMessage(
                 t("version.current"),
-                updateInfo?.currentVersion || "1.0.0"
+                updateInfo?.currentVersion || "0.1.0"
               )}
             </div>
             {updateInfo?.hasUpdate && (
