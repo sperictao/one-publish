@@ -101,8 +101,40 @@ assertContains(
   "缺少 release 资产预处理步骤。"
 );
 assertContains(
-  "files: ./release-assets/*",
-  "Release 仍未使用 release-assets 目录上传。"
+  "-name '*.dmg'",
+  "release 资产筛选未包含 dmg。"
+);
+assertContains(
+  "-name '*.msi'",
+  "release 资产筛选未包含 msi。"
+);
+assertContains(
+  "-name '*-setup.exe'",
+  "release 资产筛选未包含 setup.exe。"
+);
+assertContains(
+  "-name '*.AppImage'",
+  "release 资产筛选未包含 AppImage。"
+);
+assertContains(
+  "-name '*.deb'",
+  "release 资产筛选未包含 deb。"
+);
+assertContains(
+  "-name '*.rpm'",
+  "release 资产筛选未包含 rpm。"
+);
+assertContains(
+  "- name: Remove existing release",
+  "缺少旧 release 清理步骤。"
+);
+assertContains(
+  "gh release create",
+  "Release 仍未使用 gh release create。"
+);
+assertContains(
+  "find ./release-assets -type f -print0",
+  "gh release create 未从 release-assets 上传文件。"
 );
 
 console.log("PASS: build-release workflow 通过顺序与 secrets 保护检查。");

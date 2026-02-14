@@ -151,7 +151,14 @@ jobs:
               target="${parent}-${filename}"
             fi
             cp "$file" "./release-assets/$target"
-          done < <(find ./artifacts -type f -print0)
+          done < <(find ./artifacts -type f \( \
+            -name '*.dmg' -o \
+            -name '*.msi' -o \
+            -name '*-setup.exe' -o \
+            -name '*.AppImage' -o \
+            -name '*.deb' -o \
+            -name '*.rpm' \
+          \) -print0)
 
           file_count="$(find ./release-assets -type f | wc -l | tr -d ' ')"
           if [ "$file_count" -eq 0 ]; then
@@ -161,8 +168,20 @@ jobs:
 
           echo "Prepared $file_count release assets."
 
+      - name: Remove existing release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh release view "${GITHUB_REF_NAME}" --repo "${GITHUB_REPOSITORY}" >/dev/null 2>&1; then
+            gh release delete "${GITHUB_REF_NAME}" --repo "${GITHUB_REPOSITORY}" --yes --cleanup-tag=false
+          fi
+
       - name: Create GitHub Release
-        uses: softprops/action-gh-release@v2
-        with:
-          files: ./release-assets/*
-          overwrite_files: false
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mapfile -d '' files < <(find ./release-assets -type f -print0)
+          gh release create "${GITHUB_REF_NAME}" "${files[@]}" \
+            --repo "${GITHUB_REPOSITORY}" \
+            --title "${GITHUB_REF_NAME}" \
+            --notes ""
