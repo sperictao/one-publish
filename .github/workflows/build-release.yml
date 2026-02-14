@@ -24,18 +24,23 @@ jobs:
           - os: macos-latest
             tauri_args: "--target aarch64-apple-darwin"
             artifact: macos-aarch64
+            bundle_path: src-tauri/target/aarch64-apple-darwin/release/bundle/**
           - os: macos-latest
             tauri_args: "--target x86_64-apple-darwin"
             artifact: macos-x86_64
+            bundle_path: src-tauri/target/x86_64-apple-darwin/release/bundle/**
           - os: macos-latest
             tauri_args: "--target universal-apple-darwin"
             artifact: macos-universal
+            bundle_path: src-tauri/target/universal-apple-darwin/release/bundle/**
           - os: windows-latest
             tauri_args: ""
             artifact: windows
+            bundle_path: src-tauri/target/release/bundle/**
           - os: ubuntu-latest
             tauri_args: ""
             artifact: linux
+            bundle_path: src-tauri/target/release/bundle/**
 
     steps:
       - name: Checkout
@@ -120,8 +125,8 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: bundles-${{ matrix.artifact }}
-          path: |
-            src-tauri/target/release/bundle/**
+          path: ${{ matrix.bundle_path }}
+          if-no-files-found: error
 
   release:
     name: release
@@ -135,7 +140,29 @@ jobs:
           path: ./artifacts
           merge-multiple: true
 
+      - name: Prepare release assets
+        run: |
+          mkdir -p ./release-assets
+          while IFS= read -r -d '' file; do
+            filename="$(basename "$file")"
+            target="$filename"
+            if [ -e "./release-assets/$target" ]; then
+              parent="$(basename "$(dirname "$file")")"
+              target="${parent}-${filename}"
+            fi
+            cp "$file" "./release-assets/$target"
+          done < <(find ./artifacts -type f -print0)
+
+          file_count="$(find ./release-assets -type f | wc -l | tr -d ' ')"
+          if [ "$file_count" -eq 0 ]; then
+            echo "No release assets found."
+            exit 1
+          fi
+
+          echo "Prepared $file_count release assets."
+
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          files: ./artifacts/**
+          files: ./release-assets/*
+          overwrite_files: false

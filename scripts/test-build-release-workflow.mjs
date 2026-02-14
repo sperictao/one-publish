@@ -54,6 +54,12 @@ const assertIfContains = (stepName, requiredFragments) => {
   }
 };
 
+const assertContains = (fragment, message) => {
+  if (!content.includes(fragment)) {
+    throw new Error(`复现成功：${message}`);
+  }
+};
+
 assertIfContains("Import Apple Developer Certificate", [
   "matrix.os == 'macos-latest'",
   "env.HAS_APPLE_CERT == 'true'",
@@ -73,5 +79,30 @@ assertIfContains("Build (macOS unsigned)", [
   "matrix.os == 'macos-latest'",
   "env.HAS_APPLE_SIGNING != 'true'",
 ]);
+
+assertContains(
+  "bundle_path: src-tauri/target/aarch64-apple-darwin/release/bundle/**",
+  "macOS aarch64 bundle_path 未配置为 target 子目录。"
+);
+assertContains(
+  "bundle_path: src-tauri/target/x86_64-apple-darwin/release/bundle/**",
+  "macOS x86_64 bundle_path 未配置为 target 子目录。"
+);
+assertContains(
+  "bundle_path: src-tauri/target/universal-apple-darwin/release/bundle/**",
+  "macOS universal bundle_path 未配置为 target 子目录。"
+);
+assertContains(
+  "if-no-files-found: error",
+  "Upload bundles 未启用 if-no-files-found: error，可能掩盖产物缺失。"
+);
+assertContains(
+  "- name: Prepare release assets",
+  "缺少 release 资产预处理步骤。"
+);
+assertContains(
+  "files: ./release-assets/*",
+  "Release 仍未使用 release-assets 目录上传。"
+);
 
 console.log("PASS: build-release workflow 通过顺序与 secrets 保护检查。");
