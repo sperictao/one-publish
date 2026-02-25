@@ -191,6 +191,9 @@ pub struct AppState {
     /// 中间面板宽度
     #[serde(default = "default_middle_panel_width")]
     pub middle_panel_width: i32,
+    /// 用户是否自定义了面板宽度
+    #[serde(default)]
+    pub panel_widths_customized: bool,
     /// 选中的预设 ID
     #[serde(default = "default_preset")]
     pub selected_preset: String,
@@ -254,6 +257,7 @@ impl Default for AppState {
             selected_repo_id: None,
             left_panel_width: default_left_panel_width(),
             middle_panel_width: default_middle_panel_width(),
+            panel_widths_customized: false,
             selected_preset: default_preset(),
             is_custom_mode: false,
             custom_config: PublishConfigStore::default(),
@@ -437,9 +441,11 @@ pub async fn update_ui_state(
 
     if let Some(width) = left_panel_width {
         state.left_panel_width = width;
+        state.panel_widths_customized = true;
     }
     if let Some(width) = middle_panel_width {
         state.middle_panel_width = width;
+        state.panel_widths_customized = true;
     }
     if selected_repo_id.is_some() {
         state.selected_repo_id = selected_repo_id;

@@ -953,6 +953,7 @@ function App() {
     selectRepository,
     leftPanelWidth,
     middlePanelWidth,
+    panelWidthsCustomized,
     setLeftPanelWidth,
     setMiddlePanelWidth,
     selectedPreset,
@@ -1349,27 +1350,44 @@ function App() {
   const MIN_PANEL_WIDTH = 150;
   const MAX_PANEL_WIDTH = 400;
 
+  // 按 2:2:6 比例计算默认面板宽度（用户未自定义时）
+  const [windowWidth, setWindowWidth] = useState(window.innerWidth);
+
+  useEffect(() => {
+    if (panelWidthsCustomized) return;
+    const handleResize = () => setWindowWidth(window.innerWidth);
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
+  }, [panelWidthsCustomized]);
+
+  const effectiveLeftPanelWidth = panelWidthsCustomized
+    ? leftPanelWidth
+    : Math.max(MIN_PANEL_WIDTH, Math.min(MAX_PANEL_WIDTH, Math.round(windowWidth * 0.2)));
+  const effectiveMiddlePanelWidth = panelWidthsCustomized
+    ? middlePanelWidth
+    : Math.max(MIN_PANEL_WIDTH, Math.min(MAX_PANEL_WIDTH, Math.round(windowWidth * 0.2)));
+
   // Resize handlers
   const handleLeftPanelResize = useCallback(
     (delta: number) => {
       const newWidth = Math.max(
         MIN_PANEL_WIDTH,
-        Math.min(MAX_PANEL_WIDTH, leftPanelWidth + delta)
+        Math.min(MAX_PANEL_WIDTH, effectiveLeftPanelWidth + delta)
       );
       setLeftPanelWidth(newWidth);
     },
-    [leftPanelWidth, setLeftPanelWidth]
+    [effectiveLeftPanelWidth, setLeftPanelWidth]
   );
 
   const handleMiddlePanelResize = useCallback(
     (delta: number) => {
       const newWidth = Math.max(
         MIN_PANEL_WIDTH,
-        Math.min(MAX_PANEL_WIDTH, middlePanelWidth + delta)
+        Math.min(MAX_PANEL_WIDTH, effectiveMiddlePanelWidth + delta)
       );
       setMiddlePanelWidth(newWidth);
     },
-    [middlePanelWidth, setMiddlePanelWidth]
+    [effectiveMiddlePanelWidth, setMiddlePanelWidth]
   );
 
   // Project State (runtime only)
@@ -3688,7 +3706,7 @@ function App() {
           <CollapsiblePanel
             collapsed={leftPanelCollapsed}
             side="left"
-            width={`${leftPanelWidth}px`}
+            width={`${effectiveLeftPanelWidth}px`}
             className="glass-card repo-sidebar-shell h-full rounded-2xl"
           >
             <RepositoryList
@@ -3727,7 +3745,7 @@ function App() {
           <CollapsiblePanel
             collapsed={middlePanelCollapsed}
             side="left"
-            width={`${middlePanelWidth}px`}
+            width={`${effectiveMiddlePanelWidth}px`}
             className="glass-card repo-sidebar-shell h-full rounded-2xl"
           >
             <PublishConfigPanel

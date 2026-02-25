@@ -229,9 +229,10 @@ export function useAppState() {
     [setUIState]
   );
 
-  // 更新面板宽度的便捷方法
+  // 更新面板宽度的便捷方法（同时标记为已自定义）
   const setLeftPanelWidth = useCallback(
     (width: number) => {
+      setState((prev) => ({ ...prev, panelWidthsCustomized: true }));
       setUIState({ leftPanelWidth: width });
     },
     [setUIState]
@@ -239,6 +240,7 @@ export function useAppState() {
 
   const setMiddlePanelWidth = useCallback(
     (width: number) => {
+      setState((prev) => ({ ...prev, panelWidthsCustomized: true }));
       setUIState({ middlePanelWidth: width });
     },
     [setUIState]
@@ -325,6 +327,7 @@ export function useAppState() {
     // UI 状态
     leftPanelWidth: state.leftPanelWidth,
     middlePanelWidth: state.middlePanelWidth,
+    panelWidthsCustomized: state.panelWidthsCustomized,
     setLeftPanelWidth,
     setMiddlePanelWidth,
 

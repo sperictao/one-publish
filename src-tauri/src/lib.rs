@@ -52,10 +52,29 @@ pub fn run() {
             }
         }))
         .setup(|app| {
+            let main_window = app.get_webview_window("main").unwrap();
+
+            // 根据显示器分辨率自适应窗口大小
+            if let Ok(Some(monitor)) = main_window.current_monitor() {
+                let size = monitor.size();
+                let scale = monitor.scale_factor();
+                let logical_w = size.width as f64 / scale;
+                let logical_h = size.height as f64 / scale;
+
+                let target_w = (logical_w * 0.75).clamp(900.0, 1600.0) as u32;
+                let target_h = (logical_h * 0.75).clamp(700.0, 1000.0) as u32;
+
+                let _ = main_window.set_size(tauri::LogicalSize::new(target_w, target_h));
+                let _ = main_window.center();
+                log::info!(
+                    "自适应窗口大小: {}x{} (显示器: {}x{}, scale: {:.1})",
+                    target_w, target_h, size.width, size.height, scale
+                );
+            }
+
             // 设置 macOS 交通灯位置
             #[cfg(target_os = "macos")]
             {
-                let main_window = app.get_webview_window("main").unwrap();
                 main_window.set_traffic_lights_inset(18.0, 32.0).unwrap();
             }
 

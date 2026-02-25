@@ -48,6 +48,7 @@ export interface AppState {
   selectedRepoId: string | null;
   leftPanelWidth: number;
   middlePanelWidth: number;
+  panelWidthsCustomized: boolean;
   // 以下全局字段仅用于向后兼容反序列化，前端不再使用
   selectedPreset: string;
   isCustomMode: boolean;
@@ -67,6 +68,7 @@ export const defaultAppState: AppState = {
   selectedRepoId: null,
   leftPanelWidth: 220,
   middlePanelWidth: 280,
+  panelWidthsCustomized: false,
   selectedPreset: "release-fd",
   isCustomMode: false,
   customConfig: {
