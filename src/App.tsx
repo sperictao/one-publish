@@ -5110,7 +5110,7 @@ function App() {
         open={quickCreateProfileOpen}
         onOpenChange={handleQuickCreateProfileOpenChange}
       >
-        <DialogContent className="sm:max-w-[840px]">
+        <DialogContent className="sm:max-w-[840px] max-h-[80vh] flex flex-col">
           <DialogHeader>
             <DialogTitle>
               {profileT.quickCreateTitle || "创建发布配置"}
@@ -5120,7 +5120,7 @@ function App() {
             </DialogDescription>
           </DialogHeader>
 
-          <div className="space-y-4">
+          <div className="flex-1 space-y-4 overflow-y-auto">
             <fieldset className="space-y-2.5">
               <Label>{profileT.quickCreateTemplate || "预置模板"}</Label>
               <div className="grid max-h-[240px] grid-cols-2 gap-2 overflow-y-auto pr-1 md:grid-cols-4">
