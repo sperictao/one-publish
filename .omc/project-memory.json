@@ -1,0 +1,280 @@
+{
+  "version": "1.0.0",
+  "lastScanned": 1772024855167,
+  "projectRoot": "/Users/erictao/source/repos/one-publish",
+  "techStack": {
+    "languages": [
+      {
+        "name": "JavaScript/TypeScript",
+        "version": null,
+        "confidence": "high",
+        "markers": [
+          "package.json"
+        ]
+      },
+      {
+        "name": "TypeScript",
+        "version": null,
+        "confidence": "high",
+        "markers": [
+          "tsconfig.json"
+        ]
+      }
+    ],
+    "frameworks": [
+      {
+        "name": "react",
+        "version": "18.2.0",
+        "category": "frontend"
+      },
+      {
+        "name": "react-dom",
+        "version": "18.2.0",
+        "category": "frontend"
+      },
+      {
+        "name": "@playwright/test",
+        "version": "1.58.1",
+        "category": "testing"
+      },
+      {
+        "name": "vite",
+        "version": "7.3.0",
+        "category": "build"
+      },
+      {
+        "name": "vitest",
+        "version": "4.0.18",
+        "category": "testing"
+      }
+    ],
+    "packageManager": "pnpm",
+    "runtime": null
+  },
+  "build": {
+    "buildCommand": "pnpm build",
+    "testCommand": "pnpm test",
+    "lintCommand": null,
+    "devCommand": "pnpm dev",
+    "scripts": {
+      "dev": "pnpm tauri dev",
+      "build": "pnpm tauri build",
+      "build:updater": "node scripts/validate-updater-config.mjs && pnpm tauri build --config src-tauri/tauri.conf.updater.prod.json",
+      "tauri": "tauri",
+      "dev:renderer": "vite",
+      "build:renderer": "vite build",
+      "typecheck": "tsc --noEmit",
+      "test:workflow": "node scripts/test-build-release-workflow.mjs",
+      "test": "vitest run",
+      "test:ui": "vitest --ui",
+      "test:watch": "vitest",
+      "e2e": "playwright test",
+      "e2e:ui": "playwright test --ui"
+    }
+  },
+  "conventions": {
+    "namingStyle": null,
+    "importStyle": null,
+    "testPattern": null,
+    "fileOrganization": "type-based"
+  },
+  "structure": {
+    "isMonorepo": false,
+    "workspaces": [],
+    "mainDirectories": [
+      "docs",
+      "scripts",
+      "src",
+      "tests"
+    ],
+    "gitBranches": {
+      "defaultBranch": "main",
+      "branchingStrategy": null
+    }
+  },
+  "customNotes": [],
+  "directoryMap": {
+    "dist": {
+      "path": "dist",
+      "purpose": "Distribution/build output",
+      "fileCount": 1,
+      "lastAccessed": 1772024855131,
+      "keyFiles": [
+        "index.html"
+      ]
+    },
+    "docs": {
+      "path": "docs",
+      "purpose": "Documentation",
+      "fileCount": 3,
+      "lastAccessed": 1772024855132,
+      "keyFiles": [
+        "design-philosophy.md",
+        "liquid-glass-design-system.md"
+      ]
+    },
+    "scripts": {
+      "path": "scripts",
+      "purpose": "Build/utility scripts",
+      "fileCount": 4,
+      "lastAccessed": 1772024855144,
+      "keyFiles": [
+        "generate-icons.mjs",
+        "generate-tray-icons.mjs",
+        "test-build-release-workflow.mjs",
+        "validate-updater-config.mjs"
+      ]
+    },
+    "skills": {
+      "path": "skills",
+      "purpose": null,
+      "fileCount": 0,
+      "lastAccessed": 1772024855145,
+      "keyFiles": []
+    },
+    "src": {
+      "path": "src",
+      "purpose": "Source code",
+      "fileCount": 6,
+      "lastAccessed": 1772024855145,
+      "keyFiles": [
+        "App.tsx",
+        "index.css",
+        "index.html",
+        "main.tsx",
+        "vite-env.d.ts"
+      ]
+    },
+    "src-tauri": {
+      "path": "src-tauri",
+      "purpose": null,
+      "fileCount": 7,
+      "lastAccessed": 1772024855147,
+      "keyFiles": [
+        "Cargo.lock",
+        "Cargo.toml",
+        "build.rs",
+        "tauri.conf.json",
+        "tauri.conf.updater.example.json"
+      ]
+    },
+    "statuses": {
+      "path": "statuses",
+      "purpose": null,
+      "fileCount": 0,
+      "lastAccessed": 1772024855148,
+      "keyFiles": []
+    },
+    "test-results": {
+      "path": "test-results",
+      "purpose": null,
+      "fileCount": 1,
+      "lastAccessed": 1772024855149,
+      "keyFiles": []
+    },
+    "tests": {
+      "path": "tests",
+      "purpose": "Test files",
+      "fileCount": 1,
+      "lastAccessed": 1772024855150,
+      "keyFiles": []
+    },
+    "dist/assets": {
+      "path": "dist/assets",
+      "purpose": "Static assets",
+      "fileCount": 4,
+      "lastAccessed": 1772024855151,
+      "keyFiles": [
+        "en-CMLb52LV.js",
+        "index-DqmaZxbq.js",
+        "index-DsyMqlJ7.css"
+      ]
+    },
+    "src/components": {
+      "path": "src/components",
+      "purpose": "UI components",
+      "fileCount": 0,
+      "lastAccessed": 1772024855154,
+      "keyFiles": []
+    },
+    "src/lib": {
+      "path": "src/lib",
+      "purpose": "Library code",
+      "fileCount": 12,
+      "lastAccessed": 1772024855155,
+      "keyFiles": [
+        "artifact.ts",
+        "commandImportMapping.ts",
+        "environment.ts"
+      ]
+    },
+    "src-tauri/src": {
+      "path": "src-tauri/src",
+      "purpose": "Source code",
+      "fileCount": 14,
+      "lastAccessed": 1772024855156,
+      "keyFiles": [
+        "command_parser.rs",
+        "commands.rs",
+        "compiler.rs"
+      ]
+    }
+  },
+  "hotPaths": [
+    {
+      "path": "src/App.tsx",
+      "accessCount": 13,
+      "lastAccessed": 1772027395608,
+      "type": "file"
+    },
+    {
+      "path": "src/lib/store.ts",
+      "accessCount": 5,
+      "lastAccessed": 1772027301487,
+      "type": "file"
+    },
+    {
+      "path": "src-tauri/src/store.rs",
+      "accessCount": 4,
+      "lastAccessed": 1772027281089,
+      "type": "file"
+    },
+    {
+      "path": "src/hooks/useAppState.ts",
+      "accessCount": 4,
+      "lastAccessed": 1772027321024,
+      "type": "file"
+    },
+    {
+      "path": "src-tauri/tauri.conf.json",
+      "accessCount": 3,
+      "lastAccessed": 1772027018903,
+      "type": "file"
+    },
+    {
+      "path": "src-tauri/src/lib.rs",
+      "accessCount": 2,
+      "lastAccessed": 1772027243230,
+      "type": "file"
+    },
+    {
+      "path": "src/components/layout/ResizeHandle.tsx",
+      "accessCount": 1,
+      "lastAccessed": 1772026266264,
+      "type": "file"
+    },
+    {
+      "path": "src-tauri/src/main.rs",
+      "accessCount": 1,
+      "lastAccessed": 1772027216603,
+      "type": "file"
+    },
+    {
+      "path": "src-tauri/Cargo.toml",
+      "accessCount": 1,
+      "lastAccessed": 1772027216644,
+      "type": "file"
+    }
+  ],
+  "userDirectives": []
+}

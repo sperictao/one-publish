@@ -1,0 +1,7 @@
+{
+  "tool_name": "Read",
+  "tool_input_preview": "{\"file_path\":\"/Users/erictao/source/repos/one-publish/src/App.tsx\"}",
+  "error": "File content (38315 tokens) exceeds maximum allowed tokens (25000). Please use offset and limit parameters to read specific portions of the file, or use the GrepTool to search for specific content.",
+  "timestamp": "2026-02-25T13:31:07.166Z",
+  "retry_count": 1
+}
