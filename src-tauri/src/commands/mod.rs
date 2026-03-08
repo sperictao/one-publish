@@ -1,10 +1,8 @@
 // Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
 use crate::artifact::{PackageFormat, PackageResult, SignMethod, SignResult};
-use crate::command_parser::CommandParser;
 use crate::config_export::{ConfigExport, ConfigProfile};
 use crate::environment::{check_environment, FixAction, FixResult, FixType};
 use crate::provider::registry::ProviderRegistry;
-use crate::provider::ProviderManifest;
 use crate::spec::{PublishSpec, SpecValue, SPEC_VERSION};
 use crate::store::Branch;
 use serde::{Deserialize, Serialize};
@@ -17,21 +15,36 @@ use std::sync::{
     Arc, OnceLock,
 };
 use tauri::{AppHandle, Emitter};
-use tauri_plugin_updater::{Error as UpdaterError, UpdaterExt};
 use tokio::io::{AsyncBufReadExt, AsyncRead, BufReader};
 use tokio::process::{Child, Command};
 use tokio::sync::{mpsc, Mutex};
 use tokio::time::{timeout, Duration};
 
 mod export;
+mod provider;
+mod updater;
 pub use export::{
     export_diagnostics_index, export_execution_history, export_execution_snapshot,
     export_failure_group_bundle, export_preflight_report, open_execution_snapshot,
+};
+pub use provider::{get_provider_schema, import_from_command, list_providers};
+pub use updater::{
+    check_update, get_current_version, get_shortcuts_help, get_updater_config_health,
+    get_updater_help_paths, install_update, open_updater_help, UpdateInfo,
+    UpdaterConfigHealth, UpdaterHelpPaths,
 };
 pub(crate) use export::{
     __cmd__export_diagnostics_index, __cmd__export_execution_history,
     __cmd__export_execution_snapshot, __cmd__export_failure_group_bundle,
     __cmd__export_preflight_report, __cmd__open_execution_snapshot,
+};
+pub(crate) use provider::{
+    __cmd__get_provider_schema, __cmd__import_from_command, __cmd__list_providers,
+};
+pub(crate) use updater::{
+    __cmd__check_update, __cmd__get_current_version, __cmd__get_shortcuts_help,
+    __cmd__get_updater_config_health, __cmd__get_updater_help_paths,
+    __cmd__install_update, __cmd__open_updater_help,
 };
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -1204,214 +1217,6 @@ fn count_output_files(output_dir: &str) -> usize {
         .map(|entries| entries.count())
         .unwrap_or(0)
 }
-/// 版本信息
-#[derive(Debug, Serialize, Deserialize)]
-pub struct UpdateInfo {
-    pub current_version: String,
-    pub available_version: Option<String>,
-    pub has_update: bool,
-    pub release_notes: Option<String>,
-    pub message: Option<String>,
-}
-#[derive(Debug, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct UpdaterHelpPaths {
-    pub docs_path: String,
-    pub template_path: String,
-}
-#[derive(Debug, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct UpdaterConfigHealth {
-    pub configured: bool,
-    pub message: String,
-}
-fn no_update_info(message: Option<String>) -> UpdateInfo {
-    UpdateInfo {
-        current_version: env!("CARGO_PKG_VERSION").to_string(),
-        available_version: None,
-        has_update: false,
-        release_notes: None,
-        message,
-    }
-}
-fn map_updater_error(err: UpdaterError) -> String {
-    match err {
-        UpdaterError::EmptyEndpoints => {
-            "更新源未配置，请在 tauri.conf.json 中设置 updater 的 endpoints 与 pubkey".to_string()
-        }
-        UpdaterError::InsecureTransportProtocol => {
-            "更新地址必须使用 https 协议（或在开发环境显式允许非安全协议）".to_string()
-        }
-        _ => err.to_string(),
-    }
-}
-fn resolve_updater_help_paths() -> Result<(PathBuf, PathBuf), String> {
-    let mut roots = Vec::new();
-    if let Ok(cwd) = std::env::current_dir() {
-        roots.push(cwd);
-    }
-    if let Ok(exe_path) = std::env::current_exe() {
-        if let Some(parent) = exe_path.parent() {
-            roots.push(parent.to_path_buf());
-        }
-    }
-    for root in roots {
-        let mut current = root;
-        loop {
-            let docs = current.join("docs").join("updater").join("SETUP.md");
-            let template = current
-                .join("src-tauri")
-                .join("tauri.conf.updater.example.json");
-            if docs.exists() && template.exists() {
-                return Ok((docs, template));
-            }
-            if !current.pop() {
-                break;
-            }
-        }
-    }
-    Err("未找到 updater 指南文件，请在源码仓库中运行该功能".to_string())
-}
-#[tauri::command]
-pub fn get_updater_help_paths() -> Result<UpdaterHelpPaths, crate::errors::AppError> {
-    let (docs, template) =
-        resolve_updater_help_paths().map_err(crate::errors::AppError::unknown)?;
-    Ok(UpdaterHelpPaths {
-        docs_path: docs.to_string_lossy().to_string(),
-        template_path: template.to_string_lossy().to_string(),
-    })
-}
-#[tauri::command]
-pub fn get_updater_config_health(app: AppHandle) -> UpdaterConfigHealth {
-    match app.updater() {
-        Ok(_) => UpdaterConfigHealth {
-            configured: true,
-            message: "updater 配置已就绪".to_string(),
-        },
-        Err(err) => UpdaterConfigHealth {
-            configured: false,
-            message: format!("更新源未配置或不可用: {}", map_updater_error(err)),
-        },
-    }
-}
-#[tauri::command]
-pub fn open_updater_help(target: String) -> Result<String, crate::errors::AppError> {
-    let (docs, template) =
-        resolve_updater_help_paths().map_err(crate::errors::AppError::unknown)?;
-    let path = match target.as_str() {
-        "docs" => docs,
-        "template" => template,
-        _ => {
-            return Err(crate::errors::AppError::unknown(format!(
-                "unsupported updater help target: {}",
-                target
-            )))
-        }
-    };
-    open::that(&path).map_err(|e| {
-        crate::errors::AppError::unknown(format!("failed to open updater help file: {}", e))
-    })?;
-    Ok(path.to_string_lossy().to_string())
-}
-/// 检查更新
-#[tauri::command]
-pub async fn check_update(app: AppHandle) -> Result<UpdateInfo, String> {
-    let updater = match app.updater() {
-        Ok(updater) => updater,
-        Err(err) => {
-            return Ok(no_update_info(Some(format!(
-                "更新源未配置或不可用: {}",
-                map_updater_error(err)
-            ))));
-        }
-    };
-    match updater.check().await {
-        Ok(Some(update)) => Ok(UpdateInfo {
-            current_version: update.current_version,
-            available_version: Some(update.version),
-            has_update: true,
-            release_notes: update.body,
-            message: Some("发现可用更新".to_string()),
-        }),
-        Ok(None) => Ok(no_update_info(Some("当前已是最新版本".to_string()))),
-        Err(err) => Ok(no_update_info(Some(format!(
-            "检查更新失败: {}",
-            map_updater_error(err)
-        )))),
-    }
-}
-/// 执行更新并重启
-#[tauri::command]
-pub async fn install_update(app: AppHandle) -> Result<String, String> {
-    let updater = app
-        .updater()
-        .map_err(|err| format!("更新源未配置或不可用: {}", map_updater_error(err)))?;
-    let maybe_update = updater
-        .check()
-        .await
-        .map_err(|err| format!("检查更新失败: {}", map_updater_error(err)))?;
-    let Some(update) = maybe_update else {
-        return Ok("当前已是最新版本，无需安装".to_string());
-    };
-    let target_version = update.version.clone();
-    update
-        .download_and_install(|_, _| {}, || {})
-        .await
-        .map_err(|err| format!("安装更新失败: {}", map_updater_error(err)))?;
-    Ok(format!(
-        "更新安装完成（v{}）。请重启应用以生效。",
-        target_version
-    ))
-}
-/// 获取当前版本
-#[tauri::command]
-pub fn get_current_version() -> String {
-    env!("CARGO_PKG_VERSION").to_string()
-}
-/// 获取快捷键帮助
-#[tauri::command]
-pub fn get_shortcuts_help() -> Vec<crate::shortcuts::ShortcutHelp> {
-    crate::shortcuts::get_shortcuts_help()
-}
-#[tauri::command]
-pub fn list_providers() -> Vec<ProviderManifest> {
-    let registry = ProviderRegistry::new();
-    registry.manifests()
-}
-/// 获取 Provider 的参数 Schema
-#[tauri::command]
-pub async fn get_provider_schema(
-    provider_id: String,
-) -> Result<crate::parameter::ParameterSchema, crate::errors::AppError> {
-    let registry = ProviderRegistry::new();
-    let provider = registry
-        .get(&provider_id)
-        .map_err(crate::errors::AppError::from)?;
-    let schema = provider
-        .get_schema()
-        .map_err(|e| crate::errors::AppError::unknown(format!("failed to load schema: {}", e)))?;
-    Ok(schema)
-}
-/// 从命令导入配置
-#[tauri::command]
-pub async fn import_from_command(
-    command: String,
-    provider_id: String,
-    project_path: String,
-) -> Result<crate::spec::PublishSpec, crate::errors::AppError> {
-    let registry = ProviderRegistry::new();
-    let provider = registry
-        .get(&provider_id)
-        .map_err(crate::errors::AppError::from)?;
-    let schema = provider
-        .get_schema()
-        .map_err(|e| crate::errors::AppError::unknown(format!("failed to load schema: {}", e)))?;
-    let parser = CommandParser::new(provider_id);
-    let spec = parser
-        .parse_command(&command, project_path, &schema)
-        .map_err(|e| crate::errors::AppError::unknown(format!("parse error: {}", e)))?;
-    Ok(spec)
-}
 /// 导出配置到文件
 #[tauri::command]
 pub async fn export_config(
@@ -1735,26 +1540,6 @@ mod tests {
         };
         let output_dir = infer_output_dir(&spec);
         assert!(output_dir.ends_with("target/release") || output_dir.ends_with("target\\release"));
-    }
-    #[test]
-    fn list_providers_includes_core_toolchains() {
-        let ids: Vec<String> = list_providers().into_iter().map(|p| p.id).collect();
-        assert!(ids.contains(&"dotnet".to_string()));
-        assert!(ids.contains(&"cargo".to_string()));
-        assert!(ids.contains(&"go".to_string()));
-        assert!(ids.contains(&"java".to_string()));
-    }
-    #[test]
-    fn updater_empty_endpoints_error_is_actionable() {
-        let msg = map_updater_error(UpdaterError::EmptyEndpoints);
-        assert!(msg.contains("updater"));
-        assert!(msg.contains("endpoints"));
-        assert!(msg.contains("pubkey"));
-    }
-    #[test]
-    fn updater_insecure_transport_error_is_actionable() {
-        let msg = map_updater_error(UpdaterError::InsecureTransportProtocol);
-        assert!(msg.contains("https"));
     }
     #[test]
     fn fix_command_parsing_allows_brew_install() {
