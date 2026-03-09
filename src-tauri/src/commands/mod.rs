@@ -1,6 +1,5 @@
 // Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
 use crate::artifact::{PackageFormat, PackageResult, SignMethod, SignResult};
-use crate::environment::{check_environment, FixAction, FixResult, FixType};
 use crate::provider::registry::ProviderRegistry;
 use crate::spec::{PublishSpec, SpecValue, SPEC_VERSION};
 use serde::{Deserialize, Serialize};
@@ -16,14 +15,15 @@ use tauri::{AppHandle, Emitter};
 use tokio::io::{AsyncBufReadExt, AsyncRead, BufReader};
 use tokio::process::{Child, Command};
 use tokio::sync::{mpsc, Mutex};
-use tokio::time::{timeout, Duration};
 
 mod config;
+mod environment;
 mod export;
 mod provider;
 mod repository;
 mod updater;
 pub use config::{apply_imported_config, export_config, import_config};
+pub use environment::{apply_fix, run_environment_check};
 pub use export::{
     export_diagnostics_index, export_execution_history, export_execution_snapshot,
     export_failure_group_bundle, export_preflight_report, open_execution_snapshot,
@@ -41,6 +41,7 @@ pub use updater::{
 pub(crate) use config::{
     __cmd__apply_imported_config, __cmd__export_config, __cmd__import_config,
 };
+pub(crate) use environment::{__cmd__apply_fix, __cmd__run_environment_check};
 pub(crate) use export::{
     __cmd__export_diagnostics_index, __cmd__export_execution_history,
     __cmd__export_execution_snapshot, __cmd__export_failure_group_bundle,
@@ -544,64 +545,6 @@ fn count_output_files(output_dir: &str) -> usize {
         .map(|entries| entries.count())
         .unwrap_or(0)
 }
-/// Run environment check
-#[tauri::command]
-pub async fn run_environment_check(
-    provider_ids: Option<Vec<String>>,
-) -> Result<crate::environment::EnvironmentCheckResult, crate::errors::AppError> {
-    check_environment(provider_ids).await.map_err(|e| {
-        crate::errors::AppError::unknown_with_code(
-            format!("environment check failed: {}", e),
-            "environment_check_failed",
-        )
-    })
-}
-/// Apply a fix action
-#[tauri::command]
-pub async fn apply_fix(action: FixAction) -> Result<FixResult, crate::errors::AppError> {
-    match action.action_type {
-        FixType::OpenUrl => {
-            let url = action.url.ok_or_else(|| {
-                crate::errors::AppError::unknown("URL is required for OpenUrl fix")
-            })?;
-            // Use tauri_plugin_opener to open the URL
-            open::that(&url).map_err(|e| {
-                crate::errors::AppError::unknown(format!("failed to open URL: {}", e))
-            })?;
-            Ok(FixResult::OpenedUrl(url))
-        }
-        FixType::RunCommand => {
-            let command_str = action.command.ok_or_else(|| {
-                crate::errors::AppError::unknown("Command is required for RunCommand fix")
-            })?;
-            let (program, args) = validate_and_parse_fix_command(&command_str)?;
-            log::info!("Applying fix via command: {} {}", program, args.join(" "));
-            let output = timeout(
-                Duration::from_secs(10 * 60),
-                Command::new(&program).args(&args).output(),
-            )
-            .await
-            .map_err(|_| crate::errors::AppError::unknown("command timed out"))?
-            .map_err(|e| {
-                crate::errors::AppError::unknown(format!("failed to run command: {}", e))
-            })?;
-            crate::environment::invalidate_environment_cache();
-            Ok(FixResult::CommandExecuted {
-                stdout: String::from_utf8_lossy(&output.stdout).to_string(),
-                stderr: String::from_utf8_lossy(&output.stderr).to_string(),
-                exit_code: output.status.code().unwrap_or(-1),
-            })
-        }
-        FixType::CopyCommand => {
-            let command_str = action.command.ok_or_else(|| {
-                crate::errors::AppError::unknown("Command is required for CopyCommand fix")
-            })?;
-            // TODO: Copy to clipboard using tauri_plugin_clipboard
-            Ok(FixResult::CopiedToClipboard(command_str))
-        }
-        FixType::Manual => Ok(FixResult::Manual(action.label)),
-    }
-}
 /// Package an output directory into a single artifact file.
 #[tauri::command]
 pub async fn package_artifact(
@@ -637,74 +580,6 @@ pub async fn sign_artifact(
     )
     .await
     .map_err(|e| crate::errors::AppError::unknown(format!("sign failed: {}", e)))
-}
-fn validate_and_parse_fix_command(
-    command_str: &str,
-) -> Result<(String, Vec<String>), crate::errors::AppError> {
-    let trimmed = command_str.trim();
-    if trimmed.is_empty() {
-        return Err(crate::errors::AppError::unknown("command is empty"));
-    }
-    if trimmed.contains('\n')
-        || trimmed.contains('\r')
-        || trimmed.contains('|')
-        || trimmed.contains('&')
-        || trimmed.contains(';')
-        || trimmed.contains('>')
-        || trimmed.contains('<')
-    {
-        return Err(crate::errors::AppError::unknown(
-            "unsupported command: contains unsafe shell characters",
-        ));
-    }
-    if trimmed.contains('"') || trimmed.contains('\'') {
-        return Err(crate::errors::AppError::unknown(
-            "unsupported command: quoting is not allowed",
-        ));
-    }
-    let parts: Vec<&str> = trimmed.split_whitespace().collect();
-    let Some((program, args)) = parts.split_first() else {
-        return Err(crate::errors::AppError::unknown("command is empty"));
-    };
-    if *program == "sudo" {
-        return Err(crate::errors::AppError::unknown(
-            "unsupported command: sudo is not allowed",
-        ));
-    }
-    // Keep the allowlist intentionally small; only support built-in guided fixes.
-    match *program {
-        "brew" => {
-            if args.first() != Some(&"install") {
-                return Err(crate::errors::AppError::unknown(
-                    "unsupported brew command (only `brew install ...` is allowed)",
-                ));
-            }
-        }
-        "winget" => {
-            if args.first() != Some(&"install") {
-                return Err(crate::errors::AppError::unknown(
-                    "unsupported winget command (only `winget install ...` is allowed)",
-                ));
-            }
-        }
-        "rustup" => {
-            if args.first() != Some(&"update") {
-                return Err(crate::errors::AppError::unknown(
-                    "unsupported rustup command (only `rustup update` is allowed)",
-                ));
-            }
-        }
-        _ => {
-            return Err(crate::errors::AppError::unknown(format!(
-                "unsupported command: `{}` is not allowed",
-                program
-            )));
-        }
-    }
-    Ok((
-        program.to_string(),
-        args.iter().map(|s| s.to_string()).collect(),
-    ))
 }
 #[cfg(test)]
 mod tests {
@@ -793,18 +668,5 @@ mod tests {
         };
         let output_dir = infer_output_dir(&spec);
         assert!(output_dir.ends_with("target/release") || output_dir.ends_with("target\\release"));
-    }
-    #[test]
-    fn fix_command_parsing_allows_brew_install() {
-        let (program, args) =
-            validate_and_parse_fix_command("brew install rustup").expect("brew install");
-        assert_eq!(program, "brew");
-        assert_eq!(args, vec!["install".to_string(), "rustup".to_string()]);
-    }
-    #[test]
-    fn fix_command_parsing_rejects_unsafe_separator() {
-        let err = validate_and_parse_fix_command("brew install rust; rm -rf /")
-            .expect_err("unsafe command should fail");
-        assert!(err.message.contains("unsafe shell characters"));
     }
 }
