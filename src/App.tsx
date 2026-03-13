@@ -48,6 +48,7 @@ import { CommandImportDialog } from "@/components/publish/CommandImportDialog";
 import { ConfigDialog } from "@/components/publish/ConfigDialog";
 import { ParameterEditor } from "@/components/publish/ParameterEditor";
 import { ExecutionHistoryCard } from "@/components/publish/ExecutionHistoryCard";
+import { DotnetPublishCard } from "@/components/publish/DotnetPublishCard";
 import { FailureGroupDetailCard } from "@/components/publish/FailureGroupDetailCard";
 import { FailureGroupsCard } from "@/components/publish/FailureGroupsCard";
 import { OutputLogCard } from "@/components/publish/OutputLogCard";
@@ -65,9 +66,7 @@ import {
 import {
   Select,
   SelectContent,
-  SelectGroup,
   SelectItem,
-  SelectLabel,
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
@@ -2067,246 +2066,27 @@ function App() {
               <div className="mx-auto max-w-3xl space-y-6 p-6">
                 {/* Publish Configuration Card */}
                 {selectedRepo && activeProviderId === "dotnet" && projectInfo && (
-                <Card>
-                  <CardHeader className="pb-3">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <CardTitle className="text-lg flex items-center gap-2">
-                          <Settings className="h-5 w-5" />
-                          {configT.title || "发布配置"}
-                        </CardTitle>
-                        <CardDescription>
-                          {configT.description || "选择预设配置或自定义发布参数"}
-                        </CardDescription>
-                      </div>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => setCommandImportOpen(true)}
-                        disabled={!selectedRepo}
-                      >
-                        <Import className="h-4 w-4 mr-1" />
-                        {appT.importFromCommand || "从命令导入"}
-                      </Button>
-                    </div>
-                  </CardHeader>
-                  <CardContent className="space-y-4">
-                    {/* Mode Toggle */}
-                    <div className="flex items-center justify-between">
-                      <Label htmlFor="custom-mode">{configT.customMode || "自定义模式"}</Label>
-                      <Switch
-                        id="custom-mode"
-                        checked={isCustomMode}
-                        onCheckedChange={setIsCustomMode}
-                      />
-                    </div>
-
-                    {!isCustomMode ? (
-                      /* Preset Selection */
-                      <div className="space-y-2">
-                        <Label>{configT.presets || "选择预设配置"}</Label>
-                        <Select
-                          value={selectedPreset}
-                          onValueChange={handleSelectPresetValueChange}
-                        >
-                          <SelectTrigger>
-                            <SelectValue placeholder={appT.selectPublishConfig || "选择发布配置"} />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectGroup>
-                              <SelectLabel>{appT.releaseConfigs || "Release 配置"}</SelectLabel>
-                              {PRESETS.filter((p) =>
-                                p.id.startsWith("release")
-                              ).map((preset) => {
-                                const presetText = getPresetText(
-                                  preset.id,
-                                  preset.name,
-                                  preset.description
-                                );
-
-                                return (
-                                  <SelectItem key={preset.id} value={preset.id}>
-                                    <div className="flex flex-col">
-                                      <span>{presetText.name}</span>
-                                      <span className="text-xs text-muted-foreground">
-                                        {presetText.description}
-                                      </span>
-                                    </div>
-                                  </SelectItem>
-                                );
-                              })}
-                            </SelectGroup>
-                            <SelectGroup>
-                              <SelectLabel>{appT.debugConfigs || "Debug 配置"}</SelectLabel>
-                              {PRESETS.filter((p) =>
-                                p.id.startsWith("debug")
-                              ).map((preset) => {
-                                const presetText = getPresetText(
-                                  preset.id,
-                                  preset.name,
-                                  preset.description
-                                );
-
-                                return (
-                                  <SelectItem key={preset.id} value={preset.id}>
-                                    <div className="flex flex-col">
-                                      <span>{presetText.name}</span>
-                                      <span className="text-xs text-muted-foreground">
-                                        {presetText.description}
-                                      </span>
-                                    </div>
-                                  </SelectItem>
-                                );
-                              })}
-                            </SelectGroup>
-                            {projectInfo.publish_profiles.length > 0 && (
-                              <SelectGroup>
-                                <SelectLabel>{appT.projectPublishProfiles || "项目发布配置"}</SelectLabel>
-                                {projectInfo.publish_profiles.map((profile) => (
-                                  <SelectItem
-                                    key={`profile-${profile}`}
-                                    value={`profile-${profile}`}
-                                  >
-                                    {profile}
-                                  </SelectItem>
-                                ))}
-                              </SelectGroup>
-                            )}
-                          </SelectContent>
-                        </Select>
-                      </div>
-                    ) : (
-                      /* Custom Configuration */
-                      <div className="grid grid-cols-2 gap-4">
-                        <div className="space-y-2">
-                          <Label htmlFor="configuration">{appT.configurationType || "配置类型"}</Label>
-                          <Select
-                            value={customConfig.configuration}
-                            onValueChange={(v) =>
-                              handleCustomConfigUpdate({ configuration: v })
-                            }
-                          >
-                            <SelectTrigger id="configuration">
-                              <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="Release">Release</SelectItem>
-                              <SelectItem value="Debug">Debug</SelectItem>
-                            </SelectContent>
-                          </Select>
-                        </div>
-
-                        <div className="space-y-2">
-                          <Label htmlFor="runtime">{appT.runtimeLabel || "运行时"}</Label>
-                          <Select
-                            value={customConfig.runtime || "none"}
-                            onValueChange={(v) =>
-                              handleCustomConfigUpdate({
-                                runtime: v === "none" ? "" : v,
-                              })
-                            }
-                          >
-                            <SelectTrigger id="runtime">
-                              <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="none">{appT.frameworkDependent || "框架依赖"}</SelectItem>
-                              <SelectItem value="win-x64">
-                                Windows x64
-                              </SelectItem>
-                              <SelectItem value="osx-arm64">
-                                macOS ARM64
-                              </SelectItem>
-                              <SelectItem value="osx-x64">macOS x64</SelectItem>
-                              <SelectItem value="linux-x64">
-                                Linux x64
-                              </SelectItem>
-                            </SelectContent>
-                          </Select>
-                        </div>
-
-                        <div className="col-span-2 space-y-2">
-                          <Label htmlFor="output-dir">{appT.outputDirLabel || "输出目录"}</Label>
-                          <Input
-                            id="output-dir"
-                            value={customConfig.outputDir}
-                            onChange={(e) =>
-                              handleCustomConfigUpdate({
-                                outputDir: e.target.value,
-                              })
-                            }
-                            placeholder={appT.outputDirPlaceholder || "留空使用默认目录"}
-                          />
-                        </div>
-
-                        <div className="col-span-2 flex items-center gap-2">
-                          <Switch
-                            id="self-contained"
-                            checked={customConfig.selfContained}
-                            onCheckedChange={(checked) =>
-                              handleCustomConfigUpdate({
-                                selfContained: checked,
-                              })
-                            }
-                            disabled={!customConfig.runtime}
-                          />
-                          <Label htmlFor="self-contained">{appT.selfContained || "自包含部署"}</Label>
-                        </div>
-                      </div>
-                    )}
-
-                    {/* Current Config Preview */}
-                    <div className="mt-4 p-3 bg-[var(--glass-input-bg)] rounded-xl border border-[var(--glass-border-subtle)]">
-                      <div className="text-xs text-muted-foreground mb-2">
-                        {publishT.command || "将执行的命令:"}
-                      </div>
-                      <code className="text-xs font-mono break-all">
-                        {dotnetPublishPreviewCommand}
-                      </code>
-                    </div>
-
-                    {/* Publish Button */}
-                    <Button
-                      className="w-full"
-                      size="lg"
-                      onClick={executePublish}
-                      disabled={!projectInfo || isPublishing}
-                    >
-                      {isPublishing ? (
-                        <>
-                          <Loader2 className="h-5 w-5 mr-2 animate-spin" />
-                          {configT.publishing || "发布中..."}
-                        </>
-                      ) : (
-                        <>
-                          <Play className="h-5 w-5 mr-2" />
-                          {configT.execute || "执行发布"}
-                        </>
-                      )}
-                    </Button>
-                    {isPublishing && (
-                      <Button
-                        type="button"
-                        variant="destructive"
-                        className="w-full"
-                        onClick={cancelPublish}
-                        disabled={isCancellingPublish}
-                      >
-                        {isCancellingPublish ? (
-                          <>
-                            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                            {appT.cancelling || "取消中..."}
-                          </>
-                        ) : (
-                          <>
-                            <Square className="h-4 w-4 mr-2" />
-                            {appT.cancelPublish || "取消发布"}
-                          </>
-                        )}
-                      </Button>
-                    )}
-                  </CardContent>
-                </Card>
+                <DotnetPublishCard
+                  configT={configT}
+                  appT={appT}
+                  publishT={publishT}
+                  isCustomMode={isCustomMode}
+                  selectedPreset={selectedPreset}
+                  releasePresets={PRESETS.filter((preset) => preset.id.startsWith("release"))}
+                  debugPresets={PRESETS.filter((preset) => preset.id.startsWith("debug"))}
+                  projectPublishProfiles={projectInfo.publish_profiles}
+                  customConfig={customConfig}
+                  dotnetPublishPreviewCommand={dotnetPublishPreviewCommand}
+                  isPublishing={isPublishing}
+                  isCancellingPublish={isCancellingPublish}
+                  disabled={!selectedRepo}
+                  onOpenCommandImport={() => setCommandImportOpen(true)}
+                  onCustomModeChange={setIsCustomMode}
+                  onPresetChange={handleSelectPresetValueChange}
+                  onCustomConfigUpdate={handleCustomConfigUpdate}
+                  onExecutePublish={executePublish}
+                  onCancelPublish={cancelPublish}
+                />
               )}
 
               {selectedRepo && activeProviderId !== "dotnet" && (
