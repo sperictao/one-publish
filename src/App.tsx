@@ -127,15 +127,6 @@ interface ProjectInfo {
   publish_profiles: string[];
 }
 
-interface PublishConfig {
-  configuration: string;
-  runtime: string;
-  self_contained: boolean;
-  output_dir: string;
-  use_profile: boolean;
-  profile_name: string;
-}
-
 interface DotnetPreset {
   id: string;
   name: string;
@@ -1214,90 +1205,6 @@ function App() {
     setActiveProviderId,
   });
 
-  // Convert store config to publish config
-  const storeConfigToPublishConfig = (
-    config: PublishConfigStore
-  ): PublishConfig => ({
-    configuration: config.configuration,
-    runtime: config.runtime,
-    self_contained: config.selfContained,
-    output_dir: config.outputDir,
-    use_profile: config.useProfile,
-    profile_name: config.profileName,
-  });
-
-  // Get current publish config
-  const getCurrentConfig = useCallback((): PublishConfig => {
-    if (isCustomMode) {
-      // 自定义模式，如果用户没有指定输出目录，使用默认目录
-      const config = storeConfigToPublishConfig(customConfig);
-      if (!config.output_dir && defaultOutputDir) {
-        return { ...config, output_dir: defaultOutputDir };
-      }
-      return config;
-    }
-
-    if (selectedPreset.startsWith("profile-")) {
-      const profileName = selectedPreset.slice("profile-".length).trim();
-      if (profileName) {
-        return {
-          configuration: "Release",
-          runtime: "",
-          self_contained: false,
-          output_dir: "",
-          use_profile: true,
-          profile_name: profileName,
-        };
-      }
-    }
-
-    const preset = PRESETS.find((p) => p.id === selectedPreset);
-    if (!preset) {
-      const config = storeConfigToPublishConfig(customConfig);
-      return {
-        ...config,
-        output_dir: config.output_dir || defaultOutputDir || "",
-      };
-    }
-
-    // 预设模式：优先使用默认目录，否则使用项目特定目录
-    const outputDir = defaultOutputDir
-      ? defaultOutputDir
-      : projectInfo
-        ? `${projectInfo.root_path}/publish/${selectedPreset}`
-        : "";
-
-    return {
-      ...preset.config,
-      output_dir: outputDir,
-      use_profile: false,
-      profile_name: "",
-    };
-  }, [isCustomMode, customConfig, selectedPreset, projectInfo, defaultOutputDir]);
-
-  const dotnetPublishPreviewCommand = useMemo(() => {
-    if (!projectInfo) {
-      return "";
-    }
-
-    const config = getCurrentConfig();
-    const baseCommand = `dotnet publish "${projectInfo.project_file}"`;
-
-    if (config.use_profile && config.profile_name) {
-      return `${baseCommand} -p:PublishProfile="${config.profile_name}"`;
-    }
-
-    return [
-      baseCommand,
-      `-c ${config.configuration}`,
-      config.runtime ? `--runtime ${config.runtime}` : null,
-      config.self_contained ? "--self-contained" : null,
-      config.output_dir ? `-o "${config.output_dir}"` : null,
-    ]
-      .filter((part): part is string => Boolean(part))
-      .join(" ");
-  }, [getCurrentConfig, projectInfo]);
-
   const buildExecutionRecord = useCallback(
     (params: {
       spec: ProviderPublishSpec;
@@ -1351,6 +1258,7 @@ function App() {
     setReleaseChecklistOpen,
     artifactActionState,
     setArtifactActionState,
+    dotnetPublishPreviewCommand,
     runPublishWithSpec,
     executePublish,
     cancelPublish,

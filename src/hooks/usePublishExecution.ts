@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { toast } from "sonner";
@@ -227,6 +227,29 @@ export function usePublishExecution({
     projectInfo,
     selectedPreset,
   ]);
+
+  const dotnetPublishPreviewCommand = useMemo(() => {
+    if (!projectInfo || activeProviderId !== "dotnet") {
+      return "";
+    }
+
+    const config = getCurrentConfig();
+    const baseCommand = `dotnet publish "${projectInfo.project_file}"`;
+
+    if (config.use_profile && config.profile_name) {
+      return `${baseCommand} -p:PublishProfile="${config.profile_name}"`;
+    }
+
+    return [
+      baseCommand,
+      `-c ${config.configuration}`,
+      config.runtime ? `--runtime ${config.runtime}` : null,
+      config.self_contained ? "--self-contained" : null,
+      config.output_dir ? `-o "${config.output_dir}"` : null,
+    ]
+      .filter((part): part is string => Boolean(part))
+      .join(" ");
+  }, [activeProviderId, getCurrentConfig, projectInfo]);
 
   const getRecentConfigKeyForCurrentSelection = useCallback(() => {
     if (activeProviderId !== "dotnet") {
@@ -526,6 +549,7 @@ export function usePublishExecution({
     artifactActionState,
     setArtifactActionState,
     setCurrentExecutionRecordId,
+    dotnetPublishPreviewCommand,
     runPublishWithSpec,
     executePublish,
     cancelPublish,
