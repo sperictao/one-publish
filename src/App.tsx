@@ -28,14 +28,13 @@ import { useScopedConfigs } from "@/hooks/useScopedConfigs";
 import { useHistoryActions } from "@/hooks/useHistoryActions";
 import { useEnvironmentStatus } from "@/hooks/useEnvironmentStatus";
 import { useDialogDerivedState } from "@/hooks/useDialogDerivedState";
+import { useProviderRuntime } from "@/hooks/useProviderRuntime";
 import { useI18n, type Language } from "@/hooks/useI18n";
 import { cn } from "@/lib/utils";
 import {
   addExecutionRecord,
   checkRepositoryBranchConnectivity,
   getExecutionHistory,
-  getProviderSchema,
-  listProviders,
   type ExecutionRecord,
   type PublishConfigStore,
   type ProviderManifest,
@@ -91,7 +90,6 @@ import {
   filterExecutionHistory,
   isRecordInRepository,
 } from "@/features/history/utils/historyFilters";
-import type { ParameterSchema, ParameterValue } from "@/types/parameters";
 
 interface ProjectInfo {
   root_path: string;
@@ -346,14 +344,17 @@ function App() {
     void setI18nLanguage(normalizedPreferenceLanguage);
   }, [isStateLoading, language, normalizedPreferenceLanguage, setI18nLanguage]);
 
-  const [providers, setProviders] = useState<ProviderManifest[]>([]);
-  const [activeProviderId, setActiveProviderId] = useState("dotnet");
-  const [providerSchemas, setProviderSchemas] = useState<
-    Record<string, ParameterSchema>
-  >({});
-  const [providerParameters, setProviderParameters] = useState<
-    Record<string, Record<string, ParameterValue>>
-  >({});
+  const {
+    activeProviderId,
+    setActiveProviderId,
+    providerSchemas,
+    setProviderParameters,
+    availableProviders: providerRuntimeProviders,
+    activeProvider,
+    activeProviderSchema,
+    activeProviderParameters,
+    handleProviderParametersChange,
+  } = useProviderRuntime();
 
   // 快捷键处理
   useShortcuts({
@@ -530,14 +531,13 @@ function App() {
   } = useScopedConfigs(selectedRepoId);
 
   const availableProviders =
-    providers.length > 0 ? providers : FALLBACK_PROVIDERS;
-  const activeProvider =
+    providerRuntimeProviders.length > 0 ? providerRuntimeProviders : FALLBACK_PROVIDERS;
+  const resolvedActiveProvider =
+    activeProvider ||
     availableProviders.find((p) => p.id === activeProviderId) ||
     availableProviders[0] ||
     FALLBACK_PROVIDERS[0];
-  const activeProviderLabel = formatProviderLabel(activeProvider);
-  const activeProviderSchema = providerSchemas[activeProviderId];
-  const activeProviderParameters = providerParameters[activeProviderId] || {};
+  const activeProviderLabel = formatProviderLabel(resolvedActiveProvider);
 
   const scopedExecutionHistory = useMemo(() => {
     if (!selectedRepo) {
@@ -722,6 +722,10 @@ function App() {
     handleLoadProfile,
   } = profilesState;
 
+  useEffect(() => {
+    loadProfiles();
+  }, [loadProfiles]);
+
   const handleSelectPresetValueChange = useCallback(
     (presetValue: string) => {
       if (presetValue.startsWith("profile-")) {
@@ -735,57 +739,6 @@ function App() {
     },
     [handleSelectProjectProfile, setActiveProfileName, setIsCustomMode, setSelectedPreset]
   );
-
-  useEffect(() => {
-    let mounted = true;
-
-    listProviders()
-      .then((items) => {
-        if (!mounted) return;
-        if (items.length > 0) {
-          setProviders(items);
-          if (!items.some((item) => item.id === activeProviderId)) {
-            setActiveProviderId(items[0].id);
-          }
-        }
-      })
-      .catch((err) => {
-        console.error("加载 Provider 列表失败:", err);
-      });
-
-    loadProfiles();
-
-    return () => {
-      mounted = false;
-    };
-  }, []);
-
-  // 切换仓库时重新加载 profiles
-  useEffect(() => {
-    loadProfiles();
-  }, [loadProfiles]);
-
-  useEffect(() => {
-    if (providerSchemas[activeProviderId]) return;
-
-    let mounted = true;
-
-    getProviderSchema(activeProviderId)
-      .then((schema) => {
-        if (!mounted) return;
-        setProviderSchemas((prev) => ({
-          ...prev,
-          [activeProviderId]: schema,
-        }));
-      })
-      .catch((err) => {
-        console.error("加载 Provider Schema 失败:", err);
-      });
-
-    return () => {
-      mounted = false;
-    };
-  }, [activeProviderId, providerSchemas]);
 
   useEffect(() => {
     getExecutionHistory()
@@ -1125,16 +1078,6 @@ function App() {
     setSelectedHistoryPresetId,
   });
 
-  const handleProviderParametersChange = useCallback(
-    (parameters: Record<string, ParameterValue>) => {
-      setProviderParameters((prev) => ({
-        ...prev,
-        [activeProviderId]: parameters,
-      }));
-    },
-    [activeProviderId]
-  );
-
   const {
     rerunChecklistOpen,
     setRerunChecklistOpen,
@@ -1351,7 +1294,7 @@ function App() {
               {selectedRepo && activeImportFeedback && (
                 <CommandImportResultCard
                   activeImportFeedback={activeImportFeedback}
-                  providerLabel={formatProviderLabel(activeProvider)}
+                  providerLabel={formatProviderLabel(resolvedActiveProvider)}
                   appT={appT}
                 />
               )}
