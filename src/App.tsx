@@ -26,6 +26,7 @@ import { useHistoryPresets } from "@/hooks/useHistoryPresets";
 import { useScopedConfigs } from "@/hooks/useScopedConfigs";
 import { useHistoryActions } from "@/hooks/useHistoryActions";
 import { useEnvironmentStatus } from "@/hooks/useEnvironmentStatus";
+import { useDialogDerivedState } from "@/hooks/useDialogDerivedState";
 import { useI18n, type Language } from "@/hooks/useI18n";
 import { cn } from "@/lib/utils";
 import {
@@ -109,18 +110,6 @@ interface DotnetPreset {
 }
 
 const SPEC_VERSION = 1;
-
-const toDotnetProfileParameters = (
-  config: Pick<
-    PublishConfigStore,
-    "configuration" | "runtime" | "outputDir" | "selfContained"
-  >
-) => ({
-  configuration: config.configuration,
-  runtime: config.runtime,
-  output: config.outputDir,
-  self_contained: config.selfContained,
-});
 
 // Preset configurations
 const PRESETS: DotnetPreset[] = [
@@ -644,10 +633,14 @@ function App() {
 
   const environmentStatus = useEnvironmentStatus(environmentLastResult);
 
-  const commandImportProjectPath = useMemo(() => {
-    if (projectInfo?.project_file) return projectInfo.project_file;
-    return selectedRepo?.path || "";
-  }, [projectInfo, selectedRepo]);
+  const { commandImportProjectPath, currentConfigParameters } =
+    useDialogDerivedState({
+      activeProviderId,
+      customConfig,
+      activeProviderParameters,
+      projectFile: projectInfo?.project_file,
+      selectedRepoPath: selectedRepo?.path,
+    });
 
   const handleCustomConfigUpdate = useCallback(
     (updates: Partial<PublishConfigStore>) => {
@@ -682,7 +675,12 @@ function App() {
     presets: PRESETS,
     defaultPresetId: PRESETS[0]?.id ?? "release-fd",
     getPresetText,
-    buildProfileParameters: toDotnetProfileParameters,
+    buildProfileParameters: (config) => ({
+      configuration: config.configuration,
+      runtime: config.runtime,
+      output: config.outputDir,
+      self_contained: config.selfContained,
+    }),
   });
 
   const persistExecutionRecord = useCallback((record: ExecutionRecord) => {
@@ -1638,11 +1636,7 @@ function App() {
         onLoadProfile={handleLoadProfile}
         currentProviderId={activeProviderId}
         repoId={selectedRepoId}
-        currentParameters={
-          activeProviderId === "dotnet"
-            ? toDotnetProfileParameters(customConfig)
-            : activeProviderParameters
-        }
+        currentParameters={currentConfigParameters}
       />
     </div>
   );
