@@ -10,6 +10,7 @@ import { useTheme } from "@/hooks/useTheme";
 import { useShortcuts } from "@/hooks/useShortcuts";
 import { useDiagnosticsExports } from "@/hooks/useDiagnosticsExports";
 import { useRepositoryActions } from "@/hooks/useRepositoryActions";
+import { useRecoverableSpec } from "@/hooks/useRecoverableSpec";
 import { useRerunFlow } from "@/hooks/useRerunFlow";
 import {
   usePublishExecution,
@@ -1044,118 +1045,18 @@ function App() {
     persistExecutionRecord,
   });
 
-  const extractSpecFromRecord = useCallback(
-    (record: ExecutionRecord): ProviderPublishSpec | null => {
-      const raw = record.spec;
-      if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
-        return null;
-      }
-
-      const payload = raw as Record<string, unknown>;
-      const providerId = payload.provider_id;
-      const projectPath = payload.project_path;
-      if (typeof providerId !== "string" || typeof projectPath !== "string") {
-        return null;
-      }
-
-      const version =
-        typeof payload.version === "number" ? payload.version : SPEC_VERSION;
-      const parametersRaw = payload.parameters;
-      const parameters =
-        parametersRaw &&
-        typeof parametersRaw === "object" &&
-        !Array.isArray(parametersRaw)
-          ? (parametersRaw as Record<string, unknown>)
-          : {};
-
-      return {
-        version,
-        provider_id: providerId,
-        project_path: projectPath,
-        parameters,
-      };
-    },
-    []
-  );
-
-  const restoreSpecToEditor = useCallback(
-    (spec: ProviderPublishSpec) => {
-      setActiveProviderId(spec.provider_id);
-
-      if (spec.provider_id === "dotnet") {
-        const parameters = spec.parameters || {};
-        const propertiesRaw = parameters.properties;
-        const properties =
-          propertiesRaw &&
-          typeof propertiesRaw === "object" &&
-          !Array.isArray(propertiesRaw)
-            ? (propertiesRaw as Record<string, unknown>)
-            : null;
-        const profileName =
-          properties && typeof properties.PublishProfile === "string"
-            ? properties.PublishProfile
-            : "";
-
-        if (profileName) {
-          setCustomConfig({
-            ...customConfig,
-            configuration: "Release",
-            runtime: "",
-            selfContained: false,
-            outputDir:
-              typeof parameters.output === "string" ? parameters.output : "",
-            useProfile: true,
-            profileName,
-          });
-        } else {
-          setCustomConfig({
-            ...customConfig,
-            configuration:
-              typeof parameters.configuration === "string"
-                ? parameters.configuration
-                : "Release",
-            runtime: typeof parameters.runtime === "string" ? parameters.runtime : "",
-            selfContained: parameters.self_contained === true,
-            outputDir:
-              typeof parameters.output === "string" ? parameters.output : "",
-            useProfile: false,
-            profileName: "",
-          });
-        }
-
-        setIsCustomMode(true);
-      } else {
-        setProviderParameters((prev) => ({
-          ...prev,
-          [spec.provider_id]: spec.parameters as Record<string, ParameterValue>,
-        }));
-      }
-    },
-    [customConfig, setCustomConfig, setIsCustomMode]
-  );
-
-  const getRecentConfigKeyFromSpec = useCallback(
-    (spec: ProviderPublishSpec) => {
-      if (spec.provider_id !== "dotnet") {
-        return null;
-      }
-
-      const propertiesRaw = spec.parameters?.properties;
-      if (
-        propertiesRaw &&
-        typeof propertiesRaw === "object" &&
-        !Array.isArray(propertiesRaw)
-      ) {
-        const profileName = (propertiesRaw as Record<string, unknown>).PublishProfile;
-        if (typeof profileName === "string" && profileName.trim()) {
-          return `pubxml:${profileName.trim()}`;
-        }
-      }
-
-      return null;
-    },
-    []
-  );
+  const {
+    extractSpecFromRecord,
+    restoreSpecToEditor,
+    getRecentConfigKeyFromSpec,
+  } = useRecoverableSpec({
+    specVersion: SPEC_VERSION,
+    customConfig,
+    setCustomConfig,
+    setIsCustomMode,
+    setActiveProviderId,
+    setProviderParameters,
+  });
 
   const trackBundleExport = useCallback((outputPath: string) => {
     setRecentBundleExports((prev) =>
