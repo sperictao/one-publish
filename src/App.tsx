@@ -19,6 +19,7 @@ import {
   QUICK_CREATE_PROFILE_GROUP_CUSTOM,
   QUICK_CREATE_PROFILE_GROUP_DEFAULT,
 } from "@/hooks/useProfiles";
+import { useHistoryPresets } from "@/hooks/useHistoryPresets";
 import { useI18n, type Language } from "@/hooks/useI18n";
 import { cn } from "@/lib/utils";
 import {
@@ -45,6 +46,7 @@ import { EnvironmentCheckDialog } from "@/components/environment/EnvironmentChec
 
 // Publish Components
 import { CommandImportDialog } from "@/components/publish/CommandImportDialog";
+import { CommandImportResultCard } from "@/components/publish/CommandImportResultCard";
 import { ConfigDialog } from "@/components/publish/ConfigDialog";
 import { ExecutionHistoryCard } from "@/components/publish/ExecutionHistoryCard";
 import { DotnetPublishCard } from "@/components/publish/DotnetPublishCard";
@@ -56,13 +58,6 @@ import { ReleaseChecklistDialog } from "@/components/release/ReleaseChecklistDia
 
 // UI Components
 import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
 import {
   Select,
   SelectContent,
@@ -85,7 +80,6 @@ import {
   Folder,
   Settings,
   Loader2,
-  Import,
   Save,
   Check,
 } from "lucide-react";
@@ -109,10 +103,6 @@ import {
 } from "@/lib/issueDraft";
 import {
   DEFAULT_DAILY_TRIAGE_PRESET,
-  loadDailyTriagePreset,
-  loadHistoryFilterPresets,
-  saveDailyTriagePreset,
-  saveHistoryFilterPresets,
   type DailyTriagePreset,
   type HistoryFilterStatus,
   type HistoryFilterPreset,
@@ -724,14 +714,6 @@ function App() {
   const [historyFilterWindow, setHistoryFilterWindow] =
     useState<HistoryFilterWindow>("all");
   const [historyFilterKeyword, setHistoryFilterKeyword] = useState("");
-  const [historyFilterPresets, setHistoryFilterPresets] = useState<
-    HistoryFilterPreset[]
-  >([]);
-  const [dailyTriagePreset, setDailyTriagePreset] = useState<DailyTriagePreset>(
-    () => loadDailyTriagePreset()
-  );
-  const [selectedHistoryPresetId, setSelectedHistoryPresetId] =
-    useState("none");
   const [selectedFailureGroupKey, setSelectedFailureGroupKey] =
     useState<string | null>(null);
   const [issueDraftTemplate, setIssueDraftTemplate] =
@@ -937,6 +919,23 @@ function App() {
     buildProfileParameters: toDotnetProfileParameters,
   });
 
+  const {
+    historyFilterPresets,
+    dailyTriagePreset,
+    setDailyTriagePreset,
+    selectedHistoryPresetId,
+    setSelectedHistoryPresetId,
+    applyHistoryPreset,
+    saveCurrentHistoryPreset,
+    deleteSelectedHistoryPreset,
+  } = useHistoryPresets({
+    historyT,
+    historyFilterProvider,
+    historyFilterStatus,
+    historyFilterWindow,
+    historyFilterKeyword,
+  });
+
   const persistExecutionRecord = useCallback((record: ExecutionRecord) => {
     addExecutionRecord(record)
       .then((history) => {
@@ -1048,30 +1047,11 @@ function App() {
       .catch((err) => {
         console.error("加载执行历史失败:", err);
       });
-
-    setHistoryFilterPresets(loadHistoryFilterPresets());
   }, []);
-
-  useEffect(() => {
-    saveHistoryFilterPresets(historyFilterPresets);
-  }, [historyFilterPresets]);
-
-  useEffect(() => {
-    saveDailyTriagePreset(dailyTriagePreset);
-  }, [dailyTriagePreset]);
 
   useEffect(() => {
     saveRerunChecklistPreference({ enabled: isRerunChecklistEnabled });
   }, [isRerunChecklistEnabled]);
-
-  useEffect(() => {
-    if (
-      selectedHistoryPresetId !== "none" &&
-      !historyFilterPresets.some((preset) => preset.id === selectedHistoryPresetId)
-    ) {
-      setSelectedHistoryPresetId("none");
-    }
-  }, [historyFilterPresets, selectedHistoryPresetId]);
 
   useEffect(() => {
     setExecutionHistory((prev) => prev.slice(0, executionHistoryLimit));
@@ -1770,98 +1750,6 @@ function App() {
     rerunChecklistState,
   ]);
 
-  const applyHistoryPreset = useCallback(
-    (presetId: string) => {
-      if (presetId === "none") {
-        setSelectedHistoryPresetId("none");
-        return;
-      }
-
-      const preset = historyFilterPresets.find((item) => item.id === presetId);
-      if (!preset) {
-        toast.error(historyT.presetNotFound || "未找到筛选预设");
-        return;
-      }
-
-      setHistoryFilterProvider(preset.provider);
-      setHistoryFilterStatus(preset.status);
-      setHistoryFilterWindow(preset.window);
-      setHistoryFilterKeyword(preset.keyword);
-      setSelectedHistoryPresetId(preset.id);
-    },
-    [historyFilterPresets]
-  );
-
-  const saveCurrentHistoryPreset = useCallback(() => {
-    const defaultName = (historyT.presetNamePrefix || "筛选预设") + ` ${historyFilterPresets.length + 1}`;
-    const input =
-      typeof window !== "undefined"
-        ? window.prompt(historyT.promptPresetName || "输入筛选预设名称", defaultName)
-        : defaultName;
-    if (!input) {
-      return;
-    }
-
-    const name = input.trim();
-    if (!name) {
-      toast.error(historyT.presetNameRequired || "筛选预设名称不能为空");
-      return;
-    }
-
-    const existingPreset = historyFilterPresets.find((item) => item.name === name);
-    const presetId =
-      existingPreset?.id || `${Date.now()}-${Math.random().toString(16).slice(2, 8)}`;
-
-    const preset: HistoryFilterPreset = {
-      id: presetId,
-      name,
-      provider: historyFilterProvider,
-      status: historyFilterStatus,
-      window: historyFilterWindow,
-      keyword: historyFilterKeyword,
-    };
-
-    setHistoryFilterPresets((prev) => {
-      const existingIndex = prev.findIndex((item) => item.id === presetId);
-      if (existingIndex >= 0) {
-        const next = [...prev];
-        next[existingIndex] = preset;
-        return next;
-      }
-
-      return [preset, ...prev].slice(0, 20);
-    });
-
-    setSelectedHistoryPresetId(presetId);
-    toast.success(historyT.presetSaved || "筛选预设已保存", { description: name });
-  }, [
-    historyFilterKeyword,
-    historyFilterPresets,
-    historyFilterProvider,
-    historyFilterStatus,
-    historyFilterWindow,
-  ]);
-
-  const deleteSelectedHistoryPreset = useCallback(() => {
-    if (selectedHistoryPresetId === "none") {
-      toast.error(historyT.selectPresetToDelete || "请先选择要删除的筛选预设");
-      return;
-    }
-
-    const current = historyFilterPresets.find(
-      (preset) => preset.id === selectedHistoryPresetId
-    );
-
-    setHistoryFilterPresets((prev) =>
-      prev.filter((preset) => preset.id !== selectedHistoryPresetId)
-    );
-    setSelectedHistoryPresetId("none");
-
-    toast.success(historyT.presetDeleted || "筛选预设已删除", {
-      description: current?.name || "",
-    });
-  }, [historyFilterPresets, selectedHistoryPresetId]);
-
   const handleProviderParametersChange = useCallback(
     (parameters: Record<string, ParameterValue>) => {
       setProviderParameters((prev) => ({
@@ -2113,31 +2001,11 @@ function App() {
               )}
 
               {selectedRepo && activeImportFeedback && (
-                <Card>
-                  <CardHeader className="pb-3">
-                    <CardTitle className="text-lg flex items-center gap-2">
-                      <Import className="h-5 w-5" />
-                      {appT.commandImportResult || "命令导入映射结果"}
-                    </CardTitle>
-                    <CardDescription>
-                      Provider: {formatProviderLabel(activeProvider)}
-                    </CardDescription>
-                  </CardHeader>
-                  <CardContent className="space-y-2 text-sm">
-                    <div className="rounded-xl border border-emerald-200/60 bg-emerald-50/80 px-3 py-2 text-emerald-700">
-                      {(appT.mappedFieldsLabel || "已映射字段") + ` (${activeImportFeedback.mappedKeys.length}):`} 
-                      {activeImportFeedback.mappedKeys.length > 0
-                        ? activeImportFeedback.mappedKeys.join(", ")
-                        : appT.none || "无"}
-                    </div>
-                    <div className="rounded-xl border border-amber-200/60 bg-amber-50/80 px-3 py-2 text-amber-700">
-                      {(appT.unmappedFieldsLabel || "未映射字段") + ` (${activeImportFeedback.unmappedKeys.length}):`} 
-                      {activeImportFeedback.unmappedKeys.length > 0
-                        ? activeImportFeedback.unmappedKeys.join(", ")
-                        : appT.none || "无"}
-                    </div>
-                  </CardContent>
-                </Card>
+                <CommandImportResultCard
+                  activeImportFeedback={activeImportFeedback}
+                  providerLabel={formatProviderLabel(activeProvider)}
+                  appT={appT}
+                />
               )}
 
               <OutputLogCard
