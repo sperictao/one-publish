@@ -23,9 +23,9 @@ import {
   QUICK_CREATE_PROFILE_GROUP_DEFAULT,
 } from "@/hooks/useProfiles";
 import { useCommandImport } from "@/hooks/useCommandImport";
-import { useHistoryPresets } from "@/hooks/useHistoryPresets";
 import { useScopedConfigs } from "@/hooks/useScopedConfigs";
 import { useHistoryActions } from "@/hooks/useHistoryActions";
+import { useHistoryViewState } from "@/hooks/useHistoryViewState";
 import { useEnvironmentStatus } from "@/hooks/useEnvironmentStatus";
 import { useDialogDerivedState } from "@/hooks/useDialogDerivedState";
 import { useProviderRuntime } from "@/hooks/useProviderRuntime";
@@ -70,7 +70,6 @@ import type { EnvironmentCheckResult } from "@/lib/environment";
 import { deriveFailureSignature } from "@/lib/failureSignature";
 import { type IssueDraftTemplate } from "@/lib/issueDraft";
 import {
-  DEFAULT_DAILY_TRIAGE_PRESET,
   type HistoryFilterStatus,
   type HistoryFilterWindow,
 } from "@/lib/historyFilterPresets";
@@ -83,10 +82,7 @@ import {
   loadRerunChecklistPreference,
   saveRerunChecklistPreference,
 } from "@/lib/rerunChecklistPreference";
-import {
-  filterExecutionHistory,
-  isRecordInRepository,
-} from "@/features/history/utils/historyFilters";
+import { isRecordInRepository } from "@/features/history/utils/historyFilters";
 
 interface ProjectInfo {
   root_path: string;
@@ -502,46 +498,27 @@ function App() {
     historyFilterPresets,
     dailyTriagePreset,
     setDailyTriagePreset,
-    selectedHistoryPresetId,
+    selectedHistoryPresetId: effectiveSelectedHistoryPresetId,
     setSelectedHistoryPresetId,
-    applyHistoryPreset,
     saveCurrentHistoryPreset,
     deleteSelectedHistoryPreset,
-  } = useHistoryPresets({
+    filteredExecutionHistory,
+    dailyTriageRecords,
+    applyHistoryPresetToFilters,
+    resetDailyTriagePreset,
+    clearHistoryFilters,
+  } = useHistoryViewState({
     historyT,
+    scopedExecutionHistory,
     historyFilterProvider,
     historyFilterStatus,
     historyFilterWindow,
     historyFilterKeyword,
+    setHistoryFilterProvider,
+    setHistoryFilterStatus,
+    setHistoryFilterWindow,
+    setHistoryFilterKeyword,
   });
-
-  const filteredExecutionHistory = useMemo(
-    () =>
-      filterExecutionHistory(scopedExecutionHistory, {
-        provider: historyFilterProvider,
-        status: historyFilterStatus,
-        window: historyFilterWindow,
-        keyword: historyFilterKeyword,
-      }),
-    [
-      scopedExecutionHistory,
-      historyFilterProvider,
-      historyFilterStatus,
-      historyFilterWindow,
-      historyFilterKeyword,
-    ]
-  );
-
-  const dailyTriageRecords = useMemo(
-    () =>
-      filterExecutionHistory(scopedExecutionHistory, {
-        provider: dailyTriagePreset.provider,
-        status: dailyTriagePreset.status,
-        window: dailyTriagePreset.window,
-        keyword: dailyTriagePreset.keyword,
-      }),
-    [scopedExecutionHistory, dailyTriagePreset]
-  );
 
   const snapshotPaths = useMemo(
     () =>
@@ -1292,7 +1269,7 @@ function App() {
                 historyFilterStatus={historyFilterStatus}
                 historyFilterWindow={historyFilterWindow}
                 historyFilterKeyword={historyFilterKeyword}
-                selectedHistoryPresetId={selectedHistoryPresetId}
+                selectedHistoryPresetId={effectiveSelectedHistoryPresetId}
                 historyFilterPresets={historyFilterPresets}
                 dailyTriagePreset={dailyTriagePreset}
                 dailyTriageRecords={dailyTriageRecords}
@@ -1306,30 +1283,15 @@ function App() {
                 onHistoryFilterStatusChange={setHistoryFilterStatus}
                 onHistoryFilterWindowChange={setHistoryFilterWindow}
                 onHistoryFilterKeywordChange={setHistoryFilterKeyword}
-                onApplyHistoryPreset={(presetId) =>
-                  applyHistoryPreset(presetId, {
-                    setHistoryFilterProvider,
-                    setHistoryFilterStatus,
-                    setHistoryFilterWindow,
-                    setHistoryFilterKeyword,
-                  })
-                }
+                onApplyHistoryPreset={applyHistoryPresetToFilters}
                 onSaveCurrentHistoryPreset={saveCurrentHistoryPreset}
                 onDeleteSelectedHistoryPreset={deleteSelectedHistoryPreset}
                 onDailyTriagePresetChange={setDailyTriagePreset}
-                onResetDailyTriagePreset={() =>
-                  setDailyTriagePreset(DEFAULT_DAILY_TRIAGE_PRESET)
-                }
+                onResetDailyTriagePreset={resetDailyTriagePreset}
                 onExportExecutionHistory={exportExecutionHistory}
                 onExportDailyTriageReport={exportDailyTriageReport}
                 onExportDiagnosticsIndex={exportDiagnosticsIndex}
-                onClearFilters={() => {
-                  setHistoryFilterProvider("all");
-                  setHistoryFilterStatus("all");
-                  setHistoryFilterWindow("all");
-                  setHistoryFilterKeyword("");
-                  setSelectedHistoryPresetId("none");
-                }}
+                onClearFilters={clearHistoryFilters}
                 onOpenSnapshotFromRecord={openSnapshotFromRecord}
                 onRerunFromHistory={rerunFromHistory}
                 onCopyHandoffSnippet={copyHandoffSnippet}
