@@ -11,6 +11,7 @@ import { useRepositoryActions } from "@/hooks/useRepositoryActions";
 import { useRecoverableSpec } from "@/hooks/useRecoverableSpec";
 import { useRerunFlow } from "@/hooks/useRerunFlow";
 import { useProjectScanner } from "@/hooks/useProjectScanner";
+import { usePresetText } from "@/hooks/usePresetText";
 import {
   usePublishExecution,
   type ProviderPublishSpec,
@@ -259,63 +260,7 @@ function App() {
   const rerunT = translations.rerun || {};
   const profileT = translations.profiles || {};
 
-  const presetTextMap = useMemo(
-    () => ({
-      "release-fd": {
-        name: configT.releaseFd || "Release - 框架依赖",
-        description: configT.releaseFdDesc || "推荐用于开发/测试",
-      },
-      "release-win-x64": {
-        name: configT.releaseWin || "Release - Windows x64",
-        description: configT.releaseWinDesc || "自包含部署",
-      },
-      "release-osx-arm64": {
-        name: configT.releaseOsxA || "Release - macOS ARM64",
-        description: configT.releaseOsxADesc || "Apple Silicon",
-      },
-      "release-osx-x64": {
-        name: configT.releaseOsxX || "Release - macOS x64",
-        description: configT.releaseOsxXDesc || "Intel Mac",
-      },
-      "release-linux-x64": {
-        name: configT.releaseLinux || "Release - Linux x64",
-        description: configT.releaseLinuxDesc || "自包含部署",
-      },
-      "debug-fd": {
-        name: configT.debugFd || "Debug - 框架依赖",
-        description: configT.debugFdDesc || "调试模式",
-      },
-      "debug-win-x64": {
-        name: configT.debugWin || "Debug - Windows x64",
-        description: configT.debugWinDesc || "自包含部署",
-      },
-      "debug-osx-arm64": {
-        name: configT.debugOsxA || "Debug - macOS ARM64",
-        description: configT.debugOsxADesc || "Apple Silicon",
-      },
-      "debug-osx-x64": {
-        name: configT.debugOsxX || "Debug - macOS x64",
-        description: configT.debugOsxXDesc || "Intel Mac",
-      },
-      "debug-linux-x64": {
-        name: configT.debugLinux || "Debug - Linux x64",
-        description: configT.debugLinuxDesc || "自包含部署",
-      },
-    }),
-    [configT]
-  );
-
-  const getPresetText = useCallback(
-    (presetId: string, fallbackName: string, fallbackDescription: string) => {
-      const presetText =
-        presetTextMap[presetId as keyof typeof presetTextMap] || null;
-      return {
-        name: presetText?.name || fallbackName,
-        description: presetText?.description || fallbackDescription,
-      };
-    },
-    [presetTextMap]
-  );
+  const { getPresetText } = usePresetText(configT);
 
   const normalizedPreferenceLanguage: Language =
     preferenceLanguage === "en" ? "en" : "zh";
