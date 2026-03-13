@@ -37,27 +37,20 @@ import {
 } from "@/lib/store";
 
 // Layout Components
+import { AppDialogs } from "@/components/layout/AppDialogs";
 import { CollapsiblePanel } from "@/components/layout/CollapsiblePanel";
 import { RepositoryList } from "@/components/layout/RepositoryList";
 import { PublishConfigPanel } from "@/components/layout/PublishConfigPanel";
 import { ResizeHandle } from "@/components/layout/ResizeHandle";
-import { SettingsDialog } from "@/components/layout/SettingsDialog";
-import { ShortcutsDialog } from "@/components/layout/ShortcutsDialog";
-import { EnvironmentCheckDialog } from "@/components/environment/EnvironmentCheckDialog";
 
 // Publish Components
-import { CommandImportDialog } from "@/components/publish/CommandImportDialog";
 import { CommandImportResultCard } from "@/components/publish/CommandImportResultCard";
-import { ConfigDialog } from "@/components/publish/ConfigDialog";
 import { ExecutionHistoryCard } from "@/components/publish/ExecutionHistoryCard";
 import { DotnetPublishCard } from "@/components/publish/DotnetPublishCard";
 import { FailureGroupDetailCard } from "@/components/publish/FailureGroupDetailCard";
 import { GenericProviderPublishCard } from "@/components/publish/GenericProviderPublishCard";
 import { FailureGroupsCard } from "@/components/publish/FailureGroupsCard";
 import { OutputLogCard } from "@/components/publish/OutputLogCard";
-import { QuickCreateProfileDialog } from "@/components/publish/QuickCreateProfileDialog";
-import { RerunChecklistDialog } from "@/components/publish/RerunChecklistDialog";
-import { ReleaseChecklistDialog } from "@/components/release/ReleaseChecklistDialog";
 
 // UI Components
 import { Button } from "@/components/ui/button";
@@ -1646,28 +1639,19 @@ function App() {
         </div>
       </div>
 
-      {/* Shortcuts Dialog */}
-      <ShortcutsDialog
-        open={shortcutsOpen}
-        onOpenChange={setShortcutsOpen}
-      />
-
-      {/* Environment Check Dialog */}
-      <EnvironmentCheckDialog
-        open={environmentDialogOpen}
-        onOpenChange={(v) => {
-          setEnvironmentDialogOpen(v);
-          if (!v) setEnvironmentInitialResult(null);
+      <AppDialogs
+        shortcutsOpen={shortcutsOpen}
+        onShortcutsOpenChange={setShortcutsOpen}
+        environmentDialogOpen={environmentDialogOpen}
+        onEnvironmentDialogOpenChange={(open) => {
+          setEnvironmentDialogOpen(open);
+          if (!open) setEnvironmentInitialResult(null);
         }}
-        defaultProviderIds={environmentDefaultProviderIds}
-        initialResult={environmentInitialResult}
-        onChecked={(res) => setEnvironmentLastResult(res)}
-      />
-
-      {/* Settings Dialog */}
-      <SettingsDialog
-        open={settingsOpen}
-        onOpenChange={setSettingsOpen}
+        environmentDefaultProviderIds={environmentDefaultProviderIds}
+        environmentInitialResult={environmentInitialResult}
+        onEnvironmentChecked={setEnvironmentLastResult}
+        settingsOpen={settingsOpen}
+        onSettingsOpenChange={setSettingsOpen}
         language={language}
         onLanguageChange={handleLanguageChange}
         minimizeToTrayOnClose={minimizeToTrayOnClose}
@@ -1685,51 +1669,30 @@ function App() {
         environmentStatus={environmentStatus}
         environmentCheckedAt={environmentLastResult?.checked_at}
         onOpenEnvironment={() => openEnvironmentDialog(null, [activeProviderId])}
-      />
-
-      <RerunChecklistDialog
-        open={rerunChecklistOpen}
+        rerunChecklistOpen={rerunChecklistOpen}
         pendingRerunRecord={pendingRerunRecord}
         selectedRepoCurrentBranch={selectedRepo?.currentBranch}
-        environmentStatus={environmentStatus}
         rerunChecklistState={rerunChecklistState}
         rerunT={rerunT}
-        onOpenChange={(open) => {
-          if (open) {
-            setRerunChecklistOpen(true);
-            return;
-          }
-          closeRerunChecklistDialog();
-        }}
-        onChecklistStateChange={setRerunChecklistState}
-        onClose={closeRerunChecklistDialog}
-        onConfirm={() => void confirmRerunWithChecklist()}
-      />
-
-      <ReleaseChecklistDialog
-        open={releaseChecklistOpen}
-        onOpenChange={setReleaseChecklistOpen}
+        onRerunChecklistOpenChange={setRerunChecklistOpen}
+        onRerunChecklistStateChange={setRerunChecklistState}
+        onRerunChecklistClose={closeRerunChecklistDialog}
+        onRerunChecklistConfirm={() => void confirmRerunWithChecklist()}
+        releaseChecklistOpen={releaseChecklistOpen}
+        onReleaseChecklistOpenChange={setReleaseChecklistOpen}
         publishResult={publishResult}
-        environmentResult={environmentLastResult}
         packageResult={artifactActionState.packageResult}
         signResult={artifactActionState.signResult}
-        onOpenEnvironment={() => openEnvironmentDialog(environmentLastResult, [activeProviderId])}
-        onOpenSettings={handleOpenSettings}
-      />
-
-      {/* Command Import Dialog */}
-      {selectedRepo && commandImportProjectPath && (
-        <CommandImportDialog
-          open={commandImportOpen}
-          onOpenChange={setCommandImportOpen}
-          providerId={activeProviderId}
-          projectPath={commandImportProjectPath}
-          onImport={handleCommandImport}
-        />
-      )}
-
-      <QuickCreateProfileDialog
-        open={quickCreateProfileOpen}
+        onReleaseChecklistOpenEnvironment={() =>
+          openEnvironmentDialog(environmentLastResult, [activeProviderId])
+        }
+        onReleaseChecklistOpenSettings={handleOpenSettings}
+        selectedRepoExists={Boolean(selectedRepo)}
+        commandImportProjectPath={commandImportProjectPath}
+        commandImportOpen={commandImportOpen}
+        onCommandImportOpenChange={setCommandImportOpen}
+        activeProviderId={activeProviderId}
+        onCommandImport={handleCommandImport}
         quickCreateProfileOpen={quickCreateProfileOpen}
         quickCreateTemplateId={quickCreateTemplateId}
         quickCreateTemplateOptions={quickCreateTemplateOptions}
@@ -1744,19 +1707,15 @@ function App() {
         profileT={profileT}
         appT={appT}
         cancelLabel={rerunT.cancel || "取消"}
-        onOpenChange={handleQuickCreateProfileOpenChange}
+        onQuickCreateOpenChange={handleQuickCreateProfileOpenChange}
         onApplyTemplate={applyQuickCreateTemplate}
         onProfileNameChange={setQuickCreateProfileName}
         onProfileGroupChange={setQuickCreateProfileGroup}
         onProfileCustomGroupChange={setQuickCreateProfileCustomGroup}
         onDraftChange={updateQuickCreateProfileDraft}
-        onSave={handleQuickCreateProfileSave}
-      />
-
-      {/* Config Dialog */}
-      <ConfigDialog
-        open={configDialogOpen}
-        onOpenChange={(open) => {
+        onQuickCreateSave={handleQuickCreateProfileSave}
+        configDialogOpen={configDialogOpen}
+        onConfigDialogOpenChange={(open) => {
           setConfigDialogOpen(open);
           if (!open) {
             loadProfiles();
