@@ -56,6 +56,7 @@ import { FailureGroupDetailCard } from "@/components/publish/FailureGroupDetailC
 import { GenericProviderPublishCard } from "@/components/publish/GenericProviderPublishCard";
 import { FailureGroupsCard } from "@/components/publish/FailureGroupsCard";
 import { OutputLogCard } from "@/components/publish/OutputLogCard";
+import { RerunChecklistDialog } from "@/components/publish/RerunChecklistDialog";
 import { ReleaseChecklistDialog } from "@/components/release/ReleaseChecklistDialog";
 
 // UI Components
@@ -1831,8 +1832,13 @@ function App() {
         onOpenEnvironment={() => openEnvironmentDialog(null, [activeProviderId])}
       />
 
-      <Dialog
+      <RerunChecklistDialog
         open={rerunChecklistOpen}
+        pendingRerunRecord={pendingRerunRecord}
+        selectedRepoCurrentBranch={selectedRepo?.currentBranch}
+        environmentStatus={environmentStatus}
+        rerunChecklistState={rerunChecklistState}
+        rerunT={rerunT}
         onOpenChange={(open) => {
           if (open) {
             setRerunChecklistOpen(true);
@@ -1840,105 +1846,10 @@ function App() {
           }
           closeRerunChecklistDialog();
         }}
-      >
-        <DialogContent className="sm:max-w-[520px]">
-          <DialogHeader>
-            <DialogTitle>{rerunT.title || "重跑前确认清单"}</DialogTitle>
-            <DialogDescription>
-              {rerunT.description || "请确认以下检查项，避免在敏感分支或错误目标上触发重跑。"}
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-3">
-            <div className="rounded-xl border border-[var(--glass-border-subtle)] bg-[var(--glass-input-bg)] p-3 text-sm space-y-1">
-              <div>
-                <span className="text-muted-foreground">{rerunT.provider || "Provider:"}</span>{" "}
-                {pendingRerunRecord?.providerId || rerunT.unknown || "(未知)"}
-              </div>
-              <div>
-                <span className="text-muted-foreground">{rerunT.currentBranch || "当前分支:"}</span>{" "}
-                {selectedRepo?.currentBranch || rerunT.unknown || "(未知)"}
-              </div>
-              <div>
-                <span className="text-muted-foreground">{rerunT.environmentStatus || "环境状态:"}</span>{" "}
-                {environmentStatus === "ready"
-                  ? rerunT.ready || "已就绪"
-                  : environmentStatus === "warning"
-                    ? rerunT.warning || "存在警告"
-                    : environmentStatus === "blocked"
-                      ? rerunT.blocked || "存在阻断问题"
-                      : rerunT.notChecked || "未检查"}
-              </div>
-              <div>
-                <span className="text-muted-foreground">{rerunT.outputTarget || "输出目标:"}</span>{" "}
-                {pendingRerunRecord?.outputDir || rerunT.unrecorded || "(未记录)"}
-              </div>
-            </div>
-
-            <div className="space-y-2">
-              <div className="flex items-center justify-between rounded-xl border border-[var(--glass-border-subtle)] px-3 py-2">
-                <Label htmlFor="rerun-check-branch" className="text-sm">
-                  {rerunT.branchCheck || "我已确认当前分支允许重跑"}
-                </Label>
-                <Switch
-                  id="rerun-check-branch"
-                  checked={rerunChecklistState.branch}
-                  onCheckedChange={(checked) =>
-                    setRerunChecklistState((prev) => ({
-                      ...prev,
-                      branch: checked,
-                    }))
-                  }
-                />
-              </div>
-              <div className="flex items-center justify-between rounded-xl border border-[var(--glass-border-subtle)] px-3 py-2">
-                <Label htmlFor="rerun-check-env" className="text-sm">
-                  {rerunT.environmentCheck || "我已确认环境状态满足预期"}
-                </Label>
-                <Switch
-                  id="rerun-check-env"
-                  checked={rerunChecklistState.environment}
-                  onCheckedChange={(checked) =>
-                    setRerunChecklistState((prev) => ({
-                      ...prev,
-                      environment: checked,
-                    }))
-                  }
-                />
-              </div>
-              <div className="flex items-center justify-between rounded-xl border border-[var(--glass-border-subtle)] px-3 py-2">
-                <Label htmlFor="rerun-check-output" className="text-sm">
-                  {rerunT.outputCheck || "我已确认输出目标目录与日志窗口"}
-                </Label>
-                <Switch
-                  id="rerun-check-output"
-                  checked={rerunChecklistState.output}
-                  onCheckedChange={(checked) =>
-                    setRerunChecklistState((prev) => ({
-                      ...prev,
-                      output: checked,
-                    }))
-                  }
-                />
-              </div>
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="ghost" onClick={closeRerunChecklistDialog}>
-              {rerunT.cancel || "取消"}
-            </Button>
-            <Button
-              onClick={() => void confirmRerunWithChecklist()}
-              disabled={
-                !rerunChecklistState.branch ||
-                !rerunChecklistState.environment ||
-                !rerunChecklistState.output
-              }
-            >
-              {rerunT.confirm || "确认并重跑"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+        onChecklistStateChange={setRerunChecklistState}
+        onClose={closeRerunChecklistDialog}
+        onConfirm={() => void confirmRerunWithChecklist()}
+      />
 
       <ReleaseChecklistDialog
         open={releaseChecklistOpen}
