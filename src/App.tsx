@@ -4,6 +4,7 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import { toast } from "sonner";
 
 // Hooks
+import { useAppDialogs } from "@/hooks/useAppDialogs";
 import { useAppState } from "@/hooks/useAppState";
 import { useTheme } from "@/hooks/useTheme";
 import { useShortcuts } from "@/hooks/useShortcuts";
@@ -397,17 +398,22 @@ function App() {
   // Layout State (local only - collapse state doesn't need persistence)
   const [leftPanelCollapsed, setLeftPanelCollapsed] = useState(false);
   const [middlePanelCollapsed, setMiddlePanelCollapsed] = useState(false);
-  const [settingsOpen, setSettingsOpen] = useState(false);
-  const [shortcutsOpen, setShortcutsOpen] = useState(false);
-  const [commandImportOpen, setCommandImportOpen] = useState(false);
-  const [configDialogOpen, setConfigDialogOpen] = useState(false);
-
-
-  const [environmentDialogOpen, setEnvironmentDialogOpen] = useState(false);
-  const [environmentDefaultProviderIds, setEnvironmentDefaultProviderIds] =
-    useState<string[]>(["dotnet"]);
-  const [environmentInitialResult, setEnvironmentInitialResult] =
-    useState<EnvironmentCheckResult | null>(null);
+  const {
+    settingsOpen,
+    setSettingsOpen,
+    shortcutsOpen,
+    setShortcutsOpen,
+    commandImportOpen,
+    setCommandImportOpen,
+    configDialogOpen,
+    environmentDialogOpen,
+    environmentDefaultProviderIds,
+    environmentInitialResult,
+    handleOpenSettings,
+    openEnvironmentDialog,
+    handleEnvironmentDialogOpenChange,
+    handleConfigDialogOpenChange,
+  } = useAppDialogs(activeProviderId);
   const [environmentLastResult, setEnvironmentLastResult] =
     useState<EnvironmentCheckResult | null>(null);
   const [isRerunChecklistEnabled, setIsRerunChecklistEnabled] = useState(
@@ -488,11 +494,6 @@ function App() {
   const [branchConnectivityByRepoId, setBranchConnectivityByRepoId] = useState<
     Record<string, boolean>
   >({});
-
-  // Open settings dialog
-  const handleOpenSettings = useCallback(() => {
-    setSettingsOpen(true);
-  }, []);
 
   // Get selected repository
   const selectedRepo = repositories.find((r) => r.id === selectedRepoId) || null;
@@ -662,18 +663,6 @@ function App() {
     if (projectInfo?.project_file) return projectInfo.project_file;
     return selectedRepo?.path || "";
   }, [projectInfo, selectedRepo]);
-
-  const openEnvironmentDialog = useCallback(
-    (
-      initialResult: EnvironmentCheckResult | null = null,
-      providerIds: string[] = [activeProviderId]
-    ) => {
-      setEnvironmentDefaultProviderIds(providerIds);
-      setEnvironmentInitialResult(initialResult);
-      setEnvironmentDialogOpen(true);
-    },
-    [activeProviderId]
-  );
 
   const handleCustomConfigUpdate = useCallback(
     (updates: Partial<PublishConfigStore>) => {
@@ -1643,10 +1632,7 @@ function App() {
         shortcutsOpen={shortcutsOpen}
         onShortcutsOpenChange={setShortcutsOpen}
         environmentDialogOpen={environmentDialogOpen}
-        onEnvironmentDialogOpenChange={(open) => {
-          setEnvironmentDialogOpen(open);
-          if (!open) setEnvironmentInitialResult(null);
-        }}
+        onEnvironmentDialogOpenChange={handleEnvironmentDialogOpenChange}
         environmentDefaultProviderIds={environmentDefaultProviderIds}
         environmentInitialResult={environmentInitialResult}
         onEnvironmentChecked={setEnvironmentLastResult}
@@ -1665,7 +1651,7 @@ function App() {
         theme={theme}
         onThemeChange={setTheme}
         onOpenShortcuts={() => setShortcutsOpen(true)}
-        onOpenConfig={() => setConfigDialogOpen(true)}
+        onOpenConfig={() => handleConfigDialogOpenChange(true)}
         environmentStatus={environmentStatus}
         environmentCheckedAt={environmentLastResult?.checked_at}
         onOpenEnvironment={() => openEnvironmentDialog(null, [activeProviderId])}
@@ -1715,12 +1701,9 @@ function App() {
         onDraftChange={updateQuickCreateProfileDraft}
         onQuickCreateSave={handleQuickCreateProfileSave}
         configDialogOpen={configDialogOpen}
-        onConfigDialogOpenChange={(open) => {
-          setConfigDialogOpen(open);
-          if (!open) {
-            loadProfiles();
-          }
-        }}
+        onConfigDialogOpenChange={(open) =>
+          handleConfigDialogOpenChange(open, loadProfiles)
+        }
         onLoadProfile={handleLoadProfile}
         currentProviderId={activeProviderId}
         repoId={selectedRepoId}
