@@ -19,6 +19,7 @@ import {
   QUICK_CREATE_PROFILE_GROUP_CUSTOM,
   QUICK_CREATE_PROFILE_GROUP_DEFAULT,
 } from "@/hooks/useProfiles";
+import { useCommandImport } from "@/hooks/useCommandImport";
 import { useHistoryPresets } from "@/hooks/useHistoryPresets";
 import { useI18n, type Language } from "@/hooks/useI18n";
 import { cn } from "@/lib/utils";
@@ -86,7 +87,6 @@ import {
 
 // Types
 import type { EnvironmentCheckResult } from "@/lib/environment";
-import { mapImportedSpecByProvider } from "@/lib/commandImportMapping";
 import { deriveFailureSignature } from "@/lib/failureSignature";
 import {
   analyzeProjectScanFailure,
@@ -134,12 +134,6 @@ interface PublishConfig {
   output_dir: string;
   use_profile: boolean;
   profile_name: string;
-}
-
-interface ImportFeedback {
-  providerId: string;
-  mappedKeys: string[];
-  unmappedKeys: string[];
 }
 
 interface DotnetPreset {
@@ -409,8 +403,6 @@ function App() {
   const [providerParameters, setProviderParameters] = useState<
     Record<string, Record<string, ParameterValue>>
   >({});
-  const [lastImportFeedback, setLastImportFeedback] =
-    useState<ImportFeedback | null>(null);
 
   // 快捷键处理
   useShortcuts({
@@ -781,10 +773,6 @@ function App() {
   const activeProviderLabel = formatProviderLabel(activeProvider);
   const activeProviderSchema = providerSchemas[activeProviderId];
   const activeProviderParameters = providerParameters[activeProviderId] || {};
-  const activeImportFeedback =
-    lastImportFeedback?.providerId === activeProviderId
-      ? lastImportFeedback
-      : null;
 
   const scopedExecutionHistory = useMemo(() => {
     if (!selectedRepo) {
@@ -820,7 +808,6 @@ function App() {
     historyFilterWindow,
     historyFilterKeyword,
   });
-
 
   const filteredExecutionHistory = useMemo(
     () =>
@@ -914,6 +901,15 @@ function App() {
     },
     [customConfig, setCustomConfig]
   );
+
+  const { activeImportFeedback, handleCommandImport } = useCommandImport({
+    activeProviderId,
+    appT,
+    providerSchemas,
+    onDotnetConfigUpdate: handleCustomConfigUpdate,
+    onEnableCustomMode: () => setIsCustomMode(true),
+    setProviderParameters,
+  });
 
   const profilesState = useProfiles({
     appT,
@@ -1758,52 +1754,6 @@ function App() {
     },
     [activeProviderId]
   );
-
-  // Handle command import
-  const handleCommandImport = (spec: any) => {
-    const importedProviderId =
-      spec?.provider_id || spec?.providerId || activeProviderId;
-    const schema = providerSchemas[importedProviderId];
-    const mapping = mapImportedSpecByProvider(spec, activeProviderId, {
-      supportedKeys: schema ? Object.keys(schema.parameters) : undefined,
-    });
-
-    setLastImportFeedback({
-      providerId: mapping.providerId,
-      mappedKeys: mapping.mappedKeys,
-      unmappedKeys: mapping.unmappedKeys,
-    });
-
-    if (mapping.providerId === "dotnet") {
-      if (Object.keys(mapping.dotnetUpdates).length > 0) {
-        handleCustomConfigUpdate(mapping.dotnetUpdates);
-        setIsCustomMode(true);
-      }
-    } else {
-      setProviderParameters((prev) => ({
-        ...prev,
-        [mapping.providerId]: mapping.providerParameters,
-      }));
-    }
-
-    if (mapping.mappedKeys.length === 0 && mapping.unmappedKeys.length > 0) {
-      toast.error(appT.noMappableParameters || "未找到可映射参数", {
-        description: `${appT.unmappedFields || "未映射字段"}: ${mapping.unmappedKeys.join(", ")}`,
-      });
-      return;
-    }
-
-    if (mapping.unmappedKeys.length > 0) {
-      toast.message(appT.partialImport || "参数已部分导入", {
-        description: `${appT.mappedFields || "已映射"} ${mapping.mappedKeys.length} ${appT.fieldsUnit || "个字段"}，${appT.unmappedFields || "未映射字段"} ${mapping.unmappedKeys.length} ${appT.fieldsUnit || "个字段"}`,
-      });
-      return;
-    }
-
-    toast.success(appT.parametersImported || "参数已导入", {
-      description: `${appT.mappedFields || "已映射"} ${mapping.mappedKeys.length} ${appT.fieldsUnit || "个字段"}`,
-    });
-  };
 
   // Show loading state
   if (isStateLoading) {
