@@ -24,6 +24,7 @@ import {
 } from "@/hooks/useProfiles";
 import { useCommandImport } from "@/hooks/useCommandImport";
 import { useScopedConfigs } from "@/hooks/useScopedConfigs";
+import { useFailureGroupSelection } from "@/hooks/useFailureGroupSelection";
 import { useHistoryActions } from "@/hooks/useHistoryActions";
 import { useHistoryViewState } from "@/hooks/useHistoryViewState";
 import { useEnvironmentStatus } from "@/hooks/useEnvironmentStatus";
@@ -73,11 +74,7 @@ import {
   type HistoryFilterStatus,
   type HistoryFilterWindow,
 } from "@/lib/historyFilterPresets";
-import {
-  getRepresentativeRecord,
-  groupExecutionFailures,
-  type FailureGroup,
-} from "@/lib/failureGroups";
+import { groupExecutionFailures, type FailureGroup } from "@/lib/failureGroups";
 import {
   loadRerunChecklistPreference,
   saveRerunChecklistPreference,
@@ -404,8 +401,6 @@ function App() {
   const [historyFilterWindow, setHistoryFilterWindow] =
     useState<HistoryFilterWindow>("all");
   const [historyFilterKeyword, setHistoryFilterKeyword] = useState("");
-  const [selectedFailureGroupKey, setSelectedFailureGroupKey] =
-    useState<string | null>(null);
   const [issueDraftTemplate, setIssueDraftTemplate] =
     useState<IssueDraftTemplate>("bug");
   const [issueDraftSections, setIssueDraftSections] = useState({
@@ -537,18 +532,12 @@ function App() {
     [filteredExecutionHistory]
   );
 
-  const selectedFailureGroup = useMemo(
-    () =>
-      failureGroups.find((group) => group.key === selectedFailureGroupKey) ||
-      null,
-    [failureGroups, selectedFailureGroupKey]
-  );
-
-  const representativeFailureRecord = useMemo(
-    () =>
-      selectedFailureGroup ? getRepresentativeRecord(selectedFailureGroup) : null,
-    [selectedFailureGroup]
-  );
+  const {
+    selectedFailureGroupKey,
+    setSelectedFailureGroupKey,
+    selectedFailureGroup,
+    representativeFailureRecord,
+  } = useFailureGroupSelection(failureGroups);
 
   const environmentStatus = useEnvironmentStatus(environmentLastResult);
 
@@ -675,22 +664,6 @@ function App() {
   useEffect(() => {
     setExecutionHistory((prev) => prev.slice(0, executionHistoryLimit));
   }, [executionHistoryLimit]);
-
-  useEffect(() => {
-    if (failureGroups.length === 0) {
-      if (selectedFailureGroupKey !== null) {
-        setSelectedFailureGroupKey(null);
-      }
-      return;
-    }
-
-    if (
-      !selectedFailureGroupKey ||
-      !failureGroups.some((group) => group.key === selectedFailureGroupKey)
-    ) {
-      setSelectedFailureGroupKey(failureGroups[0].key);
-    }
-  }, [failureGroups, selectedFailureGroupKey]);
 
   // Load project info when repo or provider changes
   useEffect(() => {
