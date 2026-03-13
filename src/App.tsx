@@ -103,9 +103,7 @@ import {
 } from "@/lib/issueDraft";
 import {
   DEFAULT_DAILY_TRIAGE_PRESET,
-  type DailyTriagePreset,
   type HistoryFilterStatus,
-  type HistoryFilterPreset,
   type HistoryFilterWindow,
 } from "@/lib/historyFilterPresets";
 import {
@@ -806,6 +804,24 @@ function App() {
     [scopedExecutionHistory]
   );
 
+  const {
+    historyFilterPresets,
+    dailyTriagePreset,
+    setDailyTriagePreset,
+    selectedHistoryPresetId,
+    setSelectedHistoryPresetId,
+    applyHistoryPreset,
+    saveCurrentHistoryPreset,
+    deleteSelectedHistoryPreset,
+  } = useHistoryPresets({
+    historyT,
+    historyFilterProvider,
+    historyFilterStatus,
+    historyFilterWindow,
+    historyFilterKeyword,
+  });
+
+
   const filteredExecutionHistory = useMemo(
     () =>
       filterExecutionHistory(scopedExecutionHistory, {
@@ -917,23 +933,6 @@ function App() {
     defaultPresetId: PRESETS[0]?.id ?? "release-fd",
     getPresetText,
     buildProfileParameters: toDotnetProfileParameters,
-  });
-
-  const {
-    historyFilterPresets,
-    dailyTriagePreset,
-    setDailyTriagePreset,
-    selectedHistoryPresetId,
-    setSelectedHistoryPresetId,
-    applyHistoryPreset,
-    saveCurrentHistoryPreset,
-    deleteSelectedHistoryPreset,
-  } = useHistoryPresets({
-    historyT,
-    historyFilterProvider,
-    historyFilterStatus,
-    historyFilterWindow,
-    historyFilterKeyword,
   });
 
   const persistExecutionRecord = useCallback((record: ExecutionRecord) => {
@@ -2076,7 +2075,14 @@ function App() {
                 onHistoryFilterStatusChange={setHistoryFilterStatus}
                 onHistoryFilterWindowChange={setHistoryFilterWindow}
                 onHistoryFilterKeywordChange={setHistoryFilterKeyword}
-                onApplyHistoryPreset={applyHistoryPreset}
+                onApplyHistoryPreset={(presetId) =>
+                  applyHistoryPreset(presetId, {
+                    setHistoryFilterProvider,
+                    setHistoryFilterStatus,
+                    setHistoryFilterWindow,
+                    setHistoryFilterKeyword,
+                  })
+                }
                 onSaveCurrentHistoryPreset={saveCurrentHistoryPreset}
                 onDeleteSelectedHistoryPreset={deleteSelectedHistoryPreset}
                 onDailyTriagePresetChange={setDailyTriagePreset}
