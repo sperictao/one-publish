@@ -10,6 +10,7 @@ import { useTheme } from "@/hooks/useTheme";
 import { useShortcuts } from "@/hooks/useShortcuts";
 import { useDiagnosticsExports } from "@/hooks/useDiagnosticsExports";
 import { useRepositoryActions } from "@/hooks/useRepositoryActions";
+import { useRerunFlow } from "@/hooks/useRerunFlow";
 import {
   usePublishExecution,
   type ProviderPublishSpec,
@@ -419,14 +420,6 @@ function App() {
   const [isRerunChecklistEnabled, setIsRerunChecklistEnabled] = useState(
     () => loadRerunChecklistPreference().enabled
   );
-  const [rerunChecklistOpen, setRerunChecklistOpen] = useState(false);
-  const [pendingRerunRecord, setPendingRerunRecord] =
-    useState<ExecutionRecord | null>(null);
-  const [rerunChecklistState, setRerunChecklistState] = useState({
-    branch: false,
-    environment: false,
-    output: false,
-  });
   // Min/Max constraints
   const MIN_PANEL_WIDTH = 150;
   const MAX_PANEL_WIDTH = 400;
@@ -1241,79 +1234,6 @@ function App() {
     setSelectedHistoryPresetId,
   });
 
-  const executeRerunFromRecord = useCallback(
-    async (record: ExecutionRecord) => {
-      const spec = extractSpecFromRecord(record);
-      if (!spec) {
-        toast.error(historyT.historyMissingRecoverableSpec || "历史记录缺少可恢复的发布参数", {
-          description: historyT.historyMissingRecoverableSpecHint || "请使用最新版本重新执行一次后再重跑",
-        });
-        return;
-      }
-
-      restoreSpecToEditor(spec);
-      await runPublishWithSpec(spec, getRecentConfigKeyFromSpec(spec));
-    },
-    [
-      extractSpecFromRecord,
-      getRecentConfigKeyFromSpec,
-      restoreSpecToEditor,
-      runPublishWithSpec,
-    ]
-  );
-
-  const rerunFromHistory = useCallback(
-    async (record: ExecutionRecord) => {
-      if (!isRerunChecklistEnabled) {
-        await executeRerunFromRecord(record);
-        return;
-      }
-
-      setPendingRerunRecord(record);
-      setRerunChecklistState({
-        branch: false,
-        environment: false,
-        output: false,
-      });
-      setRerunChecklistOpen(true);
-    },
-    [executeRerunFromRecord, isRerunChecklistEnabled]
-  );
-
-  const closeRerunChecklistDialog = useCallback(() => {
-    setRerunChecklistOpen(false);
-    setPendingRerunRecord(null);
-    setRerunChecklistState({
-      branch: false,
-      environment: false,
-      output: false,
-    });
-  }, []);
-
-  const confirmRerunWithChecklist = useCallback(async () => {
-    if (!pendingRerunRecord) {
-      return;
-    }
-
-    if (
-      !rerunChecklistState.branch ||
-      !rerunChecklistState.environment ||
-      !rerunChecklistState.output
-    ) {
-      toast.error(rerunT.requireChecklist || "请先完成重跑前确认清单");
-      return;
-    }
-
-    const record = pendingRerunRecord;
-    closeRerunChecklistDialog();
-    await executeRerunFromRecord(record);
-  }, [
-    closeRerunChecklistDialog,
-    executeRerunFromRecord,
-    pendingRerunRecord,
-    rerunChecklistState,
-  ]);
-
   const handleProviderParametersChange = useCallback(
     (parameters: Record<string, ParameterValue>) => {
       setProviderParameters((prev) => ({
@@ -1323,6 +1243,25 @@ function App() {
     },
     [activeProviderId]
   );
+
+  const {
+    rerunChecklistOpen,
+    setRerunChecklistOpen,
+    pendingRerunRecord,
+    rerunChecklistState,
+    setRerunChecklistState,
+    rerunFromHistory,
+    closeRerunChecklistDialog,
+    confirmRerunWithChecklist,
+  } = useRerunFlow({
+    isRerunChecklistEnabled,
+    historyT,
+    rerunT,
+    extractSpecFromRecord,
+    restoreSpecToEditor,
+    getRecentConfigKeyFromSpec,
+    runPublishWithSpec,
+  });
 
   // Show loading state
   if (isStateLoading) {
