@@ -25,6 +25,7 @@ import { useCommandImport } from "@/hooks/useCommandImport";
 import { useHistoryPresets } from "@/hooks/useHistoryPresets";
 import { useScopedConfigs } from "@/hooks/useScopedConfigs";
 import { useHistoryActions } from "@/hooks/useHistoryActions";
+import { useEnvironmentStatus } from "@/hooks/useEnvironmentStatus";
 import { useI18n, type Language } from "@/hooks/useI18n";
 import { cn } from "@/lib/utils";
 import {
@@ -641,16 +642,7 @@ function App() {
     [selectedFailureGroup]
   );
 
-  const environmentStatus = useMemo(() => {
-    if (!environmentLastResult) return "unknown" as const;
-    if (environmentLastResult.issues.some((i) => i.severity === "critical")) {
-      return "blocked" as const;
-    }
-    if (environmentLastResult.issues.some((i) => i.severity === "warning")) {
-      return "warning" as const;
-    }
-    return "ready" as const;
-  }, [environmentLastResult]);
+  const environmentStatus = useEnvironmentStatus(environmentLastResult);
 
   const commandImportProjectPath = useMemo(() => {
     if (projectInfo?.project_file) return projectInfo.project_file;
