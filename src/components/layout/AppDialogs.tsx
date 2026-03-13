@@ -30,7 +30,7 @@ interface RerunChecklistState {
   output: boolean;
 }
 
-interface AppDialogsProps {
+export interface AppDialogsProps {
   shortcutsOpen: boolean;
   onShortcutsOpenChange: (open: boolean) => void;
   environmentDialogOpen: boolean;
