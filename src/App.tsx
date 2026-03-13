@@ -56,35 +56,16 @@ import { FailureGroupDetailCard } from "@/components/publish/FailureGroupDetailC
 import { GenericProviderPublishCard } from "@/components/publish/GenericProviderPublishCard";
 import { FailureGroupsCard } from "@/components/publish/FailureGroupsCard";
 import { OutputLogCard } from "@/components/publish/OutputLogCard";
+import { QuickCreateProfileDialog } from "@/components/publish/QuickCreateProfileDialog";
 import { RerunChecklistDialog } from "@/components/publish/RerunChecklistDialog";
 import { ReleaseChecklistDialog } from "@/components/release/ReleaseChecklistDialog";
 
 // UI Components
 import { Button } from "@/components/ui/button";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Switch } from "@/components/ui/switch";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import {
   Folder,
   Settings,
   Loader2,
-  Save,
-  Check,
 } from "lucide-react";
 
 // Types
@@ -1873,244 +1854,30 @@ function App() {
         />
       )}
 
-      <Dialog
+      <QuickCreateProfileDialog
         open={quickCreateProfileOpen}
+        quickCreateProfileOpen={quickCreateProfileOpen}
+        quickCreateTemplateId={quickCreateTemplateId}
+        quickCreateTemplateOptions={quickCreateTemplateOptions}
+        quickCreateProfileName={quickCreateProfileName}
+        quickCreateProfileGroup={quickCreateProfileGroup}
+        quickCreateProfileGroupOptions={quickCreateProfileGroupOptions}
+        quickCreateProfileCustomGroup={quickCreateProfileCustomGroup}
+        quickCreateProfileDraft={quickCreateProfileDraft}
+        quickCreateProfileSaving={quickCreateProfileSaving}
+        quickCreateGroupDefaultValue={QUICK_CREATE_PROFILE_GROUP_DEFAULT}
+        quickCreateGroupCustomValue={QUICK_CREATE_PROFILE_GROUP_CUSTOM}
+        profileT={profileT}
+        appT={appT}
+        cancelLabel={rerunT.cancel || "取消"}
         onOpenChange={handleQuickCreateProfileOpenChange}
-      >
-        <DialogContent className="sm:max-w-[840px] max-h-[80vh] flex flex-col">
-          <DialogHeader>
-            <DialogTitle>
-              {profileT.quickCreateTitle || "创建发布配置"}
-            </DialogTitle>
-            <DialogDescription>
-              {profileT.quickCreateDescription || "填写与自定义模式一致的参数并保存为发布配置。"}
-            </DialogDescription>
-          </DialogHeader>
-
-          <div className="flex-1 space-y-4 overflow-y-auto">
-            <fieldset className="space-y-2.5">
-              <Label>{profileT.quickCreateTemplate || "预置模板"}</Label>
-              <div className="grid max-h-[240px] grid-cols-2 gap-2 overflow-y-auto pr-1 md:grid-cols-4">
-                {quickCreateTemplateOptions.map((option) => {
-                  const isSelected = quickCreateTemplateId === option.id;
-
-                  return (
-                    <label
-                      key={`quick-template-${option.id}`}
-                      title={
-                        option.description
-                          ? `${option.name} - ${option.description}`
-                          : option.name
-                      }
-                      className={cn(
-                        "group relative flex cursor-pointer items-center gap-2 rounded-lg border px-2.5 py-2 transition-all duration-150",
-                        isSelected
-                          ? "border-primary/45 bg-primary/10 shadow-[0_6px_16px_hsl(var(--primary)/0.12)]"
-                          : "border-[var(--glass-divider)] bg-[var(--glass-bg)] hover:border-primary/30 hover:bg-[var(--glass-bg-hover)]"
-                      )}
-                      htmlFor={`quick-template-${option.id}`}
-                    >
-                      <input
-                        id={`quick-template-${option.id}`}
-                        type="radio"
-                        name="quick-profile-template"
-                        className="sr-only"
-                        checked={isSelected}
-                        onChange={() => applyQuickCreateTemplate(option.id)}
-                      />
-                      <div className="min-w-0 flex-1">
-                        <div className="truncate text-sm font-medium leading-5">
-                          {option.name}
-                        </div>
-                        {option.description && (
-                          <div className="truncate text-[11px] text-muted-foreground">
-                            {option.description}
-                          </div>
-                        )}
-                      </div>
-                      <div className="flex items-start">
-                        <span
-                          className={cn(
-                            "mt-0.5 inline-flex h-4 w-4 flex-shrink-0 items-center justify-center rounded-full border transition-colors duration-200",
-                            isSelected
-                              ? "border-primary bg-primary text-primary-foreground"
-                              : "border-[var(--glass-divider)] bg-background/70 text-transparent group-hover:border-primary/45"
-                          )}
-                        >
-                          <Check className="h-3 w-3" />
-                        </span>
-                      </div>
-                    </label>
-                  );
-                })}
-              </div>
-            </fieldset>
-
-            <div className="space-y-2">
-              <Label htmlFor="quick-profile-name">
-                {profileT.quickCreateName || "配置名称"}
-              </Label>
-              <Input
-                id="quick-profile-name"
-                placeholder={profileT.profileNamePlaceholder || "输入配置文件名称"}
-                value={quickCreateProfileName}
-                onChange={(e) => setQuickCreateProfileName(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" && !quickCreateProfileSaving) {
-                    e.preventDefault();
-                    handleQuickCreateProfileSave();
-                  }
-                }}
-              />
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="quick-profile-group">
-                {profileT.quickCreateGroup || "发布配置组"}
-              </Label>
-              <Select
-                value={quickCreateProfileGroup}
-                onValueChange={setQuickCreateProfileGroup}
-              >
-                <SelectTrigger id="quick-profile-group">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value={QUICK_CREATE_PROFILE_GROUP_DEFAULT}>
-                    {profileT.quickCreateGroupDefault || "默认分组"}
-                  </SelectItem>
-                  {quickCreateProfileGroupOptions.map((group) => (
-                    <SelectItem key={`quick-profile-group-${group}`} value={group}>
-                      {group}
-                    </SelectItem>
-                  ))}
-                  <SelectItem value={QUICK_CREATE_PROFILE_GROUP_CUSTOM}>
-                    {profileT.quickCreateGroupCustom || "自定义分组"}
-                  </SelectItem>
-                </SelectContent>
-              </Select>
-              {quickCreateProfileGroup === QUICK_CREATE_PROFILE_GROUP_CUSTOM && (
-                <Input
-                  id="quick-profile-group-custom"
-                  value={quickCreateProfileCustomGroup}
-                  onChange={(e) =>
-                    setQuickCreateProfileCustomGroup(e.target.value)
-                  }
-                  placeholder={
-                    profileT.quickCreateGroupCustomPlaceholder ||
-                    "输入自定义发布配置组名称"
-                  }
-                />
-              )}
-            </div>
-
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="quick-profile-configuration">
-                  {appT.configurationType || "配置类型"}
-                </Label>
-                <Select
-                  value={quickCreateProfileDraft.configuration}
-                  onValueChange={(value) =>
-                    updateQuickCreateProfileDraft({ configuration: value })
-                  }
-                >
-                  <SelectTrigger id="quick-profile-configuration">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="Release">Release</SelectItem>
-                    <SelectItem value="Debug">Debug</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="quick-profile-runtime">
-                  {appT.runtimeLabel || "运行时"}
-                </Label>
-                <Select
-                  value={quickCreateProfileDraft.runtime || "none"}
-                  onValueChange={(value) =>
-                    updateQuickCreateProfileDraft({
-                      runtime: value === "none" ? "" : value,
-                    })
-                  }
-                >
-                  <SelectTrigger id="quick-profile-runtime">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="none">
-                      {appT.frameworkDependent || "框架依赖"}
-                    </SelectItem>
-                    <SelectItem value="win-x64">Windows x64</SelectItem>
-                    <SelectItem value="osx-arm64">macOS ARM64</SelectItem>
-                    <SelectItem value="osx-x64">macOS x64</SelectItem>
-                    <SelectItem value="linux-x64">Linux x64</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div className="col-span-2 space-y-2">
-                <Label htmlFor="quick-profile-output">
-                  {appT.outputDirLabel || "输出目录"}
-                </Label>
-                <Input
-                  id="quick-profile-output"
-                  value={quickCreateProfileDraft.outputDir}
-                  onChange={(e) =>
-                    updateQuickCreateProfileDraft({ outputDir: e.target.value })
-                  }
-                  placeholder={appT.outputDirPlaceholder || "留空使用默认目录"}
-                />
-              </div>
-
-              <div className="col-span-2 flex items-center gap-2">
-                <Switch
-                  id="quick-profile-self-contained"
-                  checked={quickCreateProfileDraft.selfContained}
-                  onCheckedChange={(checked) =>
-                    updateQuickCreateProfileDraft({ selfContained: checked })
-                  }
-                  disabled={!quickCreateProfileDraft.runtime}
-                />
-                <Label htmlFor="quick-profile-self-contained">
-                  {appT.selfContained || "自包含部署"}
-                </Label>
-              </div>
-            </div>
-          </div>
-
-          <DialogFooter>
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => handleQuickCreateProfileOpenChange(false)}
-              disabled={quickCreateProfileSaving}
-            >
-              {rerunT.cancel || "取消"}
-            </Button>
-            <Button
-              type="button"
-              onClick={handleQuickCreateProfileSave}
-              disabled={quickCreateProfileSaving || !quickCreateProfileName.trim()}
-            >
-              {quickCreateProfileSaving ? (
-                <>
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                  {profileT.quickCreateSaving || "保存中..."}
-                </>
-              ) : (
-                <>
-                  <Save className="h-4 w-4 mr-2" />
-                  {profileT.quickCreateAction || "创建并保存"}
-                </>
-              )}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+        onApplyTemplate={applyQuickCreateTemplate}
+        onProfileNameChange={setQuickCreateProfileName}
+        onProfileGroupChange={setQuickCreateProfileGroup}
+        onProfileCustomGroupChange={setQuickCreateProfileCustomGroup}
+        onDraftChange={updateQuickCreateProfileDraft}
+        onSave={handleQuickCreateProfileSave}
+      />
 
       {/* Config Dialog */}
       <ConfigDialog
