@@ -46,10 +46,10 @@ import { EnvironmentCheckDialog } from "@/components/environment/EnvironmentChec
 // Publish Components
 import { CommandImportDialog } from "@/components/publish/CommandImportDialog";
 import { ConfigDialog } from "@/components/publish/ConfigDialog";
-import { ParameterEditor } from "@/components/publish/ParameterEditor";
 import { ExecutionHistoryCard } from "@/components/publish/ExecutionHistoryCard";
 import { DotnetPublishCard } from "@/components/publish/DotnetPublishCard";
 import { FailureGroupDetailCard } from "@/components/publish/FailureGroupDetailCard";
+import { GenericProviderPublishCard } from "@/components/publish/GenericProviderPublishCard";
 import { FailureGroupsCard } from "@/components/publish/FailureGroupsCard";
 import { OutputLogCard } from "@/components/publish/OutputLogCard";
 import { ReleaseChecklistDialog } from "@/components/release/ReleaseChecklistDialog";
@@ -83,11 +83,9 @@ import {
 } from "@/components/ui/dialog";
 import {
   Folder,
-  Play,
   Settings,
   Loader2,
   Import,
-  Square,
   Save,
   Check,
 } from "lucide-react";
@@ -2072,8 +2070,14 @@ function App() {
                   publishT={publishT}
                   isCustomMode={isCustomMode}
                   selectedPreset={selectedPreset}
-                  releasePresets={PRESETS.filter((preset) => preset.id.startsWith("release"))}
-                  debugPresets={PRESETS.filter((preset) => preset.id.startsWith("debug"))}
+                  releasePresets={PRESETS.filter((preset) => preset.id.startsWith("release")).map((preset) => ({
+                    ...preset,
+                    ...getPresetText(preset.id, preset.name, preset.description),
+                  }))}
+                  debugPresets={PRESETS.filter((preset) => preset.id.startsWith("debug")).map((preset) => ({
+                    ...preset,
+                    ...getPresetText(preset.id, preset.name, preset.description),
+                  }))}
                   projectPublishProfiles={projectInfo.publish_profiles}
                   customConfig={customConfig}
                   dotnetPublishPreviewCommand={dotnetPublishPreviewCommand}
@@ -2090,100 +2094,22 @@ function App() {
               )}
 
               {selectedRepo && activeProviderId !== "dotnet" && (
-                <Card>
-                  <CardHeader className="pb-3">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <CardTitle className="text-lg flex items-center gap-2">
-                          <Settings className="h-5 w-5" />
-                          {configT.title || "发布配置"}
-                        </CardTitle>
-                        <CardDescription>
-                          {(appT.providerConfigReady || "{{provider}} Provider 已就绪（支持参数映射与通用执行）").replace("{{provider}}", activeProviderLabel)}
-                        </CardDescription>
-                      </div>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => setCommandImportOpen(true)}
-                      >
-                        <Import className="h-4 w-4 mr-1" />
-                        {appT.importFromCommand || "从命令导入"}
-                      </Button>
-                    </div>
-                  </CardHeader>
-                  <CardContent className="space-y-3">
-                    <div className="rounded-xl border border-amber-200/60 bg-amber-50/80 px-3 py-2 text-amber-700 text-sm">
-                      {(appT.providerConfigHint || "当前已支持 {{provider}} 的命令导入映射、参数编辑与通用执行。").replace("{{provider}}", activeProviderLabel)}
-                    </div>
-                    {activeProviderSchema ? (
-                      <ParameterEditor
-                        schema={activeProviderSchema}
-                        parameters={activeProviderParameters}
-                        onChange={handleProviderParametersChange}
-                      />
-                    ) : (
-                      <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                        {appT.loadingProviderSchema || "正在加载 Provider 参数定义..."}
-                      </div>
-                    )}
-                    <div className="rounded-xl bg-[var(--glass-input-bg)] p-3">
-                      <div className="text-xs text-muted-foreground mb-2">
-                        {appT.parameterSnapshot || "当前参数快照（可保存为配置文件）:"}
-                      </div>
-                      <pre className="text-xs font-mono overflow-auto max-h-40">
-                        {JSON.stringify(activeProviderParameters, null, 2)}
-                      </pre>
-                    </div>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      onClick={() => openEnvironmentDialog(null, [activeProviderId])}
-                    >
-                      {appT.openEnvironmentCheck || "打开环境检查"}
-                    </Button>
-                    <Button
-                      className="w-full"
-                      size="lg"
-                      onClick={executePublish}
-                      disabled={isPublishing}
-                    >
-                      {isPublishing ? (
-                        <>
-                          <Loader2 className="h-5 w-5 mr-2 animate-spin" />
-                          {configT.publishing || "发布中..."}
-                        </>
-                      ) : (
-                        <>
-                          <Play className="h-5 w-5 mr-2" />
-                          {configT.execute || "执行发布"}
-                        </>
-                      )}
-                    </Button>
-                    {isPublishing && (
-                      <Button
-                        type="button"
-                        variant="destructive"
-                        className="w-full"
-                        onClick={cancelPublish}
-                        disabled={isCancellingPublish}
-                      >
-                        {isCancellingPublish ? (
-                          <>
-                            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                            {appT.cancelling || "取消中..."}
-                          </>
-                        ) : (
-                          <>
-                            <Square className="h-4 w-4 mr-2" />
-                            {appT.cancelPublish || "取消发布"}
-                          </>
-                        )}
-                      </Button>
-                    )}
-                  </CardContent>
-                </Card>
+                <GenericProviderPublishCard
+                  activeProviderLabel={activeProviderLabel}
+                  activeProviderSchema={activeProviderSchema}
+                  activeProviderParameters={activeProviderParameters}
+                  appT={appT}
+                  configT={configT}
+                  isPublishing={isPublishing}
+                  isCancellingPublish={isCancellingPublish}
+                  onOpenCommandImport={() => setCommandImportOpen(true)}
+                  onProviderParametersChange={handleProviderParametersChange}
+                  onOpenEnvironmentCheck={() =>
+                    openEnvironmentDialog(null, [activeProviderId])
+                  }
+                  onExecutePublish={executePublish}
+                  onCancelPublish={cancelPublish}
+                />
               )}
 
               {selectedRepo && activeImportFeedback && (

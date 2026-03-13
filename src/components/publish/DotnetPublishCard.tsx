@@ -223,8 +223,8 @@ export function DotnetPublishCard({
           </div>
         )}
 
-        <div className="mt-4 p-3 bg-[var(--glass-input-bg)] rounded-xl border border-[var(--glass-border-subtle)]">
-          <div className="text-xs text-muted-foreground mb-2">
+        <div className="mt-4 rounded-xl border border-[var(--glass-border-subtle)] bg-[var(--glass-input-bg)] p-3">
+          <div className="mb-2 text-xs text-muted-foreground">
             {publishT.command || "将执行的命令:"}
           </div>
           <code className="text-xs font-mono break-all">{dotnetPublishPreviewCommand}</code>
