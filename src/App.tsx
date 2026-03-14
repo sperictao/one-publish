@@ -7,6 +7,7 @@ import { useAppState } from "@/hooks/useAppState";
 import { useTheme } from "@/hooks/useTheme";
 import { useShortcuts } from "@/hooks/useShortcuts";
 import { useDiagnosticsExports } from "@/hooks/useDiagnosticsExports";
+import { useDiagnosticsUiState } from "@/hooks/useDiagnosticsUiState";
 import { useRepositoryActions } from "@/hooks/useRepositoryActions";
 import { useRecoverableSpec } from "@/hooks/useRecoverableSpec";
 import { useRerunFlow } from "@/hooks/useRerunFlow";
@@ -65,7 +66,6 @@ import {
 } from "lucide-react";
 
 // Types
-import type { EnvironmentCheckResult } from "@/lib/environment";
 import { deriveFailureSignature } from "@/lib/failureSignature";
 import {
   loadRerunChecklistPreference,
@@ -332,8 +332,6 @@ function App() {
     handleEnvironmentDialogOpenChange,
     handleConfigDialogOpenChange,
   } = useAppDialogs(activeProviderId);
-  const [environmentLastResult, setEnvironmentLastResult] =
-    useState<EnvironmentCheckResult | null>(null);
   const [isRerunChecklistEnabled, setIsRerunChecklistEnabled] = useState(
     () => loadRerunChecklistPreference().enabled
   );
@@ -383,8 +381,6 @@ function App() {
 
   // Project State (runtime only)
   const [projectInfo, setProjectInfo] = useState<ProjectInfo | null>(null);
-  const [recentBundleExports, setRecentBundleExports] = useState<string[]>([]);
-  const [recentHistoryExports, setRecentHistoryExports] = useState<string[]>([]);
   const [executionHistory, setExecutionHistory] = useState<ExecutionRecord[]>([]);
   const [branchConnectivityByRepoId, setBranchConnectivityByRepoId] = useState<
     Record<string, boolean>
@@ -432,7 +428,16 @@ function App() {
     };
   }, [repositories]);
 
-  const { 
+  const {
+    environmentLastResult,
+    setEnvironmentLastResult,
+    recentBundleExports,
+    recentHistoryExports,
+    trackBundleExport,
+    trackHistoryExport,
+  } = useDiagnosticsUiState();
+
+  const {
     recentConfigKeys,
     favoriteConfigKeys,
     pushRecentConfig,
@@ -776,18 +781,6 @@ function App() {
     setActiveProviderId,
     setProviderParameters,
   });
-
-  const trackBundleExport = useCallback((outputPath: string) => {
-    setRecentBundleExports((prev) =>
-      [outputPath, ...prev.filter((item) => item !== outputPath)].slice(0, 20)
-    );
-  }, []);
-
-  const trackHistoryExport = useCallback((outputPath: string) => {
-    setRecentHistoryExports((prev) =>
-      [outputPath, ...prev.filter((item) => item !== outputPath)].slice(0, 20)
-    );
-  }, []);
 
   const {
     copyGroupSignature,
