@@ -12,21 +12,12 @@ import {
   extractInvokeErrorCode,
   extractInvokeErrorMessage,
 } from "@/lib/tauri/invokeErrors";
-import type {
-  ExecutionRecord,
-  PublishConfigStore,
-} from "@/lib/store";
+import type { ExecutionRecord, PublishConfigStore } from "@/lib/store";
 import type { ArtifactActionState } from "@/components/publish/ArtifactActions";
-import type { ParameterValue } from "@/types/parameters";
+import type { PublishExecutionInput } from "@/hooks/usePublishExecutionInput";
 
 interface TranslationMap {
   [key: string]: string | undefined;
-}
-
-interface ProjectInfo {
-  root_path: string;
-  project_file: string;
-  publish_profiles: string[];
 }
 
 interface PublishConfig {
@@ -60,17 +51,6 @@ interface PublishLogChunkEvent {
   line: string;
 }
 
-interface DotnetPreset {
-  id: string;
-  name: string;
-  description: string;
-  config: {
-    configuration: string;
-    runtime: string;
-    self_contained: boolean;
-  };
-}
-
 export interface PublishExecutionCallSurface {
   pushRecentConfig: (key: string, repoId?: string | null) => void;
   openEnvironmentDialog: (
@@ -92,17 +72,7 @@ export interface PublishExecutionCallSurface {
 interface UsePublishExecutionParams {
   appT: TranslationMap;
   publishT: TranslationMap;
-  selectedRepoId: string | null;
-  selectedRepo: { path: string } | null;
-  activeProviderId: string;
-  activeProviderParameters: Record<string, ParameterValue>;
-  selectedPreset: string;
-  isCustomMode: boolean;
-  customConfig: PublishConfigStore;
-  defaultOutputDir?: string;
-  projectInfo: ProjectInfo | null;
-  presets: DotnetPreset[];
-  specVersion: number;
+  input: PublishExecutionInput;
   callSurface: PublishExecutionCallSurface;
 }
 
@@ -120,19 +90,22 @@ const storeConfigToPublishConfig = (
 export function usePublishExecution({
   appT,
   publishT,
-  selectedRepoId,
-  selectedRepo,
-  activeProviderId,
-  activeProviderParameters,
-  selectedPreset,
-  isCustomMode,
-  customConfig,
-  defaultOutputDir,
-  projectInfo,
-  presets,
-  specVersion,
+  input,
   callSurface,
 }: UsePublishExecutionParams) {
+  const {
+    selectedRepoId,
+    selectedRepo,
+    activeProviderId,
+    activeProviderParameters,
+    selectedPreset,
+    isCustomMode,
+    customConfig,
+    defaultOutputDir,
+    projectInfo,
+    presets,
+    specVersion,
+  } = input;
   const [isPublishing, setIsPublishing] = useState(false);
   const [isCancellingPublish, setIsCancellingPublish] = useState(false);
   const [publishResult, setPublishResult] = useState<PublishResult | null>(null);

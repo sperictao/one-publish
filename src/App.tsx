@@ -11,6 +11,7 @@ import { useProjectExecutionState } from "@/hooks/useProjectExecutionState";
 import { useProjectShellState } from "@/hooks/useProjectShellState";
 import { useProviderPresentationState } from "@/hooks/useProviderPresentationState";
 import { usePublishExecutionCallSurface } from "@/hooks/usePublishExecutionCallSurface";
+import { usePublishExecutionInput } from "@/hooks/usePublishExecutionInput";
 import { useRepositoryActions } from "@/hooks/useRepositoryActions";
 import { useRepositoryViewState } from "@/hooks/useRepositoryViewState";
 import { useRecoverableSpec } from "@/hooks/useRecoverableSpec";
@@ -505,6 +506,20 @@ function App() {
     persistExecutionRecord,
   });
 
+  const publishExecutionInput = usePublishExecutionInput({
+    selectedRepoId,
+    selectedRepo,
+    activeProviderId,
+    activeProviderParameters,
+    selectedPreset,
+    isCustomMode,
+    customConfig,
+    defaultOutputDir,
+    projectInfo,
+    presets: PRESETS,
+    specVersion: SPEC_VERSION,
+  });
+
   const {
     isPublishing,
     isCancellingPublish,
@@ -523,17 +538,7 @@ function App() {
   } = usePublishExecution({
     appT,
     publishT,
-    selectedRepoId,
-    selectedRepo,
-    activeProviderId,
-    activeProviderParameters,
-    selectedPreset,
-    isCustomMode,
-    customConfig,
-    defaultOutputDir,
-    projectInfo,
-    presets: PRESETS,
-    specVersion: SPEC_VERSION,
+    input: publishExecutionInput,
     callSurface: publishExecutionCallSurface,
   });
 
