@@ -10,6 +10,7 @@ import { useDiagnosticsExports } from "@/hooks/useDiagnosticsExports";
 import { useDiagnosticsUiState } from "@/hooks/useDiagnosticsUiState";
 import { useLayoutShellState } from "@/hooks/useLayoutShellState";
 import { useRepositoryActions } from "@/hooks/useRepositoryActions";
+import { useRepositoryViewState } from "@/hooks/useRepositoryViewState";
 import { useRecoverableSpec } from "@/hooks/useRecoverableSpec";
 import { useRerunFlow } from "@/hooks/useRerunFlow";
 import { useProjectScanner } from "@/hooks/useProjectScanner";
@@ -43,7 +44,6 @@ import { useProviderRuntime } from "@/hooks/useProviderRuntime";
 import { useI18n, type Language } from "@/hooks/useI18n";
 import {
   addExecutionRecord,
-  checkRepositoryBranchConnectivity,
   getExecutionHistory,
   type ExecutionRecord,
   type PublishConfigStore,
@@ -351,52 +351,16 @@ function App() {
 
   // Project State (runtime only)
   const [projectInfo, setProjectInfo] = useState<ProjectInfo | null>(null);
-  const [executionHistory, setExecutionHistory] = useState<ExecutionRecord[]>([]);
-  const [branchConnectivityByRepoId, setBranchConnectivityByRepoId] = useState<
-    Record<string, boolean>
-  >({});
 
-  // Get selected repository
-  const selectedRepo = repositories.find((r) => r.id === selectedRepoId) || null;
-
-  useEffect(() => {
-    let cancelled = false;
-
-    if (repositories.length === 0) {
-      setBranchConnectivityByRepoId({});
-      return;
-    }
-
-    const checkBranchConnectivity = async () => {
-      const entries = await Promise.all(
-        repositories.map(async (repo) => {
-          try {
-            const result = await checkRepositoryBranchConnectivity(
-              repo.path,
-              repo.currentBranch
-            );
-            return [repo.id, result.canConnect] as const;
-          } catch {
-            return [repo.id, false] as const;
-          }
-        })
-      );
-
-      if (cancelled) {
-        return;
-      }
-
-      setBranchConnectivityByRepoId(
-        Object.fromEntries(entries) as Record<string, boolean>
-      );
-    };
-
-    void checkBranchConnectivity();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [repositories]);
+  const {
+    selectedRepo,
+    branchConnectivityByRepoId,
+    executionHistory,
+    setExecutionHistory,
+  } = useRepositoryViewState({
+    repositories,
+    selectedRepoId,
+  });
 
   const {
     environmentLastResult,
