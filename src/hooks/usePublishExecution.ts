@@ -1,4 +1,4 @@
-import { useCallback, useState } from "react";
+import { useCallback } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { toast } from "sonner";
 
@@ -15,11 +15,11 @@ import {
   extractInvokeErrorMessage,
 } from "@/lib/tauri/invokeErrors";
 import type { ExecutionRecord } from "@/lib/store";
-import type { ArtifactActionState } from "@/components/publish/ArtifactActions";
 import { useDotnetPublishSelection } from "@/hooks/useDotnetPublishSelection";
 import type { PublishExecutionInput } from "@/hooks/usePublishExecutionInput";
 import { usePublishLogStream } from "@/hooks/usePublishLogStream";
 import { usePublishSpecBuilder } from "@/hooks/usePublishSpecBuilder";
+import { usePublishUiState } from "@/hooks/usePublishUiState";
 
 export interface PublishResult {
   provider_id: string;
@@ -82,20 +82,23 @@ export function usePublishExecution({
     presets,
     specVersion,
   } = input;
-  const [isPublishing, setIsPublishing] = useState(false);
-  const [isCancellingPublish, setIsCancellingPublish] = useState(false);
-  const [publishResult, setPublishResult] = useState<PublishResult | null>(null);
-  const [lastExecutedSpec, setLastExecutedSpec] =
-    useState<ProviderPublishSpec | null>(null);
-  const [currentExecutionRecordId, setCurrentExecutionRecordId] =
-    useState<string | null>(null);
+  const {
+    isPublishing,
+    setIsPublishing,
+    isCancellingPublish,
+    setIsCancellingPublish,
+    publishResult,
+    setPublishResult,
+    lastExecutedSpec,
+    setLastExecutedSpec,
+    currentExecutionRecordId,
+    setCurrentExecutionRecordId,
+    releaseChecklistOpen,
+    setReleaseChecklistOpen,
+    artifactActionState,
+    setArtifactActionState,
+  } = usePublishUiState();
   const { outputLog, setOutputLog } = usePublishLogStream();
-  const [releaseChecklistOpen, setReleaseChecklistOpen] = useState(false);
-  const [artifactActionState, setArtifactActionState] =
-    useState<ArtifactActionState>({
-      packageResult: null,
-      signResult: null,
-    });
 
   const {
     getCurrentConfig,
