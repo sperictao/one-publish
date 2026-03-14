@@ -1,6 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
-
 // Hooks
 import { useAppDialogs } from "@/hooks/useAppDialogs";
 import { useAppState } from "@/hooks/useAppState";
@@ -9,17 +8,14 @@ import { useShortcuts } from "@/hooks/useShortcuts";
 import { useDiagnosticsExports } from "@/hooks/useDiagnosticsExports";
 import { useDiagnosticsUiState } from "@/hooks/useDiagnosticsUiState";
 import { useLayoutShellState } from "@/hooks/useLayoutShellState";
+import { useProjectExecutionState } from "@/hooks/useProjectExecutionState";
 import { useRepositoryActions } from "@/hooks/useRepositoryActions";
 import { useRepositoryViewState } from "@/hooks/useRepositoryViewState";
 import { useRecoverableSpec } from "@/hooks/useRecoverableSpec";
 import { useRerunFlow } from "@/hooks/useRerunFlow";
 import { useProjectScanner } from "@/hooks/useProjectScanner";
 import { usePresetText } from "@/hooks/usePresetText";
-import {
-  usePublishExecution,
-  type ProviderPublishSpec,
-  type PublishResult,
-} from "@/hooks/usePublishExecution";
+import { usePublishExecution } from "@/hooks/usePublishExecution";
 import {
   useProfiles,
   QUICK_CREATE_PROFILE_GROUP_CUSTOM,
@@ -43,9 +39,6 @@ import { useDialogsCompositionState } from "@/hooks/useDialogsCompositionState";
 import { useProviderRuntime } from "@/hooks/useProviderRuntime";
 import { useI18n, type Language } from "@/hooks/useI18n";
 import {
-  addExecutionRecord,
-  getExecutionHistory,
-  type ExecutionRecord,
   type PublishConfigStore,
   type ProviderManifest,
 } from "@/lib/store";
@@ -65,11 +58,6 @@ import {
 } from "lucide-react";
 
 // Types
-import { deriveFailureSignature } from "@/lib/failureSignature";
-import {
-  loadRerunChecklistPreference,
-  saveRerunChecklistPreference,
-} from "@/lib/rerunChecklistPreference";
 
 interface ProjectInfo {
   root_path: string;
@@ -328,9 +316,6 @@ function App() {
     handleEnvironmentDialogOpenChange,
     handleConfigDialogOpenChange,
   } = useAppDialogs(activeProviderId);
-  const [isRerunChecklistEnabled, setIsRerunChecklistEnabled] = useState(
-    () => loadRerunChecklistPreference().enabled
-  );
 
   const {
     leftPanelCollapsed,
@@ -355,8 +340,6 @@ function App() {
   const {
     selectedRepo,
     branchConnectivityByRepoId,
-    executionHistory,
-    setExecutionHistory,
   } = useRepositoryViewState({
     repositories,
     selectedRepoId,
@@ -387,6 +370,97 @@ function App() {
     availableProviders[0] ||
     FALLBACK_PROVIDERS[0];
   const activeProviderLabel = formatProviderLabel(resolvedActiveProvider);
+
+  const handleCustomConfigUpdate = useCallback(
+    (updates: Partial<PublishConfigStore>) => {
+      setCustomConfig({ ...customConfig, ...updates });
+    },
+    [customConfig, setCustomConfig]
+  );
+
+  const { activeImportFeedback, handleCommandImport } = useCommandImport({
+    activeProviderId,
+    appT,
+    providerSchemas,
+    onDotnetConfigUpdate: handleCustomConfigUpdate,
+    onEnableCustomMode: () => setIsCustomMode(true),
+    setProviderParameters,
+  });
+
+  const profilesState = useProfiles({
+    appT,
+    profileT,
+    language,
+    selectedRepoId,
+    activeProviderId,
+    providerSchemas,
+    setActiveProviderId,
+    setIsCustomMode,
+    isCustomMode,
+    setSelectedPreset,
+    setProviderParameters,
+    handleCustomConfigUpdate,
+    pushRecentConfig,
+    presets: PRESETS,
+    defaultPresetId: PRESETS[0]?.id ?? "release-fd",
+    getPresetText,
+    buildProfileParameters: (config) => ({
+      configuration: config.configuration,
+      runtime: config.runtime,
+      output: config.outputDir,
+      self_contained: config.selfContained,
+    }),
+  });
+
+  const { scanProject } = useProjectScanner({
+    appT,
+    setProjectInfo,
+  });
+
+  const {
+    profiles,
+    activeProfileName,
+    quickCreateProfileOpen,
+    quickCreateProfileName,
+    setQuickCreateProfileName,
+    quickCreateTemplateId,
+    quickCreateProfileDraft,
+    quickCreateProfileGroup,
+    setQuickCreateProfileGroup,
+    quickCreateProfileCustomGroup,
+    setQuickCreateProfileCustomGroup,
+    quickCreateProfileSaving,
+    loadProfiles,
+    setActiveProfileName,
+    openQuickCreateProfileDialog,
+    handleQuickCreateProfileOpenChange,
+    quickCreateTemplateOptions,
+    quickCreateProfileGroupOptions,
+    applyQuickCreateTemplate,
+    updateQuickCreateProfileDraft,
+    handleSelectProjectProfile,
+    handleSelectProfileFromPanel,
+    handleQuickCreateProfileSave,
+    handleDeleteProfileFromPanel,
+    handleLoadProfile,
+  } = profilesState;
+
+  const {
+    isRerunChecklistEnabled,
+    setIsRerunChecklistEnabled,
+    executionHistory,
+    setExecutionHistory,
+    persistExecutionRecord,
+    buildExecutionRecord,
+    handleSelectPresetValueChange,
+  } = useProjectExecutionState({
+    executionHistoryLimit,
+    selectedPreset,
+    setSelectedPreset,
+    setIsCustomMode,
+    setActiveProfileName,
+    handleSelectProjectProfile,
+  });
 
   const {
     historyFilterProvider,
@@ -430,123 +504,10 @@ function App() {
     representativeFailureRecord,
   } = useFailureGroupSelection(failureGroups);
 
-
-  const handleCustomConfigUpdate = useCallback(
-    (updates: Partial<PublishConfigStore>) => {
-      setCustomConfig({ ...customConfig, ...updates });
-    },
-    [customConfig, setCustomConfig]
-  );
-
-  const { activeImportFeedback, handleCommandImport } = useCommandImport({
-    activeProviderId,
-    appT,
-    providerSchemas,
-    onDotnetConfigUpdate: handleCustomConfigUpdate,
-    onEnableCustomMode: () => setIsCustomMode(true),
-    setProviderParameters,
-  });
-
-  const profilesState = useProfiles({
-    appT,
-    profileT,
-    language,
-    selectedRepoId,
-    activeProviderId,
-    providerSchemas,
-    setActiveProviderId,
-    setIsCustomMode,
-    isCustomMode,
-    setSelectedPreset,
-    setProviderParameters,
-    handleCustomConfigUpdate,
-    pushRecentConfig,
-    presets: PRESETS,
-    defaultPresetId: PRESETS[0]?.id ?? "release-fd",
-    getPresetText,
-    buildProfileParameters: (config) => ({
-      configuration: config.configuration,
-      runtime: config.runtime,
-      output: config.outputDir,
-      self_contained: config.selfContained,
-    }),
-  });
-
-  const persistExecutionRecord = useCallback((record: ExecutionRecord) => {
-    addExecutionRecord(record)
-      .then((history) => {
-        setExecutionHistory(history);
-      })
-      .catch((err) => {
-        console.error("保存执行历史失败:", err);
-      });
-  }, []);
-
-  const {
-    profiles,
-    activeProfileName,
-    quickCreateProfileOpen,
-    quickCreateProfileName,
-    setQuickCreateProfileName,
-    quickCreateTemplateId,
-    quickCreateProfileDraft,
-    quickCreateProfileGroup,
-    setQuickCreateProfileGroup,
-    quickCreateProfileCustomGroup,
-    setQuickCreateProfileCustomGroup,
-    quickCreateProfileSaving,
-    loadProfiles,
-    setActiveProfileName,
-    openQuickCreateProfileDialog,
-    handleQuickCreateProfileOpenChange,
-    quickCreateTemplateOptions,
-    quickCreateProfileGroupOptions,
-    applyQuickCreateTemplate,
-    updateQuickCreateProfileDraft,
-    handleSelectProjectProfile,
-    handleSelectProfileFromPanel,
-    handleQuickCreateProfileSave,
-    handleDeleteProfileFromPanel,
-    handleLoadProfile,
-  } = profilesState;
-
   useEffect(() => {
     loadProfiles();
   }, [loadProfiles]);
 
-  const handleSelectPresetValueChange = useCallback(
-    (presetValue: string) => {
-      if (presetValue.startsWith("profile-")) {
-        handleSelectProjectProfile(presetValue.slice("profile-".length));
-        return;
-      }
-
-      setSelectedPreset(presetValue);
-      setIsCustomMode(false);
-      setActiveProfileName(null);
-    },
-    [handleSelectProjectProfile, setActiveProfileName, setIsCustomMode, setSelectedPreset]
-  );
-
-  useEffect(() => {
-    getExecutionHistory()
-      .then((history) => {
-        setExecutionHistory(history);
-      })
-      .catch((err) => {
-        console.error("加载执行历史失败:", err);
-      });
-  }, []);
-
-  useEffect(() => {
-    saveRerunChecklistPreference({ enabled: isRerunChecklistEnabled });
-  }, [isRerunChecklistEnabled]);
-
-  useEffect(() => {
-    setExecutionHistory((prev) => prev.slice(0, executionHistoryLimit));
-  }, [executionHistoryLimit]);
-
-  // Load project info when repo or provider changes
   useEffect(() => {
     if (!selectedRepo || isStateLoading) return;
 
@@ -559,9 +520,8 @@ function App() {
     }
 
     setProjectInfo(null);
-  }, [selectedRepoId, isStateLoading, activeProviderId]);
+  }, [selectedRepoId, isStateLoading, activeProviderId, selectedRepo, scanProject]);
 
-  // Setup window drag functionality for Tauri 2.x
   useEffect(() => {
     if (!(window as any).__TAURI__) {
       return;
@@ -571,17 +531,14 @@ function App() {
 
     const handleMouseDown = (e: MouseEvent) => {
       const target = e.target as HTMLElement;
-      // Check if the target or any parent has data-tauri-drag-region
       const dragRegion = target.closest("[data-tauri-drag-region]");
       const noDrag = target.closest("[data-tauri-no-drag]");
 
       if (dragRegion && !noDrag && e.buttons === 1) {
         e.preventDefault();
         if (e.detail === 2) {
-          // Double click to toggle maximize
           void appWindow.toggleMaximize().catch(() => {});
         } else {
-          // Single click to start dragging
           void appWindow.startDragging().catch(() => {});
         }
       }
@@ -592,11 +549,6 @@ function App() {
       document.removeEventListener("mousedown", handleMouseDown);
     };
   }, []);
-
-  const { scanProject } = useProjectScanner({
-    appT,
-    setProjectInfo,
-  });
 
   const {
     handleAddRepo,
@@ -614,48 +566,6 @@ function App() {
     updateRepository,
     setActiveProviderId,
   });
-
-  const buildExecutionRecord = useCallback(
-    (params: {
-      spec: ProviderPublishSpec;
-      repoId: string | null;
-      startedAt: string;
-      finishedAt: string;
-      result: PublishResult;
-      output: string;
-    }): ExecutionRecord => {
-      const commandLine =
-        params.output
-          .split("\n")
-          .find((line) => line.startsWith("$ ")) || null;
-      const failureSignature =
-        !params.result.success && !params.result.cancelled
-          ? deriveFailureSignature({
-              error: params.result.error,
-              output: params.output,
-            })
-          : null;
-
-      return {
-        id: `${Date.now()}-${Math.random().toString(16).slice(2, 8)}`,
-        repoId: params.repoId,
-        providerId: params.spec.provider_id,
-        projectPath: params.spec.project_path,
-        startedAt: params.startedAt,
-        finishedAt: params.finishedAt,
-        success: params.result.success,
-        cancelled: params.result.cancelled,
-        outputDir: params.result.output_dir || null,
-        error: params.result.error,
-        commandLine,
-        snapshotPath: null,
-        failureSignature,
-        spec: params.spec,
-        fileCount: params.result.file_count,
-      };
-    },
-    []
-  );
 
   const {
     isPublishing,

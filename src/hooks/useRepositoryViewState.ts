@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 
 import { checkRepositoryBranchConnectivity } from "@/lib/store";
-import type { ExecutionRecord } from "@/lib/store";
 import type { Repository } from "@/types/repository";
 
 export function useRepositoryViewState(params: {
@@ -11,7 +10,6 @@ export function useRepositoryViewState(params: {
   const [branchConnectivityByRepoId, setBranchConnectivityByRepoId] = useState<
     Record<string, boolean>
   >({});
-  const [executionHistory, setExecutionHistory] = useState<ExecutionRecord[]>([]);
 
   const selectedRepo = useMemo(
     () => params.repositories.find((repo) => repo.id === params.selectedRepoId) || null,
@@ -60,7 +58,5 @@ export function useRepositoryViewState(params: {
   return {
     selectedRepo,
     branchConnectivityByRepoId,
-    executionHistory,
-    setExecutionHistory,
   };
 }
