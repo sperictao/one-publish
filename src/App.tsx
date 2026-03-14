@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 
 // Hooks
@@ -26,7 +26,7 @@ import { useCommandImport } from "@/hooks/useCommandImport";
 import { useScopedConfigs } from "@/hooks/useScopedConfigs";
 import { useFailureGroupSelection } from "@/hooks/useFailureGroupSelection";
 import { useHistoryActions } from "@/hooks/useHistoryActions";
-import { useHistoryViewState } from "@/hooks/useHistoryViewState";
+import { useHistoryDiagnosticsState } from "@/hooks/useHistoryDiagnosticsState";
 import { useExecutionHistoryCardProps } from "@/hooks/useExecutionHistoryCardProps";
 import { useFailureGroupDetailCardProps } from "@/hooks/useFailureGroupDetailCardProps";
 import { useFailureGroupsCardProps } from "@/hooks/useFailureGroupsCardProps";
@@ -67,17 +67,10 @@ import {
 // Types
 import type { EnvironmentCheckResult } from "@/lib/environment";
 import { deriveFailureSignature } from "@/lib/failureSignature";
-import { type IssueDraftTemplate } from "@/lib/issueDraft";
-import {
-  type HistoryFilterStatus,
-  type HistoryFilterWindow,
-} from "@/lib/historyFilterPresets";
-import { groupExecutionFailures, type FailureGroup } from "@/lib/failureGroups";
 import {
   loadRerunChecklistPreference,
   saveRerunChecklistPreference,
 } from "@/lib/rerunChecklistPreference";
-import { isRecordInRepository } from "@/features/history/utils/historyFilters";
 
 interface ProjectInfo {
   root_path: string;
@@ -393,19 +386,6 @@ function App() {
   const [recentBundleExports, setRecentBundleExports] = useState<string[]>([]);
   const [recentHistoryExports, setRecentHistoryExports] = useState<string[]>([]);
   const [executionHistory, setExecutionHistory] = useState<ExecutionRecord[]>([]);
-  const [historyFilterProvider, setHistoryFilterProvider] = useState("all");
-  const [historyFilterStatus, setHistoryFilterStatus] =
-    useState<HistoryFilterStatus>("all");
-  const [historyFilterWindow, setHistoryFilterWindow] =
-    useState<HistoryFilterWindow>("all");
-  const [historyFilterKeyword, setHistoryFilterKeyword] = useState("");
-  const [issueDraftTemplate, setIssueDraftTemplate] =
-    useState<IssueDraftTemplate>("bug");
-  const [issueDraftSections, setIssueDraftSections] = useState({
-    impact: true,
-    workaround: true,
-    owner: false,
-  });
   const [branchConnectivityByRepoId, setBranchConnectivityByRepoId] = useState<
     Record<string, boolean>
   >({});
@@ -469,25 +449,21 @@ function App() {
     FALLBACK_PROVIDERS[0];
   const activeProviderLabel = formatProviderLabel(resolvedActiveProvider);
 
-  const scopedExecutionHistory = useMemo(() => {
-    if (!selectedRepo) {
-      return [];
-    }
-
-    return executionHistory.filter((record) =>
-      isRecordInRepository(record, selectedRepo)
-    );
-  }, [executionHistory, selectedRepo]);
-
-  const historyProviderOptions = useMemo(
-    () =>
-      Array.from(
-        new Set(scopedExecutionHistory.map((record) => record.providerId))
-      ).sort(),
-    [scopedExecutionHistory]
-  );
-
   const {
+    historyFilterProvider,
+    setHistoryFilterProvider,
+    historyFilterStatus,
+    setHistoryFilterStatus,
+    historyFilterWindow,
+    setHistoryFilterWindow,
+    historyFilterKeyword,
+    setHistoryFilterKeyword,
+    issueDraftTemplate,
+    setIssueDraftTemplate,
+    issueDraftSections,
+    setIssueDraftSections,
+    scopedExecutionHistory,
+    historyProviderOptions,
     historyFilterPresets,
     dailyTriagePreset,
     setDailyTriagePreset,
@@ -500,35 +476,13 @@ function App() {
     applyHistoryPresetToFilters,
     resetDailyTriagePreset,
     clearHistoryFilters,
-  } = useHistoryViewState({
+    snapshotPaths,
+    failureGroups,
+  } = useHistoryDiagnosticsState({
     historyT,
-    scopedExecutionHistory,
-    historyFilterProvider,
-    historyFilterStatus,
-    historyFilterWindow,
-    historyFilterKeyword,
-    setHistoryFilterProvider,
-    setHistoryFilterStatus,
-    setHistoryFilterWindow,
-    setHistoryFilterKeyword,
+    executionHistory,
+    selectedRepo,
   });
-
-  const snapshotPaths = useMemo(
-    () =>
-      Array.from(
-        new Set(
-          scopedExecutionHistory
-            .map((record) => record.snapshotPath?.trim())
-            .filter((value): value is string => Boolean(value))
-        )
-      ),
-    [scopedExecutionHistory]
-  );
-
-  const failureGroups = useMemo<FailureGroup[]>(
-    () => groupExecutionFailures(filteredExecutionHistory),
-    [filteredExecutionHistory]
-  );
 
   const {
     selectedFailureGroupKey,
