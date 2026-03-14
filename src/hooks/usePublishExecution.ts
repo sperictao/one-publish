@@ -1,6 +1,5 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { listen } from "@tauri-apps/api/event";
 import { toast } from "sonner";
 
 import { getCancelPublishFeedback } from "@/hooks/useCancelPublishFeedback";
@@ -19,6 +18,7 @@ import type { ExecutionRecord } from "@/lib/store";
 import type { ArtifactActionState } from "@/components/publish/ArtifactActions";
 import { useDotnetPublishSelection } from "@/hooks/useDotnetPublishSelection";
 import type { PublishExecutionInput } from "@/hooks/usePublishExecutionInput";
+import { usePublishLogStream } from "@/hooks/usePublishLogStream";
 import { usePublishSpecBuilder } from "@/hooks/usePublishSpecBuilder";
 
 export interface PublishResult {
@@ -36,11 +36,6 @@ export interface ProviderPublishSpec {
   provider_id: string;
   project_path: string;
   parameters: Record<string, unknown>;
-}
-
-interface PublishLogChunkEvent {
-  sessionId: string;
-  line: string;
 }
 
 export interface PublishExecutionCallSurface {
@@ -94,40 +89,13 @@ export function usePublishExecution({
     useState<ProviderPublishSpec | null>(null);
   const [currentExecutionRecordId, setCurrentExecutionRecordId] =
     useState<string | null>(null);
-  const [outputLog, setOutputLog] = useState("");
+  const { outputLog, setOutputLog } = usePublishLogStream();
   const [releaseChecklistOpen, setReleaseChecklistOpen] = useState(false);
   const [artifactActionState, setArtifactActionState] =
     useState<ArtifactActionState>({
       packageResult: null,
       signResult: null,
     });
-
-  useEffect(() => {
-    if (!(window as any).__TAURI__) {
-      return;
-    }
-
-    let unlisten: (() => void) | null = null;
-
-    listen<PublishLogChunkEvent>("provider-publish-log", (event) => {
-      const line = event.payload?.line?.trimEnd();
-      if (!line) return;
-
-      setOutputLog((prev) => (prev ? `${prev}\n${line}` : line));
-    })
-      .then((dispose) => {
-        unlisten = dispose;
-      })
-      .catch((err) => {
-        console.error("监听发布日志失败:", err);
-      });
-
-    return () => {
-      if (unlisten) {
-        unlisten();
-      }
-    };
-  }, []);
 
   const {
     getCurrentConfig,
