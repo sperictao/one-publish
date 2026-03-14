@@ -9,7 +9,7 @@ import {
 import { Copy } from "lucide-react";
 import type { FailureGroup } from "@/lib/failureGroups";
 
-interface FailureGroupsCardProps {
+export interface FailureGroupsCardProps {
   failureGroups: FailureGroup[];
   selectedFailureGroupKey: string | null;
   failureT: Record<string, string | undefined>;

@@ -18,7 +18,7 @@ import type { FailureGroup } from "@/lib/failureGroups";
 import type { ExecutionRecord } from "@/lib/store";
 import type { IssueDraftTemplate } from "@/lib/issueDraft";
 
-interface FailureGroupDetailCardProps {
+export interface FailureGroupDetailCardProps {
   selectedFailureGroup: FailureGroup | null;
   representativeFailureRecord: ExecutionRecord | null;
   issueDraftTemplate: IssueDraftTemplate;

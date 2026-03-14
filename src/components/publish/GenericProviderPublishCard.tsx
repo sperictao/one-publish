@@ -11,7 +11,7 @@ import {
 } from "@/components/ui/card";
 import type { ParameterSchema, ParameterValue } from "@/types/parameters";
 
-interface GenericProviderPublishCardProps {
+export interface GenericProviderPublishCardProps {
   activeProviderLabel: string;
   activeProviderSchema: ParameterSchema | null;
   activeProviderParameters: Record<string, ParameterValue>;

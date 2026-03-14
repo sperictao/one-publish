@@ -28,6 +28,14 @@ import { useFailureGroupSelection } from "@/hooks/useFailureGroupSelection";
 import { useHistoryActions } from "@/hooks/useHistoryActions";
 import { useHistoryViewState } from "@/hooks/useHistoryViewState";
 import { useExecutionHistoryCardProps } from "@/hooks/useExecutionHistoryCardProps";
+import { useFailureGroupDetailCardProps } from "@/hooks/useFailureGroupDetailCardProps";
+import { useFailureGroupsCardProps } from "@/hooks/useFailureGroupsCardProps";
+import { useOutputLogCardProps } from "@/hooks/useOutputLogCardProps";
+import { useCommandImportResultCardProps } from "@/hooks/useCommandImportResultCardProps";
+import {
+  useDotnetPublishCardProps,
+  useGenericProviderPublishCardProps,
+} from "@/hooks/usePublishCardProps";
 import { useEnvironmentStatus } from "@/hooks/useEnvironmentStatus";
 import { useDialogDerivedState } from "@/hooks/useDialogDerivedState";
 import { useProviderRuntime } from "@/hooks/useProviderRuntime";
@@ -48,16 +56,8 @@ import { AppDialogs } from "@/components/layout/AppDialogs";
 import { CollapsiblePanel } from "@/components/layout/CollapsiblePanel";
 import { RepositoryList } from "@/components/layout/RepositoryList";
 import { PublishConfigPanel } from "@/components/layout/PublishConfigPanel";
+import { PublishContentSection } from "@/components/layout/PublishContentSection";
 import { ResizeHandle } from "@/components/layout/ResizeHandle";
-
-// Publish Components
-import { CommandImportResultCard } from "@/components/publish/CommandImportResultCard";
-import { ExecutionHistoryCard } from "@/components/publish/ExecutionHistoryCard";
-import { DotnetPublishCard } from "@/components/publish/DotnetPublishCard";
-import { FailureGroupDetailCard } from "@/components/publish/FailureGroupDetailCard";
-import { GenericProviderPublishCard } from "@/components/publish/GenericProviderPublishCard";
-import { FailureGroupsCard } from "@/components/publish/FailureGroupsCard";
-import { OutputLogCard } from "@/components/publish/OutputLogCard";
 
 // UI Components
 import { Button } from "@/components/ui/button";
@@ -1024,6 +1024,90 @@ function App() {
     copyHandoffSnippet,
   });
 
+  const failureGroupDetailCardProps = useFailureGroupDetailCardProps({
+    selectedFailureGroup,
+    representativeFailureRecord,
+    issueDraftTemplate,
+    issueDraftSections,
+    failureT,
+    appT,
+    isExportingFailureBundle,
+    isPublishing,
+    setIssueDraftTemplate,
+    setIssueDraftSections,
+    copyGroupSignature,
+    copyRecordCommand,
+    copyFailureIssueDraft,
+    exportFailureGroupBundle,
+    openSnapshotFromRecord,
+    rerunFromHistory,
+  });
+
+  const outputLogCardProps = useOutputLogCardProps({
+    outputLog,
+    publishResult,
+    appT,
+    isExportingSnapshot,
+    exportExecutionSnapshot,
+    setReleaseChecklistOpen,
+    setArtifactActionState,
+  });
+
+  const failureGroupsCardProps = useFailureGroupsCardProps({
+    failureGroups,
+    selectedFailureGroupKey,
+    failureT,
+    isPublishing,
+    setSelectedFailureGroupKey,
+    copyGroupSignature,
+    openSnapshotFromRecord,
+    rerunFromHistory,
+  });
+
+  const dotnetPublishCardProps = useDotnetPublishCardProps({
+    configT,
+    appT,
+    publishT,
+    isCustomMode,
+    selectedPreset,
+    presets: PRESETS,
+    getPresetText,
+    projectPublishProfiles: projectInfo?.publish_profiles || [],
+    customConfig,
+    dotnetPublishPreviewCommand,
+    isPublishing,
+    isCancellingPublish,
+    disabled: !selectedRepo,
+    setCommandImportOpen,
+    setIsCustomMode,
+    handleSelectPresetValueChange,
+    handleCustomConfigUpdate,
+    executePublish,
+    cancelPublish,
+  });
+
+  const genericProviderPublishCardProps = useGenericProviderPublishCardProps({
+    activeProviderLabel,
+    activeProviderSchema,
+    activeProviderParameters,
+    appT,
+    configT,
+    isPublishing,
+    isCancellingPublish,
+    setCommandImportOpen,
+    handleProviderParametersChange,
+    openEnvironmentDialog,
+    activeProviderId,
+    executePublish,
+    cancelPublish,
+  });
+
+  const commandImportResultCardProps = useCommandImportResultCardProps({
+    activeImportFeedback,
+    providerLabel: formatProviderLabel(resolvedActiveProvider),
+    appT,
+  });
+
   // Show loading state
   if (isStateLoading) {
     return (
@@ -1167,112 +1251,24 @@ function App() {
             </div>
             {/* Content area */}
             <div className="repo-list-scroll glass-scrollbar relative flex-1 overflow-auto">
-              <div className="mx-auto max-w-3xl space-y-6 p-6">
-                {/* Publish Configuration Card */}
-                {selectedRepo && activeProviderId === "dotnet" && projectInfo && (
-                <DotnetPublishCard
-                  configT={configT}
-                  appT={appT}
-                  publishT={publishT}
-                  isCustomMode={isCustomMode}
-                  selectedPreset={selectedPreset}
-                  releasePresets={PRESETS.filter((preset) => preset.id.startsWith("release")).map((preset) => ({
-                    ...preset,
-                    ...getPresetText(preset.id, preset.name, preset.description),
-                  }))}
-                  debugPresets={PRESETS.filter((preset) => preset.id.startsWith("debug")).map((preset) => ({
-                    ...preset,
-                    ...getPresetText(preset.id, preset.name, preset.description),
-                  }))}
-                  projectPublishProfiles={projectInfo.publish_profiles}
-                  customConfig={customConfig}
-                  dotnetPublishPreviewCommand={dotnetPublishPreviewCommand}
-                  isPublishing={isPublishing}
-                  isCancellingPublish={isCancellingPublish}
-                  disabled={!selectedRepo}
-                  onOpenCommandImport={() => setCommandImportOpen(true)}
-                  onCustomModeChange={setIsCustomMode}
-                  onPresetChange={handleSelectPresetValueChange}
-                  onCustomConfigUpdate={handleCustomConfigUpdate}
-                  onExecutePublish={executePublish}
-                  onCancelPublish={cancelPublish}
-                />
-              )}
-
-              {selectedRepo && activeProviderId !== "dotnet" && (
-                <GenericProviderPublishCard
-                  activeProviderLabel={activeProviderLabel}
-                  activeProviderSchema={activeProviderSchema}
-                  activeProviderParameters={activeProviderParameters}
-                  appT={appT}
-                  configT={configT}
-                  isPublishing={isPublishing}
-                  isCancellingPublish={isCancellingPublish}
-                  onOpenCommandImport={() => setCommandImportOpen(true)}
-                  onProviderParametersChange={handleProviderParametersChange}
-                  onOpenEnvironmentCheck={() =>
-                    openEnvironmentDialog(null, [activeProviderId])
-                  }
-                  onExecutePublish={executePublish}
-                  onCancelPublish={cancelPublish}
-                />
-              )}
-
-              {selectedRepo && activeImportFeedback && (
-                <CommandImportResultCard
-                  activeImportFeedback={activeImportFeedback}
-                  providerLabel={formatProviderLabel(resolvedActiveProvider)}
-                  appT={appT}
-                />
-              )}
-
-              <OutputLogCard
-                outputLog={outputLog}
-                publishResult={publishResult}
-                appT={appT}
-                isExportingSnapshot={isExportingSnapshot}
-                onExportExecutionSnapshot={exportExecutionSnapshot}
-                onOpenReleaseChecklist={() => setReleaseChecklistOpen(true)}
-                onArtifactActionStateChange={setArtifactActionState}
+              <PublishContentSection
+                showDotnetPublishCard={Boolean(
+                  selectedRepo && activeProviderId === "dotnet" && projectInfo
+                )}
+                showGenericProviderPublishCard={Boolean(
+                  selectedRepo && activeProviderId !== "dotnet"
+                )}
+                showCommandImportResultCard={Boolean(
+                  selectedRepo && commandImportResultCardProps
+                )}
+                dotnetPublishCardProps={dotnetPublishCardProps}
+                genericProviderPublishCardProps={genericProviderPublishCardProps}
+                commandImportResultCardProps={commandImportResultCardProps}
+                outputLogCardProps={outputLogCardProps}
+                failureGroupsCardProps={failureGroupsCardProps}
+                failureGroupDetailCardProps={failureGroupDetailCardProps}
+                executionHistoryCardProps={executionHistoryCardProps}
               />
-
-              <FailureGroupsCard
-                failureGroups={failureGroups}
-                selectedFailureGroupKey={selectedFailureGroupKey}
-                failureT={failureT}
-                isPublishing={isPublishing}
-                onSelectFailureGroup={setSelectedFailureGroupKey}
-                onCopyGroupSignature={copyGroupSignature}
-                onOpenSnapshotFromRecord={openSnapshotFromRecord}
-                onRerunFromHistory={rerunFromHistory}
-              />
-
-              <FailureGroupDetailCard
-                selectedFailureGroup={selectedFailureGroup}
-                representativeFailureRecord={representativeFailureRecord}
-                issueDraftTemplate={issueDraftTemplate}
-                issueDraftSections={issueDraftSections}
-                failureT={failureT}
-                appT={appT}
-                isExportingFailureBundle={isExportingFailureBundle}
-                isPublishing={isPublishing}
-                onIssueDraftTemplateChange={setIssueDraftTemplate}
-                onToggleIssueDraftSection={(key) =>
-                  setIssueDraftSections((prev) => ({
-                    ...prev,
-                    [key]: !prev[key],
-                  }))
-                }
-                onCopyGroupSignature={copyGroupSignature}
-                onCopyRecordCommand={copyRecordCommand}
-                onCopyFailureIssueDraft={copyFailureIssueDraft}
-                onExportFailureGroupBundle={exportFailureGroupBundle}
-                onOpenSnapshotFromRecord={openSnapshotFromRecord}
-                onRerunFromHistory={rerunFromHistory}
-              />
-
-              <ExecutionHistoryCard {...executionHistoryCardProps} />
-              </div>
             </div>
           </div>
         </div>

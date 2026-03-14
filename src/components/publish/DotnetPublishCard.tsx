@@ -34,7 +34,7 @@ interface DotnetCustomConfig {
   selfContained: boolean;
 }
 
-interface DotnetPublishCardProps {
+export interface DotnetPublishCardProps {
   configT: Record<string, string | undefined>;
   appT: Record<string, string | undefined>;
   publishT: Record<string, string | undefined>;

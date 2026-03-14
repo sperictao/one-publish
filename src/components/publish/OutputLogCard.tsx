@@ -13,7 +13,7 @@ import {
 import { ListChecks, Loader2, Terminal } from "lucide-react";
 import type { PublishResult } from "@/hooks/usePublishExecution";
 
-interface OutputLogCardProps {
+export interface OutputLogCardProps {
   outputLog: string;
   publishResult: PublishResult | null;
   appT: Record<string, string | undefined>;

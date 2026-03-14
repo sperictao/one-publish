@@ -14,7 +14,7 @@ interface ImportFeedback {
   unmappedKeys: string[];
 }
 
-interface CommandImportResultCardProps {
+export interface CommandImportResultCardProps {
   activeImportFeedback: ImportFeedback;
   providerLabel: string;
   appT: Record<string, string | undefined>;
