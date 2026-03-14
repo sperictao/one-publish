@@ -9,6 +9,7 @@ import { useDiagnosticsUiState } from "@/hooks/useDiagnosticsUiState";
 import { useLayoutShellState } from "@/hooks/useLayoutShellState";
 import { useProjectExecutionState } from "@/hooks/useProjectExecutionState";
 import { useProjectShellState } from "@/hooks/useProjectShellState";
+import { useProviderPresentationState } from "@/hooks/useProviderPresentationState";
 import { useRepositoryActions } from "@/hooks/useRepositoryActions";
 import { useRepositoryViewState } from "@/hooks/useRepositoryViewState";
 import { useRecoverableSpec } from "@/hooks/useRecoverableSpec";
@@ -37,10 +38,6 @@ import {
 import { useDialogsCompositionState } from "@/hooks/useDialogsCompositionState";
 import { useProviderRuntime } from "@/hooks/useProviderRuntime";
 import { useI18n, type Language } from "@/hooks/useI18n";
-import {
-  type PublishConfigStore,
-  type ProviderManifest,
-} from "@/lib/store";
 
 // Layout Components
 import { AppDialogs } from "@/components/layout/AppDialogs";
@@ -162,21 +159,6 @@ const PRESETS: DotnetPreset[] = [
     },
   },
 ];
-
-const FALLBACK_PROVIDERS: ProviderManifest[] = [
-  { id: "dotnet", displayName: "dotnet", version: "1" },
-  { id: "cargo", displayName: "cargo", version: "1" },
-  { id: "go", displayName: "go", version: "1" },
-  { id: "java", displayName: "java", version: "1" },
-];
-
-function formatProviderLabel(provider: ProviderManifest): string {
-  if (provider.id === "dotnet") return ".NET (dotnet)";
-  if (provider.id === "cargo") return "Rust (cargo)";
-  if (provider.id === "go") return "Go";
-  if (provider.id === "java") return "Java (gradle)";
-  return provider.displayName || provider.id;
-}
 
 function App() {
   // 使用持久化的应用状态
@@ -352,21 +334,17 @@ function App() {
     toggleFavoriteConfig,
   } = useScopedConfigs(selectedRepoId);
 
-  const availableProviders =
-    providerRuntimeProviders.length > 0 ? providerRuntimeProviders : FALLBACK_PROVIDERS;
-  const resolvedActiveProvider =
-    activeProvider ||
-    availableProviders.find((p) => p.id === activeProviderId) ||
-    availableProviders[0] ||
-    FALLBACK_PROVIDERS[0];
-  const activeProviderLabel = formatProviderLabel(resolvedActiveProvider);
-
-  const handleCustomConfigUpdate = useCallback(
-    (updates: Partial<PublishConfigStore>) => {
-      setCustomConfig({ ...customConfig, ...updates });
-    },
-    [customConfig, setCustomConfig]
-  );
+  const {
+    activeProviderLabel,
+    repositoryProviders,
+    handleCustomConfigUpdate,
+  } = useProviderPresentationState({
+    providerRuntimeProviders,
+    activeProvider,
+    activeProviderId,
+    customConfig,
+    setCustomConfig,
+  });
 
   const { activeImportFeedback, handleCommandImport } = useCommandImport({
     activeProviderId,
@@ -834,7 +812,7 @@ function App() {
 
   const commandImportResultCardProps = useCommandImportResultCardProps({
     activeImportFeedback,
-    providerLabel: formatProviderLabel(resolvedActiveProvider),
+    providerLabel: activeProviderLabel,
     appT,
   });
 
@@ -862,10 +840,7 @@ function App() {
           <RepositoryList
             repositories={repositories}
             selectedRepoId={selectedRepoId}
-            providers={availableProviders.map((provider) => ({
-              ...provider,
-              label: formatProviderLabel(provider),
-            }))}
+            providers={repositoryProviders}
             onSelectRepo={selectRepository}
             onAddRepo={handleAddRepo}
             onEditRepo={handleEditRepo}
