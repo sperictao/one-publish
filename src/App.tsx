@@ -57,13 +57,11 @@ import { CollapsiblePanel } from "@/components/layout/CollapsiblePanel";
 import { RepositoryList } from "@/components/layout/RepositoryList";
 import { PublishConfigPanel } from "@/components/layout/PublishConfigPanel";
 import { PublishContentSection } from "@/components/layout/PublishContentSection";
+import { MainContentShell } from "@/components/layout/MainContentShell";
 import { ResizeHandle } from "@/components/layout/ResizeHandle";
 
 // UI Components
-import { Button } from "@/components/ui/button";
 import {
-  Folder,
-  Settings,
   Loader2,
 } from "lucide-react";
 
@@ -1202,76 +1200,33 @@ function App() {
         )}
 
         {/* Right Panel - Main Content */}
-        <div className="flex-1 flex flex-col p-2">
-          <div className="glass-card repo-sidebar-shell flex h-full flex-col overflow-hidden rounded-2xl">
-            {/* Drag region header */}
-            <div className="h-10 flex-shrink-0 bg-[var(--glass-panel-bg)]/30 flex">
-              {/* Left column for expand buttons - only show when branch panel is collapsed */}
-              {middlePanelCollapsed && (
-                <div
-                  data-tauri-drag-region
-                  className={`flex items-center justify-end px-2 ${
-                    leftPanelCollapsed ? "pl-[100px]" : ""
-                  }`}
-                >
-                  <div className="flex items-center gap-0.5" data-tauri-no-drag>
-                    {leftPanelCollapsed && (
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-6 w-6"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setLeftPanelCollapsed(false);
-                        }}
-                        title={appT.expandRepoList || "展开仓库列表"}
-                        data-tauri-no-drag
-                      >
-                        <Folder className="h-4 w-4" />
-                      </Button>
-                    )}
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-6 w-6"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setMiddlePanelCollapsed(false);
-                      }}
-                      title={(translations.configPanel || {}).expandConfigList || "展开配置列表"}
-                      data-tauri-no-drag
-                    >
-                      <Settings className="h-4 w-4" />
-                    </Button>
-                  </div>
-                </div>
-              )}
-              {/* Main drag region */}
-              <div data-tauri-drag-region className="flex-1" />
-            </div>
-            {/* Content area */}
-            <div className="repo-list-scroll glass-scrollbar relative flex-1 overflow-auto">
-              <PublishContentSection
-                showDotnetPublishCard={Boolean(
-                  selectedRepo && activeProviderId === "dotnet" && projectInfo
-                )}
-                showGenericProviderPublishCard={Boolean(
-                  selectedRepo && activeProviderId !== "dotnet"
-                )}
-                showCommandImportResultCard={Boolean(
-                  selectedRepo && commandImportResultCardProps
-                )}
-                dotnetPublishCardProps={dotnetPublishCardProps}
-                genericProviderPublishCardProps={genericProviderPublishCardProps}
-                commandImportResultCardProps={commandImportResultCardProps}
-                outputLogCardProps={outputLogCardProps}
-                failureGroupsCardProps={failureGroupsCardProps}
-                failureGroupDetailCardProps={failureGroupDetailCardProps}
-                executionHistoryCardProps={executionHistoryCardProps}
-              />
-            </div>
-          </div>
-        </div>
+        <MainContentShell
+          leftPanelCollapsed={leftPanelCollapsed}
+          middlePanelCollapsed={middlePanelCollapsed}
+          appT={appT}
+          configPanelT={translations.configPanel || {}}
+          onExpandLeftPanel={() => setLeftPanelCollapsed(false)}
+          onExpandMiddlePanel={() => setMiddlePanelCollapsed(false)}
+        >
+          <PublishContentSection
+            showDotnetPublishCard={Boolean(
+              selectedRepo && activeProviderId === "dotnet" && projectInfo
+            )}
+            showGenericProviderPublishCard={Boolean(
+              selectedRepo && activeProviderId !== "dotnet"
+            )}
+            showCommandImportResultCard={Boolean(
+              selectedRepo && commandImportResultCardProps
+            )}
+            dotnetPublishCardProps={dotnetPublishCardProps}
+            genericProviderPublishCardProps={genericProviderPublishCardProps}
+            commandImportResultCardProps={commandImportResultCardProps}
+            outputLogCardProps={outputLogCardProps}
+            failureGroupsCardProps={failureGroupsCardProps}
+            failureGroupDetailCardProps={failureGroupDetailCardProps}
+            executionHistoryCardProps={executionHistoryCardProps}
+          />
+        </MainContentShell>
       </div>
 
       <AppDialogs {...appDialogsProps} />
