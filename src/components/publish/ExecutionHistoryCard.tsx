@@ -26,7 +26,7 @@ import type {
 } from "@/lib/historyFilterPresets";
 import type { HandoffSnippetFormat } from "@/lib/handoffSnippet";
 
-interface ExecutionHistoryCardProps {
+export interface ExecutionHistoryCardProps {
   scopedExecutionHistory: ExecutionRecord[];
   filteredExecutionHistory: ExecutionRecord[];
   executionHistoryLimit: number;

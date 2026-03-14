@@ -27,6 +27,7 @@ import { useScopedConfigs } from "@/hooks/useScopedConfigs";
 import { useFailureGroupSelection } from "@/hooks/useFailureGroupSelection";
 import { useHistoryActions } from "@/hooks/useHistoryActions";
 import { useHistoryViewState } from "@/hooks/useHistoryViewState";
+import { useExecutionHistoryCardProps } from "@/hooks/useExecutionHistoryCardProps";
 import { useEnvironmentStatus } from "@/hooks/useEnvironmentStatus";
 import { useDialogDerivedState } from "@/hooks/useDialogDerivedState";
 import { useProviderRuntime } from "@/hooks/useProviderRuntime";
@@ -986,6 +987,43 @@ function App() {
     currentConfigParameters,
   });
 
+  const executionHistoryCardProps = useExecutionHistoryCardProps({
+    scopedExecutionHistory,
+    filteredExecutionHistory,
+    executionHistoryLimit,
+    historyProviderOptions,
+    historyFilterProvider,
+    historyFilterStatus,
+    historyFilterWindow,
+    historyFilterKeyword,
+    selectedHistoryPresetId: effectiveSelectedHistoryPresetId,
+    historyFilterPresets,
+    dailyTriagePreset,
+    dailyTriageRecords,
+    isExportingHistory,
+    isExportingDiagnosticsIndex,
+    isPublishing,
+    appT,
+    historyT,
+    failureT,
+    setHistoryFilterProvider,
+    setHistoryFilterStatus,
+    setHistoryFilterWindow,
+    setHistoryFilterKeyword,
+    applyHistoryPresetToFilters,
+    saveCurrentHistoryPreset,
+    deleteSelectedHistoryPreset,
+    setDailyTriagePreset,
+    resetDailyTriagePreset,
+    exportExecutionHistory,
+    exportDailyTriageReport,
+    exportDiagnosticsIndex,
+    clearHistoryFilters,
+    openSnapshotFromRecord,
+    rerunFromHistory,
+    copyHandoffSnippet,
+  });
+
   // Show loading state
   if (isStateLoading) {
     return (
@@ -1233,42 +1271,7 @@ function App() {
                 onRerunFromHistory={rerunFromHistory}
               />
 
-              <ExecutionHistoryCard
-                scopedExecutionHistory={scopedExecutionHistory}
-                filteredExecutionHistory={filteredExecutionHistory}
-                executionHistoryLimit={executionHistoryLimit}
-                historyProviderOptions={historyProviderOptions}
-                historyFilterProvider={historyFilterProvider}
-                historyFilterStatus={historyFilterStatus}
-                historyFilterWindow={historyFilterWindow}
-                historyFilterKeyword={historyFilterKeyword}
-                selectedHistoryPresetId={effectiveSelectedHistoryPresetId}
-                historyFilterPresets={historyFilterPresets}
-                dailyTriagePreset={dailyTriagePreset}
-                dailyTriageRecords={dailyTriageRecords}
-                isExportingHistory={isExportingHistory}
-                isExportingDiagnosticsIndex={isExportingDiagnosticsIndex}
-                isPublishing={isPublishing}
-                appT={appT}
-                historyT={historyT}
-                failureT={failureT}
-                onHistoryFilterProviderChange={setHistoryFilterProvider}
-                onHistoryFilterStatusChange={setHistoryFilterStatus}
-                onHistoryFilterWindowChange={setHistoryFilterWindow}
-                onHistoryFilterKeywordChange={setHistoryFilterKeyword}
-                onApplyHistoryPreset={applyHistoryPresetToFilters}
-                onSaveCurrentHistoryPreset={saveCurrentHistoryPreset}
-                onDeleteSelectedHistoryPreset={deleteSelectedHistoryPreset}
-                onDailyTriagePresetChange={setDailyTriagePreset}
-                onResetDailyTriagePreset={resetDailyTriagePreset}
-                onExportExecutionHistory={exportExecutionHistory}
-                onExportDailyTriageReport={exportDailyTriageReport}
-                onExportDiagnosticsIndex={exportDiagnosticsIndex}
-                onClearFilters={clearHistoryFilters}
-                onOpenSnapshotFromRecord={openSnapshotFromRecord}
-                onRerunFromHistory={rerunFromHistory}
-                onCopyHandoffSnippet={copyHandoffSnippet}
-              />
+              <ExecutionHistoryCard {...executionHistoryCardProps} />
               </div>
             </div>
           </div>
