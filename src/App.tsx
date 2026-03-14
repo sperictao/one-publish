@@ -8,6 +8,7 @@ import { useTheme } from "@/hooks/useTheme";
 import { useShortcuts } from "@/hooks/useShortcuts";
 import { useDiagnosticsExports } from "@/hooks/useDiagnosticsExports";
 import { useDiagnosticsUiState } from "@/hooks/useDiagnosticsUiState";
+import { useLayoutShellState } from "@/hooks/useLayoutShellState";
 import { useRepositoryActions } from "@/hooks/useRepositoryActions";
 import { useRecoverableSpec } from "@/hooks/useRecoverableSpec";
 import { useRerunFlow } from "@/hooks/useRerunFlow";
@@ -311,9 +312,6 @@ function App() {
     },
   });
 
-  // Layout State (local only - collapse state doesn't need persistence)
-  const [leftPanelCollapsed, setLeftPanelCollapsed] = useState(false);
-  const [middlePanelCollapsed, setMiddlePanelCollapsed] = useState(false);
   const {
     settingsOpen,
     setSettingsOpen,
@@ -333,49 +331,23 @@ function App() {
   const [isRerunChecklistEnabled, setIsRerunChecklistEnabled] = useState(
     () => loadRerunChecklistPreference().enabled
   );
-  // Min/Max constraints
-  const MIN_PANEL_WIDTH = 150;
-  const MAX_PANEL_WIDTH = 400;
 
-  // 按 2:2:6 比例计算默认面板宽度（用户未自定义时）
-  const [windowWidth, setWindowWidth] = useState(window.innerWidth);
-
-  useEffect(() => {
-    if (panelWidthsCustomized) return;
-    const handleResize = () => setWindowWidth(window.innerWidth);
-    window.addEventListener("resize", handleResize);
-    return () => window.removeEventListener("resize", handleResize);
-  }, [panelWidthsCustomized]);
-
-  const effectiveLeftPanelWidth = panelWidthsCustomized
-    ? leftPanelWidth
-    : Math.max(MIN_PANEL_WIDTH, Math.min(MAX_PANEL_WIDTH, Math.round(windowWidth * 0.2)));
-  const effectiveMiddlePanelWidth = panelWidthsCustomized
-    ? middlePanelWidth
-    : Math.max(MIN_PANEL_WIDTH, Math.min(MAX_PANEL_WIDTH, Math.round(windowWidth * 0.2)));
-
-  // Resize handlers
-  const handleLeftPanelResize = useCallback(
-    (delta: number) => {
-      const newWidth = Math.max(
-        MIN_PANEL_WIDTH,
-        Math.min(MAX_PANEL_WIDTH, effectiveLeftPanelWidth + delta)
-      );
-      setLeftPanelWidth(newWidth);
-    },
-    [effectiveLeftPanelWidth, setLeftPanelWidth]
-  );
-
-  const handleMiddlePanelResize = useCallback(
-    (delta: number) => {
-      const newWidth = Math.max(
-        MIN_PANEL_WIDTH,
-        Math.min(MAX_PANEL_WIDTH, effectiveMiddlePanelWidth + delta)
-      );
-      setMiddlePanelWidth(newWidth);
-    },
-    [effectiveMiddlePanelWidth, setMiddlePanelWidth]
-  );
+  const {
+    leftPanelCollapsed,
+    setLeftPanelCollapsed,
+    middlePanelCollapsed,
+    setMiddlePanelCollapsed,
+    effectiveLeftPanelWidth,
+    effectiveMiddlePanelWidth,
+    handleLeftPanelResize,
+    handleMiddlePanelResize,
+  } = useLayoutShellState({
+    panelWidthsCustomized,
+    leftPanelWidth,
+    middlePanelWidth,
+    setLeftPanelWidth,
+    setMiddlePanelWidth,
+  });
 
   // Project State (runtime only)
   const [projectInfo, setProjectInfo] = useState<ProjectInfo | null>(null);
