@@ -41,7 +41,6 @@ import { useDialogDerivedState } from "@/hooks/useDialogDerivedState";
 import { useProviderRuntime } from "@/hooks/useProviderRuntime";
 import { useAppDialogsProps } from "@/hooks/useAppDialogsProps";
 import { useI18n, type Language } from "@/hooks/useI18n";
-import { cn } from "@/lib/utils";
 import {
   addExecutionRecord,
   checkRepositoryBranchConnectivity,
@@ -53,12 +52,12 @@ import {
 
 // Layout Components
 import { AppDialogs } from "@/components/layout/AppDialogs";
-import { CollapsiblePanel } from "@/components/layout/CollapsiblePanel";
 import { RepositoryList } from "@/components/layout/RepositoryList";
 import { PublishConfigPanel } from "@/components/layout/PublishConfigPanel";
 import { PublishContentSection } from "@/components/layout/PublishContentSection";
 import { MainContentShell } from "@/components/layout/MainContentShell";
 import { ResizeHandle } from "@/components/layout/ResizeHandle";
+import { SidebarPanelShell } from "@/components/layout/SidebarPanelShell";
 
 // UI Components
 import {
@@ -1123,36 +1122,29 @@ function App() {
       {/* Main Content - Three Column Layout (no separate title bar) */}
       <div className="flex flex-1 overflow-hidden">
         {/* Left Panel - Repository List */}
-        <div className={cn(
-          "flex flex-col p-2 transition-all duration-300 ease-in-out",
-          leftPanelCollapsed && "p-0"
-        )}>
-          <CollapsiblePanel
-            collapsed={leftPanelCollapsed}
-            side="left"
-            width={`${effectiveLeftPanelWidth}px`}
-            className="glass-card repo-sidebar-shell h-full rounded-2xl"
-          >
-            <RepositoryList
-              repositories={repositories}
-              selectedRepoId={selectedRepoId}
-              providers={availableProviders.map((provider) => ({
-                ...provider,
-                label: formatProviderLabel(provider),
-              }))}
-              onSelectRepo={selectRepository}
-              onAddRepo={handleAddRepo}
-              onEditRepo={handleEditRepo}
-              onRemoveRepo={handleRemoveRepo}
-              onDetectProvider={handleDetectRepoProvider}
-              onScanProjectFiles={handleScanProjectFiles}
-              onRefreshBranches={handleRefreshRepoBranches}
-              branchConnectivityByRepoId={branchConnectivityByRepoId}
-              onSettings={handleOpenSettings}
-              onCollapse={() => setLeftPanelCollapsed(true)}
-            />
-          </CollapsiblePanel>
-        </div>
+        <SidebarPanelShell
+          collapsed={leftPanelCollapsed}
+          width={`${effectiveLeftPanelWidth}px`}
+        >
+          <RepositoryList
+            repositories={repositories}
+            selectedRepoId={selectedRepoId}
+            providers={availableProviders.map((provider) => ({
+              ...provider,
+              label: formatProviderLabel(provider),
+            }))}
+            onSelectRepo={selectRepository}
+            onAddRepo={handleAddRepo}
+            onEditRepo={handleEditRepo}
+            onRemoveRepo={handleRemoveRepo}
+            onDetectProvider={handleDetectRepoProvider}
+            onScanProjectFiles={handleScanProjectFiles}
+            onRefreshBranches={handleRefreshRepoBranches}
+            branchConnectivityByRepoId={branchConnectivityByRepoId}
+            onSettings={handleOpenSettings}
+            onCollapse={() => setLeftPanelCollapsed(true)}
+          />
+        </SidebarPanelShell>
 
         {/* Left Resize Handle */}
         {!leftPanelCollapsed && (
@@ -1160,39 +1152,30 @@ function App() {
         )}
 
         {/* Middle Panel - Publish Config */}
-        <div
-          className={cn(
-            "flex flex-col p-2 transition-all duration-300 ease-in-out",
-            middlePanelCollapsed && "p-0"
-          )}
+        <SidebarPanelShell
+          collapsed={middlePanelCollapsed}
+          width={`${effectiveMiddlePanelWidth}px`}
         >
-          <CollapsiblePanel
-            collapsed={middlePanelCollapsed}
-            side="left"
-            width={`${effectiveMiddlePanelWidth}px`}
-            className="glass-card repo-sidebar-shell h-full rounded-2xl"
-          >
-            <PublishConfigPanel
-              selectedPreset={selectedPreset}
-              isCustomMode={isCustomMode}
-              profiles={profiles}
-              activeProfileName={activeProfileName}
-              onSelectProfile={handleSelectProfileFromPanel}
-              onCreateProfile={openQuickCreateProfileDialog}
-              onRefreshProfiles={loadProfiles}
-              onDeleteProfile={handleDeleteProfileFromPanel}
-              projectPublishProfiles={projectInfo?.publish_profiles || []}
-              onSelectProjectProfile={handleSelectProjectProfile}
-              recentConfigKeys={recentConfigKeys}
-              favoriteConfigKeys={favoriteConfigKeys}
-              onToggleFavoriteConfig={toggleFavoriteConfig}
-              onRemoveRecentConfig={removeRecentConfig}
-              onCollapse={() => setMiddlePanelCollapsed(true)}
-              showExpandButton={leftPanelCollapsed}
-              onExpandRepo={() => setLeftPanelCollapsed(false)}
-            />
-          </CollapsiblePanel>
-        </div>
+          <PublishConfigPanel
+            selectedPreset={selectedPreset}
+            isCustomMode={isCustomMode}
+            profiles={profiles}
+            activeProfileName={activeProfileName}
+            onSelectProfile={handleSelectProfileFromPanel}
+            onCreateProfile={openQuickCreateProfileDialog}
+            onRefreshProfiles={loadProfiles}
+            onDeleteProfile={handleDeleteProfileFromPanel}
+            projectPublishProfiles={projectInfo?.publish_profiles || []}
+            onSelectProjectProfile={handleSelectProjectProfile}
+            recentConfigKeys={recentConfigKeys}
+            favoriteConfigKeys={favoriteConfigKeys}
+            onToggleFavoriteConfig={toggleFavoriteConfig}
+            onRemoveRecentConfig={removeRecentConfig}
+            onCollapse={() => setMiddlePanelCollapsed(true)}
+            showExpandButton={leftPanelCollapsed}
+            onExpandRepo={() => setLeftPanelCollapsed(false)}
+          />
+        </SidebarPanelShell>
 
         {/* Middle Resize Handle */}
         {!middlePanelCollapsed && (
