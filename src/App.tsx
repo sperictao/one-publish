@@ -37,10 +37,8 @@ import {
   useDotnetPublishCardProps,
   useGenericProviderPublishCardProps,
 } from "@/hooks/usePublishCardProps";
-import { useEnvironmentStatus } from "@/hooks/useEnvironmentStatus";
-import { useDialogDerivedState } from "@/hooks/useDialogDerivedState";
+import { useDialogsCompositionState } from "@/hooks/useDialogsCompositionState";
 import { useProviderRuntime } from "@/hooks/useProviderRuntime";
-import { useAppDialogsProps } from "@/hooks/useAppDialogsProps";
 import { useI18n, type Language } from "@/hooks/useI18n";
 import {
   addExecutionRecord,
@@ -496,16 +494,6 @@ function App() {
     representativeFailureRecord,
   } = useFailureGroupSelection(failureGroups);
 
-  const environmentStatus = useEnvironmentStatus(environmentLastResult);
-
-  const { commandImportProjectPath, currentConfigParameters } =
-    useDialogDerivedState({
-      activeProviderId,
-      customConfig,
-      activeProviderParameters,
-      projectFile: projectInfo?.project_file,
-      selectedRepoPath: selectedRepo?.path,
-    });
 
   const handleCustomConfigUpdate = useCallback(
     (updates: Partial<PublishConfigStore>) => {
@@ -856,7 +844,7 @@ function App() {
     runPublishWithSpec,
   });
 
-  const appDialogsProps = useAppDialogsProps({
+  const { appDialogsProps } = useDialogsCompositionState({
     shortcutsOpen,
     setShortcutsOpen,
     environmentDialogOpen,
@@ -879,7 +867,6 @@ function App() {
     theme,
     setTheme,
     handleConfigDialogOpenChange,
-    environmentStatus,
     environmentLastResult,
     openEnvironmentDialog,
     activeProviderId,
@@ -899,7 +886,6 @@ function App() {
     signResult: artifactActionState.signResult,
     handleOpenSettings,
     selectedRepoExists: Boolean(selectedRepo),
-    commandImportProjectPath,
     commandImportOpen,
     setCommandImportOpen,
     handleCommandImport,
@@ -928,7 +914,10 @@ function App() {
     loadProfiles,
     handleLoadProfile,
     selectedRepoId,
-    currentConfigParameters,
+    customConfig,
+    activeProviderParameters,
+    projectFile: projectInfo?.project_file,
+    selectedRepoPath: selectedRepo?.path,
   });
 
   const executionHistoryCardProps = useExecutionHistoryCardProps({
