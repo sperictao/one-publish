@@ -3,6 +3,9 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { toast } from "sonner";
 
+import { getCancelPublishFeedback } from "@/hooks/useCancelPublishFeedback";
+import { getPublishFailureFeedback } from "@/hooks/usePublishFailureFeedback";
+import type { TranslationMap } from "@/hooks/usePublishExecutionTypes";
 import {
   runEnvironmentCheck,
   type EnvironmentCheckResult,
@@ -15,13 +18,8 @@ import {
 import type { ExecutionRecord } from "@/lib/store";
 import type { ArtifactActionState } from "@/components/publish/ArtifactActions";
 import { useDotnetPublishSelection } from "@/hooks/useDotnetPublishSelection";
-import { getPublishFailureFeedback } from "@/hooks/usePublishFailureFeedback";
 import type { PublishExecutionInput } from "@/hooks/usePublishExecutionInput";
 import { usePublishSpecBuilder } from "@/hooks/usePublishSpecBuilder";
-
-interface TranslationMap {
-  [key: string]: string | undefined;
-}
 
 export interface PublishResult {
   provider_id: string;
@@ -318,17 +316,14 @@ export function usePublishExecution({
       }
     } catch (err) {
       const errorCode = extractInvokeErrorCode(err);
-      if (errorCode === "publish_cancel_failed") {
-        toast.error(appT.cancelPublishFailed || "取消发布失败", {
-          description:
-            appT.cancelPublishFailedDesc ||
-            "取消信号发送失败，请检查进程状态后重试。",
-        });
-      } else {
-        toast.error(appT.cancelPublishFailed || "取消发布失败", {
-          description: extractInvokeErrorMessage(err),
-        });
-      }
+      const feedback = getCancelPublishFeedback(
+        appT,
+        errorCode,
+        extractInvokeErrorMessage(err)
+      );
+      toast.error(feedback.title, {
+        description: feedback.description,
+      });
     } finally {
       setIsCancellingPublish(false);
     }
