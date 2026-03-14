@@ -71,20 +71,7 @@ interface DotnetPreset {
   };
 }
 
-interface UsePublishExecutionParams {
-  appT: TranslationMap;
-  publishT: TranslationMap;
-  selectedRepoId: string | null;
-  selectedRepo: { path: string } | null;
-  activeProviderId: string;
-  activeProviderParameters: Record<string, ParameterValue>;
-  selectedPreset: string;
-  isCustomMode: boolean;
-  customConfig: PublishConfigStore;
-  defaultOutputDir?: string;
-  projectInfo: ProjectInfo | null;
-  presets: DotnetPreset[];
-  specVersion: number;
+export interface PublishExecutionCallSurface {
   pushRecentConfig: (key: string, repoId?: string | null) => void;
   openEnvironmentDialog: (
     initialResult?: EnvironmentCheckResult | null,
@@ -100,6 +87,23 @@ interface UsePublishExecutionParams {
     output: string;
   }) => ExecutionRecord;
   persistExecutionRecord: (record: ExecutionRecord) => void;
+}
+
+interface UsePublishExecutionParams {
+  appT: TranslationMap;
+  publishT: TranslationMap;
+  selectedRepoId: string | null;
+  selectedRepo: { path: string } | null;
+  activeProviderId: string;
+  activeProviderParameters: Record<string, ParameterValue>;
+  selectedPreset: string;
+  isCustomMode: boolean;
+  customConfig: PublishConfigStore;
+  defaultOutputDir?: string;
+  projectInfo: ProjectInfo | null;
+  presets: DotnetPreset[];
+  specVersion: number;
+  callSurface: PublishExecutionCallSurface;
 }
 
 const storeConfigToPublishConfig = (
@@ -127,11 +131,7 @@ export function usePublishExecution({
   projectInfo,
   presets,
   specVersion,
-  pushRecentConfig,
-  openEnvironmentDialog,
-  setEnvironmentLastResult,
-  buildExecutionRecord,
-  persistExecutionRecord,
+  callSurface,
 }: UsePublishExecutionParams) {
   const [isPublishing, setIsPublishing] = useState(false);
   const [isCancellingPublish, setIsCancellingPublish] = useState(false);
@@ -271,14 +271,14 @@ export function usePublishExecution({
     async (spec: ProviderPublishSpec, recentConfigKey?: string | null) => {
       try {
         const env = await runEnvironmentCheck([spec.provider_id]);
-        setEnvironmentLastResult(env);
+        callSurface.setEnvironmentLastResult(env);
 
         const critical = env.issues.find((item) => item.severity === "critical");
         if (critical) {
           toast.error(appT.environmentBlocked || "环境未就绪，已阻止发布", {
             description: critical.description,
           });
-          openEnvironmentDialog(env, [spec.provider_id]);
+          callSurface.openEnvironmentDialog(env, [spec.provider_id]);
           return;
         }
 
@@ -306,7 +306,7 @@ export function usePublishExecution({
 
       try {
         if (recentConfigKey) {
-          pushRecentConfig(recentConfigKey);
+          callSurface.pushRecentConfig(recentConfigKey);
         }
 
         const result = await invoke<PublishResult>("execute_provider_publish", {
@@ -332,7 +332,7 @@ export function usePublishExecution({
           });
         }
 
-        const record = buildExecutionRecord({
+        const record = callSurface.buildExecutionRecord({
           spec,
           repoId: selectedRepoId,
           startedAt: executionStartedAt,
@@ -341,7 +341,7 @@ export function usePublishExecution({
           output: result.output,
         });
         setCurrentExecutionRecordId(record.id);
-        persistExecutionRecord(record);
+        callSurface.persistExecutionRecord(record);
       } catch (err) {
         const rawErrorMessage = extractInvokeErrorMessage(err);
         const failureReason = analyzePublishExecutionFailure(err);
@@ -417,7 +417,7 @@ export function usePublishExecution({
           });
         }
 
-        const record = buildExecutionRecord({
+        const record = callSurface.buildExecutionRecord({
           spec,
           repoId: selectedRepoId,
           startedAt: executionStartedAt,
@@ -426,7 +426,7 @@ export function usePublishExecution({
           output: "",
         });
         setCurrentExecutionRecordId(record.id);
-        persistExecutionRecord(record);
+        callSurface.persistExecutionRecord(record);
       } finally {
         setIsPublishing(false);
         setIsCancellingPublish(false);
@@ -434,13 +434,9 @@ export function usePublishExecution({
     },
     [
       appT,
-      buildExecutionRecord,
-      openEnvironmentDialog,
-      persistExecutionRecord,
+      callSurface,
       publishT,
-      pushRecentConfig,
       selectedRepoId,
-      setEnvironmentLastResult,
     ]
   );
 

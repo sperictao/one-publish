@@ -10,6 +10,7 @@ import { useLayoutShellState } from "@/hooks/useLayoutShellState";
 import { useProjectExecutionState } from "@/hooks/useProjectExecutionState";
 import { useProjectShellState } from "@/hooks/useProjectShellState";
 import { useProviderPresentationState } from "@/hooks/useProviderPresentationState";
+import { usePublishExecutionCallSurface } from "@/hooks/usePublishExecutionCallSurface";
 import { useRepositoryActions } from "@/hooks/useRepositoryActions";
 import { useRepositoryViewState } from "@/hooks/useRepositoryViewState";
 import { useRecoverableSpec } from "@/hooks/useRecoverableSpec";
@@ -496,6 +497,14 @@ function App() {
     setActiveProviderId,
   });
 
+  const publishExecutionCallSurface = usePublishExecutionCallSurface({
+    pushRecentConfig,
+    openEnvironmentDialog,
+    setEnvironmentLastResult,
+    buildExecutionRecord,
+    persistExecutionRecord,
+  });
+
   const {
     isPublishing,
     isCancellingPublish,
@@ -525,11 +534,7 @@ function App() {
     projectInfo,
     presets: PRESETS,
     specVersion: SPEC_VERSION,
-    pushRecentConfig,
-    openEnvironmentDialog,
-    setEnvironmentLastResult,
-    buildExecutionRecord,
-    persistExecutionRecord,
+    callSurface: publishExecutionCallSurface,
   });
 
   const {
