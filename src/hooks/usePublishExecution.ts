@@ -15,6 +15,7 @@ import {
 import type { ExecutionRecord } from "@/lib/store";
 import type { ArtifactActionState } from "@/components/publish/ArtifactActions";
 import { useDotnetPublishSelection } from "@/hooks/useDotnetPublishSelection";
+import { getPublishFailureFeedback } from "@/hooks/usePublishFailureFeedback";
 import type { PublishExecutionInput } from "@/hooks/usePublishExecutionInput";
 import { usePublishSpecBuilder } from "@/hooks/usePublishSpecBuilder";
 
@@ -243,65 +244,14 @@ export function usePublishExecution({
         };
         setPublishResult(failedResult);
 
-        if (failureReason === "already_running") {
-          toast.error(appT.publishAlreadyRunning || "已有发布任务正在执行", {
-            description:
-              appT.publishAlreadyRunningDesc ||
-              "请等待当前任务结束，或先取消后再重试。",
-          });
-        } else if (failureReason === "project_path_not_found") {
-          toast.error(appT.publishProjectPathNotFound || "项目路径不存在", {
-            description:
-              appT.publishProjectPathNotFoundDesc ||
-              "请确认 Project Root / Project File 路径正确后重试。",
-          });
-        } else if (failureReason === "unsupported_provider") {
-          toast.error(appT.publishProviderUnsupported || "不支持的 Provider", {
-            description:
-              appT.publishProviderUnsupportedDesc ||
-              "请确认 Provider 配置有效，或在编辑弹窗重新选择 Provider。",
-          });
-        } else if (failureReason === "render_error") {
-          toast.error(appT.publishRenderFailed || "参数渲染失败", {
-            description:
-              appT.publishRenderFailedDesc ||
-              "请检查当前参数配置是否符合 Provider 要求。",
-          });
-        } else if (failureReason === "tool_missing") {
-          toast.error(appT.publishToolMissing || "缺少构建命令", {
-            description:
-              appT.publishToolMissingDesc ||
-              "请安装对应构建工具，并确保命令已加入 PATH。",
-          });
-        } else if (failureReason === "permission_denied") {
-          toast.error(appT.publishPermissionDenied || "缺少执行权限", {
-            description:
-              appT.publishPermissionDeniedDesc ||
-              "请检查项目目录与构建命令的执行权限后重试。",
-          });
-        } else if (failureReason === "plan_invalid") {
-          toast.error(appT.publishPlanInvalid || "发布计划无效", {
-            description:
-              appT.publishPlanInvalidDesc ||
-              "当前发布命令计划不可执行，请检查 Provider 与参数。",
-          });
-        } else if (failureReason === "java_gradle_missing") {
-          toast.error(appT.publishGradleMissing || "未检测到 Gradle", {
-            description:
-              appT.publishGradleMissingDesc ||
-              "请确保项目下存在 gradlew，或在环境中安装 gradle。",
-          });
-        } else if (failureReason === "process_failed") {
-          toast.error(appT.publishProcessFailed || "发布进程执行失败", {
-            description:
-              appT.publishProcessFailedDesc ||
-              "发布进程启动或等待失败，请稍后重试。",
-          });
-        } else {
-          toast.error(appT.publishExecutionError || "发布执行错误", {
-            description: rawErrorMessage,
-          });
-        }
+        const feedback = getPublishFailureFeedback(
+          failureReason,
+          appT,
+          rawErrorMessage
+        );
+        toast.error(feedback.title, {
+          description: feedback.description,
+        });
 
         const record = callSurface.buildExecutionRecord({
           spec,
