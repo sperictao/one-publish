@@ -1,5 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
-import { getCurrentWindow } from "@tauri-apps/api/window";
+import { useEffect, useCallback } from "react";
 // Hooks
 import { useAppDialogs } from "@/hooks/useAppDialogs";
 import { useAppState } from "@/hooks/useAppState";
@@ -9,11 +8,11 @@ import { useDiagnosticsExports } from "@/hooks/useDiagnosticsExports";
 import { useDiagnosticsUiState } from "@/hooks/useDiagnosticsUiState";
 import { useLayoutShellState } from "@/hooks/useLayoutShellState";
 import { useProjectExecutionState } from "@/hooks/useProjectExecutionState";
+import { useProjectShellState } from "@/hooks/useProjectShellState";
 import { useRepositoryActions } from "@/hooks/useRepositoryActions";
 import { useRepositoryViewState } from "@/hooks/useRepositoryViewState";
 import { useRecoverableSpec } from "@/hooks/useRecoverableSpec";
 import { useRerunFlow } from "@/hooks/useRerunFlow";
-import { useProjectScanner } from "@/hooks/useProjectScanner";
 import { usePresetText } from "@/hooks/usePresetText";
 import { usePublishExecution } from "@/hooks/usePublishExecution";
 import {
@@ -58,12 +57,6 @@ import {
 } from "lucide-react";
 
 // Types
-
-interface ProjectInfo {
-  root_path: string;
-  project_file: string;
-  publish_profiles: string[];
-}
 
 interface DotnetPreset {
   id: string;
@@ -334,9 +327,6 @@ function App() {
     setMiddlePanelWidth,
   });
 
-  // Project State (runtime only)
-  const [projectInfo, setProjectInfo] = useState<ProjectInfo | null>(null);
-
   const {
     selectedRepo,
     branchConnectivityByRepoId,
@@ -412,9 +402,12 @@ function App() {
     }),
   });
 
-  const { scanProject } = useProjectScanner({
+  const { projectInfo, scanProject } = useProjectShellState({
     appT,
-    setProjectInfo,
+    selectedRepoId,
+    selectedRepoPath: selectedRepo?.path,
+    isStateLoading,
+    activeProviderId,
   });
 
   const {
@@ -507,48 +500,6 @@ function App() {
   useEffect(() => {
     loadProfiles();
   }, [loadProfiles]);
-
-  useEffect(() => {
-    if (!selectedRepo || isStateLoading) return;
-
-    if (activeProviderId === "dotnet") {
-      scanProject(selectedRepo.path, {
-        silentSuccess: true,
-        silentFailure: true,
-      });
-      return;
-    }
-
-    setProjectInfo(null);
-  }, [selectedRepoId, isStateLoading, activeProviderId, selectedRepo, scanProject]);
-
-  useEffect(() => {
-    if (!(window as any).__TAURI__) {
-      return;
-    }
-
-    const appWindow = getCurrentWindow();
-
-    const handleMouseDown = (e: MouseEvent) => {
-      const target = e.target as HTMLElement;
-      const dragRegion = target.closest("[data-tauri-drag-region]");
-      const noDrag = target.closest("[data-tauri-no-drag]");
-
-      if (dragRegion && !noDrag && e.buttons === 1) {
-        e.preventDefault();
-        if (e.detail === 2) {
-          void appWindow.toggleMaximize().catch(() => {});
-        } else {
-          void appWindow.startDragging().catch(() => {});
-        }
-      }
-    };
-
-    document.addEventListener("mousedown", handleMouseDown);
-    return () => {
-      document.removeEventListener("mousedown", handleMouseDown);
-    };
-  }, []);
 
   const {
     handleAddRepo,
