@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { toast } from "sonner";
@@ -12,21 +12,13 @@ import {
   extractInvokeErrorCode,
   extractInvokeErrorMessage,
 } from "@/lib/tauri/invokeErrors";
-import type { ExecutionRecord, PublishConfigStore } from "@/lib/store";
+import type { ExecutionRecord } from "@/lib/store";
 import type { ArtifactActionState } from "@/components/publish/ArtifactActions";
+import { useDotnetPublishSelection } from "@/hooks/useDotnetPublishSelection";
 import type { PublishExecutionInput } from "@/hooks/usePublishExecutionInput";
 
 interface TranslationMap {
   [key: string]: string | undefined;
-}
-
-interface PublishConfig {
-  configuration: string;
-  runtime: string;
-  self_contained: boolean;
-  output_dir: string;
-  use_profile: boolean;
-  profile_name: string;
 }
 
 export interface PublishResult {
@@ -75,17 +67,6 @@ interface UsePublishExecutionParams {
   input: PublishExecutionInput;
   callSurface: PublishExecutionCallSurface;
 }
-
-const storeConfigToPublishConfig = (
-  config: PublishConfigStore
-): PublishConfig => ({
-  configuration: config.configuration,
-  runtime: config.runtime,
-  self_contained: config.selfContained,
-  output_dir: config.outputDir,
-  use_profile: config.useProfile,
-  profile_name: config.profileName,
-});
 
 export function usePublishExecution({
   appT,
@@ -148,97 +129,19 @@ export function usePublishExecution({
     };
   }, []);
 
-  const getCurrentConfig = useCallback((): PublishConfig => {
-    if (isCustomMode) {
-      const config = storeConfigToPublishConfig(customConfig);
-      if (!config.output_dir && defaultOutputDir) {
-        return { ...config, output_dir: defaultOutputDir };
-      }
-      return config;
-    }
-
-    if (selectedPreset.startsWith("profile-")) {
-      const profileName = selectedPreset.slice("profile-".length).trim();
-      if (profileName) {
-        return {
-          configuration: "Release",
-          runtime: "",
-          self_contained: false,
-          output_dir: "",
-          use_profile: true,
-          profile_name: profileName,
-        };
-      }
-    }
-
-    const preset = presets.find((item) => item.id === selectedPreset);
-    if (!preset) {
-      const config = storeConfigToPublishConfig(customConfig);
-      return {
-        ...config,
-        output_dir: config.output_dir || defaultOutputDir || "",
-      };
-    }
-
-    const outputDir = defaultOutputDir
-      ? defaultOutputDir
-      : projectInfo
-        ? `${projectInfo.root_path}/publish/${selectedPreset}`
-        : "";
-
-    return {
-      ...preset.config,
-      output_dir: outputDir,
-      use_profile: false,
-      profile_name: "",
-    };
-  }, [
+  const {
+    getCurrentConfig,
+    dotnetPublishPreviewCommand,
+    recentConfigKeyForCurrentSelection,
+  } = useDotnetPublishSelection({
+    activeProviderId,
+    selectedPreset,
+    isCustomMode,
     customConfig,
     defaultOutputDir,
-    isCustomMode,
-    presets,
     projectInfo,
-    selectedPreset,
-  ]);
-
-  const dotnetPublishPreviewCommand = useMemo(() => {
-    if (!projectInfo || activeProviderId !== "dotnet") {
-      return "";
-    }
-
-    const config = getCurrentConfig();
-    const baseCommand = `dotnet publish "${projectInfo.project_file}"`;
-
-    if (config.use_profile && config.profile_name) {
-      return `${baseCommand} -p:PublishProfile="${config.profile_name}"`;
-    }
-
-    return [
-      baseCommand,
-      `-c ${config.configuration}`,
-      config.runtime ? `--runtime ${config.runtime}` : null,
-      config.self_contained ? "--self-contained" : null,
-      config.output_dir ? `-o "${config.output_dir}"` : null,
-    ]
-      .filter((part): part is string => Boolean(part))
-      .join(" ");
-  }, [activeProviderId, getCurrentConfig, projectInfo]);
-
-  const getRecentConfigKeyForCurrentSelection = useCallback(() => {
-    if (activeProviderId !== "dotnet") {
-      return null;
-    }
-
-    if (isCustomMode) {
-      return null;
-    }
-
-    if (selectedPreset.startsWith("profile-")) {
-      return `pubxml:${selectedPreset.slice("profile-".length)}`;
-    }
-
-    return `preset:${selectedPreset}`;
-  }, [activeProviderId, isCustomMode, selectedPreset]);
+    presets,
+  });
 
   const runPublishWithSpec = useCallback(
     async (spec: ProviderPublishSpec, recentConfigKey?: string | null) => {
@@ -462,14 +365,14 @@ export function usePublishExecution({
       };
     }
 
-    await runPublishWithSpec(spec, getRecentConfigKeyForCurrentSelection());
+    await runPublishWithSpec(spec, recentConfigKeyForCurrentSelection);
   }, [
     activeProviderId,
     activeProviderParameters,
     appT,
     getCurrentConfig,
-    getRecentConfigKeyForCurrentSelection,
     projectInfo,
+    recentConfigKeyForCurrentSelection,
     runPublishWithSpec,
     selectedRepo,
     specVersion,
