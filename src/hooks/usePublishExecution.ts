@@ -16,6 +16,7 @@ import type { ExecutionRecord } from "@/lib/store";
 import type { ArtifactActionState } from "@/components/publish/ArtifactActions";
 import { useDotnetPublishSelection } from "@/hooks/useDotnetPublishSelection";
 import type { PublishExecutionInput } from "@/hooks/usePublishExecutionInput";
+import { usePublishSpecBuilder } from "@/hooks/usePublishSpecBuilder";
 
 interface TranslationMap {
   [key: string]: string | undefined;
@@ -141,6 +142,15 @@ export function usePublishExecution({
     defaultOutputDir,
     projectInfo,
     presets,
+  });
+
+  const { buildPublishSpec } = usePublishSpecBuilder({
+    activeProviderId,
+    activeProviderParameters,
+    projectInfo,
+    selectedRepo,
+    specVersion,
+    getCurrentConfig,
   });
 
   const runPublishWithSpec = useCallback(
@@ -322,60 +332,25 @@ export function usePublishExecution({
       return;
     }
 
-    let spec: ProviderPublishSpec;
+    if (activeProviderId === "dotnet" && !projectInfo) {
+      toast.error(appT.selectDotnetProjectFirst || "请先选择 .NET 项目");
+      return;
+    }
 
-    if (activeProviderId === "dotnet") {
-      if (!projectInfo) {
-        toast.error(appT.selectDotnetProjectFirst || "请先选择 .NET 项目");
-        return;
-      }
-
-      const config = getCurrentConfig();
-      const parameters: Record<string, unknown> = {};
-
-      if (config.use_profile && config.profile_name) {
-        parameters.properties = {
-          PublishProfile: config.profile_name,
-        };
-      } else {
-        parameters.configuration = config.configuration;
-        if (config.runtime) {
-          parameters.runtime = config.runtime;
-        }
-        if (config.self_contained) {
-          parameters.self_contained = true;
-        }
-        if (config.output_dir) {
-          parameters.output = config.output_dir;
-        }
-      }
-
-      spec = {
-        version: specVersion,
-        provider_id: "dotnet",
-        project_path: projectInfo.project_file,
-        parameters,
-      };
-    } else {
-      spec = {
-        version: specVersion,
-        provider_id: activeProviderId,
-        project_path: selectedRepo.path,
-        parameters: activeProviderParameters,
-      };
+    const spec = buildPublishSpec();
+    if (!spec) {
+      return;
     }
 
     await runPublishWithSpec(spec, recentConfigKeyForCurrentSelection);
   }, [
     activeProviderId,
-    activeProviderParameters,
     appT,
-    getCurrentConfig,
+    buildPublishSpec,
     projectInfo,
     recentConfigKeyForCurrentSelection,
     runPublishWithSpec,
     selectedRepo,
-    specVersion,
   ]);
 
   const cancelPublish = useCallback(async () => {
