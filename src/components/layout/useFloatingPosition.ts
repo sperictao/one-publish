@@ -36,6 +36,7 @@ interface UseFloatingPositionOptions {
   isReducedMotionRef: React.MutableRefObject<boolean>;
   rowRefs: React.MutableRefObject<Record<string, HTMLDivElement | null>>;
   listRef: React.MutableRefObject<HTMLDivElement | null>;
+  rectInsetX?: number;
   onRectCommitted: (nextRect: FloatingCardRectDraft | null, previousRect: FloatingCardRectDraft | null) => void;
 }
 
@@ -43,6 +44,7 @@ export function useFloatingPosition({
   isReducedMotionRef,
   rowRefs,
   listRef,
+  rectInsetX = 0,
   onRectCommitted,
 }: UseFloatingPositionOptions) {
   const [floatingRenderRect, setFloatingRenderRect] = useState<FloatingCardRect>(
@@ -57,6 +59,35 @@ export function useFloatingPosition({
   const floatingFollowTimestampRef = useRef<number | null>(null);
   const floatingAnimatingRef = useRef(false);
   const isPointerFollowingRef = useRef(false);
+
+  const getRowRectDraft = useCallback(
+    (rowElement: HTMLDivElement): FloatingCardRectDraft => {
+      const listElement = listRef.current;
+      const rowWidth = rowElement.offsetWidth;
+      const rowHeight = rowElement.offsetHeight;
+      const insetX = Math.max(0, Math.min(rectInsetX, rowWidth / 2));
+
+      if (listElement) {
+        const rowRect = rowElement.getBoundingClientRect();
+        const listRect = listElement.getBoundingClientRect();
+
+        return {
+          top: rowRect.top - listRect.top + listElement.scrollTop,
+          left: rowRect.left - listRect.left + listElement.scrollLeft + insetX,
+          width: Math.max(0, rowRect.width - insetX * 2),
+          height: rowRect.height,
+        };
+      }
+
+      return {
+        top: rowElement.offsetTop,
+        left: rowElement.offsetLeft + insetX,
+        width: Math.max(0, rowWidth - insetX * 2),
+        height: rowHeight,
+      };
+    },
+    [listRef, rectInsetX]
+  );
 
   const setFloatingAnimating = useCallback((next: boolean) => {
     if (floatingAnimatingRef.current === next) {
@@ -225,14 +256,9 @@ export function useFloatingPosition({
         return;
       }
 
-      commitFloatingRect({
-        top: rowElement.offsetTop,
-        left: rowElement.offsetLeft,
-        width: rowElement.offsetWidth,
-        height: rowElement.offsetHeight,
-      });
+      commitFloatingRect(getRowRectDraft(rowElement));
     },
-    [commitFloatingRect, rowRefs]
+    [commitFloatingRect, getRowRectDraft, rowRefs]
   );
 
   const commitPointerFollowY = useCallback(
@@ -240,9 +266,10 @@ export function useFloatingPosition({
       const rowElement = rowRefs.current[repoId];
       if (!rowElement) return;
 
-      const rowHeight = rowElement.offsetHeight;
-      const rowLeft = rowElement.offsetLeft;
-      const rowWidth = rowElement.offsetWidth;
+      const rowRect = getRowRectDraft(rowElement);
+      const rowHeight = rowRect.height;
+      const rowLeft = rowRect.left;
+      const rowWidth = rowRect.width;
 
       let top = pointerY - rowHeight / 2;
 
@@ -257,12 +284,7 @@ export function useFloatingPosition({
 
       // Keep previousFloatingRectRef aligned with the row rect
       // so dynamics compute correct transitions on snap-to-row
-      previousFloatingRectRef.current = {
-        top: rowElement.offsetTop,
-        left: rowLeft,
-        width: rowWidth,
-        height: rowHeight,
-      };
+      previousFloatingRectRef.current = rowRect;
 
       floatingTargetRectRef.current = {
         top,
@@ -275,7 +297,7 @@ export function useFloatingPosition({
       isPointerFollowingRef.current = true;
       startFloatingCardFollow();
     },
-    [listRef, rowRefs, startFloatingCardFollow]
+    [getRowRectDraft, listRef, rowRefs, startFloatingCardFollow]
   );
 
   const cancelFollow = useCallback(() => {

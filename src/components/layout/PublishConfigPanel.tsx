@@ -7,6 +7,7 @@ import {
   Plus,
   RefreshCw,
   Folder,
+  FileText,
   ChevronRight,
   ChevronDown,
   Trash2,
@@ -16,6 +17,7 @@ import {
 } from "lucide-react";
 import type { ConfigProfile } from "@/lib/store";
 import { useI18n } from "@/hooks/useI18n";
+import { useFloatingRepoCard } from "@/components/layout/useFloatingRepoCard";
 
 // Collapse toggle icon (reused from BranchPanel)
 function CollapseIcon() {
@@ -32,6 +34,11 @@ function CollapseIcon() {
       <path d="M11 6L8 8L11 10" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
   );
+}
+
+function normalizeRenderableConfigId(configId: string | null) {
+  if (!configId) return null;
+  return configId.startsWith("recent:") ? configId.slice("recent:".length) : configId;
 }
 
 export interface PublishConfigPanelProps {
@@ -88,7 +95,7 @@ function ConfigGroup({
           {count}
         </span>
       </button>
-      {expanded && <div>{children}</div>}
+      {expanded && <div className="space-y-1.5">{children}</div>}
     </div>
   );
 }
@@ -127,56 +134,93 @@ function FavoriteButton({
 function ProfileItem({
   profile,
   configKey,
+  configId,
   isSelected,
   isFavorite,
   onClick,
   onToggleFavorite,
   onDelete,
+  rowRef,
+  onItemMouseEnter,
 }: {
   profile: ConfigProfile;
   configKey: string;
+  configId: string;
   isSelected: boolean;
   isFavorite: boolean;
   onClick: () => void;
   onToggleFavorite: (configKey: string) => void;
   onDelete: () => void;
+  rowRef: (node: HTMLDivElement | null) => void;
+  onItemMouseEnter: () => void;
 }) {
   return (
     <div
-      className={cn(
-        "config-list-row group flex items-start gap-2 px-3 py-2.5 glass-transition hover:bg-[var(--glass-bg)] cursor-pointer",
-        isSelected && "config-item-selected relative z-10 rounded-lg mx-1 bg-[var(--glass-bg-active)] ring-1 ring-[var(--glass-border-subtle)] hover:bg-[var(--glass-bg-active)]"
-      )}
+      ref={rowRef}
+      role="button"
+      tabIndex={0}
+      aria-pressed={isSelected}
+      data-repo-row="true"
+      data-repo-id={configId}
+      className="group relative z-10 flex w-full cursor-pointer items-start gap-2.5 rounded-2xl border border-transparent bg-transparent px-3 py-2.5 text-left shadow-none outline-none transition-all duration-300 hover:bg-[var(--glass-bg)]/20 focus-visible:ring-2 focus-visible:ring-primary/30 focus-visible:ring-offset-1 focus-visible:ring-offset-background"
       onClick={onClick}
+      onMouseEnter={onItemMouseEnter}
+      onFocus={onItemMouseEnter}
     >
-      <FavoriteButton
-        isFavorite={isFavorite}
-        onToggle={() => onToggleFavorite(configKey)}
-      />
+      <span
+        className={cn(
+          "mt-0.5 flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-[14px] transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]",
+          isSelected
+            ? "scale-105 bg-primary/10 shadow-[0_0_18px_hsl(var(--primary)/0.24)]"
+            : "bg-[var(--glass-icon-bg)] shadow-[var(--glass-icon-highlight)] group-hover:scale-105 group-hover:bg-primary/8"
+        )}
+      >
+        <FileText
+          className={cn(
+            "h-4 w-4 transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]",
+            isSelected
+              ? "scale-110 text-primary drop-shadow-[0_0_4px_hsl(var(--primary)/0.3)]"
+              : "text-muted-foreground/60 group-hover:text-primary group-hover:drop-shadow-[0_0_3px_hsl(var(--primary)/0.15)]"
+          )}
+        />
+      </span>
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-1.5">
-          <span className="truncate text-sm font-medium">{profile.name}</span>
-          <span className="rounded bg-primary/15 px-1.5 py-0.5 text-[10px] font-medium text-primary">
+          <span
+            className={cn(
+              "truncate text-[13px] font-medium tracking-tight transition-colors duration-300",
+              isSelected ? "text-foreground" : "text-foreground/78"
+            )}
+          >
+            {profile.name}
+          </span>
+          <span className="rounded-full bg-primary/12 px-1.5 py-0.5 text-[10px] font-bold text-primary">
             {profile.providerId}
           </span>
         </div>
-        <span className="block truncate text-xs text-muted-foreground mt-0.5">
+        <span className="mt-0.5 block truncate text-[11px] text-muted-foreground/55">
           {new Date(profile.createdAt).toLocaleDateString()}
         </span>
       </div>
-      {!profile.isSystemDefault && (
-        <Button
-          variant="ghost"
-          size="icon"
-          className="h-6 w-6 flex-shrink-0 opacity-0 group-hover:opacity-100 glass-transition"
-          onClick={(e) => {
-            e.stopPropagation();
-            onDelete();
-          }}
-        >
-          <Trash2 className="h-3.5 w-3.5 text-destructive" />
-        </Button>
-      )}
+      <div className="flex flex-shrink-0 items-center gap-0.5 -translate-y-0.5 opacity-0 transition-all duration-300 group-hover:translate-y-0 group-hover:opacity-70 group-focus-within:translate-y-0 group-focus-within:opacity-70">
+        <FavoriteButton
+          isFavorite={isFavorite}
+          onToggle={() => onToggleFavorite(configKey)}
+        />
+        {!profile.isSystemDefault && (
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-6 w-6 flex-shrink-0"
+            onClick={(e) => {
+              e.stopPropagation();
+              onDelete();
+            }}
+          >
+            <Trash2 className="h-3.5 w-3.5 text-destructive" />
+          </Button>
+        )}
+      </div>
     </div>
   );
 }
@@ -201,6 +245,7 @@ export function PublishConfigPanel({
   onExpandRepo,
 }: PublishConfigPanelProps) {
   const [searchQuery, setSearchQuery] = useState("");
+  const [preferredSelectedRenderId, setPreferredSelectedRenderId] = useState<string | null>(null);
   const { translations } = useI18n();
   const t = translations.configPanel || {};
   const headerButtonClass =
@@ -228,7 +273,6 @@ export function PublishConfigPanel({
       key: string;
       name: string;
       description: string;
-      isSelected: boolean;
       onClick: () => void;
     }> = [];
 
@@ -243,7 +287,6 @@ export function PublishConfigPanel({
           key: rk,
           name: id,
           description: ".pubxml",
-          isSelected: !isCustomMode && selectedPreset === `profile-${id}`,
           onClick: () => onSelectProjectProfile(id),
         });
       } else if (type === "userprofile") {
@@ -253,7 +296,6 @@ export function PublishConfigPanel({
           key: rk,
           name: profile.name,
           description: profile.providerId,
-          isSelected: isCustomMode && activeProfileName === id,
           onClick: () => onSelectProfile(profile),
         });
       }
@@ -311,6 +353,71 @@ export function PublishConfigPanel({
 
   const hasProjectProfiles = projectPublishProfiles.length > 0;
 
+  const selectedConfigId = useMemo(() => {
+    if (isCustomMode && activeProfileName) {
+      return `userprofile:${activeProfileName}`;
+    }
+    if (!isCustomMode && selectedPreset?.startsWith("profile-")) {
+      const name = selectedPreset.slice("profile-".length);
+      if (pubxmlSet.has(name)) return `pubxml:${name}`;
+    }
+    return null;
+  }, [isCustomMode, activeProfileName, selectedPreset, pubxmlSet]);
+
+  const allConfigIds = useMemo(() => {
+    const ids: string[] = [];
+    if (!query) {
+      for (const item of recentItems) {
+        ids.push(`recent:${item.key}`);
+      }
+    }
+    for (const name of filteredProjectProfiles) {
+      ids.push(`pubxml:${name}`);
+    }
+    for (const group of groupedFilteredProfiles) {
+      for (const profile of group.items) {
+        ids.push(`userprofile:${profile.name}`);
+      }
+    }
+    return ids;
+  }, [query, recentItems, filteredProjectProfiles, groupedFilteredProfiles]);
+
+  const selectedRenderId = useMemo(() => {
+    if (!selectedConfigId) {
+      return null;
+    }
+
+    if (
+      preferredSelectedRenderId &&
+      normalizeRenderableConfigId(preferredSelectedRenderId) === selectedConfigId &&
+      allConfigIds.includes(preferredSelectedRenderId)
+    ) {
+      return preferredSelectedRenderId;
+    }
+
+    return selectedConfigId;
+  }, [allConfigIds, preferredSelectedRenderId, selectedConfigId]);
+
+  const {
+    listRef,
+    floatingCardSurfaceRef,
+    cardTargetRepoId: cardTargetConfigId,
+    floatingVisible,
+    floatingCardMotionStyle,
+    floatingCardSurfaceStyle,
+    setRepoRowRef: setConfigRowRef,
+    handleRepoMouseEnter: handleConfigMouseEnter,
+    handleListPointerMove,
+    handleListPointerEnter,
+    handleListMouseLeave,
+    handleListScroll,
+  } = useFloatingRepoCard({
+    filteredRepoIds: allConfigIds,
+    selectedRepoId: selectedRenderId,
+    lockToSelectedWhenAvailable: true,
+    rectInsetX: 6,
+  });
+
   return (
     <div className="flex h-full flex-col">
       {/* Header with action buttons */}
@@ -337,32 +444,6 @@ export function PublishConfigPanel({
               <Folder className="h-4 w-4" />
             </Button>
           )}
-          <Button
-            variant="ghost"
-            size="icon"
-            className={headerButtonClass}
-            onClick={(e) => {
-              e.stopPropagation();
-              onCreateProfile();
-            }}
-            title={t.newConfig || "新建配置"}
-            data-tauri-no-drag
-          >
-            <Plus className="h-4 w-4" />
-          </Button>
-          <Button
-            variant="ghost"
-            size="icon"
-            className={headerButtonClass}
-            onClick={(e) => {
-              e.stopPropagation();
-              onRefreshProfiles();
-            }}
-            title={t.refresh || "刷新配置"}
-            data-tauri-no-drag
-          >
-            <RefreshCw className="h-4 w-4" />
-          </Button>
           {onCollapse && (
             <Button
               variant="ghost"
@@ -381,6 +462,41 @@ export function PublishConfigPanel({
         </div>
       </div>
 
+      <div className="flex items-center justify-between px-3 py-2">
+        <div className="flex items-center gap-1.5">
+          <span className="text-sm font-medium text-foreground/80">{t.allConfigs || "全部"}</span>
+          <span className="flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-primary/12 px-1 text-[10px] font-bold leading-none text-primary">
+            {profiles.length}
+          </span>
+        </div>
+        <div className="flex items-center gap-1.5">
+          <button
+            type="button"
+            className="glass-surface flex h-7 w-7 items-center justify-center rounded-full transition-all duration-300 hover:bg-[var(--glass-bg-hover)]"
+            onClick={(e) => {
+              e.stopPropagation();
+              onCreateProfile();
+            }}
+            title={t.newConfig || "新建配置"}
+            data-tauri-no-drag
+          >
+            <Plus className="h-3.5 w-3.5 text-muted-foreground transition-transform duration-300 hover:rotate-90" />
+          </button>
+          <button
+            type="button"
+            className="glass-surface flex h-7 w-7 items-center justify-center rounded-full transition-all duration-300 hover:bg-[var(--glass-bg-hover)]"
+            onClick={(e) => {
+              e.stopPropagation();
+              onRefreshProfiles();
+            }}
+            title={t.refresh || "刷新配置"}
+            data-tauri-no-drag
+          >
+            <RefreshCw className="h-3.5 w-3.5 text-muted-foreground transition-all duration-300 hover:rotate-180" />
+          </button>
+        </div>
+      </div>
+
       {/* Search */}
       <div className="px-3 py-1.5">
         <div className="group/search glass-input relative rounded-xl">
@@ -395,11 +511,33 @@ export function PublishConfigPanel({
       </div>
 
       {/* Config List */}
-      <div className="repo-list-scroll glass-scrollbar relative flex-1 overflow-auto px-2.5 py-2">
+      <div
+        ref={listRef}
+        className="repo-list-scroll scrollbar-fade glass-scrollbar relative flex-1 overflow-auto px-2.5 py-2"
+        onPointerEnter={handleListPointerEnter}
+        onPointerMove={handleListPointerMove}
+        onMouseLeave={handleListMouseLeave}
+        onScroll={handleListScroll}
+      >
+        <div
+          aria-hidden
+          className={cn(
+            "pointer-events-none !absolute z-0 origin-top-left transition-opacity duration-120 ease-linear",
+            floatingVisible ? "opacity-100" : "opacity-0"
+          )}
+          style={floatingCardMotionStyle}
+        >
+          <div
+            ref={floatingCardSurfaceRef}
+            data-selected={cardTargetConfigId === selectedRenderId ? "true" : "false"}
+            className="repo-floating-card h-full w-full transition-[box-shadow] duration-320 ease-[cubic-bezier(0.16,1,0.3,1)]"
+            style={floatingCardSurfaceStyle}
+          />
+        </div>
         <div className="glass-stagger">
           {/* Recently Used (non-collapsible, only when not searching) */}
           {!query && recentItems.length > 0 && (
-            <div>
+            <div className="space-y-1.5">
               <div className="flex items-center gap-1.5 px-3 py-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                 <Clock className="h-3.5 w-3.5" />
                 <span>{t.recentlyUsed || "最近使用"}</span>
@@ -407,34 +545,70 @@ export function PublishConfigPanel({
               {recentItems.map((item) => (
                 <div
                   key={`recent-${item.key}`}
-                  className={cn(
-                    "config-list-row group flex items-start gap-2 px-3 py-2 glass-transition hover:bg-[var(--glass-bg)] cursor-pointer",
-                    item.isSelected && "config-item-selected relative z-10 rounded-lg mx-1 bg-[var(--glass-bg-active)] ring-1 ring-[var(--glass-border-subtle)] hover:bg-[var(--glass-bg-active)]"
-                  )}
-                  onClick={item.onClick}
+                  ref={setConfigRowRef(`recent:${item.key}`)}
+                  role="button"
+                  tabIndex={0}
+                  aria-pressed={item.key === selectedConfigId}
+                  data-repo-row="true"
+                  data-repo-id={`recent:${item.key}`}
+                  className="group relative z-10 flex w-full cursor-pointer items-start gap-2.5 rounded-2xl border border-transparent bg-transparent px-3 py-2.5 text-left shadow-none outline-none transition-all duration-300 hover:bg-[var(--glass-bg)]/20 focus-visible:ring-2 focus-visible:ring-primary/30 focus-visible:ring-offset-1 focus-visible:ring-offset-background"
+                  onClick={() => {
+                    setPreferredSelectedRenderId(`recent:${item.key}`);
+                    item.onClick();
+                  }}
+                  onMouseEnter={() => handleConfigMouseEnter(`recent:${item.key}`)}
+                  onFocus={() => handleConfigMouseEnter(`recent:${item.key}`)}
                 >
-                  <FavoriteButton
-                    isFavorite={favoriteSet.has(item.key)}
-                    onToggle={() => onToggleFavoriteConfig(item.key)}
-                  />
+                  <span
+                    className={cn(
+                      "mt-0.5 flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-[14px] transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]",
+                      selectedRenderId === `recent:${item.key}`
+                        ? "scale-105 bg-primary/10 shadow-[0_0_18px_hsl(var(--primary)/0.24)]"
+                        : "bg-[var(--glass-icon-bg)] shadow-[var(--glass-icon-highlight)] group-hover:scale-105 group-hover:bg-primary/8"
+                    )}
+                  >
+                    <FileText
+                      className={cn(
+                        "h-4 w-4 transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]",
+                        selectedRenderId === `recent:${item.key}`
+                          ? "scale-110 text-primary drop-shadow-[0_0_4px_hsl(var(--primary)/0.3)]"
+                          : "text-muted-foreground/60 group-hover:text-primary group-hover:drop-shadow-[0_0_3px_hsl(var(--primary)/0.15)]"
+                      )}
+                    />
+                  </span>
                   <div className="min-w-0 flex-1">
-                    <span className="block truncate text-sm font-medium">{item.name}</span>
-                    <span className="block truncate text-xs text-muted-foreground mt-0.5">
+                    <span
+                      className={cn(
+                        "block truncate text-[13px] font-medium tracking-tight transition-colors duration-300",
+                        selectedRenderId === `recent:${item.key}`
+                          ? "text-foreground"
+                          : "text-foreground/78"
+                      )}
+                    >
+                      {item.name}
+                    </span>
+                    <span className="mt-0.5 block truncate text-[11px] text-muted-foreground/55">
                       {item.description}
                     </span>
                   </div>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-6 w-6 flex-shrink-0 opacity-0 group-hover:opacity-100 glass-transition"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onRemoveRecentConfig(item.key);
-                    }}
-                    title={t.removeRecent || "从最近使用移除"}
-                  >
-                    <X className="h-3.5 w-3.5 text-muted-foreground" />
-                  </Button>
+                  <div className="flex flex-shrink-0 items-center gap-0.5 -translate-y-0.5 opacity-0 transition-all duration-300 group-hover:translate-y-0 group-hover:opacity-70 group-focus-within:translate-y-0 group-focus-within:opacity-70">
+                    <FavoriteButton
+                      isFavorite={favoriteSet.has(item.key)}
+                      onToggle={() => onToggleFavoriteConfig(item.key)}
+                    />
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-6 w-6 flex-shrink-0"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onRemoveRecentConfig(item.key);
+                      }}
+                      title={t.removeRecent || "从最近使用移除"}
+                    >
+                      <X className="h-3.5 w-3.5 text-muted-foreground" />
+                    </Button>
+                  </div>
                 </div>
               ))}
             </div>
@@ -450,22 +624,57 @@ export function PublishConfigPanel({
             {/* .pubxml project publish profiles */}
             {filteredProjectProfiles.map((name) => {
               const configKey = `pubxml:${name}`;
+              const isPubxmlSelected = selectedRenderId === configKey;
               return (
                 <div
                   key={`pubxml-${name}`}
-                  className={cn(
-                    "config-list-row flex items-start gap-2 px-3 py-2.5 glass-transition hover:bg-[var(--glass-bg)] cursor-pointer",
-                    !isCustomMode && selectedPreset === `profile-${name}` && "config-item-selected relative z-10 rounded-lg mx-1 bg-[var(--glass-bg-active)] ring-1 ring-[var(--glass-border-subtle)] hover:bg-[var(--glass-bg-active)]"
-                  )}
-                  onClick={() => onSelectProjectProfile(name)}
+                  ref={setConfigRowRef(configKey)}
+                  role="button"
+                  tabIndex={0}
+                  aria-pressed={isPubxmlSelected}
+                  data-repo-row="true"
+                  data-repo-id={configKey}
+                  className="group relative z-10 flex w-full cursor-pointer items-start gap-2.5 rounded-2xl border border-transparent bg-transparent px-3 py-2.5 text-left shadow-none outline-none transition-all duration-300 hover:bg-[var(--glass-bg)]/20 focus-visible:ring-2 focus-visible:ring-primary/30 focus-visible:ring-offset-1 focus-visible:ring-offset-background"
+                  onClick={() => {
+                    setPreferredSelectedRenderId(configKey);
+                    onSelectProjectProfile(name);
+                  }}
+                  onMouseEnter={() => handleConfigMouseEnter(configKey)}
+                  onFocus={() => handleConfigMouseEnter(configKey)}
                 >
-                  <FavoriteButton
-                    isFavorite={favoriteSet.has(configKey)}
-                    onToggle={() => onToggleFavoriteConfig(configKey)}
-                  />
+                  <span
+                    className={cn(
+                      "mt-0.5 flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-[14px] transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]",
+                      isPubxmlSelected
+                        ? "scale-105 bg-primary/10 shadow-[0_0_18px_hsl(var(--primary)/0.24)]"
+                        : "bg-[var(--glass-icon-bg)] shadow-[var(--glass-icon-highlight)] group-hover:scale-105 group-hover:bg-primary/8"
+                    )}
+                  >
+                    <FileText
+                      className={cn(
+                        "h-4 w-4 transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]",
+                        isPubxmlSelected
+                          ? "scale-110 text-primary drop-shadow-[0_0_4px_hsl(var(--primary)/0.3)]"
+                          : "text-muted-foreground/60 group-hover:text-primary group-hover:drop-shadow-[0_0_3px_hsl(var(--primary)/0.15)]"
+                      )}
+                    />
+                  </span>
                   <div className="min-w-0 flex-1">
-                    <span className="block truncate text-sm font-medium">{name}</span>
-                    <span className="block truncate text-xs text-muted-foreground mt-0.5">.pubxml</span>
+                    <span
+                      className={cn(
+                        "block truncate text-[13px] font-medium tracking-tight transition-colors duration-300",
+                        isPubxmlSelected ? "text-foreground" : "text-foreground/78"
+                      )}
+                    >
+                      {name}
+                    </span>
+                    <span className="mt-0.5 block truncate text-[11px] text-muted-foreground/55">.pubxml</span>
+                  </div>
+                  <div className="flex flex-shrink-0 items-center gap-0.5 -translate-y-0.5 opacity-0 transition-all duration-300 group-hover:translate-y-0 group-hover:opacity-70 group-focus-within:translate-y-0 group-focus-within:opacity-70">
+                    <FavoriteButton
+                      isFavorite={favoriteSet.has(configKey)}
+                      onToggle={() => onToggleFavoriteConfig(configKey)}
+                    />
                   </div>
                 </div>
               );
@@ -486,13 +695,19 @@ export function PublishConfigPanel({
                   key={profile.name}
                   profile={profile}
                   configKey={`userprofile:${profile.name}`}
+                  configId={`userprofile:${profile.name}`}
                   isSelected={
-                    isCustomMode && activeProfileName === profile.name
+                    selectedRenderId === `userprofile:${profile.name}`
                   }
                   isFavorite={favoriteSet.has(`userprofile:${profile.name}`)}
-                  onClick={() => onSelectProfile(profile)}
+                  onClick={() => {
+                    setPreferredSelectedRenderId(`userprofile:${profile.name}`);
+                    onSelectProfile(profile);
+                  }}
                   onToggleFavorite={onToggleFavoriteConfig}
                   onDelete={() => onDeleteProfile(profile.name)}
+                  rowRef={setConfigRowRef(`userprofile:${profile.name}`)}
+                  onItemMouseEnter={() => handleConfigMouseEnter(`userprofile:${profile.name}`)}
                 />
               ))}
             </ConfigGroup>

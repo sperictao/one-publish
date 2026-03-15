@@ -416,16 +416,8 @@ export function RepositoryList({
         onRefreshBranches={onRefreshBranches}
       />
 
-      <div className="relative flex items-center justify-between px-3 py-2">
+      <div className="relative flex items-center px-3 py-2">
         <div className="pointer-events-none absolute -top-6 left-0 right-0 h-6 bg-gradient-to-t from-[var(--glass-panel-bg)] to-transparent" />
-        <button
-          type="button"
-          className="glass-surface flex items-center gap-1.5 rounded-xl px-2.5 py-1 text-xs text-muted-foreground/70 transition-all duration-300 hover:bg-[var(--glass-bg-hover)] hover:text-foreground/80"
-          onClick={onAddRepo}
-        >
-          <Plus className="h-3 w-3" />
-          <span>{repoT.addRepository || "添加仓库"}</span>
-        </button>
         <button
           type="button"
           className="flex h-7 w-7 items-center justify-center rounded-xl text-muted-foreground/50 transition-all duration-300 hover:bg-[var(--glass-bg)] hover:text-foreground/70"
