@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { isTauri } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 
 import { useProjectScanner } from "@/hooks/useProjectScanner";
@@ -49,7 +50,7 @@ export function useProjectShellState(params: {
   ]);
 
   useEffect(() => {
-    if (!(window as any).__TAURI__) {
+    if (!isTauri()) {
       return;
     }
 

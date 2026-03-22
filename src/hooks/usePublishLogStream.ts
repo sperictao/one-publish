@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { isTauri } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 
 interface PublishLogChunkEvent {
@@ -10,17 +11,17 @@ export function usePublishLogStream() {
   const [outputLog, setOutputLog] = useState("");
 
   useEffect(() => {
-    if (!(window as any).__TAURI__) {
+    if (!isTauri()) {
       return;
     }
 
     let unlisten: (() => void) | null = null;
 
     listen<PublishLogChunkEvent>("provider-publish-log", (event) => {
-      const line = event.payload?.line?.trimEnd();
+      const line = event.payload?.line;
       if (!line) return;
 
-      setOutputLog((prev) => (prev ? `${prev}\n${line}` : line));
+      setOutputLog((prev) => `${prev}${line}`);
     })
       .then((dispose) => {
         unlisten = dispose;

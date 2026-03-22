@@ -11,7 +11,7 @@ use std::sync::{
     Arc, OnceLock,
 };
 use tauri::{AppHandle, Emitter};
-use tokio::io::{AsyncBufReadExt, AsyncRead, BufReader};
+use tokio::io::{AsyncRead, AsyncReadExt};
 use tokio::process::{Child, Command};
 use tokio::sync::{mpsc, Mutex};
 
@@ -28,6 +28,7 @@ pub use environment::{apply_fix, run_environment_check};
 pub use export::{
     export_diagnostics_index, export_execution_history, export_execution_snapshot,
     export_failure_group_bundle, export_preflight_report, open_execution_snapshot,
+    open_output_directory,
 };
 pub use provider::{get_provider_schema, import_from_command, list_providers};
 pub use repository::{
@@ -48,6 +49,7 @@ pub(crate) use export::{
     __cmd__export_diagnostics_index, __cmd__export_execution_history,
     __cmd__export_execution_snapshot, __cmd__export_failure_group_bundle,
     __cmd__export_preflight_report, __cmd__open_execution_snapshot,
+    __cmd__open_output_directory,
 };
 pub(crate) use provider::{
     __cmd__get_provider_schema, __cmd__import_from_command, __cmd__list_providers,
@@ -260,8 +262,9 @@ async fn execute_publish_spec(
     } else {
         format!("$ {} {}", program, args.join(" "))
     };
+    let command_line_output = format!("{}\n", command_line);
     let session_id = build_publish_session_id(&spec.provider_id);
-    emit_publish_log(app, &session_id, &command_line);
+    emit_publish_log(app, &session_id, &command_line_output);
     let stdout = child.stdout.take();
     let stderr = child.stderr.take();
     let child = Arc::new(Mutex::new(child));
@@ -275,19 +278,19 @@ async fn execute_publish_spec(
         });
     }
     let run_result: Result<(String, bool, bool, Option<String>), crate::errors::AppError> = async {
-        let mut output_lines = vec![command_line];
+        let mut output_text = command_line_output.clone();
         let (sender, receiver) = mpsc::unbounded_channel::<(String, String)>();
-        let collector = tokio::spawn(collect_log_lines(app.clone(), session_id.clone(), receiver));
+        let collector = tokio::spawn(collect_log_chunks(app.clone(), session_id.clone(), receiver));
         let mut readers = Vec::new();
         if let Some(stdout) = stdout {
-            readers.push(tokio::spawn(read_stream_lines(
+            readers.push(tokio::spawn(read_stream_chunks(
                 stdout,
                 "stdout",
                 sender.clone(),
             )));
         }
         if let Some(stderr) = stderr {
-            readers.push(tokio::spawn(read_stream_lines(
+            readers.push(tokio::spawn(read_stream_chunks(
                 stderr,
                 "stderr",
                 sender.clone(),
@@ -306,18 +309,22 @@ async fn execute_publish_spec(
         for reader in readers {
             let _ = reader.await;
         }
-        let streamed_lines = collector.await.map_err(|err| {
+        let streamed_output = collector.await.map_err(|err| {
             crate::errors::AppError::unknown_with_code(
                 format!("failed to collect publish logs: {}", err),
                 "publish_log_collect_failed",
             )
         })?;
-        output_lines.extend(streamed_lines);
+        output_text.push_str(&streamed_output);
         let cancelled = cancel_requested.load(Ordering::SeqCst);
         if cancelled {
-            let cancelled_line = "[cancelled] 发布已取消".to_string();
+            let cancelled_line = if output_text.ends_with('\n') {
+                "[cancelled] 发布已取消".to_string()
+            } else {
+                "\n[cancelled] 发布已取消".to_string()
+            };
             emit_publish_log(app, &session_id, &cancelled_line);
-            output_lines.push(cancelled_line);
+            output_text.push_str(&cancelled_line);
         }
         let success = status.success() && !cancelled;
         let error = if cancelled {
@@ -327,7 +334,7 @@ async fn execute_publish_spec(
         } else {
             Some(format!("发布失败，退出代码: {:?}", status.code()))
         };
-        Ok((output_lines.join("\n"), success, cancelled, error))
+        Ok((output_text, success, cancelled, error))
     }
     .await;
     clear_running_execution(&session_id).await;
@@ -364,42 +371,61 @@ fn emit_publish_log(app: &AppHandle, session_id: &str, line: &str) {
         log::warn!("failed to emit provider-publish-log: {}", err);
     }
 }
-async fn collect_log_lines(
+fn render_stream_chunk(stream: &str, chunk: &str, stderr_needs_prefix: &mut bool) -> String {
+    if stream != "stderr" {
+        return chunk.to_string();
+    }
+
+    let mut rendered = String::new();
+    for ch in chunk.chars() {
+        if *stderr_needs_prefix {
+            rendered.push_str("[stderr] ");
+            *stderr_needs_prefix = false;
+        }
+        rendered.push(ch);
+        if ch == '\n' || ch == '\r' {
+            *stderr_needs_prefix = true;
+        }
+    }
+    rendered
+}
+async fn collect_log_chunks(
     app: AppHandle,
     session_id: String,
     mut receiver: mpsc::UnboundedReceiver<(String, String)>,
-) -> Vec<String> {
-    let mut lines = Vec::new();
-    while let Some((stream, line)) = receiver.recv().await {
-        let rendered = if stream == "stderr" {
-            format!("[stderr] {}", line)
-        } else {
-            line
-        };
+) -> String {
+    let mut output = String::new();
+    let mut stderr_needs_prefix = true;
+    while let Some((stream, chunk)) = receiver.recv().await {
+        let rendered = render_stream_chunk(&stream, &chunk, &mut stderr_needs_prefix);
+        if rendered.is_empty() {
+            continue;
+        }
         emit_publish_log(&app, &session_id, &rendered);
-        lines.push(rendered);
+        output.push_str(&rendered);
     }
-    lines
+    output
 }
-async fn read_stream_lines<R>(
-    stream: R,
+async fn read_stream_chunks<R>(
+    mut stream: R,
     stream_name: &'static str,
     sender: mpsc::UnboundedSender<(String, String)>,
 ) where
     R: AsyncRead + Unpin + Send + 'static,
 {
-    let mut lines = BufReader::new(stream).lines();
+    let mut buffer = [0u8; 4096];
     loop {
-        match lines.next_line().await {
-            Ok(Some(line)) => {
-                if sender.send((stream_name.to_string(), line)).is_err() {
+        match stream.read(&mut buffer).await {
+            Ok(0) => return,
+            Ok(size) => {
+                let chunk = String::from_utf8_lossy(&buffer[..size]).to_string();
+                if sender.send((stream_name.to_string(), chunk)).is_err() {
                     return;
                 }
             }
-            Ok(None) => return,
             Err(err) => {
                 let message = format!("stream read error: {}", err);
-                let _ = sender.send(("stderr".to_string(), message));
+                let _ = sender.send(("stderr".to_string(), format!("{}\n", message)));
                 return;
             }
         }

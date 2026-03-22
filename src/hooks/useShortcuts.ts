@@ -1,6 +1,8 @@
 // useShortcuts - 快捷键事件监听和处理
 
 import { useEffect } from "react";
+import { isTauri } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
 
 export interface ShortcutHandlers {
   onRefresh?: () => void;
@@ -14,62 +16,56 @@ export interface ShortcutHandlers {
  */
 export function useShortcuts(handlers: ShortcutHandlers) {
   useEffect(() => {
-    if (window.__TAURI__) {
-      const { listen } = window.__TAURI__.event;
-
-      const unlisteners: (() => void)[] = [];
-
-      // 监听刷新快捷键
-      if (handlers.onRefresh) {
-        listen('shortcut-refresh', () => {
-          console.log('Refresh shortcut triggered');
-          handlers.onRefresh?.();
-        }).then((unlisten) => {
-          unlisteners.push(unlisten);
-        }).catch((err) => {
-          console.error('Failed to listen for refresh shortcut:', err);
-        });
-      }
-
-      // 监听发布快捷键
-      if (handlers.onPublish) {
-        listen('shortcut-publish', () => {
-          console.log('Publish shortcut triggered');
-          handlers.onPublish?.();
-        }).then((unlisten) => {
-          unlisteners.push(unlisten);
-        }).catch((err) => {
-          console.error('Failed to listen for publish shortcut:', err);
-        });
-      }
-
-      // 监听设置快捷键
-      if (handlers.onOpenSettings) {
-        listen('shortcut-settings', () => {
-          console.log('Settings shortcut triggered');
-          handlers.onOpenSettings?.();
-        }).then((unlisten) => {
-          unlisteners.push(unlisten);
-        }).catch((err) => {
-          console.error('Failed to listen for settings shortcut:', err);
-        });
-      }
-
-      // 清理函数
-      return () => {
-        unlisteners.forEach((unlisten) => unlisten());
-      };
+    if (!isTauri()) {
+      return;
     }
-  }, [handlers]);
-}
 
-// 为 window 添加 __TAURI__ 类型声明
-declare global {
-  interface Window {
-    __TAURI__?: {
-      event: {
-        listen: (event: string, handler: () => void) => Promise<() => void>;
-      };
+    const unlisteners: (() => void)[] = [];
+
+    // 监听刷新快捷键
+    if (handlers.onRefresh) {
+      listen("shortcut-refresh", () => {
+        console.log("Refresh shortcut triggered");
+        handlers.onRefresh?.();
+      })
+        .then((unlisten) => {
+          unlisteners.push(unlisten);
+        })
+        .catch((err) => {
+          console.error("Failed to listen for refresh shortcut:", err);
+        });
+    }
+
+    // 监听发布快捷键
+    if (handlers.onPublish) {
+      listen("shortcut-publish", () => {
+        console.log("Publish shortcut triggered");
+        handlers.onPublish?.();
+      })
+        .then((unlisten) => {
+          unlisteners.push(unlisten);
+        })
+        .catch((err) => {
+          console.error("Failed to listen for publish shortcut:", err);
+        });
+    }
+
+    // 监听设置快捷键
+    if (handlers.onOpenSettings) {
+      listen("shortcut-settings", () => {
+        console.log("Settings shortcut triggered");
+        handlers.onOpenSettings?.();
+      })
+        .then((unlisten) => {
+          unlisteners.push(unlisten);
+        })
+        .catch((err) => {
+          console.error("Failed to listen for settings shortcut:", err);
+        });
+    }
+
+    return () => {
+      unlisteners.forEach((unlisten) => unlisten());
     };
-  }
+  }, [handlers]);
 }
