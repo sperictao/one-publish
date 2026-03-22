@@ -14,6 +14,7 @@ import {
   deleteProfile,
   getProfiles,
   saveProfile,
+  updateProfile,
   type ConfigProfile,
   type PublishConfigStore,
 } from "@/lib/store";
@@ -71,6 +72,11 @@ interface UseProfilesParams {
   >;
   handleCustomConfigUpdate: (updates: Partial<PublishConfigStore>) => void;
   pushRecentConfig: (key: string, repoId?: string | null) => void;
+  replaceScopedConfigKey: (
+    previousKey: string,
+    nextKey: string,
+    repoId?: string | null
+  ) => void;
   presets: DotnetPreset[];
   defaultPresetId: string;
   getPresetText: (
@@ -118,6 +124,7 @@ export function useProfiles({
   setProviderParameters,
   handleCustomConfigUpdate,
   pushRecentConfig,
+  replaceScopedConfigKey,
   presets,
   defaultPresetId,
   getPresetText,
@@ -138,6 +145,7 @@ export function useProfiles({
   const [quickCreateProfileCustomGroup, setQuickCreateProfileCustomGroup] =
     useState("");
   const [quickCreateProfileSaving, setQuickCreateProfileSaving] = useState(false);
+  const [editingProfileOriginalName, setEditingProfileOriginalName] = useState<string | null>(null);
 
   const loadProfiles = useCallback(async () => {
     if (!selectedRepoId) {
@@ -157,24 +165,54 @@ export function useProfiles({
     void loadProfiles();
   }, [loadProfiles]);
 
-  const openQuickCreateProfileDialog = useCallback(() => {
+  const resetQuickCreateProfileState = useCallback(() => {
     setQuickCreateProfileName("");
     setQuickCreateTemplateId(QUICK_CREATE_CUSTOM_TEMPLATE_ID);
     setQuickCreateProfileDraft(EMPTY_DOTNET_CUSTOM_CONFIG_DRAFT);
     setQuickCreateProfileGroup(QUICK_CREATE_PROFILE_GROUP_DEFAULT);
     setQuickCreateProfileCustomGroup("");
-    setQuickCreateProfileOpen(true);
+    setQuickCreateProfileSaving(false);
+    setEditingProfileOriginalName(null);
   }, []);
+
+  const openQuickCreateProfileDialog = useCallback(() => {
+    resetQuickCreateProfileState();
+    setQuickCreateProfileOpen(true);
+  }, [resetQuickCreateProfileState]);
 
   const handleQuickCreateProfileOpenChange = useCallback((open: boolean) => {
     setQuickCreateProfileOpen(open);
     if (!open) {
-      setQuickCreateProfileName("");
-      setQuickCreateTemplateId(QUICK_CREATE_CUSTOM_TEMPLATE_ID);
-      setQuickCreateProfileGroup(QUICK_CREATE_PROFILE_GROUP_DEFAULT);
-      setQuickCreateProfileCustomGroup("");
-      setQuickCreateProfileSaving(false);
+      resetQuickCreateProfileState();
     }
+  }, [resetQuickCreateProfileState]);
+
+  const openQuickEditProfileDialog = useCallback((profile: ConfigProfile) => {
+    if (profile.isSystemDefault || profile.providerId !== "dotnet") {
+      return;
+    }
+
+    const parameters = profile.parameters || {};
+    const resolvedGroup = profile.profileGroup?.trim() || "";
+
+    setQuickCreateProfileName(profile.name);
+    setQuickCreateTemplateId(QUICK_CREATE_CUSTOM_TEMPLATE_ID);
+    setQuickCreateProfileDraft({
+      configuration:
+        typeof parameters.configuration === "string"
+          ? parameters.configuration
+          : "Release",
+      runtime: typeof parameters.runtime === "string" ? parameters.runtime : "",
+      outputDir: typeof parameters.output === "string" ? parameters.output : "",
+      selfContained: parameters.self_contained === true,
+    });
+    setQuickCreateProfileGroup(
+      resolvedGroup || QUICK_CREATE_PROFILE_GROUP_DEFAULT
+    );
+    setQuickCreateProfileCustomGroup("");
+    setQuickCreateProfileSaving(false);
+    setEditingProfileOriginalName(profile.name);
+    setQuickCreateProfileOpen(true);
   }, []);
 
   const quickCreateTemplateOptions = useMemo<QuickCreateTemplateOption[]>(
@@ -340,13 +378,27 @@ export function useProfiles({
 
     try {
       const parameters = buildProfileParameters(quickCreateProfileDraft);
-      await saveProfile({
-        repoId: selectedRepoId,
-        name: profileName,
-        providerId: "dotnet",
-        parameters,
-        profileGroup: resolvedProfileGroup || undefined,
-      });
+      const isEditing = Boolean(editingProfileOriginalName);
+      const nextProfileKey = `userprofile:${profileName}`;
+
+      if (editingProfileOriginalName) {
+        await updateProfile({
+          repoId: selectedRepoId,
+          originalName: editingProfileOriginalName,
+          name: profileName,
+          providerId: "dotnet",
+          parameters,
+          profileGroup: resolvedProfileGroup || undefined,
+        });
+      } else {
+        await saveProfile({
+          repoId: selectedRepoId,
+          name: profileName,
+          providerId: "dotnet",
+          parameters,
+          profileGroup: resolvedProfileGroup || undefined,
+        });
+      }
 
       await loadProfiles();
 
@@ -358,20 +410,39 @@ export function useProfiles({
         createdAt: new Date().toISOString(),
         isSystemDefault: false,
       });
-      pushRecentConfig(`userprofile:${profileName}`);
+      if (
+        editingProfileOriginalName &&
+        editingProfileOriginalName !== profileName
+      ) {
+        replaceScopedConfigKey(
+          `userprofile:${editingProfileOriginalName}`,
+          nextProfileKey,
+          selectedRepoId
+        );
+      } else {
+        pushRecentConfig(nextProfileKey);
+      }
 
-      toast.success(profileT.saveSuccess || "配置文件保存成功");
+      toast.success(
+        isEditing
+          ? profileT.quickEditSuccess || "配置文件更新成功"
+          : profileT.saveSuccess || "配置文件保存成功"
+      );
       handleQuickCreateProfileOpenChange(false);
     } catch (err) {
       console.error("保存配置文件失败:", err);
       toast.error(
-        extractInvokeErrorMessage(err) || profileT.saveFailed || "保存配置文件失败"
+        extractInvokeErrorMessage(err) ||
+          (editingProfileOriginalName
+            ? profileT.quickEditFailed || "更新配置文件失败"
+            : profileT.saveFailed || "保存配置文件失败")
       );
     } finally {
       setQuickCreateProfileSaving(false);
     }
   }, [
     buildProfileParameters,
+    editingProfileOriginalName,
     handleQuickCreateProfileOpenChange,
     handleSelectProfileFromPanel,
     loadProfiles,
@@ -382,6 +453,7 @@ export function useProfiles({
     quickCreateProfileGroup,
     quickCreateProfileName,
     quickCreateProfileSaving,
+    replaceScopedConfigKey,
     selectedRepoId,
   ]);
 
@@ -436,9 +508,11 @@ export function useProfiles({
     quickCreateProfileCustomGroup,
     setQuickCreateProfileCustomGroup,
     quickCreateProfileSaving,
+    isQuickCreateEditing: editingProfileOriginalName !== null,
     loadProfiles,
     setActiveProfileName,
     openQuickCreateProfileDialog,
+    openQuickEditProfileDialog,
     handleQuickCreateProfileOpenChange,
     quickCreateTemplateOptions,
     quickCreateProfileGroupOptions,

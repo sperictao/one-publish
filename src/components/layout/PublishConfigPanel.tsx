@@ -11,6 +11,7 @@ import {
   ChevronRight,
   ChevronDown,
   Trash2,
+  Pencil,
   Clock,
   Star,
   X,
@@ -48,6 +49,7 @@ export interface PublishConfigPanelProps {
   activeProfileName: string | null;
   onSelectProfile: (profile: ConfigProfile) => void;
   onCreateProfile: () => void;
+  onEditProfile: (profile: ConfigProfile) => void;
   onRefreshProfiles: () => void;
   onDeleteProfile: (name: string) => void;
   projectPublishProfiles: string[];
@@ -139,6 +141,9 @@ function ProfileItem({
   isFavorite,
   onClick,
   onToggleFavorite,
+  onEdit,
+  canEdit,
+  editTitle,
   onDelete,
   rowRef,
   onItemMouseEnter,
@@ -150,6 +155,9 @@ function ProfileItem({
   isFavorite: boolean;
   onClick: () => void;
   onToggleFavorite: (configKey: string) => void;
+  onEdit: () => void;
+  canEdit: boolean;
+  editTitle: string;
   onDelete: () => void;
   rowRef: (node: HTMLDivElement | null) => void;
   onItemMouseEnter: () => void;
@@ -184,7 +192,7 @@ function ProfileItem({
           )}
         />
       </span>
-      <div className="min-w-0 flex flex-1 items-center gap-2 overflow-hidden">
+      <div className="min-w-0 flex flex-1 items-center overflow-hidden">
         <span
           className={cn(
             "truncate text-[13px] font-medium tracking-tight transition-colors duration-300",
@@ -193,18 +201,26 @@ function ProfileItem({
         >
           {profile.name}
         </span>
-        <span className="flex-shrink-0 rounded-full bg-primary/12 px-1.5 py-0.5 text-[10px] font-bold text-primary">
-          {profile.providerId}
-        </span>
-        <span className="truncate text-[11px] text-muted-foreground/55">
-          {new Date(profile.createdAt).toLocaleDateString()}
-        </span>
       </div>
       <div className="flex flex-shrink-0 items-center gap-0.5 opacity-0 transition-all duration-300 group-hover:opacity-70 group-focus-within:opacity-70">
         <FavoriteButton
           isFavorite={isFavorite}
           onToggle={() => onToggleFavorite(configKey)}
         />
+        {canEdit && (
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-6 w-6 flex-shrink-0"
+            onClick={(e) => {
+              e.stopPropagation();
+              onEdit();
+            }}
+            title={editTitle}
+          >
+            <Pencil className="h-3.5 w-3.5 text-muted-foreground" />
+          </Button>
+        )}
         {!profile.isSystemDefault && (
           <Button
             variant="ghost"
@@ -230,6 +246,7 @@ export function PublishConfigPanel({
   activeProfileName,
   onSelectProfile,
   onCreateProfile,
+  onEditProfile,
   onRefreshProfiles,
   onDeleteProfile,
   projectPublishProfiles,
@@ -270,7 +287,7 @@ export function PublishConfigPanel({
     const items: Array<{
       key: string;
       name: string;
-      description: string;
+      description?: string;
       onClick: () => void;
     }> = [];
 
@@ -284,7 +301,6 @@ export function PublishConfigPanel({
         items.push({
           key: rk,
           name: id,
-          description: ".pubxml",
           onClick: () => onSelectProjectProfile(id),
         });
       } else if (type === "userprofile") {
@@ -585,10 +601,14 @@ export function PublishConfigPanel({
                     >
                       {item.name}
                     </span>
-                    <span className="flex-shrink-0 text-muted-foreground/30">·</span>
-                    <span className="truncate text-[11px] text-muted-foreground/55">
-                      {item.description}
-                    </span>
+                    {item.description ? (
+                      <>
+                        <span className="flex-shrink-0 text-muted-foreground/30">·</span>
+                        <span className="truncate text-[11px] text-muted-foreground/55">
+                          {item.description}
+                        </span>
+                      </>
+                    ) : null}
                   </div>
                   <div className="flex flex-shrink-0 items-center gap-0.5 opacity-0 transition-all duration-300 group-hover:opacity-70 group-focus-within:opacity-70">
                     <FavoriteButton
@@ -667,8 +687,6 @@ export function PublishConfigPanel({
                     >
                       {name}
                     </span>
-                    <span className="flex-shrink-0 text-muted-foreground/30">·</span>
-                    <span className="truncate text-[11px] text-muted-foreground/55">.pubxml</span>
                   </div>
                   <div className="flex flex-shrink-0 items-center gap-0.5 opacity-0 transition-all duration-300 group-hover:opacity-70 group-focus-within:opacity-70">
                     <FavoriteButton
@@ -705,6 +723,9 @@ export function PublishConfigPanel({
                     onSelectProfile(profile);
                   }}
                   onToggleFavorite={onToggleFavoriteConfig}
+                  onEdit={() => onEditProfile(profile)}
+                  canEdit={!profile.isSystemDefault && profile.providerId === "dotnet"}
+                  editTitle={t.editConfig || "编辑配置"}
                   onDelete={() => onDeleteProfile(profile.name)}
                   rowRef={setConfigRowRef(`userprofile:${profile.name}`)}
                   onItemMouseEnter={() => handleConfigMouseEnter(`userprofile:${profile.name}`)}

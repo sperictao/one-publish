@@ -384,6 +384,20 @@ export async function saveProfile(params: {
 }
 
 /**
+ * 更新配置文件（按仓库隔离）
+ */
+export async function updateProfile(params: {
+  repoId: string;
+  originalName: string;
+  name: string;
+  providerId: string;
+  parameters: Record<string, any>;
+  profileGroup?: string;
+}): Promise<AppState> {
+  return await invoke<AppState>("update_profile", params);
+}
+
+/**
  * 删除配置文件（按仓库隔离）
  */
 export async function deleteProfile(repoId: string, name: string): Promise<AppState> {

@@ -190,11 +190,50 @@ export function useScopedConfigs(selectedRepoId: string | null) {
     [favoriteConfigByRepo, pushRecentConfig, selectedRepoId]
   );
 
+  const replaceScopedConfigKey = useCallback(
+    (previousKey: string, nextKey: string, repoId: string | null = selectedRepoId) => {
+      if (!repoId || !previousKey || !nextKey) {
+        return;
+      }
+
+      setRecentConfigByRepo((prev) => {
+        const scoped = prev[repoId] ?? [];
+        const nextScoped = [nextKey, ...scoped.filter((item) => item !== previousKey && item !== nextKey)]
+          .slice(0, MAX_RECENT);
+        const next = {
+          ...prev,
+          [repoId]: nextScoped,
+        };
+        persistScopedConfigKeys(RECENT_CONFIGS_KEY, next);
+        return next;
+      });
+
+      setFavoriteConfigByRepo((prev) => {
+        const scoped = prev[repoId] ?? [];
+        if (!scoped.includes(previousKey)) {
+          return prev;
+        }
+
+        const nextScoped = Array.from(
+          new Set(scoped.map((item) => (item === previousKey ? nextKey : item)))
+        );
+        const next = {
+          ...prev,
+          [repoId]: nextScoped,
+        };
+        persistScopedConfigKeys(FAVORITE_CONFIGS_KEY, next);
+        return next;
+      });
+    },
+    [selectedRepoId]
+  );
+
   return {
     recentConfigKeys,
     favoriteConfigKeys,
     pushRecentConfig,
     removeRecentConfig,
     toggleFavoriteConfig,
+    replaceScopedConfigKey,
   };
 }

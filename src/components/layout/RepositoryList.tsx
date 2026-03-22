@@ -331,14 +331,21 @@ export function RepositoryList({
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center justify-between gap-2">
                       <div className="min-w-0 flex-1">
-                        <span
-                          className={cn(
-                            "block truncate text-[13px] font-medium tracking-tight transition-colors duration-300",
-                            isSelected ? "text-foreground" : "text-foreground/78"
-                          )}
-                        >
-                          {repo.name}
-                        </span>
+                        <div className="flex items-center gap-1.5">
+                          <span
+                            className={cn(
+                              "block min-w-0 truncate text-[13px] font-medium tracking-tight transition-colors duration-300",
+                              isSelected ? "text-foreground" : "text-foreground/78"
+                            )}
+                          >
+                            {repo.name}
+                          </span>
+                          {repo.providerId ? (
+                            <span className="flex-shrink-0 rounded-full bg-primary/12 px-1.5 py-0.5 text-[10px] font-bold text-primary">
+                              {repo.providerId}
+                            </span>
+                          ) : null}
+                        </div>
                         <p
                           className="mt-0.5 truncate text-[11px] text-muted-foreground/55"
                           title={repo.path}

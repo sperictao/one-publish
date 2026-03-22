@@ -309,7 +309,13 @@
     "quickCreateTemplateCustom": "自定义配置（空表单）",
     "quickCreateAction": "创建并保存",
     "quickCreateSaving": "保存中...",
-    "enterProfileGroup": "请输入发布配置组名称"
+    "enterProfileGroup": "请输入发布配置组名称",
+    "quickEditTitle": "编辑发布配置",
+    "quickEditDescription": "修改发布配置后保存更新。",
+    "quickEditAction": "保存修改",
+    "quickEditSaving": "更新中...",
+    "quickEditSuccess": "配置文件更新成功",
+    "quickEditFailed": "更新配置文件失败"
   },
   "app": {
     "loading": "加载中...",
@@ -594,6 +600,7 @@
     "profileGroup": "项目发布配置",
     "defaultProfileGroup": "默认分组",
     "noProfiles": "暂无自定义配置",
+    "editConfig": "编辑配置",
     "expandConfigList": "展开配置列表",
     "collapsePanel": "收起面板",
     "expandRepoList": "展开仓库列表"

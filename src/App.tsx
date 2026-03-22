@@ -328,6 +328,7 @@ function App() {
     pushRecentConfig,
     removeRecentConfig,
     toggleFavoriteConfig,
+    replaceScopedConfigKey,
   } = useScopedConfigs(selectedRepoId);
 
   const {
@@ -365,6 +366,7 @@ function App() {
     setProviderParameters,
     handleCustomConfigUpdate,
     pushRecentConfig,
+    replaceScopedConfigKey,
     presets: PRESETS,
     defaultPresetId: PRESETS[0]?.id ?? "release-fd",
     getPresetText,
@@ -397,9 +399,11 @@ function App() {
     quickCreateProfileCustomGroup,
     setQuickCreateProfileCustomGroup,
     quickCreateProfileSaving,
+    isQuickCreateEditing,
     loadProfiles,
     setActiveProfileName,
     openQuickCreateProfileDialog,
+    openQuickEditProfileDialog,
     handleQuickCreateProfileOpenChange,
     quickCreateTemplateOptions,
     quickCreateProfileGroupOptions,
@@ -673,6 +677,7 @@ function App() {
     quickCreateProfileCustomGroup,
     quickCreateProfileDraft,
     quickCreateProfileSaving,
+    quickCreateEditing: isQuickCreateEditing,
     quickCreateGroupDefaultValue: QUICK_CREATE_PROFILE_GROUP_DEFAULT,
     quickCreateGroupCustomValue: QUICK_CREATE_PROFILE_GROUP_CUSTOM,
     profileT,
@@ -850,6 +855,7 @@ function App() {
             activeProfileName={activeProfileName}
             onSelectProfile={handleSelectProfileFromPanel}
             onCreateProfile={openQuickCreateProfileDialog}
+            onEditProfile={openQuickEditProfileDialog}
             onRefreshProfiles={loadProfiles}
             onDeleteProfile={handleDeleteProfileFromPanel}
             projectPublishProfiles={projectInfo?.publish_profiles || []}

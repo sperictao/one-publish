@@ -581,6 +581,52 @@ pub async fn save_profile(
     Ok(state)
 }
 
+/// 更新已保存配置文件（按仓库隔离）
+#[tauri::command]
+pub async fn update_profile(
+    repo_id: String,
+    original_name: String,
+    name: String,
+    provider_id: String,
+    parameters: serde_json::Value,
+    profile_group: Option<String>,
+) -> Result<AppState, String> {
+    let mut state = get_state();
+
+    let repo = state
+        .repositories
+        .iter_mut()
+        .find(|r| r.id == repo_id)
+        .ok_or_else(|| format!("未找到仓库: {}", repo_id))?;
+
+    if original_name != name && repo.publish_config.profiles.iter().any(|p| p.name == name) {
+        return Err(format!("配置文件 '{}' 已存在", name));
+    }
+
+    let normalized_profile_group = profile_group
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty());
+
+    let profile = repo
+        .publish_config
+        .profiles
+        .iter_mut()
+        .find(|p| p.name == original_name)
+        .ok_or_else(|| format!("未找到配置文件: {}", original_name))?;
+
+    if profile.is_system_default {
+        return Err("不能编辑系统默认配置文件".to_string());
+    }
+
+    profile.name = name;
+    profile.provider_id = provider_id;
+    profile.parameters = parameters;
+    profile.profile_group = normalized_profile_group;
+
+    update_state(state.clone())?;
+    Ok(state)
+}
+
 /// 删除配置文件（按仓库隔离）
 #[tauri::command]
 pub async fn delete_profile(repo_id: String, name: String) -> Result<AppState, String> {

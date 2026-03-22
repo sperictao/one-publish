@@ -309,7 +309,13 @@
     "quickCreateTemplateCustom": "Custom (empty form)",
     "quickCreateAction": "Create and save",
     "quickCreateSaving": "Saving...",
-    "enterProfileGroup": "Please enter a profile group name"
+    "enterProfileGroup": "Please enter a profile group name",
+    "quickEditTitle": "Edit publish profile",
+    "quickEditDescription": "Update the publish profile and save the changes.",
+    "quickEditAction": "Save changes",
+    "quickEditSaving": "Updating...",
+    "quickEditSuccess": "Profile updated",
+    "quickEditFailed": "Failed to update profile"
   },
   "app": {
     "loading": "Loading...",
@@ -594,6 +600,7 @@
     "profileGroup": "Project Profiles",
     "defaultProfileGroup": "Default Group",
     "noProfiles": "No custom profiles yet",
+    "editConfig": "Edit profile",
     "expandConfigList": "Expand config list",
     "collapsePanel": "Collapse panel",
     "expandRepoList": "Expand repository list"

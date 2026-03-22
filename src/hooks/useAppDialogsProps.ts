@@ -83,6 +83,7 @@ export interface UseAppDialogsPropsParams {
   quickCreateProfileCustomGroup: string;
   quickCreateProfileDraft: QuickCreateProfileDraft;
   quickCreateProfileSaving: boolean;
+  quickCreateEditing: boolean;
   quickCreateGroupDefaultValue: string;
   quickCreateGroupCustomValue: string;
   profileT: Record<string, string | undefined>;
@@ -162,6 +163,7 @@ export function useAppDialogsProps(params: UseAppDialogsPropsParams): AppDialogs
     quickCreateProfileCustomGroup: params.quickCreateProfileCustomGroup,
     quickCreateProfileDraft: params.quickCreateProfileDraft,
     quickCreateProfileSaving: params.quickCreateProfileSaving,
+    quickCreateEditing: params.quickCreateEditing,
     quickCreateGroupDefaultValue: params.quickCreateGroupDefaultValue,
     quickCreateGroupCustomValue: params.quickCreateGroupCustomValue,
     profileT: params.profileT,

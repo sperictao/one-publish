@@ -45,6 +45,7 @@ interface QuickCreateProfileDialogProps {
   quickCreateProfileCustomGroup: string;
   quickCreateProfileDraft: QuickCreateProfileDraft;
   quickCreateProfileSaving: boolean;
+  quickCreateEditing: boolean;
   quickCreateGroupDefaultValue: string;
   quickCreateGroupCustomValue: string;
   profileT: Record<string, string | undefined>;
@@ -70,6 +71,7 @@ export function QuickCreateProfileDialog({
   quickCreateProfileCustomGroup,
   quickCreateProfileDraft,
   quickCreateProfileSaving,
+  quickCreateEditing,
   quickCreateGroupDefaultValue,
   quickCreateGroupCustomValue,
   profileT,
@@ -91,9 +93,15 @@ export function QuickCreateProfileDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-[840px] max-h-[80vh] flex flex-col">
         <DialogHeader>
-          <DialogTitle>{profileT.quickCreateTitle || "创建发布配置"}</DialogTitle>
+          <DialogTitle>
+            {quickCreateEditing
+              ? profileT.quickEditTitle || "编辑发布配置"
+              : profileT.quickCreateTitle || "创建发布配置"}
+          </DialogTitle>
           <DialogDescription>
-            {profileT.quickCreateDescription || "填写与自定义模式一致的参数并保存为发布配置。"}
+            {quickCreateEditing
+              ? profileT.quickEditDescription || "修改发布配置后保存更新。"
+              : profileT.quickCreateDescription || "填写与自定义模式一致的参数并保存为发布配置。"}
           </DialogDescription>
         </DialogHeader>
 
@@ -303,12 +311,16 @@ export function QuickCreateProfileDialog({
             {quickCreateProfileSaving ? (
               <>
                 <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                {profileT.quickCreateSaving || "保存中..."}
+                {quickCreateEditing
+                  ? profileT.quickEditSaving || "更新中..."
+                  : profileT.quickCreateSaving || "保存中..."}
               </>
             ) : (
               <>
                 <Save className="h-4 w-4 mr-2" />
-                {profileT.quickCreateAction || "创建并保存"}
+                {quickCreateEditing
+                  ? profileT.quickEditAction || "保存修改"
+                  : profileT.quickCreateAction || "创建并保存"}
               </>
             )}
           </Button>

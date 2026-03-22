@@ -88,6 +88,7 @@ export interface AppDialogsProps {
   quickCreateProfileCustomGroup: string;
   quickCreateProfileDraft: QuickCreateProfileDraft;
   quickCreateProfileSaving: boolean;
+  quickCreateEditing: boolean;
   quickCreateGroupDefaultValue: string;
   quickCreateGroupCustomValue: string;
   profileT: Record<string, string | undefined>;
@@ -199,6 +200,7 @@ export function AppDialogs(props: AppDialogsProps) {
         quickCreateProfileCustomGroup={props.quickCreateProfileCustomGroup}
         quickCreateProfileDraft={props.quickCreateProfileDraft}
         quickCreateProfileSaving={props.quickCreateProfileSaving}
+        quickCreateEditing={props.quickCreateEditing}
         quickCreateGroupDefaultValue={props.quickCreateGroupDefaultValue}
         quickCreateGroupCustomValue={props.quickCreateGroupCustomValue}
         profileT={props.profileT}
