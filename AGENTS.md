@@ -37,3 +37,10 @@
 ## Lessons Learned
 - 修复 macOS 交通灯位置问题时，先确认是否由 `tauri-plugin-decorum` 在 `resize/fullscreen` 回调里按默认值重排，避免应用层与插件层同时抢写导致抖动。
 - 调整左栏视觉时，默认只改容器层（外壳与列表背景）；仓库行卡片（含 `repo-floating-card`）除非需求明确，不得修改其边框、阴影、悬浮与选中行为。
+
+## 常用提示词（超短版）
+- `发布页对齐：和左栏一致，只改样式不动逻辑，改完跑 pnpm typecheck。`
+- `中栏浮卡：只修 PublishConfigPanel，左栏保持原样，改完跑 pnpm typecheck。`
+- `React 审查：先给最小方案，再修重渲染、useEffect、异步串行和 bundle 导入问题。`
+- `TS 修错：别用 any，最小改动修类型，最后说明根因并跑 pnpm typecheck。`
+- `UI 回归：先用 Playwright 复现并截图，不要先改代码。`
