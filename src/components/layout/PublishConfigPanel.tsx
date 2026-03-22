@@ -111,7 +111,7 @@ function FavoriteButton({
   return (
     <button
       type="button"
-      className="mt-0.5 flex h-4 w-4 flex-shrink-0 items-center justify-center"
+      className="flex h-4 w-4 flex-shrink-0 items-center justify-center"
       onClick={(e) => {
         e.stopPropagation();
         onToggle();
@@ -162,14 +162,14 @@ function ProfileItem({
       aria-pressed={isSelected}
       data-repo-row="true"
       data-repo-id={configId}
-      className="group relative z-10 flex w-full cursor-pointer items-start gap-2.5 rounded-2xl border border-transparent bg-transparent px-3 py-2.5 text-left shadow-none outline-none transition-all duration-300 hover:bg-[var(--glass-bg)]/20 focus-visible:ring-2 focus-visible:ring-primary/30 focus-visible:ring-offset-1 focus-visible:ring-offset-background"
+      className="group relative z-10 flex w-full cursor-pointer items-center gap-2.5 rounded-2xl border border-transparent bg-transparent px-3 py-2 text-left shadow-none outline-none transition-all duration-300 hover:bg-[var(--glass-bg)]/20 focus-visible:ring-2 focus-visible:ring-primary/30 focus-visible:ring-offset-1 focus-visible:ring-offset-background"
       onClick={onClick}
       onMouseEnter={onItemMouseEnter}
       onFocus={onItemMouseEnter}
     >
       <span
         className={cn(
-          "mt-0.5 flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-[14px] transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]",
+          "flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-[14px] transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]",
           isSelected
             ? "scale-105 bg-primary/10 shadow-[0_0_18px_hsl(var(--primary)/0.24)]"
             : "bg-[var(--glass-icon-bg)] shadow-[var(--glass-icon-highlight)] group-hover:scale-105 group-hover:bg-primary/8"
@@ -184,25 +184,23 @@ function ProfileItem({
           )}
         />
       </span>
-      <div className="min-w-0 flex-1">
-        <div className="flex items-center gap-1.5">
-          <span
-            className={cn(
-              "truncate text-[13px] font-medium tracking-tight transition-colors duration-300",
-              isSelected ? "text-foreground" : "text-foreground/78"
-            )}
-          >
-            {profile.name}
-          </span>
-          <span className="rounded-full bg-primary/12 px-1.5 py-0.5 text-[10px] font-bold text-primary">
-            {profile.providerId}
-          </span>
-        </div>
-        <span className="mt-0.5 block truncate text-[11px] text-muted-foreground/55">
+      <div className="min-w-0 flex flex-1 items-center gap-2 overflow-hidden">
+        <span
+          className={cn(
+            "truncate text-[13px] font-medium tracking-tight transition-colors duration-300",
+            isSelected ? "text-foreground" : "text-foreground/78"
+          )}
+        >
+          {profile.name}
+        </span>
+        <span className="flex-shrink-0 rounded-full bg-primary/12 px-1.5 py-0.5 text-[10px] font-bold text-primary">
+          {profile.providerId}
+        </span>
+        <span className="truncate text-[11px] text-muted-foreground/55">
           {new Date(profile.createdAt).toLocaleDateString()}
         </span>
       </div>
-      <div className="flex flex-shrink-0 items-center gap-0.5 -translate-y-0.5 opacity-0 transition-all duration-300 group-hover:translate-y-0 group-hover:opacity-70 group-focus-within:translate-y-0 group-focus-within:opacity-70">
+      <div className="flex flex-shrink-0 items-center gap-0.5 opacity-0 transition-all duration-300 group-hover:opacity-70 group-focus-within:opacity-70">
         <FavoriteButton
           isFavorite={isFavorite}
           onToggle={() => onToggleFavorite(configKey)}
@@ -551,7 +549,7 @@ export function PublishConfigPanel({
                   aria-pressed={item.key === selectedConfigId}
                   data-repo-row="true"
                   data-repo-id={`recent:${item.key}`}
-                  className="group relative z-10 flex w-full cursor-pointer items-start gap-2.5 rounded-2xl border border-transparent bg-transparent px-3 py-2.5 text-left shadow-none outline-none transition-all duration-300 hover:bg-[var(--glass-bg)]/20 focus-visible:ring-2 focus-visible:ring-primary/30 focus-visible:ring-offset-1 focus-visible:ring-offset-background"
+                  className="group relative z-10 flex w-full cursor-pointer items-center gap-2.5 rounded-2xl border border-transparent bg-transparent px-3 py-2 text-left shadow-none outline-none transition-all duration-300 hover:bg-[var(--glass-bg)]/20 focus-visible:ring-2 focus-visible:ring-primary/30 focus-visible:ring-offset-1 focus-visible:ring-offset-background"
                   onClick={() => {
                     setPreferredSelectedRenderId(`recent:${item.key}`);
                     item.onClick();
@@ -561,7 +559,7 @@ export function PublishConfigPanel({
                 >
                   <span
                     className={cn(
-                      "mt-0.5 flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-[14px] transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]",
+                      "flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-[14px] transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]",
                       selectedRenderId === `recent:${item.key}`
                         ? "scale-105 bg-primary/10 shadow-[0_0_18px_hsl(var(--primary)/0.24)]"
                         : "bg-[var(--glass-icon-bg)] shadow-[var(--glass-icon-highlight)] group-hover:scale-105 group-hover:bg-primary/8"
@@ -576,10 +574,10 @@ export function PublishConfigPanel({
                       )}
                     />
                   </span>
-                  <div className="min-w-0 flex-1">
+                  <div className="min-w-0 flex flex-1 items-center gap-2 overflow-hidden">
                     <span
                       className={cn(
-                        "block truncate text-[13px] font-medium tracking-tight transition-colors duration-300",
+                        "truncate text-[13px] font-medium tracking-tight transition-colors duration-300",
                         selectedRenderId === `recent:${item.key}`
                           ? "text-foreground"
                           : "text-foreground/78"
@@ -587,11 +585,12 @@ export function PublishConfigPanel({
                     >
                       {item.name}
                     </span>
-                    <span className="mt-0.5 block truncate text-[11px] text-muted-foreground/55">
+                    <span className="flex-shrink-0 text-muted-foreground/30">·</span>
+                    <span className="truncate text-[11px] text-muted-foreground/55">
                       {item.description}
                     </span>
                   </div>
-                  <div className="flex flex-shrink-0 items-center gap-0.5 -translate-y-0.5 opacity-0 transition-all duration-300 group-hover:translate-y-0 group-hover:opacity-70 group-focus-within:translate-y-0 group-focus-within:opacity-70">
+                  <div className="flex flex-shrink-0 items-center gap-0.5 opacity-0 transition-all duration-300 group-hover:opacity-70 group-focus-within:opacity-70">
                     <FavoriteButton
                       isFavorite={favoriteSet.has(item.key)}
                       onToggle={() => onToggleFavoriteConfig(item.key)}
@@ -634,7 +633,7 @@ export function PublishConfigPanel({
                   aria-pressed={isPubxmlSelected}
                   data-repo-row="true"
                   data-repo-id={configKey}
-                  className="group relative z-10 flex w-full cursor-pointer items-start gap-2.5 rounded-2xl border border-transparent bg-transparent px-3 py-2.5 text-left shadow-none outline-none transition-all duration-300 hover:bg-[var(--glass-bg)]/20 focus-visible:ring-2 focus-visible:ring-primary/30 focus-visible:ring-offset-1 focus-visible:ring-offset-background"
+                  className="group relative z-10 flex w-full cursor-pointer items-center gap-2.5 rounded-2xl border border-transparent bg-transparent px-3 py-2 text-left shadow-none outline-none transition-all duration-300 hover:bg-[var(--glass-bg)]/20 focus-visible:ring-2 focus-visible:ring-primary/30 focus-visible:ring-offset-1 focus-visible:ring-offset-background"
                   onClick={() => {
                     setPreferredSelectedRenderId(configKey);
                     onSelectProjectProfile(name);
@@ -644,7 +643,7 @@ export function PublishConfigPanel({
                 >
                   <span
                     className={cn(
-                      "mt-0.5 flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-[14px] transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]",
+                      "flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-[14px] transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]",
                       isPubxmlSelected
                         ? "scale-105 bg-primary/10 shadow-[0_0_18px_hsl(var(--primary)/0.24)]"
                         : "bg-[var(--glass-icon-bg)] shadow-[var(--glass-icon-highlight)] group-hover:scale-105 group-hover:bg-primary/8"
@@ -659,18 +658,19 @@ export function PublishConfigPanel({
                       )}
                     />
                   </span>
-                  <div className="min-w-0 flex-1">
+                  <div className="min-w-0 flex flex-1 items-center gap-2 overflow-hidden">
                     <span
                       className={cn(
-                        "block truncate text-[13px] font-medium tracking-tight transition-colors duration-300",
+                        "truncate text-[13px] font-medium tracking-tight transition-colors duration-300",
                         isPubxmlSelected ? "text-foreground" : "text-foreground/78"
                       )}
                     >
                       {name}
                     </span>
-                    <span className="mt-0.5 block truncate text-[11px] text-muted-foreground/55">.pubxml</span>
+                    <span className="flex-shrink-0 text-muted-foreground/30">·</span>
+                    <span className="truncate text-[11px] text-muted-foreground/55">.pubxml</span>
                   </div>
-                  <div className="flex flex-shrink-0 items-center gap-0.5 -translate-y-0.5 opacity-0 transition-all duration-300 group-hover:translate-y-0 group-hover:opacity-70 group-focus-within:translate-y-0 group-focus-within:opacity-70">
+                  <div className="flex flex-shrink-0 items-center gap-0.5 opacity-0 transition-all duration-300 group-hover:opacity-70 group-focus-within:opacity-70">
                     <FavoriteButton
                       isFavorite={favoriteSet.has(configKey)}
                       onToggle={() => onToggleFavoriteConfig(configKey)}
