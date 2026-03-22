@@ -39,6 +39,9 @@ export function usePublishSpecBuilder(params: {
         parameters.properties = {
           PublishProfile: config.profile_name,
         };
+        if (config.output_dir) {
+          parameters.output = config.output_dir;
+        }
       } else {
         parameters.configuration = config.configuration;
         if (config.runtime) {

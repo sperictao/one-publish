@@ -1,6 +1,6 @@
 import { useCallback, useMemo } from "react";
 
-import { joinPath } from "@/lib/paths";
+import { getPathBasename, joinPath } from "@/lib/paths";
 import type { PublishConfigStore } from "@/lib/store";
 
 interface ProjectInfo {
@@ -40,6 +40,10 @@ const storeConfigToPublishConfig = (
   profile_name: config.profileName,
 });
 
+function stripFileExtension(name: string): string {
+  return name.replace(/\.[^.]+$/, "");
+}
+
 export function useDotnetPublishSelection(params: {
   activeProviderId: string;
   selectedPreset: string;
@@ -49,11 +53,34 @@ export function useDotnetPublishSelection(params: {
   projectInfo: ProjectInfo | null;
   presets: DotnetPreset[];
 }) {
+  const buildDefaultScopedOutputDir = useCallback(
+    (configuration?: string) => {
+      if (!params.defaultOutputDir) {
+        return "";
+      }
+
+      const projectName = params.projectInfo?.project_file
+        ? stripFileExtension(getPathBasename(params.projectInfo.project_file))
+        : params.projectInfo?.root_path
+          ? getPathBasename(params.projectInfo.root_path)
+          : "";
+      const resolvedConfiguration = configuration?.trim() || "Release";
+
+      return projectName
+        ? joinPath(params.defaultOutputDir, projectName, resolvedConfiguration)
+        : joinPath(params.defaultOutputDir, resolvedConfiguration);
+    },
+    [params.defaultOutputDir, params.projectInfo]
+  );
+
   const getCurrentConfig = useCallback((): PublishConfig => {
     if (params.isCustomMode) {
       const config = storeConfigToPublishConfig(params.customConfig);
       if (!config.output_dir && params.defaultOutputDir) {
-        return { ...config, output_dir: params.defaultOutputDir };
+        return {
+          ...config,
+          output_dir: buildDefaultScopedOutputDir(config.configuration),
+        };
       }
       return config;
     }
@@ -65,7 +92,7 @@ export function useDotnetPublishSelection(params: {
           configuration: "Release",
           runtime: "",
           self_contained: false,
-          output_dir: "",
+          output_dir: buildDefaultScopedOutputDir("Release"),
           use_profile: true,
           profile_name: profileName,
         };
@@ -77,12 +104,13 @@ export function useDotnetPublishSelection(params: {
       const config = storeConfigToPublishConfig(params.customConfig);
       return {
         ...config,
-        output_dir: config.output_dir || params.defaultOutputDir || "",
+        output_dir:
+          config.output_dir || buildDefaultScopedOutputDir(config.configuration),
       };
     }
 
     const outputDir = params.defaultOutputDir
-      ? params.defaultOutputDir
+      ? buildDefaultScopedOutputDir(preset.config.configuration)
       : params.projectInfo
         ? joinPath(params.projectInfo.root_path, "publish", params.selectedPreset)
         : "";
@@ -93,7 +121,7 @@ export function useDotnetPublishSelection(params: {
       use_profile: false,
       profile_name: "",
     };
-  }, [params]);
+  }, [buildDefaultScopedOutputDir, params]);
 
   const dotnetPublishPreviewCommand = useMemo(() => {
     if (!params.projectInfo || params.activeProviderId !== "dotnet") {
@@ -104,7 +132,13 @@ export function useDotnetPublishSelection(params: {
     const baseCommand = `dotnet publish "${params.projectInfo.project_file}"`;
 
     if (config.use_profile && config.profile_name) {
-      return `${baseCommand} -p:PublishProfile="${config.profile_name}"`;
+      return [
+        baseCommand,
+        `-p:PublishProfile="${config.profile_name}"`,
+        config.output_dir ? `-o "${config.output_dir}"` : null,
+      ]
+        .filter((part): part is string => Boolean(part))
+        .join(" ");
     }
 
     return [
