@@ -33,10 +33,6 @@ import { useFailureGroupDetailCardProps } from "@/hooks/useFailureGroupDetailCar
 import { useFailureGroupsCardProps } from "@/hooks/useFailureGroupsCardProps";
 import { useOutputLogCardProps } from "@/hooks/useOutputLogCardProps";
 import { useCommandImportResultCardProps } from "@/hooks/useCommandImportResultCardProps";
-import {
-  useDotnetPublishCardProps,
-  useGenericProviderPublishCardProps,
-} from "@/hooks/usePublishCardProps";
 import { useDialogsCompositionState } from "@/hooks/useDialogsCompositionState";
 import { useProviderRuntime } from "@/hooks/useProviderRuntime";
 import { useI18n, type Language } from "@/hooks/useI18n";
@@ -240,9 +236,7 @@ function App() {
     setProviderParameters,
     availableProviders: providerRuntimeProviders,
     activeProvider,
-    activeProviderSchema,
     activeProviderParameters,
-    handleProviderParametersChange,
   } = useProviderRuntime();
 
   // 快捷键处理
@@ -425,7 +419,6 @@ function App() {
     setExecutionHistory,
     persistExecutionRecord,
     buildExecutionRecord,
-    handleSelectPresetValueChange,
   } = useProjectExecutionState({
     executionHistoryLimit,
     selectedPreset,
@@ -765,6 +758,23 @@ function App() {
     outputLog,
     publishResult,
     appT,
+    publishControls:
+      selectedRepo && (activeProviderId === "dotnet" ? Boolean(projectInfo) : true)
+        ? {
+            publishCommand:
+              activeProviderId === "dotnet" ? dotnetPublishPreviewCommand : null,
+            publishCommandLabel: publishT.command || "将执行的命令:",
+            executeLabel: configT.execute || "执行发布",
+            publishingLabel: configT.publishing || "发布中...",
+            cancelLabel: appT.cancelPublish || "取消发布",
+            cancellingLabel: appT.cancelling || "取消中...",
+            isPublishing,
+            isCancellingPublish,
+            executeDisabled: !selectedRepo,
+            onExecutePublish: executePublish,
+            onCancelPublish: cancelPublish,
+          }
+        : null,
     isExportingSnapshot,
     exportExecutionSnapshot,
     setReleaseChecklistOpen,
@@ -780,44 +790,6 @@ function App() {
     copyGroupSignature,
     openSnapshotFromRecord,
     rerunFromHistory,
-  });
-
-  const dotnetPublishCardProps = useDotnetPublishCardProps({
-    configT,
-    appT,
-    publishT,
-    isCustomMode,
-    selectedPreset,
-    presets: PRESETS,
-    getPresetText,
-    projectPublishProfiles: projectInfo?.publish_profiles || [],
-    customConfig,
-    dotnetPublishPreviewCommand,
-    isPublishing,
-    isCancellingPublish,
-    disabled: !selectedRepo,
-    setCommandImportOpen,
-    setIsCustomMode,
-    handleSelectPresetValueChange,
-    handleCustomConfigUpdate,
-    executePublish,
-    cancelPublish,
-  });
-
-  const genericProviderPublishCardProps = useGenericProviderPublishCardProps({
-    activeProviderLabel,
-    activeProviderSchema,
-    activeProviderParameters,
-    appT,
-    configT,
-    isPublishing,
-    isCancellingPublish,
-    setCommandImportOpen,
-    handleProviderParametersChange,
-    openEnvironmentDialog,
-    activeProviderId,
-    executePublish,
-    cancelPublish,
   });
 
   const commandImportResultCardProps = useCommandImportResultCardProps({
@@ -837,6 +809,10 @@ function App() {
       </div>
     );
   }
+
+  const showCommandImportResultCard = Boolean(
+    selectedRepo && commandImportResultCardProps
+  );
 
   return (
     <div className="flex h-screen flex-col bg-background">
@@ -910,17 +886,7 @@ function App() {
           onExpandMiddlePanel={() => setMiddlePanelCollapsed(false)}
         >
           <PublishContentSection
-            showDotnetPublishCard={Boolean(
-              selectedRepo && activeProviderId === "dotnet" && projectInfo
-            )}
-            showGenericProviderPublishCard={Boolean(
-              selectedRepo && activeProviderId !== "dotnet"
-            )}
-            showCommandImportResultCard={Boolean(
-              selectedRepo && commandImportResultCardProps
-            )}
-            dotnetPublishCardProps={dotnetPublishCardProps}
-            genericProviderPublishCardProps={genericProviderPublishCardProps}
+            showCommandImportResultCard={showCommandImportResultCard}
             commandImportResultCardProps={commandImportResultCardProps}
             outputLogCardProps={outputLogCardProps}
             failureGroupsCardProps={failureGroupsCardProps}

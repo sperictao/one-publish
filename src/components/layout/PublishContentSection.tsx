@@ -1,14 +1,9 @@
 import { CommandImportResultCard, type CommandImportResultCardProps } from "@/components/publish/CommandImportResultCard";
-import { DotnetPublishCard, type DotnetPublishCardProps } from "@/components/publish/DotnetPublishCard";
 import {
   FailureGroupDetailCard,
   type FailureGroupDetailCardProps,
 } from "@/components/publish/FailureGroupDetailCard";
 import { FailureGroupsCard, type FailureGroupsCardProps } from "@/components/publish/FailureGroupsCard";
-import {
-  GenericProviderPublishCard,
-  type GenericProviderPublishCardProps,
-} from "@/components/publish/GenericProviderPublishCard";
 import { OutputLogCard, type OutputLogCardProps } from "@/components/publish/OutputLogCard";
 import {
   ExecutionHistoryCard,
@@ -16,11 +11,7 @@ import {
 } from "@/components/publish/ExecutionHistoryCard";
 
 export interface PublishContentSectionProps {
-  showDotnetPublishCard: boolean;
-  showGenericProviderPublishCard: boolean;
   showCommandImportResultCard: boolean;
-  dotnetPublishCardProps: DotnetPublishCardProps;
-  genericProviderPublishCardProps: GenericProviderPublishCardProps;
   commandImportResultCardProps: CommandImportResultCardProps | null;
   outputLogCardProps: OutputLogCardProps;
   failureGroupsCardProps: FailureGroupsCardProps;
@@ -29,11 +20,7 @@ export interface PublishContentSectionProps {
 }
 
 export function PublishContentSection({
-  showDotnetPublishCard,
-  showGenericProviderPublishCard,
   showCommandImportResultCard,
-  dotnetPublishCardProps,
-  genericProviderPublishCardProps,
   commandImportResultCardProps,
   outputLogCardProps,
   failureGroupsCardProps,
@@ -42,10 +29,6 @@ export function PublishContentSection({
 }: PublishContentSectionProps) {
   return (
     <div className="mx-auto max-w-3xl space-y-6 p-6">
-      {showDotnetPublishCard && <DotnetPublishCard {...dotnetPublishCardProps} />}
-      {showGenericProviderPublishCard && (
-        <GenericProviderPublishCard {...genericProviderPublishCardProps} />
-      )}
       {showCommandImportResultCard && commandImportResultCardProps && (
         <CommandImportResultCard {...commandImportResultCardProps} />
       )}

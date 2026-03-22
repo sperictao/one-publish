@@ -1,6 +1,9 @@
 import { useMemo } from "react";
 
-import type { OutputLogCardProps } from "@/components/publish/OutputLogCard";
+import type {
+  OutputLogCardProps,
+  OutputLogCardPublishControls,
+} from "@/components/publish/OutputLogCard";
 import type { ArtifactActionState } from "@/components/publish/ArtifactActions";
 import type { PublishResult } from "@/hooks/usePublishExecution";
 
@@ -12,6 +15,7 @@ interface UseOutputLogCardPropsParams {
   outputLog: string;
   publishResult: PublishResult | null;
   appT: TranslationMap;
+  publishControls: OutputLogCardPublishControls | null;
   isExportingSnapshot: boolean;
   exportExecutionSnapshot: () => void;
   setReleaseChecklistOpen: (open: boolean) => void;
@@ -26,6 +30,7 @@ export function useOutputLogCardProps(
       outputLog: params.outputLog,
       publishResult: params.publishResult,
       appT: params.appT,
+      publishControls: params.publishControls,
       isExportingSnapshot: params.isExportingSnapshot,
       onExportExecutionSnapshot: params.exportExecutionSnapshot,
       onOpenReleaseChecklist: () => params.setReleaseChecklistOpen(true),
