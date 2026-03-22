@@ -16,6 +16,10 @@ import { useFloatingDynamics } from "./useFloatingDynamics";
 interface UseFloatingRepoCardOptions {
   filteredRepoIds: string[];
   selectedRepoId: string | null;
+  lockToSelectedWhenAvailable?: boolean;
+  rectInsetX?: number;
+  enablePointerFollow?: boolean;
+  preserveHoverOnGap?: boolean;
 }
 
 interface UseFloatingRepoCardResult {
@@ -33,9 +37,13 @@ interface UseFloatingRepoCardResult {
   handleListScroll: () => void;
 }
 
-export function useFloatingRepoCard({
+export function useFloatingConfigCard({
   filteredRepoIds,
   selectedRepoId,
+  lockToSelectedWhenAvailable = false,
+  rectInsetX = 0,
+  enablePointerFollow = true,
+  preserveHoverOnGap = false,
 }: UseFloatingRepoCardOptions): UseFloatingRepoCardResult {
   const [hoveredRepoId, setHoveredRepoId] = useState<string | null>(null);
 
@@ -63,6 +71,8 @@ export function useFloatingRepoCard({
     cleanupDynamics,
   } = useFloatingDynamics({ isReducedMotionRef, floatingCardSurfaceRef });
 
+  const shouldLockToSelected = lockToSelectedWhenAvailable && Boolean(selectedRepoId);
+
   const {
     floatingRenderRect,
     isFloatingAnimating,
@@ -76,6 +86,7 @@ export function useFloatingRepoCard({
     isReducedMotionRef,
     rowRefs,
     listRef,
+    rectInsetX,
     onRectCommitted: applyDynamics,
   });
 
@@ -84,7 +95,9 @@ export function useFloatingRepoCard({
     [filteredRepoIds]
   );
 
-  const cardTargetRepoId = hoveredRepoId ?? selectedRepoId ?? null;
+  const cardTargetRepoId = shouldLockToSelected
+    ? selectedRepoId ?? hoveredRepoId ?? null
+    : hoveredRepoId ?? selectedRepoId ?? null;
 
   const setRepoRowRef = useCallback(
     (repoId: string) => (node: HTMLDivElement | null) => {
@@ -105,7 +118,7 @@ export function useFloatingRepoCard({
       setHoveredRepoId(repoId);
 
       // In pointer-follow mode, skip snap-to-row (let pointerMove control position)
-      if (!isPointerFollowingRef.current) {
+      if (!shouldLockToSelected && (!enablePointerFollow || !isPointerFollowingRef.current)) {
         updateFloatingRect(repoId);
       }
 
@@ -119,7 +132,16 @@ export function useFloatingRepoCard({
         triggerSelectedBounce();
       }
     },
-    [hoveredRepoIdRef, isPointerFollowingRef, lastHoveredRepoIdRef, selectedRepoId, triggerSelectedBounce, updateFloatingRect]
+    [
+      enablePointerFollow,
+      hoveredRepoIdRef,
+      isPointerFollowingRef,
+      lastHoveredRepoIdRef,
+      selectedRepoId,
+      shouldLockToSelected,
+      triggerSelectedBounce,
+      updateFloatingRect,
+    ]
   );
 
   const handleListPointerMove = useCallback(
@@ -142,8 +164,15 @@ export function useFloatingRepoCard({
       if (!listElement) return;
       const pointerY = event.clientY - listElement.getBoundingClientRect().top + listElement.scrollTop;
 
-      // Resolve which repo the pointer is over
-      const resolvedRepoId = resolvePointerRepoId(event.target) ?? resolveNearestRepoIdByPointerY(pointerY);
+      // Resolve which repo the pointer is over.
+      // When already hovering a row, avoid switching targets while the pointer
+      // is over group headers / gaps; wait until it actually enters another row.
+      const pointerRepoId = resolvePointerRepoId(event.target);
+      const resolvedRepoId =
+        pointerRepoId ??
+        (preserveHoverOnGap && hoveredRepoIdRef.current
+          ? null
+          : resolveNearestRepoIdByPointerY(pointerY));
 
       // Update hovered repo if changed
       if (resolvedRepoId && resolvedRepoId !== hoveredRepoIdRef.current) {
@@ -151,12 +180,27 @@ export function useFloatingRepoCard({
       }
 
       // Pointer-follow: update card Y to track mouse position
+      if (shouldLockToSelected || !enablePointerFollow) {
+        return;
+      }
+
       const currentHoveredRepoId = hoveredRepoIdRef.current;
       if (!currentHoveredRepoId) return;
 
       commitPointerFollowY(pointerY, currentHoveredRepoId);
     },
-    [commitPointerFollowY, floatingCardSurfaceRef, handleRepoMouseEnter, hoveredRepoIdRef, resolveNearestRepoIdByPointerY, resolvePointerRepoId, updateHighlight]
+    [
+      commitPointerFollowY,
+      floatingCardSurfaceRef,
+      handleRepoMouseEnter,
+      hoveredRepoIdRef,
+      enablePointerFollow,
+      preserveHoverOnGap,
+      resolveNearestRepoIdByPointerY,
+      resolvePointerRepoId,
+      shouldLockToSelected,
+      updateHighlight,
+    ]
   );
 
   const handleListPointerEnter = useCallback(
@@ -197,6 +241,7 @@ export function useFloatingRepoCard({
 
     hoveredRepoIdRef.current = null;
     cancelFollow();
+    isPointerFollowingRef.current = false;
     updateFloatingRect(selectedRepoId ?? null);
     setHoveredRepoId(null);
   }, [cancelFollow, hoveredRepoIdRef, isPointerFollowingRef, lastHoveredRepoIdRef, selectedRepoId, startSelectedGlowDecay, triggerSelectedBounce, updateFloatingRect]);
@@ -271,11 +316,35 @@ export function useFloatingRepoCard({
     setHoveredRepoId(null);
   }, [filteredRepoIds, hoveredRepoId, hoveredRepoIdRef]);
 
-  // Force snap to row on selection change (overrides pointer-follow)
+  // Match the left sidebar feel: selection changes may snap the card, but
+  // hover transitions should not interrupt active pointer-follow.
   useLayoutEffect(() => {
+    if (shouldLockToSelected || !enablePointerFollow) {
+      return;
+    }
     isPointerFollowingRef.current = false;
     updateFloatingRect(hoveredRepoIdRef.current ?? selectedRepoId);
-  }, [selectedRepoId, updateFloatingRect]);
+  }, [
+    enablePointerFollow,
+    hoveredRepoIdRef,
+    selectedRepoId,
+    shouldLockToSelected,
+    updateFloatingRect,
+  ]);
+
+  useLayoutEffect(() => {
+    if (!shouldLockToSelected && enablePointerFollow) {
+      return;
+    }
+    isPointerFollowingRef.current = false;
+    updateFloatingRect(cardTargetRepoId);
+  }, [
+    cardTargetRepoId,
+    enablePointerFollow,
+    isPointerFollowingRef,
+    shouldLockToSelected,
+    updateFloatingRect,
+  ]);
 
   useLayoutEffect(() => {
     if (isPointerFollowingRef.current) return;

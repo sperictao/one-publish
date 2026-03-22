@@ -17,7 +17,7 @@ import {
 } from "lucide-react";
 import type { ConfigProfile } from "@/lib/store";
 import { useI18n } from "@/hooks/useI18n";
-import { useFloatingRepoCard } from "@/components/layout/useFloatingRepoCard";
+import { useFloatingConfigCard } from "@/components/layout/useFloatingConfigCard";
 
 // Collapse toggle icon (reused from BranchPanel)
 function CollapseIcon() {
@@ -411,11 +411,11 @@ export function PublishConfigPanel({
     handleListPointerEnter,
     handleListMouseLeave,
     handleListScroll,
-  } = useFloatingRepoCard({
+  } = useFloatingConfigCard({
     filteredRepoIds: allConfigIds,
     selectedRepoId: selectedRenderId,
-    lockToSelectedWhenAvailable: true,
-    rectInsetX: 6,
+    enablePointerFollow: true,
+    preserveHoverOnGap: true,
   });
 
   return (
