@@ -21,6 +21,7 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { useI18n } from "@/hooks/useI18n";
+import { joinPath } from "@/lib/paths";
 import type { PackageResult, SignResult } from "@/lib/artifact";
 import type { EnvironmentCheckResult } from "@/lib/environment";
 import { getUpdaterConfigHealth, type UpdaterConfigHealth } from "@/lib/store";
@@ -89,12 +90,7 @@ function buildDefaultReportPath(outputDir: string | undefined) {
   const stamp = new Date().toISOString().replace(/[:.]/g, "-");
   const fileName = `preflight-report-${stamp}.md`;
   if (!outputDir) return fileName;
-
-  const trimmed = outputDir.replace(/[\\/]+$/, "");
-  if (!trimmed) return fileName;
-
-  const separator = trimmed.includes("\\") ? "\\" : "/";
-  return `${trimmed}${separator}${fileName}`;
+  return joinPath(outputDir, fileName);
 }
 
 export function ReleaseChecklistDialog({

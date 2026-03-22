@@ -9,6 +9,7 @@ import {
   type PackageResult,
   type SignResult,
 } from "@/lib/artifact";
+import { appendExtensionToPath } from "@/lib/paths";
 import { useI18n } from "@/hooks/useI18n";
 
 function formatBytes(bytes: number) {
@@ -52,8 +53,7 @@ export function ArtifactActions({ outputDir, onStateChange }: ArtifactActionsPro
   }, [onStateChange, packageResult, signResult]);
 
   const defaultZipPath = useMemo(() => {
-    const trimmed = outputDir.replace(/[\\/]+$/, "");
-    return trimmed ? `${trimmed}.zip` : "artifact.zip";
+    return appendExtensionToPath(outputDir, ".zip");
   }, [outputDir]);
 
   const handlePackage = async () => {

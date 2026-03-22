@@ -176,7 +176,7 @@ fn scan_publish_profiles(project_file: &Path) -> Vec<String> {
             if let Ok(entries) = std::fs::read_dir(&profiles_dir) {
                 for entry in entries.flatten() {
                     let path = entry.path();
-                    if path.extension().map_or(false, |e| e == "pubxml") {
+                    if path.extension().is_some_and(|e| e == "pubxml") {
                         if let Some(stem) = path.file_stem() {
                             profiles.push(stem.to_string_lossy().to_string());
                         }
@@ -616,7 +616,7 @@ pub async fn scan_project_files(path: String) -> Result<Vec<String>, crate::erro
                     entry_path
                         .file_name()
                         .and_then(|n| n.to_str())
-                        .map(|name| exact_names.iter().any(|&en| name == en))
+                        .map(|name| exact_names.contains(&name))
                         .unwrap_or(false)
                 } else {
                     entry_path

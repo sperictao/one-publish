@@ -9,6 +9,7 @@ import {
   scanProjectFiles,
   scanRepositoryBranches,
 } from "@/lib/store";
+import { getPathBasename } from "@/lib/paths";
 import { remapPathPrefix } from "@/features/repository/utils/pathUtils";
 import {
   analyzeBranchRefreshFailure,
@@ -57,7 +58,7 @@ export function useRepositoryActions({
     }
 
     const path = selected as string;
-    const name = path.split("/").pop() || "Unknown";
+    const name = getPathBasename(path) || "Unknown";
 
     try {
       await detectRepositoryProvider(path);

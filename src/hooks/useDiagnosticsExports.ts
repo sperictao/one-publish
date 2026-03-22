@@ -11,6 +11,7 @@ import type {
   HistoryFilterWindow,
 } from "@/lib/historyFilterPresets";
 import type { FailureGroup } from "@/lib/failureGroups";
+import { joinPath } from "@/lib/paths";
 import {
   setExecutionRecordSnapshot,
   type ExecutionRecord,
@@ -179,7 +180,7 @@ export function useDiagnosticsExports({
 
     const timestamp = new Date().toISOString().replace(/[:]/g, "-");
     const defaultPath = publishResult.output_dir
-      ? `${publishResult.output_dir}/execution-snapshot-${timestamp}.md`
+      ? joinPath(publishResult.output_dir, `execution-snapshot-${timestamp}.md`)
       : `execution-snapshot-${timestamp}.md`;
 
     const selected = await save({
@@ -274,7 +275,7 @@ export function useDiagnosticsExports({
     const representativeRecord = representativeFailureRecord;
     const defaultDir = selectedFailureGroup.latestRecord.outputDir || selectedRepoPath || "";
     const defaultPath = defaultDir
-      ? `${defaultDir}/failure-group-bundle-${timestamp}.md`
+      ? joinPath(defaultDir, `failure-group-bundle-${timestamp}.md`)
       : `failure-group-bundle-${timestamp}.md`;
 
     const selected = await save({
@@ -354,7 +355,7 @@ export function useDiagnosticsExports({
       const prefix = options?.filePrefix ?? "execution-history";
       const defaultDir = selectedRepoPath || "";
       const defaultPath = defaultDir
-        ? `${defaultDir}/${prefix}-${timestamp}.${extension}`
+        ? joinPath(defaultDir, `${prefix}-${timestamp}.${extension}`)
         : `${prefix}-${timestamp}.${extension}`;
 
       const filters =
@@ -471,7 +472,7 @@ export function useDiagnosticsExports({
     const timestamp = new Date().toISOString().replace(/[:]/g, "-");
     const defaultDir = selectedRepoPath || "";
     const defaultPath = defaultDir
-      ? `${defaultDir}/diagnostics-index-${timestamp}.md`
+      ? joinPath(defaultDir, `diagnostics-index-${timestamp}.md`)
       : `diagnostics-index-${timestamp}.md`;
 
     const selected = await save({

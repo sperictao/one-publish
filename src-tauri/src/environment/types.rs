@@ -186,7 +186,6 @@ pub fn parse_version(output: &[u8], prefix: &str) -> Option<String> {
                 Some(
                     line.strip_prefix(prefix)
                         .unwrap()
-                        .trim()
                         .split_whitespace()
                         .next()
                         .unwrap_or("")

@@ -1,5 +1,6 @@
 import { useCallback, useMemo } from "react";
 
+import { joinPath } from "@/lib/paths";
 import type { PublishConfigStore } from "@/lib/store";
 
 interface ProjectInfo {
@@ -83,7 +84,7 @@ export function useDotnetPublishSelection(params: {
     const outputDir = params.defaultOutputDir
       ? params.defaultOutputDir
       : params.projectInfo
-        ? `${params.projectInfo.root_path}/publish/${params.selectedPreset}`
+        ? joinPath(params.projectInfo.root_path, "publish", params.selectedPreset)
         : "";
 
     return {

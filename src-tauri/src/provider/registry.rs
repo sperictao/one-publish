@@ -9,6 +9,12 @@ pub struct ProviderRegistry {
     providers: Vec<Box<dyn Provider>>,
 }
 
+impl Default for ProviderRegistry {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl ProviderRegistry {
     pub fn new() -> Self {
         Self {

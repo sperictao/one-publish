@@ -220,11 +220,12 @@ async fn sign_gpg_detached(
         })?;
     }
 
-    let mut args: Vec<String> = Vec::new();
-    args.push("--batch".to_string());
-    args.push("--yes".to_string());
-    args.push("--detach-sign".to_string());
-    args.push("--armor".to_string());
+    let mut args: Vec<String> = vec![
+        "--batch".to_string(),
+        "--yes".to_string(),
+        "--detach-sign".to_string(),
+        "--armor".to_string(),
+    ];
 
     if let Some(key) = key_id {
         if !key.trim().is_empty() {

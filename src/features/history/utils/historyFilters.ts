@@ -1,5 +1,6 @@
 import type { Repository } from "@/types/repository";
 import type { ExecutionRecord } from "@/lib/store";
+import { isPathEqualOrInside } from "@/lib/paths";
 import type {
   HistoryFilterStatus,
   HistoryFilterWindow,
@@ -67,10 +68,6 @@ export function filterExecutionHistory(
   });
 }
 
-function normalizePathForMatch(path: string): string {
-  return path.replace(/\\/g, "/").replace(/\/+$/, "").toLowerCase();
-}
-
 export function isRecordInRepository(
   record: ExecutionRecord,
   repo: Repository
@@ -79,15 +76,5 @@ export function isRecordInRepository(
     return true;
   }
 
-  const normalizedRepoPath = normalizePathForMatch(repo.path);
-  const normalizedRecordPath = normalizePathForMatch(record.projectPath || "");
-
-  if (!normalizedRepoPath || !normalizedRecordPath) {
-    return false;
-  }
-
-  return (
-    normalizedRecordPath === normalizedRepoPath ||
-    normalizedRecordPath.startsWith(`${normalizedRepoPath}/`)
-  );
+  return isPathEqualOrInside(record.projectPath || "", repo.path);
 }

@@ -51,13 +51,7 @@ pub async fn apply_imported_config(
             continue;
         }
         // 转换 parameters: BTreeMap -> serde_json::Value::Object
-        let parameters = serde_json::Value::Object(
-            profile
-                .parameters
-                .into_iter()
-                .map(|(k, v)| (k, v))
-                .collect(),
-        );
+        let parameters = serde_json::Value::Object(profile.parameters.into_iter().collect());
         // 转换为 store::ConfigProfile 格式
         let store_profile = crate::store::ConfigProfile {
             name: profile.name,

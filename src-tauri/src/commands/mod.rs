@@ -469,24 +469,60 @@ fn resolve_java_program(
         "java_gradle_not_found",
     ))
 }
+fn resolve_provider_project_dir(path: PathBuf, known_files: &[&str]) -> Option<PathBuf> {
+    let looks_like_project_file = path
+        .file_name()
+        .and_then(|name| name.to_str())
+        .map(|name| known_files.iter().any(|file| name.eq_ignore_ascii_case(file)))
+        .unwrap_or(false)
+        || (!path.is_dir() && path.extension().is_some());
+
+    if looks_like_project_file {
+        path.parent().map(|parent| parent.to_path_buf())
+    } else {
+        Some(path)
+    }
+}
 fn resolve_working_dir(spec: &PublishSpec) -> Option<PathBuf> {
     let path = PathBuf::from(&spec.project_path);
     match spec.provider_id.as_str() {
         "dotnet" => path.parent().map(|p| p.to_path_buf()),
-        _ => {
-            if path.is_dir() {
-                Some(path)
-            } else {
-                path.parent().map(|p| p.to_path_buf())
-            }
-        }
+        "cargo" => resolve_provider_project_dir(path, &["Cargo.toml"]),
+        "go" => resolve_provider_project_dir(path, &["go.mod"]),
+        "java" => resolve_provider_project_dir(
+            path,
+            &[
+                "build.gradle",
+                "build.gradle.kts",
+                "settings.gradle",
+                "settings.gradle.kts",
+                "pom.xml",
+                "gradlew",
+                "gradlew.bat",
+            ],
+        ),
+        _ => resolve_provider_project_dir(path, &[]),
     }
+}
+fn resolve_output_path(path: String, base_dir: Option<PathBuf>) -> String {
+    if path.is_empty() {
+        return path;
+    }
+
+    let candidate = PathBuf::from(&path);
+    if candidate.is_absolute() {
+        return candidate.to_string_lossy().to_string();
+    }
+
+    base_dir
+        .map(|dir| dir.join(candidate).to_string_lossy().to_string())
+        .unwrap_or(path)
 }
 fn infer_output_dir(spec: &PublishSpec) -> String {
     match spec.provider_id.as_str() {
         "dotnet" => {
             if let Some(output) = read_parameter_string(&spec.parameters, "output") {
-                return output;
+                return resolve_output_path(output, resolve_working_dir(spec));
             }
             if let Some(parent) = Path::new(&spec.project_path).parent() {
                 let configuration = read_parameter_string(&spec.parameters, "configuration")
@@ -502,7 +538,7 @@ fn infer_output_dir(spec: &PublishSpec) -> String {
         }
         "cargo" => {
             if let Some(target_dir) = read_parameter_string(&spec.parameters, "target_dir") {
-                return target_dir;
+                return resolve_output_path(target_dir, resolve_working_dir(spec));
             }
             if let Some(project_dir) = resolve_working_dir(spec) {
                 let profile = if read_parameter_bool(&spec.parameters, "release") {
@@ -518,7 +554,9 @@ fn infer_output_dir(spec: &PublishSpec) -> String {
             }
             String::new()
         }
-        "go" => read_parameter_string(&spec.parameters, "output").unwrap_or_default(),
+        "go" => read_parameter_string(&spec.parameters, "output")
+            .map(|output| resolve_output_path(output, resolve_working_dir(spec)))
+            .unwrap_or_default(),
         "java" => resolve_working_dir(spec)
             .map(|dir| dir.join("build").join("libs").to_string_lossy().to_string())
             .unwrap_or_default(),
@@ -550,6 +588,7 @@ fn count_output_files(output_dir: &str) -> usize {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::path::PathBuf;
 
     fn base_dotnet_config() -> PublishConfig {
         PublishConfig {
@@ -634,5 +673,47 @@ mod tests {
         };
         let output_dir = infer_output_dir(&spec);
         assert!(output_dir.ends_with("target/release") || output_dir.ends_with("target\\release"));
+    }
+    #[test]
+    fn infer_output_dir_for_dotnet_relative_output_resolves_from_project_dir() {
+        let mut params = BTreeMap::new();
+        params.insert(
+            "output".to_string(),
+            SpecValue::String("./publish/linux-x64".to_string()),
+        );
+        let spec = PublishSpec {
+            version: SPEC_VERSION,
+            provider_id: "dotnet".to_string(),
+            project_path: "/tmp/demo-project/src/app.csproj".to_string(),
+            parameters: params,
+        };
+
+        let output_dir = infer_output_dir(&spec);
+
+        assert_eq!(
+            PathBuf::from(output_dir),
+            PathBuf::from("/tmp/demo-project/src").join("./publish/linux-x64")
+        );
+    }
+    #[test]
+    fn infer_output_dir_for_cargo_relative_target_dir_resolves_from_project_dir() {
+        let mut params = BTreeMap::new();
+        params.insert(
+            "target_dir".to_string(),
+            SpecValue::String("artifacts/release".to_string()),
+        );
+        let spec = PublishSpec {
+            version: SPEC_VERSION,
+            provider_id: "cargo".to_string(),
+            project_path: "/tmp/demo-project".to_string(),
+            parameters: params,
+        };
+
+        let output_dir = infer_output_dir(&spec);
+
+        assert_eq!(
+            PathBuf::from(output_dir),
+            PathBuf::from("/tmp/demo-project").join("artifacts/release")
+        );
     }
 }

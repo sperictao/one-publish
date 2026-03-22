@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
 import { cn } from "@/lib/utils";
+import { getPathBasename } from "@/lib/paths";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
@@ -515,7 +516,7 @@ export function EditRepositoryDialog({
                     </SelectItem>
                     {projectFileOptions.map((filePath) => (
                       <SelectItem key={filePath} value={filePath}>
-                        {filePath.split("/").pop() || filePath}
+                        {getPathBasename(filePath) || filePath}
                       </SelectItem>
                     ))}
                     <SelectItem value={MANUAL_INPUT_VALUE}>
