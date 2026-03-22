@@ -1,13 +1,15 @@
+import { useCallback, useState } from "react";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import {
   Card,
   CardContent,
-  CardDescription,
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { Loader2, Play, Square, Terminal } from "lucide-react";
+import { ArrowUpRight, FolderOpen, Loader2, Play, Square, Terminal } from "lucide-react";
 import type { PublishResult } from "@/hooks/usePublishExecution";
+import { openOutputDirectory } from "@/lib/store";
 
 export interface OutputLogCardPublishControls {
   publishCommand?: string | null;
@@ -36,6 +38,29 @@ export function OutputLogCard({
   appT,
   publishControls,
 }: OutputLogCardProps) {
+  const [isOpeningOutputDir, setIsOpeningOutputDir] = useState(false);
+
+  const handleOpenOutputDir = useCallback(async () => {
+    const outputDir = publishResult?.output_dir?.trim();
+    if (!outputDir) {
+      return;
+    }
+
+    try {
+      setIsOpeningOutputDir(true);
+      const openedPath = await openOutputDirectory(outputDir);
+      toast.success(appT.outputDirectoryOpened || "已打开输出目录", {
+        description: openedPath,
+      });
+    } catch (err) {
+      toast.error(appT.openOutputDirectoryFailed || "打开输出目录失败", {
+        description: String(err),
+      });
+    } finally {
+      setIsOpeningOutputDir(false);
+    }
+  }, [appT, publishResult?.output_dir]);
+
   if (!outputLog && !publishResult && !publishControls) {
     return null;
   }
@@ -45,7 +70,7 @@ export function OutputLogCard({
       <CardHeader className="pb-3">
         <CardTitle className="text-lg flex items-center gap-2">
           <Terminal className="h-5 w-5" />
-          {appT.outputLogTitle || "输出日志"}
+          {appT.outputLogTitle || "执行发布"}
           {publishResult && (
             <span
               className={`ml-2 text-sm font-normal ${
@@ -65,12 +90,33 @@ export function OutputLogCard({
           )}
         </CardTitle>
         {publishResult?.success && publishResult.output_dir && (
-          <>
-            <CardDescription>
-              {(appT.outputDirectoryLabel || "输出目录")}: {publishResult.output_dir} (
-              {publishResult.file_count} {appT.fileCountUnit || "个文件"})
-            </CardDescription>
-          </>
+          <button
+            type="button"
+            className="glass-surface group mt-1 w-full rounded-2xl border border-[var(--glass-border-subtle)] p-3 text-left transition-all duration-300 hover:-translate-y-0.5 hover:bg-[var(--glass-bg-hover)] hover:shadow-[var(--glass-shadow-lg)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:cursor-not-allowed disabled:opacity-70"
+            onClick={handleOpenOutputDir}
+            disabled={isOpeningOutputDir}
+          >
+            <div className="flex items-center gap-3">
+              <span className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-2xl bg-primary/10 text-primary shadow-[0_0_0_1px_hsl(var(--primary)/0.08)]">
+                {isOpeningOutputDir ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <FolderOpen className="h-4 w-4" />
+                )}
+              </span>
+              <span className="min-w-0 flex flex-1 items-center gap-3 overflow-hidden">
+                <span className="flex-shrink-0 text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground/70">
+                  {appT.outputDirectoryLabel || "输出目录"}
+                </span>
+                <span className="truncate font-mono text-xs text-muted-foreground/80 transition-all duration-300 group-hover:font-semibold group-hover:text-foreground">
+                  {publishResult.output_dir}
+                </span>
+              </span>
+              <span className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-xl text-muted-foreground/65 transition-all duration-300 group-hover:bg-primary/10 group-hover:text-primary">
+                <ArrowUpRight className="h-4 w-4" />
+              </span>
+            </div>
+          </button>
         )}
       </CardHeader>
       <CardContent className="space-y-4">

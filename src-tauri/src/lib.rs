@@ -146,6 +146,7 @@ pub fn run() {
             commands::export_execution_history,
             commands::export_diagnostics_index,
             commands::open_execution_snapshot,
+            commands::open_output_directory,
             commands::import_config,
             commands::apply_imported_config,
             commands::run_environment_check,

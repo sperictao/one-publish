@@ -798,6 +798,34 @@ pub async fn open_execution_snapshot(
     Ok(path.to_string_lossy().to_string())
 }
 
+#[tauri::command]
+pub async fn open_output_directory(output_dir: String) -> Result<String, crate::errors::AppError> {
+    let trimmed = output_dir.trim();
+    if trimmed.is_empty() {
+        return Err(crate::errors::AppError::unknown("输出目录为空"));
+    }
+
+    let path = PathBuf::from(trimmed);
+    if !path.exists() {
+        return Err(crate::errors::AppError::unknown(format!(
+            "输出目录不存在: {}",
+            trimmed
+        )));
+    }
+
+    if !path.is_dir() {
+        return Err(crate::errors::AppError::unknown(format!(
+            "输出目录不是文件夹: {}",
+            trimmed
+        )));
+    }
+
+    open::that(&path)
+        .map_err(|e| crate::errors::AppError::unknown(format!("打开输出目录失败: {}", e)))?;
+
+    Ok(path.to_string_lossy().to_string())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

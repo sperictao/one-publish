@@ -456,7 +456,13 @@ export async function openExecutionSnapshot(params: {
   outputDir?: string | null;
 }): Promise<string> {
   return await invoke<string>("open_execution_snapshot", {
-    snapshot_path: params.snapshotPath ?? null,
-    output_dir: params.outputDir ?? null,
+    snapshotPath: params.snapshotPath ?? null,
+    outputDir: params.outputDir ?? null,
+  });
+}
+
+export async function openOutputDirectory(outputDir: string): Promise<string> {
+  return await invoke<string>("open_output_directory", {
+    outputDir,
   });
 }
