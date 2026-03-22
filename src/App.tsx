@@ -523,7 +523,6 @@ function App() {
     releaseChecklistOpen,
     setReleaseChecklistOpen,
     artifactActionState,
-    setArtifactActionState,
     dotnetPublishPreviewCommand,
     runPublishWithSpec,
     executePublish,
@@ -565,11 +564,9 @@ function App() {
   });
 
   const {
-    isExportingSnapshot,
     isExportingFailureBundle,
     isExportingHistory,
     isExportingDiagnosticsIndex,
-    exportExecutionSnapshot,
     exportFailureGroupBundle,
     exportExecutionHistory,
     exportDailyTriageReport,
@@ -775,10 +772,6 @@ function App() {
             onCancelPublish: cancelPublish,
           }
         : null,
-    isExportingSnapshot,
-    exportExecutionSnapshot,
-    setReleaseChecklistOpen,
-    setArtifactActionState,
   });
 
   const failureGroupsCardProps = useFailureGroupsCardProps({

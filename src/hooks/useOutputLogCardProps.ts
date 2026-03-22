@@ -4,7 +4,6 @@ import type {
   OutputLogCardProps,
   OutputLogCardPublishControls,
 } from "@/components/publish/OutputLogCard";
-import type { ArtifactActionState } from "@/components/publish/ArtifactActions";
 import type { PublishResult } from "@/hooks/usePublishExecution";
 
 interface TranslationMap {
@@ -16,10 +15,6 @@ interface UseOutputLogCardPropsParams {
   publishResult: PublishResult | null;
   appT: TranslationMap;
   publishControls: OutputLogCardPublishControls | null;
-  isExportingSnapshot: boolean;
-  exportExecutionSnapshot: () => void;
-  setReleaseChecklistOpen: (open: boolean) => void;
-  setArtifactActionState: (state: ArtifactActionState) => void;
 }
 
 export function useOutputLogCardProps(
@@ -31,10 +26,6 @@ export function useOutputLogCardProps(
       publishResult: params.publishResult,
       appT: params.appT,
       publishControls: params.publishControls,
-      isExportingSnapshot: params.isExportingSnapshot,
-      onExportExecutionSnapshot: params.exportExecutionSnapshot,
-      onOpenReleaseChecklist: () => params.setReleaseChecklistOpen(true),
-      onArtifactActionStateChange: params.setArtifactActionState,
     }),
     [params]
   );
