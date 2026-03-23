@@ -83,13 +83,19 @@ export interface EnvironmentCheckDialogProps {
   onChecked?: (result: EnvironmentCheckResult) => void;
 }
 
-export function EnvironmentCheckDialog({
-  open,
-  onOpenChange,
+export interface EnvironmentCheckContentProps {
+  active: boolean;
+  defaultProviderIds?: string[];
+  initialResult?: EnvironmentCheckResult | null;
+  onChecked?: (result: EnvironmentCheckResult) => void;
+}
+
+export function EnvironmentCheckContent({
+  active,
   defaultProviderIds = ["dotnet"],
   initialResult = null,
   onChecked,
-}: EnvironmentCheckDialogProps) {
+}: EnvironmentCheckContentProps) {
   const { translations } = useI18n();
 
   const [selectedProviderIds, setSelectedProviderIds] = useState<string[]>(
@@ -104,14 +110,14 @@ export function EnvironmentCheckDialog({
   const [lastFixResult, setLastFixResult] = useState<FixResult | null>(null);
 
   useEffect(() => {
-    if (!open) return;
+    if (!active) return;
     setSelectedProviderIds(uniqSorted(defaultProviderIds));
     setResult(initialResult);
     setError(null);
     setLastFixResult(null);
     setPendingRun(null);
     setRunningFix(false);
-  }, [open, defaultProviderIds, initialResult]);
+  }, [active, defaultProviderIds, initialResult]);
 
   const issues = useMemo(() => {
     return (result?.issues || []).slice().sort(issueSort);
@@ -163,11 +169,11 @@ export function EnvironmentCheckDialog({
   };
 
   useEffect(() => {
-    if (!open) return;
+    if (!active) return;
     if (result) return;
     void handleCheck();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open]);
+  }, [active]);
 
   const toggleProvider = (id: string, enabled: boolean) => {
     setSelectedProviderIds((prev) => {
@@ -183,7 +189,7 @@ export function EnvironmentCheckDialog({
     try {
       await navigator.clipboard.writeText(command);
       toast.success(translations.environment?.copied || "已复制命令");
-    } catch (err) {
+    } catch {
       window.prompt(translations.environment?.copyFallback || "复制命令：", command);
     }
   };
@@ -208,7 +214,6 @@ export function EnvironmentCheckDialog({
       return;
     }
 
-    // open_url
     try {
       setRunningFix(true);
       const res = await applyFix(fix);
@@ -249,213 +254,189 @@ export function EnvironmentCheckDialog({
 
   return (
     <>
-      <Dialog open={open} onOpenChange={onOpenChange}>
-        <DialogContent className="sm:max-w-[720px] max-h-[80vh] flex flex-col">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <Terminal className="h-5 w-5" />
-              {translations.environment?.title || "环境检查"}
-            </DialogTitle>
-            <DialogDescription>
-              {translations.environment?.description ||
-                "检测本机工具链并提供修复建议"}
-            </DialogDescription>
-          </DialogHeader>
-
-          <div className="space-y-4 py-2 overflow-y-auto glass-scrollbar pr-1">
-            <div className="space-y-2">
-              <Label>{translations.environment?.scope || "检查范围"}</Label>
-              <div className="grid grid-cols-2 gap-3">
-                {ALL_PROVIDERS.map((p) => {
-                  const checked = selectedProviderIds.includes(p.id);
-                  return (
-                    <div
-                      key={p.id}
-                      className="flex items-center justify-between rounded-xl border border-[var(--glass-border-subtle)] bg-[var(--glass-input-bg)] p-3"
-                    >
-                      <div className="space-y-0.5">
-                        <div className="text-sm font-medium">{p.label}</div>
-                        <div className="text-xs text-muted-foreground">
-                          {p.description}
-                        </div>
-                      </div>
-                      <Switch
-                        checked={checked}
-                        onCheckedChange={(v) => toggleProvider(p.id, v)}
-                      />
+      <div className="space-y-4 py-2">
+        <div className="space-y-2">
+          <Label>{translations.environment?.scope || "检查范围"}</Label>
+          <div className="grid grid-cols-2 gap-3">
+            {ALL_PROVIDERS.map((p) => {
+              const checked = selectedProviderIds.includes(p.id);
+              return (
+                <div
+                  key={p.id}
+                  className="flex items-center justify-between rounded-xl border border-[var(--glass-border-subtle)] bg-[var(--glass-input-bg)] p-3"
+                >
+                  <div className="space-y-0.5">
+                    <div className="text-sm font-medium">{p.label}</div>
+                    <div className="text-xs text-muted-foreground">
+                      {p.description}
                     </div>
-                  );
-                })}
-              </div>
-            </div>
-
-            <div className="flex items-center justify-between rounded-xl border border-[var(--glass-border-subtle)] bg-[var(--glass-input-bg)] p-3">
-              <div className="space-y-1">
-                <div className="text-sm font-medium">
-                  {translations.environment?.status || "环境状态"}
-                </div>
-                <div className="text-xs text-muted-foreground">
-                  {result ? (
-                    <span className="inline-flex items-center gap-2">
-                      {statusBadge?.icon}
-                      <span>{statusBadge?.text}</span>
-                      <span className="opacity-60">{result.checked_at}</span>
-                    </span>
-                  ) : (
-                    translations.environment?.unknown || "未检查"
-                  )}
-                </div>
-              </div>
-              <Button
-                variant="outline"
-                onClick={handleCheck}
-                disabled={checking || runningFix}
-              >
-                {checking ? (
-                  <>
-                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                    {translations.environment?.checking || "检查中..."}
-                  </>
-                ) : (
-                  translations.environment?.recheck || "重新检查"
-                )}
-              </Button>
-            </div>
-
-            {error && (
-              <div className="rounded-xl border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">
-                {error}
-              </div>
-            )}
-
-            {result && (
-              <div className="space-y-3">
-                <div className="space-y-2">
-                  <Label>{translations.environment?.providers || "工具状态"}</Label>
-                  <div className="grid grid-cols-1 gap-2">
-                    {result.providers.map((p) => (
-                      <div
-                        key={p.provider_id}
-                        className="flex items-center justify-between rounded-xl border border-[var(--glass-border-subtle)] bg-[var(--glass-input-bg)] p-3 text-sm"
-                      >
-                        <div className="flex items-center gap-2">
-                          {p.installed ? (
-                            <CheckCircle2 className="h-4 w-4 text-green-600" />
-                          ) : (
-                            <XCircle className="h-4 w-4 text-red-600" />
-                          )}
-                          <span className="font-medium">{p.provider_id}</span>
-                          <span className="text-muted-foreground">
-                            {p.version || "unknown"}
-                          </span>
-                        </div>
-                        <div className="text-xs text-muted-foreground truncate max-w-[360px]">
-                          {p.path || ""}
-                        </div>
-                      </div>
-                    ))}
                   </div>
+                  <Switch
+                    checked={checked}
+                    onCheckedChange={(value) => toggleProvider(p.id, value)}
+                  />
                 </div>
+              );
+            })}
+          </div>
+        </div>
 
-                <div className="space-y-2">
-                  <Label>{translations.environment?.issues || "发现的问题"}</Label>
-                  {issues.length === 0 ? (
-                    <div className="rounded-xl border border-[var(--glass-border-subtle)] p-3 text-sm text-muted-foreground">
-                      {translations.environment?.noIssues || "未发现问题"}
+        <div className="flex items-center justify-between rounded-xl border border-[var(--glass-border-subtle)] bg-[var(--glass-input-bg)] p-3">
+          <div className="space-y-1">
+            <div className="text-sm font-medium">
+              {translations.environment?.status || "环境状态"}
+            </div>
+            <div className="text-xs text-muted-foreground">
+              {result ? (
+                <span className="inline-flex items-center gap-2">
+                  {statusBadge?.icon}
+                  <span>{statusBadge?.text}</span>
+                  <span className="opacity-60">{result.checked_at}</span>
+                </span>
+              ) : (
+                translations.environment?.unknown || "未检查"
+              )}
+            </div>
+          </div>
+          <Button
+            variant="outline"
+            onClick={handleCheck}
+            disabled={checking || runningFix}
+          >
+            {checking ? (
+              <>
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                {translations.environment?.checking || "检查中..."}
+              </>
+            ) : (
+              translations.environment?.recheck || "重新检查"
+            )}
+          </Button>
+        </div>
+
+        {error && (
+          <div className="rounded-xl border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">
+            {error}
+          </div>
+        )}
+
+        {result && (
+          <div className="space-y-3">
+            <div className="space-y-2">
+              <Label>{translations.environment?.providers || "工具状态"}</Label>
+              <div className="grid grid-cols-1 gap-2">
+                {result.providers.map((provider) => (
+                  <div
+                    key={provider.provider_id}
+                    className="flex items-center justify-between rounded-xl border border-[var(--glass-border-subtle)] bg-[var(--glass-input-bg)] p-3 text-sm"
+                  >
+                    <div className="flex items-center gap-2">
+                      {provider.installed ? (
+                        <CheckCircle2 className="h-4 w-4 text-green-600" />
+                      ) : (
+                        <XCircle className="h-4 w-4 text-red-600" />
+                      )}
+                      <span className="font-medium">{provider.provider_id}</span>
+                      <span className="text-muted-foreground">
+                        {provider.version || "unknown"}
+                      </span>
                     </div>
-                  ) : (
-                    <div className="space-y-2">
-                      {issues.map((issue, idx) => (
-                        <div
-                          key={`${issue.provider_id}-${issue.issue_type}-${idx}`}
-                          className="rounded-xl border border-[var(--glass-border-subtle)] p-3"
-                        >
-                          <div className="flex items-start justify-between gap-3">
-                            <div className="space-y-1">
-                              <div className="flex items-center gap-2">
-                                {issue.severity === "critical" ? (
-                                  <XCircle className="h-4 w-4 text-red-600" />
-                                ) : issue.severity === "warning" ? (
-                                  <AlertTriangle className="h-4 w-4 text-yellow-600" />
-                                ) : (
-                                  <CheckCircle2 className="h-4 w-4 text-blue-600" />
-                                )}
-                                <div className="text-sm font-medium">
-                                  {issue.description}
-                                </div>
-                              </div>
-                              <div className="text-xs text-muted-foreground">
-                                <span className="mr-3">
-                                  provider: {issue.provider_id}
-                                </span>
-                                {issue.current_value && (
-                                  <span className="mr-3">
-                                    current: {issue.current_value}
-                                  </span>
-                                )}
-                                {issue.expected_value && (
-                                  <span>
-                                    expected: {issue.expected_value}
-                                  </span>
-                                )}
-                              </div>
+                    <div className="text-xs text-muted-foreground truncate max-w-[360px]">
+                      {provider.path || ""}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label>{translations.environment?.issues || "发现的问题"}</Label>
+              {issues.length === 0 ? (
+                <div className="rounded-xl border border-[var(--glass-border-subtle)] p-3 text-sm text-muted-foreground">
+                  {translations.environment?.noIssues || "未发现问题"}
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {issues.map((issue, idx) => (
+                    <div
+                      key={`${issue.provider_id}-${issue.issue_type}-${idx}`}
+                      className="rounded-xl border border-[var(--glass-border-subtle)] p-3"
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="space-y-1">
+                          <div className="flex items-center gap-2">
+                            {issue.severity === "critical" ? (
+                              <XCircle className="h-4 w-4 text-red-600" />
+                            ) : issue.severity === "warning" ? (
+                              <AlertTriangle className="h-4 w-4 text-yellow-600" />
+                            ) : (
+                              <CheckCircle2 className="h-4 w-4 text-blue-600" />
+                            )}
+                            <div className="text-sm font-medium">
+                              {issue.description}
                             </div>
                           </div>
-
-                          {issue.fixes.length > 0 && (
-                            <div className="mt-3 flex flex-wrap gap-2">
-                              {issue.fixes.map((fix, fixIdx) => (
-                                <Button
-                                  key={`${fix.label}-${fixIdx}`}
-                                  size="sm"
-                                  variant={
-                                    fix.action_type === "run_command"
-                                      ? "default"
-                                      : "outline"
-                                  }
-                                  onClick={() => handleApplyFix(fix)}
-                                  disabled={checking || runningFix}
-                                >
-                                  {fix.action_type === "open_url" ? (
-                                    <ExternalLink className="h-4 w-4 mr-2" />
-                                  ) : fix.action_type === "copy_command" ? (
-                                    <Copy className="h-4 w-4 mr-2" />
-                                  ) : (
-                                    <Terminal className="h-4 w-4 mr-2" />
-                                  )}
-                                  {fix.label}
-                                </Button>
-                              ))}
-                            </div>
-                          )}
+                          <div className="text-xs text-muted-foreground">
+                            <span className="mr-3">
+                              provider: {issue.provider_id}
+                            </span>
+                            {issue.current_value && (
+                              <span className="mr-3">
+                                current: {issue.current_value}
+                              </span>
+                            )}
+                            {issue.expected_value && (
+                              <span>
+                                expected: {issue.expected_value}
+                              </span>
+                            )}
+                          </div>
                         </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
+                      </div>
 
-                {fixResultText && (
-                  <div className="space-y-2">
-                    <Label>{translations.environment?.result || "执行结果"}</Label>
-                    <pre className="rounded-xl border border-[var(--glass-border-subtle)] bg-[var(--glass-code-bg)] p-3 text-xs whitespace-pre-wrap max-h-56 overflow-auto">
-                      {fixResultText}
-                    </pre>
-                  </div>
-                )}
+                      {issue.fixes.length > 0 && (
+                        <div className="mt-3 flex flex-wrap gap-2">
+                          {issue.fixes.map((fix, fixIdx) => (
+                            <Button
+                              key={`${fix.label}-${fixIdx}`}
+                              size="sm"
+                              variant={
+                                fix.action_type === "run_command" ? "default" : "outline"
+                              }
+                              onClick={() => handleApplyFix(fix)}
+                              disabled={checking || runningFix}
+                            >
+                              {fix.action_type === "open_url" ? (
+                                <ExternalLink className="h-4 w-4 mr-2" />
+                              ) : fix.action_type === "copy_command" ? (
+                                <Copy className="h-4 w-4 mr-2" />
+                              ) : (
+                                <Terminal className="h-4 w-4 mr-2" />
+                              )}
+                              {fix.label}
+                            </Button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {fixResultText && (
+              <div className="space-y-2">
+                <Label>{translations.environment?.result || "执行结果"}</Label>
+                <pre className="rounded-xl border border-[var(--glass-border-subtle)] bg-[var(--glass-code-bg)] p-3 text-xs whitespace-pre-wrap max-h-56 overflow-auto">
+                  {fixResultText}
+                </pre>
               </div>
             )}
           </div>
+        )}
+      </div>
 
-          <DialogFooter>
-            <Button variant="outline" onClick={() => onOpenChange(false)}>
-              {translations.environment?.close || "关闭"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Confirm run command */}
-      <Dialog open={!!pendingRun} onOpenChange={(v) => !v && setPendingRun(null)}>
+      <Dialog open={!!pendingRun} onOpenChange={(open) => !open && setPendingRun(null)}>
         <DialogContent className="sm:max-w-[640px]">
           <DialogHeader>
             <DialogTitle>
@@ -499,3 +480,44 @@ export function EnvironmentCheckDialog({
   );
 }
 
+export function EnvironmentCheckDialog({
+  open,
+  onOpenChange,
+  defaultProviderIds = ["dotnet"],
+  initialResult = null,
+  onChecked,
+}: EnvironmentCheckDialogProps) {
+  const { translations } = useI18n();
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-[720px] max-h-[80vh] flex flex-col">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <Terminal className="h-5 w-5" />
+            {translations.environment?.title || "环境检查"}
+          </DialogTitle>
+          <DialogDescription>
+            {translations.environment?.description ||
+              "检测本机工具链并提供修复建议"}
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="overflow-y-auto glass-scrollbar pr-1">
+          <EnvironmentCheckContent
+            active={open}
+            defaultProviderIds={defaultProviderIds}
+            initialResult={initialResult}
+            onChecked={onChecked}
+          />
+        </div>
+
+        <DialogFooter>
+          <Button variant="outline" onClick={() => onOpenChange(false)}>
+            {translations.environment?.close || "关闭"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}

@@ -183,5 +183,6 @@ export function useAppDialogsProps(params: UseAppDialogsPropsParams): AppDialogs
     currentProviderId: params.activeProviderId,
     repoId: params.selectedRepoId,
     currentParameters: params.currentConfigParameters,
+    onProfilesChanged: params.loadProfiles,
   };
 }

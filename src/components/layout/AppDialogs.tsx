@@ -107,6 +107,7 @@ export interface AppDialogsProps {
   currentProviderId: string;
   repoId: string | null;
   currentParameters: Record<string, any>;
+  onProfilesChanged: () => void | Promise<void>;
 }
 
 export function AppDialogs(props: AppDialogsProps) {
@@ -143,10 +144,16 @@ export function AppDialogs(props: AppDialogsProps) {
         theme={props.theme}
         onThemeChange={props.onThemeChange}
         onOpenShortcuts={props.onOpenShortcuts}
-        onOpenConfig={props.onOpenConfig}
         environmentStatus={props.environmentStatus}
         environmentCheckedAt={props.environmentCheckedAt}
-        onOpenEnvironment={props.onOpenEnvironment}
+        environmentDefaultProviderIds={props.environmentDefaultProviderIds}
+        environmentInitialResult={props.environmentInitialResult}
+        onEnvironmentChecked={props.onEnvironmentChecked}
+        onLoadProfile={props.onLoadProfile}
+        currentProviderId={props.currentProviderId}
+        repoId={props.repoId}
+        currentParameters={props.currentParameters}
+        onProfilesChanged={props.onProfilesChanged}
       />
 
       <RerunChecklistDialog
@@ -222,6 +229,7 @@ export function AppDialogs(props: AppDialogsProps) {
         currentProviderId={props.currentProviderId}
         repoId={props.repoId}
         currentParameters={props.currentParameters}
+        onProfilesChanged={props.onProfilesChanged}
       />
     </>
   );

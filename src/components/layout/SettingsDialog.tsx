@@ -16,6 +16,8 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
+import { EnvironmentCheckContent } from "@/components/environment/EnvironmentCheckDialog";
+import { ConfigManagementContent } from "@/components/publish/ConfigDialog";
 import {
   Languages,
   Minimize2,
@@ -40,12 +42,14 @@ import {
   installUpdate,
   getUpdaterHelpPaths,
   getUpdaterConfigHealth,
+  type ConfigProfile,
   openUpdaterHelp,
 } from "@/lib/store";
 import type { UpdateInfo } from "@/lib/store";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import { useI18n, t } from "@/hooks/useI18n";
 import type { Language } from "@/hooks/useI18n";
+import type { EnvironmentCheckResult } from "@/lib/environment";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 
@@ -82,10 +86,16 @@ interface SettingsDialogProps {
   theme: "light" | "dark" | "auto";
   onThemeChange: (theme: "light" | "dark" | "auto") => void;
   onOpenShortcuts?: () => void;
-  onOpenConfig?: () => void;
   environmentStatus?: "unknown" | "ready" | "warning" | "blocked";
   environmentCheckedAt?: string;
-  onOpenEnvironment?: () => void;
+  environmentDefaultProviderIds?: string[];
+  environmentInitialResult?: EnvironmentCheckResult | null;
+  onEnvironmentChecked?: (result: EnvironmentCheckResult) => void;
+  onLoadProfile: (profile: ConfigProfile) => void;
+  currentProviderId: string;
+  repoId: string | null;
+  currentParameters: Record<string, any>;
+  onProfilesChanged?: () => void | Promise<void>;
 }
 
 export function SettingsDialog({
@@ -104,10 +114,14 @@ export function SettingsDialog({
   theme,
   onThemeChange,
   onOpenShortcuts,
-  onOpenConfig,
-  environmentStatus = "unknown",
-  environmentCheckedAt,
-  onOpenEnvironment,
+  environmentDefaultProviderIds = ["dotnet"],
+  environmentInitialResult = null,
+  onEnvironmentChecked,
+  onLoadProfile,
+  currentProviderId,
+  repoId,
+  currentParameters,
+  onProfilesChanged,
 }: SettingsDialogProps) {
   const [activeCategory, setActiveCategory] = useState<SettingsCategoryId>("general");
   const [updateInfo, setUpdateInfo] = useState<UpdateInfo | null>(null);
@@ -430,41 +444,12 @@ export function SettingsDialog({
   );
 
   const renderEnvironmentSettings = () => (
-    <div className="space-y-6">
-      <div className="space-y-2">
-        <Label className="flex items-center gap-2">
-          <Info className="h-4 w-4" />
-          {translations.environment?.title || "环境检查"}
-        </Label>
-        <div className="flex items-center justify-between gap-3 rounded-xl bg-[var(--glass-input-bg)] border border-[var(--glass-border-subtle)] p-3">
-          <div className="space-y-1">
-            <div className="text-sm font-medium">
-              {translations.environment?.status || "环境状态"}: {" "}
-              {environmentStatus === "ready"
-                ? translations.environment?.ready || "已就绪"
-                : environmentStatus === "warning"
-                  ? translations.environment?.warning || "存在警告"
-                  : environmentStatus === "blocked"
-                    ? translations.environment?.blocked || "存在阻断问题"
-                    : translations.environment?.unknown || "未检查"}
-            </div>
-            {environmentCheckedAt && (
-              <div className="text-xs text-muted-foreground">
-                {environmentCheckedAt}
-              </div>
-            )}
-          </div>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={onOpenEnvironment}
-            disabled={!onOpenEnvironment}
-          >
-            {translations.environment?.title || "环境检查"}
-          </Button>
-        </div>
-      </div>
-    </div>
+    <EnvironmentCheckContent
+      active={isOpen && activeCategory === "environment"}
+      defaultProviderIds={environmentDefaultProviderIds}
+      initialResult={environmentInitialResult}
+      onChecked={onEnvironmentChecked}
+    />
   );
 
   const renderShortcutsSettings = () => {
@@ -513,29 +498,14 @@ export function SettingsDialog({
   };
 
   const renderConfigSettings = () => (
-    <div className="space-y-6">
-      <div className="rounded-xl border border-[var(--glass-border-subtle)] bg-[var(--glass-input-bg)] p-4">
-        <div className="space-y-3">
-          <div className="space-y-1">
-            <div className="text-sm font-medium">
-              {translations.config?.button || "配置管理"}
-            </div>
-            <p className="text-xs text-muted-foreground">
-              管理发布配置模板、参数预设以及命令行为。
-            </p>
-          </div>
-          <Button
-            variant="outline"
-            onClick={onOpenConfig}
-            disabled={!onOpenConfig}
-            className="w-full justify-start"
-          >
-            <Sliders className="mr-2 h-4 w-4" />
-            {translations.config?.button || "配置管理"}
-          </Button>
-        </div>
-      </div>
-    </div>
+    <ConfigManagementContent
+      active={isOpen && activeCategory === "config"}
+      onLoadProfile={onLoadProfile}
+      currentProviderId={currentProviderId}
+      repoId={repoId}
+      currentParameters={currentParameters}
+      onProfilesChanged={onProfilesChanged}
+    />
   );
 
   const renderAboutSettings = () => (
