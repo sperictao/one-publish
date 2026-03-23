@@ -1,4 +1,4 @@
-import { useEffect, useCallback } from "react";
+import { useEffect, useCallback, useState } from "react";
 // Hooks
 import { useAppDialogs } from "@/hooks/useAppDialogs";
 import { useAppState } from "@/hooks/useAppState";
@@ -63,6 +63,8 @@ interface DotnetPreset {
     self_contained: boolean;
   };
 }
+
+type RightPanelView = "home" | "history";
 
 const SPEC_VERSION = 1;
 
@@ -159,6 +161,8 @@ const PRESETS: DotnetPreset[] = [
 ];
 
 function App() {
+  const [rightPanelView, setRightPanelView] = useState<RightPanelView>("home");
+
   // 使用持久化的应用状态
   const {
     isLoading: isStateLoading,
@@ -881,8 +885,11 @@ function App() {
           middlePanelCollapsed={middlePanelCollapsed}
           appT={appT}
           configPanelT={translations.configPanel || {}}
+          rightPanelView={rightPanelView}
           onExpandLeftPanel={() => setLeftPanelCollapsed(false)}
           onExpandMiddlePanel={() => setMiddlePanelCollapsed(false)}
+          onSelectHomeView={() => setRightPanelView("home")}
+          onSelectHistoryView={() => setRightPanelView("history")}
         >
           <PublishContentSection
             showCommandImportResultCard={showCommandImportResultCard}
@@ -891,6 +898,7 @@ function App() {
             failureGroupsCardProps={failureGroupsCardProps}
             failureGroupDetailCardProps={failureGroupDetailCardProps}
             executionHistoryCardProps={executionHistoryCardProps}
+            rightPanelView={rightPanelView}
           />
         </MainContentShell>
       </div>

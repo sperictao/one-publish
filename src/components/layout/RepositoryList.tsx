@@ -183,7 +183,7 @@ export function RepositoryList({
             <Button
               variant="ghost"
               size="icon"
-              className="h-6 w-6 rounded-lg text-muted-foreground/60 hover:bg-[var(--glass-bg)] hover:text-foreground"
+              className="h-7 w-9 rounded-full p-0 text-muted-foreground/60 hover:bg-black/[0.045] hover:text-foreground hover:shadow-[inset_0_1px_0_rgba(255,255,255,0.72),0_1px_2px_rgba(15,23,42,0.06)] dark:hover:bg-white/[0.06] dark:hover:shadow-[inset_0_1px_0_rgba(255,255,255,0.08)]"
               onClick={(event) => {
                 event.stopPropagation();
                 onCollapse();

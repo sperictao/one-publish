@@ -175,7 +175,10 @@ export function usePublishExecution({
         if (result.success) {
           toast.success(publishT.success || "发布成功!", {
             description: result.output_dir
-              ? `${publishT.output || "输出目录"}: ${result.output_dir}`
+              ? (publishT.output || "输出目录: {{dir}}").replace(
+                  "{{dir}}",
+                  result.output_dir
+                )
               : appT.commandExecuted || "命令执行成功",
           });
         } else if (result.cancelled) {

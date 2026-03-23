@@ -374,6 +374,8 @@
     "parameterSnapshot": "Current parameter snapshot (can be saved as profile):",
     "openEnvironmentCheck": "Open Environment Check",
     "outputLogTitle": "Execute Publish",
+    "rightPanelHome": "Home",
+    "rightPanelHistory": "History",
     "statusSuccess": "Success",
     "statusCancelled": "Cancelled",
     "statusFailed": "Failed",

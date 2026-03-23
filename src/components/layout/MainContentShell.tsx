@@ -1,6 +1,6 @@
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { Folder, Settings } from "lucide-react";
+import { FileCog, Folder, History, House } from "lucide-react";
 
 interface TranslationMap {
   [key: string]: string | undefined;
@@ -11,8 +11,11 @@ export interface MainContentShellProps {
   middlePanelCollapsed: boolean;
   appT: TranslationMap;
   configPanelT: TranslationMap;
+  rightPanelView: "home" | "history";
   onExpandLeftPanel: () => void;
   onExpandMiddlePanel: () => void;
+  onSelectHomeView: () => void;
+  onSelectHistoryView: () => void;
   children: React.ReactNode;
 }
 
@@ -21,17 +24,27 @@ export function MainContentShell({
   middlePanelCollapsed,
   appT,
   configPanelT,
+  rightPanelView,
   onExpandLeftPanel,
   onExpandMiddlePanel,
+  onSelectHomeView,
+  onSelectHistoryView,
   children,
 }: MainContentShellProps) {
+  const headerIconButtonClass =
+    "h-7 w-9 rounded-full p-0 text-muted-foreground/60 hover:bg-black/[0.045] hover:text-foreground hover:shadow-[inset_0_1px_0_rgba(255,255,255,0.72),0_1px_2px_rgba(15,23,42,0.06)] dark:hover:bg-white/[0.06] dark:hover:shadow-[inset_0_1px_0_rgba(255,255,255,0.08)]";
+  const viewButtonClass =
+    "flex h-7 w-9 items-center justify-center rounded-full p-0 transition-all duration-200 active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 focus-visible:ring-offset-2 focus-visible:ring-offset-background";
+
   return (
     <div className="flex-1 flex flex-col p-2">
       <div className="glass-card repo-sidebar-shell flex h-full flex-col overflow-hidden rounded-2xl">
-        <div className="h-10 flex-shrink-0 bg-[var(--glass-panel-bg)]/30 flex">
+        <div
+          data-tauri-drag-region
+          className="flex h-10 flex-shrink-0 items-center bg-[var(--glass-panel-bg)]/30"
+        >
           {middlePanelCollapsed && (
             <div
-              data-tauri-drag-region
               className={cn(
                 "flex items-center justify-end px-2",
                 leftPanelCollapsed && "pl-[100px]"
@@ -42,7 +55,7 @@ export function MainContentShell({
                   <Button
                     variant="ghost"
                     size="icon"
-                    className="h-6 w-6"
+                    className={headerIconButtonClass}
                     onClick={(e) => {
                       e.stopPropagation();
                       onExpandLeftPanel();
@@ -56,7 +69,7 @@ export function MainContentShell({
                 <Button
                   variant="ghost"
                   size="icon"
-                  className="h-6 w-6"
+                  className={headerIconButtonClass}
                   onClick={(e) => {
                     e.stopPropagation();
                     onExpandMiddlePanel();
@@ -64,12 +77,57 @@ export function MainContentShell({
                   title={configPanelT.expandConfigList || "展开配置列表"}
                   data-tauri-no-drag
                 >
-                  <Settings className="h-4 w-4" />
+                  <FileCog className="h-4 w-4" />
                 </Button>
               </div>
             </div>
           )}
-          <div data-tauri-drag-region className="flex-1" />
+          <div className="flex-1" />
+          <div className="px-2">
+            <div
+              className="flex items-center gap-0.5 rounded-full border border-black/5 bg-black/[0.04] px-1 py-1 shadow-[inset_0_1px_0_rgba(255,255,255,0.68),0_1px_2px_rgba(15,23,42,0.05)] backdrop-blur-xl dark:border-white/10 dark:bg-white/[0.05] dark:shadow-[inset_0_1px_0_rgba(255,255,255,0.08)]"
+              data-tauri-no-drag
+            >
+              <button
+                type="button"
+                className={cn(
+                  viewButtonClass,
+                  rightPanelView === "home"
+                    ? "bg-background/95 text-foreground shadow-[inset_0_1px_0_rgba(255,255,255,0.72),0_1px_2px_rgba(15,23,42,0.08)] dark:bg-white/90 dark:text-slate-900"
+                    : "text-muted-foreground/65 hover:bg-black/[0.045] hover:text-foreground hover:shadow-[inset_0_1px_0_rgba(255,255,255,0.72),0_1px_2px_rgba(15,23,42,0.06)] dark:hover:bg-white/[0.06] dark:hover:shadow-[inset_0_1px_0_rgba(255,255,255,0.08)]"
+                )}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onSelectHomeView();
+                }}
+                aria-label={appT.rightPanelHome || "主页"}
+                title={appT.rightPanelHome || "主页"}
+                aria-pressed={rightPanelView === "home"}
+                data-tauri-no-drag
+              >
+                <House className="h-3.5 w-3.5" />
+              </button>
+              <button
+                type="button"
+                className={cn(
+                  viewButtonClass,
+                  rightPanelView === "history"
+                    ? "bg-background/95 text-foreground shadow-[inset_0_1px_0_rgba(255,255,255,0.72),0_1px_2px_rgba(15,23,42,0.08)] dark:bg-white/90 dark:text-slate-900"
+                    : "text-muted-foreground/65 hover:bg-black/[0.045] hover:text-foreground hover:shadow-[inset_0_1px_0_rgba(255,255,255,0.72),0_1px_2px_rgba(15,23,42,0.06)] dark:hover:bg-white/[0.06] dark:hover:shadow-[inset_0_1px_0_rgba(255,255,255,0.08)]"
+                )}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onSelectHistoryView();
+                }}
+                aria-label={appT.rightPanelHistory || "历史记录"}
+                title={appT.rightPanelHistory || "历史记录"}
+                aria-pressed={rightPanelView === "history"}
+                data-tauri-no-drag
+              >
+                <History className="h-3.5 w-3.5" />
+              </button>
+            </div>
+          </div>
         </div>
         <div className="repo-list-scroll glass-scrollbar relative flex-1 overflow-auto">
           {children}

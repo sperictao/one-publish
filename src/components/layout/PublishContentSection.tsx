@@ -17,6 +17,7 @@ export interface PublishContentSectionProps {
   failureGroupsCardProps: FailureGroupsCardProps;
   failureGroupDetailCardProps: FailureGroupDetailCardProps;
   executionHistoryCardProps: ExecutionHistoryCardProps;
+  rightPanelView: "home" | "history";
 }
 
 export function PublishContentSection({
@@ -26,16 +27,20 @@ export function PublishContentSection({
   failureGroupsCardProps,
   failureGroupDetailCardProps,
   executionHistoryCardProps,
+  rightPanelView,
 }: PublishContentSectionProps) {
   return (
     <div className="mx-auto max-w-3xl space-y-6 p-6">
       {showCommandImportResultCard && commandImportResultCardProps && (
         <CommandImportResultCard {...commandImportResultCardProps} />
       )}
-      <OutputLogCard {...outputLogCardProps} />
+      {rightPanelView === "home" ? (
+        <OutputLogCard {...outputLogCardProps} />
+      ) : (
+        <ExecutionHistoryCard {...executionHistoryCardProps} />
+      )}
       <FailureGroupsCard {...failureGroupsCardProps} />
       <FailureGroupDetailCard {...failureGroupDetailCardProps} />
-      <ExecutionHistoryCard {...executionHistoryCardProps} />
     </div>
   );
 }

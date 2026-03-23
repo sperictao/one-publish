@@ -374,6 +374,8 @@
     "parameterSnapshot": "当前参数快照（可保存为配置文件）:",
     "openEnvironmentCheck": "打开环境检查",
     "outputLogTitle": "执行发布",
+    "rightPanelHome": "主页",
+    "rightPanelHistory": "历史记录",
     "statusSuccess": "成功",
     "statusCancelled": "已取消",
     "statusFailed": "失败",
