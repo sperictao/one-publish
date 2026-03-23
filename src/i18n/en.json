@@ -17,6 +17,12 @@
       "shortcutsDescription": "Review global shortcuts and improve frequent action efficiency.",
       "configDescription": "Manage publish templates and parameter presets.",
       "aboutDescription": "Check version details, update status, and release notes."
+    },
+    "general": {
+      "executionHistoryLimitLabel": "Execution History Retention Limit",
+      "executionHistoryLimitDescription": "Set between 5 and 200 records. Values outside the range are corrected automatically and take effect immediately.",
+      "preRerunChecklistLabel": "Pre-rerun Checklist",
+      "preRerunChecklistDescription": "When enabled, clicking \"Rerun Record\" checks branch, environment, and output target confirmations first."
     }
   },
   "version": {

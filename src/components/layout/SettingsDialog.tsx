@@ -328,7 +328,7 @@ export function SettingsDialog({
       <div className="space-y-2">
         <Label className="flex items-center gap-2">
           <Info className="h-4 w-4" />
-          执行历史保留上限
+          {translations.settings?.general?.executionHistoryLimitLabel || "执行历史保留上限"}
         </Label>
         <Input
           type="number"
@@ -345,7 +345,8 @@ export function SettingsDialog({
           }}
         />
         <p className="text-xs text-muted-foreground">
-          可设置 5~200 条，超出范围会自动修正并即时生效。
+          {translations.settings?.general?.executionHistoryLimitDescription ||
+            "可设置 5~200 条，超出范围会自动修正并即时生效。"}
         </p>
       </div>
 
@@ -354,11 +355,12 @@ export function SettingsDialog({
           <div className="flex items-center gap-2">
             <ListChecks className="h-4 w-4 text-muted-foreground" />
             <Label className="cursor-pointer" htmlFor="rerun-checklist-enabled">
-              重跑前确认清单
+              {translations.settings?.general?.preRerunChecklistLabel || "重跑前确认清单"}
             </Label>
           </div>
           <p className="text-xs text-muted-foreground">
-            启用后，点击“重跑记录”会先检查分支、环境和输出目标确认项。
+            {translations.settings?.general?.preRerunChecklistDescription ||
+              "启用后，点击“重跑记录”会先检查分支、环境和输出目标确认项。"}
           </p>
         </div>
         <Switch

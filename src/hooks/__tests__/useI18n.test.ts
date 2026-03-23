@@ -3,12 +3,22 @@ import { act, renderHook, waitFor } from "@testing-library/react";
 import { t, useI18n, __setTranslationsCacheForTest } from "../useI18n";
 
 const zh = {
-  settings: { title: "应用设置" },
+  settings: {
+    title: "应用设置",
+    general: {
+      executionHistoryLimitLabel: "执行历史保留上限",
+    },
+  },
   version: { current: "当前版本: v{}" },
 };
 
 const en = {
-  settings: { title: "App Settings" },
+  settings: {
+    title: "App Settings",
+    general: {
+      executionHistoryLimitLabel: "Execution History Retention Limit",
+    },
+  },
   version: { current: "Current Version: v{}" },
 };
 
@@ -32,6 +42,11 @@ describe("useI18n.t", () => {
   it("resolves nested key and ignores unrelated params", () => {
     localStorage.setItem("app-language", "zh");
     expect(t("version.current", { any: 123 })).toBe("当前版本: v{}");
+  });
+
+  it("resolves deeper nested translation keys", () => {
+    localStorage.setItem("app-language", "zh");
+    expect(t("settings.general.executionHistoryLimitLabel")).toBe("执行历史保留上限");
   });
 
   it("falls back to default language when storage value is invalid", () => {

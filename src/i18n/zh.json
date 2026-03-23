@@ -17,6 +17,12 @@
       "shortcutsDescription": "查看全局快捷键，提高常用操作效率。",
       "configDescription": "管理发布配置模板与参数预设。",
       "aboutDescription": "查看版本信息、更新状态与更新日志。"
+    },
+    "general": {
+      "executionHistoryLimitLabel": "执行历史保留上限",
+      "executionHistoryLimitDescription": "可设置 5~200 条，超出范围会自动修正并即时生效。",
+      "preRerunChecklistLabel": "重跑前确认清单",
+      "preRerunChecklistDescription": "启用后，点击“重跑记录”会先检查分支、环境和输出目标确认项。"
     }
   },
   "version": {
