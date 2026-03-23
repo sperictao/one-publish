@@ -66,7 +66,7 @@ export function OutputLogCard({
   }
 
   return (
-    <Card>
+    <Card className="flex h-full min-h-[28rem] w-full flex-col lg:min-h-[calc(100vh-11rem)]">
       <CardHeader className="pb-3">
         <CardTitle className="text-lg flex items-center gap-2">
           <Terminal className="h-5 w-5" />
@@ -119,7 +119,7 @@ export function OutputLogCard({
           </button>
         )}
       </CardHeader>
-      <CardContent className="space-y-4">
+      <CardContent className="flex min-h-0 flex-1 flex-col space-y-4">
         {publishControls && (
           <div className="space-y-3">
             {publishControls.publishCommand && (
@@ -177,7 +177,7 @@ export function OutputLogCard({
             </div>
           </div>
         )}
-        <div className="bg-gray-950 text-gray-100 p-4 rounded-lg font-mono text-xs max-h-80 overflow-auto">
+        <div className="min-h-[20rem] flex-1 overflow-auto rounded-lg bg-gray-950 p-4 font-mono text-xs text-gray-100">
           <pre className="whitespace-pre-wrap">
             {outputLog || publishResult?.error || appT.noOutput || "无输出"}
           </pre>

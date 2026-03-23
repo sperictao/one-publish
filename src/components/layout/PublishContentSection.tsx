@@ -29,18 +29,48 @@ export function PublishContentSection({
   executionHistoryCardProps,
   rightPanelView,
 }: PublishContentSectionProps) {
+  const hasOutputLogCard =
+    Boolean(outputLogCardProps.outputLog) ||
+    outputLogCardProps.publishResult !== null ||
+    outputLogCardProps.publishControls !== null;
+  const hasFailureGroups = failureGroupsCardProps.failureGroups.length > 0;
+  const hasFailureGroupDetail =
+    failureGroupDetailCardProps.selectedFailureGroup !== null;
+  const hasExecutionHistory =
+    executionHistoryCardProps.scopedExecutionHistory.length > 0;
+
   return (
-    <div className="mx-auto max-w-3xl space-y-6 p-6">
+    <div className="flex min-h-full flex-col gap-6 p-6">
       {showCommandImportResultCard && commandImportResultCardProps && (
-        <CommandImportResultCard {...commandImportResultCardProps} />
+        <div className="mx-auto w-full max-w-3xl">
+          <CommandImportResultCard {...commandImportResultCardProps} />
+        </div>
       )}
       {rightPanelView === "home" ? (
-        <OutputLogCard {...outputLogCardProps} />
+        <>
+          {hasOutputLogCard && (
+            <div className="flex min-h-0 flex-1 flex-col">
+              <OutputLogCard {...outputLogCardProps} />
+            </div>
+          )}
+          {hasFailureGroups && (
+            <div className="mx-auto w-full max-w-3xl">
+              <FailureGroupsCard {...failureGroupsCardProps} />
+            </div>
+          )}
+          {hasFailureGroupDetail && (
+            <div className="mx-auto w-full max-w-3xl">
+              <FailureGroupDetailCard {...failureGroupDetailCardProps} />
+            </div>
+          )}
+        </>
       ) : (
-        <ExecutionHistoryCard {...executionHistoryCardProps} />
+        hasExecutionHistory && (
+          <div className="mx-auto w-full max-w-3xl">
+            <ExecutionHistoryCard {...executionHistoryCardProps} />
+          </div>
+        )
       )}
-      <FailureGroupsCard {...failureGroupsCardProps} />
-      <FailureGroupDetailCard {...failureGroupDetailCardProps} />
     </div>
   );
 }

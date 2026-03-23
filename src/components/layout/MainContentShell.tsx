@@ -1,6 +1,6 @@
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { FileCog, Folder, History, House } from "lucide-react";
+import { FileCog, Folder, History, LayoutDashboard } from "lucide-react";
 
 interface TranslationMap {
   [key: string]: string | undefined;
@@ -105,7 +105,7 @@ export function MainContentShell({
                 aria-pressed={rightPanelView === "home"}
                 data-tauri-no-drag
               >
-                <House className="h-3.5 w-3.5" />
+                <LayoutDashboard className="h-3.5 w-3.5" />
               </button>
               <button
                 type="button"
