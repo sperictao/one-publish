@@ -1,15 +1,48 @@
-import { EnvironmentCheckDialog } from "@/components/environment/EnvironmentCheckDialog";
-import { SettingsDialog } from "@/components/layout/SettingsDialog";
-import { ShortcutsDialog } from "@/components/layout/ShortcutsDialog";
-import { CommandImportDialog } from "@/components/publish/CommandImportDialog";
-import { ConfigDialog } from "@/components/publish/ConfigDialog";
-import { QuickCreateProfileDialog } from "@/components/publish/QuickCreateProfileDialog";
-import { RerunChecklistDialog } from "@/components/publish/RerunChecklistDialog";
-import { ReleaseChecklistDialog } from "@/components/release/ReleaseChecklistDialog";
+import { Suspense, lazy } from "react";
 import type { EnvironmentCheckResult } from "@/lib/environment";
 import type { ConfigProfile, ExecutionRecord } from "@/lib/store";
 import type { PublishResult } from "@/hooks/usePublishExecution";
 import type { Language } from "@/hooks/useI18n";
+
+const ShortcutsDialog = lazy(async () => {
+  const mod = await import("@/components/layout/ShortcutsDialog");
+  return { default: mod.ShortcutsDialog };
+});
+
+const EnvironmentCheckDialog = lazy(async () => {
+  const mod = await import("@/components/environment/EnvironmentCheckDialog");
+  return { default: mod.EnvironmentCheckDialog };
+});
+
+const SettingsDialog = lazy(async () => {
+  const mod = await import("@/components/layout/SettingsDialog");
+  return { default: mod.SettingsDialog };
+});
+
+const RerunChecklistDialog = lazy(async () => {
+  const mod = await import("@/components/publish/RerunChecklistDialog");
+  return { default: mod.RerunChecklistDialog };
+});
+
+const ReleaseChecklistDialog = lazy(async () => {
+  const mod = await import("@/components/release/ReleaseChecklistDialog");
+  return { default: mod.ReleaseChecklistDialog };
+});
+
+const CommandImportDialog = lazy(async () => {
+  const mod = await import("@/components/publish/CommandImportDialog");
+  return { default: mod.CommandImportDialog };
+});
+
+const QuickCreateProfileDialog = lazy(async () => {
+  const mod = await import("@/components/publish/QuickCreateProfileDialog");
+  return { default: mod.QuickCreateProfileDialog };
+});
+
+const ConfigDialog = lazy(async () => {
+  const mod = await import("@/components/publish/ConfigDialog");
+  return { default: mod.ConfigDialog };
+});
 
 interface QuickCreateProfileDraft {
   configuration: string;
@@ -113,124 +146,156 @@ export interface AppDialogsProps {
 export function AppDialogs(props: AppDialogsProps) {
   return (
     <>
-      <ShortcutsDialog
-        open={props.shortcutsOpen}
-        onOpenChange={props.onShortcutsOpenChange}
-      />
+      {props.shortcutsOpen ? (
+        <Suspense fallback={null}>
+          <ShortcutsDialog
+            open={props.shortcutsOpen}
+            onOpenChange={props.onShortcutsOpenChange}
+          />
+        </Suspense>
+      ) : null}
 
-      <EnvironmentCheckDialog
-        open={props.environmentDialogOpen}
-        onOpenChange={(open) => {
-          props.onEnvironmentDialogOpenChange(open);
-        }}
-        defaultProviderIds={props.environmentDefaultProviderIds}
-        initialResult={props.environmentInitialResult}
-        onChecked={props.onEnvironmentChecked}
-      />
+      {props.environmentDialogOpen ? (
+        <Suspense fallback={null}>
+          <EnvironmentCheckDialog
+            open={props.environmentDialogOpen}
+            onOpenChange={(open) => {
+              props.onEnvironmentDialogOpenChange(open);
+            }}
+            defaultProviderIds={props.environmentDefaultProviderIds}
+            initialResult={props.environmentInitialResult}
+            onChecked={props.onEnvironmentChecked}
+          />
+        </Suspense>
+      ) : null}
 
-      <SettingsDialog
-        open={props.settingsOpen}
-        onOpenChange={props.onSettingsOpenChange}
-        language={props.language}
-        onLanguageChange={props.onLanguageChange}
-        minimizeToTrayOnClose={props.minimizeToTrayOnClose}
-        onMinimizeToTrayOnCloseChange={props.onMinimizeToTrayOnCloseChange}
-        defaultOutputDir={props.defaultOutputDir}
-        onDefaultOutputDirChange={props.onDefaultOutputDirChange}
-        executionHistoryLimit={props.executionHistoryLimit}
-        onExecutionHistoryLimitChange={props.onExecutionHistoryLimitChange}
-        preRerunChecklistEnabled={props.preRerunChecklistEnabled}
-        onPreRerunChecklistEnabledChange={props.onPreRerunChecklistEnabledChange}
-        theme={props.theme}
-        onThemeChange={props.onThemeChange}
-        onOpenShortcuts={props.onOpenShortcuts}
-        environmentStatus={props.environmentStatus}
-        environmentCheckedAt={props.environmentCheckedAt}
-        environmentDefaultProviderIds={props.environmentDefaultProviderIds}
-        environmentInitialResult={props.environmentInitialResult}
-        onEnvironmentChecked={props.onEnvironmentChecked}
-        onLoadProfile={props.onLoadProfile}
-        currentProviderId={props.currentProviderId}
-        repoId={props.repoId}
-        currentParameters={props.currentParameters}
-        onProfilesChanged={props.onProfilesChanged}
-      />
+      {props.settingsOpen ? (
+        <Suspense fallback={null}>
+          <SettingsDialog
+            open={props.settingsOpen}
+            onOpenChange={props.onSettingsOpenChange}
+            language={props.language}
+            onLanguageChange={props.onLanguageChange}
+            minimizeToTrayOnClose={props.minimizeToTrayOnClose}
+            onMinimizeToTrayOnCloseChange={props.onMinimizeToTrayOnCloseChange}
+            defaultOutputDir={props.defaultOutputDir}
+            onDefaultOutputDirChange={props.onDefaultOutputDirChange}
+            executionHistoryLimit={props.executionHistoryLimit}
+            onExecutionHistoryLimitChange={props.onExecutionHistoryLimitChange}
+            preRerunChecklistEnabled={props.preRerunChecklistEnabled}
+            onPreRerunChecklistEnabledChange={props.onPreRerunChecklistEnabledChange}
+            theme={props.theme}
+            onThemeChange={props.onThemeChange}
+            onOpenShortcuts={props.onOpenShortcuts}
+            environmentStatus={props.environmentStatus}
+            environmentCheckedAt={props.environmentCheckedAt}
+            environmentDefaultProviderIds={props.environmentDefaultProviderIds}
+            environmentInitialResult={props.environmentInitialResult}
+            onEnvironmentChecked={props.onEnvironmentChecked}
+            onLoadProfile={props.onLoadProfile}
+            currentProviderId={props.currentProviderId}
+            repoId={props.repoId}
+            currentParameters={props.currentParameters}
+            onProfilesChanged={props.onProfilesChanged}
+          />
+        </Suspense>
+      ) : null}
 
-      <RerunChecklistDialog
-        open={props.rerunChecklistOpen}
-        pendingRerunRecord={props.pendingRerunRecord}
-        selectedRepoCurrentBranch={props.selectedRepoCurrentBranch}
-        environmentStatus={props.environmentStatus}
-        rerunChecklistState={props.rerunChecklistState}
-        rerunT={props.rerunT}
-        onOpenChange={(open) => {
-          if (open) {
-            props.onRerunChecklistOpenChange(true);
-            return;
-          }
-          props.onRerunChecklistClose();
-        }}
-        onChecklistStateChange={props.onRerunChecklistStateChange}
-        onClose={props.onRerunChecklistClose}
-        onConfirm={props.onRerunChecklistConfirm}
-      />
+      {props.rerunChecklistOpen ? (
+        <Suspense fallback={null}>
+          <RerunChecklistDialog
+            open={props.rerunChecklistOpen}
+            pendingRerunRecord={props.pendingRerunRecord}
+            selectedRepoCurrentBranch={props.selectedRepoCurrentBranch}
+            environmentStatus={props.environmentStatus}
+            rerunChecklistState={props.rerunChecklistState}
+            rerunT={props.rerunT}
+            onOpenChange={(open) => {
+              if (open) {
+                props.onRerunChecklistOpenChange(true);
+                return;
+              }
+              props.onRerunChecklistClose();
+            }}
+            onChecklistStateChange={props.onRerunChecklistStateChange}
+            onClose={props.onRerunChecklistClose}
+            onConfirm={props.onRerunChecklistConfirm}
+          />
+        </Suspense>
+      ) : null}
 
-      <ReleaseChecklistDialog
-        open={props.releaseChecklistOpen}
-        onOpenChange={props.onReleaseChecklistOpenChange}
-        publishResult={props.publishResult}
-        environmentResult={props.environmentInitialResult}
-        packageResult={props.packageResult}
-        signResult={props.signResult}
-        onOpenEnvironment={props.onReleaseChecklistOpenEnvironment}
-        onOpenSettings={props.onReleaseChecklistOpenSettings}
-      />
+      {props.releaseChecklistOpen ? (
+        <Suspense fallback={null}>
+          <ReleaseChecklistDialog
+            open={props.releaseChecklistOpen}
+            onOpenChange={props.onReleaseChecklistOpenChange}
+            publishResult={props.publishResult}
+            environmentResult={props.environmentInitialResult}
+            packageResult={props.packageResult}
+            signResult={props.signResult}
+            onOpenEnvironment={props.onReleaseChecklistOpenEnvironment}
+            onOpenSettings={props.onReleaseChecklistOpenSettings}
+          />
+        </Suspense>
+      ) : null}
 
-      {props.selectedRepoExists && props.commandImportProjectPath && (
-        <CommandImportDialog
-          open={props.commandImportOpen}
-          onOpenChange={props.onCommandImportOpenChange}
-          providerId={props.activeProviderId}
-          projectPath={props.commandImportProjectPath}
-          onImport={props.onCommandImport}
-        />
-      )}
+      {props.selectedRepoExists &&
+      props.commandImportProjectPath &&
+      props.commandImportOpen ? (
+        <Suspense fallback={null}>
+          <CommandImportDialog
+            open={props.commandImportOpen}
+            onOpenChange={props.onCommandImportOpenChange}
+            providerId={props.activeProviderId}
+            projectPath={props.commandImportProjectPath}
+            onImport={props.onCommandImport}
+          />
+        </Suspense>
+      ) : null}
 
-      <QuickCreateProfileDialog
-        open={props.quickCreateProfileOpen}
-        quickCreateProfileOpen={props.quickCreateProfileOpen}
-        quickCreateTemplateId={props.quickCreateTemplateId}
-        quickCreateTemplateOptions={props.quickCreateTemplateOptions}
-        quickCreateProfileName={props.quickCreateProfileName}
-        quickCreateProfileGroup={props.quickCreateProfileGroup}
-        quickCreateProfileGroupOptions={props.quickCreateProfileGroupOptions}
-        quickCreateProfileCustomGroup={props.quickCreateProfileCustomGroup}
-        quickCreateProfileDraft={props.quickCreateProfileDraft}
-        quickCreateProfileSaving={props.quickCreateProfileSaving}
-        quickCreateEditing={props.quickCreateEditing}
-        quickCreateGroupDefaultValue={props.quickCreateGroupDefaultValue}
-        quickCreateGroupCustomValue={props.quickCreateGroupCustomValue}
-        profileT={props.profileT}
-        appT={props.appT}
-        cancelLabel={props.cancelLabel}
-        onOpenChange={props.onQuickCreateOpenChange}
-        onApplyTemplate={props.onApplyTemplate}
-        onProfileNameChange={props.onProfileNameChange}
-        onProfileGroupChange={props.onProfileGroupChange}
-        onProfileCustomGroupChange={props.onProfileCustomGroupChange}
-        onDraftChange={props.onDraftChange}
-        onSave={props.onQuickCreateSave}
-      />
+      {props.quickCreateProfileOpen ? (
+        <Suspense fallback={null}>
+          <QuickCreateProfileDialog
+            open={props.quickCreateProfileOpen}
+            quickCreateProfileOpen={props.quickCreateProfileOpen}
+            quickCreateTemplateId={props.quickCreateTemplateId}
+            quickCreateTemplateOptions={props.quickCreateTemplateOptions}
+            quickCreateProfileName={props.quickCreateProfileName}
+            quickCreateProfileGroup={props.quickCreateProfileGroup}
+            quickCreateProfileGroupOptions={props.quickCreateProfileGroupOptions}
+            quickCreateProfileCustomGroup={props.quickCreateProfileCustomGroup}
+            quickCreateProfileDraft={props.quickCreateProfileDraft}
+            quickCreateProfileSaving={props.quickCreateProfileSaving}
+            quickCreateEditing={props.quickCreateEditing}
+            quickCreateGroupDefaultValue={props.quickCreateGroupDefaultValue}
+            quickCreateGroupCustomValue={props.quickCreateGroupCustomValue}
+            profileT={props.profileT}
+            appT={props.appT}
+            cancelLabel={props.cancelLabel}
+            onOpenChange={props.onQuickCreateOpenChange}
+            onApplyTemplate={props.onApplyTemplate}
+            onProfileNameChange={props.onProfileNameChange}
+            onProfileGroupChange={props.onProfileGroupChange}
+            onProfileCustomGroupChange={props.onProfileCustomGroupChange}
+            onDraftChange={props.onDraftChange}
+            onSave={props.onQuickCreateSave}
+          />
+        </Suspense>
+      ) : null}
 
-      <ConfigDialog
-        open={props.configDialogOpen}
-        onOpenChange={props.onConfigDialogOpenChange}
-        onLoadProfile={props.onLoadProfile}
-        currentProviderId={props.currentProviderId}
-        repoId={props.repoId}
-        currentParameters={props.currentParameters}
-        onProfilesChanged={props.onProfilesChanged}
-      />
+      {props.configDialogOpen ? (
+        <Suspense fallback={null}>
+          <ConfigDialog
+            open={props.configDialogOpen}
+            onOpenChange={props.onConfigDialogOpenChange}
+            onLoadProfile={props.onLoadProfile}
+            currentProviderId={props.currentProviderId}
+            repoId={props.repoId}
+            currentParameters={props.currentParameters}
+            onProfilesChanged={props.onProfilesChanged}
+          />
+        </Suspense>
+      ) : null}
     </>
   );
 }
