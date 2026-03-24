@@ -1,14 +1,29 @@
-import { CommandImportResultCard, type CommandImportResultCardProps } from "@/components/publish/CommandImportResultCard";
-import {
-  FailureGroupDetailCard,
-  type FailureGroupDetailCardProps,
-} from "@/components/publish/FailureGroupDetailCard";
-import { FailureGroupsCard, type FailureGroupsCardProps } from "@/components/publish/FailureGroupsCard";
+import { Suspense, lazy } from "react";
 import { OutputLogCard, type OutputLogCardProps } from "@/components/publish/OutputLogCard";
-import {
-  ExecutionHistoryCard,
-  type ExecutionHistoryCardProps,
-} from "@/components/publish/ExecutionHistoryCard";
+import type { CommandImportResultCardProps } from "@/components/publish/CommandImportResultCard";
+import type { FailureGroupDetailCardProps } from "@/components/publish/FailureGroupDetailCard";
+import type { FailureGroupsCardProps } from "@/components/publish/FailureGroupsCard";
+import type { ExecutionHistoryCardProps } from "@/components/publish/ExecutionHistoryCard";
+
+const CommandImportResultCard = lazy(async () => {
+  const mod = await import("@/components/publish/CommandImportResultCard");
+  return { default: mod.CommandImportResultCard };
+});
+
+const FailureGroupsCard = lazy(async () => {
+  const mod = await import("@/components/publish/FailureGroupsCard");
+  return { default: mod.FailureGroupsCard };
+});
+
+const FailureGroupDetailCard = lazy(async () => {
+  const mod = await import("@/components/publish/FailureGroupDetailCard");
+  return { default: mod.FailureGroupDetailCard };
+});
+
+const ExecutionHistoryCard = lazy(async () => {
+  const mod = await import("@/components/publish/ExecutionHistoryCard");
+  return { default: mod.ExecutionHistoryCard };
+});
 
 export interface PublishContentSectionProps {
   showCommandImportResultCard: boolean;
@@ -43,7 +58,9 @@ export function PublishContentSection({
     <div className="flex min-h-full flex-col gap-6 p-6">
       {showCommandImportResultCard && commandImportResultCardProps && (
         <div className="mx-auto w-full max-w-3xl">
-          <CommandImportResultCard {...commandImportResultCardProps} />
+          <Suspense fallback={null}>
+            <CommandImportResultCard {...commandImportResultCardProps} />
+          </Suspense>
         </div>
       )}
       {rightPanelView === "home" ? (
@@ -55,19 +72,25 @@ export function PublishContentSection({
           )}
           {hasFailureGroups && (
             <div className="mx-auto w-full max-w-3xl">
-              <FailureGroupsCard {...failureGroupsCardProps} />
+              <Suspense fallback={null}>
+                <FailureGroupsCard {...failureGroupsCardProps} />
+              </Suspense>
             </div>
           )}
           {hasFailureGroupDetail && (
             <div className="mx-auto w-full max-w-3xl">
-              <FailureGroupDetailCard {...failureGroupDetailCardProps} />
+              <Suspense fallback={null}>
+                <FailureGroupDetailCard {...failureGroupDetailCardProps} />
+              </Suspense>
             </div>
           )}
         </>
       ) : (
         hasExecutionHistory && (
           <div className="mx-auto w-full max-w-3xl">
-            <ExecutionHistoryCard {...executionHistoryCardProps} />
+            <Suspense fallback={null}>
+              <ExecutionHistoryCard {...executionHistoryCardProps} />
+            </Suspense>
           </div>
         )
       )}
