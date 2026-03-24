@@ -1,4 +1,6 @@
 import {
+  Suspense,
+  lazy,
   useCallback,
   useMemo,
   useState,
@@ -28,8 +30,12 @@ import {
 } from "lucide-react";
 import type { Branch, Repository } from "@/types/repository";
 import { useI18n } from "@/hooks/useI18n";
-import { EditRepositoryDialog } from "@/components/layout/EditRepositoryDialog";
 import { useFloatingRepoCard } from "@/components/layout/useFloatingRepoCard";
+
+const EditRepositoryDialog = lazy(async () => {
+  const mod = await import("@/components/layout/EditRepositoryDialog");
+  return { default: mod.EditRepositoryDialog };
+});
 
 function CollapseIcon() {
   return (
@@ -412,16 +418,20 @@ export function RepositoryList({
         )}
       </div>
 
-      <EditRepositoryDialog
-        repository={editingRepo}
-        providers={providers}
-        repoT={repoT}
-        onOpenChange={handleEditDialogChange}
-        onEditRepo={onEditRepo}
-        onDetectProvider={onDetectProvider}
-        onScanProjectFiles={onScanProjectFiles}
-        onRefreshBranches={onRefreshBranches}
-      />
+      {editingRepo ? (
+        <Suspense fallback={null}>
+          <EditRepositoryDialog
+            repository={editingRepo}
+            providers={providers}
+            repoT={repoT}
+            onOpenChange={handleEditDialogChange}
+            onEditRepo={onEditRepo}
+            onDetectProvider={onDetectProvider}
+            onScanProjectFiles={onScanProjectFiles}
+            onRefreshBranches={onRefreshBranches}
+          />
+        </Suspense>
+      ) : null}
 
       <div className="relative flex items-center px-3 py-2">
         <div className="pointer-events-none absolute -top-6 left-0 right-0 h-6 bg-gradient-to-t from-[var(--glass-panel-bg)] to-transparent" />
