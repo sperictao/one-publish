@@ -1,10 +1,10 @@
 import { useCallback } from "react";
 import { toast } from "sonner";
 
-import { buildGitHubActionsSnippet, buildShellHandoffSnippet, type HandoffSnippetFormat } from "@/lib/handoffSnippet";
-import { buildFailureIssueDraft, type IssueDraftTemplate } from "@/lib/issueDraft";
-import { getRepresentativeRecord, type FailureGroup } from "@/lib/failureGroups";
-import { openExecutionSnapshot, setExecutionRecordSnapshot, type ExecutionRecord } from "@/lib/store";
+import type { HandoffSnippetFormat } from "@/lib/handoffSnippet";
+import type { IssueDraftTemplate } from "@/lib/issueDraft";
+import type { FailureGroup } from "@/lib/failureGroups";
+import type { ExecutionRecord } from "@/lib/store";
 
 interface TranslationMap {
   [key: string]: string | undefined;
@@ -83,6 +83,11 @@ export function useHistoryActions({
   }, [copyText, failureT.signatureLabel]);
 
   const copyFailureIssueDraft = useCallback(async (group: FailureGroup) => {
+    const [{ buildFailureIssueDraft }, { getRepresentativeRecord }] =
+      await Promise.all([
+        import("@/lib/issueDraft"),
+        import("@/lib/failureGroups"),
+      ]);
     const representative = getRepresentativeRecord(group);
     const draft = buildFailureIssueDraft({
       providerId: group.providerId,
@@ -128,6 +133,10 @@ export function useHistoryActions({
       return;
     }
 
+    const {
+      buildGitHubActionsSnippet,
+      buildShellHandoffSnippet,
+    } = await import("@/lib/handoffSnippet");
     const snippet = format === "shell"
       ? buildShellHandoffSnippet({ spec, commandLine: record.commandLine })
       : buildGitHubActionsSnippet({ spec, commandLine: record.commandLine });
@@ -141,6 +150,7 @@ export function useHistoryActions({
   }, [copyText, extractSpecFromRecord, historyT]);
 
   const openSnapshotFromRecord = useCallback(async (record: ExecutionRecord) => {
+    const { openExecutionSnapshot, setExecutionRecordSnapshot } = await import("@/lib/store");
     try {
       const openedPath = await openExecutionSnapshot({
         snapshotPath: record.snapshotPath ?? null,
