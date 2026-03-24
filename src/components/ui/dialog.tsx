@@ -27,16 +27,22 @@ const DialogOverlay = React.forwardRef<
 ));
 DialogOverlay.displayName = DialogPrimitive.Overlay.displayName;
 
+type DialogContentProps =
+  React.ComponentPropsWithoutRef<typeof DialogPrimitive.Content> & {
+    overlayClassName?: string;
+    closeButtonClassName?: string;
+  };
+
 const DialogContent = React.forwardRef<
   React.ElementRef<typeof DialogPrimitive.Content>,
-  React.ComponentPropsWithoutRef<typeof DialogPrimitive.Content>
->(({ className, children, ...props }, ref) => {
+  DialogContentProps
+>(({ className, children, overlayClassName, closeButtonClassName, ...props }, ref) => {
   const { translations } = useI18n();
   const commonT = translations.common || {};
 
   return (
     <DialogPortal>
-      <DialogOverlay />
+      <DialogOverlay className={overlayClassName} />
       <DialogPrimitive.Content
         ref={ref}
         className={cn(
@@ -46,7 +52,12 @@ const DialogContent = React.forwardRef<
         {...props}
       >
         {children}
-        <DialogPrimitive.Close className="glass-press absolute right-4 top-4 rounded-lg opacity-70 ring-offset-background transition-all duration-200 hover:opacity-100 hover:bg-[var(--glass-bg)] focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:pointer-events-none data-[state=open]:bg-[var(--glass-bg)] data-[state=open]:text-muted-foreground">
+        <DialogPrimitive.Close
+          className={cn(
+            "glass-press absolute right-4 top-4 rounded-lg opacity-70 ring-offset-background transition-all duration-200 hover:opacity-100 hover:bg-[var(--glass-bg)] focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:pointer-events-none data-[state=open]:bg-[var(--glass-bg)] data-[state=open]:text-muted-foreground",
+            closeButtonClassName
+          )}
+        >
           <X className="h-4 w-4" />
           <span className="sr-only">{commonT.close || "关闭"}</span>
         </DialogPrimitive.Close>

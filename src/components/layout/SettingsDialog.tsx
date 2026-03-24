@@ -16,8 +16,6 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { EnvironmentCheckContent } from "@/components/environment/EnvironmentCheckDialog";
-import { ConfigManagementContent } from "@/components/publish/ConfigDialog";
 import {
   Languages,
   Minimize2,
@@ -36,7 +34,14 @@ import {
   Keyboard,
   type LucideIcon,
 } from "lucide-react";
-import { useState, useCallback } from "react";
+import {
+  Suspense,
+  lazy,
+  startTransition,
+  useCallback,
+  useMemo,
+  useState,
+} from "react";
 import {
   checkUpdate,
   installUpdate,
@@ -52,6 +57,16 @@ import type { Language } from "@/hooks/useI18n";
 import type { EnvironmentCheckResult } from "@/lib/environment";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
+
+const EnvironmentCheckContent = lazy(async () => {
+  const mod = await import("@/components/environment/EnvironmentCheckDialog");
+  return { default: mod.EnvironmentCheckContent };
+});
+
+const ConfigManagementContent = lazy(async () => {
+  const mod = await import("@/components/publish/ConfigDialog");
+  return { default: mod.ConfigManagementContent };
+});
 
 function formatMessage(template: string, ...args: Array<string | number>) {
   let out = template;
@@ -98,6 +113,16 @@ interface SettingsDialogProps {
   onProfilesChanged?: () => void | Promise<void>;
 }
 
+function SettingsSectionFallback({ label }: { label: string }) {
+  return (
+    <div className="space-y-3">
+      <div className="h-10 rounded-xl border border-[var(--glass-border-subtle)] bg-[var(--glass-input-bg)]" />
+      <div className="h-24 rounded-xl border border-[var(--glass-border-subtle)] bg-[var(--glass-input-bg)]" />
+      <p className="text-xs text-muted-foreground">{label}</p>
+    </div>
+  );
+}
+
 export function SettingsDialog({
   open: isOpen,
   onOpenChange,
@@ -138,59 +163,88 @@ export function SettingsDialog({
   } | null>(null);
   const { translations } = useI18n();
 
-  const categoryItems: SettingsCategoryItem[] = [
-    {
-      id: "general",
-      icon: Languages,
-      label: translations.settings?.categories?.general || "通用",
-      description:
-        translations.settings?.sections?.generalDescription ||
-        "管理语言、默认输出目录与运行偏好。",
-    },
-    {
-      id: "appearance",
-      icon: Palette,
-      label: translations.settings?.categories?.appearance || "外观",
-      description:
-        translations.settings?.sections?.appearanceDescription ||
-        "调整主题显示风格，匹配你的系统与使用习惯。",
-    },
-    {
-      id: "environment",
-      icon: ListChecks,
-      label: translations.settings?.categories?.environment || "环境检查",
-      description:
-        translations.settings?.sections?.environmentDescription ||
-        "查看环境诊断结果并快速进入检查页。",
-    },
-    {
-      id: "shortcuts",
-      icon: Keyboard,
-      label: translations.settings?.categories?.shortcuts || "快捷键",
-      description:
-        translations.settings?.sections?.shortcutsDescription ||
-        "查看全局快捷键，提高常用操作效率。",
-    },
-    {
-      id: "config",
-      icon: Sliders,
-      label: translations.settings?.categories?.config || "配置管理",
-      description:
-        translations.settings?.sections?.configDescription ||
-        "管理发布配置模板与参数预设。",
-    },
-    {
-      id: "about",
-      icon: Info,
-      label: translations.settings?.categories?.about || "关于",
-      description:
-        translations.settings?.sections?.aboutDescription ||
-        "查看版本信息、更新状态与更新日志。",
-    },
-  ];
+  const categoryItems = useMemo<SettingsCategoryItem[]>(
+    () => [
+      {
+        id: "general",
+        icon: Languages,
+        label: translations.settings?.categories?.general || "通用",
+        description:
+          translations.settings?.sections?.generalDescription ||
+          "管理语言、默认输出目录与运行偏好。",
+      },
+      {
+        id: "appearance",
+        icon: Palette,
+        label: translations.settings?.categories?.appearance || "外观",
+        description:
+          translations.settings?.sections?.appearanceDescription ||
+          "调整主题显示风格，匹配你的系统与使用习惯。",
+      },
+      {
+        id: "environment",
+        icon: ListChecks,
+        label: translations.settings?.categories?.environment || "环境检查",
+        description:
+          translations.settings?.sections?.environmentDescription ||
+          "查看环境诊断结果并快速进入检查页。",
+      },
+      {
+        id: "shortcuts",
+        icon: Keyboard,
+        label: translations.settings?.categories?.shortcuts || "快捷键",
+        description:
+          translations.settings?.sections?.shortcutsDescription ||
+          "查看全局快捷键，提高常用操作效率。",
+      },
+      {
+        id: "config",
+        icon: Sliders,
+        label: translations.settings?.categories?.config || "配置管理",
+        description:
+          translations.settings?.sections?.configDescription ||
+          "管理发布配置模板与参数预设。",
+      },
+      {
+        id: "about",
+        icon: Info,
+        label: translations.settings?.categories?.about || "关于",
+        description:
+          translations.settings?.sections?.aboutDescription ||
+          "查看版本信息、更新状态与更新日志。",
+      },
+    ],
+    [translations]
+  );
 
-  const activeCategoryItem =
-    categoryItems.find((item) => item.id === activeCategory) ?? categoryItems[0];
+  const activeCategoryItem = useMemo(
+    () =>
+      categoryItems.find((item) => item.id === activeCategory) ??
+      categoryItems[0],
+    [activeCategory, categoryItems]
+  );
+
+  const shortcutsItems = useMemo(
+    () => [
+      {
+        key: "Cmd/Ctrl + R",
+        description: translations.shortcuts?.refresh || "刷新项目",
+      },
+      {
+        key: "Cmd/Ctrl + P",
+        description: translations.shortcuts?.publish || "执行发布",
+      },
+      {
+        key: "Cmd/Ctrl + ,",
+        description: translations.shortcuts?.settings || "打开设置",
+      },
+    ],
+    [
+      translations.shortcuts?.publish,
+      translations.shortcuts?.refresh,
+      translations.shortcuts?.settings,
+    ]
+  );
 
   const handleLanguageChange = useCallback(
     (nextLanguage: string) => {
@@ -219,6 +273,19 @@ export function SettingsDialog({
         });
     },
     [language, onLanguageChange]
+  );
+
+  const handleCategoryChange = useCallback(
+    (nextCategory: SettingsCategoryId) => {
+      if (nextCategory === activeCategory) {
+        return;
+      }
+
+      startTransition(() => {
+        setActiveCategory(nextCategory);
+      });
+    },
+    [activeCategory]
   );
 
   const handleCheckUpdate = async () => {
@@ -444,37 +511,30 @@ export function SettingsDialog({
   );
 
   const renderEnvironmentSettings = () => (
-    <EnvironmentCheckContent
-      active={isOpen && activeCategory === "environment"}
-      defaultProviderIds={environmentDefaultProviderIds}
-      initialResult={environmentInitialResult}
-      onChecked={onEnvironmentChecked}
-    />
+    <Suspense
+      fallback={
+        <SettingsSectionFallback
+          label={translations.app?.loading || "加载中..."}
+        />
+      }
+    >
+      <EnvironmentCheckContent
+        active={isOpen && activeCategory === "environment"}
+        defaultProviderIds={environmentDefaultProviderIds}
+        initialResult={environmentInitialResult}
+        onChecked={onEnvironmentChecked}
+      />
+    </Suspense>
   );
 
   const renderShortcutsSettings = () => {
-    const shortcutItems = [
-      {
-        key: "Cmd/Ctrl + R",
-        description: translations.shortcuts?.refresh || "刷新项目",
-      },
-      {
-        key: "Cmd/Ctrl + P",
-        description: translations.shortcuts?.publish || "执行发布",
-      },
-      {
-        key: "Cmd/Ctrl + ,",
-        description: translations.shortcuts?.settings || "打开设置",
-      },
-    ];
-
     return (
       <div className="space-y-6">
         <div className="space-y-2">
-          {shortcutItems.map((shortcut) => (
+          {shortcutsItems.map((shortcut) => (
             <div
               key={shortcut.key}
-              className="flex items-center justify-between rounded-xl bg-[var(--glass-input-bg)] px-3 py-2 glass-transition"
+              className="flex items-center justify-between rounded-xl border border-[var(--glass-border-subtle)] bg-[var(--glass-input-bg)] px-3 py-2 glass-transition"
             >
               <span className="text-sm">{shortcut.description}</span>
               <kbd className="rounded-lg border border-[var(--glass-kbd-border)] bg-[var(--glass-kbd-bg)] px-2 py-1 text-xs font-semibold">
@@ -498,14 +558,22 @@ export function SettingsDialog({
   };
 
   const renderConfigSettings = () => (
-    <ConfigManagementContent
-      active={isOpen && activeCategory === "config"}
-      onLoadProfile={onLoadProfile}
-      currentProviderId={currentProviderId}
-      repoId={repoId}
-      currentParameters={currentParameters}
-      onProfilesChanged={onProfilesChanged}
-    />
+    <Suspense
+      fallback={
+        <SettingsSectionFallback
+          label={translations.app?.loading || "加载中..."}
+        />
+      }
+    >
+      <ConfigManagementContent
+        active={isOpen && activeCategory === "config"}
+        onLoadProfile={onLoadProfile}
+        currentProviderId={currentProviderId}
+        repoId={repoId}
+        currentParameters={currentParameters}
+        onProfilesChanged={onProfilesChanged}
+      />
+    </Suspense>
   );
 
   const renderAboutSettings = () => (
@@ -515,7 +583,7 @@ export function SettingsDialog({
           <Info className="h-4 w-4" />
           {translations.version?.title || "版本信息"}
         </Label>
-        <div className="flex flex-col gap-3 rounded-xl bg-[var(--glass-input-bg)] border border-[var(--glass-border-subtle)] p-3 sm:flex-row sm:items-start sm:justify-between">
+        <div className="flex flex-col gap-3 rounded-xl border border-[var(--glass-border-subtle)] bg-[var(--glass-input-bg)] p-3 sm:flex-row sm:items-start sm:justify-between">
           <div className="space-y-1">
             <div className="text-sm font-medium">
               {formatMessage(
@@ -619,7 +687,7 @@ export function SettingsDialog({
       </div>
 
       {updateInfo?.releaseNotes && (
-        <div className="max-h-40 overflow-y-auto rounded-xl bg-[var(--glass-input-bg)] p-3 text-xs">
+        <div className="max-h-40 overflow-y-auto rounded-xl border border-[var(--glass-border-subtle)] bg-[var(--glass-input-bg)] p-3 text-xs">
           <div className="mb-1 font-medium">
             {translations.version?.notes || "更新说明:"}
           </div>
@@ -650,54 +718,61 @@ export function SettingsDialog({
 
   return (
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[860px] h-[72vh] grid-rows-[auto_1fr]">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <Languages className="h-5 w-5" />
-            {translations.settings?.title || "应用设置"}
-          </DialogTitle>
-          <DialogDescription>
-            {translations.settings?.description || "配置语言、外观、输出目录等偏好设置"}
-          </DialogDescription>
-        </DialogHeader>
+      <DialogContent
+        overlayClassName="bg-background backdrop-blur-0"
+        className="overflow-visible border-none bg-transparent p-0 shadow-none backdrop-blur-none sm:max-w-[876px]"
+      >
+        <div className="p-2">
+          <div className="glass-card repo-sidebar-shell flex h-[72vh] min-h-0 flex-col overflow-hidden rounded-2xl">
+            <DialogHeader className="border-b border-[var(--glass-divider)] px-6 pb-4 pt-6 pr-16">
+              <DialogTitle className="flex items-center gap-2">
+                <Languages className="h-5 w-5" />
+                {translations.settings?.title || "应用设置"}
+              </DialogTitle>
+              <DialogDescription>
+                {translations.settings?.description || "配置语言、外观、输出目录等偏好设置"}
+              </DialogDescription>
+            </DialogHeader>
 
-        <div className="grid gap-4 py-4 sm:grid-cols-[190px_minmax(0,1fr)] min-h-0">
-          <aside className="glass-surface rounded-2xl p-2 min-h-0 overflow-y-auto">
-            <nav className="flex gap-1 overflow-x-auto pb-1 sm:flex-col sm:overflow-visible sm:pb-0">
-              {categoryItems.map((item) => {
-                const Icon = item.icon;
-                const isActive = item.id === activeCategory;
+            <div className="grid min-h-0 flex-1 gap-4 p-4 sm:grid-cols-[190px_minmax(0,1fr)]">
+              <aside className="glass-card min-h-0 overflow-y-auto rounded-2xl p-2">
+                <nav className="flex gap-1 overflow-x-auto pb-1 sm:flex-col sm:overflow-visible sm:pb-0">
+                  {categoryItems.map((item) => {
+                    const Icon = item.icon;
+                    const isActive = item.id === activeCategory;
 
-                return (
-                  <button
-                    key={item.id}
-                    type="button"
-                    aria-current={isActive ? "page" : undefined}
-                    className={cn(
-                      "glass-press flex min-w-[110px] items-center gap-2 rounded-xl px-3 py-2 text-left text-sm glass-transition sm:min-w-0",
-                      isActive
-                        ? "bg-[var(--glass-bg-active)] text-foreground shadow-[var(--glass-shadow)]"
-                        : "text-muted-foreground hover:bg-[var(--glass-bg)] hover:text-foreground"
-                    )}
-                    onClick={() => setActiveCategory(item.id)}
-                  >
-                    <Icon className="h-4 w-4 shrink-0" />
-                    <span className="truncate">{item.label}</span>
-                  </button>
-                );
-              })}
-            </nav>
-          </aside>
+                    return (
+                      <button
+                        key={item.id}
+                        type="button"
+                        aria-current={isActive ? "page" : undefined}
+                        className={cn(
+                          "glass-press flex min-w-[110px] items-center gap-2 rounded-xl px-3 py-2 text-left text-sm glass-transition sm:min-w-0",
+                          isActive
+                            ? "bg-[var(--glass-bg-active)] text-foreground shadow-[var(--glass-shadow)]"
+                            : "text-muted-foreground hover:bg-[var(--glass-bg)] hover:text-foreground"
+                        )}
+                        onClick={() => handleCategoryChange(item.id)}
+                      >
+                        <Icon className="h-4 w-4 shrink-0" />
+                        <span className="truncate">{item.label}</span>
+                      </button>
+                    );
+                  })}
+                </nav>
+              </aside>
 
-          <section className="overflow-y-auto glass-scrollbar rounded-2xl border border-[var(--glass-border-subtle)] bg-[var(--glass-bg)] p-4 min-h-0">
-            <div className="mb-4 space-y-1 border-b border-[var(--glass-divider)] pb-3">
-              <h3 className="text-sm font-semibold">{activeCategoryItem.label}</h3>
-              <p className="text-xs text-muted-foreground">
-                {activeCategoryItem.description}
-              </p>
+              <section className="glass-card min-h-0 overflow-y-auto rounded-2xl p-4 glass-scrollbar">
+                <div className="mb-4 space-y-1 border-b border-[var(--glass-divider)] pb-3">
+                  <h3 className="text-sm font-semibold">{activeCategoryItem.label}</h3>
+                  <p className="text-xs text-muted-foreground">
+                    {activeCategoryItem.description}
+                  </p>
+                </div>
+                {renderCategoryContent()}
+              </section>
             </div>
-            {renderCategoryContent()}
-          </section>
+          </div>
         </div>
       </DialogContent>
     </Dialog>
