@@ -2,6 +2,7 @@
 //!
 //! 使用 JSON 文件存储应用配置，位于 `~/.one-publish/config.json`
 
+use crate::errors::AppError;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fs;
@@ -410,35 +411,38 @@ pub fn update_state(new_state: AppState) -> Result<(), crate::errors::AppError> 
 
 /// 获取应用状态
 #[tauri::command]
-pub async fn get_app_state() -> Result<AppState, String> {
+pub async fn get_app_state() -> Result<AppState, AppError> {
     Ok(get_state())
 }
 
 /// 保存应用状态
 #[tauri::command]
-pub async fn save_app_state(state: AppState) -> Result<(), String> {
-    update_state(state).map_err(|err| err.message)
+pub async fn save_app_state(state: AppState) -> Result<(), AppError> {
+    update_state(state)
 }
 
 /// 添加仓库
 #[tauri::command]
-pub async fn add_repository(repo: Repository) -> Result<AppState, String> {
+pub async fn add_repository(repo: Repository) -> Result<AppState, AppError> {
     let mut state = get_state();
 
     // 检查是否已存在
     if state.repositories.iter().any(|r| r.path == repo.path) {
-        return Err("仓库已存在".to_string());
+        return Err(AppError::validation_with_code(
+            "仓库已存在",
+            "repository_exists",
+        ));
     }
 
     state.repositories.push(repo.clone());
     state.selected_repo_id = Some(repo.id);
-    update_state(state.clone()).map_err(|err| err.message)?;
+    update_state(state.clone())?;
     Ok(state)
 }
 
 /// 删除仓库
 #[tauri::command]
-pub async fn remove_repository(repo_id: String) -> Result<AppState, String> {
+pub async fn remove_repository(repo_id: String) -> Result<AppState, AppError> {
     let mut state = get_state();
 
     state.repositories.retain(|r| r.id != repo_id);
@@ -448,20 +452,20 @@ pub async fn remove_repository(repo_id: String) -> Result<AppState, String> {
         state.selected_repo_id = state.repositories.first().map(|r| r.id.clone());
     }
 
-    update_state(state.clone()).map_err(|err| err.message)?;
+    update_state(state.clone())?;
     Ok(state)
 }
 
 /// 更新仓库
 #[tauri::command]
-pub async fn update_repository(repo: Repository) -> Result<AppState, String> {
+pub async fn update_repository(repo: Repository) -> Result<AppState, AppError> {
     let mut state = get_state();
 
     if let Some(existing) = state.repositories.iter_mut().find(|r| r.id == repo.id) {
         *existing = repo;
     }
 
-    update_state(state.clone()).map_err(|err| err.message)?;
+    update_state(state.clone())?;
     Ok(state)
 }
 
@@ -471,7 +475,7 @@ pub async fn update_ui_state(
     left_panel_width: Option<i32>,
     middle_panel_width: Option<i32>,
     selected_repo_id: Option<String>,
-) -> Result<(), String> {
+) -> Result<(), AppError> {
     let mut state = get_state();
 
     if let Some(width) = left_panel_width {
@@ -482,40 +486,11 @@ pub async fn update_ui_state(
         state.middle_panel_width = width;
         state.panel_widths_customized = true;
     }
-    if selected_repo_id.is_some() {
-        state.selected_repo_id = selected_repo_id;
+    if let Some(repo_id) = selected_repo_id {
+        state.selected_repo_id = Some(repo_id);
     }
 
-    update_state(state).map_err(|err| err.message)
-}
-
-/// 更新发布配置状态（按仓库隔离）
-#[tauri::command]
-pub async fn update_publish_state(
-    repo_id: String,
-    selected_preset: Option<String>,
-    is_custom_mode: Option<bool>,
-    custom_config: Option<PublishConfigStore>,
-) -> Result<(), String> {
-    let mut state = get_state();
-
-    let repo = state
-        .repositories
-        .iter_mut()
-        .find(|r| r.id == repo_id)
-        .ok_or_else(|| format!("未找到仓库: {}", repo_id))?;
-
-    if let Some(preset) = selected_preset {
-        repo.publish_config.selected_preset = preset;
-    }
-    if let Some(mode) = is_custom_mode {
-        repo.publish_config.is_custom_mode = mode;
-    }
-    if let Some(config) = custom_config {
-        repo.publish_config.custom_config = config;
-    }
-
-    update_state(state).map_err(|err| err.message)
+    update_state(state)
 }
 
 /// 更新偏好设置（语言、托盘行为、主题等）
@@ -527,7 +502,7 @@ pub async fn update_preferences(
     default_output_dir: Option<String>,
     theme: Option<String>,
     execution_history_limit: Option<usize>,
-) -> Result<AppState, String> {
+) -> Result<AppState, AppError> {
     let mut state = get_state();
     let language_changed = language.is_some();
 
@@ -552,7 +527,7 @@ pub async fn update_preferences(
         trim_execution_history(&mut state.execution_history, state.execution_history_limit);
     }
 
-    update_state(state.clone()).map_err(|err| err.message)?;
+    update_state(state.clone())?;
 
     // 语言变化需要刷新托盘菜单以便实时更新文案
     if language_changed {
@@ -564,15 +539,54 @@ pub async fn update_preferences(
     Ok(state)
 }
 
+/// 更新发布配置状态（按仓库隔离）
+#[tauri::command]
+pub async fn update_publish_state(
+    repo_id: String,
+    selected_preset: Option<String>,
+    is_custom_mode: Option<bool>,
+    custom_config: Option<PublishConfigStore>,
+) -> Result<(), AppError> {
+    let mut state = get_state();
+
+    let repo = state
+        .repositories
+        .iter_mut()
+        .find(|r| r.id == repo_id)
+        .ok_or_else(|| {
+            AppError::validation_with_code(
+                format!("未找到仓库: {}", repo_id),
+                "repository_not_found",
+            )
+        })?;
+
+    if let Some(preset) = selected_preset {
+        repo.publish_config.selected_preset = preset;
+    }
+    if let Some(mode) = is_custom_mode {
+        repo.publish_config.is_custom_mode = mode;
+    }
+    if let Some(config) = custom_config {
+        repo.publish_config.custom_config = config;
+    }
+
+    update_state(state)
+}
+
 /// 获取保存的配置文件（按仓库隔离）
 #[tauri::command]
-pub async fn get_profiles(repo_id: String) -> Result<Vec<ConfigProfile>, String> {
+pub async fn get_profiles(repo_id: String) -> Result<Vec<ConfigProfile>, AppError> {
     let state = get_state();
     let repo = state
         .repositories
         .iter()
         .find(|r| r.id == repo_id)
-        .ok_or_else(|| format!("未找到仓库: {}", repo_id))?;
+        .ok_or_else(|| {
+            AppError::validation_with_code(
+                format!("未找到仓库: {}", repo_id),
+                "repository_not_found",
+            )
+        })?;
     Ok(repo.publish_config.profiles.clone())
 }
 
@@ -584,18 +598,26 @@ pub async fn save_profile(
     provider_id: String,
     parameters: serde_json::Value,
     profile_group: Option<String>,
-) -> Result<AppState, String> {
+) -> Result<AppState, AppError> {
     let mut state = get_state();
 
     let repo = state
         .repositories
         .iter_mut()
         .find(|r| r.id == repo_id)
-        .ok_or_else(|| format!("未找到仓库: {}", repo_id))?;
+        .ok_or_else(|| {
+            AppError::validation_with_code(
+                format!("未找到仓库: {}", repo_id),
+                "repository_not_found",
+            )
+        })?;
 
     // 检查是否已存在同名配置文件
     if repo.publish_config.profiles.iter().any(|p| p.name == name) {
-        return Err(format!("配置文件 '{}' 已存在", name));
+        return Err(AppError::validation_with_code(
+            format!("配置文件 '{}' 已存在", name),
+            "profile_exists",
+        ));
     }
 
     let normalized_profile_group = profile_group
@@ -612,7 +634,7 @@ pub async fn save_profile(
     };
 
     repo.publish_config.profiles.push(profile);
-    update_state(state.clone()).map_err(|err| err.message)?;
+    update_state(state.clone())?;
     Ok(state)
 }
 
@@ -625,17 +647,25 @@ pub async fn update_profile(
     provider_id: String,
     parameters: serde_json::Value,
     profile_group: Option<String>,
-) -> Result<AppState, String> {
+) -> Result<AppState, AppError> {
     let mut state = get_state();
 
     let repo = state
         .repositories
         .iter_mut()
         .find(|r| r.id == repo_id)
-        .ok_or_else(|| format!("未找到仓库: {}", repo_id))?;
+        .ok_or_else(|| {
+            AppError::validation_with_code(
+                format!("未找到仓库: {}", repo_id),
+                "repository_not_found",
+            )
+        })?;
 
     if original_name != name && repo.publish_config.profiles.iter().any(|p| p.name == name) {
-        return Err(format!("配置文件 '{}' 已存在", name));
+        return Err(AppError::validation_with_code(
+            format!("配置文件 '{}' 已存在", name),
+            "profile_exists",
+        ));
     }
 
     let normalized_profile_group = profile_group
@@ -647,10 +677,18 @@ pub async fn update_profile(
         .profiles
         .iter_mut()
         .find(|p| p.name == original_name)
-        .ok_or_else(|| format!("未找到配置文件: {}", original_name))?;
+        .ok_or_else(|| {
+            AppError::validation_with_code(
+                format!("未找到配置文件: {}", original_name),
+                "profile_not_found",
+            )
+        })?;
 
     if profile.is_system_default {
-        return Err("不能编辑系统默认配置文件".to_string());
+        return Err(AppError::validation_with_code(
+            "不能编辑系统默认配置文件",
+            "system_profile_immutable",
+        ));
     }
 
     profile.name = name;
@@ -658,30 +696,38 @@ pub async fn update_profile(
     profile.parameters = parameters;
     profile.profile_group = normalized_profile_group;
 
-    update_state(state.clone()).map_err(|err| err.message)?;
+    update_state(state.clone())?;
     Ok(state)
 }
 
 /// 删除配置文件（按仓库隔离）
 #[tauri::command]
-pub async fn delete_profile(repo_id: String, name: String) -> Result<AppState, String> {
+pub async fn delete_profile(repo_id: String, name: String) -> Result<AppState, AppError> {
     let mut state = get_state();
 
     let repo = state
         .repositories
         .iter_mut()
         .find(|r| r.id == repo_id)
-        .ok_or_else(|| format!("未找到仓库: {}", repo_id))?;
+        .ok_or_else(|| {
+            AppError::validation_with_code(
+                format!("未找到仓库: {}", repo_id),
+                "repository_not_found",
+            )
+        })?;
 
     // 不允许删除系统默认配置文件
     if let Some(profile) = repo.publish_config.profiles.iter().find(|p| p.name == name) {
         if profile.is_system_default {
-            return Err("不能删除系统默认配置文件".to_string());
+            return Err(AppError::validation_with_code(
+                "不能删除系统默认配置文件",
+                "system_profile_immutable",
+            ));
         }
     }
 
     repo.publish_config.profiles.retain(|p| p.name != name);
-    update_state(state.clone()).map_err(|err| err.message)?;
+    update_state(state.clone())?;
     Ok(state)
 }
 
@@ -696,19 +742,19 @@ fn append_execution_history(
 
 /// 获取执行历史
 #[tauri::command]
-pub async fn get_execution_history() -> Result<Vec<ExecutionRecord>, String> {
+pub async fn get_execution_history() -> Result<Vec<ExecutionRecord>, AppError> {
     let state = get_state();
     Ok(state.execution_history)
 }
 
 /// 追加执行历史记录（按配置保留最近 N 条）
 #[tauri::command]
-pub async fn add_execution_record(record: ExecutionRecord) -> Result<Vec<ExecutionRecord>, String> {
+pub async fn add_execution_record(record: ExecutionRecord) -> Result<Vec<ExecutionRecord>, AppError> {
     let mut state = get_state();
     let history_limit = state.execution_history_limit;
     append_execution_history(&mut state.execution_history, record, history_limit);
     let history = state.execution_history.clone();
-    update_state(state).map_err(|err| err.message)?;
+    update_state(state)?;
     Ok(history)
 }
 
@@ -717,7 +763,7 @@ pub async fn add_execution_record(record: ExecutionRecord) -> Result<Vec<Executi
 pub async fn set_execution_record_snapshot(
     record_id: String,
     snapshot_path: String,
-) -> Result<Vec<ExecutionRecord>, String> {
+) -> Result<Vec<ExecutionRecord>, AppError> {
     let mut state = get_state();
     let mut found = false;
 
@@ -730,10 +776,13 @@ pub async fn set_execution_record_snapshot(
     }
 
     if !found {
-        return Err(format!("未找到执行记录: {}", record_id));
+        return Err(AppError::validation_with_code(
+            format!("未找到执行记录: {}", record_id),
+            "execution_record_not_found",
+        ));
     }
 
     let history = state.execution_history.clone();
-    update_state(state).map_err(|err| err.message)?;
+    update_state(state)?;
     Ok(history)
 }
