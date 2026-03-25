@@ -50,7 +50,10 @@ pub async fn apply_fix(action: FixAction) -> Result<FixResult, crate::errors::Ap
                 )
             })?
             .map_err(|e| {
-                crate::errors::AppError::unknown(format!("failed to run command: {}", e))
+                crate::errors::AppError::external_command_with_code(
+                    format!("failed to run command: {}", e),
+                    "fix_command_spawn_failed",
+                )
             })?;
             crate::environment::invalidate_environment_cache();
             Ok(FixResult::CommandExecuted {
