@@ -84,6 +84,13 @@ fn classify_git_branch_scan_error(stderr: &str) -> &'static str {
     "unknown"
 }
 
+fn repository_error(
+    message: impl Into<String>,
+    code: impl Into<String>,
+) -> crate::errors::AppError {
+    crate::errors::AppError::repository_with_code(message, code)
+}
+
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct RepositoryBranchScanResult {
@@ -248,21 +255,21 @@ pub async fn detect_repository_provider(path: String) -> Result<String, crate::e
     let repo_path = PathBuf::from(&path);
 
     if !repo_path.exists() {
-        return Err(crate::errors::AppError::unknown_with_code(
+        return Err(repository_error(
             format!("repository path does not exist: {}", path),
             "path_not_found",
         ));
     }
 
     if !repo_path.is_dir() {
-        return Err(crate::errors::AppError::unknown_with_code(
+        return Err(repository_error(
             format!("repository path is not a directory: {}", path),
             "not_directory",
         ));
     }
 
     if let Err(err) = std::fs::read_dir(&repo_path) {
-        return Err(crate::errors::AppError::unknown_with_code(
+        return Err(repository_error(
             format!("failed to read repository directory: {}", err),
             classify_repository_path_error(err.kind()),
         ));
@@ -270,12 +277,7 @@ pub async fn detect_repository_provider(path: String) -> Result<String, crate::e
 
     detect_provider_from_path(&repo_path)
         .map(ToString::to_string)
-        .ok_or_else(|| {
-            crate::errors::AppError::unknown_with_code(
-                "cannot detect provider from repository path",
-                "unsupported_provider",
-            )
-        })
+        .ok_or_else(|| repository_error("cannot detect provider from repository path", "unsupported_provider"))
 }
 
 #[tauri::command]
@@ -372,14 +374,14 @@ pub async fn scan_repository_branches(
     let repo_path = PathBuf::from(&path);
 
     if !repo_path.exists() {
-        return Err(crate::errors::AppError::unknown_with_code(
+        return Err(repository_error(
             format!("repository path does not exist: {}", path),
             "path_not_found",
         ));
     }
 
     if !repo_path.is_dir() {
-        return Err(crate::errors::AppError::unknown_with_code(
+        return Err(repository_error(
             format!("repository path is not a directory: {}", path),
             "not_directory",
         ));
@@ -390,11 +392,9 @@ pub async fn scan_repository_branches(
         Command::new("git").arg("-C").arg(&path).arg("remote").output(),
     )
     .await
-    .map_err(|_| {
-        crate::errors::AppError::unknown_with_code("git remote timed out after 5s", "timeout")
-    })?
+    .map_err(|_| repository_error("git remote timed out after 5s", "timeout"))?
     .map_err(|err| {
-        crate::errors::AppError::unknown_with_code(
+        repository_error(
             format!("failed to execute git remote: {}", err),
             classify_git_execution_error(err.kind()),
         )
@@ -402,7 +402,7 @@ pub async fn scan_repository_branches(
 
     if !remote_output.status.success() {
         let stderr = String::from_utf8_lossy(&remote_output.stderr).trim().to_string();
-        return Err(crate::errors::AppError::unknown_with_code(
+        return Err(repository_error(
             format_git_command_failure("remote", &remote_output.stderr),
             classify_git_branch_scan_error(&stderr),
         ));
@@ -424,14 +424,9 @@ pub async fn scan_repository_branches(
                 .output(),
         )
         .await
-        .map_err(|_| {
-            crate::errors::AppError::unknown_with_code(
-                "git fetch timed out after 5s",
-                "timeout",
-            )
-        })?
+        .map_err(|_| repository_error("git fetch timed out after 5s", "timeout"))?
         .map_err(|err| {
-            crate::errors::AppError::unknown_with_code(
+            repository_error(
                 format!("failed to execute git fetch: {}", err),
                 classify_git_execution_error(err.kind()),
             )
@@ -439,7 +434,7 @@ pub async fn scan_repository_branches(
 
         if !fetch_output.status.success() {
             let stderr = String::from_utf8_lossy(&fetch_output.stderr).trim().to_string();
-            return Err(crate::errors::AppError::unknown_with_code(
+            return Err(repository_error(
                 format_git_command_failure("fetch", &fetch_output.stderr),
                 classify_git_branch_scan_error(&stderr),
             ));
@@ -457,11 +452,9 @@ pub async fn scan_repository_branches(
             .output(),
     )
     .await
-    .map_err(|_| {
-        crate::errors::AppError::unknown_with_code("git branch timed out after 5s", "timeout")
-    })?
+    .map_err(|_| repository_error("git branch timed out after 5s", "timeout"))?
     .map_err(|err| {
-        crate::errors::AppError::unknown_with_code(
+        repository_error(
             format!("failed to execute git branch: {}", err),
             classify_git_execution_error(err.kind()),
         )
@@ -469,7 +462,7 @@ pub async fn scan_repository_branches(
 
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
-        return Err(crate::errors::AppError::unknown_with_code(
+        return Err(repository_error(
             format_git_command_failure("branch", &output.stderr),
             classify_git_branch_scan_error(&stderr),
         ));
@@ -501,7 +494,7 @@ pub async fn scan_repository_branches(
         .collect();
 
     if branches.is_empty() {
-        return Err(crate::errors::AppError::unknown_with_code(
+        return Err(repository_error(
             "no git branches found in repository",
             "no_branches",
         ));
@@ -525,14 +518,9 @@ pub async fn scan_repository_branches(
                 .output(),
         )
         .await
-        .map_err(|_| {
-            crate::errors::AppError::unknown_with_code(
-                "git rev-parse timed out after 5s",
-                "timeout",
-            )
-        })?
+        .map_err(|_| repository_error("git rev-parse timed out after 5s", "timeout"))?
         .map_err(|err| {
-            crate::errors::AppError::unknown_with_code(
+            repository_error(
                 format!("failed to detect current branch: {}", err),
                 classify_git_execution_error(err.kind()),
             )
@@ -569,7 +557,7 @@ pub async fn scan_repository_branches(
 pub async fn scan_project_files(path: String) -> Result<Vec<String>, crate::errors::AppError> {
     let root = PathBuf::from(&path);
     if !root.is_dir() {
-        return Err(crate::errors::AppError::unknown_with_code(
+        return Err(repository_error(
             format!("path is not a directory: {}", path),
             "not_directory",
         ));
@@ -644,34 +632,22 @@ pub async fn scan_project(
 ) -> Result<ProjectInfo, crate::errors::AppError> {
     let search_path = match start_path {
         Some(p) => PathBuf::from(p),
-        None => std::env::current_dir().map_err(|e| {
-            crate::errors::AppError::unknown_with_code(
-                format!("failed to resolve current directory: {}", e),
-                "current_dir_failed",
-            )
-        })?,
+        None => std::env::current_dir()
+            .map_err(|e| repository_error(format!("failed to resolve current directory: {}", e), "current_dir_failed"))?,
     };
 
     if !search_path.exists() {
-        return Err(crate::errors::AppError::unknown_with_code(
+        return Err(repository_error(
             format!("scan start path does not exist: {}", search_path.display()),
             "path_not_found",
         ));
     }
 
-    let root_path = find_project_root(&search_path).ok_or_else(|| {
-        crate::errors::AppError::unknown_with_code(
-            "cannot find project root (.sln)",
-            "project_root_not_found",
-        )
-    })?;
+    let root_path = find_project_root(&search_path)
+        .ok_or_else(|| repository_error("cannot find project root (.sln)", "project_root_not_found"))?;
 
-    let project_file = find_project_file(&root_path).ok_or_else(|| {
-        crate::errors::AppError::unknown_with_code(
-            "cannot find project file (.csproj)",
-            "project_file_not_found",
-        )
-    })?;
+    let project_file = find_project_file(&root_path)
+        .ok_or_else(|| repository_error("cannot find project file (.csproj)", "project_file_not_found"))?;
 
     let publish_profiles = scan_publish_profiles(&project_file);
     Ok(ProjectInfo {

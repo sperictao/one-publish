@@ -11,6 +11,7 @@ pub enum ErrorKind {
     Config,
     Provider,
     Export,
+    Repository,
     ExternalOpen,
     ExternalCommand,
     Store,
@@ -98,6 +99,15 @@ impl AppError {
     pub fn export_with_code(message: impl Into<String>, code: impl Into<String>) -> Self {
         Self {
             kind: ErrorKind::Export,
+            message: message.into(),
+            details: None,
+            code: Some(code.into()),
+        }
+    }
+
+    pub fn repository_with_code(message: impl Into<String>, code: impl Into<String>) -> Self {
+        Self {
+            kind: ErrorKind::Repository,
             message: message.into(),
             details: None,
             code: Some(code.into()),
