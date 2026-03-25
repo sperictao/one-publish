@@ -4,7 +4,6 @@ import { useAppDialogs } from "@/hooks/useAppDialogs";
 import { useAppState } from "@/hooks/useAppState";
 import { useTheme } from "@/hooks/useTheme";
 import { useShortcuts } from "@/hooks/useShortcuts";
-import { useDiagnosticsExports } from "@/hooks/useDiagnosticsExports";
 import { useDiagnosticsUiState } from "@/hooks/useDiagnosticsUiState";
 import { useLayoutShellState } from "@/hooks/useLayoutShellState";
 import { useProjectExecutionState } from "@/hooks/useProjectExecutionState";
@@ -25,12 +24,6 @@ import {
 } from "@/hooks/useProfiles";
 import { useCommandImport } from "@/hooks/useCommandImport";
 import { useScopedConfigs } from "@/hooks/useScopedConfigs";
-import { useFailureGroupSelection } from "@/hooks/useFailureGroupSelection";
-import { useHistoryActions } from "@/hooks/useHistoryActions";
-import { useHistoryDiagnosticsState } from "@/hooks/useHistoryDiagnosticsState";
-import { useExecutionHistoryCardProps } from "@/hooks/useExecutionHistoryCardProps";
-import { useFailureGroupDetailCardProps } from "@/hooks/useFailureGroupDetailCardProps";
-import { useFailureGroupsCardProps } from "@/hooks/useFailureGroupsCardProps";
 import { useOutputLogCardProps } from "@/hooks/useOutputLogCardProps";
 import { useCommandImportResultCardProps } from "@/hooks/useCommandImportResultCardProps";
 import { useDialogsCompositionState } from "@/hooks/useDialogsCompositionState";
@@ -50,6 +43,7 @@ import { SidebarPanelShell } from "@/components/layout/SidebarPanelShell";
 import {
   Loader2,
 } from "lucide-react";
+import { isRecordInRepository } from "@/features/history/utils/historyFilters";
 
 // Types
 
@@ -436,48 +430,6 @@ function App() {
     handleSelectProjectProfile,
   });
 
-  const {
-    historyFilterProvider,
-    setHistoryFilterProvider,
-    historyFilterStatus,
-    setHistoryFilterStatus,
-    historyFilterWindow,
-    setHistoryFilterWindow,
-    historyFilterKeyword,
-    setHistoryFilterKeyword,
-    issueDraftTemplate,
-    setIssueDraftTemplate,
-    issueDraftSections,
-    setIssueDraftSections,
-    scopedExecutionHistory,
-    historyProviderOptions,
-    historyFilterPresets,
-    dailyTriagePreset,
-    setDailyTriagePreset,
-    selectedHistoryPresetId: effectiveSelectedHistoryPresetId,
-    setSelectedHistoryPresetId,
-    saveCurrentHistoryPreset,
-    deleteSelectedHistoryPreset,
-    filteredExecutionHistory,
-    dailyTriageRecords,
-    applyHistoryPresetToFilters,
-    resetDailyTriagePreset,
-    clearHistoryFilters,
-    snapshotPaths,
-    failureGroups,
-  } = useHistoryDiagnosticsState({
-    historyT,
-    executionHistory,
-    selectedRepo,
-  });
-
-  const {
-    selectedFailureGroupKey,
-    setSelectedFailureGroupKey,
-    selectedFailureGroup,
-    representativeFailureRecord,
-  } = useFailureGroupSelection(failureGroups);
-
   useEffect(() => {
     loadProfiles();
   }, [loadProfiles]);
@@ -553,59 +505,6 @@ function App() {
     setIsCustomMode,
     setActiveProviderId,
     setProviderParameters,
-  });
-
-  const {
-    copyGroupSignature,
-    copyFailureIssueDraft,
-    copyRecordCommand,
-    copyHandoffSnippet,
-    openSnapshotFromRecord,
-  } = useHistoryActions({
-    appT,
-    historyT,
-    failureT,
-    issueDraftTemplate,
-    issueDraftSections,
-    extractSpecFromRecord,
-    setExecutionHistory,
-  });
-
-  const {
-    isExportingFailureBundle,
-    isExportingHistory,
-    isExportingDiagnosticsIndex,
-    exportFailureGroupBundle,
-    exportExecutionHistory,
-    exportDailyTriageReport,
-    exportDiagnosticsIndex,
-  } = useDiagnosticsExports({
-    historyT,
-    failureT,
-    publishResult,
-    lastExecutedSpec,
-    outputLog,
-    environmentLastResult,
-    currentExecutionRecordId,
-    selectedFailureGroup,
-    representativeFailureRecord,
-    dailyTriagePreset,
-    dailyTriageRecords,
-    snapshotPaths,
-    recentBundleExports,
-    recentHistoryExports,
-    scopedExecutionHistory,
-    filteredExecutionHistory,
-    failureGroupsCount: failureGroups.length,
-    selectedRepoPath: selectedRepo?.path || "",
-    setExecutionHistory,
-    trackBundleExport,
-    trackHistoryExport,
-    setHistoryFilterProvider,
-    setHistoryFilterStatus,
-    setHistoryFilterWindow,
-    setHistoryFilterKeyword,
-    setSelectedHistoryPresetId,
   });
 
   const {
@@ -704,62 +603,6 @@ function App() {
     selectedRepoPath: selectedRepo?.path,
   });
 
-  const executionHistoryCardProps = useExecutionHistoryCardProps({
-    scopedExecutionHistory,
-    filteredExecutionHistory,
-    executionHistoryLimit,
-    historyProviderOptions,
-    historyFilterProvider,
-    historyFilterStatus,
-    historyFilterWindow,
-    historyFilterKeyword,
-    selectedHistoryPresetId: effectiveSelectedHistoryPresetId,
-    historyFilterPresets,
-    dailyTriagePreset,
-    dailyTriageRecords,
-    isExportingHistory,
-    isExportingDiagnosticsIndex,
-    isPublishing,
-    appT,
-    historyT,
-    failureT,
-    setHistoryFilterProvider,
-    setHistoryFilterStatus,
-    setHistoryFilterWindow,
-    setHistoryFilterKeyword,
-    applyHistoryPresetToFilters,
-    saveCurrentHistoryPreset,
-    deleteSelectedHistoryPreset,
-    setDailyTriagePreset,
-    resetDailyTriagePreset,
-    exportExecutionHistory,
-    exportDailyTriageReport,
-    exportDiagnosticsIndex,
-    clearHistoryFilters,
-    openSnapshotFromRecord,
-    rerunFromHistory,
-    copyHandoffSnippet,
-  });
-
-  const failureGroupDetailCardProps = useFailureGroupDetailCardProps({
-    selectedFailureGroup,
-    representativeFailureRecord,
-    issueDraftTemplate,
-    issueDraftSections,
-    failureT,
-    appT,
-    isExportingFailureBundle,
-    isPublishing,
-    setIssueDraftTemplate,
-    setIssueDraftSections,
-    copyGroupSignature,
-    copyRecordCommand,
-    copyFailureIssueDraft,
-    exportFailureGroupBundle,
-    openSnapshotFromRecord,
-    rerunFromHistory,
-  });
-
   const outputLogCardProps = useOutputLogCardProps({
     outputLog,
     publishResult,
@@ -783,17 +626,6 @@ function App() {
         : null,
   });
 
-  const failureGroupsCardProps = useFailureGroupsCardProps({
-    failureGroups,
-    selectedFailureGroupKey,
-    failureT,
-    isPublishing,
-    setSelectedFailureGroupKey,
-    copyGroupSignature,
-    openSnapshotFromRecord,
-    rerunFromHistory,
-  });
-
   const commandImportResultCardProps = useCommandImportResultCardProps({
     activeImportFeedback,
     providerLabel: activeProviderLabel,
@@ -815,6 +647,15 @@ function App() {
   const showCommandImportResultCard = Boolean(
     selectedRepo && commandImportResultCardProps
   );
+  const shouldLoadDiagnosticsSection = selectedRepo
+    ? rightPanelView === "history" ||
+      executionHistory.some(
+        (record) =>
+          !record.success &&
+          !record.cancelled &&
+          isRecordInRepository(record, selectedRepo)
+      )
+    : false;
 
   return (
     <div className="flex h-screen flex-col bg-background">
@@ -895,9 +736,33 @@ function App() {
             showCommandImportResultCard={showCommandImportResultCard}
             commandImportResultCardProps={commandImportResultCardProps}
             outputLogCardProps={outputLogCardProps}
-            failureGroupsCardProps={failureGroupsCardProps}
-            failureGroupDetailCardProps={failureGroupDetailCardProps}
-            executionHistoryCardProps={executionHistoryCardProps}
+            shouldLoadDiagnosticsSection={shouldLoadDiagnosticsSection}
+            diagnosticsSectionProps={
+              selectedRepo
+                ? {
+                    rightPanelView,
+                    appT,
+                    historyT,
+                    failureT,
+                    executionHistory,
+                    executionHistoryLimit,
+                    selectedRepo,
+                    isPublishing,
+                    publishResult,
+                    lastExecutedSpec,
+                    outputLog,
+                    environmentLastResult,
+                    currentExecutionRecordId,
+                    recentBundleExports,
+                    recentHistoryExports,
+                    setExecutionHistory,
+                    trackBundleExport,
+                    trackHistoryExport,
+                    extractSpecFromRecord,
+                    rerunFromHistory,
+                  }
+                : null
+            }
             rightPanelView={rightPanelView}
           />
         </MainContentShell>

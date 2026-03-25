@@ -1,37 +1,24 @@
 import { Suspense, lazy } from "react";
 import { OutputLogCard, type OutputLogCardProps } from "@/components/publish/OutputLogCard";
 import type { CommandImportResultCardProps } from "@/components/publish/CommandImportResultCard";
-import type { FailureGroupDetailCardProps } from "@/components/publish/FailureGroupDetailCard";
-import type { FailureGroupsCardProps } from "@/components/publish/FailureGroupsCard";
-import type { ExecutionHistoryCardProps } from "@/components/publish/ExecutionHistoryCard";
+import type { DiagnosticsSectionProps } from "@/components/publish/DiagnosticsSection";
 
 const CommandImportResultCard = lazy(async () => {
   const mod = await import("@/components/publish/CommandImportResultCard");
   return { default: mod.CommandImportResultCard };
 });
 
-const FailureGroupsCard = lazy(async () => {
-  const mod = await import("@/components/publish/FailureGroupsCard");
-  return { default: mod.FailureGroupsCard };
-});
-
-const FailureGroupDetailCard = lazy(async () => {
-  const mod = await import("@/components/publish/FailureGroupDetailCard");
-  return { default: mod.FailureGroupDetailCard };
-});
-
-const ExecutionHistoryCard = lazy(async () => {
-  const mod = await import("@/components/publish/ExecutionHistoryCard");
-  return { default: mod.ExecutionHistoryCard };
+const DiagnosticsSection = lazy(async () => {
+  const mod = await import("@/components/publish/DiagnosticsSection");
+  return { default: mod.DiagnosticsSection };
 });
 
 export interface PublishContentSectionProps {
   showCommandImportResultCard: boolean;
   commandImportResultCardProps: CommandImportResultCardProps | null;
   outputLogCardProps: OutputLogCardProps;
-  failureGroupsCardProps: FailureGroupsCardProps;
-  failureGroupDetailCardProps: FailureGroupDetailCardProps;
-  executionHistoryCardProps: ExecutionHistoryCardProps;
+  shouldLoadDiagnosticsSection: boolean;
+  diagnosticsSectionProps: DiagnosticsSectionProps | null;
   rightPanelView: "home" | "history";
 }
 
@@ -39,20 +26,14 @@ export function PublishContentSection({
   showCommandImportResultCard,
   commandImportResultCardProps,
   outputLogCardProps,
-  failureGroupsCardProps,
-  failureGroupDetailCardProps,
-  executionHistoryCardProps,
+  shouldLoadDiagnosticsSection,
+  diagnosticsSectionProps,
   rightPanelView,
 }: PublishContentSectionProps) {
   const hasOutputLogCard =
     Boolean(outputLogCardProps.outputLog) ||
     outputLogCardProps.publishResult !== null ||
     outputLogCardProps.publishControls !== null;
-  const hasFailureGroups = failureGroupsCardProps.failureGroups.length > 0;
-  const hasFailureGroupDetail =
-    failureGroupDetailCardProps.selectedFailureGroup !== null;
-  const hasExecutionHistory =
-    executionHistoryCardProps.scopedExecutionHistory.length > 0;
 
   return (
     <div className="flex min-h-full flex-col gap-6 p-6">
@@ -70,29 +51,12 @@ export function PublishContentSection({
               <OutputLogCard {...outputLogCardProps} />
             </div>
           )}
-          {hasFailureGroups && (
-            <div className="mx-auto w-full max-w-3xl">
-              <Suspense fallback={null}>
-                <FailureGroupsCard {...failureGroupsCardProps} />
-              </Suspense>
-            </div>
-          )}
-          {hasFailureGroupDetail && (
-            <div className="mx-auto w-full max-w-3xl">
-              <Suspense fallback={null}>
-                <FailureGroupDetailCard {...failureGroupDetailCardProps} />
-              </Suspense>
-            </div>
-          )}
         </>
-      ) : (
-        hasExecutionHistory && (
-          <div className="mx-auto w-full max-w-3xl">
-            <Suspense fallback={null}>
-              <ExecutionHistoryCard {...executionHistoryCardProps} />
-            </Suspense>
-          </div>
-        )
+      ) : null}
+      {shouldLoadDiagnosticsSection && diagnosticsSectionProps && (
+        <Suspense fallback={null}>
+          <DiagnosticsSection {...diagnosticsSectionProps} />
+        </Suspense>
       )}
     </div>
   );
