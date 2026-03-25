@@ -1,4 +1,4 @@
-import { useEffect, useCallback, useState } from "react";
+import { Suspense, lazy, useEffect, useCallback, useState } from "react";
 // Hooks
 import { useAppDialogs } from "@/hooks/useAppDialogs";
 import { useAppState } from "@/hooks/useAppState";
@@ -26,12 +26,10 @@ import { useCommandImport } from "@/hooks/useCommandImport";
 import { useScopedConfigs } from "@/hooks/useScopedConfigs";
 import { useOutputLogCardProps } from "@/hooks/useOutputLogCardProps";
 import { useCommandImportResultCardProps } from "@/hooks/useCommandImportResultCardProps";
-import { useDialogsCompositionState } from "@/hooks/useDialogsCompositionState";
 import { useProviderRuntime } from "@/hooks/useProviderRuntime";
 import { useI18n, type Language } from "@/hooks/useI18n";
 
 // Layout Components
-import { AppDialogs } from "@/components/layout/AppDialogs";
 import { RepositoryList } from "@/components/layout/RepositoryList";
 import { PublishConfigPanel } from "@/components/layout/PublishConfigPanel";
 import { PublishContentSection } from "@/components/layout/PublishContentSection";
@@ -61,6 +59,10 @@ interface DotnetPreset {
 type RightPanelView = "home" | "history";
 
 const SPEC_VERSION = 1;
+const AppDialogsHost = lazy(async () => {
+  const mod = await import("@/components/layout/AppDialogsHost");
+  return { default: mod.AppDialogsHost };
+});
 
 // Preset configurations
 const PRESETS: DotnetPreset[] = [
@@ -526,83 +528,6 @@ function App() {
     runPublishWithSpec,
   });
 
-  const { appDialogsProps } = useDialogsCompositionState({
-    shortcutsOpen,
-    setShortcutsOpen,
-    environmentDialogOpen,
-    handleEnvironmentDialogOpenChange,
-    environmentDefaultProviderIds,
-    environmentInitialResult,
-    setEnvironmentLastResult,
-    settingsOpen,
-    setSettingsOpen,
-    language,
-    handleLanguageChange,
-    minimizeToTrayOnClose,
-    setMinimizeToTrayOnClose,
-    defaultOutputDir,
-    setDefaultOutputDir,
-    executionHistoryLimit,
-    setExecutionHistoryLimit,
-    isRerunChecklistEnabled,
-    setIsRerunChecklistEnabled,
-    theme,
-    setTheme,
-    handleConfigDialogOpenChange,
-    environmentLastResult,
-    openEnvironmentDialog,
-    activeProviderId,
-    rerunChecklistOpen,
-    pendingRerunRecord,
-    selectedRepoCurrentBranch: selectedRepo?.currentBranch,
-    rerunChecklistState,
-    rerunT,
-    setRerunChecklistOpen,
-    setRerunChecklistState,
-    closeRerunChecklistDialog,
-    confirmRerunWithChecklist,
-    releaseChecklistOpen,
-    setReleaseChecklistOpen,
-    publishResult,
-    packageResult: artifactActionState.packageResult,
-    signResult: artifactActionState.signResult,
-    handleOpenSettings,
-    selectedRepoExists: Boolean(selectedRepo),
-    commandImportOpen,
-    setCommandImportOpen,
-    handleCommandImport,
-    quickCreateProfileOpen,
-    quickCreateTemplateId,
-    quickCreateTemplateOptions,
-    quickCreateProfileName,
-    quickCreateProfileGroup,
-    quickCreateProfileGroupOptions,
-    quickCreateProfileCustomGroup,
-    quickCreateProfileDraft,
-    quickCreateProfileSaving,
-    quickCreateEditing: isQuickCreateEditing,
-    quickCreateGroupDefaultValue: QUICK_CREATE_PROFILE_GROUP_DEFAULT,
-    quickCreateGroupCustomValue: QUICK_CREATE_PROFILE_GROUP_CUSTOM,
-    profileT,
-    appT,
-    cancelLabel: rerunT.cancel || "取消",
-    handleQuickCreateProfileOpenChange,
-    applyQuickCreateTemplate,
-    setQuickCreateProfileName,
-    setQuickCreateProfileGroup,
-    setQuickCreateProfileCustomGroup,
-    updateQuickCreateProfileDraft,
-    handleQuickCreateProfileSave,
-    configDialogOpen,
-    loadProfiles,
-    handleLoadProfile,
-    selectedRepoId,
-    customConfig,
-    activeProviderParameters,
-    projectFile: projectInfo?.project_file,
-    selectedRepoPath: selectedRepo?.path,
-  });
-
   const outputLogCardProps = useOutputLogCardProps({
     outputLog,
     publishResult,
@@ -656,6 +581,15 @@ function App() {
           isRecordInRepository(record, selectedRepo)
       )
     : false;
+  const shouldLoadAppDialogsHost =
+    shortcutsOpen ||
+    environmentDialogOpen ||
+    settingsOpen ||
+    rerunChecklistOpen ||
+    releaseChecklistOpen ||
+    commandImportOpen ||
+    quickCreateProfileOpen ||
+    configDialogOpen;
 
   return (
     <div className="flex h-screen flex-col bg-background">
@@ -768,7 +702,86 @@ function App() {
         </MainContentShell>
       </div>
 
-      <AppDialogs {...appDialogsProps} />
+      {shouldLoadAppDialogsHost ? (
+        <Suspense fallback={null}>
+          <AppDialogsHost
+            shortcutsOpen={shortcutsOpen}
+            setShortcutsOpen={setShortcutsOpen}
+            environmentDialogOpen={environmentDialogOpen}
+            handleEnvironmentDialogOpenChange={handleEnvironmentDialogOpenChange}
+            environmentDefaultProviderIds={environmentDefaultProviderIds}
+            environmentInitialResult={environmentInitialResult}
+            setEnvironmentLastResult={setEnvironmentLastResult}
+            settingsOpen={settingsOpen}
+            setSettingsOpen={setSettingsOpen}
+            language={language}
+            handleLanguageChange={handleLanguageChange}
+            minimizeToTrayOnClose={minimizeToTrayOnClose}
+            setMinimizeToTrayOnClose={setMinimizeToTrayOnClose}
+            defaultOutputDir={defaultOutputDir}
+            setDefaultOutputDir={setDefaultOutputDir}
+            executionHistoryLimit={executionHistoryLimit}
+            setExecutionHistoryLimit={setExecutionHistoryLimit}
+            isRerunChecklistEnabled={isRerunChecklistEnabled}
+            setIsRerunChecklistEnabled={setIsRerunChecklistEnabled}
+            theme={theme}
+            setTheme={setTheme}
+            handleConfigDialogOpenChange={handleConfigDialogOpenChange}
+            environmentLastResult={environmentLastResult}
+            openEnvironmentDialog={openEnvironmentDialog}
+            activeProviderId={activeProviderId}
+            rerunChecklistOpen={rerunChecklistOpen}
+            pendingRerunRecord={pendingRerunRecord}
+            selectedRepoCurrentBranch={selectedRepo?.currentBranch}
+            rerunChecklistState={rerunChecklistState}
+            rerunT={rerunT}
+            setRerunChecklistOpen={setRerunChecklistOpen}
+            setRerunChecklistState={setRerunChecklistState}
+            closeRerunChecklistDialog={closeRerunChecklistDialog}
+            confirmRerunWithChecklist={confirmRerunWithChecklist}
+            releaseChecklistOpen={releaseChecklistOpen}
+            setReleaseChecklistOpen={setReleaseChecklistOpen}
+            publishResult={publishResult}
+            packageResult={artifactActionState.packageResult}
+            signResult={artifactActionState.signResult}
+            handleOpenSettings={handleOpenSettings}
+            selectedRepoExists={Boolean(selectedRepo)}
+            commandImportOpen={commandImportOpen}
+            setCommandImportOpen={setCommandImportOpen}
+            handleCommandImport={handleCommandImport}
+            quickCreateProfileOpen={quickCreateProfileOpen}
+            quickCreateTemplateId={quickCreateTemplateId}
+            quickCreateTemplateOptions={quickCreateTemplateOptions}
+            quickCreateProfileName={quickCreateProfileName}
+            quickCreateProfileGroup={quickCreateProfileGroup}
+            quickCreateProfileGroupOptions={quickCreateProfileGroupOptions}
+            quickCreateProfileCustomGroup={quickCreateProfileCustomGroup}
+            quickCreateProfileDraft={quickCreateProfileDraft}
+            quickCreateProfileSaving={quickCreateProfileSaving}
+            quickCreateEditing={isQuickCreateEditing}
+            quickCreateGroupDefaultValue={QUICK_CREATE_PROFILE_GROUP_DEFAULT}
+            quickCreateGroupCustomValue={QUICK_CREATE_PROFILE_GROUP_CUSTOM}
+            profileT={profileT}
+            appT={appT}
+            cancelLabel={rerunT.cancel || "取消"}
+            handleQuickCreateProfileOpenChange={handleQuickCreateProfileOpenChange}
+            applyQuickCreateTemplate={applyQuickCreateTemplate}
+            setQuickCreateProfileName={setQuickCreateProfileName}
+            setQuickCreateProfileGroup={setQuickCreateProfileGroup}
+            setQuickCreateProfileCustomGroup={setQuickCreateProfileCustomGroup}
+            updateQuickCreateProfileDraft={updateQuickCreateProfileDraft}
+            handleQuickCreateProfileSave={handleQuickCreateProfileSave}
+            configDialogOpen={configDialogOpen}
+            loadProfiles={loadProfiles}
+            handleLoadProfile={handleLoadProfile}
+            selectedRepoId={selectedRepoId}
+            customConfig={customConfig}
+            activeProviderParameters={activeProviderParameters}
+            projectFile={projectInfo?.project_file}
+            selectedRepoPath={selectedRepo?.path}
+          />
+        </Suspense>
+      ) : null}
     </div>
   );
 }

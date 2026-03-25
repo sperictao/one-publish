@@ -6,7 +6,7 @@ import {
 } from "@/hooks/useAppDialogsProps";
 import type { EnvironmentCheckResult } from "@/lib/environment";
 
-type DialogsCompositionParams = Omit<
+export type DialogsCompositionParams = Omit<
   UseAppDialogsPropsParams,
   "environmentStatus" | "commandImportProjectPath" | "currentConfigParameters"
 > & {
