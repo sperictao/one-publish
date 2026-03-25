@@ -1,16 +1,19 @@
 import { useCallback } from "react";
+import { ask, open } from "@tauri-apps/plugin-dialog";
 import { toast } from "sonner";
 
+import {
+  addRepository as apiAddRepository,
+  defaultRepoPublishConfig,
+  detectRepositoryProvider,
+  scanProjectFiles,
+  scanRepositoryBranches,
+} from "@/lib/store";
+import { getPathBasename } from "@/lib/paths";
+import { remapPathPrefix } from "@/features/repository/utils/pathUtils";
 import type { Branch, Repository } from "@/types/repository";
 
-const loadDialogApi = () => import("@tauri-apps/plugin-dialog");
 const loadInvokeErrors = () => import("@/lib/tauri/invokeErrors");
-const loadStoreApi = () => import("@/lib/store");
-const loadPathHelpers = () =>
-  Promise.all([
-    import("@/lib/paths"),
-    import("@/features/repository/utils/pathUtils"),
-  ]);
 
 interface TranslationMap {
   [key: string]: string | undefined;
@@ -20,7 +23,7 @@ interface UseRepositoryActionsParams {
   appT: TranslationMap;
   repositories: Repository[];
   selectedRepoId: string | null;
-  addRepository: (repo: Repository) => Promise<unknown>;
+  addRepository: typeof apiAddRepository;
   removeRepository: (repoId: string) => Promise<unknown>;
   updateRepository: (repo: Repository) => Promise<unknown>;
   setActiveProviderId: (value: string) => void;
@@ -41,15 +44,6 @@ export function useRepositoryActions({
   setActiveProviderId,
 }: UseRepositoryActionsParams) {
   const handleAddRepo = useCallback(async () => {
-    const [
-      { open },
-      { defaultRepoPublishConfig, detectRepositoryProvider },
-      { getPathBasename },
-    ] = await Promise.all([
-      loadDialogApi(),
-      loadStoreApi(),
-      import("@/lib/paths"),
-    ]);
     const selected = await open({
       directory: true,
       multiple: false,
@@ -95,7 +89,6 @@ export function useRepositoryActions({
 
   const handleRemoveRepo = useCallback(
     async (repo: Repository) => {
-      const { ask } = await loadDialogApi();
       const confirmed = await ask(
         (appT.removeRepositoryConfirm || "确认移除仓库「{{name}}」？").replace(
           "{{name}}",
@@ -130,7 +123,6 @@ export function useRepositoryActions({
         toast.error(appT.repositoryNotFound || "未找到目标仓库");
         return false;
       }
-      const [, { remapPathPrefix }] = await loadPathHelpers();
 
       const nextName = repo.name.trim();
       const nextPath = repo.path.trim();
@@ -189,7 +181,6 @@ export function useRepositoryActions({
       }
 
       try {
-        const { detectRepositoryProvider } = await loadStoreApi();
         const providerId = await detectRepositoryProvider(nextPath);
 
         if (!silentSuccess) {
@@ -265,7 +256,6 @@ export function useRepositoryActions({
       return [];
     }
     try {
-      const { scanProjectFiles } = await loadStoreApi();
       return await scanProjectFiles(nextPath);
     } catch {
       return [];
@@ -286,7 +276,6 @@ export function useRepositoryActions({
       }
 
       try {
-        const { scanRepositoryBranches } = await loadStoreApi();
         const result = await scanRepositoryBranches(nextPath);
         const branchCountLabel = appT.branchesCountUnit || "个分支";
 
