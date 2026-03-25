@@ -1,41 +1,63 @@
+import { Suspense, lazy, type Dispatch, type SetStateAction } from "react";
 import { ExecutionHistoryCard } from "@/components/publish/ExecutionHistoryCard";
 import { FailureGroupDetailCard } from "@/components/publish/FailureGroupDetailCard";
 import { FailureGroupsCard } from "@/components/publish/FailureGroupsCard";
 import { useDiagnosticsExports } from "@/hooks/useDiagnosticsExports";
+import { useEnvironmentStatus } from "@/hooks/useEnvironmentStatus";
 import { useExecutionHistoryCardProps } from "@/hooks/useExecutionHistoryCardProps";
 import { useFailureGroupDetailCardProps } from "@/hooks/useFailureGroupDetailCardProps";
 import { useFailureGroupSelection } from "@/hooks/useFailureGroupSelection";
 import { useFailureGroupsCardProps } from "@/hooks/useFailureGroupsCardProps";
 import { useHistoryActions } from "@/hooks/useHistoryActions";
 import { useHistoryDiagnosticsState } from "@/hooks/useHistoryDiagnosticsState";
+import { useRecoverableSpec } from "@/hooks/useRecoverableSpec";
+import { useRerunFlow } from "@/hooks/useRerunFlow";
 import type { ProviderPublishSpec, PublishResult } from "@/hooks/usePublishExecution";
 import type { EnvironmentCheckResult } from "@/lib/environment";
-import type { ExecutionRecord } from "@/lib/store";
+import type { ExecutionRecord, PublishConfigStore } from "@/lib/store";
+import type { ParameterValue } from "@/types/parameters";
 import type { Repository } from "@/types/repository";
 
 type TranslationMap = Record<string, string | undefined>;
+const RerunChecklistDialog = lazy(async () => {
+  const mod = await import("@/components/publish/RerunChecklistDialog");
+  return { default: mod.RerunChecklistDialog };
+});
 
 export interface DiagnosticsSectionProps {
   rightPanelView: "home" | "history";
   appT: TranslationMap;
   historyT: TranslationMap;
   failureT: TranslationMap;
+  rerunT: TranslationMap;
   executionHistory: ExecutionRecord[];
   executionHistoryLimit: number;
   selectedRepo: Repository;
   isPublishing: boolean;
+  isRerunChecklistEnabled: boolean;
+  specVersion: number;
+  customConfig: PublishConfigStore;
+  setCustomConfig: (config: PublishConfigStore) => void;
+  setIsCustomMode: (value: boolean) => void;
+  setActiveProviderId: (providerId: string) => void;
+  setProviderParameters: Dispatch<
+    SetStateAction<Record<string, Record<string, ParameterValue>>>
+  >;
   publishResult: PublishResult | null;
   lastExecutedSpec: ProviderPublishSpec | null;
   outputLog: string;
   environmentLastResult: EnvironmentCheckResult | null;
+  selectedRepoCurrentBranch?: string | null;
   currentExecutionRecordId: string | null;
   recentBundleExports: string[];
   recentHistoryExports: string[];
   setExecutionHistory: (history: ExecutionRecord[]) => void;
   trackBundleExport: (outputPath: string) => void;
   trackHistoryExport: (outputPath: string) => void;
-  extractSpecFromRecord: (record: ExecutionRecord) => ProviderPublishSpec | null;
-  rerunFromHistory: (record: ExecutionRecord) => Promise<void>;
+  runPublishWithSpec: (
+    spec: ProviderPublishSpec,
+    recentConfigKey?: string | null
+  ) => Promise<void>;
 }
 
 export function DiagnosticsSection({
@@ -43,23 +65,44 @@ export function DiagnosticsSection({
   appT,
   historyT,
   failureT,
+  rerunT,
   executionHistory,
   executionHistoryLimit,
   selectedRepo,
   isPublishing,
+  isRerunChecklistEnabled,
+  specVersion,
+  customConfig,
+  setCustomConfig,
+  setIsCustomMode,
+  setActiveProviderId,
+  setProviderParameters,
   publishResult,
   lastExecutedSpec,
   outputLog,
   environmentLastResult,
+  selectedRepoCurrentBranch,
   currentExecutionRecordId,
   recentBundleExports,
   recentHistoryExports,
   setExecutionHistory,
   trackBundleExport,
   trackHistoryExport,
-  extractSpecFromRecord,
-  rerunFromHistory,
+  runPublishWithSpec,
 }: DiagnosticsSectionProps) {
+  const environmentStatus = useEnvironmentStatus(environmentLastResult);
+  const {
+    extractSpecFromRecord,
+    restoreSpecToEditor,
+    getRecentConfigKeyFromSpec,
+  } = useRecoverableSpec({
+    specVersion,
+    customConfig,
+    setCustomConfig,
+    setIsCustomMode,
+    setActiveProviderId,
+    setProviderParameters,
+  });
   const {
     historyFilterProvider,
     setHistoryFilterProvider,
@@ -154,6 +197,24 @@ export function DiagnosticsSection({
     setHistoryFilterKeyword,
     setSelectedHistoryPresetId,
   });
+  const {
+    rerunChecklistOpen,
+    setRerunChecklistOpen,
+    pendingRerunRecord,
+    rerunChecklistState,
+    setRerunChecklistState,
+    rerunFromHistory,
+    closeRerunChecklistDialog,
+    confirmRerunWithChecklist,
+  } = useRerunFlow({
+    isRerunChecklistEnabled,
+    historyT,
+    rerunT,
+    extractSpecFromRecord,
+    restoreSpecToEditor,
+    getRecentConfigKeyFromSpec,
+    runPublishWithSpec,
+  });
 
   const executionHistoryCardProps = useExecutionHistoryCardProps({
     scopedExecutionHistory,
@@ -227,16 +288,41 @@ export function DiagnosticsSection({
     failureGroupDetailCardProps.selectedFailureGroup !== null;
   const hasExecutionHistory =
     executionHistoryCardProps.scopedExecutionHistory.length > 0;
+  const rerunChecklistDialog = rerunChecklistOpen ? (
+    <Suspense fallback={null}>
+      <RerunChecklistDialog
+        open={rerunChecklistOpen}
+        pendingRerunRecord={pendingRerunRecord}
+        selectedRepoCurrentBranch={selectedRepoCurrentBranch}
+        environmentStatus={environmentStatus}
+        rerunChecklistState={rerunChecklistState}
+        rerunT={rerunT}
+        onOpenChange={(open) => {
+          if (open) {
+            setRerunChecklistOpen(true);
+            return;
+          }
+          closeRerunChecklistDialog();
+        }}
+        onChecklistStateChange={setRerunChecklistState}
+        onClose={closeRerunChecklistDialog}
+        onConfirm={() => void confirmRerunWithChecklist()}
+      />
+    </Suspense>
+  ) : null;
 
   if (rightPanelView === "history") {
     if (!hasExecutionHistory) {
-      return null;
+      return rerunChecklistDialog;
     }
 
     return (
-      <div className="mx-auto w-full max-w-3xl">
-        <ExecutionHistoryCard {...executionHistoryCardProps} />
-      </div>
+      <>
+        <div className="mx-auto w-full max-w-3xl">
+          <ExecutionHistoryCard {...executionHistoryCardProps} />
+        </div>
+        {rerunChecklistDialog}
+      </>
     );
   }
 
@@ -252,6 +338,7 @@ export function DiagnosticsSection({
           <FailureGroupDetailCard {...failureGroupDetailCardProps} />
         </div>
       )}
+      {rerunChecklistDialog}
     </>
   );
 }
