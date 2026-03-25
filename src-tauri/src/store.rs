@@ -344,30 +344,15 @@ fn load_from_file() -> AppState {
 }
 
 /// 保存状态到文件
-fn save_to_file(state: &AppState) -> Result<(), crate::errors::AppError> {
+fn save_to_file(state: &AppState) -> Result<(), String> {
     let path = get_config_path();
 
     if let Some(parent) = path.parent() {
-        fs::create_dir_all(parent).map_err(|e| {
-            crate::errors::AppError::store_with_code(
-                format!("创建目录失败: {}", e),
-                "store_create_dir_failed",
-            )
-        })?;
+        fs::create_dir_all(parent).map_err(|e| format!("创建目录失败: {}", e))?;
     }
 
-    let json = serde_json::to_string_pretty(state).map_err(|e| {
-        crate::errors::AppError::store_with_code(
-            format!("序列化失败: {}", e),
-            "store_serialize_failed",
-        )
-    })?;
-    fs::write(&path, json).map_err(|e| {
-        crate::errors::AppError::store_with_code(
-            format!("写入文件失败: {}", e),
-            "store_write_failed",
-        )
-    })?;
+    let json = serde_json::to_string_pretty(state).map_err(|e| format!("序列化失败: {}", e))?;
+    fs::write(&path, json).map_err(|e| format!("写入文件失败: {}", e))?;
     Ok(())
 }
 
@@ -390,18 +375,13 @@ pub fn get_state() -> AppState {
 }
 
 /// 更新状态
-pub fn update_state(new_state: AppState) -> Result<(), crate::errors::AppError> {
+pub fn update_state(new_state: AppState) -> Result<(), String> {
     let normalized = sanitize_state(new_state);
     save_to_file(&normalized)?;
 
     let mut guard = state_store()
         .write()
-        .map_err(|err| {
-            crate::errors::AppError::store_with_code(
-                format!("写入状态锁失败: {}", err),
-                "store_lock_write_failed",
-            )
-        })?;
+        .map_err(|err| format!("写入状态锁失败: {}", err))?;
     *guard = normalized;
     Ok(())
 }
@@ -417,7 +397,7 @@ pub async fn get_app_state() -> Result<AppState, String> {
 /// 保存应用状态
 #[tauri::command]
 pub async fn save_app_state(state: AppState) -> Result<(), String> {
-    update_state(state).map_err(|err| err.message)
+    update_state(state)
 }
 
 /// 添加仓库
@@ -432,7 +412,7 @@ pub async fn add_repository(repo: Repository) -> Result<AppState, String> {
 
     state.repositories.push(repo.clone());
     state.selected_repo_id = Some(repo.id);
-    update_state(state.clone()).map_err(|err| err.message)?;
+    update_state(state.clone())?;
     Ok(state)
 }
 
@@ -448,7 +428,7 @@ pub async fn remove_repository(repo_id: String) -> Result<AppState, String> {
         state.selected_repo_id = state.repositories.first().map(|r| r.id.clone());
     }
 
-    update_state(state.clone()).map_err(|err| err.message)?;
+    update_state(state.clone())?;
     Ok(state)
 }
 
@@ -461,7 +441,7 @@ pub async fn update_repository(repo: Repository) -> Result<AppState, String> {
         *existing = repo;
     }
 
-    update_state(state.clone()).map_err(|err| err.message)?;
+    update_state(state.clone())?;
     Ok(state)
 }
 
@@ -486,7 +466,7 @@ pub async fn update_ui_state(
         state.selected_repo_id = selected_repo_id;
     }
 
-    update_state(state).map_err(|err| err.message)
+    update_state(state)
 }
 
 /// 更新发布配置状态（按仓库隔离）
@@ -515,7 +495,7 @@ pub async fn update_publish_state(
         repo.publish_config.custom_config = config;
     }
 
-    update_state(state).map_err(|err| err.message)
+    update_state(state)
 }
 
 /// 更新偏好设置（语言、托盘行为、主题等）
@@ -552,7 +532,7 @@ pub async fn update_preferences(
         trim_execution_history(&mut state.execution_history, state.execution_history_limit);
     }
 
-    update_state(state.clone()).map_err(|err| err.message)?;
+    update_state(state.clone())?;
 
     // 语言变化需要刷新托盘菜单以便实时更新文案
     if language_changed {
@@ -612,7 +592,7 @@ pub async fn save_profile(
     };
 
     repo.publish_config.profiles.push(profile);
-    update_state(state.clone()).map_err(|err| err.message)?;
+    update_state(state.clone())?;
     Ok(state)
 }
 
@@ -658,7 +638,7 @@ pub async fn update_profile(
     profile.parameters = parameters;
     profile.profile_group = normalized_profile_group;
 
-    update_state(state.clone()).map_err(|err| err.message)?;
+    update_state(state.clone())?;
     Ok(state)
 }
 
@@ -681,7 +661,7 @@ pub async fn delete_profile(repo_id: String, name: String) -> Result<AppState, S
     }
 
     repo.publish_config.profiles.retain(|p| p.name != name);
-    update_state(state.clone()).map_err(|err| err.message)?;
+    update_state(state.clone())?;
     Ok(state)
 }
 
@@ -708,7 +688,7 @@ pub async fn add_execution_record(record: ExecutionRecord) -> Result<Vec<Executi
     let history_limit = state.execution_history_limit;
     append_execution_history(&mut state.execution_history, record, history_limit);
     let history = state.execution_history.clone();
-    update_state(state).map_err(|err| err.message)?;
+    update_state(state)?;
     Ok(history)
 }
 
@@ -734,6 +714,6 @@ pub async fn set_execution_record_snapshot(
     }
 
     let history = state.execution_history.clone();
-    update_state(state).map_err(|err| err.message)?;
+    update_state(state)?;
     Ok(history)
 }
