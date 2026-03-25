@@ -6,21 +6,16 @@ import {
   type Dispatch,
   type SetStateAction,
 } from "react";
-import { toast } from "sonner";
 
-import { mapImportedSpecByProvider } from "@/lib/commandImportMapping";
 import {
-  deleteProfile,
   getProfiles,
-  saveProfile,
-  updateProfile,
   type ConfigProfile,
   type PublishConfigStore,
 } from "@/lib/store";
 import type { Language } from "@/hooks/useI18n";
 import type { ParameterSchema, ParameterValue } from "@/types/parameters";
 
-const loadInvokeErrors = () => import("@/lib/tauri/invokeErrors");
+const loadProfilesRuntime = () => import("@/hooks/useProfiles.runtime");
 
 interface TranslationMap {
   [key: string]: string | undefined;
@@ -284,37 +279,17 @@ export function useProfiles({
   );
 
   const applyProfile = useCallback(
-    (profile: LoadableProfile) => {
-      const profileProviderId =
-        profile.providerId || profile.provider_id || activeProviderId;
-      const schema = providerSchemas[profileProviderId];
-      const mapping = mapImportedSpecByProvider(
-        {
-          providerId: profileProviderId,
-          parameters: profile.parameters || {},
-        },
-        profileProviderId,
-        {
-          supportedKeys: schema ? Object.keys(schema.parameters) : undefined,
-        }
-      );
-
-      if (profileProviderId !== activeProviderId) {
-        setActiveProviderId(profileProviderId);
-      }
-
-      if (mapping.providerId === "dotnet") {
-        handleCustomConfigUpdate(mapping.dotnetUpdates);
-        setIsCustomMode(true);
-      } else {
-        setProviderParameters((prev) => ({
-          ...prev,
-          [mapping.providerId]: mapping.providerParameters,
-        }));
-      }
-
-      toast.success(appT.profileLoaded || "配置文件已加载", {
-        description: `${appT.loadedProfile || "已加载配置文件"}: ${profile.name}`,
+    async (profile: LoadableProfile) => {
+      const { applyProfileRuntime } = await loadProfilesRuntime();
+      await applyProfileRuntime({
+        profile,
+        activeProviderId,
+        providerSchemas,
+        setActiveProviderId,
+        setIsCustomMode,
+        setProviderParameters,
+        handleCustomConfigUpdate,
+        appT,
       });
     },
     [
@@ -338,110 +313,32 @@ export function useProfiles({
   );
 
   const handleSelectProfileFromPanel = useCallback(
-    (profile: ConfigProfile) => {
+    async (profile: ConfigProfile) => {
       setActiveProfileName(profile.name);
-      applyProfile(profile);
+      await applyProfile(profile);
     },
     [applyProfile]
   );
 
   const handleQuickCreateProfileSave = useCallback(async () => {
-    if (!selectedRepoId) {
-      return;
-    }
-
-    const profileName = quickCreateProfileName.trim();
-    if (!profileName) {
-      toast.error(profileT.enterProfileName || "请输入配置文件名称");
-      return;
-    }
-
-    const resolvedProfileGroup =
-      quickCreateProfileGroup === QUICK_CREATE_PROFILE_GROUP_DEFAULT
-        ? ""
-        : quickCreateProfileGroup === QUICK_CREATE_PROFILE_GROUP_CUSTOM
-          ? quickCreateProfileCustomGroup.trim()
-          : quickCreateProfileGroup.trim();
-
-    if (
-      quickCreateProfileGroup === QUICK_CREATE_PROFILE_GROUP_CUSTOM &&
-      !resolvedProfileGroup
-    ) {
-      toast.error(profileT.enterProfileGroup || "请输入发布配置组名称");
-      return;
-    }
-
-    if (quickCreateProfileSaving) {
-      return;
-    }
-
-    setQuickCreateProfileSaving(true);
-
-    try {
-      const parameters = buildProfileParameters(quickCreateProfileDraft);
-      const isEditing = Boolean(editingProfileOriginalName);
-      const nextProfileKey = `userprofile:${profileName}`;
-
-      if (editingProfileOriginalName) {
-        await updateProfile({
-          repoId: selectedRepoId,
-          originalName: editingProfileOriginalName,
-          name: profileName,
-          providerId: "dotnet",
-          parameters,
-          profileGroup: resolvedProfileGroup || undefined,
-        });
-      } else {
-        await saveProfile({
-          repoId: selectedRepoId,
-          name: profileName,
-          providerId: "dotnet",
-          parameters,
-          profileGroup: resolvedProfileGroup || undefined,
-        });
-      }
-
-      await loadProfiles();
-
-      handleSelectProfileFromPanel({
-        name: profileName,
-        providerId: "dotnet",
-        parameters,
-        profileGroup: resolvedProfileGroup || undefined,
-        createdAt: new Date().toISOString(),
-        isSystemDefault: false,
-      });
-      if (
-        editingProfileOriginalName &&
-        editingProfileOriginalName !== profileName
-      ) {
-        replaceScopedConfigKey(
-          `userprofile:${editingProfileOriginalName}`,
-          nextProfileKey,
-          selectedRepoId
-        );
-      } else {
-        pushRecentConfig(nextProfileKey);
-      }
-
-      toast.success(
-        isEditing
-          ? profileT.quickEditSuccess || "配置文件更新成功"
-          : profileT.saveSuccess || "配置文件保存成功"
-      );
-      handleQuickCreateProfileOpenChange(false);
-    } catch (err) {
-      const { extractInvokeErrorMessage } = await loadInvokeErrors();
-      console.error("保存配置文件失败:", err);
-      toast.error(
-        extractInvokeErrorMessage(err) ||
-          (editingProfileOriginalName
-            ? profileT.quickEditFailed || "更新配置文件失败"
-            : profileT.saveFailed || "保存配置文件失败")
-      );
-    } finally {
-      setQuickCreateProfileSaving(false);
-    }
+    const { handleQuickCreateProfileSaveRuntime } = await loadProfilesRuntime();
+    await handleQuickCreateProfileSaveRuntime({
+      selectedRepoId,
+      quickCreateProfileName,
+      quickCreateProfileGroup,
+      quickCreateProfileCustomGroup,
+      quickCreateProfileSaving,
+      quickCreateProfileDraft,
+      editingProfileOriginalName,
+      buildProfileParameters,
+      loadProfiles,
+      handleSelectProfileFromPanel,
+      replaceScopedConfigKey,
+      pushRecentConfig,
+      profileT,
+      handleQuickCreateProfileOpenChange,
+      setQuickCreateProfileSaving,
+    });
   }, [
     buildProfileParameters,
     editingProfileOriginalName,
@@ -461,23 +358,19 @@ export function useProfiles({
 
   const handleDeleteProfileFromPanel = useCallback(
     async (name: string) => {
-      if (!selectedRepoId) {
-        return;
-      }
-
-      try {
-        await deleteProfile(selectedRepoId, name);
-        await loadProfiles();
-        if (activeProfileName === name) {
-          setActiveProfileName(null);
-          if (isCustomMode) {
-            setIsCustomMode(false);
-            setSelectedPreset(defaultPresetId);
-          }
-        }
-      } catch (err) {
-        console.error("删除配置文件失败:", err);
-      }
+      const { handleDeleteProfileFromPanelRuntime } =
+        await loadProfilesRuntime();
+      await handleDeleteProfileFromPanelRuntime({
+        selectedRepoId,
+        name,
+        loadProfiles,
+        activeProfileName,
+        setActiveProfileName,
+        isCustomMode,
+        setIsCustomMode,
+        setSelectedPreset,
+        defaultPresetId,
+      });
     },
     [
       activeProfileName,
@@ -491,8 +384,8 @@ export function useProfiles({
   );
 
   const handleLoadProfile = useCallback(
-    (profile: LoadableProfile) => {
-      applyProfile(profile);
+    async (profile: LoadableProfile) => {
+      await applyProfile(profile);
     },
     [applyProfile]
   );
