@@ -5,6 +5,7 @@ use serde::Serialize;
 #[serde(rename_all = "snake_case")]
 pub enum ErrorKind {
     Unknown,
+    Validation,
     UnsupportedProvider,
     UnsupportedSpecVersion,
     RenderError,
@@ -33,6 +34,24 @@ impl AppError {
     pub fn unknown_with_code(message: impl Into<String>, code: impl Into<String>) -> Self {
         Self {
             kind: ErrorKind::Unknown,
+            message: message.into(),
+            details: None,
+            code: Some(code.into()),
+        }
+    }
+
+    pub fn validation(message: impl Into<String>) -> Self {
+        Self {
+            kind: ErrorKind::Validation,
+            message: message.into(),
+            details: None,
+            code: None,
+        }
+    }
+
+    pub fn validation_with_code(message: impl Into<String>, code: impl Into<String>) -> Self {
+        Self {
+            kind: ErrorKind::Validation,
             message: message.into(),
             details: None,
             code: Some(code.into()),

@@ -16,7 +16,10 @@ pub async fn apply_fix(action: FixAction) -> Result<FixResult, crate::errors::Ap
     match action.action_type {
         FixType::OpenUrl => {
             let url = action.url.ok_or_else(|| {
-                crate::errors::AppError::unknown("URL is required for OpenUrl fix")
+                crate::errors::AppError::validation_with_code(
+                    "URL is required for OpenUrl fix",
+                    "missing_fix_url",
+                )
             })?;
             open::that(&url).map_err(|e| {
                 crate::errors::AppError::unknown(format!("failed to open URL: {}", e))
@@ -25,7 +28,10 @@ pub async fn apply_fix(action: FixAction) -> Result<FixResult, crate::errors::Ap
         }
         FixType::RunCommand => {
             let command_str = action.command.ok_or_else(|| {
-                crate::errors::AppError::unknown("Command is required for RunCommand fix")
+                crate::errors::AppError::validation_with_code(
+                    "Command is required for RunCommand fix",
+                    "missing_fix_command",
+                )
             })?;
             let (program, args) = validate_and_parse_fix_command(&command_str)?;
             log::info!("Applying fix via command: {} {}", program, args.join(" "));
@@ -47,7 +53,10 @@ pub async fn apply_fix(action: FixAction) -> Result<FixResult, crate::errors::Ap
         }
         FixType::CopyCommand => {
             let command_str = action.command.ok_or_else(|| {
-                crate::errors::AppError::unknown("Command is required for CopyCommand fix")
+                crate::errors::AppError::validation_with_code(
+                    "Command is required for CopyCommand fix",
+                    "missing_fix_command",
+                )
             })?;
             Ok(FixResult::CopiedToClipboard(command_str))
         }
@@ -60,7 +69,10 @@ fn validate_and_parse_fix_command(
 ) -> Result<(String, Vec<String>), crate::errors::AppError> {
     let trimmed = command_str.trim();
     if trimmed.is_empty() {
-        return Err(crate::errors::AppError::unknown("command is empty"));
+        return Err(crate::errors::AppError::validation_with_code(
+            "command is empty",
+            "empty_fix_command",
+        ));
     }
     if trimmed.contains('\n')
         || trimmed.contains('\r')
@@ -70,51 +82,60 @@ fn validate_and_parse_fix_command(
         || trimmed.contains('>')
         || trimmed.contains('<')
     {
-        return Err(crate::errors::AppError::unknown(
+        return Err(crate::errors::AppError::validation_with_code(
             "unsupported command: contains unsafe shell characters",
+            "unsafe_fix_command",
         ));
     }
     if trimmed.contains('"') || trimmed.contains('\'') {
-        return Err(crate::errors::AppError::unknown(
+        return Err(crate::errors::AppError::validation_with_code(
             "unsupported command: quoting is not allowed",
+            "quoted_fix_command",
         ));
     }
     let parts: Vec<&str> = trimmed.split_whitespace().collect();
     let Some((program, args)) = parts.split_first() else {
-        return Err(crate::errors::AppError::unknown("command is empty"));
+        return Err(crate::errors::AppError::validation_with_code(
+            "command is empty",
+            "empty_fix_command",
+        ));
     };
     if *program == "sudo" {
-        return Err(crate::errors::AppError::unknown(
+        return Err(crate::errors::AppError::validation_with_code(
             "unsupported command: sudo is not allowed",
+            "sudo_fix_command",
         ));
     }
     match *program {
         "brew" => {
             if args.first() != Some(&"install") {
-                return Err(crate::errors::AppError::unknown(
+                return Err(crate::errors::AppError::validation_with_code(
                     "unsupported brew command (only `brew install ...` is allowed)",
+                    "unsupported_brew_fix_command",
                 ));
             }
         }
         "winget" => {
             if args.first() != Some(&"install") {
-                return Err(crate::errors::AppError::unknown(
+                return Err(crate::errors::AppError::validation_with_code(
                     "unsupported winget command (only `winget install ...` is allowed)",
+                    "unsupported_winget_fix_command",
                 ));
             }
         }
         "rustup" => {
             if args.first() != Some(&"update") {
-                return Err(crate::errors::AppError::unknown(
+                return Err(crate::errors::AppError::validation_with_code(
                     "unsupported rustup command (only `rustup update` is allowed)",
+                    "unsupported_rustup_fix_command",
                 ));
             }
         }
         _ => {
-            return Err(crate::errors::AppError::unknown(format!(
-                "unsupported command: `{}` is not allowed",
-                program
-            )));
+            return Err(crate::errors::AppError::validation_with_code(
+                format!("unsupported command: `{}` is not allowed", program),
+                "unsupported_fix_command",
+            ));
         }
     }
     Ok((
