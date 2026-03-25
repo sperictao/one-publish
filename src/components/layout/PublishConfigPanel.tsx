@@ -1,4 +1,16 @@
-import { useState, useMemo } from "react";
+import {
+  startTransition,
+  Suspense,
+  lazy,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type CSSProperties,
+  type MutableRefObject,
+  type PointerEvent as ReactPointerEvent,
+} from "react";
 import { cn } from "@/lib/utils";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -18,7 +30,14 @@ import {
 } from "lucide-react";
 import type { ConfigProfile } from "@/lib/store";
 import { useI18n } from "@/hooks/useI18n";
-import { useFloatingConfigCard } from "@/components/layout/useFloatingConfigCard";
+import type { PublishConfigFloatingBindings } from "@/components/layout/PublishConfigPanelFloatingLayer";
+
+const PublishConfigPanelFloatingLayer = lazy(async () => {
+  const mod = await import("@/components/layout/PublishConfigPanelFloatingLayer");
+  return { default: mod.PublishConfigPanelFloatingLayer };
+});
+
+const EMPTY_FLOATING_STYLE: CSSProperties = {};
 
 // Collapse toggle icon (reused from BranchPanel)
 function CollapseIcon() {
@@ -261,10 +280,13 @@ export function PublishConfigPanel({
 }: PublishConfigPanelProps) {
   const [searchQuery, setSearchQuery] = useState("");
   const [preferredSelectedRenderId, setPreferredSelectedRenderId] = useState<string | null>(null);
+  const [floatingEnhancerEnabled, setFloatingEnhancerEnabled] = useState(false);
   const { translations } = useI18n();
   const t = translations.configPanel || {};
   const headerButtonClass =
     "h-7 w-9 rounded-full p-0 text-muted-foreground/60 hover:bg-black/[0.045] hover:text-foreground hover:shadow-[inset_0_1px_0_rgba(255,255,255,0.72),0_1px_2px_rgba(15,23,42,0.06)] dark:hover:bg-white/[0.06] dark:hover:shadow-[inset_0_1px_0_rgba(255,255,255,0.08)]";
+  const fallbackListRef = useRef<HTMLDivElement | null>(null);
+  const fallbackFloatingCardSurfaceRef = useRef<HTMLDivElement | null>(null);
 
   const query = searchQuery.toLowerCase();
   const favoriteSet = useMemo(
@@ -412,25 +434,291 @@ export function PublishConfigPanel({
     return selectedConfigId;
   }, [allConfigIds, preferredSelectedRenderId, selectedConfigId]);
 
-  const {
-    listRef,
-    floatingCardSurfaceRef,
-    cardTargetRepoId: cardTargetConfigId,
-    floatingVisible,
-    floatingCardMotionStyle,
-    floatingCardSurfaceStyle,
-    setRepoRowRef: setConfigRowRef,
-    handleRepoMouseEnter: handleConfigMouseEnter,
-    handleListPointerMove,
-    handleListPointerEnter,
-    handleListMouseLeave,
-    handleListScroll,
-  } = useFloatingConfigCard({
-    filteredRepoIds: allConfigIds,
-    selectedRepoId: selectedRenderId,
-    enablePointerFollow: true,
-    preserveHoverOnGap: true,
-  });
+  useEffect(() => {
+    if (floatingEnhancerEnabled) {
+      return;
+    }
+
+    const timerId = window.setTimeout(() => {
+      startTransition(() => {
+        setFloatingEnhancerEnabled(true);
+      });
+    }, 0);
+
+    return () => {
+      window.clearTimeout(timerId);
+    };
+  }, [floatingEnhancerEnabled]);
+
+  const createFallbackRowRef = useCallback(
+    (_configId: string) => (_node: HTMLDivElement | null) => {},
+    []
+  );
+  const noopPointerHandler = useCallback(
+    (_event: ReactPointerEvent<HTMLDivElement>) => {},
+    []
+  );
+  const noopHoverHandler = useCallback((_configId: string) => {}, []);
+  const noopVoidHandler = useCallback(() => {}, []);
+
+  const fallbackFloatingBindings = useMemo<PublishConfigFloatingBindings>(
+    () => ({
+      listRef: fallbackListRef as MutableRefObject<HTMLDivElement | null>,
+      floatingCardSurfaceRef:
+        fallbackFloatingCardSurfaceRef as MutableRefObject<HTMLDivElement | null>,
+      cardTargetConfigId: null,
+      floatingVisible: false,
+      floatingCardMotionStyle: EMPTY_FLOATING_STYLE,
+      floatingCardSurfaceStyle: EMPTY_FLOATING_STYLE,
+      setConfigRowRef: createFallbackRowRef,
+      handleConfigMouseEnter: noopHoverHandler,
+      handleListPointerMove: noopPointerHandler,
+      handleListPointerEnter: noopPointerHandler,
+      handleListMouseLeave: noopVoidHandler,
+      handleListScroll: noopVoidHandler,
+    }),
+    [
+      createFallbackRowRef,
+      noopHoverHandler,
+      noopPointerHandler,
+      noopVoidHandler,
+    ]
+  );
+
+  const renderConfigList = useCallback(
+    (floating: PublishConfigFloatingBindings) => (
+      <div
+        ref={floating.listRef}
+        className="repo-list-scroll scrollbar-fade glass-scrollbar relative flex-1 overflow-auto px-2.5 py-2"
+        onPointerEnter={floating.handleListPointerEnter}
+        onPointerMove={floating.handleListPointerMove}
+        onMouseLeave={floating.handleListMouseLeave}
+        onScroll={floating.handleListScroll}
+      >
+        <div
+          aria-hidden
+          className={cn(
+            "pointer-events-none !absolute z-0 origin-top-left transition-opacity duration-120 ease-linear",
+            floating.floatingVisible ? "opacity-100" : "opacity-0"
+          )}
+          style={floating.floatingCardMotionStyle}
+        >
+          <div
+            ref={floating.floatingCardSurfaceRef}
+            data-selected={floating.cardTargetConfigId === selectedRenderId ? "true" : "false"}
+            className="repo-floating-card h-full w-full transition-[box-shadow] duration-320 ease-[cubic-bezier(0.16,1,0.3,1)]"
+            style={floating.floatingCardSurfaceStyle}
+          />
+        </div>
+        <div className="glass-stagger">
+          {!query && recentItems.length > 0 && (
+            <div className="space-y-1.5">
+              <div className="flex items-center gap-1.5 px-3 py-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                <Clock className="h-3.5 w-3.5" />
+                <span>{t.recentlyUsed || "最近使用"}</span>
+              </div>
+              {recentItems.map((item) => (
+                <div
+                  key={`recent-${item.key}`}
+                  ref={floating.setConfigRowRef(`recent:${item.key}`)}
+                  role="button"
+                  tabIndex={0}
+                  aria-pressed={item.key === selectedConfigId}
+                  data-repo-row="true"
+                  data-repo-id={`recent:${item.key}`}
+                  className="group relative z-10 flex w-full cursor-pointer items-center gap-2.5 rounded-2xl border border-transparent bg-transparent px-3 py-2 text-left shadow-none outline-none transition-all duration-300 hover:bg-[var(--glass-bg)]/20 focus-visible:ring-2 focus-visible:ring-primary/30 focus-visible:ring-offset-1 focus-visible:ring-offset-background"
+                  onClick={() => {
+                    setPreferredSelectedRenderId(`recent:${item.key}`);
+                    item.onClick();
+                  }}
+                  onMouseEnter={() => floating.handleConfigMouseEnter(`recent:${item.key}`)}
+                  onFocus={() => floating.handleConfigMouseEnter(`recent:${item.key}`)}
+                >
+                  <span
+                    className={cn(
+                      "flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-[14px] transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]",
+                      selectedRenderId === `recent:${item.key}`
+                        ? "scale-105 bg-primary/10 shadow-[0_0_18px_hsl(var(--primary)/0.24)]"
+                        : "bg-[var(--glass-icon-bg)] shadow-[var(--glass-icon-highlight)] group-hover:scale-105 group-hover:bg-primary/8"
+                    )}
+                  >
+                    <FileText
+                      className={cn(
+                        "h-4 w-4 transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]",
+                        selectedRenderId === `recent:${item.key}`
+                          ? "scale-110 text-primary drop-shadow-[0_0_4px_hsl(var(--primary)/0.3)]"
+                          : "text-muted-foreground/60 group-hover:text-primary group-hover:drop-shadow-[0_0_3px_hsl(var(--primary)/0.15)]"
+                      )}
+                    />
+                  </span>
+                  <div className="min-w-0 flex flex-1 items-center gap-2 overflow-hidden">
+                    <span
+                      className={cn(
+                        "truncate text-[13px] font-medium tracking-tight transition-colors duration-300",
+                        selectedRenderId === `recent:${item.key}`
+                          ? "text-foreground"
+                          : "text-foreground/78"
+                      )}
+                    >
+                      {item.name}
+                    </span>
+                    {item.description ? (
+                      <>
+                        <span className="flex-shrink-0 text-muted-foreground/30">·</span>
+                        <span className="truncate text-[11px] text-muted-foreground/55">
+                          {item.description}
+                        </span>
+                      </>
+                    ) : null}
+                  </div>
+                  <div className="flex flex-shrink-0 items-center gap-0.5 opacity-0 transition-all duration-300 group-hover:opacity-70 group-focus-within:opacity-70">
+                    <FavoriteButton
+                      isFavorite={favoriteSet.has(item.key)}
+                      onToggle={() => onToggleFavoriteConfig(item.key)}
+                    />
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-6 w-6 flex-shrink-0"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onRemoveRecentConfig(item.key);
+                      }}
+                      title={t.removeRecent || "从最近使用移除"}
+                    >
+                      <X className="h-3.5 w-3.5 text-muted-foreground" />
+                    </Button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          <ConfigGroup
+            title={t.profileGroup || "项目发布配置"}
+            count={filteredProjectProfiles.length}
+            defaultExpanded={true}
+            visible={hasProjectProfiles && filteredProjectProfiles.length > 0}
+          >
+            {filteredProjectProfiles.map((name) => {
+              const configKey = `pubxml:${name}`;
+              const isPubxmlSelected = selectedRenderId === configKey;
+              return (
+                <div
+                  key={`pubxml-${name}`}
+                  ref={floating.setConfigRowRef(configKey)}
+                  role="button"
+                  tabIndex={0}
+                  aria-pressed={isPubxmlSelected}
+                  data-repo-row="true"
+                  data-repo-id={configKey}
+                  className="group relative z-10 flex w-full cursor-pointer items-center gap-2.5 rounded-2xl border border-transparent bg-transparent px-3 py-2 text-left shadow-none outline-none transition-all duration-300 hover:bg-[var(--glass-bg)]/20 focus-visible:ring-2 focus-visible:ring-primary/30 focus-visible:ring-offset-1 focus-visible:ring-offset-background"
+                  onClick={() => {
+                    setPreferredSelectedRenderId(configKey);
+                    onSelectProjectProfile(name);
+                  }}
+                  onMouseEnter={() => floating.handleConfigMouseEnter(configKey)}
+                  onFocus={() => floating.handleConfigMouseEnter(configKey)}
+                >
+                  <span
+                    className={cn(
+                      "flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-[14px] transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]",
+                      isPubxmlSelected
+                        ? "scale-105 bg-primary/10 shadow-[0_0_18px_hsl(var(--primary)/0.24)]"
+                        : "bg-[var(--glass-icon-bg)] shadow-[var(--glass-icon-highlight)] group-hover:scale-105 group-hover:bg-primary/8"
+                    )}
+                  >
+                    <FileText
+                      className={cn(
+                        "h-4 w-4 transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]",
+                        isPubxmlSelected
+                          ? "scale-110 text-primary drop-shadow-[0_0_4px_hsl(var(--primary)/0.3)]"
+                          : "text-muted-foreground/60 group-hover:text-primary group-hover:drop-shadow-[0_0_3px_hsl(var(--primary)/0.15)]"
+                      )}
+                    />
+                  </span>
+                  <div className="min-w-0 flex flex-1 items-center gap-2 overflow-hidden">
+                    <span
+                      className={cn(
+                        "truncate text-[13px] font-medium tracking-tight transition-colors duration-300",
+                        isPubxmlSelected ? "text-foreground" : "text-foreground/78"
+                      )}
+                    >
+                      {name}
+                    </span>
+                  </div>
+                  <div className="flex flex-shrink-0 items-center gap-0.5 opacity-0 transition-all duration-300 group-hover:opacity-70 group-focus-within:opacity-70">
+                    <FavoriteButton
+                      isFavorite={favoriteSet.has(configKey)}
+                      onToggle={() => onToggleFavoriteConfig(configKey)}
+                    />
+                  </div>
+                </div>
+              );
+            })}
+          </ConfigGroup>
+
+          {groupedFilteredProfiles.map((group) => (
+            <ConfigGroup
+              key={`userprofile-group-${group.groupName}`}
+              title={group.groupName}
+              count={group.items.length}
+              defaultExpanded={true}
+              visible={true}
+            >
+              {group.items.map((profile) => (
+                <ProfileItem
+                  key={profile.name}
+                  profile={profile}
+                  configKey={`userprofile:${profile.name}`}
+                  configId={`userprofile:${profile.name}`}
+                  isSelected={
+                    selectedRenderId === `userprofile:${profile.name}`
+                  }
+                  isFavorite={favoriteSet.has(`userprofile:${profile.name}`)}
+                  onClick={() => {
+                    setPreferredSelectedRenderId(`userprofile:${profile.name}`);
+                    onSelectProfile(profile);
+                  }}
+                  onToggleFavorite={onToggleFavoriteConfig}
+                  onEdit={() => onEditProfile(profile)}
+                  canEdit={!profile.isSystemDefault && profile.providerId === "dotnet"}
+                  editTitle={t.editConfig || "编辑配置"}
+                  onDelete={() => onDeleteProfile(profile.name)}
+                  rowRef={floating.setConfigRowRef(`userprofile:${profile.name}`)}
+                  onItemMouseEnter={() => floating.handleConfigMouseEnter(`userprofile:${profile.name}`)}
+                />
+              ))}
+            </ConfigGroup>
+          ))}
+          {filteredProfiles.length === 0 && (
+            <div className="px-3 py-4 text-center text-xs text-muted-foreground">
+              {t.noProfiles || "暂无自定义配置"}
+            </div>
+          )}
+        </div>
+      </div>
+    ),
+    [
+      allConfigIds,
+      favoriteSet,
+      filteredProfiles.length,
+      filteredProjectProfiles,
+      groupedFilteredProfiles,
+      hasProjectProfiles,
+      onDeleteProfile,
+      onEditProfile,
+      onRemoveRecentConfig,
+      onSelectProfile,
+      onSelectProjectProfile,
+      onToggleFavoriteConfig,
+      query,
+      recentItems,
+      selectedConfigId,
+      selectedRenderId,
+      t,
+    ]
+  );
 
   return (
     <div className="flex h-full flex-col">
@@ -524,222 +812,18 @@ export function PublishConfigPanel({
         </div>
       </div>
 
-      {/* Config List */}
-      <div
-        ref={listRef}
-        className="repo-list-scroll scrollbar-fade glass-scrollbar relative flex-1 overflow-auto px-2.5 py-2"
-        onPointerEnter={handleListPointerEnter}
-        onPointerMove={handleListPointerMove}
-        onMouseLeave={handleListMouseLeave}
-        onScroll={handleListScroll}
-      >
-        <div
-          aria-hidden
-          className={cn(
-            "pointer-events-none !absolute z-0 origin-top-left transition-opacity duration-120 ease-linear",
-            floatingVisible ? "opacity-100" : "opacity-0"
-          )}
-          style={floatingCardMotionStyle}
-        >
-          <div
-            ref={floatingCardSurfaceRef}
-            data-selected={cardTargetConfigId === selectedRenderId ? "true" : "false"}
-            className="repo-floating-card h-full w-full transition-[box-shadow] duration-320 ease-[cubic-bezier(0.16,1,0.3,1)]"
-            style={floatingCardSurfaceStyle}
-          />
-        </div>
-        <div className="glass-stagger">
-          {/* Recently Used (non-collapsible, only when not searching) */}
-          {!query && recentItems.length > 0 && (
-            <div className="space-y-1.5">
-              <div className="flex items-center gap-1.5 px-3 py-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                <Clock className="h-3.5 w-3.5" />
-                <span>{t.recentlyUsed || "最近使用"}</span>
-              </div>
-              {recentItems.map((item) => (
-                <div
-                  key={`recent-${item.key}`}
-                  ref={setConfigRowRef(`recent:${item.key}`)}
-                  role="button"
-                  tabIndex={0}
-                  aria-pressed={item.key === selectedConfigId}
-                  data-repo-row="true"
-                  data-repo-id={`recent:${item.key}`}
-                  className="group relative z-10 flex w-full cursor-pointer items-center gap-2.5 rounded-2xl border border-transparent bg-transparent px-3 py-2 text-left shadow-none outline-none transition-all duration-300 hover:bg-[var(--glass-bg)]/20 focus-visible:ring-2 focus-visible:ring-primary/30 focus-visible:ring-offset-1 focus-visible:ring-offset-background"
-                  onClick={() => {
-                    setPreferredSelectedRenderId(`recent:${item.key}`);
-                    item.onClick();
-                  }}
-                  onMouseEnter={() => handleConfigMouseEnter(`recent:${item.key}`)}
-                  onFocus={() => handleConfigMouseEnter(`recent:${item.key}`)}
-                >
-                  <span
-                    className={cn(
-                      "flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-[14px] transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]",
-                      selectedRenderId === `recent:${item.key}`
-                        ? "scale-105 bg-primary/10 shadow-[0_0_18px_hsl(var(--primary)/0.24)]"
-                        : "bg-[var(--glass-icon-bg)] shadow-[var(--glass-icon-highlight)] group-hover:scale-105 group-hover:bg-primary/8"
-                    )}
-                  >
-                    <FileText
-                      className={cn(
-                        "h-4 w-4 transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]",
-                        selectedRenderId === `recent:${item.key}`
-                          ? "scale-110 text-primary drop-shadow-[0_0_4px_hsl(var(--primary)/0.3)]"
-                          : "text-muted-foreground/60 group-hover:text-primary group-hover:drop-shadow-[0_0_3px_hsl(var(--primary)/0.15)]"
-                      )}
-                    />
-                  </span>
-                  <div className="min-w-0 flex flex-1 items-center gap-2 overflow-hidden">
-                    <span
-                      className={cn(
-                        "truncate text-[13px] font-medium tracking-tight transition-colors duration-300",
-                        selectedRenderId === `recent:${item.key}`
-                          ? "text-foreground"
-                          : "text-foreground/78"
-                      )}
-                    >
-                      {item.name}
-                    </span>
-                    {item.description ? (
-                      <>
-                        <span className="flex-shrink-0 text-muted-foreground/30">·</span>
-                        <span className="truncate text-[11px] text-muted-foreground/55">
-                          {item.description}
-                        </span>
-                      </>
-                    ) : null}
-                  </div>
-                  <div className="flex flex-shrink-0 items-center gap-0.5 opacity-0 transition-all duration-300 group-hover:opacity-70 group-focus-within:opacity-70">
-                    <FavoriteButton
-                      isFavorite={favoriteSet.has(item.key)}
-                      onToggle={() => onToggleFavoriteConfig(item.key)}
-                    />
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-6 w-6 flex-shrink-0"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        onRemoveRecentConfig(item.key);
-                      }}
-                      title={t.removeRecent || "从最近使用移除"}
-                    >
-                      <X className="h-3.5 w-3.5 text-muted-foreground" />
-                    </Button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-
-          {/* Project profiles group (.pubxml only) */}
-          <ConfigGroup
-            title={t.profileGroup || "项目发布配置"}
-            count={filteredProjectProfiles.length}
-            defaultExpanded={true}
-            visible={hasProjectProfiles && filteredProjectProfiles.length > 0}
+      {!floatingEnhancerEnabled ? (
+        renderConfigList(fallbackFloatingBindings)
+      ) : (
+        <Suspense fallback={renderConfigList(fallbackFloatingBindings)}>
+          <PublishConfigPanelFloatingLayer
+            allConfigIds={allConfigIds}
+            selectedRenderId={selectedRenderId}
           >
-            {/* .pubxml project publish profiles */}
-            {filteredProjectProfiles.map((name) => {
-              const configKey = `pubxml:${name}`;
-              const isPubxmlSelected = selectedRenderId === configKey;
-              return (
-                <div
-                  key={`pubxml-${name}`}
-                  ref={setConfigRowRef(configKey)}
-                  role="button"
-                  tabIndex={0}
-                  aria-pressed={isPubxmlSelected}
-                  data-repo-row="true"
-                  data-repo-id={configKey}
-                  className="group relative z-10 flex w-full cursor-pointer items-center gap-2.5 rounded-2xl border border-transparent bg-transparent px-3 py-2 text-left shadow-none outline-none transition-all duration-300 hover:bg-[var(--glass-bg)]/20 focus-visible:ring-2 focus-visible:ring-primary/30 focus-visible:ring-offset-1 focus-visible:ring-offset-background"
-                  onClick={() => {
-                    setPreferredSelectedRenderId(configKey);
-                    onSelectProjectProfile(name);
-                  }}
-                  onMouseEnter={() => handleConfigMouseEnter(configKey)}
-                  onFocus={() => handleConfigMouseEnter(configKey)}
-                >
-                  <span
-                    className={cn(
-                      "flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-[14px] transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]",
-                      isPubxmlSelected
-                        ? "scale-105 bg-primary/10 shadow-[0_0_18px_hsl(var(--primary)/0.24)]"
-                        : "bg-[var(--glass-icon-bg)] shadow-[var(--glass-icon-highlight)] group-hover:scale-105 group-hover:bg-primary/8"
-                    )}
-                  >
-                    <FileText
-                      className={cn(
-                        "h-4 w-4 transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]",
-                        isPubxmlSelected
-                          ? "scale-110 text-primary drop-shadow-[0_0_4px_hsl(var(--primary)/0.3)]"
-                          : "text-muted-foreground/60 group-hover:text-primary group-hover:drop-shadow-[0_0_3px_hsl(var(--primary)/0.15)]"
-                      )}
-                    />
-                  </span>
-                  <div className="min-w-0 flex flex-1 items-center gap-2 overflow-hidden">
-                    <span
-                      className={cn(
-                        "truncate text-[13px] font-medium tracking-tight transition-colors duration-300",
-                        isPubxmlSelected ? "text-foreground" : "text-foreground/78"
-                      )}
-                    >
-                      {name}
-                    </span>
-                  </div>
-                  <div className="flex flex-shrink-0 items-center gap-0.5 opacity-0 transition-all duration-300 group-hover:opacity-70 group-focus-within:opacity-70">
-                    <FavoriteButton
-                      isFavorite={favoriteSet.has(configKey)}
-                      onToggle={() => onToggleFavoriteConfig(configKey)}
-                    />
-                  </div>
-                </div>
-              );
-            })}
-          </ConfigGroup>
-
-          {/* User-saved ConfigProfile items (grouped by profileGroup) */}
-          {groupedFilteredProfiles.map((group) => (
-            <ConfigGroup
-              key={`userprofile-group-${group.groupName}`}
-              title={group.groupName}
-              count={group.items.length}
-              defaultExpanded={true}
-              visible={true}
-            >
-              {group.items.map((profile) => (
-                <ProfileItem
-                  key={profile.name}
-                  profile={profile}
-                  configKey={`userprofile:${profile.name}`}
-                  configId={`userprofile:${profile.name}`}
-                  isSelected={
-                    selectedRenderId === `userprofile:${profile.name}`
-                  }
-                  isFavorite={favoriteSet.has(`userprofile:${profile.name}`)}
-                  onClick={() => {
-                    setPreferredSelectedRenderId(`userprofile:${profile.name}`);
-                    onSelectProfile(profile);
-                  }}
-                  onToggleFavorite={onToggleFavoriteConfig}
-                  onEdit={() => onEditProfile(profile)}
-                  canEdit={!profile.isSystemDefault && profile.providerId === "dotnet"}
-                  editTitle={t.editConfig || "编辑配置"}
-                  onDelete={() => onDeleteProfile(profile.name)}
-                  rowRef={setConfigRowRef(`userprofile:${profile.name}`)}
-                  onItemMouseEnter={() => handleConfigMouseEnter(`userprofile:${profile.name}`)}
-                />
-              ))}
-            </ConfigGroup>
-          ))}
-          {filteredProfiles.length === 0 && (
-            <div className="px-3 py-4 text-center text-xs text-muted-foreground">
-              {t.noProfiles || "暂无自定义配置"}
-            </div>
-          )}
-        </div>
-      </div>
+            {renderConfigList}
+          </PublishConfigPanelFloatingLayer>
+        </Suspense>
+      )}
     </div>
   );
 }
