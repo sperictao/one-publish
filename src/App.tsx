@@ -31,7 +31,6 @@ import { useI18n, type Language } from "@/hooks/useI18n";
 
 // Layout Components
 import { RepositoryList } from "@/components/layout/RepositoryList";
-import { PublishConfigPanel } from "@/components/layout/PublishConfigPanel";
 import { PublishContentSection } from "@/components/layout/PublishContentSection";
 import { MainContentShell } from "@/components/layout/MainContentShell";
 import { ResizeHandle } from "@/components/layout/ResizeHandle";
@@ -62,6 +61,10 @@ const SPEC_VERSION = 1;
 const AppDialogsHost = lazy(async () => {
   const mod = await import("@/components/layout/AppDialogsHost");
   return { default: mod.AppDialogsHost };
+});
+const PublishConfigPanel = lazy(async () => {
+  const mod = await import("@/components/layout/PublishConfigPanel");
+  return { default: mod.PublishConfigPanel };
 });
 
 // Preset configurations
@@ -627,26 +630,28 @@ function App() {
           collapsed={middlePanelCollapsed}
           width={`${effectiveMiddlePanelWidth}px`}
         >
-          <PublishConfigPanel
-            selectedPreset={selectedPreset}
-            isCustomMode={isCustomMode}
-            profiles={profiles}
-            activeProfileName={activeProfileName}
-            onSelectProfile={handleSelectProfileFromPanel}
-            onCreateProfile={openQuickCreateProfileDialog}
-            onEditProfile={openQuickEditProfileDialog}
-            onRefreshProfiles={loadProfiles}
-            onDeleteProfile={handleDeleteProfileFromPanel}
-            projectPublishProfiles={projectInfo?.publish_profiles || []}
-            onSelectProjectProfile={handleSelectProjectProfile}
-            recentConfigKeys={recentConfigKeys}
-            favoriteConfigKeys={favoriteConfigKeys}
-            onToggleFavoriteConfig={toggleFavoriteConfig}
-            onRemoveRecentConfig={removeRecentConfig}
-            onCollapse={() => setMiddlePanelCollapsed(true)}
-            showExpandButton={leftPanelCollapsed}
-            onExpandRepo={() => setLeftPanelCollapsed(false)}
-          />
+          <Suspense fallback={<div className="flex h-full flex-col" />}>
+            <PublishConfigPanel
+              selectedPreset={selectedPreset}
+              isCustomMode={isCustomMode}
+              profiles={profiles}
+              activeProfileName={activeProfileName}
+              onSelectProfile={handleSelectProfileFromPanel}
+              onCreateProfile={openQuickCreateProfileDialog}
+              onEditProfile={openQuickEditProfileDialog}
+              onRefreshProfiles={loadProfiles}
+              onDeleteProfile={handleDeleteProfileFromPanel}
+              projectPublishProfiles={projectInfo?.publish_profiles || []}
+              onSelectProjectProfile={handleSelectProjectProfile}
+              recentConfigKeys={recentConfigKeys}
+              favoriteConfigKeys={favoriteConfigKeys}
+              onToggleFavoriteConfig={toggleFavoriteConfig}
+              onRemoveRecentConfig={removeRecentConfig}
+              onCollapse={() => setMiddlePanelCollapsed(true)}
+              showExpandButton={leftPanelCollapsed}
+              onExpandRepo={() => setLeftPanelCollapsed(false)}
+            />
+          </Suspense>
         </SidebarPanelShell>
 
         {/* Middle Resize Handle */}
