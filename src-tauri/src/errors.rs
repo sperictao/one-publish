@@ -1,5 +1,6 @@
 use crate::compiler::CompileError;
 use serde::Serialize;
+use std::fmt;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case")]
@@ -9,6 +10,7 @@ pub enum ErrorKind {
     Artifact,
     ExternalOpen,
     ExternalCommand,
+    Store,
     UnsupportedProvider,
     UnsupportedSpecVersion,
     RenderError,
@@ -89,6 +91,21 @@ impl AppError {
             details: None,
             code: Some(code.into()),
         }
+    }
+
+    pub fn store_with_code(message: impl Into<String>, code: impl Into<String>) -> Self {
+        Self {
+            kind: ErrorKind::Store,
+            message: message.into(),
+            details: None,
+            code: Some(code.into()),
+        }
+    }
+}
+
+impl fmt::Display for AppError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.message)
     }
 }
 
