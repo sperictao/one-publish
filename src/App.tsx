@@ -22,9 +22,10 @@ import {
   QUICK_CREATE_PROFILE_GROUP_CUSTOM,
   QUICK_CREATE_PROFILE_GROUP_DEFAULT,
 } from "@/hooks/useProfiles";
-import type { ImportFeedback } from "@/hooks/useCommandImport";
+import { useCommandImport } from "@/hooks/useCommandImport";
 import { useScopedConfigs } from "@/hooks/useScopedConfigs";
 import { useOutputLogCardProps } from "@/hooks/useOutputLogCardProps";
+import { useCommandImportResultCardProps } from "@/hooks/useCommandImportResultCardProps";
 import { useProviderRuntime } from "@/hooks/useProviderRuntime";
 import { useI18n, type Language } from "@/hooks/useI18n";
 
@@ -341,8 +342,15 @@ function App() {
     customConfig,
     setCustomConfig,
   });
-  const [lastImportFeedback, setLastImportFeedback] =
-    useState<ImportFeedback | null>(null);
+
+  const { activeImportFeedback, handleCommandImport } = useCommandImport({
+    activeProviderId,
+    appT,
+    providerSchemas,
+    onDotnetConfigUpdate: handleCustomConfigUpdate,
+    onEnableCustomMode: () => setIsCustomMode(true),
+    setProviderParameters,
+  });
 
   const profilesState = useProfiles({
     appT,
@@ -543,17 +551,11 @@ function App() {
         : null,
   });
 
-  const activeImportFeedback =
-    lastImportFeedback?.providerId === activeProviderId
-      ? lastImportFeedback
-      : null;
-  const commandImportResultCardProps = activeImportFeedback
-    ? {
-        activeImportFeedback,
-        providerLabel: activeProviderLabel,
-        appT,
-      }
-    : null;
+  const commandImportResultCardProps = useCommandImportResultCardProps({
+    activeImportFeedback,
+    providerLabel: activeProviderLabel,
+    appT,
+  });
 
   // Show loading state
   if (isStateLoading) {
@@ -746,11 +748,7 @@ function App() {
             selectedRepoExists={Boolean(selectedRepo)}
             commandImportOpen={commandImportOpen}
             setCommandImportOpen={setCommandImportOpen}
-            providerSchemas={providerSchemas}
-            onDotnetConfigUpdate={handleCustomConfigUpdate}
-            onEnableCustomMode={() => setIsCustomMode(true)}
-            setProviderParameters={setProviderParameters}
-            onCommandImportFeedbackChange={setLastImportFeedback}
+            handleCommandImport={handleCommandImport}
             quickCreateProfileOpen={quickCreateProfileOpen}
             quickCreateTemplateId={quickCreateTemplateId}
             quickCreateTemplateOptions={quickCreateTemplateOptions}
