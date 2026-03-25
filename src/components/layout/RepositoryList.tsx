@@ -1,10 +1,16 @@
 import {
+  startTransition,
   Suspense,
   lazy,
   useCallback,
+  useEffect,
   useMemo,
+  useRef,
   useState,
+  type CSSProperties,
   type KeyboardEvent as ReactKeyboardEvent,
+  type MutableRefObject,
+  type PointerEvent as ReactPointerEvent,
 } from "react";
 import { cn } from "@/lib/utils";
 import { Input } from "@/components/ui/input";
@@ -30,12 +36,18 @@ import {
 } from "lucide-react";
 import type { Branch, Repository } from "@/types/repository";
 import { useI18n } from "@/hooks/useI18n";
-import { useFloatingRepoCard } from "@/components/layout/useFloatingRepoCard";
+import type { RepositoryListFloatingBindings } from "@/components/layout/RepositoryListFloatingLayer";
 
 const EditRepositoryDialog = lazy(async () => {
   const mod = await import("@/components/layout/EditRepositoryDialog");
   return { default: mod.EditRepositoryDialog };
 });
+const RepositoryListFloatingLayer = lazy(async () => {
+  const mod = await import("@/components/layout/RepositoryListFloatingLayer");
+  return { default: mod.RepositoryListFloatingLayer };
+});
+
+const EMPTY_FLOATING_STYLE: CSSProperties = {};
 
 function CollapseIcon() {
   return (
@@ -108,8 +120,11 @@ export function RepositoryList({
   const [searchQuery, setSearchQuery] = useState("");
   const [filterExpanded, setFilterExpanded] = useState(true);
   const [editingRepo, setEditingRepo] = useState<Repository | null>(null);
+  const [floatingEnhancerEnabled, setFloatingEnhancerEnabled] = useState(false);
   const { translations } = useI18n();
   const repoT = translations.repositoryList || {};
+  const fallbackListRef = useRef<HTMLDivElement | null>(null);
+  const fallbackFloatingCardSurfaceRef = useRef<HTMLDivElement | null>(null);
 
   const filteredRepos = useMemo(
     () =>
@@ -126,23 +141,56 @@ export function RepositoryList({
     [filteredRepos]
   );
 
-  const {
-    listRef,
-    floatingCardSurfaceRef,
-    cardTargetRepoId,
-    floatingVisible,
-    floatingCardMotionStyle,
-    floatingCardSurfaceStyle,
-    setRepoRowRef,
-    handleRepoMouseEnter,
-    handleListPointerMove,
-    handleListPointerEnter,
-    handleListMouseLeave,
-    handleListScroll,
-  } = useFloatingRepoCard({
-    filteredRepoIds,
-    selectedRepoId,
-  });
+  useEffect(() => {
+    if (floatingEnhancerEnabled) {
+      return;
+    }
+
+    const timerId = window.setTimeout(() => {
+      startTransition(() => {
+        setFloatingEnhancerEnabled(true);
+      });
+    }, 0);
+
+    return () => {
+      window.clearTimeout(timerId);
+    };
+  }, [floatingEnhancerEnabled]);
+
+  const createFallbackRowRef = useCallback(
+    (_repoId: string) => (_node: HTMLDivElement | null) => {},
+    []
+  );
+  const noopPointerHandler = useCallback(
+    (_event: ReactPointerEvent<HTMLDivElement>) => {},
+    []
+  );
+  const noopHoverHandler = useCallback((_repoId: string) => {}, []);
+  const noopVoidHandler = useCallback(() => {}, []);
+
+  const fallbackFloatingBindings = useMemo<RepositoryListFloatingBindings>(
+    () => ({
+      listRef: fallbackListRef as MutableRefObject<HTMLDivElement | null>,
+      floatingCardSurfaceRef:
+        fallbackFloatingCardSurfaceRef as MutableRefObject<HTMLDivElement | null>,
+      cardTargetRepoId: null,
+      floatingVisible: false,
+      floatingCardMotionStyle: EMPTY_FLOATING_STYLE,
+      floatingCardSurfaceStyle: EMPTY_FLOATING_STYLE,
+      setRepoRowRef: createFallbackRowRef,
+      handleRepoMouseEnter: noopHoverHandler,
+      handleListPointerMove: noopPointerHandler,
+      handleListPointerEnter: noopPointerHandler,
+      handleListMouseLeave: noopVoidHandler,
+      handleListScroll: noopVoidHandler,
+    }),
+    [
+      createFallbackRowRef,
+      noopHoverHandler,
+      noopPointerHandler,
+      noopVoidHandler,
+    ]
+  );
 
   const handleRepoRowKeyDown = useCallback(
     (event: ReactKeyboardEvent<HTMLDivElement>, repoId: string) => {
@@ -170,279 +218,319 @@ export function RepositoryList({
     }
   }, []);
 
-  return (
-    <div className="repo-list-root flex h-full flex-col">
-      <div
-        data-tauri-drag-region
-        className="flex h-10 items-center justify-between pl-[100px] pr-2"
-      >
-        <div className="flex items-center gap-1.5" data-tauri-no-drag>
-          <div className="flex h-5 w-5 items-center justify-center rounded-md bg-primary/10">
-            <Package className="h-3 w-3 text-primary" />
-          </div>
-          <span className="text-[10px] font-semibold uppercase tracking-[0.15em] text-muted-foreground/70">
-            One Publish
-          </span>
-        </div>
-        <div className="flex items-center gap-0.5" data-tauri-no-drag>
-          {onCollapse && (
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-7 w-9 rounded-full p-0 text-muted-foreground/60 hover:bg-black/[0.045] hover:text-foreground hover:shadow-[inset_0_1px_0_rgba(255,255,255,0.72),0_1px_2px_rgba(15,23,42,0.06)] dark:hover:bg-white/[0.06] dark:hover:shadow-[inset_0_1px_0_rgba(255,255,255,0.08)]"
-              onClick={(event) => {
-                event.stopPropagation();
-                onCollapse();
-              }}
-              title={repoT.collapsePanel || "收起面板"}
-              data-tauri-no-drag
-            >
-              <CollapseIcon />
-            </Button>
-          )}
-        </div>
-      </div>
-
-      <div className="flex items-center justify-between px-3 py-2">
-        <button
-          type="button"
-          className="glass-surface flex items-center gap-1.5 rounded-full px-3 py-1 text-sm font-medium transition-all duration-300 hover:bg-[var(--glass-bg-hover)]"
-          onClick={() => setFilterExpanded(!filterExpanded)}
-        >
-          <span className="text-foreground/80">{repoT.all || "全部"}</span>
-          <span className="flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-primary/12 px-1 text-[10px] font-bold leading-none text-primary">
-            {repositories.length}
-          </span>
-          <ChevronDown
-            className={cn(
-              "h-3 w-3 text-muted-foreground/60 transition-transform duration-300",
-              filterExpanded ? "" : "-rotate-90"
-            )}
-          />
-        </button>
-        <button
-          type="button"
-          className="glass-surface flex h-7 w-7 items-center justify-center rounded-full transition-all duration-300 hover:bg-[var(--glass-bg-hover)]"
-          onClick={(event) => {
-            event.stopPropagation();
-            onAddRepo();
-          }}
-          title={repoT.addRepository || "添加仓库"}
-          data-tauri-no-drag
-        >
-          <Plus className="h-3.5 w-3.5 text-muted-foreground transition-transform duration-300 hover:rotate-90" />
-        </button>
-      </div>
-
-      <div className="px-3 py-1.5">
-        <div className="group/search glass-input relative rounded-xl">
-          <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground/50 transition-colors duration-300 group-focus-within/search:text-primary" />
-          <Input
-            placeholder={repoT.searchRepository || "搜索仓库"}
-            value={searchQuery}
-            onChange={(event) => setSearchQuery(event.target.value)}
-            className="h-8 border-none bg-transparent pl-8 text-sm shadow-none focus-visible:ring-0"
-          />
-        </div>
-      </div>
-
-      <div
-        ref={listRef}
-        className="repo-list-scroll scrollbar-fade glass-scrollbar relative flex-1 overflow-auto px-2.5 py-2"
-        onPointerEnter={handleListPointerEnter}
-        onPointerMove={handleListPointerMove}
-        onMouseLeave={handleListMouseLeave}
-        onScroll={handleListScroll}
-      >
+  const renderList = useCallback(
+    (floating: RepositoryListFloatingBindings) => (
+      <div className="repo-list-root flex h-full flex-col">
         <div
-          aria-hidden
-          className={cn(
-            "pointer-events-none !absolute z-0 origin-top-left transition-opacity duration-120 ease-linear",
-            floatingVisible ? "opacity-100" : "opacity-0"
-          )}
-          style={floatingCardMotionStyle}
+          data-tauri-drag-region
+          className="flex h-10 items-center justify-between pl-[100px] pr-2"
+        >
+          <div className="flex items-center gap-1.5" data-tauri-no-drag>
+            <div className="flex h-5 w-5 items-center justify-center rounded-md bg-primary/10">
+              <Package className="h-3 w-3 text-primary" />
+            </div>
+            <span className="text-[10px] font-semibold uppercase tracking-[0.15em] text-muted-foreground/70">
+              One Publish
+            </span>
+          </div>
+          <div className="flex items-center gap-0.5" data-tauri-no-drag>
+            {onCollapse && (
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-7 w-9 rounded-full p-0 text-muted-foreground/60 hover:bg-black/[0.045] hover:text-foreground hover:shadow-[inset_0_1px_0_rgba(255,255,255,0.72),0_1px_2px_rgba(15,23,42,0.06)] dark:hover:bg-white/[0.06] dark:hover:shadow-[inset_0_1px_0_rgba(255,255,255,0.08)]"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  onCollapse();
+                }}
+                title={repoT.collapsePanel || "收起面板"}
+                data-tauri-no-drag
+              >
+                <CollapseIcon />
+              </Button>
+            )}
+          </div>
+        </div>
+
+        <div className="flex items-center justify-between px-3 py-2">
+          <button
+            type="button"
+            className="glass-surface flex items-center gap-1.5 rounded-full px-3 py-1 text-sm font-medium transition-all duration-300 hover:bg-[var(--glass-bg-hover)]"
+            onClick={() => setFilterExpanded(!filterExpanded)}
+          >
+            <span className="text-foreground/80">{repoT.all || "全部"}</span>
+            <span className="flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-primary/12 px-1 text-[10px] font-bold leading-none text-primary">
+              {repositories.length}
+            </span>
+            <ChevronDown
+              className={cn(
+                "h-3 w-3 text-muted-foreground/60 transition-transform duration-300",
+                filterExpanded ? "" : "-rotate-90"
+              )}
+            />
+          </button>
+          <button
+            type="button"
+            className="glass-surface flex h-7 w-7 items-center justify-center rounded-full transition-all duration-300 hover:bg-[var(--glass-bg-hover)]"
+            onClick={(event) => {
+              event.stopPropagation();
+              onAddRepo();
+            }}
+            title={repoT.addRepository || "添加仓库"}
+            data-tauri-no-drag
+          >
+            <Plus className="h-3.5 w-3.5 text-muted-foreground transition-transform duration-300 hover:rotate-90" />
+          </button>
+        </div>
+
+        <div className="px-3 py-1.5">
+          <div className="group/search glass-input relative rounded-xl">
+            <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground/50 transition-colors duration-300 group-focus-within/search:text-primary" />
+            <Input
+              placeholder={repoT.searchRepository || "搜索仓库"}
+              value={searchQuery}
+              onChange={(event) => setSearchQuery(event.target.value)}
+              className="h-8 border-none bg-transparent pl-8 text-sm shadow-none focus-visible:ring-0"
+            />
+          </div>
+        </div>
+
+        <div
+          ref={floating.listRef}
+          className="repo-list-scroll scrollbar-fade glass-scrollbar relative flex-1 overflow-auto px-2.5 py-2"
+          onPointerEnter={floating.handleListPointerEnter}
+          onPointerMove={floating.handleListPointerMove}
+          onMouseLeave={floating.handleListMouseLeave}
+          onScroll={floating.handleListScroll}
         >
           <div
-            ref={floatingCardSurfaceRef}
-            data-selected={cardTargetRepoId === selectedRepoId ? "true" : "false"}
-            className="repo-floating-card h-full w-full transition-[box-shadow] duration-320 ease-[cubic-bezier(0.16,1,0.3,1)]"
-            style={floatingCardSurfaceStyle}
-          />
-        </div>
-
-        {filteredRepos.length === 0 ? (
-          <div className="flex h-full flex-col items-center justify-center gap-3 px-4 py-8">
-            <div className="glass-surface flex h-16 w-16 items-center justify-center rounded-2xl">
-              <FolderGit2 className="h-7 w-7 text-muted-foreground/30" />
-            </div>
-            <div className="text-center">
-              <p className="text-sm font-medium text-foreground/60">
-                {repoT.noRepositories || "暂无仓库"}
-              </p>
-              <p className="mt-1 text-xs text-muted-foreground/50">
-                {repoT.noRepositoriesHint || "点击下方添加仓库"}
-              </p>
-            </div>
+            aria-hidden
+            className={cn(
+              "pointer-events-none !absolute z-0 origin-top-left transition-opacity duration-120 ease-linear",
+              floating.floatingVisible ? "opacity-100" : "opacity-0"
+            )}
+            style={floating.floatingCardMotionStyle}
+          >
+            <div
+              ref={floating.floatingCardSurfaceRef}
+              data-selected={floating.cardTargetRepoId === selectedRepoId ? "true" : "false"}
+              className="repo-floating-card h-full w-full transition-[box-shadow] duration-320 ease-[cubic-bezier(0.16,1,0.3,1)]"
+              style={floating.floatingCardSurfaceStyle}
+            />
           </div>
-        ) : (
-          <div className="repo-list-grid space-y-1.5">
-            {filteredRepos.map((repo) => {
-              const isSelected = selectedRepoId === repo.id;
-              const currentBranchName =
-                repo.currentBranch?.trim() ||
-                repoT.currentBranchUnknown ||
-                "未知分支";
-              const canConnectBranch = branchConnectivityByRepoId[repo.id] ?? false;
-              return (
-                <div
-                  key={repo.id}
-                  ref={setRepoRowRef(repo.id)}
-                  role="button"
-                  tabIndex={0}
-                  aria-pressed={isSelected}
-                  aria-label={`${repoT.selectRepository || "选择仓库"}: ${repo.name}`}
-                  data-repo-row="true"
-                  data-repo-id={repo.id}
-                  className="group relative z-10 flex w-full cursor-pointer items-start gap-2.5 rounded-2xl border border-transparent bg-transparent px-3 py-2.5 text-left shadow-none outline-none transition-all duration-300 hover:bg-[var(--glass-bg)]/20 focus-visible:ring-2 focus-visible:ring-primary/30 focus-visible:ring-offset-1 focus-visible:ring-offset-background"
-                  onClick={() => {
-                    onSelectRepo(repo.id);
-                  }}
-                  onMouseEnter={() => {
-                    handleRepoMouseEnter(repo.id);
-                  }}
-                  onFocus={() => {
-                    handleRepoMouseEnter(repo.id);
-                  }}
-                  onKeyDown={(event) => {
-                    handleRepoRowKeyDown(event, repo.id);
-                  }}
-                >
-                  <span
-                    className={cn(
-                      "mt-0.5 flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-[14px] transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]",
-                      isSelected
-                        ? "scale-105 bg-primary/10 shadow-[0_0_18px_hsl(var(--primary)/0.24)]"
-                        : "bg-[var(--glass-icon-bg)] shadow-[var(--glass-icon-highlight)] group-hover:scale-105 group-hover:bg-primary/8"
-                    )}
+
+          {filteredRepos.length === 0 ? (
+            <div className="flex h-full flex-col items-center justify-center gap-3 px-4 py-8">
+              <div className="glass-surface flex h-16 w-16 items-center justify-center rounded-2xl">
+                <FolderGit2 className="h-7 w-7 text-muted-foreground/30" />
+              </div>
+              <div className="text-center">
+                <p className="text-sm font-medium text-foreground/60">
+                  {repoT.noRepositories || "暂无仓库"}
+                </p>
+                <p className="mt-1 text-xs text-muted-foreground/50">
+                  {repoT.noRepositoriesHint || "点击下方添加仓库"}
+                </p>
+              </div>
+            </div>
+          ) : (
+            <div className="repo-list-grid space-y-1.5">
+              {filteredRepos.map((repo) => {
+                const isSelected = selectedRepoId === repo.id;
+                const currentBranchName =
+                  repo.currentBranch?.trim() ||
+                  repoT.currentBranchUnknown ||
+                  "未知分支";
+                const canConnectBranch = branchConnectivityByRepoId[repo.id] ?? false;
+                return (
+                  <div
+                    key={repo.id}
+                    ref={floating.setRepoRowRef(repo.id)}
+                    role="button"
+                    tabIndex={0}
+                    aria-pressed={isSelected}
+                    aria-label={`${repoT.selectRepository || "选择仓库"}: ${repo.name}`}
+                    data-repo-row="true"
+                    data-repo-id={repo.id}
+                    className="group relative z-10 flex w-full cursor-pointer items-start gap-2.5 rounded-2xl border border-transparent bg-transparent px-3 py-2.5 text-left shadow-none outline-none transition-all duration-300 hover:bg-[var(--glass-bg)]/20 focus-visible:ring-2 focus-visible:ring-primary/30 focus-visible:ring-offset-1 focus-visible:ring-offset-background"
+                    onClick={() => {
+                      onSelectRepo(repo.id);
+                    }}
+                    onMouseEnter={() => {
+                      floating.handleRepoMouseEnter(repo.id);
+                    }}
+                    onFocus={() => {
+                      floating.handleRepoMouseEnter(repo.id);
+                    }}
+                    onKeyDown={(event) => {
+                      handleRepoRowKeyDown(event, repo.id);
+                    }}
                   >
-                    <FolderGit2
+                    <span
                       className={cn(
-                        "h-4 w-4 transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]",
+                        "mt-0.5 flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-[14px] transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]",
                         isSelected
-                          ? "scale-110 text-primary drop-shadow-[0_0_4px_hsl(var(--primary)/0.3)]"
-                          : "text-muted-foreground/60 group-hover:text-primary group-hover:drop-shadow-[0_0_3px_hsl(var(--primary)/0.15)]"
+                          ? "scale-105 bg-primary/10 shadow-[0_0_18px_hsl(var(--primary)/0.24)]"
+                          : "bg-[var(--glass-icon-bg)] shadow-[var(--glass-icon-highlight)] group-hover:scale-105 group-hover:bg-primary/8"
                       )}
-                    />
-                  </span>
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center justify-between gap-2">
-                      <div className="min-w-0 flex-1">
-                        <div className="flex items-center gap-1.5">
-                          <span
-                            className={cn(
-                              "block min-w-0 truncate text-[13px] font-medium tracking-tight transition-colors duration-300",
-                              isSelected ? "text-foreground" : "text-foreground/78"
-                            )}
-                          >
-                            {repo.name}
-                          </span>
-                          {repo.providerId ? (
-                            <span className="flex-shrink-0 rounded-full bg-primary/12 px-1.5 py-0.5 text-[10px] font-bold text-primary">
-                              {repo.providerId}
-                            </span>
-                          ) : null}
-                        </div>
-                        <p
-                          className="mt-0.5 truncate text-[11px] text-muted-foreground/55"
-                          title={repo.path}
-                        >
-                          {repo.path}
-                        </p>
-                      </div>
-                      <div className="flex flex-shrink-0 items-center gap-1">
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <Button
-                              type="button"
-                              variant="ghost"
-                              size="icon"
-                              className="h-5 w-5 rounded-lg transition-all duration-300 -translate-y-0.5 opacity-0 group-hover:translate-y-0 group-hover:opacity-70 group-focus-within:translate-y-0 group-focus-within:opacity-70 data-[state=open]:translate-y-0 data-[state=open]:bg-[var(--glass-bg-active)] data-[state=open]:opacity-100"
-                              title={repoT.moreActions || "更多操作"}
-                              onClick={(event) => {
-                                event.stopPropagation();
-                              }}
-                            >
-                              <MoreHorizontal className="h-3 w-3" />
-                            </Button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end" sideOffset={4}>
-                            <DropdownMenuItem onSelect={() => openEditDialog(repo)}>
-                              <Pencil className="h-3.5 w-3.5 text-muted-foreground/70" />
-                              <span>{repoT.edit || "编辑"}</span>
-                            </DropdownMenuItem>
-                            <DropdownMenuSeparator />
-                            <DropdownMenuItem
-                              className="text-destructive focus:bg-destructive/10"
-                              onSelect={() => void onRemoveRepo(repo)}
-                            >
-                              <Trash2 className="h-3.5 w-3.5" />
-                              <span>{repoT.remove || "移除"}</span>
-                            </DropdownMenuItem>
-                          </DropdownMenuContent>
-                        </DropdownMenu>
-                      </div>
-                    </div>
-                    <div className="mt-1.5 min-w-0">
-                      <span
+                    >
+                      <FolderGit2
                         className={cn(
-                          "inline-flex max-w-full items-center gap-1.5 rounded-full px-2 py-0.5 text-[11px] leading-4 transition-all duration-300",
-                          canConnectBranch
-                            ? "capsule-breathe bg-[var(--glass-branch-connected-bg)] text-[var(--glass-branch-connected-text)]"
-                            : "border border-[var(--glass-branch-disconnected-border)] bg-[var(--glass-branch-disconnected-bg)] text-muted-foreground/64 shadow-[var(--glass-branch-disconnected-highlight)]"
+                          "h-4 w-4 transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]",
+                          isSelected
+                            ? "scale-110 text-primary drop-shadow-[0_0_4px_hsl(var(--primary)/0.3)]"
+                            : "text-muted-foreground/60 group-hover:text-primary group-hover:drop-shadow-[0_0_3px_hsl(var(--primary)/0.15)]"
                         )}
-                        title={
-                          canConnectBranch
-                            ? repoT.branchConnectable || "分支可连接"
-                            : repoT.branchUnreachable || "分支不可连接"
-                        }
-                      >
-                        <GitBranch className="h-3 w-3 flex-shrink-0" />
-                        <span className="truncate">{currentBranchName}</span>
-                      </span>
+                      />
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-1.5">
+                            <span
+                              className={cn(
+                                "block min-w-0 truncate text-[13px] font-medium tracking-tight transition-colors duration-300",
+                                isSelected ? "text-foreground" : "text-foreground/78"
+                              )}
+                            >
+                              {repo.name}
+                            </span>
+                            {repo.providerId ? (
+                              <span className="flex-shrink-0 rounded-full bg-primary/12 px-1.5 py-0.5 text-[10px] font-bold text-primary">
+                                {repo.providerId}
+                              </span>
+                            ) : null}
+                          </div>
+                          <p
+                            className="mt-0.5 truncate text-[11px] text-muted-foreground/55"
+                            title={repo.path}
+                          >
+                            {repo.path}
+                          </p>
+                        </div>
+                        <div className="flex flex-shrink-0 items-center gap-1">
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="icon"
+                                className="h-5 w-5 rounded-lg transition-all duration-300 -translate-y-0.5 opacity-0 group-hover:translate-y-0 group-hover:opacity-70 group-focus-within:translate-y-0 group-focus-within:opacity-70 data-[state=open]:translate-y-0 data-[state=open]:bg-[var(--glass-bg-active)] data-[state=open]:opacity-100"
+                                title={repoT.moreActions || "更多操作"}
+                                onClick={(event) => {
+                                  event.stopPropagation();
+                                }}
+                              >
+                                <MoreHorizontal className="h-3 w-3" />
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end" sideOffset={4}>
+                              <DropdownMenuItem onSelect={() => openEditDialog(repo)}>
+                                <Pencil className="h-3.5 w-3.5 text-muted-foreground/70" />
+                                <span>{repoT.edit || "编辑"}</span>
+                              </DropdownMenuItem>
+                              <DropdownMenuSeparator />
+                              <DropdownMenuItem
+                                className="text-destructive focus:bg-destructive/10"
+                                onSelect={() => void onRemoveRepo(repo)}
+                              >
+                                <Trash2 className="h-3.5 w-3.5" />
+                                <span>{repoT.remove || "移除"}</span>
+                              </DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        </div>
+                      </div>
+                      <div className="mt-1.5 min-w-0">
+                        <span
+                          className={cn(
+                            "inline-flex max-w-full items-center gap-1.5 rounded-full px-2 py-0.5 text-[11px] leading-4 transition-all duration-300",
+                            canConnectBranch
+                              ? "capsule-breathe bg-[var(--glass-branch-connected-bg)] text-[var(--glass-branch-connected-text)]"
+                              : "border border-[var(--glass-branch-disconnected-border)] bg-[var(--glass-branch-disconnected-bg)] text-muted-foreground/64 shadow-[var(--glass-branch-disconnected-highlight)]"
+                          )}
+                          title={
+                            canConnectBranch
+                              ? repoT.branchConnectable || "分支可连接"
+                              : repoT.branchUnreachable || "分支不可连接"
+                          }
+                        >
+                          <GitBranch className="h-3 w-3 flex-shrink-0" />
+                          <span className="truncate">{currentBranchName}</span>
+                        </span>
+                      </div>
                     </div>
                   </div>
-                </div>
-              );
-            })}
-          </div>
-        )}
-      </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
 
-      {editingRepo ? (
-        <Suspense fallback={null}>
-          <EditRepositoryDialog
-            repository={editingRepo}
-            providers={providers}
-            repoT={repoT}
-            onOpenChange={handleEditDialogChange}
-            onEditRepo={onEditRepo}
-            onDetectProvider={onDetectProvider}
-            onScanProjectFiles={onScanProjectFiles}
-            onRefreshBranches={onRefreshBranches}
-          />
-        </Suspense>
-      ) : null}
+        {editingRepo ? (
+          <Suspense fallback={null}>
+            <EditRepositoryDialog
+              repository={editingRepo}
+              providers={providers}
+              repoT={repoT}
+              onOpenChange={handleEditDialogChange}
+              onEditRepo={onEditRepo}
+              onDetectProvider={onDetectProvider}
+              onScanProjectFiles={onScanProjectFiles}
+              onRefreshBranches={onRefreshBranches}
+            />
+          </Suspense>
+        ) : null}
 
-      <div className="relative flex items-center px-3 py-2">
-        <div className="pointer-events-none absolute -top-6 left-0 right-0 h-6 bg-gradient-to-t from-[var(--glass-panel-bg)] to-transparent" />
-        <button
-          type="button"
-          className="flex h-7 w-7 items-center justify-center rounded-xl text-muted-foreground/50 transition-all duration-300 hover:bg-[var(--glass-bg)] hover:text-foreground/70"
-          onClick={onSettings}
-        >
-          <Settings className="h-3.5 w-3.5 transition-transform duration-500 hover:rotate-90" />
-        </button>
+        <div className="relative flex items-center px-3 py-2">
+          <div className="pointer-events-none absolute -top-6 left-0 right-0 h-6 bg-gradient-to-t from-[var(--glass-panel-bg)] to-transparent" />
+          <button
+            type="button"
+            className="flex h-7 w-7 items-center justify-center rounded-xl text-muted-foreground/50 transition-all duration-300 hover:bg-[var(--glass-bg)] hover:text-foreground/70"
+            onClick={onSettings}
+          >
+            <Settings className="h-3.5 w-3.5 transition-transform duration-500 hover:rotate-90" />
+          </button>
+        </div>
       </div>
-    </div>
+    ),
+    [
+      branchConnectivityByRepoId,
+      editingRepo,
+      filteredRepos,
+      filterExpanded,
+      handleEditDialogChange,
+      handleRepoRowKeyDown,
+      onAddRepo,
+      onCollapse,
+      onDetectProvider,
+      onEditRepo,
+      onRefreshBranches,
+      onRemoveRepo,
+      onScanProjectFiles,
+      onSelectRepo,
+      onSettings,
+      openEditDialog,
+      providers,
+      repoT,
+      repositories.length,
+      searchQuery,
+      selectedRepoId,
+    ]
+  );
+
+  if (!floatingEnhancerEnabled) {
+    return renderList(fallbackFloatingBindings);
+  }
+
+  return (
+    <Suspense fallback={renderList(fallbackFloatingBindings)}>
+      <RepositoryListFloatingLayer
+        filteredRepoIds={filteredRepoIds}
+        selectedRepoId={selectedRepoId}
+      >
+        {renderList}
+      </RepositoryListFloatingLayer>
+    </Suspense>
   );
 }
