@@ -43,7 +43,12 @@ pub async fn apply_fix(action: FixAction) -> Result<FixResult, crate::errors::Ap
                 Command::new(&program).args(&args).output(),
             )
             .await
-            .map_err(|_| crate::errors::AppError::unknown("command timed out"))?
+            .map_err(|_| {
+                crate::errors::AppError::external_command_with_code(
+                    "command timed out",
+                    "fix_command_timed_out",
+                )
+            })?
             .map_err(|e| {
                 crate::errors::AppError::unknown(format!("failed to run command: {}", e))
             })?;
