@@ -49,7 +49,7 @@ pub(crate) fn map_updater_error(err: UpdaterError) -> String {
     }
 }
 
-fn resolve_updater_help_paths() -> Result<(PathBuf, PathBuf), String> {
+fn resolve_updater_help_paths() -> Result<(PathBuf, PathBuf), crate::errors::AppError> {
     let mut roots = Vec::new();
     if let Ok(cwd) = std::env::current_dir() {
         roots.push(cwd);
@@ -74,13 +74,15 @@ fn resolve_updater_help_paths() -> Result<(PathBuf, PathBuf), String> {
             }
         }
     }
-    Err("未找到 updater 指南文件，请在源码仓库中运行该功能".to_string())
+    Err(crate::errors::AppError::updater_with_code(
+        "未找到 updater 指南文件，请在源码仓库中运行该功能",
+        "updater_help_files_not_found",
+    ))
 }
 
 #[tauri::command]
 pub fn get_updater_help_paths() -> Result<UpdaterHelpPaths, crate::errors::AppError> {
-    let (docs, template) =
-        resolve_updater_help_paths().map_err(crate::errors::AppError::unknown)?;
+    let (docs, template) = resolve_updater_help_paths()?;
     Ok(UpdaterHelpPaths {
         docs_path: docs.to_string_lossy().to_string(),
         template_path: template.to_string_lossy().to_string(),
@@ -103,27 +105,29 @@ pub fn get_updater_config_health(app: AppHandle) -> UpdaterConfigHealth {
 
 #[tauri::command]
 pub fn open_updater_help(target: String) -> Result<String, crate::errors::AppError> {
-    let (docs, template) =
-        resolve_updater_help_paths().map_err(crate::errors::AppError::unknown)?;
+    let (docs, template) = resolve_updater_help_paths()?;
     let path = match target.as_str() {
         "docs" => docs,
         "template" => template,
         _ => {
-            return Err(crate::errors::AppError::unknown(format!(
-                "unsupported updater help target: {}",
-                target
-            )))
+            return Err(crate::errors::AppError::updater_with_code(
+                format!("unsupported updater help target: {}", target),
+                "unsupported_updater_help_target",
+            ))
         }
     };
-    open::that(&path).map_err(|e| {
-        crate::errors::AppError::unknown(format!("failed to open updater help file: {}", e))
+    open::that(&path).map_err(|source| {
+        crate::errors::AppError::updater_with_code(
+            format!("failed to open updater help file: {}", source),
+            "open_updater_help_failed",
+        )
     })?;
     Ok(path.to_string_lossy().to_string())
 }
 
 /// 检查更新
 #[tauri::command]
-pub async fn check_update(app: AppHandle) -> Result<UpdateInfo, String> {
+pub async fn check_update(app: AppHandle) -> Result<UpdateInfo, crate::errors::AppError> {
     let updater = match app.updater() {
         Ok(updater) => updater,
         Err(err) => {
@@ -151,14 +155,22 @@ pub async fn check_update(app: AppHandle) -> Result<UpdateInfo, String> {
 
 /// 执行更新并重启
 #[tauri::command]
-pub async fn install_update(app: AppHandle) -> Result<String, String> {
-    let updater = app
-        .updater()
-        .map_err(|err| format!("更新源未配置或不可用: {}", map_updater_error(err)))?;
+pub async fn install_update(app: AppHandle) -> Result<String, crate::errors::AppError> {
+    let updater = app.updater().map_err(|source| {
+        crate::errors::AppError::updater_with_code(
+            format!("更新源未配置或不可用: {}", map_updater_error(source)),
+            "updater_not_configured",
+        )
+    })?;
     let maybe_update = updater
         .check()
         .await
-        .map_err(|err| format!("检查更新失败: {}", map_updater_error(err)))?;
+        .map_err(|source| {
+            crate::errors::AppError::updater_with_code(
+                format!("检查更新失败: {}", map_updater_error(source)),
+                "check_update_failed",
+            )
+        })?;
     let Some(update) = maybe_update else {
         return Ok("当前已是最新版本，无需安装".to_string());
     };
@@ -166,7 +178,12 @@ pub async fn install_update(app: AppHandle) -> Result<String, String> {
     update
         .download_and_install(|_, _| {}, || {})
         .await
-        .map_err(|err| format!("安装更新失败: {}", map_updater_error(err)))?;
+        .map_err(|source| {
+            crate::errors::AppError::updater_with_code(
+                format!("安装更新失败: {}", map_updater_error(source)),
+                "install_update_failed",
+            )
+        })?;
     Ok(format!(
         "更新安装完成（v{}）。请重启应用以生效。",
         target_version
