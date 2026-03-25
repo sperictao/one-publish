@@ -11,23 +11,43 @@ pub async fn export_config(
         exported_at: chrono::Utc::now(),
         profiles,
     };
-    let json = serde_json::to_string_pretty(&config)
-        .map_err(|e| crate::errors::AppError::unknown(format!("serialization error: {}", e)))?;
-    std::fs::write(&file_path, json)
-        .map_err(|e| crate::errors::AppError::unknown(format!("write error: {}", e)))?;
+    let json = serde_json::to_string_pretty(&config).map_err(|source| {
+        crate::errors::AppError::config_with_code(
+            format!("serialization error: {}", source),
+            "export_config_serialize_failed",
+        )
+    })?;
+    std::fs::write(&file_path, json).map_err(|source| {
+        crate::errors::AppError::config_with_code(
+            format!("write error: {}", source),
+            "export_config_write_failed",
+        )
+    })?;
     Ok(file_path)
 }
 
 /// 导入配置从文件
 #[tauri::command]
 pub async fn import_config(file_path: String) -> Result<ConfigExport, crate::errors::AppError> {
-    let content = std::fs::read_to_string(&file_path)
-        .map_err(|e| crate::errors::AppError::unknown(format!("read error: {}", e)))?;
-    let config: ConfigExport = serde_json::from_str(&content)
-        .map_err(|e| crate::errors::AppError::unknown(format!("parse error: {}", e)))?;
+    let content = std::fs::read_to_string(&file_path).map_err(|source| {
+        crate::errors::AppError::config_with_code(
+            format!("read error: {}", source),
+            "import_config_read_failed",
+        )
+    })?;
+    let config: ConfigExport = serde_json::from_str(&content).map_err(|source| {
+        crate::errors::AppError::config_with_code(
+            format!("parse error: {}", source),
+            "import_config_parse_failed",
+        )
+    })?;
     // Validate the imported configuration
-    crate::config_export::validate_import(&config)
-        .map_err(|e| crate::errors::AppError::unknown(format!("validation error: {}", e)))?;
+    crate::config_export::validate_import(&config).map_err(|source| {
+        crate::errors::AppError::config_with_code(
+            format!("validation error: {}", source),
+            "import_config_validation_failed",
+        )
+    })?;
     Ok(config)
 }
 
@@ -42,7 +62,12 @@ pub async fn apply_imported_config(
         .repositories
         .iter_mut()
         .find(|r| r.id == repo_id)
-        .ok_or_else(|| crate::errors::AppError::unknown(format!("未找到仓库: {}", repo_id)))?;
+        .ok_or_else(|| {
+            crate::errors::AppError::config_with_code(
+                format!("未找到仓库: {}", repo_id),
+                "config_repo_not_found",
+            )
+        })?;
 
     for profile in profiles {
         // 检查是否已存在同名配置文件
@@ -63,7 +88,11 @@ pub async fn apply_imported_config(
         };
         repo.publish_config.profiles.push(store_profile);
     }
-    crate::store::update_state(state)
-        .map_err(|e| crate::errors::AppError::unknown(format!("保存配置失败: {}", e)))?;
+    crate::store::update_state(state).map_err(|source| {
+        crate::errors::AppError::config_with_code(
+            format!("保存配置失败: {}", source),
+            "apply_imported_config_save_failed",
+        )
+    })?;
     Ok(())
 }

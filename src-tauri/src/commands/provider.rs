@@ -17,9 +17,12 @@ pub async fn get_provider_schema(
     let provider = registry
         .get(&provider_id)
         .map_err(crate::errors::AppError::from)?;
-    let schema = provider
-        .get_schema()
-        .map_err(|e| crate::errors::AppError::unknown(format!("failed to load schema: {}", e)))?;
+    let schema = provider.get_schema().map_err(|source| {
+        crate::errors::AppError::provider_with_code(
+            format!("failed to load schema: {}", source),
+            "provider_schema_load_failed",
+        )
+    })?;
     Ok(schema)
 }
 
@@ -34,13 +37,19 @@ pub async fn import_from_command(
     let provider = registry
         .get(&provider_id)
         .map_err(crate::errors::AppError::from)?;
-    let schema = provider
-        .get_schema()
-        .map_err(|e| crate::errors::AppError::unknown(format!("failed to load schema: {}", e)))?;
+    let schema = provider.get_schema().map_err(|source| {
+        crate::errors::AppError::provider_with_code(
+            format!("failed to load schema: {}", source),
+            "provider_schema_load_failed",
+        )
+    })?;
     let parser = CommandParser::new(provider_id);
-    let spec = parser
-        .parse_command(&command, project_path, &schema)
-        .map_err(|e| crate::errors::AppError::unknown(format!("parse error: {}", e)))?;
+    let spec = parser.parse_command(&command, project_path, &schema).map_err(|source| {
+        crate::errors::AppError::provider_with_code(
+            format!("parse error: {}", source),
+            "provider_command_parse_failed",
+        )
+    })?;
     Ok(spec)
 }
 

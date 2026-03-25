@@ -8,6 +8,9 @@ pub enum ErrorKind {
     Unknown,
     Validation,
     Artifact,
+    Config,
+    Provider,
+    Export,
     ExternalOpen,
     ExternalCommand,
     Store,
@@ -68,6 +71,33 @@ impl AppError {
     pub fn artifact_with_code(message: impl Into<String>, code: impl Into<String>) -> Self {
         Self {
             kind: ErrorKind::Artifact,
+            message: message.into(),
+            details: None,
+            code: Some(code.into()),
+        }
+    }
+
+    pub fn config_with_code(message: impl Into<String>, code: impl Into<String>) -> Self {
+        Self {
+            kind: ErrorKind::Config,
+            message: message.into(),
+            details: None,
+            code: Some(code.into()),
+        }
+    }
+
+    pub fn provider_with_code(message: impl Into<String>, code: impl Into<String>) -> Self {
+        Self {
+            kind: ErrorKind::Provider,
+            message: message.into(),
+            details: None,
+            code: Some(code.into()),
+        }
+    }
+
+    pub fn export_with_code(message: impl Into<String>, code: impl Into<String>) -> Self {
+        Self {
+            kind: ErrorKind::Export,
             message: message.into(),
             details: None,
             code: Some(code.into()),
