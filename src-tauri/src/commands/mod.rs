@@ -121,6 +121,13 @@ fn classify_process_wait_error(kind: IoErrorKind) -> &'static str {
     }
 }
 
+fn publish_error(
+    message: impl Into<String>,
+    code: impl Into<String>,
+) -> crate::errors::AppError {
+    crate::errors::AppError::publish_with_code(message, code)
+}
+
 #[tauri::command]
 pub async fn execute_publish(
     app: AppHandle,
@@ -129,7 +136,7 @@ pub async fn execute_publish(
 ) -> Result<PublishResult, crate::errors::AppError> {
     let project_file = PathBuf::from(&project_path);
     if !project_file.exists() {
-        return Err(crate::errors::AppError::unknown_with_code(
+        return Err(publish_error(
             format!("project file does not exist: {}", project_path),
             "project_path_not_found",
         ));
@@ -144,7 +151,7 @@ pub async fn execute_provider_publish(
 ) -> Result<PublishResult, crate::errors::AppError> {
     let project_path = PathBuf::from(&spec.project_path);
     if !project_path.exists() {
-        return Err(crate::errors::AppError::unknown_with_code(
+        return Err(publish_error(
             format!("project path does not exist: {}", spec.project_path),
             "project_path_not_found",
         ));
@@ -162,12 +169,9 @@ pub async fn cancel_provider_publish() -> Result<bool, crate::errors::AppError> 
     };
     running.cancel_requested.store(true, Ordering::SeqCst);
     let mut child = running.child.lock().await;
-    child.start_kill().map_err(|err| {
-        crate::errors::AppError::unknown_with_code(
-            format!("failed to cancel publish: {}", err),
-            "publish_cancel_failed",
-        )
-    })?;
+    child
+        .start_kill()
+        .map_err(|err| publish_error(format!("failed to cancel publish: {}", err), "publish_cancel_failed"))?;
     Ok(true)
 }
 fn build_dotnet_spec_from_config(project_path: String, config: PublishConfig) -> PublishSpec {
@@ -208,7 +212,7 @@ async fn execute_publish_spec(
     {
         let running = running_execution_slot().lock().await;
         if running.is_some() {
-            return Err(crate::errors::AppError::unknown_with_code(
+            return Err(publish_error(
                 "another publish execution is already running",
                 "publish_already_running",
             ));
@@ -251,12 +255,9 @@ async fn execute_publish_spec(
     if let Some(dir) = &working_dir {
         command.current_dir(dir);
     }
-    let mut child = command.spawn().map_err(|e| {
-        crate::errors::AppError::unknown_with_code(
-            format!("failed to spawn {}: {}", program, e),
-            classify_process_spawn_error(e.kind()),
-        )
-    })?;
+    let mut child = command
+        .spawn()
+        .map_err(|e| publish_error(format!("failed to spawn {}: {}", program, e), classify_process_spawn_error(e.kind())))?;
     let command_line = if args.is_empty() {
         format!("$ {}", program)
     } else {
@@ -299,22 +300,17 @@ async fn execute_publish_spec(
         drop(sender);
         let status = {
             let mut running_child = child.lock().await;
-            running_child.wait().await.map_err(|err| {
-                crate::errors::AppError::unknown_with_code(
-                    format!("failed to wait publish process: {}", err),
-                    classify_process_wait_error(err.kind()),
-                )
-            })?
+            running_child
+                .wait()
+                .await
+                .map_err(|err| publish_error(format!("failed to wait publish process: {}", err), classify_process_wait_error(err.kind())))?
         };
         for reader in readers {
             let _ = reader.await;
         }
-        let streamed_output = collector.await.map_err(|err| {
-            crate::errors::AppError::unknown_with_code(
-                format!("failed to collect publish logs: {}", err),
-                "publish_log_collect_failed",
-            )
-        })?;
+        let streamed_output = collector
+            .await
+            .map_err(|err| publish_error(format!("failed to collect publish logs: {}", err), "publish_log_collect_failed"))?;
         output_text.push_str(&streamed_output);
         let cancelled = cancel_requested.load(Ordering::SeqCst);
         if cancelled {
@@ -444,21 +440,14 @@ async fn clear_running_execution(session_id: &str) {
 fn resolve_plan_command(
     plan: &crate::plan::ExecutionPlan,
 ) -> Result<(String, Vec<String>), crate::errors::AppError> {
-    let first_step = plan.steps.first().ok_or_else(|| {
-        crate::errors::AppError::unknown_with_code(
-            "execution plan has no step",
-            "plan_missing_step",
-        )
-    })?;
+    let first_step = plan
+        .steps
+        .first()
+        .ok_or_else(|| publish_error("execution plan has no step", "plan_missing_step"))?;
     let mut parts = first_step.title.split_whitespace();
     let program = parts
         .next()
-        .ok_or_else(|| {
-            crate::errors::AppError::unknown_with_code(
-                "execution step title is empty",
-                "plan_invalid_step_title",
-            )
-        })?
+        .ok_or_else(|| publish_error("execution step title is empty", "plan_invalid_step_title"))?
         .to_string();
     let args = parts.map(|item| item.to_string()).collect();
     Ok((program, args))
@@ -471,7 +460,7 @@ fn resolve_java_program(
         return Ok(program.to_string());
     }
     let Some(dir) = working_dir else {
-        return Err(crate::errors::AppError::unknown_with_code(
+        return Err(publish_error(
             "java provider requires a project directory",
             "java_project_dir_required",
         ));
@@ -487,7 +476,7 @@ fn resolve_java_program(
     if crate::environment::command_exists("gradle") {
         return Ok("gradle".to_string());
     }
-    Err(crate::errors::AppError::unknown_with_code(
+    Err(publish_error(
         format!(
             "gradle wrapper not found at {} and `gradle` is not available in PATH",
             wrapper_path.to_string_lossy()
