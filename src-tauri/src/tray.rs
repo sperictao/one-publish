@@ -196,19 +196,27 @@ fn windows_tray_icon() -> Option<Image<'static>> {
 
 /// 更新托盘菜单
 #[tauri::command]
-pub async fn update_tray_menu(app: AppHandle) -> Result<bool, String> {
+pub async fn update_tray_menu(app: AppHandle) -> Result<bool, crate::errors::AppError> {
     match create_tray_menu(&app) {
         Ok(new_menu) => {
             if let Some(tray) = app.tray_by_id("main") {
                 tray.set_menu(Some(new_menu))
-                    .map_err(|e| format!("更新托盘菜单失败: {}", e))?;
+                    .map_err(|source| {
+                        crate::errors::AppError::tray_with_code(
+                            format!("更新托盘菜单失败: {}", source),
+                            "tray_menu_update_failed",
+                        )
+                    })?;
                 return Ok(true);
             }
             Ok(false)
         }
         Err(err) => {
             log::error!("创建托盘菜单失败: {}", err);
-            Err(format!("创建托盘菜单失败: {}", err))
+            Err(crate::errors::AppError::tray_with_code(
+                format!("创建托盘菜单失败: {}", err),
+                "tray_menu_create_failed",
+            ))
         }
     }
 }
