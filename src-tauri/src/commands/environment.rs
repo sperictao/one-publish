@@ -22,7 +22,10 @@ pub async fn apply_fix(action: FixAction) -> Result<FixResult, crate::errors::Ap
                 )
             })?;
             open::that(&url).map_err(|e| {
-                crate::errors::AppError::unknown(format!("failed to open URL: {}", e))
+                crate::errors::AppError::external_open_with_code(
+                    format!("failed to open URL: {}", e),
+                    "fix_open_url_failed",
+                )
             })?;
             Ok(FixResult::OpenedUrl(url))
         }

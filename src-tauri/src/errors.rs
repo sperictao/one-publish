@@ -7,6 +7,7 @@ pub enum ErrorKind {
     Unknown,
     Validation,
     Artifact,
+    ExternalOpen,
     UnsupportedProvider,
     UnsupportedSpecVersion,
     RenderError,
@@ -62,6 +63,15 @@ impl AppError {
     pub fn artifact_with_code(message: impl Into<String>, code: impl Into<String>) -> Self {
         Self {
             kind: ErrorKind::Artifact,
+            message: message.into(),
+            details: None,
+            code: Some(code.into()),
+        }
+    }
+
+    pub fn external_open_with_code(message: impl Into<String>, code: impl Into<String>) -> Self {
+        Self {
+            kind: ErrorKind::ExternalOpen,
             message: message.into(),
             details: None,
             code: Some(code.into()),
