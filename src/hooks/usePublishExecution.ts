@@ -2,24 +2,23 @@ import { useCallback } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { toast } from "sonner";
 
-import { getCancelPublishFeedback } from "@/hooks/useCancelPublishFeedback";
-import { getPublishFailureFeedback } from "@/hooks/usePublishFailureFeedback";
 import type { TranslationMap } from "@/hooks/usePublishExecutionTypes";
 import {
   runEnvironmentCheck,
   type EnvironmentCheckResult,
 } from "@/lib/environment";
-import {
-  analyzePublishExecutionFailure,
-  extractInvokeErrorCode,
-  extractInvokeErrorMessage,
-} from "@/lib/tauri/invokeErrors";
 import type { ExecutionRecord } from "@/lib/store";
 import { useDotnetPublishSelection } from "@/hooks/useDotnetPublishSelection";
 import type { PublishExecutionInput } from "@/hooks/usePublishExecutionInput";
 import { usePublishLogStream } from "@/hooks/usePublishLogStream";
 import { usePublishSpecBuilder } from "@/hooks/usePublishSpecBuilder";
 import { usePublishUiState } from "@/hooks/usePublishUiState";
+
+const loadInvokeErrors = () => import("@/lib/tauri/invokeErrors");
+const loadPublishFailureFeedback = () =>
+  import("@/hooks/usePublishFailureFeedback");
+const loadCancelPublishFeedback = () =>
+  import("@/hooks/useCancelPublishFeedback");
 
 export interface PublishResult {
   provider_id: string;
@@ -145,6 +144,7 @@ export function usePublishExecution({
           });
         }
       } catch (err) {
+        const { extractInvokeErrorMessage } = await loadInvokeErrors();
         toast.error(appT.environmentCheckFailed || "环境检查失败", {
           description: extractInvokeErrorMessage(err),
         });
@@ -202,6 +202,13 @@ export function usePublishExecution({
         setCurrentExecutionRecordId(record.id);
         callSurface.persistExecutionRecord(record);
       } catch (err) {
+        const [
+          { analyzePublishExecutionFailure, extractInvokeErrorMessage },
+          { getPublishFailureFeedback },
+        ] = await Promise.all([
+          loadInvokeErrors(),
+          loadPublishFailureFeedback(),
+        ]);
         const rawErrorMessage = extractInvokeErrorMessage(err);
         const failureReason = analyzePublishExecutionFailure(err);
 
@@ -289,6 +296,13 @@ export function usePublishExecution({
         toast.message(appT.noRunningPublishTask || "当前没有运行中的发布任务");
       }
     } catch (err) {
+      const [
+        { extractInvokeErrorCode, extractInvokeErrorMessage },
+        { getCancelPublishFeedback },
+      ] = await Promise.all([
+        loadInvokeErrors(),
+        loadCancelPublishFeedback(),
+      ]);
       const errorCode = extractInvokeErrorCode(err);
       const feedback = getCancelPublishFeedback(
         appT,

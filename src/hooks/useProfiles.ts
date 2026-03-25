@@ -9,7 +9,6 @@ import {
 import { toast } from "sonner";
 
 import { mapImportedSpecByProvider } from "@/lib/commandImportMapping";
-import { extractInvokeErrorMessage } from "@/lib/tauri/invokeErrors";
 import {
   deleteProfile,
   getProfiles,
@@ -20,6 +19,8 @@ import {
 } from "@/lib/store";
 import type { Language } from "@/hooks/useI18n";
 import type { ParameterSchema, ParameterValue } from "@/types/parameters";
+
+const loadInvokeErrors = () => import("@/lib/tauri/invokeErrors");
 
 interface TranslationMap {
   [key: string]: string | undefined;
@@ -430,6 +431,7 @@ export function useProfiles({
       );
       handleQuickCreateProfileOpenChange(false);
     } catch (err) {
+      const { extractInvokeErrorMessage } = await loadInvokeErrors();
       console.error("保存配置文件失败:", err);
       toast.error(
         extractInvokeErrorMessage(err) ||

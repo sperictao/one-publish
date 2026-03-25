@@ -2,10 +2,7 @@ import { useCallback } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { toast } from "sonner";
 
-import {
-  analyzeProjectScanFailure,
-  extractInvokeErrorMessage,
-} from "@/lib/tauri/invokeErrors";
+const loadInvokeErrors = () => import("@/lib/tauri/invokeErrors");
 
 interface TranslationMap {
   [key: string]: string | undefined;
@@ -49,6 +46,8 @@ export function useProjectScanner(params: {
           return;
         }
 
+        const { analyzeProjectScanFailure, extractInvokeErrorMessage } =
+          await loadInvokeErrors();
         const rawErrorMessage = extractInvokeErrorMessage(err);
         const failureReason = analyzeProjectScanFailure(err);
 

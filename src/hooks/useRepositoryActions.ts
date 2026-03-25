@@ -11,12 +11,9 @@ import {
 } from "@/lib/store";
 import { getPathBasename } from "@/lib/paths";
 import { remapPathPrefix } from "@/features/repository/utils/pathUtils";
-import {
-  analyzeBranchRefreshFailure,
-  analyzeProviderDetectFailure,
-  extractInvokeErrorMessage,
-} from "@/lib/tauri/invokeErrors";
 import type { Branch, Repository } from "@/types/repository";
+
+const loadInvokeErrors = () => import("@/lib/tauri/invokeErrors");
 
 interface TranslationMap {
   [key: string]: string | undefined;
@@ -194,6 +191,10 @@ export function useRepositoryActions({
 
         return providerId;
       } catch (err) {
+        const {
+          analyzeProviderDetectFailure,
+          extractInvokeErrorMessage,
+        } = await loadInvokeErrors();
         const rawErrorMessage = extractInvokeErrorMessage(err);
         const failureReason = analyzeProviderDetectFailure(err);
 
@@ -286,6 +287,10 @@ export function useRepositoryActions({
 
         return result;
       } catch (err) {
+        const {
+          analyzeBranchRefreshFailure,
+          extractInvokeErrorMessage,
+        } = await loadInvokeErrors();
         const rawErrorMessage = extractInvokeErrorMessage(err);
         const failureReason = analyzeBranchRefreshFailure(err);
 
