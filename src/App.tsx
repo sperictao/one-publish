@@ -13,6 +13,8 @@ import { usePublishExecutionCallSurface } from "@/hooks/usePublishExecutionCallS
 import { usePublishExecutionInput } from "@/hooks/usePublishExecutionInput";
 import { useRepositoryActions } from "@/hooks/useRepositoryActions";
 import { useRepositoryViewState } from "@/hooks/useRepositoryViewState";
+import { useRecoverableSpec } from "@/hooks/useRecoverableSpec";
+import { useRerunFlow } from "@/hooks/useRerunFlow";
 import { usePresetText } from "@/hooks/usePresetText";
 import { usePublishExecution } from "@/hooks/usePublishExecution";
 import {
@@ -494,6 +496,38 @@ function App() {
     callSurface: publishExecutionCallSurface,
   });
 
+  const {
+    extractSpecFromRecord,
+    restoreSpecToEditor,
+    getRecentConfigKeyFromSpec,
+  } = useRecoverableSpec({
+    specVersion: SPEC_VERSION,
+    customConfig,
+    setCustomConfig,
+    setIsCustomMode,
+    setActiveProviderId,
+    setProviderParameters,
+  });
+
+  const {
+    rerunChecklistOpen,
+    setRerunChecklistOpen,
+    pendingRerunRecord,
+    rerunChecklistState,
+    setRerunChecklistState,
+    rerunFromHistory,
+    closeRerunChecklistDialog,
+    confirmRerunWithChecklist,
+  } = useRerunFlow({
+    isRerunChecklistEnabled,
+    historyT,
+    rerunT,
+    extractSpecFromRecord,
+    restoreSpecToEditor,
+    getRecentConfigKeyFromSpec,
+    runPublishWithSpec,
+  });
+
   const outputLogCardProps = useOutputLogCardProps({
     outputLog,
     publishResult,
@@ -551,6 +585,7 @@ function App() {
     shortcutsOpen ||
     environmentDialogOpen ||
     settingsOpen ||
+    rerunChecklistOpen ||
     releaseChecklistOpen ||
     commandImportOpen ||
     quickCreateProfileOpen ||
@@ -643,30 +678,22 @@ function App() {
                     appT,
                     historyT,
                     failureT,
-                    rerunT,
                     executionHistory,
                     executionHistoryLimit,
                     selectedRepo,
                     isPublishing,
-                    isRerunChecklistEnabled,
-                    specVersion: SPEC_VERSION,
-                    customConfig,
-                    setCustomConfig,
-                    setIsCustomMode,
-                    setActiveProviderId,
-                    setProviderParameters,
                     publishResult,
                     lastExecutedSpec,
                     outputLog,
                     environmentLastResult,
-                    selectedRepoCurrentBranch: selectedRepo?.currentBranch,
                     currentExecutionRecordId,
                     recentBundleExports,
                     recentHistoryExports,
                     setExecutionHistory,
                     trackBundleExport,
                     trackHistoryExport,
-                    runPublishWithSpec,
+                    extractSpecFromRecord,
+                    rerunFromHistory,
                   }
                 : null
             }
@@ -703,6 +730,15 @@ function App() {
             environmentLastResult={environmentLastResult}
             openEnvironmentDialog={openEnvironmentDialog}
             activeProviderId={activeProviderId}
+            rerunChecklistOpen={rerunChecklistOpen}
+            pendingRerunRecord={pendingRerunRecord}
+            selectedRepoCurrentBranch={selectedRepo?.currentBranch}
+            rerunChecklistState={rerunChecklistState}
+            rerunT={rerunT}
+            setRerunChecklistOpen={setRerunChecklistOpen}
+            setRerunChecklistState={setRerunChecklistState}
+            closeRerunChecklistDialog={closeRerunChecklistDialog}
+            confirmRerunWithChecklist={confirmRerunWithChecklist}
             releaseChecklistOpen={releaseChecklistOpen}
             setReleaseChecklistOpen={setReleaseChecklistOpen}
             publishResult={publishResult}

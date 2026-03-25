@@ -1,6 +1,6 @@
 import { Suspense, lazy } from "react";
 import type { EnvironmentCheckResult } from "@/lib/environment";
-import type { ConfigProfile } from "@/lib/store";
+import type { ConfigProfile, ExecutionRecord } from "@/lib/store";
 import type { PublishResult } from "@/hooks/usePublishExecution";
 import type { Language } from "@/hooks/useI18n";
 
@@ -17,6 +17,11 @@ const EnvironmentCheckDialog = lazy(async () => {
 const SettingsDialog = lazy(async () => {
   const mod = await import("@/components/layout/SettingsDialog");
   return { default: mod.SettingsDialog };
+});
+
+const RerunChecklistDialog = lazy(async () => {
+  const mod = await import("@/components/publish/RerunChecklistDialog");
+  return { default: mod.RerunChecklistDialog };
 });
 
 const ReleaseChecklistDialog = lazy(async () => {
@@ -52,6 +57,12 @@ interface QuickCreateTemplateOption {
   description?: string;
 }
 
+interface RerunChecklistState {
+  branch: boolean;
+  environment: boolean;
+  output: boolean;
+}
+
 export interface AppDialogsProps {
   shortcutsOpen: boolean;
   onShortcutsOpenChange: (open: boolean) => void;
@@ -79,6 +90,15 @@ export interface AppDialogsProps {
   environmentStatus: "unknown" | "ready" | "warning" | "blocked";
   environmentCheckedAt?: string;
   onOpenEnvironment: () => void;
+  rerunChecklistOpen: boolean;
+  pendingRerunRecord: ExecutionRecord | null;
+  selectedRepoCurrentBranch?: string | null;
+  rerunChecklistState: RerunChecklistState;
+  rerunT: Record<string, string | undefined>;
+  onRerunChecklistOpenChange: (open: boolean) => void;
+  onRerunChecklistStateChange: (state: RerunChecklistState) => void;
+  onRerunChecklistClose: () => void;
+  onRerunChecklistConfirm: () => void;
   releaseChecklistOpen: boolean;
   onReleaseChecklistOpenChange: (open: boolean) => void;
   publishResult: PublishResult | null;
@@ -177,6 +197,29 @@ export function AppDialogs(props: AppDialogsProps) {
             repoId={props.repoId}
             currentParameters={props.currentParameters}
             onProfilesChanged={props.onProfilesChanged}
+          />
+        </Suspense>
+      ) : null}
+
+      {props.rerunChecklistOpen ? (
+        <Suspense fallback={null}>
+          <RerunChecklistDialog
+            open={props.rerunChecklistOpen}
+            pendingRerunRecord={props.pendingRerunRecord}
+            selectedRepoCurrentBranch={props.selectedRepoCurrentBranch}
+            environmentStatus={props.environmentStatus}
+            rerunChecklistState={props.rerunChecklistState}
+            rerunT={props.rerunT}
+            onOpenChange={(open) => {
+              if (open) {
+                props.onRerunChecklistOpenChange(true);
+                return;
+              }
+              props.onRerunChecklistClose();
+            }}
+            onChecklistStateChange={props.onRerunChecklistStateChange}
+            onClose={props.onRerunChecklistClose}
+            onConfirm={props.onRerunChecklistConfirm}
           />
         </Suspense>
       ) : null}

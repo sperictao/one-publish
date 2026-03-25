@@ -2,7 +2,7 @@ import type { AppDialogsProps } from "@/components/layout/AppDialogs";
 import type { EnvironmentStatus } from "@/hooks/useEnvironmentStatus";
 import type { Language } from "@/hooks/useI18n";
 import type { PublishResult } from "@/hooks/usePublishExecution";
-import type { ConfigProfile } from "@/lib/store";
+import type { ConfigProfile, ExecutionRecord } from "@/lib/store";
 import type { EnvironmentCheckResult } from "@/lib/environment";
 
 interface QuickCreateProfileDraft {
@@ -16,6 +16,12 @@ interface QuickCreateTemplateOption {
   id: string;
   name: string;
   description?: string;
+}
+
+interface RerunChecklistState {
+  branch: boolean;
+  environment: boolean;
+  output: boolean;
 }
 
 export interface UseAppDialogsPropsParams {
@@ -48,6 +54,15 @@ export interface UseAppDialogsPropsParams {
     providerIds?: string[]
   ) => void;
   activeProviderId: string;
+  rerunChecklistOpen: boolean;
+  pendingRerunRecord: ExecutionRecord | null;
+  selectedRepoCurrentBranch?: string | null;
+  rerunChecklistState: RerunChecklistState;
+  rerunT: Record<string, string | undefined>;
+  setRerunChecklistOpen: (open: boolean) => void;
+  setRerunChecklistState: (state: RerunChecklistState) => void;
+  closeRerunChecklistDialog: () => void;
+  confirmRerunWithChecklist: () => Promise<void>;
   releaseChecklistOpen: boolean;
   setReleaseChecklistOpen: (open: boolean) => void;
   publishResult: PublishResult | null;
@@ -116,6 +131,15 @@ export function useAppDialogsProps(params: UseAppDialogsPropsParams): AppDialogs
     environmentStatus: params.environmentStatus,
     environmentCheckedAt: params.environmentLastResult?.checked_at,
     onOpenEnvironment: () => params.openEnvironmentDialog(null, [params.activeProviderId]),
+    rerunChecklistOpen: params.rerunChecklistOpen,
+    pendingRerunRecord: params.pendingRerunRecord,
+    selectedRepoCurrentBranch: params.selectedRepoCurrentBranch,
+    rerunChecklistState: params.rerunChecklistState,
+    rerunT: params.rerunT,
+    onRerunChecklistOpenChange: params.setRerunChecklistOpen,
+    onRerunChecklistStateChange: params.setRerunChecklistState,
+    onRerunChecklistClose: params.closeRerunChecklistDialog,
+    onRerunChecklistConfirm: () => void params.confirmRerunWithChecklist(),
     releaseChecklistOpen: params.releaseChecklistOpen,
     onReleaseChecklistOpenChange: params.setReleaseChecklistOpen,
     publishResult: params.publishResult,
