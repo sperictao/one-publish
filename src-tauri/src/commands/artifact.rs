@@ -18,7 +18,12 @@ pub async fn package_artifact(
         include_root_dir,
     )
     .await
-    .map_err(|e| crate::errors::AppError::unknown(format!("package failed: {}", e)))
+    .map_err(|e| {
+        crate::errors::AppError::artifact_with_code(
+            format!("package failed: {}", e),
+            "artifact_package_failed",
+        )
+    })
 }
 
 /// Sign an artifact file using a supported signing method.
@@ -36,5 +41,10 @@ pub async fn sign_artifact(
         key_id.as_deref(),
     )
     .await
-    .map_err(|e| crate::errors::AppError::unknown(format!("sign failed: {}", e)))
+    .map_err(|e| {
+        crate::errors::AppError::artifact_with_code(
+            format!("sign failed: {}", e),
+            "artifact_sign_failed",
+        )
+    })
 }
