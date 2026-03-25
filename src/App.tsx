@@ -31,6 +31,7 @@ import { useI18n, type Language } from "@/hooks/useI18n";
 
 // Layout Components
 import { ResizeHandle } from "@/components/layout/ResizeHandle";
+import { SidebarPanelShell } from "@/components/layout/SidebarPanelShell";
 
 // UI Components
 import {
@@ -73,10 +74,6 @@ const PublishContentSection = lazy(async () => {
 const MainContentShell = lazy(async () => {
   const mod = await import("@/components/layout/MainContentShell");
   return { default: mod.MainContentShell };
-});
-const SidebarPanelShell = lazy(async () => {
-  const mod = await import("@/components/layout/SidebarPanelShell");
-  return { default: mod.SidebarPanelShell };
 });
 
 // Preset configurations
@@ -611,30 +608,28 @@ function App() {
       {/* Main Content - Three Column Layout (no separate title bar) */}
       <div className="flex flex-1 overflow-hidden">
         {/* Left Panel - Repository List */}
-        <Suspense fallback={<div className="flex h-full flex-col p-2" />}>
-          <SidebarPanelShell
-            collapsed={leftPanelCollapsed}
-            width={`${effectiveLeftPanelWidth}px`}
-          >
-            <Suspense fallback={<div className="flex h-full flex-col" />}>
-              <RepositoryList
-                repositories={repositories}
-                selectedRepoId={selectedRepoId}
-                providers={repositoryProviders}
-                onSelectRepo={selectRepository}
-                onAddRepo={handleAddRepo}
-                onEditRepo={handleEditRepo}
-                onRemoveRepo={handleRemoveRepo}
-                onDetectProvider={handleDetectRepoProvider}
-                onScanProjectFiles={handleScanProjectFiles}
-                onRefreshBranches={handleRefreshRepoBranches}
-                branchConnectivityByRepoId={branchConnectivityByRepoId}
-                onSettings={handleOpenSettings}
-                onCollapse={() => setLeftPanelCollapsed(true)}
-              />
-            </Suspense>
-          </SidebarPanelShell>
-        </Suspense>
+        <SidebarPanelShell
+          collapsed={leftPanelCollapsed}
+          width={`${effectiveLeftPanelWidth}px`}
+        >
+          <Suspense fallback={<div className="flex h-full flex-col" />}>
+            <RepositoryList
+              repositories={repositories}
+              selectedRepoId={selectedRepoId}
+              providers={repositoryProviders}
+              onSelectRepo={selectRepository}
+              onAddRepo={handleAddRepo}
+              onEditRepo={handleEditRepo}
+              onRemoveRepo={handleRemoveRepo}
+              onDetectProvider={handleDetectRepoProvider}
+              onScanProjectFiles={handleScanProjectFiles}
+              onRefreshBranches={handleRefreshRepoBranches}
+              branchConnectivityByRepoId={branchConnectivityByRepoId}
+              onSettings={handleOpenSettings}
+              onCollapse={() => setLeftPanelCollapsed(true)}
+            />
+          </Suspense>
+        </SidebarPanelShell>
 
         {/* Left Resize Handle */}
         {!leftPanelCollapsed && (
@@ -642,35 +637,33 @@ function App() {
         )}
 
         {/* Middle Panel - Publish Config */}
-        <Suspense fallback={<div className="flex h-full flex-col p-2" />}>
-          <SidebarPanelShell
-            collapsed={middlePanelCollapsed}
-            width={`${effectiveMiddlePanelWidth}px`}
-          >
-            <Suspense fallback={<div className="flex h-full flex-col" />}>
-              <PublishConfigPanel
-                selectedPreset={selectedPreset}
-                isCustomMode={isCustomMode}
-                profiles={profiles}
-                activeProfileName={activeProfileName}
-                onSelectProfile={handleSelectProfileFromPanel}
-                onCreateProfile={openQuickCreateProfileDialog}
-                onEditProfile={openQuickEditProfileDialog}
-                onRefreshProfiles={loadProfiles}
-                onDeleteProfile={handleDeleteProfileFromPanel}
-                projectPublishProfiles={projectInfo?.publish_profiles || []}
-                onSelectProjectProfile={handleSelectProjectProfile}
-                recentConfigKeys={recentConfigKeys}
-                favoriteConfigKeys={favoriteConfigKeys}
-                onToggleFavoriteConfig={toggleFavoriteConfig}
-                onRemoveRecentConfig={removeRecentConfig}
-                onCollapse={() => setMiddlePanelCollapsed(true)}
-                showExpandButton={leftPanelCollapsed}
-                onExpandRepo={() => setLeftPanelCollapsed(false)}
-              />
-            </Suspense>
-          </SidebarPanelShell>
-        </Suspense>
+        <SidebarPanelShell
+          collapsed={middlePanelCollapsed}
+          width={`${effectiveMiddlePanelWidth}px`}
+        >
+          <Suspense fallback={<div className="flex h-full flex-col" />}>
+            <PublishConfigPanel
+              selectedPreset={selectedPreset}
+              isCustomMode={isCustomMode}
+              profiles={profiles}
+              activeProfileName={activeProfileName}
+              onSelectProfile={handleSelectProfileFromPanel}
+              onCreateProfile={openQuickCreateProfileDialog}
+              onEditProfile={openQuickEditProfileDialog}
+              onRefreshProfiles={loadProfiles}
+              onDeleteProfile={handleDeleteProfileFromPanel}
+              projectPublishProfiles={projectInfo?.publish_profiles || []}
+              onSelectProjectProfile={handleSelectProjectProfile}
+              recentConfigKeys={recentConfigKeys}
+              favoriteConfigKeys={favoriteConfigKeys}
+              onToggleFavoriteConfig={toggleFavoriteConfig}
+              onRemoveRecentConfig={removeRecentConfig}
+              onCollapse={() => setMiddlePanelCollapsed(true)}
+              showExpandButton={leftPanelCollapsed}
+              onExpandRepo={() => setLeftPanelCollapsed(false)}
+            />
+          </Suspense>
+        </SidebarPanelShell>
 
         {/* Middle Resize Handle */}
         {!middlePanelCollapsed && (
