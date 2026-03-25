@@ -30,7 +30,6 @@ import { useProviderRuntime } from "@/hooks/useProviderRuntime";
 import { useI18n, type Language } from "@/hooks/useI18n";
 
 // Layout Components
-import { RepositoryList } from "@/components/layout/RepositoryList";
 import { PublishContentSection } from "@/components/layout/PublishContentSection";
 import { MainContentShell } from "@/components/layout/MainContentShell";
 import { ResizeHandle } from "@/components/layout/ResizeHandle";
@@ -61,6 +60,10 @@ const SPEC_VERSION = 1;
 const AppDialogsHost = lazy(async () => {
   const mod = await import("@/components/layout/AppDialogsHost");
   return { default: mod.AppDialogsHost };
+});
+const RepositoryList = lazy(async () => {
+  const mod = await import("@/components/layout/RepositoryList");
+  return { default: mod.RepositoryList };
 });
 const PublishConfigPanel = lazy(async () => {
   const mod = await import("@/components/layout/PublishConfigPanel");
@@ -603,21 +606,23 @@ function App() {
           collapsed={leftPanelCollapsed}
           width={`${effectiveLeftPanelWidth}px`}
         >
-          <RepositoryList
-            repositories={repositories}
-            selectedRepoId={selectedRepoId}
-            providers={repositoryProviders}
-            onSelectRepo={selectRepository}
-            onAddRepo={handleAddRepo}
-            onEditRepo={handleEditRepo}
-            onRemoveRepo={handleRemoveRepo}
-            onDetectProvider={handleDetectRepoProvider}
-            onScanProjectFiles={handleScanProjectFiles}
-            onRefreshBranches={handleRefreshRepoBranches}
-            branchConnectivityByRepoId={branchConnectivityByRepoId}
-            onSettings={handleOpenSettings}
-            onCollapse={() => setLeftPanelCollapsed(true)}
-          />
+          <Suspense fallback={<div className="flex h-full flex-col" />}>
+            <RepositoryList
+              repositories={repositories}
+              selectedRepoId={selectedRepoId}
+              providers={repositoryProviders}
+              onSelectRepo={selectRepository}
+              onAddRepo={handleAddRepo}
+              onEditRepo={handleEditRepo}
+              onRemoveRepo={handleRemoveRepo}
+              onDetectProvider={handleDetectRepoProvider}
+              onScanProjectFiles={handleScanProjectFiles}
+              onRefreshBranches={handleRefreshRepoBranches}
+              branchConnectivityByRepoId={branchConnectivityByRepoId}
+              onSettings={handleOpenSettings}
+              onCollapse={() => setLeftPanelCollapsed(true)}
+            />
+          </Suspense>
         </SidebarPanelShell>
 
         {/* Left Resize Handle */}
