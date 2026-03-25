@@ -30,7 +30,6 @@ import { useProviderRuntime } from "@/hooks/useProviderRuntime";
 import { useI18n, type Language } from "@/hooks/useI18n";
 
 // Layout Components
-import { PublishContentSection } from "@/components/layout/PublishContentSection";
 import { MainContentShell } from "@/components/layout/MainContentShell";
 import { ResizeHandle } from "@/components/layout/ResizeHandle";
 import { SidebarPanelShell } from "@/components/layout/SidebarPanelShell";
@@ -68,6 +67,10 @@ const RepositoryList = lazy(async () => {
 const PublishConfigPanel = lazy(async () => {
   const mod = await import("@/components/layout/PublishConfigPanel");
   return { default: mod.PublishConfigPanel };
+});
+const PublishContentSection = lazy(async () => {
+  const mod = await import("@/components/layout/PublishContentSection");
+  return { default: mod.PublishContentSection };
 });
 
 // Preset configurations
@@ -676,39 +679,41 @@ function App() {
           onSelectHomeView={() => setRightPanelView("home")}
           onSelectHistoryView={() => setRightPanelView("history")}
         >
-          <PublishContentSection
-            showCommandImportResultCard={showCommandImportResultCard}
-            commandImportResultCardProps={commandImportResultCardProps}
-            outputLogCardProps={outputLogCardProps}
-            shouldLoadDiagnosticsSection={shouldLoadDiagnosticsSection}
-            diagnosticsSectionProps={
-              selectedRepo
-                ? {
-                    rightPanelView,
-                    appT,
-                    historyT,
-                    failureT,
-                    executionHistory,
-                    executionHistoryLimit,
-                    selectedRepo,
-                    isPublishing,
-                    publishResult,
-                    lastExecutedSpec,
-                    outputLog,
-                    environmentLastResult,
-                    currentExecutionRecordId,
-                    recentBundleExports,
-                    recentHistoryExports,
-                    setExecutionHistory,
-                    trackBundleExport,
-                    trackHistoryExport,
-                    extractSpecFromRecord,
-                    rerunFromHistory,
-                  }
-                : null
-            }
-            rightPanelView={rightPanelView}
-          />
+          <Suspense fallback={<div className="flex h-full flex-col" />}>
+            <PublishContentSection
+              showCommandImportResultCard={showCommandImportResultCard}
+              commandImportResultCardProps={commandImportResultCardProps}
+              outputLogCardProps={outputLogCardProps}
+              shouldLoadDiagnosticsSection={shouldLoadDiagnosticsSection}
+              diagnosticsSectionProps={
+                selectedRepo
+                  ? {
+                      rightPanelView,
+                      appT,
+                      historyT,
+                      failureT,
+                      executionHistory,
+                      executionHistoryLimit,
+                      selectedRepo,
+                      isPublishing,
+                      publishResult,
+                      lastExecutedSpec,
+                      outputLog,
+                      environmentLastResult,
+                      currentExecutionRecordId,
+                      recentBundleExports,
+                      recentHistoryExports,
+                      setExecutionHistory,
+                      trackBundleExport,
+                      trackHistoryExport,
+                      extractSpecFromRecord,
+                      rerunFromHistory,
+                    }
+                  : null
+              }
+              rightPanelView={rightPanelView}
+            />
+          </Suspense>
         </MainContentShell>
       </div>
 
