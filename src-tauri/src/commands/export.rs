@@ -1,6 +1,29 @@
 use serde_json::Value;
 use std::path::{Path, PathBuf};
 
+fn export_error(
+    message: impl Into<String>,
+    code: impl Into<String>,
+) -> crate::errors::AppError {
+    crate::errors::AppError::export_with_code(message, code)
+}
+
+fn export_source_error(
+    prefix: &str,
+    source: impl std::fmt::Display,
+    code: &'static str,
+) -> crate::errors::AppError {
+    export_error(format!("{prefix}: {source}"), code)
+}
+
+fn export_open_error(
+    prefix: &str,
+    source: impl std::fmt::Display,
+    code: &'static str,
+) -> crate::errors::AppError {
+    crate::errors::AppError::external_open_with_code(format!("{prefix}: {source}"), code)
+}
+
 fn render_preflight_markdown(report: &Value) -> Result<String, crate::errors::AppError> {
     let generated_at = report
         .get("generatedAt")
@@ -66,7 +89,7 @@ fn render_preflight_markdown(report: &Value) -> Result<String, crate::errors::Ap
         }
     }
     let raw = serde_json::to_string_pretty(report)
-        .map_err(|e| crate::errors::AppError::unknown(format!("serialization error: {}", e)))?;
+        .map_err(|source| export_source_error("serialization error", source, "preflight_markdown_serialize_failed"))?;
     lines.extend([
         String::new(),
         "## Raw Snapshot".to_string(),
@@ -84,8 +107,9 @@ pub async fn export_preflight_report(
     file_path: String,
 ) -> Result<String, crate::errors::AppError> {
     if !report.is_object() {
-        return Err(crate::errors::AppError::unknown(
+        return Err(export_error(
             "preflight report payload must be an object",
+            "preflight_report_payload_invalid",
         ));
     }
     let ext = Path::new(&file_path)
@@ -96,11 +120,17 @@ pub async fn export_preflight_report(
     let content = if ext == "md" || ext == "markdown" {
         render_preflight_markdown(&report)?
     } else {
-        serde_json::to_string_pretty(&report)
-            .map_err(|e| crate::errors::AppError::unknown(format!("serialization error: {}", e)))?
+        serde_json::to_string_pretty(&report).map_err(|source| {
+            export_source_error(
+                "serialization error",
+                source,
+                "preflight_report_serialize_failed",
+            )
+        })?
     };
-    std::fs::write(&file_path, content)
-        .map_err(|e| crate::errors::AppError::unknown(format!("write error: {}", e)))?;
+    std::fs::write(&file_path, content).map_err(|source| {
+        export_source_error("write error", source, "preflight_report_write_failed")
+    })?;
     Ok(file_path)
 }
 
@@ -157,13 +187,25 @@ fn render_execution_snapshot_markdown(snapshot: &Value) -> Result<String, crate:
         .get("spec")
         .map(serde_json::to_string_pretty)
         .transpose()
-        .map_err(|e| crate::errors::AppError::unknown(format!("serialization error: {}", e)))?
+        .map_err(|source| {
+            export_source_error(
+                "serialization error",
+                source,
+                "execution_snapshot_spec_serialize_failed",
+            )
+        })?
         .unwrap_or_else(|| "{}".to_string());
     let result_json = snapshot
         .get("result")
         .map(serde_json::to_string_pretty)
         .transpose()
-        .map_err(|e| crate::errors::AppError::unknown(format!("serialization error: {}", e)))?
+        .map_err(|source| {
+            export_source_error(
+                "serialization error",
+                source,
+                "execution_snapshot_result_serialize_failed",
+            )
+        })?
         .unwrap_or_else(|| "{}".to_string());
     let mut lines = vec![
         "# Execution Snapshot".to_string(),
@@ -236,8 +278,9 @@ pub async fn export_execution_snapshot(
     file_path: String,
 ) -> Result<String, crate::errors::AppError> {
     if !snapshot.is_object() {
-        return Err(crate::errors::AppError::unknown(
+        return Err(export_error(
             "execution snapshot payload must be an object",
+            "execution_snapshot_payload_invalid",
         ));
     }
     let ext = Path::new(&file_path)
@@ -248,11 +291,17 @@ pub async fn export_execution_snapshot(
     let content = if ext == "md" || ext == "markdown" {
         render_execution_snapshot_markdown(&snapshot)?
     } else {
-        serde_json::to_string_pretty(&snapshot)
-            .map_err(|e| crate::errors::AppError::unknown(format!("serialization error: {}", e)))?
+        serde_json::to_string_pretty(&snapshot).map_err(|source| {
+            export_source_error(
+                "serialization error",
+                source,
+                "execution_snapshot_serialize_failed",
+            )
+        })?
     };
-    std::fs::write(&file_path, content)
-        .map_err(|e| crate::errors::AppError::unknown(format!("write error: {}", e)))?;
+    std::fs::write(&file_path, content).map_err(|source| {
+        export_source_error("write error", source, "execution_snapshot_write_failed")
+    })?;
     Ok(file_path)
 }
 
@@ -353,8 +402,13 @@ fn render_failure_group_bundle_markdown(bundle: &Value) -> Result<String, crate:
         }
     }
 
-    let raw = serde_json::to_string_pretty(bundle)
-        .map_err(|e| crate::errors::AppError::unknown(format!("serialization error: {}", e)))?;
+    let raw = serde_json::to_string_pretty(bundle).map_err(|source| {
+        export_source_error(
+            "serialization error",
+            source,
+            "failure_group_bundle_markdown_serialize_failed",
+        )
+    })?;
     lines.extend([
         String::new(),
         "## Raw Bundle".to_string(),
@@ -373,8 +427,9 @@ pub async fn export_failure_group_bundle(
     file_path: String,
 ) -> Result<String, crate::errors::AppError> {
     if !bundle.is_object() {
-        return Err(crate::errors::AppError::unknown(
+        return Err(export_error(
             "failure group bundle payload must be an object",
+            "failure_group_bundle_payload_invalid",
         ));
     }
 
@@ -386,12 +441,18 @@ pub async fn export_failure_group_bundle(
     let content = if ext == "md" || ext == "markdown" {
         render_failure_group_bundle_markdown(&bundle)?
     } else {
-        serde_json::to_string_pretty(&bundle)
-            .map_err(|e| crate::errors::AppError::unknown(format!("serialization error: {}", e)))?
+        serde_json::to_string_pretty(&bundle).map_err(|source| {
+            export_source_error(
+                "serialization error",
+                source,
+                "failure_group_bundle_serialize_failed",
+            )
+        })?
     };
 
-    std::fs::write(&file_path, content)
-        .map_err(|e| crate::errors::AppError::unknown(format!("write error: {}", e)))?;
+    std::fs::write(&file_path, content).map_err(|source| {
+        export_source_error("write error", source, "failure_group_bundle_write_failed")
+    })?;
     Ok(file_path)
 }
 
@@ -431,8 +492,9 @@ fn render_execution_history_csv(history: &[Value]) -> Result<String, crate::erro
 
     for item in history {
         let Some(record) = item.as_object() else {
-            return Err(crate::errors::AppError::unknown(
+            return Err(export_error(
                 "execution history item must be an object",
+                "execution_history_item_invalid",
             ));
         };
 
@@ -497,12 +559,18 @@ pub async fn export_execution_history(
     let content = if ext == "csv" {
         render_execution_history_csv(&history)?
     } else {
-        serde_json::to_string_pretty(&history)
-            .map_err(|e| crate::errors::AppError::unknown(format!("serialization error: {}", e)))?
+        serde_json::to_string_pretty(&history).map_err(|source| {
+            export_source_error(
+                "serialization error",
+                source,
+                "execution_history_serialize_failed",
+            )
+        })?
     };
 
-    std::fs::write(&file_path, content)
-        .map_err(|e| crate::errors::AppError::unknown(format!("write error: {}", e)))?;
+    std::fs::write(&file_path, content).map_err(|source| {
+        export_source_error("write error", source, "execution_history_write_failed")
+    })?;
     Ok(file_path)
 }
 
@@ -585,8 +653,13 @@ fn render_diagnostics_index_markdown(index: &Value) -> Result<String, crate::err
     append_links("Bundle Exports", &bundles);
     append_links("History Exports", &history_exports);
 
-    let raw = serde_json::to_string_pretty(index)
-        .map_err(|e| crate::errors::AppError::unknown(format!("serialization error: {}", e)))?;
+    let raw = serde_json::to_string_pretty(index).map_err(|source| {
+        export_source_error(
+            "serialization error",
+            source,
+            "diagnostics_index_markdown_serialize_failed",
+        )
+    })?;
     lines.extend([
         String::new(),
         "## Raw Index".to_string(),
@@ -669,8 +742,9 @@ pub async fn export_diagnostics_index(
     file_path: String,
 ) -> Result<String, crate::errors::AppError> {
     if !index.is_object() {
-        return Err(crate::errors::AppError::unknown(
+        return Err(export_error(
             "diagnostics index payload must be an object",
+            "diagnostics_index_payload_invalid",
         ));
     }
 
@@ -685,12 +759,18 @@ pub async fn export_diagnostics_index(
     } else if ext == "html" || ext == "htm" {
         render_diagnostics_index_html(&index)
     } else {
-        serde_json::to_string_pretty(&index)
-            .map_err(|e| crate::errors::AppError::unknown(format!("serialization error: {}", e)))?
+        serde_json::to_string_pretty(&index).map_err(|source| {
+            export_source_error(
+                "serialization error",
+                source,
+                "diagnostics_index_serialize_failed",
+            )
+        })?
     };
 
-    std::fs::write(&file_path, content)
-        .map_err(|e| crate::errors::AppError::unknown(format!("write error: {}", e)))?;
+    std::fs::write(&file_path, content).map_err(|source| {
+        export_source_error("write error", source, "diagnostics_index_write_failed")
+    })?;
     Ok(file_path)
 }
 
@@ -698,25 +778,27 @@ fn find_latest_snapshot_in_output_dir(
     output_dir: &str,
 ) -> Result<PathBuf, crate::errors::AppError> {
     if output_dir.trim().is_empty() {
-        return Err(crate::errors::AppError::unknown(
+        return Err(export_error(
             "记录中没有可用的输出目录，请先导出快照",
+            "snapshot_output_dir_missing",
         ));
     }
 
     let dir = PathBuf::from(output_dir);
     if !dir.is_dir() {
-        return Err(crate::errors::AppError::unknown(format!(
-            "输出目录不存在: {}",
-            dir.to_string_lossy()
-        )));
+        return Err(export_error(
+            format!("输出目录不存在: {}", dir.to_string_lossy()),
+            "snapshot_output_dir_not_found",
+        ));
     }
 
     let mut latest: Option<(std::time::SystemTime, PathBuf)> = None;
-    for entry in std::fs::read_dir(&dir)
-        .map_err(|e| crate::errors::AppError::unknown(format!("读取输出目录失败: {}", e)))?
-    {
-        let entry = entry
-            .map_err(|e| crate::errors::AppError::unknown(format!("读取目录项失败: {}", e)))?;
+    for entry in std::fs::read_dir(&dir).map_err(|source| {
+        export_source_error("读取输出目录失败", source, "snapshot_output_dir_read_failed")
+    })? {
+        let entry = entry.map_err(|source| {
+            export_source_error("读取目录项失败", source, "snapshot_output_dir_entry_read_failed")
+        })?;
         let path = entry.path();
         if !path.is_file() {
             continue;
@@ -749,10 +831,10 @@ fn find_latest_snapshot_in_output_dir(
     }
 
     latest.map(|(_, path)| path).ok_or_else(|| {
-        crate::errors::AppError::unknown(format!(
-            "未在输出目录找到执行快照，请先导出快照: {}",
-            dir.to_string_lossy()
-        ))
+        export_error(
+            format!("未在输出目录找到执行快照，请先导出快照: {}", dir.to_string_lossy()),
+            "snapshot_not_found_in_output_dir",
+        )
     })
 }
 
@@ -767,8 +849,9 @@ pub async fn open_execution_snapshot(
             if let Some(output_dir) = output_dir {
                 find_latest_snapshot_in_output_dir(&output_dir)?
             } else {
-                return Err(crate::errors::AppError::unknown(
+                return Err(export_error(
                     "记录中没有快照路径，请先导出快照",
+                    "snapshot_path_missing",
                 ));
             }
         } else {
@@ -778,22 +861,23 @@ pub async fn open_execution_snapshot(
             } else if let Some(output_dir) = output_dir {
                 find_latest_snapshot_in_output_dir(&output_dir)?
             } else {
-                return Err(crate::errors::AppError::unknown(format!(
-                    "快照文件不存在: {}",
-                    trimmed
-                )));
+                return Err(export_error(
+                    format!("快照文件不存在: {}", trimmed),
+                    "snapshot_file_not_found",
+                ));
             }
         }
     } else if let Some(output_dir) = output_dir {
         find_latest_snapshot_in_output_dir(&output_dir)?
     } else {
-        return Err(crate::errors::AppError::unknown(
+        return Err(export_error(
             "记录中没有可用的快照路径和输出目录",
+            "snapshot_and_output_dir_missing",
         ));
     };
 
     open::that(&path)
-        .map_err(|e| crate::errors::AppError::unknown(format!("打开快照失败: {}", e)))?;
+        .map_err(|source| export_open_error("打开快照失败", source, "open_snapshot_failed"))?;
 
     Ok(path.to_string_lossy().to_string())
 }
@@ -802,26 +886,27 @@ pub async fn open_execution_snapshot(
 pub async fn open_output_directory(output_dir: String) -> Result<String, crate::errors::AppError> {
     let trimmed = output_dir.trim();
     if trimmed.is_empty() {
-        return Err(crate::errors::AppError::unknown("输出目录为空"));
+        return Err(export_error("输出目录为空", "output_dir_empty"));
     }
 
     let path = PathBuf::from(trimmed);
     if !path.exists() {
-        return Err(crate::errors::AppError::unknown(format!(
-            "输出目录不存在: {}",
-            trimmed
-        )));
+        return Err(export_error(
+            format!("输出目录不存在: {}", trimmed),
+            "output_dir_not_found",
+        ));
     }
 
     if !path.is_dir() {
-        return Err(crate::errors::AppError::unknown(format!(
-            "输出目录不是文件夹: {}",
-            trimmed
-        )));
+        return Err(export_error(
+            format!("输出目录不是文件夹: {}", trimmed),
+            "output_dir_not_directory",
+        ));
     }
 
-    open::that(&path)
-        .map_err(|e| crate::errors::AppError::unknown(format!("打开输出目录失败: {}", e)))?;
+    open::that(&path).map_err(|source| {
+        export_open_error("打开输出目录失败", source, "open_output_directory_failed")
+    })?;
 
     Ok(path.to_string_lossy().to_string())
 }
