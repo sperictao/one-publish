@@ -3,10 +3,11 @@
 //! 处理应用的全局快捷键功能
 
 use tauri::AppHandle;
+use tauri_plugin_global_shortcut::Error as ShortcutError;
 use tauri_plugin_global_shortcut::GlobalShortcutExt;
 
 /// 注册全局快捷键
-pub fn register_shortcuts(app: &AppHandle) -> Result<(), Box<dyn std::error::Error>> {
+pub fn register_shortcuts(app: &AppHandle) -> Result<(), ShortcutError> {
     // Cmd/Ctrl + R - 刷新项目
     let shortcut_r = if cfg!(target_os = "macos") {
         "Cmd+R"

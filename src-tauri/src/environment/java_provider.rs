@@ -8,28 +8,26 @@ const MIN_JAVA_VERSION: &str = "11";
 const PROVIDER_ID: &str = "java";
 
 /// Check Java installation
-pub async fn check_java() -> Result<ProviderStatus, Box<dyn std::error::Error>> {
+pub async fn check_java() -> ProviderStatus {
     let path = super::types::command_path("java");
 
     match Command::new("java").arg("-version").output() {
         Ok(output) => {
             let version_str = parse_java_version(&output.stderr);
 
-            let status = ProviderStatus {
+            ProviderStatus {
                 provider_id: PROVIDER_ID.to_string(),
                 installed: true,
                 version: Some(version_str),
                 path,
-            };
-
-            Ok(status)
+            }
         }
-        Err(_) => Ok(ProviderStatus {
+        Err(_) => ProviderStatus {
             provider_id: PROVIDER_ID.to_string(),
             installed: false,
             version: None,
             path,
-        }),
+        },
     }
 }
 

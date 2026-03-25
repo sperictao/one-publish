@@ -24,7 +24,7 @@ use tauri_plugin_decorum::WebviewWindowExt;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    tauri::Builder::default()
+    let result = tauri::Builder::default()
         .plugin(tauri_plugin_log::Builder::new().build())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_process::init())
@@ -52,7 +52,9 @@ pub fn run() {
             }
         }))
         .setup(|app| {
-            let main_window = app.get_webview_window("main").unwrap();
+            let Some(main_window) = app.get_webview_window("main") else {
+                return Err(tauri::Error::WindowNotFound.into());
+            };
 
             // 根据显示器分辨率自适应窗口大小
             if let Ok(Some(monitor)) = main_window.current_monitor() {
@@ -75,7 +77,7 @@ pub fn run() {
             // 设置 macOS 交通灯位置
             #[cfg(target_os = "macos")]
             {
-                main_window.set_traffic_lights_inset(18.0, 32.0).unwrap();
+                main_window.set_traffic_lights_inset(18.0, 32.0)?;
             }
 
             // 初始化系统托盘
@@ -170,6 +172,10 @@ pub fn run() {
             store::set_execution_record_snapshot,
             tray::update_tray_menu
         ])
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .run(tauri::generate_context!());
+
+    if let Err(err) = result {
+        eprintln!("error while running tauri application: {err}");
+        std::process::exit(1);
+    }
 }

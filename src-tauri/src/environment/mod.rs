@@ -73,14 +73,14 @@ pub fn invalidate_environment_cache() {
 /// Run full environment check (optionally scoped by provider ids).
 pub async fn check_environment(
     provider_ids: Option<Vec<String>>,
-) -> Result<EnvironmentCheckResult, Box<dyn std::error::Error>> {
+) -> EnvironmentCheckResult {
     let provider_ids = normalize_provider_ids(provider_ids);
     let cache_key = make_cache_key(&provider_ids);
 
     if let Ok(guard) = cache().lock() {
         if let Some(entry) = guard.entries.get(&cache_key) {
             if entry.cached_at.elapsed() < ENV_CACHE_TTL {
-                return Ok(entry.result.clone());
+                return entry.result.clone();
             }
         }
     }
@@ -90,28 +90,28 @@ pub async fn check_environment(
     for provider_id in provider_ids {
         match provider_id.as_str() {
             "cargo" => {
-                let status = check_cargo().await?;
+                let status = check_cargo().await;
                 for issue in cargo_provider::detect_cargo_issues(&status) {
                     result = result.with_issue(issue);
                 }
                 result = result.with_provider(status);
             }
             "dotnet" => {
-                let status = check_dotnet().await?;
+                let status = check_dotnet().await;
                 for issue in dotnet_provider::detect_dotnet_issues(&status) {
                     result = result.with_issue(issue);
                 }
                 result = result.with_provider(status);
             }
             "go" => {
-                let status = check_go().await?;
+                let status = check_go().await;
                 for issue in go_provider::detect_go_issues(&status) {
                     result = result.with_issue(issue);
                 }
                 result = result.with_provider(status);
             }
             "java" => {
-                let status = check_java().await?;
+                let status = check_java().await;
                 for issue in java_provider::detect_java_issues(&status) {
                     result = result.with_issue(issue);
                 }
@@ -140,7 +140,7 @@ pub async fn check_environment(
         );
     }
 
-    Ok(result)
+    result
 }
 
 #[cfg(test)]
@@ -149,7 +149,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_check_environment() {
-        let result = check_environment(None).await.unwrap();
+        let result = check_environment(None).await;
         // The result will depend on what's installed on the test machine
         assert!(!result.providers.is_empty());
     }

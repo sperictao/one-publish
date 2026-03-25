@@ -182,20 +182,15 @@ pub fn parse_version(output: &[u8], prefix: &str) -> Option<String> {
     output_str
         .lines()
         .find_map(|line| {
-            if line.starts_with(prefix) {
-                Some(
-                    line.strip_prefix(prefix)
-                        .unwrap()
-                        .split_whitespace()
-                        .next()
-                        .unwrap_or("")
-                        .to_string(),
-                )
-            } else {
-                None
-            }
+            line.strip_prefix(prefix).and_then(|stripped| {
+                let version = stripped
+                    .split_whitespace()
+                    .next()
+                    .unwrap_or("")
+                    .to_string();
+                (!version.is_empty()).then_some(version)
+            })
         })
-        .filter(|s| !s.is_empty())
 }
 
 /// Check if a command is available in PATH

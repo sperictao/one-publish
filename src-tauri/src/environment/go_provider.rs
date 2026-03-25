@@ -8,28 +8,26 @@ const MIN_GO_VERSION: &str = "1.20";
 const PROVIDER_ID: &str = "go";
 
 /// Check Go installation
-pub async fn check_go() -> Result<ProviderStatus, Box<dyn std::error::Error>> {
+pub async fn check_go() -> ProviderStatus {
     let path = super::types::command_path("go");
 
     match Command::new("go").arg("version").output() {
         Ok(output) => {
             let version_str = parse_go_version(&output.stdout);
 
-            let status = ProviderStatus {
+            ProviderStatus {
                 provider_id: PROVIDER_ID.to_string(),
                 installed: true,
                 version: Some(version_str),
                 path,
-            };
-
-            Ok(status)
+            }
         }
-        Err(_) => Ok(ProviderStatus {
+        Err(_) => ProviderStatus {
             provider_id: PROVIDER_ID.to_string(),
             installed: false,
             version: None,
             path,
-        }),
+        },
     }
 }
 

@@ -8,7 +8,7 @@ const MIN_DOTNET_VERSION: &str = "6.0.0";
 const PROVIDER_ID: &str = "dotnet";
 
 /// Check .NET SDK installation
-pub async fn check_dotnet() -> Result<ProviderStatus, Box<dyn std::error::Error>> {
+pub async fn check_dotnet() -> ProviderStatus {
     let path = super::types::command_path("dotnet");
 
     match Command::new("dotnet").arg("--version").output() {
@@ -16,21 +16,19 @@ pub async fn check_dotnet() -> Result<ProviderStatus, Box<dyn std::error::Error>
             let version_str = super::types::parse_version(&output.stdout, "")
                 .unwrap_or_else(|| "unknown".to_string());
 
-            let status = ProviderStatus {
+            ProviderStatus {
                 provider_id: PROVIDER_ID.to_string(),
                 installed: true,
                 version: Some(version_str),
                 path,
-            };
-
-            Ok(status)
+            }
         }
-        Err(_) => Ok(ProviderStatus {
+        Err(_) => ProviderStatus {
             provider_id: PROVIDER_ID.to_string(),
             installed: false,
             version: None,
             path,
-        }),
+        },
     }
 }
 

@@ -274,10 +274,17 @@ impl Default for AppState {
 
 /// 获取配置文件路径
 fn get_config_path() -> PathBuf {
-    dirs::home_dir()
-        .expect("无法获取用户主目录")
-        .join(".one-publish")
-        .join("config.json")
+    if let Some(home_dir) = dirs::home_dir() {
+        return home_dir.join(".one-publish").join("config.json");
+    }
+
+    if let Ok(current_dir) = std::env::current_dir() {
+        log::warn!("无法获取用户主目录，回退到当前目录保存配置");
+        return current_dir.join(".one-publish").join("config.json");
+    }
+
+    log::warn!("无法获取用户主目录和当前目录，回退到相对路径保存配置");
+    PathBuf::from(".one-publish").join("config.json")
 }
 
 /// 从文件加载状态
@@ -358,7 +365,13 @@ fn state_store() -> &'static RwLock<AppState> {
 
 /// 获取当前状态
 pub fn get_state() -> AppState {
-    state_store().read().expect("读取状态锁失败").clone()
+    match state_store().read() {
+        Ok(guard) => guard.clone(),
+        Err(err) => {
+            log::error!("读取状态锁失败: {}", err);
+            err.into_inner().clone()
+        }
+    }
 }
 
 /// 更新状态
@@ -366,7 +379,9 @@ pub fn update_state(new_state: AppState) -> Result<(), String> {
     let normalized = sanitize_state(new_state);
     save_to_file(&normalized)?;
 
-    let mut guard = state_store().write().expect("写入状态锁失败");
+    let mut guard = state_store()
+        .write()
+        .map_err(|err| format!("写入状态锁失败: {}", err))?;
     *guard = normalized;
     Ok(())
 }

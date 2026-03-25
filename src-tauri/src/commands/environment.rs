@@ -7,12 +7,7 @@ use tokio::time::{timeout, Duration};
 pub async fn run_environment_check(
     provider_ids: Option<Vec<String>>,
 ) -> Result<crate::environment::EnvironmentCheckResult, crate::errors::AppError> {
-    check_environment(provider_ids).await.map_err(|e| {
-        crate::errors::AppError::unknown_with_code(
-            format!("environment check failed: {}", e),
-            "environment_check_failed",
-        )
-    })
+    Ok(check_environment(provider_ids).await)
 }
 
 /// Apply a fix action

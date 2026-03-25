@@ -1,4 +1,3 @@
-use anyhow::{anyhow, Context, Result};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::fs::{self, File};
@@ -8,6 +7,85 @@ use tokio::process::Command;
 use tokio::time::{timeout, Duration};
 use walkdir::WalkDir;
 use zip::{write::SimpleFileOptions, CompressionMethod, ZipWriter};
+
+type Result<T> = std::result::Result<T, ArtifactError>;
+
+#[derive(Debug, thiserror::Error)]
+pub enum ArtifactError {
+    #[error("{0}")]
+    Validation(String),
+    #[error("{context}: {source}")]
+    Io {
+        context: String,
+        #[source]
+        source: std::io::Error,
+    },
+    #[error("{context}: {source}")]
+    WalkDir {
+        context: String,
+        #[source]
+        source: walkdir::Error,
+    },
+    #[error("{context}: {source}")]
+    Zip {
+        context: String,
+        #[source]
+        source: zip::result::ZipError,
+    },
+    #[error("{context}: {source}")]
+    Join {
+        context: String,
+        #[source]
+        source: tokio::task::JoinError,
+    },
+    #[error("{context}: {source}")]
+    Path {
+        context: String,
+        #[source]
+        source: std::path::StripPrefixError,
+    },
+    #[error("signing command timed out")]
+    SignTimeout,
+}
+
+fn validation_error(message: impl Into<String>) -> ArtifactError {
+    ArtifactError::Validation(message.into())
+}
+
+fn io_error(context: impl Into<String>, source: std::io::Error) -> ArtifactError {
+    ArtifactError::Io {
+        context: context.into(),
+        source,
+    }
+}
+
+fn walkdir_error(context: impl Into<String>, source: walkdir::Error) -> ArtifactError {
+    ArtifactError::WalkDir {
+        context: context.into(),
+        source,
+    }
+}
+
+fn zip_error(context: impl Into<String>, source: zip::result::ZipError) -> ArtifactError {
+    ArtifactError::Zip {
+        context: context.into(),
+        source,
+    }
+}
+
+fn join_error(context: impl Into<String>, source: tokio::task::JoinError) -> ArtifactError {
+    ArtifactError::Join {
+        context: context.into(),
+        source,
+    }
+}
+
+fn path_error(context: impl Into<String>, source: std::path::StripPrefixError) -> ArtifactError {
+    ArtifactError::Path {
+        context: context.into(),
+        source,
+    }
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -48,7 +126,7 @@ async fn package_zip(
         package_zip_sync(&input_dir, &output_path, include_root_dir)
     })
     .await
-    .context("failed to join packaging task")?
+    .map_err(|source| join_error("failed to join packaging task", source))?
 }
 
 fn package_zip_sync(
@@ -57,21 +135,25 @@ fn package_zip_sync(
     include_root_dir: bool,
 ) -> Result<PackageResult> {
     if !input_dir.exists() {
-        return Err(anyhow!(
+        return Err(validation_error(format!(
             "input directory does not exist: {}",
             input_dir.display()
-        ));
+        )));
     }
     if !input_dir.is_dir() {
-        return Err(anyhow!(
+        return Err(validation_error(format!(
             "input path is not a directory: {}",
             input_dir.display()
-        ));
+        )));
     }
 
     if let Some(parent) = output_path.parent() {
-        fs::create_dir_all(parent)
-            .with_context(|| format!("failed to create output directory: {}", parent.display()))?;
+        fs::create_dir_all(parent).map_err(|source| {
+            io_error(
+                format!("failed to create output directory: {}", parent.display()),
+                source,
+            )
+        })?;
     }
 
     let root_name = input_dir
@@ -80,8 +162,12 @@ fn package_zip_sync(
         .unwrap_or("artifact")
         .to_string();
 
-    let output_file = File::create(output_path)
-        .with_context(|| format!("failed to create output file: {}", output_path.display()))?;
+    let output_file = File::create(output_path).map_err(|source| {
+        io_error(
+            format!("failed to create output file: {}", output_path.display()),
+            source,
+        )
+    })?;
 
     let mut zip = ZipWriter::new(output_file);
     let options = SimpleFileOptions::default().compression_method(CompressionMethod::Deflated);
@@ -89,8 +175,12 @@ fn package_zip_sync(
     let mut file_count = 0usize;
 
     for entry in WalkDir::new(input_dir).follow_links(false) {
-        let entry =
-            entry.with_context(|| format!("failed to read entry under {}", input_dir.display()))?;
+        let entry = entry.map_err(|source| {
+            walkdir_error(
+                format!("failed to read entry under {}", input_dir.display()),
+                source,
+            )
+        })?;
         if !entry.file_type().is_file() {
             continue;
         }
@@ -98,7 +188,7 @@ fn package_zip_sync(
         let rel = entry
             .path()
             .strip_prefix(input_dir)
-            .with_context(|| "failed to compute relative path")?;
+            .map_err(|source| path_error("failed to compute relative path", source))?;
         if rel.as_os_str().is_empty() {
             continue;
         }
@@ -112,20 +202,22 @@ fn package_zip_sync(
         let name = normalize_zip_path(&name_path);
 
         zip.start_file(name, options)
-            .with_context(|| "failed to add file to zip")?;
+            .map_err(|source| zip_error("failed to add file to zip", source))?;
 
         let mut src = File::open(entry.path())
-            .with_context(|| format!("failed to open {}", entry.path().display()))?;
-        std::io::copy(&mut src, &mut zip)
-            .with_context(|| format!("failed to write {}", entry.path().display()))?;
+            .map_err(|source| io_error(format!("failed to open {}", entry.path().display()), source))?;
+        std::io::copy(&mut src, &mut zip).map_err(|source| {
+            io_error(format!("failed to write {}", entry.path().display()), source)
+        })?;
 
         file_count += 1;
     }
 
-    zip.finish().with_context(|| "failed to finalize zip")?;
+    zip.finish()
+        .map_err(|source| zip_error("failed to finalize zip", source))?;
 
     let bytes = fs::metadata(output_path)
-        .with_context(|| format!("failed to stat {}", output_path.display()))?
+        .map_err(|source| io_error(format!("failed to stat {}", output_path.display()), source))?
         .len();
 
     let sha256 = compute_sha256_hex(output_path)?;
@@ -144,14 +236,16 @@ fn normalize_zip_path(path: &Path) -> String {
 }
 
 fn compute_sha256_hex(path: &Path) -> Result<String> {
-    let mut file =
-        File::open(path).with_context(|| format!("failed to open {}", path.display()))?;
+    let mut file = File::open(path)
+        .map_err(|source| io_error(format!("failed to open {}", path.display()), source))?;
 
     let mut hasher = Sha256::new();
     let mut buf = [0u8; 8192];
 
     loop {
-        let n = file.read(&mut buf).with_context(|| "failed to read file")?;
+        let n = file
+            .read(&mut buf)
+            .map_err(|source| io_error("failed to read file", source))?;
         if n == 0 {
             break;
         }
@@ -195,16 +289,16 @@ async fn sign_gpg_detached(
     key_id: Option<&str>,
 ) -> Result<SignResult> {
     if !artifact_path.exists() {
-        return Err(anyhow!(
+        return Err(validation_error(format!(
             "artifact does not exist: {}",
             artifact_path.display()
-        ));
+        )));
     }
     if !artifact_path.is_file() {
-        return Err(anyhow!(
+        return Err(validation_error(format!(
             "artifact path is not a file: {}",
             artifact_path.display()
-        ));
+        )));
     }
 
     let signature_path = output_path
@@ -212,10 +306,13 @@ async fn sign_gpg_detached(
         .unwrap_or_else(|| PathBuf::from(format!("{}.asc", artifact_path.to_string_lossy())));
 
     if let Some(parent) = signature_path.parent() {
-        fs::create_dir_all(parent).with_context(|| {
-            format!(
-                "failed to create signature output directory: {}",
-                parent.display()
+        fs::create_dir_all(parent).map_err(|source| {
+            io_error(
+                format!(
+                    "failed to create signature output directory: {}",
+                    parent.display()
+                ),
+                source,
             )
         })?;
     }
@@ -243,8 +340,8 @@ async fn sign_gpg_detached(
         Command::new("gpg").args(&args).output(),
     )
     .await
-    .map_err(|_| anyhow!("signing command timed out"))?
-    .with_context(|| "failed to run gpg")?;
+    .map_err(|_| ArtifactError::SignTimeout)?
+    .map_err(|source| io_error("failed to run gpg", source))?;
 
     let exit_code = output.status.code().unwrap_or(-1);
     let success = exit_code == 0;
