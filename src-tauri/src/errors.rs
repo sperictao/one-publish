@@ -171,6 +171,19 @@ impl AppError {
             code: Some(code.into()),
         }
     }
+
+    pub fn render_with_details_and_code(
+        message: impl Into<String>,
+        details: impl Into<String>,
+        code: impl Into<String>,
+    ) -> Self {
+        Self {
+            kind: ErrorKind::RenderError,
+            message: message.into(),
+            details: Some(details.into()),
+            code: Some(code.into()),
+        }
+    }
 }
 
 impl fmt::Display for AppError {

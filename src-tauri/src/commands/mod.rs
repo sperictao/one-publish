@@ -1,4 +1,5 @@
 // Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
+use crate::parameter::RenderError;
 use crate::provider::registry::ProviderRegistry;
 use crate::spec::{PublishSpec, SpecValue, SPEC_VERSION};
 use serde::{Deserialize, Serialize};
@@ -128,6 +129,32 @@ fn publish_error(
     crate::errors::AppError::publish_with_code(message, code)
 }
 
+fn publish_schema_error(source: RenderError) -> crate::errors::AppError {
+    publish_error(
+        format!("failed to load provider schema: {source}"),
+        "publish_schema_load_failed",
+    )
+}
+
+fn classify_publish_render_error_code(source: &RenderError) -> &'static str {
+    match source {
+        RenderError::UnknownParameter(_) => "publish_unknown_parameter",
+        RenderError::InvalidType { .. } => "publish_invalid_parameter_type",
+        RenderError::InvalidArrayTypeItem { .. } => "publish_invalid_parameter_array_item",
+        RenderError::MissingPrefix(_) => "publish_missing_parameter_prefix",
+        RenderError::InvalidMapValue { .. } => "publish_invalid_parameter_map_value",
+    }
+}
+
+fn publish_render_error(source: RenderError) -> crate::errors::AppError {
+    let details = source.to_string();
+    crate::errors::AppError::render_with_details_and_code(
+        format!("parameter render error: {details}"),
+        details,
+        classify_publish_render_error_code(&source),
+    )
+}
+
 #[tauri::command]
 pub async fn execute_publish(
     app: AppHandle,
@@ -223,13 +250,11 @@ async fn execute_publish_spec(
     let provider = registry
         .get(&spec.provider_id)
         .map_err(crate::errors::AppError::from)?;
-    let schema = provider
-        .get_schema()
-        .map_err(|e| crate::errors::AppError::from(crate::compiler::CompileError::from(e)))?;
+    let schema = provider.get_schema().map_err(publish_schema_error)?;
     let renderer = crate::parameter::ParameterRenderer::new(schema);
     let rendered = renderer
         .render(&spec.parameters)
-        .map_err(|e| crate::errors::AppError::from(crate::compiler::CompileError::from(e)))?;
+        .map_err(publish_render_error)?;
     let (base_program, mut args) = resolve_plan_command(&plan)?;
     if spec.provider_id == "dotnet" {
         args.push(spec.project_path.clone());
@@ -603,6 +628,7 @@ fn count_output_files(output_dir: &str) -> usize {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::errors::ErrorKind;
     use std::path::PathBuf;
 
     fn base_dotnet_config() -> PublishConfig {
@@ -632,6 +658,29 @@ mod tests {
             _ => panic!("expected properties map"),
         }
     }
+
+    #[test]
+    fn publish_schema_error_uses_publish_kind_and_code() {
+        let err = publish_schema_error(RenderError::UnknownParameter(
+            "failed to read schema file: boom".to_string(),
+        ));
+
+        assert_eq!(err.kind, ErrorKind::Publish);
+        assert_eq!(err.code.as_deref(), Some("publish_schema_load_failed"));
+    }
+
+    #[test]
+    fn publish_render_error_keeps_render_kind_and_specific_code() {
+        let err = publish_render_error(RenderError::InvalidType {
+            parameter: "configuration".to_string(),
+            expected: "string".to_string(),
+        });
+
+        assert_eq!(err.kind, ErrorKind::RenderError);
+        assert_eq!(err.code.as_deref(), Some("publish_invalid_parameter_type"));
+        assert!(err.details.as_deref().is_some());
+    }
+
     #[test]
     fn resolve_plan_command_uses_first_step_title() {
         let plan = crate::plan::ExecutionPlan {
