@@ -5,7 +5,6 @@ import {
   useMemo,
   type PointerEvent as ReactPointerEvent,
   useRef,
-  useState,
   type CSSProperties,
 } from "react";
 import { useReducedMotion } from "./useReducedMotion";
@@ -15,7 +14,12 @@ import { useFloatingDynamics } from "./useFloatingDynamics";
 
 interface UseFloatingRepoCardOptions {
   filteredRepoIds: string[];
+  targetRepoId: string | null;
   selectedRepoId: string | null;
+  freezeFloating: boolean;
+  onListPointerEnter: () => void;
+  onListPointerLeave: () => void;
+  onPointerRepoChange: (repoId: string | null) => void;
 }
 
 interface UseFloatingRepoCardResult {
@@ -26,7 +30,6 @@ interface UseFloatingRepoCardResult {
   floatingCardMotionStyle: CSSProperties;
   floatingCardSurfaceStyle: CSSProperties;
   setRepoRowRef: (repoId: string) => (node: HTMLDivElement | null) => void;
-  handleRepoMouseEnter: (repoId: string) => void;
   handleListPointerMove: (event: ReactPointerEvent<HTMLDivElement>) => void;
   handleListPointerEnter: (event: ReactPointerEvent<HTMLDivElement>) => void;
   handleListMouseLeave: () => void;
@@ -35,23 +38,24 @@ interface UseFloatingRepoCardResult {
 
 export function useFloatingRepoCard({
   filteredRepoIds,
+  targetRepoId,
   selectedRepoId,
+  freezeFloating,
+  onListPointerEnter,
+  onListPointerLeave,
+  onPointerRepoChange,
 }: UseFloatingRepoCardOptions): UseFloatingRepoCardResult {
-  const [hoveredRepoId, setHoveredRepoId] = useState<string | null>(null);
-
   const listRef = useRef<HTMLDivElement | null>(null);
   const floatingCardSurfaceRef = useRef<HTMLDivElement | null>(null);
   const rowRefs = useRef<Record<string, HTMLDivElement | null>>({});
   const cardTargetRepoIdRef = useRef<string | null>(null);
+  const activePointerRepoIdRef = useRef<string | null>(null);
+  const previousTargetRepoIdRef = useRef<string | null>(null);
 
   const isReducedMotionRef = useReducedMotion();
 
-  const {
-    hoveredRepoIdRef,
-    lastHoveredRepoIdRef,
-    resolvePointerRepoId,
-    resolveNearestRepoIdByPointerY,
-  } = usePointerRepoId({ filteredRepoIds, rowRefs });
+  const { resolvePointerRepoId, resolveNearestRepoIdByPointerY } =
+    usePointerRepoId({ filteredRepoIds, rowRefs });
 
   const {
     floatingDynamics,
@@ -84,8 +88,6 @@ export function useFloatingRepoCard({
     [filteredRepoIds]
   );
 
-  const cardTargetRepoId = hoveredRepoId ?? selectedRepoId ?? null;
-
   const setRepoRowRef = useCallback(
     (repoId: string) => (node: HTMLDivElement | null) => {
       if (node) {
@@ -95,31 +97,6 @@ export function useFloatingRepoCard({
       delete rowRefs.current[repoId];
     },
     []
-  );
-
-  const handleRepoMouseEnter = useCallback(
-    (repoId: string) => {
-      const previousHoveredRepoId = hoveredRepoIdRef.current;
-      lastHoveredRepoIdRef.current = previousHoveredRepoId;
-      hoveredRepoIdRef.current = repoId;
-      setHoveredRepoId(repoId);
-
-      // In pointer-follow mode, skip snap-to-row (let pointerMove control position)
-      if (!isPointerFollowingRef.current) {
-        updateFloatingRect(repoId);
-      }
-
-      const enteredSelectedRepo = repoId === selectedRepoId;
-      const enteredFromOutside = lastHoveredRepoIdRef.current === null;
-      const enteredFromNonSelectedRepo =
-        lastHoveredRepoIdRef.current !== null &&
-        lastHoveredRepoIdRef.current !== selectedRepoId;
-
-      if (enteredSelectedRepo && (enteredFromOutside || enteredFromNonSelectedRepo)) {
-        triggerSelectedBounce();
-      }
-    },
-    [hoveredRepoIdRef, isPointerFollowingRef, lastHoveredRepoIdRef, selectedRepoId, triggerSelectedBounce, updateFloatingRect]
   );
 
   const handleListPointerMove = useCallback(
@@ -142,31 +119,51 @@ export function useFloatingRepoCard({
       if (!listElement) return;
       const pointerY = event.clientY - listElement.getBoundingClientRect().top + listElement.scrollTop;
 
+      if (freezeFloating) {
+        return;
+      }
+
       // Resolve which repo the pointer is over
       const resolvedRepoId = resolvePointerRepoId(event.target) ?? resolveNearestRepoIdByPointerY(pointerY);
 
-      // Update hovered repo if changed
-      if (resolvedRepoId && resolvedRepoId !== hoveredRepoIdRef.current) {
-        handleRepoMouseEnter(resolvedRepoId);
+      if (!resolvedRepoId) {
+        return;
       }
 
-      // Pointer-follow: update card Y to track mouse position
-      const currentHoveredRepoId = hoveredRepoIdRef.current;
-      if (!currentHoveredRepoId) return;
+      if (resolvedRepoId !== activePointerRepoIdRef.current) {
+        activePointerRepoIdRef.current = resolvedRepoId;
+        onPointerRepoChange(resolvedRepoId);
+      }
 
-      commitPointerFollowY(pointerY, currentHoveredRepoId);
+      commitPointerFollowY(pointerY, resolvedRepoId);
     },
-    [commitPointerFollowY, floatingCardSurfaceRef, handleRepoMouseEnter, hoveredRepoIdRef, resolveNearestRepoIdByPointerY, resolvePointerRepoId, updateHighlight]
+    [
+      commitPointerFollowY,
+      floatingCardSurfaceRef,
+      freezeFloating,
+      onPointerRepoChange,
+      resolveNearestRepoIdByPointerY,
+      resolvePointerRepoId,
+      updateHighlight,
+    ]
   );
 
   const handleListPointerEnter = useCallback(
     (event: ReactPointerEvent<HTMLDivElement>) => {
       if (event.pointerType && event.pointerType !== "mouse") return;
 
+      onListPointerEnter();
+
+      if (freezeFloating) {
+        return;
+      }
+
       const fallbackRepoId = resolvePointerRepoId(event.target);
       if (fallbackRepoId) {
-        if (fallbackRepoId === hoveredRepoIdRef.current) return;
-        handleRepoMouseEnter(fallbackRepoId);
+        if (fallbackRepoId !== activePointerRepoIdRef.current) {
+          activePointerRepoIdRef.current = fallbackRepoId;
+          onPointerRepoChange(fallbackRepoId);
+        }
         return;
       }
 
@@ -177,29 +174,53 @@ export function useFloatingRepoCard({
         event.clientY - listElement.getBoundingClientRect().top + listElement.scrollTop;
       const nearestRepoId = resolveNearestRepoIdByPointerY(pointerY);
 
-      if (!nearestRepoId || nearestRepoId === hoveredRepoIdRef.current) return;
-      handleRepoMouseEnter(nearestRepoId);
+      if (!nearestRepoId || nearestRepoId === activePointerRepoIdRef.current) return;
+
+      activePointerRepoIdRef.current = nearestRepoId;
+      onPointerRepoChange(nearestRepoId);
     },
-    [handleRepoMouseEnter, hoveredRepoIdRef, resolveNearestRepoIdByPointerY, resolvePointerRepoId]
+    [
+      freezeFloating,
+      onListPointerEnter,
+      onPointerRepoChange,
+      resolveNearestRepoIdByPointerY,
+      resolvePointerRepoId,
+    ]
   );
 
   const handleListMouseLeave = useCallback(() => {
     isPointerFollowingRef.current = false;
+    onListPointerLeave();
 
-    const previousHoveredRepoId = hoveredRepoIdRef.current;
-    lastHoveredRepoIdRef.current = previousHoveredRepoId;
+    const previousPointerRepoId = activePointerRepoIdRef.current;
+    activePointerRepoIdRef.current = null;
 
-    if (previousHoveredRepoId && previousHoveredRepoId === selectedRepoId) {
+    if (previousPointerRepoId && previousPointerRepoId === selectedRepoId) {
       triggerSelectedBounce();
-    } else if (previousHoveredRepoId && selectedRepoId) {
+    } else if (previousPointerRepoId && selectedRepoId) {
       startSelectedGlowDecay();
     }
 
-    hoveredRepoIdRef.current = null;
     cancelFollow();
-    updateFloatingRect(selectedRepoId ?? null);
-    setHoveredRepoId(null);
-  }, [cancelFollow, hoveredRepoIdRef, isPointerFollowingRef, lastHoveredRepoIdRef, selectedRepoId, startSelectedGlowDecay, triggerSelectedBounce, updateFloatingRect]);
+
+    if (freezeFloating) {
+      updateFloatingRect(targetRepoId);
+      return;
+    }
+
+    onPointerRepoChange(null);
+  }, [
+    cancelFollow,
+    freezeFloating,
+    isPointerFollowingRef,
+    onListPointerLeave,
+    onPointerRepoChange,
+    selectedRepoId,
+    startSelectedGlowDecay,
+    targetRepoId,
+    triggerSelectedBounce,
+    updateFloatingRect,
+  ]);
 
   const floatingCardMotionStyle = useMemo<CSSProperties>(() => {
     const style: CSSProperties = {
@@ -261,26 +282,39 @@ export function useFloatingRepoCard({
   }, [updateFloatingRect]);
 
   useEffect(() => {
-    cardTargetRepoIdRef.current = cardTargetRepoId;
-  }, [cardTargetRepoId]);
+    cardTargetRepoIdRef.current = targetRepoId;
+  }, [targetRepoId]);
 
   useEffect(() => {
-    if (!hoveredRepoId) return;
-    if (filteredRepoIds.includes(hoveredRepoId)) return;
-    hoveredRepoIdRef.current = null;
-    setHoveredRepoId(null);
-  }, [filteredRepoIds, hoveredRepoId, hoveredRepoIdRef]);
+    const previousTargetRepoId = previousTargetRepoIdRef.current;
+    previousTargetRepoIdRef.current = targetRepoId;
 
-  // Force snap to row on selection change (overrides pointer-follow)
-  useLayoutEffect(() => {
-    isPointerFollowingRef.current = false;
-    updateFloatingRect(hoveredRepoIdRef.current ?? selectedRepoId);
-  }, [selectedRepoId, updateFloatingRect]);
+    if (
+      targetRepoId &&
+      targetRepoId === selectedRepoId &&
+      previousTargetRepoId !== selectedRepoId
+    ) {
+      triggerSelectedBounce();
+    }
+  }, [selectedRepoId, targetRepoId, triggerSelectedBounce]);
 
   useLayoutEffect(() => {
+    if (freezeFloating) {
+      isPointerFollowingRef.current = false;
+      updateFloatingRect(targetRepoId);
+      return;
+    }
+
     if (isPointerFollowingRef.current) return;
-    updateFloatingRect(cardTargetRepoId);
-  }, [cardTargetRepoId, filteredRepoIdsSignature, updateFloatingRect]);
+    updateFloatingRect(targetRepoId);
+  }, [freezeFloating, filteredRepoIdsSignature, isPointerFollowingRef, targetRepoId, updateFloatingRect]);
+
+  useEffect(() => {
+    const activePointerRepoId = activePointerRepoIdRef.current;
+    if (!activePointerRepoId) return;
+    if (filteredRepoIds.includes(activePointerRepoId)) return;
+    activePointerRepoIdRef.current = null;
+  }, [filteredRepoIds, filteredRepoIdsSignature]);
 
   useEffect(() => {
     const listElement = listRef.current;
@@ -308,12 +342,11 @@ export function useFloatingRepoCard({
   return {
     listRef,
     floatingCardSurfaceRef,
-    cardTargetRepoId,
+    cardTargetRepoId: targetRepoId,
     floatingVisible: floatingRenderRect.visible,
     floatingCardMotionStyle,
     floatingCardSurfaceStyle,
     setRepoRowRef,
-    handleRepoMouseEnter,
     handleListPointerMove,
     handleListPointerEnter,
     handleListMouseLeave,

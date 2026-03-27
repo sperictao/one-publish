@@ -32,6 +32,33 @@ export const hasMeaningfulRectDiff = (
   Math.abs(current.width - next.width) > 0.2 ||
   Math.abs(current.height - next.height) > 0.2;
 
+export interface PointerFollowTopBounds {
+  minTop: number;
+  maxTop: number;
+}
+
+export const resolvePointerFollowTopBounds = (
+  rowElements: Array<{ offsetTop: number } | null | undefined>
+): PointerFollowTopBounds | null => {
+  let minTop = Number.POSITIVE_INFINITY;
+  let maxTop = Number.NEGATIVE_INFINITY;
+
+  for (const rowElement of rowElements) {
+    if (!rowElement) {
+      continue;
+    }
+
+    minTop = Math.min(minTop, rowElement.offsetTop);
+    maxTop = Math.max(maxTop, rowElement.offsetTop);
+  }
+
+  if (!Number.isFinite(minTop) || !Number.isFinite(maxTop)) {
+    return null;
+  }
+
+  return { minTop, maxTop };
+};
+
 interface UseFloatingPositionOptions {
   isReducedMotionRef: React.MutableRefObject<boolean>;
   rowRefs: React.MutableRefObject<Record<string, HTMLDivElement | null>>;
@@ -273,13 +300,24 @@ export function useFloatingPosition({
 
       let top = pointerY - rowHeight / 2;
 
-      // Clamp to list bounds
-      const listElement = listRef.current;
-      if (listElement) {
-        const maxTop = listElement.scrollHeight - rowHeight;
-        top = Math.max(0, Math.min(maxTop, top));
+      // Clamp to actual row bounds first, avoiding empty-space follow
+      const pointerFollowTopBounds = resolvePointerFollowTopBounds(
+        Object.values(rowRefs.current)
+      );
+
+      if (pointerFollowTopBounds) {
+        top = Math.max(
+          pointerFollowTopBounds.minTop,
+          Math.min(pointerFollowTopBounds.maxTop, top)
+        );
       } else {
-        top = Math.max(0, top);
+        const listElement = listRef.current;
+        if (listElement) {
+          const maxTop = listElement.scrollHeight - rowHeight;
+          top = Math.max(0, Math.min(maxTop, top));
+        } else {
+          top = Math.max(0, top);
+        }
       }
 
       // Keep previousFloatingRectRef aligned with the row rect

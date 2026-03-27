@@ -14,7 +14,6 @@ export interface RepositoryListFloatingBindings {
   floatingCardMotionStyle: CSSProperties;
   floatingCardSurfaceStyle: CSSProperties;
   setRepoRowRef: (repoId: string) => (node: HTMLDivElement | null) => void;
-  handleRepoMouseEnter: (repoId: string) => void;
   handleListPointerMove: (event: ReactPointerEvent<HTMLDivElement>) => void;
   handleListPointerEnter: (event: ReactPointerEvent<HTMLDivElement>) => void;
   handleListMouseLeave: () => void;
@@ -23,18 +22,33 @@ export interface RepositoryListFloatingBindings {
 
 interface RepositoryListFloatingLayerProps {
   filteredRepoIds: string[];
+  targetRepoId: string | null;
   selectedRepoId: string | null;
+  freezeFloating: boolean;
+  onListPointerEnter: () => void;
+  onListPointerLeave: () => void;
+  onPointerRepoChange: (repoId: string | null) => void;
   children: (bindings: RepositoryListFloatingBindings) => ReactNode;
 }
 
 export function RepositoryListFloatingLayer({
   filteredRepoIds,
+  targetRepoId,
   selectedRepoId,
+  freezeFloating,
+  onListPointerEnter,
+  onListPointerLeave,
+  onPointerRepoChange,
   children,
 }: RepositoryListFloatingLayerProps) {
   const floatingBindings = useFloatingRepoCard({
     filteredRepoIds,
+    targetRepoId,
     selectedRepoId,
+    freezeFloating,
+    onListPointerEnter,
+    onListPointerLeave,
+    onPointerRepoChange,
   });
 
   return <>{children(floatingBindings)}</>;
