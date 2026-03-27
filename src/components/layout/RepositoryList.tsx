@@ -364,6 +364,9 @@ export function RepositoryList({
           <RepositoryListFloatingLayer
             filteredRepoIds={filteredRepoIds}
             targetRepoId={interaction.visualTargetRepoId}
+            restingTargetRepoId={
+              interaction.activeMenuRepoId ?? interaction.focusedRepoId ?? selectedRepoId
+            }
             selectedRepoId={selectedRepoId}
             freezeFloating={interaction.freezeFloating}
             onListPointerEnter={interaction.handleListPointerEnter}

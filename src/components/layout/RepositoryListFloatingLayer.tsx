@@ -23,6 +23,7 @@ export interface RepositoryListFloatingBindings {
 interface RepositoryListFloatingLayerProps {
   filteredRepoIds: string[];
   targetRepoId: string | null;
+  restingTargetRepoId: string | null;
   selectedRepoId: string | null;
   freezeFloating: boolean;
   onListPointerEnter: () => void;
@@ -34,6 +35,7 @@ interface RepositoryListFloatingLayerProps {
 export function RepositoryListFloatingLayer({
   filteredRepoIds,
   targetRepoId,
+  restingTargetRepoId,
   selectedRepoId,
   freezeFloating,
   onListPointerEnter,
@@ -44,6 +46,7 @@ export function RepositoryListFloatingLayer({
   const floatingBindings = useFloatingRepoCard({
     filteredRepoIds,
     targetRepoId,
+    restingTargetRepoId,
     selectedRepoId,
     freezeFloating,
     onListPointerEnter,

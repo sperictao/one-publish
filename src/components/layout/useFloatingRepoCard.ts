@@ -15,6 +15,7 @@ import { useFloatingDynamics } from "./useFloatingDynamics";
 interface UseFloatingRepoCardOptions {
   filteredRepoIds: string[];
   targetRepoId: string | null;
+  restingTargetRepoId: string | null;
   selectedRepoId: string | null;
   freezeFloating: boolean;
   onListPointerEnter: () => void;
@@ -39,6 +40,7 @@ interface UseFloatingRepoCardResult {
 export function useFloatingRepoCard({
   filteredRepoIds,
   targetRepoId,
+  restingTargetRepoId,
   selectedRepoId,
   freezeFloating,
   onListPointerEnter,
@@ -208,6 +210,7 @@ export function useFloatingRepoCard({
       return;
     }
 
+    updateFloatingRect(restingTargetRepoId);
     onPointerRepoChange(null);
   }, [
     cancelFollow,
@@ -215,6 +218,7 @@ export function useFloatingRepoCard({
     isPointerFollowingRef,
     onListPointerLeave,
     onPointerRepoChange,
+    restingTargetRepoId,
     selectedRepoId,
     startSelectedGlowDecay,
     targetRepoId,
