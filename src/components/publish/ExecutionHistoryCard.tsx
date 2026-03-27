@@ -14,13 +14,9 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Switch } from "@/components/ui/switch";
 import { Loader2 } from "lucide-react";
 import type { ExecutionRecord } from "@/lib/store";
 import type {
-  DailyTriagePreset,
-  HistoryExportFormat,
-  HistoryFilterPreset,
   HistoryFilterStatus,
   HistoryFilterWindow,
 } from "@/lib/historyFilterPresets";
@@ -35,10 +31,6 @@ export interface ExecutionHistoryCardProps {
   historyFilterStatus: HistoryFilterStatus;
   historyFilterWindow: HistoryFilterWindow;
   historyFilterKeyword: string;
-  selectedHistoryPresetId: string;
-  historyFilterPresets: HistoryFilterPreset[];
-  dailyTriagePreset: DailyTriagePreset;
-  dailyTriageRecords: ExecutionRecord[];
   isExportingHistory: boolean;
   isExportingDiagnosticsIndex: boolean;
   isPublishing: boolean;
@@ -49,13 +41,7 @@ export interface ExecutionHistoryCardProps {
   onHistoryFilterStatusChange: (value: HistoryFilterStatus) => void;
   onHistoryFilterWindowChange: (value: HistoryFilterWindow) => void;
   onHistoryFilterKeywordChange: (value: string) => void;
-  onApplyHistoryPreset: (value: string) => void;
-  onSaveCurrentHistoryPreset: () => void;
-  onDeleteSelectedHistoryPreset: () => void;
-  onDailyTriagePresetChange: (updater: (prev: DailyTriagePreset) => DailyTriagePreset) => void;
-  onResetDailyTriagePreset: () => void;
   onExportExecutionHistory: () => Promise<void>;
-  onExportDailyTriageReport: () => void;
   onExportDiagnosticsIndex: () => void;
   onClearFilters: () => void;
   onOpenSnapshotFromRecord: (record: ExecutionRecord) => Promise<void>;
@@ -75,10 +61,6 @@ export function ExecutionHistoryCard({
   historyFilterStatus,
   historyFilterWindow,
   historyFilterKeyword,
-  selectedHistoryPresetId,
-  historyFilterPresets,
-  dailyTriagePreset,
-  dailyTriageRecords,
   isExportingHistory,
   isExportingDiagnosticsIndex,
   isPublishing,
@@ -89,13 +71,7 @@ export function ExecutionHistoryCard({
   onHistoryFilterStatusChange,
   onHistoryFilterWindowChange,
   onHistoryFilterKeywordChange,
-  onApplyHistoryPreset,
-  onSaveCurrentHistoryPreset,
-  onDeleteSelectedHistoryPreset,
-  onDailyTriagePresetChange,
-  onResetDailyTriagePreset,
   onExportExecutionHistory,
-  onExportDailyTriageReport,
   onExportDiagnosticsIndex,
   onClearFilters,
   onOpenSnapshotFromRecord,
@@ -178,153 +154,6 @@ export function ExecutionHistoryCard({
           />
         </div>
 
-        <div className="flex flex-wrap items-center gap-2">
-          <Select value={selectedHistoryPresetId} onValueChange={onApplyHistoryPreset}>
-            <SelectTrigger className="h-8 w-[220px]">
-              <SelectValue placeholder={historyT.selectPreset || "选择筛选预设"} />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="none">{historyT.noPreset || "(不使用预设)"}</SelectItem>
-              {historyFilterPresets.map((preset) => (
-                <SelectItem key={preset.id} value={preset.id}>
-                  {preset.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <Button type="button" size="sm" variant="outline" onClick={onSaveCurrentHistoryPreset}>
-            {historyT.saveAsPreset || "保存为预设"}
-          </Button>
-          <Button
-            type="button"
-            size="sm"
-            variant="ghost"
-            onClick={onDeleteSelectedHistoryPreset}
-            disabled={selectedHistoryPresetId === "none"}
-          >
-            {historyT.deletePreset || "删除预设"}
-          </Button>
-        </div>
-
-        <details className="group rounded-xl border border-[var(--glass-border-subtle)] bg-[var(--glass-input-bg)]">
-          <summary className="flex cursor-pointer items-center justify-between p-3 text-sm font-medium select-none">
-            <span>{historyT.dailyPresetTitle || "每日排障预设"}</span>
-            <div className="flex items-center gap-2">
-              <span className="text-xs text-muted-foreground">{historyT.enabled || "启用"}</span>
-              <Switch
-                checked={dailyTriagePreset.enabled}
-                onCheckedChange={(checked) =>
-                  onDailyTriagePresetChange((prev) => ({
-                    ...prev,
-                    enabled: checked,
-                  }))
-                }
-              />
-            </div>
-          </summary>
-          <div className="border-t border-[var(--glass-divider)] p-3 space-y-2">
-            <div className="grid gap-2 md:grid-cols-5">
-              <Select
-                value={dailyTriagePreset.provider}
-                onValueChange={(value) =>
-                  onDailyTriagePresetChange((prev) => ({
-                    ...prev,
-                    provider: value,
-                  }))
-                }
-              >
-                <SelectTrigger className="h-8">
-                  <SelectValue placeholder={historyT.provider || "Provider"} />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">{historyT.allProviders || "全部 Provider"}</SelectItem>
-                  {historyProviderOptions.map((providerId) => (
-                    <SelectItem key={`triage-${providerId}`} value={providerId}>
-                      {providerId}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <Select
-                value={dailyTriagePreset.status}
-                onValueChange={(value) =>
-                  onDailyTriagePresetChange((prev) => ({
-                    ...prev,
-                    status: value as HistoryFilterStatus,
-                  }))
-                }
-              >
-                <SelectTrigger className="h-8">
-                  <SelectValue placeholder={historyT.status || "状态"} />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">{historyT.allStatuses || "全部状态"}</SelectItem>
-                  <SelectItem value="success">{appT.statusSuccess || "成功"}</SelectItem>
-                  <SelectItem value="failed">{appT.statusFailed || "失败"}</SelectItem>
-                  <SelectItem value="cancelled">{appT.statusCancelled || "已取消"}</SelectItem>
-                </SelectContent>
-              </Select>
-              <Select
-                value={dailyTriagePreset.window}
-                onValueChange={(value) =>
-                  onDailyTriagePresetChange((prev) => ({
-                    ...prev,
-                    window: value as HistoryFilterWindow,
-                  }))
-                }
-              >
-                <SelectTrigger className="h-8">
-                  <SelectValue placeholder={historyT.timeWindow || "时间窗口"} />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">{historyT.allTime || "全部时间"}</SelectItem>
-                  <SelectItem value="24h">{historyT.last24Hours || "最近 24 小时"}</SelectItem>
-                  <SelectItem value="7d">{historyT.last7Days || "最近 7 天"}</SelectItem>
-                  <SelectItem value="30d">{historyT.last30Days || "最近 30 天"}</SelectItem>
-                </SelectContent>
-              </Select>
-              <Select
-                value={dailyTriagePreset.format}
-                onValueChange={(value) =>
-                  onDailyTriagePresetChange((prev) => ({
-                    ...prev,
-                    format: value as HistoryExportFormat,
-                  }))
-                }
-              >
-                <SelectTrigger className="h-8">
-                  <SelectValue placeholder={historyT.format || "格式"} />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="csv">CSV</SelectItem>
-                  <SelectItem value="json">JSON</SelectItem>
-                </SelectContent>
-              </Select>
-              <Input
-                className="h-8"
-                value={dailyTriagePreset.keyword}
-                onChange={(event) =>
-                  onDailyTriagePresetChange((prev) => ({
-                    ...prev,
-                    keyword: event.target.value,
-                  }))
-                }
-                placeholder={historyT.dailyKeyword || "日报关键词（可选）"}
-              />
-            </div>
-            <div className="text-xs text-muted-foreground">
-              {(historyT.dailyPresetMatches || "当前预设命中 {{count}} 条记录").replace(
-                "{{count}}",
-                String(dailyTriageRecords.length)
-              )}
-              {dailyTriagePreset.enabled ? "" : historyT.disabled || "（已禁用）"}
-            </div>
-            <Button type="button" size="sm" variant="secondary" onClick={onResetDailyTriagePreset}>
-              {historyT.resetDailyPreset || "恢复日报默认预设"}
-            </Button>
-          </div>
-        </details>
-
         <div className="flex items-center justify-between border-t border-[var(--glass-divider)] pt-3">
           <div className="flex flex-wrap gap-2">
             <Button
@@ -342,23 +171,6 @@ export function ExecutionHistoryCard({
                 </>
               ) : (
                 historyT.exportHistory || "导出历史"
-              )}
-            </Button>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              className="w-fit"
-              onClick={onExportDailyTriageReport}
-              disabled={!dailyTriagePreset.enabled || isExportingHistory}
-            >
-              {isExportingHistory ? (
-                <>
-                  <Loader2 className="mr-1 h-3 w-3 animate-spin" />
-                  {appT.exporting || "导出中..."}
-                </>
-              ) : (
-                historyT.exportDailyReport || "一键导出日报"
               )}
             </Button>
             <Button

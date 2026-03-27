@@ -4,12 +4,7 @@ import { save } from "@tauri-apps/plugin-dialog";
 import { toast } from "sonner";
 
 import type { EnvironmentCheckResult } from "@/lib/environment";
-import type {
-  DailyTriagePreset,
-  HistoryExportFormat,
-  HistoryFilterStatus,
-  HistoryFilterWindow,
-} from "@/lib/historyFilterPresets";
+import type { HistoryExportFormat } from "@/lib/historyFilterPresets";
 import type { FailureGroup } from "@/lib/failureGroups";
 import { joinPath } from "@/lib/paths";
 import {
@@ -118,8 +113,6 @@ interface UseDiagnosticsExportsParams {
   currentExecutionRecordId: string | null;
   selectedFailureGroup: FailureGroup | null;
   representativeFailureRecord: ExecutionRecord | null;
-  dailyTriagePreset: DailyTriagePreset;
-  dailyTriageRecords: ExecutionRecord[];
   snapshotPaths: string[];
   recentBundleExports: string[];
   recentHistoryExports: string[];
@@ -130,11 +123,6 @@ interface UseDiagnosticsExportsParams {
   setExecutionHistory: (history: ExecutionRecord[]) => void;
   trackBundleExport: (outputPath: string) => void;
   trackHistoryExport: (outputPath: string) => void;
-  setHistoryFilterProvider: (value: string) => void;
-  setHistoryFilterStatus: (value: HistoryFilterStatus) => void;
-  setHistoryFilterWindow: (value: HistoryFilterWindow) => void;
-  setHistoryFilterKeyword: (value: string) => void;
-  setSelectedHistoryPresetId: (value: string) => void;
 }
 
 export function useDiagnosticsExports({
@@ -147,8 +135,6 @@ export function useDiagnosticsExports({
   currentExecutionRecordId,
   selectedFailureGroup,
   representativeFailureRecord,
-  dailyTriagePreset,
-  dailyTriageRecords,
   snapshotPaths,
   recentBundleExports,
   recentHistoryExports,
@@ -159,11 +145,6 @@ export function useDiagnosticsExports({
   setExecutionHistory,
   trackBundleExport,
   trackHistoryExport,
-  setHistoryFilterProvider,
-  setHistoryFilterStatus,
-  setHistoryFilterWindow,
-  setHistoryFilterKeyword,
-  setSelectedHistoryPresetId,
 }: UseDiagnosticsExportsParams) {
   const [isExportingSnapshot, setIsExportingSnapshot] = useState(false);
   const [isExportingFailureBundle, setIsExportingFailureBundle] =
@@ -341,11 +322,7 @@ export function useDiagnosticsExports({
     async (options?: ExportHistoryOptions) => {
       const records = options?.records ?? filteredExecutionHistory;
       if (records.length === 0) {
-        toast.error(
-          options?.records
-            ? historyT.noPresetHistoryToExport || "预设下没有可导出的执行历史"
-            : historyT.noHistoryToExport || "当前没有可导出的执行历史"
-        );
+        toast.error(historyT.noHistoryToExport || "当前没有可导出的执行历史");
         return;
       }
 
@@ -419,42 +396,6 @@ export function useDiagnosticsExports({
     },
     [filteredExecutionHistory, historyT, selectedRepoPath, trackHistoryExport]
   );
-
-  const exportDailyTriageReport = useCallback(async () => {
-    if (!dailyTriagePreset.enabled) {
-      toast.message(historyT.dailyPresetDisabled || "每日排障预设已禁用");
-      return;
-    }
-
-    if (dailyTriageRecords.length === 0) {
-      toast.error(historyT.noDailyHistoryToExport || "日报预设下没有可导出的执行历史");
-      return;
-    }
-
-    setHistoryFilterProvider(dailyTriagePreset.provider);
-    setHistoryFilterStatus(dailyTriagePreset.status);
-    setHistoryFilterWindow(dailyTriagePreset.window);
-    setHistoryFilterKeyword(dailyTriagePreset.keyword);
-    setSelectedHistoryPresetId("none");
-
-    await exportExecutionHistory({
-      records: dailyTriageRecords,
-      format: dailyTriagePreset.format,
-      title: historyT.exportDailyReportTitle || "导出每日排障报告",
-      filePrefix: "daily-triage-report",
-      successMessage: historyT.dailyReportExported || "每日排障报告已导出",
-    });
-  }, [
-    dailyTriagePreset,
-    dailyTriageRecords,
-    exportExecutionHistory,
-    historyT,
-    setHistoryFilterKeyword,
-    setHistoryFilterProvider,
-    setHistoryFilterStatus,
-    setHistoryFilterWindow,
-    setSelectedHistoryPresetId,
-  ]);
 
   const exportDiagnosticsIndex = useCallback(async () => {
     const hasAnyLinks =
@@ -541,7 +482,6 @@ export function useDiagnosticsExports({
     exportExecutionSnapshot,
     exportFailureGroupBundle,
     exportExecutionHistory,
-    exportDailyTriageReport,
     exportDiagnosticsIndex,
   };
 }

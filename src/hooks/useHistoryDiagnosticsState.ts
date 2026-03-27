@@ -11,12 +11,7 @@ import type { Repository } from "@/types/repository";
 import { isRecordInRepository } from "@/features/history/utils/historyFilters";
 import { useHistoryViewState } from "@/hooks/useHistoryViewState";
 
-interface TranslationMap {
-  [key: string]: string | undefined;
-}
-
 export function useHistoryDiagnosticsState(params: {
-  historyT: TranslationMap;
   executionHistory: ExecutionRecord[];
   selectedRepo: Repository | null;
 }) {
@@ -55,7 +50,6 @@ export function useHistoryDiagnosticsState(params: {
   );
 
   const historyViewState = useHistoryViewState({
-    historyT: params.historyT,
     scopedExecutionHistory,
     historyFilterProvider,
     historyFilterStatus,
