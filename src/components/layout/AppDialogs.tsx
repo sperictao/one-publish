@@ -192,11 +192,6 @@ export function AppDialogs(props: AppDialogsProps) {
             environmentDefaultProviderIds={props.environmentDefaultProviderIds}
             environmentInitialResult={props.environmentInitialResult}
             onEnvironmentChecked={props.onEnvironmentChecked}
-            onLoadProfile={props.onLoadProfile}
-            currentProviderId={props.currentProviderId}
-            repoId={props.repoId}
-            currentParameters={props.currentParameters}
-            onProfilesChanged={props.onProfilesChanged}
           />
         </Suspense>
       ) : null}
