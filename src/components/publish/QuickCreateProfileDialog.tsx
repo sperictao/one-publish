@@ -5,7 +5,6 @@ import {
   Save,
   SlidersHorizontal,
   Sparkles,
-  type LucideIcon,
 } from "lucide-react";
 import { memo, startTransition, useCallback } from "react";
 
@@ -26,6 +25,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { SectionShell } from "@/components/ui/section-shell";
 import {
   Select,
   SelectContent,
@@ -76,37 +76,6 @@ interface QuickCreateProfileDialogProps {
   onProfileCustomGroupChange: (value: string) => void;
   onDraftChange: (patch: Partial<QuickCreateProfileDraft>) => void;
   onSave: () => void;
-}
-
-function SectionShell({
-  icon: Icon,
-  title,
-  description,
-  children,
-}: {
-  icon: LucideIcon;
-  title: string;
-  description: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <Card className="rounded-2xl">
-      <CardHeader className="pb-3">
-        <div className="flex items-start gap-3">
-          <span className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-2xl bg-primary/10 text-primary shadow-[0_8px_20px_hsl(var(--primary)/0.16)]">
-            <Icon className="h-4 w-4" />
-          </span>
-          <div className="min-w-0">
-            <h3 className="text-base font-semibold text-foreground">{title}</h3>
-            <CardDescription className="mt-1 text-xs leading-5">
-              {description}
-            </CardDescription>
-          </div>
-        </div>
-      </CardHeader>
-      <CardContent className="pt-0">{children}</CardContent>
-    </Card>
-  );
 }
 
 const QuickCreateTemplateCard = memo(function QuickCreateTemplateCard({
@@ -542,6 +511,7 @@ export function QuickCreateProfileDialog({
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
+        chrome="bare"
         overlayClassName="bg-background backdrop-blur-0"
         closeButtonClassName="right-6 top-6"
         className="overflow-visible border-none bg-transparent p-0 shadow-none backdrop-blur-none sm:max-w-[960px]"

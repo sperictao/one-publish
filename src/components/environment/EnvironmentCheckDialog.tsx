@@ -491,7 +491,7 @@ export function EnvironmentCheckDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[720px] max-h-[80vh] flex flex-col">
+      <DialogContent className="sm:max-w-[720px]" surfaceClassName="max-h-[80vh] flex flex-col">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Terminal className="h-5 w-5" />

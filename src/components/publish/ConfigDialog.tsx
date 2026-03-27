@@ -2,13 +2,18 @@ import {
   Dialog,
   DialogContent,
   DialogDescription,
+  DialogFooter,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Card, CardContent } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+} from "@/components/ui/card";
+import { SectionShell } from "@/components/ui/section-shell";
 import {
   Download,
   Upload,
@@ -17,6 +22,9 @@ import {
   Loader2,
   AlertCircle,
   Play,
+  FileCog,
+  Layers3,
+  Sparkles,
 } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
@@ -223,107 +231,150 @@ export function ConfigManagementContent({
   };
 
   return (
-    <div className="flex-1 space-y-4">
-      <div className="flex gap-2">
-        <Button variant="outline" onClick={handleExportConfig} className="flex-1">
-          <Download className="h-4 w-4 mr-2" />
-          {profileT.export || "导出配置"}
-        </Button>
-        <Button
-          variant="outline"
-          onClick={handleImportConfig}
-          className="flex-1"
-          disabled={!repoId}
-        >
-          <Upload className="h-4 w-4 mr-2" />
-          {profileT.import || "导入配置"}
-        </Button>
-      </div>
-
-      <div className="space-y-2">
-        <Label>{profileT.saveCurrent || "保存当前配置"}</Label>
-        <div className="flex gap-2">
-          <Input
-            placeholder={profileT.profileNamePlaceholder || "输入配置文件名称"}
-            value={newProfileName}
-            onChange={(e) => setNewProfileName(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" && !isSaving) {
-                void handleSaveProfile();
-              }
-            }}
+    <div className="space-y-5">
+      <SectionShell
+        icon={Sparkles}
+        title={profileT.managementActionsTitle || "配置文件操作"}
+        description={
+          profileT.managementActionsDescription ||
+          "在当前仓库范围内导出配置备份，或从 JSON 文件批量导入。"
+        }
+      >
+        <div className="grid gap-3 md:grid-cols-2">
+          <Button
+            variant="outline"
+            onClick={handleExportConfig}
+            className="h-11 justify-start"
+          >
+            <Download className="mr-2 h-4 w-4" />
+            {profileT.export || "导出配置"}
+          </Button>
+          <Button
+            variant="outline"
+            onClick={handleImportConfig}
+            className="h-11 justify-start"
             disabled={!repoId}
-          />
+          >
+            <Upload className="mr-2 h-4 w-4" />
+            {profileT.import || "导入配置"}
+          </Button>
+        </div>
+      </SectionShell>
+
+      <SectionShell
+        icon={Layers3}
+        title={profileT.saveCurrent || "保存当前配置"}
+        description={
+          profileT.managementSaveDescription ||
+          "把当前中栏参数快照保存成可复用的发布配置，便于后续直接加载。"
+        }
+      >
+        <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_auto] md:items-end">
+          <div className="space-y-2">
+            <Label htmlFor="config-profile-name">
+              {profileT.profileNamePlaceholder || "输入配置文件名称"}
+            </Label>
+            <Input
+              id="config-profile-name"
+              placeholder={profileT.profileNamePlaceholder || "输入配置文件名称"}
+              value={newProfileName}
+              onChange={(e) => setNewProfileName(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && !isSaving) {
+                  void handleSaveProfile();
+                }
+              }}
+              disabled={!repoId}
+              className="h-11"
+            />
+            <p className="text-xs leading-5 text-muted-foreground">
+              {profileT.quickCreateNameHint ||
+                "配置名会直接显示在中栏列表里，建议简短清晰。"}
+            </p>
+          </div>
           <Button
             onClick={() => void handleSaveProfile()}
             disabled={isSaving || !newProfileName.trim() || !repoId}
+            className="h-11 min-w-[148px]"
           >
             {isSaving ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
+              <>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                {profileT.quickCreateSaving || "保存中..."}
+              </>
             ) : (
-              <Save className="h-4 w-4" />
+              <>
+                <Save className="mr-2 h-4 w-4" />
+                {profileT.saveCurrentAction || "保存配置"}
+              </>
             )}
           </Button>
         </div>
-      </div>
+      </SectionShell>
 
-      <div className="space-y-2">
-        <Label>{profileT.savedProfiles || "已保存的配置"}</Label>
+      <SectionShell
+        icon={FileCog}
+        title={profileT.savedProfiles || "已保存的配置"}
+        description={
+          profileT.managementSavedDescription ||
+          "管理当前仓库已保存的配置，支持直接加载与删除自定义项。"
+        }
+      >
         {isLoading && profiles.length === 0 ? (
-          <div className="flex items-center justify-center p-8">
+          <div className="flex min-h-[180px] items-center justify-center rounded-2xl border border-[var(--glass-border-subtle)] bg-[var(--glass-input-bg)]">
             <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
           </div>
         ) : profiles.length === 0 ? (
-          <div className="text-center p-8 text-muted-foreground glass-surface rounded-2xl">
-            <AlertCircle className="h-8 w-8 mx-auto mb-2" />
-            <p>{profileT.noProfiles || "暂无保存的配置文件"}</p>
+          <div className="rounded-2xl border border-[var(--glass-border-subtle)] bg-[var(--glass-input-bg)] px-5 py-10 text-center text-muted-foreground">
+            <AlertCircle className="mx-auto mb-3 h-8 w-8" />
+            <p className="text-sm">{profileT.noProfiles || "暂无保存的配置文件"}</p>
           </div>
         ) : (
-          <div className="space-y-2">
+          <div className="space-y-3">
             {profiles.map((profile) => (
-              <Card key={profile.name}>
-                <CardContent className="p-4">
-                  <div className="flex items-center justify-between">
-                    <div className="flex-1">
-                      <div className="flex items-center gap-2 mb-1">
-                        <h4 className="font-medium">{profile.name}</h4>
-                        {profile.isSystemDefault && (
-                          <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-primary text-primary-foreground">
-                            {profileT.defaultTag || "默认"}
-                          </span>
-                        )}
-                      </div>
-                      <div className="text-sm text-muted-foreground">
-                        {profile.providerId} ·{" "}
-                        {new Date(profile.createdAt).toLocaleDateString(dateLocale)}
-                      </div>
+              <Card key={profile.name} className="rounded-2xl">
+                <CardContent className="flex flex-col gap-4 p-4 sm:flex-row sm:items-center sm:justify-between">
+                  <div className="min-w-0 flex-1">
+                    <div className="mb-1 flex flex-wrap items-center gap-2">
+                      <h4 className="truncate text-sm font-semibold text-foreground">
+                        {profile.name}
+                      </h4>
+                      {profile.isSystemDefault ? (
+                        <span className="inline-flex items-center rounded-full bg-primary/12 px-2 py-0.5 text-[11px] font-medium text-primary">
+                          {profileT.defaultTag || "默认"}
+                        </span>
+                      ) : null}
                     </div>
-                    <div className="flex gap-2">
+                    <p className="text-xs leading-5 text-muted-foreground">
+                      {profile.providerId} ·{" "}
+                      {new Date(profile.createdAt).toLocaleDateString(dateLocale)}
+                    </p>
+                  </div>
+                  <div className="flex flex-col gap-2 sm:flex-row">
+                    <Button
+                      variant="outline"
+                      onClick={() => handleLoadSelectedProfile(profile)}
+                      className="h-10 min-w-[112px]"
+                    >
+                      <Play className="mr-2 h-4 w-4" />
+                      {profileT.load || "加载"}
+                    </Button>
+                    {!profile.isSystemDefault ? (
                       <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => handleLoadSelectedProfile(profile)}
+                        variant="ghost"
+                        onClick={() => void handleDeleteProfile(profile)}
+                        className="h-10 px-3 text-destructive hover:text-destructive"
                       >
-                        <Play className="h-4 w-4 mr-1" />
-                        {profileT.load || "加载"}
+                        <Trash2 className="h-4 w-4" />
                       </Button>
-                      {!profile.isSystemDefault && (
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => void handleDeleteProfile(profile)}
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      )}
-                    </div>
+                    ) : null}
                   </div>
                 </CardContent>
               </Card>
             ))}
           </div>
         )}
-      </div>
+      </SectionShell>
     </div>
   );
 }
@@ -339,28 +390,65 @@ export function ConfigDialog({
 }: ConfigDialogProps) {
   const { translations } = useI18n();
   const profileT = translations.profiles || {};
+  const commonT = translations.common || {};
 
   return (
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[600px] max-h-[80vh] flex flex-col">
-        <DialogHeader>
-          <DialogTitle>{profileT.title || "配置管理"}</DialogTitle>
-          <DialogDescription>
-            {profileT.description || "管理、导入、导出发布配置文件"}
-          </DialogDescription>
-        </DialogHeader>
+      <DialogContent
+        chrome="bare"
+        overlayClassName="bg-background backdrop-blur-0"
+        closeButtonClassName="right-6 top-6"
+        className="overflow-visible border-none bg-transparent p-0 shadow-none backdrop-blur-none sm:max-w-[960px]"
+      >
+        <div className="p-1">
+          <div className="glass-card repo-sidebar-shell flex h-[82vh] min-h-0 flex-col overflow-hidden rounded-2xl">
+            <DialogHeader className="border-b border-[var(--glass-divider)] px-6 pb-5 pt-6 pr-16">
+              <div className="flex items-start gap-3">
+                <span className="mt-0.5 flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-2xl bg-primary/10 text-primary shadow-[0_8px_20px_hsl(var(--primary)/0.16)]">
+                  <FileCog className="h-4 w-4" />
+                </span>
+                <div className="min-w-0">
+                  <DialogTitle className="text-[18px] font-semibold tracking-tight">
+                    {profileT.title || "配置管理"}
+                  </DialogTitle>
+                  <DialogDescription className="mt-1 pr-2 leading-6">
+                    {profileT.description || "管理、导入、导出发布配置文件"}
+                  </DialogDescription>
+                </div>
+              </div>
+            </DialogHeader>
 
-        <div className="flex-1 overflow-y-auto">
-          <ConfigManagementContent
-            active={isOpen}
-            onLoadProfile={onLoadProfile}
-            currentProviderId={currentProviderId}
-            repoId={repoId}
-            currentParameters={currentParameters}
-            closeOnLoad
-            onClose={() => onOpenChange(false)}
-            onProfilesChanged={onProfilesChanged}
-          />
+            <div className="glass-scrollbar min-h-0 flex-1 overflow-y-auto">
+              <div className="space-y-5 p-5 sm:p-6">
+                <ConfigManagementContent
+                  active={isOpen}
+                  onLoadProfile={onLoadProfile}
+                  currentProviderId={currentProviderId}
+                  repoId={repoId}
+                  currentParameters={currentParameters}
+                  closeOnLoad
+                  onClose={() => onOpenChange(false)}
+                  onProfilesChanged={onProfilesChanged}
+                />
+              </div>
+            </div>
+
+            <DialogFooter className="border-t border-[var(--glass-divider)] px-6 py-5 sm:flex-row sm:items-center sm:justify-between sm:space-x-0">
+              <div className="text-xs leading-5 text-muted-foreground">
+                {profileT.managementFooterHint ||
+                  "在这里统一导入、导出、保存和加载当前仓库的发布配置。"}
+              </div>
+              <div className="flex flex-col-reverse gap-2 sm:flex-row sm:items-center">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => onOpenChange(false)}
+                >
+                  {commonT.close || "关闭"}
+                </Button>
+              </div>
+            </DialogFooter>
+          </div>
         </div>
       </DialogContent>
     </Dialog>

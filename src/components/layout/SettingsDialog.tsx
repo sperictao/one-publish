@@ -111,6 +111,64 @@ function SettingsSectionFallback({ label }: { label: string }) {
   );
 }
 
+function SettingsInset({
+  children,
+  className,
+}: {
+  children: React.ReactNode;
+  className?: string;
+}) {
+  return (
+    <div
+      className={cn(
+        "rounded-2xl border border-[var(--glass-border-subtle)] bg-[var(--glass-input-bg)] p-4 shadow-[var(--glass-inset-shadow)]",
+        className
+      )}
+    >
+      {children}
+    </div>
+  );
+}
+
+function SettingsSwitchRow({
+  id,
+  icon: Icon,
+  label,
+  description,
+  checked,
+  onCheckedChange,
+}: {
+  id: string;
+  icon: LucideIcon;
+  label: string;
+  description: string;
+  checked: boolean;
+  onCheckedChange: (value: boolean) => void;
+}) {
+  return (
+    <SettingsInset className="flex items-start justify-between gap-4">
+      <div className="min-w-0 space-y-1">
+        <div className="flex items-center gap-2">
+          <span className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl bg-background/60 text-foreground/75">
+            <Icon className="h-4 w-4" />
+          </span>
+          <Label className="cursor-pointer text-sm font-medium" htmlFor={id}>
+            {label}
+          </Label>
+        </div>
+        <p className="text-xs leading-5 text-muted-foreground">
+          {description}
+        </p>
+      </div>
+      <Switch
+        id={id}
+        checked={checked}
+        onCheckedChange={onCheckedChange}
+      />
+    </SettingsInset>
+  );
+}
+
 export function SettingsDialog({
   open: isOpen,
   onOpenChange,
@@ -338,151 +396,165 @@ export function SettingsDialog({
   };
 
   const renderGeneralSettings = () => (
-    <div className="space-y-6">
-      <div className="space-y-2">
-        <Label>{translations.language?.label || "界面语言"}</Label>
-        <Select value={language} onValueChange={handleLanguageChange}>
-          <SelectTrigger>
-            <SelectValue placeholder={translations.language?.placeholder || "选择语言"} />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="zh">
-              {translations.language?.chinese || "简体中文"}
-            </SelectItem>
-            <SelectItem value="en">
-              {translations.language?.english || "English"}
-            </SelectItem>
-          </SelectContent>
-        </Select>
-      </div>
+    <div className="space-y-4">
+        <div className="grid gap-4 xl:grid-cols-2">
+          <div className="space-y-2">
+            <Label htmlFor="settings-language">
+              {translations.language?.label || "界面语言"}
+            </Label>
+            <Select value={language} onValueChange={handleLanguageChange}>
+              <SelectTrigger id="settings-language">
+                <SelectValue
+                  placeholder={translations.language?.placeholder || "选择语言"}
+                />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="zh">
+                  {translations.language?.chinese || "简体中文"}
+                </SelectItem>
+                <SelectItem value="en">
+                  {translations.language?.english || "English"}
+                </SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
 
-      <div className="space-y-2">
-        <Label className="flex items-center gap-2">
-          <FolderOpen className="h-4 w-4" />
-          {translations.outputDir?.label || "默认发布目录"}
-        </Label>
-        <div className="flex gap-2">
-          <Input
-            value={defaultOutputDir}
-            onChange={(e) => onDefaultOutputDirChange(e.target.value)}
-            placeholder={translations.outputDir?.placeholder || "留空使用项目默认目录"}
-          />
-          <Button
-            variant="outline"
-            size="icon"
-            onClick={handleSelectDirectory}
-            title="选择目录"
-          >
-            <FolderOpen className="h-4 w-4" />
-          </Button>
+          <div className="space-y-2">
+            <Label htmlFor="settings-execution-history">
+              {translations.settings?.general?.executionHistoryLimitLabel ||
+                "执行历史保留上限"}
+            </Label>
+            <Input
+              id="settings-execution-history"
+              type="number"
+              min={5}
+              max={200}
+              value={executionHistoryLimit}
+              onChange={(e) => {
+                const next = Math.trunc(Number(e.target.value));
+                if (Number.isNaN(next)) {
+                  return;
+                }
+                const normalized = Math.min(200, Math.max(5, next));
+                onExecutionHistoryLimitChange(normalized);
+              }}
+            />
+            <p className="text-xs leading-5 text-muted-foreground">
+              {translations.settings?.general?.executionHistoryLimitDescription ||
+                "可设置 5~200 条，超出范围会自动修正并即时生效。"}
+            </p>
+          </div>
         </div>
-        <p className="text-xs text-muted-foreground">
-          {translations.outputDir?.support || "支持相对路径（如 ./publish）或绝对路径"}
-        </p>
-      </div>
 
-      <div className="space-y-2">
-        <Label className="flex items-center gap-2">
-          <Info className="h-4 w-4" />
-          {translations.settings?.general?.executionHistoryLimitLabel || "执行历史保留上限"}
-        </Label>
-        <Input
-          type="number"
-          min={5}
-          max={200}
-          value={executionHistoryLimit}
-          onChange={(e) => {
-            const next = Math.trunc(Number(e.target.value));
-            if (Number.isNaN(next)) {
-              return;
+        <SettingsInset>
+          <div className="space-y-2">
+            <Label
+              htmlFor="settings-default-output-dir"
+              className="flex items-center gap-2"
+            >
+              <FolderOpen className="h-4 w-4" />
+              {translations.outputDir?.label || "默认发布目录"}
+            </Label>
+            <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto]">
+              <Input
+                id="settings-default-output-dir"
+                value={defaultOutputDir}
+                onChange={(e) => onDefaultOutputDirChange(e.target.value)}
+                placeholder={
+                  translations.outputDir?.placeholder || "留空使用项目默认目录"
+                }
+              />
+              <Button
+                variant="outline"
+                size="icon"
+                className="h-10 w-10 shrink-0"
+                onClick={handleSelectDirectory}
+                title={translations.outputDir?.label || "选择默认发布目录"}
+              >
+                <FolderOpen className="h-4 w-4" />
+              </Button>
+            </div>
+            <p className="text-xs leading-5 text-muted-foreground">
+              {translations.outputDir?.support ||
+                "支持相对路径（如 ./publish）或绝对路径"}
+            </p>
+          </div>
+        </SettingsInset>
+
+        <div className="space-y-3">
+          <SettingsSwitchRow
+            id="rerun-checklist-enabled"
+            icon={ListChecks}
+            label={
+              translations.settings?.general?.preRerunChecklistLabel ||
+              "重跑前确认清单"
             }
-            const normalized = Math.min(200, Math.max(5, next));
-            onExecutionHistoryLimitChange(normalized);
-          }}
-        />
-        <p className="text-xs text-muted-foreground">
-          {translations.settings?.general?.executionHistoryLimitDescription ||
-            "可设置 5~200 条，超出范围会自动修正并即时生效。"}
-        </p>
-      </div>
+            description={
+              translations.settings?.general?.preRerunChecklistDescription ||
+              "启用后，点击“重跑记录”会先检查分支、环境和输出目标确认项。"
+            }
+            checked={preRerunChecklistEnabled}
+            onCheckedChange={onPreRerunChecklistEnabledChange}
+          />
 
-      <div className="flex items-center justify-between">
-        <div className="space-y-1">
-          <div className="flex items-center gap-2">
-            <ListChecks className="h-4 w-4 text-muted-foreground" />
-            <Label className="cursor-pointer" htmlFor="rerun-checklist-enabled">
-              {translations.settings?.general?.preRerunChecklistLabel || "重跑前确认清单"}
-            </Label>
-          </div>
-          <p className="text-xs text-muted-foreground">
-            {translations.settings?.general?.preRerunChecklistDescription ||
-              "启用后，点击“重跑记录”会先检查分支、环境和输出目标确认项。"}
-          </p>
+          <SettingsSwitchRow
+            id="minimize-to-tray"
+            icon={Minimize2}
+            label={translations.tray?.label || "关闭窗口时最小化到托盘"}
+            description={
+              translations.tray?.description ||
+              "启用后点击关闭按钮会隐藏窗口，继续驻留托盘。"
+            }
+            checked={minimizeToTrayOnClose}
+            onCheckedChange={onMinimizeToTrayOnCloseChange}
+          />
         </div>
-        <Switch
-          id="rerun-checklist-enabled"
-          checked={preRerunChecklistEnabled}
-          onCheckedChange={onPreRerunChecklistEnabledChange}
-        />
       </div>
-
-      <div className="flex items-center justify-between">
-        <div className="space-y-1">
-          <div className="flex items-center gap-2">
-            <Minimize2 className="h-4 w-4 text-muted-foreground" />
-            <Label className="cursor-pointer" htmlFor="minimize-to-tray">
-              {translations.tray?.label || "关闭窗口时最小化到托盘"}
-            </Label>
-          </div>
-          <p className="text-xs text-muted-foreground">
-            {translations.tray?.description ||
-              "启用后点击关闭按钮会隐藏窗口，继续驻留托盘。"}
-          </p>
-        </div>
-        <Switch
-          id="minimize-to-tray"
-          checked={minimizeToTrayOnClose}
-          onCheckedChange={onMinimizeToTrayOnCloseChange}
-        />
-      </div>
-
-    </div>
   );
 
   const renderAppearanceSettings = () => (
-    <div className="space-y-6">
-      <div className="space-y-2">
-        <Label className="flex items-center gap-2">
-          <Palette className="h-4 w-4" />
-          {translations.theme?.label || "外观主题"}
-        </Label>
-        <Select value={theme} onValueChange={onThemeChange}>
-          <SelectTrigger>
-            <SelectValue placeholder={translations.theme?.placeholder || "选择主题"} />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="auto">
-              <div className="flex items-center gap-2">
-                <Monitor className="h-4 w-4" />
-                <span>{translations.theme?.auto || "跟随系统"}</span>
-              </div>
-            </SelectItem>
-            <SelectItem value="light">
-              <div className="flex items-center gap-2">
-                <Sun className="h-4 w-4" />
-                <span>{translations.theme?.light || "亮色"}</span>
-              </div>
-            </SelectItem>
-            <SelectItem value="dark">
-              <div className="flex items-center gap-2">
-                <Moon className="h-4 w-4" />
-                <span>{translations.theme?.dark || "暗色"}</span>
-              </div>
-            </SelectItem>
-          </SelectContent>
-        </Select>
+    <div className="space-y-4">
+        <div className="space-y-2">
+          <Label htmlFor="settings-theme" className="flex items-center gap-2">
+            <Palette className="h-4 w-4" />
+            {translations.theme?.label || "外观主题"}
+          </Label>
+          <Select value={theme} onValueChange={onThemeChange}>
+            <SelectTrigger id="settings-theme">
+              <SelectValue
+                placeholder={translations.theme?.placeholder || "选择主题"}
+              />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="auto">
+                <div className="flex items-center gap-2">
+                  <Monitor className="h-4 w-4" />
+                  <span>{translations.theme?.auto || "跟随系统"}</span>
+                </div>
+              </SelectItem>
+              <SelectItem value="light">
+                <div className="flex items-center gap-2">
+                  <Sun className="h-4 w-4" />
+                  <span>{translations.theme?.light || "亮色"}</span>
+                </div>
+              </SelectItem>
+              <SelectItem value="dark">
+                <div className="flex items-center gap-2">
+                  <Moon className="h-4 w-4" />
+                  <span>{translations.theme?.dark || "暗色"}</span>
+                </div>
+              </SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+
+        <SettingsInset>
+          <p className="text-xs leading-5 text-muted-foreground">
+            {translations.settings?.sections?.appearanceDescription ||
+              "主题切换会立即作用到当前窗口与后续打开的设置面板。"}
+          </p>
+        </SettingsInset>
       </div>
-    </div>
   );
 
   const renderEnvironmentSettings = () => (
@@ -504,12 +576,11 @@ export function SettingsDialog({
 
   const renderShortcutsSettings = () => {
     return (
-      <div className="space-y-6">
-        <div className="space-y-2">
+      <div className="space-y-3">
           {shortcutsItems.map((shortcut) => (
             <div
               key={shortcut.key}
-              className="flex items-center justify-between rounded-xl border border-[var(--glass-border-subtle)] bg-[var(--glass-input-bg)] px-3 py-2 glass-transition"
+              className="flex items-center justify-between rounded-2xl border border-[var(--glass-border-subtle)] bg-[var(--glass-input-bg)] px-4 py-3 glass-transition"
             >
               <span className="text-sm">{shortcut.description}</span>
               <kbd className="rounded-lg border border-[var(--glass-kbd-border)] bg-[var(--glass-kbd-bg)] px-2 py-1 text-xs font-semibold">
@@ -517,29 +588,23 @@ export function SettingsDialog({
               </kbd>
             </div>
           ))}
-        </div>
 
-        <Button
-          variant="outline"
-          className="w-full justify-start"
-          onClick={onOpenShortcuts}
-          disabled={!onOpenShortcuts}
-        >
-          <Keyboard className="mr-2 h-4 w-4" />
-          {translations.shortcuts?.button || "查看快捷键"}
-        </Button>
-      </div>
+          <Button
+            variant="outline"
+            className="h-11 w-full justify-start"
+            onClick={onOpenShortcuts}
+            disabled={!onOpenShortcuts}
+          >
+            <Keyboard className="mr-2 h-4 w-4" />
+            {translations.shortcuts?.button || "查看快捷键"}
+          </Button>
+        </div>
     );
   };
 
   const renderAboutSettings = () => (
-    <div className="space-y-6">
-      <div className="space-y-2">
-        <Label className="flex items-center gap-2">
-          <Info className="h-4 w-4" />
-          {translations.version?.title || "版本信息"}
-        </Label>
-        <div className="flex flex-col gap-3 rounded-xl border border-[var(--glass-border-subtle)] bg-[var(--glass-input-bg)] p-3 sm:flex-row sm:items-start sm:justify-between">
+    <div className="space-y-4">
+        <SettingsInset className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
           <div className="space-y-1">
             <div className="text-sm font-medium">
               {formatMessage(
@@ -574,7 +639,8 @@ export function SettingsDialog({
                   updaterConfigHealth.configured ? "text-green-600" : "text-yellow-600"
                 )}
               >
-                {translations.version?.configStatus || "配置状态"}: {updaterConfigHealth.message}
+                {translations.version?.configStatus || "配置状态"}:{" "}
+                {updaterConfigHealth.message}
               </div>
             )}
             {updaterHelpPaths && (
@@ -609,7 +675,7 @@ export function SettingsDialog({
             )}
           </div>
 
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
             <Button
               variant="outline"
               size="sm"
@@ -639,18 +705,17 @@ export function SettingsDialog({
               </Button>
             )}
           </div>
-        </div>
-      </div>
+        </SettingsInset>
 
-      {updateInfo?.releaseNotes && (
-        <div className="max-h-40 overflow-y-auto rounded-xl border border-[var(--glass-border-subtle)] bg-[var(--glass-input-bg)] p-3 text-xs">
-          <div className="mb-1 font-medium">
-            {translations.version?.notes || "更新说明:"}
-          </div>
-          <div className="whitespace-pre-wrap">{updateInfo.releaseNotes}</div>
-        </div>
-      )}
-    </div>
+        {updateInfo?.releaseNotes && (
+          <SettingsInset className="max-h-56 overflow-y-auto glass-scrollbar text-xs">
+            <div className="mb-1 font-medium">
+              {translations.version?.notes || "更新说明:"}
+            </div>
+            <div className="whitespace-pre-wrap">{updateInfo.releaseNotes}</div>
+          </SettingsInset>
+        )}
+      </div>
   );
 
   const renderCategoryContent = () => {
@@ -670,28 +735,38 @@ export function SettingsDialog({
     }
   };
 
+  const ActiveCategoryIcon = activeCategoryItem.icon;
+
   return (
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
       <DialogContent
+        chrome="bare"
         overlayClassName="bg-background backdrop-blur-0"
         closeButtonClassName="right-6 top-6"
         className="overflow-visible border-none bg-transparent p-0 shadow-none backdrop-blur-none sm:max-w-[960px]"
       >
         <div className="p-1">
           <div className="glass-card repo-sidebar-shell flex h-[82vh] min-h-0 flex-col overflow-hidden rounded-2xl">
-            <DialogHeader className="border-b border-[var(--glass-divider)] px-6 pb-4 pt-6 pr-16">
-              <DialogTitle className="flex items-center gap-2">
-                <Languages className="h-5 w-5" />
-                {translations.settings?.title || "应用设置"}
-              </DialogTitle>
-              <DialogDescription>
-                {translations.settings?.description || "配置语言、外观、输出目录等偏好设置"}
-              </DialogDescription>
+            <DialogHeader className="border-b border-[var(--glass-divider)] px-6 pb-5 pt-6 pr-16">
+              <div className="flex items-start gap-3">
+                <span className="mt-0.5 flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-2xl bg-primary/10 text-primary shadow-[0_8px_20px_hsl(var(--primary)/0.16)]">
+                  <Languages className="h-4 w-4" />
+                </span>
+                <div className="min-w-0">
+                  <DialogTitle className="text-[18px] font-semibold tracking-tight">
+                    {translations.settings?.title || "应用设置"}
+                  </DialogTitle>
+                  <DialogDescription className="mt-1 pr-2 leading-6">
+                    {translations.settings?.description ||
+                      "配置语言、外观、输出目录等偏好设置"}
+                  </DialogDescription>
+                </div>
+              </div>
             </DialogHeader>
 
-            <div className="grid min-h-0 flex-1 gap-4 p-4 sm:grid-cols-[190px_minmax(0,1fr)]">
-              <aside className="glass-card min-h-0 overflow-y-auto rounded-2xl p-2">
-                <nav className="flex gap-1 overflow-x-auto pb-1 sm:flex-col sm:overflow-visible sm:pb-0">
+            <div className="grid min-h-0 flex-1 gap-5 p-5 sm:grid-cols-[240px_minmax(0,1fr)] sm:p-6">
+              <aside className="glass-card min-h-0 overflow-y-auto rounded-2xl p-2.5">
+                <nav className="flex gap-2 overflow-x-auto pb-1 sm:flex-col sm:overflow-visible sm:pb-0">
                   {categoryItems.map((item) => {
                     const Icon = item.icon;
                     const isActive = item.id === activeCategory;
@@ -702,29 +777,56 @@ export function SettingsDialog({
                         type="button"
                         aria-current={isActive ? "page" : undefined}
                         className={cn(
-                          "glass-press flex min-w-[110px] items-center gap-2 rounded-xl px-3 py-2 text-left text-sm glass-transition sm:min-w-0",
+                          "glass-press flex min-w-[170px] items-start gap-3 rounded-2xl border px-3.5 py-3 text-left glass-transition sm:min-w-0",
                           isActive
-                            ? "bg-[var(--glass-bg-active)] text-foreground shadow-[var(--glass-shadow)]"
-                            : "text-muted-foreground hover:bg-[var(--glass-bg)] hover:text-foreground"
+                            ? "border-[var(--glass-border)] bg-[var(--glass-bg-active)] text-foreground shadow-[var(--glass-shadow)]"
+                            : "border-transparent text-muted-foreground hover:border-[var(--glass-border-subtle)] hover:bg-[var(--glass-input-bg)] hover:text-foreground"
                         )}
                         onClick={() => handleCategoryChange(item.id)}
                       >
-                        <Icon className="h-4 w-4 shrink-0" />
-                        <span className="truncate">{item.label}</span>
+                        <span
+                          className={cn(
+                            "mt-0.5 flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl",
+                            isActive
+                              ? "bg-primary/10 text-primary shadow-[var(--glass-inset-shadow)]"
+                              : "bg-[var(--glass-input-bg)] text-foreground/70"
+                          )}
+                        >
+                          <Icon className="h-4 w-4 shrink-0" />
+                        </span>
+                        <span className="min-w-0">
+                          <span className="block truncate text-sm font-medium">
+                            {item.label}
+                          </span>
+                          <span className="mt-1 block text-[11px] leading-4 text-muted-foreground">
+                            {item.description}
+                          </span>
+                        </span>
                       </button>
                     );
                   })}
                 </nav>
               </aside>
 
-              <section className="glass-card min-h-0 overflow-y-auto rounded-2xl p-4 glass-scrollbar">
-                <div className="mb-4 space-y-1 border-b border-[var(--glass-divider)] pb-3">
-                  <h3 className="text-sm font-semibold">{activeCategoryItem.label}</h3>
-                  <p className="text-xs text-muted-foreground">
-                    {activeCategoryItem.description}
-                  </p>
+              <section className="glass-card min-h-0 flex flex-col overflow-hidden rounded-2xl">
+                <div className="border-b border-[var(--glass-divider)] px-5 pb-4 pt-5 sm:px-6 sm:pb-4 sm:pt-6">
+                  <div className="flex items-start gap-3">
+                    <span className="mt-0.5 flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-2xl bg-primary/10 text-primary shadow-[0_8px_20px_hsl(var(--primary)/0.16)]">
+                      <ActiveCategoryIcon className="h-4 w-4" />
+                    </span>
+                    <div className="min-w-0">
+                      <h3 className="text-base font-semibold text-foreground">
+                        {activeCategoryItem.label}
+                      </h3>
+                      <p className="mt-1 text-xs leading-5 text-muted-foreground">
+                        {activeCategoryItem.description}
+                      </p>
+                    </div>
+                  </div>
                 </div>
-                {renderCategoryContent()}
+                <div className="glass-scrollbar min-h-0 flex-1 overflow-y-auto p-5 sm:p-6">
+                  {renderCategoryContent()}
+                </div>
               </section>
             </div>
           </div>

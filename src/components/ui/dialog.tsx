@@ -31,40 +31,85 @@ type DialogContentProps =
   React.ComponentPropsWithoutRef<typeof DialogPrimitive.Content> & {
     overlayClassName?: string;
     closeButtonClassName?: string;
+    surfaceClassName?: string;
+    chrome?: "glass" | "bare";
   };
 
 const DialogContent = React.forwardRef<
   React.ElementRef<typeof DialogPrimitive.Content>,
   DialogContentProps
->(({ className, children, overlayClassName, closeButtonClassName, ...props }, ref) => {
-  const { translations } = useI18n();
-  const commonT = translations.common || {};
+>(
+  (
+    {
+      className,
+      children,
+      overlayClassName,
+      closeButtonClassName,
+      surfaceClassName,
+      chrome = "glass",
+      ...props
+    },
+    ref
+  ) => {
+    const { translations } = useI18n();
+    const commonT = translations.common || {};
 
-  return (
-    <DialogPortal>
-      <DialogOverlay className={overlayClassName} />
-      <DialogPrimitive.Content
-        ref={ref}
+    const closeButton = (
+      <DialogPrimitive.Close
         className={cn(
-          "fixed left-[50%] top-[50%] z-50 grid w-full max-w-lg translate-x-[-50%] translate-y-[-50%] gap-4 border-[var(--glass-border)] bg-[var(--glass-panel-bg)] backdrop-blur-xl p-6 shadow-[var(--glass-shadow-lg)] duration-200 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[state=closed]:slide-out-to-left-1/2 data-[state=closed]:slide-out-to-top-[48%] data-[state=open]:slide-in-from-left-1/2 data-[state=open]:slide-in-from-top-[48%] sm:rounded-2xl overflow-hidden",
-          className
+          "glass-press absolute right-5 top-5 z-10 rounded-xl opacity-70 ring-offset-background transition-all duration-200 hover:opacity-100 hover:bg-[var(--glass-bg)] focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:pointer-events-none data-[state=open]:bg-[var(--glass-bg)] data-[state=open]:text-muted-foreground",
+          closeButtonClassName
         )}
-        {...props}
       >
-        {children}
-        <DialogPrimitive.Close
+        <X className="h-4 w-4" />
+        <span className="sr-only">{commonT.close || "关闭"}</span>
+      </DialogPrimitive.Close>
+    );
+
+    if (chrome === "bare") {
+      return (
+        <DialogPortal>
+          <DialogOverlay className={overlayClassName} />
+          <DialogPrimitive.Content
+            ref={ref}
+            className={cn(
+              "fixed left-[50%] top-[50%] z-50 w-[calc(100%-1.5rem)] max-w-lg translate-x-[-50%] translate-y-[-50%] duration-200 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[state=closed]:slide-out-to-left-1/2 data-[state=closed]:slide-out-to-top-[48%] data-[state=open]:slide-in-from-left-1/2 data-[state=open]:slide-in-from-top-[48%] sm:w-full",
+              className
+            )}
+            {...props}
+          >
+            {children}
+            {closeButton}
+          </DialogPrimitive.Content>
+        </DialogPortal>
+      );
+    }
+
+    return (
+      <DialogPortal>
+        <DialogOverlay className={overlayClassName} />
+        <DialogPrimitive.Content
+          ref={ref}
           className={cn(
-            "glass-press absolute right-4 top-4 rounded-lg opacity-70 ring-offset-background transition-all duration-200 hover:opacity-100 hover:bg-[var(--glass-bg)] focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:pointer-events-none data-[state=open]:bg-[var(--glass-bg)] data-[state=open]:text-muted-foreground",
-            closeButtonClassName
+            "fixed left-[50%] top-[50%] z-50 w-[calc(100%-1.5rem)] max-w-lg translate-x-[-50%] translate-y-[-50%] duration-200 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[state=closed]:slide-out-to-left-1/2 data-[state=closed]:slide-out-to-top-[48%] data-[state=open]:slide-in-from-left-1/2 data-[state=open]:slide-in-from-top-[48%] sm:w-full",
+            className
           )}
+          {...props}
         >
-          <X className="h-4 w-4" />
-          <span className="sr-only">{commonT.close || "关闭"}</span>
-        </DialogPrimitive.Close>
-      </DialogPrimitive.Content>
-    </DialogPortal>
-  );
-});
+          <div
+            className={cn(
+              "glass-card repo-sidebar-shell relative grid gap-4 overflow-hidden rounded-2xl border border-[var(--glass-border)] bg-[var(--glass-panel-bg)] p-6 shadow-[var(--glass-shadow-lg)] backdrop-blur-xl",
+              surfaceClassName
+            )}
+          >
+            {children}
+            {closeButton}
+          </div>
+        </DialogPrimitive.Content>
+      </DialogPortal>
+    );
+  }
+);
 DialogContent.displayName = DialogPrimitive.Content.displayName;
 
 const DialogHeader = ({

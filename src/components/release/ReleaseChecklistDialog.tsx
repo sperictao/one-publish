@@ -400,7 +400,7 @@ export function ReleaseChecklistDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[920px] max-h-[85vh] flex flex-col">
+      <DialogContent className="sm:max-w-[920px]" surfaceClassName="max-h-[85vh] flex flex-col">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <ListChecks className="h-5 w-5" />
