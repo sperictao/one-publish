@@ -626,6 +626,7 @@
     "requireChecklist": "Please complete the pre-rerun checklist first"
   },
   "configPanel": {
+    "allConfigs": "All",
     "searchConfig": "Search configs",
     "newConfig": "New config",
     "refresh": "Refresh configs",
@@ -634,6 +635,7 @@
     "debugGroup": "Debug Presets",
     "profileGroup": "Project Profiles",
     "defaultProfileGroup": "Default Group",
+    "noConfigs": "No configs found",
     "noProfiles": "No custom profiles yet",
     "editConfig": "Edit profile",
     "expandConfigList": "Expand config list",

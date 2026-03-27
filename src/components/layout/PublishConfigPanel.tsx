@@ -15,11 +15,19 @@ import { cn } from "@/lib/utils";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+} from "@/components/ui/dropdown-menu";
+import {
   Search,
   Plus,
   RefreshCw,
   Folder,
   FileText,
+  Check,
   ChevronRight,
   ChevronDown,
   Trash2,
@@ -38,6 +46,17 @@ const PublishConfigPanelFloatingLayer = lazy(async () => {
 });
 
 const EMPTY_FLOATING_STYLE: CSSProperties = {};
+const ALL_GROUP_FILTER = "__all__";
+const PROJECT_GROUP_FILTER = "__project_profiles__";
+
+type GroupFilterValue =
+  | typeof ALL_GROUP_FILTER
+  | typeof PROJECT_GROUP_FILTER
+  | `profile-group:${string}`;
+
+function createProfileGroupFilterValue(groupName: string): GroupFilterValue {
+  return `profile-group:${groupName}`;
+}
 
 // Collapse toggle icon (reused from BranchPanel)
 function CollapseIcon() {
@@ -279,10 +298,15 @@ export function PublishConfigPanel({
   onExpandRepo,
 }: PublishConfigPanelProps) {
   const [searchQuery, setSearchQuery] = useState("");
+  const [groupFilterValue, setGroupFilterValue] =
+    useState<GroupFilterValue>(ALL_GROUP_FILTER);
+  const [groupFilterOpen, setGroupFilterOpen] = useState(false);
   const [preferredSelectedRenderId, setPreferredSelectedRenderId] = useState<string | null>(null);
   const [floatingEnhancerEnabled, setFloatingEnhancerEnabled] = useState(false);
   const { translations } = useI18n();
   const t = translations.configPanel || {};
+  const allConfigsLabel =
+    t.allConfigs || translations.repositoryList?.all || "全部";
   const headerButtonClass =
     "h-7 w-9 rounded-full p-0 text-muted-foreground/60 hover:bg-black/[0.045] hover:text-foreground hover:shadow-[inset_0_1px_0_rgba(255,255,255,0.72),0_1px_2px_rgba(15,23,42,0.06)] dark:hover:bg-white/[0.06] dark:hover:shadow-[inset_0_1px_0_rgba(255,255,255,0.08)]";
   const fallbackListRef = useRef<HTMLDivElement | null>(null);
@@ -364,6 +388,54 @@ export function PublishConfigPanel({
     return name.toLowerCase().includes(query);
   });
 
+  const groupFilterOptions = useMemo<
+    Array<{ value: GroupFilterValue; label: string; count: number }>
+  >(() => {
+    const defaultGroupName = t.defaultProfileGroup || "默认分组";
+    const groupMap = new Map<string, number>();
+
+    for (const profile of profiles) {
+      const groupName = profile.profileGroup?.trim() || defaultGroupName;
+      groupMap.set(groupName, (groupMap.get(groupName) ?? 0) + 1);
+    }
+
+    const profileGroupOptions = Array.from(groupMap.entries())
+      .map(([groupName, count]) => ({
+        value: createProfileGroupFilterValue(groupName),
+        label: groupName,
+        count,
+      }))
+      .sort((left, right) => {
+        if (left.label === defaultGroupName) return -1;
+        if (right.label === defaultGroupName) return 1;
+        return left.label.localeCompare(right.label);
+      });
+
+    const options: Array<{ value: GroupFilterValue; label: string; count: number }> = [
+      {
+        value: ALL_GROUP_FILTER,
+        label: allConfigsLabel,
+        count: projectPublishProfiles.length + profiles.length,
+      },
+    ];
+
+    if (projectPublishProfiles.length > 0) {
+      options.push({
+        value: PROJECT_GROUP_FILTER,
+        label: t.profileGroup || "项目发布配置",
+        count: projectPublishProfiles.length,
+      });
+    }
+
+    return [...options, ...profileGroupOptions];
+  }, [
+    profiles,
+    projectPublishProfiles.length,
+    allConfigsLabel,
+    t.defaultProfileGroup,
+    t.profileGroup,
+  ]);
+
   const groupedFilteredProfiles = useMemo(() => {
     const defaultGroupName = t.defaultProfileGroup || "默认分组";
     const groupMap = new Map<string, ConfigProfile[]>();
@@ -387,7 +459,56 @@ export function PublishConfigPanel({
       });
   }, [filteredProfiles, t.defaultProfileGroup]);
 
-  const hasProjectProfiles = projectPublishProfiles.length > 0;
+  useEffect(() => {
+    if (groupFilterOptions.some((option) => option.value === groupFilterValue)) {
+      return;
+    }
+    setGroupFilterValue(ALL_GROUP_FILTER);
+  }, [groupFilterOptions, groupFilterValue]);
+
+  const selectedGroupFilterOption = useMemo(
+    () =>
+      groupFilterOptions.find((option) => option.value === groupFilterValue) ??
+      groupFilterOptions[0],
+    [groupFilterOptions, groupFilterValue]
+  );
+
+  const visibleProjectProfiles = useMemo(() => {
+    if (
+      groupFilterValue !== ALL_GROUP_FILTER &&
+      groupFilterValue !== PROJECT_GROUP_FILTER
+    ) {
+      return [];
+    }
+    return filteredProjectProfiles;
+  }, [filteredProjectProfiles, groupFilterValue]);
+
+  const visibleGroupedFilteredProfiles = useMemo(() => {
+    if (groupFilterValue === ALL_GROUP_FILTER) {
+      return groupedFilteredProfiles;
+    }
+    if (groupFilterValue === PROJECT_GROUP_FILTER) {
+      return [];
+    }
+    return groupedFilteredProfiles.filter(
+      (group) => createProfileGroupFilterValue(group.groupName) === groupFilterValue
+    );
+  }, [groupFilterValue, groupedFilteredProfiles]);
+
+  const visibleConfigCount = useMemo(
+    () =>
+      visibleProjectProfiles.length +
+      visibleGroupedFilteredProfiles.reduce(
+        (total, group) => total + group.items.length,
+        0
+      ),
+    [visibleGroupedFilteredProfiles, visibleProjectProfiles.length]
+  );
+
+  const showRecentItems =
+    !query && groupFilterValue === ALL_GROUP_FILTER && recentItems.length > 0;
+  const hasVisibleConfigResults =
+    visibleProjectProfiles.length > 0 || visibleGroupedFilteredProfiles.length > 0;
 
   const selectedConfigId = useMemo(() => {
     if (isCustomMode && activeProfileName) {
@@ -402,21 +523,26 @@ export function PublishConfigPanel({
 
   const allConfigIds = useMemo(() => {
     const ids: string[] = [];
-    if (!query) {
+    if (showRecentItems) {
       for (const item of recentItems) {
         ids.push(`recent:${item.key}`);
       }
     }
-    for (const name of filteredProjectProfiles) {
+    for (const name of visibleProjectProfiles) {
       ids.push(`pubxml:${name}`);
     }
-    for (const group of groupedFilteredProfiles) {
+    for (const group of visibleGroupedFilteredProfiles) {
       for (const profile of group.items) {
         ids.push(`userprofile:${profile.name}`);
       }
     }
     return ids;
-  }, [query, recentItems, filteredProjectProfiles, groupedFilteredProfiles]);
+  }, [
+    recentItems,
+    showRecentItems,
+    visibleGroupedFilteredProfiles,
+    visibleProjectProfiles,
+  ]);
 
   const selectedRenderId = useMemo(() => {
     if (!selectedConfigId) {
@@ -511,7 +637,7 @@ export function PublishConfigPanel({
           />
         </div>
         <div className="glass-stagger">
-          {!query && recentItems.length > 0 && (
+          {showRecentItems && (
             <div className="space-y-1.5">
               <div className="flex items-center gap-1.5 px-3 py-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                 <Clock className="h-3.5 w-3.5" />
@@ -596,11 +722,11 @@ export function PublishConfigPanel({
 
           <ConfigGroup
             title={t.profileGroup || "项目发布配置"}
-            count={filteredProjectProfiles.length}
+            count={visibleProjectProfiles.length}
             defaultExpanded={true}
-            visible={hasProjectProfiles && filteredProjectProfiles.length > 0}
+            visible={visibleProjectProfiles.length > 0}
           >
-            {filteredProjectProfiles.map((name) => {
+            {visibleProjectProfiles.map((name) => {
               const configKey = `pubxml:${name}`;
               const isPubxmlSelected = selectedRenderId === configKey;
               return (
@@ -658,7 +784,7 @@ export function PublishConfigPanel({
             })}
           </ConfigGroup>
 
-          {groupedFilteredProfiles.map((group) => (
+          {visibleGroupedFilteredProfiles.map((group) => (
             <ConfigGroup
               key={`userprofile-group-${group.groupName}`}
               title={group.groupName}
@@ -691,32 +817,30 @@ export function PublishConfigPanel({
               ))}
             </ConfigGroup>
           ))}
-          {filteredProfiles.length === 0 && (
+          {!showRecentItems && !hasVisibleConfigResults && (
             <div className="px-3 py-4 text-center text-xs text-muted-foreground">
-              {t.noProfiles || "暂无自定义配置"}
+              {t.noConfigs || "暂无配置"}
             </div>
           )}
         </div>
       </div>
     ),
     [
-      allConfigIds,
       favoriteSet,
-      filteredProfiles.length,
-      filteredProjectProfiles,
-      groupedFilteredProfiles,
-      hasProjectProfiles,
+      hasVisibleConfigResults,
       onDeleteProfile,
       onEditProfile,
       onRemoveRecentConfig,
       onSelectProfile,
       onSelectProjectProfile,
       onToggleFavoriteConfig,
-      query,
       recentItems,
       selectedConfigId,
       selectedRenderId,
+      showRecentItems,
       t,
+      visibleGroupedFilteredProfiles,
+      visibleProjectProfiles,
     ]
   );
 
@@ -765,12 +889,69 @@ export function PublishConfigPanel({
       </div>
 
       <div className="flex items-center justify-between px-3 py-2">
-        <div className="flex items-center gap-1.5">
-          <span className="text-sm font-medium text-foreground/80">{t.allConfigs || "全部"}</span>
-          <span className="flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-primary/12 px-1 text-[10px] font-bold leading-none text-primary">
-            {profiles.length}
-          </span>
-        </div>
+        <DropdownMenu open={groupFilterOpen} onOpenChange={setGroupFilterOpen}>
+          <DropdownMenuTrigger asChild>
+            <button
+              type="button"
+              className="glass-surface flex items-center gap-1.5 rounded-full px-3 py-1 text-sm font-medium transition-all duration-300 hover:bg-[var(--glass-bg-hover)]"
+              aria-haspopup="menu"
+              aria-expanded={groupFilterOpen}
+            >
+              <span className="text-foreground/80">
+                {selectedGroupFilterOption?.label || allConfigsLabel}
+              </span>
+              <span className="flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-primary/12 px-1 text-[10px] font-bold leading-none text-primary">
+                {visibleConfigCount}
+              </span>
+              <ChevronDown
+                className={cn(
+                  "h-3 w-3 text-muted-foreground/60 transition-transform duration-300",
+                  groupFilterOpen ? "" : "-rotate-90"
+                )}
+              />
+            </button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="start" sideOffset={8} className="min-w-[13rem]">
+            <DropdownMenuItem
+              onSelect={() => setGroupFilterValue(ALL_GROUP_FILTER)}
+              className={cn(
+                "justify-between gap-3",
+                groupFilterValue === ALL_GROUP_FILTER && "bg-[var(--glass-bg-hover)]"
+              )}
+            >
+              <div className="flex min-w-0 flex-1 items-center gap-2">
+                <span className="truncate">{allConfigsLabel}</span>
+                <span className="flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-primary/12 px-1 text-[10px] font-bold leading-none text-primary">
+                  {groupFilterOptions[0]?.count ?? 0}
+                </span>
+              </div>
+              {groupFilterValue === ALL_GROUP_FILTER ? (
+                <Check className="h-3.5 w-3.5 text-primary" />
+              ) : null}
+            </DropdownMenuItem>
+            {groupFilterOptions.length > 1 ? <DropdownMenuSeparator /> : null}
+            {groupFilterOptions.slice(1).map((option) => (
+              <DropdownMenuItem
+                key={option.value}
+                onSelect={() => setGroupFilterValue(option.value)}
+                className={cn(
+                  "justify-between gap-3",
+                  groupFilterValue === option.value && "bg-[var(--glass-bg-hover)]"
+                )}
+              >
+                <div className="flex min-w-0 flex-1 items-center gap-2">
+                  <span className="truncate">{option.label}</span>
+                  <span className="flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-primary/12 px-1 text-[10px] font-bold leading-none text-primary">
+                    {option.count}
+                  </span>
+                </div>
+                {groupFilterValue === option.value ? (
+                  <Check className="h-3.5 w-3.5 text-primary" />
+                ) : null}
+              </DropdownMenuItem>
+            ))}
+          </DropdownMenuContent>
+        </DropdownMenu>
         <div className="flex items-center gap-1.5">
           <button
             type="button"

@@ -626,6 +626,7 @@
     "requireChecklist": "请先完成重跑前确认清单"
   },
   "configPanel": {
+    "allConfigs": "全部",
     "searchConfig": "搜索配置",
     "newConfig": "新建配置",
     "refresh": "刷新配置",
@@ -634,6 +635,7 @@
     "debugGroup": "Debug 配置",
     "profileGroup": "项目发布配置",
     "defaultProfileGroup": "默认分组",
+    "noConfigs": "暂无配置",
     "noProfiles": "暂无自定义配置",
     "editConfig": "编辑配置",
     "expandConfigList": "展开配置列表",
