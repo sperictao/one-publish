@@ -65,3 +65,8 @@ autoresearch-lessons.md
 autoresearch-runtime.json
 autoresearch-state.json
 research-results.tsv
+autoresearch-launch.prev.json
+autoresearch-runtime.prev.json
+.gitignore
+research-results.prev.tsv
+autoresearch-state.prev.json
