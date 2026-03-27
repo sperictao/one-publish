@@ -543,10 +543,11 @@ export function QuickCreateProfileDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
         overlayClassName="bg-background backdrop-blur-0"
-        className="overflow-visible border-none bg-transparent p-0 shadow-none backdrop-blur-none sm:max-w-[876px]"
+        closeButtonClassName="right-6 top-6"
+        className="overflow-visible border-none bg-transparent p-0 shadow-none backdrop-blur-none sm:max-w-[960px]"
       >
-        <div className="p-2">
-          <div className="glass-card repo-sidebar-shell flex h-[72vh] min-h-0 flex-col overflow-hidden rounded-2xl">
+        <div className="p-1">
+          <div className="glass-card repo-sidebar-shell flex h-[82vh] min-h-0 flex-col overflow-hidden rounded-2xl">
             <DialogHeader className="border-b border-[var(--glass-divider)] px-6 pb-5 pt-6 pr-16">
               <div className="flex items-start gap-3">
                 <span
