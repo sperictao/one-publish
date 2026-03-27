@@ -3,7 +3,6 @@ import { describe, expect, it } from "vitest";
 import {
   buildDotnetAdvancedParameters,
   buildDotnetProfileParameters,
-  createDotnetPublishConfigPatchFromParameter,
   createDefaultDotnetPublishConfig,
   createDotnetPublishConfigFromParameters,
 } from "@/lib/dotnetPublishConfig";
@@ -105,29 +104,24 @@ describe("dotnetPublishConfig", () => {
     });
   });
 
-  it("根据参数项生成 dotnet 配置补丁", () => {
-    expect(
-      createDotnetPublishConfigPatchFromParameter("properties", {
-        Version: 1,
-        PublishTrimmed: true,
-      })
-    ).toEqual({
-      properties: {
-        Version: "1",
-        PublishTrimmed: "true",
+  it("可从 PublishProfile 属性恢复配置文件选择", () => {
+    const restored = createDotnetPublishConfigFromParameters(
+      {
+        properties: {
+          PublishProfile: "FolderProfile",
+        },
       },
-    });
+      {
+        inferProfileSelection: true,
+      }
+    );
 
-    expect(
-      createDotnetPublishConfigPatchFromParameter("define", ["A", " B "])
-    ).toEqual({
-      define: ["A", "B"],
-    });
-
-    expect(
-      createDotnetPublishConfigPatchFromParameter("no_restore", true)
-    ).toEqual({
-      noRestore: true,
+    expect(restored.useProfile).toBe(true);
+    expect(restored.profileName).toBe("FolderProfile");
+    expect(buildDotnetProfileParameters(restored)).toEqual({
+      properties: {
+        PublishProfile: "FolderProfile",
+      },
     });
   });
 });

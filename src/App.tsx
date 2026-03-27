@@ -1,4 +1,4 @@
-import { Suspense, lazy, useEffect, useCallback, useMemo, useState } from "react";
+import { Suspense, lazy, useEffect, useCallback, useState } from "react";
 // Hooks
 import { useAppDialogs } from "@/hooks/useAppDialogs";
 import { useAppState } from "@/hooks/useAppState";
@@ -194,7 +194,6 @@ function App() {
     setSelectedPreset,
     setIsCustomMode,
     setCustomConfig,
-    setCurrentPublishState,
     language: preferenceLanguage,
     minimizeToTrayOnClose,
     defaultOutputDir,
@@ -366,13 +365,19 @@ function App() {
 
   const applyDotnetCustomConfig = useCallback(
     (config: PublishConfigStore) => {
-      setCurrentPublishState({
-        customConfig: config,
-        isCustomMode: true,
-      });
+      setCustomConfig(config);
+      setIsCustomMode(true);
     },
-    [setCurrentPublishState]
+    [setCustomConfig, setIsCustomMode]
   );
+
+  const { activeImportFeedback, handleCommandImport } = useCommandImport({
+    activeProviderId,
+    appT,
+    providerSchemas,
+    onDotnetConfigReplace: applyDotnetCustomConfig,
+    setProviderParameters,
+  });
 
   const profilesState = useProfiles({
     appT,
@@ -432,22 +437,6 @@ function App() {
     handleDeleteProfileFromPanel,
     handleLoadProfile,
   } = profilesState;
-
-  const replaceDotnetCustomConfig = useCallback(
-    (config: PublishConfigStore) => {
-      applyDotnetCustomConfig(config);
-      setActiveProfileName(null);
-    },
-    [applyDotnetCustomConfig, setActiveProfileName]
-  );
-
-  const { activeImportFeedback, handleCommandImport } = useCommandImport({
-    activeProviderId,
-    appT,
-    providerSchemas,
-    onDotnetConfigReplace: replaceDotnetCustomConfig,
-    setProviderParameters,
-  });
 
   const {
     isRerunChecklistEnabled,
@@ -522,7 +511,6 @@ function App() {
     runPublishWithSpec,
     executePublish,
     cancelPublish,
-    currentDotnetPublishConfig,
   } = usePublishExecution({
     appT,
     publishT,
@@ -536,65 +524,11 @@ function App() {
     getRecentConfigKeyFromSpec,
   } = useRecoverableSpec({
     specVersion: SPEC_VERSION,
-    applyDotnetCustomConfig: replaceDotnetCustomConfig,
+    setCustomConfig,
+    setIsCustomMode,
     setActiveProviderId,
     setProviderParameters,
   });
-
-  const currentDotnetSourceLabel = useMemo(() => {
-    if (activeProviderId !== "dotnet") {
-      return "";
-    }
-
-    if (isCustomMode) {
-      return activeProfileName?.trim() || configT.customMode || "自定义模式";
-    }
-
-    if (selectedPreset.startsWith("profile-")) {
-      const profileName = selectedPreset.slice("profile-".length).trim();
-      if (!profileName) {
-        return appT.projectPublishProfiles || "项目发布配置";
-      }
-
-      return `${appT.projectPublishProfiles || "项目发布配置"} · ${profileName}`;
-    }
-
-    const matchedPreset = PRESETS.find((preset) => preset.id === selectedPreset);
-    if (!matchedPreset) {
-      return configT.customMode || "自定义模式";
-    }
-
-    return getPresetText(
-      matchedPreset.id,
-      matchedPreset.name,
-      matchedPreset.description
-    ).name;
-  }, [
-    activeProfileName,
-    activeProviderId,
-    appT.projectPublishProfiles,
-    configT.customMode,
-    getPresetText,
-    isCustomMode,
-    selectedPreset,
-  ]);
-
-  const handleRightPanelDotnetConfigChange = useCallback(
-    (updates: Partial<PublishConfigStore>) => {
-      if (!currentDotnetPublishConfig) {
-        return;
-      }
-
-      replaceDotnetCustomConfig({
-        ...currentDotnetPublishConfig,
-        ...updates,
-      });
-    },
-    [
-      currentDotnetPublishConfig,
-      replaceDotnetCustomConfig,
-    ]
-  );
 
   const {
     rerunChecklistOpen,
@@ -765,21 +699,6 @@ function App() {
                 showCommandImportResultCard={showCommandImportResultCard}
                 commandImportResultCardProps={commandImportResultCardProps}
                 outputLogCardProps={outputLogCardProps}
-                dotnetPublishEditorCardProps={
-                  selectedRepo &&
-                  activeProviderId === "dotnet" &&
-                  currentDotnetPublishConfig
-                    ? {
-                        appT,
-                        configT,
-                        profileT,
-                        dotnetSchema: providerSchemas.dotnet,
-                        config: currentDotnetPublishConfig,
-                        sourceLabel: currentDotnetSourceLabel,
-                        onConfigChange: handleRightPanelDotnetConfigChange,
-                      }
-                    : null
-                }
                 shouldLoadDiagnosticsSection={shouldLoadDiagnosticsSection}
                 diagnosticsSectionProps={
                   selectedRepo

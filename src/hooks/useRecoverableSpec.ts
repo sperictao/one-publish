@@ -7,7 +7,8 @@ import type { ProviderPublishSpec } from "@/hooks/usePublishExecution";
 
 interface UseRecoverableSpecParams {
   specVersion: number;
-  applyDotnetCustomConfig: (config: PublishConfigStore) => void;
+  setCustomConfig: (config: PublishConfigStore) => void;
+  setIsCustomMode: (value: boolean) => void;
   setActiveProviderId: (providerId: string) => void;
   setProviderParameters: React.Dispatch<
     React.SetStateAction<Record<string, Record<string, ParameterValue>>>
@@ -16,7 +17,8 @@ interface UseRecoverableSpecParams {
 
 export function useRecoverableSpec({
   specVersion,
-  applyDotnetCustomConfig,
+  setCustomConfig,
+  setIsCustomMode,
   setActiveProviderId,
   setProviderParameters,
 }: UseRecoverableSpecParams) {
@@ -60,11 +62,13 @@ export function useRecoverableSpec({
 
       if (spec.provider_id === "dotnet") {
         const parameters = spec.parameters || {};
-        applyDotnetCustomConfig(
+        setCustomConfig(
           createDotnetPublishConfigFromParameters(parameters, {
             inferProfileSelection: true,
           })
         );
+
+        setIsCustomMode(true);
       } else {
         setProviderParameters((prev) => ({
           ...prev,
@@ -73,8 +77,9 @@ export function useRecoverableSpec({
       }
     },
     [
-      applyDotnetCustomConfig,
       setActiveProviderId,
+      setCustomConfig,
+      setIsCustomMode,
       setProviderParameters,
     ]
   );

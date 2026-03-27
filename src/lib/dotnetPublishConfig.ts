@@ -88,38 +88,6 @@ export function buildDotnetAdvancedParameters(
   };
 }
 
-export function createDotnetPublishConfigPatchFromParameter(
-  key: string,
-  value: ParameterValue
-): Partial<PublishConfigStore> | null {
-  switch (key) {
-    case "configuration":
-      return { configuration: typeof value === "string" ? value : "Release" };
-    case "runtime":
-      return { runtime: typeof value === "string" ? value : "" };
-    case "framework":
-      return { framework: typeof value === "string" ? value : "" };
-    case "output":
-      return { outputDir: typeof value === "string" ? value : "" };
-    case "self_contained":
-      return { selfContained: value === true };
-    case "no_build":
-      return { noBuild: value === true };
-    case "no_restore":
-      return { noRestore: value === true };
-    case "verbosity":
-      return { verbosity: typeof value === "string" ? value : "" };
-    case "no_logo":
-      return { noLogo: value === true };
-    case "properties":
-      return { properties: normalizeDotnetPropertyMap(value) };
-    case "define":
-      return { define: normalizeDotnetStringArray(value) };
-    default:
-      return null;
-  }
-}
-
 export function buildDotnetProfileParameters(
   config: PublishConfigStore
 ): Record<string, ParameterValue> {
