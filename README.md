@@ -89,6 +89,10 @@ one-publish/
 - 配置说明：`docs/updater/SETUP.md`
 - 生产模板：`src-tauri/tauri.conf.updater.example.json`
 
+## GitHub Release
+
+- 一键发布说明：`docs/release/GITHUB_RELEASE.md`
+
 ## 许可证
 
 MIT

@@ -129,12 +129,28 @@ assertContains(
   "缺少旧 release 清理步骤。"
 );
 assertContains(
+  "- name: Checkout release ref",
+  "release job 缺少仓库 checkout，无法读取 release notes 文件。"
+);
+assertContains(
+  "- name: Resolve release notes",
+  "缺少 release notes 解析步骤。"
+);
+assertContains(
+  "release_notes_path=\"./release-notes/${GITHUB_REF_NAME}.md\"",
+  "release notes 文件路径未绑定到 tag。"
+);
+assertContains(
   "gh release create",
   "Release 仍未使用 gh release create。"
 );
 assertContains(
   "find ./release-assets -type f -print0",
   "gh release create 未从 release-assets 上传文件。"
+);
+assertContains(
+  "--notes-file \"${RELEASE_NOTES_PATH}\"",
+  "GitHub Release 未使用 release notes 文件。"
 );
 
 console.log("PASS: build-release workflow 通过顺序与 secrets 保护检查。");
