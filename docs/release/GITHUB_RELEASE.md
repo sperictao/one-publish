@@ -16,14 +16,20 @@
 正式发布：
 
 ```bash
-pnpm release -- 0.2.1
+pnpm release --version 0.2.1
+# 或
+pnpm release -v 0.2.1
 ```
 
 预演发布内容（不改文件、不提交、不推送）：
 
 ```bash
-pnpm release -- 0.2.1 --dry-run
+pnpm release --version 0.2.1 --dry-run
+# 或
+pnpm release -v 0.2.1 -d
 ```
+
+> 说明：位置参数方式已移除，必须显式传入 `--version` 或 `-v`。不需要额外写 `--`。
 
 ## 前置条件
 

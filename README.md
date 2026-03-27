@@ -92,6 +92,7 @@ one-publish/
 ## GitHub Release
 
 - 一键发布说明：`docs/release/GITHUB_RELEASE.md`
+- 命令示例：`pnpm release --version 0.2.1` 或 `pnpm release -v 0.2.1`
 
 ## 许可证
 
