@@ -70,3 +70,7 @@ autoresearch-runtime.prev.json
 .gitignore
 research-results.prev.tsv
 autoresearch-state.prev.json
+
+# Local agent state
+.ob1/
+.omc/
