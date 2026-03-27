@@ -6,7 +6,7 @@ import {
   SlidersHorizontal,
   Sparkles,
 } from "lucide-react";
-import { memo, startTransition, useCallback } from "react";
+import { memo, startTransition, useCallback, useMemo } from "react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -34,14 +34,14 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
+import { DotnetAdvancedParametersSection } from "@/components/publish/DotnetAdvancedParametersSection";
+import {
+  buildDotnetAdvancedParameters,
+  createDotnetPublishConfigPatchFromParameter,
+} from "@/lib/dotnetPublishConfig";
+import type { PublishConfigStore } from "@/lib/store";
 import { cn } from "@/lib/utils";
-
-interface QuickCreateProfileDraft {
-  configuration: string;
-  runtime: string;
-  outputDir: string;
-  selfContained: boolean;
-}
+import type { ParameterSchema, ParameterValue } from "@/types/parameters";
 
 interface QuickCreateTemplateOption {
   id: string;
@@ -61,9 +61,10 @@ interface QuickCreateProfileDialogProps {
   quickCreateProfileGroup: string;
   quickCreateProfileGroupOptions: string[];
   quickCreateProfileCustomGroup: string;
-  quickCreateProfileDraft: QuickCreateProfileDraft;
+  quickCreateProfileDraft: PublishConfigStore;
   quickCreateProfileSaving: boolean;
   quickCreateEditing: boolean;
+  dotnetSchema?: ParameterSchema;
   quickCreateGroupDefaultValue: string;
   quickCreateGroupCustomValue: string;
   profileT: QuickCreateTranslations;
@@ -74,7 +75,7 @@ interface QuickCreateProfileDialogProps {
   onProfileNameChange: (value: string) => void;
   onProfileGroupChange: (value: string) => void;
   onProfileCustomGroupChange: (value: string) => void;
-  onDraftChange: (patch: Partial<QuickCreateProfileDraft>) => void;
+  onDraftChange: (patch: Partial<PublishConfigStore>) => void;
   onSave: () => void;
 }
 
@@ -434,6 +435,7 @@ export function QuickCreateProfileDialog({
   quickCreateProfileDraft,
   quickCreateProfileSaving,
   quickCreateEditing,
+  dotnetSchema,
   quickCreateGroupDefaultValue,
   quickCreateGroupCustomValue,
   profileT,
@@ -504,6 +506,21 @@ export function QuickCreateProfileDialog({
   const handleSelfContainedChange = useCallback(
     (checked: boolean) => {
       onDraftChange({ selfContained: checked });
+    },
+    [onDraftChange]
+  );
+
+  const advancedParameters = useMemo(
+    () => buildDotnetAdvancedParameters(quickCreateProfileDraft),
+    [quickCreateProfileDraft]
+  );
+
+  const handleAdvancedParameterChange = useCallback(
+    (key: string, value: ParameterValue) => {
+      const patch = createDotnetPublishConfigPatchFromParameter(key, value);
+      if (patch) {
+        onDraftChange(patch);
+      }
     },
     [onDraftChange]
   );
@@ -592,6 +609,13 @@ export function QuickCreateProfileDialog({
                   isRuntimeRequired={isRuntimeRequired}
                   onOutputDirChange={handleOutputDirChange}
                   onSelfContainedChange={handleSelfContainedChange}
+                />
+
+                <DotnetAdvancedParametersSection
+                  profileT={profileT}
+                  dotnetSchema={dotnetSchema}
+                  parameters={advancedParameters}
+                  onParameterChange={handleAdvancedParameterChange}
                 />
               </div>
             </div>

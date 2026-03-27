@@ -17,6 +17,9 @@ jobs:
       HAS_APPLE_CERT: ${{ secrets.APPLE_CERTIFICATE != '' && secrets.APPLE_CERTIFICATE_PASSWORD != '' && secrets.KEYCHAIN_PASSWORD != '' }}
       HAS_WINDOWS_CERT: ${{ secrets.WINDOWS_CERTIFICATE != '' && secrets.WINDOWS_CERTIFICATE_PASSWORD != '' }}
       HAS_APPLE_SIGNING: ${{ secrets.APPLE_ID != '' && secrets.APPLE_PASSWORD != '' && secrets.APPLE_SIGNING_IDENTITY != '' }}
+      TAURI_UPDATER_PUBKEY: ${{ secrets.TAURI_UPDATER_PUBKEY }}
+      TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+      TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
     strategy:
       fail-fast: false
       matrix:
@@ -111,15 +114,15 @@ jobs:
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
           APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
-        run: pnpm tauri build ${{ matrix.tauri_args }}
+        run: pnpm build:updater -- ${{ matrix.tauri_args }}
 
       - name: Build (macOS unsigned)
         if: matrix.os == 'macos-latest' && env.HAS_APPLE_SIGNING != 'true'
-        run: pnpm tauri build ${{ matrix.tauri_args }}
+        run: pnpm build:updater -- ${{ matrix.tauri_args }}
 
       - name: Build
         if: matrix.os != 'macos-latest'
-        run: pnpm tauri build ${{ matrix.tauri_args }}
+        run: pnpm build:updater -- ${{ matrix.tauri_args }}
 
       - name: Upload bundles
         uses: actions/upload-artifact@v4
@@ -164,12 +167,25 @@ jobs:
             fi
             cp "$file" "./release-assets/$target"
           done < <(find ./artifacts -type f \( \
+            -name '*.app.tar.gz' -o \
+            -name '*.app.tar.gz.sig' -o \
+            -name '*.msi.zip' -o \
+            -name '*.msi.zip.sig' -o \
+            -name '*-setup.exe.zip' -o \
+            -name '*-setup.exe.zip.sig' -o \
+            -name '*.AppImage.tar.gz' -o \
+            -name '*.AppImage.tar.gz.sig' -o \
             -name '*.dmg' -o \
             -name '*.msi' -o \
+            -name '*.msi.sig' -o \
             -name '*-setup.exe' -o \
+            -name '*-setup.exe.sig' -o \
             -name '*.AppImage' -o \
+            -name '*.AppImage.sig' -o \
             -name '*.deb' -o \
-            -name '*.rpm' \
+            -name '*.deb.sig' -o \
+            -name '*.rpm' -o \
+            -name '*.rpm.sig' \
           \) -print0)
 
           file_count="$(find ./release-assets -type f | wc -l | tr -d ' ')"
@@ -179,6 +195,16 @@ jobs:
           fi
 
           echo "Prepared $file_count release assets."
+
+      - name: Generate latest updater manifest
+        env:
+          RELEASE_DOWNLOAD_BASE: https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}
+        run: |
+          node scripts/generate-latest-json.mjs \
+            --input ./release-assets \
+            --output ./release-assets/latest.json \
+            --version "${GITHUB_REF_NAME#v}" \
+            --baseUrl "${RELEASE_DOWNLOAD_BASE}"
 
       - name: Remove existing release
         env:

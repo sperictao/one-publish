@@ -93,12 +93,36 @@ assertContains(
   "macOS universal bundle_path 未配置为 target 子目录。"
 );
 assertContains(
+  "TAURI_UPDATER_PUBKEY",
+  "workflow 未注入 TAURI_UPDATER_PUBKEY。"
+);
+assertContains(
+  "TAURI_SIGNING_PRIVATE_KEY",
+  "workflow 未注入 TAURI_SIGNING_PRIVATE_KEY。"
+);
+assertContains(
   "if-no-files-found: error",
   "Upload bundles 未启用 if-no-files-found: error，可能掩盖产物缺失。"
 );
 assertContains(
+  "pnpm build:updater --",
+  "构建步骤仍未切到 build:updater。"
+);
+assertContains(
   "- name: Prepare release assets",
   "缺少 release 资产预处理步骤。"
+);
+assertContains(
+  "-name '*.app.tar.gz'",
+  "release 资产筛选未包含 macOS updater tar.gz。"
+);
+assertContains(
+  "-name '*.msi.zip'",
+  "release 资产筛选未包含 Windows updater zip。"
+);
+assertContains(
+  "-name '*.AppImage.tar.gz'",
+  "release 资产筛选未包含 Linux updater tar.gz。"
 );
 assertContains(
   "-name '*.dmg'",
@@ -147,6 +171,18 @@ assertContains(
 assertContains(
   "find ./release-assets -type f -print0",
   "gh release create 未从 release-assets 上传文件。"
+);
+assertContains(
+  "- name: Generate latest updater manifest",
+  "缺少 latest.json 生成步骤。"
+);
+assertContains(
+  "scripts/generate-latest-json.mjs",
+  "workflow 未调用 latest.json 生成脚本。"
+);
+assertContains(
+  "--output ./release-assets/latest.json",
+  "latest.json 未写入 release-assets。"
 );
 assertContains(
   "--notes-file \"${RELEASE_NOTES_PATH}\"",

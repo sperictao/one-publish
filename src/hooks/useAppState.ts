@@ -270,6 +270,17 @@ export function useAppState() {
     [setPublishState]
   );
 
+  const setCurrentPublishState = useCallback(
+    (params: {
+      selectedPreset?: string;
+      isCustomMode?: boolean;
+      customConfig?: PublishConfigStore;
+    }) => {
+      setPublishState(params);
+    },
+    [setPublishState]
+  );
+
   // 更新语言
   const setLanguage = useCallback(
     (language: string) => {
@@ -338,6 +349,7 @@ export function useAppState() {
     setSelectedPreset,
     setIsCustomMode,
     setCustomConfig,
+    setCurrentPublishState,
 
     // 偏好设置
     language: state.language,

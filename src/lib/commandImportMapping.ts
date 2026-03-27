@@ -1,4 +1,8 @@
 import type { PublishConfigStore } from "@/lib/store";
+import {
+  normalizeDotnetPropertyMap,
+  normalizeDotnetStringArray,
+} from "@/lib/dotnetPublishConfig";
 import type { ParameterValue } from "@/types/parameters";
 
 interface CommandImportSpec {
@@ -115,6 +119,76 @@ export function mapImportedSpecByProvider(
       if (key === "self_contained") {
         if (typeof rawValue === "boolean") {
           dotnetUpdates.selfContained = rawValue;
+          mappedKeys.push(key);
+        } else {
+          unmappedKeys.push(key);
+        }
+        continue;
+      }
+
+      if (key === "framework") {
+        if (typeof rawValue === "string") {
+          dotnetUpdates.framework = rawValue;
+          mappedKeys.push(key);
+        } else {
+          unmappedKeys.push(key);
+        }
+        continue;
+      }
+
+      if (key === "no_build") {
+        if (typeof rawValue === "boolean") {
+          dotnetUpdates.noBuild = rawValue;
+          mappedKeys.push(key);
+        } else {
+          unmappedKeys.push(key);
+        }
+        continue;
+      }
+
+      if (key === "no_restore") {
+        if (typeof rawValue === "boolean") {
+          dotnetUpdates.noRestore = rawValue;
+          mappedKeys.push(key);
+        } else {
+          unmappedKeys.push(key);
+        }
+        continue;
+      }
+
+      if (key === "verbosity") {
+        if (typeof rawValue === "string") {
+          dotnetUpdates.verbosity = rawValue;
+          mappedKeys.push(key);
+        } else {
+          unmappedKeys.push(key);
+        }
+        continue;
+      }
+
+      if (key === "no_logo") {
+        if (typeof rawValue === "boolean") {
+          dotnetUpdates.noLogo = rawValue;
+          mappedKeys.push(key);
+        } else {
+          unmappedKeys.push(key);
+        }
+        continue;
+      }
+
+      if (key === "properties") {
+        if (isPlainObject(rawValue)) {
+          dotnetUpdates.properties = normalizeDotnetPropertyMap(rawValue);
+          mappedKeys.push(key);
+        } else {
+          unmappedKeys.push(key);
+        }
+        continue;
+      }
+
+      if (key === "define") {
+        if (Array.isArray(rawValue)) {
+          dotnetUpdates.define = normalizeDotnetStringArray(rawValue);
           mappedKeys.push(key);
         } else {
           unmappedKeys.push(key);

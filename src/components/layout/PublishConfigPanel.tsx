@@ -28,6 +28,7 @@ import {
   SlidersHorizontal,
   Folder,
   FileText,
+  Eye,
   Check,
   ChevronRight,
   ChevronDown,
@@ -37,9 +38,25 @@ import {
   Star,
   X,
 } from "lucide-react";
-import type { ConfigProfile } from "@/lib/store";
+import { toast } from "sonner";
+import {
+  readProjectPublishProfile,
+  type ConfigProfile,
+} from "@/lib/store";
+import {
+  parseProjectPublishProfileXml,
+  type ParsedProjectPublishProfile,
+} from "@/lib/projectPublishProfileXml";
+import { extractInvokeErrorMessage } from "@/lib/tauri/invokeErrors";
 import { useI18n } from "@/hooks/useI18n";
 import type { PublishConfigFloatingBindings } from "@/components/layout/PublishConfigPanelFloatingLayer";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 
 const PublishConfigPanelFloatingLayer = lazy(async () => {
   const mod = await import("@/components/layout/PublishConfigPanelFloatingLayer");
@@ -93,6 +110,7 @@ export interface PublishConfigPanelProps {
   onOpenConfigDialog: () => void;
   onDeleteProfile: (name: string) => void;
   projectPublishProfiles: string[];
+  projectFilePath?: string;
   onSelectProjectProfile: (profileName: string) => void;
   recentConfigKeys: string[];
   favoriteConfigKeys: string[];
@@ -102,6 +120,27 @@ export interface PublishConfigPanelProps {
   showExpandButton?: boolean;
   onExpandRepo?: () => void;
 }
+
+type ProjectProfileViewerState =
+  | {
+      status: "idle";
+      profileName: null;
+    }
+  | {
+      status: "loading";
+      profileName: string;
+    }
+  | {
+      status: "ready";
+      profileName: string;
+      filePath: string;
+      parsedProfile: ParsedProjectPublishProfile;
+    }
+  | {
+      status: "error";
+      profileName: string;
+      errorMessage: string;
+    };
 
 // Collapsible group sub-component
 function ConfigGroup({
@@ -291,6 +330,7 @@ export function PublishConfigPanel({
   onOpenConfigDialog,
   onDeleteProfile,
   projectPublishProfiles,
+  projectFilePath,
   onSelectProjectProfile,
   recentConfigKeys,
   favoriteConfigKeys,
@@ -306,6 +346,12 @@ export function PublishConfigPanel({
   const [groupFilterOpen, setGroupFilterOpen] = useState(false);
   const [preferredSelectedRenderId, setPreferredSelectedRenderId] = useState<string | null>(null);
   const [floatingEnhancerEnabled, setFloatingEnhancerEnabled] = useState(false);
+  const [projectProfileViewerOpen, setProjectProfileViewerOpen] = useState(false);
+  const [projectProfileViewerState, setProjectProfileViewerState] =
+    useState<ProjectProfileViewerState>({
+      status: "idle",
+      profileName: null,
+    });
   const { translations } = useI18n();
   const t = translations.configPanel || {};
   const configManagementLabel =
@@ -318,6 +364,7 @@ export function PublishConfigPanel({
     "h-7 w-9 rounded-full p-0 text-muted-foreground/60 hover:bg-black/[0.045] hover:text-foreground hover:shadow-[inset_0_1px_0_rgba(255,255,255,0.72),0_1px_2px_rgba(15,23,42,0.06)] dark:hover:bg-white/[0.06] dark:hover:shadow-[inset_0_1px_0_rgba(255,255,255,0.08)]";
   const fallbackListRef = useRef<HTMLDivElement | null>(null);
   const fallbackFloatingCardSurfaceRef = useRef<HTMLDivElement | null>(null);
+  const latestProjectProfileRequestId = useRef(0);
 
   const query = searchQuery.toLowerCase();
   const favoriteSet = useMemo(
@@ -594,6 +641,70 @@ export function PublishConfigPanel({
   const noopHoverHandler = useCallback((_configId: string) => {}, []);
   const noopVoidHandler = useCallback(() => {}, []);
 
+  const handleViewProjectProfile = useCallback(
+    async (profileName: string) => {
+      setProjectProfileViewerOpen(true);
+
+      if (!projectFilePath) {
+        const errorMessage = "当前项目文件路径不可用，无法读取发布配置。";
+        setProjectProfileViewerState({
+          status: "error",
+          profileName,
+          errorMessage,
+        });
+        toast.error(t.loadConfigFailed || "加载配置失败", {
+          description: errorMessage,
+        });
+        return;
+      }
+
+      const requestId = latestProjectProfileRequestId.current + 1;
+      latestProjectProfileRequestId.current = requestId;
+      setProjectProfileViewerState({
+        status: "loading",
+        profileName,
+      });
+
+      try {
+        const profileFile = await readProjectPublishProfile(
+          projectFilePath,
+          profileName
+        );
+        const parsedProfile = parseProjectPublishProfileXml(profileFile.content);
+
+        if (latestProjectProfileRequestId.current !== requestId) {
+          return;
+        }
+
+        setProjectProfileViewerState({
+          status: "ready",
+          profileName: profileFile.profileName,
+          filePath: profileFile.filePath,
+          parsedProfile,
+        });
+      } catch (error) {
+        const errorMessage =
+          error instanceof Error
+            ? error.message
+            : extractInvokeErrorMessage(error);
+
+        if (latestProjectProfileRequestId.current !== requestId) {
+          return;
+        }
+
+        setProjectProfileViewerState({
+          status: "error",
+          profileName,
+          errorMessage,
+        });
+        toast.error(t.loadConfigFailed || "加载配置失败", {
+          description: errorMessage,
+        });
+      }
+    },
+    [projectFilePath, t.loadConfigFailed]
+  );
+
   const fallbackFloatingBindings = useMemo<PublishConfigFloatingBindings>(
     () => ({
       listRef: fallbackListRef as MutableRefObject<HTMLDivElement | null>,
@@ -785,6 +896,18 @@ export function PublishConfigPanel({
                       isFavorite={favoriteSet.has(configKey)}
                       onToggle={() => onToggleFavoriteConfig(configKey)}
                     />
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-6 w-6 flex-shrink-0"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        void handleViewProjectProfile(name);
+                      }}
+                      title={t.viewConfig || "查看配置"}
+                    >
+                      <Eye className="h-3.5 w-3.5 text-muted-foreground" />
+                    </Button>
                   </div>
                 </div>
               );
@@ -1025,6 +1148,124 @@ export function PublishConfigPanel({
           </PublishConfigPanelFloatingLayer>
         </Suspense>
       )}
+
+      <Dialog
+        open={projectProfileViewerOpen}
+        onOpenChange={setProjectProfileViewerOpen}
+      >
+        <DialogContent className="max-w-3xl">
+          <DialogHeader>
+            <DialogTitle>{t.viewConfigTitle || "查看发布配置"}</DialogTitle>
+            <DialogDescription>
+              {projectProfileViewerState.profileName
+                ? `${
+                    t.viewConfigDescription || "查看项目发布配置文件中的全部参数。"
+                  } · ${projectProfileViewerState.profileName}`
+                : t.viewConfigDescription ||
+                  "查看项目发布配置文件中的全部参数。"}
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="max-h-[70vh] space-y-4 overflow-y-auto pr-1">
+            {projectProfileViewerState.status === "loading" ? (
+              <div className="flex min-h-40 items-center justify-center rounded-2xl border border-dashed border-border/70 bg-muted/20 text-sm text-muted-foreground">
+                <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
+                {t.loadingConfig || "正在加载配置..."}
+              </div>
+            ) : null}
+
+            {projectProfileViewerState.status === "error" ? (
+              <div className="rounded-2xl border border-destructive/30 bg-destructive/5 p-4 text-sm text-destructive">
+                {projectProfileViewerState.errorMessage}
+              </div>
+            ) : null}
+
+            {projectProfileViewerState.status === "ready" ? (
+              <>
+                <div className="rounded-2xl border border-[var(--glass-border-subtle)] bg-[var(--glass-input-bg)] p-4">
+                  <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                    {t.configFilePath || "配置文件路径"}
+                  </div>
+                  <div className="mt-2 break-all font-mono text-xs text-foreground/80">
+                    {projectProfileViewerState.filePath}
+                  </div>
+                </div>
+
+                <div className="space-y-3">
+                  <div className="text-sm font-semibold text-foreground">
+                    {t.parsedParameters || "解析参数"}
+                  </div>
+                  {projectProfileViewerState.parsedProfile.sections.map((section) => (
+                    <section
+                      key={section.id}
+                      className="rounded-2xl border border-[var(--glass-border-subtle)] bg-[var(--glass-input-bg)] p-4"
+                    >
+                      <div className="flex flex-wrap items-center gap-2">
+                        <h3 className="text-sm font-semibold text-foreground">
+                          {section.title}
+                        </h3>
+                        {Object.entries(section.attributes).map(([key, value]) => (
+                          <span
+                            key={`${section.id}-${key}`}
+                            className="rounded-full bg-primary/10 px-2 py-0.5 font-mono text-[11px] text-primary"
+                          >
+                            {key}={value}
+                          </span>
+                        ))}
+                      </div>
+
+                      {section.entries.length > 0 ? (
+                        <div className="mt-3 space-y-2">
+                          {section.entries.map((entry, entryIndex) => (
+                            <div
+                              key={`${section.id}-${entry.path}-${entryIndex}`}
+                              className="rounded-xl border border-border/60 bg-background/70 p-3"
+                            >
+                              <div className="break-all text-sm font-medium text-foreground">
+                                {entry.key}
+                              </div>
+                              <div className="mt-1 break-all font-mono text-xs text-muted-foreground">
+                                {entry.value || "—"}
+                              </div>
+                              {Object.keys(entry.attributes).length > 0 ? (
+                                <div className="mt-2 flex flex-wrap gap-2">
+                                  {Object.entries(entry.attributes).map(
+                                    ([key, value]) => (
+                                      <span
+                                        key={`${entry.path}-${key}`}
+                                        className="rounded-full bg-secondary px-2 py-0.5 font-mono text-[11px] text-secondary-foreground"
+                                      >
+                                        {key}={value}
+                                      </span>
+                                    )
+                                  )}
+                                </div>
+                              ) : null}
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <div className="mt-3 text-xs text-muted-foreground">
+                          {t.noConfigParameters || "配置文件中暂无可展示的参数"}
+                        </div>
+                      )}
+                    </section>
+                  ))}
+                </div>
+
+                <details className="rounded-2xl border border-[var(--glass-border-subtle)] bg-[var(--glass-input-bg)] p-4">
+                  <summary className="cursor-pointer text-sm font-semibold text-foreground">
+                    {t.rawConfigFile || "原始配置文件"}
+                  </summary>
+                  <pre className="mt-3 max-h-80 overflow-auto whitespace-pre-wrap break-all rounded-xl bg-background/80 p-3 font-mono text-xs text-foreground/85">
+                    {projectProfileViewerState.parsedProfile.rawXml}
+                  </pre>
+                </details>
+              </>
+            ) : null}
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

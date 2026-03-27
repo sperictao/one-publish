@@ -19,21 +19,37 @@ OnePublish 已接入 Tauri v2 Updater 插件。
 
 ## 生产环境配置
 
-1. 复制示例配置：
+1. 准备 updater 使用的 minisign 公钥，并写入环境变量：
 
 ```bash
-cp src-tauri/tauri.conf.updater.example.json src-tauri/tauri.conf.updater.prod.json
+export TAURI_UPDATER_PUBKEY='YOUR_MINISIGN_PUBKEY'
 ```
 
-2. 将 `pubkey` 替换为你发布系统使用的 minisign 公钥。
-3. 将 `endpoints` 替换为你的更新 JSON 服务地址（建议 HTTPS）。
-4. 构建时叠加配置（命令会先校验 updater 配置）：
+2. 如需覆盖默认 GitHub Release 更新地址，可额外设置：
+
+```bash
+export TAURI_UPDATER_ENDPOINT='https://github.com/sperictao/one-publish/releases/latest/download/latest.json'
+```
+
+3. 构建时会自动生成生产 overlay，并先校验 updater 配置：
 
 ```bash
 pnpm build:updater
 ```
 
+4. CI 还需要配置：
+   - `TAURI_UPDATER_PUBKEY`
+   - `TAURI_SIGNING_PRIVATE_KEY`
+   - `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`（如私钥有密码）
+
 ## 说明
 
 - `pubkey` 与 `endpoints` 缺失时，后端会返回“更新源未配置”提示。
+- 默认更新源为 GitHub Release 的 `latest.json`：
+
+```text
+https://github.com/sperictao/one-publish/releases/latest/download/latest.json
+```
+
 - 若使用非 HTTPS 地址，release 构建会被 updater 插件拦截。
+- `bundle.createUpdaterArtifacts` 需要开启，release 工作流会上传 `latest.json`、updater 包和 `.sig`。

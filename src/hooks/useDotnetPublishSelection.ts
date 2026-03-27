@@ -1,5 +1,6 @@
 import { useCallback, useMemo } from "react";
 
+import { buildDotnetProfileParameters } from "@/lib/dotnetPublishConfig";
 import { getPathBasename, joinPath } from "@/lib/paths";
 import type { PublishConfigStore } from "@/lib/store";
 
@@ -23,8 +24,15 @@ interface DotnetPreset {
 interface PublishConfig {
   configuration: string;
   runtime: string;
+  framework: string;
   self_contained: boolean;
   output_dir: string;
+  no_build: boolean;
+  no_restore: boolean;
+  verbosity: string;
+  no_logo: boolean;
+  properties: Record<string, string>;
+  define: string[];
   use_profile: boolean;
   profile_name: string;
 }
@@ -34,8 +42,15 @@ const storeConfigToPublishConfig = (
 ): PublishConfig => ({
   configuration: config.configuration,
   runtime: config.runtime,
+  framework: config.framework,
   self_contained: config.selfContained,
   output_dir: config.outputDir,
+  no_build: config.noBuild,
+  no_restore: config.noRestore,
+  verbosity: config.verbosity,
+  no_logo: config.noLogo,
+  properties: { ...config.properties },
+  define: [...config.define],
   use_profile: config.useProfile,
   profile_name: config.profileName,
 });
@@ -91,8 +106,15 @@ export function useDotnetPublishSelection(params: {
         return {
           configuration: "Release",
           runtime: "",
+          framework: "",
           self_contained: false,
           output_dir: buildDefaultScopedOutputDir("Release"),
+          no_build: false,
+          no_restore: false,
+          verbosity: "",
+          no_logo: false,
+          properties: {},
+          define: [],
           use_profile: true,
           profile_name: profileName,
         };
@@ -115,12 +137,19 @@ export function useDotnetPublishSelection(params: {
         ? joinPath(params.projectInfo.root_path, "publish", params.selectedPreset)
         : "";
 
-    return {
-      ...preset.config,
-      output_dir: outputDir,
-      use_profile: false,
-      profile_name: "",
-    };
+      return {
+        ...preset.config,
+        framework: "",
+        output_dir: outputDir,
+        no_build: false,
+        no_restore: false,
+        verbosity: "",
+        no_logo: false,
+        properties: {},
+        define: [],
+        use_profile: false,
+        profile_name: "",
+      };
   }, [buildDefaultScopedOutputDir, params]);
 
   const dotnetPublishPreviewCommand = useMemo(() => {
@@ -130,26 +159,66 @@ export function useDotnetPublishSelection(params: {
 
     const config = getCurrentConfig();
     const baseCommand = `dotnet publish "${params.projectInfo.project_file}"`;
+    const parameterArgs: string[] = [];
+    const parameterRecord = buildDotnetProfileParameters({
+      configuration: config.configuration,
+      runtime: config.runtime,
+      framework: config.framework,
+      selfContained: config.self_contained,
+      outputDir: config.output_dir,
+      noBuild: config.no_build,
+      noRestore: config.no_restore,
+      verbosity: config.verbosity,
+      noLogo: config.no_logo,
+      properties: config.properties,
+      define: config.define,
+      useProfile: config.use_profile,
+      profileName: config.profile_name,
+    });
 
-    if (config.use_profile && config.profile_name) {
-      return [
-        baseCommand,
-        `-p:PublishProfile="${config.profile_name}"`,
-        config.output_dir ? `-o "${config.output_dir}"` : null,
-      ]
-        .filter((part): part is string => Boolean(part))
-        .join(" ");
+    if (typeof parameterRecord.configuration === "string") {
+      parameterArgs.push(`-c ${parameterRecord.configuration}`);
+    }
+    if (typeof parameterRecord.runtime === "string") {
+      parameterArgs.push(`--runtime ${parameterRecord.runtime}`);
+    }
+    if (typeof parameterRecord.framework === "string") {
+      parameterArgs.push(`--framework ${parameterRecord.framework}`);
+    }
+    if (parameterRecord.self_contained === true) {
+      parameterArgs.push("--self-contained");
+    }
+    if (typeof parameterRecord.output === "string") {
+      parameterArgs.push(`-o "${parameterRecord.output}"`);
+    }
+    if (parameterRecord.no_build === true) {
+      parameterArgs.push("--no-build");
+    }
+    if (parameterRecord.no_restore === true) {
+      parameterArgs.push("--no-restore");
+    }
+    if (typeof parameterRecord.verbosity === "string") {
+      parameterArgs.push(`--verbosity ${parameterRecord.verbosity}`);
+    }
+    if (parameterRecord.no_logo === true) {
+      parameterArgs.push("--no-logo");
+    }
+    if (Array.isArray(parameterRecord.define)) {
+      for (const define of parameterRecord.define) {
+        parameterArgs.push(`--define ${define}`);
+      }
+    }
+    if (
+      parameterRecord.properties &&
+      typeof parameterRecord.properties === "object" &&
+      !Array.isArray(parameterRecord.properties)
+    ) {
+      for (const [key, value] of Object.entries(parameterRecord.properties)) {
+        parameterArgs.push(`-p:${key}=${value}`);
+      }
     }
 
-    return [
-      baseCommand,
-      `-c ${config.configuration}`,
-      config.runtime ? `--runtime ${config.runtime}` : null,
-      config.self_contained ? "--self-contained" : null,
-      config.output_dir ? `-o "${config.output_dir}"` : null,
-    ]
-      .filter((part): part is string => Boolean(part))
-      .join(" ");
+    return [baseCommand, ...parameterArgs].join(" ");
   }, [params.activeProviderId, getCurrentConfig, params.projectInfo]);
 
   const recentConfigKeyForCurrentSelection = useMemo(() => {

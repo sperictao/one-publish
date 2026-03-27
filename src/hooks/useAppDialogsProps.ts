@@ -1,16 +1,15 @@
 import type { AppDialogsProps } from "@/components/layout/AppDialogs";
+import type { AppUpdaterState } from "@/hooks/useAppUpdater";
 import type { EnvironmentStatus } from "@/hooks/useEnvironmentStatus";
 import type { Language } from "@/hooks/useI18n";
 import type { PublishResult } from "@/hooks/usePublishExecution";
-import type { ConfigProfile, ExecutionRecord } from "@/lib/store";
+import type {
+  ConfigProfile,
+  ExecutionRecord,
+  PublishConfigStore,
+} from "@/lib/store";
 import type { EnvironmentCheckResult } from "@/lib/environment";
-
-interface QuickCreateProfileDraft {
-  configuration: string;
-  runtime: string;
-  outputDir: string;
-  selfContained: boolean;
-}
+import type { ParameterSchema } from "@/types/parameters";
 
 interface QuickCreateTemplateOption {
   id: string;
@@ -54,6 +53,10 @@ export interface UseAppDialogsPropsParams {
     providerIds?: string[]
   ) => void;
   activeProviderId: string;
+  updaterState: AppUpdaterState;
+  checkForUpdates: () => Promise<void>;
+  installAvailableUpdate: () => Promise<void>;
+  openUpdaterHelpTarget: (target: "docs" | "template") => Promise<void>;
   rerunChecklistOpen: boolean;
   pendingRerunRecord: ExecutionRecord | null;
   selectedRepoCurrentBranch?: string | null;
@@ -81,9 +84,10 @@ export interface UseAppDialogsPropsParams {
   quickCreateProfileGroup: string;
   quickCreateProfileGroupOptions: string[];
   quickCreateProfileCustomGroup: string;
-  quickCreateProfileDraft: QuickCreateProfileDraft;
+  quickCreateProfileDraft: PublishConfigStore;
   quickCreateProfileSaving: boolean;
   quickCreateEditing: boolean;
+  dotnetSchema?: ParameterSchema;
   quickCreateGroupDefaultValue: string;
   quickCreateGroupCustomValue: string;
   profileT: Record<string, string | undefined>;
@@ -94,7 +98,7 @@ export interface UseAppDialogsPropsParams {
   setQuickCreateProfileName: (value: string) => void;
   setQuickCreateProfileGroup: (value: string) => void;
   setQuickCreateProfileCustomGroup: (value: string) => void;
-  updateQuickCreateProfileDraft: (patch: Partial<QuickCreateProfileDraft>) => void;
+  updateQuickCreateProfileDraft: (patch: Partial<PublishConfigStore>) => void;
   handleQuickCreateProfileSave: () => void;
   configDialogOpen: boolean;
   loadProfiles: () => void;
@@ -154,6 +158,10 @@ export function useAppDialogsProps(params: UseAppDialogsPropsParams): AppDialogs
     onCommandImportOpenChange: params.setCommandImportOpen,
     activeProviderId: params.activeProviderId,
     onCommandImport: params.handleCommandImport,
+    updaterState: params.updaterState,
+    onCheckForUpdates: params.checkForUpdates,
+    onInstallAvailableUpdate: params.installAvailableUpdate,
+    onOpenUpdaterHelpTarget: params.openUpdaterHelpTarget,
     quickCreateProfileOpen: params.quickCreateProfileOpen,
     quickCreateTemplateId: params.quickCreateTemplateId,
     quickCreateTemplateOptions: params.quickCreateTemplateOptions,
@@ -164,6 +172,7 @@ export function useAppDialogsProps(params: UseAppDialogsPropsParams): AppDialogs
     quickCreateProfileDraft: params.quickCreateProfileDraft,
     quickCreateProfileSaving: params.quickCreateProfileSaving,
     quickCreateEditing: params.quickCreateEditing,
+    dotnetSchema: params.dotnetSchema,
     quickCreateGroupDefaultValue: params.quickCreateGroupDefaultValue,
     quickCreateGroupCustomValue: params.quickCreateGroupCustomValue,
     profileT: params.profileT,

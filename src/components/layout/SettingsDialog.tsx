@@ -41,15 +41,8 @@ import {
   useMemo,
   useState,
 } from "react";
-import {
-  checkUpdate,
-  installUpdate,
-  getUpdaterHelpPaths,
-  getUpdaterConfigHealth,
-  openUpdaterHelp,
-} from "@/lib/store";
-import type { UpdateInfo } from "@/lib/store";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
+import type { AppUpdaterState } from "@/hooks/useAppUpdater";
 import { useI18n, t } from "@/hooks/useI18n";
 import type { Language } from "@/hooks/useI18n";
 import type { EnvironmentCheckResult } from "@/lib/environment";
@@ -99,6 +92,10 @@ interface SettingsDialogProps {
   environmentDefaultProviderIds?: string[];
   environmentInitialResult?: EnvironmentCheckResult | null;
   onEnvironmentChecked?: (result: EnvironmentCheckResult) => void;
+  updaterState: AppUpdaterState;
+  onCheckForUpdates: () => Promise<void>;
+  onInstallAvailableUpdate: () => Promise<void>;
+  onOpenUpdaterHelpTarget: (target: "docs" | "template") => Promise<void>;
 }
 
 function SettingsSectionFallback({ label }: { label: string }) {
@@ -188,21 +185,22 @@ export function SettingsDialog({
   environmentDefaultProviderIds = ["dotnet"],
   environmentInitialResult = null,
   onEnvironmentChecked,
+  updaterState,
+  onCheckForUpdates,
+  onInstallAvailableUpdate,
+  onOpenUpdaterHelpTarget,
 }: SettingsDialogProps) {
   const [activeCategory, setActiveCategory] = useState<SettingsCategoryId>("general");
-  const [updateInfo, setUpdateInfo] = useState<UpdateInfo | null>(null);
-  const [isCheckingUpdate, setIsCheckingUpdate] = useState(false);
-  const [isInstallingUpdate, setIsInstallingUpdate] = useState(false);
-  const [isOpeningUpdaterHelp, setIsOpeningUpdaterHelp] = useState(false);
-  const [updaterHelpPaths, setUpdaterHelpPaths] = useState<{
-    docsPath: string;
-    templatePath: string;
-  } | null>(null);
-  const [updaterConfigHealth, setUpdaterConfigHealth] = useState<{
-    configured: boolean;
-    message: string;
-  } | null>(null);
   const { translations } = useI18n();
+  const {
+    currentVersion,
+    updateInfo,
+    updaterHelpPaths,
+    updaterConfigHealth,
+    isCheckingUpdate,
+    isInstallingUpdate,
+    isOpeningUpdaterHelp,
+  } = updaterState;
 
   const categoryItems = useMemo<SettingsCategoryItem[]>(
     () => [
@@ -321,64 +319,20 @@ export function SettingsDialog({
     [activeCategory]
   );
 
-  const handleCheckUpdate = async () => {
-    setIsCheckingUpdate(true);
-    try {
-      const info = await checkUpdate();
-      setUpdateInfo(info);
+  const handleCheckUpdate = useCallback(() => {
+    void onCheckForUpdates();
+  }, [onCheckForUpdates]);
 
-      const health = await getUpdaterConfigHealth();
-      setUpdaterConfigHealth(health);
+  const handleOpenUpdaterHelp = useCallback(
+    (target: "docs" | "template") => {
+      void onOpenUpdaterHelpTarget(target);
+    },
+    [onOpenUpdaterHelpTarget]
+  );
 
-      if (
-        info.message?.includes("更新源未配置") ||
-        info.message?.includes("updater")
-      ) {
-        const paths = await getUpdaterHelpPaths();
-        setUpdaterHelpPaths(paths);
-      } else {
-        setUpdaterHelpPaths(null);
-      }
-    } catch (err) {
-      console.error("检查更新失败:", err);
-    } finally {
-      setIsCheckingUpdate(false);
-    }
-  };
-
-  const handleOpenUpdaterHelp = async (target: "docs" | "template") => {
-    setIsOpeningUpdaterHelp(true);
-    try {
-      await openUpdaterHelp(target);
-    } catch (err) {
-      console.error("打开 updater 帮助失败:", err);
-    } finally {
-      setIsOpeningUpdaterHelp(false);
-    }
-  };
-
-  const handleInstallUpdate = async () => {
-    setIsInstallingUpdate(true);
-    try {
-      const message = await installUpdate();
-      const info = await checkUpdate();
-      setUpdateInfo({
-        ...info,
-        message: message || info.message,
-      });
-    } catch (err) {
-      console.error("安装更新失败:", err);
-      setUpdateInfo((prev) => ({
-        currentVersion: prev?.currentVersion || "0.1.0",
-        availableVersion: prev?.availableVersion || null,
-        hasUpdate: prev?.hasUpdate || false,
-        releaseNotes: prev?.releaseNotes || null,
-        message: String(err),
-      }));
-    } finally {
-      setIsInstallingUpdate(false);
-    }
-  };
+  const handleInstallUpdate = useCallback(() => {
+    void onInstallAvailableUpdate();
+  }, [onInstallAvailableUpdate]);
 
   const handleSelectDirectory = async () => {
     try {
@@ -609,7 +563,7 @@ export function SettingsDialog({
             <div className="text-sm font-medium">
               {formatMessage(
                 t("version.current"),
-                updateInfo?.currentVersion || "0.1.0"
+                updateInfo?.currentVersion || currentVersion || "—"
               )}
             </div>
             {updateInfo?.hasUpdate && (

@@ -1,8 +1,14 @@
 import { Suspense, lazy } from "react";
 import type { EnvironmentCheckResult } from "@/lib/environment";
-import type { ConfigProfile, ExecutionRecord } from "@/lib/store";
+import type {
+  ConfigProfile,
+  ExecutionRecord,
+  PublishConfigStore,
+} from "@/lib/store";
+import type { AppUpdaterState } from "@/hooks/useAppUpdater";
 import type { PublishResult } from "@/hooks/usePublishExecution";
 import type { Language } from "@/hooks/useI18n";
+import type { ParameterSchema } from "@/types/parameters";
 
 const ShortcutsDialog = lazy(async () => {
   const mod = await import("@/components/layout/ShortcutsDialog");
@@ -43,13 +49,6 @@ const ConfigDialog = lazy(async () => {
   const mod = await import("@/components/publish/ConfigDialog");
   return { default: mod.ConfigDialog };
 });
-
-interface QuickCreateProfileDraft {
-  configuration: string;
-  runtime: string;
-  outputDir: string;
-  selfContained: boolean;
-}
 
 interface QuickCreateTemplateOption {
   id: string;
@@ -112,6 +111,10 @@ export interface AppDialogsProps {
   onCommandImportOpenChange: (open: boolean) => void;
   activeProviderId: string;
   onCommandImport: (spec: any) => void;
+  updaterState: AppUpdaterState;
+  onCheckForUpdates: () => Promise<void>;
+  onInstallAvailableUpdate: () => Promise<void>;
+  onOpenUpdaterHelpTarget: (target: "docs" | "template") => Promise<void>;
   quickCreateProfileOpen: boolean;
   quickCreateTemplateId: string;
   quickCreateTemplateOptions: QuickCreateTemplateOption[];
@@ -119,9 +122,10 @@ export interface AppDialogsProps {
   quickCreateProfileGroup: string;
   quickCreateProfileGroupOptions: string[];
   quickCreateProfileCustomGroup: string;
-  quickCreateProfileDraft: QuickCreateProfileDraft;
+  quickCreateProfileDraft: PublishConfigStore;
   quickCreateProfileSaving: boolean;
   quickCreateEditing: boolean;
+  dotnetSchema?: ParameterSchema;
   quickCreateGroupDefaultValue: string;
   quickCreateGroupCustomValue: string;
   profileT: Record<string, string | undefined>;
@@ -132,7 +136,7 @@ export interface AppDialogsProps {
   onProfileNameChange: (value: string) => void;
   onProfileGroupChange: (value: string) => void;
   onProfileCustomGroupChange: (value: string) => void;
-  onDraftChange: (patch: Partial<QuickCreateProfileDraft>) => void;
+  onDraftChange: (patch: Partial<PublishConfigStore>) => void;
   onQuickCreateSave: () => void;
   configDialogOpen: boolean;
   onConfigDialogOpenChange: (open: boolean) => void;
@@ -192,6 +196,10 @@ export function AppDialogs(props: AppDialogsProps) {
             environmentDefaultProviderIds={props.environmentDefaultProviderIds}
             environmentInitialResult={props.environmentInitialResult}
             onEnvironmentChecked={props.onEnvironmentChecked}
+            updaterState={props.updaterState}
+            onCheckForUpdates={props.onCheckForUpdates}
+            onInstallAvailableUpdate={props.onInstallAvailableUpdate}
+            onOpenUpdaterHelpTarget={props.onOpenUpdaterHelpTarget}
           />
         </Suspense>
       ) : null}
@@ -262,6 +270,7 @@ export function AppDialogs(props: AppDialogsProps) {
             quickCreateProfileDraft={props.quickCreateProfileDraft}
             quickCreateProfileSaving={props.quickCreateProfileSaving}
             quickCreateEditing={props.quickCreateEditing}
+            dotnetSchema={props.dotnetSchema}
             quickCreateGroupDefaultValue={props.quickCreateGroupDefaultValue}
             quickCreateGroupCustomValue={props.quickCreateGroupCustomValue}
             profileT={props.profileT}

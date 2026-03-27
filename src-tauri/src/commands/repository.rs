@@ -1,4 +1,4 @@
-use super::ProjectInfo;
+use super::{ProjectInfo, ProjectPublishProfileFile};
 use crate::store::Branch;
 use serde::Serialize;
 use std::io::ErrorKind as IoErrorKind;
@@ -194,6 +194,56 @@ fn scan_publish_profiles(project_file: &Path) -> Vec<String> {
     }
     profiles.sort();
     profiles
+}
+
+fn resolve_publish_profile_path(
+    project_file: &Path,
+    profile_name: &str,
+) -> Result<PathBuf, crate::errors::AppError> {
+    let normalized_profile_name = profile_name.trim();
+    if normalized_profile_name.is_empty() {
+        return Err(repository_error(
+            "publish profile name cannot be empty",
+            "profile_name_empty",
+        ));
+    }
+
+    if normalized_profile_name.contains("..")
+        || normalized_profile_name.contains('/')
+        || normalized_profile_name.contains('\\')
+    {
+        return Err(repository_error(
+            format!("invalid publish profile name: {}", normalized_profile_name),
+            "invalid_profile_name",
+        ));
+    }
+
+    let project_dir = project_file.parent().ok_or_else(|| {
+        repository_error(
+            format!(
+                "cannot resolve parent directory for project file: {}",
+                project_file.display()
+            ),
+            "project_dir_not_found",
+        )
+    })?;
+
+    let profile_path = project_dir
+        .join("Properties")
+        .join("PublishProfiles")
+        .join(format!("{}.pubxml", normalized_profile_name));
+
+    if !profile_path.is_file() {
+        return Err(repository_error(
+            format!(
+                "publish profile does not exist: {}",
+                profile_path.to_string_lossy()
+            ),
+            "profile_not_found",
+        ));
+    }
+
+    Ok(profile_path)
 }
 
 fn has_extension_file(path: &Path, extension: &str) -> bool {
@@ -654,5 +704,40 @@ pub async fn scan_project(
         root_path: root_path.to_string_lossy().to_string(),
         project_file: project_file.to_string_lossy().to_string(),
         publish_profiles,
+    })
+}
+
+#[tauri::command]
+pub async fn read_project_publish_profile(
+    project_file: String,
+    profile_name: String,
+) -> Result<ProjectPublishProfileFile, crate::errors::AppError> {
+    let project_file_path = PathBuf::from(project_file);
+    if !project_file_path.is_file() {
+        return Err(repository_error(
+            format!(
+                "project file does not exist: {}",
+                project_file_path.to_string_lossy()
+            ),
+            "project_file_not_found",
+        ));
+    }
+
+    let profile_path = resolve_publish_profile_path(&project_file_path, &profile_name)?;
+    let content = std::fs::read_to_string(&profile_path).map_err(|error| {
+        repository_error(
+            format!(
+                "failed to read publish profile {}: {}",
+                profile_path.to_string_lossy(),
+                error
+            ),
+            classify_repository_path_error(error.kind()),
+        )
+    })?;
+
+    Ok(ProjectPublishProfileFile {
+        profile_name: profile_name.trim().to_string(),
+        file_path: profile_path.to_string_lossy().to_string(),
+        content,
     })
 }

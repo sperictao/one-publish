@@ -1,4 +1,4 @@
-import { useCallback } from "react";
+import { useCallback, useMemo } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { toast } from "sonner";
 
@@ -7,7 +7,7 @@ import {
   runEnvironmentCheck,
   type EnvironmentCheckResult,
 } from "@/lib/environment";
-import type { ExecutionRecord } from "@/lib/store";
+import type { ExecutionRecord, PublishConfigStore } from "@/lib/store";
 import { useDotnetPublishSelection } from "@/hooks/useDotnetPublishSelection";
 import type { PublishExecutionInput } from "@/hooks/usePublishExecutionInput";
 import { usePublishLogStream } from "@/hooks/usePublishLogStream";
@@ -112,6 +112,29 @@ export function usePublishExecution({
     projectInfo,
     presets,
   });
+
+  const currentDotnetPublishConfig = useMemo<PublishConfigStore | null>(() => {
+    if (activeProviderId !== "dotnet") {
+      return null;
+    }
+
+    const currentConfig = getCurrentConfig();
+    return {
+      configuration: currentConfig.configuration,
+      runtime: currentConfig.runtime,
+      framework: currentConfig.framework,
+      selfContained: currentConfig.self_contained,
+      outputDir: currentConfig.output_dir,
+      noBuild: currentConfig.no_build,
+      noRestore: currentConfig.no_restore,
+      verbosity: currentConfig.verbosity,
+      noLogo: currentConfig.no_logo,
+      properties: { ...currentConfig.properties },
+      define: [...currentConfig.define],
+      useProfile: currentConfig.use_profile,
+      profileName: currentConfig.profile_name,
+    };
+  }, [activeProviderId, getCurrentConfig]);
 
   const { buildPublishSpec } = usePublishSpecBuilder({
     activeProviderId,
@@ -330,6 +353,7 @@ export function usePublishExecution({
     setArtifactActionState,
     setCurrentExecutionRecordId,
     dotnetPublishPreviewCommand,
+    currentDotnetPublishConfig,
     runPublishWithSpec,
     executePublish,
     cancelPublish,

@@ -1,28 +1,12 @@
 import { useMemo } from "react";
 
+import { buildDotnetProfileParameters } from "@/lib/dotnetPublishConfig";
 import type { PublishConfigStore } from "@/lib/store";
 import type { ParameterValue } from "@/types/parameters";
 
-function toDotnetProfileParameters(
-  config: Pick<
-    PublishConfigStore,
-    "configuration" | "runtime" | "outputDir" | "selfContained"
-  >
-) {
-  return {
-    configuration: config.configuration,
-    runtime: config.runtime,
-    output: config.outputDir,
-    self_contained: config.selfContained,
-  };
-}
-
 export function useDialogDerivedState(params: {
   activeProviderId: string;
-  customConfig: Pick<
-    PublishConfigStore,
-    "configuration" | "runtime" | "outputDir" | "selfContained"
-  >;
+  customConfig: PublishConfigStore;
   activeProviderParameters: Record<string, ParameterValue>;
   projectFile?: string | null;
   selectedRepoPath?: string | null;
@@ -36,7 +20,7 @@ export function useDialogDerivedState(params: {
 
   const currentConfigParameters = useMemo(() => {
     if (params.activeProviderId === "dotnet") {
-      return toDotnetProfileParameters(params.customConfig);
+      return buildDotnetProfileParameters(params.customConfig);
     }
     return params.activeProviderParameters;
   }, [params.activeProviderId, params.activeProviderParameters, params.customConfig]);

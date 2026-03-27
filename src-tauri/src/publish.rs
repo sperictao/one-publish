@@ -20,14 +20,48 @@ pub fn build_dotnet_publish_plan(project_path: &str, config: &PublishConfig) -> 
             args.push(config.runtime.clone());
         }
 
+        if !config.framework.is_empty() {
+            args.push("--framework".to_string());
+            args.push(config.framework.clone());
+        }
+
         if config.self_contained {
             args.push("--self-contained".to_string());
         }
+    }
 
-        if !config.output_dir.is_empty() {
-            args.push("-o".to_string());
-            args.push(config.output_dir.clone());
+    if !config.output_dir.is_empty() {
+        args.push("-o".to_string());
+        args.push(config.output_dir.clone());
+    }
+
+    if config.no_build {
+        args.push("--no-build".to_string());
+    }
+
+    if config.no_restore {
+        args.push("--no-restore".to_string());
+    }
+
+    if !config.verbosity.is_empty() {
+        args.push("--verbosity".to_string());
+        args.push(config.verbosity.clone());
+    }
+
+    if config.no_logo {
+        args.push("--no-logo".to_string());
+    }
+
+    for define in &config.define {
+        args.push("--define".to_string());
+        args.push(define.clone());
+    }
+
+    for (key, value) in &config.properties {
+        if config.use_profile && key == "PublishProfile" {
+            continue;
         }
+        args.push(format!("-p:{}={}", key, value));
     }
 
     DotnetPublishPlan {
@@ -41,14 +75,7 @@ mod tests {
     use super::*;
 
     fn base_config() -> PublishConfig {
-        PublishConfig {
-            configuration: "Release".to_string(),
-            runtime: "".to_string(),
-            self_contained: false,
-            output_dir: "".to_string(),
-            use_profile: false,
-            profile_name: "".to_string(),
-        }
+        PublishConfig::default()
     }
 
     #[test]

@@ -17,6 +17,10 @@ import {
   type ConfigProfile,
   type PublishConfigStore,
 } from "@/lib/store";
+import {
+  createDefaultDotnetPublishConfig,
+  createDotnetPublishConfigFromParameters,
+} from "@/lib/dotnetPublishConfig";
 import type { Language } from "@/hooks/useI18n";
 import type { ParameterSchema, ParameterValue } from "@/types/parameters";
 
@@ -35,13 +39,6 @@ interface DotnetPreset {
     runtime: string;
     self_contained: boolean;
   };
-}
-
-interface DotnetCustomConfigDraft {
-  configuration: string;
-  runtime: string;
-  outputDir: string;
-  selfContained: boolean;
 }
 
 interface QuickCreateTemplateOption {
@@ -71,7 +68,7 @@ interface UseProfilesParams {
   setProviderParameters: Dispatch<
     SetStateAction<Record<string, Record<string, ParameterValue>>>
   >;
-  handleCustomConfigUpdate: (updates: Partial<PublishConfigStore>) => void;
+  applyDotnetCustomConfig: (config: PublishConfigStore) => void;
   pushRecentConfig: (key: string, repoId?: string | null) => void;
   replaceScopedConfigKey: (
     previousKey: string,
@@ -88,26 +85,19 @@ interface UseProfilesParams {
     name: string;
     description: string;
   };
-  buildProfileParameters: (config: DotnetCustomConfigDraft) => Record<string, unknown>;
+  buildProfileParameters: (config: PublishConfigStore) => Record<string, unknown>;
 }
 
 export const QUICK_CREATE_CUSTOM_TEMPLATE_ID = "custom";
 export const QUICK_CREATE_PROFILE_GROUP_DEFAULT = "__default__";
 export const QUICK_CREATE_PROFILE_GROUP_CUSTOM = "__custom__";
 
-const EMPTY_DOTNET_CUSTOM_CONFIG_DRAFT: DotnetCustomConfigDraft = {
-  configuration: "Release",
-  runtime: "",
-  outputDir: "",
-  selfContained: false,
-};
-
 const toDotnetCustomConfigDraftFromPreset = (
   preset: DotnetPreset
-): DotnetCustomConfigDraft => ({
+): PublishConfigStore => ({
+  ...createDefaultDotnetPublishConfig(),
   configuration: preset.config.configuration,
   runtime: preset.config.runtime,
-  outputDir: "",
   selfContained: preset.config.self_contained,
 });
 
@@ -123,7 +113,7 @@ export function useProfiles({
   isCustomMode,
   setSelectedPreset,
   setProviderParameters,
-  handleCustomConfigUpdate,
+  applyDotnetCustomConfig,
   pushRecentConfig,
   replaceScopedConfigKey,
   presets,
@@ -139,7 +129,7 @@ export function useProfiles({
     QUICK_CREATE_CUSTOM_TEMPLATE_ID
   );
   const [quickCreateProfileDraft, setQuickCreateProfileDraft] =
-    useState<DotnetCustomConfigDraft>(EMPTY_DOTNET_CUSTOM_CONFIG_DRAFT);
+    useState<PublishConfigStore>(() => createDefaultDotnetPublishConfig());
   const [quickCreateProfileGroup, setQuickCreateProfileGroup] = useState(
     QUICK_CREATE_PROFILE_GROUP_DEFAULT
   );
@@ -169,7 +159,7 @@ export function useProfiles({
   const resetQuickCreateProfileState = useCallback(() => {
     setQuickCreateProfileName("");
     setQuickCreateTemplateId(QUICK_CREATE_CUSTOM_TEMPLATE_ID);
-    setQuickCreateProfileDraft(EMPTY_DOTNET_CUSTOM_CONFIG_DRAFT);
+    setQuickCreateProfileDraft(createDefaultDotnetPublishConfig());
     setQuickCreateProfileGroup(QUICK_CREATE_PROFILE_GROUP_DEFAULT);
     setQuickCreateProfileCustomGroup("");
     setQuickCreateProfileSaving(false);
@@ -198,15 +188,11 @@ export function useProfiles({
 
     setQuickCreateProfileName(profile.name);
     setQuickCreateTemplateId(QUICK_CREATE_CUSTOM_TEMPLATE_ID);
-    setQuickCreateProfileDraft({
-      configuration:
-        typeof parameters.configuration === "string"
-          ? parameters.configuration
-          : "Release",
-      runtime: typeof parameters.runtime === "string" ? parameters.runtime : "",
-      outputDir: typeof parameters.output === "string" ? parameters.output : "",
-      selfContained: parameters.self_contained === true,
-    });
+    setQuickCreateProfileDraft(
+      createDotnetPublishConfigFromParameters(
+        parameters as Record<string, unknown>
+      )
+    );
     setQuickCreateProfileGroup(
       resolvedGroup || QUICK_CREATE_PROFILE_GROUP_DEFAULT
     );
@@ -261,14 +247,14 @@ export function useProfiles({
     setQuickCreateTemplateId(templateId);
 
     if (templateId === QUICK_CREATE_CUSTOM_TEMPLATE_ID) {
-      setQuickCreateProfileDraft(EMPTY_DOTNET_CUSTOM_CONFIG_DRAFT);
+      setQuickCreateProfileDraft(createDefaultDotnetPublishConfig());
       return;
     }
 
     const matchedPreset = presets.find((preset) => preset.id === templateId);
     if (!matchedPreset) {
       setQuickCreateTemplateId(QUICK_CREATE_CUSTOM_TEMPLATE_ID);
-      setQuickCreateProfileDraft(EMPTY_DOTNET_CUSTOM_CONFIG_DRAFT);
+      setQuickCreateProfileDraft(createDefaultDotnetPublishConfig());
       return;
     }
 
@@ -276,7 +262,7 @@ export function useProfiles({
   }, [presets]);
 
   const updateQuickCreateProfileDraft = useCallback(
-    (updates: Partial<DotnetCustomConfigDraft>) => {
+    (updates: Partial<PublishConfigStore>) => {
       setQuickCreateTemplateId(QUICK_CREATE_CUSTOM_TEMPLATE_ID);
       setQuickCreateProfileDraft((prev) => ({ ...prev, ...updates }));
     },
@@ -304,8 +290,14 @@ export function useProfiles({
       }
 
       if (mapping.providerId === "dotnet") {
-        handleCustomConfigUpdate(mapping.dotnetUpdates);
-        setIsCustomMode(true);
+        applyDotnetCustomConfig(
+          createDotnetPublishConfigFromParameters(
+            (profile.parameters || {}) as Record<string, unknown>,
+            {
+              inferProfileSelection: true,
+            }
+          )
+        );
       } else {
         setProviderParameters((prev) => ({
           ...prev,
@@ -319,11 +311,10 @@ export function useProfiles({
     },
     [
       activeProviderId,
+      applyDotnetCustomConfig,
       appT,
-      handleCustomConfigUpdate,
       providerSchemas,
       setActiveProviderId,
-      setIsCustomMode,
       setProviderParameters,
     ]
   );

@@ -1,5 +1,6 @@
 import { useCallback } from "react";
 
+import { buildDotnetProfileParameters } from "@/lib/dotnetPublishConfig";
 import type { ParameterValue } from "@/types/parameters";
 import type { ProviderPublishSpec } from "@/hooks/usePublishExecution";
 
@@ -12,8 +13,15 @@ interface ProjectInfo {
 interface PublishConfig {
   configuration: string;
   runtime: string;
+  framework: string;
   self_contained: boolean;
   output_dir: string;
+  no_build: boolean;
+  no_restore: boolean;
+  verbosity: string;
+  no_logo: boolean;
+  properties: Record<string, string>;
+  define: string[];
   use_profile: boolean;
   profile_name: string;
 }
@@ -33,27 +41,21 @@ export function usePublishSpecBuilder(params: {
       }
 
       const config = params.getCurrentConfig();
-      const parameters: Record<string, unknown> = {};
-
-      if (config.use_profile && config.profile_name) {
-        parameters.properties = {
-          PublishProfile: config.profile_name,
-        };
-        if (config.output_dir) {
-          parameters.output = config.output_dir;
-        }
-      } else {
-        parameters.configuration = config.configuration;
-        if (config.runtime) {
-          parameters.runtime = config.runtime;
-        }
-        if (config.self_contained) {
-          parameters.self_contained = true;
-        }
-        if (config.output_dir) {
-          parameters.output = config.output_dir;
-        }
-      }
+      const parameters = buildDotnetProfileParameters({
+        configuration: config.configuration,
+        runtime: config.runtime,
+        framework: config.framework,
+        selfContained: config.self_contained,
+        outputDir: config.output_dir,
+        noBuild: config.no_build,
+        noRestore: config.no_restore,
+        verbosity: config.verbosity,
+        noLogo: config.no_logo,
+        properties: config.properties,
+        define: config.define,
+        useProfile: config.use_profile,
+        profileName: config.profile_name,
+      });
 
       return {
         version: params.specVersion,

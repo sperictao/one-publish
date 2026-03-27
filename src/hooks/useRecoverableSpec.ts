@@ -1,14 +1,13 @@
 import { useCallback } from "react";
 
+import { createDotnetPublishConfigFromParameters } from "@/lib/dotnetPublishConfig";
 import type { ExecutionRecord, PublishConfigStore } from "@/lib/store";
 import type { ParameterValue } from "@/types/parameters";
 import type { ProviderPublishSpec } from "@/hooks/usePublishExecution";
 
 interface UseRecoverableSpecParams {
   specVersion: number;
-  customConfig: PublishConfigStore;
-  setCustomConfig: (config: PublishConfigStore) => void;
-  setIsCustomMode: (value: boolean) => void;
+  applyDotnetCustomConfig: (config: PublishConfigStore) => void;
   setActiveProviderId: (providerId: string) => void;
   setProviderParameters: React.Dispatch<
     React.SetStateAction<Record<string, Record<string, ParameterValue>>>
@@ -17,9 +16,7 @@ interface UseRecoverableSpecParams {
 
 export function useRecoverableSpec({
   specVersion,
-  customConfig,
-  setCustomConfig,
-  setIsCustomMode,
+  applyDotnetCustomConfig,
   setActiveProviderId,
   setProviderParameters,
 }: UseRecoverableSpecParams) {
@@ -63,47 +60,11 @@ export function useRecoverableSpec({
 
       if (spec.provider_id === "dotnet") {
         const parameters = spec.parameters || {};
-        const propertiesRaw = parameters.properties;
-        const properties =
-          propertiesRaw &&
-          typeof propertiesRaw === "object" &&
-          !Array.isArray(propertiesRaw)
-            ? (propertiesRaw as Record<string, unknown>)
-            : null;
-        const profileName =
-          properties && typeof properties.PublishProfile === "string"
-            ? properties.PublishProfile
-            : "";
-
-        if (profileName) {
-          setCustomConfig({
-            ...customConfig,
-            configuration: "Release",
-            runtime: "",
-            selfContained: false,
-            outputDir:
-              typeof parameters.output === "string" ? parameters.output : "",
-            useProfile: true,
-            profileName,
-          });
-        } else {
-          setCustomConfig({
-            ...customConfig,
-            configuration:
-              typeof parameters.configuration === "string"
-                ? parameters.configuration
-                : "Release",
-            runtime:
-              typeof parameters.runtime === "string" ? parameters.runtime : "",
-            selfContained: parameters.self_contained === true,
-            outputDir:
-              typeof parameters.output === "string" ? parameters.output : "",
-            useProfile: false,
-            profileName: "",
-          });
-        }
-
-        setIsCustomMode(true);
+        applyDotnetCustomConfig(
+          createDotnetPublishConfigFromParameters(parameters, {
+            inferProfileSelection: true,
+          })
+        );
       } else {
         setProviderParameters((prev) => ({
           ...prev,
@@ -112,10 +73,8 @@ export function useRecoverableSpec({
       }
     },
     [
-      customConfig,
+      applyDotnetCustomConfig,
       setActiveProviderId,
-      setCustomConfig,
-      setIsCustomMode,
       setProviderParameters,
     ]
   );

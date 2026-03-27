@@ -5,6 +5,8 @@ import {
   type UseAppDialogsPropsParams,
 } from "@/hooks/useAppDialogsProps";
 import type { EnvironmentCheckResult } from "@/lib/environment";
+import type { PublishConfigStore } from "@/lib/store";
+import type { ParameterSchema } from "@/types/parameters";
 
 export type DialogsCompositionParams = Omit<
   UseAppDialogsPropsParams,
@@ -12,13 +14,9 @@ export type DialogsCompositionParams = Omit<
 > & {
   environmentLastResult: EnvironmentCheckResult | null;
   activeProviderId: string;
-  customConfig: {
-    configuration: string;
-    runtime: string;
-    outputDir: string;
-    selfContained: boolean;
-  };
+  customConfig: PublishConfigStore;
   activeProviderParameters: Record<string, any>;
+  dotnetSchema?: ParameterSchema;
   projectFile?: string;
   selectedRepoPath?: string;
 };

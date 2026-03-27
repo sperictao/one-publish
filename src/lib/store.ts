@@ -8,8 +8,15 @@ import type { ParameterSchema } from "@/types/parameters";
 export interface PublishConfigStore {
   configuration: string;
   runtime: string;
+  framework: string;
   selfContained: boolean;
   outputDir: string;
+  noBuild: boolean;
+  noRestore: boolean;
+  verbosity: string;
+  noLogo: boolean;
+  properties: Record<string, string>;
+  define: string[];
   useProfile: boolean;
   profileName: string;
 }
@@ -74,8 +81,15 @@ export const defaultAppState: AppState = {
   customConfig: {
     configuration: "Release",
     runtime: "",
+    framework: "",
     selfContained: false,
     outputDir: "",
+    noBuild: false,
+    noRestore: false,
+    verbosity: "",
+    noLogo: false,
+    properties: {},
+    define: [],
     useProfile: false,
     profileName: "",
   },
@@ -95,8 +109,15 @@ export const defaultRepoPublishConfig: RepoPublishConfig = {
   customConfig: {
     configuration: "Release",
     runtime: "",
+    framework: "",
     selfContained: false,
     outputDir: "",
+    noBuild: false,
+    noRestore: false,
+    verbosity: "",
+    noLogo: false,
+    properties: {},
+    define: [],
     useProfile: false,
     profileName: "",
   },
@@ -191,6 +212,12 @@ export interface ProviderManifest {
   version: string;
 }
 
+export interface ProjectPublishProfileFile {
+  profileName: string;
+  filePath: string;
+  content: string;
+}
+
 /**
  * 获取 Provider 列表
  */
@@ -213,6 +240,16 @@ export async function getProviderSchema(
   providerId: string
 ): Promise<ParameterSchema> {
   return await invoke<ParameterSchema>("get_provider_schema", { providerId });
+}
+
+export async function readProjectPublishProfile(
+  projectFile: string,
+  profileName: string
+): Promise<ProjectPublishProfileFile> {
+  return await invoke<ProjectPublishProfileFile>("read_project_publish_profile", {
+    projectFile,
+    profileName,
+  });
 }
 
 /**

@@ -1,4 +1,4 @@
-import { Suspense, lazy, useEffect, useCallback, useState } from "react";
+import { Suspense, lazy, useEffect, useCallback, useMemo, useState } from "react";
 // Hooks
 import { useAppDialogs } from "@/hooks/useAppDialogs";
 import { useAppState } from "@/hooks/useAppState";
@@ -24,10 +24,13 @@ import {
 } from "@/hooks/useProfiles";
 import { useCommandImport } from "@/hooks/useCommandImport";
 import { useScopedConfigs } from "@/hooks/useScopedConfigs";
+import { useAppUpdater } from "@/hooks/useAppUpdater";
 import { useOutputLogCardProps } from "@/hooks/useOutputLogCardProps";
 import { useCommandImportResultCardProps } from "@/hooks/useCommandImportResultCardProps";
 import { useProviderRuntime } from "@/hooks/useProviderRuntime";
 import { useI18n, type Language } from "@/hooks/useI18n";
+import type { PublishConfigStore } from "@/lib/store";
+import { buildDotnetProfileParameters } from "@/lib/dotnetPublishConfig";
 
 // Layout Components
 import { ResizeHandle } from "@/components/layout/ResizeHandle";
@@ -191,6 +194,7 @@ function App() {
     setSelectedPreset,
     setIsCustomMode,
     setCustomConfig,
+    setCurrentPublishState,
     language: preferenceLanguage,
     minimizeToTrayOnClose,
     defaultOutputDir,
@@ -217,6 +221,12 @@ function App() {
   const profileT = translations.profiles || {};
 
   const { getPresetText } = usePresetText(configT);
+  const {
+    updaterState,
+    checkForUpdates,
+    installAvailableUpdate,
+    openUpdaterHelpTarget,
+  } = useAppUpdater();
 
   const normalizedPreferenceLanguage: Language =
     preferenceLanguage === "en" ? "en" : "zh";
@@ -346,7 +356,6 @@ function App() {
   const {
     activeProviderLabel,
     repositoryProviders,
-    handleCustomConfigUpdate,
   } = useProviderPresentationState({
     providerRuntimeProviders,
     activeProvider,
@@ -355,14 +364,15 @@ function App() {
     setCustomConfig,
   });
 
-  const { activeImportFeedback, handleCommandImport } = useCommandImport({
-    activeProviderId,
-    appT,
-    providerSchemas,
-    onDotnetConfigUpdate: handleCustomConfigUpdate,
-    onEnableCustomMode: () => setIsCustomMode(true),
-    setProviderParameters,
-  });
+  const applyDotnetCustomConfig = useCallback(
+    (config: PublishConfigStore) => {
+      setCurrentPublishState({
+        customConfig: config,
+        isCustomMode: true,
+      });
+    },
+    [setCurrentPublishState]
+  );
 
   const profilesState = useProfiles({
     appT,
@@ -376,18 +386,13 @@ function App() {
     isCustomMode,
     setSelectedPreset,
     setProviderParameters,
-    handleCustomConfigUpdate,
+    applyDotnetCustomConfig,
     pushRecentConfig,
     replaceScopedConfigKey,
     presets: PRESETS,
     defaultPresetId: PRESETS[0]?.id ?? "release-fd",
     getPresetText,
-    buildProfileParameters: (config) => ({
-      configuration: config.configuration,
-      runtime: config.runtime,
-      output: config.outputDir,
-      self_contained: config.selfContained,
-    }),
+    buildProfileParameters: buildDotnetProfileParameters,
   });
 
   const { projectInfo, scanProject } = useProjectShellState({
@@ -427,6 +432,22 @@ function App() {
     handleDeleteProfileFromPanel,
     handleLoadProfile,
   } = profilesState;
+
+  const replaceDotnetCustomConfig = useCallback(
+    (config: PublishConfigStore) => {
+      applyDotnetCustomConfig(config);
+      setActiveProfileName(null);
+    },
+    [applyDotnetCustomConfig, setActiveProfileName]
+  );
+
+  const { activeImportFeedback, handleCommandImport } = useCommandImport({
+    activeProviderId,
+    appT,
+    providerSchemas,
+    onDotnetConfigReplace: replaceDotnetCustomConfig,
+    setProviderParameters,
+  });
 
   const {
     isRerunChecklistEnabled,
@@ -501,6 +522,7 @@ function App() {
     runPublishWithSpec,
     executePublish,
     cancelPublish,
+    currentDotnetPublishConfig,
   } = usePublishExecution({
     appT,
     publishT,
@@ -514,12 +536,65 @@ function App() {
     getRecentConfigKeyFromSpec,
   } = useRecoverableSpec({
     specVersion: SPEC_VERSION,
-    customConfig,
-    setCustomConfig,
-    setIsCustomMode,
+    applyDotnetCustomConfig: replaceDotnetCustomConfig,
     setActiveProviderId,
     setProviderParameters,
   });
+
+  const currentDotnetSourceLabel = useMemo(() => {
+    if (activeProviderId !== "dotnet") {
+      return "";
+    }
+
+    if (isCustomMode) {
+      return activeProfileName?.trim() || configT.customMode || "自定义模式";
+    }
+
+    if (selectedPreset.startsWith("profile-")) {
+      const profileName = selectedPreset.slice("profile-".length).trim();
+      if (!profileName) {
+        return appT.projectPublishProfiles || "项目发布配置";
+      }
+
+      return `${appT.projectPublishProfiles || "项目发布配置"} · ${profileName}`;
+    }
+
+    const matchedPreset = PRESETS.find((preset) => preset.id === selectedPreset);
+    if (!matchedPreset) {
+      return configT.customMode || "自定义模式";
+    }
+
+    return getPresetText(
+      matchedPreset.id,
+      matchedPreset.name,
+      matchedPreset.description
+    ).name;
+  }, [
+    activeProfileName,
+    activeProviderId,
+    appT.projectPublishProfiles,
+    configT.customMode,
+    getPresetText,
+    isCustomMode,
+    selectedPreset,
+  ]);
+
+  const handleRightPanelDotnetConfigChange = useCallback(
+    (updates: Partial<PublishConfigStore>) => {
+      if (!currentDotnetPublishConfig) {
+        return;
+      }
+
+      replaceDotnetCustomConfig({
+        ...currentDotnetPublishConfig,
+        ...updates,
+      });
+    },
+    [
+      currentDotnetPublishConfig,
+      replaceDotnetCustomConfig,
+    ]
+  );
 
   const {
     rerunChecklistOpen,
@@ -654,6 +729,7 @@ function App() {
               onOpenConfigDialog={() => handleConfigDialogOpenChange(true)}
               onDeleteProfile={handleDeleteProfileFromPanel}
               projectPublishProfiles={projectInfo?.publish_profiles || []}
+              projectFilePath={projectInfo?.project_file}
               onSelectProjectProfile={handleSelectProjectProfile}
               recentConfigKeys={recentConfigKeys}
               favoriteConfigKeys={favoriteConfigKeys}
@@ -689,6 +765,21 @@ function App() {
                 showCommandImportResultCard={showCommandImportResultCard}
                 commandImportResultCardProps={commandImportResultCardProps}
                 outputLogCardProps={outputLogCardProps}
+                dotnetPublishEditorCardProps={
+                  selectedRepo &&
+                  activeProviderId === "dotnet" &&
+                  currentDotnetPublishConfig
+                    ? {
+                        appT,
+                        configT,
+                        profileT,
+                        dotnetSchema: providerSchemas.dotnet,
+                        config: currentDotnetPublishConfig,
+                        sourceLabel: currentDotnetSourceLabel,
+                        onConfigChange: handleRightPanelDotnetConfigChange,
+                      }
+                    : null
+                }
                 shouldLoadDiagnosticsSection={shouldLoadDiagnosticsSection}
                 diagnosticsSectionProps={
                   selectedRepo
@@ -751,6 +842,12 @@ function App() {
             environmentLastResult={environmentLastResult}
             openEnvironmentDialog={openEnvironmentDialog}
             activeProviderId={activeProviderId}
+            updaterState={updaterState}
+            checkForUpdates={async () => {
+              await checkForUpdates();
+            }}
+            installAvailableUpdate={installAvailableUpdate}
+            openUpdaterHelpTarget={openUpdaterHelpTarget}
             rerunChecklistOpen={rerunChecklistOpen}
             pendingRerunRecord={pendingRerunRecord}
             selectedRepoCurrentBranch={selectedRepo?.currentBranch}
@@ -780,6 +877,7 @@ function App() {
             quickCreateProfileDraft={quickCreateProfileDraft}
             quickCreateProfileSaving={quickCreateProfileSaving}
             quickCreateEditing={isQuickCreateEditing}
+            dotnetSchema={providerSchemas.dotnet}
             quickCreateGroupDefaultValue={QUICK_CREATE_PROFILE_GROUP_DEFAULT}
             quickCreateGroupCustomValue={QUICK_CREATE_PROFILE_GROUP_CUSTOM}
             profileT={profileT}

@@ -4,7 +4,7 @@
 
 use crate::errors::AppError;
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::fs;
 use std::path::PathBuf;
 use std::sync::{OnceLock, RwLock};
@@ -42,12 +42,19 @@ pub struct Repository {
 
 /// 发布配置
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase", default)]
 pub struct PublishConfigStore {
     pub configuration: String,
     pub runtime: String,
+    pub framework: String,
     pub self_contained: bool,
     pub output_dir: String,
+    pub no_build: bool,
+    pub no_restore: bool,
+    pub verbosity: String,
+    pub no_logo: bool,
+    pub properties: BTreeMap<String, String>,
+    pub define: Vec<String>,
     pub use_profile: bool,
     pub profile_name: String,
 }
@@ -134,8 +141,15 @@ impl Default for PublishConfigStore {
         Self {
             configuration: "Release".to_string(),
             runtime: String::new(),
+            framework: String::new(),
             self_contained: false,
             output_dir: String::new(),
+            no_build: false,
+            no_restore: false,
+            verbosity: String::new(),
+            no_logo: false,
+            properties: BTreeMap::new(),
+            define: Vec::new(),
             use_profile: false,
             profile_name: String::new(),
         }

@@ -2,10 +2,16 @@ import { Suspense, lazy } from "react";
 import { OutputLogCard, type OutputLogCardProps } from "@/components/publish/OutputLogCard";
 import type { CommandImportResultCardProps } from "@/components/publish/CommandImportResultCard";
 import type { DiagnosticsSectionProps } from "@/components/publish/DiagnosticsSection";
+import type { DotnetPublishEditorCardProps } from "@/components/publish/DotnetPublishEditorCard";
 
 const CommandImportResultCard = lazy(async () => {
   const mod = await import("@/components/publish/CommandImportResultCard");
   return { default: mod.CommandImportResultCard };
+});
+
+const DotnetPublishEditorCard = lazy(async () => {
+  const mod = await import("@/components/publish/DotnetPublishEditorCard");
+  return { default: mod.DotnetPublishEditorCard };
 });
 
 const DiagnosticsSection = lazy(async () => {
@@ -17,6 +23,7 @@ export interface PublishContentSectionProps {
   showCommandImportResultCard: boolean;
   commandImportResultCardProps: CommandImportResultCardProps | null;
   outputLogCardProps: OutputLogCardProps;
+  dotnetPublishEditorCardProps: DotnetPublishEditorCardProps | null;
   shouldLoadDiagnosticsSection: boolean;
   diagnosticsSectionProps: DiagnosticsSectionProps | null;
   rightPanelView: "home" | "history";
@@ -26,6 +33,7 @@ export function PublishContentSection({
   showCommandImportResultCard,
   commandImportResultCardProps,
   outputLogCardProps,
+  dotnetPublishEditorCardProps,
   shouldLoadDiagnosticsSection,
   diagnosticsSectionProps,
   rightPanelView,
@@ -46,6 +54,13 @@ export function PublishContentSection({
       )}
       {rightPanelView === "home" ? (
         <>
+          {dotnetPublishEditorCardProps && (
+            <div className="mx-auto w-full max-w-3xl">
+              <Suspense fallback={null}>
+                <DotnetPublishEditorCard {...dotnetPublishEditorCardProps} />
+              </Suspense>
+            </div>
+          )}
           {hasOutputLogCard && (
             <div className="flex min-h-0 flex-1 flex-col">
               <OutputLogCard {...outputLogCardProps} />

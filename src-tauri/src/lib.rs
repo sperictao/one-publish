@@ -125,6 +125,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             commands::scan_project_files,
             commands::scan_project,
+            commands::read_project_publish_profile,
             commands::detect_repository_provider,
             commands::scan_repository_branches,
             commands::check_repository_branch_connectivity,

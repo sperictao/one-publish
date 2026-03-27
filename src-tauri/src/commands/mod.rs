@@ -33,8 +33,9 @@ pub use export::{
 };
 pub use provider::{get_provider_schema, import_from_command, list_providers};
 pub use repository::{
-    check_repository_branch_connectivity, detect_repository_provider, scan_project,
-    scan_project_files, scan_repository_branches,
+    check_repository_branch_connectivity, detect_repository_provider,
+    read_project_publish_profile, scan_project, scan_project_files,
+    scan_repository_branches,
 };
 pub use updater::{
     check_update, get_current_version, get_shortcuts_help, get_updater_config_health,
@@ -57,7 +58,8 @@ pub(crate) use provider::{
 };
 pub(crate) use repository::{
     __cmd__check_repository_branch_connectivity, __cmd__detect_repository_provider,
-    __cmd__scan_project, __cmd__scan_project_files, __cmd__scan_repository_branches,
+    __cmd__read_project_publish_profile, __cmd__scan_project,
+    __cmd__scan_project_files, __cmd__scan_repository_branches,
 };
 pub(crate) use updater::{
     __cmd__check_update, __cmd__get_current_version, __cmd__get_shortcuts_help,
@@ -72,13 +74,47 @@ pub struct ProjectInfo {
     pub publish_profiles: Vec<String>,
 }
 #[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProjectPublishProfileFile {
+    pub profile_name: String,
+    pub file_path: String,
+    pub content: String,
+}
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", default)]
 pub struct PublishConfig {
     pub configuration: String,
     pub runtime: String,
+    pub framework: String,
     pub self_contained: bool,
     pub output_dir: String,
+    pub no_build: bool,
+    pub no_restore: bool,
+    pub verbosity: String,
+    pub no_logo: bool,
+    pub properties: BTreeMap<String, String>,
+    pub define: Vec<String>,
     pub use_profile: bool,
     pub profile_name: String,
+}
+impl Default for PublishConfig {
+    fn default() -> Self {
+        Self {
+            configuration: "Release".to_string(),
+            runtime: String::new(),
+            framework: String::new(),
+            self_contained: false,
+            output_dir: String::new(),
+            no_build: false,
+            no_restore: false,
+            verbosity: String::new(),
+            no_logo: false,
+            properties: BTreeMap::new(),
+            define: Vec::new(),
+            use_profile: false,
+            profile_name: String::new(),
+        }
+    }
 }
 #[derive(Debug, Serialize, Deserialize)]
 pub struct PublishResult {
@@ -203,13 +239,17 @@ pub async fn cancel_provider_publish() -> Result<bool, crate::errors::AppError> 
 }
 fn build_dotnet_spec_from_config(project_path: String, config: PublishConfig) -> PublishSpec {
     let mut parameters = BTreeMap::<String, SpecValue>::new();
+    let mut properties = config
+        .properties
+        .into_iter()
+        .map(|(key, value)| (key, SpecValue::String(value)))
+        .collect::<BTreeMap<String, SpecValue>>();
+
     if config.use_profile && !config.profile_name.is_empty() {
-        let mut properties = BTreeMap::<String, SpecValue>::new();
         properties.insert(
             "PublishProfile".to_string(),
             SpecValue::String(config.profile_name),
         );
-        parameters.insert("properties".to_string(), SpecValue::Map(properties));
     } else {
         parameters.insert(
             "configuration".to_string(),
@@ -218,12 +258,36 @@ fn build_dotnet_spec_from_config(project_path: String, config: PublishConfig) ->
         if !config.runtime.is_empty() {
             parameters.insert("runtime".to_string(), SpecValue::String(config.runtime));
         }
+        if !config.framework.is_empty() {
+            parameters.insert("framework".to_string(), SpecValue::String(config.framework));
+        }
         if config.self_contained {
             parameters.insert("self_contained".to_string(), SpecValue::Bool(true));
         }
-        if !config.output_dir.is_empty() {
-            parameters.insert("output".to_string(), SpecValue::String(config.output_dir));
-        }
+    }
+    if !config.output_dir.is_empty() {
+        parameters.insert("output".to_string(), SpecValue::String(config.output_dir));
+    }
+    if config.no_build {
+        parameters.insert("no_build".to_string(), SpecValue::Bool(true));
+    }
+    if config.no_restore {
+        parameters.insert("no_restore".to_string(), SpecValue::Bool(true));
+    }
+    if !config.verbosity.is_empty() {
+        parameters.insert("verbosity".to_string(), SpecValue::String(config.verbosity));
+    }
+    if config.no_logo {
+        parameters.insert("no_logo".to_string(), SpecValue::Bool(true));
+    }
+    if !config.define.is_empty() {
+        parameters.insert(
+            "define".to_string(),
+            SpecValue::List(config.define.into_iter().map(SpecValue::String).collect()),
+        );
+    }
+    if !properties.is_empty() {
+        parameters.insert("properties".to_string(), SpecValue::Map(properties));
     }
     PublishSpec {
         version: SPEC_VERSION,
@@ -632,14 +696,7 @@ mod tests {
     use std::path::PathBuf;
 
     fn base_dotnet_config() -> PublishConfig {
-        PublishConfig {
-            configuration: "Release".to_string(),
-            runtime: String::new(),
-            self_contained: false,
-            output_dir: String::new(),
-            use_profile: false,
-            profile_name: String::new(),
-        }
+        PublishConfig::default()
     }
     #[test]
     fn build_dotnet_spec_maps_profile_to_properties() {

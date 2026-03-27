@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { mapImportedSpecByProvider } from "@/lib/commandImportMapping";
 
 describe("mapImportedSpecByProvider", () => {
-  it("映射 dotnet 可落地字段并标记未映射字段", () => {
+  it("映射 dotnet 可落地字段并保留高级参数", () => {
     const result = mapImportedSpecByProvider(
       {
         provider_id: "dotnet",
@@ -13,6 +13,15 @@ describe("mapImportedSpecByProvider", () => {
           output: "./publish",
           self_contained: true,
           framework: "net8.0",
+          no_build: true,
+          no_restore: true,
+          verbosity: "diagnostic",
+          no_logo: true,
+          properties: {
+            Version: "1.2.3",
+            PublishTrimmed: true,
+          },
+          define: ["A", "B"],
         },
       },
       "dotnet"
@@ -24,14 +33,31 @@ describe("mapImportedSpecByProvider", () => {
       runtime: "linux-x64",
       outputDir: "./publish",
       selfContained: true,
+      framework: "net8.0",
+      noBuild: true,
+      noRestore: true,
+      verbosity: "diagnostic",
+      noLogo: true,
+      properties: {
+        Version: "1.2.3",
+        PublishTrimmed: "true",
+      },
+      define: ["A", "B"],
     });
     expect(result.mappedKeys).toEqual([
       "configuration",
       "runtime",
       "output",
       "self_contained",
+      "framework",
+      "no_build",
+      "no_restore",
+      "verbosity",
+      "no_logo",
+      "properties",
+      "define",
     ]);
-    expect(result.unmappedKeys).toEqual(["framework"]);
+    expect(result.unmappedKeys).toEqual([]);
   });
 
   it("按 schema key 映射 cargo 参数", () => {

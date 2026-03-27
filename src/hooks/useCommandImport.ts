@@ -8,6 +8,8 @@ import {
 import { toast } from "sonner";
 
 import { mapImportedSpecByProvider } from "@/lib/commandImportMapping";
+import { createDotnetPublishConfigFromParameters } from "@/lib/dotnetPublishConfig";
+import type { PublishConfigStore } from "@/lib/store";
 import type { ParameterSchema, ParameterValue } from "@/types/parameters";
 
 export interface ImportFeedback {
@@ -20,21 +22,11 @@ interface TranslationMap {
   [key: string]: string | undefined;
 }
 
-interface DotnetConfigPatch {
-  configuration?: string;
-  runtime?: string;
-  outputDir?: string;
-  selfContained?: boolean;
-  useProfile?: boolean;
-  profileName?: string;
-}
-
 interface UseCommandImportParams {
   activeProviderId: string;
   appT: TranslationMap;
   providerSchemas: Record<string, ParameterSchema>;
-  onDotnetConfigUpdate: (patch: DotnetConfigPatch) => void;
-  onEnableCustomMode: () => void;
+  onDotnetConfigReplace: (config: PublishConfigStore) => void;
   setProviderParameters: Dispatch<
     SetStateAction<Record<string, Record<string, ParameterValue>>>
   >;
@@ -44,8 +36,7 @@ export function useCommandImport({
   activeProviderId,
   appT,
   providerSchemas,
-  onDotnetConfigUpdate,
-  onEnableCustomMode,
+  onDotnetConfigReplace,
   setProviderParameters,
 }: UseCommandImportParams) {
   const [lastImportFeedback, setLastImportFeedback] =
@@ -76,8 +67,11 @@ export function useCommandImport({
 
       if (mapping.providerId === "dotnet") {
         if (Object.keys(mapping.dotnetUpdates).length > 0) {
-          onDotnetConfigUpdate(mapping.dotnetUpdates);
-          onEnableCustomMode();
+          onDotnetConfigReplace(
+            createDotnetPublishConfigFromParameters(spec?.parameters || {}, {
+              inferProfileSelection: true,
+            })
+          );
         }
       } else {
         setProviderParameters((prev) => ({
@@ -112,8 +106,7 @@ export function useCommandImport({
       appT.noMappableParameters,
       appT.partialImport,
       appT.unmappedFields,
-      onDotnetConfigUpdate,
-      onEnableCustomMode,
+      onDotnetConfigReplace,
       providerSchemas,
       setProviderParameters,
     ]
