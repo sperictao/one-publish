@@ -25,6 +25,7 @@ import {
   Search,
   Plus,
   RefreshCw,
+  SlidersHorizontal,
   Folder,
   FileText,
   Check,
@@ -89,6 +90,7 @@ export interface PublishConfigPanelProps {
   onCreateProfile: () => void;
   onEditProfile: (profile: ConfigProfile) => void;
   onRefreshProfiles: () => void;
+  onOpenConfigDialog: () => void;
   onDeleteProfile: (name: string) => void;
   projectPublishProfiles: string[];
   onSelectProjectProfile: (profileName: string) => void;
@@ -286,6 +288,7 @@ export function PublishConfigPanel({
   onCreateProfile,
   onEditProfile,
   onRefreshProfiles,
+  onOpenConfigDialog,
   onDeleteProfile,
   projectPublishProfiles,
   onSelectProjectProfile,
@@ -305,6 +308,10 @@ export function PublishConfigPanel({
   const [floatingEnhancerEnabled, setFloatingEnhancerEnabled] = useState(false);
   const { translations } = useI18n();
   const t = translations.configPanel || {};
+  const configManagementLabel =
+    translations.settings?.categories?.config ||
+    translations.profiles?.title ||
+    "配置管理";
   const allConfigsLabel =
     t.allConfigs || translations.repositoryList?.all || "全部";
   const headerButtonClass =
@@ -976,6 +983,19 @@ export function PublishConfigPanel({
             data-tauri-no-drag
           >
             <RefreshCw className="h-3.5 w-3.5 text-muted-foreground transition-all duration-300 hover:rotate-180" />
+          </button>
+          <button
+            type="button"
+            className="glass-surface flex h-7 w-7 items-center justify-center rounded-full transition-all duration-300 hover:bg-[var(--glass-bg-hover)]"
+            onClick={(e) => {
+              e.stopPropagation();
+              onOpenConfigDialog();
+            }}
+            title={configManagementLabel}
+            aria-label={configManagementLabel}
+            data-tauri-no-drag
+          >
+            <SlidersHorizontal className="h-3.5 w-3.5 text-muted-foreground transition-all duration-300 hover:rotate-180" />
           </button>
         </div>
       </div>

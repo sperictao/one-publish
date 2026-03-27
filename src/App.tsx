@@ -651,6 +651,7 @@ function App() {
               onCreateProfile={openQuickCreateProfileDialog}
               onEditProfile={openQuickEditProfileDialog}
               onRefreshProfiles={loadProfiles}
+              onOpenConfigDialog={() => handleConfigDialogOpenChange(true)}
               onDeleteProfile={handleDeleteProfileFromPanel}
               projectPublishProfiles={projectInfo?.publish_profiles || []}
               onSelectProjectProfile={handleSelectProjectProfile}

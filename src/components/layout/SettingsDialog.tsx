@@ -27,7 +27,6 @@ import {
   RefreshCw,
   Download,
   Info,
-  Sliders,
   FileText,
   FileCog,
   ListChecks,
@@ -47,7 +46,6 @@ import {
   installUpdate,
   getUpdaterHelpPaths,
   getUpdaterConfigHealth,
-  type ConfigProfile,
   openUpdaterHelp,
 } from "@/lib/store";
 import type { UpdateInfo } from "@/lib/store";
@@ -63,11 +61,6 @@ const EnvironmentCheckContent = lazy(async () => {
   return { default: mod.EnvironmentCheckContent };
 });
 
-const ConfigManagementContent = lazy(async () => {
-  const mod = await import("@/components/publish/ConfigDialog");
-  return { default: mod.ConfigManagementContent };
-});
-
 function formatMessage(template: string, ...args: Array<string | number>) {
   let out = template;
   args.forEach((arg) => {
@@ -76,7 +69,7 @@ function formatMessage(template: string, ...args: Array<string | number>) {
   return out;
 }
 
-type SettingsCategoryId = "general" | "appearance" | "environment" | "shortcuts" | "config" | "about";
+type SettingsCategoryId = "general" | "appearance" | "environment" | "shortcuts" | "about";
 
 interface SettingsCategoryItem {
   id: SettingsCategoryId;
@@ -106,11 +99,6 @@ interface SettingsDialogProps {
   environmentDefaultProviderIds?: string[];
   environmentInitialResult?: EnvironmentCheckResult | null;
   onEnvironmentChecked?: (result: EnvironmentCheckResult) => void;
-  onLoadProfile: (profile: ConfigProfile) => void;
-  currentProviderId: string;
-  repoId: string | null;
-  currentParameters: Record<string, any>;
-  onProfilesChanged?: () => void | Promise<void>;
 }
 
 function SettingsSectionFallback({ label }: { label: string }) {
@@ -142,11 +130,6 @@ export function SettingsDialog({
   environmentDefaultProviderIds = ["dotnet"],
   environmentInitialResult = null,
   onEnvironmentChecked,
-  onLoadProfile,
-  currentProviderId,
-  repoId,
-  currentParameters,
-  onProfilesChanged,
 }: SettingsDialogProps) {
   const [activeCategory, setActiveCategory] = useState<SettingsCategoryId>("general");
   const [updateInfo, setUpdateInfo] = useState<UpdateInfo | null>(null);
@@ -196,14 +179,6 @@ export function SettingsDialog({
         description:
           translations.settings?.sections?.shortcutsDescription ||
           "查看全局快捷键，提高常用操作效率。",
-      },
-      {
-        id: "config",
-        icon: Sliders,
-        label: translations.settings?.categories?.config || "配置管理",
-        description:
-          translations.settings?.sections?.configDescription ||
-          "管理发布配置模板与参数预设。",
       },
       {
         id: "about",
@@ -557,25 +532,6 @@ export function SettingsDialog({
     );
   };
 
-  const renderConfigSettings = () => (
-    <Suspense
-      fallback={
-        <SettingsSectionFallback
-          label={translations.app?.loading || "加载中..."}
-        />
-      }
-    >
-      <ConfigManagementContent
-        active={isOpen && activeCategory === "config"}
-        onLoadProfile={onLoadProfile}
-        currentProviderId={currentProviderId}
-        repoId={repoId}
-        currentParameters={currentParameters}
-        onProfilesChanged={onProfilesChanged}
-      />
-    </Suspense>
-  );
-
   const renderAboutSettings = () => (
     <div className="space-y-6">
       <div className="space-y-2">
@@ -707,8 +663,6 @@ export function SettingsDialog({
         return renderEnvironmentSettings();
       case "shortcuts":
         return renderShortcutsSettings();
-      case "config":
-        return renderConfigSettings();
       case "about":
         return renderAboutSettings();
       default:
