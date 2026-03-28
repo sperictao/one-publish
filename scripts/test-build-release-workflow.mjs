@@ -86,6 +86,13 @@ const assertStepContains = (stepName, fragment, message) => {
   }
 };
 
+const assertStepNotContains = (stepName, fragment, message) => {
+  const block = getStepBlock(stepName);
+  if (block.includes(fragment)) {
+    throw new Error(`复现成功：${message}`);
+  }
+};
+
 assertIfContains("Import Apple Developer Certificate", [
   "matrix.os == 'macos-latest'",
   "env.HAS_APPLE_CERT == 'true'",
@@ -151,44 +158,68 @@ assertContains(
   "workflow 仍在使用不支持 Node 24 的 pnpm/action-setup 主版本。"
 );
 assertContains(
+  "- name: Prepare updater assets",
+  "缺少 updater 资产预处理步骤。"
+);
+assertContains(
+  "mkdir -p ./updater-assets",
+  "workflow 未创建 updater-assets staging 目录。"
+);
+assertContains(
+  "copy_single ./artifacts/bundles-macos-universal '*.app.tar.gz' ./updater-assets",
+  "updater 资产未固定选取 macOS universal tarball。"
+);
+assertContains(
+  "copy_single ./artifacts/bundles-windows '*.msi' ./updater-assets",
+  "updater 资产未固定选取 Windows msi。"
+);
+assertContains(
+  "copy_single ./artifacts/bundles-linux '*.AppImage' ./updater-assets",
+  "updater 资产未固定选取 Linux AppImage。"
+);
+assertContains(
+  "copy_single ./artifacts/bundles-macos-universal '*.app.tar.gz.sig' ./updater-assets",
+  "updater 资产未收集 macOS 签名。"
+);
+assertContains(
+  "copy_single ./artifacts/bundles-windows '*.msi.sig' ./updater-assets",
+  "updater 资产未收集 Windows msi 签名。"
+);
+assertContains(
+  "copy_single ./artifacts/bundles-linux '*.AppImage.sig' ./updater-assets",
+  "updater 资产未收集 Linux AppImage 签名。"
+);
+assertContains(
   "- name: Prepare release assets",
   "缺少 release 资产预处理步骤。"
 );
 assertContains(
-  "-name '*.app.tar.gz'",
-  "release 资产筛选未包含 macOS updater tar.gz。"
+  "mkdir -p ./release-assets",
+  "workflow 未创建 release-assets staging 目录。"
 );
 assertContains(
-  "-name '*.msi.zip'",
-  "release 资产筛选未包含 Windows updater zip。"
+  "copy_single ./updater-assets latest.json ./release-assets",
+  "release 资产未包含 latest.json。"
 );
 assertContains(
-  "-name '*.AppImage.tar.gz'",
-  "release 资产筛选未包含 Linux updater tar.gz。"
+  "copy_single ./updater-assets '*.app.tar.gz' ./release-assets",
+  "release 资产未包含 macOS updater tarball。"
 );
 assertContains(
-  "-name '*.dmg'",
-  "release 资产筛选未包含 dmg。"
+  "copy_single ./artifacts/bundles-macos-universal '*universal*.dmg' ./release-assets",
+  "release 资产未固定选取 macOS universal dmg。"
 );
 assertContains(
-  "-name '*.msi'",
-  "release 资产筛选未包含 msi。"
+  "copy_single ./updater-assets '*.msi' ./release-assets",
+  "release 资产未包含 Windows msi。"
 );
 assertContains(
-  "-name '*-setup.exe'",
-  "release 资产筛选未包含 setup.exe。"
+  "copy_single ./updater-assets '*.AppImage' ./release-assets",
+  "release 资产未包含 Linux AppImage。"
 );
 assertContains(
-  "-name '*.AppImage'",
-  "release 资产筛选未包含 AppImage。"
-);
-assertContains(
-  "-name '*.deb'",
-  "release 资产筛选未包含 deb。"
-);
-assertContains(
-  "-name '*.rpm'",
-  "release 资产筛选未包含 rpm。"
+  "copy_single ./artifacts/bundles-linux '*.deb' ./release-assets",
+  "release 资产未包含 Linux deb。"
 );
 assertContains(
   "- name: Remove existing release",
@@ -210,6 +241,11 @@ assertContains(
   "gh release create",
   "Release 仍未使用 gh release create。"
 );
+assertStepNotContains(
+  "Download bundles",
+  "merge-multiple: true",
+  "Download bundles 仍在平铺 artifact，macOS 重名产物会互相覆盖。"
+);
 assertContains(
   "find ./release-assets -type f -print0",
   "gh release create 未从 release-assets 上传文件。"
@@ -224,13 +260,33 @@ assertContains(
 );
 assertStepContains(
   "Generate latest updater manifest",
-  "--output ./release-assets/latest.json",
-  "latest.json 未写入 release-assets。"
+  "--input ./updater-assets",
+  "latest.json 生成步骤未改为读取 updater-assets。"
+);
+assertStepContains(
+  "Generate latest updater manifest",
+  "--output ./updater-assets/latest.json",
+  "latest.json 未先写入 updater-assets。"
 );
 assertStepContains(
   "Generate latest updater manifest",
   "--notes-file \"${RELEASE_NOTES_PATH}\"",
   "latest.json 生成步骤未注入 release notes 文件。"
+);
+assertStepNotContains(
+  "Prepare release assets",
+  ".sig",
+  "release-assets 仍在公开收集 .sig 文件。"
+);
+assertStepNotContains(
+  "Prepare release assets",
+  "*.rpm",
+  "release-assets 仍在公开收集 rpm。"
+);
+assertStepNotContains(
+  "Prepare release assets",
+  "*-setup.exe",
+  "release-assets 仍在公开收集 setup.exe。"
 );
 assertStepContains(
   "Create GitHub Release",

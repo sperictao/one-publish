@@ -1,5 +1,13 @@
 # GitHub Release 自动更新接入计划
 
+> 注意：本文是历史规划文档，部分公开资产清单已过时。当前实现请以
+> `build-release.yml`、`docs/updater/SETUP.md` 与
+> `docs/release/GITHUB_RELEASE.md` 为准。
+>
+> 当前公开 release 页面默认只保留 `latest.json`、macOS universal
+> `.app.tar.gz` / `.dmg`、Windows `.msi`、Linux `.AppImage` / `.deb`；
+> `*.sig` 仅用于 manifest 生成与签名校验，不再公开上传。
+
 ## 文档目标
 
 本计划用于收敛 OnePublish 基于 **GitHub Release + Tauri Updater**

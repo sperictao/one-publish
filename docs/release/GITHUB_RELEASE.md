@@ -56,10 +56,22 @@ pnpm release -v 0.2.1 -d
 tag 推送后，`.github/workflows/build-release.yml` 会：
 
 1. 构建 macOS / Windows / Linux 安装包
-2. 汇总产物到 `release-assets`
+2. 收集 updater 必需产物到 `updater-assets`
 3. 读取 `release-notes/<tag>.md`
-4. 用同一份 `release-notes/<tag>.md` 写入 `latest.json` 的 `notes`
-5. 创建同名 GitHub Release 并上传附件
+4. 用同一份 `release-notes/<tag>.md` 生成 `updater-assets/latest.json`
+5. 组装公开的 `release-assets`
+6. 创建同名 GitHub Release 并上传附件
+
+公开 release 页面默认只保留这几类文件：
+
+- `latest.json`
+- macOS universal `*.app.tar.gz`
+- macOS universal `*.dmg`
+- Windows `*.msi`
+- Linux `*.AppImage`
+- Linux `*.deb`
+
+`*.sig` 仅用于 manifest 生成与签名校验，不再公开上传。
 
 本地 `pnpm release` 命令会继续轮询这次 `build-release` run，直到：
 
@@ -80,6 +92,6 @@ tag 推送后，`.github/workflows/build-release.yml` 会：
 ## 发布后检查
 
 - GitHub Actions：`Actions` 页面确认 `build-release` 成功
-- GitHub Releases：确认 tag、release notes、附件齐全
+- GitHub Releases：确认 tag、release notes、附件齐全，且页面不再出现 `*.sig`、`*.rpm`、`setup.exe`
 - 本地版本文件与 release tag 一致
 - 若命令本身返回非 0，请优先查看控制台里输出的失败 job 链接、annotation 和日志摘录

@@ -144,7 +144,38 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           path: ./artifacts
-          merge-multiple: true
+
+      - name: Prepare updater assets
+        run: |
+          mkdir -p ./updater-assets
+
+          copy_single() {
+            local source_dir="$1"
+            local pattern="$2"
+            local destination_dir="$3"
+            mapfile -d '' matches < <(find "$source_dir" -type f -name "$pattern" -print0)
+            if [ "${#matches[@]}" -ne 1 ]; then
+              echo "Expected exactly one match for $pattern in $source_dir, found ${#matches[@]}"
+              printf '%s\n' "${matches[@]}"
+              exit 1
+            fi
+            cp "${matches[0]}" "$destination_dir/$(basename "${matches[0]}")"
+          }
+
+          copy_single ./artifacts/bundles-macos-universal '*.app.tar.gz' ./updater-assets
+          copy_single ./artifacts/bundles-macos-universal '*.app.tar.gz.sig' ./updater-assets
+          copy_single ./artifacts/bundles-windows '*.msi' ./updater-assets
+          copy_single ./artifacts/bundles-windows '*.msi.sig' ./updater-assets
+          copy_single ./artifacts/bundles-linux '*.AppImage' ./updater-assets
+          copy_single ./artifacts/bundles-linux '*.AppImage.sig' ./updater-assets
+
+          file_count="$(find ./updater-assets -type f | wc -l | tr -d ' ')"
+          if [ "$file_count" -eq 0 ]; then
+            echo "No updater assets found."
+            exit 1
+          fi
+
+          echo "Prepared $file_count updater assets."
 
       - name: Resolve release notes
         run: |
@@ -155,38 +186,40 @@ jobs:
           fi
           echo "RELEASE_NOTES_PATH=$release_notes_path" >> "$GITHUB_ENV"
 
+      - name: Generate latest updater manifest
+        env:
+          RELEASE_DOWNLOAD_BASE: https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}
+        run: |
+          node scripts/generate-latest-json.mjs \
+            --input ./updater-assets \
+            --output ./updater-assets/latest.json \
+            --version "${GITHUB_REF_NAME#v}" \
+            --baseUrl "${RELEASE_DOWNLOAD_BASE}" \
+            --notes-file "${RELEASE_NOTES_PATH}"
+
       - name: Prepare release assets
         run: |
           mkdir -p ./release-assets
-          while IFS= read -r -d '' file; do
-            filename="$(basename "$file")"
-            target="$filename"
-            if [ -e "./release-assets/$target" ]; then
-              parent="$(basename "$(dirname "$file")")"
-              target="${parent}-${filename}"
+
+          copy_single() {
+            local source_dir="$1"
+            local pattern="$2"
+            local destination_dir="$3"
+            mapfile -d '' matches < <(find "$source_dir" -type f -name "$pattern" -print0)
+            if [ "${#matches[@]}" -ne 1 ]; then
+              echo "Expected exactly one match for $pattern in $source_dir, found ${#matches[@]}"
+              printf '%s\n' "${matches[@]}"
+              exit 1
             fi
-            cp "$file" "./release-assets/$target"
-          done < <(find ./artifacts -type f \( \
-            -name '*.app.tar.gz' -o \
-            -name '*.app.tar.gz.sig' -o \
-            -name '*.msi.zip' -o \
-            -name '*.msi.zip.sig' -o \
-            -name '*-setup.exe.zip' -o \
-            -name '*-setup.exe.zip.sig' -o \
-            -name '*.AppImage.tar.gz' -o \
-            -name '*.AppImage.tar.gz.sig' -o \
-            -name '*.dmg' -o \
-            -name '*.msi' -o \
-            -name '*.msi.sig' -o \
-            -name '*-setup.exe' -o \
-            -name '*-setup.exe.sig' -o \
-            -name '*.AppImage' -o \
-            -name '*.AppImage.sig' -o \
-            -name '*.deb' -o \
-            -name '*.deb.sig' -o \
-            -name '*.rpm' -o \
-            -name '*.rpm.sig' \
-          \) -print0)
+            cp "${matches[0]}" "$destination_dir/$(basename "${matches[0]}")"
+          }
+
+          copy_single ./updater-assets latest.json ./release-assets
+          copy_single ./updater-assets '*.app.tar.gz' ./release-assets
+          copy_single ./artifacts/bundles-macos-universal '*universal*.dmg' ./release-assets
+          copy_single ./updater-assets '*.msi' ./release-assets
+          copy_single ./updater-assets '*.AppImage' ./release-assets
+          copy_single ./artifacts/bundles-linux '*.deb' ./release-assets
 
           file_count="$(find ./release-assets -type f | wc -l | tr -d ' ')"
           if [ "$file_count" -eq 0 ]; then
@@ -195,17 +228,6 @@ jobs:
           fi
 
           echo "Prepared $file_count release assets."
-
-      - name: Generate latest updater manifest
-        env:
-          RELEASE_DOWNLOAD_BASE: https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}
-        run: |
-          node scripts/generate-latest-json.mjs \
-            --input ./release-assets \
-            --output ./release-assets/latest.json \
-            --version "${GITHUB_REF_NAME#v}" \
-            --baseUrl "${RELEASE_DOWNLOAD_BASE}" \
-            --notes-file "${RELEASE_NOTES_PATH}"
 
       - name: Remove existing release
         env:

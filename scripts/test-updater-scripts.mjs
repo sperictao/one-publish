@@ -47,6 +47,25 @@ function run(command, args, options = {}) {
   return result;
 }
 
+function runExpectFailure(command, args, options = {}) {
+  const result = spawnSync(command, args, {
+    cwd: rootDir,
+    encoding: "utf8",
+    stdio: "pipe",
+    ...options,
+  });
+
+  if (result.error) {
+    fail(`执行 ${command} 失败：${result.error.message}`);
+  }
+
+  if (result.status === 0) {
+    fail(`执行 ${command} ${args.join(" ")} 应失败但成功了。`);
+  }
+
+  return `${result.stderr || ""}${result.stdout || ""}`;
+}
+
 const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "one-publish-updater-"));
 
 try {
@@ -119,30 +138,21 @@ try {
   fs.mkdirSync(releaseAssetsDir, { recursive: true });
   fs.writeFileSync(notesPath, `${releaseNotes}\n`, "utf8");
 
-  const assets = [
-    {
-      platform: "darwin-aarch64",
-      assetName: "OnePublish_0.2.0_aarch64.app.tar.gz",
-      signature: "sig-darwin-aarch64",
-    },
-    {
-      platform: "darwin-x86_64",
-      assetName: "OnePublish_0.2.0_x64.app.tar.gz",
-      signature: "sig-darwin-x86_64",
-    },
-    {
-      platform: "windows-x86_64",
-      assetName: "OnePublish_0.2.0_x64_en-US.msi.zip",
-      signature: "sig-windows-x86_64",
-    },
-    {
-      platform: "linux-x86_64",
-      assetName: "OnePublish_0.2.0_amd64.AppImage.tar.gz",
-      signature: "sig-linux-x86_64",
-    },
-  ];
+  const macUpdaterAsset = {
+    assetName: "OnePublish.app.tar.gz",
+    signature: "sig-darwin-universal",
+  };
+  const windowsUpdaterAsset = {
+    assetName: "OnePublish_0.2.0_x64_en-US.msi",
+    signature: "sig-windows-x86_64",
+  };
+  const linuxUpdaterAsset = {
+    assetName: "OnePublish_0.2.0_amd64.AppImage",
+    signature: "sig-linux-x86_64",
+  };
+  const updaterAssets = [macUpdaterAsset, windowsUpdaterAsset, linuxUpdaterAsset];
 
-  for (const asset of assets) {
+  for (const asset of updaterAssets) {
     fs.writeFileSync(path.join(releaseAssetsDir, asset.assetName), "placeholder", "utf8");
     fs.writeFileSync(
       path.join(releaseAssetsDir, `${asset.assetName}.sig`),
@@ -175,17 +185,143 @@ try {
     "latest.json pub_date 不是合法时间。"
   );
 
-  for (const asset of assets) {
-    ensure(
-      manifest.platforms?.[asset.platform]?.signature === asset.signature,
-      `latest.json 缺少 ${asset.platform} 签名。`
-    );
-    ensure(
-      manifest.platforms?.[asset.platform]?.url ===
-        `${baseUrl}/${encodeURIComponent(asset.assetName)}`,
-      `latest.json 缺少 ${asset.platform} 资产 URL。`
-    );
+  ensure(
+    manifest.platforms?.["darwin-aarch64"]?.signature === macUpdaterAsset.signature,
+    "latest.json 缺少 darwin-aarch64 签名。"
+  );
+  ensure(
+    manifest.platforms?.["darwin-x86_64"]?.signature === macUpdaterAsset.signature,
+    "latest.json 缺少 darwin-x86_64 签名。"
+  );
+  ensure(
+    manifest.platforms?.["darwin-aarch64"]?.url ===
+      `${baseUrl}/${encodeURIComponent(macUpdaterAsset.assetName)}`,
+    "latest.json 缺少 darwin-aarch64 资产 URL。"
+  );
+  ensure(
+    manifest.platforms?.["darwin-x86_64"]?.url ===
+      `${baseUrl}/${encodeURIComponent(macUpdaterAsset.assetName)}`,
+    "latest.json 缺少 darwin-x86_64 资产 URL。"
+  );
+  ensure(
+    manifest.platforms?.["windows-x86_64"]?.signature === windowsUpdaterAsset.signature,
+    "latest.json 缺少 windows-x86_64 签名。"
+  );
+  ensure(
+    manifest.platforms?.["windows-x86_64"]?.url ===
+      `${baseUrl}/${encodeURIComponent(windowsUpdaterAsset.assetName)}`,
+    "latest.json 缺少 windows-x86_64 资产 URL。"
+  );
+  ensure(
+    manifest.platforms?.["linux-x86_64"]?.signature === linuxUpdaterAsset.signature,
+    "latest.json 缺少 linux-x86_64 签名。"
+  );
+  ensure(
+    manifest.platforms?.["linux-x86_64"]?.url ===
+      `${baseUrl}/${encodeURIComponent(linuxUpdaterAsset.assetName)}`,
+    "latest.json 缺少 linux-x86_64 资产 URL。"
+  );
+
+  const missingMacSigDir = path.join(tempDir, "missing-mac-sig");
+  fs.mkdirSync(missingMacSigDir, { recursive: true });
+  for (const asset of updaterAssets) {
+    fs.writeFileSync(path.join(missingMacSigDir, asset.assetName), "placeholder", "utf8");
+    if (asset !== macUpdaterAsset) {
+      fs.writeFileSync(
+        path.join(missingMacSigDir, `${asset.assetName}.sig`),
+        `${asset.signature}\n`,
+        "utf8"
+      );
+    }
   }
+
+  const missingMacSigOutput = runExpectFailure(process.execPath, [
+    "scripts/generate-latest-json.mjs",
+    "--input",
+    missingMacSigDir,
+    "--output",
+    path.join(missingMacSigDir, "latest.json"),
+    "--version",
+    "0.2.0",
+    "--baseUrl",
+    baseUrl,
+    "--notes-file",
+    notesPath,
+  ]);
+  ensure(
+    missingMacSigOutput.includes("macOS universal updater 包 缺少对应签名文件"),
+    "缺少 macOS 签名时未返回可读错误。"
+  );
+
+  const missingWindowsDir = path.join(tempDir, "missing-windows-msi");
+  fs.mkdirSync(missingWindowsDir, { recursive: true });
+  fs.writeFileSync(path.join(missingWindowsDir, macUpdaterAsset.assetName), "placeholder", "utf8");
+  fs.writeFileSync(
+    path.join(missingWindowsDir, `${macUpdaterAsset.assetName}.sig`),
+    `${macUpdaterAsset.signature}\n`,
+    "utf8"
+  );
+  fs.writeFileSync(path.join(missingWindowsDir, linuxUpdaterAsset.assetName), "placeholder", "utf8");
+  fs.writeFileSync(
+    path.join(missingWindowsDir, `${linuxUpdaterAsset.assetName}.sig`),
+    `${linuxUpdaterAsset.signature}\n`,
+    "utf8"
+  );
+
+  const missingWindowsOutput = runExpectFailure(process.execPath, [
+    "scripts/generate-latest-json.mjs",
+    "--input",
+    missingWindowsDir,
+    "--output",
+    path.join(missingWindowsDir, "latest.json"),
+    "--version",
+    "0.2.0",
+    "--baseUrl",
+    baseUrl,
+    "--notes-file",
+    notesPath,
+  ]);
+  ensure(
+    missingWindowsOutput.includes("缺少 Windows MSI updater 包"),
+    "缺少 Windows MSI 时未返回可读错误。"
+  );
+
+  const missingLinuxDir = path.join(tempDir, "missing-linux-appimage");
+  fs.mkdirSync(missingLinuxDir, { recursive: true });
+  fs.writeFileSync(path.join(missingLinuxDir, macUpdaterAsset.assetName), "placeholder", "utf8");
+  fs.writeFileSync(
+    path.join(missingLinuxDir, `${macUpdaterAsset.assetName}.sig`),
+    `${macUpdaterAsset.signature}\n`,
+    "utf8"
+  );
+  fs.writeFileSync(
+    path.join(missingLinuxDir, windowsUpdaterAsset.assetName),
+    "placeholder",
+    "utf8"
+  );
+  fs.writeFileSync(
+    path.join(missingLinuxDir, `${windowsUpdaterAsset.assetName}.sig`),
+    `${windowsUpdaterAsset.signature}\n`,
+    "utf8"
+  );
+
+  const missingLinuxOutput = runExpectFailure(process.execPath, [
+    "scripts/generate-latest-json.mjs",
+    "--input",
+    missingLinuxDir,
+    "--output",
+    path.join(missingLinuxDir, "latest.json"),
+    "--version",
+    "0.2.0",
+    "--baseUrl",
+    baseUrl,
+    "--notes-file",
+    notesPath,
+  ]);
+  ensure(
+    missingLinuxOutput.includes("缺少 Linux AppImage updater 包"),
+    "缺少 Linux AppImage 时未返回可读错误。"
+  );
 
   console.log("PASS: updater 配置与 latest.json 脚本烟测通过。");
 } finally {
