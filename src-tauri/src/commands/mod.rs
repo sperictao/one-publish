@@ -121,7 +121,6 @@ pub struct PublishResult {
     pub provider_id: String,
     pub success: bool,
     pub cancelled: bool,
-    pub output: String,
     pub error: Option<String>,
     pub output_dir: String,
     pub file_count: usize,
@@ -131,6 +130,11 @@ pub struct PublishResult {
 struct PublishLogChunkEvent {
     session_id: String,
     line: String,
+}
+
+#[derive(Debug, Clone, Copy)]
+struct PublishLogSummary {
+    ends_with_newline: bool,
 }
 #[derive(Clone)]
 struct RunningExecution {
@@ -367,8 +371,7 @@ async fn execute_publish_spec(
             cancel_requested: Arc::clone(&cancel_requested),
         });
     }
-    let run_result: Result<(String, bool, bool, Option<String>), crate::errors::AppError> = async {
-        let mut output_text = command_line_output.clone();
+    let run_result: Result<(bool, bool, Option<String>), crate::errors::AppError> = async {
         let (sender, receiver) = mpsc::unbounded_channel::<(String, String)>();
         let collector = tokio::spawn(collect_log_chunks(app.clone(), session_id.clone(), receiver));
         let mut readers = Vec::new();
@@ -397,19 +400,17 @@ async fn execute_publish_spec(
         for reader in readers {
             let _ = reader.await;
         }
-        let streamed_output = collector
+        let log_summary = collector
             .await
             .map_err(|err| publish_error(format!("failed to collect publish logs: {}", err), "publish_log_collect_failed"))?;
-        output_text.push_str(&streamed_output);
         let cancelled = cancel_requested.load(Ordering::SeqCst);
         if cancelled {
-            let cancelled_line = if output_text.ends_with('\n') {
+            let cancelled_line = if log_summary.ends_with_newline {
                 "[cancelled] 发布已取消".to_string()
             } else {
                 "\n[cancelled] 发布已取消".to_string()
             };
             emit_publish_log(app, &session_id, &cancelled_line);
-            output_text.push_str(&cancelled_line);
         }
         let success = status.success() && !cancelled;
         let error = if cancelled {
@@ -419,11 +420,11 @@ async fn execute_publish_spec(
         } else {
             Some(format!("发布失败，退出代码: {:?}", status.code()))
         };
-        Ok((output_text, success, cancelled, error))
+        Ok((success, cancelled, error))
     }
     .await;
     clear_running_execution(&session_id).await;
-    let (output_text, success, cancelled, error) = run_result?;
+    let (success, cancelled, error) = run_result?;
     let output_dir = infer_output_dir(&spec);
     let file_count = if success {
         count_output_files(&output_dir)
@@ -434,7 +435,6 @@ async fn execute_publish_spec(
         provider_id: spec.provider_id,
         success,
         cancelled,
-        output: output_text,
         error,
         output_dir,
         file_count,
@@ -478,18 +478,18 @@ async fn collect_log_chunks(
     app: AppHandle,
     session_id: String,
     mut receiver: mpsc::UnboundedReceiver<(String, String)>,
-) -> String {
-    let mut output = String::new();
+) -> PublishLogSummary {
     let mut stderr_needs_prefix = true;
+    let mut ends_with_newline = true;
     while let Some((stream, chunk)) = receiver.recv().await {
         let rendered = render_stream_chunk(&stream, &chunk, &mut stderr_needs_prefix);
         if rendered.is_empty() {
             continue;
         }
         emit_publish_log(&app, &session_id, &rendered);
-        output.push_str(&rendered);
+        ends_with_newline = rendered.ends_with('\n') || rendered.ends_with('\r');
     }
-    output
+    PublishLogSummary { ends_with_newline }
 }
 async fn read_stream_chunks<R>(
     mut stream: R,
@@ -835,6 +835,25 @@ mod tests {
         assert_eq!(
             PathBuf::from(output_dir),
             PathBuf::from("/tmp/demo-project").join("artifacts/release")
+        );
+    }
+
+    #[test]
+    fn publish_result_serialization_excludes_output_payload() {
+        let serialized = serde_json::to_value(PublishResult {
+            provider_id: "dotnet".to_string(),
+            success: true,
+            cancelled: false,
+            error: None,
+            output_dir: "/tmp/out".to_string(),
+            file_count: 3,
+        })
+        .expect("serialize publish result");
+
+        assert_eq!(serialized.get("output"), None);
+        assert_eq!(
+            serialized.get("provider_id").and_then(serde_json::Value::as_str),
+            Some("dotnet")
         );
     }
 }

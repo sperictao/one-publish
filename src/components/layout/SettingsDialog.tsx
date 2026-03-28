@@ -39,7 +39,9 @@ import {
   useMemo,
   useState,
 } from "react";
+import { isTauri } from "@tauri-apps/api/core";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
+import { relaunch } from "@tauri-apps/plugin-process";
 import type { AppUpdaterState } from "@/hooks/useAppUpdater";
 import { useI18n, t } from "@/hooks/useI18n";
 import type { Language } from "@/hooks/useI18n";
@@ -170,6 +172,7 @@ export function SettingsDialog({
   onOpenUpdaterHelpTarget,
 }: SettingsDialogProps) {
   const [activeCategory, setActiveCategory] = useState<SettingsCategoryId>("general");
+  const [isRestarting, setIsRestarting] = useState(false);
   const { translations } = useI18n();
   const {
     currentVersion,
@@ -312,6 +315,22 @@ export function SettingsDialog({
   const handleInstallUpdate = useCallback(() => {
     void onInstallAvailableUpdate();
   }, [onInstallAvailableUpdate]);
+
+  const handleRestartApp = useCallback(() => {
+    if (!isTauri()) {
+      return;
+    }
+
+    setIsRestarting(true);
+
+    void relaunch().catch((error) => {
+      console.error("重启应用失败:", error);
+      setIsRestarting(false);
+      toast.error(
+        translations.version?.restartFailed || "重启应用失败，请稍后重试"
+      );
+    });
+  }, [translations.version?.restartFailed]);
 
   const handleSelectDirectory = async () => {
     try {
@@ -609,6 +628,25 @@ export function SettingsDialog({
           </div>
 
           <div className="flex flex-wrap gap-2">
+            {isTauri() && updaterConfigHealth?.configured && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleRestartApp}
+                disabled={isRestarting || isCheckingUpdate || isInstallingUpdate}
+              >
+                {isRestarting ? (
+                  <RefreshCw className="h-4 w-4 animate-spin" />
+                ) : (
+                  <RefreshCw className="h-4 w-4" />
+                )}
+                <span className="ml-1">
+                  {isRestarting
+                    ? translations.version?.restarting || "重启中..."
+                    : translations.version?.restart || "重启应用"}
+                </span>
+              </Button>
+            )}
             <Button
               variant="outline"
               size="sm"

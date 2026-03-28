@@ -26,7 +26,6 @@ export interface PublishResult {
   provider_id: string;
   success: boolean;
   cancelled: boolean;
-  output: string;
   error: string | null;
   output_dir: string;
   file_count: number;
@@ -116,7 +115,7 @@ export function usePublishRunner({
     artifactActionState,
     setArtifactActionState,
   } = usePublishUiState();
-  const { outputLog, setOutputLog } = usePublishLogStream();
+  const { outputLog, setOutputLog, getOutputLogSnapshot } = usePublishLogStream();
 
   const {
     getCurrentConfig,
@@ -143,6 +142,19 @@ export function usePublishRunner({
     specVersion,
     getCurrentConfig,
   });
+
+  const waitForOutputLogSnapshot = useCallback(async (): Promise<string> => {
+    await new Promise<void>((resolve) => {
+      if (typeof window === "undefined" || typeof window.setTimeout !== "function") {
+        resolve();
+        return;
+      }
+
+      window.setTimeout(resolve, 0);
+    });
+
+    return getOutputLogSnapshot();
+  }, [getOutputLogSnapshot]);
 
   const runPublishSpec = useCallback(
     async (spec: ProviderPublishSpec, recentConfigKey?: string | null) => {
@@ -190,9 +202,9 @@ export function usePublishRunner({
         const result = await invoke<PublishResult>("execute_provider_publish", {
           spec,
         });
+        const outputLogSnapshot = await waitForOutputLogSnapshot();
 
         setPublishResult(result);
-        setOutputLog(result.output);
 
         if (result.success) {
           toast.success(publishT.success || "发布成功!", {
@@ -219,7 +231,7 @@ export function usePublishRunner({
           startedAt: executionStartedAt,
           finishedAt: new Date().toISOString(),
           result,
-          output: result.output,
+          outputLog: outputLogSnapshot,
         });
         setCurrentPublishRecordId(record.id);
         savePublishRecord(record);
@@ -238,7 +250,6 @@ export function usePublishRunner({
           provider_id: spec.provider_id,
           success: false,
           cancelled: false,
-          output: "",
           error: rawErrorMessage,
           output_dir: "",
           file_count: 0,
@@ -260,7 +271,7 @@ export function usePublishRunner({
           startedAt: executionStartedAt,
           finishedAt: new Date().toISOString(),
           result: failedResult,
-          output: "",
+          outputLog: await waitForOutputLogSnapshot(),
         });
         setCurrentPublishRecordId(record.id);
         savePublishRecord(record);
@@ -277,6 +288,7 @@ export function usePublishRunner({
       savePublishRecord,
       selectedRepoId,
       setEnvironmentLastResult,
+      waitForOutputLogSnapshot,
     ]
   );
 

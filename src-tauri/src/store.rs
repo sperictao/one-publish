@@ -393,14 +393,47 @@ fn state_store() -> &'static RwLock<AppState> {
     STATE_STORE.get_or_init(|| RwLock::new(load_from_file()))
 }
 
-/// 获取当前状态
-pub fn get_state() -> AppState {
+fn with_read_state<T>(reader: impl FnOnce(&AppState) -> T) -> T {
     match state_store().read() {
-        Ok(guard) => guard.clone(),
+        Ok(guard) => reader(&guard),
         Err(err) => {
             log::error!("读取状态锁失败: {}", err);
-            err.into_inner().clone()
+            let guard = err.into_inner();
+            reader(&guard)
         }
+    }
+}
+
+/// 获取当前状态
+pub fn get_state() -> AppState {
+    with_read_state(|state| state.clone())
+}
+
+fn get_bootstrap_state() -> AppState {
+    with_read_state(build_frontend_state)
+}
+
+fn get_execution_history_snapshot() -> Vec<ExecutionRecord> {
+    with_read_state(|state| state.execution_history.clone())
+}
+
+fn build_frontend_state(state: &AppState) -> AppState {
+    AppState {
+        repositories: state.repositories.clone(),
+        selected_repo_id: state.selected_repo_id.clone(),
+        left_panel_width: state.left_panel_width,
+        middle_panel_width: state.middle_panel_width,
+        panel_widths_customized: state.panel_widths_customized,
+        selected_preset: default_preset(),
+        is_custom_mode: false,
+        custom_config: PublishConfigStore::default(),
+        minimize_to_tray_on_close: state.minimize_to_tray_on_close,
+        language: state.language.clone(),
+        default_output_dir: state.default_output_dir.clone(),
+        theme: state.theme.clone(),
+        profiles: Vec::new(),
+        execution_history_limit: state.execution_history_limit,
+        execution_history: Vec::new(),
     }
 }
 
@@ -426,7 +459,7 @@ pub fn update_state(new_state: AppState) -> Result<(), crate::errors::AppError> 
 /// 获取应用状态
 #[tauri::command]
 pub async fn get_app_state() -> Result<AppState, AppError> {
-    Ok(get_state())
+    Ok(get_bootstrap_state())
 }
 
 /// 保存应用状态
@@ -450,8 +483,8 @@ pub async fn add_repository(repo: Repository) -> Result<AppState, AppError> {
 
     state.repositories.push(repo.clone());
     state.selected_repo_id = Some(repo.id);
-    update_state(state.clone())?;
-    Ok(state)
+    update_state(state)?;
+    Ok(get_bootstrap_state())
 }
 
 /// 删除仓库
@@ -466,8 +499,8 @@ pub async fn remove_repository(repo_id: String) -> Result<AppState, AppError> {
         state.selected_repo_id = state.repositories.first().map(|r| r.id.clone());
     }
 
-    update_state(state.clone())?;
-    Ok(state)
+    update_state(state)?;
+    Ok(get_bootstrap_state())
 }
 
 /// 更新仓库
@@ -479,8 +512,8 @@ pub async fn update_repository(repo: Repository) -> Result<AppState, AppError> {
         *existing = repo;
     }
 
-    update_state(state.clone())?;
-    Ok(state)
+    update_state(state)?;
+    Ok(get_bootstrap_state())
 }
 
 /// 更新 UI 状态（面板宽度等）
@@ -541,7 +574,7 @@ pub async fn update_preferences(
         trim_execution_history(&mut state.execution_history, state.execution_history_limit);
     }
 
-    update_state(state.clone())?;
+    update_state(state)?;
 
     // 语言变化需要刷新托盘菜单以便实时更新文案
     if language_changed {
@@ -550,7 +583,7 @@ pub async fn update_preferences(
         }
     }
 
-    Ok(state)
+    Ok(get_bootstrap_state())
 }
 
 /// 更新发布配置状态（按仓库隔离）
@@ -590,18 +623,20 @@ pub async fn update_publish_state(
 /// 获取保存的配置文件（按仓库隔离）
 #[tauri::command]
 pub async fn get_profiles(repo_id: String) -> Result<Vec<ConfigProfile>, AppError> {
-    let state = get_state();
-    let repo = state
-        .repositories
-        .iter()
-        .find(|r| r.id == repo_id)
-        .ok_or_else(|| {
-            AppError::validation_with_code(
-                format!("未找到仓库: {}", repo_id),
-                "repository_not_found",
-            )
-        })?;
-    Ok(repo.publish_config.profiles.clone())
+    with_read_state(|state| {
+        let repo = state
+            .repositories
+            .iter()
+            .find(|r| r.id == repo_id)
+            .ok_or_else(|| {
+                AppError::validation_with_code(
+                    format!("未找到仓库: {}", repo_id),
+                    "repository_not_found",
+                )
+            })?;
+
+        Ok(repo.publish_config.profiles.clone())
+    })
 }
 
 /// 保存当前配置为配置文件（按仓库隔离）
@@ -757,8 +792,7 @@ fn append_execution_history(
 /// 获取执行历史
 #[tauri::command]
 pub async fn get_execution_history() -> Result<Vec<ExecutionRecord>, AppError> {
-    let state = get_state();
-    Ok(state.execution_history)
+    Ok(get_execution_history_snapshot())
 }
 
 /// 追加执行历史记录（按配置保留最近 N 条）
@@ -799,4 +833,67 @@ pub async fn set_execution_record_snapshot(
     let history = state.execution_history.clone();
     update_state(state)?;
     Ok(history)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn bootstrap_state_serialization_excludes_execution_history() {
+        let state = AppState {
+            repositories: vec![Repository {
+                id: "repo-1".to_string(),
+                name: "one-publish".to_string(),
+                path: "/repo".to_string(),
+                project_file: None,
+                current_branch: "main".to_string(),
+                branches: Vec::new(),
+                is_main: true,
+                provider_id: Some("dotnet".to_string()),
+                publish_config: RepoPublishConfig::default(),
+            }],
+            execution_history: vec![ExecutionRecord {
+                id: "history-1".to_string(),
+                repo_id: Some("repo-1".to_string()),
+                provider_id: "dotnet".to_string(),
+                project_path: "/repo/App.csproj".to_string(),
+                started_at: "2026-03-28T10:00:00.000Z".to_string(),
+                finished_at: "2026-03-28T10:00:03.000Z".to_string(),
+                success: true,
+                cancelled: false,
+                output_dir: Some("/repo/out".to_string()),
+                error: None,
+                command_line: None,
+                snapshot_path: None,
+                failure_signature: None,
+                spec: None,
+                file_count: 2,
+            }],
+            ..AppState::default()
+        };
+
+        let frontend_state = build_frontend_state(&state);
+        let serialized = serde_json::to_value(&frontend_state).expect("serialize frontend state");
+
+        assert_eq!(
+            serialized
+                .get("executionHistory")
+                .and_then(serde_json::Value::as_array)
+                .map(Vec::len),
+            Some(0),
+            "前端启动载荷不应携带执行历史内容"
+        );
+        assert_eq!(
+            serialized.get("repositories").and_then(serde_json::Value::as_array).map(Vec::len),
+            Some(1)
+        );
+        assert_eq!(
+            serialized
+                .get("profiles")
+                .and_then(serde_json::Value::as_array)
+                .map(Vec::len),
+            Some(0)
+        );
+    }
 }

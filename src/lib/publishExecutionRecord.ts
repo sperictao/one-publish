@@ -5,21 +5,47 @@ import type {
   PublishResult,
 } from "@/hooks/usePublishRunner";
 
+function extractCommandLine(outputLog: string): string | null {
+  if (!outputLog) {
+    return null;
+  }
+
+  let cursor = 0;
+  while (cursor < outputLog.length) {
+    const nextBreak = outputLog.indexOf("\n", cursor);
+    const line =
+      nextBreak === -1
+        ? outputLog.slice(cursor)
+        : outputLog.slice(cursor, nextBreak);
+
+    if (line.startsWith("$ ")) {
+      return line;
+    }
+
+    if (nextBreak === -1) {
+      break;
+    }
+
+    cursor = nextBreak + 1;
+  }
+
+  return null;
+}
+
 export function createPublishExecutionRecord(params: {
   spec: ProviderPublishSpec;
   repoId: string | null;
   startedAt: string;
   finishedAt: string;
   result: PublishResult;
-  output: string;
+  outputLog: string;
 }): ExecutionRecord {
-  const commandLine =
-    params.output.split("\n").find((line) => line.startsWith("$ ")) || null;
+  const commandLine = extractCommandLine(params.outputLog);
   const failureSignature =
     !params.result.success && !params.result.cancelled
       ? deriveFailureSignature({
           error: params.result.error,
-          output: params.output,
+          output: params.outputLog,
         })
       : null;
 

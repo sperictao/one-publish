@@ -49,33 +49,46 @@ export interface ExecutionRecord {
   fileCount: number;
 }
 
-// 应用状态类型
-export interface AppState {
+// 启动桥接状态：只保留首屏必需字段，避免把历史等大块数据带入前端常驻状态
+export interface BootstrapState {
   repositories: Repository[];
   selectedRepoId: string | null;
   leftPanelWidth: number;
   middlePanelWidth: number;
   panelWidthsCustomized: boolean;
-  // 以下全局字段仅用于向后兼容反序列化，前端不再使用
-  selectedPreset: string;
-  isCustomMode: boolean;
-  customConfig: PublishConfigStore;
   minimizeToTrayOnClose: boolean;
   language: string;
   defaultOutputDir: string;
   theme: "light" | "dark" | "auto";
-  profiles: ConfigProfile[];
-  executionHistory: ExecutionRecord[];
   executionHistoryLimit: number;
 }
 
-// 默认状态
-export const defaultAppState: AppState = {
+// 完整应用状态：仅用于持久化和少数全量命令交互
+export interface AppState extends BootstrapState {
+  // 以下全局字段仅用于向后兼容反序列化，前端不再使用
+  selectedPreset: string;
+  isCustomMode: boolean;
+  customConfig: PublishConfigStore;
+  profiles: ConfigProfile[];
+  executionHistory: ExecutionRecord[];
+}
+
+export const defaultBootstrapState: BootstrapState = {
   repositories: [],
   selectedRepoId: null,
   leftPanelWidth: 220,
   middlePanelWidth: 280,
   panelWidthsCustomized: false,
+  minimizeToTrayOnClose: true,
+  language: "zh",
+  defaultOutputDir: "",
+  theme: "auto",
+  executionHistoryLimit: 20,
+};
+
+// 默认状态
+export const defaultAppState: AppState = {
+  ...defaultBootstrapState,
   selectedPreset: "release-fd",
   isCustomMode: false,
   customConfig: {
@@ -93,13 +106,8 @@ export const defaultAppState: AppState = {
     useProfile: false,
     profileName: "",
   },
-  minimizeToTrayOnClose: true,
-  language: "zh",
-  defaultOutputDir: "",
-  theme: "auto",
   profiles: [],
   executionHistory: [],
-  executionHistoryLimit: 20,
 };
 
 // 仓库级发布配置默认值

@@ -1,4 +1,4 @@
-import { Suspense, lazy, useEffect, useCallback, useState } from "react";
+import { Suspense, lazy, useEffect, useCallback, useMemo, useState } from "react";
 // Hooks
 import { useAppDialogs } from "@/hooks/useAppDialogs";
 import { useAppState } from "@/hooks/useAppState";
@@ -559,6 +559,18 @@ function App() {
     providerLabel: activeProviderLabel,
     appT,
   });
+  const hasSelectedRepoFailureHistory = useMemo(() => {
+    if (!selectedRepo) {
+      return false;
+    }
+
+    return executionHistory.some(
+      (record) =>
+        !record.success &&
+        !record.cancelled &&
+        isRecordInRepository(record, selectedRepo)
+    );
+  }, [executionHistory, selectedRepo]);
 
   // Show loading state
   if (isStateLoading) {
@@ -577,13 +589,32 @@ function App() {
   );
   const shouldLoadDiagnosticsSection = selectedRepo
     ? rightPanelView === "history" ||
-      executionHistory.some(
-        (record) =>
-          !record.success &&
-          !record.cancelled &&
-          isRecordInRepository(record, selectedRepo)
-      )
+      hasSelectedRepoFailureHistory
     : false;
+  const diagnosticsSectionProps = shouldLoadDiagnosticsSection && selectedRepo
+    ? {
+        rightPanelView,
+        appT,
+        historyT,
+        failureT,
+        executionHistory,
+        executionHistoryLimit,
+        selectedRepo,
+        isPublishing,
+        publishResult,
+        lastPublishSpec,
+        outputLog,
+        environmentLastResult,
+        currentPublishRecordId,
+        recentBundleExports,
+        recentHistoryExports,
+        setExecutionHistory,
+        trackBundleExport,
+        trackHistoryExport,
+        extractSpecFromRecord,
+        rerunFromHistory,
+      }
+    : null;
   const shouldLoadAppDialogsHost =
     shortcutsOpen ||
     environmentDialogOpen ||
@@ -683,32 +714,7 @@ function App() {
                 commandImportResultCardProps={commandImportResultCardProps}
                 publishRunCardProps={publishRunCardProps}
                 shouldLoadDiagnosticsSection={shouldLoadDiagnosticsSection}
-                diagnosticsSectionProps={
-                  selectedRepo
-                    ? {
-                        rightPanelView,
-                        appT,
-                        historyT,
-                        failureT,
-                        executionHistory,
-                        executionHistoryLimit,
-                        selectedRepo,
-                        isPublishing,
-                        publishResult,
-                        lastPublishSpec,
-                        outputLog,
-                        environmentLastResult,
-                        currentPublishRecordId,
-                        recentBundleExports,
-                        recentHistoryExports,
-                        setExecutionHistory,
-                        trackBundleExport,
-                        trackHistoryExport,
-                        extractSpecFromRecord,
-                        rerunFromHistory,
-                      }
-                    : null
-                }
+                diagnosticsSectionProps={diagnosticsSectionProps}
                 rightPanelView={rightPanelView}
               />
             </Suspense>

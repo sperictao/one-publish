@@ -16,7 +16,6 @@ interface PublishResult {
   provider_id: string;
   success: boolean;
   cancelled: boolean;
-  output: string;
   error: string | null;
   output_dir: string;
   file_count: number;
