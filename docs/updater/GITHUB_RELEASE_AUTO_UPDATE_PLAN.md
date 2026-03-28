@@ -4,9 +4,10 @@
 > `build-release.yml`、`docs/updater/SETUP.md` 与
 > `docs/release/GITHUB_RELEASE.md` 为准。
 >
-> 当前公开 release 页面默认只保留 `latest.json`、macOS universal
-> `.app.tar.gz` / `.dmg`、Windows `.msi`、Linux `.AppImage` / `.deb`；
-> `*.sig` 仅用于 manifest 生成与签名校验，不再公开上传。
+> 当前公开 release 页面默认只保留 `latest.json`、macOS
+> `aarch64/x64 .app.tar.gz`、`aarch64/x64/universal .dmg`、Windows `.msi`、
+> Linux `.AppImage` / `.deb`；`*.sig` 仅用于 manifest 生成与签名校验，
+> 不再公开上传。
 
 ## 文档目标
 

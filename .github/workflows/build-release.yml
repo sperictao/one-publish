@@ -148,6 +148,7 @@ jobs:
       - name: Prepare updater assets
         run: |
           mkdir -p ./updater-assets
+          version="${GITHUB_REF_NAME#v}"
 
           copy_single() {
             local source_dir="$1"
@@ -162,8 +163,23 @@ jobs:
             cp "${matches[0]}" "$destination_dir/$(basename "${matches[0]}")"
           }
 
-          copy_single ./artifacts/bundles-macos-universal '*.app.tar.gz' ./updater-assets
-          copy_single ./artifacts/bundles-macos-universal '*.app.tar.gz.sig' ./updater-assets
+          copy_single_as() {
+            local source_dir="$1"
+            local pattern="$2"
+            local destination_path="$3"
+            mapfile -d '' matches < <(find "$source_dir" -type f -name "$pattern" -print0)
+            if [ "${#matches[@]}" -ne 1 ]; then
+              echo "Expected exactly one match for $pattern in $source_dir, found ${#matches[@]}"
+              printf '%s\n' "${matches[@]}"
+              exit 1
+            fi
+            cp "${matches[0]}" "$destination_path"
+          }
+
+          copy_single_as ./artifacts/bundles-macos-aarch64 '*.app.tar.gz' "./updater-assets/OnePublish_${version}_aarch64.app.tar.gz"
+          copy_single_as ./artifacts/bundles-macos-aarch64 '*.app.tar.gz.sig' "./updater-assets/OnePublish_${version}_aarch64.app.tar.gz.sig"
+          copy_single_as ./artifacts/bundles-macos-x86_64 '*.app.tar.gz' "./updater-assets/OnePublish_${version}_x64.app.tar.gz"
+          copy_single_as ./artifacts/bundles-macos-x86_64 '*.app.tar.gz.sig' "./updater-assets/OnePublish_${version}_x64.app.tar.gz.sig"
           copy_single ./artifacts/bundles-windows '*.msi' ./updater-assets
           copy_single ./artifacts/bundles-windows '*.msi.sig' ./updater-assets
           copy_single ./artifacts/bundles-linux '*.AppImage' ./updater-assets
@@ -215,7 +231,10 @@ jobs:
           }
 
           copy_single ./updater-assets latest.json ./release-assets
-          copy_single ./updater-assets '*.app.tar.gz' ./release-assets
+          copy_single ./updater-assets '*aarch64.app.tar.gz' ./release-assets
+          copy_single ./updater-assets '*x64.app.tar.gz' ./release-assets
+          copy_single ./artifacts/bundles-macos-aarch64 '*aarch64*.dmg' ./release-assets
+          copy_single ./artifacts/bundles-macos-x86_64 '*x64*.dmg' ./release-assets
           copy_single ./artifacts/bundles-macos-universal '*universal*.dmg' ./release-assets
           copy_single ./updater-assets '*.msi' ./release-assets
           copy_single ./updater-assets '*.AppImage' ./release-assets

@@ -138,9 +138,13 @@ try {
   fs.mkdirSync(releaseAssetsDir, { recursive: true });
   fs.writeFileSync(notesPath, `${releaseNotes}\n`, "utf8");
 
-  const macUpdaterAsset = {
-    assetName: "OnePublish.app.tar.gz",
-    signature: "sig-darwin-universal",
+  const macAarch64UpdaterAsset = {
+    assetName: "OnePublish_0.2.0_aarch64.app.tar.gz",
+    signature: "sig-darwin-aarch64",
+  };
+  const macX64UpdaterAsset = {
+    assetName: "OnePublish_0.2.0_x64.app.tar.gz",
+    signature: "sig-darwin-x64",
   };
   const windowsUpdaterAsset = {
     assetName: "OnePublish_0.2.0_x64_en-US.msi",
@@ -150,7 +154,12 @@ try {
     assetName: "OnePublish_0.2.0_amd64.AppImage",
     signature: "sig-linux-x86_64",
   };
-  const updaterAssets = [macUpdaterAsset, windowsUpdaterAsset, linuxUpdaterAsset];
+  const updaterAssets = [
+    macAarch64UpdaterAsset,
+    macX64UpdaterAsset,
+    windowsUpdaterAsset,
+    linuxUpdaterAsset,
+  ];
 
   for (const asset of updaterAssets) {
     fs.writeFileSync(path.join(releaseAssetsDir, asset.assetName), "placeholder", "utf8");
@@ -186,21 +195,21 @@ try {
   );
 
   ensure(
-    manifest.platforms?.["darwin-aarch64"]?.signature === macUpdaterAsset.signature,
+    manifest.platforms?.["darwin-aarch64"]?.signature === macAarch64UpdaterAsset.signature,
     "latest.json 缺少 darwin-aarch64 签名。"
   );
   ensure(
-    manifest.platforms?.["darwin-x86_64"]?.signature === macUpdaterAsset.signature,
+    manifest.platforms?.["darwin-x86_64"]?.signature === macX64UpdaterAsset.signature,
     "latest.json 缺少 darwin-x86_64 签名。"
   );
   ensure(
     manifest.platforms?.["darwin-aarch64"]?.url ===
-      `${baseUrl}/${encodeURIComponent(macUpdaterAsset.assetName)}`,
+      `${baseUrl}/${encodeURIComponent(macAarch64UpdaterAsset.assetName)}`,
     "latest.json 缺少 darwin-aarch64 资产 URL。"
   );
   ensure(
     manifest.platforms?.["darwin-x86_64"]?.url ===
-      `${baseUrl}/${encodeURIComponent(macUpdaterAsset.assetName)}`,
+      `${baseUrl}/${encodeURIComponent(macX64UpdaterAsset.assetName)}`,
     "latest.json 缺少 darwin-x86_64 资产 URL。"
   );
   ensure(
@@ -226,7 +235,7 @@ try {
   fs.mkdirSync(missingMacSigDir, { recursive: true });
   for (const asset of updaterAssets) {
     fs.writeFileSync(path.join(missingMacSigDir, asset.assetName), "placeholder", "utf8");
-    if (asset !== macUpdaterAsset) {
+    if (asset !== macAarch64UpdaterAsset) {
       fs.writeFileSync(
         path.join(missingMacSigDir, `${asset.assetName}.sig`),
         `${asset.signature}\n`,
@@ -249,24 +258,49 @@ try {
     notesPath,
   ]);
   ensure(
-    missingMacSigOutput.includes("macOS universal updater 包 缺少对应签名文件"),
-    "缺少 macOS 签名时未返回可读错误。"
+    missingMacSigOutput.includes("macOS aarch64 updater 包 缺少对应签名文件"),
+    "缺少 macOS aarch64 签名时未返回可读错误。"
+  );
+
+  const missingMacX64Dir = path.join(tempDir, "missing-mac-x64");
+  fs.mkdirSync(missingMacX64Dir, { recursive: true });
+  for (const asset of [macAarch64UpdaterAsset, windowsUpdaterAsset, linuxUpdaterAsset]) {
+    fs.writeFileSync(path.join(missingMacX64Dir, asset.assetName), "placeholder", "utf8");
+    fs.writeFileSync(
+      path.join(missingMacX64Dir, `${asset.assetName}.sig`),
+      `${asset.signature}\n`,
+      "utf8"
+    );
+  }
+
+  const missingMacX64Output = runExpectFailure(process.execPath, [
+    "scripts/generate-latest-json.mjs",
+    "--input",
+    missingMacX64Dir,
+    "--output",
+    path.join(missingMacX64Dir, "latest.json"),
+    "--version",
+    "0.2.0",
+    "--baseUrl",
+    baseUrl,
+    "--notes-file",
+    notesPath,
+  ]);
+  ensure(
+    missingMacX64Output.includes("缺少 macOS x64 updater 包"),
+    "缺少 macOS x64 tarball 时未返回可读错误。"
   );
 
   const missingWindowsDir = path.join(tempDir, "missing-windows-msi");
   fs.mkdirSync(missingWindowsDir, { recursive: true });
-  fs.writeFileSync(path.join(missingWindowsDir, macUpdaterAsset.assetName), "placeholder", "utf8");
-  fs.writeFileSync(
-    path.join(missingWindowsDir, `${macUpdaterAsset.assetName}.sig`),
-    `${macUpdaterAsset.signature}\n`,
-    "utf8"
-  );
-  fs.writeFileSync(path.join(missingWindowsDir, linuxUpdaterAsset.assetName), "placeholder", "utf8");
-  fs.writeFileSync(
-    path.join(missingWindowsDir, `${linuxUpdaterAsset.assetName}.sig`),
-    `${linuxUpdaterAsset.signature}\n`,
-    "utf8"
-  );
+  for (const asset of [macAarch64UpdaterAsset, macX64UpdaterAsset, linuxUpdaterAsset]) {
+    fs.writeFileSync(path.join(missingWindowsDir, asset.assetName), "placeholder", "utf8");
+    fs.writeFileSync(
+      path.join(missingWindowsDir, `${asset.assetName}.sig`),
+      `${asset.signature}\n`,
+      "utf8"
+    );
+  }
 
   const missingWindowsOutput = runExpectFailure(process.execPath, [
     "scripts/generate-latest-json.mjs",
@@ -288,22 +322,14 @@ try {
 
   const missingLinuxDir = path.join(tempDir, "missing-linux-appimage");
   fs.mkdirSync(missingLinuxDir, { recursive: true });
-  fs.writeFileSync(path.join(missingLinuxDir, macUpdaterAsset.assetName), "placeholder", "utf8");
-  fs.writeFileSync(
-    path.join(missingLinuxDir, `${macUpdaterAsset.assetName}.sig`),
-    `${macUpdaterAsset.signature}\n`,
-    "utf8"
-  );
-  fs.writeFileSync(
-    path.join(missingLinuxDir, windowsUpdaterAsset.assetName),
-    "placeholder",
-    "utf8"
-  );
-  fs.writeFileSync(
-    path.join(missingLinuxDir, `${windowsUpdaterAsset.assetName}.sig`),
-    `${windowsUpdaterAsset.signature}\n`,
-    "utf8"
-  );
+  for (const asset of [macAarch64UpdaterAsset, macX64UpdaterAsset, windowsUpdaterAsset]) {
+    fs.writeFileSync(path.join(missingLinuxDir, asset.assetName), "placeholder", "utf8");
+    fs.writeFileSync(
+      path.join(missingLinuxDir, `${asset.assetName}.sig`),
+      `${asset.signature}\n`,
+      "utf8"
+    );
+  }
 
   const missingLinuxOutput = runExpectFailure(process.execPath, [
     "scripts/generate-latest-json.mjs",

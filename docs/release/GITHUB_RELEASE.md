@@ -65,8 +65,11 @@ tag 推送后，`.github/workflows/build-release.yml` 会：
 公开 release 页面默认只保留这几类文件：
 
 - `latest.json`
-- macOS universal `*.app.tar.gz`
-- macOS universal `*.dmg`
+- macOS `*aarch64*.app.tar.gz`
+- macOS `*x64*.app.tar.gz`
+- macOS `*aarch64*.dmg`
+- macOS `*x64*.dmg`
+- macOS `*universal*.dmg`
 - Windows `*.msi`
 - Linux `*.AppImage`
 - Linux `*.deb`

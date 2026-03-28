@@ -122,13 +122,18 @@ const files = fs
   .sort();
 
 const findAsset = createAssetMatcher(files);
-// macOS updater 固定使用一份 universal tarball，同时映射到 Intel 和 Apple Silicon。
-const macUpdaterAsset = requireSignedAsset(findAsset, files, "macOS universal updater 包", [
-  { includes: ["universal"], endsWith: ".app.tar.gz" },
-  {
-    excludes: ["aarch64", "arm64", "x64", "x86_64"],
-    endsWith: ".app.tar.gz",
-  },
+const macAarch64UpdaterAsset = requireSignedAsset(
+  findAsset,
+  files,
+  "macOS aarch64 updater 包",
+  [
+    { includes: ["aarch64"], endsWith: ".app.tar.gz" },
+    { includes: ["arm64"], endsWith: ".app.tar.gz" },
+  ]
+);
+const macX64UpdaterAsset = requireSignedAsset(findAsset, files, "macOS x64 updater 包", [
+  { includes: ["x64"], endsWith: ".app.tar.gz" },
+  { includes: ["x86_64"], endsWith: ".app.tar.gz" },
 ]);
 const windowsUpdaterAsset = requireSignedAsset(findAsset, files, "Windows MSI updater 包", [
   { includes: ["x64"], endsWith: ".msi" },
@@ -141,10 +146,9 @@ const linuxUpdaterAsset = requireSignedAsset(findAsset, files, "Linux AppImage u
   { endsWith: ".AppImage" },
 ]);
 
-const macPlatformEntry = createPlatformEntry(inputDir, baseUrl, macUpdaterAsset);
 const platforms = {
-  "darwin-aarch64": macPlatformEntry,
-  "darwin-x86_64": macPlatformEntry,
+  "darwin-aarch64": createPlatformEntry(inputDir, baseUrl, macAarch64UpdaterAsset),
+  "darwin-x86_64": createPlatformEntry(inputDir, baseUrl, macX64UpdaterAsset),
   "windows-x86_64": createPlatformEntry(inputDir, baseUrl, windowsUpdaterAsset),
   "linux-x86_64": createPlatformEntry(inputDir, baseUrl, linuxUpdaterAsset),
 };

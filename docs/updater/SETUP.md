@@ -57,5 +57,5 @@ https://github.com/sperictao/one-publish/releases/latest/download/latest.json
 - 若使用非 HTTPS 地址，release 构建会被 updater 插件拦截。
 - `bundle.createUpdaterArtifacts` 需要开启，release 工作流会先收集 updater 包和 `.sig` 生成 `latest.json`，再只公开上传 `latest.json` 与需要对外分发的安装包。
 - `.sig` 只作为 manifest 生成与签名校验输入，不再出现在公开 GitHub Release 页面。
-- macOS 自动更新仍依赖公开的 universal `.app.tar.gz`，因为 `latest.json` 会直接引用这个下载地址。
+- macOS 自动更新现在会分别引用公开的 `aarch64` / `x64` `.app.tar.gz`，而 `universal.dmg` 仅用于手动下载。
 - `latest.json` 的 `notes` 会复用 `release-notes/<tag>.md`，设置页中的“更新说明”也来自这里。
