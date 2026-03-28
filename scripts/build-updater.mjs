@@ -16,6 +16,7 @@ function run(command, args, options = {}) {
     encoding: "utf8",
     stdio: options.stdio ?? "inherit",
     env: options.env ?? process.env,
+    shell: options.shell ?? false,
   });
 
   if (result.error) {
@@ -36,7 +37,20 @@ function buildTauriBuildArgs(args = []) {
 }
 
 function getPnpmCommand(platform = process.platform) {
-  return platform === "win32" ? "pnpm.cmd" : "pnpm";
+  return "pnpm";
+}
+
+function getPnpmRunOptions(platform = process.platform) {
+  if (platform === "win32") {
+    return {
+      // Windows 上通过 shell 启动 pnpm，避免直接 spawn .cmd 在 CI 中触发 EINVAL。
+      shell: true,
+    };
+  }
+
+  return {
+    shell: false,
+  };
 }
 
 function main(argv = process.argv.slice(2)) {
@@ -44,13 +58,13 @@ function main(argv = process.argv.slice(2)) {
   run(process.execPath, ["scripts/validate-updater-config.mjs", updaterConfigPath]);
 
   // 这里必须把 target 等参数直接传给 Tauri CLI，避免落到 Cargo 的 `--` 分隔符后面。
-  run(getPnpmCommand(), buildTauriBuildArgs(argv));
+  run(getPnpmCommand(), buildTauriBuildArgs(argv), getPnpmRunOptions());
 }
 
 const isDirectExecution =
   process.argv[1] && pathToFileURL(process.argv[1]).href === import.meta.url;
 
-export { buildTauriBuildArgs, getPnpmCommand, normalizeForwardedArgs };
+export { buildTauriBuildArgs, getPnpmCommand, getPnpmRunOptions, normalizeForwardedArgs };
 
 if (isDirectExecution) {
   main();

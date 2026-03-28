@@ -139,6 +139,18 @@ assertContains(
   "Setup Node 仍未升级到兼容 Vite 7 的版本。"
 );
 assertContains(
+  "uses: actions/checkout@v5",
+  "workflow 仍在使用不支持 Node 24 的 actions/checkout 主版本。"
+);
+assertContains(
+  "uses: actions/setup-node@v5",
+  "workflow 仍在使用不支持 Node 24 的 actions/setup-node 主版本。"
+);
+assertContains(
+  "uses: pnpm/action-setup@v5",
+  "workflow 仍在使用不支持 Node 24 的 pnpm/action-setup 主版本。"
+);
+assertContains(
   "- name: Prepare release assets",
   "缺少 release 资产预处理步骤。"
 );

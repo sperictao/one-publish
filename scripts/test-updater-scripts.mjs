@@ -3,7 +3,12 @@ import os from "node:os";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
 
-import { buildTauriBuildArgs, normalizeForwardedArgs } from "./build-updater.mjs";
+import {
+  buildTauriBuildArgs,
+  getPnpmCommand,
+  getPnpmRunOptions,
+  normalizeForwardedArgs,
+} from "./build-updater.mjs";
 
 const rootDir = process.cwd();
 const defaultUpdaterEndpoint =
@@ -68,6 +73,10 @@ try {
     !tauriBuildArgs.includes("--"),
     "build-updater 错误地把参数留在 Cargo runner 分隔符之后。"
   );
+
+  ensure(getPnpmCommand("win32") === "pnpm", "Windows 下应通过 shell 调用 pnpm。");
+  ensure(getPnpmRunOptions("win32").shell === true, "Windows 下应开启 shell 运行 pnpm。");
+  ensure(getPnpmRunOptions("darwin").shell === false, "非 Windows 下不应开启 shell。");
 
   const configPath = path.join(tempDir, "tauri.conf.updater.prod.json");
   const releaseAssetsDir = path.join(tempDir, "release-assets");
