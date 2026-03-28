@@ -6,7 +6,7 @@ import type {
   PublishConfigStore,
 } from "@/lib/store";
 import type { AppUpdaterState } from "@/hooks/useAppUpdater";
-import type { PublishResult } from "@/hooks/usePublishExecution";
+import type { PublishResult } from "@/hooks/usePublishRunner";
 import type { Language } from "@/hooks/useI18n";
 import type { ParameterSchema } from "@/types/parameters";
 

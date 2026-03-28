@@ -1,5 +1,8 @@
 import { Suspense, lazy } from "react";
-import { OutputLogCard, type OutputLogCardProps } from "@/components/publish/OutputLogCard";
+import {
+  PublishRunCard,
+  type PublishRunCardProps,
+} from "@/components/publish/PublishRunCard";
 import type { CommandImportResultCardProps } from "@/components/publish/CommandImportResultCard";
 import type { DiagnosticsSectionProps } from "@/components/publish/DiagnosticsSection";
 
@@ -16,7 +19,7 @@ const DiagnosticsSection = lazy(async () => {
 export interface PublishContentSectionProps {
   showCommandImportResultCard: boolean;
   commandImportResultCardProps: CommandImportResultCardProps | null;
-  outputLogCardProps: OutputLogCardProps;
+  publishRunCardProps: PublishRunCardProps;
   shouldLoadDiagnosticsSection: boolean;
   diagnosticsSectionProps: DiagnosticsSectionProps | null;
   rightPanelView: "home" | "history";
@@ -25,15 +28,15 @@ export interface PublishContentSectionProps {
 export function PublishContentSection({
   showCommandImportResultCard,
   commandImportResultCardProps,
-  outputLogCardProps,
+  publishRunCardProps,
   shouldLoadDiagnosticsSection,
   diagnosticsSectionProps,
   rightPanelView,
 }: PublishContentSectionProps) {
-  const hasOutputLogCard =
-    Boolean(outputLogCardProps.outputLog) ||
-    outputLogCardProps.publishResult !== null ||
-    outputLogCardProps.publishControls !== null;
+  const hasPublishRunCard =
+    Boolean(publishRunCardProps.outputLog) ||
+    publishRunCardProps.publishResult !== null ||
+    publishRunCardProps.publishActions !== null;
 
   return (
     <div className="flex min-h-full flex-col gap-6 p-6">
@@ -46,9 +49,9 @@ export function PublishContentSection({
       )}
       {rightPanelView === "home" ? (
         <>
-          {hasOutputLogCard && (
+          {hasPublishRunCard && (
             <div className="flex min-h-0 flex-1 flex-col">
-              <OutputLogCard {...outputLogCardProps} />
+              <PublishRunCard {...publishRunCardProps} />
             </div>
           )}
         </>

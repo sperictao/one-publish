@@ -4,15 +4,15 @@ import type { ArtifactActionState } from "@/components/publish/ArtifactActions";
 import type {
   ProviderPublishSpec,
   PublishResult,
-} from "@/hooks/usePublishExecution";
+} from "@/hooks/usePublishRunner";
 
 export function usePublishUiState() {
   const [isPublishing, setIsPublishing] = useState(false);
   const [isCancellingPublish, setIsCancellingPublish] = useState(false);
   const [publishResult, setPublishResult] = useState<PublishResult | null>(null);
-  const [lastExecutedSpec, setLastExecutedSpec] =
+  const [lastPublishSpec, setLastPublishSpec] =
     useState<ProviderPublishSpec | null>(null);
-  const [currentExecutionRecordId, setCurrentExecutionRecordId] =
+  const [currentPublishRecordId, setCurrentPublishRecordId] =
     useState<string | null>(null);
   const [releaseChecklistOpen, setReleaseChecklistOpen] = useState(false);
   const [artifactActionState, setArtifactActionState] =
@@ -28,10 +28,10 @@ export function usePublishUiState() {
     setIsCancellingPublish,
     publishResult,
     setPublishResult,
-    lastExecutedSpec,
-    setLastExecutedSpec,
-    currentExecutionRecordId,
-    setCurrentExecutionRecordId,
+    lastPublishSpec,
+    setLastPublishSpec,
+    currentPublishRecordId,
+    setCurrentPublishRecordId,
     releaseChecklistOpen,
     setReleaseChecklistOpen,
     artifactActionState,

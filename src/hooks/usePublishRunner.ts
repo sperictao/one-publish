@@ -2,14 +2,14 @@ import { useCallback } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { toast } from "sonner";
 
-import type { TranslationMap } from "@/hooks/usePublishExecutionTypes";
+import type { TranslationMap } from "@/hooks/usePublishRunnerTypes";
 import {
   runEnvironmentCheck,
   type EnvironmentCheckResult,
 } from "@/lib/environment";
 import type { ExecutionRecord } from "@/lib/store";
 import { useDotnetPublishSelection } from "@/hooks/useDotnetPublishSelection";
-import type { PublishExecutionInput } from "@/hooks/usePublishExecutionInput";
+import type { PublishRunnerInput } from "@/hooks/usePublishRunnerInput";
 import { usePublishLogStream } from "@/hooks/usePublishLogStream";
 import { usePublishSpecBuilder } from "@/hooks/usePublishSpecBuilder";
 import { usePublishUiState } from "@/hooks/usePublishUiState";
@@ -37,14 +37,14 @@ export interface ProviderPublishSpec {
   parameters: Record<string, unknown>;
 }
 
-export interface PublishExecutionCallSurface {
+export interface PublishRunnerCallbacks {
   pushRecentConfig: (key: string, repoId?: string | null) => void;
   openEnvironmentDialog: (
     initialResult?: EnvironmentCheckResult | null,
     providerIds?: string[]
   ) => void;
   setEnvironmentLastResult: (result: EnvironmentCheckResult | null) => void;
-  buildExecutionRecord: (params: {
+  createPublishRecord: (params: {
     spec: ProviderPublishSpec;
     repoId: string | null;
     startedAt: string;
@@ -52,22 +52,22 @@ export interface PublishExecutionCallSurface {
     result: PublishResult;
     output: string;
   }) => ExecutionRecord;
-  persistExecutionRecord: (record: ExecutionRecord) => void;
+  savePublishRecord: (record: ExecutionRecord) => void;
 }
 
-interface UsePublishExecutionParams {
+interface UsePublishRunnerParams {
   appT: TranslationMap;
   publishT: TranslationMap;
-  input: PublishExecutionInput;
-  callSurface: PublishExecutionCallSurface;
+  input: PublishRunnerInput;
+  callbacks: PublishRunnerCallbacks;
 }
 
-export function usePublishExecution({
+export function usePublishRunner({
   appT,
   publishT,
   input,
-  callSurface,
-}: UsePublishExecutionParams) {
+  callbacks,
+}: UsePublishRunnerParams) {
   const {
     selectedRepoId,
     selectedRepo,
@@ -75,6 +75,7 @@ export function usePublishExecution({
     activeProviderParameters,
     selectedPreset,
     isCustomMode,
+    activeProfileName,
     customConfig,
     defaultOutputDir,
     projectInfo,
@@ -88,10 +89,10 @@ export function usePublishExecution({
     setIsCancellingPublish,
     publishResult,
     setPublishResult,
-    lastExecutedSpec,
-    setLastExecutedSpec,
-    currentExecutionRecordId,
-    setCurrentExecutionRecordId,
+    lastPublishSpec,
+    setLastPublishSpec,
+    currentPublishRecordId,
+    setCurrentPublishRecordId,
     releaseChecklistOpen,
     setReleaseChecklistOpen,
     artifactActionState,
@@ -103,10 +104,13 @@ export function usePublishExecution({
     getCurrentConfig,
     dotnetPublishPreviewCommand,
     recentConfigKeyForCurrentSelection,
+    resolvedProjectProfileParameters,
+    resolveSelectedProjectProfileParameters,
   } = useDotnetPublishSelection({
     activeProviderId,
     selectedPreset,
     isCustomMode,
+    activeProfileName,
     customConfig,
     defaultOutputDir,
     projectInfo,
@@ -122,18 +126,18 @@ export function usePublishExecution({
     getCurrentConfig,
   });
 
-  const runPublishWithSpec = useCallback(
+  const runPublishSpec = useCallback(
     async (spec: ProviderPublishSpec, recentConfigKey?: string | null) => {
       try {
         const env = await runEnvironmentCheck([spec.provider_id]);
-        callSurface.setEnvironmentLastResult(env);
+        callbacks.setEnvironmentLastResult(env);
 
         const critical = env.issues.find((item) => item.severity === "critical");
         if (critical) {
           toast.error(appT.environmentBlocked || "环境未就绪，已阻止发布", {
             description: critical.description,
           });
-          callSurface.openEnvironmentDialog(env, [spec.provider_id]);
+          callbacks.openEnvironmentDialog(env, [spec.provider_id]);
           return;
         }
 
@@ -150,8 +154,8 @@ export function usePublishExecution({
         });
       }
 
-      setLastExecutedSpec(spec);
-      setCurrentExecutionRecordId(null);
+      setLastPublishSpec(spec);
+      setCurrentPublishRecordId(null);
       setIsPublishing(true);
       setPublishResult(null);
       setOutputLog("");
@@ -162,7 +166,7 @@ export function usePublishExecution({
 
       try {
         if (recentConfigKey) {
-          callSurface.pushRecentConfig(recentConfigKey);
+          callbacks.pushRecentConfig(recentConfigKey);
         }
 
         const result = await invoke<PublishResult>("execute_provider_publish", {
@@ -191,7 +195,7 @@ export function usePublishExecution({
           });
         }
 
-        const record = callSurface.buildExecutionRecord({
+        const record = callbacks.createPublishRecord({
           spec,
           repoId: selectedRepoId,
           startedAt: executionStartedAt,
@@ -199,8 +203,8 @@ export function usePublishExecution({
           result,
           output: result.output,
         });
-        setCurrentExecutionRecordId(record.id);
-        callSurface.persistExecutionRecord(record);
+        setCurrentPublishRecordId(record.id);
+        callbacks.savePublishRecord(record);
       } catch (err) {
         const [
           { analyzePublishExecutionFailure, extractInvokeErrorMessage },
@@ -232,7 +236,7 @@ export function usePublishExecution({
           description: feedback.description,
         });
 
-        const record = callSurface.buildExecutionRecord({
+        const record = callbacks.createPublishRecord({
           spec,
           repoId: selectedRepoId,
           startedAt: executionStartedAt,
@@ -240,8 +244,8 @@ export function usePublishExecution({
           result: failedResult,
           output: "",
         });
-        setCurrentExecutionRecordId(record.id);
-        callSurface.persistExecutionRecord(record);
+        setCurrentPublishRecordId(record.id);
+        callbacks.savePublishRecord(record);
       } finally {
         setIsPublishing(false);
         setIsCancellingPublish(false);
@@ -249,13 +253,13 @@ export function usePublishExecution({
     },
     [
       appT,
-      callSurface,
+      callbacks,
       publishT,
       selectedRepoId,
     ]
   );
 
-  const executePublish = useCallback(async () => {
+  const startPublish = useCallback(async () => {
     if (!selectedRepo) {
       toast.error(appT.selectRepositoryFirst || "请先选择仓库");
       return;
@@ -266,20 +270,49 @@ export function usePublishExecution({
       return;
     }
 
+    if (
+      activeProviderId === "dotnet" &&
+      projectInfo &&
+      !isCustomMode &&
+      selectedPreset.startsWith("profile-")
+    ) {
+      const profileParameters =
+        resolvedProjectProfileParameters ??
+        (await resolveSelectedProjectProfileParameters());
+
+      if (profileParameters) {
+        await runPublishSpec(
+          {
+            version: specVersion,
+            provider_id: "dotnet",
+            project_path: projectInfo.project_file,
+            parameters: profileParameters,
+          },
+          recentConfigKeyForCurrentSelection
+        );
+        return;
+      }
+    }
+
     const spec = buildPublishSpec();
     if (!spec) {
       return;
     }
 
-    await runPublishWithSpec(spec, recentConfigKeyForCurrentSelection);
+    await runPublishSpec(spec, recentConfigKeyForCurrentSelection);
   }, [
     activeProviderId,
     appT,
     buildPublishSpec,
+    isCustomMode,
     projectInfo,
     recentConfigKeyForCurrentSelection,
-    runPublishWithSpec,
+    resolveSelectedProjectProfileParameters,
+    resolvedProjectProfileParameters,
+    runPublishSpec,
     selectedRepo,
+    selectedPreset,
+    specVersion,
   ]);
 
   const cancelPublish = useCallback(async () => {
@@ -321,17 +354,17 @@ export function usePublishExecution({
     isPublishing,
     isCancellingPublish,
     publishResult,
-    lastExecutedSpec,
-    currentExecutionRecordId,
+    lastPublishSpec,
+    currentPublishRecordId,
     outputLog,
     releaseChecklistOpen,
     setReleaseChecklistOpen,
     artifactActionState,
     setArtifactActionState,
-    setCurrentExecutionRecordId,
+    setCurrentPublishRecordId,
     dotnetPublishPreviewCommand,
-    runPublishWithSpec,
-    executePublish,
+    runPublishSpec,
+    startPublish,
     cancelPublish,
   };
 }

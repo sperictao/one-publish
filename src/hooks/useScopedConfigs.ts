@@ -198,8 +198,15 @@ export function useScopedConfigs(selectedRepoId: string | null) {
 
       setRecentConfigByRepo((prev) => {
         const scoped = prev[repoId] ?? [];
-        const nextScoped = [nextKey, ...scoped.filter((item) => item !== previousKey && item !== nextKey)]
-          .slice(0, MAX_RECENT);
+        if (!scoped.includes(previousKey)) {
+          return prev;
+        }
+
+        const nextScoped = Array.from(
+          new Set(
+            scoped.map((item) => (item === previousKey ? nextKey : item))
+          )
+        ).slice(0, MAX_RECENT);
         const next = {
           ...prev,
           [repoId]: nextScoped,

@@ -2,6 +2,7 @@ import { useMemo } from "react";
 
 import type { PublishConfigStore } from "@/lib/store";
 import type { ParameterValue } from "@/types/parameters";
+
 interface ProjectInfo {
   root_path: string;
   project_file: string;
@@ -19,13 +20,14 @@ interface DotnetPreset {
   };
 }
 
-export interface PublishExecutionInput {
+export interface PublishRunnerInput {
   selectedRepoId: string | null;
   selectedRepo: { path: string } | null;
   activeProviderId: string;
   activeProviderParameters: Record<string, ParameterValue>;
   selectedPreset: string;
   isCustomMode: boolean;
+  activeProfileName: string | null;
   customConfig: PublishConfigStore;
   defaultOutputDir?: string;
   projectInfo: ProjectInfo | null;
@@ -33,9 +35,9 @@ export interface PublishExecutionInput {
   specVersion: number;
 }
 
-export function usePublishExecutionInput(
-  params: PublishExecutionInput
-): PublishExecutionInput {
+export function usePublishRunnerInput(
+  params: PublishRunnerInput
+): PublishRunnerInput {
   return useMemo(
     () => ({
       selectedRepoId: params.selectedRepoId,
@@ -44,6 +46,7 @@ export function usePublishExecutionInput(
       activeProviderParameters: params.activeProviderParameters,
       selectedPreset: params.selectedPreset,
       isCustomMode: params.isCustomMode,
+      activeProfileName: params.activeProfileName,
       customConfig: params.customConfig,
       defaultOutputDir: params.defaultOutputDir,
       projectInfo: params.projectInfo,

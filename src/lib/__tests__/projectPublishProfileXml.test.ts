@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 
-import { parseProjectPublishProfileXml } from "@/lib/projectPublishProfileXml";
+import {
+  extractDotnetPublishParametersFromProjectProfile,
+  parseProjectPublishProfileXml,
+} from "@/lib/projectPublishProfileXml";
 
 describe("parseProjectPublishProfileXml", () => {
   it("解析 .pubxml 中的所有直接分组与嵌套参数", () => {
@@ -79,5 +82,43 @@ describe("parseProjectPublishProfileXml", () => {
     expect(() =>
       parseProjectPublishProfileXml("<Project><PropertyGroup></Project>")
     ).toThrow();
+  });
+
+  it("提取项目发布配置里的 dotnet 参数", () => {
+    const parsed = parseProjectPublishProfileXml(`
+      <Project>
+        <PropertyGroup>
+          <Configuration>Release</Configuration>
+          <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+          <TargetFramework>net8.0</TargetFramework>
+          <PublishDir>bin/Release/net8.0/publish/</PublishDir>
+          <SelfContained>true</SelfContained>
+          <NoBuild>true</NoBuild>
+          <NoRestore>true</NoRestore>
+          <Verbosity>diagnostic</Verbosity>
+          <NoLogo>true</NoLogo>
+          <DefineConstants>TRACE;DEMO</DefineConstants>
+          <PublishTrimmed>true</PublishTrimmed>
+          <DeleteExistingFiles>false</DeleteExistingFiles>
+        </PropertyGroup>
+      </Project>
+    `);
+
+    expect(extractDotnetPublishParametersFromProjectProfile(parsed)).toEqual({
+      configuration: "Release",
+      runtime: "win-x64",
+      framework: "net8.0",
+      output: "bin/Release/net8.0/publish/",
+      self_contained: true,
+      no_build: true,
+      no_restore: true,
+      verbosity: "diagnostic",
+      no_logo: true,
+      define: ["TRACE", "DEMO"],
+      properties: {
+        PublishTrimmed: "true",
+        DeleteExistingFiles: "false",
+      },
+    });
   });
 });

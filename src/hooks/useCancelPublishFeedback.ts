@@ -1,4 +1,4 @@
-import type { TranslationMap } from "@/hooks/usePublishExecutionTypes";
+import type { TranslationMap } from "@/hooks/usePublishRunnerTypes";
 
 export function getCancelPublishFeedback(
   appT: TranslationMap,

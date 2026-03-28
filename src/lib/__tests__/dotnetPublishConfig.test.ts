@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   buildDotnetAdvancedParameters,
+  buildDotnetPublishCommand,
   buildDotnetProfileParameters,
   createDefaultDotnetPublishConfig,
   createDotnetPublishConfigFromParameters,
@@ -123,5 +124,27 @@ describe("dotnetPublishConfig", () => {
         PublishProfile: "FolderProfile",
       },
     });
+  });
+
+  it("根据参数快照生成 dotnet publish 命令预览", () => {
+    expect(
+      buildDotnetPublishCommand("/tmp/app.csproj", {
+        configuration: "Release",
+        runtime: "linux-x64",
+        framework: "net8.0",
+        self_contained: true,
+        output: "./publish",
+        no_build: true,
+        no_restore: true,
+        verbosity: "minimal",
+        no_logo: true,
+        define: ["TRACE"],
+        properties: {
+          PublishTrimmed: "true",
+        },
+      })
+    ).toBe(
+      'dotnet publish "/tmp/app.csproj" -c Release --runtime linux-x64 --framework net8.0 --self-contained -o "./publish" --no-build --no-restore --verbosity minimal --no-logo --define TRACE -p:PublishTrimmed=true'
+    );
   });
 });

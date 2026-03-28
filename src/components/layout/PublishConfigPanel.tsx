@@ -1,4 +1,5 @@
 import {
+  Fragment,
   startTransition,
   Suspense,
   lazy,
@@ -12,6 +13,8 @@ import {
   type PointerEvent as ReactPointerEvent,
 } from "react";
 import { cn } from "@/lib/utils";
+import { AppDialogInset } from "@/components/ui/app-dialog-inset";
+import { AppDialogShell } from "@/components/ui/app-dialog-shell";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import {
@@ -29,6 +32,7 @@ import {
   Folder,
   FileText,
   Eye,
+  Copy,
   Check,
   ChevronRight,
   ChevronDown,
@@ -37,26 +41,24 @@ import {
   Clock,
   Star,
   X,
+  MoreHorizontal,
 } from "lucide-react";
 import { toast } from "sonner";
 import {
   readProjectPublishProfile,
   type ConfigProfile,
+  type PublishConfigStore,
 } from "@/lib/store";
 import {
+  extractDotnetPublishParametersFromProjectProfile,
   parseProjectPublishProfileXml,
   type ParsedProjectPublishProfile,
 } from "@/lib/projectPublishProfileXml";
+import { createDotnetPublishConfigFromParameters } from "@/lib/dotnetPublishConfig";
 import { extractInvokeErrorMessage } from "@/lib/tauri/invokeErrors";
 import { useI18n } from "@/hooks/useI18n";
 import type { PublishConfigFloatingBindings } from "@/components/layout/PublishConfigPanelFloatingLayer";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { Dialog } from "@/components/ui/dialog";
 
 const PublishConfigPanelFloatingLayer = lazy(async () => {
   const mod = await import("@/components/layout/PublishConfigPanelFloatingLayer");
@@ -112,6 +114,10 @@ export interface PublishConfigPanelProps {
   projectPublishProfiles: string[];
   projectFilePath?: string;
   onSelectProjectProfile: (profileName: string) => void;
+  onCopyProjectProfileToCustom: (
+    sourceProfileName: string,
+    config: PublishConfigStore
+  ) => Promise<string>;
   recentConfigKeys: string[];
   favoriteConfigKeys: string[];
   onToggleFavoriteConfig: (configKey: string) => void;
@@ -181,33 +187,100 @@ function ConfigGroup({
   );
 }
 
-// Favorite toggle icon
-function FavoriteButton({
+type ConfigRowAction = {
+  key: string;
+  label: string;
+  icon: JSX.Element;
+  onSelect: () => void | Promise<unknown>;
+  destructive?: boolean;
+  separatorBefore?: boolean;
+};
+
+function createFavoriteConfigAction({
   isFavorite,
-  onToggle,
+  favoriteLabel,
+  unfavoriteLabel,
+  onSelect,
 }: {
   isFavorite: boolean;
-  onToggle: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      className="flex h-4 w-4 flex-shrink-0 items-center justify-center"
-      onClick={(e) => {
-        e.stopPropagation();
-        onToggle();
-      }}
-      title={isFavorite ? "取消收藏" : "收藏配置"}
-    >
+  favoriteLabel: string;
+  unfavoriteLabel: string;
+  onSelect: () => void | Promise<unknown>;
+}): ConfigRowAction {
+  return {
+    key: "favorite",
+    label: isFavorite ? unfavoriteLabel : favoriteLabel,
+    icon: (
       <Star
         className={cn(
-          "h-4 w-4 transition-colors",
+          "h-3.5 w-3.5",
           isFavorite
-            ? "fill-green-500 text-green-500 animate-pulse"
-            : "text-muted-foreground hover:text-foreground"
+            ? "fill-green-500 text-green-500"
+            : "text-muted-foreground/70"
         )}
       />
-    </button>
+    ),
+    onSelect,
+  };
+}
+
+function ConfigRowActionsMenu({
+  open,
+  moreActionsLabel,
+  itemLabel,
+  actions,
+  onOpenChange,
+}: {
+  open: boolean;
+  moreActionsLabel: string;
+  itemLabel: string;
+  actions: ConfigRowAction[];
+  onOpenChange: (open: boolean) => void;
+}) {
+  return (
+    <DropdownMenu open={open} onOpenChange={onOpenChange}>
+      <DropdownMenuTrigger asChild>
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          className="h-6 w-6 rounded-lg transition-all duration-300 opacity-0 group-hover:opacity-75 group-focus-within:opacity-75 data-[state=open]:bg-[var(--glass-bg-active)] data-[state=open]:opacity-100"
+          title={moreActionsLabel}
+          aria-haspopup="menu"
+          aria-expanded={open}
+          aria-label={`${moreActionsLabel}: ${itemLabel}`}
+          onPointerDown={(event) => {
+            event.stopPropagation();
+          }}
+          onClick={(event) => {
+            event.stopPropagation();
+          }}
+          onKeyDown={(event) => {
+            event.stopPropagation();
+          }}
+        >
+          <MoreHorizontal className="h-3.5 w-3.5" />
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" sideOffset={6}>
+        {actions.map((action) => (
+          <Fragment key={action.key}>
+            {action.separatorBefore ? <DropdownMenuSeparator /> : null}
+            <DropdownMenuItem
+              className={cn(
+                action.destructive && "text-destructive focus:bg-destructive/10"
+              )}
+              onSelect={() => {
+                void action.onSelect();
+              }}
+            >
+              {action.icon}
+              <span>{action.label}</span>
+            </DropdownMenuItem>
+          </Fragment>
+        ))}
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }
 
@@ -218,12 +291,18 @@ function ProfileItem({
   configId,
   isSelected,
   isFavorite,
+  isMenuOpen,
   onClick,
   onToggleFavorite,
   onEdit,
   canEdit,
   editTitle,
+  deleteTitle,
+  favoriteLabel,
+  unfavoriteLabel,
+  moreActionsLabel,
   onDelete,
+  onMenuOpenChange,
   rowRef,
   onItemMouseEnter,
 }: {
@@ -232,87 +311,102 @@ function ProfileItem({
   configId: string;
   isSelected: boolean;
   isFavorite: boolean;
+  isMenuOpen: boolean;
   onClick: () => void;
   onToggleFavorite: (configKey: string) => void;
   onEdit: () => void;
   canEdit: boolean;
   editTitle: string;
+  deleteTitle: string;
+  favoriteLabel: string;
+  unfavoriteLabel: string;
+  moreActionsLabel: string;
   onDelete: () => void;
+  onMenuOpenChange: (open: boolean) => void;
   rowRef: (node: HTMLDivElement | null) => void;
   onItemMouseEnter: () => void;
 }) {
+  const actions: ConfigRowAction[] = [
+    createFavoriteConfigAction({
+      isFavorite,
+      favoriteLabel,
+      unfavoriteLabel,
+      onSelect: () => onToggleFavorite(configKey),
+    }),
+  ];
+
+  if (canEdit) {
+    actions.push({
+      key: "edit",
+      label: editTitle,
+      icon: <Pencil className="h-3.5 w-3.5 text-muted-foreground/70" />,
+      onSelect: onEdit,
+    });
+  }
+
+  if (!profile.isSystemDefault) {
+    actions.push({
+      key: "delete",
+      label: deleteTitle,
+      icon: <Trash2 className="h-3.5 w-3.5" />,
+      onSelect: onDelete,
+      destructive: true,
+      separatorBefore: canEdit,
+    });
+  }
+
   return (
     <div
       ref={rowRef}
-      role="button"
-      tabIndex={0}
-      aria-pressed={isSelected}
       data-repo-row="true"
       data-repo-id={configId}
-      className="group relative z-10 flex w-full cursor-pointer items-center gap-2.5 rounded-2xl border border-transparent bg-transparent px-3 py-2 text-left shadow-none outline-none transition-all duration-300 hover:bg-[var(--glass-bg)]/20 focus-visible:ring-2 focus-visible:ring-primary/30 focus-visible:ring-offset-1 focus-visible:ring-offset-background"
-      onClick={onClick}
+      data-menu-open={isMenuOpen ? "true" : "false"}
+      className="group relative z-10"
       onMouseEnter={onItemMouseEnter}
-      onFocus={onItemMouseEnter}
+      onFocusCapture={onItemMouseEnter}
     >
-      <span
-        className={cn(
-          "flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-[14px] transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]",
-          isSelected
-            ? "scale-105 bg-primary/10 shadow-[0_0_18px_hsl(var(--primary)/0.24)]"
-            : "bg-[var(--glass-icon-bg)] shadow-[var(--glass-icon-highlight)] group-hover:scale-105 group-hover:bg-primary/8"
-        )}
+      <button
+        type="button"
+        aria-pressed={isSelected}
+        className="flex w-full items-center gap-2.5 rounded-2xl border border-transparent bg-transparent px-3 py-2 pr-11 text-left shadow-none outline-none transition-all duration-300 hover:bg-[var(--glass-bg)]/20 focus-visible:ring-2 focus-visible:ring-primary/30 focus-visible:ring-offset-1 focus-visible:ring-offset-background"
+        onClick={onClick}
       >
-        <FileText
-          className={cn(
-            "h-4 w-4 transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]",
-            isSelected
-              ? "scale-110 text-primary drop-shadow-[0_0_4px_hsl(var(--primary)/0.3)]"
-              : "text-muted-foreground/60 group-hover:text-primary group-hover:drop-shadow-[0_0_3px_hsl(var(--primary)/0.15)]"
-          )}
-        />
-      </span>
-      <div className="min-w-0 flex flex-1 items-center overflow-hidden">
         <span
           className={cn(
-            "truncate text-[13px] font-medium tracking-tight transition-colors duration-300",
-            isSelected ? "text-foreground" : "text-foreground/78"
+            "flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-[14px] transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]",
+            isSelected
+              ? "scale-105 bg-primary/10 shadow-[0_0_18px_hsl(var(--primary)/0.24)]"
+              : "bg-[var(--glass-icon-bg)] shadow-[var(--glass-icon-highlight)] group-hover:scale-105 group-hover:bg-primary/8"
           )}
         >
-          {profile.name}
+          <FileText
+            className={cn(
+              "h-4 w-4 transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]",
+              isSelected
+                ? "scale-110 text-primary drop-shadow-[0_0_4px_hsl(var(--primary)/0.3)]"
+                : "text-muted-foreground/60 group-hover:text-primary group-hover:drop-shadow-[0_0_3px_hsl(var(--primary)/0.15)]"
+            )}
+          />
         </span>
-      </div>
-      <div className="flex flex-shrink-0 items-center gap-0.5 opacity-0 transition-all duration-300 group-hover:opacity-70 group-focus-within:opacity-70">
-        <FavoriteButton
-          isFavorite={isFavorite}
-          onToggle={() => onToggleFavorite(configKey)}
+        <div className="min-w-0 flex flex-1 items-center overflow-hidden">
+          <span
+            className={cn(
+              "truncate text-[13px] font-medium tracking-tight transition-colors duration-300",
+              isSelected ? "text-foreground" : "text-foreground/78"
+            )}
+          >
+            {profile.name}
+          </span>
+        </div>
+      </button>
+      <div className="absolute inset-y-0 right-3 flex items-center">
+        <ConfigRowActionsMenu
+          open={isMenuOpen}
+          moreActionsLabel={moreActionsLabel}
+          itemLabel={profile.name}
+          actions={actions}
+          onOpenChange={onMenuOpenChange}
         />
-        {canEdit && (
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-6 w-6 flex-shrink-0"
-            onClick={(e) => {
-              e.stopPropagation();
-              onEdit();
-            }}
-            title={editTitle}
-          >
-            <Pencil className="h-3.5 w-3.5 text-muted-foreground" />
-          </Button>
-        )}
-        {!profile.isSystemDefault && (
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-6 w-6 flex-shrink-0"
-            onClick={(e) => {
-              e.stopPropagation();
-              onDelete();
-            }}
-          >
-            <Trash2 className="h-3.5 w-3.5 text-destructive" />
-          </Button>
-        )}
       </div>
     </div>
   );
@@ -332,6 +426,7 @@ export function PublishConfigPanel({
   projectPublishProfiles,
   projectFilePath,
   onSelectProjectProfile,
+  onCopyProjectProfileToCustom,
   recentConfigKeys,
   favoriteConfigKeys,
   onToggleFavoriteConfig,
@@ -344,6 +439,7 @@ export function PublishConfigPanel({
   const [groupFilterValue, setGroupFilterValue] =
     useState<GroupFilterValue>(ALL_GROUP_FILTER);
   const [groupFilterOpen, setGroupFilterOpen] = useState(false);
+  const [openConfigMenuId, setOpenConfigMenuId] = useState<string | null>(null);
   const [preferredSelectedRenderId, setPreferredSelectedRenderId] = useState<string | null>(null);
   const [floatingEnhancerEnabled, setFloatingEnhancerEnabled] = useState(false);
   const [projectProfileViewerOpen, setProjectProfileViewerOpen] = useState(false);
@@ -360,6 +456,12 @@ export function PublishConfigPanel({
     "配置管理";
   const allConfigsLabel =
     t.allConfigs || translations.repositoryList?.all || "全部";
+  const moreActionsLabel =
+    t.moreActions || translations.repositoryList?.moreActions || "更多操作";
+  const favoriteConfigLabel = t.favoriteConfig || "收藏配置";
+  const unfavoriteConfigLabel = t.unfavoriteConfig || "取消收藏";
+  const removeRecentLabel = t.removeRecent || "从最近使用移除";
+  const deleteConfigLabel = t.deleteConfig || "删除配置";
   const headerButtonClass =
     "h-7 w-9 rounded-full p-0 text-muted-foreground/60 hover:bg-black/[0.045] hover:text-foreground hover:shadow-[inset_0_1px_0_rgba(255,255,255,0.72),0_1px_2px_rgba(15,23,42,0.06)] dark:hover:bg-white/[0.06] dark:hover:shadow-[inset_0_1px_0_rgba(255,255,255,0.08)]";
   const fallbackListRef = useRef<HTMLDivElement | null>(null);
@@ -598,6 +700,29 @@ export function PublishConfigPanel({
     visibleProjectProfiles,
   ]);
 
+  useEffect(() => {
+    if (!openConfigMenuId) {
+      return;
+    }
+
+    if (!allConfigIds.includes(openConfigMenuId)) {
+      setOpenConfigMenuId(null);
+    }
+  }, [allConfigIds, openConfigMenuId]);
+
+  const handleConfigMenuOpenChange = useCallback(
+    (configId: string, open: boolean) => {
+      setOpenConfigMenuId((current) => {
+        if (open) {
+          return configId;
+        }
+
+        return current === configId ? null : current;
+      });
+    },
+    []
+  );
+
   const selectedRenderId = useMemo(() => {
     if (!selectedConfigId) {
       return null;
@@ -705,6 +830,60 @@ export function PublishConfigPanel({
     [projectFilePath, t.loadConfigFailed]
   );
 
+  const handleCopyProjectProfileToCustom = useCallback(
+    async (profileName: string) => {
+      if (!projectFilePath) {
+        const errorMessage =
+          t.copyConfigFailedDescription ||
+          "当前项目文件路径不可用，无法复制发布配置。";
+        toast.error(t.copyConfigFailed || "复制为自定义配置失败", {
+          description: errorMessage,
+        });
+        return;
+      }
+
+      try {
+        const profileFile = await readProjectPublishProfile(
+          projectFilePath,
+          profileName
+        );
+        const parsedProfile = parseProjectPublishProfileXml(profileFile.content);
+        const parameters =
+          extractDotnetPublishParametersFromProjectProfile(parsedProfile);
+        const config = createDotnetPublishConfigFromParameters(parameters);
+
+        const createdProfileName = await onCopyProjectProfileToCustom(
+          profileFile.profileName,
+          config
+        );
+        toast.success(t.copyConfigSuccess || "已复制为自定义配置", {
+          description:
+            (t.copyConfigSuccessDescription ||
+              "已根据项目发布配置生成可编辑的自定义配置：{{name}}").replace(
+              "{{name}}",
+              createdProfileName
+            ),
+        });
+      } catch (error) {
+        const errorMessage =
+          error instanceof Error
+            ? error.message
+            : extractInvokeErrorMessage(error);
+        toast.error(t.copyConfigFailed || "复制为自定义配置失败", {
+          description: errorMessage,
+        });
+      }
+    },
+    [
+      onCopyProjectProfileToCustom,
+      projectFilePath,
+      t.copyConfigFailed,
+      t.copyConfigFailedDescription,
+      t.copyConfigSuccess,
+      t.copyConfigSuccessDescription,
+    ]
+  );
+
   const fallbackFloatingBindings = useMemo<PublishConfigFloatingBindings>(
     () => ({
       listRef: fallbackListRef as MutableRefObject<HTMLDivElement | null>,
@@ -765,73 +944,85 @@ export function PublishConfigPanel({
                 <div
                   key={`recent-${item.key}`}
                   ref={floating.setConfigRowRef(`recent:${item.key}`)}
-                  role="button"
-                  tabIndex={0}
-                  aria-pressed={item.key === selectedConfigId}
                   data-repo-row="true"
                   data-repo-id={`recent:${item.key}`}
-                  className="group relative z-10 flex w-full cursor-pointer items-center gap-2.5 rounded-2xl border border-transparent bg-transparent px-3 py-2 text-left shadow-none outline-none transition-all duration-300 hover:bg-[var(--glass-bg)]/20 focus-visible:ring-2 focus-visible:ring-primary/30 focus-visible:ring-offset-1 focus-visible:ring-offset-background"
-                  onClick={() => {
-                    setPreferredSelectedRenderId(`recent:${item.key}`);
-                    item.onClick();
-                  }}
+                  data-menu-open={openConfigMenuId === `recent:${item.key}` ? "true" : "false"}
+                  className="group relative z-10"
                   onMouseEnter={() => floating.handleConfigMouseEnter(`recent:${item.key}`)}
-                  onFocus={() => floating.handleConfigMouseEnter(`recent:${item.key}`)}
+                  onFocusCapture={() => floating.handleConfigMouseEnter(`recent:${item.key}`)}
                 >
-                  <span
-                    className={cn(
-                      "flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-[14px] transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]",
-                      selectedRenderId === `recent:${item.key}`
-                        ? "scale-105 bg-primary/10 shadow-[0_0_18px_hsl(var(--primary)/0.24)]"
-                        : "bg-[var(--glass-icon-bg)] shadow-[var(--glass-icon-highlight)] group-hover:scale-105 group-hover:bg-primary/8"
-                    )}
+                  <button
+                    type="button"
+                    aria-pressed={item.key === selectedConfigId}
+                    className="flex w-full items-center gap-2.5 rounded-2xl border border-transparent bg-transparent px-3 py-2 pr-11 text-left shadow-none outline-none transition-all duration-300 hover:bg-[var(--glass-bg)]/20 focus-visible:ring-2 focus-visible:ring-primary/30 focus-visible:ring-offset-1 focus-visible:ring-offset-background"
+                    onClick={() => {
+                      setPreferredSelectedRenderId(`recent:${item.key}`);
+                      item.onClick();
+                    }}
                   >
-                    <FileText
-                      className={cn(
-                        "h-4 w-4 transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]",
-                        selectedRenderId === `recent:${item.key}`
-                          ? "scale-110 text-primary drop-shadow-[0_0_4px_hsl(var(--primary)/0.3)]"
-                          : "text-muted-foreground/60 group-hover:text-primary group-hover:drop-shadow-[0_0_3px_hsl(var(--primary)/0.15)]"
-                      )}
-                    />
-                  </span>
-                  <div className="min-w-0 flex flex-1 items-center gap-2 overflow-hidden">
                     <span
                       className={cn(
-                        "truncate text-[13px] font-medium tracking-tight transition-colors duration-300",
+                        "flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-[14px] transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]",
                         selectedRenderId === `recent:${item.key}`
-                          ? "text-foreground"
-                          : "text-foreground/78"
+                          ? "scale-105 bg-primary/10 shadow-[0_0_18px_hsl(var(--primary)/0.24)]"
+                          : "bg-[var(--glass-icon-bg)] shadow-[var(--glass-icon-highlight)] group-hover:scale-105 group-hover:bg-primary/8"
                       )}
                     >
-                      {item.name}
+                      <FileText
+                        className={cn(
+                          "h-4 w-4 transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]",
+                          selectedRenderId === `recent:${item.key}`
+                            ? "scale-110 text-primary drop-shadow-[0_0_4px_hsl(var(--primary)/0.3)]"
+                            : "text-muted-foreground/60 group-hover:text-primary group-hover:drop-shadow-[0_0_3px_hsl(var(--primary)/0.15)]"
+                        )}
+                      />
                     </span>
-                    {item.description ? (
-                      <>
-                        <span className="flex-shrink-0 text-muted-foreground/30">·</span>
-                        <span className="truncate text-[11px] text-muted-foreground/55">
-                          {item.description}
-                        </span>
-                      </>
-                    ) : null}
-                  </div>
-                  <div className="flex flex-shrink-0 items-center gap-0.5 opacity-0 transition-all duration-300 group-hover:opacity-70 group-focus-within:opacity-70">
-                    <FavoriteButton
-                      isFavorite={favoriteSet.has(item.key)}
-                      onToggle={() => onToggleFavoriteConfig(item.key)}
-                    />
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-6 w-6 flex-shrink-0"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        onRemoveRecentConfig(item.key);
+                    <div className="min-w-0 flex flex-1 items-center gap-2 overflow-hidden">
+                      <span
+                        className={cn(
+                          "truncate text-[13px] font-medium tracking-tight transition-colors duration-300",
+                          selectedRenderId === `recent:${item.key}`
+                            ? "text-foreground"
+                            : "text-foreground/78"
+                        )}
+                      >
+                        {item.name}
+                      </span>
+                      {item.description ? (
+                        <>
+                          <span className="flex-shrink-0 text-muted-foreground/30">·</span>
+                          <span className="truncate text-[11px] text-muted-foreground/55">
+                            {item.description}
+                          </span>
+                        </>
+                      ) : null}
+                    </div>
+                  </button>
+                  <div className="absolute inset-y-0 right-3 flex items-center">
+                    <ConfigRowActionsMenu
+                      open={openConfigMenuId === `recent:${item.key}`}
+                      moreActionsLabel={moreActionsLabel}
+                      itemLabel={item.name}
+                      actions={[
+                        createFavoriteConfigAction({
+                          isFavorite: favoriteSet.has(item.key),
+                          favoriteLabel: favoriteConfigLabel,
+                          unfavoriteLabel: unfavoriteConfigLabel,
+                          onSelect: () => onToggleFavoriteConfig(item.key),
+                        }),
+                        {
+                          key: "removeRecent",
+                          label: removeRecentLabel,
+                          icon: <X className="h-3.5 w-3.5" />,
+                          onSelect: () => onRemoveRecentConfig(item.key),
+                          destructive: true,
+                          separatorBefore: true,
+                        },
+                      ]}
+                      onOpenChange={(open) => {
+                        handleConfigMenuOpenChange(`recent:${item.key}`, open);
                       }}
-                      title={t.removeRecent || "从最近使用移除"}
-                    >
-                      <X className="h-3.5 w-3.5 text-muted-foreground" />
-                    </Button>
+                    />
                   </div>
                 </div>
               ))}
@@ -851,63 +1042,79 @@ export function PublishConfigPanel({
                 <div
                   key={`pubxml-${name}`}
                   ref={floating.setConfigRowRef(configKey)}
-                  role="button"
-                  tabIndex={0}
-                  aria-pressed={isPubxmlSelected}
                   data-repo-row="true"
                   data-repo-id={configKey}
-                  className="group relative z-10 flex w-full cursor-pointer items-center gap-2.5 rounded-2xl border border-transparent bg-transparent px-3 py-2 text-left shadow-none outline-none transition-all duration-300 hover:bg-[var(--glass-bg)]/20 focus-visible:ring-2 focus-visible:ring-primary/30 focus-visible:ring-offset-1 focus-visible:ring-offset-background"
-                  onClick={() => {
-                    setPreferredSelectedRenderId(configKey);
-                    onSelectProjectProfile(name);
-                  }}
+                  data-menu-open={openConfigMenuId === configKey ? "true" : "false"}
+                  className="group relative z-10"
                   onMouseEnter={() => floating.handleConfigMouseEnter(configKey)}
-                  onFocus={() => floating.handleConfigMouseEnter(configKey)}
+                  onFocusCapture={() => floating.handleConfigMouseEnter(configKey)}
                 >
-                  <span
-                    className={cn(
-                      "flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-[14px] transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]",
-                      isPubxmlSelected
-                        ? "scale-105 bg-primary/10 shadow-[0_0_18px_hsl(var(--primary)/0.24)]"
-                        : "bg-[var(--glass-icon-bg)] shadow-[var(--glass-icon-highlight)] group-hover:scale-105 group-hover:bg-primary/8"
-                    )}
+                  <button
+                    type="button"
+                    aria-pressed={isPubxmlSelected}
+                    className="flex w-full items-center gap-2.5 rounded-2xl border border-transparent bg-transparent px-3 py-2 pr-11 text-left shadow-none outline-none transition-all duration-300 hover:bg-[var(--glass-bg)]/20 focus-visible:ring-2 focus-visible:ring-primary/30 focus-visible:ring-offset-1 focus-visible:ring-offset-background"
+                    onClick={() => {
+                      setPreferredSelectedRenderId(configKey);
+                      onSelectProjectProfile(name);
+                    }}
                   >
-                    <FileText
-                      className={cn(
-                        "h-4 w-4 transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]",
-                        isPubxmlSelected
-                          ? "scale-110 text-primary drop-shadow-[0_0_4px_hsl(var(--primary)/0.3)]"
-                          : "text-muted-foreground/60 group-hover:text-primary group-hover:drop-shadow-[0_0_3px_hsl(var(--primary)/0.15)]"
-                      )}
-                    />
-                  </span>
-                  <div className="min-w-0 flex flex-1 items-center gap-2 overflow-hidden">
                     <span
                       className={cn(
-                        "truncate text-[13px] font-medium tracking-tight transition-colors duration-300",
-                        isPubxmlSelected ? "text-foreground" : "text-foreground/78"
+                        "flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-[14px] transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]",
+                        isPubxmlSelected
+                          ? "scale-105 bg-primary/10 shadow-[0_0_18px_hsl(var(--primary)/0.24)]"
+                          : "bg-[var(--glass-icon-bg)] shadow-[var(--glass-icon-highlight)] group-hover:scale-105 group-hover:bg-primary/8"
                       )}
                     >
-                      {name}
+                      <FileText
+                        className={cn(
+                          "h-4 w-4 transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]",
+                          isPubxmlSelected
+                            ? "scale-110 text-primary drop-shadow-[0_0_4px_hsl(var(--primary)/0.3)]"
+                            : "text-muted-foreground/60 group-hover:text-primary group-hover:drop-shadow-[0_0_3px_hsl(var(--primary)/0.15)]"
+                        )}
+                      />
                     </span>
-                  </div>
-                  <div className="flex flex-shrink-0 items-center gap-0.5 opacity-0 transition-all duration-300 group-hover:opacity-70 group-focus-within:opacity-70">
-                    <FavoriteButton
-                      isFavorite={favoriteSet.has(configKey)}
-                      onToggle={() => onToggleFavoriteConfig(configKey)}
-                    />
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-6 w-6 flex-shrink-0"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        void handleViewProjectProfile(name);
+                    <div className="min-w-0 flex flex-1 items-center gap-2 overflow-hidden">
+                      <span
+                        className={cn(
+                          "truncate text-[13px] font-medium tracking-tight transition-colors duration-300",
+                          isPubxmlSelected ? "text-foreground" : "text-foreground/78"
+                        )}
+                      >
+                        {name}
+                      </span>
+                    </div>
+                  </button>
+                  <div className="absolute inset-y-0 right-3 flex items-center">
+                    <ConfigRowActionsMenu
+                      open={openConfigMenuId === configKey}
+                      moreActionsLabel={moreActionsLabel}
+                      itemLabel={name}
+                      actions={[
+                        createFavoriteConfigAction({
+                          isFavorite: favoriteSet.has(configKey),
+                          favoriteLabel: favoriteConfigLabel,
+                          unfavoriteLabel: unfavoriteConfigLabel,
+                          onSelect: () => onToggleFavoriteConfig(configKey),
+                        }),
+                        {
+                          key: "copy",
+                          label: t.copyConfig || "复制为自定义配置",
+                          icon: <Copy className="h-3.5 w-3.5 text-muted-foreground/70" />,
+                          onSelect: () => handleCopyProjectProfileToCustom(name),
+                        },
+                        {
+                          key: "view",
+                          label: t.viewConfig || "查看配置",
+                          icon: <Eye className="h-3.5 w-3.5 text-muted-foreground/70" />,
+                          onSelect: () => handleViewProjectProfile(name),
+                        },
+                      ]}
+                      onOpenChange={(open) => {
+                        handleConfigMenuOpenChange(configKey, open);
                       }}
-                      title={t.viewConfig || "查看配置"}
-                    >
-                      <Eye className="h-3.5 w-3.5 text-muted-foreground" />
-                    </Button>
+                    />
                   </div>
                 </div>
               );
@@ -932,6 +1139,7 @@ export function PublishConfigPanel({
                     selectedRenderId === `userprofile:${profile.name}`
                   }
                   isFavorite={favoriteSet.has(`userprofile:${profile.name}`)}
+                  isMenuOpen={openConfigMenuId === `userprofile:${profile.name}`}
                   onClick={() => {
                     setPreferredSelectedRenderId(`userprofile:${profile.name}`);
                     onSelectProfile(profile);
@@ -940,7 +1148,14 @@ export function PublishConfigPanel({
                   onEdit={() => onEditProfile(profile)}
                   canEdit={!profile.isSystemDefault && profile.providerId === "dotnet"}
                   editTitle={t.editConfig || "编辑配置"}
+                  deleteTitle={deleteConfigLabel}
+                  favoriteLabel={favoriteConfigLabel}
+                  unfavoriteLabel={unfavoriteConfigLabel}
+                  moreActionsLabel={moreActionsLabel}
                   onDelete={() => onDeleteProfile(profile.name)}
+                  onMenuOpenChange={(open) => {
+                    handleConfigMenuOpenChange(`userprofile:${profile.name}`, open);
+                  }}
                   rowRef={floating.setConfigRowRef(`userprofile:${profile.name}`)}
                   onItemMouseEnter={() => floating.handleConfigMouseEnter(`userprofile:${profile.name}`)}
                 />
@@ -956,7 +1171,9 @@ export function PublishConfigPanel({
       </div>
     ),
     [
+      deleteConfigLabel,
       favoriteSet,
+      favoriteConfigLabel,
       hasVisibleConfigResults,
       onDeleteProfile,
       onEditProfile,
@@ -964,11 +1181,18 @@ export function PublishConfigPanel({
       onSelectProfile,
       onSelectProjectProfile,
       onToggleFavoriteConfig,
+      openConfigMenuId,
       recentItems,
+      removeRecentLabel,
       selectedConfigId,
       selectedRenderId,
       showRecentItems,
       t,
+      moreActionsLabel,
+      unfavoriteConfigLabel,
+      handleConfigMenuOpenChange,
+      handleCopyProjectProfileToCustom,
+      handleViewProjectProfile,
       visibleGroupedFilteredProfiles,
       visibleProjectProfiles,
     ]
@@ -1153,20 +1377,32 @@ export function PublishConfigPanel({
         open={projectProfileViewerOpen}
         onOpenChange={setProjectProfileViewerOpen}
       >
-        <DialogContent className="max-w-3xl">
-          <DialogHeader>
-            <DialogTitle>{t.viewConfigTitle || "查看发布配置"}</DialogTitle>
-            <DialogDescription>
-              {projectProfileViewerState.profileName
-                ? `${
-                    t.viewConfigDescription || "查看项目发布配置文件中的全部参数。"
-                  } · ${projectProfileViewerState.profileName}`
-                : t.viewConfigDescription ||
-                  "查看项目发布配置文件中的全部参数。"}
-            </DialogDescription>
-          </DialogHeader>
-
-          <div className="max-h-[70vh] space-y-4 overflow-y-auto pr-1">
+        <AppDialogShell
+          size="wide"
+          title={t.viewConfigTitle || "查看发布配置"}
+          description={
+            projectProfileViewerState.profileName
+              ? `${
+                  t.viewConfigDescription || "查看项目发布配置文件中的全部参数。"
+                } · ${projectProfileViewerState.profileName}`
+              : t.viewConfigDescription ||
+                "查看项目发布配置文件中的全部参数。"
+          }
+          icon={<Eye className="h-4 w-4" />}
+          bodyInnerClassName="max-h-[70vh] space-y-4 pr-1"
+          footer={
+            <div className="flex w-full justify-end">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setProjectProfileViewerOpen(false)}
+              >
+                {t.close || "关闭"}
+              </Button>
+            </div>
+          }
+        >
+          <div className="space-y-4">
             {projectProfileViewerState.status === "loading" ? (
               <div className="flex min-h-40 items-center justify-center rounded-2xl border border-dashed border-border/70 bg-muted/20 text-sm text-muted-foreground">
                 <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
@@ -1175,31 +1411,28 @@ export function PublishConfigPanel({
             ) : null}
 
             {projectProfileViewerState.status === "error" ? (
-              <div className="rounded-2xl border border-destructive/30 bg-destructive/5 p-4 text-sm text-destructive">
+              <AppDialogInset className="border-destructive/30 bg-destructive/5 text-sm text-destructive shadow-none">
                 {projectProfileViewerState.errorMessage}
-              </div>
+              </AppDialogInset>
             ) : null}
 
             {projectProfileViewerState.status === "ready" ? (
               <>
-                <div className="rounded-2xl border border-[var(--glass-border-subtle)] bg-[var(--glass-input-bg)] p-4">
+                <AppDialogInset>
                   <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                     {t.configFilePath || "配置文件路径"}
                   </div>
                   <div className="mt-2 break-all font-mono text-xs text-foreground/80">
                     {projectProfileViewerState.filePath}
                   </div>
-                </div>
+                </AppDialogInset>
 
                 <div className="space-y-3">
                   <div className="text-sm font-semibold text-foreground">
                     {t.parsedParameters || "解析参数"}
                   </div>
                   {projectProfileViewerState.parsedProfile.sections.map((section) => (
-                    <section
-                      key={section.id}
-                      className="rounded-2xl border border-[var(--glass-border-subtle)] bg-[var(--glass-input-bg)] p-4"
-                    >
+                    <AppDialogInset key={section.id} as="section">
                       <div className="flex flex-wrap items-center gap-2">
                         <h3 className="text-sm font-semibold text-foreground">
                           {section.title}
@@ -1249,22 +1482,24 @@ export function PublishConfigPanel({
                           {t.noConfigParameters || "配置文件中暂无可展示的参数"}
                         </div>
                       )}
-                    </section>
+                    </AppDialogInset>
                   ))}
                 </div>
 
-                <details className="rounded-2xl border border-[var(--glass-border-subtle)] bg-[var(--glass-input-bg)] p-4">
-                  <summary className="cursor-pointer text-sm font-semibold text-foreground">
-                    {t.rawConfigFile || "原始配置文件"}
-                  </summary>
-                  <pre className="mt-3 max-h-80 overflow-auto whitespace-pre-wrap break-all rounded-xl bg-background/80 p-3 font-mono text-xs text-foreground/85">
-                    {projectProfileViewerState.parsedProfile.rawXml}
-                  </pre>
-                </details>
+                <AppDialogInset className="p-0">
+                  <details className="p-4">
+                    <summary className="cursor-pointer text-sm font-semibold text-foreground">
+                      {t.rawConfigFile || "原始配置文件"}
+                    </summary>
+                    <pre className="mt-3 max-h-80 overflow-auto whitespace-pre-wrap break-all rounded-xl bg-background/80 p-3 font-mono text-xs text-foreground/85">
+                      {projectProfileViewerState.parsedProfile.rawXml}
+                    </pre>
+                  </details>
+                </AppDialogInset>
               </>
             ) : null}
           </div>
-        </DialogContent>
+        </AppDialogShell>
       </Dialog>
     </div>
   );

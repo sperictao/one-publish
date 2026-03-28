@@ -54,6 +54,25 @@ interface LoadableProfile {
   parameters?: Record<string, unknown>;
 }
 
+function buildCopiedProfileName(
+  sourceProfileName: string,
+  existingNames: Set<string>
+): string {
+  const normalizedSourceName = sourceProfileName.trim() || "Profile";
+  const baseName = `${normalizedSourceName}-copy`;
+
+  if (!existingNames.has(baseName)) {
+    return baseName;
+  }
+
+  let index = 2;
+  while (existingNames.has(`${baseName}${index}`)) {
+    index += 1;
+  }
+
+  return `${baseName}${index}`;
+}
+
 interface UseProfilesParams {
   appT: TranslationMap;
   profileT: TranslationMap;
@@ -65,11 +84,10 @@ interface UseProfilesParams {
   setIsCustomMode: (value: boolean) => void;
   isCustomMode: boolean;
   setSelectedPreset: (value: string) => void;
-  setProviderParameters: Dispatch<
+    setProviderParameters: Dispatch<
     SetStateAction<Record<string, Record<string, ParameterValue>>>
   >;
   applyDotnetCustomConfig: (config: PublishConfigStore) => void;
-  pushRecentConfig: (key: string, repoId?: string | null) => void;
   replaceScopedConfigKey: (
     previousKey: string,
     nextKey: string,
@@ -114,7 +132,6 @@ export function useProfiles({
   setSelectedPreset,
   setProviderParameters,
   applyDotnetCustomConfig,
-  pushRecentConfig,
   replaceScopedConfigKey,
   presets,
   defaultPresetId,
@@ -411,8 +428,6 @@ export function useProfiles({
           nextProfileKey,
           selectedRepoId
         );
-      } else {
-        pushRecentConfig(nextProfileKey);
       }
 
       toast.success(
@@ -440,7 +455,6 @@ export function useProfiles({
     handleSelectProfileFromPanel,
     loadProfiles,
     profileT,
-    pushRecentConfig,
     quickCreateProfileCustomGroup,
     quickCreateProfileDraft,
     quickCreateProfileGroup,
@@ -488,6 +502,41 @@ export function useProfiles({
     [applyProfile]
   );
 
+  const handleCreateProfileFromProjectProfile = useCallback(
+    async (sourceProfileName: string, config: PublishConfigStore) => {
+      if (!selectedRepoId) {
+        throw new Error(profileT.saveFailed || "保存配置文件失败");
+      }
+
+      const existingNames = new Set(profiles.map((profile) => profile.name));
+      const profileName = buildCopiedProfileName(sourceProfileName, existingNames);
+      const parameters = buildProfileParameters(config);
+
+      await saveProfile({
+        repoId: selectedRepoId,
+        name: profileName,
+        providerId: "dotnet",
+        parameters,
+      });
+
+      await loadProfiles();
+
+      setActiveProfileName(profileName);
+      applyDotnetCustomConfig(config);
+
+      return profileName;
+    },
+    [
+      applyDotnetCustomConfig,
+      buildProfileParameters,
+      loadProfiles,
+      profileT.saveFailed,
+      profiles,
+      selectedRepoId,
+      setActiveProfileName,
+    ]
+  );
+
   return {
     profiles,
     activeProfileName,
@@ -516,5 +565,6 @@ export function useProfiles({
     handleQuickCreateProfileSave,
     handleDeleteProfileFromPanel,
     handleLoadProfile,
+    handleCreateProfileFromProjectProfile,
   };
 }

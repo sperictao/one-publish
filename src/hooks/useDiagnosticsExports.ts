@@ -107,10 +107,10 @@ interface UseDiagnosticsExportsParams {
   historyT: TranslationMap;
   failureT: TranslationMap;
   publishResult: PublishResult | null;
-  lastExecutedSpec: ProviderPublishSpec | null;
+  lastPublishSpec: ProviderPublishSpec | null;
   outputLog: string;
   environmentLastResult: EnvironmentCheckResult | null;
-  currentExecutionRecordId: string | null;
+  currentPublishRecordId: string | null;
   selectedFailureGroup: FailureGroup | null;
   representativeFailureRecord: ExecutionRecord | null;
   snapshotPaths: string[];
@@ -129,10 +129,10 @@ export function useDiagnosticsExports({
   historyT,
   failureT,
   publishResult,
-  lastExecutedSpec,
+  lastPublishSpec,
   outputLog,
   environmentLastResult,
-  currentExecutionRecordId,
+  currentPublishRecordId,
   selectedFailureGroup,
   representativeFailureRecord,
   snapshotPaths,
@@ -154,7 +154,7 @@ export function useDiagnosticsExports({
     useState(false);
 
   const exportExecutionSnapshot = useCallback(async () => {
-    if (!publishResult || !lastExecutedSpec) {
+    if (!publishResult || !lastPublishSpec) {
       toast.error(historyT.noSnapshotToExport || "暂无可导出的执行快照");
       return;
     }
@@ -189,7 +189,7 @@ export function useDiagnosticsExports({
     const snapshot: ExecutionSnapshotPayload = {
       generatedAt: new Date().toISOString(),
       providerId: publishResult.provider_id,
-      spec: lastExecutedSpec,
+      spec: lastPublishSpec,
       command: {
         line: commandLine,
       },
@@ -218,9 +218,9 @@ export function useDiagnosticsExports({
         snapshot,
       });
 
-      if (currentExecutionRecordId) {
+      if (currentPublishRecordId) {
         const history = await setExecutionRecordSnapshot(
-          currentExecutionRecordId,
+          currentPublishRecordId,
           outputPath
         );
         setExecutionHistory(history);
@@ -237,10 +237,10 @@ export function useDiagnosticsExports({
       setIsExportingSnapshot(false);
     }
   }, [
-    currentExecutionRecordId,
+    currentPublishRecordId,
     environmentLastResult,
     historyT,
-    lastExecutedSpec,
+    lastPublishSpec,
     outputLog,
     publishResult,
     setExecutionHistory,

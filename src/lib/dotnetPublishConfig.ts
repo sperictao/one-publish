@@ -88,6 +88,68 @@ export function buildDotnetAdvancedParameters(
   };
 }
 
+export function buildDotnetPublishCommand(
+  projectFile: string,
+  parameters: Record<string, unknown>
+): string {
+  const parameterArgs: string[] = [];
+
+  if (typeof parameters.configuration === "string") {
+    parameterArgs.push(`-c ${parameters.configuration}`);
+  }
+  if (typeof parameters.runtime === "string") {
+    parameterArgs.push(`--runtime ${parameters.runtime}`);
+  }
+  if (typeof parameters.framework === "string") {
+    parameterArgs.push(`--framework ${parameters.framework}`);
+  }
+  if (parameters.self_contained === true) {
+    parameterArgs.push("--self-contained");
+  }
+  if (typeof parameters.output === "string") {
+    parameterArgs.push(`-o "${parameters.output}"`);
+  }
+  if (parameters.no_build === true) {
+    parameterArgs.push("--no-build");
+  }
+  if (parameters.no_restore === true) {
+    parameterArgs.push("--no-restore");
+  }
+  if (typeof parameters.verbosity === "string") {
+    parameterArgs.push(`--verbosity ${parameters.verbosity}`);
+  }
+  if (parameters.no_logo === true) {
+    parameterArgs.push("--no-logo");
+  }
+  if (Array.isArray(parameters.define)) {
+    for (const define of parameters.define) {
+      if (typeof define === "string" && define.trim().length > 0) {
+        parameterArgs.push(`--define ${define.trim()}`);
+      }
+    }
+  }
+  if (
+    parameters.properties &&
+    typeof parameters.properties === "object" &&
+    !Array.isArray(parameters.properties)
+  ) {
+    for (const [key, value] of Object.entries(
+      parameters.properties as Record<string, unknown>
+    )) {
+      if (
+        (typeof value === "string" ||
+          typeof value === "number" ||
+          typeof value === "boolean") &&
+        key.trim().length > 0
+      ) {
+        parameterArgs.push(`-p:${key}=${String(value)}`);
+      }
+    }
+  }
+
+  return [`dotnet publish "${projectFile}"`, ...parameterArgs].join(" ");
+}
+
 export function buildDotnetProfileParameters(
   config: PublishConfigStore
 ): Record<string, ParameterValue> {

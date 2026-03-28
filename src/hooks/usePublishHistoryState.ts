@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 
-import type { ProviderPublishSpec, PublishResult } from "@/hooks/usePublishExecution";
+import type { ProviderPublishSpec, PublishResult } from "@/hooks/usePublishRunner";
 import { deriveFailureSignature } from "@/lib/failureSignature";
 import { getExecutionHistory, addExecutionRecord, type ExecutionRecord } from "@/lib/store";
 import {
@@ -8,7 +8,7 @@ import {
   saveRerunChecklistPreference,
 } from "@/lib/rerunChecklistPreference";
 
-export function useProjectExecutionState(params: {
+export function usePublishHistoryState(params: {
   executionHistoryLimit: number;
   selectedPreset: string;
   setSelectedPreset: (value: string) => void;
@@ -21,7 +21,7 @@ export function useProjectExecutionState(params: {
   );
   const [executionHistory, setExecutionHistory] = useState<ExecutionRecord[]>([]);
 
-  const persistExecutionRecord = useCallback((record: ExecutionRecord) => {
+  const savePublishRecord = useCallback((record: ExecutionRecord) => {
     addExecutionRecord(record)
       .then((history) => {
         setExecutionHistory(history);
@@ -31,7 +31,7 @@ export function useProjectExecutionState(params: {
       });
   }, []);
 
-  const buildExecutionRecord = useCallback(
+  const createPublishRecord = useCallback(
     (params: {
       spec: ProviderPublishSpec;
       repoId: string | null;
@@ -108,8 +108,8 @@ export function useProjectExecutionState(params: {
     setIsRerunChecklistEnabled,
     executionHistory,
     setExecutionHistory,
-    persistExecutionRecord,
-    buildExecutionRecord,
+    savePublishRecord,
+    createPublishRecord,
     handleSelectPresetValueChange,
   };
 }

@@ -2,7 +2,7 @@ import type { AppDialogsProps } from "@/components/layout/AppDialogs";
 import type { AppUpdaterState } from "@/hooks/useAppUpdater";
 import type { EnvironmentStatus } from "@/hooks/useEnvironmentStatus";
 import type { Language } from "@/hooks/useI18n";
-import type { PublishResult } from "@/hooks/usePublishExecution";
+import type { PublishResult } from "@/hooks/usePublishRunner";
 import type {
   ConfigProfile,
   ExecutionRecord,

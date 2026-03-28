@@ -1,8 +1,17 @@
-import { useCallback, useMemo } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
-import { buildDotnetProfileParameters } from "@/lib/dotnetPublishConfig";
+import {
+  buildDotnetProfileParameters,
+  buildDotnetPublishCommand,
+} from "@/lib/dotnetPublishConfig";
 import { getPathBasename, joinPath } from "@/lib/paths";
+import {
+  extractDotnetPublishParametersFromProjectProfile,
+  parseProjectPublishProfileXml,
+} from "@/lib/projectPublishProfileXml";
+import { readProjectPublishProfile } from "@/lib/store";
 import type { PublishConfigStore } from "@/lib/store";
+import type { ParameterValue } from "@/types/parameters";
 
 interface ProjectInfo {
   root_path: string;
@@ -63,11 +72,15 @@ export function useDotnetPublishSelection(params: {
   activeProviderId: string;
   selectedPreset: string;
   isCustomMode: boolean;
+  activeProfileName: string | null;
   customConfig: PublishConfigStore;
   defaultOutputDir?: string;
   projectInfo: ProjectInfo | null;
   presets: DotnetPreset[];
 }) {
+  const [resolvedProjectProfileParameters, setResolvedProjectProfileParameters] =
+    useState<Record<string, ParameterValue> | null>(null);
+
   const buildDefaultScopedOutputDir = useCallback(
     (configuration?: string) => {
       if (!params.defaultOutputDir) {
@@ -87,6 +100,84 @@ export function useDotnetPublishSelection(params: {
     },
     [params.defaultOutputDir, params.projectInfo]
   );
+
+  const selectedProjectProfileName = useMemo(() => {
+    if (
+      params.activeProviderId !== "dotnet" ||
+      params.isCustomMode ||
+      !params.selectedPreset.startsWith("profile-")
+    ) {
+      return null;
+    }
+
+    const profileName = params.selectedPreset.slice("profile-".length).trim();
+    return profileName || null;
+  }, [
+    params.activeProviderId,
+    params.isCustomMode,
+    params.selectedPreset,
+  ]);
+
+  const resolveSelectedProjectProfileParameters = useCallback(async () => {
+    if (!params.projectInfo || !selectedProjectProfileName) {
+      return null;
+    }
+
+    const profileFile = await readProjectPublishProfile(
+      params.projectInfo.project_file,
+      selectedProjectProfileName
+    );
+    const parsedProfile = parseProjectPublishProfileXml(profileFile.content);
+    const parameters = extractDotnetPublishParametersFromProjectProfile(
+      parsedProfile
+    ) as Record<string, ParameterValue>;
+
+    if (
+      typeof parameters.output !== "string" &&
+      params.defaultOutputDir
+    ) {
+      const configuration =
+        typeof parameters.configuration === "string" &&
+        parameters.configuration.trim().length > 0
+          ? parameters.configuration
+          : "Release";
+      parameters.output = buildDefaultScopedOutputDir(configuration);
+    }
+
+    return parameters;
+  }, [
+    buildDefaultScopedOutputDir,
+    params.defaultOutputDir,
+    params.projectInfo,
+    selectedProjectProfileName,
+  ]);
+
+  useEffect(() => {
+    let disposed = false;
+
+    if (!selectedProjectProfileName) {
+      setResolvedProjectProfileParameters(null);
+      return () => {
+        disposed = true;
+      };
+    }
+
+    void resolveSelectedProjectProfileParameters()
+      .then((parameters) => {
+        if (!disposed) {
+          setResolvedProjectProfileParameters(parameters);
+        }
+      })
+      .catch(() => {
+        if (!disposed) {
+          setResolvedProjectProfileParameters(null);
+        }
+      });
+
+    return () => {
+      disposed = true;
+    };
+  }, [resolveSelectedProjectProfileParameters, selectedProjectProfileName]);
 
   const getCurrentConfig = useCallback((): PublishConfig => {
     if (params.isCustomMode) {
@@ -152,14 +243,12 @@ export function useDotnetPublishSelection(params: {
       };
   }, [buildDefaultScopedOutputDir, params]);
 
-  const dotnetPublishPreviewCommand = useMemo(() => {
+  const fallbackDotnetPublishPreviewCommand = useMemo(() => {
     if (!params.projectInfo || params.activeProviderId !== "dotnet") {
       return "";
     }
 
     const config = getCurrentConfig();
-    const baseCommand = `dotnet publish "${params.projectInfo.project_file}"`;
-    const parameterArgs: string[] = [];
     const parameterRecord = buildDotnetProfileParameters({
       configuration: config.configuration,
       runtime: config.runtime,
@@ -176,50 +265,32 @@ export function useDotnetPublishSelection(params: {
       profileName: config.profile_name,
     });
 
-    if (typeof parameterRecord.configuration === "string") {
-      parameterArgs.push(`-c ${parameterRecord.configuration}`);
-    }
-    if (typeof parameterRecord.runtime === "string") {
-      parameterArgs.push(`--runtime ${parameterRecord.runtime}`);
-    }
-    if (typeof parameterRecord.framework === "string") {
-      parameterArgs.push(`--framework ${parameterRecord.framework}`);
-    }
-    if (parameterRecord.self_contained === true) {
-      parameterArgs.push("--self-contained");
-    }
-    if (typeof parameterRecord.output === "string") {
-      parameterArgs.push(`-o "${parameterRecord.output}"`);
-    }
-    if (parameterRecord.no_build === true) {
-      parameterArgs.push("--no-build");
-    }
-    if (parameterRecord.no_restore === true) {
-      parameterArgs.push("--no-restore");
-    }
-    if (typeof parameterRecord.verbosity === "string") {
-      parameterArgs.push(`--verbosity ${parameterRecord.verbosity}`);
-    }
-    if (parameterRecord.no_logo === true) {
-      parameterArgs.push("--no-logo");
-    }
-    if (Array.isArray(parameterRecord.define)) {
-      for (const define of parameterRecord.define) {
-        parameterArgs.push(`--define ${define}`);
-      }
-    }
-    if (
-      parameterRecord.properties &&
-      typeof parameterRecord.properties === "object" &&
-      !Array.isArray(parameterRecord.properties)
-    ) {
-      for (const [key, value] of Object.entries(parameterRecord.properties)) {
-        parameterArgs.push(`-p:${key}=${value}`);
-      }
+    return buildDotnetPublishCommand(
+      params.projectInfo.project_file,
+      parameterRecord
+    );
+  }, [params.activeProviderId, getCurrentConfig, params.projectInfo]);
+
+  const dotnetPublishPreviewCommand = useMemo(() => {
+    if (!params.projectInfo || params.activeProviderId !== "dotnet") {
+      return "";
     }
 
-    return [baseCommand, ...parameterArgs].join(" ");
-  }, [params.activeProviderId, getCurrentConfig, params.projectInfo]);
+    if (selectedProjectProfileName && resolvedProjectProfileParameters) {
+      return buildDotnetPublishCommand(
+        params.projectInfo.project_file,
+        resolvedProjectProfileParameters
+      );
+    }
+
+    return fallbackDotnetPublishPreviewCommand;
+  }, [
+    fallbackDotnetPublishPreviewCommand,
+    params.activeProviderId,
+    params.projectInfo,
+    resolvedProjectProfileParameters,
+    selectedProjectProfileName,
+  ]);
 
   const recentConfigKeyForCurrentSelection = useMemo(() => {
     if (params.activeProviderId !== "dotnet") {
@@ -227,7 +298,9 @@ export function useDotnetPublishSelection(params: {
     }
 
     if (params.isCustomMode) {
-      return null;
+      return params.activeProfileName
+        ? `userprofile:${params.activeProfileName}`
+        : null;
     }
 
     if (params.selectedPreset.startsWith("profile-")) {
@@ -235,11 +308,18 @@ export function useDotnetPublishSelection(params: {
     }
 
     return `preset:${params.selectedPreset}`;
-  }, [params.activeProviderId, params.isCustomMode, params.selectedPreset]);
+  }, [
+    params.activeProfileName,
+    params.activeProviderId,
+    params.isCustomMode,
+    params.selectedPreset,
+  ]);
 
   return {
     getCurrentConfig,
     dotnetPublishPreviewCommand,
     recentConfigKeyForCurrentSelection,
+    resolvedProjectProfileParameters,
+    resolveSelectedProjectProfileParameters,
   };
 }

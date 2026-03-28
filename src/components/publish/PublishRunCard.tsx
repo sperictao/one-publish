@@ -8,36 +8,36 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { ArrowUpRight, FolderOpen, Loader2, Play, Square, Terminal } from "lucide-react";
-import type { PublishResult } from "@/hooks/usePublishExecution";
+import type { PublishResult } from "@/hooks/usePublishRunner";
 import { openOutputDirectory } from "@/lib/store";
 
-export interface OutputLogCardPublishControls {
+export interface PublishRunCardActions {
   publishCommand?: string | null;
   publishCommandLabel?: string;
-  executeLabel?: string;
+  startLabel?: string;
   publishingLabel?: string;
   cancelLabel?: string;
   cancellingLabel?: string;
   isPublishing: boolean;
   isCancellingPublish: boolean;
-  executeDisabled: boolean;
-  onExecutePublish: () => void;
+  startDisabled: boolean;
+  onStartPublish: () => void;
   onCancelPublish: () => void;
 }
 
-export interface OutputLogCardProps {
+export interface PublishRunCardProps {
   outputLog: string;
   publishResult: PublishResult | null;
   appT: Record<string, string | undefined>;
-  publishControls: OutputLogCardPublishControls | null;
+  publishActions: PublishRunCardActions | null;
 }
 
-export function OutputLogCard({
+export function PublishRunCard({
   outputLog,
   publishResult,
   appT,
-  publishControls,
-}: OutputLogCardProps) {
+  publishActions,
+}: PublishRunCardProps) {
   const [isOpeningOutputDir, setIsOpeningOutputDir] = useState(false);
 
   const handleOpenOutputDir = useCallback(async () => {
@@ -61,7 +61,7 @@ export function OutputLogCard({
     }
   }, [appT, publishResult?.output_dir]);
 
-  if (!outputLog && !publishResult && !publishControls) {
+  if (!outputLog && !publishResult && !publishActions) {
     return null;
   }
 
@@ -120,15 +120,15 @@ export function OutputLogCard({
         )}
       </CardHeader>
       <CardContent className="flex min-h-0 flex-1 flex-col space-y-4">
-        {publishControls && (
+        {publishActions && (
           <div className="space-y-3">
-            {publishControls.publishCommand && (
+            {publishActions.publishCommand && (
               <div className="rounded-xl border border-[var(--glass-border-subtle)] bg-[var(--glass-input-bg)] p-3">
                 <div className="mb-2 text-xs text-muted-foreground">
-                  {publishControls.publishCommandLabel || "将执行的命令:"}
+                  {publishActions.publishCommandLabel || "将执行的命令:"}
                 </div>
                 <code className="text-xs font-mono break-all">
-                  {publishControls.publishCommand}
+                  {publishActions.publishCommand}
                 </code>
               </div>
             )}
@@ -136,40 +136,40 @@ export function OutputLogCard({
               <Button
                 className="w-full sm:flex-1"
                 size="lg"
-                onClick={publishControls.onExecutePublish}
+                onClick={publishActions.onStartPublish}
                 disabled={
-                  publishControls.executeDisabled || publishControls.isPublishing
+                  publishActions.startDisabled || publishActions.isPublishing
                 }
               >
-                {publishControls.isPublishing ? (
+                {publishActions.isPublishing ? (
                   <>
                     <Loader2 className="h-5 w-5 mr-2 animate-spin" />
-                    {publishControls.publishingLabel || "发布中..."}
+                    {publishActions.publishingLabel || "发布中..."}
                   </>
                 ) : (
                   <>
                     <Play className="h-5 w-5 mr-2" />
-                    {publishControls.executeLabel || "执行发布"}
+                    {publishActions.startLabel || "执行发布"}
                   </>
                 )}
               </Button>
-              {publishControls.isPublishing && (
+              {publishActions.isPublishing && (
                 <Button
                   type="button"
                   variant="destructive"
                   className="w-full sm:w-auto"
-                  onClick={publishControls.onCancelPublish}
-                  disabled={publishControls.isCancellingPublish}
+                  onClick={publishActions.onCancelPublish}
+                  disabled={publishActions.isCancellingPublish}
                 >
-                  {publishControls.isCancellingPublish ? (
+                  {publishActions.isCancellingPublish ? (
                     <>
                       <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                      {publishControls.cancellingLabel || "取消中..."}
+                      {publishActions.cancellingLabel || "取消中..."}
                     </>
                   ) : (
                     <>
                       <Square className="h-4 w-4 mr-2" />
-                      {publishControls.cancelLabel || "取消发布"}
+                      {publishActions.cancelLabel || "取消发布"}
                     </>
                   )}
                 </Button>

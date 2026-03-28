@@ -27,7 +27,7 @@ interface UseRerunFlowParams {
   extractSpecFromRecord: (record: ExecutionRecord) => ProviderPublishSpec | null;
   restoreSpecToEditor: (spec: ProviderPublishSpec) => void;
   getRecentConfigKeyFromSpec: (spec: ProviderPublishSpec) => string | null;
-  runPublishWithSpec: (spec: ProviderPublishSpec, recentConfigKey?: string | null) => Promise<void>;
+  runPublishSpec: (spec: ProviderPublishSpec, recentConfigKey?: string | null) => Promise<void>;
 }
 
 const INITIAL_CHECKLIST_STATE: RerunChecklistState = {
@@ -43,7 +43,7 @@ export function useRerunFlow({
   extractSpecFromRecord,
   restoreSpecToEditor,
   getRecentConfigKeyFromSpec,
-  runPublishWithSpec,
+  runPublishSpec,
 }: UseRerunFlowParams) {
   const [rerunChecklistOpen, setRerunChecklistOpen] = useState(false);
   const [pendingRerunRecord, setPendingRerunRecord] = useState<ExecutionRecord | null>(null);
@@ -63,7 +63,7 @@ export function useRerunFlow({
       }
 
       restoreSpecToEditor(spec);
-      await runPublishWithSpec(spec, getRecentConfigKeyFromSpec(spec));
+      await runPublishSpec(spec, getRecentConfigKeyFromSpec(spec));
     },
     [
       extractSpecFromRecord,
@@ -71,7 +71,7 @@ export function useRerunFlow({
       historyT.historyMissingRecoverableSpec,
       historyT.historyMissingRecoverableSpecHint,
       restoreSpecToEditor,
-      runPublishWithSpec,
+      runPublishSpec,
     ]
   );
 

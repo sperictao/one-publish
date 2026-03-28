@@ -3,7 +3,7 @@ import { useCallback } from "react";
 import { createDotnetPublishConfigFromParameters } from "@/lib/dotnetPublishConfig";
 import type { ExecutionRecord, PublishConfigStore } from "@/lib/store";
 import type { ParameterValue } from "@/types/parameters";
-import type { ProviderPublishSpec } from "@/hooks/usePublishExecution";
+import type { ProviderPublishSpec } from "@/hooks/usePublishRunner";
 
 interface UseRecoverableSpecParams {
   specVersion: number;

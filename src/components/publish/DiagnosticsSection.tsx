@@ -8,7 +8,7 @@ import { useFailureGroupSelection } from "@/hooks/useFailureGroupSelection";
 import { useFailureGroupsCardProps } from "@/hooks/useFailureGroupsCardProps";
 import { useHistoryActions } from "@/hooks/useHistoryActions";
 import { useHistoryDiagnosticsState } from "@/hooks/useHistoryDiagnosticsState";
-import type { ProviderPublishSpec, PublishResult } from "@/hooks/usePublishExecution";
+import type { ProviderPublishSpec, PublishResult } from "@/hooks/usePublishRunner";
 import type { EnvironmentCheckResult } from "@/lib/environment";
 import type { ExecutionRecord } from "@/lib/store";
 import type { Repository } from "@/types/repository";
@@ -25,10 +25,10 @@ export interface DiagnosticsSectionProps {
   selectedRepo: Repository;
   isPublishing: boolean;
   publishResult: PublishResult | null;
-  lastExecutedSpec: ProviderPublishSpec | null;
+  lastPublishSpec: ProviderPublishSpec | null;
   outputLog: string;
   environmentLastResult: EnvironmentCheckResult | null;
-  currentExecutionRecordId: string | null;
+  currentPublishRecordId: string | null;
   recentBundleExports: string[];
   recentHistoryExports: string[];
   setExecutionHistory: (history: ExecutionRecord[]) => void;
@@ -48,10 +48,10 @@ export function DiagnosticsSection({
   selectedRepo,
   isPublishing,
   publishResult,
-  lastExecutedSpec,
+  lastPublishSpec,
   outputLog,
   environmentLastResult,
-  currentExecutionRecordId,
+  currentPublishRecordId,
   recentBundleExports,
   recentHistoryExports,
   setExecutionHistory,
@@ -118,10 +118,10 @@ export function DiagnosticsSection({
     historyT,
     failureT,
     publishResult,
-    lastExecutedSpec,
+    lastPublishSpec,
     outputLog,
     environmentLastResult,
-    currentExecutionRecordId,
+    currentPublishRecordId,
     selectedFailureGroup,
     representativeFailureRecord,
     snapshotPaths,

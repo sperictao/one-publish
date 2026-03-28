@@ -20,6 +20,12 @@ export interface ParsedProjectPublishProfile {
   sections: ProjectPublishProfileSection[];
 }
 
+type DotnetProfileParameterValue =
+  | string
+  | boolean
+  | string[]
+  | Record<string, string>;
+
 const TEXT_NODE = 3;
 const CDATA_SECTION_NODE = 4;
 
@@ -141,4 +147,127 @@ export function parseProjectPublishProfileXml(
     rawXml,
     sections,
   };
+}
+
+function parseDotnetBooleanValue(value: string): boolean | null {
+  const normalized = value.trim().toLowerCase();
+  if (!normalized) {
+    return null;
+  }
+
+  if (
+    normalized === "true" ||
+    normalized === "1" ||
+    normalized === "yes"
+  ) {
+    return true;
+  }
+
+  if (
+    normalized === "false" ||
+    normalized === "0" ||
+    normalized === "no"
+  ) {
+    return false;
+  }
+
+  return null;
+}
+
+function splitDotnetDefineConstants(value: string): string[] {
+  return value
+    .split(/[;,]/)
+    .map((item) => item.trim())
+    .filter((item) => item.length > 0);
+}
+
+export function extractDotnetPublishParametersFromProjectProfile(
+  parsedProfile: ParsedProjectPublishProfile
+): Record<string, DotnetProfileParameterValue> {
+  const parameters: Record<string, DotnetProfileParameterValue> = {};
+  const properties: Record<string, string> = {};
+
+  for (const section of parsedProfile.sections) {
+    if (section.tagName !== "PropertyGroup") {
+      continue;
+    }
+
+    for (const entry of section.entries) {
+      if (entry.path.includes(".")) {
+        continue;
+      }
+
+      const key = entry.path.trim();
+      const value = entry.value.trim();
+
+      if (!key || !value) {
+        continue;
+      }
+
+      switch (key) {
+        case "Configuration":
+          parameters.configuration = value;
+          break;
+        case "RuntimeIdentifier":
+          parameters.runtime = value;
+          break;
+        case "TargetFramework":
+          parameters.framework = value;
+          break;
+        case "PublishDir":
+        case "PublishUrl":
+          parameters.output = value;
+          break;
+        case "SelfContained": {
+          const resolved = parseDotnetBooleanValue(value);
+          if (resolved !== null) {
+            parameters.self_contained = resolved;
+          }
+          break;
+        }
+        case "NoBuild": {
+          const resolved = parseDotnetBooleanValue(value);
+          if (resolved !== null) {
+            parameters.no_build = resolved;
+          }
+          break;
+        }
+        case "NoRestore": {
+          const resolved = parseDotnetBooleanValue(value);
+          if (resolved !== null) {
+            parameters.no_restore = resolved;
+          }
+          break;
+        }
+        case "Verbosity":
+        case "MSBuildVerbosity":
+          parameters.verbosity = value;
+          break;
+        case "NoLogo": {
+          const resolved = parseDotnetBooleanValue(value);
+          if (resolved !== null) {
+            parameters.no_logo = resolved;
+          }
+          break;
+        }
+        case "DefineConstants":
+        case "Define": {
+          const defines = splitDotnetDefineConstants(value);
+          if (defines.length > 0) {
+            parameters.define = defines;
+          }
+          break;
+        }
+        default:
+          properties[key] = value;
+          break;
+      }
+    }
+  }
+
+  if (Object.keys(properties).length > 0) {
+    parameters.properties = properties;
+  }
+
+  return parameters;
 }

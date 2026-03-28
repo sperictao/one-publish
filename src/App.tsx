@@ -6,17 +6,17 @@ import { useTheme } from "@/hooks/useTheme";
 import { useShortcuts } from "@/hooks/useShortcuts";
 import { useDiagnosticsUiState } from "@/hooks/useDiagnosticsUiState";
 import { useLayoutShellState } from "@/hooks/useLayoutShellState";
-import { useProjectExecutionState } from "@/hooks/useProjectExecutionState";
+import { usePublishHistoryState } from "@/hooks/usePublishHistoryState";
 import { useProjectShellState } from "@/hooks/useProjectShellState";
 import { useProviderPresentationState } from "@/hooks/useProviderPresentationState";
-import { usePublishExecutionCallSurface } from "@/hooks/usePublishExecutionCallSurface";
-import { usePublishExecutionInput } from "@/hooks/usePublishExecutionInput";
+import { usePublishRunnerCallbacks } from "@/hooks/usePublishRunnerCallbacks";
+import { usePublishRunnerInput } from "@/hooks/usePublishRunnerInput";
 import { useRepositoryActions } from "@/hooks/useRepositoryActions";
 import { useRepositoryViewState } from "@/hooks/useRepositoryViewState";
 import { useRecoverableSpec } from "@/hooks/useRecoverableSpec";
 import { useRerunFlow } from "@/hooks/useRerunFlow";
 import { usePresetText } from "@/hooks/usePresetText";
-import { usePublishExecution } from "@/hooks/usePublishExecution";
+import { usePublishRunner } from "@/hooks/usePublishRunner";
 import {
   useProfiles,
   QUICK_CREATE_PROFILE_GROUP_CUSTOM,
@@ -25,7 +25,7 @@ import {
 import { useCommandImport } from "@/hooks/useCommandImport";
 import { useScopedConfigs } from "@/hooks/useScopedConfigs";
 import { useAppUpdater } from "@/hooks/useAppUpdater";
-import { useOutputLogCardProps } from "@/hooks/useOutputLogCardProps";
+import { usePublishRunCardProps } from "@/hooks/usePublishRunCardProps";
 import { useCommandImportResultCardProps } from "@/hooks/useCommandImportResultCardProps";
 import { useProviderRuntime } from "@/hooks/useProviderRuntime";
 import { useI18n, type Language } from "@/hooks/useI18n";
@@ -278,13 +278,13 @@ function App() {
 
       if (activeProviderId === "dotnet") {
         if (projectInfo) {
-          executePublish();
+          startPublish();
         }
         return;
       }
 
       if (selectedRepo) {
-        executePublish();
+        startPublish();
       }
     },
     onOpenSettings: () => {
@@ -392,7 +392,6 @@ function App() {
     setSelectedPreset,
     setProviderParameters,
     applyDotnetCustomConfig,
-    pushRecentConfig,
     replaceScopedConfigKey,
     presets: PRESETS,
     defaultPresetId: PRESETS[0]?.id ?? "release-fd",
@@ -436,6 +435,7 @@ function App() {
     handleQuickCreateProfileSave,
     handleDeleteProfileFromPanel,
     handleLoadProfile,
+    handleCreateProfileFromProjectProfile,
   } = profilesState;
 
   const {
@@ -443,9 +443,9 @@ function App() {
     setIsRerunChecklistEnabled,
     executionHistory,
     setExecutionHistory,
-    persistExecutionRecord,
-    buildExecutionRecord,
-  } = useProjectExecutionState({
+    savePublishRecord,
+    createPublishRecord,
+  } = usePublishHistoryState({
     executionHistoryLimit,
     selectedPreset,
     setSelectedPreset,
@@ -475,21 +475,22 @@ function App() {
     setActiveProviderId,
   });
 
-  const publishExecutionCallSurface = usePublishExecutionCallSurface({
+  const publishRunnerCallbacks = usePublishRunnerCallbacks({
     pushRecentConfig,
     openEnvironmentDialog,
     setEnvironmentLastResult,
-    buildExecutionRecord,
-    persistExecutionRecord,
+    createPublishRecord,
+    savePublishRecord,
   });
 
-  const publishExecutionInput = usePublishExecutionInput({
+  const publishRunnerInput = usePublishRunnerInput({
     selectedRepoId,
     selectedRepo,
     activeProviderId,
     activeProviderParameters,
     selectedPreset,
     isCustomMode,
+    activeProfileName,
     customConfig,
     defaultOutputDir,
     projectInfo,
@@ -501,21 +502,21 @@ function App() {
     isPublishing,
     isCancellingPublish,
     publishResult,
-    lastExecutedSpec,
-    currentExecutionRecordId,
+    lastPublishSpec,
+    currentPublishRecordId,
     outputLog,
     releaseChecklistOpen,
     setReleaseChecklistOpen,
     artifactActionState,
     dotnetPublishPreviewCommand,
-    runPublishWithSpec,
-    executePublish,
+    runPublishSpec,
+    startPublish,
     cancelPublish,
-  } = usePublishExecution({
+  } = usePublishRunner({
     appT,
     publishT,
-    input: publishExecutionInput,
-    callSurface: publishExecutionCallSurface,
+    input: publishRunnerInput,
+    callbacks: publishRunnerCallbacks,
   });
 
   const {
@@ -546,27 +547,27 @@ function App() {
     extractSpecFromRecord,
     restoreSpecToEditor,
     getRecentConfigKeyFromSpec,
-    runPublishWithSpec,
+    runPublishSpec,
   });
 
-  const outputLogCardProps = useOutputLogCardProps({
+  const publishRunCardProps = usePublishRunCardProps({
     outputLog,
     publishResult,
     appT,
-    publishControls:
+    publishActions:
       selectedRepo && (activeProviderId === "dotnet" ? Boolean(projectInfo) : true)
         ? {
             publishCommand:
               activeProviderId === "dotnet" ? dotnetPublishPreviewCommand : null,
             publishCommandLabel: publishT.command || "将执行的命令:",
-            executeLabel: configT.execute || "执行发布",
+            startLabel: configT.execute || "执行发布",
             publishingLabel: configT.publishing || "发布中...",
             cancelLabel: appT.cancelPublish || "取消发布",
             cancellingLabel: appT.cancelling || "取消中...",
             isPublishing,
             isCancellingPublish,
-            executeDisabled: !selectedRepo,
-            onExecutePublish: executePublish,
+            startDisabled: !selectedRepo,
+            onStartPublish: startPublish,
             onCancelPublish: cancelPublish,
           }
         : null,
@@ -665,6 +666,7 @@ function App() {
               projectPublishProfiles={projectInfo?.publish_profiles || []}
               projectFilePath={projectInfo?.project_file}
               onSelectProjectProfile={handleSelectProjectProfile}
+              onCopyProjectProfileToCustom={handleCreateProfileFromProjectProfile}
               recentConfigKeys={recentConfigKeys}
               favoriteConfigKeys={favoriteConfigKeys}
               onToggleFavoriteConfig={toggleFavoriteConfig}
@@ -698,7 +700,7 @@ function App() {
               <PublishContentSection
                 showCommandImportResultCard={showCommandImportResultCard}
                 commandImportResultCardProps={commandImportResultCardProps}
-                outputLogCardProps={outputLogCardProps}
+                publishRunCardProps={publishRunCardProps}
                 shouldLoadDiagnosticsSection={shouldLoadDiagnosticsSection}
                 diagnosticsSectionProps={
                   selectedRepo
@@ -712,10 +714,10 @@ function App() {
                         selectedRepo,
                         isPublishing,
                         publishResult,
-                        lastExecutedSpec,
+                        lastPublishSpec,
                         outputLog,
                         environmentLastResult,
-                        currentExecutionRecordId,
+                        currentPublishRecordId,
                         recentBundleExports,
                         recentHistoryExports,
                         setExecutionHistory,
