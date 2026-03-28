@@ -1,10 +1,5 @@
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { AppDialogShell } from "@/components/ui/app-dialog-shell";
+import { Dialog } from "@/components/ui/dialog";
 import { Keyboard } from "lucide-react";
 import { useEffect, useState } from "react";
 import { getShortcutsHelp } from "@/lib/store";
@@ -34,17 +29,14 @@ export function ShortcutsDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[400px]">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <Keyboard className="h-5 w-5" />
-            {shortcutT.title || "快捷键"}
-          </DialogTitle>
-          <DialogDescription>
-            {shortcutT.description || "可用的全局快捷键"}
-          </DialogDescription>
-        </DialogHeader>
-        <div className="space-y-2 py-4 glass-stagger">
+      <AppDialogShell
+        size="compact"
+        title={shortcutT.title || "快捷键"}
+        description={shortcutT.description || "可用的全局快捷键"}
+        icon={<Keyboard className="h-4 w-4" />}
+        bodyInnerClassName="space-y-2 glass-stagger"
+      >
+        <div className="space-y-2">
           {shortcuts.map((shortcut, index) => (
             <div
               key={index}
@@ -62,7 +54,7 @@ export function ShortcutsDialog({
             </p>
           )}
         </div>
-      </DialogContent>
+      </AppDialogShell>
     </Dialog>
   );
 }

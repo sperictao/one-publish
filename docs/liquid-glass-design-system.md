@@ -295,6 +295,9 @@ scrollbar-color: transparent transparent;
 | **Button** | `ui/button.tsx` | `shadow-[var(--glass-shadow)]`, `border-[var(--glass-border)]`, `bg-[var(--glass-bg)]`, `backdrop-blur-sm` | `glass-press` | 所有变体均有按压反馈；outline/secondary 带玻璃边框和模糊 |
 | **Card** | `ui/card.tsx` | `glass-card` | `glass-interactive` | hover 上浮 + 按压回弹 + specular 高光 |
 | **Dialog** | `ui/dialog.tsx` | `bg-[var(--glass-panel-bg)]`, `backdrop-blur-xl`, `border-[var(--glass-border)]`, `shadow-[var(--glass-shadow-lg)]`, `bg-[var(--glass-overlay)]` | `glass-press`（close 按钮） | Overlay 带 `backdrop-blur-md`；Content 带 zoom + slide 入场 |
+| **AppDialogShell** | `ui/app-dialog-shell.tsx` | `glass-card`, `repo-sidebar-shell`, `bg-background`（overlay） | 复用 `glass-press`（close 按钮） | 设置页同款定制外壳，统一头部、滚动体、底部操作栏与尺寸变体 |
+| **AppDialogInset** | `ui/app-dialog-inset.tsx` | `bg-[var(--glass-input-bg)]`, `border-[var(--glass-border-subtle)]`, `shadow-[var(--glass-inset-shadow)]` | — | 弹窗内部信息卡、表单分组、结果预览统一使用的 inset 容器 |
+| **AppDialogBadge** | `ui/app-dialog-badge.tsx` | 基于语义色的轻量状态胶囊 | — | 弹窗内状态摘要、步骤状态、工具状态统一使用的徽标组件 |
 | **Input** | `ui/input.tsx` | `border-[var(--glass-border-subtle)]`, `bg-[var(--glass-input-bg)]`, `shadow-[var(--glass-inset-shadow)]` | — | focus 时 primary ring + 边框加深 |
 | **Select** | `ui/select.tsx` | Trigger: 同 Input；Content: `bg-[var(--glass-panel-bg)]`, `backdrop-blur-xl` | `glass-press`（trigger）, `glass-transition`（item） | 下拉面板带玻璃模糊 |
 | **Switch** | `ui/switch.tsx` | `bg-[var(--glass-input-bg)]`, `border-[var(--glass-border)]`, `shadow-[var(--glass-inset-shadow)]` | `glass-press`, `duration-200`（thumb） | 未选中态带内凹阴影 |

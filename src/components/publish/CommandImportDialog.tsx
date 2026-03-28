@@ -2,14 +2,9 @@ import { useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { toast } from "sonner";
 
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { AppDialogShell } from "@/components/ui/app-dialog-shell";
+import { AppDialogInset } from "@/components/ui/app-dialog-inset";
+import { Dialog } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -99,32 +94,50 @@ export function CommandImportDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[600px]">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <Terminal className="h-5 w-5" />
-            {commandT.title || "从命令导入"}
-          </DialogTitle>
-          <DialogDescription>
-            {commandT.description || "粘贴你的构建命令，自动提取参数"}
-          </DialogDescription>
-        </DialogHeader>
-
-        <div className="space-y-4 py-4">
-          <div className="space-y-2">
-            <Label htmlFor="command-input">{commandT.commandLabel || "构建命令"}</Label>
-            <Textarea
-              id="command-input"
-              placeholder={`${commandT.examplePrefix || "示例"}: ${commandExample}`}
-              value={command}
-              onChange={(e) => setCommand(e.target.value)}
-              rows={4}
-              className="font-mono text-sm"
-            />
-            <p className="text-xs text-muted-foreground">
-              {(commandT.currentProvider || "当前 Provider: {{provider}}（支持: dotnet, cargo, go, gradle）").replace("{{provider}}", providerLabel)}
-            </p>
+      <AppDialogShell
+        size="compact"
+        dialogClassName="sm:max-w-[640px]"
+        title={commandT.title || "从命令导入"}
+        description={commandT.description || "粘贴你的构建命令，自动提取参数"}
+        icon={<Terminal className="h-4 w-4" />}
+        bodyInnerClassName="space-y-4"
+        footer={
+          <div className="flex w-full flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+            <Button variant="outline" onClick={handleClose}>
+              {commandT.cancel || "取消"}
+            </Button>
+            <Button onClick={handleImport} disabled={!parsedSpec}>
+              {commandT.importParameters || "导入参数"}
+            </Button>
           </div>
+        }
+      >
+        <div className="space-y-4">
+          <AppDialogInset className="space-y-3">
+            <div className="space-y-1">
+              <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground/70">
+                {commandT.commandSectionTitle || "命令输入"}
+              </div>
+              <p className="text-xs leading-5 text-muted-foreground">
+                {(commandT.currentProvider ||
+                  "当前 Provider: {{provider}}（支持: dotnet, cargo, go, gradle）").replace(
+                  "{{provider}}",
+                  providerLabel
+                )}
+              </p>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="command-input">{commandT.commandLabel || "构建命令"}</Label>
+              <Textarea
+                id="command-input"
+                placeholder={`${commandT.examplePrefix || "示例"}: ${commandExample}`}
+                value={command}
+                onChange={(e) => setCommand(e.target.value)}
+                rows={4}
+                className="font-mono text-sm"
+              />
+            </div>
+          </AppDialogInset>
 
           <Button
             onClick={handleParse}
@@ -142,33 +155,24 @@ export function CommandImportDialog({
           </Button>
 
           {error && (
-            <div className="p-3 bg-destructive/8 text-destructive rounded-xl border border-destructive/20 text-sm">
-              <p className="font-semibold mb-1">{commandT.parseFailed || "解析失败"}</p>
+            <AppDialogInset className="space-y-1 border-destructive/20 bg-destructive/8 text-destructive shadow-none">
+              <p className="font-semibold">{commandT.parseFailed || "解析失败"}</p>
               <p className="text-xs">{error}</p>
-            </div>
+            </AppDialogInset>
           )}
 
           {parsedSpec && (
-            <div className="space-y-2">
+            <AppDialogInset className="space-y-2">
               <Label>{commandT.extractedParameters || "提取的参数"}</Label>
-              <div className="p-3 bg-[var(--glass-input-bg)] rounded-xl">
+              <div className="rounded-xl bg-background/60 p-3">
                 <pre className="text-xs font-mono overflow-auto max-h-40">
                   {JSON.stringify(parsedSpec.parameters, null, 2)}
                 </pre>
               </div>
-            </div>
+            </AppDialogInset>
           )}
         </div>
-
-        <DialogFooter>
-          <Button variant="outline" onClick={handleClose}>
-            {commandT.cancel || "取消"}
-          </Button>
-          <Button onClick={handleImport} disabled={!parsedSpec}>
-            {commandT.importParameters || "导入参数"}
-          </Button>
-        </DialogFooter>
-      </DialogContent>
+      </AppDialogShell>
     </Dialog>
   );
 }

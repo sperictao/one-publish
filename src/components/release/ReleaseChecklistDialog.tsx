@@ -11,14 +11,10 @@ import {
   XCircle,
 } from "lucide-react";
 
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { AppDialogBadge } from "@/components/ui/app-dialog-badge";
+import { AppDialogInset } from "@/components/ui/app-dialog-inset";
+import { AppDialogShell } from "@/components/ui/app-dialog-shell";
+import { Dialog } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { useI18n } from "@/hooks/useI18n";
 import { joinPath } from "@/lib/paths";
@@ -65,24 +61,24 @@ function statusStyles(status: ChecklistStatus) {
   if (status === "pass") {
     return {
       icon: <CheckCircle2 className="h-4 w-4 text-green-600" />,
-      badgeClass: "border-green-200 bg-green-50 text-green-700",
+      badgeVariant: "success" as const,
     };
   }
   if (status === "warning") {
     return {
       icon: <AlertTriangle className="h-4 w-4 text-amber-600" />,
-      badgeClass: "border-amber-200 bg-amber-50 text-amber-700",
+      badgeVariant: "warning" as const,
     };
   }
   if (status === "fail") {
     return {
       icon: <XCircle className="h-4 w-4 text-red-600" />,
-      badgeClass: "border-red-200 bg-red-50 text-red-700",
+      badgeVariant: "danger" as const,
     };
   }
   return {
     icon: <Circle className="h-4 w-4 text-muted-foreground" />,
-    badgeClass: "border-border bg-muted text-muted-foreground",
+    badgeVariant: "neutral" as const,
   };
 }
 
@@ -316,10 +312,6 @@ export function ReleaseChecklistDialog({
     ? checklistTranslations.ready || "签名发布条件已满足"
     : checklistTranslations.notReady || "签名发布条件未满足";
 
-  const readyClass = blockingReady
-    ? "border-green-200 bg-green-50 text-green-700"
-    : "border-amber-200 bg-amber-50 text-amber-700";
-
   const reportChecklist = useMemo<PreflightChecklistItem[]>(
     () =>
       checklistItems.map((item) => ({
@@ -400,37 +392,93 @@ export function ReleaseChecklistDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[920px]" surfaceClassName="max-h-[85vh] flex flex-col">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <ListChecks className="h-5 w-5" />
-            {checklistTranslations.title || "签名发布清单"}
-          </DialogTitle>
-          <DialogDescription>
-            {checklistTranslations.description ||
-              "按步骤核对发布条件，确保产物可分发且可验证。"}
-          </DialogDescription>
-        </DialogHeader>
-
-        <div className="rounded-xl border border-[var(--glass-border-subtle)] bg-[var(--glass-input-bg)] p-3 text-xs sm:text-sm flex flex-wrap gap-2 sm:gap-3">
-          <span className="rounded border px-2 py-1">
+      <AppDialogShell
+        size="wide"
+        title={checklistTranslations.title || "签名发布清单"}
+        description={
+          checklistTranslations.description ||
+          "按步骤核对发布条件，确保产物可分发且可验证。"
+        }
+        icon={<ListChecks className="h-4 w-4" />}
+        bodyInnerClassName="space-y-4"
+        footerClassName="sm:space-x-0"
+        footer={
+          <>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={handleExportReport}
+              disabled={exporting}
+            >
+              {exporting ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  {checklistTranslations.exporting || "导出中..."}
+                </>
+              ) : (
+                checklistTranslations.export || "导出预检报告"
+              )}
+            </Button>
+            <div className="flex flex-col-reverse gap-2 sm:flex-row sm:items-center">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setActiveStepIndex((prev) => Math.max(prev - 1, 0))}
+                disabled={activeStepIndex === 0 || exporting}
+              >
+                {checklistTranslations.prev || "上一步"}
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() =>
+                  setActiveStepIndex((prev) =>
+                    Math.min(prev + 1, checklistItems.length - 1)
+                  )
+                }
+                disabled={activeStepIndex >= checklistItems.length - 1 || exporting}
+              >
+                {checklistTranslations.next || "下一步"}
+              </Button>
+              <Button type="button" onClick={() => onOpenChange(false)} disabled={exporting}>
+                {checklistTranslations.close || "完成"}
+              </Button>
+            </div>
+          </>
+        }
+      >
+        <AppDialogInset className="flex flex-wrap gap-2 p-3 text-xs sm:text-sm">
+          <AppDialogBadge
+            variant="success"
+            icon={<CheckCircle2 className="h-3.5 w-3.5" />}
+          >
             {(checklistTranslations.summary?.passed || "已通过") + `: ${passedCount}`}
-          </span>
-          <span className="rounded border px-2 py-1">
+          </AppDialogBadge>
+          <AppDialogBadge
+            variant="warning"
+            icon={<AlertTriangle className="h-3.5 w-3.5" />}
+          >
             {(checklistTranslations.summary?.warning || "警告") + `: ${warningCount}`}
-          </span>
-          <span className="rounded border px-2 py-1">
+          </AppDialogBadge>
+          <AppDialogBadge
+            variant="danger"
+            icon={<XCircle className="h-3.5 w-3.5" />}
+          >
             {(checklistTranslations.summary?.failed || "失败") + `: ${failedCount}`}
-          </span>
-          <span className={`rounded border px-2 py-1 inline-flex items-center gap-1 ${readyClass}`}>
-            {blockingReady ? (
-              <ShieldCheck className="h-3.5 w-3.5" />
-            ) : (
-              <AlertTriangle className="h-3.5 w-3.5" />
-            )}
+          </AppDialogBadge>
+          <AppDialogBadge
+            variant={blockingReady ? "success" : "warning"}
+            icon={
+              blockingReady ? (
+                <ShieldCheck className="h-3.5 w-3.5" />
+              ) : (
+                <AlertTriangle className="h-3.5 w-3.5" />
+              )
+            }
+          >
             {readyMessage}
-          </span>
-        </div>
+          </AppDialogBadge>
+        </AppDialogInset>
 
         <div className="grid gap-4 md:grid-cols-[240px_1fr] overflow-y-auto glass-scrollbar pr-1">
           <div className="space-y-2 glass-stagger">
@@ -454,18 +502,16 @@ export function ReleaseChecklistDialog({
                     {style.icon}
                   </div>
                   <div className="mt-2">
-                    <span
-                      className={`inline-flex items-center rounded border px-2 py-0.5 text-[11px] ${style.badgeClass}`}
-                    >
+                    <AppDialogBadge variant={style.badgeVariant}>
                       {statusLabel}
-                    </span>
+                    </AppDialogBadge>
                   </div>
                 </button>
               );
             })}
           </div>
 
-          <div className="rounded-xl border border-[var(--glass-border-subtle)] p-4 space-y-4">
+          <AppDialogInset className="space-y-4">
             <div className="space-y-1">
               <div className="flex items-center justify-between gap-2">
                 <h3 className="text-base font-semibold">{activeStep.title}</h3>
@@ -476,7 +522,7 @@ export function ReleaseChecklistDialog({
               <p className="text-sm text-muted-foreground">{activeStep.description}</p>
             </div>
 
-            <div className="rounded-xl bg-[var(--glass-code-bg)] p-3 text-xs font-mono whitespace-pre-wrap break-all">
+            <div className="rounded-xl border border-[var(--glass-border-subtle)] bg-[var(--glass-code-bg)] p-3 text-xs font-mono whitespace-pre-wrap break-all">
               {activeStep.detail}
             </div>
 
@@ -490,50 +536,9 @@ export function ReleaseChecklistDialog({
                 {activeStep.actionLabel}
               </Button>
             )}
-          </div>
+          </AppDialogInset>
         </div>
-
-        <DialogFooter>
-          <Button
-            type="button"
-            variant="secondary"
-            onClick={handleExportReport}
-            disabled={exporting}
-          >
-            {exporting ? (
-              <>
-                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                {checklistTranslations.exporting || "导出中..."}
-              </>
-            ) : (
-              checklistTranslations.export || "导出预检报告"
-            )}
-          </Button>
-          <Button
-            type="button"
-            variant="outline"
-            onClick={() => setActiveStepIndex((prev) => Math.max(prev - 1, 0))}
-            disabled={activeStepIndex === 0 || exporting}
-          >
-            {checklistTranslations.prev || "上一步"}
-          </Button>
-          <Button
-            type="button"
-            variant="outline"
-            onClick={() =>
-              setActiveStepIndex((prev) =>
-                Math.min(prev + 1, checklistItems.length - 1)
-              )
-            }
-            disabled={activeStepIndex >= checklistItems.length - 1 || exporting}
-          >
-            {checklistTranslations.next || "下一步"}
-          </Button>
-          <Button type="button" onClick={() => onOpenChange(false)} disabled={exporting}>
-            {checklistTranslations.close || "完成"}
-          </Button>
-        </DialogFooter>
-      </DialogContent>
+      </AppDialogShell>
     </Dialog>
   );
 }

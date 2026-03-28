@@ -1,12 +1,14 @@
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
 import { cn } from "@/lib/utils";
 import { getPathBasename } from "@/lib/paths";
+import { AppDialogInset } from "@/components/ui/app-dialog-inset";
+import { AppDialogShell } from "@/components/ui/app-dialog-shell";
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { FileSearch, RefreshCw } from "lucide-react";
+import { FileSearch, FolderGit2, RefreshCw } from "lucide-react";
 import type { Branch, Repository } from "@/types/repository";
 
 interface ProviderOption {
@@ -438,224 +440,270 @@ export function EditRepositoryDialog({
         }
       }}
     >
-      <DialogContent className="sm:max-w-[520px]">
-        <DialogHeader>
-          <DialogTitle>{repoT.editRepository || "编辑项目信息"}</DialogTitle>
-          <DialogDescription>
-            {repoT.editRepositoryDescription ||
-              "可编辑仓库名称、Project Root、Project File 与当前分支信息。"}
-          </DialogDescription>
-        </DialogHeader>
-
-        <form className="space-y-4" onSubmit={handleSubmit}>
-          <div className="space-y-2">
-            <Label htmlFor="repo-edit-name">{repoT.repositoryName || "仓库名称"}</Label>
-            <Input
-              id="repo-edit-name"
-              value={editName}
-              onChange={(event) => setEditName(event.target.value)}
-              placeholder={repoT.repositoryNamePlaceholder || "请输入仓库名称"}
-            />
-            {isEditNameEmpty && (
-              <p className="text-xs text-destructive">
-                {repoT.repositoryNameRequired || "请输入仓库名称"}
+      <AppDialogShell
+        size="compact"
+        dialogClassName="sm:max-w-[620px]"
+        title={repoT.editRepository || "编辑项目信息"}
+        description={
+          repoT.editRepositoryDescription ||
+          "可编辑仓库名称、Project Root、Project File 与当前分支信息。"
+        }
+        icon={<FolderGit2 className="h-4 w-4" />}
+        bodyInnerClassName="space-y-4"
+        footer={
+          <>
+            <div className="text-xs leading-5 text-muted-foreground">
+              {repoT.editRepositoryHint || "修改仓库基础信息后会立即刷新左栏展示与关联状态。"}
+            </div>
+            <div className="flex flex-col-reverse gap-2 sm:flex-row sm:items-center">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => onOpenChange(false)}
+                disabled={isSavingRepo || isDetectingProvider || isRefreshingBranches}
+              >
+                {repoT.cancel || "取消"}
+              </Button>
+              <Button
+                type="submit"
+                form="edit-repository-form"
+                disabled={
+                  isSavingRepo ||
+                  isDetectingProvider ||
+                  isRefreshingBranches ||
+                  isEditNameEmpty ||
+                  isEditPathEmpty
+                }
+              >
+                {isSavingRepo ? repoT.saving || "保存中..." : repoT.save || "保存"}
+              </Button>
+            </div>
+          </>
+        }
+      >
+        <form id="edit-repository-form" className="space-y-4" onSubmit={handleSubmit}>
+          <AppDialogInset className="space-y-4">
+            <div className="space-y-1">
+              <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground/70">
+                {repoT.repositorySectionTitle || "仓库信息"}
+              </div>
+              <p className="text-xs leading-5 text-muted-foreground">
+                {repoT.repositorySectionDescription || "更新左栏展示名称和项目根目录。"}
               </p>
-            )}
-          </div>
+            </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="repo-edit-path">{repoT.repositoryPath || "Project Root"}</Label>
-            <Input
-              id="repo-edit-path"
-              value={editPath}
-              onChange={(event) => setEditPath(event.target.value)}
-              placeholder={repoT.repositoryPathPlaceholder || "请输入项目根目录路径"}
-            />
-            {isEditPathEmpty && (
-              <p className="text-xs text-destructive">
-                {repoT.repositoryPathRequired || "请输入项目根目录路径"}
-              </p>
-            )}
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="repo-edit-project-file">{repoT.projectFile || "Project File"}</Label>
-            <div className="flex items-center gap-2">
-              {isProjectFileManual ? (
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="repo-edit-name">{repoT.repositoryName || "仓库名称"}</Label>
                 <Input
-                  id="repo-edit-project-file"
-                  className="flex-1"
-                  value={editProjectFile}
-                  onChange={(event) => setEditProjectFile(event.target.value)}
-                  placeholder={repoT.projectFilePlaceholder || "可选：请输入项目文件路径"}
+                  id="repo-edit-name"
+                  value={editName}
+                  onChange={(event) => setEditName(event.target.value)}
+                  placeholder={repoT.repositoryNamePlaceholder || "请输入仓库名称"}
                 />
-              ) : (
-                <Select
-                  value={editProjectFile || NO_PROJECT_FILE_VALUE}
-                  onValueChange={(value) => {
-                    if (value === MANUAL_INPUT_VALUE) {
-                      setIsProjectFileManual(true);
-                      return;
-                    }
-                    setEditProjectFile(value === NO_PROJECT_FILE_VALUE ? "" : value);
-                  }}
-                  disabled={isScanningProjectFiles}
-                >
-                  <SelectTrigger id="repo-edit-project-file" className="flex-1">
-                    <SelectValue
-                      placeholder={
-                        isScanningProjectFiles
-                          ? repoT.scanningProjectFiles || "扫描中..."
-                          : repoT.projectFilePlaceholder || "可选：请输入项目文件路径"
-                      }
+                {isEditNameEmpty && (
+                  <p className="text-xs text-destructive">
+                    {repoT.repositoryNameRequired || "请输入仓库名称"}
+                  </p>
+                )}
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="repo-edit-path">{repoT.repositoryPath || "Project Root"}</Label>
+                <Input
+                  id="repo-edit-path"
+                  value={editPath}
+                  onChange={(event) => setEditPath(event.target.value)}
+                  placeholder={repoT.repositoryPathPlaceholder || "请输入项目根目录路径"}
+                />
+                {isEditPathEmpty && (
+                  <p className="text-xs text-destructive">
+                    {repoT.repositoryPathRequired || "请输入项目根目录路径"}
+                  </p>
+                )}
+              </div>
+            </div>
+          </AppDialogInset>
+
+          <AppDialogInset className="space-y-4">
+            <div className="space-y-1">
+              <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground/70">
+                {repoT.projectMetadataSectionTitle || "项目定位"}
+              </div>
+              <p className="text-xs leading-5 text-muted-foreground">
+                {repoT.projectMetadataSectionDescription || "补全项目文件与 Provider，减少后续手动切换。"}
+              </p>
+            </div>
+
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="repo-edit-project-file">{repoT.projectFile || "Project File"}</Label>
+                <div className="flex items-center gap-2">
+                  {isProjectFileManual ? (
+                    <Input
+                      id="repo-edit-project-file"
+                      className="flex-1"
+                      value={editProjectFile}
+                      onChange={(event) => setEditProjectFile(event.target.value)}
+                      placeholder={repoT.projectFilePlaceholder || "可选：请输入项目文件路径"}
                     />
+                  ) : (
+                    <Select
+                      value={editProjectFile || NO_PROJECT_FILE_VALUE}
+                      onValueChange={(value) => {
+                        if (value === MANUAL_INPUT_VALUE) {
+                          setIsProjectFileManual(true);
+                          return;
+                        }
+                        setEditProjectFile(value === NO_PROJECT_FILE_VALUE ? "" : value);
+                      }}
+                      disabled={isScanningProjectFiles}
+                    >
+                      <SelectTrigger id="repo-edit-project-file" className="flex-1">
+                        <SelectValue
+                          placeholder={
+                            isScanningProjectFiles
+                              ? repoT.scanningProjectFiles || "扫描中..."
+                              : repoT.projectFilePlaceholder || "可选：请输入项目文件路径"
+                          }
+                        />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value={NO_PROJECT_FILE_VALUE}>
+                          {repoT.projectFileNone || "未设置"}
+                        </SelectItem>
+                        {projectFileOptions.map((filePath) => (
+                          <SelectItem key={filePath} value={filePath}>
+                            {getPathBasename(filePath) || filePath}
+                          </SelectItem>
+                        ))}
+                        <SelectItem value={MANUAL_INPUT_VALUE}>
+                          {repoT.projectFileManualInput || "手动输入..."}
+                        </SelectItem>
+                      </SelectContent>
+                    </Select>
+                  )}
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="icon"
+                    className="h-9 w-9"
+                    onClick={() => {
+                      if (isProjectFileManual && projectFileOptions.length > 0) {
+                        setIsProjectFileManual(false);
+                      } else {
+                        void handleScanProjectFiles();
+                      }
+                    }}
+                    title={repoT.scanProjectFiles || "扫描项目文件"}
+                    disabled={isSavingRepo || isScanningProjectFiles || !editPath.trim()}
+                  >
+                    <FileSearch
+                      className={cn("h-4 w-4", isScanningProjectFiles && "animate-spin")}
+                    />
+                  </Button>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  {repoT.projectFileScanHint || "可从自动扫描结果中选择，或切换到手动输入。"}
+                </p>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="repo-edit-provider">{repoT.provider || "Provider"}</Label>
+                <div className="flex items-center gap-2">
+                  <Select
+                    value={editProviderId}
+                    onValueChange={(value) => {
+                      setShouldAutoDetectProvider(false);
+                      setEditProviderId(value);
+                    }}
+                    disabled={isDetectingProvider}
+                  >
+                    <SelectTrigger id="repo-edit-provider" className="flex-1">
+                      <SelectValue placeholder={repoT.providerPlaceholder || "选择 Provider"} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value={NO_PROVIDER_VALUE}>
+                        {repoT.providerUnspecified || "未设置"}
+                      </SelectItem>
+                      {providerOptions.map((provider) => (
+                        <SelectItem key={provider.id} value={provider.id}>
+                          {provider.label || provider.displayName || provider.id}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="icon"
+                    className="h-9 w-9"
+                    onClick={() => {
+                      void handleDetectProvider();
+                    }}
+                    title={repoT.detectProvider || "自动检测 Provider"}
+                    disabled={isSavingRepo || isDetectingProvider || isRefreshingBranches}
+                  >
+                    <RefreshCw className={cn("h-4 w-4", isDetectingProvider && "animate-spin")} />
+                  </Button>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  {repoT.providerDetectHint || "可手动填写 Provider，或点击右侧按钮自动检测。"}
+                </p>
+              </div>
+            </div>
+          </AppDialogInset>
+
+          <AppDialogInset className="space-y-4">
+            <div className="space-y-1">
+              <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground/70">
+                {repoT.gitSectionTitle || "Git 状态"}
+              </div>
+              <p className="text-xs leading-5 text-muted-foreground">
+                {repoT.gitSectionDescription || "同步当前分支，确保发布与仓库状态一致。"}
+              </p>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="repo-edit-branch">{repoT.currentBranch || "当前分支"}</Label>
+              <div className="flex items-center gap-2">
+                <Select
+                  value={editCurrentBranch}
+                  onValueChange={setEditCurrentBranch}
+                  disabled={branchOptions.length === 0 || isRefreshingBranches}
+                >
+                  <SelectTrigger id="repo-edit-branch" className="flex-1">
+                    <SelectValue placeholder={repoT.currentBranchPlaceholder || "请选择分支"} />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value={NO_PROJECT_FILE_VALUE}>
-                      {repoT.projectFileNone || "未设置"}
-                    </SelectItem>
-                    {projectFileOptions.map((filePath) => (
-                      <SelectItem key={filePath} value={filePath}>
-                        {getPathBasename(filePath) || filePath}
+                    {branchOptions.map((branchName) => (
+                      <SelectItem key={branchName} value={branchName}>
+                        {branchName}
                       </SelectItem>
                     ))}
-                    <SelectItem value={MANUAL_INPUT_VALUE}>
-                      {repoT.projectFileManualInput || "手动输入..."}
-                    </SelectItem>
                   </SelectContent>
                 </Select>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="icon"
+                  className="h-9 w-9"
+                  onClick={() => {
+                    void handleRefreshBranches();
+                  }}
+                  title={repoT.refreshBranches || "刷新分支"}
+                  disabled={isSavingRepo || isDetectingProvider || isRefreshingBranches}
+                >
+                  <RefreshCw className={cn("h-4 w-4", isRefreshingBranches && "animate-spin")} />
+                </Button>
+              </div>
+              {branchOptions.length === 0 && (
+                <p className="text-xs text-muted-foreground">{repoT.noBranches || "暂无可选分支"}</p>
               )}
-              <Button
-                type="button"
-                variant="outline"
-                size="icon"
-                className="h-9 w-9"
-                onClick={() => {
-                  if (isProjectFileManual && projectFileOptions.length > 0) {
-                    setIsProjectFileManual(false);
-                  } else {
-                    void handleScanProjectFiles();
-                  }
-                }}
-                title={repoT.scanProjectFiles || "扫描项目文件"}
-                disabled={isSavingRepo || isScanningProjectFiles || !editPath.trim()}
-              >
-                <FileSearch
-                  className={cn("h-4 w-4", isScanningProjectFiles && "animate-spin")}
-                />
-              </Button>
             </div>
-            <p className="text-xs text-muted-foreground">
-              {repoT.projectFileScanHint || "可从自动扫描结果中选择，或切换到手动输入。"}
-            </p>
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="repo-edit-provider">{repoT.provider || "Provider"}</Label>
-            <div className="flex items-center gap-2">
-              <Select
-                value={editProviderId}
-                onValueChange={(value) => {
-                  setShouldAutoDetectProvider(false);
-                  setEditProviderId(value);
-                }}
-                disabled={isDetectingProvider}
-              >
-                <SelectTrigger id="repo-edit-provider" className="flex-1">
-                  <SelectValue placeholder={repoT.providerPlaceholder || "选择 Provider"} />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value={NO_PROVIDER_VALUE}>
-                    {repoT.providerUnspecified || "未设置"}
-                  </SelectItem>
-                  {providerOptions.map((provider) => (
-                    <SelectItem key={provider.id} value={provider.id}>
-                      {provider.label || provider.displayName || provider.id}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <Button
-                type="button"
-                variant="outline"
-                size="icon"
-                className="h-9 w-9"
-                onClick={() => {
-                  void handleDetectProvider();
-                }}
-                title={repoT.detectProvider || "自动检测 Provider"}
-                disabled={isSavingRepo || isDetectingProvider || isRefreshingBranches}
-              >
-                <RefreshCw className={cn("h-4 w-4", isDetectingProvider && "animate-spin")} />
-              </Button>
-            </div>
-            <p className="text-xs text-muted-foreground">
-              {repoT.providerDetectHint || "可手动填写 Provider，或点击右侧按钮自动检测。"}
-            </p>
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="repo-edit-branch">{repoT.currentBranch || "当前分支"}</Label>
-            <div className="flex items-center gap-2">
-              <Select
-                value={editCurrentBranch}
-                onValueChange={setEditCurrentBranch}
-                disabled={branchOptions.length === 0 || isRefreshingBranches}
-              >
-                <SelectTrigger id="repo-edit-branch" className="flex-1">
-                  <SelectValue placeholder={repoT.currentBranchPlaceholder || "请选择分支"} />
-                </SelectTrigger>
-                <SelectContent>
-                  {branchOptions.map((branchName) => (
-                    <SelectItem key={branchName} value={branchName}>
-                      {branchName}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <Button
-                type="button"
-                variant="outline"
-                size="icon"
-                className="h-9 w-9"
-                onClick={() => {
-                  void handleRefreshBranches();
-                }}
-                title={repoT.refreshBranches || "刷新分支"}
-                disabled={isSavingRepo || isDetectingProvider || isRefreshingBranches}
-              >
-                <RefreshCw className={cn("h-4 w-4", isRefreshingBranches && "animate-spin")} />
-              </Button>
-            </div>
-            {branchOptions.length === 0 && (
-              <p className="text-xs text-muted-foreground">{repoT.noBranches || "暂无可选分支"}</p>
-            )}
-          </div>
-
-          <DialogFooter>
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => onOpenChange(false)}
-              disabled={isSavingRepo || isDetectingProvider || isRefreshingBranches}
-            >
-              {repoT.cancel || "取消"}
-            </Button>
-            <Button
-              type="submit"
-              disabled={
-                isSavingRepo ||
-                isDetectingProvider ||
-                isRefreshingBranches ||
-                isEditNameEmpty ||
-                isEditPathEmpty
-              }
-            >
-              {isSavingRepo ? repoT.saving || "保存中..." : repoT.save || "保存"}
-            </Button>
-          </DialogFooter>
+          </AppDialogInset>
         </form>
-      </DialogContent>
+      </AppDialogShell>
     </Dialog>
   );
 }

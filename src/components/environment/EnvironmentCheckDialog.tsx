@@ -10,14 +10,10 @@ import {
   XCircle,
 } from "lucide-react";
 
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { AppDialogBadge } from "@/components/ui/app-dialog-badge";
+import { AppDialogShell } from "@/components/ui/app-dialog-shell";
+import { AppDialogInset } from "@/components/ui/app-dialog-inset";
+import { Dialog } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
@@ -136,17 +132,20 @@ export function EnvironmentCheckContent({
       return {
         icon: <XCircle className="h-4 w-4 text-red-600" />,
         text: translations.environment?.blocked || "存在阻断问题",
+        variant: "danger" as const,
       };
     }
     if (grouped.warning.length > 0) {
       return {
         icon: <AlertTriangle className="h-4 w-4 text-yellow-600" />,
         text: translations.environment?.warning || "存在警告",
+        variant: "warning" as const,
       };
     }
     return {
       icon: <CheckCircle2 className="h-4 w-4 text-green-600" />,
       text: translations.environment?.ready || "已就绪",
+      variant: "success" as const,
     };
   }, [grouped.critical.length, grouped.warning.length, result, translations.environment]);
 
@@ -255,7 +254,7 @@ export function EnvironmentCheckContent({
   return (
     <>
       <div className="space-y-4 py-2">
-        <div className="space-y-2">
+        <AppDialogInset className="space-y-3">
           <Label>{translations.environment?.scope || "检查范围"}</Label>
           <div className="grid grid-cols-2 gap-3">
             {ALL_PROVIDERS.map((p) => {
@@ -263,7 +262,7 @@ export function EnvironmentCheckContent({
               return (
                 <div
                   key={p.id}
-                  className="flex items-center justify-between rounded-xl border border-[var(--glass-border-subtle)] bg-[var(--glass-input-bg)] p-3"
+                  className="flex items-center justify-between rounded-xl border border-[var(--glass-border-subtle)] bg-background/60 p-3"
                 >
                   <div className="space-y-0.5">
                     <div className="text-sm font-medium">{p.label}</div>
@@ -279,20 +278,24 @@ export function EnvironmentCheckContent({
               );
             })}
           </div>
-        </div>
+        </AppDialogInset>
 
-        <div className="flex items-center justify-between rounded-xl border border-[var(--glass-border-subtle)] bg-[var(--glass-input-bg)] p-3">
+        <AppDialogInset className="flex items-center justify-between gap-4">
           <div className="space-y-1">
             <div className="text-sm font-medium">
               {translations.environment?.status || "环境状态"}
             </div>
             <div className="text-xs text-muted-foreground">
               {result ? (
-                <span className="inline-flex items-center gap-2">
-                  {statusBadge?.icon}
-                  <span>{statusBadge?.text}</span>
+                <div className="flex flex-wrap items-center gap-2">
+                  <AppDialogBadge
+                    variant={statusBadge?.variant ?? "neutral"}
+                    icon={statusBadge?.icon}
+                  >
+                    {statusBadge?.text}
+                  </AppDialogBadge>
                   <span className="opacity-60">{result.checked_at}</span>
-                </span>
+                </div>
               ) : (
                 translations.environment?.unknown || "未检查"
               )}
@@ -312,31 +315,37 @@ export function EnvironmentCheckContent({
               translations.environment?.recheck || "重新检查"
             )}
           </Button>
-        </div>
+        </AppDialogInset>
 
         {error && (
-          <div className="rounded-xl border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">
+          <AppDialogInset className="border-destructive/40 bg-destructive/10 text-sm text-destructive shadow-none">
             {error}
-          </div>
+          </AppDialogInset>
         )}
 
         {result && (
           <div className="space-y-3">
-            <div className="space-y-2">
+            <AppDialogInset className="space-y-3">
               <Label>{translations.environment?.providers || "工具状态"}</Label>
               <div className="grid grid-cols-1 gap-2">
                 {result.providers.map((provider) => (
                   <div
                     key={provider.provider_id}
-                    className="flex items-center justify-between rounded-xl border border-[var(--glass-border-subtle)] bg-[var(--glass-input-bg)] p-3 text-sm"
+                    className="flex items-center justify-between rounded-xl border border-[var(--glass-border-subtle)] bg-background/60 p-3 text-sm"
                   >
-                    <div className="flex items-center gap-2">
-                      {provider.installed ? (
-                        <CheckCircle2 className="h-4 w-4 text-green-600" />
-                      ) : (
-                        <XCircle className="h-4 w-4 text-red-600" />
-                      )}
-                      <span className="font-medium">{provider.provider_id}</span>
+                    <div className="flex min-w-0 items-center gap-2">
+                      <AppDialogBadge
+                        variant={provider.installed ? "success" : "danger"}
+                        icon={
+                          provider.installed ? (
+                            <CheckCircle2 className="h-3.5 w-3.5" />
+                          ) : (
+                            <XCircle className="h-3.5 w-3.5" />
+                          )
+                        }
+                      >
+                        {provider.provider_id}
+                      </AppDialogBadge>
                       <span className="text-muted-foreground">
                         {provider.version || "unknown"}
                       </span>
@@ -347,12 +356,12 @@ export function EnvironmentCheckContent({
                   </div>
                 ))}
               </div>
-            </div>
+            </AppDialogInset>
 
-            <div className="space-y-2">
+            <AppDialogInset className="space-y-3">
               <Label>{translations.environment?.issues || "发现的问题"}</Label>
               {issues.length === 0 ? (
-                <div className="rounded-xl border border-[var(--glass-border-subtle)] p-3 text-sm text-muted-foreground">
+                <div className="rounded-xl border border-[var(--glass-border-subtle)] bg-background/50 p-3 text-sm text-muted-foreground">
                   {translations.environment?.noIssues || "未发现问题"}
                 </div>
               ) : (
@@ -360,7 +369,7 @@ export function EnvironmentCheckContent({
                   {issues.map((issue, idx) => (
                     <div
                       key={`${issue.provider_id}-${issue.issue_type}-${idx}`}
-                      className="rounded-xl border border-[var(--glass-border-subtle)] p-3"
+                      className="rounded-xl border border-[var(--glass-border-subtle)] bg-background/50 p-3"
                     >
                       <div className="flex items-start justify-between gap-3">
                         <div className="space-y-1">
@@ -375,6 +384,17 @@ export function EnvironmentCheckContent({
                             <div className="text-sm font-medium">
                               {issue.description}
                             </div>
+                            <AppDialogBadge
+                              variant={
+                                issue.severity === "critical"
+                                  ? "danger"
+                                  : issue.severity === "warning"
+                                    ? "warning"
+                                    : "info"
+                              }
+                            >
+                              {issue.severity}
+                            </AppDialogBadge>
                           </div>
                           <div className="text-xs text-muted-foreground">
                             <span className="mr-3">
@@ -422,59 +442,60 @@ export function EnvironmentCheckContent({
                   ))}
                 </div>
               )}
-            </div>
+            </AppDialogInset>
 
             {fixResultText && (
-              <div className="space-y-2">
+              <AppDialogInset className="space-y-2">
                 <Label>{translations.environment?.result || "执行结果"}</Label>
                 <pre className="rounded-xl border border-[var(--glass-border-subtle)] bg-[var(--glass-code-bg)] p-3 text-xs whitespace-pre-wrap max-h-56 overflow-auto">
                   {fixResultText}
                 </pre>
-              </div>
+              </AppDialogInset>
             )}
           </div>
         )}
       </div>
 
       <Dialog open={!!pendingRun} onOpenChange={(open) => !open && setPendingRun(null)}>
-        <DialogContent className="sm:max-w-[640px]">
-          <DialogHeader>
-            <DialogTitle>
-              {translations.environment?.confirmTitle || "确认执行命令"}
-            </DialogTitle>
-            <DialogDescription>
-              {translations.environment?.confirmDesc ||
-                "该操作将执行系统命令，可能会安装或修改本地环境。请确认命令内容无误。"}
-            </DialogDescription>
-          </DialogHeader>
-
-          <div className="space-y-2">
+        <AppDialogShell
+          size="compact"
+          dialogClassName="sm:max-w-[640px]"
+          title={translations.environment?.confirmTitle || "确认执行命令"}
+          description={
+            translations.environment?.confirmDesc ||
+            "该操作将执行系统命令，可能会安装或修改本地环境。请确认命令内容无误。"
+          }
+          icon={<Terminal className="h-4 w-4" />}
+          bodyInnerClassName="space-y-2"
+          footer={
+            <div className="flex w-full flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+              <Button
+                variant="outline"
+                onClick={() => setPendingRun(null)}
+                disabled={runningFix}
+              >
+                {translations.environment?.cancel || "取消"}
+              </Button>
+              <Button onClick={confirmRun} disabled={runningFix}>
+                {runningFix ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    {translations.environment?.running || "执行中..."}
+                  </>
+                ) : (
+                  translations.environment?.run || "执行"
+                )}
+              </Button>
+            </div>
+          }
+        >
+          <AppDialogInset className="space-y-2">
             <Label>{translations.environment?.commandPreview || "命令预览"}</Label>
             <pre className="rounded-xl border border-[var(--glass-border-subtle)] bg-[var(--glass-code-bg)] p-3 text-xs whitespace-pre-wrap max-h-40 overflow-auto">
               {pendingRun?.command || ""}
             </pre>
-          </div>
-
-          <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => setPendingRun(null)}
-              disabled={runningFix}
-            >
-              {translations.environment?.cancel || "取消"}
-            </Button>
-            <Button onClick={confirmRun} disabled={runningFix}>
-              {runningFix ? (
-                <>
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                  {translations.environment?.running || "执行中..."}
-                </>
-              ) : (
-                translations.environment?.run || "执行"
-              )}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
+          </AppDialogInset>
+        </AppDialogShell>
       </Dialog>
     </>
   );
@@ -491,33 +512,28 @@ export function EnvironmentCheckDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[720px]" surfaceClassName="max-h-[80vh] flex flex-col">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <Terminal className="h-5 w-5" />
-            {translations.environment?.title || "环境检查"}
-          </DialogTitle>
-          <DialogDescription>
-            {translations.environment?.description ||
-              "检测本机工具链并提供修复建议"}
-          </DialogDescription>
-        </DialogHeader>
-
-        <div className="overflow-y-auto glass-scrollbar pr-1">
-          <EnvironmentCheckContent
-            active={open}
-            defaultProviderIds={defaultProviderIds}
-            initialResult={initialResult}
-            onChecked={onChecked}
-          />
-        </div>
-
-        <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)}>
-            {translations.environment?.close || "关闭"}
-          </Button>
-        </DialogFooter>
-      </DialogContent>
+      <AppDialogShell
+        size="default"
+        surfaceClassName="max-h-[80vh]"
+        title={translations.environment?.title || "环境检查"}
+        description={translations.environment?.description || "检测本机工具链并提供修复建议"}
+        icon={<Terminal className="h-4 w-4" />}
+        bodyInnerClassName="pr-1"
+        footer={
+          <div className="flex w-full justify-end">
+            <Button variant="outline" onClick={() => onOpenChange(false)}>
+              {translations.environment?.close || "关闭"}
+            </Button>
+          </div>
+        }
+      >
+        <EnvironmentCheckContent
+          active={open}
+          defaultProviderIds={defaultProviderIds}
+          initialResult={initialResult}
+          onChecked={onChecked}
+        />
+      </AppDialogShell>
     </Dialog>
   );
 }

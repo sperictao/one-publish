@@ -9,6 +9,7 @@ import {
 } from "lucide-react";
 import { memo, startTransition, useCallback, useMemo } from "react";
 
+import { AppDialogShell } from "@/components/ui/app-dialog-shell";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -16,14 +17,7 @@ import {
   CardDescription,
   CardHeader,
 } from "@/components/ui/card";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { Dialog } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { SectionShell } from "@/components/ui/section-shell";
@@ -658,143 +652,127 @@ export function QuickCreateProfileDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent
-        chrome="bare"
-        overlayClassName="bg-background backdrop-blur-0"
-        closeButtonClassName="right-6 top-6"
-        className="overflow-visible border-none bg-transparent p-0 shadow-none backdrop-blur-none sm:max-w-[960px]"
-      >
-        <div className="p-1">
-          <div className="glass-card repo-sidebar-shell flex h-[82vh] min-h-0 flex-col overflow-hidden rounded-2xl">
-            <DialogHeader className="border-b border-[var(--glass-divider)] px-6 pb-5 pt-6 pr-16">
-              <div className="flex items-start gap-3">
-                <span
-                  className={cn(
-                    "mt-0.5 flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-2xl shadow-[0_8px_20px_rgba(0,0,0,0.08)]",
-                    quickCreateEditing
-                      ? "bg-[var(--glass-input-bg)] text-foreground/75"
-                      : "bg-primary/10 text-primary"
-                  )}
-                >
-                  {quickCreateEditing ? (
-                    <Layers3 className="h-4 w-4" />
-                  ) : (
-                    <Sparkles className="h-4 w-4" />
-                  )}
-                </span>
-                <div className="min-w-0">
-                  <DialogTitle className="text-[18px] font-semibold tracking-tight">
-                    {quickCreateEditing
-                      ? profileT.quickEditTitle || "编辑发布配置"
-                      : profileT.quickCreateTitle || "创建发布配置"}
-                  </DialogTitle>
-                  <DialogDescription className="mt-1 pr-2 leading-6">
-                    {quickCreateEditing
-                      ? profileT.quickEditDescription || "修改发布配置后保存更新。"
-                      : profileT.quickCreateDescription ||
-                        "填写与自定义模式一致的参数并保存为发布配置。"}
-                  </DialogDescription>
-                </div>
-              </div>
-            </DialogHeader>
-
-            <div className="glass-scrollbar min-h-0 flex-1 overflow-y-auto">
-              <div className="space-y-5 p-5 sm:p-6">
-                <QuickCreateTemplateCard
-                  quickCreateEditing={quickCreateEditing}
-                  profileT={profileT}
-                  quickCreateTemplateId={quickCreateTemplateId}
-                  quickCreateTemplateOptions={quickCreateTemplateOptions}
-                  selectedTemplateDescription={selectedTemplate?.description || null}
-                  onApplyTemplate={handleTemplateChange}
-                />
-
-                <QuickCreateBasicInfoSection
-                  profileT={profileT}
-                  quickCreateProfileName={quickCreateProfileName}
-                  quickCreateProfileGroup={quickCreateProfileGroup}
-                  quickCreateGroupDefaultValue={quickCreateGroupDefaultValue}
-                  quickCreateGroupCustomValue={quickCreateGroupCustomValue}
-                  quickCreateProfileGroupOptions={quickCreateProfileGroupOptions}
-                  quickCreateProfileCustomGroup={quickCreateProfileCustomGroup}
-                  onProfileNameChange={onProfileNameChange}
-                  onProfileNameKeyDown={handleProfileNameKeyDown}
-                  onProfileGroupChange={onProfileGroupChange}
-                  onProfileCustomGroupChange={onProfileCustomGroupChange}
-                />
-
-                <QuickCreateParametersSection
-                  profileT={profileT}
-                  appT={appT}
-                  configuration={quickCreateProfileDraft.configuration}
-                  runtime={quickCreateProfileDraft.runtime}
-                  onConfigurationChange={handleConfigurationChange}
-                  onRuntimeChange={handleRuntimeChange}
-                />
-
-                <QuickCreateOutputSection
-                  profileT={profileT}
-                  appT={appT}
-                  outputDir={quickCreateProfileDraft.outputDir}
-                  selfContained={quickCreateProfileDraft.selfContained}
-                  isRuntimeRequired={isRuntimeRequired}
-                  onOutputDirChange={handleOutputDirChange}
-                  onSelfContainedChange={handleSelfContainedChange}
-                />
-
-                <QuickCreateAdvancedParametersSection
-                  profileT={profileT}
-                  dotnetSchema={dotnetSchema}
-                  parameters={advancedParameters}
-                  onParameterChange={handleAdvancedParameterChange}
-                />
-              </div>
+      <AppDialogShell
+        size="workspace"
+        title={
+          quickCreateEditing
+            ? profileT.quickEditTitle || "编辑发布配置"
+            : profileT.quickCreateTitle || "创建发布配置"
+        }
+        description={
+          quickCreateEditing
+            ? profileT.quickEditDescription || "修改发布配置后保存更新。"
+            : profileT.quickCreateDescription ||
+              "填写与自定义模式一致的参数并保存为发布配置。"
+        }
+        icon={
+          quickCreateEditing ? (
+            <Layers3 className="h-4 w-4" />
+          ) : (
+            <Sparkles className="h-4 w-4" />
+          )
+        }
+        iconWrapperClassName={cn(
+          "shadow-[0_8px_20px_rgba(0,0,0,0.08)]",
+          quickCreateEditing
+            ? "bg-[var(--glass-input-bg)] text-foreground/75"
+            : "bg-primary/10 text-primary"
+        )}
+        bodyInnerClassName="space-y-5"
+        footerClassName="sm:space-x-0"
+        footer={
+          <>
+            <div className="text-xs leading-5 text-muted-foreground">
+              {quickCreateEditing
+                ? profileT.quickEditFooterHint ||
+                  "保存后会立即更新并应用当前发布配置。"
+                : profileT.quickCreateFooterHint ||
+                  "保存后会立即写入并应用到当前仓库。"}
             </div>
+            <div className="flex flex-col-reverse gap-2 sm:flex-row sm:items-center">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => onOpenChange(false)}
+                disabled={quickCreateProfileSaving}
+              >
+                {cancelLabel}
+              </Button>
+              <Button
+                type="button"
+                onClick={onSave}
+                disabled={isSaveDisabled}
+                className="min-w-[148px]"
+              >
+                {quickCreateProfileSaving ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    {quickCreateEditing
+                      ? profileT.quickEditSaving || "更新中..."
+                      : profileT.quickCreateSaving || "保存中..."}
+                  </>
+                ) : (
+                  <>
+                    <Save className="mr-2 h-4 w-4" />
+                    {quickCreateEditing
+                      ? profileT.quickEditAction || "保存修改"
+                      : profileT.quickCreateAction || "创建并保存"}
+                  </>
+                )}
+              </Button>
+            </div>
+          </>
+        }
+      >
+        <QuickCreateTemplateCard
+          quickCreateEditing={quickCreateEditing}
+          profileT={profileT}
+          quickCreateTemplateId={quickCreateTemplateId}
+          quickCreateTemplateOptions={quickCreateTemplateOptions}
+          selectedTemplateDescription={selectedTemplate?.description || null}
+          onApplyTemplate={handleTemplateChange}
+        />
 
-            <DialogFooter className="border-t border-[var(--glass-divider)] px-6 py-5 sm:flex-row sm:items-center sm:justify-between sm:space-x-0">
-              <div className="text-xs leading-5 text-muted-foreground">
-                {quickCreateEditing
-                  ? profileT.quickEditFooterHint ||
-                    "保存后会立即更新并应用当前发布配置。"
-                  : profileT.quickCreateFooterHint ||
-                    "保存后会立即写入并应用到当前仓库。"}
-              </div>
-              <div className="flex flex-col-reverse gap-2 sm:flex-row sm:items-center">
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => onOpenChange(false)}
-                  disabled={quickCreateProfileSaving}
-                >
-                  {cancelLabel}
-                </Button>
-                <Button
-                  type="button"
-                  onClick={onSave}
-                  disabled={isSaveDisabled}
-                  className="min-w-[148px]"
-                >
-                  {quickCreateProfileSaving ? (
-                    <>
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      {quickCreateEditing
-                        ? profileT.quickEditSaving || "更新中..."
-                        : profileT.quickCreateSaving || "保存中..."}
-                    </>
-                  ) : (
-                    <>
-                      <Save className="mr-2 h-4 w-4" />
-                      {quickCreateEditing
-                        ? profileT.quickEditAction || "保存修改"
-                        : profileT.quickCreateAction || "创建并保存"}
-                    </>
-                  )}
-                </Button>
-              </div>
-            </DialogFooter>
-          </div>
-        </div>
-      </DialogContent>
+        <QuickCreateBasicInfoSection
+          profileT={profileT}
+          quickCreateProfileName={quickCreateProfileName}
+          quickCreateProfileGroup={quickCreateProfileGroup}
+          quickCreateGroupDefaultValue={quickCreateGroupDefaultValue}
+          quickCreateGroupCustomValue={quickCreateGroupCustomValue}
+          quickCreateProfileGroupOptions={quickCreateProfileGroupOptions}
+          quickCreateProfileCustomGroup={quickCreateProfileCustomGroup}
+          onProfileNameChange={onProfileNameChange}
+          onProfileNameKeyDown={handleProfileNameKeyDown}
+          onProfileGroupChange={onProfileGroupChange}
+          onProfileCustomGroupChange={onProfileCustomGroupChange}
+        />
+
+        <QuickCreateParametersSection
+          profileT={profileT}
+          appT={appT}
+          configuration={quickCreateProfileDraft.configuration}
+          runtime={quickCreateProfileDraft.runtime}
+          onConfigurationChange={handleConfigurationChange}
+          onRuntimeChange={handleRuntimeChange}
+        />
+
+        <QuickCreateOutputSection
+          profileT={profileT}
+          appT={appT}
+          outputDir={quickCreateProfileDraft.outputDir}
+          selfContained={quickCreateProfileDraft.selfContained}
+          isRuntimeRequired={isRuntimeRequired}
+          onOutputDirChange={handleOutputDirChange}
+          onSelfContainedChange={handleSelfContainedChange}
+        />
+
+        <QuickCreateAdvancedParametersSection
+          profileT={profileT}
+          dotnetSchema={dotnetSchema}
+          parameters={advancedParameters}
+          onParameterChange={handleAdvancedParameterChange}
+        />
+      </AppDialogShell>
     </Dialog>
   );
 }

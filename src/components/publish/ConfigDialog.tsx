@@ -1,11 +1,8 @@
 import {
   Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
 } from "@/components/ui/dialog";
+import { AppDialogInset } from "@/components/ui/app-dialog-inset";
+import { AppDialogShell } from "@/components/ui/app-dialog-shell";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -321,14 +318,14 @@ export function ConfigManagementContent({
         }
       >
         {isLoading && profiles.length === 0 ? (
-          <div className="flex min-h-[180px] items-center justify-center rounded-2xl border border-[var(--glass-border-subtle)] bg-[var(--glass-input-bg)]">
+          <AppDialogInset className="flex min-h-[180px] items-center justify-center">
             <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-          </div>
+          </AppDialogInset>
         ) : profiles.length === 0 ? (
-          <div className="rounded-2xl border border-[var(--glass-border-subtle)] bg-[var(--glass-input-bg)] px-5 py-10 text-center text-muted-foreground">
+          <AppDialogInset className="px-5 py-10 text-center text-muted-foreground">
             <AlertCircle className="mx-auto mb-3 h-8 w-8" />
             <p className="text-sm">{profileT.noProfiles || "暂无保存的配置文件"}</p>
-          </div>
+          </AppDialogInset>
         ) : (
           <div className="space-y-3">
             {profiles.map((profile) => (
@@ -394,63 +391,42 @@ export function ConfigDialog({
 
   return (
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
-      <DialogContent
-        chrome="bare"
-        overlayClassName="bg-background backdrop-blur-0"
-        closeButtonClassName="right-6 top-6"
-        className="overflow-visible border-none bg-transparent p-0 shadow-none backdrop-blur-none sm:max-w-[960px]"
-      >
-        <div className="p-1">
-          <div className="glass-card repo-sidebar-shell flex h-[82vh] min-h-0 flex-col overflow-hidden rounded-2xl">
-            <DialogHeader className="border-b border-[var(--glass-divider)] px-6 pb-5 pt-6 pr-16">
-              <div className="flex items-start gap-3">
-                <span className="mt-0.5 flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-2xl bg-primary/10 text-primary shadow-[0_8px_20px_hsl(var(--primary)/0.16)]">
-                  <FileCog className="h-4 w-4" />
-                </span>
-                <div className="min-w-0">
-                  <DialogTitle className="text-[18px] font-semibold tracking-tight">
-                    {profileT.title || "配置管理"}
-                  </DialogTitle>
-                  <DialogDescription className="mt-1 pr-2 leading-6">
-                    {profileT.description || "管理、导入、导出发布配置文件"}
-                  </DialogDescription>
-                </div>
-              </div>
-            </DialogHeader>
-
-            <div className="glass-scrollbar min-h-0 flex-1 overflow-y-auto">
-              <div className="space-y-5 p-5 sm:p-6">
-                <ConfigManagementContent
-                  active={isOpen}
-                  onLoadProfile={onLoadProfile}
-                  currentProviderId={currentProviderId}
-                  repoId={repoId}
-                  currentParameters={currentParameters}
-                  closeOnLoad
-                  onClose={() => onOpenChange(false)}
-                  onProfilesChanged={onProfilesChanged}
-                />
-              </div>
+      <AppDialogShell
+        size="workspace"
+        title={profileT.title || "配置管理"}
+        description={profileT.description || "管理、导入、导出发布配置文件"}
+        icon={<FileCog className="h-4 w-4" />}
+        bodyInnerClassName="space-y-5"
+        footerClassName="sm:space-x-0"
+        footer={
+          <>
+            <div className="text-xs leading-5 text-muted-foreground">
+              {profileT.managementFooterHint ||
+                "在这里统一导入、导出、保存和加载当前仓库的发布配置。"}
             </div>
-
-            <DialogFooter className="border-t border-[var(--glass-divider)] px-6 py-5 sm:flex-row sm:items-center sm:justify-between sm:space-x-0">
-              <div className="text-xs leading-5 text-muted-foreground">
-                {profileT.managementFooterHint ||
-                  "在这里统一导入、导出、保存和加载当前仓库的发布配置。"}
-              </div>
-              <div className="flex flex-col-reverse gap-2 sm:flex-row sm:items-center">
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => onOpenChange(false)}
-                >
-                  {commonT.close || "关闭"}
-                </Button>
-              </div>
-            </DialogFooter>
-          </div>
-        </div>
-      </DialogContent>
+            <div className="flex flex-col-reverse gap-2 sm:flex-row sm:items-center">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => onOpenChange(false)}
+              >
+                {commonT.close || "关闭"}
+              </Button>
+            </div>
+          </>
+        }
+      >
+        <ConfigManagementContent
+          active={isOpen}
+          onLoadProfile={onLoadProfile}
+          currentProviderId={currentProviderId}
+          repoId={repoId}
+          currentParameters={currentParameters}
+          closeOnLoad
+          onClose={() => onOpenChange(false)}
+          onProfilesChanged={onProfilesChanged}
+        />
+      </AppDialogShell>
     </Dialog>
   );
 }

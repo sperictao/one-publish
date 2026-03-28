@@ -135,7 +135,7 @@ export function RepositoryRow({
         </div>
       </button>
 
-      <div className="absolute right-3 top-2.5 flex items-center">
+      <div className="absolute inset-y-0 right-3 flex items-center">
         <RepositoryRowActionsMenu
           repo={repo}
           open={isMenuOpen}

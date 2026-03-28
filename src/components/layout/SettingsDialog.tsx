@@ -1,10 +1,8 @@
 import {
   Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
 } from "@/components/ui/dialog";
+import { AppDialogInset } from "@/components/ui/app-dialog-inset";
+import { AppDialogShell } from "@/components/ui/app-dialog-shell";
 import {
   Select,
   SelectContent,
@@ -108,25 +106,6 @@ function SettingsSectionFallback({ label }: { label: string }) {
   );
 }
 
-function SettingsInset({
-  children,
-  className,
-}: {
-  children: React.ReactNode;
-  className?: string;
-}) {
-  return (
-    <div
-      className={cn(
-        "rounded-2xl border border-[var(--glass-border-subtle)] bg-[var(--glass-input-bg)] p-4 shadow-[var(--glass-inset-shadow)]",
-        className
-      )}
-    >
-      {children}
-    </div>
-  );
-}
-
 function SettingsSwitchRow({
   id,
   icon: Icon,
@@ -143,7 +122,7 @@ function SettingsSwitchRow({
   onCheckedChange: (value: boolean) => void;
 }) {
   return (
-    <SettingsInset className="flex items-start justify-between gap-4">
+    <AppDialogInset className="flex items-start justify-between gap-4">
       <div className="min-w-0 space-y-1">
         <div className="flex items-center gap-2">
           <span className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl bg-background/60 text-foreground/75">
@@ -162,7 +141,7 @@ function SettingsSwitchRow({
         checked={checked}
         onCheckedChange={onCheckedChange}
       />
-    </SettingsInset>
+    </AppDialogInset>
   );
 }
 
@@ -400,7 +379,7 @@ export function SettingsDialog({
           </div>
         </div>
 
-        <SettingsInset>
+        <AppDialogInset>
           <div className="space-y-2">
             <Label
               htmlFor="settings-default-output-dir"
@@ -433,7 +412,7 @@ export function SettingsDialog({
                 "支持相对路径（如 ./publish）或绝对路径"}
             </p>
           </div>
-        </SettingsInset>
+        </AppDialogInset>
 
         <div className="space-y-3">
           <SettingsSwitchRow
@@ -502,12 +481,12 @@ export function SettingsDialog({
           </Select>
         </div>
 
-        <SettingsInset>
+        <AppDialogInset>
           <p className="text-xs leading-5 text-muted-foreground">
             {translations.settings?.sections?.appearanceDescription ||
               "主题切换会立即作用到当前窗口与后续打开的设置面板。"}
           </p>
-        </SettingsInset>
+        </AppDialogInset>
       </div>
   );
 
@@ -558,7 +537,7 @@ export function SettingsDialog({
 
   const renderAboutSettings = () => (
     <div className="space-y-4">
-        <SettingsInset className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+        <AppDialogInset className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
           <div className="space-y-1">
             <div className="text-sm font-medium">
               {formatMessage(
@@ -659,15 +638,15 @@ export function SettingsDialog({
               </Button>
             )}
           </div>
-        </SettingsInset>
+        </AppDialogInset>
 
         {updateInfo?.releaseNotes && (
-          <SettingsInset className="max-h-56 overflow-y-auto glass-scrollbar text-xs">
+          <AppDialogInset className="max-h-56 overflow-y-auto glass-scrollbar text-xs">
             <div className="mb-1 font-medium">
               {translations.version?.notes || "更新说明:"}
             </div>
             <div className="whitespace-pre-wrap">{updateInfo.releaseNotes}</div>
-          </SettingsInset>
+          </AppDialogInset>
         )}
       </div>
   );
@@ -693,99 +672,83 @@ export function SettingsDialog({
 
   return (
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
-      <DialogContent
-        chrome="bare"
-        overlayClassName="bg-background backdrop-blur-0"
-        closeButtonClassName="right-6 top-6"
-        className="overflow-visible border-none bg-transparent p-0 shadow-none backdrop-blur-none sm:max-w-[960px]"
+      <AppDialogShell
+        size="workspace"
+        bodyPadding="none"
+        bodyScrollable={false}
+        bodyInnerClassName="min-h-0 h-full"
+        title={translations.settings?.title || "应用设置"}
+        description={
+          translations.settings?.description || "配置语言、外观、输出目录等偏好设置"
+        }
+        icon={<Languages className="h-4 w-4" />}
       >
-        <div className="p-1">
-          <div className="glass-card repo-sidebar-shell flex h-[82vh] min-h-0 flex-col overflow-hidden rounded-2xl">
-            <DialogHeader className="border-b border-[var(--glass-divider)] px-6 pb-5 pt-6 pr-16">
+        <div className="grid h-full min-h-0 gap-5 p-5 sm:grid-cols-[240px_minmax(0,1fr)] sm:p-6">
+          <aside className="glass-card min-h-0 overflow-y-auto rounded-2xl p-2.5">
+            <nav className="flex gap-2 overflow-x-auto pb-1 sm:flex-col sm:overflow-visible sm:pb-0">
+              {categoryItems.map((item) => {
+                const Icon = item.icon;
+                const isActive = item.id === activeCategory;
+
+                return (
+                  <button
+                    key={item.id}
+                    type="button"
+                    aria-current={isActive ? "page" : undefined}
+                    className={cn(
+                      "glass-press flex min-w-[170px] items-start gap-3 rounded-2xl border px-3.5 py-3 text-left glass-transition sm:min-w-0",
+                      isActive
+                        ? "border-[var(--glass-border)] bg-[var(--glass-bg-active)] text-foreground shadow-[var(--glass-shadow)]"
+                        : "border-transparent text-muted-foreground hover:border-[var(--glass-border-subtle)] hover:bg-[var(--glass-input-bg)] hover:text-foreground"
+                    )}
+                    onClick={() => handleCategoryChange(item.id)}
+                  >
+                    <span
+                      className={cn(
+                        "mt-0.5 flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl",
+                        isActive
+                          ? "bg-primary/10 text-primary shadow-[var(--glass-inset-shadow)]"
+                          : "bg-[var(--glass-input-bg)] text-foreground/70"
+                      )}
+                    >
+                      <Icon className="h-4 w-4 shrink-0" />
+                    </span>
+                    <span className="min-w-0">
+                      <span className="block truncate text-sm font-medium">
+                        {item.label}
+                      </span>
+                      <span className="mt-1 block text-[11px] leading-4 text-muted-foreground">
+                        {item.description}
+                      </span>
+                    </span>
+                  </button>
+                );
+              })}
+            </nav>
+          </aside>
+
+          <section className="glass-card min-h-0 flex flex-col overflow-hidden rounded-2xl">
+            <div className="border-b border-[var(--glass-divider)] px-5 pb-4 pt-5 sm:px-6 sm:pb-4 sm:pt-6">
               <div className="flex items-start gap-3">
                 <span className="mt-0.5 flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-2xl bg-primary/10 text-primary shadow-[0_8px_20px_hsl(var(--primary)/0.16)]">
-                  <Languages className="h-4 w-4" />
+                  <ActiveCategoryIcon className="h-4 w-4" />
                 </span>
                 <div className="min-w-0">
-                  <DialogTitle className="text-[18px] font-semibold tracking-tight">
-                    {translations.settings?.title || "应用设置"}
-                  </DialogTitle>
-                  <DialogDescription className="mt-1 pr-2 leading-6">
-                    {translations.settings?.description ||
-                      "配置语言、外观、输出目录等偏好设置"}
-                  </DialogDescription>
+                  <h3 className="text-base font-semibold text-foreground">
+                    {activeCategoryItem.label}
+                  </h3>
+                  <p className="mt-1 text-xs leading-5 text-muted-foreground">
+                    {activeCategoryItem.description}
+                  </p>
                 </div>
               </div>
-            </DialogHeader>
-
-            <div className="grid min-h-0 flex-1 gap-5 p-5 sm:grid-cols-[240px_minmax(0,1fr)] sm:p-6">
-              <aside className="glass-card min-h-0 overflow-y-auto rounded-2xl p-2.5">
-                <nav className="flex gap-2 overflow-x-auto pb-1 sm:flex-col sm:overflow-visible sm:pb-0">
-                  {categoryItems.map((item) => {
-                    const Icon = item.icon;
-                    const isActive = item.id === activeCategory;
-
-                    return (
-                      <button
-                        key={item.id}
-                        type="button"
-                        aria-current={isActive ? "page" : undefined}
-                        className={cn(
-                          "glass-press flex min-w-[170px] items-start gap-3 rounded-2xl border px-3.5 py-3 text-left glass-transition sm:min-w-0",
-                          isActive
-                            ? "border-[var(--glass-border)] bg-[var(--glass-bg-active)] text-foreground shadow-[var(--glass-shadow)]"
-                            : "border-transparent text-muted-foreground hover:border-[var(--glass-border-subtle)] hover:bg-[var(--glass-input-bg)] hover:text-foreground"
-                        )}
-                        onClick={() => handleCategoryChange(item.id)}
-                      >
-                        <span
-                          className={cn(
-                            "mt-0.5 flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl",
-                            isActive
-                              ? "bg-primary/10 text-primary shadow-[var(--glass-inset-shadow)]"
-                              : "bg-[var(--glass-input-bg)] text-foreground/70"
-                          )}
-                        >
-                          <Icon className="h-4 w-4 shrink-0" />
-                        </span>
-                        <span className="min-w-0">
-                          <span className="block truncate text-sm font-medium">
-                            {item.label}
-                          </span>
-                          <span className="mt-1 block text-[11px] leading-4 text-muted-foreground">
-                            {item.description}
-                          </span>
-                        </span>
-                      </button>
-                    );
-                  })}
-                </nav>
-              </aside>
-
-              <section className="glass-card min-h-0 flex flex-col overflow-hidden rounded-2xl">
-                <div className="border-b border-[var(--glass-divider)] px-5 pb-4 pt-5 sm:px-6 sm:pb-4 sm:pt-6">
-                  <div className="flex items-start gap-3">
-                    <span className="mt-0.5 flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-2xl bg-primary/10 text-primary shadow-[0_8px_20px_hsl(var(--primary)/0.16)]">
-                      <ActiveCategoryIcon className="h-4 w-4" />
-                    </span>
-                    <div className="min-w-0">
-                      <h3 className="text-base font-semibold text-foreground">
-                        {activeCategoryItem.label}
-                      </h3>
-                      <p className="mt-1 text-xs leading-5 text-muted-foreground">
-                        {activeCategoryItem.description}
-                      </p>
-                    </div>
-                  </div>
-                </div>
-                <div className="glass-scrollbar min-h-0 flex-1 overflow-y-auto p-5 sm:p-6">
-                  {renderCategoryContent()}
-                </div>
-              </section>
             </div>
-          </div>
+            <div className="glass-scrollbar min-h-0 flex-1 overflow-y-auto p-5 sm:p-6">
+              {renderCategoryContent()}
+            </div>
+          </section>
         </div>
-      </DialogContent>
+      </AppDialogShell>
     </Dialog>
   );
 }
