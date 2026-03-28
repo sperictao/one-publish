@@ -43,6 +43,10 @@ coverage/
 
 # Tauri (Rust backend)
 src-tauri/target/
+src-tauri/tauri.conf.updater.prod.json
+
+# Release / updater generated assets
+release-assets/
 
 # Claude Code
 .claude/logs/

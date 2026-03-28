@@ -204,7 +204,8 @@ jobs:
             --input ./release-assets \
             --output ./release-assets/latest.json \
             --version "${GITHUB_REF_NAME#v}" \
-            --baseUrl "${RELEASE_DOWNLOAD_BASE}"
+            --baseUrl "${RELEASE_DOWNLOAD_BASE}" \
+            --notes-file "${RELEASE_NOTES_PATH}"
 
       - name: Remove existing release
         env:

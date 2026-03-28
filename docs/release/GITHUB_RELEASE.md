@@ -6,7 +6,7 @@
 
 1. 同步 `package.json`、`src-tauri/Cargo.toml`、`src-tauri/tauri.conf.json`、`src-tauri/Cargo.lock` 版本
 2. 自动生成 `release-notes/<tag>.md`
-3. 运行最小校验：`pnpm typecheck`、`pnpm test:workflow`
+3. 运行最小校验：`pnpm typecheck`、`pnpm test:workflow`、`pnpm test:updater`
 4. 提交发布 commit
 5. 创建并推送 tag
 6. 触发 GitHub Actions 构建多平台安装包并创建 GitHub Release
@@ -56,14 +56,15 @@ tag 推送后，`.github/workflows/build-release.yml` 会：
 1. 构建 macOS / Windows / Linux 安装包
 2. 汇总产物到 `release-assets`
 3. 读取 `release-notes/<tag>.md`
-4. 创建同名 GitHub Release 并上传附件
+4. 用同一份 `release-notes/<tag>.md` 写入 `latest.json` 的 `notes`
+5. 创建同名 GitHub Release 并上传附件
 
 ## 常见失败点
 
 - 工作区不干净：先提交或清理本地改动
 - 不在 `main` 分支：切回 `main`
 - tag 已存在：换新版本号
-- `pnpm typecheck` 或 `pnpm test:workflow` 失败：先修复再发版
+- `pnpm typecheck`、`pnpm test:workflow` 或 `pnpm test:updater` 失败：先修复再发版
 - 远端 push 失败：确认 GitHub 权限或分支保护规则
 
 ## 发布后检查

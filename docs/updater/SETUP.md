@@ -37,6 +37,9 @@ export TAURI_UPDATER_ENDPOINT='https://github.com/sperictao/one-publish/releases
 pnpm build:updater
 ```
 
+生成的 `src-tauri/tauri.conf.updater.prod.json` 为本地产物，
+已加入 `.gitignore`，不要手动提交。
+
 4. CI 还需要配置：
    - `TAURI_UPDATER_PUBKEY`
    - `TAURI_SIGNING_PRIVATE_KEY`
@@ -53,3 +56,4 @@ https://github.com/sperictao/one-publish/releases/latest/download/latest.json
 
 - 若使用非 HTTPS 地址，release 构建会被 updater 插件拦截。
 - `bundle.createUpdaterArtifacts` 需要开启，release 工作流会上传 `latest.json`、updater 包和 `.sig`。
+- `latest.json` 的 `notes` 会复用 `release-notes/<tag>.md`，设置页中的“更新说明”也来自这里。

@@ -39,6 +39,25 @@ const getStepIf = (stepName) => {
   return null;
 };
 
+const getStepBlock = (stepName) => {
+  const marker = `- name: ${stepName}`;
+  const stepStart = lines.findIndex((line) => line.trim() === marker);
+  if (stepStart === -1) {
+    return "";
+  }
+
+  const block = [lines[stepStart]];
+  for (let index = stepStart + 1; index < lines.length; index += 1) {
+    const line = lines[index];
+    if (line.trim().startsWith("- name:")) {
+      break;
+    }
+    block.push(line);
+  }
+
+  return block.join("\n");
+};
+
 const assertIfContains = (stepName, requiredFragments) => {
   const condition = getStepIf(stepName);
   if (!condition) {
@@ -56,6 +75,13 @@ const assertIfContains = (stepName, requiredFragments) => {
 
 const assertContains = (fragment, message) => {
   if (!content.includes(fragment)) {
+    throw new Error(`复现成功：${message}`);
+  }
+};
+
+const assertStepContains = (stepName, fragment, message) => {
+  const block = getStepBlock(stepName);
+  if (!block.includes(fragment)) {
     throw new Error(`复现成功：${message}`);
   }
 };
@@ -180,11 +206,18 @@ assertContains(
   "scripts/generate-latest-json.mjs",
   "workflow 未调用 latest.json 生成脚本。"
 );
-assertContains(
+assertStepContains(
+  "Generate latest updater manifest",
   "--output ./release-assets/latest.json",
   "latest.json 未写入 release-assets。"
 );
-assertContains(
+assertStepContains(
+  "Generate latest updater manifest",
+  "--notes-file \"${RELEASE_NOTES_PATH}\"",
+  "latest.json 生成步骤未注入 release notes 文件。"
+);
+assertStepContains(
+  "Create GitHub Release",
   "--notes-file \"${RELEASE_NOTES_PATH}\"",
   "GitHub Release 未使用 release notes 文件。"
 );

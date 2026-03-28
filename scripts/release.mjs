@@ -292,9 +292,16 @@ function buildCommitLine(commit, repoUrl) {
   return `- ${commit.subject} (${hashPart})`;
 }
 
+function formatLocalDate(date = new Date()) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
 function buildReleaseNotes(tag, previousTag, commits, repoUrl) {
   const sections = groupCommits(commits);
-  const today = new Date().toISOString().slice(0, 10);
+  const today = formatLocalDate();
   const lines = [
     `# OnePublish ${tag}`,
     "",
@@ -391,6 +398,7 @@ function main() {
   console.log("🚀 开始校验发布前状态...");
   run("pnpm", ["typecheck"], { stdio: "inherit" });
   run("pnpm", ["test:workflow"], { stdio: "inherit" });
+  run("pnpm", ["test:updater"], { stdio: "inherit" });
 
   console.log("📝 提交发布版本与 release notes...");
   stageReleaseFiles(tag);

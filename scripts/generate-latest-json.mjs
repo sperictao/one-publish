@@ -61,7 +61,8 @@ const outputPath = path.resolve(
 );
 const version = String(args.version || "").trim();
 const baseUrl = String(args.baseUrl || "").trim().replace(/\/$/, "");
-const notes = args.notes ?? "";
+const notesFile = String(args["notes-file"] || "").trim();
+let notes = args.notes ?? "";
 
 if (!version) {
   fail("缺少 --version");
@@ -73,6 +74,17 @@ if (!baseUrl) {
 
 if (!fs.existsSync(inputDir)) {
   fail(`输入目录不存在: ${inputDir}`);
+}
+
+if (notesFile) {
+  const resolvedNotesPath = path.resolve(process.cwd(), notesFile);
+  if (!fs.existsSync(resolvedNotesPath)) {
+    fail(`notes 文件不存在: ${resolvedNotesPath}`);
+  }
+
+  if (!notes) {
+    notes = fs.readFileSync(resolvedNotesPath, "utf8").trim();
+  }
 }
 
 const files = fs
