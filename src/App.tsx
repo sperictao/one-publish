@@ -9,8 +9,6 @@ import { useLayoutShellState } from "@/hooks/useLayoutShellState";
 import { usePublishHistoryState } from "@/hooks/usePublishHistoryState";
 import { useProjectShellState } from "@/hooks/useProjectShellState";
 import { useProviderPresentationState } from "@/hooks/useProviderPresentationState";
-import { usePublishRunnerCallbacks } from "@/hooks/usePublishRunnerCallbacks";
-import { usePublishRunnerInput } from "@/hooks/usePublishRunnerInput";
 import { useRepositoryActions } from "@/hooks/useRepositoryActions";
 import { useRepositoryViewState } from "@/hooks/useRepositoryViewState";
 import { useRecoverableSpec } from "@/hooks/useRecoverableSpec";
@@ -25,7 +23,6 @@ import {
 import { useCommandImport } from "@/hooks/useCommandImport";
 import { useScopedConfigs } from "@/hooks/useScopedConfigs";
 import { useAppUpdater } from "@/hooks/useAppUpdater";
-import { usePublishRunCardProps } from "@/hooks/usePublishRunCardProps";
 import { useCommandImportResultCardProps } from "@/hooks/useCommandImportResultCardProps";
 import { useProviderRuntime } from "@/hooks/useProviderRuntime";
 import { useI18n, type Language } from "@/hooks/useI18n";
@@ -422,7 +419,6 @@ function App() {
     quickCreateProfileSaving,
     isQuickCreateEditing,
     loadProfiles,
-    setActiveProfileName,
     openQuickCreateProfileDialog,
     openQuickEditProfileDialog,
     handleQuickCreateProfileOpenChange,
@@ -444,14 +440,8 @@ function App() {
     executionHistory,
     setExecutionHistory,
     savePublishRecord,
-    createPublishRecord,
   } = usePublishHistoryState({
     executionHistoryLimit,
-    selectedPreset,
-    setSelectedPreset,
-    setIsCustomMode,
-    setActiveProfileName,
-    handleSelectProjectProfile,
   });
 
   useEffect(() => {
@@ -475,29 +465,6 @@ function App() {
     setActiveProviderId,
   });
 
-  const publishRunnerCallbacks = usePublishRunnerCallbacks({
-    pushRecentConfig,
-    openEnvironmentDialog,
-    setEnvironmentLastResult,
-    createPublishRecord,
-    savePublishRecord,
-  });
-
-  const publishRunnerInput = usePublishRunnerInput({
-    selectedRepoId,
-    selectedRepo,
-    activeProviderId,
-    activeProviderParameters,
-    selectedPreset,
-    isCustomMode,
-    activeProfileName,
-    customConfig,
-    defaultOutputDir,
-    projectInfo,
-    presets: PRESETS,
-    specVersion: SPEC_VERSION,
-  });
-
   const {
     isPublishing,
     isCancellingPublish,
@@ -515,8 +482,22 @@ function App() {
   } = usePublishRunner({
     appT,
     publishT,
-    input: publishRunnerInput,
-    callbacks: publishRunnerCallbacks,
+    selectedRepoId,
+    selectedRepo,
+    activeProviderId,
+    activeProviderParameters,
+    selectedPreset,
+    isCustomMode,
+    activeProfileName,
+    customConfig,
+    defaultOutputDir,
+    projectInfo,
+    presets: PRESETS,
+    specVersion: SPEC_VERSION,
+    pushRecentConfig,
+    openEnvironmentDialog,
+    setEnvironmentLastResult,
+    savePublishRecord,
   });
 
   const {
@@ -550,7 +531,7 @@ function App() {
     runPublishSpec,
   });
 
-  const publishRunCardProps = usePublishRunCardProps({
+  const publishRunCardProps = {
     outputLog,
     publishResult,
     appT,
@@ -571,7 +552,7 @@ function App() {
             onCancelPublish: cancelPublish,
           }
         : null,
-  });
+  };
 
   const commandImportResultCardProps = useCommandImportResultCardProps({
     activeImportFeedback,

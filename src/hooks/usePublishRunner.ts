@@ -9,10 +9,12 @@ import {
 } from "@/lib/environment";
 import type { ExecutionRecord } from "@/lib/store";
 import { useDotnetPublishSelection } from "@/hooks/useDotnetPublishSelection";
-import type { PublishRunnerInput } from "@/hooks/usePublishRunnerInput";
 import { usePublishLogStream } from "@/hooks/usePublishLogStream";
 import { usePublishSpecBuilder } from "@/hooks/usePublishSpecBuilder";
 import { usePublishUiState } from "@/hooks/usePublishUiState";
+import { createPublishExecutionRecord } from "@/lib/publishExecutionRecord";
+import type { PublishConfigStore } from "@/lib/store";
+import type { ParameterValue } from "@/types/parameters";
 
 const loadInvokeErrors = () => import("@/lib/tauri/invokeErrors");
 const loadPublishFailureFeedback = () =>
@@ -37,51 +39,67 @@ export interface ProviderPublishSpec {
   parameters: Record<string, unknown>;
 }
 
-export interface PublishRunnerCallbacks {
+interface ProjectInfo {
+  root_path: string;
+  project_file: string;
+  publish_profiles: string[];
+}
+
+interface DotnetPreset {
+  id: string;
+  name: string;
+  description: string;
+  config: {
+    configuration: string;
+    runtime: string;
+    self_contained: boolean;
+  };
+}
+
+interface UsePublishRunnerParams {
+  appT: TranslationMap;
+  publishT: TranslationMap;
+  selectedRepoId: string | null;
+  selectedRepo: { path: string } | null;
+  activeProviderId: string;
+  activeProviderParameters: Record<string, ParameterValue>;
+  selectedPreset: string;
+  isCustomMode: boolean;
+  activeProfileName: string | null;
+  customConfig: PublishConfigStore;
+  defaultOutputDir?: string;
+  projectInfo: ProjectInfo | null;
+  presets: DotnetPreset[];
+  specVersion: number;
   pushRecentConfig: (key: string, repoId?: string | null) => void;
   openEnvironmentDialog: (
     initialResult?: EnvironmentCheckResult | null,
     providerIds?: string[]
   ) => void;
   setEnvironmentLastResult: (result: EnvironmentCheckResult | null) => void;
-  createPublishRecord: (params: {
-    spec: ProviderPublishSpec;
-    repoId: string | null;
-    startedAt: string;
-    finishedAt: string;
-    result: PublishResult;
-    output: string;
-  }) => ExecutionRecord;
   savePublishRecord: (record: ExecutionRecord) => void;
-}
-
-interface UsePublishRunnerParams {
-  appT: TranslationMap;
-  publishT: TranslationMap;
-  input: PublishRunnerInput;
-  callbacks: PublishRunnerCallbacks;
 }
 
 export function usePublishRunner({
   appT,
   publishT,
-  input,
-  callbacks,
+  selectedRepoId,
+  selectedRepo,
+  activeProviderId,
+  activeProviderParameters,
+  selectedPreset,
+  isCustomMode,
+  activeProfileName,
+  customConfig,
+  defaultOutputDir,
+  projectInfo,
+  presets,
+  specVersion,
+  pushRecentConfig,
+  openEnvironmentDialog,
+  setEnvironmentLastResult,
+  savePublishRecord,
 }: UsePublishRunnerParams) {
-  const {
-    selectedRepoId,
-    selectedRepo,
-    activeProviderId,
-    activeProviderParameters,
-    selectedPreset,
-    isCustomMode,
-    activeProfileName,
-    customConfig,
-    defaultOutputDir,
-    projectInfo,
-    presets,
-    specVersion,
-  } = input;
   const {
     isPublishing,
     setIsPublishing,
@@ -104,8 +122,8 @@ export function usePublishRunner({
     getCurrentConfig,
     dotnetPublishPreviewCommand,
     recentConfigKeyForCurrentSelection,
-    resolvedProjectProfileParameters,
-    resolveSelectedProjectProfileParameters,
+    resolvedProjectProfile,
+    resolveSelectedProjectProfile,
   } = useDotnetPublishSelection({
     activeProviderId,
     selectedPreset,
@@ -130,14 +148,14 @@ export function usePublishRunner({
     async (spec: ProviderPublishSpec, recentConfigKey?: string | null) => {
       try {
         const env = await runEnvironmentCheck([spec.provider_id]);
-        callbacks.setEnvironmentLastResult(env);
+        setEnvironmentLastResult(env);
 
         const critical = env.issues.find((item) => item.severity === "critical");
         if (critical) {
           toast.error(appT.environmentBlocked || "环境未就绪，已阻止发布", {
             description: critical.description,
           });
-          callbacks.openEnvironmentDialog(env, [spec.provider_id]);
+          openEnvironmentDialog(env, [spec.provider_id]);
           return;
         }
 
@@ -166,7 +184,7 @@ export function usePublishRunner({
 
       try {
         if (recentConfigKey) {
-          callbacks.pushRecentConfig(recentConfigKey);
+          pushRecentConfig(recentConfigKey);
         }
 
         const result = await invoke<PublishResult>("execute_provider_publish", {
@@ -195,7 +213,7 @@ export function usePublishRunner({
           });
         }
 
-        const record = callbacks.createPublishRecord({
+        const record = createPublishExecutionRecord({
           spec,
           repoId: selectedRepoId,
           startedAt: executionStartedAt,
@@ -204,7 +222,7 @@ export function usePublishRunner({
           output: result.output,
         });
         setCurrentPublishRecordId(record.id);
-        callbacks.savePublishRecord(record);
+        savePublishRecord(record);
       } catch (err) {
         const [
           { analyzePublishExecutionFailure, extractInvokeErrorMessage },
@@ -236,7 +254,7 @@ export function usePublishRunner({
           description: feedback.description,
         });
 
-        const record = callbacks.createPublishRecord({
+        const record = createPublishExecutionRecord({
           spec,
           repoId: selectedRepoId,
           startedAt: executionStartedAt,
@@ -245,7 +263,7 @@ export function usePublishRunner({
           output: "",
         });
         setCurrentPublishRecordId(record.id);
-        callbacks.savePublishRecord(record);
+        savePublishRecord(record);
       } finally {
         setIsPublishing(false);
         setIsCancellingPublish(false);
@@ -253,9 +271,12 @@ export function usePublishRunner({
     },
     [
       appT,
-      callbacks,
+      openEnvironmentDialog,
       publishT,
+      pushRecentConfig,
+      savePublishRecord,
       selectedRepoId,
+      setEnvironmentLastResult,
     ]
   );
 
@@ -276,17 +297,16 @@ export function usePublishRunner({
       !isCustomMode &&
       selectedPreset.startsWith("profile-")
     ) {
-      const profileParameters =
-        resolvedProjectProfileParameters ??
-        (await resolveSelectedProjectProfileParameters());
+      const projectProfile =
+        resolvedProjectProfile ?? (await resolveSelectedProjectProfile());
 
-      if (profileParameters) {
+      if (projectProfile) {
         await runPublishSpec(
           {
             version: specVersion,
             provider_id: "dotnet",
             project_path: projectInfo.project_file,
-            parameters: profileParameters,
+            parameters: projectProfile.parameters,
           },
           recentConfigKeyForCurrentSelection
         );
@@ -307,8 +327,8 @@ export function usePublishRunner({
     isCustomMode,
     projectInfo,
     recentConfigKeyForCurrentSelection,
-    resolveSelectedProjectProfileParameters,
-    resolvedProjectProfileParameters,
+    resolveSelectedProjectProfile,
+    resolvedProjectProfile,
     runPublishSpec,
     selectedRepo,
     selectedPreset,
@@ -361,7 +381,6 @@ export function usePublishRunner({
     setReleaseChecklistOpen,
     artifactActionState,
     setArtifactActionState,
-    setCurrentPublishRecordId,
     dotnetPublishPreviewCommand,
     runPublishSpec,
     startPublish,

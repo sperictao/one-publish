@@ -6,12 +6,10 @@ import {
 } from "@/lib/dotnetPublishConfig";
 import { getPathBasename, joinPath } from "@/lib/paths";
 import {
-  extractDotnetPublishParametersFromProjectProfile,
-  parseProjectPublishProfileXml,
-} from "@/lib/projectPublishProfileXml";
-import { readProjectPublishProfile } from "@/lib/store";
+  resolveDotnetProjectProfile,
+  type ResolvedDotnetProjectProfile,
+} from "@/lib/dotnetProjectProfile";
 import type { PublishConfigStore } from "@/lib/store";
-import type { ParameterValue } from "@/types/parameters";
 
 interface ProjectInfo {
   root_path: string;
@@ -78,8 +76,8 @@ export function useDotnetPublishSelection(params: {
   projectInfo: ProjectInfo | null;
   presets: DotnetPreset[];
 }) {
-  const [resolvedProjectProfileParameters, setResolvedProjectProfileParameters] =
-    useState<Record<string, ParameterValue> | null>(null);
+  const [resolvedProjectProfile, setResolvedProjectProfile] =
+    useState<ResolvedDotnetProjectProfile | null>(null);
 
   const buildDefaultScopedOutputDir = useCallback(
     (configuration?: string) => {
@@ -87,12 +85,12 @@ export function useDotnetPublishSelection(params: {
         return "";
       }
 
+      const resolvedConfiguration = configuration?.trim() || "Release";
       const projectName = params.projectInfo?.project_file
         ? stripFileExtension(getPathBasename(params.projectInfo.project_file))
         : params.projectInfo?.root_path
           ? getPathBasename(params.projectInfo.root_path)
           : "";
-      const resolvedConfiguration = configuration?.trim() || "Release";
 
       return projectName
         ? joinPath(params.defaultOutputDir, projectName, resolvedConfiguration)
@@ -118,35 +116,17 @@ export function useDotnetPublishSelection(params: {
     params.selectedPreset,
   ]);
 
-  const resolveSelectedProjectProfileParameters = useCallback(async () => {
+  const resolveSelectedProjectProfile = useCallback(async () => {
     if (!params.projectInfo || !selectedProjectProfileName) {
       return null;
     }
 
-    const profileFile = await readProjectPublishProfile(
-      params.projectInfo.project_file,
-      selectedProjectProfileName
-    );
-    const parsedProfile = parseProjectPublishProfileXml(profileFile.content);
-    const parameters = extractDotnetPublishParametersFromProjectProfile(
-      parsedProfile
-    ) as Record<string, ParameterValue>;
-
-    if (
-      typeof parameters.output !== "string" &&
-      params.defaultOutputDir
-    ) {
-      const configuration =
-        typeof parameters.configuration === "string" &&
-        parameters.configuration.trim().length > 0
-          ? parameters.configuration
-          : "Release";
-      parameters.output = buildDefaultScopedOutputDir(configuration);
-    }
-
-    return parameters;
+    return resolveDotnetProjectProfile({
+      projectInfo: params.projectInfo,
+      profileName: selectedProjectProfileName,
+      defaultOutputDir: params.defaultOutputDir,
+    });
   }, [
-    buildDefaultScopedOutputDir,
     params.defaultOutputDir,
     params.projectInfo,
     selectedProjectProfileName,
@@ -156,28 +136,28 @@ export function useDotnetPublishSelection(params: {
     let disposed = false;
 
     if (!selectedProjectProfileName) {
-      setResolvedProjectProfileParameters(null);
+      setResolvedProjectProfile(null);
       return () => {
         disposed = true;
       };
     }
 
-    void resolveSelectedProjectProfileParameters()
-      .then((parameters) => {
+    void resolveSelectedProjectProfile()
+      .then((profile) => {
         if (!disposed) {
-          setResolvedProjectProfileParameters(parameters);
+          setResolvedProjectProfile(profile);
         }
       })
       .catch(() => {
         if (!disposed) {
-          setResolvedProjectProfileParameters(null);
+          setResolvedProjectProfile(null);
         }
       });
 
     return () => {
       disposed = true;
     };
-  }, [resolveSelectedProjectProfileParameters, selectedProjectProfileName]);
+  }, [resolveSelectedProjectProfile, selectedProjectProfileName]);
 
   const getCurrentConfig = useCallback((): PublishConfig => {
     if (params.isCustomMode) {
@@ -228,19 +208,19 @@ export function useDotnetPublishSelection(params: {
         ? joinPath(params.projectInfo.root_path, "publish", params.selectedPreset)
         : "";
 
-      return {
-        ...preset.config,
-        framework: "",
-        output_dir: outputDir,
-        no_build: false,
-        no_restore: false,
-        verbosity: "",
-        no_logo: false,
-        properties: {},
-        define: [],
-        use_profile: false,
-        profile_name: "",
-      };
+    return {
+      ...preset.config,
+      framework: "",
+      output_dir: outputDir,
+      no_build: false,
+      no_restore: false,
+      verbosity: "",
+      no_logo: false,
+      properties: {},
+      define: [],
+      use_profile: false,
+      profile_name: "",
+    };
   }, [buildDefaultScopedOutputDir, params]);
 
   const fallbackDotnetPublishPreviewCommand = useMemo(() => {
@@ -276,10 +256,10 @@ export function useDotnetPublishSelection(params: {
       return "";
     }
 
-    if (selectedProjectProfileName && resolvedProjectProfileParameters) {
+    if (resolvedProjectProfile) {
       return buildDotnetPublishCommand(
         params.projectInfo.project_file,
-        resolvedProjectProfileParameters
+        resolvedProjectProfile.parameters
       );
     }
 
@@ -288,8 +268,7 @@ export function useDotnetPublishSelection(params: {
     fallbackDotnetPublishPreviewCommand,
     params.activeProviderId,
     params.projectInfo,
-    resolvedProjectProfileParameters,
-    selectedProjectProfileName,
+    resolvedProjectProfile,
   ]);
 
   const recentConfigKeyForCurrentSelection = useMemo(() => {
@@ -319,7 +298,7 @@ export function useDotnetPublishSelection(params: {
     getCurrentConfig,
     dotnetPublishPreviewCommand,
     recentConfigKeyForCurrentSelection,
-    resolvedProjectProfileParameters,
-    resolveSelectedProjectProfileParameters,
+    resolvedProjectProfile,
+    resolveSelectedProjectProfile,
   };
 }
