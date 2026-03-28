@@ -10,6 +10,7 @@
 4. 提交发布 commit
 5. 创建并推送 tag
 6. 触发 GitHub Actions 构建多平台安装包并创建 GitHub Release
+7. 本地命令持续等待远端 workflow 完成，并回显每个 job 的最终状态
 
 ## 使用方式
 
@@ -37,6 +38,7 @@ pnpm release -v 0.2.1 -d
 - 工作区必须干净
 - 本地已安装依赖：`pnpm install`
 - 本地具备远端仓库 push 权限
+- 本地能够访问 GitHub API；建议提前配置 `GH_TOKEN` / `GITHUB_TOKEN`，或执行 `gh auth login`
 
 ## Release Notes 规则
 
@@ -59,16 +61,25 @@ tag 推送后，`.github/workflows/build-release.yml` 会：
 4. 用同一份 `release-notes/<tag>.md` 写入 `latest.json` 的 `notes`
 5. 创建同名 GitHub Release 并上传附件
 
+本地 `pnpm release` 命令会继续轮询这次 `build-release` run，直到：
+
+- 每个 job 都进入最终状态
+- 控制台输出每个 job 的成功 / 失败结果
+- 若有失败 job，进一步输出失败步骤、annotation 和日志摘录
+
 ## 常见失败点
 
 - 工作区不干净：先提交或清理本地改动
 - 不在 `main` 分支：切回 `main`
 - tag 已存在：换新版本号
 - `pnpm typecheck`、`pnpm test:workflow` 或 `pnpm test:updater` 失败：先修复再发版
+- `pnpm test:release` 失败：先修复 release 脚本等待 / 汇总逻辑
 - 远端 push 失败：确认 GitHub 权限或分支保护规则
+- GitHub API 查询失败或被限流：补 `GH_TOKEN` / `GITHUB_TOKEN`，或重新执行 `gh auth login`
 
 ## 发布后检查
 
 - GitHub Actions：`Actions` 页面确认 `build-release` 成功
 - GitHub Releases：确认 tag、release notes、附件齐全
 - 本地版本文件与 release tag 一致
+- 若命令本身返回非 0，请优先查看控制台里输出的失败 job 链接、annotation 和日志摘录

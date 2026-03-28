@@ -3,6 +3,8 @@ import os from "node:os";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
 
+import { buildTauriBuildArgs, normalizeForwardedArgs } from "./build-updater.mjs";
+
 const rootDir = process.cwd();
 const defaultUpdaterEndpoint =
   "https://github.com/sperictao/one-publish/releases/latest/download/latest.json";
@@ -43,6 +45,30 @@ function run(command, args, options = {}) {
 const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "one-publish-updater-"));
 
 try {
+  const forwardedArgs = normalizeForwardedArgs(["--", "--target", "universal-apple-darwin"]);
+  ensure(
+    JSON.stringify(forwardedArgs) === JSON.stringify(["--target", "universal-apple-darwin"]),
+    "build-updater 未正确清理 pnpm 透传参数里的独立分隔符。"
+  );
+
+  const tauriBuildArgs = buildTauriBuildArgs(["--", "--target", "universal-apple-darwin"]);
+  ensure(
+    JSON.stringify(tauriBuildArgs) ===
+      JSON.stringify([
+        "tauri",
+        "build",
+        "--config",
+        "src-tauri/tauri.conf.updater.prod.json",
+        "--target",
+        "universal-apple-darwin",
+      ]),
+    "build-updater 未把 target 作为 Tauri CLI 参数拼接。"
+  );
+  ensure(
+    !tauriBuildArgs.includes("--"),
+    "build-updater 错误地把参数留在 Cargo runner 分隔符之后。"
+  );
+
   const configPath = path.join(tempDir, "tauri.conf.updater.prod.json");
   const releaseAssetsDir = path.join(tempDir, "release-assets");
   const latestJsonPath = path.join(releaseAssetsDir, "latest.json");

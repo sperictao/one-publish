@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "pnpm tauri dev",
     "build": "pnpm tauri build",
-    "build:updater": "node scripts/generate-updater-config.mjs && node scripts/validate-updater-config.mjs && pnpm tauri build --config src-tauri/tauri.conf.updater.prod.json",
+    "build:updater": "node scripts/build-updater.mjs",
     "release": "node scripts/release.mjs",
     "tauri": "tauri",
     "dev:renderer": "vite",
@@ -14,6 +14,7 @@
     "typecheck": "tsc --noEmit",
     "test:workflow": "node scripts/test-build-release-workflow.mjs",
     "test:updater": "node scripts/test-updater-scripts.mjs",
+    "test:release": "node scripts/test-release-script.mjs",
     "test": "vitest run",
     "test:ui": "vitest --ui",
     "test:watch": "vitest",

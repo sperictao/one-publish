@@ -135,6 +135,10 @@ assertContains(
   "构建步骤仍未切到 build:updater。"
 );
 assertContains(
+  'node-version: "20"',
+  "Setup Node 仍未升级到兼容 Vite 7 的版本。"
+);
+assertContains(
   "- name: Prepare release assets",
   "缺少 release 资产预处理步骤。"
 );
