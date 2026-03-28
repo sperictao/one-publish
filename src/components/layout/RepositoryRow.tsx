@@ -42,10 +42,10 @@ export function RepositoryRow({
   return (
     <div
       ref={rowRef}
-      data-repo-row="true"
-      data-repo-id={repo.id}
-      data-visual-target={isVisualTarget ? "true" : "false"}
-      data-menu-open={isMenuOpen ? "true" : "false"}
+      data-list-row="true"
+      data-list-item-id={repo.id}
+      data-list-visual-target={isVisualTarget ? "true" : "false"}
+      data-list-menu-open={isMenuOpen ? "true" : "false"}
       className="group relative z-10"
       onMouseEnter={() => {
         onRowMouseEnter(repo.id);

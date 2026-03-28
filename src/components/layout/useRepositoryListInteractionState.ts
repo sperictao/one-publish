@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useMemo } from "react";
+import { useListInteractionState } from "./useListInteractionState";
 
 interface UseRepositoryListInteractionStateOptions {
   filteredRepoIds: string[];
@@ -25,124 +26,27 @@ export function useRepositoryListInteractionState({
   filteredRepoIds,
   selectedRepoId,
 }: UseRepositoryListInteractionStateOptions): RepositoryListInteractionState {
-  const [hoveredRepoId, setHoveredRepoId] = useState<string | null>(null);
-  const [focusedRepoId, setFocusedRepoId] = useState<string | null>(null);
-  const [activeMenuRepoId, setActiveMenuRepoId] = useState<string | null>(null);
-  const [pointerInsideList, setPointerInsideList] = useState(false);
-  const activeMenuRepoIdRef = useRef<string | null>(null);
-  const pointerInsideListRef = useRef(false);
+  const interaction = useListInteractionState({
+    filteredItemIds: filteredRepoIds,
+    selectedItemId: selectedRepoId,
+  });
 
-  const filteredRepoIdsSignature = useMemo(
-    () => filteredRepoIds.join("|"),
-    [filteredRepoIds]
+  return useMemo(
+    () => ({
+      hoveredRepoId: interaction.hoveredItemId,
+      focusedRepoId: interaction.focusedItemId,
+      activeMenuRepoId: interaction.activeMenuItemId,
+      visualTargetRepoId: interaction.visualTargetItemId,
+      freezeFloating: interaction.freezeFloating,
+      handleRowMouseEnter: interaction.handleRowMouseEnter,
+      handleRowFocus: interaction.handleRowFocus,
+      handleRowBlur: interaction.handleRowBlur,
+      handlePointerRepoChange: interaction.handlePointerItemChange,
+      handleListPointerEnter: interaction.handleListPointerEnter,
+      handleListPointerLeave: interaction.handleListPointerLeave,
+      handleMenuOpenChange: interaction.handleMenuOpenChange,
+      isMenuOpenForRepo: interaction.isMenuOpenForItem,
+    }),
+    [interaction]
   );
-
-  useEffect(() => {
-    const filteredRepoIdSet = new Set(filteredRepoIds);
-
-    setHoveredRepoId((prev) => (prev && !filteredRepoIdSet.has(prev) ? null : prev));
-    setFocusedRepoId((prev) => (prev && !filteredRepoIdSet.has(prev) ? null : prev));
-    setActiveMenuRepoId((prev) => {
-      const nextValue = prev && !filteredRepoIdSet.has(prev) ? null : prev;
-      activeMenuRepoIdRef.current = nextValue;
-      return nextValue;
-    });
-  }, [filteredRepoIdsSignature, filteredRepoIds]);
-
-  const visualTargetRepoId = useMemo(
-    () =>
-      activeMenuRepoId ??
-      (pointerInsideList ? hoveredRepoId : null) ??
-      focusedRepoId ??
-      selectedRepoId ??
-      null,
-    [activeMenuRepoId, focusedRepoId, hoveredRepoId, pointerInsideList, selectedRepoId]
-  );
-
-  useEffect(() => {
-    activeMenuRepoIdRef.current = activeMenuRepoId;
-  }, [activeMenuRepoId]);
-
-  useEffect(() => {
-    pointerInsideListRef.current = pointerInsideList;
-  }, [pointerInsideList]);
-
-  const handleRowMouseEnter = useCallback((repoId: string) => {
-    setHoveredRepoId((prev) => (prev === repoId ? prev : repoId));
-  }, []);
-
-  const handleRowFocus = useCallback((repoId: string) => {
-    setFocusedRepoId((prev) => (prev === repoId ? prev : repoId));
-  }, []);
-
-  const handleRowBlur = useCallback((repoId: string) => {
-    setFocusedRepoId((prev) => (prev === repoId ? null : prev));
-  }, []);
-
-  const handlePointerRepoChange = useCallback(
-    (repoId: string | null) => {
-      if (activeMenuRepoIdRef.current) {
-        return;
-      }
-
-      setHoveredRepoId((prev) => (prev === repoId ? prev : repoId));
-    },
-    []
-  );
-
-  const handleListPointerEnter = useCallback(() => {
-    pointerInsideListRef.current = true;
-    setPointerInsideList(true);
-  }, []);
-
-  const handleListPointerLeave = useCallback(() => {
-    pointerInsideListRef.current = false;
-    setPointerInsideList(false);
-
-    if (activeMenuRepoIdRef.current) {
-      return;
-    }
-
-    setHoveredRepoId(null);
-  }, []);
-
-  const handleMenuOpenChange = useCallback(
-    (repoId: string, open: boolean) => {
-      if (open) {
-        activeMenuRepoIdRef.current = repoId;
-        setActiveMenuRepoId(repoId);
-        setHoveredRepoId(repoId);
-        return;
-      }
-
-      activeMenuRepoIdRef.current = null;
-      setActiveMenuRepoId((prev) => (prev === repoId ? null : prev));
-
-      if (!pointerInsideListRef.current) {
-        setHoveredRepoId(null);
-      }
-    },
-    []
-  );
-
-  const isMenuOpenForRepo = useCallback(
-    (repoId: string) => activeMenuRepoId === repoId,
-    [activeMenuRepoId]
-  );
-
-  return {
-    hoveredRepoId,
-    focusedRepoId,
-    activeMenuRepoId,
-    visualTargetRepoId,
-    freezeFloating: activeMenuRepoId !== null,
-    handleRowMouseEnter,
-    handleRowFocus,
-    handleRowBlur,
-    handlePointerRepoChange,
-    handleListPointerEnter,
-    handleListPointerLeave,
-    handleMenuOpenChange,
-    isMenuOpenForRepo,
-  };
 }

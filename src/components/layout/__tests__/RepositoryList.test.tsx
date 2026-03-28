@@ -135,17 +135,17 @@ describe("RepositoryList", () => {
     );
 
     const repoBRow = container.querySelector<HTMLElement>(
-      '[data-repo-id="repo-b"]'
+      '[data-list-item-id="repo-b"]'
     );
     expect(repoBRow).not.toBeNull();
 
-    const list = container.querySelector<HTMLElement>(".repo-list-scroll");
+    const list = container.querySelector<HTMLElement>(".list-scroll-shell");
     expect(list).not.toBeNull();
 
     fireEvent.pointerEnter(list!);
     fireEvent.mouseOver(repoBRow!);
     await waitFor(() => {
-      expect(repoBRow).toHaveAttribute("data-visual-target", "true");
+      expect(repoBRow).toHaveAttribute("data-list-visual-target", "true");
     });
 
     const trigger = screen.getByRole("button", {
@@ -157,13 +157,13 @@ describe("RepositoryList", () => {
     const removeItem = await screen.findByRole("menuitem", { name: "移除" });
     expect(onSelectRepo).not.toHaveBeenCalled();
     const repoBRowAfterOpen = container.querySelector<HTMLElement>(
-      '[data-repo-id="repo-b"]'
+      '[data-list-item-id="repo-b"]'
     );
 
     fireEvent.pointerLeave(list!);
 
-    expect(repoBRowAfterOpen).toHaveAttribute("data-menu-open", "true");
-    expect(repoBRowAfterOpen).toHaveAttribute("data-visual-target", "true");
+    expect(repoBRowAfterOpen).toHaveAttribute("data-list-menu-open", "true");
+    expect(repoBRowAfterOpen).toHaveAttribute("data-list-visual-target", "true");
 
     fireEvent.click(removeItem);
 

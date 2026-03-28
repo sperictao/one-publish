@@ -129,7 +129,7 @@ export function MainContentShell({
             </div>
           </div>
         </div>
-        <div className="repo-list-scroll glass-scrollbar relative flex-1 overflow-auto">
+        <div className="list-scroll-shell glass-scrollbar relative flex-1 overflow-auto">
           {children}
         </div>
       </div>

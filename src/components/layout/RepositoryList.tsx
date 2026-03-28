@@ -203,7 +203,7 @@ export function RepositoryList({
     (floating: RepositoryListFloatingBindings) => (
       <div
         ref={floating.listRef}
-        className="repo-list-scroll scrollbar-fade glass-scrollbar relative flex-1 overflow-auto px-2.5 py-2"
+        className="list-scroll-shell scrollbar-fade glass-scrollbar relative flex-1 overflow-auto px-2.5 py-2"
         onPointerEnter={floating.handleListPointerEnter}
         onPointerMove={floating.handleListPointerMove}
         onPointerLeave={floating.handleListMouseLeave}
@@ -220,7 +220,7 @@ export function RepositoryList({
           <div
             ref={floating.floatingCardSurfaceRef}
             data-selected={floating.cardTargetRepoId === selectedRepoId ? "true" : "false"}
-            className="repo-floating-card h-full w-full transition-[box-shadow] duration-320 ease-[cubic-bezier(0.16,1,0.3,1)]"
+            className="floating-list-card h-full w-full transition-[box-shadow] duration-320 ease-[cubic-bezier(0.16,1,0.3,1)]"
             style={floating.floatingCardSurfaceStyle}
           />
         </div>

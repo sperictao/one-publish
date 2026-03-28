@@ -14,7 +14,6 @@ export interface PublishConfigFloatingBindings {
   floatingCardMotionStyle: CSSProperties;
   floatingCardSurfaceStyle: CSSProperties;
   setConfigRowRef: (configId: string) => (node: HTMLDivElement | null) => void;
-  handleConfigMouseEnter: (configId: string) => void;
   handleListPointerMove: (event: ReactPointerEvent<HTMLDivElement>) => void;
   handleListPointerEnter: (event: ReactPointerEvent<HTMLDivElement>) => void;
   handleListMouseLeave: () => void;
@@ -22,34 +21,49 @@ export interface PublishConfigFloatingBindings {
 }
 
 interface PublishConfigPanelFloatingLayerProps {
-  allConfigIds: string[];
-  selectedRenderId: string | null;
+  filteredConfigIds: string[];
+  targetConfigId: string | null;
+  restingTargetConfigId: string | null;
+  selectedConfigId: string | null;
+  freezeFloating: boolean;
+  onListPointerEnter: () => void;
+  onListPointerLeave: () => void;
+  onPointerConfigChange: (configId: string | null) => void;
   children: (bindings: PublishConfigFloatingBindings) => ReactNode;
 }
 
 export function PublishConfigPanelFloatingLayer({
-  allConfigIds,
-  selectedRenderId,
+  filteredConfigIds,
+  targetConfigId,
+  restingTargetConfigId,
+  selectedConfigId,
+  freezeFloating,
+  onListPointerEnter,
+  onListPointerLeave,
+  onPointerConfigChange,
   children,
 }: PublishConfigPanelFloatingLayerProps) {
   const {
     listRef,
     floatingCardSurfaceRef,
-    cardTargetRepoId,
+    cardTargetConfigId,
     floatingVisible,
     floatingCardMotionStyle,
     floatingCardSurfaceStyle,
-    setRepoRowRef,
-    handleRepoMouseEnter,
+    setConfigRowRef,
     handleListPointerMove,
     handleListPointerEnter,
     handleListMouseLeave,
     handleListScroll,
   } = useFloatingConfigCard({
-    filteredRepoIds: allConfigIds,
-    selectedRepoId: selectedRenderId,
-    enablePointerFollow: true,
-    preserveHoverOnGap: true,
+    filteredConfigIds,
+    targetConfigId,
+    restingTargetConfigId,
+    selectedConfigId,
+    freezeFloating,
+    onListPointerEnter,
+    onListPointerLeave,
+    onPointerConfigChange,
   });
 
   return (
@@ -57,12 +71,11 @@ export function PublishConfigPanelFloatingLayer({
       {children({
         listRef,
         floatingCardSurfaceRef,
-        cardTargetConfigId: cardTargetRepoId,
+        cardTargetConfigId,
         floatingVisible,
         floatingCardMotionStyle,
         floatingCardSurfaceStyle,
-        setConfigRowRef: setRepoRowRef,
-        handleConfigMouseEnter: handleRepoMouseEnter,
+        setConfigRowRef,
         handleListPointerMove,
         handleListPointerEnter,
         handleListMouseLeave,

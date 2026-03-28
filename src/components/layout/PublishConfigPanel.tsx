@@ -1,5 +1,4 @@
 import {
-  Fragment,
   startTransition,
   Suspense,
   lazy,
@@ -41,24 +40,25 @@ import {
   Clock,
   Star,
   X,
-  MoreHorizontal,
 } from "lucide-react";
 import { toast } from "sonner";
 import {
-  readProjectPublishProfile,
   type ConfigProfile,
   type PublishConfigStore,
 } from "@/lib/store";
 import {
-  extractDotnetPublishParametersFromProjectProfile,
-  parseProjectPublishProfileXml,
   type ParsedProjectPublishProfile,
 } from "@/lib/projectPublishProfileXml";
-import { createDotnetPublishConfigFromParameters } from "@/lib/dotnetPublishConfig";
+import { resolveDotnetProjectProfile } from "@/lib/dotnetProjectProfile";
 import { extractInvokeErrorMessage } from "@/lib/tauri/invokeErrors";
 import { useI18n } from "@/hooks/useI18n";
 import type { PublishConfigFloatingBindings } from "@/components/layout/PublishConfigPanelFloatingLayer";
 import { Dialog } from "@/components/ui/dialog";
+import {
+  RowActionsMenu,
+  type RowActionsMenuAction,
+} from "@/components/layout/RowActionsMenu";
+import { useListInteractionState } from "@/components/layout/useListInteractionState";
 
 const PublishConfigPanelFloatingLayer = lazy(async () => {
   const mod = await import("@/components/layout/PublishConfigPanelFloatingLayer");
@@ -187,15 +187,6 @@ function ConfigGroup({
   );
 }
 
-type ConfigRowAction = {
-  key: string;
-  label: string;
-  icon: JSX.Element;
-  onSelect: () => void | Promise<unknown>;
-  destructive?: boolean;
-  separatorBefore?: boolean;
-};
-
 function createFavoriteConfigAction({
   isFavorite,
   favoriteLabel,
@@ -206,7 +197,7 @@ function createFavoriteConfigAction({
   favoriteLabel: string;
   unfavoriteLabel: string;
   onSelect: () => void | Promise<unknown>;
-}): ConfigRowAction {
+}): RowActionsMenuAction {
   return {
     key: "favorite",
     label: isFavorite ? unfavoriteLabel : favoriteLabel,
@@ -224,72 +215,13 @@ function createFavoriteConfigAction({
   };
 }
 
-function ConfigRowActionsMenu({
-  open,
-  moreActionsLabel,
-  itemLabel,
-  actions,
-  onOpenChange,
-}: {
-  open: boolean;
-  moreActionsLabel: string;
-  itemLabel: string;
-  actions: ConfigRowAction[];
-  onOpenChange: (open: boolean) => void;
-}) {
-  return (
-    <DropdownMenu open={open} onOpenChange={onOpenChange}>
-      <DropdownMenuTrigger asChild>
-        <Button
-          type="button"
-          variant="ghost"
-          size="icon"
-          className="h-6 w-6 rounded-lg transition-all duration-300 opacity-0 group-hover:opacity-75 group-focus-within:opacity-75 data-[state=open]:bg-[var(--glass-bg-active)] data-[state=open]:opacity-100"
-          title={moreActionsLabel}
-          aria-haspopup="menu"
-          aria-expanded={open}
-          aria-label={`${moreActionsLabel}: ${itemLabel}`}
-          onPointerDown={(event) => {
-            event.stopPropagation();
-          }}
-          onClick={(event) => {
-            event.stopPropagation();
-          }}
-          onKeyDown={(event) => {
-            event.stopPropagation();
-          }}
-        >
-          <MoreHorizontal className="h-3.5 w-3.5" />
-        </Button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" sideOffset={6}>
-        {actions.map((action) => (
-          <Fragment key={action.key}>
-            {action.separatorBefore ? <DropdownMenuSeparator /> : null}
-            <DropdownMenuItem
-              className={cn(
-                action.destructive && "text-destructive focus:bg-destructive/10"
-              )}
-              onSelect={() => {
-                void action.onSelect();
-              }}
-            >
-              {action.icon}
-              <span>{action.label}</span>
-            </DropdownMenuItem>
-          </Fragment>
-        ))}
-      </DropdownMenuContent>
-    </DropdownMenu>
-  );
-}
-
 // User profile item with delete button on hover
 function ProfileItem({
   profile,
   configKey,
   configId,
   isSelected,
+  isVisualTarget,
   isFavorite,
   isMenuOpen,
   onClick,
@@ -305,11 +237,14 @@ function ProfileItem({
   onMenuOpenChange,
   rowRef,
   onItemMouseEnter,
+  onItemFocus,
+  onItemBlur,
 }: {
   profile: ConfigProfile;
   configKey: string;
   configId: string;
   isSelected: boolean;
+  isVisualTarget: boolean;
   isFavorite: boolean;
   isMenuOpen: boolean;
   onClick: () => void;
@@ -325,8 +260,10 @@ function ProfileItem({
   onMenuOpenChange: (open: boolean) => void;
   rowRef: (node: HTMLDivElement | null) => void;
   onItemMouseEnter: () => void;
+  onItemFocus: () => void;
+  onItemBlur: () => void;
 }) {
-  const actions: ConfigRowAction[] = [
+  const actions: RowActionsMenuAction[] = [
     createFavoriteConfigAction({
       isFavorite,
       favoriteLabel,
@@ -358,12 +295,24 @@ function ProfileItem({
   return (
     <div
       ref={rowRef}
-      data-repo-row="true"
-      data-repo-id={configId}
-      data-menu-open={isMenuOpen ? "true" : "false"}
+      data-list-row="true"
+      data-list-item-id={configId}
+      data-list-visual-target={isVisualTarget ? "true" : "false"}
+      data-list-menu-open={isMenuOpen ? "true" : "false"}
       className="group relative z-10"
       onMouseEnter={onItemMouseEnter}
-      onFocusCapture={onItemMouseEnter}
+      onFocusCapture={onItemFocus}
+      onBlurCapture={(event) => {
+        const nextFocusTarget = event.relatedTarget;
+        if (
+          nextFocusTarget instanceof Node &&
+          event.currentTarget.contains(nextFocusTarget)
+        ) {
+          return;
+        }
+
+        onItemBlur();
+      }}
     >
       <button
         type="button"
@@ -400,12 +349,13 @@ function ProfileItem({
         </div>
       </button>
       <div className="absolute inset-y-0 right-3 flex items-center">
-        <ConfigRowActionsMenu
+        <RowActionsMenu
           open={isMenuOpen}
           moreActionsLabel={moreActionsLabel}
           itemLabel={profile.name}
           actions={actions}
           onOpenChange={onMenuOpenChange}
+          stopPropagation
         />
       </div>
     </div>
@@ -439,7 +389,6 @@ export function PublishConfigPanel({
   const [groupFilterValue, setGroupFilterValue] =
     useState<GroupFilterValue>(ALL_GROUP_FILTER);
   const [groupFilterOpen, setGroupFilterOpen] = useState(false);
-  const [openConfigMenuId, setOpenConfigMenuId] = useState<string | null>(null);
   const [preferredSelectedRenderId, setPreferredSelectedRenderId] = useState<string | null>(null);
   const [floatingEnhancerEnabled, setFloatingEnhancerEnabled] = useState(false);
   const [projectProfileViewerOpen, setProjectProfileViewerOpen] = useState(false);
@@ -700,29 +649,6 @@ export function PublishConfigPanel({
     visibleProjectProfiles,
   ]);
 
-  useEffect(() => {
-    if (!openConfigMenuId) {
-      return;
-    }
-
-    if (!allConfigIds.includes(openConfigMenuId)) {
-      setOpenConfigMenuId(null);
-    }
-  }, [allConfigIds, openConfigMenuId]);
-
-  const handleConfigMenuOpenChange = useCallback(
-    (configId: string, open: boolean) => {
-      setOpenConfigMenuId((current) => {
-        if (open) {
-          return configId;
-        }
-
-        return current === configId ? null : current;
-      });
-    },
-    []
-  );
-
   const selectedRenderId = useMemo(() => {
     if (!selectedConfigId) {
       return null;
@@ -738,6 +664,11 @@ export function PublishConfigPanel({
 
     return selectedConfigId;
   }, [allConfigIds, preferredSelectedRenderId, selectedConfigId]);
+
+  const interaction = useListInteractionState({
+    filteredItemIds: allConfigIds,
+    selectedItemId: selectedRenderId,
+  });
 
   useEffect(() => {
     if (floatingEnhancerEnabled) {
@@ -763,7 +694,6 @@ export function PublishConfigPanel({
     (_event: ReactPointerEvent<HTMLDivElement>) => {},
     []
   );
-  const noopHoverHandler = useCallback((_configId: string) => {}, []);
   const noopVoidHandler = useCallback(() => {}, []);
 
   const handleViewProjectProfile = useCallback(
@@ -791,11 +721,13 @@ export function PublishConfigPanel({
       });
 
       try {
-        const profileFile = await readProjectPublishProfile(
-          projectFilePath,
-          profileName
-        );
-        const parsedProfile = parseProjectPublishProfileXml(profileFile.content);
+        const resolvedProfile = await resolveDotnetProjectProfile({
+          projectInfo: {
+            root_path: "",
+            project_file: projectFilePath,
+          },
+          profileName,
+        });
 
         if (latestProjectProfileRequestId.current !== requestId) {
           return;
@@ -803,9 +735,9 @@ export function PublishConfigPanel({
 
         setProjectProfileViewerState({
           status: "ready",
-          profileName: profileFile.profileName,
-          filePath: profileFile.filePath,
-          parsedProfile,
+          profileName: resolvedProfile.profileName,
+          filePath: resolvedProfile.filePath,
+          parsedProfile: resolvedProfile.parsedProfile,
         });
       } catch (error) {
         const errorMessage =
@@ -843,18 +775,17 @@ export function PublishConfigPanel({
       }
 
       try {
-        const profileFile = await readProjectPublishProfile(
-          projectFilePath,
-          profileName
-        );
-        const parsedProfile = parseProjectPublishProfileXml(profileFile.content);
-        const parameters =
-          extractDotnetPublishParametersFromProjectProfile(parsedProfile);
-        const config = createDotnetPublishConfigFromParameters(parameters);
+        const resolvedProfile = await resolveDotnetProjectProfile({
+          projectInfo: {
+            root_path: "",
+            project_file: projectFilePath,
+          },
+          profileName,
+        });
 
         const createdProfileName = await onCopyProjectProfileToCustom(
-          profileFile.profileName,
-          config
+          resolvedProfile.profileName,
+          resolvedProfile.editableConfig
         );
         toast.success(t.copyConfigSuccess || "已复制为自定义配置", {
           description:
@@ -889,20 +820,21 @@ export function PublishConfigPanel({
       listRef: fallbackListRef as MutableRefObject<HTMLDivElement | null>,
       floatingCardSurfaceRef:
         fallbackFloatingCardSurfaceRef as MutableRefObject<HTMLDivElement | null>,
-      cardTargetConfigId: null,
+      cardTargetConfigId: interaction.visualTargetItemId,
       floatingVisible: false,
       floatingCardMotionStyle: EMPTY_FLOATING_STYLE,
       floatingCardSurfaceStyle: EMPTY_FLOATING_STYLE,
       setConfigRowRef: createFallbackRowRef,
-      handleConfigMouseEnter: noopHoverHandler,
       handleListPointerMove: noopPointerHandler,
-      handleListPointerEnter: noopPointerHandler,
-      handleListMouseLeave: noopVoidHandler,
+      handleListPointerEnter: interaction.handleListPointerEnter,
+      handleListMouseLeave: interaction.handleListPointerLeave,
       handleListScroll: noopVoidHandler,
     }),
     [
       createFallbackRowRef,
-      noopHoverHandler,
+      interaction.handleListPointerEnter,
+      interaction.handleListPointerLeave,
+      interaction.visualTargetItemId,
       noopPointerHandler,
       noopVoidHandler,
     ]
@@ -912,10 +844,10 @@ export function PublishConfigPanel({
     (floating: PublishConfigFloatingBindings) => (
       <div
         ref={floating.listRef}
-        className="repo-list-scroll scrollbar-fade glass-scrollbar relative flex-1 overflow-auto px-2.5 py-2"
+        className="list-scroll-shell scrollbar-fade glass-scrollbar relative flex-1 overflow-auto px-2.5 py-2"
         onPointerEnter={floating.handleListPointerEnter}
         onPointerMove={floating.handleListPointerMove}
-        onMouseLeave={floating.handleListMouseLeave}
+        onPointerLeave={floating.handleListMouseLeave}
         onScroll={floating.handleListScroll}
       >
         <div
@@ -929,7 +861,7 @@ export function PublishConfigPanel({
           <div
             ref={floating.floatingCardSurfaceRef}
             data-selected={floating.cardTargetConfigId === selectedRenderId ? "true" : "false"}
-            className="repo-floating-card h-full w-full transition-[box-shadow] duration-320 ease-[cubic-bezier(0.16,1,0.3,1)]"
+            className="floating-list-card h-full w-full transition-[box-shadow] duration-320 ease-[cubic-bezier(0.16,1,0.3,1)]"
             style={floating.floatingCardSurfaceStyle}
           />
         </div>
@@ -944,12 +876,36 @@ export function PublishConfigPanel({
                 <div
                   key={`recent-${item.key}`}
                   ref={floating.setConfigRowRef(`recent:${item.key}`)}
-                  data-repo-row="true"
-                  data-repo-id={`recent:${item.key}`}
-                  data-menu-open={openConfigMenuId === `recent:${item.key}` ? "true" : "false"}
+                  data-list-row="true"
+                  data-list-item-id={`recent:${item.key}`}
+                  data-list-visual-target={
+                    interaction.visualTargetItemId === `recent:${item.key}`
+                      ? "true"
+                      : "false"
+                  }
+                  data-list-menu-open={
+                    interaction.isMenuOpenForItem(`recent:${item.key}`)
+                      ? "true"
+                      : "false"
+                  }
                   className="group relative z-10"
-                  onMouseEnter={() => floating.handleConfigMouseEnter(`recent:${item.key}`)}
-                  onFocusCapture={() => floating.handleConfigMouseEnter(`recent:${item.key}`)}
+                  onMouseEnter={() =>
+                    interaction.handleRowMouseEnter(`recent:${item.key}`)
+                  }
+                  onFocusCapture={() =>
+                    interaction.handleRowFocus(`recent:${item.key}`)
+                  }
+                  onBlurCapture={(event) => {
+                    const nextFocusTarget = event.relatedTarget;
+                    if (
+                      nextFocusTarget instanceof Node &&
+                      event.currentTarget.contains(nextFocusTarget)
+                    ) {
+                      return;
+                    }
+
+                    interaction.handleRowBlur(`recent:${item.key}`);
+                  }}
                 >
                   <button
                     type="button"
@@ -999,8 +955,8 @@ export function PublishConfigPanel({
                     </div>
                   </button>
                   <div className="absolute inset-y-0 right-3 flex items-center">
-                    <ConfigRowActionsMenu
-                      open={openConfigMenuId === `recent:${item.key}`}
+                    <RowActionsMenu
+                      open={interaction.isMenuOpenForItem(`recent:${item.key}`)}
                       moreActionsLabel={moreActionsLabel}
                       itemLabel={item.name}
                       actions={[
@@ -1020,8 +976,9 @@ export function PublishConfigPanel({
                         },
                       ]}
                       onOpenChange={(open) => {
-                        handleConfigMenuOpenChange(`recent:${item.key}`, open);
+                        interaction.handleMenuOpenChange(`recent:${item.key}`, open);
                       }}
+                      stopPropagation
                     />
                   </div>
                 </div>
@@ -1042,12 +999,28 @@ export function PublishConfigPanel({
                 <div
                   key={`pubxml-${name}`}
                   ref={floating.setConfigRowRef(configKey)}
-                  data-repo-row="true"
-                  data-repo-id={configKey}
-                  data-menu-open={openConfigMenuId === configKey ? "true" : "false"}
+                  data-list-row="true"
+                  data-list-item-id={configKey}
+                  data-list-visual-target={
+                    interaction.visualTargetItemId === configKey ? "true" : "false"
+                  }
+                  data-list-menu-open={
+                    interaction.isMenuOpenForItem(configKey) ? "true" : "false"
+                  }
                   className="group relative z-10"
-                  onMouseEnter={() => floating.handleConfigMouseEnter(configKey)}
-                  onFocusCapture={() => floating.handleConfigMouseEnter(configKey)}
+                  onMouseEnter={() => interaction.handleRowMouseEnter(configKey)}
+                  onFocusCapture={() => interaction.handleRowFocus(configKey)}
+                  onBlurCapture={(event) => {
+                    const nextFocusTarget = event.relatedTarget;
+                    if (
+                      nextFocusTarget instanceof Node &&
+                      event.currentTarget.contains(nextFocusTarget)
+                    ) {
+                      return;
+                    }
+
+                    interaction.handleRowBlur(configKey);
+                  }}
                 >
                   <button
                     type="button"
@@ -1087,8 +1060,8 @@ export function PublishConfigPanel({
                     </div>
                   </button>
                   <div className="absolute inset-y-0 right-3 flex items-center">
-                    <ConfigRowActionsMenu
-                      open={openConfigMenuId === configKey}
+                    <RowActionsMenu
+                      open={interaction.isMenuOpenForItem(configKey)}
                       moreActionsLabel={moreActionsLabel}
                       itemLabel={name}
                       actions={[
@@ -1112,8 +1085,9 @@ export function PublishConfigPanel({
                         },
                       ]}
                       onOpenChange={(open) => {
-                        handleConfigMenuOpenChange(configKey, open);
+                        interaction.handleMenuOpenChange(configKey, open);
                       }}
+                      stopPropagation
                     />
                   </div>
                 </div>
@@ -1138,8 +1112,13 @@ export function PublishConfigPanel({
                   isSelected={
                     selectedRenderId === `userprofile:${profile.name}`
                   }
+                  isVisualTarget={
+                    interaction.visualTargetItemId === `userprofile:${profile.name}`
+                  }
                   isFavorite={favoriteSet.has(`userprofile:${profile.name}`)}
-                  isMenuOpen={openConfigMenuId === `userprofile:${profile.name}`}
+                  isMenuOpen={interaction.isMenuOpenForItem(
+                    `userprofile:${profile.name}`
+                  )}
                   onClick={() => {
                     setPreferredSelectedRenderId(`userprofile:${profile.name}`);
                     onSelectProfile(profile);
@@ -1154,10 +1133,21 @@ export function PublishConfigPanel({
                   moreActionsLabel={moreActionsLabel}
                   onDelete={() => onDeleteProfile(profile.name)}
                   onMenuOpenChange={(open) => {
-                    handleConfigMenuOpenChange(`userprofile:${profile.name}`, open);
+                    interaction.handleMenuOpenChange(
+                      `userprofile:${profile.name}`,
+                      open
+                    );
                   }}
                   rowRef={floating.setConfigRowRef(`userprofile:${profile.name}`)}
-                  onItemMouseEnter={() => floating.handleConfigMouseEnter(`userprofile:${profile.name}`)}
+                  onItemMouseEnter={() =>
+                    interaction.handleRowMouseEnter(`userprofile:${profile.name}`)
+                  }
+                  onItemFocus={() =>
+                    interaction.handleRowFocus(`userprofile:${profile.name}`)
+                  }
+                  onItemBlur={() =>
+                    interaction.handleRowBlur(`userprofile:${profile.name}`)
+                  }
                 />
               ))}
             </ConfigGroup>
@@ -1181,7 +1171,6 @@ export function PublishConfigPanel({
       onSelectProfile,
       onSelectProjectProfile,
       onToggleFavoriteConfig,
-      openConfigMenuId,
       recentItems,
       removeRecentLabel,
       selectedConfigId,
@@ -1190,9 +1179,14 @@ export function PublishConfigPanel({
       t,
       moreActionsLabel,
       unfavoriteConfigLabel,
-      handleConfigMenuOpenChange,
       handleCopyProjectProfileToCustom,
       handleViewProjectProfile,
+      interaction.handleMenuOpenChange,
+      interaction.handleRowBlur,
+      interaction.handleRowFocus,
+      interaction.handleRowMouseEnter,
+      interaction.isMenuOpenForItem,
+      interaction.visualTargetItemId,
       visibleGroupedFilteredProfiles,
       visibleProjectProfiles,
     ]
@@ -1365,8 +1359,18 @@ export function PublishConfigPanel({
       ) : (
         <Suspense fallback={renderConfigList(fallbackFloatingBindings)}>
           <PublishConfigPanelFloatingLayer
-            allConfigIds={allConfigIds}
-            selectedRenderId={selectedRenderId}
+            filteredConfigIds={allConfigIds}
+            targetConfigId={interaction.visualTargetItemId}
+            restingTargetConfigId={
+              interaction.activeMenuItemId ??
+              interaction.focusedItemId ??
+              selectedRenderId
+            }
+            selectedConfigId={selectedRenderId}
+            freezeFloating={interaction.freezeFloating}
+            onListPointerEnter={interaction.handleListPointerEnter}
+            onListPointerLeave={interaction.handleListPointerLeave}
+            onPointerConfigChange={interaction.handlePointerItemChange}
           >
             {renderConfigList}
           </PublishConfigPanelFloatingLayer>

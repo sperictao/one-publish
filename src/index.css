@@ -338,7 +338,7 @@ html.dark {
   );
 }
 
-.repo-list-scroll {
+.list-scroll-shell {
   border-radius: 1rem;
   border: 1px solid var(--repo-sidebar-inner-border);
   background: var(--repo-sidebar-inner-bg);
@@ -347,7 +347,7 @@ html.dark {
   -webkit-backdrop-filter: blur(20px) saturate(145%);
 }
 
-.repo-list-scroll::before {
+.list-scroll-shell::before {
   content: "";
   position: absolute;
   inset: 0;
@@ -361,7 +361,7 @@ html.dark {
   );
 }
 
-.dark .repo-list-scroll::before {
+.dark .list-scroll-shell::before {
   background: linear-gradient(
     180deg,
     rgba(255, 255, 255, 0.08) 0%,
@@ -403,41 +403,41 @@ html.dark {
   animation: capsule-breathe 2.8s ease-in-out infinite;
 }
 
-.repo-floating-card {
-  --repo-trail-opacity: 0;
-  --repo-trail-x: 0px;
-  --repo-trail-y: 0px;
-  --repo-trail-scale: 1;
-  --repo-selected-glow: 0;
-  --repo-highlight-x: 0.16;
-  --repo-highlight-y: 0;
-  --repo-morph-stretch: 0;
-  --repo-shadow-offset-x: 0px;
-  --repo-shadow-offset-y: 0px;
-  --repo-specular-sweep: 0.5;
-  --repo-specular-angle: 90deg;
-  --repo-caustic-x: 0.16;
-  --repo-caustic-y: 0;
+.floating-list-card {
+  --list-card-trail-opacity: 0;
+  --list-card-trail-x: 0px;
+  --list-card-trail-y: 0px;
+  --list-card-trail-scale: 1;
+  --list-card-selected-glow: 0;
+  --list-card-highlight-x: 0.16;
+  --list-card-highlight-y: 0;
+  --list-card-morph-stretch: 0;
+  --list-card-shadow-offset-x: 0px;
+  --list-card-shadow-offset-y: 0px;
+  --list-card-specular-sweep: 0.5;
+  --list-card-specular-angle: 90deg;
+  --list-card-caustic-x: 0.16;
+  --list-card-caustic-y: 0;
   position: absolute;
   border-radius: 1.25rem;
   border: 1px solid rgba(255, 255, 255, 0.45);
   background: linear-gradient(145deg, rgba(255, 255, 255, 0.58) 0%, hsl(var(--background) / 0.18) 50%, rgba(246, 245, 255, 0.38) 100%);
   box-shadow:
-    calc(0px + var(--repo-shadow-offset-x)) calc(10px + var(--repo-shadow-offset-y)) 24px rgba(98, 108, 145, 0.16),
+    calc(0px + var(--list-card-shadow-offset-x)) calc(10px + var(--list-card-shadow-offset-y)) 24px rgba(98, 108, 145, 0.16),
     0 4px 10px rgba(98, 108, 145, 0.08),
     0 0 40px rgba(98, 108, 145, 0.06),
     inset 0 1px 0 rgba(255, 255, 255, 0.7),
     inset 0 0 12px rgba(255, 255, 255, 0.12),
-    calc(var(--repo-shadow-offset-x) * 2.5) calc(var(--repo-shadow-offset-y) * 2.5) 18px rgba(255, 186, 73, 0.12),
-    calc(var(--repo-shadow-offset-x) * -2.5) calc(var(--repo-shadow-offset-y) * -2.5) 18px rgba(120, 160, 255, 0.12);
+    calc(var(--list-card-shadow-offset-x) * 2.5) calc(var(--list-card-shadow-offset-y) * 2.5) 18px rgba(255, 186, 73, 0.12),
+    calc(var(--list-card-shadow-offset-x) * -2.5) calc(var(--list-card-shadow-offset-y) * -2.5) 18px rgba(120, 160, 255, 0.12);
   backdrop-filter: blur(24px) saturate(180%);
   -webkit-backdrop-filter: blur(24px) saturate(180%);
   overflow: hidden;
-  filter: blur(calc(var(--repo-morph-stretch) * 0.5px));
+  filter: blur(calc(var(--list-card-morph-stretch) * 0.5px));
   transition: box-shadow 0.32s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
-.repo-floating-card::after {
+.floating-list-card::after {
   content: "";
   position: absolute;
   inset: -2px;
@@ -450,52 +450,52 @@ html.dark {
     rgba(200, 186, 255, 0.22) 72%,
     rgba(220, 210, 255, 0.1) 100%
   );
-  opacity: var(--repo-trail-opacity);
-  transform: translate3d(var(--repo-trail-x), var(--repo-trail-y), 0) scale(var(--repo-trail-scale));
+  opacity: var(--list-card-trail-opacity);
+  transform: translate3d(var(--list-card-trail-x), var(--list-card-trail-y), 0) scale(var(--list-card-trail-scale));
   filter: blur(13px);
   transition:
     opacity 0.36s cubic-bezier(0.16, 1, 0.3, 1),
     transform 0.36s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
-.repo-floating-card[data-selected="true"] {
+.floating-list-card[data-selected="true"] {
   box-shadow:
-    calc(0px + var(--repo-shadow-offset-x)) calc(12px + var(--repo-shadow-offset-y)) 24px rgba(98, 108, 145, 0.18),
+    calc(0px + var(--list-card-shadow-offset-x)) calc(12px + var(--list-card-shadow-offset-y)) 24px rgba(98, 108, 145, 0.18),
     0 4px 12px rgba(98, 108, 145, 0.1),
     0 0 40px rgba(98, 108, 145, 0.06),
     inset 0 1px 0 rgba(255, 255, 255, 0.74),
     inset 0 0 12px rgba(255, 255, 255, 0.12),
-    0 0 calc(16px + 12px * var(--repo-selected-glow)) rgba(108, 140, 255, calc(0.08 + 0.12 * var(--repo-selected-glow))),
-    calc(var(--repo-shadow-offset-x) * 2.5) calc(var(--repo-shadow-offset-y) * 2.5) 18px rgba(255, 186, 73, 0.12),
-    calc(var(--repo-shadow-offset-x) * -2.5) calc(var(--repo-shadow-offset-y) * -2.5) 18px rgba(120, 160, 255, 0.12);
+    0 0 calc(16px + 12px * var(--list-card-selected-glow)) rgba(108, 140, 255, calc(0.08 + 0.12 * var(--list-card-selected-glow))),
+    calc(var(--list-card-shadow-offset-x) * 2.5) calc(var(--list-card-shadow-offset-y) * 2.5) 18px rgba(255, 186, 73, 0.12),
+    calc(var(--list-card-shadow-offset-x) * -2.5) calc(var(--list-card-shadow-offset-y) * -2.5) 18px rgba(120, 160, 255, 0.12);
 }
 
-.repo-floating-card::before {
+.floating-list-card::before {
   content: "";
   position: absolute;
   inset: 0;
   background:
-    linear-gradient(var(--repo-specular-angle), transparent calc(var(--repo-specular-sweep) * 100% - 3%), rgba(255, 255, 255, 0.38) calc(var(--repo-specular-sweep) * 100%), transparent calc(var(--repo-specular-sweep) * 100% + 3%)),
-    radial-gradient(60% 40% at calc(var(--repo-caustic-x) * 100%) calc(var(--repo-caustic-y) * 100%), rgba(255, 255, 255, 0.18) 0%, rgba(255, 255, 255, 0) 70%),
-    radial-gradient(80% 50% at calc(var(--repo-highlight-x) * 100%) calc(var(--repo-highlight-y) * 100%), rgba(255, 255, 255, 0.35) 0%, rgba(255, 255, 255, 0) 75%),
+    linear-gradient(var(--list-card-specular-angle), transparent calc(var(--list-card-specular-sweep) * 100% - 3%), rgba(255, 255, 255, 0.38) calc(var(--list-card-specular-sweep) * 100%), transparent calc(var(--list-card-specular-sweep) * 100% + 3%)),
+    radial-gradient(60% 40% at calc(var(--list-card-caustic-x) * 100%) calc(var(--list-card-caustic-y) * 100%), rgba(255, 255, 255, 0.18) 0%, rgba(255, 255, 255, 0) 70%),
+    radial-gradient(80% 50% at calc(var(--list-card-highlight-x) * 100%) calc(var(--list-card-highlight-y) * 100%), rgba(255, 255, 255, 0.35) 0%, rgba(255, 255, 255, 0) 75%),
     linear-gradient(180deg, rgba(255, 255, 255, 0.18) 0%, rgba(255, 255, 255, 0) 68%);
   pointer-events: none;
 }
 
-.dark .repo-floating-card {
+.dark .floating-list-card {
   border-color: rgba(255, 255, 255, 0.12);
   background: linear-gradient(145deg, rgba(52, 57, 76, 0.62) 0%, hsl(var(--background) / 0.22) 50%, rgba(35, 39, 54, 0.52) 100%);
   box-shadow:
-    calc(0px + var(--repo-shadow-offset-x)) calc(10px + var(--repo-shadow-offset-y)) 24px rgba(0, 0, 0, 0.34),
+    calc(0px + var(--list-card-shadow-offset-x)) calc(10px + var(--list-card-shadow-offset-y)) 24px rgba(0, 0, 0, 0.34),
     0 4px 10px rgba(0, 0, 0, 0.2),
     0 0 40px rgba(0, 0, 0, 0.1),
     inset 0 1px 0 rgba(255, 255, 255, 0.08),
     inset 0 0 12px rgba(255, 255, 255, 0.04),
-    calc(var(--repo-shadow-offset-x) * 2.5) calc(var(--repo-shadow-offset-y) * 2.5) 18px rgba(255, 186, 73, 0.09),
-    calc(var(--repo-shadow-offset-x) * -2.5) calc(var(--repo-shadow-offset-y) * -2.5) 18px rgba(120, 160, 255, 0.10);
+    calc(var(--list-card-shadow-offset-x) * 2.5) calc(var(--list-card-shadow-offset-y) * 2.5) 18px rgba(255, 186, 73, 0.09),
+    calc(var(--list-card-shadow-offset-x) * -2.5) calc(var(--list-card-shadow-offset-y) * -2.5) 18px rgba(120, 160, 255, 0.10);
 }
 
-.dark .repo-floating-card::after {
+.dark .floating-list-card::after {
   background: linear-gradient(
     118deg,
     rgba(88, 126, 214, 0.34) 0%,
@@ -505,23 +505,23 @@ html.dark {
   );
 }
 
-.dark .repo-floating-card[data-selected="true"] {
+.dark .floating-list-card[data-selected="true"] {
   box-shadow:
-    calc(0px + var(--repo-shadow-offset-x)) calc(10px + var(--repo-shadow-offset-y)) 24px rgba(0, 0, 0, 0.4),
+    calc(0px + var(--list-card-shadow-offset-x)) calc(10px + var(--list-card-shadow-offset-y)) 24px rgba(0, 0, 0, 0.4),
     0 4px 12px rgba(0, 0, 0, 0.24),
     0 0 40px rgba(0, 0, 0, 0.1),
     inset 0 1px 0 rgba(255, 255, 255, 0.1),
     inset 0 0 12px rgba(255, 255, 255, 0.04),
-    0 0 calc(14px + 12px * var(--repo-selected-glow)) rgba(93, 126, 232, calc(0.12 + 0.18 * var(--repo-selected-glow))),
-    calc(var(--repo-shadow-offset-x) * 2.5) calc(var(--repo-shadow-offset-y) * 2.5) 18px rgba(255, 186, 73, 0.09),
-    calc(var(--repo-shadow-offset-x) * -2.5) calc(var(--repo-shadow-offset-y) * -2.5) 18px rgba(120, 160, 255, 0.10);
+    0 0 calc(14px + 12px * var(--list-card-selected-glow)) rgba(93, 126, 232, calc(0.12 + 0.18 * var(--list-card-selected-glow))),
+    calc(var(--list-card-shadow-offset-x) * 2.5) calc(var(--list-card-shadow-offset-y) * 2.5) 18px rgba(255, 186, 73, 0.09),
+    calc(var(--list-card-shadow-offset-x) * -2.5) calc(var(--list-card-shadow-offset-y) * -2.5) 18px rgba(120, 160, 255, 0.10);
 }
 
-.dark .repo-floating-card::before {
+.dark .floating-list-card::before {
   background:
-    linear-gradient(var(--repo-specular-angle), transparent calc(var(--repo-specular-sweep) * 100% - 3%), rgba(255, 255, 255, 0.12) calc(var(--repo-specular-sweep) * 100%), transparent calc(var(--repo-specular-sweep) * 100% + 3%)),
-    radial-gradient(60% 40% at calc(var(--repo-caustic-x) * 100%) calc(var(--repo-caustic-y) * 100%), rgba(255, 255, 255, 0.06) 0%, rgba(255, 255, 255, 0) 70%),
-    radial-gradient(80% 50% at calc(var(--repo-highlight-x) * 100%) calc(var(--repo-highlight-y) * 100%), rgba(255, 255, 255, 0.1) 0%, rgba(255, 255, 255, 0) 72%),
+    linear-gradient(var(--list-card-specular-angle), transparent calc(var(--list-card-specular-sweep) * 100% - 3%), rgba(255, 255, 255, 0.12) calc(var(--list-card-specular-sweep) * 100%), transparent calc(var(--list-card-specular-sweep) * 100% + 3%)),
+    radial-gradient(60% 40% at calc(var(--list-card-caustic-x) * 100%) calc(var(--list-card-caustic-y) * 100%), rgba(255, 255, 255, 0.06) 0%, rgba(255, 255, 255, 0) 70%),
+    radial-gradient(80% 50% at calc(var(--list-card-highlight-x) * 100%) calc(var(--list-card-highlight-y) * 100%), rgba(255, 255, 255, 0.1) 0%, rgba(255, 255, 255, 0) 72%),
     linear-gradient(180deg, rgba(255, 255, 255, 0.06) 0%, rgba(255, 255, 255, 0) 68%);
 }
 
