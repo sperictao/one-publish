@@ -83,50 +83,45 @@ export function MainContentShell({
             </div>
           )}
           <div className="flex-1" />
-          <div className="px-2">
-            <div
-              className="flex items-center gap-0.5 rounded-full border border-black/5 bg-black/[0.04] px-1 py-1 shadow-[inset_0_1px_0_rgba(255,255,255,0.68),0_1px_2px_rgba(15,23,42,0.05)] backdrop-blur-xl dark:border-white/10 dark:bg-white/[0.05] dark:shadow-[inset_0_1px_0_rgba(255,255,255,0.08)]"
+          <div className="flex items-center gap-0.5 px-2" data-tauri-no-drag>
+            <button
+              type="button"
+              className={cn(
+                viewButtonClass,
+                rightPanelView === "home"
+                  ? "bg-background/95 text-foreground shadow-[inset_0_1px_0_rgba(255,255,255,0.72),0_1px_2px_rgba(15,23,42,0.08)] dark:bg-white/90 dark:text-slate-900"
+                  : "text-muted-foreground/65 hover:bg-black/[0.045] hover:text-foreground hover:shadow-[inset_0_1px_0_rgba(255,255,255,0.72),0_1px_2px_rgba(15,23,42,0.06)] dark:hover:bg-white/[0.06] dark:hover:shadow-[inset_0_1px_0_rgba(255,255,255,0.08)]"
+              )}
+              onClick={(e) => {
+                e.stopPropagation();
+                onSelectHomeView();
+              }}
+              aria-label={appT.rightPanelHome || "主页"}
+              title={appT.rightPanelHome || "主页"}
+              aria-pressed={rightPanelView === "home"}
               data-tauri-no-drag
             >
-              <button
-                type="button"
-                className={cn(
-                  viewButtonClass,
-                  rightPanelView === "home"
-                    ? "bg-background/95 text-foreground shadow-[inset_0_1px_0_rgba(255,255,255,0.72),0_1px_2px_rgba(15,23,42,0.08)] dark:bg-white/90 dark:text-slate-900"
-                    : "text-muted-foreground/65 hover:bg-black/[0.045] hover:text-foreground hover:shadow-[inset_0_1px_0_rgba(255,255,255,0.72),0_1px_2px_rgba(15,23,42,0.06)] dark:hover:bg-white/[0.06] dark:hover:shadow-[inset_0_1px_0_rgba(255,255,255,0.08)]"
-                )}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onSelectHomeView();
-                }}
-                aria-label={appT.rightPanelHome || "主页"}
-                title={appT.rightPanelHome || "主页"}
-                aria-pressed={rightPanelView === "home"}
-                data-tauri-no-drag
-              >
-                <LayoutDashboard className="h-3.5 w-3.5" />
-              </button>
-              <button
-                type="button"
-                className={cn(
-                  viewButtonClass,
-                  rightPanelView === "history"
-                    ? "bg-background/95 text-foreground shadow-[inset_0_1px_0_rgba(255,255,255,0.72),0_1px_2px_rgba(15,23,42,0.08)] dark:bg-white/90 dark:text-slate-900"
-                    : "text-muted-foreground/65 hover:bg-black/[0.045] hover:text-foreground hover:shadow-[inset_0_1px_0_rgba(255,255,255,0.72),0_1px_2px_rgba(15,23,42,0.06)] dark:hover:bg-white/[0.06] dark:hover:shadow-[inset_0_1px_0_rgba(255,255,255,0.08)]"
-                )}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onSelectHistoryView();
-                }}
-                aria-label={appT.rightPanelHistory || "历史记录"}
-                title={appT.rightPanelHistory || "历史记录"}
-                aria-pressed={rightPanelView === "history"}
-                data-tauri-no-drag
-              >
-                <History className="h-3.5 w-3.5" />
-              </button>
-            </div>
+              <LayoutDashboard className="h-3.5 w-3.5" />
+            </button>
+            <button
+              type="button"
+              className={cn(
+                viewButtonClass,
+                rightPanelView === "history"
+                  ? "bg-background/95 text-foreground shadow-[inset_0_1px_0_rgba(255,255,255,0.72),0_1px_2px_rgba(15,23,42,0.08)] dark:bg-white/90 dark:text-slate-900"
+                  : "text-muted-foreground/65 hover:bg-black/[0.045] hover:text-foreground hover:shadow-[inset_0_1px_0_rgba(255,255,255,0.72),0_1px_2px_rgba(15,23,42,0.06)] dark:hover:bg-white/[0.06] dark:hover:shadow-[inset_0_1px_0_rgba(255,255,255,0.08)]"
+              )}
+              onClick={(e) => {
+                e.stopPropagation();
+                onSelectHistoryView();
+              }}
+              aria-label={appT.rightPanelHistory || "历史记录"}
+              title={appT.rightPanelHistory || "历史记录"}
+              aria-pressed={rightPanelView === "history"}
+              data-tauri-no-drag
+            >
+              <History className="h-3.5 w-3.5" />
+            </button>
           </div>
         </div>
         <div className="list-scroll-shell glass-scrollbar relative flex-1 overflow-auto">
