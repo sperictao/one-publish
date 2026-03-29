@@ -25,8 +25,6 @@ import {
   RefreshCw,
   Download,
   Info,
-  FileText,
-  FileCog,
   ListChecks,
   Keyboard,
   type LucideIcon,
@@ -36,6 +34,7 @@ import {
   lazy,
   startTransition,
   useCallback,
+  useEffect,
   useMemo,
   useState,
 } from "react";
@@ -169,19 +168,18 @@ export function SettingsDialog({
   updaterState,
   onCheckForUpdates,
   onInstallAvailableUpdate,
-  onOpenUpdaterHelpTarget,
+  onOpenUpdaterHelpTarget: _onOpenUpdaterHelpTarget,
 }: SettingsDialogProps) {
   const [activeCategory, setActiveCategory] = useState<SettingsCategoryId>("general");
   const [isRestarting, setIsRestarting] = useState(false);
+  const [hasRequestedUpdateCheck, setHasRequestedUpdateCheck] = useState(false);
   const { translations } = useI18n();
   const {
     currentVersion,
     updateInfo,
-    updaterHelpPaths,
-    updaterConfigHealth,
+    isRestartRequired,
     isCheckingUpdate,
     isInstallingUpdate,
-    isOpeningUpdaterHelp,
   } = updaterState;
 
   const categoryItems = useMemo<SettingsCategoryItem[]>(
@@ -302,19 +300,27 @@ export function SettingsDialog({
   );
 
   const handleCheckUpdate = useCallback(() => {
+    setHasRequestedUpdateCheck(true);
     void onCheckForUpdates();
   }, [onCheckForUpdates]);
 
-  const handleOpenUpdaterHelp = useCallback(
-    (target: "docs" | "template") => {
-      void onOpenUpdaterHelpTarget(target);
-    },
-    [onOpenUpdaterHelpTarget]
-  );
+  const shouldHideDefaultUpdaterConfigMessage =
+    !hasRequestedUpdateCheck &&
+    Boolean(
+      updateInfo?.message?.includes("更新源未配置或不可用:") &&
+        updateInfo.message.includes("endpoints") &&
+        updateInfo.message.includes("pubkey")
+    );
 
   const handleInstallUpdate = useCallback(() => {
     void onInstallAvailableUpdate();
   }, [onInstallAvailableUpdate]);
+
+  useEffect(() => {
+    if (!isOpen) {
+      setHasRequestedUpdateCheck(false);
+    }
+  }, [isOpen]);
 
   const handleRestartApp = useCallback(() => {
     if (!isTauri()) {
@@ -579,56 +585,15 @@ export function SettingsDialog({
                 {translations.version?.none || "没有可用的更新"}
               </div>
             )}
-            {updateInfo?.message && (
+            {updateInfo?.message && !shouldHideDefaultUpdaterConfigMessage && (
               <div className="text-xs text-muted-foreground">
                 {updateInfo.message}
-              </div>
-            )}
-            {updaterConfigHealth && (
-              <div
-                className={cn(
-                  "text-xs",
-                  updaterConfigHealth.configured ? "text-green-600" : "text-yellow-600"
-                )}
-              >
-                {translations.version?.configStatus || "配置状态"}:{" "}
-                {updaterConfigHealth.message}
-              </div>
-            )}
-            {updaterHelpPaths && (
-              <div className="flex flex-col gap-2 pt-1">
-                <div className="break-all font-mono text-xs text-muted-foreground">
-                  {updaterHelpPaths.docsPath}
-                </div>
-                <div className="break-all font-mono text-xs text-muted-foreground">
-                  {updaterHelpPaths.templatePath}
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    disabled={isOpeningUpdaterHelp}
-                    onClick={() => handleOpenUpdaterHelp("docs")}
-                  >
-                    <FileText className="mr-1 h-4 w-4" />
-                    {translations.version?.openGuide || "打开配置指南"}
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    disabled={isOpeningUpdaterHelp}
-                    onClick={() => handleOpenUpdaterHelp("template")}
-                  >
-                    <FileCog className="mr-1 h-4 w-4" />
-                    {translations.version?.openTemplate || "打开模板文件"}
-                  </Button>
-                </div>
               </div>
             )}
           </div>
 
           <div className="flex flex-wrap gap-2">
-            {isTauri() && updaterConfigHealth?.configured && (
+            {isTauri() && isRestartRequired && (
               <Button
                 variant="outline"
                 size="sm"
@@ -660,7 +625,7 @@ export function SettingsDialog({
               )}
               <span className="ml-1">{translations.version?.check || "检查更新"}</span>
             </Button>
-            {updateInfo?.hasUpdate && (
+            {updateInfo?.hasUpdate && !isRestartRequired && (
               <Button
                 variant="default"
                 size="sm"

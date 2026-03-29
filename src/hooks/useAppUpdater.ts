@@ -41,6 +41,7 @@ export interface AppUpdaterState {
   updateInfo: UpdateInfo | null;
   updaterHelpPaths: UpdaterHelpPaths | null;
   updaterConfigHealth: UpdaterConfigHealth | null;
+  isRestartRequired: boolean;
   isCheckingUpdate: boolean;
   isInstallingUpdate: boolean;
   isOpeningUpdaterHelp: boolean;
@@ -51,6 +52,7 @@ const INITIAL_STATE: AppUpdaterState = {
   updateInfo: null,
   updaterHelpPaths: null,
   updaterConfigHealth: null,
+  isRestartRequired: false,
   isCheckingUpdate: false,
   isInstallingUpdate: false,
   isOpeningUpdaterHelp: false,
@@ -178,6 +180,9 @@ export function useAppUpdater() {
     try {
       const installMessage = await installUpdate();
       const latestInfo = await checkForUpdates({ silent: true });
+      const isRestartRequired =
+        installMessage.includes("重启") ||
+        installMessage.toLowerCase().includes("restart");
 
       setState((prev) => ({
         ...prev,
@@ -194,6 +199,7 @@ export function useAppUpdater() {
             latestInfo?.releaseNotes || prev.updateInfo?.releaseNotes || null,
           message: installMessage || latestInfo?.message || null,
         },
+        isRestartRequired,
       }));
     } catch (error) {
       const errorMessage = toErrorMessage(error);
