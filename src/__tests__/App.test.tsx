@@ -274,10 +274,24 @@ vi.mock("@/hooks/useScopedConfigs", () => ({
 vi.mock("@/hooks/useAppUpdater", () => ({
   useAppUpdater: () => ({
     updaterState: {
-      status: "idle",
-      checking: false,
-      updateAvailable: null,
-      error: null,
+      currentVersion: "0.3.2",
+      updateInfo: null,
+      updaterHelpPaths: null,
+      updaterConfigHealth: null,
+      isRestartRequired: false,
+      isCheckingUpdate: false,
+      isInstallingUpdate: false,
+      isOpeningUpdaterHelp: false,
+      downloadProgress: {
+        stage: "idle",
+        version: null,
+        downloadedBytes: 0,
+        totalBytes: null,
+        percent: null,
+        attempt: 0,
+        maxAttempts: 0,
+        message: null,
+      },
     },
     checkForUpdates: mocks.noop,
     installAvailableUpdate: mocks.noop,

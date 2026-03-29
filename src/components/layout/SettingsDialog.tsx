@@ -61,6 +61,24 @@ function formatMessage(template: string, ...args: Array<string | number>) {
   return out;
 }
 
+function formatBytes(bytes: number) {
+  if (!Number.isFinite(bytes) || bytes <= 0) {
+    return "0 B";
+  }
+
+  const units = ["B", "KB", "MB", "GB"];
+  let value = bytes;
+  let unitIndex = 0;
+
+  while (value >= 1024 && unitIndex < units.length - 1) {
+    value /= 1024;
+    unitIndex += 1;
+  }
+
+  const digits = unitIndex === 0 ? 0 : value >= 100 ? 0 : value >= 10 ? 1 : 2;
+  return `${value.toFixed(digits)} ${units[unitIndex]}`;
+}
+
 type SettingsCategoryId = "general" | "appearance" | "environment" | "shortcuts" | "about";
 
 interface SettingsCategoryItem {
@@ -180,6 +198,7 @@ export function SettingsDialog({
     isRestartRequired,
     isCheckingUpdate,
     isInstallingUpdate,
+    downloadProgress,
   } = updaterState;
 
   const categoryItems = useMemo<SettingsCategoryItem[]>(
@@ -642,6 +661,60 @@ export function SettingsDialog({
             )}
           </div>
         </AppDialogInset>
+
+        {isInstallingUpdate && (
+          <AppDialogInset className="space-y-3">
+            <div className="flex items-start justify-between gap-3">
+              <div className="space-y-1">
+                <div className="text-sm font-medium">
+                  {downloadProgress.stage === "installing"
+                    ? translations.version?.installing || "正在安装更新..."
+                    : translations.version?.downloading || "正在下载更新..."}
+                </div>
+                <div className="text-xs text-muted-foreground">
+                  {downloadProgress.stage === "retrying"
+                    ? formatMessage(
+                        translations.version?.retrying ||
+                          "下载中断，正在进行第 {} / {} 次尝试",
+                        downloadProgress.attempt || 1,
+                        downloadProgress.maxAttempts || 1
+                      )
+                    : downloadProgress.totalBytes && downloadProgress.totalBytes > 0
+                      ? formatMessage(
+                          translations.version?.downloadProgress ||
+                            "已下载 {} / {}",
+                          formatBytes(downloadProgress.downloadedBytes),
+                          formatBytes(downloadProgress.totalBytes)
+                        )
+                      : formatMessage(
+                          translations.version?.downloadProgressUnknown ||
+                            "已下载 {}",
+                          formatBytes(downloadProgress.downloadedBytes)
+                        )}
+                </div>
+              </div>
+              {downloadProgress.percent !== null && (
+                <div className="text-xs font-medium tabular-nums text-muted-foreground">
+                  {Math.round(downloadProgress.percent)}%
+                </div>
+              )}
+            </div>
+
+            <div className="h-2 overflow-hidden rounded-full bg-[var(--glass-input-bg)]">
+              <div
+                className={cn(
+                  "h-full rounded-full bg-primary transition-[width] duration-200",
+                  downloadProgress.percent === null && "animate-pulse w-1/3"
+                )}
+                style={
+                  downloadProgress.percent !== null
+                    ? { width: `${Math.max(0, Math.min(downloadProgress.percent, 100))}%` }
+                    : undefined
+                }
+              />
+            </div>
+          </AppDialogInset>
+        )}
 
         {updateInfo?.releaseNotes && (
           <AppDialogInset className="max-h-56 overflow-y-auto glass-scrollbar text-xs">

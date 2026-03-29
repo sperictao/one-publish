@@ -1,4 +1,5 @@
 import { isTauri } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 
@@ -28,12 +29,45 @@ function toErrorMessage(error: unknown) {
     return error.message;
   }
 
+  if (
+    error &&
+    typeof error === "object" &&
+    "message" in error &&
+    typeof error.message === "string"
+  ) {
+    return error.message;
+  }
+
   return String(error);
 }
 
 interface RefreshOptions {
   silent?: boolean;
   notifyIfAvailable?: boolean;
+}
+
+const UPDATER_DOWNLOAD_PROGRESS_EVENT = "updater-download-progress";
+
+export interface UpdateDownloadProgress {
+  stage: "idle" | "downloading" | "retrying" | "installing";
+  version: string | null;
+  downloadedBytes: number;
+  totalBytes: number | null;
+  percent: number | null;
+  attempt: number;
+  maxAttempts: number;
+  message: string | null;
+}
+
+interface UpdateDownloadProgressEventPayload {
+  stage: UpdateDownloadProgress["stage"];
+  version: string;
+  downloadedBytes: number;
+  totalBytes: number | null;
+  percent: number | null;
+  attempt: number;
+  maxAttempts: number;
+  message: string | null;
 }
 
 export interface AppUpdaterState {
@@ -45,7 +79,19 @@ export interface AppUpdaterState {
   isCheckingUpdate: boolean;
   isInstallingUpdate: boolean;
   isOpeningUpdaterHelp: boolean;
+  downloadProgress: UpdateDownloadProgress;
 }
+
+const INITIAL_DOWNLOAD_PROGRESS: UpdateDownloadProgress = {
+  stage: "idle",
+  version: null,
+  downloadedBytes: 0,
+  totalBytes: null,
+  percent: null,
+  attempt: 0,
+  maxAttempts: 0,
+  message: null,
+};
 
 const INITIAL_STATE: AppUpdaterState = {
   currentVersion: null,
@@ -56,6 +102,7 @@ const INITIAL_STATE: AppUpdaterState = {
   isCheckingUpdate: false,
   isInstallingUpdate: false,
   isOpeningUpdaterHelp: false,
+  downloadProgress: INITIAL_DOWNLOAD_PROGRESS,
 };
 
 export function useAppUpdater() {
@@ -63,6 +110,56 @@ export function useAppUpdater() {
   const autoCheckStartedRef = useRef(false);
   const lastNotifiedVersionRef = useRef<string | null>(null);
   const { translations } = useI18n();
+  const resetDownloadProgress = useCallback(() => {
+    setState((prev) => ({
+      ...prev,
+      downloadProgress: INITIAL_DOWNLOAD_PROGRESS,
+    }));
+  }, []);
+
+  useEffect(() => {
+    if (!isTauri()) {
+      return;
+    }
+
+    let unlisten: (() => void) | null = null;
+
+    listen<UpdateDownloadProgressEventPayload>(
+      UPDATER_DOWNLOAD_PROGRESS_EVENT,
+      (event) => {
+        const payload = event.payload;
+        if (!payload) {
+          return;
+        }
+
+        setState((prev) => ({
+          ...prev,
+          downloadProgress: {
+            stage: payload.stage,
+            version: payload.version,
+            downloadedBytes: payload.downloadedBytes,
+            totalBytes: payload.totalBytes,
+            percent: payload.percent,
+            attempt: payload.attempt,
+            maxAttempts: payload.maxAttempts,
+            message: payload.message,
+          },
+        }));
+      }
+    )
+      .then((dispose) => {
+        unlisten = dispose;
+      })
+      .catch((error) => {
+        console.error("监听更新下载进度失败:", error);
+      });
+
+    return () => {
+      if (unlisten) {
+        unlisten();
+      }
+    };
+  }, []);
 
   const resolveUpdaterHelpPaths = useCallback(
     async (
@@ -176,9 +273,10 @@ export function useAppUpdater() {
     }
 
     setState((prev) => ({ ...prev, isInstallingUpdate: true }));
+    resetDownloadProgress();
 
     try {
-      const installMessage = await installUpdate();
+      const installMessage = await installUpdate(state.updateInfo?.availableVersion);
       const latestInfo = await checkForUpdates({ silent: true });
       const isRestartRequired =
         installMessage.includes("重启") ||
@@ -218,8 +316,9 @@ export function useAppUpdater() {
       }));
     } finally {
       setState((prev) => ({ ...prev, isInstallingUpdate: false }));
+      resetDownloadProgress();
     }
-  }, [checkForUpdates]);
+  }, [checkForUpdates, resetDownloadProgress, state.updateInfo?.availableVersion]);
 
   const openUpdaterHelpTarget = useCallback(
     async (target: "docs" | "template") => {

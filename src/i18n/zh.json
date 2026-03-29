@@ -40,7 +40,12 @@
     "openTemplate": "打开模板文件",
     "notes": "更新说明",
     "clickToCheck": "点击检查更新以获取最新版本信息",
-    "autoCheckDescription": "发现新版本，可前往设置 > 关于安装更新。"
+    "autoCheckDescription": "发现新版本，可前往设置 > 关于安装更新。",
+    "downloading": "正在下载更新...",
+    "installing": "正在安装更新...",
+    "retrying": "下载中断，正在进行第 {} / {} 次尝试",
+    "downloadProgress": "已下载 {} / {}",
+    "downloadProgressUnknown": "已下载 {}"
   },
   "language": {
     "label": "界面语言",

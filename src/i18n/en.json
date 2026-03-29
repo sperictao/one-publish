@@ -40,7 +40,12 @@
     "openTemplate": "Open template file",
     "notes": "Release Notes",
     "clickToCheck": "Click to check for latest version info",
-    "autoCheckDescription": "A new version is available. Open Settings > About to install it."
+    "autoCheckDescription": "A new version is available. Open Settings > About to install it.",
+    "downloading": "Downloading update...",
+    "installing": "Installing update...",
+    "retrying": "Download interrupted. Retrying attempt {} / {}",
+    "downloadProgress": "Downloaded {} / {}",
+    "downloadProgressUnknown": "Downloaded {}"
   },
   "language": {
     "label": "Interface Language",

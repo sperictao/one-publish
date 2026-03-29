@@ -42,6 +42,7 @@ pub use updater::{
     get_updater_help_paths, install_update, open_updater_help, UpdateInfo,
     UpdaterConfigHealth, UpdaterHelpPaths,
 };
+pub(crate) use updater::PendingUpdateState;
 pub(crate) use artifact::{__cmd__package_artifact, __cmd__sign_artifact};
 pub(crate) use config::{
     __cmd__apply_imported_config, __cmd__export_config, __cmd__import_config,

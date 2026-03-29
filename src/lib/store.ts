@@ -354,8 +354,10 @@ export async function checkUpdate(): Promise<UpdateInfo> {
 /**
  * 安装更新
  */
-export async function installUpdate(): Promise<string> {
-  return await invoke<string>("install_update");
+export async function installUpdate(
+  expectedVersion?: string | null
+): Promise<string> {
+  return await invoke<string>("install_update", { expectedVersion });
 }
 
 /**

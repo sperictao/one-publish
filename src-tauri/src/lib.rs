@@ -52,6 +52,8 @@ pub fn run() {
             }
         }))
         .setup(|app| {
+            app.manage(commands::PendingUpdateState::default());
+
             let Some(main_window) = app.get_webview_window("main") else {
                 return Err(tauri::Error::WindowNotFound.into());
             };
