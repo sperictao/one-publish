@@ -196,6 +196,82 @@ fn scan_publish_profiles(project_file: &Path) -> Vec<String> {
     profiles
 }
 
+fn extract_xml_tag_values(content: &str, tag_name: &str) -> Vec<String> {
+    let normalized_content = content.to_lowercase();
+    let normalized_tag_name = tag_name.to_lowercase();
+    let open_tag = format!("<{}", normalized_tag_name);
+    let close_tag = format!("</{}>", normalized_tag_name);
+    let mut cursor = 0usize;
+    let mut values = Vec::new();
+
+    while let Some(relative_start) = normalized_content[cursor..].find(&open_tag) {
+        let tag_start = cursor + relative_start;
+        let tag_boundary = normalized_content
+            .as_bytes()
+            .get(tag_start + open_tag.len())
+            .copied();
+        if matches!(tag_boundary, Some(b'a'..=b'z' | b'A'..=b'Z' | b'0'..=b'9' | b'_')) {
+            cursor = tag_start + open_tag.len();
+            continue;
+        }
+        let Some(relative_open_end) = normalized_content[tag_start..].find('>') else {
+            break;
+        };
+        let open_end = tag_start + relative_open_end;
+        let content_start = open_end + 1;
+
+        let Some(relative_close_start) = normalized_content[content_start..].find(&close_tag)
+        else {
+            break;
+        };
+        let close_start = content_start + relative_close_start;
+        let value = content[content_start..close_start].trim();
+
+        if !value.is_empty() {
+            values.push(value.to_string());
+        }
+
+        cursor = close_start + close_tag.len();
+    }
+
+    values
+}
+
+fn extract_target_frameworks_from_project_xml(content: &str) -> Vec<String> {
+    let mut frameworks = Vec::new();
+
+    for tag_name in ["TargetFramework", "TargetFrameworks"] {
+        for raw_value in extract_xml_tag_values(content, tag_name) {
+            for framework in raw_value
+                .split(';')
+                .map(str::trim)
+                .filter(|value| !value.is_empty())
+            {
+                if !frameworks.iter().any(|item| item == framework) {
+                    frameworks.push(framework.to_string());
+                }
+            }
+        }
+    }
+
+    frameworks
+}
+
+fn read_target_frameworks(project_file: &Path) -> Result<Vec<String>, crate::errors::AppError> {
+    let content = std::fs::read_to_string(project_file).map_err(|error| {
+        repository_error(
+            format!(
+                "failed to read project file {}: {}",
+                project_file.to_string_lossy(),
+                error
+            ),
+            classify_repository_path_error(error.kind()),
+        )
+    })?;
+
+    Ok(extract_target_frameworks_from_project_xml(&content))
+}
+
 fn resolve_publish_profile_path(
     project_file: &Path,
     profile_name: &str,
@@ -700,10 +776,12 @@ pub async fn scan_project(
         .ok_or_else(|| repository_error("cannot find project file (.csproj)", "project_file_not_found"))?;
 
     let publish_profiles = scan_publish_profiles(&project_file);
+    let target_frameworks = read_target_frameworks(&project_file)?;
     Ok(ProjectInfo {
         root_path: root_path.to_string_lossy().to_string(),
         project_file: project_file.to_string_lossy().to_string(),
         publish_profiles,
+        target_frameworks,
     })
 }
 
@@ -740,4 +818,54 @@ pub async fn read_project_publish_profile(
         file_path: profile_path.to_string_lossy().to_string(),
         content,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::extract_target_frameworks_from_project_xml;
+
+    #[test]
+    fn extracts_single_target_framework() {
+        let frameworks = extract_target_frameworks_from_project_xml(
+            r#"
+            <Project>
+              <PropertyGroup>
+                <TargetFramework>net8.0</TargetFramework>
+              </PropertyGroup>
+            </Project>
+            "#,
+        );
+
+        assert_eq!(frameworks, vec!["net8.0"]);
+    }
+
+    #[test]
+    fn extracts_multiple_target_frameworks() {
+        let frameworks = extract_target_frameworks_from_project_xml(
+            r#"
+            <Project>
+              <PropertyGroup>
+                <TargetFrameworks>net8.0; net9.0 ;net10.0</TargetFrameworks>
+              </PropertyGroup>
+            </Project>
+            "#,
+        );
+
+        assert_eq!(frameworks, vec!["net8.0", "net9.0", "net10.0"]);
+    }
+
+    #[test]
+    fn returns_empty_target_frameworks_when_missing() {
+        let frameworks = extract_target_frameworks_from_project_xml(
+            r#"
+            <Project>
+              <PropertyGroup>
+                <Nullable>enable</Nullable>
+              </PropertyGroup>
+            </Project>
+            "#,
+        );
+
+        assert!(frameworks.is_empty());
+    }
 }

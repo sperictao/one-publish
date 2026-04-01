@@ -6,12 +6,8 @@ import {
   type ParsedProjectPublishProfile,
 } from "@/lib/projectPublishProfileXml";
 import { readProjectPublishProfile, type PublishConfigStore } from "@/lib/store";
+import type { DotnetProjectInfo } from "@/types/project";
 import type { ParameterValue } from "@/types/parameters";
-
-export interface DotnetProjectInfo {
-  root_path: string;
-  project_file: string;
-}
 
 export interface ResolvedDotnetProjectProfile {
   profileName: string;

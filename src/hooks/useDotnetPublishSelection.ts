@@ -10,12 +10,7 @@ import {
   type ResolvedDotnetProjectProfile,
 } from "@/lib/dotnetProjectProfile";
 import type { PublishConfigStore } from "@/lib/store";
-
-interface ProjectInfo {
-  root_path: string;
-  project_file: string;
-  publish_profiles: string[];
-}
+import type { ProjectInfo } from "@/types/project";
 
 interface DotnetPreset {
   id: string;

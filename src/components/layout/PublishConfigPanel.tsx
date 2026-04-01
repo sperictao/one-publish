@@ -4,16 +4,14 @@ import {
   lazy,
   useCallback,
   useEffect,
-  useMemo,
   useRef,
   useState,
+  useMemo,
   type CSSProperties,
   type MutableRefObject,
   type PointerEvent as ReactPointerEvent,
 } from "react";
 import { cn } from "@/lib/utils";
-import { AppDialogInset } from "@/components/ui/app-dialog-inset";
-import { AppDialogShell } from "@/components/ui/app-dialog-shell";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import {
@@ -47,18 +45,19 @@ import {
   type PublishConfigStore,
 } from "@/lib/store";
 import {
-  type ParsedProjectPublishProfile,
-} from "@/lib/projectPublishProfileXml";
+  ProjectPublishProfileViewerDialog,
+  type ProjectProfileViewerState,
+} from "@/components/publish/ProjectPublishProfileViewerDialog";
 import { resolveDotnetProjectProfile } from "@/lib/dotnetProjectProfile";
 import { extractInvokeErrorMessage } from "@/lib/tauri/invokeErrors";
 import { useI18n } from "@/hooks/useI18n";
 import type { PublishConfigFloatingBindings } from "@/components/layout/PublishConfigPanelFloatingLayer";
-import { Dialog } from "@/components/ui/dialog";
 import {
   RowActionsMenu,
   type RowActionsMenuAction,
 } from "@/components/layout/RowActionsMenu";
 import { useListInteractionState } from "@/components/layout/useListInteractionState";
+import type { ParameterSchema } from "@/types/parameters";
 
 const PublishConfigPanelFloatingLayer = lazy(async () => {
   const mod = await import("@/components/layout/PublishConfigPanelFloatingLayer");
@@ -111,8 +110,10 @@ export interface PublishConfigPanelProps {
   onRefreshProfiles: () => void;
   onOpenConfigDialog: () => void;
   onDeleteProfile: (name: string) => void;
+  dotnetSchema?: ParameterSchema;
   projectPublishProfiles: string[];
   projectFilePath?: string;
+  projectFrameworkOptions?: string[];
   onSelectProjectProfile: (profileName: string) => void;
   onCopyProjectProfileToCustom: (
     sourceProfileName: string,
@@ -127,28 +128,6 @@ export interface PublishConfigPanelProps {
   onExpandRepo?: () => void;
 }
 
-type ProjectProfileViewerState =
-  | {
-      status: "idle";
-      profileName: null;
-    }
-  | {
-      status: "loading";
-      profileName: string;
-    }
-  | {
-      status: "ready";
-      profileName: string;
-      filePath: string;
-      parsedProfile: ParsedProjectPublishProfile;
-    }
-  | {
-      status: "error";
-      profileName: string;
-      errorMessage: string;
-    };
-
-// Collapsible group sub-component
 function ConfigGroup({
   title,
   count,
@@ -373,8 +352,10 @@ export function PublishConfigPanel({
   onRefreshProfiles,
   onOpenConfigDialog,
   onDeleteProfile,
+  dotnetSchema,
   projectPublishProfiles,
   projectFilePath,
+  projectFrameworkOptions = [],
   onSelectProjectProfile,
   onCopyProjectProfileToCustom,
   recentConfigKeys,
@@ -399,6 +380,8 @@ export function PublishConfigPanel({
     });
   const { translations } = useI18n();
   const t = translations.configPanel || {};
+  const appT = translations.app || {};
+  const profileT = translations.profiles || {};
   const configManagementLabel =
     translations.settings?.categories?.config ||
     translations.profiles?.title ||
@@ -470,9 +453,6 @@ export function PublishConfigPanel({
     recentConfigKeys,
     profileMap,
     pubxmlSet,
-    isCustomMode,
-    selectedPreset,
-    activeProfileName,
     onSelectProjectProfile,
     onSelectProfile,
   ]);
@@ -725,6 +705,7 @@ export function PublishConfigPanel({
           projectInfo: {
             root_path: "",
             project_file: projectFilePath,
+            target_frameworks: projectFrameworkOptions,
           },
           profileName,
         });
@@ -737,6 +718,7 @@ export function PublishConfigPanel({
           status: "ready",
           profileName: resolvedProfile.profileName,
           filePath: resolvedProfile.filePath,
+          editableConfig: resolvedProfile.editableConfig,
           parsedProfile: resolvedProfile.parsedProfile,
         });
       } catch (error) {
@@ -759,7 +741,7 @@ export function PublishConfigPanel({
         });
       }
     },
-    [projectFilePath, t.loadConfigFailed]
+    [projectFilePath, projectFrameworkOptions, t.loadConfigFailed]
   );
 
   const handleCopyProjectProfileToCustom = useCallback(
@@ -779,6 +761,7 @@ export function PublishConfigPanel({
           projectInfo: {
             root_path: "",
             project_file: projectFilePath,
+            target_frameworks: projectFrameworkOptions,
           },
           profileName,
         });
@@ -808,12 +791,17 @@ export function PublishConfigPanel({
     [
       onCopyProjectProfileToCustom,
       projectFilePath,
+      projectFrameworkOptions,
       t.copyConfigFailed,
       t.copyConfigFailedDescription,
       t.copyConfigSuccess,
       t.copyConfigSuccessDescription,
     ]
   );
+
+  const handleProjectProfileViewerOpenChange = useCallback((open: boolean) => {
+    setProjectProfileViewerOpen(open);
+  }, []);
 
   const fallbackFloatingBindings = useMemo<PublishConfigFloatingBindings>(
     () => ({
@@ -1377,134 +1365,16 @@ export function PublishConfigPanel({
         </Suspense>
       )}
 
-      <Dialog
+      <ProjectPublishProfileViewerDialog
         open={projectProfileViewerOpen}
-        onOpenChange={setProjectProfileViewerOpen}
-      >
-        <AppDialogShell
-          size="wide"
-          title={t.viewConfigTitle || "查看发布配置"}
-          description={
-            projectProfileViewerState.profileName
-              ? `${
-                  t.viewConfigDescription || "查看项目发布配置文件中的全部参数。"
-                } · ${projectProfileViewerState.profileName}`
-              : t.viewConfigDescription ||
-                "查看项目发布配置文件中的全部参数。"
-          }
-          icon={<Eye className="h-4 w-4" />}
-          bodyInnerClassName="max-h-[70vh] space-y-4 pr-1"
-          footer={
-            <div className="flex w-full justify-end">
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => setProjectProfileViewerOpen(false)}
-              >
-                {t.close || "关闭"}
-              </Button>
-            </div>
-          }
-        >
-          <div className="space-y-4">
-            {projectProfileViewerState.status === "loading" ? (
-              <div className="flex min-h-40 items-center justify-center rounded-2xl border border-dashed border-border/70 bg-muted/20 text-sm text-muted-foreground">
-                <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
-                {t.loadingConfig || "正在加载配置..."}
-              </div>
-            ) : null}
-
-            {projectProfileViewerState.status === "error" ? (
-              <AppDialogInset className="border-destructive/30 bg-destructive/5 text-sm text-destructive shadow-none">
-                {projectProfileViewerState.errorMessage}
-              </AppDialogInset>
-            ) : null}
-
-            {projectProfileViewerState.status === "ready" ? (
-              <>
-                <AppDialogInset>
-                  <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                    {t.configFilePath || "配置文件路径"}
-                  </div>
-                  <div className="mt-2 break-all font-mono text-xs text-foreground/80">
-                    {projectProfileViewerState.filePath}
-                  </div>
-                </AppDialogInset>
-
-                <div className="space-y-3">
-                  <div className="text-sm font-semibold text-foreground">
-                    {t.parsedParameters || "解析参数"}
-                  </div>
-                  {projectProfileViewerState.parsedProfile.sections.map((section) => (
-                    <AppDialogInset key={section.id} as="section">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <h3 className="text-sm font-semibold text-foreground">
-                          {section.title}
-                        </h3>
-                        {Object.entries(section.attributes).map(([key, value]) => (
-                          <span
-                            key={`${section.id}-${key}`}
-                            className="rounded-full bg-primary/10 px-2 py-0.5 font-mono text-[11px] text-primary"
-                          >
-                            {key}={value}
-                          </span>
-                        ))}
-                      </div>
-
-                      {section.entries.length > 0 ? (
-                        <div className="mt-3 space-y-2">
-                          {section.entries.map((entry, entryIndex) => (
-                            <div
-                              key={`${section.id}-${entry.path}-${entryIndex}`}
-                              className="rounded-xl border border-border/60 bg-background/70 p-3"
-                            >
-                              <div className="break-all text-sm font-medium text-foreground">
-                                {entry.key}
-                              </div>
-                              <div className="mt-1 break-all font-mono text-xs text-muted-foreground">
-                                {entry.value || "—"}
-                              </div>
-                              {Object.keys(entry.attributes).length > 0 ? (
-                                <div className="mt-2 flex flex-wrap gap-2">
-                                  {Object.entries(entry.attributes).map(
-                                    ([key, value]) => (
-                                      <span
-                                        key={`${entry.path}-${key}`}
-                                        className="rounded-full bg-secondary px-2 py-0.5 font-mono text-[11px] text-secondary-foreground"
-                                      >
-                                        {key}={value}
-                                      </span>
-                                    )
-                                  )}
-                                </div>
-                              ) : null}
-                            </div>
-                          ))}
-                        </div>
-                      ) : (
-                        <div className="mt-3 text-xs text-muted-foreground">
-                          {t.noConfigParameters || "配置文件中暂无可展示的参数"}
-                        </div>
-                      )}
-                    </AppDialogInset>
-                  ))}
-                </div>
-
-                <AppDialogInset className="p-0">
-                  <details className="p-4">
-                    <summary className="cursor-pointer text-sm font-semibold text-foreground">
-                      {t.rawConfigFile || "原始配置文件"}
-                    </summary>
-                    <pre className="mt-3 max-h-80 overflow-auto whitespace-pre-wrap break-all rounded-xl bg-background/80 p-3 font-mono text-xs text-foreground/85">
-                      {projectProfileViewerState.parsedProfile.rawXml}
-                    </pre>
-                  </details>
-                </AppDialogInset>
-              </>
-            ) : null}
-          </div>
-        </AppDialogShell>
-      </Dialog>
+        onOpenChange={handleProjectProfileViewerOpenChange}
+        viewerState={projectProfileViewerState}
+        dotnetSchema={dotnetSchema}
+        projectFrameworkOptions={projectFrameworkOptions}
+        profileT={profileT}
+        appT={appT}
+        configPanelT={t}
+      />
     </div>
   );
 }

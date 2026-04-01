@@ -2,16 +2,12 @@ import { useCallback } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { toast } from "sonner";
 
+import type { ProjectInfo } from "@/types/project";
+
 const loadInvokeErrors = () => import("@/lib/tauri/invokeErrors");
 
 interface TranslationMap {
   [key: string]: string | undefined;
-}
-
-interface ProjectInfo {
-  root_path: string;
-  project_file: string;
-  publish_profiles: string[];
 }
 
 export function useProjectScanner(params: {

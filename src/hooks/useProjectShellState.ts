@@ -3,12 +3,7 @@ import { isTauri } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 
 import { useProjectScanner } from "@/hooks/useProjectScanner";
-
-interface ProjectInfo {
-  root_path: string;
-  project_file: string;
-  publish_profiles: string[];
-}
+import type { ProjectInfo } from "@/types/project";
 
 interface TranslationMap {
   [key: string]: string | undefined;

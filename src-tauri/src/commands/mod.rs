@@ -73,6 +73,7 @@ pub struct ProjectInfo {
     pub root_path: String,
     pub project_file: String,
     pub publish_profiles: Vec<String>,
+    pub target_frameworks: Vec<String>,
 }
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]

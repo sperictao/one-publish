@@ -123,6 +123,7 @@ export interface AppDialogsProps {
   quickCreateProfileGroupOptions: string[];
   quickCreateProfileCustomGroup: string;
   quickCreateProfileDraft: PublishConfigStore;
+  projectFrameworkOptions: string[];
   quickCreateProfileSaving: boolean;
   quickCreateEditing: boolean;
   dotnetSchema?: ParameterSchema;
@@ -268,6 +269,7 @@ export function AppDialogs(props: AppDialogsProps) {
             quickCreateProfileGroupOptions={props.quickCreateProfileGroupOptions}
             quickCreateProfileCustomGroup={props.quickCreateProfileCustomGroup}
             quickCreateProfileDraft={props.quickCreateProfileDraft}
+            projectFrameworkOptions={props.projectFrameworkOptions}
             quickCreateProfileSaving={props.quickCreateProfileSaving}
             quickCreateEditing={props.quickCreateEditing}
             dotnetSchema={props.dotnetSchema}

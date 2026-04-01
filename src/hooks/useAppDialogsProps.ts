@@ -85,6 +85,7 @@ export interface UseAppDialogsPropsParams {
   quickCreateProfileGroupOptions: string[];
   quickCreateProfileCustomGroup: string;
   quickCreateProfileDraft: PublishConfigStore;
+  projectFrameworkOptions: string[];
   quickCreateProfileSaving: boolean;
   quickCreateEditing: boolean;
   dotnetSchema?: ParameterSchema;
@@ -170,6 +171,7 @@ export function useAppDialogsProps(params: UseAppDialogsPropsParams): AppDialogs
     quickCreateProfileGroupOptions: params.quickCreateProfileGroupOptions,
     quickCreateProfileCustomGroup: params.quickCreateProfileCustomGroup,
     quickCreateProfileDraft: params.quickCreateProfileDraft,
+    projectFrameworkOptions: params.projectFrameworkOptions,
     quickCreateProfileSaving: params.quickCreateProfileSaving,
     quickCreateEditing: params.quickCreateEditing,
     dotnetSchema: params.dotnetSchema,

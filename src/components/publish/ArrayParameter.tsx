@@ -8,9 +8,19 @@ interface ArrayParameterProps {
   definition: ParameterDefinition;
   value: ParameterValue[];
   onChange: (value: ParameterValue[]) => void;
+  readOnly?: boolean;
+  label?: string;
 }
 
-export function ArrayParameter({ definition, value, onChange }: ArrayParameterProps) {
+export function ArrayParameter({
+  definition,
+  value,
+  onChange,
+  readOnly = false,
+  label,
+}: ArrayParameterProps) {
+  const resolvedLabel = label || definition.flag;
+
   const addItem = () => {
     onChange([...value, ""]);
   };
@@ -29,7 +39,7 @@ export function ArrayParameter({ definition, value, onChange }: ArrayParameterPr
     <div className="space-y-2 py-2">
       <div className="flex items-center justify-between">
         <div className="flex items-center space-x-2">
-          <Label>{definition.flag}</Label>
+          <Label>{resolvedLabel}</Label>
           {definition.description && (
             <div className="group relative inline-block">
               <HelpCircle
@@ -43,15 +53,17 @@ export function ArrayParameter({ definition, value, onChange }: ArrayParameterPr
             </div>
           )}
         </div>
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          onClick={addItem}
-        >
-          <Plus className="h-4 w-4 mr-1" />
-          Add
-        </Button>
+        {!readOnly ? (
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={addItem}
+          >
+            <Plus className="h-4 w-4 mr-1" />
+            Add
+          </Button>
+        ) : null}
       </div>
       <div className="space-y-2">
         {value.map((item, index) => (
@@ -61,16 +73,19 @@ export function ArrayParameter({ definition, value, onChange }: ArrayParameterPr
               value={String(item)}
               onChange={(e) => updateItem(index, e.target.value)}
               placeholder={`Item ${index + 1}`}
+              readOnly={readOnly}
             />
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon"
-              aria-label={`Remove item ${index + 1}`}
-              onClick={() => removeItem(index)}
-            >
-              <X className="h-4 w-4" />
-            </Button>
+            {!readOnly ? (
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                aria-label={`Remove item ${index + 1}`}
+                onClick={() => removeItem(index)}
+              >
+                <X className="h-4 w-4" />
+              </Button>
+            ) : null}
           </div>
         ))}
         {value.length === 0 && (

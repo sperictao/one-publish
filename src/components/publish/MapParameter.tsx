@@ -8,10 +8,19 @@ interface MapParameterProps {
   definition: ParameterDefinition;
   value: Record<string, ParameterValue>;
   onChange: (value: Record<string, ParameterValue>) => void;
+  readOnly?: boolean;
+  label?: string;
 }
 
-export function MapParameter({ definition, value, onChange }: MapParameterProps) {
+export function MapParameter({
+  definition,
+  value,
+  onChange,
+  readOnly = false,
+  label,
+}: MapParameterProps) {
   const entries = Object.entries(value);
+  const resolvedLabel = label || definition.flag || definition.prefix;
 
   const addEntry = () => {
     onChange({ ...value, [`key_${entries.length}`]: "" });
@@ -41,7 +50,7 @@ export function MapParameter({ definition, value, onChange }: MapParameterProps)
     <div className="space-y-2 py-2">
       <div className="flex items-center justify-between">
         <div className="flex items-center space-x-2">
-          <Label>{definition.flag || definition.prefix}</Label>
+          <Label>{resolvedLabel}</Label>
           {definition.description && (
             <div className="group relative inline-block">
               <HelpCircle
@@ -55,15 +64,17 @@ export function MapParameter({ definition, value, onChange }: MapParameterProps)
             </div>
           )}
         </div>
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          onClick={addEntry}
-        >
-          <Plus className="h-4 w-4 mr-1" />
-          Add
-        </Button>
+        {!readOnly ? (
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={addEntry}
+          >
+            <Plus className="h-4 w-4 mr-1" />
+            Add
+          </Button>
+        ) : null}
       </div>
       <div className="space-y-2">
         {entries.map(([key, val]) => (
@@ -74,6 +85,7 @@ export function MapParameter({ definition, value, onChange }: MapParameterProps)
               onChange={(e) => updateKey(key, e.target.value)}
               placeholder="Key"
               className="w-1/3"
+              readOnly={readOnly}
             />
             <Input
               type="text"
@@ -81,16 +93,19 @@ export function MapParameter({ definition, value, onChange }: MapParameterProps)
               onChange={(e) => updateValue(key, e.target.value)}
               placeholder="Value"
               className="flex-1"
+              readOnly={readOnly}
             />
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon"
-              aria-label={`Remove entry ${key}`}
-              onClick={() => removeEntry(key)}
-            >
-              <X className="h-4 w-4" />
-            </Button>
+            {!readOnly ? (
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                aria-label={`Remove entry ${key}`}
+                onClick={() => removeEntry(key)}
+              >
+                <X className="h-4 w-4" />
+              </Button>
+            ) : null}
           </div>
         ))}
         {entries.length === 0 && (

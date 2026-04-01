@@ -83,4 +83,19 @@ describe('ArrayParameter', () => {
 
     expect(handleChange).toHaveBeenCalledWith(['updated-feature']);
   });
+
+  it('renders read-only items without add or remove actions', () => {
+    render(
+      <ArrayParameter
+        definition={definition}
+        value={['feature1']}
+        onChange={vi.fn()}
+        readOnly
+      />
+    );
+
+    expect(screen.getByRole('textbox')).toHaveAttribute('readonly');
+    expect(screen.queryByRole('button', { name: /add/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /remove item/i })).not.toBeInTheDocument();
+  });
 });

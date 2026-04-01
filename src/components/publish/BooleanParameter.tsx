@@ -7,14 +7,27 @@ interface BooleanParameterProps {
   definition: ParameterDefinition;
   value: boolean;
   onChange: (value: boolean) => void;
+  readOnly?: boolean;
+  label?: string;
+  inputId?: string;
 }
 
-export function BooleanParameter({ definition, value, onChange }: BooleanParameterProps) {
+export function BooleanParameter({
+  definition,
+  value,
+  onChange,
+  readOnly = false,
+  label,
+  inputId,
+}: BooleanParameterProps) {
+  const resolvedLabel = label || definition.flag;
+  const resolvedInputId = inputId || definition.flag;
+
   return (
     <div className="flex items-center justify-between py-2">
       <div className="flex items-center space-x-2">
-        <Label htmlFor={definition.flag} className="cursor-pointer">
-          {definition.flag}
+        <Label htmlFor={resolvedInputId} className="cursor-pointer">
+          {resolvedLabel}
         </Label>
         {definition.description && (
           <div className="group relative inline-block">
@@ -30,9 +43,10 @@ export function BooleanParameter({ definition, value, onChange }: BooleanParamet
         )}
       </div>
       <Switch
-        id={definition.flag}
+        id={resolvedInputId}
         checked={value}
         onCheckedChange={onChange}
+        disabled={readOnly}
       />
     </div>
   );

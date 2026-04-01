@@ -106,4 +106,22 @@ describe('MapParameter', () => {
       key1: 'newValue',
     });
   });
+
+  it('renders read-only entries without add or remove actions', () => {
+    render(
+      <MapParameter
+        definition={definition}
+        value={{ key1: 'value1' }}
+        onChange={vi.fn()}
+        readOnly
+      />
+    );
+
+    const inputs = screen.getAllByRole('textbox');
+    expect(inputs).toHaveLength(2);
+    expect(inputs[0]).toHaveAttribute('readonly');
+    expect(inputs[1]).toHaveAttribute('readonly');
+    expect(screen.queryByRole('button', { name: /add/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /remove entry/i })).not.toBeInTheDocument();
+  });
 });

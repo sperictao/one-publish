@@ -18,6 +18,7 @@ export type DialogsCompositionParams = Omit<
   activeProviderParameters: Record<string, any>;
   dotnetSchema?: ParameterSchema;
   projectFile?: string;
+  projectFrameworkOptions: string[];
   selectedRepoPath?: string;
 };
 

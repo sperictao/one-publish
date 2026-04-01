@@ -677,6 +677,7 @@ function App() {
               onDeleteProfile={handleDeleteProfileFromPanel}
               projectPublishProfiles={projectInfo?.publish_profiles || []}
               projectFilePath={projectInfo?.project_file}
+              projectFrameworkOptions={projectInfo?.target_frameworks || []}
               onSelectProjectProfile={handleSelectProjectProfile}
               onCopyProjectProfileToCustom={handleCreateProfileFromProjectProfile}
               recentConfigKeys={recentConfigKeys}
@@ -783,6 +784,7 @@ function App() {
             quickCreateProfileGroupOptions={quickCreateProfileGroupOptions}
             quickCreateProfileCustomGroup={quickCreateProfileCustomGroup}
             quickCreateProfileDraft={quickCreateProfileDraft}
+            projectFrameworkOptions={projectInfo?.target_frameworks || []}
             quickCreateProfileSaving={quickCreateProfileSaving}
             quickCreateEditing={isQuickCreateEditing}
             dotnetSchema={providerSchemas.dotnet}

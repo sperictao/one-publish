@@ -1,13 +1,10 @@
 import {
-  FileCog,
-  FolderOutput,
   Layers3,
   Loader2,
   Save,
-  SlidersHorizontal,
   Sparkles,
 } from "lucide-react";
-import { memo, startTransition, useCallback, useMemo } from "react";
+import { memo, startTransition, useCallback } from "react";
 
 import { AppDialogShell } from "@/components/ui/app-dialog-shell";
 import { Button } from "@/components/ui/button";
@@ -28,19 +25,10 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Switch } from "@/components/ui/switch";
-import { ArrayParameter } from "@/components/publish/ArrayParameter";
-import { BooleanParameter } from "@/components/publish/BooleanParameter";
-import { MapParameter } from "@/components/publish/MapParameter";
-import { StringParameter } from "@/components/publish/StringParameter";
-import {
-  buildDotnetAdvancedParameters,
-  normalizeDotnetPropertyMap,
-  normalizeDotnetStringArray,
-} from "@/lib/dotnetPublishConfig";
+import { DotnetPublishConfigFormSections } from "@/components/publish/DotnetPublishConfigFormSections";
 import type { PublishConfigStore } from "@/lib/store";
 import { cn } from "@/lib/utils";
-import type { ParameterSchema, ParameterValue } from "@/types/parameters";
+import type { ParameterSchema } from "@/types/parameters";
 
 interface QuickCreateTemplateOption {
   id: string;
@@ -61,6 +49,7 @@ interface QuickCreateProfileDialogProps {
   quickCreateProfileGroupOptions: string[];
   quickCreateProfileCustomGroup: string;
   quickCreateProfileDraft: PublishConfigStore;
+  projectFrameworkOptions: string[];
   quickCreateProfileSaving: boolean;
   quickCreateEditing: boolean;
   dotnetSchema?: ParameterSchema;
@@ -76,27 +65,6 @@ interface QuickCreateProfileDialogProps {
   onProfileCustomGroupChange: (value: string) => void;
   onDraftChange: (patch: Partial<PublishConfigStore>) => void;
   onSave: () => void;
-}
-
-const QUICK_CREATE_BASIC_PARAM_KEYS = new Set([
-  "configuration",
-  "runtime",
-  "output",
-  "self_contained",
-]);
-
-function getParameterDefaultValue(type: string): ParameterValue {
-  switch (type) {
-    case "boolean":
-      return false;
-    case "array":
-      return [];
-    case "map":
-      return {};
-    case "string":
-    default:
-      return "";
-  }
 }
 
 const QuickCreateTemplateCard = memo(function QuickCreateTemplateCard({
@@ -294,239 +262,6 @@ const QuickCreateBasicInfoSection = memo(function QuickCreateBasicInfoSection({
   );
 });
 
-const QuickCreateParametersSection = memo(function QuickCreateParametersSection({
-  profileT,
-  appT,
-  configuration,
-  runtime,
-  onConfigurationChange,
-  onRuntimeChange,
-}: {
-  profileT: QuickCreateTranslations;
-  appT: AppTranslations;
-  configuration: string;
-  runtime: string;
-  onConfigurationChange: (value: string) => void;
-  onRuntimeChange: (value: string) => void;
-}) {
-  return (
-    <SectionShell
-      icon={SlidersHorizontal}
-      title={profileT.quickCreateParametersSection || "发布参数"}
-      description={
-        profileT.quickCreateParametersSectionDescription ||
-        "先确定构建配置和运行时，再决定输出部署方式。"
-      }
-    >
-      <div className="grid gap-4 md:grid-cols-2">
-        <div className="space-y-2">
-          <Label htmlFor="quick-profile-configuration">
-            {appT.configurationType || "配置类型"}
-          </Label>
-          <Select
-            value={configuration}
-            onValueChange={onConfigurationChange}
-          >
-            <SelectTrigger id="quick-profile-configuration">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="Release">Release</SelectItem>
-              <SelectItem value="Debug">Debug</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
-
-        <div className="space-y-2">
-          <Label htmlFor="quick-profile-runtime">
-            {appT.runtimeLabel || "运行时"}
-          </Label>
-          <Select value={runtime || "none"} onValueChange={onRuntimeChange}>
-            <SelectTrigger id="quick-profile-runtime">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="none">
-                {appT.frameworkDependent || "框架依赖"}
-              </SelectItem>
-              <SelectItem value="win-x64">Windows x64</SelectItem>
-              <SelectItem value="osx-arm64">macOS ARM64</SelectItem>
-              <SelectItem value="osx-x64">macOS x64</SelectItem>
-              <SelectItem value="linux-x64">Linux x64</SelectItem>
-            </SelectContent>
-          </Select>
-          <p className="text-xs leading-5 text-muted-foreground">
-            {profileT.quickCreateRuntimeHint ||
-              "未指定运行时时将保持框架依赖模式。"}
-          </p>
-        </div>
-      </div>
-    </SectionShell>
-  );
-});
-
-const QuickCreateOutputSection = memo(function QuickCreateOutputSection({
-  profileT,
-  appT,
-  outputDir,
-  selfContained,
-  isRuntimeRequired,
-  onOutputDirChange,
-  onSelfContainedChange,
-}: {
-  profileT: QuickCreateTranslations;
-  appT: AppTranslations;
-  outputDir: string;
-  selfContained: boolean;
-  isRuntimeRequired: boolean;
-  onOutputDirChange: (value: string) => void;
-  onSelfContainedChange: (checked: boolean) => void;
-}) {
-  return (
-    <SectionShell
-      icon={FolderOutput}
-      title={profileT.quickCreateOutputSection || "输出与部署"}
-      description={
-        profileT.quickCreateOutputSectionDescription ||
-        "控制产物输出目录和部署形态，保存后会按这些参数执行发布。"
-      }
-    >
-      <div className="space-y-4">
-        <div className="space-y-2">
-          <Label htmlFor="quick-profile-output">
-            {appT.outputDirLabel || "输出目录"}
-          </Label>
-          <Input
-            id="quick-profile-output"
-            value={outputDir}
-            onChange={(event) => onOutputDirChange(event.target.value)}
-            placeholder={appT.outputDirPlaceholder || "留空使用默认目录"}
-          />
-          <p className="text-xs leading-5 text-muted-foreground">
-            {profileT.quickCreateOutputHint ||
-              "留空时会回落到默认输出目录规则。"}
-          </p>
-        </div>
-
-        <div
-          className={cn(
-            "rounded-2xl border border-[var(--glass-border-subtle)] bg-[var(--glass-input-bg)] p-4 shadow-[var(--glass-inset-shadow)]",
-            isRuntimeRequired && "opacity-90"
-          )}
-        >
-          <div className="flex items-start justify-between gap-4">
-            <div className="min-w-0">
-              <Label
-                htmlFor="quick-profile-self-contained"
-                className="text-sm font-medium text-foreground"
-              >
-                {appT.selfContained || "自包含部署"}
-              </Label>
-              <p className="mt-1 text-xs leading-5 text-muted-foreground">
-                {isRuntimeRequired
-                  ? profileT.quickCreateSelfContainedRuntimeRequired ||
-                    "请先选择运行时，自包含部署才可启用。"
-                  : profileT.quickCreateSelfContainedHint ||
-                    "启用后会将运行时一起打包，产物更独立，但体积更大。"}
-              </p>
-            </div>
-            <Switch
-              id="quick-profile-self-contained"
-              checked={selfContained}
-              onCheckedChange={onSelfContainedChange}
-              disabled={isRuntimeRequired}
-            />
-          </div>
-        </div>
-      </div>
-    </SectionShell>
-  );
-});
-
-const QuickCreateAdvancedParametersSection = memo(
-  function QuickCreateAdvancedParametersSection({
-    profileT,
-    dotnetSchema,
-    parameters,
-    onParameterChange,
-  }: {
-    profileT: QuickCreateTranslations;
-    dotnetSchema?: ParameterSchema;
-    parameters: Record<string, ParameterValue>;
-    onParameterChange: (key: string, value: ParameterValue) => void;
-  }) {
-    const advancedEntries = useMemo(
-      () =>
-        Object.entries(dotnetSchema?.parameters || {}).filter(
-          ([key]) => !QUICK_CREATE_BASIC_PARAM_KEYS.has(key)
-        ),
-      [dotnetSchema]
-    );
-
-    if (advancedEntries.length === 0) {
-      return null;
-    }
-
-    return (
-      <SectionShell
-        icon={FileCog}
-        title={profileT.quickCreateAdvancedSection || "高级参数"}
-        description={
-          profileT.quickCreateAdvancedSectionDescription ||
-          "补充框架、日志、MSBuild 属性和自定义 define，覆盖更多发布场景。"
-        }
-      >
-        <div className="space-y-4">
-          {advancedEntries.map(([key, definition]) => {
-            const value = parameters[key] ?? getParameterDefaultValue(definition.type);
-
-            return (
-              <Card key={key} className="rounded-2xl">
-                <CardHeader className="pb-2">
-                  <div className="text-sm font-semibold text-foreground">{key}</div>
-                  <CardDescription className="text-xs leading-5">
-                    {definition.description || definition.flag}
-                  </CardDescription>
-                </CardHeader>
-                <CardContent className="pt-0">
-                  {definition.type === "boolean" ? (
-                    <BooleanParameter
-                      definition={definition}
-                      value={value as boolean}
-                      onChange={(nextValue) => onParameterChange(key, nextValue)}
-                    />
-                  ) : null}
-                  {definition.type === "string" ? (
-                    <StringParameter
-                      definition={definition}
-                      value={value as string}
-                      onChange={(nextValue) => onParameterChange(key, nextValue)}
-                    />
-                  ) : null}
-                  {definition.type === "array" ? (
-                    <ArrayParameter
-                      definition={definition}
-                      value={value as ParameterValue[]}
-                      onChange={(nextValue) => onParameterChange(key, nextValue)}
-                    />
-                  ) : null}
-                  {definition.type === "map" ? (
-                    <MapParameter
-                      definition={definition}
-                      value={value as Record<string, ParameterValue>}
-                      onChange={(nextValue) => onParameterChange(key, nextValue)}
-                    />
-                  ) : null}
-                </CardContent>
-              </Card>
-            );
-          })}
-        </div>
-      </SectionShell>
-    );
-  }
-);
-
 export function QuickCreateProfileDialog({
   open,
   quickCreateProfileOpen,
@@ -537,6 +272,7 @@ export function QuickCreateProfileDialog({
   quickCreateProfileGroupOptions,
   quickCreateProfileCustomGroup,
   quickCreateProfileDraft,
+  projectFrameworkOptions,
   quickCreateProfileSaving,
   quickCreateEditing,
   dotnetSchema,
@@ -561,7 +297,6 @@ export function QuickCreateProfileDialog({
     quickCreateTemplateOptions.find(
       (option) => option.id === quickCreateTemplateId
     ) ?? quickCreateTemplateOptions[0] ?? null;
-  const isRuntimeRequired = !quickCreateProfileDraft.runtime;
   const isSaveDisabled =
     quickCreateProfileSaving || !quickCreateProfileName.trim();
 
@@ -584,70 +319,6 @@ export function QuickCreateProfileDialog({
       onSave();
     },
     [onSave, quickCreateProfileSaving]
-  );
-
-  const handleConfigurationChange = useCallback(
-    (value: string) => {
-      onDraftChange({ configuration: value });
-    },
-    [onDraftChange]
-  );
-
-  const handleRuntimeChange = useCallback(
-    (value: string) => {
-      onDraftChange({ runtime: value === "none" ? "" : value });
-    },
-    [onDraftChange]
-  );
-
-  const handleOutputDirChange = useCallback(
-    (value: string) => {
-      onDraftChange({ outputDir: value });
-    },
-    [onDraftChange]
-  );
-
-  const handleSelfContainedChange = useCallback(
-    (checked: boolean) => {
-      onDraftChange({ selfContained: checked });
-    },
-    [onDraftChange]
-  );
-
-  const advancedParameters = useMemo(
-    () => buildDotnetAdvancedParameters(quickCreateProfileDraft),
-    [quickCreateProfileDraft]
-  );
-
-  const handleAdvancedParameterChange = useCallback(
-    (key: string, value: ParameterValue) => {
-      switch (key) {
-        case "framework":
-          onDraftChange({ framework: typeof value === "string" ? value : "" });
-          return;
-        case "no_build":
-          onDraftChange({ noBuild: value === true });
-          return;
-        case "no_restore":
-          onDraftChange({ noRestore: value === true });
-          return;
-        case "verbosity":
-          onDraftChange({ verbosity: typeof value === "string" ? value : "" });
-          return;
-        case "no_logo":
-          onDraftChange({ noLogo: value === true });
-          return;
-        case "properties":
-          onDraftChange({ properties: normalizeDotnetPropertyMap(value) });
-          return;
-        case "define":
-          onDraftChange({ define: normalizeDotnetStringArray(value) });
-          return;
-        default:
-          return;
-      }
-    },
-    [onDraftChange]
   );
 
   return (
@@ -747,30 +418,14 @@ export function QuickCreateProfileDialog({
           onProfileCustomGroupChange={onProfileCustomGroupChange}
         />
 
-        <QuickCreateParametersSection
+        <DotnetPublishConfigFormSections
+          presentation="focused"
           profileT={profileT}
           appT={appT}
-          configuration={quickCreateProfileDraft.configuration}
-          runtime={quickCreateProfileDraft.runtime}
-          onConfigurationChange={handleConfigurationChange}
-          onRuntimeChange={handleRuntimeChange}
-        />
-
-        <QuickCreateOutputSection
-          profileT={profileT}
-          appT={appT}
-          outputDir={quickCreateProfileDraft.outputDir}
-          selfContained={quickCreateProfileDraft.selfContained}
-          isRuntimeRequired={isRuntimeRequired}
-          onOutputDirChange={handleOutputDirChange}
-          onSelfContainedChange={handleSelfContainedChange}
-        />
-
-        <QuickCreateAdvancedParametersSection
-          profileT={profileT}
+          config={quickCreateProfileDraft}
           dotnetSchema={dotnetSchema}
-          parameters={advancedParameters}
-          onParameterChange={handleAdvancedParameterChange}
+          projectFrameworkOptions={projectFrameworkOptions}
+          onDraftChange={onDraftChange}
         />
       </AppDialogShell>
     </Dialog>
