@@ -10,8 +10,9 @@ const PROVIDER_ID: &str = "go";
 /// Check Go installation
 pub async fn check_go() -> ProviderStatus {
     let path = super::types::command_path("go");
+    let program = path.clone().unwrap_or_else(|| "go".to_string());
 
-    match Command::new("go").arg("version").output() {
+    match Command::new(&program).arg("version").output() {
         Ok(output) => {
             let version_str = parse_go_version(&output.stdout);
 

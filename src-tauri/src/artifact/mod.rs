@@ -204,10 +204,14 @@ fn package_zip_sync(
         zip.start_file(name, options)
             .map_err(|source| zip_error("failed to add file to zip", source))?;
 
-        let mut src = File::open(entry.path())
-            .map_err(|source| io_error(format!("failed to open {}", entry.path().display()), source))?;
+        let mut src = File::open(entry.path()).map_err(|source| {
+            io_error(format!("failed to open {}", entry.path().display()), source)
+        })?;
         std::io::copy(&mut src, &mut zip).map_err(|source| {
-            io_error(format!("failed to write {}", entry.path().display()), source)
+            io_error(
+                format!("failed to write {}", entry.path().display()),
+                source,
+            )
         })?;
 
         file_count += 1;

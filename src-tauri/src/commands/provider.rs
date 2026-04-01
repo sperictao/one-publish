@@ -44,12 +44,14 @@ pub async fn import_from_command(
         )
     })?;
     let parser = CommandParser::new(provider_id);
-    let spec = parser.parse_command(&command, project_path, &schema).map_err(|source| {
-        crate::errors::AppError::provider_with_code(
-            format!("parse error: {}", source),
-            "provider_command_parse_failed",
-        )
-    })?;
+    let spec = parser
+        .parse_command(&command, project_path, &schema)
+        .map_err(|source| {
+            crate::errors::AppError::provider_with_code(
+                format!("parse error: {}", source),
+                "provider_command_parse_failed",
+            )
+        })?;
     Ok(spec)
 }
 
@@ -59,7 +61,10 @@ mod tests {
 
     #[test]
     fn list_providers_includes_core_toolchains() {
-        let ids: Vec<String> = list_providers().into_iter().map(|provider| provider.id).collect();
+        let ids: Vec<String> = list_providers()
+            .into_iter()
+            .map(|provider| provider.id)
+            .collect();
         assert!(ids.contains(&"dotnet".to_string()));
         assert!(ids.contains(&"cargo".to_string()));
         assert!(ids.contains(&"go".to_string()));

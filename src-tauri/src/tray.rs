@@ -200,13 +200,12 @@ pub async fn update_tray_menu(app: AppHandle) -> Result<bool, crate::errors::App
     match create_tray_menu(&app) {
         Ok(new_menu) => {
             if let Some(tray) = app.tray_by_id("main") {
-                tray.set_menu(Some(new_menu))
-                    .map_err(|source| {
-                        crate::errors::AppError::tray_with_code(
-                            format!("更新托盘菜单失败: {}", source),
-                            "tray_menu_update_failed",
-                        )
-                    })?;
+                tray.set_menu(Some(new_menu)).map_err(|source| {
+                    crate::errors::AppError::tray_with_code(
+                        format!("更新托盘菜单失败: {}", source),
+                        "tray_menu_update_failed",
+                    )
+                })?;
                 return Ok(true);
             }
             Ok(false)

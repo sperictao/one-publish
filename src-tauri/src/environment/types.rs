@@ -2,6 +2,7 @@
 // Detects installed tooling and provides guided fixes
 
 use serde::{Deserialize, Serialize};
+use std::path::{Path, PathBuf};
 use std::process::Command as StdCommand;
 
 /// Severity level of environment issues
@@ -179,23 +180,18 @@ impl Default for EnvironmentCheckResult {
 /// Parse version string from command output
 pub fn parse_version(output: &[u8], prefix: &str) -> Option<String> {
     let output_str = String::from_utf8_lossy(output);
-    output_str
-        .lines()
-        .find_map(|line| {
-            line.strip_prefix(prefix).and_then(|stripped| {
-                let version = stripped
-                    .split_whitespace()
-                    .next()
-                    .unwrap_or("")
-                    .to_string();
-                (!version.is_empty()).then_some(version)
-            })
+    output_str.lines().find_map(|line| {
+        line.strip_prefix(prefix).and_then(|stripped| {
+            let version = stripped.split_whitespace().next().unwrap_or("").to_string();
+            (!version.is_empty()).then_some(version)
         })
+    })
 }
 
 /// Check if a command is available in PATH
 pub fn command_exists(command: &str) -> bool {
-    StdCommand::new(command)
+    let resolved = resolve_command_path(command).unwrap_or_else(|| PathBuf::from(command));
+    StdCommand::new(resolved)
         .arg("--version")
         .stdout(std::process::Stdio::null())
         .stderr(std::process::Stdio::null())
@@ -203,37 +199,330 @@ pub fn command_exists(command: &str) -> bool {
         .is_ok()
 }
 
-/// Get the path of a command
-pub fn command_path(command: &str) -> Option<String> {
+fn executable_name(command: &str) -> String {
+    #[cfg(windows)]
+    {
+        if command.to_ascii_lowercase().ends_with(".exe") {
+            command.to_string()
+        } else {
+            format!("{}.exe", command)
+        }
+    }
+
+    #[cfg(not(windows))]
+    {
+        command.to_string()
+    }
+}
+
+fn has_explicit_path(command: &str) -> bool {
+    let path = Path::new(command);
+    path.is_absolute() || path.components().count() > 1
+}
+
+fn find_command_in_dirs(command: &str, dirs: &[PathBuf]) -> Option<PathBuf> {
+    let executable = executable_name(command);
+    dirs.iter()
+        .map(|dir| dir.join(&executable))
+        .find(|path| path.is_file())
+}
+
+fn env_search_dirs() -> Vec<PathBuf> {
+    std::env::var_os("PATH")
+        .map(|paths| std::env::split_paths(&paths).collect())
+        .unwrap_or_default()
+}
+
+fn append_candidate(candidates: &mut Vec<PathBuf>, candidate: Option<PathBuf>) {
+    if let Some(candidate) = candidate {
+        candidates.push(candidate);
+    }
+}
+
+fn dedupe_paths(paths: Vec<PathBuf>) -> Vec<PathBuf> {
+    let mut deduped = Vec::new();
+    for path in paths {
+        if !deduped.iter().any(|existing| existing == &path) {
+            deduped.push(path);
+        }
+    }
+    deduped
+}
+
+fn env_command_candidate(var_name: &str, command: &str) -> Option<PathBuf> {
+    let value = std::env::var_os(var_name)?;
+    let path = PathBuf::from(value);
+    let executable = executable_name(command);
+    if path.file_name().and_then(|name| name.to_str()) == Some(executable.as_str()) {
+        Some(path)
+    } else {
+        Some(path.join(executable))
+    }
+}
+
+fn fallback_command_candidates(command: &str) -> Vec<PathBuf> {
+    let mut candidates = Vec::new();
+
     #[cfg(unix)]
     {
-        use std::env;
-        env::var("PATH").ok().and_then(|paths| {
-            env::split_paths(&paths).find_map(|dir| {
-                let full_path = dir.join(command);
-                if full_path.is_file() {
-                    full_path.to_str().map(|s| s.to_string())
-                } else {
-                    None
+        match command {
+            "dotnet" => {
+                append_candidate(
+                    &mut candidates,
+                    env_command_candidate("DOTNET_ROOT", command),
+                );
+                candidates.push(PathBuf::from("/opt/homebrew/bin/dotnet"));
+                candidates.push(PathBuf::from("/usr/local/bin/dotnet"));
+                candidates.push(PathBuf::from("/usr/local/share/dotnet/dotnet"));
+                candidates.push(PathBuf::from("/usr/share/dotnet/dotnet"));
+            }
+            "cargo" => {
+                append_candidate(
+                    &mut candidates,
+                    env_command_candidate("CARGO_HOME", command),
+                );
+                if let Some(home_dir) = dirs::home_dir() {
+                    candidates.push(home_dir.join(".cargo").join("bin").join("cargo"));
                 }
-            })
-        })
+                candidates.push(PathBuf::from("/opt/homebrew/bin/cargo"));
+                candidates.push(PathBuf::from("/usr/local/bin/cargo"));
+            }
+            "go" => {
+                append_candidate(&mut candidates, env_command_candidate("GOROOT", command));
+                candidates.push(PathBuf::from("/usr/local/go/bin/go"));
+                candidates.push(PathBuf::from("/opt/homebrew/bin/go"));
+                candidates.push(PathBuf::from("/usr/local/bin/go"));
+            }
+            "java" => {
+                append_candidate(&mut candidates, env_command_candidate("JAVA_HOME", command));
+                candidates.push(PathBuf::from("/usr/bin/java"));
+                candidates.push(PathBuf::from("/opt/homebrew/bin/java"));
+                candidates.push(PathBuf::from("/usr/local/bin/java"));
+            }
+            "brew" => {
+                candidates.push(PathBuf::from("/opt/homebrew/bin/brew"));
+                candidates.push(PathBuf::from("/usr/local/bin/brew"));
+            }
+            "rustup" => {
+                append_candidate(
+                    &mut candidates,
+                    env_command_candidate("CARGO_HOME", command),
+                );
+                if let Some(home_dir) = dirs::home_dir() {
+                    candidates.push(home_dir.join(".cargo").join("bin").join("rustup"));
+                }
+                candidates.push(PathBuf::from("/opt/homebrew/bin/rustup"));
+                candidates.push(PathBuf::from("/usr/local/bin/rustup"));
+            }
+            _ => {}
+        }
     }
 
     #[cfg(windows)]
     {
-        use std::env;
-        env::var("PATH").ok().and_then(|paths| {
-            env::split_paths(&paths).find_map(|dir| {
-                let full_path = dir.join(format!("{}.exe", command));
-                if full_path.is_file() {
-                    full_path.to_str().map(|s| s.to_string())
-                } else {
-                    None
+        match command {
+            "dotnet" => {
+                append_candidate(
+                    &mut candidates,
+                    env_command_candidate("DOTNET_ROOT", command),
+                );
+                append_candidate(
+                    &mut candidates,
+                    env_command_candidate("DOTNET_ROOT(x86)", command),
+                );
+                candidates.push(PathBuf::from(r"C:\Program Files\dotnet\dotnet.exe"));
+                candidates.push(PathBuf::from(r"C:\Program Files (x86)\dotnet\dotnet.exe"));
+            }
+            "cargo" | "rustup" => {
+                append_candidate(
+                    &mut candidates,
+                    env_command_candidate("CARGO_HOME", command),
+                );
+                if let Some(home_dir) = dirs::home_dir() {
+                    candidates.push(
+                        home_dir
+                            .join(".cargo")
+                            .join("bin")
+                            .join(executable_name(command)),
+                    );
                 }
-            })
-        })
+            }
+            "go" => {
+                append_candidate(&mut candidates, env_command_candidate("GOROOT", command));
+                candidates.push(PathBuf::from(r"C:\Program Files\Go\bin\go.exe"));
+            }
+            "java" => {
+                append_candidate(&mut candidates, env_command_candidate("JAVA_HOME", command));
+            }
+            "winget" => {
+                candidates.push(PathBuf::from(
+                    r"C:\Users\Default\AppData\Local\Microsoft\WindowsApps\winget.exe",
+                ));
+            }
+            _ => {}
+        }
     }
+
+    candidates
+}
+
+#[cfg(unix)]
+fn resolve_command_via_login_shell(command: &str) -> Option<(PathBuf, String)> {
+    if !command
+        .chars()
+        .all(|ch| ch.is_ascii_alphanumeric() || ch == '-' || ch == '_' || ch == '.')
+    {
+        return None;
+    }
+
+    let shells = [
+        std::env::var_os("SHELL").map(PathBuf::from),
+        Some(PathBuf::from("/bin/zsh")),
+        Some(PathBuf::from("/bin/bash")),
+        Some(PathBuf::from("/bin/sh")),
+    ];
+
+    for shell in shells.into_iter().flatten() {
+        if !shell.is_file() {
+            continue;
+        }
+
+        let shell_display = shell.to_string_lossy().to_string();
+
+        let Ok(output) = StdCommand::new(&shell)
+            .arg("-lc")
+            .arg(format!("command -v {}", command))
+            .output()
+        else {
+            continue;
+        };
+
+        if !output.status.success() {
+            continue;
+        }
+
+        let stdout = String::from_utf8_lossy(&output.stdout).into_owned();
+        let resolved = stdout
+            .lines()
+            .next()
+            .map(str::trim)
+            .filter(|value| !value.is_empty())?;
+        let resolved_path = PathBuf::from(resolved);
+        if resolved_path.is_file() {
+            return Some((resolved_path, shell_display));
+        }
+    }
+
+    None
+}
+
+#[cfg(windows)]
+fn resolve_command_via_shell(command: &str) -> Option<PathBuf> {
+    let output = StdCommand::new("where").arg(command).output().ok()?;
+    if !output.status.success() {
+        return None;
+    }
+
+    String::from_utf8_lossy(&output.stdout)
+        .lines()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(PathBuf::from)
+        .find(|path| path.is_file())
+}
+
+/// Resolve a command path for packaged GUI processes that may not inherit shell PATH.
+pub fn resolve_command_path(command: &str) -> Option<PathBuf> {
+    let trimmed = command.trim();
+    if trimmed.is_empty() {
+        return None;
+    }
+
+    if has_explicit_path(trimmed) {
+        let explicit = PathBuf::from(trimmed);
+        if explicit.is_file() {
+            return Some(explicit);
+        }
+        log::warn!(
+            "command resolution failed: command={} explicit_path={} exists=false",
+            trimmed,
+            explicit.to_string_lossy()
+        );
+        return None;
+    }
+
+    let env_dirs = env_search_dirs();
+    if let Some(path) = find_command_in_dirs(trimmed, &env_dirs) {
+        return Some(path);
+    }
+
+    let fallback_candidates = dedupe_paths(fallback_command_candidates(trimmed));
+    for candidate in &fallback_candidates {
+        if candidate.is_file() {
+            log::info!(
+                "command resolution fallback hit: command={} source=fallback candidate={}",
+                trimmed,
+                candidate.to_string_lossy()
+            );
+            return Some(candidate.to_path_buf());
+        }
+    }
+
+    #[cfg(unix)]
+    {
+        if let Some((resolved_path, shell_display)) = resolve_command_via_login_shell(trimmed) {
+            log::info!(
+                "command resolution fallback hit: command={} source=login_shell shell={} path={}",
+                trimmed,
+                shell_display,
+                resolved_path.to_string_lossy()
+            );
+            return Some(resolved_path);
+        }
+    }
+
+    #[cfg(windows)]
+    {
+        if let Some(resolved_path) = resolve_command_via_shell(trimmed) {
+            log::info!(
+                "command resolution fallback hit: command={} source=where path={}",
+                trimmed,
+                resolved_path.to_string_lossy()
+            );
+            return Some(resolved_path);
+        }
+    }
+
+    let fallback_list = fallback_candidates
+        .iter()
+        .map(|path| path.to_string_lossy().to_string())
+        .collect::<Vec<_>>()
+        .join(", ");
+    let path_env = std::env::var("PATH").unwrap_or_default();
+    let dotnet_root = std::env::var("DOTNET_ROOT").ok();
+    let dotnet_root_x86 = std::env::var("DOTNET_ROOT(x86)").ok();
+    let cargo_home = std::env::var("CARGO_HOME").ok();
+    let go_root = std::env::var("GOROOT").ok();
+    let java_home = std::env::var("JAVA_HOME").ok();
+
+    log::warn!(
+        "command resolution failed: command={} path_env={} dotnet_root={:?} dotnet_root_x86={:?} cargo_home={:?} go_root={:?} java_home={:?} fallback_candidates=[{}]",
+        trimmed,
+        path_env,
+        dotnet_root,
+        dotnet_root_x86,
+        cargo_home,
+        go_root,
+        java_home,
+        fallback_list
+    );
+
+    None
+}
+
+/// Get the path of a command
+pub fn command_path(command: &str) -> Option<String> {
+    resolve_command_path(command).and_then(|path| path.to_str().map(|s| s.to_string()))
 }
 
 /// Parse semantic version string
@@ -299,6 +588,7 @@ pub fn compare_versions(v1: &str, v2: &str) -> i32 {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use tempfile::TempDir;
 
     #[test]
     fn test_parse_version() {
@@ -376,5 +666,29 @@ mod tests {
 
         result.check_ready();
         assert!(!result.is_ready);
+    }
+
+    #[test]
+    fn test_find_command_in_dirs_uses_matching_executable_name() {
+        let temp_dir = TempDir::new().expect("temp dir");
+        let executable = temp_dir.path().join(executable_name("dotnet"));
+        std::fs::write(&executable, b"").expect("write executable");
+
+        let resolved =
+            find_command_in_dirs("dotnet", &[temp_dir.path().to_path_buf()]).expect("resolve");
+
+        assert_eq!(resolved, executable);
+    }
+
+    #[test]
+    fn test_resolve_command_path_accepts_explicit_existing_path() {
+        let temp_dir = TempDir::new().expect("temp dir");
+        let executable = temp_dir.path().join(executable_name("tool"));
+        std::fs::write(&executable, b"").expect("write executable");
+
+        let resolved = resolve_command_path(executable.to_string_lossy().as_ref())
+            .expect("resolve explicit path");
+
+        assert_eq!(resolved, executable);
     }
 }

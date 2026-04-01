@@ -72,7 +72,11 @@ pub fn run() {
                 let _ = main_window.center();
                 log::info!(
                     "自适应窗口大小: {}x{} (显示器: {}x{}, scale: {:.1})",
-                    target_w, target_h, size.width, size.height, scale
+                    target_w,
+                    target_h,
+                    size.width,
+                    size.height,
+                    scale
                 );
             }
 

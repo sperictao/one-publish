@@ -9,7 +9,10 @@ const PROVIDER_ID: &str = "java";
 
 /// Check Java installation
 pub async fn check_java() -> ProviderStatus {
-    match Command::new("java").arg("-version").output() {
+    let path = super::types::command_path("java");
+    let program = path.clone().unwrap_or_else(|| "java".to_string());
+
+    match Command::new(&program).arg("-version").output() {
         Ok(output) => {
             let version = parse_java_version(&output.stderr);
 
@@ -18,7 +21,7 @@ pub async fn check_java() -> ProviderStatus {
                     provider_id: PROVIDER_ID.to_string(),
                     installed: true,
                     version,
-                    path: super::types::command_path("java"),
+                    path,
                 }
             } else {
                 ProviderStatus {
@@ -71,36 +74,34 @@ pub fn detect_java_issues(status: &ProviderStatus) -> Vec<EnvironmentIssue> {
 /// Format: "openjdk version "17.0.2" 2022-01-18" or "java version "1.8.0_345""
 fn parse_java_version(output: &[u8]) -> Option<String> {
     let output_str = String::from_utf8_lossy(output);
-    output_str
-        .lines()
-        .find_map(|line| {
-            if line.contains("version") {
-                // Extract version like "17.0.2" or "1.8.0_345"
-                let version = line.split('"').nth(1).unwrap_or("").to_string();
+    output_str.lines().find_map(|line| {
+        if line.contains("version") {
+            // Extract version like "17.0.2" or "1.8.0_345"
+            let version = line.split('"').nth(1).unwrap_or("").to_string();
 
-                // Convert "1.8.0_345" to "8" for comparison
-                if version.starts_with("1.") {
-                    Some(
-                        version
-                            .split('.')
-                            .nth(1)
-                            .map(|v| v.to_string())
-                            .unwrap_or(version.clone()),
-                    )
-                } else {
-                    // For Java 9+, extract major version
-                    Some(
-                        version
-                            .split('.')
-                            .next()
-                            .map(|v| v.to_string())
-                            .unwrap_or(version.clone()),
-                    )
-                }
+            // Convert "1.8.0_345" to "8" for comparison
+            if version.starts_with("1.") {
+                Some(
+                    version
+                        .split('.')
+                        .nth(1)
+                        .map(|v| v.to_string())
+                        .unwrap_or(version.clone()),
+                )
             } else {
-                None
+                // For Java 9+, extract major version
+                Some(
+                    version
+                        .split('.')
+                        .next()
+                        .map(|v| v.to_string())
+                        .unwrap_or(version.clone()),
+                )
             }
-        })
+        } else {
+            None
+        }
+    })
 }
 
 /// Create issue for missing Java

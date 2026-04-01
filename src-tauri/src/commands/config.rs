@@ -71,7 +71,12 @@ pub async fn apply_imported_config(
 
     for profile in profiles {
         // 检查是否已存在同名配置文件
-        if repo.publish_config.profiles.iter().any(|p| p.name == profile.name) {
+        if repo
+            .publish_config
+            .profiles
+            .iter()
+            .any(|p| p.name == profile.name)
+        {
             log::warn!("配置文件 '{}' 已存在，跳过导入", profile.name);
             continue;
         }

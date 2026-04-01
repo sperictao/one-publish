@@ -210,7 +210,10 @@ fn extract_xml_tag_values(content: &str, tag_name: &str) -> Vec<String> {
             .as_bytes()
             .get(tag_start + open_tag.len())
             .copied();
-        if matches!(tag_boundary, Some(b'a'..=b'z' | b'A'..=b'Z' | b'0'..=b'9' | b'_')) {
+        if matches!(
+            tag_boundary,
+            Some(b'a'..=b'z' | b'A'..=b'Z' | b'0'..=b'9' | b'_')
+        ) {
             cursor = tag_start + open_tag.len();
             continue;
         }
@@ -403,7 +406,12 @@ pub async fn detect_repository_provider(path: String) -> Result<String, crate::e
 
     detect_provider_from_path(&repo_path)
         .map(ToString::to_string)
-        .ok_or_else(|| repository_error("cannot detect provider from repository path", "unsupported_provider"))
+        .ok_or_else(|| {
+            repository_error(
+                "cannot detect provider from repository path",
+                "unsupported_provider",
+            )
+        })
 }
 
 #[tauri::command]
@@ -515,7 +523,11 @@ pub async fn scan_repository_branches(
 
     let remote_output = timeout(
         Duration::from_secs(5),
-        Command::new("git").arg("-C").arg(&path).arg("remote").output(),
+        Command::new("git")
+            .arg("-C")
+            .arg(&path)
+            .arg("remote")
+            .output(),
     )
     .await
     .map_err(|_| repository_error("git remote timed out after 5s", "timeout"))?
@@ -527,7 +539,9 @@ pub async fn scan_repository_branches(
     })?;
 
     if !remote_output.status.success() {
-        let stderr = String::from_utf8_lossy(&remote_output.stderr).trim().to_string();
+        let stderr = String::from_utf8_lossy(&remote_output.stderr)
+            .trim()
+            .to_string();
         return Err(repository_error(
             format_git_command_failure("remote", &remote_output.stderr),
             classify_git_branch_scan_error(&stderr),
@@ -559,7 +573,9 @@ pub async fn scan_repository_branches(
         })?;
 
         if !fetch_output.status.success() {
-            let stderr = String::from_utf8_lossy(&fetch_output.stderr).trim().to_string();
+            let stderr = String::from_utf8_lossy(&fetch_output.stderr)
+                .trim()
+                .to_string();
             return Err(repository_error(
                 format_git_command_failure("fetch", &fetch_output.stderr),
                 classify_git_branch_scan_error(&stderr),
@@ -758,8 +774,12 @@ pub async fn scan_project(
 ) -> Result<ProjectInfo, crate::errors::AppError> {
     let search_path = match start_path {
         Some(p) => PathBuf::from(p),
-        None => std::env::current_dir()
-            .map_err(|e| repository_error(format!("failed to resolve current directory: {}", e), "current_dir_failed"))?,
+        None => std::env::current_dir().map_err(|e| {
+            repository_error(
+                format!("failed to resolve current directory: {}", e),
+                "current_dir_failed",
+            )
+        })?,
     };
 
     if !search_path.exists() {
@@ -769,11 +789,16 @@ pub async fn scan_project(
         ));
     }
 
-    let root_path = find_project_root(&search_path)
-        .ok_or_else(|| repository_error("cannot find project root (.sln)", "project_root_not_found"))?;
+    let root_path = find_project_root(&search_path).ok_or_else(|| {
+        repository_error("cannot find project root (.sln)", "project_root_not_found")
+    })?;
 
-    let project_file = find_project_file(&root_path)
-        .ok_or_else(|| repository_error("cannot find project file (.csproj)", "project_file_not_found"))?;
+    let project_file = find_project_file(&root_path).ok_or_else(|| {
+        repository_error(
+            "cannot find project file (.csproj)",
+            "project_file_not_found",
+        )
+    })?;
 
     let publish_profiles = scan_publish_profiles(&project_file);
     let target_frameworks = read_target_frameworks(&project_file)?;

@@ -113,10 +113,7 @@ fn calculate_progress_percent(downloaded_bytes: u64, total_bytes: Option<u64>) -
     })
 }
 
-fn emit_update_download_progress(
-    app: &AppHandle,
-    payload: UpdateDownloadProgressPayload,
-) {
+fn emit_update_download_progress(app: &AppHandle, payload: UpdateDownloadProgressPayload) {
     if let Err(err) = app.emit(UPDATE_DOWNLOAD_PROGRESS_EVENT, payload) {
         log::warn!("发送更新下载进度事件失败: {}", err);
     }
@@ -250,14 +247,7 @@ async fn download_update_with_retry(
     for attempt in 1..=UPDATE_DOWNLOAD_MAX_ATTEMPTS {
         emit_update_download_progress(
             app,
-            build_progress_payload(
-                "downloading",
-                &update.version,
-                0,
-                None,
-                attempt,
-                None,
-            ),
+            build_progress_payload("downloading", &update.version, 0, None, attempt, None),
         );
 
         let app_handle = app.clone();
@@ -313,7 +303,10 @@ async fn download_update_with_retry(
                     continue;
                 }
 
-                return Err(DownloadFailure { error, attempts: attempt });
+                return Err(DownloadFailure {
+                    error,
+                    attempts: attempt,
+                });
             }
         }
     }
@@ -476,39 +469,43 @@ pub async fn install_update(
     expected_version: Option<String>,
 ) -> Result<String, crate::errors::AppError> {
     let expected_version = normalize_expected_version(expected_version);
-    let Some((selected_update, used_cached_update)) =
-        resolve_install_update(&app, pending_update_state.inner(), expected_version.as_deref())
-            .await?
+    let Some((selected_update, used_cached_update)) = resolve_install_update(
+        &app,
+        pending_update_state.inner(),
+        expected_version.as_deref(),
+    )
+    .await?
     else {
         return Ok("当前已是最新版本，无需安装".to_string());
     };
 
-    let (update, bytes, retry_count) = match download_update_with_retry(&app, &selected_update).await {
-        Ok((bytes, retry_count)) => (selected_update, bytes, retry_count),
-        Err(initial_failure) => {
-            let refreshed_update = if used_cached_update {
-                refresh_update_after_cached_failure(
-                    &app,
-                    pending_update_state.inner(),
-                    &selected_update,
-                )
-                .await
-            } else {
-                None
-            };
+    let (update, bytes, retry_count) =
+        match download_update_with_retry(&app, &selected_update).await {
+            Ok((bytes, retry_count)) => (selected_update, bytes, retry_count),
+            Err(initial_failure) => {
+                let refreshed_update = if used_cached_update {
+                    refresh_update_after_cached_failure(
+                        &app,
+                        pending_update_state.inner(),
+                        &selected_update,
+                    )
+                    .await
+                } else {
+                    None
+                };
 
-            if let Some(refreshed_update) = refreshed_update {
-                match download_update_with_retry(&app, &refreshed_update).await {
-                    Ok((bytes, retry_count)) => (refreshed_update, bytes, retry_count),
-                    Err(refreshed_failure) => {
-                        return Err(download_failure_to_app_error(refreshed_failure));
+                if let Some(refreshed_update) = refreshed_update {
+                    match download_update_with_retry(&app, &refreshed_update).await {
+                        Ok((bytes, retry_count)) => (refreshed_update, bytes, retry_count),
+                        Err(refreshed_failure) => {
+                            return Err(download_failure_to_app_error(refreshed_failure));
+                        }
                     }
+                } else {
+                    return Err(download_failure_to_app_error(initial_failure));
                 }
-            } else {
-                return Err(download_failure_to_app_error(initial_failure));
             }
-        }
-    };
+        };
 
     let target_version = update.version.clone();
     let total_bytes = bytes.len() as u64;
@@ -580,8 +577,9 @@ mod tests {
 
     #[test]
     fn parses_http_status_code_from_network_message() {
-        let status =
-            extract_http_status_code("Download request failed with status: 503 Service Unavailable");
+        let status = extract_http_status_code(
+            "Download request failed with status: 503 Service Unavailable",
+        );
         assert_eq!(status, Some(503));
     }
 
@@ -595,7 +593,8 @@ mod tests {
 
     #[test]
     fn network_status_404_is_not_retryable() {
-        let error = UpdaterError::Network("Download request failed with status: 404 Not Found".into());
+        let error =
+            UpdaterError::Network("Download request failed with status: 404 Not Found".into());
         assert!(!is_retryable_download_error(&error));
     }
 

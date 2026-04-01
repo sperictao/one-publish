@@ -133,10 +133,7 @@ impl AppError {
         }
     }
 
-    pub fn external_command_with_code(
-        message: impl Into<String>,
-        code: impl Into<String>,
-    ) -> Self {
+    pub fn external_command_with_code(message: impl Into<String>, code: impl Into<String>) -> Self {
         Self {
             kind: ErrorKind::ExternalCommand,
             message: message.into(),

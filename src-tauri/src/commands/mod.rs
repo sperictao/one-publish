@@ -23,49 +23,45 @@ mod export;
 mod provider;
 mod repository;
 mod updater;
+pub(crate) use artifact::{__cmd__package_artifact, __cmd__sign_artifact};
 pub use artifact::{package_artifact, sign_artifact};
+pub(crate) use config::{__cmd__apply_imported_config, __cmd__export_config, __cmd__import_config};
 pub use config::{apply_imported_config, export_config, import_config};
+pub(crate) use environment::{__cmd__apply_fix, __cmd__run_environment_check};
 pub use environment::{apply_fix, run_environment_check};
+pub(crate) use export::{
+    __cmd__export_diagnostics_index, __cmd__export_execution_history,
+    __cmd__export_execution_snapshot, __cmd__export_failure_group_bundle,
+    __cmd__export_preflight_report, __cmd__open_execution_snapshot, __cmd__open_output_directory,
+};
 pub use export::{
     export_diagnostics_index, export_execution_history, export_execution_snapshot,
     export_failure_group_bundle, export_preflight_report, open_execution_snapshot,
     open_output_directory,
 };
-pub use provider::{get_provider_schema, import_from_command, list_providers};
-pub use repository::{
-    check_repository_branch_connectivity, detect_repository_provider,
-    read_project_publish_profile, scan_project, scan_project_files,
-    scan_repository_branches,
-};
-pub use updater::{
-    check_update, get_current_version, get_shortcuts_help, get_updater_config_health,
-    get_updater_help_paths, install_update, open_updater_help, UpdateInfo,
-    UpdaterConfigHealth, UpdaterHelpPaths,
-};
-pub(crate) use updater::PendingUpdateState;
-pub(crate) use artifact::{__cmd__package_artifact, __cmd__sign_artifact};
-pub(crate) use config::{
-    __cmd__apply_imported_config, __cmd__export_config, __cmd__import_config,
-};
-pub(crate) use environment::{__cmd__apply_fix, __cmd__run_environment_check};
-pub(crate) use export::{
-    __cmd__export_diagnostics_index, __cmd__export_execution_history,
-    __cmd__export_execution_snapshot, __cmd__export_failure_group_bundle,
-    __cmd__export_preflight_report, __cmd__open_execution_snapshot,
-    __cmd__open_output_directory,
-};
 pub(crate) use provider::{
     __cmd__get_provider_schema, __cmd__import_from_command, __cmd__list_providers,
 };
+pub use provider::{get_provider_schema, import_from_command, list_providers};
 pub(crate) use repository::{
     __cmd__check_repository_branch_connectivity, __cmd__detect_repository_provider,
-    __cmd__read_project_publish_profile, __cmd__scan_project,
-    __cmd__scan_project_files, __cmd__scan_repository_branches,
+    __cmd__read_project_publish_profile, __cmd__scan_project, __cmd__scan_project_files,
+    __cmd__scan_repository_branches,
 };
+pub use repository::{
+    check_repository_branch_connectivity, detect_repository_provider, read_project_publish_profile,
+    scan_project, scan_project_files, scan_repository_branches,
+};
+pub(crate) use updater::PendingUpdateState;
 pub(crate) use updater::{
     __cmd__check_update, __cmd__get_current_version, __cmd__get_shortcuts_help,
-    __cmd__get_updater_config_health, __cmd__get_updater_help_paths,
-    __cmd__install_update, __cmd__open_updater_help,
+    __cmd__get_updater_config_health, __cmd__get_updater_help_paths, __cmd__install_update,
+    __cmd__open_updater_help,
+};
+pub use updater::{
+    check_update, get_current_version, get_shortcuts_help, get_updater_config_health,
+    get_updater_help_paths, install_update, open_updater_help, UpdateInfo, UpdaterConfigHealth,
+    UpdaterHelpPaths,
 };
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -164,10 +160,7 @@ fn classify_process_wait_error(kind: IoErrorKind) -> &'static str {
     }
 }
 
-fn publish_error(
-    message: impl Into<String>,
-    code: impl Into<String>,
-) -> crate::errors::AppError {
+fn publish_error(message: impl Into<String>, code: impl Into<String>) -> crate::errors::AppError {
     crate::errors::AppError::publish_with_code(message, code)
 }
 
@@ -238,9 +231,12 @@ pub async fn cancel_provider_publish() -> Result<bool, crate::errors::AppError> 
     };
     running.cancel_requested.store(true, Ordering::SeqCst);
     let mut child = running.child.lock().await;
-    child
-        .start_kill()
-        .map_err(|err| publish_error(format!("failed to cancel publish: {}", err), "publish_cancel_failed"))?;
+    child.start_kill().map_err(|err| {
+        publish_error(
+            format!("failed to cancel publish: {}", err),
+            "publish_cancel_failed",
+        )
+    })?;
     Ok(true)
 }
 fn build_dotnet_spec_from_config(project_path: String, config: PublishConfig) -> PublishSpec {
@@ -336,6 +332,7 @@ async fn execute_publish_spec(
     } else {
         base_program
     };
+    let program = resolve_spawn_program(&program);
     log::info!(
         "Executing provider plan: provider={} program={} args={}",
         spec.provider_id,
@@ -350,9 +347,12 @@ async fn execute_publish_spec(
     if let Some(dir) = &working_dir {
         command.current_dir(dir);
     }
-    let mut child = command
-        .spawn()
-        .map_err(|e| publish_error(format!("failed to spawn {}: {}", program, e), classify_process_spawn_error(e.kind())))?;
+    let mut child = command.spawn().map_err(|e| {
+        publish_error(
+            format!("failed to spawn {}: {}", program, e),
+            classify_process_spawn_error(e.kind()),
+        )
+    })?;
     let command_line = if args.is_empty() {
         format!("$ {}", program)
     } else {
@@ -375,7 +375,11 @@ async fn execute_publish_spec(
     }
     let run_result: Result<(bool, bool, Option<String>), crate::errors::AppError> = async {
         let (sender, receiver) = mpsc::unbounded_channel::<(String, String)>();
-        let collector = tokio::spawn(collect_log_chunks(app.clone(), session_id.clone(), receiver));
+        let collector = tokio::spawn(collect_log_chunks(
+            app.clone(),
+            session_id.clone(),
+            receiver,
+        ));
         let mut readers = Vec::new();
         if let Some(stdout) = stdout {
             readers.push(tokio::spawn(read_stream_chunks(
@@ -394,17 +398,22 @@ async fn execute_publish_spec(
         drop(sender);
         let status = {
             let mut running_child = child.lock().await;
-            running_child
-                .wait()
-                .await
-                .map_err(|err| publish_error(format!("failed to wait publish process: {}", err), classify_process_wait_error(err.kind())))?
+            running_child.wait().await.map_err(|err| {
+                publish_error(
+                    format!("failed to wait publish process: {}", err),
+                    classify_process_wait_error(err.kind()),
+                )
+            })?
         };
         for reader in readers {
             let _ = reader.await;
         }
-        let log_summary = collector
-            .await
-            .map_err(|err| publish_error(format!("failed to collect publish logs: {}", err), "publish_log_collect_failed"))?;
+        let log_summary = collector.await.map_err(|err| {
+            publish_error(
+                format!("failed to collect publish logs: {}", err),
+                "publish_log_collect_failed",
+            )
+        })?;
         let cancelled = cancel_requested.load(Ordering::SeqCst);
         if cancelled {
             let cancelled_line = if log_summary.ends_with_newline {
@@ -543,6 +552,13 @@ fn resolve_plan_command(
     let args = parts.map(|item| item.to_string()).collect();
     Ok((program, args))
 }
+fn resolve_spawn_program(program: &str) -> String {
+    if Path::new(program).is_absolute() || Path::new(program).components().count() > 1 {
+        return program.to_string();
+    }
+
+    crate::environment::command_path(program).unwrap_or_else(|| program.to_string())
+}
 fn resolve_java_program(
     program: &str,
     working_dir: Option<&PathBuf>,
@@ -579,7 +595,11 @@ fn resolve_provider_project_dir(path: PathBuf, known_files: &[&str]) -> Option<P
     let looks_like_project_file = path
         .file_name()
         .and_then(|name| name.to_str())
-        .map(|name| known_files.iter().any(|file| name.eq_ignore_ascii_case(file)))
+        .map(|name| {
+            known_files
+                .iter()
+                .any(|file| name.eq_ignore_ascii_case(file))
+        })
         .unwrap_or(false)
         || (!path.is_dir() && path.extension().is_some());
 
@@ -854,7 +874,9 @@ mod tests {
 
         assert_eq!(serialized.get("output"), None);
         assert_eq!(
-            serialized.get("provider_id").and_then(serde_json::Value::as_str),
+            serialized
+                .get("provider_id")
+                .and_then(serde_json::Value::as_str),
             Some("dotnet")
         );
     }

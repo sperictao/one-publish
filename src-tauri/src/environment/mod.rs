@@ -71,9 +71,7 @@ pub fn invalidate_environment_cache() {
 }
 
 /// Run full environment check (optionally scoped by provider ids).
-pub async fn check_environment(
-    provider_ids: Option<Vec<String>>,
-) -> EnvironmentCheckResult {
+pub async fn check_environment(provider_ids: Option<Vec<String>>) -> EnvironmentCheckResult {
     let provider_ids = normalize_provider_ids(provider_ids);
     let cache_key = make_cache_key(&provider_ids);
 

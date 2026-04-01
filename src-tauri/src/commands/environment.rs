@@ -37,10 +37,12 @@ pub async fn apply_fix(action: FixAction) -> Result<FixResult, crate::errors::Ap
                 )
             })?;
             let (program, args) = validate_and_parse_fix_command(&command_str)?;
+            let resolved_program =
+                crate::environment::command_path(&program).unwrap_or(program.clone());
             log::info!("Applying fix via command: {} {}", program, args.join(" "));
             let output = timeout(
                 Duration::from_secs(10 * 60),
-                Command::new(&program).args(&args).output(),
+                Command::new(&resolved_program).args(&args).output(),
             )
             .await
             .map_err(|_| {

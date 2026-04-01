@@ -184,9 +184,7 @@ impl Default for RepoPublishConfig {
 impl RepoPublishConfig {
     /// 判断是否全部为默认值
     fn is_default(&self) -> bool {
-        self.selected_preset == default_preset()
-            && !self.is_custom_mode
-            && self.profiles.is_empty()
+        self.selected_preset == default_preset() && !self.is_custom_mode && self.profiles.is_empty()
     }
 }
 
@@ -469,14 +467,12 @@ pub fn update_state(new_state: AppState) -> Result<(), crate::errors::AppError> 
     let normalized = sanitize_state(new_state);
     save_to_file(&normalized)?;
 
-    let mut guard = state_store()
-        .write()
-        .map_err(|err| {
-            crate::errors::AppError::store_with_code(
-                format!("写入状态锁失败: {}", err),
-                "store_lock_write_failed",
-            )
-        })?;
+    let mut guard = state_store().write().map_err(|err| {
+        crate::errors::AppError::store_with_code(
+            format!("写入状态锁失败: {}", err),
+            "store_lock_write_failed",
+        )
+    })?;
     *guard = normalized;
     Ok(())
 }
@@ -829,7 +825,9 @@ pub async fn get_execution_history() -> Result<Vec<ExecutionRecord>, AppError> {
 
 /// 追加执行历史记录（按配置保留最近 N 条）
 #[tauri::command]
-pub async fn add_execution_record(record: ExecutionRecord) -> Result<Vec<ExecutionRecord>, AppError> {
+pub async fn add_execution_record(
+    record: ExecutionRecord,
+) -> Result<Vec<ExecutionRecord>, AppError> {
     let mut state = get_state();
     let history_limit = state.execution_history_limit;
     append_execution_history(&mut state.execution_history, record, history_limit);
@@ -917,7 +915,10 @@ mod tests {
             "前端启动载荷不应携带执行历史内容"
         );
         assert_eq!(
-            serialized.get("repositories").and_then(serde_json::Value::as_array).map(Vec::len),
+            serialized
+                .get("repositories")
+                .and_then(serde_json::Value::as_array)
+                .map(Vec::len),
             Some(1)
         );
         assert_eq!(

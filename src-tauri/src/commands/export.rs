@@ -1,10 +1,7 @@
 use serde_json::Value;
 use std::path::{Path, PathBuf};
 
-fn export_error(
-    message: impl Into<String>,
-    code: impl Into<String>,
-) -> crate::errors::AppError {
+fn export_error(message: impl Into<String>, code: impl Into<String>) -> crate::errors::AppError {
     crate::errors::AppError::export_with_code(message, code)
 }
 
@@ -88,8 +85,13 @@ fn render_preflight_markdown(report: &Value) -> Result<String, crate::errors::Ap
             }
         }
     }
-    let raw = serde_json::to_string_pretty(report)
-        .map_err(|source| export_source_error("serialization error", source, "preflight_markdown_serialize_failed"))?;
+    let raw = serde_json::to_string_pretty(report).map_err(|source| {
+        export_source_error(
+            "serialization error",
+            source,
+            "preflight_markdown_serialize_failed",
+        )
+    })?;
     lines.extend([
         String::new(),
         "## Raw Snapshot".to_string(),
@@ -794,10 +796,18 @@ fn find_latest_snapshot_in_output_dir(
 
     let mut latest: Option<(std::time::SystemTime, PathBuf)> = None;
     for entry in std::fs::read_dir(&dir).map_err(|source| {
-        export_source_error("读取输出目录失败", source, "snapshot_output_dir_read_failed")
+        export_source_error(
+            "读取输出目录失败",
+            source,
+            "snapshot_output_dir_read_failed",
+        )
     })? {
         let entry = entry.map_err(|source| {
-            export_source_error("读取目录项失败", source, "snapshot_output_dir_entry_read_failed")
+            export_source_error(
+                "读取目录项失败",
+                source,
+                "snapshot_output_dir_entry_read_failed",
+            )
         })?;
         let path = entry.path();
         if !path.is_file() {
@@ -832,7 +842,10 @@ fn find_latest_snapshot_in_output_dir(
 
     latest.map(|(_, path)| path).ok_or_else(|| {
         export_error(
-            format!("未在输出目录找到执行快照，请先导出快照: {}", dir.to_string_lossy()),
+            format!(
+                "未在输出目录找到执行快照，请先导出快照: {}",
+                dir.to_string_lossy()
+            ),
             "snapshot_not_found_in_output_dir",
         )
     })

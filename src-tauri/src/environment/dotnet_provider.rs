@@ -10,8 +10,9 @@ const PROVIDER_ID: &str = "dotnet";
 /// Check .NET SDK installation
 pub async fn check_dotnet() -> ProviderStatus {
     let path = super::types::command_path("dotnet");
+    let program = path.clone().unwrap_or_else(|| "dotnet".to_string());
 
-    match Command::new("dotnet").arg("--version").output() {
+    match Command::new(&program).arg("--version").output() {
         Ok(output) => {
             let version_str = super::types::parse_version(&output.stdout, "")
                 .unwrap_or_else(|| "unknown".to_string());

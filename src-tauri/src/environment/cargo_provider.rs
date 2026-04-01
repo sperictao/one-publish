@@ -10,8 +10,9 @@ const PROVIDER_ID: &str = "cargo";
 /// Check Rust/Cargo installation
 pub async fn check_cargo() -> ProviderStatus {
     let path = super::types::command_path("cargo");
+    let program = path.clone().unwrap_or_else(|| "cargo".to_string());
 
-    match Command::new("cargo").arg("--version").output() {
+    match Command::new(&program).arg("--version").output() {
         Ok(output) => {
             let version_str = super::types::parse_version(&output.stdout, "cargo")
                 .unwrap_or_else(|| "unknown".to_string());
