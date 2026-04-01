@@ -1,6 +1,5 @@
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
-use std::path::Path;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ParameterSchema {
@@ -222,6 +221,9 @@ impl ParameterRenderer {
 
 #[derive(Debug, thiserror::Error)]
 pub enum RenderError {
+    #[error("{0}")]
+    Schema(String),
+
     #[error("unknown parameter: {0}")]
     UnknownParameter(String),
 
@@ -242,13 +244,9 @@ pub enum RenderError {
     },
 }
 
-pub fn load_schema_from_file(path: &Path) -> Result<ParameterSchema, RenderError> {
-    let content = std::fs::read_to_string(path)
-        .map_err(|e| RenderError::UnknownParameter(format!("failed to read schema file: {}", e)))?;
-    let schema: ParameterSchema = serde_json::from_str(&content).map_err(|e| {
-        RenderError::UnknownParameter(format!("failed to parse schema JSON: {}", e))
-    })?;
-    Ok(schema)
+pub fn parse_schema_json(content: &str) -> Result<ParameterSchema, RenderError> {
+    serde_json::from_str(content)
+        .map_err(|e| RenderError::Schema(format!("failed to parse schema JSON: {}", e)))
 }
 
 #[cfg(test)]
@@ -320,6 +318,18 @@ mod tests {
 
         let result = ParameterRenderer::from_json(json);
         assert!(result.is_ok());
+    }
+
+    #[test]
+    fn invalid_schema_json_returns_schema_error() {
+        let result = parse_schema_json("{");
+        assert!(result.is_err());
+        match result {
+            Err(RenderError::Schema(message)) => {
+                assert!(message.contains("failed to parse schema JSON"));
+            }
+            _ => panic!("expected Schema error"),
+        }
     }
 
     #[test]

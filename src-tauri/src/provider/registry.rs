@@ -1,6 +1,6 @@
 use super::{Provider, ProviderManifest};
 use crate::compiler::CompileError;
-use crate::parameter::{load_schema_from_file, ParameterSchema, RenderError};
+use crate::parameter::{parse_schema_json, ParameterSchema, RenderError};
 use crate::plan::{ExecutionPlan, PlanStep, PLAN_VERSION};
 use crate::spec::{PublishSpec, SpecValue, SPEC_VERSION};
 use std::collections::BTreeMap;
@@ -43,14 +43,8 @@ impl ProviderRegistry {
     }
 }
 
-fn get_schema_path(provider_id: &str) -> String {
-    // Build path to schema file
-    let schema_path = format!(
-        "{}/src/provider/schemas/{}.json",
-        env!("CARGO_MANIFEST_DIR"),
-        provider_id
-    );
-    schema_path
+fn load_embedded_schema(schema_json: &str) -> Result<ParameterSchema, RenderError> {
+    parse_schema_json(schema_json)
 }
 
 struct DotnetProvider {
@@ -75,8 +69,7 @@ impl Provider for DotnetProvider {
     }
 
     fn get_schema(&self) -> Result<ParameterSchema, RenderError> {
-        let schema_path = get_schema_path("dotnet");
-        load_schema_from_file(schema_path.as_ref())
+        load_embedded_schema(include_str!("schemas/dotnet.json"))
     }
 
     fn compile(&self, spec: &PublishSpec) -> Result<ExecutionPlan, CompileError> {
@@ -106,8 +99,7 @@ impl Provider for CargoProvider {
     }
 
     fn get_schema(&self) -> Result<ParameterSchema, RenderError> {
-        let schema_path = get_schema_path("cargo");
-        load_schema_from_file(schema_path.as_ref())
+        load_embedded_schema(include_str!("schemas/cargo.json"))
     }
 
     fn compile(&self, spec: &PublishSpec) -> Result<ExecutionPlan, CompileError> {
@@ -137,8 +129,7 @@ impl Provider for GoProvider {
     }
 
     fn get_schema(&self) -> Result<ParameterSchema, RenderError> {
-        let schema_path = get_schema_path("go");
-        load_schema_from_file(schema_path.as_ref())
+        load_embedded_schema(include_str!("schemas/go.json"))
     }
 
     fn compile(&self, spec: &PublishSpec) -> Result<ExecutionPlan, CompileError> {
@@ -168,8 +159,7 @@ impl Provider for JavaProvider {
     }
 
     fn get_schema(&self) -> Result<ParameterSchema, RenderError> {
-        let schema_path = get_schema_path("java");
-        load_schema_from_file(schema_path.as_ref())
+        load_embedded_schema(include_str!("schemas/java.json"))
     }
 
     fn compile(&self, spec: &PublishSpec) -> Result<ExecutionPlan, CompileError> {

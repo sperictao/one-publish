@@ -173,6 +173,7 @@ fn publish_schema_error(source: RenderError) -> crate::errors::AppError {
 
 fn classify_publish_render_error_code(source: &RenderError) -> &'static str {
     match source {
+        RenderError::Schema(_) => "publish_schema_load_failed",
         RenderError::UnknownParameter(_) => "publish_unknown_parameter",
         RenderError::InvalidType { .. } => "publish_invalid_parameter_type",
         RenderError::InvalidArrayTypeItem { .. } => "publish_invalid_parameter_array_item",
@@ -740,8 +741,8 @@ mod tests {
 
     #[test]
     fn publish_schema_error_uses_publish_kind_and_code() {
-        let err = publish_schema_error(RenderError::UnknownParameter(
-            "failed to read schema file: boom".to_string(),
+        let err = publish_schema_error(RenderError::Schema(
+            "failed to parse schema JSON: boom".to_string(),
         ));
 
         assert_eq!(err.kind, ErrorKind::Publish);
