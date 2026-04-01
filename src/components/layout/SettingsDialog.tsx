@@ -44,7 +44,7 @@ import { relaunch } from "@tauri-apps/plugin-process";
 import type { AppUpdaterState } from "@/hooks/useAppUpdater";
 import { useI18n, t } from "@/hooks/useI18n";
 import type { Language } from "@/hooks/useI18n";
-import type { EnvironmentCheckResult } from "@/lib/environment";
+import type { EnvironmentCheckSnapshot } from "@/lib/environment";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 
@@ -106,9 +106,10 @@ interface SettingsDialogProps {
   onOpenShortcuts?: () => void;
   environmentStatus?: "unknown" | "ready" | "warning" | "blocked";
   environmentCheckedAt?: string;
-  environmentDefaultProviderIds?: string[];
-  environmentInitialResult?: EnvironmentCheckResult | null;
-  onEnvironmentChecked?: (result: EnvironmentCheckResult) => void;
+  environmentProviderIds: string[];
+  environmentInitialCheck?: EnvironmentCheckSnapshot | null;
+  onEnvironmentProviderIdsChange: (providerIds: string[]) => void;
+  onEnvironmentChecked?: (snapshot: EnvironmentCheckSnapshot) => void;
   updaterState: AppUpdaterState;
   onCheckForUpdates: () => Promise<void>;
   onInstallAvailableUpdate: () => Promise<void>;
@@ -180,8 +181,9 @@ export function SettingsDialog({
   theme,
   onThemeChange,
   onOpenShortcuts,
-  environmentDefaultProviderIds = ["dotnet"],
-  environmentInitialResult = null,
+  environmentProviderIds,
+  environmentInitialCheck = null,
+  onEnvironmentProviderIdsChange,
   onEnvironmentChecked,
   updaterState,
   onCheckForUpdates,
@@ -544,9 +546,10 @@ export function SettingsDialog({
     >
       <EnvironmentCheckContent
         active={isOpen && activeCategory === "environment"}
-        defaultProviderIds={environmentDefaultProviderIds}
-        initialResult={environmentInitialResult}
+        defaultProviderIds={environmentProviderIds}
+        initialCheck={environmentInitialCheck}
         onChecked={onEnvironmentChecked}
+        onProviderIdsChange={onEnvironmentProviderIdsChange}
       />
     </Suspense>
   );

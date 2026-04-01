@@ -2,6 +2,7 @@
 // 提供持久化的应用状态，包括仓库列表、UI 状态和发布配置
 
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";
+import { normalizeEnvironmentProviderIds } from "@/lib/environment";
 import {
   getAppState,
   updateUIState,
@@ -110,6 +111,7 @@ export function useAppState() {
       defaultOutputDir?: string;
       theme?: "light" | "dark" | "auto";
       executionHistoryLimit?: number;
+      environmentProviderIds?: string[];
     }) => {
       setState((prev) => ({
         ...prev,
@@ -123,6 +125,11 @@ export function useAppState() {
         ...(params.theme !== undefined && { theme: params.theme }),
         ...(params.executionHistoryLimit !== undefined && {
           executionHistoryLimit: params.executionHistoryLimit,
+        }),
+        ...(params.environmentProviderIds !== undefined && {
+          environmentProviderIds: normalizeEnvironmentProviderIds(
+            params.environmentProviderIds
+          ),
         }),
       }));
 
@@ -310,6 +317,15 @@ export function useAppState() {
     [setPreferences]
   );
 
+  const setEnvironmentProviderIds = useCallback(
+    (providerIds: string[]) => {
+      setPreferences({
+        environmentProviderIds: normalizeEnvironmentProviderIds(providerIds),
+      });
+    },
+    [setPreferences]
+  );
+
   return {
     // 状态
     state,
@@ -345,10 +361,12 @@ export function useAppState() {
     defaultOutputDir: state.defaultOutputDir,
     theme: state.theme,
     executionHistoryLimit: state.executionHistoryLimit,
+    environmentProviderIds: state.environmentProviderIds,
     setLanguage,
     setMinimizeToTrayOnClose,
     setDefaultOutputDir,
     setTheme,
     setExecutionHistoryLimit,
+    setEnvironmentProviderIds,
   };
 }

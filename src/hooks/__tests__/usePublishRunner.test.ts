@@ -34,6 +34,13 @@ vi.mock("sonner", () => ({
 
 vi.mock("@/lib/environment", () => ({
   runEnvironmentCheck: mocks.runEnvironmentCheck,
+  createEnvironmentCheckSnapshot: (
+    result: EnvironmentCheckResult,
+    providerIds?: string[]
+  ) => ({
+    providerIds: providerIds ?? [],
+    result,
+  }),
 }));
 
 vi.mock("@/hooks/useDotnetPublishSelection", () => ({
@@ -109,12 +116,13 @@ function createRunnerProps() {
       root_path: "/repo",
       project_file: "/repo/App.csproj",
       publish_profiles: ["FolderProfile"],
+      target_frameworks: ["net8.0"],
     },
     presets: [],
     specVersion: 1,
     pushRecentConfig: vi.fn(),
     openEnvironmentDialog: vi.fn(),
-    setEnvironmentLastResult: vi.fn(),
+    setEnvironmentLastCheck: vi.fn(),
     savePublishRecord: vi.fn(),
   };
 }
@@ -240,7 +248,10 @@ describe("usePublishRunner", () => {
 
     expect(props.openEnvironmentDialog).toHaveBeenCalledWith(
       expect.objectContaining({
-        is_ready: false,
+        providerIds: ["dotnet"],
+        result: expect.objectContaining({
+          is_ready: false,
+        }),
       }),
       ["dotnet"]
     );

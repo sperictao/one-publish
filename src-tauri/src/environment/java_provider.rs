@@ -9,24 +9,31 @@ const PROVIDER_ID: &str = "java";
 
 /// Check Java installation
 pub async fn check_java() -> ProviderStatus {
-    let path = super::types::command_path("java");
-
     match Command::new("java").arg("-version").output() {
         Ok(output) => {
-            let version_str = parse_java_version(&output.stderr);
+            let version = parse_java_version(&output.stderr);
 
-            ProviderStatus {
-                provider_id: PROVIDER_ID.to_string(),
-                installed: true,
-                version: Some(version_str),
-                path,
+            if output.status.success() && version.is_some() {
+                ProviderStatus {
+                    provider_id: PROVIDER_ID.to_string(),
+                    installed: true,
+                    version,
+                    path: super::types::command_path("java"),
+                }
+            } else {
+                ProviderStatus {
+                    provider_id: PROVIDER_ID.to_string(),
+                    installed: false,
+                    version: None,
+                    path: None,
+                }
             }
         }
         Err(_) => ProviderStatus {
             provider_id: PROVIDER_ID.to_string(),
             installed: false,
             version: None,
-            path,
+            path: None,
         },
     }
 }
@@ -62,7 +69,7 @@ pub fn detect_java_issues(status: &ProviderStatus) -> Vec<EnvironmentIssue> {
 /// Parse Java version from command output
 /// Output goes to stderr for `java -version`
 /// Format: "openjdk version "17.0.2" 2022-01-18" or "java version "1.8.0_345""
-fn parse_java_version(output: &[u8]) -> String {
+fn parse_java_version(output: &[u8]) -> Option<String> {
     let output_str = String::from_utf8_lossy(output);
     output_str
         .lines()
@@ -78,7 +85,7 @@ fn parse_java_version(output: &[u8]) -> String {
                             .split('.')
                             .nth(1)
                             .map(|v| v.to_string())
-                            .unwrap_or_else(|| version.clone()),
+                            .unwrap_or(version.clone()),
                     )
                 } else {
                     // For Java 9+, extract major version
@@ -87,14 +94,13 @@ fn parse_java_version(output: &[u8]) -> String {
                             .split('.')
                             .next()
                             .map(|v| v.to_string())
-                            .unwrap_or_else(|| version.clone()),
+                            .unwrap_or(version.clone()),
                     )
                 }
             } else {
                 None
             }
         })
-        .unwrap_or_else(|| "unknown".to_string())
 }
 
 /// Create issue for missing Java
@@ -205,13 +211,20 @@ mod tests {
     #[test]
     fn test_parse_java_version() {
         let output = b"openjdk version \"17.0.2\" 2022-01-18\n";
-        assert_eq!(parse_java_version(output), "17");
+        assert_eq!(parse_java_version(output), Some("17".to_string()));
 
         let output = b"java version \"1.8.0_345\"\n";
-        assert_eq!(parse_java_version(output), "8");
+        assert_eq!(parse_java_version(output), Some("8".to_string()));
 
         let output = b"openjdk version \"11.0.15\" 2022-04-19\n";
-        assert_eq!(parse_java_version(output), "11");
+        assert_eq!(parse_java_version(output), Some("11".to_string()));
+    }
+
+    #[test]
+    fn test_parse_java_version_returns_none_for_macos_stub_error() {
+        let output =
+            b"The operation couldn\xe2\x80\x99t be completed. Unable to locate a Java Runtime.\n";
+        assert_eq!(parse_java_version(output), None);
     }
 
     #[test]

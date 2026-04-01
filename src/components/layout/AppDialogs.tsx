@@ -1,5 +1,9 @@
-import { Suspense, lazy } from "react";
-import type { EnvironmentCheckResult } from "@/lib/environment";
+import { Suspense, lazy, useMemo } from "react";
+import {
+  getEnvironmentCheckSnapshotResult,
+  matchesEnvironmentCheckSnapshot,
+  type EnvironmentCheckSnapshot,
+} from "@/lib/environment";
 import type {
   ConfigProfile,
   ExecutionRecord,
@@ -68,8 +72,11 @@ export interface AppDialogsProps {
   environmentDialogOpen: boolean;
   onEnvironmentDialogOpenChange: (open: boolean) => void;
   environmentDefaultProviderIds: string[];
-  environmentInitialResult: EnvironmentCheckResult | null;
-  onEnvironmentChecked: (result: EnvironmentCheckResult) => void;
+  environmentInitialCheck: EnvironmentCheckSnapshot | null;
+  environmentLastCheck: EnvironmentCheckSnapshot | null;
+  onEnvironmentChecked: (snapshot: EnvironmentCheckSnapshot) => void;
+  environmentProviderIds: string[];
+  onEnvironmentProviderIdsChange: (providerIds: string[]) => void;
   settingsOpen: boolean;
   onSettingsOpenChange: (open: boolean) => void;
   language: Language;
@@ -149,6 +156,25 @@ export interface AppDialogsProps {
 }
 
 export function AppDialogs(props: AppDialogsProps) {
+  const environmentSettingsInitialCheck = useMemo(
+    () =>
+      matchesEnvironmentCheckSnapshot(
+        props.environmentLastCheck,
+        props.environmentProviderIds
+      )
+        ? props.environmentLastCheck
+        : null,
+    [props.environmentLastCheck, props.environmentProviderIds]
+  );
+
+  const currentProviderEnvironmentResult = useMemo(
+    () =>
+      getEnvironmentCheckSnapshotResult(props.environmentLastCheck, [
+        props.activeProviderId,
+      ]),
+    [props.activeProviderId, props.environmentLastCheck]
+  );
+
   return (
     <>
       {props.shortcutsOpen ? (
@@ -168,8 +194,9 @@ export function AppDialogs(props: AppDialogsProps) {
               props.onEnvironmentDialogOpenChange(open);
             }}
             defaultProviderIds={props.environmentDefaultProviderIds}
-            initialResult={props.environmentInitialResult}
+            initialCheck={props.environmentInitialCheck}
             onChecked={props.onEnvironmentChecked}
+            onProviderIdsChange={props.onEnvironmentProviderIdsChange}
           />
         </Suspense>
       ) : null}
@@ -194,8 +221,9 @@ export function AppDialogs(props: AppDialogsProps) {
             onOpenShortcuts={props.onOpenShortcuts}
             environmentStatus={props.environmentStatus}
             environmentCheckedAt={props.environmentCheckedAt}
-            environmentDefaultProviderIds={props.environmentDefaultProviderIds}
-            environmentInitialResult={props.environmentInitialResult}
+            environmentProviderIds={props.environmentProviderIds}
+            environmentInitialCheck={environmentSettingsInitialCheck}
+            onEnvironmentProviderIdsChange={props.onEnvironmentProviderIdsChange}
             onEnvironmentChecked={props.onEnvironmentChecked}
             updaterState={props.updaterState}
             onCheckForUpdates={props.onCheckForUpdates}
@@ -234,7 +262,7 @@ export function AppDialogs(props: AppDialogsProps) {
             open={props.releaseChecklistOpen}
             onOpenChange={props.onReleaseChecklistOpenChange}
             publishResult={props.publishResult}
-            environmentResult={props.environmentInitialResult}
+            environmentResult={currentProviderEnvironmentResult}
             packageResult={props.packageResult}
             signResult={props.signResult}
             onOpenEnvironment={props.onReleaseChecklistOpenEnvironment}

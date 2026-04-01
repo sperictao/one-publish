@@ -63,11 +63,13 @@ vi.mock("@/hooks/useAppState", async () => {
         defaultOutputDir: "",
         theme: "auto" as const,
         executionHistoryLimit: 20,
+        environmentProviderIds: ["dotnet"],
         setLanguage: mocks.noop,
         setMinimizeToTrayOnClose: mocks.noop,
         setDefaultOutputDir: mocks.noop,
         setTheme: mocks.noop,
         setExecutionHistoryLimit: mocks.noop,
+        setEnvironmentProviderIds: mocks.noop,
       };
     },
   };
@@ -92,7 +94,7 @@ vi.mock("@/hooks/useAppDialogs", () => ({
     configDialogOpen: false,
     environmentDialogOpen: false,
     environmentDefaultProviderIds: [],
-    environmentInitialResult: null,
+    environmentInitialCheck: null,
     handleOpenSettings: mocks.noop,
     openEnvironmentDialog: mocks.noop,
     handleEnvironmentDialogOpenChange: mocks.noop,
@@ -102,8 +104,8 @@ vi.mock("@/hooks/useAppDialogs", () => ({
 
 vi.mock("@/hooks/useDiagnosticsUiState", () => ({
   useDiagnosticsUiState: () => ({
-    environmentLastResult: null,
-    setEnvironmentLastResult: mocks.noop,
+    environmentLastCheck: null,
+    setEnvironmentLastCheck: mocks.noop,
     recentBundleExports: [],
     recentHistoryExports: [],
     trackBundleExport: mocks.noop,

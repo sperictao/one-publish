@@ -1,10 +1,10 @@
 import { useCallback, useState } from "react";
 
-import type { EnvironmentCheckResult } from "@/lib/environment";
+import type { EnvironmentCheckSnapshot } from "@/lib/environment";
 
 export function useDiagnosticsUiState() {
-  const [environmentLastResult, setEnvironmentLastResult] =
-    useState<EnvironmentCheckResult | null>(null);
+  const [environmentLastCheck, setEnvironmentLastCheck] =
+    useState<EnvironmentCheckSnapshot | null>(null);
   const [recentBundleExports, setRecentBundleExports] = useState<string[]>([]);
   const [recentHistoryExports, setRecentHistoryExports] = useState<string[]>([]);
 
@@ -21,8 +21,8 @@ export function useDiagnosticsUiState() {
   }, []);
 
   return {
-    environmentLastResult,
-    setEnvironmentLastResult,
+    environmentLastCheck,
+    setEnvironmentLastCheck,
     recentBundleExports,
     recentHistoryExports,
     trackBundleExport,

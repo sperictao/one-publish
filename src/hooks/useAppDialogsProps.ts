@@ -8,7 +8,10 @@ import type {
   ExecutionRecord,
   PublishConfigStore,
 } from "@/lib/store";
-import type { EnvironmentCheckResult } from "@/lib/environment";
+import type {
+  EnvironmentCheckSnapshot,
+} from "@/lib/environment";
+import { getEnvironmentCheckSnapshotResult } from "@/lib/environment";
 import type { ParameterSchema } from "@/types/parameters";
 
 interface QuickCreateTemplateOption {
@@ -29,8 +32,8 @@ export interface UseAppDialogsPropsParams {
   environmentDialogOpen: boolean;
   handleEnvironmentDialogOpenChange: (open: boolean) => void;
   environmentDefaultProviderIds: string[];
-  environmentInitialResult: EnvironmentCheckResult | null;
-  setEnvironmentLastResult: (result: EnvironmentCheckResult | null) => void;
+  environmentInitialCheck: EnvironmentCheckSnapshot | null;
+  setEnvironmentLastCheck: (snapshot: EnvironmentCheckSnapshot | null) => void;
   settingsOpen: boolean;
   setSettingsOpen: (open: boolean) => void;
   language: Language;
@@ -41,15 +44,17 @@ export interface UseAppDialogsPropsParams {
   setDefaultOutputDir: (dir: string) => void;
   executionHistoryLimit: number;
   setExecutionHistoryLimit: (limit: number) => void;
+  environmentProviderIds: string[];
+  setEnvironmentProviderIds: (providerIds: string[]) => void;
   isRerunChecklistEnabled: boolean;
   setIsRerunChecklistEnabled: (value: boolean) => void;
   theme: "light" | "dark" | "auto";
   setTheme: (theme: "light" | "dark" | "auto") => void;
   handleConfigDialogOpenChange: (open: boolean, onClose?: () => void) => void;
   environmentStatus: EnvironmentStatus;
-  environmentLastResult: EnvironmentCheckResult | null;
+  environmentLastCheck: EnvironmentCheckSnapshot | null;
   openEnvironmentDialog: (
-    initialResult?: EnvironmentCheckResult | null,
+    initialCheck?: EnvironmentCheckSnapshot | null,
     providerIds?: string[]
   ) => void;
   activeProviderId: string;
@@ -109,14 +114,20 @@ export interface UseAppDialogsPropsParams {
 }
 
 export function useAppDialogsProps(params: UseAppDialogsPropsParams): AppDialogsProps {
+  const currentProviderEnvironmentResult = getEnvironmentCheckSnapshotResult(
+    params.environmentLastCheck,
+    [params.activeProviderId]
+  );
+
   return {
     shortcutsOpen: params.shortcutsOpen,
     onShortcutsOpenChange: params.setShortcutsOpen,
     environmentDialogOpen: params.environmentDialogOpen,
     onEnvironmentDialogOpenChange: params.handleEnvironmentDialogOpenChange,
     environmentDefaultProviderIds: params.environmentDefaultProviderIds,
-    environmentInitialResult: params.environmentInitialResult,
-    onEnvironmentChecked: params.setEnvironmentLastResult,
+    environmentInitialCheck: params.environmentInitialCheck,
+    environmentLastCheck: params.environmentLastCheck,
+    onEnvironmentChecked: params.setEnvironmentLastCheck,
     settingsOpen: params.settingsOpen,
     onSettingsOpenChange: params.setSettingsOpen,
     language: params.language,
@@ -127,6 +138,8 @@ export function useAppDialogsProps(params: UseAppDialogsPropsParams): AppDialogs
     onDefaultOutputDirChange: params.setDefaultOutputDir,
     executionHistoryLimit: params.executionHistoryLimit,
     onExecutionHistoryLimitChange: params.setExecutionHistoryLimit,
+    environmentProviderIds: params.environmentProviderIds,
+    onEnvironmentProviderIdsChange: params.setEnvironmentProviderIds,
     preRerunChecklistEnabled: params.isRerunChecklistEnabled,
     onPreRerunChecklistEnabledChange: params.setIsRerunChecklistEnabled,
     theme: params.theme,
@@ -134,8 +147,11 @@ export function useAppDialogsProps(params: UseAppDialogsPropsParams): AppDialogs
     onOpenShortcuts: () => params.setShortcutsOpen(true),
     onOpenConfig: () => params.handleConfigDialogOpenChange(true),
     environmentStatus: params.environmentStatus,
-    environmentCheckedAt: params.environmentLastResult?.checked_at,
-    onOpenEnvironment: () => params.openEnvironmentDialog(null, [params.activeProviderId]),
+    environmentCheckedAt: currentProviderEnvironmentResult?.checked_at,
+    onOpenEnvironment: () =>
+      params.openEnvironmentDialog(params.environmentLastCheck, [
+        params.activeProviderId,
+      ]),
     rerunChecklistOpen: params.rerunChecklistOpen,
     pendingRerunRecord: params.pendingRerunRecord,
     selectedRepoCurrentBranch: params.selectedRepoCurrentBranch,
@@ -151,7 +167,9 @@ export function useAppDialogsProps(params: UseAppDialogsPropsParams): AppDialogs
     packageResult: params.packageResult,
     signResult: params.signResult,
     onReleaseChecklistOpenEnvironment: () =>
-      params.openEnvironmentDialog(params.environmentLastResult, [params.activeProviderId]),
+      params.openEnvironmentDialog(params.environmentLastCheck, [
+        params.activeProviderId,
+      ]),
     onReleaseChecklistOpenSettings: params.handleOpenSettings,
     selectedRepoExists: params.selectedRepoExists,
     commandImportProjectPath: params.commandImportProjectPath,

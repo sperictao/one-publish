@@ -4,8 +4,9 @@ import { toast } from "sonner";
 
 import type { TranslationMap } from "@/hooks/usePublishRunnerTypes";
 import {
+  createEnvironmentCheckSnapshot,
   runEnvironmentCheck,
-  type EnvironmentCheckResult,
+  type EnvironmentCheckSnapshot,
 } from "@/lib/environment";
 import type { ExecutionRecord } from "@/lib/store";
 import { useDotnetPublishSelection } from "@/hooks/useDotnetPublishSelection";
@@ -14,6 +15,7 @@ import { usePublishSpecBuilder } from "@/hooks/usePublishSpecBuilder";
 import { usePublishUiState } from "@/hooks/usePublishUiState";
 import { createPublishExecutionRecord } from "@/lib/publishExecutionRecord";
 import type { PublishConfigStore } from "@/lib/store";
+import type { ProjectInfo } from "@/types/project";
 import type { ParameterValue } from "@/types/parameters";
 
 const loadInvokeErrors = () => import("@/lib/tauri/invokeErrors");
@@ -36,12 +38,6 @@ export interface ProviderPublishSpec {
   provider_id: string;
   project_path: string;
   parameters: Record<string, unknown>;
-}
-
-interface ProjectInfo {
-  root_path: string;
-  project_file: string;
-  publish_profiles: string[];
 }
 
 interface DotnetPreset {
@@ -72,10 +68,10 @@ interface UsePublishRunnerParams {
   specVersion: number;
   pushRecentConfig: (key: string, repoId?: string | null) => void;
   openEnvironmentDialog: (
-    initialResult?: EnvironmentCheckResult | null,
+    initialCheck?: EnvironmentCheckSnapshot | null,
     providerIds?: string[]
   ) => void;
-  setEnvironmentLastResult: (result: EnvironmentCheckResult | null) => void;
+  setEnvironmentLastCheck: (snapshot: EnvironmentCheckSnapshot | null) => void;
   savePublishRecord: (record: ExecutionRecord) => void;
 }
 
@@ -96,7 +92,7 @@ export function usePublishRunner({
   specVersion,
   pushRecentConfig,
   openEnvironmentDialog,
-  setEnvironmentLastResult,
+  setEnvironmentLastCheck,
   savePublishRecord,
 }: UsePublishRunnerParams) {
   const {
@@ -160,14 +156,17 @@ export function usePublishRunner({
     async (spec: ProviderPublishSpec, recentConfigKey?: string | null) => {
       try {
         const env = await runEnvironmentCheck([spec.provider_id]);
-        setEnvironmentLastResult(env);
+        const environmentCheck = createEnvironmentCheckSnapshot(env, [
+          spec.provider_id,
+        ]);
+        setEnvironmentLastCheck(environmentCheck);
 
         const critical = env.issues.find((item) => item.severity === "critical");
         if (critical) {
           toast.error(appT.environmentBlocked || "环境未就绪，已阻止发布", {
             description: critical.description,
           });
-          openEnvironmentDialog(env, [spec.provider_id]);
+          openEnvironmentDialog(environmentCheck, [spec.provider_id]);
           return;
         }
 
@@ -287,7 +286,7 @@ export function usePublishRunner({
       pushRecentConfig,
       savePublishRecord,
       selectedRepoId,
-      setEnvironmentLastResult,
+      setEnvironmentLastCheck,
       waitForOutputLogSnapshot,
     ]
   );

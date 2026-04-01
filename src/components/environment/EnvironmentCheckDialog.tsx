@@ -20,7 +20,11 @@ import { Switch } from "@/components/ui/switch";
 
 import {
   applyFix,
+  createEnvironmentCheckSnapshot,
+  DEFAULT_ENVIRONMENT_PROVIDER_IDS,
+  normalizeEnvironmentProviderIds,
   runEnvironmentCheck,
+  type EnvironmentCheckSnapshot,
   type EnvironmentCheckResult,
   type EnvironmentIssue,
   type FixAction,
@@ -36,10 +40,6 @@ const ALL_PROVIDERS: Array<{ id: string; label: string; description: string }> =
     { id: "go", label: "Go", description: "go" },
     { id: "java", label: "Java", description: "java/javac" },
   ];
-
-function uniqSorted(ids: string[]) {
-  return Array.from(new Set(ids.map((x) => x.trim()).filter(Boolean))).sort();
-}
 
 function severityRank(sev: IssueSeverity) {
   if (sev === "critical") return 0;
@@ -75,30 +75,35 @@ export interface EnvironmentCheckDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   defaultProviderIds?: string[];
-  initialResult?: EnvironmentCheckResult | null;
-  onChecked?: (result: EnvironmentCheckResult) => void;
+  initialCheck?: EnvironmentCheckSnapshot | null;
+  onChecked?: (snapshot: EnvironmentCheckSnapshot) => void;
+  onProviderIdsChange?: (providerIds: string[]) => void;
 }
 
 export interface EnvironmentCheckContentProps {
   active: boolean;
   defaultProviderIds?: string[];
-  initialResult?: EnvironmentCheckResult | null;
-  onChecked?: (result: EnvironmentCheckResult) => void;
+  initialCheck?: EnvironmentCheckSnapshot | null;
+  onChecked?: (snapshot: EnvironmentCheckSnapshot) => void;
+  onProviderIdsChange?: (providerIds: string[]) => void;
 }
 
 export function EnvironmentCheckContent({
   active,
-  defaultProviderIds = ["dotnet"],
-  initialResult = null,
+  defaultProviderIds = DEFAULT_ENVIRONMENT_PROVIDER_IDS,
+  initialCheck = null,
   onChecked,
+  onProviderIdsChange,
 }: EnvironmentCheckContentProps) {
   const { translations } = useI18n();
 
   const [selectedProviderIds, setSelectedProviderIds] = useState<string[]>(
-    uniqSorted(defaultProviderIds)
+    normalizeEnvironmentProviderIds(defaultProviderIds)
   );
   const [checking, setChecking] = useState(false);
-  const [result, setResult] = useState<EnvironmentCheckResult | null>(initialResult);
+  const [result, setResult] = useState<EnvironmentCheckResult | null>(
+    initialCheck?.result || null
+  );
   const [error, setError] = useState<string | null>(null);
 
   const [pendingRun, setPendingRun] = useState<FixAction | null>(null);
@@ -107,13 +112,13 @@ export function EnvironmentCheckContent({
 
   useEffect(() => {
     if (!active) return;
-    setSelectedProviderIds(uniqSorted(defaultProviderIds));
-    setResult(initialResult);
+    setSelectedProviderIds(normalizeEnvironmentProviderIds(defaultProviderIds));
+    setResult(initialCheck?.result || null);
     setError(null);
     setLastFixResult(null);
     setPendingRun(null);
     setRunningFix(false);
-  }, [active, defaultProviderIds, initialResult]);
+  }, [active, defaultProviderIds, initialCheck]);
 
   const issues = useMemo(() => {
     return (result?.issues || []).slice().sort(issueSort);
@@ -154,8 +159,9 @@ export function EnvironmentCheckContent({
     setError(null);
     try {
       const res = await runEnvironmentCheck(selectedProviderIds);
-      setResult(res);
-      onChecked?.(res);
+      const snapshot = createEnvironmentCheckSnapshot(res, selectedProviderIds);
+      setResult(snapshot.result);
+      onChecked?.(snapshot);
     } catch (err) {
       const msg = String(err);
       setError(msg);
@@ -175,13 +181,16 @@ export function EnvironmentCheckContent({
   }, [active]);
 
   const toggleProvider = (id: string, enabled: boolean) => {
-    setSelectedProviderIds((prev) => {
-      const set = new Set(prev);
-      if (enabled) set.add(id);
-      else set.delete(id);
-      const next = Array.from(set);
-      return next.length === 0 ? ["dotnet"] : uniqSorted(next);
-    });
+    const nextSet = new Set(selectedProviderIds);
+    if (enabled) nextSet.add(id);
+    else nextSet.delete(id);
+
+    const nextSelectedProviderIds = normalizeEnvironmentProviderIds(Array.from(nextSet));
+    setSelectedProviderIds(nextSelectedProviderIds);
+    onProviderIdsChange?.(nextSelectedProviderIds);
+    setResult(null);
+    setError(null);
+    setLastFixResult(null);
   };
 
   const handleCopy = async (command: string) => {
@@ -504,9 +513,10 @@ export function EnvironmentCheckContent({
 export function EnvironmentCheckDialog({
   open,
   onOpenChange,
-  defaultProviderIds = ["dotnet"],
-  initialResult = null,
+  defaultProviderIds = DEFAULT_ENVIRONMENT_PROVIDER_IDS,
+  initialCheck = null,
   onChecked,
+  onProviderIdsChange,
 }: EnvironmentCheckDialogProps) {
   const { translations } = useI18n();
 
@@ -530,8 +540,9 @@ export function EnvironmentCheckDialog({
         <EnvironmentCheckContent
           active={open}
           defaultProviderIds={defaultProviderIds}
-          initialResult={initialResult}
+          initialCheck={initialCheck}
           onChecked={onChecked}
+          onProviderIdsChange={onProviderIdsChange}
         />
       </AppDialogShell>
     </Dialog>

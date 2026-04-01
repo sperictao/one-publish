@@ -196,10 +196,12 @@ function App() {
     defaultOutputDir,
     theme,
     executionHistoryLimit,
+    environmentProviderIds,
     setMinimizeToTrayOnClose,
     setDefaultOutputDir,
     setTheme,
     setExecutionHistoryLimit,
+    setEnvironmentProviderIds,
     setLanguage: setPreferenceLanguage,
   } = useAppState();
 
@@ -299,12 +301,12 @@ function App() {
     configDialogOpen,
     environmentDialogOpen,
     environmentDefaultProviderIds,
-    environmentInitialResult,
+    environmentInitialCheck,
     handleOpenSettings,
     openEnvironmentDialog,
     handleEnvironmentDialogOpenChange,
     handleConfigDialogOpenChange,
-  } = useAppDialogs(activeProviderId);
+  } = useAppDialogs(environmentProviderIds);
 
   const {
     leftPanelCollapsed,
@@ -332,8 +334,8 @@ function App() {
   });
 
   const {
-    environmentLastResult,
-    setEnvironmentLastResult,
+    environmentLastCheck,
+    setEnvironmentLastCheck,
     recentBundleExports,
     recentHistoryExports,
     trackBundleExport,
@@ -496,7 +498,7 @@ function App() {
     specVersion: SPEC_VERSION,
     pushRecentConfig,
     openEnvironmentDialog,
-    setEnvironmentLastResult,
+    setEnvironmentLastCheck,
     savePublishRecord,
   });
 
@@ -604,7 +606,7 @@ function App() {
         publishResult,
         lastPublishSpec,
         outputLog,
-        environmentLastResult,
+        environmentLastCheck,
         currentPublishRecordId,
         recentBundleExports,
         recentHistoryExports,
@@ -731,8 +733,8 @@ function App() {
             environmentDialogOpen={environmentDialogOpen}
             handleEnvironmentDialogOpenChange={handleEnvironmentDialogOpenChange}
             environmentDefaultProviderIds={environmentDefaultProviderIds}
-            environmentInitialResult={environmentInitialResult}
-            setEnvironmentLastResult={setEnvironmentLastResult}
+            environmentInitialCheck={environmentInitialCheck}
+            setEnvironmentLastCheck={setEnvironmentLastCheck}
             settingsOpen={settingsOpen}
             setSettingsOpen={setSettingsOpen}
             language={language}
@@ -743,12 +745,14 @@ function App() {
             setDefaultOutputDir={setDefaultOutputDir}
             executionHistoryLimit={executionHistoryLimit}
             setExecutionHistoryLimit={setExecutionHistoryLimit}
+            environmentProviderIds={environmentProviderIds}
+            setEnvironmentProviderIds={setEnvironmentProviderIds}
             isRerunChecklistEnabled={isRerunChecklistEnabled}
             setIsRerunChecklistEnabled={setIsRerunChecklistEnabled}
             theme={theme}
             setTheme={setTheme}
             handleConfigDialogOpenChange={handleConfigDialogOpenChange}
-            environmentLastResult={environmentLastResult}
+            environmentLastCheck={environmentLastCheck}
             openEnvironmentDialog={openEnvironmentDialog}
             activeProviderId={activeProviderId}
             updaterState={updaterState}

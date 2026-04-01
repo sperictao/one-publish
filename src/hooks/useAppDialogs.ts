@@ -1,17 +1,21 @@
 import { useCallback, useState } from "react";
 
-import type { EnvironmentCheckResult } from "@/lib/environment";
+import {
+  scopeEnvironmentCheckSnapshot,
+  normalizeEnvironmentProviderIds,
+  type EnvironmentCheckSnapshot,
+} from "@/lib/environment";
 
-export function useAppDialogs(activeProviderId: string) {
+export function useAppDialogs(environmentProviderIds: string[]) {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const [commandImportOpen, setCommandImportOpen] = useState(false);
   const [configDialogOpen, setConfigDialogOpen] = useState(false);
   const [environmentDialogOpen, setEnvironmentDialogOpen] = useState(false);
   const [environmentDefaultProviderIds, setEnvironmentDefaultProviderIds] =
-    useState<string[]>(["dotnet"]);
-  const [environmentInitialResult, setEnvironmentInitialResult] =
-    useState<EnvironmentCheckResult | null>(null);
+    useState<string[]>(normalizeEnvironmentProviderIds(environmentProviderIds));
+  const [environmentInitialCheck, setEnvironmentInitialCheck] =
+    useState<EnvironmentCheckSnapshot | null>(null);
 
   const handleOpenSettings = useCallback(() => {
     setSettingsOpen(true);
@@ -19,20 +23,23 @@ export function useAppDialogs(activeProviderId: string) {
 
   const openEnvironmentDialog = useCallback(
     (
-      initialResult: EnvironmentCheckResult | null = null,
-      providerIds: string[] = [activeProviderId]
+      initialCheck: EnvironmentCheckSnapshot | null = null,
+      providerIds: string[] = environmentProviderIds
     ) => {
-      setEnvironmentDefaultProviderIds(providerIds);
-      setEnvironmentInitialResult(initialResult);
+      const normalizedProviderIds = normalizeEnvironmentProviderIds(providerIds);
+      setEnvironmentDefaultProviderIds(normalizedProviderIds);
+      setEnvironmentInitialCheck(
+        scopeEnvironmentCheckSnapshot(initialCheck, normalizedProviderIds)
+      );
       setEnvironmentDialogOpen(true);
     },
-    [activeProviderId]
+    [environmentProviderIds]
   );
 
   const handleEnvironmentDialogOpenChange = useCallback((open: boolean) => {
     setEnvironmentDialogOpen(open);
     if (!open) {
-      setEnvironmentInitialResult(null);
+      setEnvironmentInitialCheck(null);
     }
   }, []);
 
@@ -58,7 +65,7 @@ export function useAppDialogs(activeProviderId: string) {
     environmentDialogOpen,
     setEnvironmentDialogOpen,
     environmentDefaultProviderIds,
-    environmentInitialResult,
+    environmentInitialCheck,
     handleOpenSettings,
     openEnvironmentDialog,
     handleEnvironmentDialogOpenChange,

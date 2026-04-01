@@ -236,6 +236,9 @@ pub struct AppState {
     /// 最近执行历史保留上限
     #[serde(default = "default_execution_history_limit")]
     pub execution_history_limit: usize,
+    /// 环境检查启用的 Provider 列表
+    #[serde(default = "default_environment_provider_ids")]
+    pub environment_provider_ids: Vec<String>,
     /// 最近执行历史
     #[serde(default)]
     pub execution_history: Vec<ExecutionRecord>,
@@ -251,6 +254,26 @@ fn default_language() -> String {
 
 fn default_theme() -> String {
     "auto".to_string()
+}
+
+fn default_environment_provider_ids() -> Vec<String> {
+    vec!["dotnet".to_string()]
+}
+
+fn normalize_environment_provider_ids(provider_ids: Vec<String>) -> Vec<String> {
+    let mut normalized = provider_ids
+        .into_iter()
+        .map(|id| id.trim().to_string())
+        .filter(|id| !id.is_empty())
+        .collect::<Vec<_>>();
+    normalized.sort();
+    normalized.dedup();
+
+    if normalized.is_empty() {
+        default_environment_provider_ids()
+    } else {
+        normalized
+    }
 }
 
 fn default_left_panel_width() -> i32 {
@@ -282,6 +305,7 @@ impl Default for AppState {
             theme: default_theme(),
             profiles: Vec::new(),
             execution_history_limit: default_execution_history_limit(),
+            environment_provider_ids: default_environment_provider_ids(),
             execution_history: Vec::new(),
         }
     }
@@ -307,6 +331,8 @@ fn sanitize_state(mut state: AppState) -> AppState {
     state.execution_history_limit =
         normalize_execution_history_limit(state.execution_history_limit);
     trim_execution_history(&mut state.execution_history, state.execution_history_limit);
+    state.environment_provider_ids =
+        normalize_environment_provider_ids(state.environment_provider_ids);
 
     // 一次性迁移：将全局发布配置下沉到各仓库
     let global_has_value = state.selected_preset != default_preset()
@@ -433,6 +459,7 @@ fn build_frontend_state(state: &AppState) -> AppState {
         theme: state.theme.clone(),
         profiles: Vec::new(),
         execution_history_limit: state.execution_history_limit,
+        environment_provider_ids: state.environment_provider_ids.clone(),
         execution_history: Vec::new(),
     }
 }
@@ -549,6 +576,7 @@ pub async fn update_preferences(
     default_output_dir: Option<String>,
     theme: Option<String>,
     execution_history_limit: Option<usize>,
+    environment_provider_ids: Option<Vec<String>>,
 ) -> Result<AppState, AppError> {
     let mut state = get_state();
     let language_changed = language.is_some();
@@ -572,6 +600,10 @@ pub async fn update_preferences(
     if let Some(limit) = execution_history_limit {
         state.execution_history_limit = normalize_execution_history_limit(limit);
         trim_execution_history(&mut state.execution_history, state.execution_history_limit);
+    }
+
+    if let Some(provider_ids) = environment_provider_ids {
+        state.environment_provider_ids = normalize_environment_provider_ids(provider_ids);
     }
 
     update_state(state)?;

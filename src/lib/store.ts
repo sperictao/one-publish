@@ -3,6 +3,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import type { Branch, Repository, RepoPublishConfig } from "@/types/repository";
 import type { ParameterSchema } from "@/types/parameters";
+import { normalizeEnvironmentProviderIds } from "@/lib/environment";
 
 // 发布配置存储类型
 export interface PublishConfigStore {
@@ -61,6 +62,7 @@ export interface BootstrapState {
   defaultOutputDir: string;
   theme: "light" | "dark" | "auto";
   executionHistoryLimit: number;
+  environmentProviderIds: string[];
 }
 
 // 完整应用状态：仅用于持久化和少数全量命令交互
@@ -84,6 +86,7 @@ export const defaultBootstrapState: BootstrapState = {
   defaultOutputDir: "",
   theme: "auto",
   executionHistoryLimit: 20,
+  environmentProviderIds: ["dotnet"],
 };
 
 // 默认状态
@@ -204,11 +207,16 @@ export async function updatePreferences(params: {
   defaultOutputDir?: string;
   theme?: "light" | "dark" | "auto";
   executionHistoryLimit?: number;
+  environmentProviderIds?: string[];
 }): Promise<AppState> {
   return await invoke<AppState>("update_preferences", {
     ...params,
     default_output_dir: params.defaultOutputDir,
     execution_history_limit: params.executionHistoryLimit,
+    environment_provider_ids:
+      params.environmentProviderIds !== undefined
+        ? normalizeEnvironmentProviderIds(params.environmentProviderIds)
+        : undefined,
   });
 }
 

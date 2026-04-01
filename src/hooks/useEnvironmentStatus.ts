@@ -1,22 +1,37 @@
 import { useMemo } from "react";
 
-import type { EnvironmentCheckResult } from "@/lib/environment";
+import {
+  getEnvironmentCheckSnapshotResult,
+  type EnvironmentCheckSnapshot,
+} from "@/lib/environment";
 
 export type EnvironmentStatus = "unknown" | "ready" | "warning" | "blocked";
 
 export function useEnvironmentStatus(
-  environmentLastResult: EnvironmentCheckResult | null
+  environmentLastCheck: EnvironmentCheckSnapshot | null,
+  activeProviderId: string
 ): EnvironmentStatus {
   return useMemo(() => {
-    if (!environmentLastResult) {
+    const scopedResult = getEnvironmentCheckSnapshotResult(
+      environmentLastCheck,
+      [activeProviderId]
+    );
+
+    if (!scopedResult) {
       return "unknown";
     }
-    if (environmentLastResult.issues.some((issue) => issue.severity === "critical")) {
+
+    if (
+      scopedResult.providers.some((provider) => !provider.installed) ||
+      scopedResult.issues.some((issue) => issue.severity === "critical")
+    ) {
       return "blocked";
     }
-    if (environmentLastResult.issues.some((issue) => issue.severity === "warning")) {
+
+    if (scopedResult.issues.some((issue) => issue.severity === "warning")) {
       return "warning";
     }
+
     return "ready";
-  }, [environmentLastResult]);
+  }, [activeProviderId, environmentLastCheck]);
 }

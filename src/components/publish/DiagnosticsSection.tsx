@@ -9,7 +9,7 @@ import { useFailureGroupsCardProps } from "@/hooks/useFailureGroupsCardProps";
 import { useHistoryActions } from "@/hooks/useHistoryActions";
 import { useHistoryDiagnosticsState } from "@/hooks/useHistoryDiagnosticsState";
 import type { ProviderPublishSpec, PublishResult } from "@/hooks/usePublishRunner";
-import type { EnvironmentCheckResult } from "@/lib/environment";
+import type { EnvironmentCheckSnapshot } from "@/lib/environment";
 import type { ExecutionRecord } from "@/lib/store";
 import type { Repository } from "@/types/repository";
 
@@ -27,7 +27,7 @@ export interface DiagnosticsSectionProps {
   publishResult: PublishResult | null;
   lastPublishSpec: ProviderPublishSpec | null;
   outputLog: string;
-  environmentLastResult: EnvironmentCheckResult | null;
+  environmentLastCheck: EnvironmentCheckSnapshot | null;
   currentPublishRecordId: string | null;
   recentBundleExports: string[];
   recentHistoryExports: string[];
@@ -50,7 +50,7 @@ export function DiagnosticsSection({
   publishResult,
   lastPublishSpec,
   outputLog,
-  environmentLastResult,
+  environmentLastCheck,
   currentPublishRecordId,
   recentBundleExports,
   recentHistoryExports,
@@ -120,7 +120,7 @@ export function DiagnosticsSection({
     publishResult,
     lastPublishSpec,
     outputLog,
-    environmentLastResult,
+    environmentLastCheck,
     currentPublishRecordId,
     selectedFailureGroup,
     representativeFailureRecord,

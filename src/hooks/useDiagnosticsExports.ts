@@ -3,7 +3,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { save } from "@tauri-apps/plugin-dialog";
 import { toast } from "sonner";
 
-import type { EnvironmentCheckResult } from "@/lib/environment";
+import type { EnvironmentCheckSnapshot } from "@/lib/environment";
 import type { HistoryExportFormat } from "@/lib/historyFilterPresets";
 import type { FailureGroup } from "@/lib/failureGroups";
 import { joinPath } from "@/lib/paths";
@@ -108,7 +108,7 @@ interface UseDiagnosticsExportsParams {
   publishResult: PublishResult | null;
   lastPublishSpec: ProviderPublishSpec | null;
   outputLog: string;
-  environmentLastResult: EnvironmentCheckResult | null;
+  environmentLastCheck: EnvironmentCheckSnapshot | null;
   currentPublishRecordId: string | null;
   selectedFailureGroup: FailureGroup | null;
   representativeFailureRecord: ExecutionRecord | null;
@@ -130,7 +130,7 @@ export function useDiagnosticsExports({
   publishResult,
   lastPublishSpec,
   outputLog,
-  environmentLastResult,
+  environmentLastCheck,
   currentPublishRecordId,
   selectedFailureGroup,
   representativeFailureRecord,
@@ -177,11 +177,12 @@ export function useDiagnosticsExports({
     const commandLine =
       outputLog.split("\n").find((line) => line.startsWith("$ ")) ||
       "(not captured)";
-    const providerStatuses = environmentLastResult?.providers || [];
-    const warningCount = (environmentLastResult?.issues || []).filter(
+    const environmentResult = environmentLastCheck?.result || null;
+    const providerStatuses = environmentResult?.providers || [];
+    const warningCount = (environmentResult?.issues || []).filter(
       (item) => item.severity === "warning"
     ).length;
-    const criticalCount = (environmentLastResult?.issues || []).filter(
+    const criticalCount = (environmentResult?.issues || []).filter(
       (item) => item.severity === "critical"
     ).length;
 
@@ -193,7 +194,9 @@ export function useDiagnosticsExports({
         line: commandLine,
       },
       environmentSummary: {
-        providerIds: providerStatuses.map((status) => status.provider_id),
+        providerIds:
+          environmentLastCheck?.providerIds ||
+          providerStatuses.map((status) => status.provider_id),
         warningCount,
         criticalCount,
       },
@@ -237,7 +240,7 @@ export function useDiagnosticsExports({
     }
   }, [
     currentPublishRecordId,
-    environmentLastResult,
+    environmentLastCheck,
     historyT,
     lastPublishSpec,
     outputLog,
