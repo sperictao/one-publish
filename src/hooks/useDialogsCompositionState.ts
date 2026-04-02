@@ -4,13 +4,21 @@ import {
   useAppDialogsProps,
   type UseAppDialogsPropsParams,
 } from "@/hooks/useAppDialogsProps";
-import type { EnvironmentCheckSnapshot } from "@/lib/environment";
+import {
+  getEnvironmentCheckSnapshotResult,
+  matchesEnvironmentCheckSnapshot,
+  type EnvironmentCheckSnapshot,
+} from "@/lib/environment";
 import type { PublishConfigStore } from "@/lib/store";
 import type { ParameterSchema } from "@/types/parameters";
 
 export type DialogsCompositionParams = Omit<
   UseAppDialogsPropsParams,
-  "environmentStatus" | "commandImportProjectPath" | "currentConfigParameters"
+  | "environmentStatus"
+  | "environmentSettingsInitialCheck"
+  | "currentProviderEnvironmentResult"
+  | "commandImportProjectPath"
+  | "currentConfigParameters"
 > & {
   environmentLastCheck: EnvironmentCheckSnapshot | null;
   activeProviderId: string;
@@ -27,6 +35,16 @@ export function useDialogsCompositionState(params: DialogsCompositionParams) {
     params.environmentLastCheck,
     params.activeProviderId
   );
+  const environmentSettingsInitialCheck = matchesEnvironmentCheckSnapshot(
+    params.environmentLastCheck,
+    params.environmentProviderIds
+  )
+    ? params.environmentLastCheck
+    : null;
+  const currentProviderEnvironmentResult = getEnvironmentCheckSnapshotResult(
+    params.environmentLastCheck,
+    [params.activeProviderId]
+  );
 
   const { commandImportProjectPath, currentConfigParameters } =
     useDialogDerivedState({
@@ -40,6 +58,8 @@ export function useDialogsCompositionState(params: DialogsCompositionParams) {
   const appDialogsProps = useAppDialogsProps({
     ...params,
     environmentStatus,
+    environmentSettingsInitialCheck,
+    currentProviderEnvironmentResult,
     commandImportProjectPath,
     currentConfigParameters,
   });
