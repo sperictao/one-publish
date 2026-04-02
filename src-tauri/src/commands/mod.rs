@@ -142,14 +142,89 @@ struct PublishLogSummary {
     ends_with_newline: bool,
 }
 #[derive(Clone)]
-struct RunningExecution {
+struct StartingExecution {
+    session_id: String,
+    cancel_requested: Arc<AtomicBool>,
+}
+
+#[derive(Clone)]
+struct ActiveExecution {
     session_id: String,
     child: Arc<Mutex<Child>>,
     cancel_requested: Arc<AtomicBool>,
 }
+
+#[derive(Clone)]
+enum RunningExecution {
+    Starting(StartingExecution),
+    Running(ActiveExecution),
+}
+
+impl RunningExecution {
+    fn session_id(&self) -> &str {
+        match self {
+            Self::Starting(execution) => &execution.session_id,
+            Self::Running(execution) => &execution.session_id,
+        }
+    }
+}
+
+#[derive(Debug)]
+struct ExecutionPermit {
+    session_id: String,
+    cancel_requested: Arc<AtomicBool>,
+}
+
+impl ExecutionPermit {
+    fn is_cancel_requested(&self) -> bool {
+        self.cancel_requested.load(Ordering::SeqCst)
+    }
+
+    async fn mark_running(&self, child: Arc<Mutex<Child>>) {
+        let mut slot = running_execution_slot().lock().await;
+        if matches!(
+            slot.as_ref(),
+            Some(RunningExecution::Starting(execution)) if execution.session_id == self.session_id
+        ) {
+            *slot = Some(RunningExecution::Running(ActiveExecution {
+                session_id: self.session_id.clone(),
+                child,
+                cancel_requested: Arc::clone(&self.cancel_requested),
+            }));
+        }
+    }
+}
+
 static RUNNING_EXECUTION: OnceLock<Mutex<Option<RunningExecution>>> = OnceLock::new();
 fn running_execution_slot() -> &'static Mutex<Option<RunningExecution>> {
     RUNNING_EXECUTION.get_or_init(|| Mutex::new(None))
+}
+
+#[cfg(test)]
+async fn force_clear_running_execution() {
+    let mut slot = running_execution_slot().lock().await;
+    *slot = None;
+}
+
+async fn reserve_execution(session_id: String) -> Result<ExecutionPermit, crate::errors::AppError> {
+    let mut slot = running_execution_slot().lock().await;
+    if slot.is_some() {
+        return Err(publish_error(
+            "another publish execution is already running",
+            "publish_already_running",
+        ));
+    }
+
+    let cancel_requested = Arc::new(AtomicBool::new(false));
+    *slot = Some(RunningExecution::Starting(StartingExecution {
+        session_id: session_id.clone(),
+        cancel_requested: Arc::clone(&cancel_requested),
+    }));
+
+    Ok(ExecutionPermit {
+        session_id,
+        cancel_requested,
+    })
 }
 
 fn classify_process_spawn_error(kind: IoErrorKind) -> &'static str {
@@ -237,15 +312,23 @@ pub async fn cancel_provider_publish() -> Result<bool, crate::errors::AppError> 
     let Some(running) = running else {
         return Ok(false);
     };
-    running.cancel_requested.store(true, Ordering::SeqCst);
-    let mut child = running.child.lock().await;
-    child.start_kill().map_err(|err| {
-        publish_error(
-            format!("failed to cancel publish: {}", err),
-            "publish_cancel_failed",
-        )
-    })?;
-    Ok(true)
+    match running {
+        RunningExecution::Starting(execution) => {
+            execution.cancel_requested.store(true, Ordering::SeqCst);
+            Ok(true)
+        }
+        RunningExecution::Running(execution) => {
+            execution.cancel_requested.store(true, Ordering::SeqCst);
+            let mut child = execution.child.lock().await;
+            child.start_kill().map_err(|err| {
+                publish_error(
+                    format!("failed to cancel publish: {}", err),
+                    "publish_cancel_failed",
+                )
+            })?;
+            Ok(true)
+        }
+    }
 }
 fn build_dotnet_spec_from_config(project_path: String, config: PublishConfig) -> PublishSpec {
     let mut parameters = BTreeMap::<String, SpecValue>::new();
@@ -310,154 +393,153 @@ async fn execute_publish_spec(
     app: &AppHandle,
     spec: PublishSpec,
 ) -> Result<PublishResult, crate::errors::AppError> {
-    {
-        let running = running_execution_slot().lock().await;
-        if running.is_some() {
-            return Err(publish_error(
-                "another publish execution is already running",
-                "publish_already_running",
-            ));
-        }
-    }
-    let plan = crate::compiler::compile(&spec).map_err(crate::errors::AppError::from)?;
-    let registry = ProviderRegistry::new();
-    let provider = registry
-        .get(&spec.provider_id)
-        .map_err(crate::errors::AppError::from)?;
-    let schema = provider.get_schema().map_err(publish_schema_error)?;
-    let renderer = crate::parameter::ParameterRenderer::new(schema);
-    let rendered = renderer
-        .render(&spec.parameters)
-        .map_err(publish_render_error)?;
-    let (base_program, mut args) = resolve_plan_command(&plan)?;
-    if spec.provider_id == "dotnet" {
-        args.push(spec.project_path.clone());
-    }
-    args.extend(rendered.args);
-    let working_dir = resolve_working_dir(&spec);
-    let program = if spec.provider_id == "java" {
-        resolve_java_program(&base_program, working_dir.as_ref())?
-    } else {
-        base_program
-    };
-    let program = resolve_spawn_program(&program);
-    log::info!(
-        "Executing provider plan: provider={} program={} args={}",
-        spec.provider_id,
-        program,
-        args.join(" ")
-    );
-    let mut command = Command::new(&program);
-    command
-        .args(&args)
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped());
-    if let Some(dir) = &working_dir {
-        command.current_dir(dir);
-    }
-    let mut child = command.spawn().map_err(|e| {
-        publish_error(
-            format!("failed to spawn {}: {}", program, e),
-            classify_process_spawn_error(e.kind()),
-        )
-    })?;
-    let command_line = if args.is_empty() {
-        format!("$ {}", program)
-    } else {
-        format!("$ {} {}", program, args.join(" "))
-    };
-    let command_line_output = format!("{}\n", command_line);
     let session_id = build_publish_session_id(&spec.provider_id);
-    emit_publish_log(app, &session_id, &command_line_output);
-    let stdout = child.stdout.take();
-    let stderr = child.stderr.take();
-    let child = Arc::new(Mutex::new(child));
-    let cancel_requested = Arc::new(AtomicBool::new(false));
-    {
-        let mut slot = running_execution_slot().lock().await;
-        *slot = Some(RunningExecution {
-            session_id: session_id.clone(),
-            child: Arc::clone(&child),
-            cancel_requested: Arc::clone(&cancel_requested),
-        });
-    }
-    let run_result: Result<(bool, bool, Option<String>), crate::errors::AppError> = async {
-        let (sender, receiver) = mpsc::unbounded_channel::<(String, String)>();
-        let collector = tokio::spawn(collect_log_chunks(
-            app.clone(),
-            session_id.clone(),
-            receiver,
-        ));
-        let mut readers = Vec::new();
-        if let Some(stdout) = stdout {
-            readers.push(tokio::spawn(read_stream_chunks(
-                stdout,
-                "stdout",
-                sender.clone(),
-            )));
+    let permit = reserve_execution(session_id.clone()).await?;
+    let execution_result: Result<PublishResult, crate::errors::AppError> = async {
+        let plan = crate::compiler::compile(&spec).map_err(crate::errors::AppError::from)?;
+        let registry = ProviderRegistry::new();
+        let provider = registry
+            .get(&spec.provider_id)
+            .map_err(crate::errors::AppError::from)?;
+        let schema = provider.get_schema().map_err(publish_schema_error)?;
+        let renderer = crate::parameter::ParameterRenderer::new(schema);
+        let rendered = renderer
+            .render(&spec.parameters)
+            .map_err(publish_render_error)?;
+        let (base_program, mut args) = resolve_plan_command(&plan)?;
+        if spec.provider_id == "dotnet" {
+            args.push(spec.project_path.clone());
         }
-        if let Some(stderr) = stderr {
-            readers.push(tokio::spawn(read_stream_chunks(
-                stderr,
-                "stderr",
-                sender.clone(),
-            )));
-        }
-        drop(sender);
-        let status = {
-            let mut running_child = child.lock().await;
-            running_child.wait().await.map_err(|err| {
-                publish_error(
-                    format!("failed to wait publish process: {}", err),
-                    classify_process_wait_error(err.kind()),
-                )
-            })?
+        args.extend(rendered.args);
+        let working_dir = resolve_working_dir(&spec);
+        let program = if spec.provider_id == "java" {
+            resolve_java_program(&base_program, working_dir.as_ref())?
+        } else {
+            base_program
         };
-        for reader in readers {
-            let _ = reader.await;
+        if permit.is_cancel_requested() {
+            return Ok(PublishResult {
+                provider_id: spec.provider_id.clone(),
+                success: false,
+                cancelled: true,
+                error: Some("发布已取消".to_string()),
+                output_dir: String::new(),
+                file_count: 0,
+            });
         }
-        let log_summary = collector.await.map_err(|err| {
+        let program = resolve_spawn_program(&program);
+        log::info!(
+            "Executing provider plan: provider={} program={} args={}",
+            spec.provider_id,
+            program,
+            args.join(" ")
+        );
+        let mut command = Command::new(&program);
+        command
+            .args(&args)
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped());
+        if let Some(dir) = &working_dir {
+            command.current_dir(dir);
+        }
+        let mut child = command.spawn().map_err(|e| {
             publish_error(
-                format!("failed to collect publish logs: {}", err),
-                "publish_log_collect_failed",
+                format!("failed to spawn {}: {}", program, e),
+                classify_process_spawn_error(e.kind()),
             )
         })?;
-        let cancelled = cancel_requested.load(Ordering::SeqCst);
-        if cancelled {
-            let cancelled_line = if log_summary.ends_with_newline {
-                "[cancelled] 发布已取消".to_string()
-            } else {
-                "\n[cancelled] 发布已取消".to_string()
-            };
-            emit_publish_log(app, &session_id, &cancelled_line);
-        }
-        let success = status.success() && !cancelled;
-        let error = if cancelled {
-            Some("发布已取消".to_string())
-        } else if success {
-            None
+        let command_line = if args.is_empty() {
+            format!("$ {}", program)
         } else {
-            Some(format!("发布失败，退出代码: {:?}", status.code()))
+            format!("$ {} {}", program, args.join(" "))
         };
-        Ok((success, cancelled, error))
+        let command_line_output = format!("{}\n", command_line);
+        emit_publish_log(app, &session_id, &command_line_output);
+        let stdout = child.stdout.take();
+        let stderr = child.stderr.take();
+        let child = Arc::new(Mutex::new(child));
+        let cancel_requested = Arc::clone(&permit.cancel_requested);
+        permit.mark_running(Arc::clone(&child)).await;
+        let run_result: Result<(bool, bool, Option<String>), crate::errors::AppError> = async {
+            let (sender, receiver) = mpsc::unbounded_channel::<(String, String)>();
+            let collector = tokio::spawn(collect_log_chunks(
+                app.clone(),
+                session_id.clone(),
+                receiver,
+            ));
+            let mut readers = Vec::new();
+            if let Some(stdout) = stdout {
+                readers.push(tokio::spawn(read_stream_chunks(
+                    stdout,
+                    "stdout",
+                    sender.clone(),
+                )));
+            }
+            if let Some(stderr) = stderr {
+                readers.push(tokio::spawn(read_stream_chunks(
+                    stderr,
+                    "stderr",
+                    sender.clone(),
+                )));
+            }
+            drop(sender);
+            let status = {
+                let mut running_child = child.lock().await;
+                running_child.wait().await.map_err(|err| {
+                    publish_error(
+                        format!("failed to wait publish process: {}", err),
+                        classify_process_wait_error(err.kind()),
+                    )
+                })?
+            };
+            for reader in readers {
+                let _ = reader.await;
+            }
+            let log_summary = collector.await.map_err(|err| {
+                publish_error(
+                    format!("failed to collect publish logs: {}", err),
+                    "publish_log_collect_failed",
+                )
+            })?;
+            let cancelled = cancel_requested.load(Ordering::SeqCst);
+            if cancelled {
+                let cancelled_line = if log_summary.ends_with_newline {
+                    "[cancelled] 发布已取消".to_string()
+                } else {
+                    "\n[cancelled] 发布已取消".to_string()
+                };
+                emit_publish_log(app, &session_id, &cancelled_line);
+            }
+            let success = status.success() && !cancelled;
+            let error = if cancelled {
+                Some("发布已取消".to_string())
+            } else if success {
+                None
+            } else {
+                Some(format!("发布失败，退出代码: {:?}", status.code()))
+            };
+            Ok((success, cancelled, error))
+        }
+        .await;
+        let (success, cancelled, error) = run_result?;
+        let output_dir = infer_output_dir(&spec);
+        let file_count = if success {
+            count_output_files(&output_dir)
+        } else {
+            0
+        };
+        Ok(PublishResult {
+            provider_id: spec.provider_id.clone(),
+            success,
+            cancelled,
+            error,
+            output_dir,
+            file_count,
+        })
     }
     .await;
     clear_running_execution(&session_id).await;
-    let (success, cancelled, error) = run_result?;
-    let output_dir = infer_output_dir(&spec);
-    let file_count = if success {
-        count_output_files(&output_dir)
-    } else {
-        0
-    };
-    Ok(PublishResult {
-        provider_id: spec.provider_id,
-        success,
-        cancelled,
-        error,
-        output_dir,
-        file_count,
-    })
+    execution_result
 }
 fn build_publish_session_id(provider_id: &str) -> String {
     let nanos = std::time::SystemTime::now()
@@ -539,7 +621,7 @@ async fn clear_running_execution(session_id: &str) {
     let mut slot = running_execution_slot().lock().await;
     let should_clear = slot
         .as_ref()
-        .map(|running| running.session_id == session_id)
+        .map(|running| running.session_id() == session_id)
         .unwrap_or(false);
     if should_clear {
         *slot = None;
@@ -724,9 +806,33 @@ mod tests {
     use super::*;
     use crate::errors::ErrorKind;
     use std::path::PathBuf;
+    use std::sync::OnceLock;
+    use std::time::Duration;
+    use tokio::sync::Mutex as AsyncMutex;
 
     fn base_dotnet_config() -> PublishConfig {
         PublishConfig::default()
+    }
+
+    fn execution_test_lock() -> &'static AsyncMutex<()> {
+        static TEST_LOCK: OnceLock<AsyncMutex<()>> = OnceLock::new();
+        TEST_LOCK.get_or_init(|| AsyncMutex::new(()))
+    }
+
+    #[cfg(target_os = "windows")]
+    async fn spawn_test_sleep_child() -> Child {
+        Command::new("cmd")
+            .args(["/C", "ping", "127.0.0.1", "-n", "6"])
+            .spawn()
+            .expect("spawn windows sleep child")
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    async fn spawn_test_sleep_child() -> Child {
+        Command::new("sleep")
+            .arg("5")
+            .spawn()
+            .expect("spawn sleep child")
     }
     #[test]
     fn build_dotnet_spec_maps_profile_to_properties() {
@@ -887,5 +993,61 @@ mod tests {
                 .and_then(serde_json::Value::as_str),
             Some("dotnet")
         );
+    }
+
+    #[tokio::test]
+    async fn reserve_execution_blocks_second_start_while_starting() {
+        let _guard = execution_test_lock().lock().await;
+        force_clear_running_execution().await;
+
+        let permit = reserve_execution("starting-session".to_string())
+            .await
+            .expect("reserve first execution");
+        let error = reserve_execution("second-session".to_string())
+            .await
+            .expect_err("second execution should be blocked");
+
+        assert_eq!(error.code.as_deref(), Some("publish_already_running"));
+
+        clear_running_execution(&permit.session_id).await;
+    }
+
+    #[tokio::test]
+    async fn cancel_provider_publish_marks_starting_execution() {
+        let _guard = execution_test_lock().lock().await;
+        force_clear_running_execution().await;
+
+        let permit = reserve_execution("starting-cancel".to_string())
+            .await
+            .expect("reserve execution");
+
+        assert!(cancel_provider_publish().await.expect("cancel starting"));
+        assert!(permit.is_cancel_requested());
+
+        clear_running_execution(&permit.session_id).await;
+    }
+
+    #[tokio::test]
+    async fn cancel_provider_publish_kills_running_execution() {
+        let _guard = execution_test_lock().lock().await;
+        force_clear_running_execution().await;
+
+        let permit = reserve_execution("running-cancel".to_string())
+            .await
+            .expect("reserve execution");
+        let child = Arc::new(Mutex::new(spawn_test_sleep_child().await));
+        permit.mark_running(Arc::clone(&child)).await;
+
+        assert!(cancel_provider_publish().await.expect("cancel running"));
+        assert!(permit.is_cancel_requested());
+
+        tokio::time::timeout(Duration::from_secs(2), async {
+            let mut running_child = child.lock().await;
+            running_child.wait().await.expect("wait child after cancel");
+        })
+        .await
+        .expect("child should exit after cancellation");
+
+        clear_running_execution(&permit.session_id).await;
     }
 }
