@@ -435,13 +435,13 @@ mod tests {
             .expect("time")
             .as_nanos();
         let root = std::env::temp_dir().join(format!("one-publish-tray-{repo_name}-{unique}"));
-        let profiles_dir = root
-            .join("UI")
-            .join("Properties")
-            .join("PublishProfiles");
+        let profiles_dir = root.join("UI").join("Properties").join("PublishProfiles");
         fs::create_dir_all(&profiles_dir).expect("create profiles dir");
-        fs::write(root.join(format!("{repo_name}.sln")), "Microsoft Visual Studio Solution File")
-            .expect("write sln");
+        fs::write(
+            root.join(format!("{repo_name}.sln")),
+            "Microsoft Visual Studio Solution File",
+        )
+        .expect("write sln");
 
         let project_file = root.join("UI").join(format!("{repo_name}.csproj"));
         fs::write(&project_file, "<Project />").expect("write csproj");

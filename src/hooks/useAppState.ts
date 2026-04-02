@@ -23,116 +23,15 @@ import type { Repository, RepoPublishConfig } from "@/types/repository";
 
 // 防抖延迟时间（毫秒）
 const DEBOUNCE_DELAY = 500;
-const MAX_RECENT_REPOSITORIES = 6;
-const MAX_RECENT_CONFIGS_PER_REPO = 6;
 
-function pushRecentPublishConfigState(
+function mergeRecentPublishState(
   state: AppState,
-  repoId: string,
-  configKey: string
+  nextState: Pick<AppState, "recentRepoIds" | "recentConfigKeysByRepo">
 ): AppState {
-  const nextRepoId = repoId.trim();
-  const nextConfigKey = configKey.trim();
-  if (!nextRepoId || !nextConfigKey) {
-    return state;
-  }
-
-  const nextRecentConfigKeysByRepo = {
-    ...state.recentConfigKeysByRepo,
-    [nextRepoId]: [
-      nextConfigKey,
-      ...(state.recentConfigKeysByRepo[nextRepoId] || []).filter(
-        (item) => item !== nextConfigKey
-      ),
-    ].slice(0, MAX_RECENT_CONFIGS_PER_REPO),
-  };
-
-  const nextRecentRepoIds = [
-    nextRepoId,
-    ...state.recentRepoIds.filter((item) => item !== nextRepoId),
-  ].slice(0, MAX_RECENT_REPOSITORIES);
-  const retainedRepoIds = new Set(nextRecentRepoIds);
-
   return {
     ...state,
-    recentRepoIds: nextRecentRepoIds,
-    recentConfigKeysByRepo: Object.fromEntries(
-      Object.entries(nextRecentConfigKeysByRepo).filter(
-        ([repoKey, keys]) => retainedRepoIds.has(repoKey) && keys.length > 0
-      )
-    ),
-  };
-}
-
-function removeRecentPublishConfigState(
-  state: AppState,
-  repoId: string,
-  configKey: string
-): AppState {
-  const nextRepoId = repoId.trim();
-  const nextConfigKey = configKey.trim();
-  if (!nextRepoId || !nextConfigKey) {
-    return state;
-  }
-
-  const currentScopedKeys = state.recentConfigKeysByRepo[nextRepoId];
-  if (!currentScopedKeys?.length) {
-    return state;
-  }
-
-  const nextScopedKeys = currentScopedKeys.filter((item) => item !== nextConfigKey);
-  const nextRecentConfigKeysByRepo = { ...state.recentConfigKeysByRepo };
-  let nextRecentRepoIds = state.recentRepoIds;
-
-  if (nextScopedKeys.length === 0) {
-    delete nextRecentConfigKeysByRepo[nextRepoId];
-    nextRecentRepoIds = state.recentRepoIds.filter((item) => item !== nextRepoId);
-  } else {
-    nextRecentConfigKeysByRepo[nextRepoId] = nextScopedKeys;
-  }
-
-  return {
-    ...state,
-    recentRepoIds: nextRecentRepoIds,
-    recentConfigKeysByRepo: nextRecentConfigKeysByRepo,
-  };
-}
-
-function replaceRecentPublishConfigKeyState(
-  state: AppState,
-  repoId: string,
-  previousKey: string,
-  nextKey: string
-): AppState {
-  const nextRepoId = repoId.trim();
-  const previousConfigKey = previousKey.trim();
-  const nextConfigKey = nextKey.trim();
-  if (!nextRepoId || !previousConfigKey || !nextConfigKey) {
-    return state;
-  }
-
-  const currentScopedKeys = state.recentConfigKeysByRepo[nextRepoId];
-  if (!currentScopedKeys?.includes(previousConfigKey)) {
-    return state;
-  }
-
-  const normalizedScopedKeys: string[] = [];
-  for (const key of currentScopedKeys) {
-    const value = key === previousConfigKey ? nextConfigKey : key;
-    if (!normalizedScopedKeys.includes(value)) {
-      normalizedScopedKeys.push(value);
-    }
-    if (normalizedScopedKeys.length >= MAX_RECENT_CONFIGS_PER_REPO) {
-      break;
-    }
-  }
-
-  return {
-    ...state,
-    recentConfigKeysByRepo: {
-      ...state.recentConfigKeysByRepo,
-      [nextRepoId]: normalizedScopedKeys,
-    },
+    recentRepoIds: nextState.recentRepoIds,
+    recentConfigKeysByRepo: nextState.recentConfigKeysByRepo,
   };
 }
 
@@ -147,6 +46,7 @@ export function useAppState() {
   const preferenceDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(
     null
   );
+  const recentMutationQueueRef = useRef<Promise<void>>(Promise.resolve());
 
   // 初始化加载状态
   useEffect(() => {
@@ -441,18 +341,38 @@ export function useAppState() {
     [setPreferences]
   );
 
+  const enqueueRecentMutation = useCallback(
+    (
+      mutation: () => Promise<AppState>,
+      errorMessage: string
+    ) => {
+      // recent 由后端持久化状态做真相源；前端串行消费返回值，避免本地镜像规则再漂移。
+      recentMutationQueueRef.current = recentMutationQueueRef.current
+        .catch(() => undefined)
+        .then(async () => {
+          try {
+            const nextState = await mutation();
+            setState((prev) => mergeRecentPublishState(prev, nextState));
+          } catch (err) {
+            console.error(errorMessage, err);
+          }
+        });
+    },
+    []
+  );
+
   const pushRecentPublishConfig = useCallback(
     (configKey: string, repoId: string | null = state.selectedRepoId) => {
       if (!repoId || !configKey.trim()) {
         return;
       }
 
-      setState((prev) => pushRecentPublishConfigState(prev, repoId, configKey));
-      apiPushRecentPublishConfig({ repoId, configKey }).catch((err) => {
-        console.error("记录最近使用发布配置失败:", err);
-      });
+      enqueueRecentMutation(
+        () => apiPushRecentPublishConfig({ repoId, configKey }),
+        "记录最近使用发布配置失败:"
+      );
     },
-    [state.selectedRepoId]
+    [enqueueRecentMutation, state.selectedRepoId]
   );
 
   const removeRecentPublishConfig = useCallback(
@@ -461,12 +381,12 @@ export function useAppState() {
         return;
       }
 
-      setState((prev) => removeRecentPublishConfigState(prev, repoId, configKey));
-      apiRemoveRecentPublishConfig({ repoId, configKey }).catch((err) => {
-        console.error("移除最近使用发布配置失败:", err);
-      });
+      enqueueRecentMutation(
+        () => apiRemoveRecentPublishConfig({ repoId, configKey }),
+        "移除最近使用发布配置失败:"
+      );
     },
-    [state.selectedRepoId]
+    [enqueueRecentMutation, state.selectedRepoId]
   );
 
   const replaceRecentPublishConfigKey = useCallback(
@@ -479,18 +399,17 @@ export function useAppState() {
         return;
       }
 
-      setState((prev) =>
-        replaceRecentPublishConfigKeyState(prev, repoId, previousKey, nextKey)
+      enqueueRecentMutation(
+        () =>
+          apiReplaceRecentPublishConfigKey({
+            repoId,
+            previousKey,
+            nextKey,
+          }),
+        "替换最近使用发布配置 key 失败:"
       );
-      apiReplaceRecentPublishConfigKey({
-        repoId,
-        previousKey,
-        nextKey,
-      }).catch((err) => {
-        console.error("替换最近使用发布配置 key 失败:", err);
-      });
     },
-    [state.selectedRepoId]
+    [enqueueRecentMutation, state.selectedRepoId]
   );
 
   return {

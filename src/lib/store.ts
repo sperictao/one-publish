@@ -227,23 +227,23 @@ export async function updatePreferences(params: {
 export async function pushRecentPublishConfig(params: {
   repoId: string;
   configKey: string;
-}): Promise<void> {
-  await invoke("push_recent_publish_config", params);
+}): Promise<AppState> {
+  return await invoke<AppState>("push_recent_publish_config", params);
 }
 
 export async function removeRecentPublishConfig(params: {
   repoId: string;
   configKey: string;
-}): Promise<void> {
-  await invoke("remove_recent_publish_config", params);
+}): Promise<AppState> {
+  return await invoke<AppState>("remove_recent_publish_config", params);
 }
 
 export async function replaceRecentPublishConfigKey(params: {
   repoId: string;
   previousKey: string;
   nextKey: string;
-}): Promise<void> {
-  await invoke("replace_recent_publish_config_key", params);
+}): Promise<AppState> {
+  return await invoke<AppState>("replace_recent_publish_config_key", params);
 }
 
 // ==================== Provider 相关 ====================

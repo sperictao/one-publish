@@ -364,18 +364,13 @@ fn push_recent_publish_config_state(
 
     let previous_repo_ids = recent_repo_ids.clone();
     *recent_repo_ids = std::iter::once(repo_id.to_string())
-        .chain(
-            previous_repo_ids
-                .into_iter()
-                .filter(|item| item != repo_id),
-        )
+        .chain(previous_repo_ids.into_iter().filter(|item| item != repo_id))
         .take(MAX_RECENT_REPOSITORIES)
         .collect();
 
     let retained_repo_ids = recent_repo_ids.iter().cloned().collect::<HashSet<_>>();
-    recent_config_keys_by_repo.retain(|id, keys| {
-        retained_repo_ids.contains(id) && !keys.is_empty()
-    });
+    recent_config_keys_by_repo
+        .retain(|id, keys| retained_repo_ids.contains(id) && !keys.is_empty());
 
     true
 }
@@ -392,13 +387,14 @@ fn remove_recent_publish_config_state(
         return false;
     }
 
-    let (removed, should_remove_repo) = if let Some(scoped) = recent_config_keys_by_repo.get_mut(repo_id) {
-        let original_len = scoped.len();
-        scoped.retain(|item| item != config_key);
-        (original_len != scoped.len(), scoped.is_empty())
-    } else {
-        return false;
-    };
+    let (removed, should_remove_repo) =
+        if let Some(scoped) = recent_config_keys_by_repo.get_mut(repo_id) {
+            let original_len = scoped.len();
+            scoped.retain(|item| item != config_key);
+            (original_len != scoped.len(), scoped.is_empty())
+        } else {
+            return false;
+        };
 
     if should_remove_repo {
         recent_config_keys_by_repo.remove(repo_id);
@@ -476,7 +472,9 @@ fn sanitize_recent_publish_state(state: &mut AppState) {
 
         if !valid_repo_ids.contains(&repo_id)
             || !state.recent_config_keys_by_repo.contains_key(&repo_id)
-            || normalized_recent_repo_ids.iter().any(|item| item == &repo_id)
+            || normalized_recent_repo_ids
+                .iter()
+                .any(|item| item == &repo_id)
         {
             continue;
         }
@@ -489,7 +487,10 @@ fn sanitize_recent_publish_state(state: &mut AppState) {
             break;
         }
 
-        if normalized_recent_repo_ids.iter().any(|item| item == repo_id) {
+        if normalized_recent_repo_ids
+            .iter()
+            .any(|item| item == repo_id)
+        {
             continue;
         }
 
@@ -501,7 +502,9 @@ fn sanitize_recent_publish_state(state: &mut AppState) {
         .cloned()
         .collect::<HashSet<_>>();
     state.recent_repo_ids = normalized_recent_repo_ids;
-    state.recent_config_keys_by_repo.retain(|repo_id, _| retained_repo_ids.contains(repo_id));
+    state
+        .recent_config_keys_by_repo
+        .retain(|repo_id, _| retained_repo_ids.contains(repo_id));
 }
 
 /// 获取配置文件路径
@@ -681,6 +684,15 @@ async fn refresh_tray_menu(app: tauri::AppHandle) {
     }
 }
 
+async fn persist_state_and_refresh_tray(
+    app: &tauri::AppHandle,
+    state: AppState,
+) -> Result<(), AppError> {
+    update_state(state)?;
+    refresh_tray_menu(app.clone()).await;
+    Ok(())
+}
+
 // ==================== Tauri Commands ====================
 
 /// 获取应用状态
@@ -710,8 +722,7 @@ pub async fn add_repository(app: tauri::AppHandle, repo: Repository) -> Result<A
 
     state.repositories.push(repo.clone());
     state.selected_repo_id = Some(repo.id);
-    update_state(state)?;
-    refresh_tray_menu(app).await;
+    persist_state_and_refresh_tray(&app, state).await?;
     Ok(get_bootstrap_state())
 }
 
@@ -730,8 +741,7 @@ pub async fn remove_repository(
         state.selected_repo_id = state.repositories.first().map(|r| r.id.clone());
     }
 
-    update_state(state)?;
-    refresh_tray_menu(app).await;
+    persist_state_and_refresh_tray(&app, state).await?;
     Ok(get_bootstrap_state())
 }
 
@@ -747,8 +757,7 @@ pub async fn update_repository(
         *existing = repo;
     }
 
-    update_state(state)?;
-    refresh_tray_menu(app).await;
+    persist_state_and_refresh_tray(&app, state).await?;
     Ok(get_bootstrap_state())
 }
 
@@ -923,9 +932,9 @@ pub async fn save_profile(
     };
 
     repo.publish_config.profiles.push(profile);
-    update_state(state.clone())?;
-    refresh_tray_menu(app).await;
-    Ok(state)
+    let response = state.clone();
+    persist_state_and_refresh_tray(&app, state).await?;
+    Ok(response)
 }
 
 /// 更新已保存配置文件（按仓库隔离）
@@ -987,9 +996,9 @@ pub async fn update_profile(
     profile.parameters = parameters;
     profile.profile_group = normalized_profile_group;
 
-    update_state(state.clone())?;
-    refresh_tray_menu(app).await;
-    Ok(state)
+    let response = state.clone();
+    persist_state_and_refresh_tray(&app, state).await?;
+    Ok(response)
 }
 
 /// 删除配置文件（按仓库隔离）
@@ -1023,9 +1032,9 @@ pub async fn delete_profile(
     }
 
     repo.publish_config.profiles.retain(|p| p.name != name);
-    update_state(state.clone())?;
-    refresh_tray_menu(app).await;
-    Ok(state)
+    let response = state.clone();
+    persist_state_and_refresh_tray(&app, state).await?;
+    Ok(response)
 }
 
 /// 记录最近使用的发布配置
@@ -1034,7 +1043,7 @@ pub async fn push_recent_publish_config(
     app: tauri::AppHandle,
     repo_id: String,
     config_key: String,
-) -> Result<(), AppError> {
+) -> Result<AppState, AppError> {
     let mut state = get_state();
 
     if !state.repositories.iter().any(|repo| repo.id == repo_id) {
@@ -1050,12 +1059,11 @@ pub async fn push_recent_publish_config(
         &repo_id,
         &config_key,
     ) {
-        return Ok(());
+        return Ok(get_bootstrap_state());
     }
 
-    update_state(state)?;
-    refresh_tray_menu(app).await;
-    Ok(())
+    persist_state_and_refresh_tray(&app, state).await?;
+    Ok(get_bootstrap_state())
 }
 
 /// 移除最近使用的发布配置
@@ -1064,7 +1072,7 @@ pub async fn remove_recent_publish_config(
     app: tauri::AppHandle,
     repo_id: String,
     config_key: String,
-) -> Result<(), AppError> {
+) -> Result<AppState, AppError> {
     let mut state = get_state();
 
     if !remove_recent_publish_config_state(
@@ -1073,12 +1081,11 @@ pub async fn remove_recent_publish_config(
         &repo_id,
         &config_key,
     ) {
-        return Ok(());
+        return Ok(get_bootstrap_state());
     }
 
-    update_state(state)?;
-    refresh_tray_menu(app).await;
-    Ok(())
+    persist_state_and_refresh_tray(&app, state).await?;
+    Ok(get_bootstrap_state())
 }
 
 /// 替换最近使用的发布配置 key
@@ -1088,7 +1095,7 @@ pub async fn replace_recent_publish_config_key(
     repo_id: String,
     previous_key: String,
     next_key: String,
-) -> Result<(), AppError> {
+) -> Result<AppState, AppError> {
     let mut state = get_state();
 
     if !replace_recent_publish_config_key_state(
@@ -1097,12 +1104,11 @@ pub async fn replace_recent_publish_config_key(
         &previous_key,
         &next_key,
     ) {
-        return Ok(());
+        return Ok(get_bootstrap_state());
     }
 
-    update_state(state)?;
-    refresh_tray_menu(app).await;
-    Ok(())
+    persist_state_and_refresh_tray(&app, state).await?;
+    Ok(get_bootstrap_state())
 }
 
 fn append_execution_history(
@@ -1291,10 +1297,8 @@ mod tests {
     #[test]
     fn remove_recent_publish_config_state_prunes_empty_repo_bucket() {
         let mut recent_repo_ids = vec!["repo-1".to_string()];
-        let mut recent_config_keys_by_repo = BTreeMap::from([(
-            "repo-1".to_string(),
-            vec!["userprofile:alpha".to_string()],
-        )]);
+        let mut recent_config_keys_by_repo =
+            BTreeMap::from([("repo-1".to_string(), vec!["userprofile:alpha".to_string()])]);
 
         assert!(remove_recent_publish_config_state(
             &mut recent_repo_ids,
@@ -1345,25 +1349,19 @@ mod tests {
                 "repo-1".to_string(),
             ],
             recent_config_keys_by_repo: BTreeMap::from([
-                (
-                    "repo-1".to_string(),
-                    vec!["userprofile:alpha".to_string()],
-                ),
-                (
-                    "repo-2".to_string(),
-                    vec!["userprofile:beta".to_string()],
-                ),
-                (
-                    "repo-3".to_string(),
-                    vec!["userprofile:stale".to_string()],
-                ),
+                ("repo-1".to_string(), vec!["userprofile:alpha".to_string()]),
+                ("repo-2".to_string(), vec!["userprofile:beta".to_string()]),
+                ("repo-3".to_string(), vec!["userprofile:stale".to_string()]),
             ]),
             ..AppState::default()
         };
 
         sanitize_recent_publish_state(&mut state);
 
-        assert_eq!(state.recent_repo_ids, vec!["repo-2".to_string(), "repo-1".to_string()]);
+        assert_eq!(
+            state.recent_repo_ids,
+            vec!["repo-2".to_string(), "repo-1".to_string()]
+        );
         assert_eq!(state.recent_config_keys_by_repo.len(), 2);
         assert!(!state.recent_config_keys_by_repo.contains_key("repo-3"));
     }
