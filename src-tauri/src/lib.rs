@@ -165,6 +165,7 @@ pub fn run() {
             commands::package_artifact,
             commands::sign_artifact,
             store::get_app_state,
+            store::get_repository,
             store::save_app_state,
             store::add_repository,
             store::remove_repository,

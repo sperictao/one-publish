@@ -542,7 +542,6 @@ function App() {
 
   useTrayRecentPublish({
     appT,
-    repositories,
     defaultOutputDir,
     specVersion: SPEC_VERSION,
     runPublishSpec,

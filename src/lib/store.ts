@@ -152,6 +152,13 @@ export async function getAppState(): Promise<AppState> {
 }
 
 /**
+ * 获取单个仓库快照
+ */
+export async function getRepository(repoId: string): Promise<Repository> {
+  return await invoke<Repository>("get_repository", { repoId });
+}
+
+/**
  * 保存完整应用状态
  */
 export async function saveAppState(state: AppState): Promise<void> {

@@ -5,7 +5,7 @@ import { listen } from "@tauri-apps/api/event";
 import { normalizeDotnetProjectBoundParameters } from "@/lib/dotnetPublishConfig";
 import { resolveDotnetProjectProfile } from "@/lib/dotnetProjectProfile";
 import { showSystemNotification } from "@/lib/systemNotification";
-import { getProfiles, showMainWindow } from "@/lib/store";
+import { getProfiles, getRepository, showMainWindow } from "@/lib/store";
 import type { RunPublishOptions, ProviderPublishSpec } from "@/hooks/usePublishRunner";
 import type { ProjectInfo } from "@/types/project";
 import type { Repository } from "@/types/repository";
@@ -147,15 +147,11 @@ function createTrayRunOptions(
 }
 
 export async function resolveTrayPublishRequest(params: {
-  repositories: Repository[];
   payload: TrayPublishRequestPayload;
   specVersion: number;
   defaultOutputDir: string;
 }): Promise<ResolvedTrayPublishRequest> {
-  const repo = params.repositories.find((item) => item.id === params.payload.repoId);
-  if (!repo) {
-    throw new Error(`missing repository: ${params.payload.repoId}`);
-  }
+  const repo = await getRepository(params.payload.repoId);
 
   const { configKey } = params.payload;
   const [keyType, ...rest] = configKey.split(":");
@@ -195,7 +191,6 @@ export async function resolveTrayPublishRequest(params: {
 
 export function useTrayRecentPublish(params: {
   appT: TranslationMap;
-  repositories: Repository[];
   defaultOutputDir: string;
   specVersion: number;
   runPublishSpec: (
@@ -214,7 +209,6 @@ export function useTrayRecentPublish(params: {
     void listen<TrayPublishRequestPayload>("tray-publish-request", async (event) => {
       try {
         const resolved = await resolveTrayPublishRequest({
-          repositories: params.repositories,
           payload: event.payload,
           specVersion: params.specVersion,
           defaultOutputDir: params.defaultOutputDir,
@@ -248,7 +242,6 @@ export function useTrayRecentPublish(params: {
   }, [
     params.appT,
     params.defaultOutputDir,
-    params.repositories,
     params.runPublishSpec,
     params.specVersion,
   ]);

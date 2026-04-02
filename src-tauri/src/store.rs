@@ -627,6 +627,30 @@ fn with_read_state<T>(reader: impl FnOnce(&AppState) -> T) -> T {
     }
 }
 
+fn repository_not_found_error(repo_id: &str) -> AppError {
+    AppError::validation_with_code(format!("未找到仓库: {}", repo_id), "repository_not_found")
+}
+
+fn find_repository<'a>(
+    repositories: &'a [Repository],
+    repo_id: &str,
+) -> Result<&'a Repository, AppError> {
+    repositories
+        .iter()
+        .find(|repository| repository.id == repo_id)
+        .ok_or_else(|| repository_not_found_error(repo_id))
+}
+
+fn find_repository_mut<'a>(
+    repositories: &'a mut [Repository],
+    repo_id: &str,
+) -> Result<&'a mut Repository, AppError> {
+    repositories
+        .iter_mut()
+        .find(|repository| repository.id == repo_id)
+        .ok_or_else(|| repository_not_found_error(repo_id))
+}
+
 /// 获取当前状态
 pub fn get_state() -> AppState {
     with_read_state(|state| state.clone())
@@ -711,6 +735,12 @@ async fn persist_state_and_refresh_tray(
 #[tauri::command]
 pub async fn get_app_state() -> Result<AppState, AppError> {
     Ok(get_bootstrap_state())
+}
+
+/// 获取单个仓库快照
+#[tauri::command]
+pub async fn get_repository(repo_id: String) -> Result<Repository, AppError> {
+    with_read_state(|state| find_repository(&state.repositories, &repo_id).cloned())
 }
 
 /// 保存应用状态
@@ -859,16 +889,7 @@ pub async fn update_publish_state(
 ) -> Result<(), AppError> {
     let mut state = get_state();
 
-    let repo = state
-        .repositories
-        .iter_mut()
-        .find(|r| r.id == repo_id)
-        .ok_or_else(|| {
-            AppError::validation_with_code(
-                format!("未找到仓库: {}", repo_id),
-                "repository_not_found",
-            )
-        })?;
+    let repo = find_repository_mut(&mut state.repositories, &repo_id)?;
 
     if let Some(preset) = selected_preset {
         repo.publish_config.selected_preset = preset;
@@ -887,18 +908,10 @@ pub async fn update_publish_state(
 #[tauri::command]
 pub async fn get_profiles(repo_id: String) -> Result<Vec<ConfigProfile>, AppError> {
     with_read_state(|state| {
-        let repo = state
-            .repositories
-            .iter()
-            .find(|r| r.id == repo_id)
-            .ok_or_else(|| {
-                AppError::validation_with_code(
-                    format!("未找到仓库: {}", repo_id),
-                    "repository_not_found",
-                )
-            })?;
-
-        Ok(repo.publish_config.profiles.clone())
+        Ok(find_repository(&state.repositories, &repo_id)?
+            .publish_config
+            .profiles
+            .clone())
     })
 }
 
@@ -914,16 +927,7 @@ pub async fn save_profile(
 ) -> Result<AppState, AppError> {
     let mut state = get_state();
 
-    let repo = state
-        .repositories
-        .iter_mut()
-        .find(|r| r.id == repo_id)
-        .ok_or_else(|| {
-            AppError::validation_with_code(
-                format!("未找到仓库: {}", repo_id),
-                "repository_not_found",
-            )
-        })?;
+    let repo = find_repository_mut(&mut state.repositories, &repo_id)?;
 
     // 检查是否已存在同名配置文件
     if repo.publish_config.profiles.iter().any(|p| p.name == name) {
@@ -965,16 +969,7 @@ pub async fn update_profile(
 ) -> Result<AppState, AppError> {
     let mut state = get_state();
 
-    let repo = state
-        .repositories
-        .iter_mut()
-        .find(|r| r.id == repo_id)
-        .ok_or_else(|| {
-            AppError::validation_with_code(
-                format!("未找到仓库: {}", repo_id),
-                "repository_not_found",
-            )
-        })?;
+    let repo = find_repository_mut(&mut state.repositories, &repo_id)?;
 
     if original_name != name && repo.publish_config.profiles.iter().any(|p| p.name == name) {
         return Err(AppError::validation_with_code(
@@ -1025,16 +1020,7 @@ pub async fn delete_profile(
 ) -> Result<AppState, AppError> {
     let mut state = get_state();
 
-    let repo = state
-        .repositories
-        .iter_mut()
-        .find(|r| r.id == repo_id)
-        .ok_or_else(|| {
-            AppError::validation_with_code(
-                format!("未找到仓库: {}", repo_id),
-                "repository_not_found",
-            )
-        })?;
+    let repo = find_repository_mut(&mut state.repositories, &repo_id)?;
 
     // 不允许删除系统默认配置文件
     if let Some(profile) = repo.publish_config.profiles.iter().find(|p| p.name == name) {
@@ -1061,12 +1047,7 @@ pub async fn push_recent_publish_config(
 ) -> Result<AppState, AppError> {
     let mut state = get_state();
 
-    if !state.repositories.iter().any(|repo| repo.id == repo_id) {
-        return Err(AppError::validation_with_code(
-            format!("未找到仓库: {}", repo_id),
-            "repository_not_found",
-        ));
-    }
+    find_repository(&state.repositories, &repo_id)?;
 
     if !push_recent_publish_config_state(
         &mut state.recent_repo_ids,
@@ -1379,6 +1360,17 @@ mod tests {
         );
         assert_eq!(state.recent_config_keys_by_repo.len(), 2);
         assert!(!state.recent_config_keys_by_repo.contains_key("repo-3"));
+    }
+
+    #[test]
+    fn find_repository_returns_consistent_not_found_error() {
+        let repositories = vec![test_repo("repo-1")];
+
+        let error = find_repository(&repositories, "repo-2").expect_err("missing repository");
+
+        assert_eq!(error.kind, crate::errors::ErrorKind::Validation);
+        assert_eq!(error.code.as_deref(), Some("repository_not_found"));
+        assert_eq!(error.message, "未找到仓库: repo-2");
     }
 
     #[test]

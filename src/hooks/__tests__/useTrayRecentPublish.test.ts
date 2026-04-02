@@ -7,6 +7,7 @@ const mocks = vi.hoisted(() => ({
   invoke: vi.fn(),
   isTauri: vi.fn(() => true),
   listen: vi.fn(),
+  getRepository: vi.fn(),
   getProfiles: vi.fn(),
   showMainWindow: vi.fn(),
   showSystemNotification: vi.fn(),
@@ -26,6 +27,7 @@ vi.mock("@/lib/store", async () => {
   const actual = await vi.importActual<typeof import("@/lib/store")>("@/lib/store");
   return {
     ...actual,
+    getRepository: mocks.getRepository,
     getProfiles: mocks.getProfiles,
     showMainWindow: mocks.showMainWindow,
   };
@@ -82,6 +84,7 @@ describe("useTrayRecentPublish", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.listen.mockResolvedValue(() => {});
+    mocks.getRepository.mockResolvedValue(createRepository());
     mocks.showSystemNotification.mockResolvedValue(true);
     mocks.showMainWindow.mockResolvedValue(true);
   });
@@ -108,7 +111,6 @@ describe("useTrayRecentPublish", () => {
     renderHook(() =>
       useTrayRecentPublish({
         appT: {},
-        repositories: [createRepository()],
         defaultOutputDir: "/exports",
         specVersion: 1,
         runPublishSpec,
@@ -175,7 +177,6 @@ describe("useTrayRecentPublish", () => {
     renderHook(() =>
       useTrayRecentPublish({
         appT: {},
-        repositories: [createRepository()],
         defaultOutputDir: "/exports",
         specVersion: 1,
         runPublishSpec,
@@ -230,21 +231,26 @@ describe("useTrayRecentPublish", () => {
         },
       },
     ]);
-    mocks.invoke.mockResolvedValue({
-      root_path: "/repo",
-      project_file: "/repo/UI/App.csproj",
-      publish_profiles: ["FolderProfile"],
-      target_frameworks: ["net8.0"],
+    mocks.getRepository.mockResolvedValue(
+      createRepository({
+        projectFile: "/repo/App.sln",
+      })
+    );
+    mocks.invoke.mockImplementation(async (command: string) => {
+      if (command === "scan_project") {
+        return {
+          root_path: "/repo",
+          project_file: "/repo/UI/App.csproj",
+          publish_profiles: ["FolderProfile"],
+          target_frameworks: ["net8.0"],
+        };
+      }
+      throw new Error(`unexpected invoke: ${command}`);
     });
 
     renderHook(() =>
       useTrayRecentPublish({
         appT: {},
-        repositories: [
-          createRepository({
-            projectFile: "/repo/App.sln",
-          }),
-        ],
         defaultOutputDir: "/exports",
         specVersion: 1,
         runPublishSpec,
@@ -308,7 +314,6 @@ describe("useTrayRecentPublish", () => {
     renderHook(() =>
       useTrayRecentPublish({
         appT: {},
-        repositories: [createRepository()],
         defaultOutputDir: "/exports",
         specVersion: 1,
         runPublishSpec,
@@ -350,6 +355,110 @@ describe("useTrayRecentPublish", () => {
     );
   });
 
+  it("托盘发布始终从后端仓库快照解析仓库", async () => {
+    const runPublishSpec = vi.fn().mockResolvedValue(undefined);
+    let handler: ((event: { payload: TrayPublishRequestPayload }) => Promise<void>) | null =
+      null;
+    mocks.listen.mockImplementation(async (_eventName, callback) => {
+      handler = callback;
+      return () => {};
+    });
+    mocks.getProfiles.mockResolvedValue([
+      {
+        name: "alpha",
+        providerId: "dotnet",
+        parameters: {
+          configuration: "Release",
+          output: "/repo/out",
+        },
+      },
+    ]);
+
+    renderHook(() =>
+      useTrayRecentPublish({
+        appT: {},
+        defaultOutputDir: "/exports",
+        specVersion: 1,
+        runPublishSpec,
+      })
+    );
+
+    await waitFor(() => {
+      expect(handler).not.toBeNull();
+    });
+
+    if (!handler) {
+      throw new Error("tray handler missing");
+    }
+    const trayHandler = handler as (
+      event: { payload: TrayPublishRequestPayload }
+    ) => Promise<void>;
+
+    await trayHandler({
+      payload: {
+        repoId: "repo-1",
+        configKey: "userprofile:alpha",
+      },
+    });
+
+    expect(mocks.getRepository).toHaveBeenCalledWith("repo-1");
+    expect(runPublishSpec).toHaveBeenCalledWith(
+      expect.objectContaining({
+        project_path: "/repo/App.csproj",
+      }),
+      expect.objectContaining({
+        repoId: "repo-1",
+        recentConfigKey: "userprofile:alpha",
+      })
+    );
+  });
+
+  it("后端仓库快照缺失时会反馈原始错误", async () => {
+    const runPublishSpec = vi.fn().mockResolvedValue(undefined);
+    let handler: ((event: { payload: TrayPublishRequestPayload }) => Promise<void>) | null =
+      null;
+    mocks.listen.mockImplementation(async (_eventName, callback) => {
+      handler = callback;
+      return () => {};
+    });
+    mocks.getRepository.mockRejectedValue(new Error("未找到仓库: repo-404"));
+
+    renderHook(() =>
+      useTrayRecentPublish({
+        appT: {
+          trayPublishFailed: "状态栏发布启动失败",
+        },
+        defaultOutputDir: "/exports",
+        specVersion: 1,
+        runPublishSpec,
+      })
+    );
+
+    await waitFor(() => {
+      expect(handler).not.toBeNull();
+    });
+
+    if (!handler) {
+      throw new Error("tray handler missing");
+    }
+    const trayHandler = handler as (
+      event: { payload: TrayPublishRequestPayload }
+    ) => Promise<void>;
+
+    await trayHandler({
+      payload: {
+        repoId: "repo-404",
+        configKey: "userprofile:alpha",
+      },
+    });
+
+    expect(runPublishSpec).not.toHaveBeenCalled();
+    expect(mocks.showSystemNotification).toHaveBeenCalledWith({
+      title: "状态栏发布启动失败",
+      body: "未找到仓库: repo-404",
+    });
+  });
+
   it("遇到失效配置时不会执行发布并拉起主窗口", async () => {
     const runPublishSpec = vi.fn().mockResolvedValue(undefined);
     let handler: ((event: { payload: TrayPublishRequestPayload }) => Promise<void>) | null =
@@ -365,7 +474,6 @@ describe("useTrayRecentPublish", () => {
         appT: {
           trayPublishFailed: "状态栏发布启动失败",
         },
-        repositories: [createRepository()],
         defaultOutputDir: "/exports",
         specVersion: 1,
         runPublishSpec,
@@ -414,7 +522,6 @@ describe("useTrayRecentPublish", () => {
         appT: {
           trayPublishFailed: "状态栏发布启动失败",
         },
-        repositories: [createRepository()],
         defaultOutputDir: "/exports",
         specVersion: 1,
         runPublishSpec,
