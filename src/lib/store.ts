@@ -186,6 +186,7 @@ export async function updateUIState(params: {
   leftPanelWidth?: number;
   middlePanelWidth?: number;
   selectedRepoId?: string | null;
+  clearSelectedRepoId?: boolean;
 }): Promise<void> {
   await invoke("update_ui_state", params);
 }

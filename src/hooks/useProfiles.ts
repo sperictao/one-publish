@@ -2,6 +2,7 @@ import {
   useCallback,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type Dispatch,
   type SetStateAction,
@@ -154,24 +155,56 @@ export function useProfiles({
     useState("");
   const [quickCreateProfileSaving, setQuickCreateProfileSaving] = useState(false);
   const [editingProfileOriginalName, setEditingProfileOriginalName] = useState<string | null>(null);
+  const loadProfilesRequestIdRef = useRef(0);
+  const selectedRepoIdRef = useRef(selectedRepoId);
+
+  useEffect(() => {
+    selectedRepoIdRef.current = selectedRepoId;
+  }, [selectedRepoId]);
 
   const loadProfiles = useCallback(async () => {
-    if (!selectedRepoId) {
+    const requestId = loadProfilesRequestIdRef.current + 1;
+    loadProfilesRequestIdRef.current = requestId;
+    const repoId = selectedRepoId;
+
+    if (!repoId) {
       setProfiles([]);
-      return;
+      return [];
     }
 
     try {
-      const data = await getProfiles(selectedRepoId);
+      const data = await getProfiles(repoId);
+
+      if (
+        loadProfilesRequestIdRef.current !== requestId ||
+        selectedRepoIdRef.current !== repoId
+      ) {
+        return data;
+      }
+
       setProfiles(data);
+      return data;
     } catch (err) {
+      if (
+        loadProfilesRequestIdRef.current === requestId &&
+        selectedRepoIdRef.current === repoId
+      ) {
+        setProfiles([]);
+      }
       console.error("加载配置文件列表失败:", err);
+      return [];
     }
   }, [selectedRepoId]);
 
   useEffect(() => {
     void loadProfiles();
   }, [loadProfiles]);
+
+  useEffect(() => {
+    setProfiles([]);
+    setActiveProfileName(null);
+    setEditingProfileOriginalName(null);
+  }, [selectedRepoId]);
 
   const resetQuickCreateProfileState = useCallback(() => {
     setQuickCreateProfileName("");

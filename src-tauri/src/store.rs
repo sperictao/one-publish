@@ -636,6 +636,18 @@ fn get_bootstrap_state() -> AppState {
     with_read_state(build_frontend_state)
 }
 
+fn apply_selected_repo_id_update(
+    state: &mut AppState,
+    selected_repo_id: Option<String>,
+    clear_selected_repo_id: bool,
+) {
+    if clear_selected_repo_id {
+        state.selected_repo_id = None;
+    } else if let Some(repo_id) = selected_repo_id {
+        state.selected_repo_id = Some(repo_id);
+    }
+}
+
 fn get_execution_history_snapshot() -> Vec<ExecutionRecord> {
     with_read_state(|state| state.execution_history.clone())
 }
@@ -767,6 +779,7 @@ pub async fn update_ui_state(
     left_panel_width: Option<i32>,
     middle_panel_width: Option<i32>,
     selected_repo_id: Option<String>,
+    clear_selected_repo_id: Option<bool>,
 ) -> Result<(), AppError> {
     let mut state = get_state();
 
@@ -778,9 +791,11 @@ pub async fn update_ui_state(
         state.middle_panel_width = width;
         state.panel_widths_customized = true;
     }
-    if let Some(repo_id) = selected_repo_id {
-        state.selected_repo_id = Some(repo_id);
-    }
+    apply_selected_repo_id_update(
+        &mut state,
+        selected_repo_id,
+        clear_selected_repo_id.unwrap_or(false),
+    );
 
     update_state(state)
 }
@@ -1364,5 +1379,19 @@ mod tests {
         );
         assert_eq!(state.recent_config_keys_by_repo.len(), 2);
         assert!(!state.recent_config_keys_by_repo.contains_key("repo-3"));
+    }
+
+    #[test]
+    fn apply_selected_repo_id_update_supports_clearing_selection() {
+        let mut state = AppState {
+            selected_repo_id: Some("repo-1".to_string()),
+            ..AppState::default()
+        };
+
+        apply_selected_repo_id_update(&mut state, None, true);
+        assert_eq!(state.selected_repo_id, None);
+
+        apply_selected_repo_id_update(&mut state, Some("repo-2".to_string()), false);
+        assert_eq!(state.selected_repo_id, Some("repo-2".to_string()));
     }
 }

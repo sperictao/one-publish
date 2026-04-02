@@ -457,10 +457,6 @@ function App() {
     executionHistoryLimit,
   });
 
-  useEffect(() => {
-    loadProfiles();
-  }, [loadProfiles]);
-
   const {
     handleAddRepo,
     handleRemoveRepo,

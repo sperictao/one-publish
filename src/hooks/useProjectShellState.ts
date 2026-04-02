@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { isTauri } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 
@@ -17,25 +17,57 @@ export function useProjectShellState(params: {
   activeProviderId: string;
 }) {
   const [projectInfo, setProjectInfo] = useState<ProjectInfo | null>(null);
-  const { scanProject } = useProjectScanner({
+  const scanRequestIdRef = useRef(0);
+  const { scanProject: scanProjectRequest } = useProjectScanner({
     appT: params.appT,
-    setProjectInfo,
   });
 
+  const scanProject = useCallback(
+    async (
+      path?: string,
+      options?: { silentSuccess?: boolean; silentFailure?: boolean }
+    ) => {
+      const targetPath = path?.trim();
+      const requestId = scanRequestIdRef.current + 1;
+      scanRequestIdRef.current = requestId;
+
+      if (!targetPath || params.activeProviderId !== "dotnet") {
+        setProjectInfo(null);
+        return null;
+      }
+
+      setProjectInfo(null);
+      const info = await scanProjectRequest(targetPath, options);
+
+      if (
+        requestId !== scanRequestIdRef.current ||
+        !info ||
+        params.selectedRepoPath?.trim() !== targetPath
+      ) {
+        return info;
+      }
+
+      setProjectInfo(info);
+      return info;
+    },
+    [params.activeProviderId, params.selectedRepoPath, scanProjectRequest]
+  );
+
   useEffect(() => {
-    if (!params.selectedRepoPath || params.isStateLoading) {
+    if (
+      !params.selectedRepoPath ||
+      params.isStateLoading ||
+      params.activeProviderId !== "dotnet"
+    ) {
+      scanRequestIdRef.current += 1;
+      setProjectInfo(null);
       return;
     }
 
-    if (params.activeProviderId === "dotnet") {
-      void scanProject(params.selectedRepoPath, {
-        silentSuccess: true,
-        silentFailure: true,
-      });
-      return;
-    }
-
-    setProjectInfo(null);
+    void scanProject(params.selectedRepoPath, {
+      silentSuccess: true,
+      silentFailure: true,
+    });
   }, [
     params.selectedRepoId,
     params.selectedRepoPath,

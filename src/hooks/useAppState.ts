@@ -24,6 +24,12 @@ import type { Repository, RepoPublishConfig } from "@/types/repository";
 // 防抖延迟时间（毫秒）
 const DEBOUNCE_DELAY = 500;
 
+type PublishStatePatch = {
+  selectedPreset?: string;
+  isCustomMode?: boolean;
+  customConfig?: PublishConfigStore;
+};
+
 function mergeRecentPublishState(
   state: AppState,
   nextState: Pick<AppState, "recentRepoIds" | "recentConfigKeysByRepo">
@@ -46,6 +52,7 @@ export function useAppState() {
   const preferenceDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(
     null
   );
+  const pendingPublishStateRef = useRef<Map<string, PublishStatePatch>>(new Map());
   const recentMutationQueueRef = useRef<Promise<void>>(Promise.resolve());
 
   // 初始化加载状态
@@ -71,6 +78,7 @@ export function useAppState() {
       if (publishDebounceRef.current) clearTimeout(publishDebounceRef.current);
       if (preferenceDebounceRef.current)
         clearTimeout(preferenceDebounceRef.current);
+      pendingPublishStateRef.current.clear();
     };
   }, []);
 
@@ -92,6 +100,7 @@ export function useAppState() {
       leftPanelWidth?: number;
       middlePanelWidth?: number;
       selectedRepoId?: string | null;
+      clearSelectedRepoId?: boolean;
     }) => {
       // 立即更新本地状态
       setState((prev) => ({
@@ -102,9 +111,11 @@ export function useAppState() {
         ...(params.middlePanelWidth !== undefined && {
           middlePanelWidth: params.middlePanelWidth,
         }),
-        ...(params.selectedRepoId !== undefined && {
-          selectedRepoId: params.selectedRepoId,
-        }),
+        ...(params.clearSelectedRepoId
+          ? { selectedRepoId: null }
+          : params.selectedRepoId !== undefined
+            ? { selectedRepoId: params.selectedRepoId }
+            : {}),
       }));
 
       // 防抖保存到后端
@@ -160,11 +171,7 @@ export function useAppState() {
 
   // 更新发布配置状态（按仓库隔离，带防抖）
   const setPublishState = useCallback(
-    (params: {
-      selectedPreset?: string;
-      isCustomMode?: boolean;
-      customConfig?: PublishConfigStore;
-    }) => {
+    (params: PublishStatePatch) => {
       // 乐观更新本地状态：更新 repositories 数组中对应仓库的 publishConfig
       setState((prev) => {
         const repoId = prev.selectedRepoId;
@@ -197,11 +204,29 @@ export function useAppState() {
       if (publishDebounceRef.current) {
         clearTimeout(publishDebounceRef.current);
       }
+      const repoId = state.selectedRepoId;
+      if (!repoId) {
+        return;
+      }
+
+      const previousPendingParams =
+        pendingPublishStateRef.current.get(repoId) ?? {};
+      pendingPublishStateRef.current.set(repoId, {
+        ...previousPendingParams,
+        ...params,
+      });
+
       publishDebounceRef.current = setTimeout(() => {
-        const currentState = state;
-        const repoId = currentState.selectedRepoId;
-        if (!repoId) return;
-        updatePublishState({ repoId, ...params }).catch(console.error);
+        const pendingEntries = Array.from(pendingPublishStateRef.current.entries());
+        pendingPublishStateRef.current.clear();
+
+        void Promise.all(
+          pendingEntries.map(([pendingRepoId, pendingParams]) =>
+            updatePublishState({ repoId: pendingRepoId, ...pendingParams }).catch(
+              console.error
+            )
+          )
+        );
       }, DEBOUNCE_DELAY);
     },
     [state.selectedRepoId]
@@ -246,7 +271,11 @@ export function useAppState() {
   // 选中仓库的便捷方法
   const selectRepository = useCallback(
     (repoId: string | null) => {
-      setUIState({ selectedRepoId: repoId });
+      setUIState(
+        repoId === null
+          ? { selectedRepoId: null, clearSelectedRepoId: true }
+          : { selectedRepoId: repoId }
+      );
     },
     [setUIState]
   );

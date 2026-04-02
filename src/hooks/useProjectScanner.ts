@@ -12,15 +12,14 @@ interface TranslationMap {
 
 export function useProjectScanner(params: {
   appT: TranslationMap;
-  setProjectInfo: (info: ProjectInfo | null) => void;
 }) {
-  const { appT, setProjectInfo } = params;
+  const { appT } = params;
 
   const scanProject = useCallback(
     async (
       path?: string,
       options?: { silentSuccess?: boolean; silentFailure?: boolean }
-    ) => {
+    ): Promise<ProjectInfo | null> => {
       const silentSuccess = options?.silentSuccess ?? false;
       const silentFailure = options?.silentFailure ?? false;
 
@@ -28,18 +27,17 @@ export function useProjectScanner(params: {
         const info = await invoke<ProjectInfo>("scan_project", {
           startPath: path,
         });
-        setProjectInfo(info);
 
         if (!silentSuccess) {
           toast.success(appT.scanProjectSuccess || "项目检测成功", {
             description: `${appT.foundProject || "找到项目"}: ${info.project_file}`,
           });
         }
-      } catch (err) {
-        setProjectInfo(null);
 
+        return info;
+      } catch (err) {
         if (silentFailure) {
-          return;
+          return null;
         }
 
         const { analyzeProjectScanFailure, extractInvokeErrorMessage } =
@@ -53,7 +51,7 @@ export function useProjectScanner(params: {
               appT.scanProjectPathNotFoundDesc ||
               "请确认 Project Root 路径存在且可访问。",
           });
-          return;
+          return null;
         }
 
         if (failureReason === "project_root_not_found") {
@@ -62,7 +60,7 @@ export function useProjectScanner(params: {
               appT.scanProjectRootNotFoundDesc ||
               "未找到 .sln 文件，请确认当前目录或上级目录包含解决方案文件。",
           });
-          return;
+          return null;
         }
 
         if (failureReason === "project_file_not_found") {
@@ -71,7 +69,7 @@ export function useProjectScanner(params: {
               appT.scanProjectFileNotFoundDesc ||
               "已找到解决方案，但未发现 .csproj 文件，请检查项目结构。",
           });
-          return;
+          return null;
         }
 
         if (failureReason === "permission_denied") {
@@ -80,7 +78,7 @@ export function useProjectScanner(params: {
               appT.scanProjectPermissionDeniedDesc ||
               "请检查当前用户对 Project Root 及其父目录的读取权限。",
           });
-          return;
+          return null;
         }
 
         if (failureReason === "current_dir_failed") {
@@ -89,15 +87,17 @@ export function useProjectScanner(params: {
               appT.scanProjectCurrentDirFailedDesc ||
               "请确认应用运行目录有效，或手动指定 Project Root 后重试。",
           });
-          return;
+          return null;
         }
 
         toast.error(appT.scanProjectFailed || "项目检测失败", {
           description: rawErrorMessage,
         });
+
+        return null;
       }
     },
-    [appT, setProjectInfo]
+    [appT]
   );
 
   return {

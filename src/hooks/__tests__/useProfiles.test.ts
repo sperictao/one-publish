@@ -1,0 +1,161 @@
+import { act, renderHook, waitFor } from "@testing-library/react";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+
+const mocks = vi.hoisted(() => ({
+  getProfiles: vi.fn(),
+  toast: {
+    success: vi.fn(),
+    error: vi.fn(),
+  },
+}));
+
+vi.mock("sonner", () => ({
+  toast: mocks.toast,
+}));
+
+vi.mock("@/lib/store", async () => {
+  const actual = await vi.importActual<typeof import("@/lib/store")>("@/lib/store");
+  return {
+    ...actual,
+    getProfiles: mocks.getProfiles,
+  };
+});
+
+import { useProfiles } from "@/hooks/useProfiles";
+import type { ConfigProfile } from "@/lib/store";
+
+function createProfile(name: string): ConfigProfile {
+  return {
+    name,
+    providerId: "dotnet",
+    parameters: {},
+    profileGroup: undefined,
+    createdAt: "2026-04-02T00:00:00.000Z",
+    isSystemDefault: false,
+  };
+}
+
+function createDeferred<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((nextResolve) => {
+    resolve = nextResolve;
+  });
+  return { promise, resolve };
+}
+
+describe("useProfiles", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("会忽略旧仓库晚到的配置列表响应", async () => {
+    const repoA = createDeferred<ConfigProfile[]>();
+    const repoB = createDeferred<ConfigProfile[]>();
+    mocks.getProfiles
+      .mockImplementationOnce(() => repoA.promise)
+      .mockImplementationOnce(() => repoB.promise);
+
+    const { result, rerender } = renderHook(
+      (selectedRepoId: string | null) =>
+        useProfiles({
+          appT: {},
+          profileT: {},
+          language: "zh",
+          selectedRepoId,
+          activeProviderId: "dotnet",
+          providerSchemas: {},
+          setActiveProviderId: vi.fn(),
+          setIsCustomMode: vi.fn(),
+          isCustomMode: false,
+          setSelectedPreset: vi.fn(),
+          setProviderParameters: vi.fn(),
+          applyDotnetCustomConfig: vi.fn(),
+          replaceScopedConfigKey: vi.fn(),
+          presets: [],
+          defaultPresetId: "release-fd",
+          getPresetText: (_presetId, fallbackName, fallbackDescription) => ({
+            name: fallbackName,
+            description: fallbackDescription,
+          }),
+          buildProfileParameters: () => ({}),
+        }),
+      {
+        initialProps: "repo-a",
+      }
+    );
+
+    rerender("repo-b");
+
+    await act(async () => {
+      repoB.resolve([createProfile("beta")]);
+    });
+
+    await waitFor(() => {
+      expect(result.current.profiles.map((profile) => profile.name)).toEqual(["beta"]);
+    });
+
+    await act(async () => {
+      repoA.resolve([createProfile("alpha")]);
+    });
+
+    expect(result.current.profiles.map((profile) => profile.name)).toEqual(["beta"]);
+    expect(mocks.getProfiles).toHaveBeenNthCalledWith(1, "repo-a");
+    expect(mocks.getProfiles).toHaveBeenNthCalledWith(2, "repo-b");
+  });
+
+  it("切换仓库时会先清空旧列表，再等待新仓库返回", async () => {
+    const repoA = createDeferred<ConfigProfile[]>();
+    const repoB = createDeferred<ConfigProfile[]>();
+    mocks.getProfiles
+      .mockImplementationOnce(() => repoA.promise)
+      .mockImplementationOnce(() => repoB.promise);
+
+    const { result, rerender } = renderHook(
+      (selectedRepoId: string | null) =>
+        useProfiles({
+          appT: {},
+          profileT: {},
+          language: "zh",
+          selectedRepoId,
+          activeProviderId: "dotnet",
+          providerSchemas: {},
+          setActiveProviderId: vi.fn(),
+          setIsCustomMode: vi.fn(),
+          isCustomMode: false,
+          setSelectedPreset: vi.fn(),
+          setProviderParameters: vi.fn(),
+          applyDotnetCustomConfig: vi.fn(),
+          replaceScopedConfigKey: vi.fn(),
+          presets: [],
+          defaultPresetId: "release-fd",
+          getPresetText: (_presetId, fallbackName, fallbackDescription) => ({
+            name: fallbackName,
+            description: fallbackDescription,
+          }),
+          buildProfileParameters: () => ({}),
+        }),
+      {
+        initialProps: "repo-a",
+      }
+    );
+
+    await act(async () => {
+      repoA.resolve([createProfile("alpha")]);
+    });
+
+    await waitFor(() => {
+      expect(result.current.profiles.map((profile) => profile.name)).toEqual(["alpha"]);
+    });
+
+    rerender("repo-b");
+    expect(result.current.profiles).toEqual([]);
+
+    await act(async () => {
+      repoB.resolve([createProfile("beta")]);
+    });
+
+    await waitFor(() => {
+      expect(result.current.profiles.map((profile) => profile.name)).toEqual(["beta"]);
+    });
+  });
+});
