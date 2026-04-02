@@ -472,6 +472,7 @@
     "openOutputDirectory": "Click to open",
     "outputDirectoryOpened": "Output directory opened",
     "openOutputDirectoryFailed": "Failed to open output directory",
+    "trayPublishFailed": "Failed to start tray publish",
     "fileCountUnit": "files",
     "openReleaseChecklist": "Open Signed Release Checklist",
     "noOutput": "No output",

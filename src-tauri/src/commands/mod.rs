@@ -52,6 +52,7 @@ pub use repository::{
     check_repository_branch_connectivity, detect_repository_provider, read_project_publish_profile,
     scan_project, scan_project_files, scan_repository_branches,
 };
+pub(crate) use repository::{resolve_project_file_from_search_path, scan_publish_profiles};
 pub(crate) use updater::PendingUpdateState;
 pub(crate) use updater::{
     __cmd__check_update, __cmd__get_current_version, __cmd__get_shortcuts_help,

@@ -14,6 +14,8 @@ const mocks = vi.hoisted(() => ({
     warning: vi.fn(),
     message: vi.fn(),
   },
+  openOutputDirectory: vi.fn(),
+  showMainWindow: vi.fn(),
   useDotnetPublishSelection: vi.fn(),
   usePublishSpecBuilder: vi.fn(),
 }));
@@ -50,6 +52,15 @@ vi.mock("@/hooks/useDotnetPublishSelection", () => ({
 vi.mock("@/hooks/usePublishSpecBuilder", () => ({
   usePublishSpecBuilder: mocks.usePublishSpecBuilder,
 }));
+
+vi.mock("@/lib/store", async () => {
+  const actual = await vi.importActual<typeof import("@/lib/store")>("@/lib/store");
+  return {
+    ...actual,
+    openOutputDirectory: mocks.openOutputDirectory,
+    showMainWindow: mocks.showMainWindow,
+  };
+});
 
 vi.mock("@/lib/tauri/invokeErrors", () => ({
   extractInvokeErrorMessage: (error: unknown) =>
@@ -197,7 +208,10 @@ describe("usePublishRunner", () => {
       });
     });
 
-    expect(props.pushRecentConfig).toHaveBeenCalledWith("pubxml:FolderProfile");
+    expect(props.pushRecentConfig).toHaveBeenCalledWith(
+      "pubxml:FolderProfile",
+      "repo-1"
+    );
     expect(props.savePublishRecord).toHaveBeenCalledWith(
       expect.objectContaining({
         repoId: "repo-1",
@@ -259,6 +273,46 @@ describe("usePublishRunner", () => {
     expect(props.savePublishRecord).not.toHaveBeenCalled();
   });
 
+  it("环境检查失败时不会继续执行发布", async () => {
+    mocks.runEnvironmentCheck.mockRejectedValue(new Error("env boom"));
+    mocks.invoke.mockResolvedValue({
+      provider_id: "dotnet",
+      success: true,
+      cancelled: false,
+      error: null,
+      output_dir: "/exports/App/Release",
+      file_count: 0,
+    });
+
+    const props = createRunnerProps();
+    const { result } = renderHook(() => usePublishRunner(props));
+
+    await act(async () => {
+      await result.current.runPublishSpec(
+        {
+          version: 1,
+          provider_id: "dotnet",
+          project_path: "/repo/App.csproj",
+          parameters: {
+            configuration: "Release",
+          },
+        },
+        {
+          repoId: "repo-1",
+          recentConfigKey: "pubxml:FolderProfile",
+          restoreWindowOnFailure: true,
+        }
+      );
+    });
+
+    expect(mocks.invoke).not.toHaveBeenCalled();
+    expect(props.savePublishRecord).not.toHaveBeenCalled();
+    expect(mocks.showMainWindow).toHaveBeenCalled();
+    expect(mocks.toast.error).toHaveBeenCalledWith("环境检查失败", {
+      description: "env boom",
+    });
+  });
+
   it("发布失败时仍然写入失败记录", async () => {
     mocks.runEnvironmentCheck.mockResolvedValue(readyEnvironment);
     mocks.invoke.mockRejectedValue(new Error("boom"));
@@ -308,5 +362,84 @@ describe("usePublishRunner", () => {
     expect(mocks.toast.error).toHaveBeenCalledWith("发布失败", {
       description: "boom",
     });
+  });
+
+  it("允许覆盖 repoId 并在成功后自动打开输出目录", async () => {
+    mocks.runEnvironmentCheck.mockResolvedValue(readyEnvironment);
+    mocks.invoke.mockResolvedValue({
+      provider_id: "dotnet",
+      success: true,
+      cancelled: false,
+      error: null,
+      output_dir: "/exports/App/Release",
+      file_count: 3,
+    });
+    mocks.openOutputDirectory.mockResolvedValue("/exports/App/Release");
+
+    const props = createRunnerProps();
+    const { result } = renderHook(() => usePublishRunner(props));
+
+    await act(async () => {
+      await result.current.runPublishSpec(
+        {
+          version: 1,
+          provider_id: "dotnet",
+          project_path: "/repo/App.csproj",
+          parameters: {
+            configuration: "Release",
+            output: "/exports/App/Release",
+          },
+        },
+        {
+          repoId: "repo-2",
+          recentConfigKey: "userprofile:beta",
+          openOutputDirOnSuccess: true,
+        }
+      );
+    });
+
+    expect(props.pushRecentConfig).toHaveBeenCalledWith("userprofile:beta", "repo-2");
+    expect(mocks.openOutputDirectory).toHaveBeenCalledWith("/exports/App/Release");
+    expect(props.savePublishRecord).toHaveBeenCalledWith(
+      expect.objectContaining({
+        repoId: "repo-2",
+        outputDir: "/exports/App/Release",
+      })
+    );
+  });
+
+  it("托盘发布失败时会拉起主窗口", async () => {
+    mocks.runEnvironmentCheck.mockResolvedValue(readyEnvironment);
+    mocks.invoke.mockResolvedValue({
+      provider_id: "dotnet",
+      success: false,
+      cancelled: false,
+      error: "publish failed",
+      output_dir: "",
+      file_count: 0,
+    });
+
+    const props = createRunnerProps();
+    const { result } = renderHook(() => usePublishRunner(props));
+
+    await act(async () => {
+      await result.current.runPublishSpec(
+        {
+          version: 1,
+          provider_id: "dotnet",
+          project_path: "/repo/App.csproj",
+          parameters: {
+            configuration: "Release",
+          },
+        },
+        {
+          repoId: "repo-1",
+          recentConfigKey: "pubxml:FolderProfile",
+          restoreWindowOnFailure: true,
+        }
+      );
+    });
+
+    expect(mocks.showMainWindow).toHaveBeenCalled();
   });
 });

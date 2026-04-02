@@ -29,10 +29,15 @@ vi.mock("@/hooks/useAppState", async () => {
         error: null,
         repositories: [],
         selectedRepoId: null,
+        recentRepoIds: [],
+        recentConfigKeysByRepo: {},
         addRepository: mocks.noop,
         removeRepository: mocks.noop,
         updateRepository: mocks.noop,
         selectRepository: mocks.noop,
+        pushRecentPublishConfig: mocks.noop,
+        removeRecentPublishConfig: mocks.noop,
+        replaceRecentPublishConfigKey: mocks.noop,
         leftPanelWidth: 220,
         middlePanelWidth: 280,
         panelWidthsCustomized: false,
@@ -219,6 +224,10 @@ vi.mock("@/hooks/usePublishRunner", () => ({
     startPublish: mocks.noop,
     cancelPublish: mocks.noop,
   }),
+}));
+
+vi.mock("@/hooks/useTrayRecentPublish", () => ({
+  useTrayRecentPublish: () => undefined,
 }));
 
 vi.mock("@/hooks/useProfiles", () => ({

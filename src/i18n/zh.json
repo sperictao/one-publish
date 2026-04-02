@@ -472,6 +472,7 @@
     "openOutputDirectory": "点击打开目录",
     "outputDirectoryOpened": "已打开输出目录",
     "openOutputDirectoryFailed": "打开输出目录失败",
+    "trayPublishFailed": "状态栏发布启动失败",
     "fileCountUnit": "个文件",
     "openReleaseChecklist": "打开签名发布清单",
     "noOutput": "无输出",

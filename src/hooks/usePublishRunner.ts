@@ -8,7 +8,11 @@ import {
   runEnvironmentCheck,
   type EnvironmentCheckSnapshot,
 } from "@/lib/environment";
-import type { ExecutionRecord } from "@/lib/store";
+import {
+  openOutputDirectory,
+  showMainWindow,
+  type ExecutionRecord,
+} from "@/lib/store";
 import { useDotnetPublishSelection } from "@/hooks/useDotnetPublishSelection";
 import { usePublishLogStream } from "@/hooks/usePublishLogStream";
 import { usePublishSpecBuilder } from "@/hooks/usePublishSpecBuilder";
@@ -38,6 +42,13 @@ export interface ProviderPublishSpec {
   provider_id: string;
   project_path: string;
   parameters: Record<string, unknown>;
+}
+
+export interface RunPublishOptions {
+  repoId?: string | null;
+  recentConfigKey?: string | null;
+  openOutputDirOnSuccess?: boolean;
+  restoreWindowOnFailure?: boolean;
 }
 
 interface DotnetPreset {
@@ -152,8 +163,42 @@ export function usePublishRunner({
     return getOutputLogSnapshot();
   }, [getOutputLogSnapshot]);
 
+  const restoreMainWindowIfNeeded = useCallback(async (shouldRestore: boolean) => {
+    if (!shouldRestore) {
+      return;
+    }
+
+    try {
+      await showMainWindow();
+    } catch {
+      // noop
+    }
+  }, []);
+
+  const openOutputDirectoryIfNeeded = useCallback(
+    async (shouldOpen: boolean, outputDir: string) => {
+      if (!shouldOpen || !outputDir.trim()) {
+        return;
+      }
+
+      try {
+        await openOutputDirectory(outputDir);
+      } catch (err) {
+        toast.error(appT.openOutputDirectoryFailed || "打开输出目录失败", {
+          description: String(err),
+        });
+      }
+    },
+    [appT.openOutputDirectoryFailed]
+  );
+
   const runPublishSpec = useCallback(
-    async (spec: ProviderPublishSpec, recentConfigKey?: string | null) => {
+    async (spec: ProviderPublishSpec, options?: RunPublishOptions) => {
+      const effectiveRepoId = options?.repoId ?? selectedRepoId;
+      const recentConfigKey = options?.recentConfigKey;
+      const openOutputDirOnSuccess = options?.openOutputDirOnSuccess ?? false;
+      const restoreWindowOnFailure = options?.restoreWindowOnFailure ?? false;
+
       try {
         const env = await runEnvironmentCheck([spec.provider_id]);
         const environmentCheck = createEnvironmentCheckSnapshot(env, [
@@ -167,6 +212,7 @@ export function usePublishRunner({
             description: critical.description,
           });
           openEnvironmentDialog(environmentCheck, [spec.provider_id]);
+          await restoreMainWindowIfNeeded(restoreWindowOnFailure);
           return;
         }
 
@@ -181,6 +227,8 @@ export function usePublishRunner({
         toast.error(appT.environmentCheckFailed || "环境检查失败", {
           description: extractInvokeErrorMessage(err),
         });
+        await restoreMainWindowIfNeeded(restoreWindowOnFailure);
+        return;
       }
 
       setLastPublishSpec(spec);
@@ -195,7 +243,7 @@ export function usePublishRunner({
 
       try {
         if (recentConfigKey) {
-          pushRecentConfig(recentConfigKey);
+          pushRecentConfig(recentConfigKey, effectiveRepoId);
         }
 
         const result = await invoke<PublishResult>("execute_provider_publish", {
@@ -206,6 +254,11 @@ export function usePublishRunner({
         setPublishResult(result);
 
         if (result.success) {
+          await openOutputDirectoryIfNeeded(
+            openOutputDirOnSuccess,
+            result.output_dir
+          );
+
           toast.success(publishT.success || "发布成功!", {
             description: result.output_dir
               ? (publishT.output || "输出目录: {{dir}}").replace(
@@ -218,15 +271,17 @@ export function usePublishRunner({
           toast.warning(appT.publishCancelled || "发布已取消", {
             description: result.error || appT.userCancelledTask || "用户取消了执行任务",
           });
+          await restoreMainWindowIfNeeded(restoreWindowOnFailure);
         } else {
           toast.error(publishT.failed || "发布失败", {
             description: result.error || appT.unknownError || "未知错误",
           });
+          await restoreMainWindowIfNeeded(restoreWindowOnFailure);
         }
 
         const record = createPublishExecutionRecord({
           spec,
-          repoId: selectedRepoId,
+          repoId: effectiveRepoId,
           startedAt: executionStartedAt,
           finishedAt: new Date().toISOString(),
           result,
@@ -266,7 +321,7 @@ export function usePublishRunner({
 
         const record = createPublishExecutionRecord({
           spec,
-          repoId: selectedRepoId,
+          repoId: effectiveRepoId,
           startedAt: executionStartedAt,
           finishedAt: new Date().toISOString(),
           result: failedResult,
@@ -274,6 +329,7 @@ export function usePublishRunner({
         });
         setCurrentPublishRecordId(record.id);
         savePublishRecord(record);
+        await restoreMainWindowIfNeeded(restoreWindowOnFailure);
       } finally {
         setIsPublishing(false);
         setIsCancellingPublish(false);
@@ -287,6 +343,8 @@ export function usePublishRunner({
       savePublishRecord,
       selectedRepoId,
       setEnvironmentLastCheck,
+      openOutputDirectoryIfNeeded,
+      restoreMainWindowIfNeeded,
       waitForOutputLogSnapshot,
     ]
   );
@@ -319,7 +377,10 @@ export function usePublishRunner({
             project_path: projectInfo.project_file,
             parameters: projectProfile.parameters,
           },
-          recentConfigKeyForCurrentSelection
+          {
+            repoId: selectedRepoId,
+            recentConfigKey: recentConfigKeyForCurrentSelection,
+          }
         );
         return;
       }
@@ -330,7 +391,10 @@ export function usePublishRunner({
       return;
     }
 
-    await runPublishSpec(spec, recentConfigKeyForCurrentSelection);
+    await runPublishSpec(spec, {
+      repoId: selectedRepoId,
+      recentConfigKey: recentConfigKeyForCurrentSelection,
+    });
   }, [
     activeProviderId,
     appT,
@@ -341,6 +405,7 @@ export function usePublishRunner({
     resolveSelectedProjectProfile,
     resolvedProjectProfile,
     runPublishSpec,
+    selectedRepoId,
     selectedRepo,
     selectedPreset,
     specVersion,

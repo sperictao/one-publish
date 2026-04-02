@@ -10,6 +10,9 @@ import {
   addRepository as apiAddRepository,
   removeRepository as apiRemoveRepository,
   updateRepository as apiUpdateRepository,
+  pushRecentPublishConfig as apiPushRecentPublishConfig,
+  removeRecentPublishConfig as apiRemoveRecentPublishConfig,
+  replaceRecentPublishConfigKey as apiReplaceRecentPublishConfigKey,
   updatePreferences,
   type AppState,
   type PublishConfigStore,
@@ -20,6 +23,118 @@ import type { Repository, RepoPublishConfig } from "@/types/repository";
 
 // 防抖延迟时间（毫秒）
 const DEBOUNCE_DELAY = 500;
+const MAX_RECENT_REPOSITORIES = 6;
+const MAX_RECENT_CONFIGS_PER_REPO = 6;
+
+function pushRecentPublishConfigState(
+  state: AppState,
+  repoId: string,
+  configKey: string
+): AppState {
+  const nextRepoId = repoId.trim();
+  const nextConfigKey = configKey.trim();
+  if (!nextRepoId || !nextConfigKey) {
+    return state;
+  }
+
+  const nextRecentConfigKeysByRepo = {
+    ...state.recentConfigKeysByRepo,
+    [nextRepoId]: [
+      nextConfigKey,
+      ...(state.recentConfigKeysByRepo[nextRepoId] || []).filter(
+        (item) => item !== nextConfigKey
+      ),
+    ].slice(0, MAX_RECENT_CONFIGS_PER_REPO),
+  };
+
+  const nextRecentRepoIds = [
+    nextRepoId,
+    ...state.recentRepoIds.filter((item) => item !== nextRepoId),
+  ].slice(0, MAX_RECENT_REPOSITORIES);
+  const retainedRepoIds = new Set(nextRecentRepoIds);
+
+  return {
+    ...state,
+    recentRepoIds: nextRecentRepoIds,
+    recentConfigKeysByRepo: Object.fromEntries(
+      Object.entries(nextRecentConfigKeysByRepo).filter(
+        ([repoKey, keys]) => retainedRepoIds.has(repoKey) && keys.length > 0
+      )
+    ),
+  };
+}
+
+function removeRecentPublishConfigState(
+  state: AppState,
+  repoId: string,
+  configKey: string
+): AppState {
+  const nextRepoId = repoId.trim();
+  const nextConfigKey = configKey.trim();
+  if (!nextRepoId || !nextConfigKey) {
+    return state;
+  }
+
+  const currentScopedKeys = state.recentConfigKeysByRepo[nextRepoId];
+  if (!currentScopedKeys?.length) {
+    return state;
+  }
+
+  const nextScopedKeys = currentScopedKeys.filter((item) => item !== nextConfigKey);
+  const nextRecentConfigKeysByRepo = { ...state.recentConfigKeysByRepo };
+  let nextRecentRepoIds = state.recentRepoIds;
+
+  if (nextScopedKeys.length === 0) {
+    delete nextRecentConfigKeysByRepo[nextRepoId];
+    nextRecentRepoIds = state.recentRepoIds.filter((item) => item !== nextRepoId);
+  } else {
+    nextRecentConfigKeysByRepo[nextRepoId] = nextScopedKeys;
+  }
+
+  return {
+    ...state,
+    recentRepoIds: nextRecentRepoIds,
+    recentConfigKeysByRepo: nextRecentConfigKeysByRepo,
+  };
+}
+
+function replaceRecentPublishConfigKeyState(
+  state: AppState,
+  repoId: string,
+  previousKey: string,
+  nextKey: string
+): AppState {
+  const nextRepoId = repoId.trim();
+  const previousConfigKey = previousKey.trim();
+  const nextConfigKey = nextKey.trim();
+  if (!nextRepoId || !previousConfigKey || !nextConfigKey) {
+    return state;
+  }
+
+  const currentScopedKeys = state.recentConfigKeysByRepo[nextRepoId];
+  if (!currentScopedKeys?.includes(previousConfigKey)) {
+    return state;
+  }
+
+  const normalizedScopedKeys: string[] = [];
+  for (const key of currentScopedKeys) {
+    const value = key === previousConfigKey ? nextConfigKey : key;
+    if (!normalizedScopedKeys.includes(value)) {
+      normalizedScopedKeys.push(value);
+    }
+    if (normalizedScopedKeys.length >= MAX_RECENT_CONFIGS_PER_REPO) {
+      break;
+    }
+  }
+
+  return {
+    ...state,
+    recentConfigKeysByRepo: {
+      ...state.recentConfigKeysByRepo,
+      [nextRepoId]: normalizedScopedKeys,
+    },
+  };
+}
 
 export function useAppState() {
   const [state, setState] = useState<AppState>(defaultAppState);
@@ -326,6 +441,58 @@ export function useAppState() {
     [setPreferences]
   );
 
+  const pushRecentPublishConfig = useCallback(
+    (configKey: string, repoId: string | null = state.selectedRepoId) => {
+      if (!repoId || !configKey.trim()) {
+        return;
+      }
+
+      setState((prev) => pushRecentPublishConfigState(prev, repoId, configKey));
+      apiPushRecentPublishConfig({ repoId, configKey }).catch((err) => {
+        console.error("记录最近使用发布配置失败:", err);
+      });
+    },
+    [state.selectedRepoId]
+  );
+
+  const removeRecentPublishConfig = useCallback(
+    (configKey: string, repoId: string | null = state.selectedRepoId) => {
+      if (!repoId || !configKey.trim()) {
+        return;
+      }
+
+      setState((prev) => removeRecentPublishConfigState(prev, repoId, configKey));
+      apiRemoveRecentPublishConfig({ repoId, configKey }).catch((err) => {
+        console.error("移除最近使用发布配置失败:", err);
+      });
+    },
+    [state.selectedRepoId]
+  );
+
+  const replaceRecentPublishConfigKey = useCallback(
+    (
+      previousKey: string,
+      nextKey: string,
+      repoId: string | null = state.selectedRepoId
+    ) => {
+      if (!repoId || !previousKey.trim() || !nextKey.trim()) {
+        return;
+      }
+
+      setState((prev) =>
+        replaceRecentPublishConfigKeyState(prev, repoId, previousKey, nextKey)
+      );
+      apiReplaceRecentPublishConfigKey({
+        repoId,
+        previousKey,
+        nextKey,
+      }).catch((err) => {
+        console.error("替换最近使用发布配置 key 失败:", err);
+      });
+    },
+    [state.selectedRepoId]
+  );
+
   return {
     // 状态
     state,
@@ -335,10 +502,15 @@ export function useAppState() {
     // 仓库操作
     repositories: state.repositories,
     selectedRepoId: state.selectedRepoId,
+    recentRepoIds: state.recentRepoIds,
+    recentConfigKeysByRepo: state.recentConfigKeysByRepo,
     addRepository,
     removeRepository,
     updateRepository,
     selectRepository,
+    pushRecentPublishConfig,
+    removeRecentPublishConfig,
+    replaceRecentPublishConfigKey,
 
     // UI 状态
     leftPanelWidth: state.leftPanelWidth,

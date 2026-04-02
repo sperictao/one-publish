@@ -2,6 +2,7 @@ import {
   defaultRepoPublishConfig,
   type PublishConfigStore,
 } from "@/lib/store";
+import { getPathBasename, joinPath } from "@/lib/paths";
 import type { ParameterValue } from "@/types/parameters";
 
 export const DOTNET_ADVANCED_PARAMETER_KEYS = [
@@ -26,6 +27,33 @@ function clonePublishConfigStore(
 
 export function createDefaultDotnetPublishConfig(): PublishConfigStore {
   return clonePublishConfigStore(defaultRepoPublishConfig.customConfig);
+}
+
+function stripFileExtension(name: string): string {
+  return name.replace(/\.[^.]+$/, "");
+}
+
+function buildDefaultScopedOutputDir(params: {
+  defaultOutputDir?: string;
+  projectFile?: string;
+  projectRoot?: string;
+  configuration?: string;
+}): string {
+  const { defaultOutputDir, projectFile, projectRoot, configuration } = params;
+  if (!defaultOutputDir) {
+    return "";
+  }
+
+  const projectName = projectFile
+    ? stripFileExtension(getPathBasename(projectFile))
+    : projectRoot
+      ? getPathBasename(projectRoot)
+      : "";
+  const resolvedConfiguration = configuration?.trim() || "Release";
+
+  return projectName
+    ? joinPath(defaultOutputDir, projectName, resolvedConfiguration)
+    : joinPath(defaultOutputDir, resolvedConfiguration);
 }
 
 export function normalizeDotnetPropertyMap(
@@ -205,6 +233,26 @@ export function buildDotnetProfileParameters(
   }
 
   return parameters;
+}
+
+export function normalizeDotnetProjectBoundParameters(params: {
+  parameters: Record<string, unknown>;
+  defaultOutputDir?: string;
+  projectFile?: string;
+  projectRoot?: string;
+}): Record<string, ParameterValue> {
+  const config = createDotnetPublishConfigFromParameters(params.parameters);
+
+  if (!config.outputDir.trim() && params.defaultOutputDir) {
+    config.outputDir = buildDefaultScopedOutputDir({
+      defaultOutputDir: params.defaultOutputDir,
+      projectFile: params.projectFile,
+      projectRoot: params.projectRoot,
+      configuration: config.configuration,
+    });
+  }
+
+  return buildDotnetProfileParameters(config);
 }
 
 export function createDotnetPublishConfigFromParameters(

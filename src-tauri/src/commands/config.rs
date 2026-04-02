@@ -54,6 +54,7 @@ pub async fn import_config(file_path: String) -> Result<ConfigExport, crate::err
 /// 应用导入的配置（按仓库隔离）
 #[tauri::command]
 pub async fn apply_imported_config(
+    app: tauri::AppHandle,
     repo_id: String,
     profiles: Vec<ConfigProfile>,
 ) -> Result<(), crate::errors::AppError> {
@@ -99,5 +100,8 @@ pub async fn apply_imported_config(
             "apply_imported_config_save_failed",
         )
     })?;
+    if let Err(err) = crate::tray::update_tray_menu(app.clone()).await {
+        log::warn!("刷新托盘菜单失败: {}", err);
+    }
     Ok(())
 }

@@ -174,10 +174,14 @@ pub fn run() {
             store::save_profile,
             store::update_profile,
             store::delete_profile,
+            store::push_recent_publish_config,
+            store::remove_recent_publish_config,
+            store::replace_recent_publish_config_key,
             store::get_execution_history,
             store::add_execution_record,
             store::set_execution_record_snapshot,
-            tray::update_tray_menu
+            tray::update_tray_menu,
+            tray::show_main_window
         ])
         .run(tauri::generate_context!());
 

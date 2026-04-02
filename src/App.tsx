@@ -15,6 +15,7 @@ import { useRecoverableSpec } from "@/hooks/useRecoverableSpec";
 import { useRerunFlow } from "@/hooks/useRerunFlow";
 import { usePresetText } from "@/hooks/usePresetText";
 import { usePublishRunner } from "@/hooks/usePublishRunner";
+import { useTrayRecentPublish } from "@/hooks/useTrayRecentPublish";
 import {
   useProfiles,
   QUICK_CREATE_PROFILE_GROUP_CUSTOM,
@@ -176,10 +177,14 @@ function App() {
     isLoading: isStateLoading,
     repositories,
     selectedRepoId,
+    recentConfigKeysByRepo,
     addRepository,
     removeRepository,
     updateRepository,
     selectRepository,
+    pushRecentPublishConfig,
+    removeRecentPublishConfig,
+    replaceRecentPublishConfigKey,
     leftPanelWidth,
     middlePanelWidth,
     panelWidthsCustomized,
@@ -349,7 +354,13 @@ function App() {
     removeRecentConfig,
     toggleFavoriteConfig,
     replaceScopedConfigKey,
-  } = useScopedConfigs(selectedRepoId);
+  } = useScopedConfigs({
+    selectedRepoId,
+    recentConfigByRepo: recentConfigKeysByRepo,
+    pushRecentConfig: pushRecentPublishConfig,
+    removeRecentConfig: removeRecentPublishConfig,
+    replaceRecentConfigKey: replaceRecentPublishConfigKey,
+  });
 
   const {
     activeProviderLabel,
@@ -530,6 +541,14 @@ function App() {
     extractSpecFromRecord,
     restoreSpecToEditor,
     getRecentConfigKeyFromSpec,
+    runPublishSpec,
+  });
+
+  useTrayRecentPublish({
+    appT,
+    repositories,
+    defaultOutputDir,
+    specVersion: SPEC_VERSION,
     runPublishSpec,
   });
 

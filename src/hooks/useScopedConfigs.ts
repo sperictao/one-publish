@@ -1,9 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 
-const RECENT_CONFIGS_KEY = "one-publish:recentConfigs";
 const FAVORITE_CONFIGS_KEY = "one-publish:favoriteConfigs";
 const LEGACY_CONFIG_SCOPE = "__legacy__";
-const MAX_RECENT = 6;
 
 function parseScopedConfigKeys(storageKey: string) {
   try {
@@ -60,33 +58,32 @@ function persistScopedConfigKeys(
   }
 }
 
-export function useScopedConfigs(selectedRepoId: string | null) {
-  const [recentConfigByRepo, setRecentConfigByRepo] = useState<Record<string, string[]>>(() =>
-    parseScopedConfigKeys(RECENT_CONFIGS_KEY)
-  );
-  const [favoriteConfigByRepo, setFavoriteConfigByRepo] = useState<Record<string, string[]>>(() =>
-    parseScopedConfigKeys(FAVORITE_CONFIGS_KEY)
-  );
+export function useScopedConfigs(params: {
+  selectedRepoId: string | null;
+  recentConfigByRepo: Record<string, string[]>;
+  pushRecentConfig: (key: string, repoId?: string | null) => void;
+  removeRecentConfig: (key: string, repoId?: string | null) => void;
+  replaceRecentConfigKey: (
+    previousKey: string,
+    nextKey: string,
+    repoId?: string | null
+  ) => void;
+}) {
+  const {
+    selectedRepoId,
+    recentConfigByRepo,
+    pushRecentConfig,
+    removeRecentConfig,
+    replaceRecentConfigKey,
+  } = params;
+  const [favoriteConfigByRepo, setFavoriteConfigByRepo] = useState<
+    Record<string, string[]>
+  >(() => parseScopedConfigKeys(FAVORITE_CONFIGS_KEY));
 
   useEffect(() => {
     if (!selectedRepoId) {
       return;
     }
-
-    setRecentConfigByRepo((prev) => {
-      const legacy = prev[LEGACY_CONFIG_SCOPE];
-      if (!legacy || prev[selectedRepoId]) {
-        return prev;
-      }
-
-      const next = {
-        ...prev,
-        [selectedRepoId]: legacy,
-      };
-      delete next[LEGACY_CONFIG_SCOPE];
-      persistScopedConfigKeys(RECENT_CONFIGS_KEY, next);
-      return next;
-    });
 
     setFavoriteConfigByRepo((prev) => {
       const legacy = prev[LEGACY_CONFIG_SCOPE];
@@ -117,48 +114,6 @@ export function useScopedConfigs(selectedRepoId: string | null) {
     }
     return favoriteConfigByRepo[selectedRepoId] ?? [];
   }, [favoriteConfigByRepo, selectedRepoId]);
-
-  const pushRecentConfig = useCallback(
-    (key: string, repoId: string | null = selectedRepoId) => {
-      if (!repoId) {
-        return;
-      }
-
-      setRecentConfigByRepo((prev) => {
-        const scoped = prev[repoId] ?? [];
-        const nextScoped = [key, ...scoped.filter((item) => item !== key)].slice(
-          0,
-          MAX_RECENT
-        );
-        const next = {
-          ...prev,
-          [repoId]: nextScoped,
-        };
-        persistScopedConfigKeys(RECENT_CONFIGS_KEY, next);
-        return next;
-      });
-    },
-    [selectedRepoId]
-  );
-
-  const removeRecentConfig = useCallback(
-    (key: string, repoId: string | null = selectedRepoId) => {
-      if (!repoId) {
-        return;
-      }
-
-      setRecentConfigByRepo((prev) => {
-        const scoped = prev[repoId] ?? [];
-        const next = {
-          ...prev,
-          [repoId]: scoped.filter((item) => item !== key),
-        };
-        persistScopedConfigKeys(RECENT_CONFIGS_KEY, next);
-        return next;
-      });
-    },
-    [selectedRepoId]
-  );
 
   const toggleFavoriteConfig = useCallback(
     (key: string, repoId: string | null = selectedRepoId) => {
@@ -196,24 +151,7 @@ export function useScopedConfigs(selectedRepoId: string | null) {
         return;
       }
 
-      setRecentConfigByRepo((prev) => {
-        const scoped = prev[repoId] ?? [];
-        if (!scoped.includes(previousKey)) {
-          return prev;
-        }
-
-        const nextScoped = Array.from(
-          new Set(
-            scoped.map((item) => (item === previousKey ? nextKey : item))
-          )
-        ).slice(0, MAX_RECENT);
-        const next = {
-          ...prev,
-          [repoId]: nextScoped,
-        };
-        persistScopedConfigKeys(RECENT_CONFIGS_KEY, next);
-        return next;
-      });
+      replaceRecentConfigKey(previousKey, nextKey, repoId);
 
       setFavoriteConfigByRepo((prev) => {
         const scoped = prev[repoId] ?? [];
@@ -232,7 +170,7 @@ export function useScopedConfigs(selectedRepoId: string | null) {
         return next;
       });
     },
-    [selectedRepoId]
+    [replaceRecentConfigKey, selectedRepoId]
   );
 
   return {

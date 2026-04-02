@@ -1,5 +1,7 @@
-import { createDotnetPublishConfigFromParameters } from "@/lib/dotnetPublishConfig";
-import { getPathBasename, joinPath } from "@/lib/paths";
+import {
+  createDotnetPublishConfigFromParameters,
+  normalizeDotnetProjectBoundParameters,
+} from "@/lib/dotnetPublishConfig";
 import {
   extractDotnetPublishParametersFromProjectProfile,
   parseProjectPublishProfileXml,
@@ -15,57 +17,6 @@ export interface ResolvedDotnetProjectProfile {
   parsedProfile: ParsedProjectPublishProfile;
   parameters: Record<string, ParameterValue>;
   editableConfig: PublishConfigStore;
-}
-
-function stripFileExtension(name: string): string {
-  return name.replace(/\.[^.]+$/, "");
-}
-
-function buildDefaultScopedOutputDir(params: {
-  defaultOutputDir?: string;
-  projectInfo: DotnetProjectInfo;
-  configuration?: string;
-}): string {
-  const { defaultOutputDir, projectInfo, configuration } = params;
-  if (!defaultOutputDir) {
-    return "";
-  }
-
-  const projectName = projectInfo.project_file
-    ? stripFileExtension(getPathBasename(projectInfo.project_file))
-    : getPathBasename(projectInfo.root_path);
-  const resolvedConfiguration = configuration?.trim() || "Release";
-
-  return projectName
-    ? joinPath(defaultOutputDir, projectName, resolvedConfiguration)
-    : joinPath(defaultOutputDir, resolvedConfiguration);
-}
-
-function normalizeDotnetProjectProfileParameters(params: {
-  projectInfo: DotnetProjectInfo;
-  rawParameters: Record<string, ParameterValue>;
-  defaultOutputDir?: string;
-}): Record<string, ParameterValue> {
-  const { projectInfo, rawParameters, defaultOutputDir } = params;
-  const parameters: Record<string, ParameterValue> = {
-    ...rawParameters,
-  };
-
-  if (typeof parameters.output !== "string" && defaultOutputDir) {
-    const configuration =
-      typeof parameters.configuration === "string" &&
-      parameters.configuration.trim().length > 0
-        ? parameters.configuration
-        : "Release";
-
-    parameters.output = buildDefaultScopedOutputDir({
-      defaultOutputDir,
-      projectInfo,
-      configuration,
-    });
-  }
-
-  return parameters;
 }
 
 export async function resolveDotnetProjectProfile(params: {
@@ -84,10 +35,11 @@ export async function resolveDotnetProjectProfile(params: {
       string,
       ParameterValue
     >;
-  const normalizedParameters = normalizeDotnetProjectProfileParameters({
-    projectInfo,
-    rawParameters,
+  const normalizedParameters = normalizeDotnetProjectBoundParameters({
+    parameters: rawParameters,
     defaultOutputDir,
+    projectFile: projectInfo.project_file,
+    projectRoot: projectInfo.root_path,
   });
 
   return {

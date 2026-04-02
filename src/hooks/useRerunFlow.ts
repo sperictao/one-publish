@@ -2,6 +2,7 @@ import { useCallback, useState } from "react";
 import { toast } from "sonner";
 
 import type { ExecutionRecord } from "@/lib/store";
+import type { RunPublishOptions } from "@/hooks/usePublishRunner";
 
 interface TranslationMap {
   [key: string]: string | undefined;
@@ -27,7 +28,7 @@ interface UseRerunFlowParams {
   extractSpecFromRecord: (record: ExecutionRecord) => ProviderPublishSpec | null;
   restoreSpecToEditor: (spec: ProviderPublishSpec) => void;
   getRecentConfigKeyFromSpec: (spec: ProviderPublishSpec) => string | null;
-  runPublishSpec: (spec: ProviderPublishSpec, recentConfigKey?: string | null) => Promise<void>;
+  runPublishSpec: (spec: ProviderPublishSpec, options?: RunPublishOptions) => Promise<void>;
 }
 
 const INITIAL_CHECKLIST_STATE: RerunChecklistState = {
@@ -63,7 +64,9 @@ export function useRerunFlow({
       }
 
       restoreSpecToEditor(spec);
-      await runPublishSpec(spec, getRecentConfigKeyFromSpec(spec));
+      await runPublishSpec(spec, {
+        recentConfigKey: getRecentConfigKeyFromSpec(spec),
+      });
     },
     [
       extractSpecFromRecord,

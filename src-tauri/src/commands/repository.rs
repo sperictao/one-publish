@@ -104,7 +104,7 @@ pub struct RepositoryBranchConnectivityResult {
     pub can_connect: bool,
 }
 
-fn find_project_root(start_path: &Path) -> Option<PathBuf> {
+pub(crate) fn find_project_root(start_path: &Path) -> Option<PathBuf> {
     let mut current = start_path.to_path_buf();
 
     if current.is_dir() {
@@ -135,7 +135,7 @@ fn find_project_root(start_path: &Path) -> Option<PathBuf> {
     None
 }
 
-fn find_project_file(root: &Path) -> Option<PathBuf> {
+pub(crate) fn find_project_file(root: &Path) -> Option<PathBuf> {
     let ui_dir = root.join("UI");
     if ui_dir.is_dir() {
         if let Ok(entries) = std::fs::read_dir(&ui_dir) {
@@ -175,7 +175,7 @@ fn find_project_file(root: &Path) -> Option<PathBuf> {
     None
 }
 
-fn scan_publish_profiles(project_file: &Path) -> Vec<String> {
+pub(crate) fn scan_publish_profiles(project_file: &Path) -> Vec<String> {
     let mut profiles = Vec::new();
     if let Some(project_dir) = project_file.parent() {
         let profiles_dir = project_dir.join("Properties").join("PublishProfiles");
@@ -194,6 +194,11 @@ fn scan_publish_profiles(project_file: &Path) -> Vec<String> {
     }
     profiles.sort();
     profiles
+}
+
+pub(crate) fn resolve_project_file_from_search_path(start_path: &Path) -> Option<PathBuf> {
+    let root_path = find_project_root(start_path)?;
+    find_project_file(&root_path)
 }
 
 fn extract_xml_tag_values(content: &str, tag_name: &str) -> Vec<String> {

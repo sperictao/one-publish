@@ -63,6 +63,8 @@ export interface BootstrapState {
   theme: "light" | "dark" | "auto";
   executionHistoryLimit: number;
   environmentProviderIds: string[];
+  recentRepoIds: string[];
+  recentConfigKeysByRepo: Record<string, string[]>;
 }
 
 // 完整应用状态：仅用于持久化和少数全量命令交互
@@ -87,6 +89,8 @@ export const defaultBootstrapState: BootstrapState = {
   theme: "auto",
   executionHistoryLimit: 20,
   environmentProviderIds: ["dotnet"],
+  recentRepoIds: [],
+  recentConfigKeysByRepo: {},
 };
 
 // 默认状态
@@ -218,6 +222,28 @@ export async function updatePreferences(params: {
         ? normalizeEnvironmentProviderIds(params.environmentProviderIds)
         : undefined,
   });
+}
+
+export async function pushRecentPublishConfig(params: {
+  repoId: string;
+  configKey: string;
+}): Promise<void> {
+  await invoke("push_recent_publish_config", params);
+}
+
+export async function removeRecentPublishConfig(params: {
+  repoId: string;
+  configKey: string;
+}): Promise<void> {
+  await invoke("remove_recent_publish_config", params);
+}
+
+export async function replaceRecentPublishConfigKey(params: {
+  repoId: string;
+  previousKey: string;
+  nextKey: string;
+}): Promise<void> {
+  await invoke("replace_recent_publish_config_key", params);
 }
 
 // ==================== Provider 相关 ====================
@@ -534,4 +560,8 @@ export async function openOutputDirectory(outputDir: string): Promise<string> {
   return await invoke<string>("open_output_directory", {
     outputDir,
   });
+}
+
+export async function showMainWindow(): Promise<boolean> {
+  return await invoke<boolean>("show_main_window");
 }

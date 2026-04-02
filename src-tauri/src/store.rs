@@ -4,7 +4,7 @@
 
 use crate::errors::AppError;
 use serde::{Deserialize, Serialize};
-use std::collections::{BTreeMap, HashMap};
+use std::collections::{BTreeMap, HashMap, HashSet};
 use std::fs;
 use std::path::PathBuf;
 use std::sync::{OnceLock, RwLock};
@@ -105,6 +105,8 @@ pub struct ExecutionRecord {
 const DEFAULT_EXECUTION_HISTORY_LIMIT: usize = 20;
 const MIN_EXECUTION_HISTORY_LIMIT: usize = 5;
 const MAX_EXECUTION_HISTORY_LIMIT: usize = 200;
+const MAX_RECENT_REPOSITORIES: usize = 6;
+const MAX_RECENT_CONFIGS_PER_REPO: usize = 6;
 
 fn default_execution_history_limit() -> usize {
     DEFAULT_EXECUTION_HISTORY_LIMIT
@@ -237,6 +239,12 @@ pub struct AppState {
     /// 环境检查启用的 Provider 列表
     #[serde(default = "default_environment_provider_ids")]
     pub environment_provider_ids: Vec<String>,
+    /// 最近使用的仓库 ID（按时间倒序）
+    #[serde(default)]
+    pub recent_repo_ids: Vec<String>,
+    /// 各仓库最近使用的发布配置 key 列表
+    #[serde(default)]
+    pub recent_config_keys_by_repo: BTreeMap<String, Vec<String>>,
     /// 最近执行历史
     #[serde(default)]
     pub execution_history: Vec<ExecutionRecord>,
@@ -304,9 +312,196 @@ impl Default for AppState {
             profiles: Vec::new(),
             execution_history_limit: default_execution_history_limit(),
             environment_provider_ids: default_environment_provider_ids(),
+            recent_repo_ids: Vec::new(),
+            recent_config_keys_by_repo: BTreeMap::new(),
             execution_history: Vec::new(),
         }
     }
+}
+
+fn normalize_recent_config_keys(keys: Vec<String>) -> Vec<String> {
+    let mut normalized = Vec::new();
+
+    for key in keys {
+        let trimmed = key.trim();
+        if trimmed.is_empty() || normalized.iter().any(|item| item == trimmed) {
+            continue;
+        }
+
+        normalized.push(trimmed.to_string());
+        if normalized.len() >= MAX_RECENT_CONFIGS_PER_REPO {
+            break;
+        }
+    }
+
+    normalized
+}
+
+fn push_recent_publish_config_state(
+    recent_repo_ids: &mut Vec<String>,
+    recent_config_keys_by_repo: &mut BTreeMap<String, Vec<String>>,
+    repo_id: &str,
+    config_key: &str,
+) -> bool {
+    let repo_id = repo_id.trim();
+    let config_key = config_key.trim();
+    if repo_id.is_empty() || config_key.is_empty() {
+        return false;
+    }
+
+    let scoped = recent_config_keys_by_repo
+        .entry(repo_id.to_string())
+        .or_default();
+    let previous_scoped = scoped.clone();
+    *scoped = std::iter::once(config_key.to_string())
+        .chain(
+            previous_scoped
+                .into_iter()
+                .filter(|item| item != config_key),
+        )
+        .take(MAX_RECENT_CONFIGS_PER_REPO)
+        .collect();
+
+    let previous_repo_ids = recent_repo_ids.clone();
+    *recent_repo_ids = std::iter::once(repo_id.to_string())
+        .chain(
+            previous_repo_ids
+                .into_iter()
+                .filter(|item| item != repo_id),
+        )
+        .take(MAX_RECENT_REPOSITORIES)
+        .collect();
+
+    let retained_repo_ids = recent_repo_ids.iter().cloned().collect::<HashSet<_>>();
+    recent_config_keys_by_repo.retain(|id, keys| {
+        retained_repo_ids.contains(id) && !keys.is_empty()
+    });
+
+    true
+}
+
+fn remove_recent_publish_config_state(
+    recent_repo_ids: &mut Vec<String>,
+    recent_config_keys_by_repo: &mut BTreeMap<String, Vec<String>>,
+    repo_id: &str,
+    config_key: &str,
+) -> bool {
+    let repo_id = repo_id.trim();
+    let config_key = config_key.trim();
+    if repo_id.is_empty() || config_key.is_empty() {
+        return false;
+    }
+
+    let (removed, should_remove_repo) = if let Some(scoped) = recent_config_keys_by_repo.get_mut(repo_id) {
+        let original_len = scoped.len();
+        scoped.retain(|item| item != config_key);
+        (original_len != scoped.len(), scoped.is_empty())
+    } else {
+        return false;
+    };
+
+    if should_remove_repo {
+        recent_config_keys_by_repo.remove(repo_id);
+        recent_repo_ids.retain(|item| item != repo_id);
+    }
+
+    removed || should_remove_repo
+}
+
+fn replace_recent_publish_config_key_state(
+    recent_config_keys_by_repo: &mut BTreeMap<String, Vec<String>>,
+    repo_id: &str,
+    previous_key: &str,
+    next_key: &str,
+) -> bool {
+    let repo_id = repo_id.trim();
+    let previous_key = previous_key.trim();
+    let next_key = next_key.trim();
+    if repo_id.is_empty() || previous_key.is_empty() || next_key.is_empty() {
+        return false;
+    }
+
+    let Some(scoped) = recent_config_keys_by_repo.get_mut(repo_id) else {
+        return false;
+    };
+
+    if !scoped.iter().any(|item| item == previous_key) {
+        return false;
+    }
+
+    *scoped = normalize_recent_config_keys(
+        scoped
+            .iter()
+            .map(|item| {
+                if item == previous_key {
+                    next_key.to_string()
+                } else {
+                    item.clone()
+                }
+            })
+            .collect(),
+    );
+    true
+}
+
+fn sanitize_recent_publish_state(state: &mut AppState) {
+    let valid_repo_ids = state
+        .repositories
+        .iter()
+        .map(|repo| repo.id.clone())
+        .collect::<HashSet<_>>();
+
+    let recent_config_keys_by_repo = std::mem::take(&mut state.recent_config_keys_by_repo);
+    state.recent_config_keys_by_repo = recent_config_keys_by_repo
+        .into_iter()
+        .filter_map(|(repo_id, keys)| {
+            if !valid_repo_ids.contains(&repo_id) {
+                return None;
+            }
+
+            let normalized = normalize_recent_config_keys(keys);
+            if normalized.is_empty() {
+                return None;
+            }
+
+            Some((repo_id, normalized))
+        })
+        .collect();
+
+    let mut normalized_recent_repo_ids = Vec::new();
+    for repo_id in std::mem::take(&mut state.recent_repo_ids) {
+        if normalized_recent_repo_ids.len() >= MAX_RECENT_REPOSITORIES {
+            break;
+        }
+
+        if !valid_repo_ids.contains(&repo_id)
+            || !state.recent_config_keys_by_repo.contains_key(&repo_id)
+            || normalized_recent_repo_ids.iter().any(|item| item == &repo_id)
+        {
+            continue;
+        }
+
+        normalized_recent_repo_ids.push(repo_id);
+    }
+
+    for repo_id in state.recent_config_keys_by_repo.keys() {
+        if normalized_recent_repo_ids.len() >= MAX_RECENT_REPOSITORIES {
+            break;
+        }
+
+        if normalized_recent_repo_ids.iter().any(|item| item == repo_id) {
+            continue;
+        }
+
+        normalized_recent_repo_ids.push(repo_id.clone());
+    }
+
+    let retained_repo_ids = normalized_recent_repo_ids
+        .iter()
+        .cloned()
+        .collect::<HashSet<_>>();
+    state.recent_repo_ids = normalized_recent_repo_ids;
+    state.recent_config_keys_by_repo.retain(|repo_id, _| retained_repo_ids.contains(repo_id));
 }
 
 /// 获取配置文件路径
@@ -331,6 +526,7 @@ fn sanitize_state(mut state: AppState) -> AppState {
     trim_execution_history(&mut state.execution_history, state.execution_history_limit);
     state.environment_provider_ids =
         normalize_environment_provider_ids(state.environment_provider_ids);
+    sanitize_recent_publish_state(&mut state);
 
     // 一次性迁移：将全局发布配置下沉到各仓库
     let global_has_value = state.selected_preset != default_preset()
@@ -458,6 +654,8 @@ fn build_frontend_state(state: &AppState) -> AppState {
         profiles: Vec::new(),
         execution_history_limit: state.execution_history_limit,
         environment_provider_ids: state.environment_provider_ids.clone(),
+        recent_repo_ids: state.recent_repo_ids.clone(),
+        recent_config_keys_by_repo: state.recent_config_keys_by_repo.clone(),
         execution_history: Vec::new(),
     }
 }
@@ -477,6 +675,12 @@ pub fn update_state(new_state: AppState) -> Result<(), crate::errors::AppError> 
     Ok(())
 }
 
+async fn refresh_tray_menu(app: tauri::AppHandle) {
+    if let Err(err) = crate::tray::update_tray_menu(app.clone()).await {
+        log::warn!("刷新托盘菜单失败: {}", err);
+    }
+}
+
 // ==================== Tauri Commands ====================
 
 /// 获取应用状态
@@ -493,7 +697,7 @@ pub async fn save_app_state(state: AppState) -> Result<(), AppError> {
 
 /// 添加仓库
 #[tauri::command]
-pub async fn add_repository(repo: Repository) -> Result<AppState, AppError> {
+pub async fn add_repository(app: tauri::AppHandle, repo: Repository) -> Result<AppState, AppError> {
     let mut state = get_state();
 
     // 检查是否已存在
@@ -507,12 +711,16 @@ pub async fn add_repository(repo: Repository) -> Result<AppState, AppError> {
     state.repositories.push(repo.clone());
     state.selected_repo_id = Some(repo.id);
     update_state(state)?;
+    refresh_tray_menu(app).await;
     Ok(get_bootstrap_state())
 }
 
 /// 删除仓库
 #[tauri::command]
-pub async fn remove_repository(repo_id: String) -> Result<AppState, AppError> {
+pub async fn remove_repository(
+    app: tauri::AppHandle,
+    repo_id: String,
+) -> Result<AppState, AppError> {
     let mut state = get_state();
 
     state.repositories.retain(|r| r.id != repo_id);
@@ -523,12 +731,16 @@ pub async fn remove_repository(repo_id: String) -> Result<AppState, AppError> {
     }
 
     update_state(state)?;
+    refresh_tray_menu(app).await;
     Ok(get_bootstrap_state())
 }
 
 /// 更新仓库
 #[tauri::command]
-pub async fn update_repository(repo: Repository) -> Result<AppState, AppError> {
+pub async fn update_repository(
+    app: tauri::AppHandle,
+    repo: Repository,
+) -> Result<AppState, AppError> {
     let mut state = get_state();
 
     if let Some(existing) = state.repositories.iter_mut().find(|r| r.id == repo.id) {
@@ -536,6 +748,7 @@ pub async fn update_repository(repo: Repository) -> Result<AppState, AppError> {
     }
 
     update_state(state)?;
+    refresh_tray_menu(app).await;
     Ok(get_bootstrap_state())
 }
 
@@ -606,9 +819,7 @@ pub async fn update_preferences(
 
     // 语言变化需要刷新托盘菜单以便实时更新文案
     if language_changed {
-        if let Err(err) = crate::tray::update_tray_menu(app.clone()).await {
-            log::warn!("刷新托盘菜单失败: {}", err);
-        }
+        refresh_tray_menu(app).await;
     }
 
     Ok(get_bootstrap_state())
@@ -670,6 +881,7 @@ pub async fn get_profiles(repo_id: String) -> Result<Vec<ConfigProfile>, AppErro
 /// 保存当前配置为配置文件（按仓库隔离）
 #[tauri::command]
 pub async fn save_profile(
+    app: tauri::AppHandle,
     repo_id: String,
     name: String,
     provider_id: String,
@@ -712,12 +924,14 @@ pub async fn save_profile(
 
     repo.publish_config.profiles.push(profile);
     update_state(state.clone())?;
+    refresh_tray_menu(app).await;
     Ok(state)
 }
 
 /// 更新已保存配置文件（按仓库隔离）
 #[tauri::command]
 pub async fn update_profile(
+    app: tauri::AppHandle,
     repo_id: String,
     original_name: String,
     name: String,
@@ -774,12 +988,17 @@ pub async fn update_profile(
     profile.profile_group = normalized_profile_group;
 
     update_state(state.clone())?;
+    refresh_tray_menu(app).await;
     Ok(state)
 }
 
 /// 删除配置文件（按仓库隔离）
 #[tauri::command]
-pub async fn delete_profile(repo_id: String, name: String) -> Result<AppState, AppError> {
+pub async fn delete_profile(
+    app: tauri::AppHandle,
+    repo_id: String,
+    name: String,
+) -> Result<AppState, AppError> {
     let mut state = get_state();
 
     let repo = state
@@ -805,7 +1024,85 @@ pub async fn delete_profile(repo_id: String, name: String) -> Result<AppState, A
 
     repo.publish_config.profiles.retain(|p| p.name != name);
     update_state(state.clone())?;
+    refresh_tray_menu(app).await;
     Ok(state)
+}
+
+/// 记录最近使用的发布配置
+#[tauri::command]
+pub async fn push_recent_publish_config(
+    app: tauri::AppHandle,
+    repo_id: String,
+    config_key: String,
+) -> Result<(), AppError> {
+    let mut state = get_state();
+
+    if !state.repositories.iter().any(|repo| repo.id == repo_id) {
+        return Err(AppError::validation_with_code(
+            format!("未找到仓库: {}", repo_id),
+            "repository_not_found",
+        ));
+    }
+
+    if !push_recent_publish_config_state(
+        &mut state.recent_repo_ids,
+        &mut state.recent_config_keys_by_repo,
+        &repo_id,
+        &config_key,
+    ) {
+        return Ok(());
+    }
+
+    update_state(state)?;
+    refresh_tray_menu(app).await;
+    Ok(())
+}
+
+/// 移除最近使用的发布配置
+#[tauri::command]
+pub async fn remove_recent_publish_config(
+    app: tauri::AppHandle,
+    repo_id: String,
+    config_key: String,
+) -> Result<(), AppError> {
+    let mut state = get_state();
+
+    if !remove_recent_publish_config_state(
+        &mut state.recent_repo_ids,
+        &mut state.recent_config_keys_by_repo,
+        &repo_id,
+        &config_key,
+    ) {
+        return Ok(());
+    }
+
+    update_state(state)?;
+    refresh_tray_menu(app).await;
+    Ok(())
+}
+
+/// 替换最近使用的发布配置 key
+#[tauri::command]
+pub async fn replace_recent_publish_config_key(
+    app: tauri::AppHandle,
+    repo_id: String,
+    previous_key: String,
+    next_key: String,
+) -> Result<(), AppError> {
+    let mut state = get_state();
+
+    if !replace_recent_publish_config_key_state(
+        &mut state.recent_config_keys_by_repo,
+        &repo_id,
+        &previous_key,
+        &next_key,
+    ) {
+        return Ok(());
+    }
+
+    update_state(state)?;
+    refresh_tray_menu(app).await;
+    Ok(())
 }
 
 fn append_execution_history(
@@ -869,6 +1166,20 @@ pub async fn set_execution_record_snapshot(
 mod tests {
     use super::*;
 
+    fn test_repo(id: &str) -> Repository {
+        Repository {
+            id: id.to_string(),
+            name: format!("Repo {id}"),
+            path: format!("/{id}"),
+            project_file: None,
+            current_branch: "main".to_string(),
+            branches: Vec::new(),
+            is_main: true,
+            provider_id: Some("dotnet".to_string()),
+            publish_config: RepoPublishConfig::default(),
+        }
+    }
+
     #[test]
     fn bootstrap_state_serialization_excludes_execution_history() {
         let state = AppState {
@@ -928,5 +1239,132 @@ mod tests {
                 .map(Vec::len),
             Some(0)
         );
+    }
+
+    #[test]
+    fn push_recent_publish_config_state_deduplicates_and_truncates() {
+        let mut recent_repo_ids = vec![
+            "repo-6".to_string(),
+            "repo-5".to_string(),
+            "repo-4".to_string(),
+            "repo-3".to_string(),
+            "repo-2".to_string(),
+            "repo-1".to_string(),
+        ];
+        let mut recent_config_keys_by_repo = BTreeMap::from([
+            (
+                "repo-1".to_string(),
+                vec![
+                    "userprofile:alpha".to_string(),
+                    "userprofile:beta".to_string(),
+                    "userprofile:gamma".to_string(),
+                    "userprofile:delta".to_string(),
+                    "userprofile:epsilon".to_string(),
+                    "userprofile:zeta".to_string(),
+                ],
+            ),
+            ("repo-7".to_string(), vec!["userprofile:legacy".to_string()]),
+        ]);
+
+        assert!(push_recent_publish_config_state(
+            &mut recent_repo_ids,
+            &mut recent_config_keys_by_repo,
+            "repo-1",
+            "userprofile:beta",
+        ));
+
+        assert_eq!(recent_repo_ids[0], "repo-1");
+        assert_eq!(
+            recent_config_keys_by_repo.get("repo-1"),
+            Some(&vec![
+                "userprofile:beta".to_string(),
+                "userprofile:alpha".to_string(),
+                "userprofile:gamma".to_string(),
+                "userprofile:delta".to_string(),
+                "userprofile:epsilon".to_string(),
+                "userprofile:zeta".to_string(),
+            ])
+        );
+        assert!(!recent_config_keys_by_repo.contains_key("repo-7"));
+    }
+
+    #[test]
+    fn remove_recent_publish_config_state_prunes_empty_repo_bucket() {
+        let mut recent_repo_ids = vec!["repo-1".to_string()];
+        let mut recent_config_keys_by_repo = BTreeMap::from([(
+            "repo-1".to_string(),
+            vec!["userprofile:alpha".to_string()],
+        )]);
+
+        assert!(remove_recent_publish_config_state(
+            &mut recent_repo_ids,
+            &mut recent_config_keys_by_repo,
+            "repo-1",
+            "userprofile:alpha",
+        ));
+
+        assert!(recent_repo_ids.is_empty());
+        assert!(recent_config_keys_by_repo.is_empty());
+    }
+
+    #[test]
+    fn replace_recent_publish_config_key_state_keeps_order_and_deduplicates() {
+        let mut recent_config_keys_by_repo = BTreeMap::from([(
+            "repo-1".to_string(),
+            vec![
+                "userprofile:alpha".to_string(),
+                "userprofile:beta".to_string(),
+                "userprofile:gamma".to_string(),
+            ],
+        )]);
+
+        assert!(replace_recent_publish_config_key_state(
+            &mut recent_config_keys_by_repo,
+            "repo-1",
+            "userprofile:beta",
+            "userprofile:alpha",
+        ));
+
+        assert_eq!(
+            recent_config_keys_by_repo.get("repo-1"),
+            Some(&vec![
+                "userprofile:alpha".to_string(),
+                "userprofile:gamma".to_string(),
+            ])
+        );
+    }
+
+    #[test]
+    fn sanitize_recent_publish_state_removes_unknown_repositories() {
+        let mut state = AppState {
+            repositories: vec![test_repo("repo-1"), test_repo("repo-2")],
+            recent_repo_ids: vec![
+                "repo-3".to_string(),
+                "repo-2".to_string(),
+                "repo-2".to_string(),
+                "repo-1".to_string(),
+            ],
+            recent_config_keys_by_repo: BTreeMap::from([
+                (
+                    "repo-1".to_string(),
+                    vec!["userprofile:alpha".to_string()],
+                ),
+                (
+                    "repo-2".to_string(),
+                    vec!["userprofile:beta".to_string()],
+                ),
+                (
+                    "repo-3".to_string(),
+                    vec!["userprofile:stale".to_string()],
+                ),
+            ]),
+            ..AppState::default()
+        };
+
+        sanitize_recent_publish_state(&mut state);
+
+        assert_eq!(state.recent_repo_ids, vec!["repo-2".to_string(), "repo-1".to_string()]);
+        assert_eq!(state.recent_config_keys_by_repo.len(), 2);
+        assert!(!state.recent_config_keys_by_repo.contains_key("repo-3"));
     }
 }
