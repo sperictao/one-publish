@@ -5,6 +5,14 @@ const mocks = vi.hoisted(() => ({
   getAppState: vi.fn(),
   updatePublishState: vi.fn(),
   updateUIState: vi.fn(),
+  updatePreferences: vi.fn(),
+  toastError: vi.fn(),
+}));
+
+vi.mock("sonner", () => ({
+  toast: {
+    error: mocks.toastError,
+  },
 }));
 
 vi.mock("@/lib/store", async () => {
@@ -14,10 +22,15 @@ vi.mock("@/lib/store", async () => {
     getAppState: mocks.getAppState,
     updatePublishState: mocks.updatePublishState,
     updateUIState: mocks.updateUIState,
+    updatePreferences: mocks.updatePreferences,
   };
 });
 
-import { defaultAppState, type AppState } from "@/lib/store";
+import {
+  defaultAppState,
+  defaultPublishConfigStore,
+  type AppState,
+} from "@/lib/store";
 import { useAppState } from "@/hooks/useAppState";
 
 function createAppState(): AppState {
@@ -36,7 +49,7 @@ function createAppState(): AppState {
           selectedPreset: "release-fd",
           isCustomMode: true,
           customConfig: {
-            ...defaultAppState.customConfig,
+            ...defaultPublishConfigStore,
             configuration: "Debug",
           },
           profiles: [],
@@ -61,6 +74,7 @@ describe("useAppState", () => {
     mocks.getAppState.mockResolvedValue(createAppState());
     mocks.updatePublishState.mockResolvedValue(undefined);
     mocks.updateUIState.mockResolvedValue(undefined);
+    mocks.updatePreferences.mockResolvedValue(createAppState());
   });
 
   afterEach(() => {
@@ -104,6 +118,82 @@ describe("useAppState", () => {
     expect(mocks.updateUIState).toHaveBeenCalledWith({
       selectedRepoId: null,
       clearSelectedRepoId: true,
+    });
+  });
+
+  it("发布配置持久化失败时会回滚并提示", async () => {
+    const initialState = createAppState();
+    const authoritativeState = createAppState();
+    authoritativeState.repositories[0].publishConfig.selectedPreset = "release-fd";
+    authoritativeState.repositories[0].publishConfig.isCustomMode = true;
+    mocks.getAppState
+      .mockResolvedValueOnce(initialState)
+      .mockResolvedValueOnce(authoritativeState);
+    mocks.updatePublishState.mockRejectedValueOnce(new Error("publish failed"));
+
+    const { result } = renderHook(() => useAppState());
+
+    await waitForAppStateLoad();
+
+    await act(async () => {
+      result.current.setSelectedPreset("profile-FolderProfile");
+      vi.advanceTimersByTime(500);
+      await Promise.resolve();
+    });
+
+    expect(result.current.selectedPreset).toBe("release-fd");
+    expect(mocks.toastError).toHaveBeenCalledWith("保存发布配置失败", {
+      description: "publish failed",
+    });
+  });
+
+  it("界面状态持久化失败时会回滚并提示", async () => {
+    const initialState = createAppState();
+    const authoritativeState = createAppState();
+    authoritativeState.selectedRepoId = "repo-1";
+    mocks.getAppState
+      .mockResolvedValueOnce(initialState)
+      .mockResolvedValueOnce(authoritativeState);
+    mocks.updateUIState.mockRejectedValueOnce(new Error("ui failed"));
+
+    const { result } = renderHook(() => useAppState());
+
+    await waitForAppStateLoad();
+
+    await act(async () => {
+      result.current.selectRepository(null);
+      vi.advanceTimersByTime(500);
+      await Promise.resolve();
+    });
+
+    expect(result.current.selectedRepoId).toBe("repo-1");
+    expect(mocks.toastError).toHaveBeenCalledWith("保存界面状态失败", {
+      description: "ui failed",
+    });
+  });
+
+  it("偏好设置持久化失败时会回滚并提示", async () => {
+    const initialState = createAppState();
+    const authoritativeState = createAppState();
+    authoritativeState.theme = "auto";
+    mocks.getAppState
+      .mockResolvedValueOnce(initialState)
+      .mockResolvedValueOnce(authoritativeState);
+    mocks.updatePreferences.mockRejectedValueOnce(new Error("preferences failed"));
+
+    const { result } = renderHook(() => useAppState());
+
+    await waitForAppStateLoad();
+
+    await act(async () => {
+      result.current.setTheme("dark");
+      vi.advanceTimersByTime(500);
+      await Promise.resolve();
+    });
+
+    expect(result.current.theme).toBe("auto");
+    expect(mocks.toastError).toHaveBeenCalledWith("保存偏好设置失败", {
+      description: "preferences failed",
     });
   });
 });

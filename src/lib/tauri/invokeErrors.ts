@@ -274,6 +274,7 @@ export type ProjectScanFailureReason =
   | "path_not_found"
   | "project_root_not_found"
   | "project_file_not_found"
+  | "multiple_project_files_found"
   | "permission_denied"
   | "current_dir_failed"
   | "unknown";
@@ -293,6 +294,10 @@ export function analyzeProjectScanFailure(
 
     if (errorCode === "project_file_not_found") {
       return "project_file_not_found";
+    }
+
+    if (errorCode === "multiple_project_files_found") {
+      return "multiple_project_files_found";
     }
 
     if (errorCode === "permission_denied") {
@@ -316,6 +321,10 @@ export function analyzeProjectScanFailure(
 
   if (normalized.includes("cannot find project file")) {
     return "project_file_not_found";
+  }
+
+  if (normalized.includes("multiple project files found")) {
+    return "multiple_project_files_found";
   }
 
   if (

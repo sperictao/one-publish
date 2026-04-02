@@ -3,6 +3,7 @@ import { isTauri } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 
 import { useProjectScanner } from "@/hooks/useProjectScanner";
+import { resolvePreferredDotnetProjectInfo } from "@/lib/dotnetProjectInfo";
 import type { ProjectInfo } from "@/types/project";
 
 interface TranslationMap {
@@ -13,21 +14,30 @@ export function useProjectShellState(params: {
   appT: TranslationMap;
   selectedRepoId: string | null;
   selectedRepoPath?: string;
+  selectedRepoProjectFile?: string;
   isStateLoading: boolean;
   activeProviderId: string;
 }) {
   const [projectInfo, setProjectInfo] = useState<ProjectInfo | null>(null);
   const scanRequestIdRef = useRef(0);
-  const { scanProject: scanProjectRequest } = useProjectScanner({
+  const {
+    scanProject: scanProjectRequest,
+    resolveProjectInfo: resolveProjectInfoRequest,
+  } = useProjectScanner({
     appT: params.appT,
   });
 
   const scanProject = useCallback(
     async (
       path?: string,
-      options?: { silentSuccess?: boolean; silentFailure?: boolean }
+      options?: {
+        silentSuccess?: boolean;
+        silentFailure?: boolean;
+        projectFile?: string;
+      }
     ) => {
       const targetPath = path?.trim();
+      const boundProjectFile = options?.projectFile?.trim();
       const requestId = scanRequestIdRef.current + 1;
       scanRequestIdRef.current = requestId;
 
@@ -37,12 +47,26 @@ export function useProjectShellState(params: {
       }
 
       setProjectInfo(null);
-      const info = await scanProjectRequest(targetPath, options);
+      const info = await resolvePreferredDotnetProjectInfo({
+        repoPath: targetPath,
+        projectFile: boundProjectFile,
+        resolveProjectInfo: (projectFile) =>
+          resolveProjectInfoRequest(projectFile, {
+            silentFailure: true,
+          }),
+        scanProject: (repoPath) =>
+          scanProjectRequest(repoPath, {
+            silentSuccess: options?.silentSuccess,
+            silentFailure: options?.silentFailure,
+          }),
+      });
 
       if (
         requestId !== scanRequestIdRef.current ||
         !info ||
-        params.selectedRepoPath?.trim() !== targetPath
+        params.selectedRepoPath?.trim() !== targetPath ||
+        (boundProjectFile &&
+          params.selectedRepoProjectFile?.trim() !== boundProjectFile)
       ) {
         return info;
       }
@@ -50,7 +74,13 @@ export function useProjectShellState(params: {
       setProjectInfo(info);
       return info;
     },
-    [params.activeProviderId, params.selectedRepoPath, scanProjectRequest]
+    [
+      params.activeProviderId,
+      params.selectedRepoPath,
+      params.selectedRepoProjectFile,
+      resolveProjectInfoRequest,
+      scanProjectRequest,
+    ]
   );
 
   useEffect(() => {
@@ -67,10 +97,12 @@ export function useProjectShellState(params: {
     void scanProject(params.selectedRepoPath, {
       silentSuccess: true,
       silentFailure: true,
+      projectFile: params.selectedRepoProjectFile,
     });
   }, [
     params.selectedRepoId,
     params.selectedRepoPath,
+    params.selectedRepoProjectFile,
     params.isStateLoading,
     params.activeProviderId,
     scanProject,

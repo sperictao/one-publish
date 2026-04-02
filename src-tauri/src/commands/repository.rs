@@ -5,6 +5,7 @@ use std::io::ErrorKind as IoErrorKind;
 use std::path::{Path, PathBuf};
 use tokio::process::Command;
 use tokio::time::{timeout, Duration};
+use walkdir::WalkDir;
 
 fn format_git_command_failure(command: &str, stderr: &[u8]) -> String {
     let error = String::from_utf8_lossy(stderr).trim().to_string();
@@ -104,75 +105,178 @@ pub struct RepositoryBranchConnectivityResult {
     pub can_connect: bool,
 }
 
-pub(crate) fn find_project_root(start_path: &Path) -> Option<PathBuf> {
-    let mut current = start_path.to_path_buf();
-
-    if current.is_dir() {
-        if let Ok(entries) = std::fs::read_dir(&current) {
-            for entry in entries.flatten() {
-                if let Some(ext) = entry.path().extension() {
-                    if ext == "sln" {
-                        return Some(current);
-                    }
-                }
-            }
-        }
-    }
-
-    while let Some(parent) = current.parent() {
-        if let Ok(entries) = std::fs::read_dir(parent) {
-            for entry in entries.flatten() {
-                if let Some(ext) = entry.path().extension() {
-                    if ext == "sln" {
-                        return Some(parent.to_path_buf());
-                    }
-                }
-            }
-        }
-        current = parent.to_path_buf();
-    }
-
-    None
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProjectScanCandidates {
+    pub root_path: String,
+    pub solution_files: Vec<String>,
+    pub project_files: Vec<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub recommended_project_file: Option<String>,
 }
 
-pub(crate) fn find_project_file(root: &Path) -> Option<PathBuf> {
-    let ui_dir = root.join("UI");
-    if ui_dir.is_dir() {
-        if let Ok(entries) = std::fs::read_dir(&ui_dir) {
-            for entry in entries.flatten() {
-                if let Some(ext) = entry.path().extension() {
-                    if ext == "csproj" {
-                        return Some(entry.path());
-                    }
-                }
-            }
+const DOTNET_PROJECT_EXTENSIONS: &[&str] = &["csproj", "fsproj", "vbproj"];
+const DOTNET_SOLUTION_EXTENSION: &str = "sln";
+const SCAN_SKIP_DIRS: &[&str] = &[".git", "node_modules", "target", "bin", "obj", "dist"];
+
+fn normalize_scan_root(start_path: &Path) -> Result<PathBuf, crate::errors::AppError> {
+    if start_path.is_dir() {
+        return Ok(start_path.to_path_buf());
+    }
+
+    if start_path.is_file() {
+        return start_path
+            .parent()
+            .map(|parent| parent.to_path_buf())
+            .ok_or_else(|| {
+                repository_error(
+                    format!(
+                        "cannot resolve parent directory for {}",
+                        start_path.display()
+                    ),
+                    "not_directory",
+                )
+            });
+    }
+
+    Err(repository_error(
+        format!("path is not a directory: {}", start_path.display()),
+        "not_directory",
+    ))
+}
+
+fn should_skip_walk_entry(entry: &walkdir::DirEntry, root: &Path) -> bool {
+    if entry.depth() == 0 {
+        return false;
+    }
+
+    if !entry.file_type().is_dir() {
+        return false;
+    }
+
+    entry
+        .path()
+        .strip_prefix(root)
+        .ok()
+        .and_then(|relative| relative.file_name())
+        .and_then(|name| name.to_str())
+        .map(|name| {
+            SCAN_SKIP_DIRS
+                .iter()
+                .any(|dir| dir.eq_ignore_ascii_case(name))
+        })
+        .unwrap_or(false)
+}
+
+fn collect_files_recursively(root: &Path, matcher: impl Fn(&Path) -> bool) -> Vec<PathBuf> {
+    let mut files = Vec::new();
+
+    for entry in WalkDir::new(root)
+        .follow_links(false)
+        .into_iter()
+        .filter_entry(|entry| !should_skip_walk_entry(entry, root))
+        .filter_map(Result::ok)
+    {
+        let path = entry.path();
+        if !path.is_file() || !matcher(path) {
+            continue;
+        }
+
+        files.push(path.to_path_buf());
+    }
+
+    files.sort();
+    files.dedup();
+    files
+}
+
+fn is_dotnet_project_file(path: &Path) -> bool {
+    path.extension()
+        .and_then(|ext| ext.to_str())
+        .map(|ext| {
+            DOTNET_PROJECT_EXTENSIONS
+                .iter()
+                .any(|candidate| ext.eq_ignore_ascii_case(candidate))
+        })
+        .unwrap_or(false)
+}
+
+fn is_dotnet_solution_file(path: &Path) -> bool {
+    path.extension()
+        .and_then(|ext| ext.to_str())
+        .map(|ext| ext.eq_ignore_ascii_case(DOTNET_SOLUTION_EXTENSION))
+        .unwrap_or(false)
+}
+
+fn collect_dotnet_project_files(root: &Path) -> Vec<PathBuf> {
+    collect_files_recursively(root, is_dotnet_project_file)
+}
+
+fn collect_solution_files(root: &Path) -> Vec<PathBuf> {
+    collect_files_recursively(root, is_dotnet_solution_file)
+}
+
+fn resolve_project_root_for_file(project_file: &Path) -> PathBuf {
+    let project_dir = project_file
+        .parent()
+        .map(Path::to_path_buf)
+        .unwrap_or_else(|| project_file.to_path_buf());
+
+    for ancestor in project_dir.ancestors() {
+        if collect_solution_files(ancestor)
+            .into_iter()
+            .any(|candidate| {
+                candidate
+                    .parent()
+                    .map(|parent| parent == ancestor)
+                    .unwrap_or(false)
+            })
+        {
+            return ancestor.to_path_buf();
+        }
+
+        if ancestor.join(".git").exists() {
+            return ancestor.to_path_buf();
         }
     }
 
-    if let Ok(entries) = std::fs::read_dir(root) {
-        for entry in entries.flatten() {
-            if let Some(ext) = entry.path().extension() {
-                if ext == "csproj" {
-                    return Some(entry.path());
-                }
-            }
-        }
+    project_dir
+}
+
+fn project_scan_candidates_from_root(root: &Path) -> ProjectScanCandidates {
+    let solution_files = collect_solution_files(root)
+        .into_iter()
+        .map(|path| path.to_string_lossy().to_string())
+        .collect::<Vec<_>>();
+    let project_files = collect_dotnet_project_files(root)
+        .into_iter()
+        .map(|path| path.to_string_lossy().to_string())
+        .collect::<Vec<_>>();
+    let recommended_project_file = match project_files.as_slice() {
+        [only] => Some(only.clone()),
+        _ => None,
+    };
+
+    ProjectScanCandidates {
+        root_path: root.to_string_lossy().to_string(),
+        solution_files,
+        project_files,
+        recommended_project_file,
+    }
+}
+
+pub(crate) fn scan_project_candidates_from_path(
+    start_path: &Path,
+) -> Result<ProjectScanCandidates, crate::errors::AppError> {
+    if !start_path.exists() {
+        return Err(repository_error(
+            format!("scan start path does not exist: {}", start_path.display()),
+            "path_not_found",
+        ));
     }
 
-    let src_dir = root.join("src");
-    if src_dir.is_dir() {
-        if let Ok(entries) = std::fs::read_dir(&src_dir) {
-            for entry in entries.flatten() {
-                if let Some(ext) = entry.path().extension() {
-                    if ext == "csproj" {
-                        return Some(entry.path());
-                    }
-                }
-            }
-        }
-    }
-
-    None
+    let root_path = normalize_scan_root(start_path)?;
+    Ok(project_scan_candidates_from_root(&root_path))
 }
 
 pub(crate) fn scan_publish_profiles(project_file: &Path) -> Vec<String> {
@@ -197,8 +301,14 @@ pub(crate) fn scan_publish_profiles(project_file: &Path) -> Vec<String> {
 }
 
 pub(crate) fn resolve_project_file_from_search_path(start_path: &Path) -> Option<PathBuf> {
-    let root_path = find_project_root(start_path)?;
-    find_project_file(&root_path)
+    let root_path = normalize_scan_root(start_path).ok()?;
+    let candidates = project_scan_candidates_from_root(&root_path);
+
+    if let Some(project_file) = candidates.recommended_project_file {
+        return Some(PathBuf::from(project_file));
+    }
+
+    None
 }
 
 fn extract_xml_tag_values(content: &str, tag_name: &str) -> Vec<String> {
@@ -703,116 +813,116 @@ pub async fn scan_repository_branches(
 #[tauri::command]
 pub async fn scan_project_files(path: String) -> Result<Vec<String>, crate::errors::AppError> {
     let root = PathBuf::from(&path);
-    if !root.is_dir() {
+    let root = normalize_scan_root(&root)?;
+
+    let provider = detect_provider_from_path(&root);
+    let results = match provider {
+        Some("dotnet") => collect_files_recursively(&root, |entry_path| {
+            is_dotnet_project_file(entry_path) || is_dotnet_solution_file(entry_path)
+        }),
+        Some("cargo") => collect_files_recursively(&root, |entry_path| {
+            entry_path
+                .file_name()
+                .and_then(|name| name.to_str())
+                .map(|name| name.eq_ignore_ascii_case("Cargo.toml"))
+                .unwrap_or(false)
+        }),
+        Some("go") => collect_files_recursively(&root, |entry_path| {
+            entry_path
+                .file_name()
+                .and_then(|name| name.to_str())
+                .map(|name| name.eq_ignore_ascii_case("go.mod"))
+                .unwrap_or(false)
+        }),
+        Some("java") => collect_files_recursively(&root, |entry_path| {
+            entry_path
+                .file_name()
+                .and_then(|name| name.to_str())
+                .map(|name| {
+                    [
+                        "build.gradle",
+                        "build.gradle.kts",
+                        "settings.gradle",
+                        "settings.gradle.kts",
+                        "pom.xml",
+                    ]
+                    .iter()
+                    .any(|candidate| name.eq_ignore_ascii_case(candidate))
+                })
+                .unwrap_or(false)
+        }),
+        _ => Vec::new(),
+    }
+    .into_iter()
+    .map(|entry_path| entry_path.to_string_lossy().to_string())
+    .collect();
+    Ok(results)
+}
+
+#[tauri::command]
+pub async fn scan_project_candidates(
+    start_path: Option<String>,
+) -> Result<ProjectScanCandidates, crate::errors::AppError> {
+    let search_path = match start_path {
+        Some(path) => PathBuf::from(path),
+        None => std::env::current_dir().map_err(|error| {
+            repository_error(
+                format!("failed to resolve current directory: {}", error),
+                "current_dir_failed",
+            )
+        })?,
+    };
+    scan_project_candidates_from_path(&search_path)
+}
+
+#[tauri::command]
+pub async fn resolve_project_info(
+    project_file: String,
+) -> Result<ProjectInfo, crate::errors::AppError> {
+    let project_file_path = PathBuf::from(&project_file);
+    if !project_file_path.is_file() || !is_dotnet_project_file(&project_file_path) {
         return Err(repository_error(
-            format!("path is not a directory: {}", path),
-            "not_directory",
+            format!(
+                "project file does not exist: {}",
+                project_file_path.display()
+            ),
+            "project_file_not_found",
         ));
     }
 
-    let provider = detect_provider_from_path(&root);
-    let extensions: &[&str] = match provider {
-        Some("dotnet") => &["csproj", "sln"],
-        Some("cargo") => &["toml"],
-        Some("go") => &["mod"],
-        Some("java") => &["gradle", "kts", "xml"],
-        _ => &[],
-    };
+    let publish_profiles = scan_publish_profiles(&project_file_path);
+    let target_frameworks = read_target_frameworks(&project_file_path)?;
+    let root_path = resolve_project_root_for_file(&project_file_path);
 
-    let exact_names: &[&str] = match provider {
-        Some("cargo") => &["Cargo.toml"],
-        Some("go") => &["go.mod"],
-        Some("java") => &[
-            "build.gradle",
-            "build.gradle.kts",
-            "settings.gradle",
-            "settings.gradle.kts",
-            "pom.xml",
-        ],
-        _ => &[],
-    };
-
-    let mut results: Vec<String> = Vec::new();
-
-    let scan_dirs = [root.join("UI"), root.clone(), root.join("src")];
-
-    for dir in &scan_dirs {
-        if !dir.is_dir() {
-            continue;
-        }
-        if let Ok(entries) = std::fs::read_dir(dir) {
-            for entry in entries.flatten() {
-                let entry_path = entry.path();
-                if !entry_path.is_file() {
-                    continue;
-                }
-
-                let matched = if !exact_names.is_empty() {
-                    entry_path
-                        .file_name()
-                        .and_then(|n| n.to_str())
-                        .map(|name| exact_names.contains(&name))
-                        .unwrap_or(false)
-                } else {
-                    entry_path
-                        .extension()
-                        .and_then(|ext| ext.to_str())
-                        .map(|ext| extensions.iter().any(|&e| ext.eq_ignore_ascii_case(e)))
-                        .unwrap_or(false)
-                };
-
-                if matched {
-                    results.push(entry_path.to_string_lossy().to_string());
-                }
-            }
-        }
-    }
-
-    results.sort();
-    results.dedup();
-    Ok(results)
+    Ok(ProjectInfo {
+        root_path: root_path.to_string_lossy().to_string(),
+        project_file: project_file_path.to_string_lossy().to_string(),
+        publish_profiles,
+        target_frameworks,
+    })
 }
 
 #[tauri::command]
 pub async fn scan_project(
     start_path: Option<String>,
 ) -> Result<ProjectInfo, crate::errors::AppError> {
-    let search_path = match start_path {
-        Some(p) => PathBuf::from(p),
-        None => std::env::current_dir().map_err(|e| {
-            repository_error(
-                format!("failed to resolve current directory: {}", e),
-                "current_dir_failed",
-            )
-        })?,
-    };
+    let candidates = scan_project_candidates(start_path).await?;
 
-    if !search_path.exists() {
-        return Err(repository_error(
-            format!("scan start path does not exist: {}", search_path.display()),
-            "path_not_found",
-        ));
-    }
-
-    let root_path = find_project_root(&search_path).ok_or_else(|| {
-        repository_error("cannot find project root (.sln)", "project_root_not_found")
-    })?;
-
-    let project_file = find_project_file(&root_path).ok_or_else(|| {
-        repository_error(
-            "cannot find project file (.csproj)",
+    match candidates.project_files.as_slice() {
+        [] if candidates.solution_files.is_empty() => Err(repository_error(
+            "cannot find project root (.sln or project file)",
+            "project_root_not_found",
+        )),
+        [] => Err(repository_error(
+            "cannot find project file (.csproj/.fsproj/.vbproj)",
             "project_file_not_found",
-        )
-    })?;
-
-    let publish_profiles = scan_publish_profiles(&project_file);
-    let target_frameworks = read_target_frameworks(&project_file)?;
-    Ok(ProjectInfo {
-        root_path: root_path.to_string_lossy().to_string(),
-        project_file: project_file.to_string_lossy().to_string(),
-        publish_profiles,
-        target_frameworks,
-    })
+        )),
+        [only_project] => resolve_project_info(only_project.clone()).await,
+        _ => Err(repository_error(
+            "multiple project files found; bind an explicit project file first",
+            "multiple_project_files_found",
+        )),
+    }
 }
 
 #[tauri::command]
@@ -853,6 +963,9 @@ pub async fn read_project_publish_profile(
 #[cfg(test)]
 mod tests {
     use super::extract_target_frameworks_from_project_xml;
+    use super::*;
+    use std::fs;
+    use tempfile::TempDir;
 
     #[test]
     fn extracts_single_target_framework() {
@@ -897,5 +1010,67 @@ mod tests {
         );
 
         assert!(frameworks.is_empty());
+    }
+
+    #[test]
+    fn scan_project_candidates_finds_single_project_without_solution() {
+        let temp_dir = TempDir::new().expect("temp dir");
+        let project_file = temp_dir.path().join("src").join("App.csproj");
+        fs::create_dir_all(project_file.parent().expect("project dir")).expect("create dir");
+        fs::write(&project_file, "<Project />").expect("write project");
+
+        let candidates = project_scan_candidates_from_root(temp_dir.path());
+
+        assert_eq!(
+            candidates.project_files,
+            vec![project_file.to_string_lossy().to_string()]
+        );
+        assert_eq!(
+            candidates.recommended_project_file.as_deref(),
+            Some(project_file.to_string_lossy().as_ref())
+        );
+        assert!(candidates.solution_files.is_empty());
+    }
+
+    #[tokio::test]
+    async fn scan_project_reports_multiple_candidates_when_more_than_one_project_exists() {
+        let temp_dir = TempDir::new().expect("temp dir");
+        let project_a = temp_dir.path().join("AppA.csproj");
+        let project_b = temp_dir.path().join("AppB.csproj");
+        fs::write(&project_a, "<Project />").expect("write project a");
+        fs::write(&project_b, "<Project />").expect("write project b");
+
+        let err = scan_project(Some(temp_dir.path().to_string_lossy().to_string()))
+            .await
+            .expect_err("multiple project files should fail");
+
+        assert_eq!(err.code.as_deref(), Some("multiple_project_files_found"));
+    }
+
+    #[tokio::test]
+    async fn resolve_project_info_uses_solution_root_when_available() {
+        let temp_dir = TempDir::new().expect("temp dir");
+        let solution = temp_dir.path().join("App.sln");
+        let project_dir = temp_dir.path().join("src").join("App");
+        let project_file = project_dir.join("App.csproj");
+        let profiles_dir = project_dir.join("Properties").join("PublishProfiles");
+
+        fs::create_dir_all(&profiles_dir).expect("create profiles dir");
+        fs::write(&solution, "").expect("write solution");
+        fs::write(
+            &project_file,
+            "<Project><PropertyGroup><TargetFramework>net8.0</TargetFramework></PropertyGroup></Project>",
+        )
+        .expect("write project");
+        fs::write(profiles_dir.join("FolderProfile.pubxml"), "<Project />").expect("write profile");
+
+        let info = resolve_project_info(project_file.to_string_lossy().to_string())
+            .await
+            .expect("resolve project info");
+
+        assert_eq!(info.root_path, temp_dir.path().to_string_lossy());
+        assert_eq!(info.project_file, project_file.to_string_lossy());
+        assert_eq!(info.publish_profiles, vec!["FolderProfile".to_string()]);
+        assert_eq!(info.target_frameworks, vec!["net8.0".to_string()]);
     }
 }

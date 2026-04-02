@@ -9,6 +9,8 @@ const mocks = vi.hoisted(() => ({
   listen: vi.fn(),
   getRepository: vi.fn(),
   getProfiles: vi.fn(),
+  resolveProjectInfo: vi.fn(),
+  scanProject: vi.fn(),
   showMainWindow: vi.fn(),
   showSystemNotification: vi.fn(),
   resolveDotnetProjectProfile: vi.fn(),
@@ -29,6 +31,8 @@ vi.mock("@/lib/store", async () => {
     ...actual,
     getRepository: mocks.getRepository,
     getProfiles: mocks.getProfiles,
+    resolveProjectInfo: mocks.resolveProjectInfo,
+    scanProject: mocks.scanProject,
     showMainWindow: mocks.showMainWindow,
   };
 });
@@ -85,6 +89,18 @@ describe("useTrayRecentPublish", () => {
     vi.clearAllMocks();
     mocks.listen.mockResolvedValue(() => {});
     mocks.getRepository.mockResolvedValue(createRepository());
+    mocks.resolveProjectInfo.mockResolvedValue({
+      root_path: "/repo",
+      project_file: "/repo/App.csproj",
+      publish_profiles: ["FolderProfile"],
+      target_frameworks: ["net8.0"],
+    });
+    mocks.scanProject.mockResolvedValue({
+      root_path: "/repo",
+      project_file: "/repo/App.csproj",
+      publish_profiles: ["FolderProfile"],
+      target_frameworks: ["net8.0"],
+    });
     mocks.showSystemNotification.mockResolvedValue(true);
     mocks.showMainWindow.mockResolvedValue(true);
   });
@@ -236,16 +252,11 @@ describe("useTrayRecentPublish", () => {
         projectFile: "/repo/App.sln",
       })
     );
-    mocks.invoke.mockImplementation(async (command: string) => {
-      if (command === "scan_project") {
-        return {
-          root_path: "/repo",
-          project_file: "/repo/UI/App.csproj",
-          publish_profiles: ["FolderProfile"],
-          target_frameworks: ["net8.0"],
-        };
-      }
-      throw new Error(`unexpected invoke: ${command}`);
+    mocks.scanProject.mockResolvedValue({
+      root_path: "/repo",
+      project_file: "/repo/UI/App.csproj",
+      publish_profiles: ["FolderProfile"],
+      target_frameworks: ["net8.0"],
     });
 
     renderHook(() =>
@@ -274,9 +285,7 @@ describe("useTrayRecentPublish", () => {
       },
     });
 
-    expect(mocks.invoke).toHaveBeenCalledWith("scan_project", {
-      startPath: "/repo",
-    });
+    expect(mocks.scanProject).toHaveBeenCalledWith("/repo");
     expect(runPublishSpec).toHaveBeenCalledWith(
       expect.objectContaining({
         project_path: "/repo/UI/App.csproj",
@@ -402,6 +411,7 @@ describe("useTrayRecentPublish", () => {
     });
 
     expect(mocks.getRepository).toHaveBeenCalledWith("repo-1");
+    expect(mocks.resolveProjectInfo).toHaveBeenCalledWith("/repo/App.csproj");
     expect(runPublishSpec).toHaveBeenCalledWith(
       expect.objectContaining({
         project_path: "/repo/App.csproj",
@@ -504,6 +514,69 @@ describe("useTrayRecentPublish", () => {
       body: "missing user profile: missing",
     });
     expect(mocks.showMainWindow).not.toHaveBeenCalled();
+  });
+
+  it("未绑定且存在多个候选项目时不会触发托盘发布", async () => {
+    const runPublishSpec = vi.fn().mockResolvedValue(undefined);
+    let handler: ((event: { payload: TrayPublishRequestPayload }) => Promise<void>) | null =
+      null;
+    mocks.listen.mockImplementation(async (_eventName, callback) => {
+      handler = callback;
+      return () => {};
+    });
+    mocks.getRepository.mockResolvedValue(
+      createRepository({
+        projectFile: undefined,
+      })
+    );
+    mocks.getProfiles.mockResolvedValue([
+      {
+        name: "alpha",
+        providerId: "dotnet",
+        parameters: {
+          configuration: "Release",
+        },
+      },
+    ]);
+    mocks.scanProject.mockRejectedValue({
+      code: "multiple_project_files_found",
+      message: "multiple project files found",
+    });
+
+    renderHook(() =>
+      useTrayRecentPublish({
+        appT: {
+          trayPublishFailed: "状态栏发布启动失败",
+        },
+        defaultOutputDir: "/exports",
+        specVersion: 1,
+        runPublishSpec,
+      })
+    );
+
+    await waitFor(() => {
+      expect(handler).not.toBeNull();
+    });
+
+    if (!handler) {
+      throw new Error("tray handler missing");
+    }
+    const trayHandler = handler as (
+      event: { payload: TrayPublishRequestPayload }
+    ) => Promise<void>;
+
+    await trayHandler({
+      payload: {
+        repoId: "repo-1",
+        configKey: "userprofile:alpha",
+      },
+    });
+
+    expect(runPublishSpec).not.toHaveBeenCalled();
+    expect(mocks.showSystemNotification).toHaveBeenCalledWith({
+      title: "状态栏发布启动失败",
+      body: "该仓库包含多个项目文件，请先在仓库设置中绑定明确的 Project File。",
+    });
   });
 
   it("如果系统通知发送失败会回退显示主窗口", async () => {

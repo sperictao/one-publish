@@ -96,7 +96,7 @@ describe("RepositoryList", () => {
         onEditRepo={() => true}
         onRemoveRepo={() => {}}
         onDetectProvider={async () => null}
-        onScanProjectFiles={async () => []}
+        onScanProjectCandidates={async () => null}
         onRefreshBranches={async () => null}
         branchConnectivityByRepoId={{}}
         onSettings={() => {}}
@@ -127,7 +127,7 @@ describe("RepositoryList", () => {
         onEditRepo={() => true}
         onRemoveRepo={onRemoveRepo}
         onDetectProvider={async () => null}
-        onScanProjectFiles={async () => []}
+        onScanProjectCandidates={async () => null}
         onRefreshBranches={async () => null}
         branchConnectivityByRepoId={{ "repo-a": true, "repo-b": false }}
         onSettings={() => {}}

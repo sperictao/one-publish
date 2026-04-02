@@ -2,7 +2,9 @@
 // 提供持久化的应用状态，包括仓库列表、UI 状态和发布配置
 
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";
+import { toast } from "sonner";
 import { normalizeEnvironmentProviderIds } from "@/lib/environment";
+import { extractInvokeErrorMessage } from "@/lib/tauri/invokeErrors";
 import {
   getAppState,
   updateUIState,
@@ -17,6 +19,7 @@ import {
   type AppState,
   type PublishConfigStore,
   defaultAppState,
+  defaultPublishConfigStore,
   defaultRepoPublishConfig,
 } from "@/lib/store";
 import type { Repository, RepoPublishConfig } from "@/types/repository";
@@ -90,8 +93,38 @@ export function useAppState() {
   );
 
   const currentPublishConfig: RepoPublishConfig = useMemo(
-    () => currentRepo?.publishConfig ?? defaultRepoPublishConfig,
+    () =>
+      currentRepo?.publishConfig ?? {
+        ...defaultRepoPublishConfig,
+        customConfig: { ...defaultPublishConfigStore },
+      },
     [currentRepo]
+  );
+
+  const restoreAuthoritativeState = useCallback(async () => {
+    const authoritativeState = await getAppState();
+    setState(authoritativeState);
+    setError(null);
+    return authoritativeState;
+  }, []);
+
+  const handlePersistenceFailure = useCallback(
+    async (title: string, err: unknown) => {
+      console.error(title, err);
+      let description = extractInvokeErrorMessage(err);
+
+      try {
+        await restoreAuthoritativeState();
+      } catch (reloadError) {
+        console.error("重新加载应用状态失败:", reloadError);
+        description = `${description}；${extractInvokeErrorMessage(reloadError)}`;
+      }
+
+      toast.error(title, {
+        description,
+      });
+    },
+    [restoreAuthoritativeState]
   );
 
   // 更新 UI 状态（带防抖）
@@ -123,10 +156,12 @@ export function useAppState() {
         clearTimeout(uiDebounceRef.current);
       }
       uiDebounceRef.current = setTimeout(() => {
-        updateUIState(params).catch(console.error);
+        void updateUIState(params).catch((err) => {
+          void handlePersistenceFailure("保存界面状态失败", err);
+        });
       }, DEBOUNCE_DELAY);
     },
-    []
+    [handlePersistenceFailure]
   );
 
   // 更新通用偏好（语言、托盘行为、主题等）
@@ -163,10 +198,12 @@ export function useAppState() {
         clearTimeout(preferenceDebounceRef.current);
       }
       preferenceDebounceRef.current = setTimeout(() => {
-        updatePreferences(params).catch(console.error);
+        void updatePreferences(params).catch((err) => {
+          void handlePersistenceFailure("保存偏好设置失败", err);
+        });
       }, DEBOUNCE_DELAY);
     },
-    []
+    [handlePersistenceFailure]
   );
 
   // 更新发布配置状态（按仓库隔离，带防抖）
@@ -222,14 +259,14 @@ export function useAppState() {
 
         void Promise.all(
           pendingEntries.map(([pendingRepoId, pendingParams]) =>
-            updatePublishState({ repoId: pendingRepoId, ...pendingParams }).catch(
-              console.error
-            )
+            updatePublishState({ repoId: pendingRepoId, ...pendingParams }).catch((err) => {
+              void handlePersistenceFailure("保存发布配置失败", err);
+            })
           )
         );
       }, DEBOUNCE_DELAY);
     },
-    [state.selectedRepoId]
+    [handlePersistenceFailure, state.selectedRepoId]
   );
 
   // 添加仓库
@@ -383,11 +420,11 @@ export function useAppState() {
             const nextState = await mutation();
             setState((prev) => mergeRecentPublishState(prev, nextState));
           } catch (err) {
-            console.error(errorMessage, err);
+            await handlePersistenceFailure(errorMessage, err);
           }
         });
     },
-    []
+    [handlePersistenceFailure]
   );
 
   const pushRecentPublishConfig = useCallback(
@@ -482,6 +519,7 @@ export function useAppState() {
     theme: state.theme,
     executionHistoryLimit: state.executionHistoryLimit,
     environmentProviderIds: state.environmentProviderIds,
+    startupNotice: state.startupNotice,
     setLanguage,
     setMinimizeToTrayOnClose,
     setDefaultOutputDir,

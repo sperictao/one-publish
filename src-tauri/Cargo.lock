@@ -2968,6 +2968,7 @@ dependencies = [
  "thiserror 2.0.17",
  "tokio",
  "walkdir",
+ "windows-sys 0.59.0",
  "zip 7.3.0",
 ]
 

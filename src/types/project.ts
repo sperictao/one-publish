@@ -5,6 +5,13 @@ export interface ProjectInfo {
   target_frameworks: string[];
 }
 
+export interface ProjectScanCandidates {
+  rootPath: string;
+  solutionFiles: string[];
+  projectFiles: string[];
+  recommendedProjectFile?: string | null;
+}
+
 export type DotnetProjectInfo = Pick<ProjectInfo, "root_path" | "project_file"> & {
   target_frameworks?: string[];
 };

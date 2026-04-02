@@ -3,6 +3,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import type { Branch, Repository, RepoPublishConfig } from "@/types/repository";
 import type { ParameterSchema } from "@/types/parameters";
+import type { ProjectInfo, ProjectScanCandidates } from "@/types/project";
 import { normalizeEnvironmentProviderIds } from "@/lib/environment";
 
 // 发布配置存储类型
@@ -65,15 +66,11 @@ export interface BootstrapState {
   environmentProviderIds: string[];
   recentRepoIds: string[];
   recentConfigKeysByRepo: Record<string, string[]>;
+  startupNotice?: string | null;
 }
 
-// 完整应用状态：仅用于持久化和少数全量命令交互
+// 完整应用状态：仅保留运行时实际使用字段
 export interface AppState extends BootstrapState {
-  // 以下全局字段仅用于向后兼容反序列化，前端不再使用
-  selectedPreset: string;
-  isCustomMode: boolean;
-  customConfig: PublishConfigStore;
-  profiles: ConfigProfile[];
   executionHistory: ExecutionRecord[];
 }
 
@@ -91,29 +88,27 @@ export const defaultBootstrapState: BootstrapState = {
   environmentProviderIds: ["dotnet"],
   recentRepoIds: [],
   recentConfigKeysByRepo: {},
+  startupNotice: null,
 };
 
-// 默认状态
+export const defaultPublishConfigStore: PublishConfigStore = {
+  configuration: "Release",
+  runtime: "",
+  framework: "",
+  selfContained: false,
+  outputDir: "",
+  noBuild: false,
+  noRestore: false,
+  verbosity: "",
+  noLogo: false,
+  properties: {},
+  define: [],
+  useProfile: false,
+  profileName: "",
+};
+
 export const defaultAppState: AppState = {
   ...defaultBootstrapState,
-  selectedPreset: "release-fd",
-  isCustomMode: false,
-  customConfig: {
-    configuration: "Release",
-    runtime: "",
-    framework: "",
-    selfContained: false,
-    outputDir: "",
-    noBuild: false,
-    noRestore: false,
-    verbosity: "",
-    noLogo: false,
-    properties: {},
-    define: [],
-    useProfile: false,
-    profileName: "",
-  },
-  profiles: [],
   executionHistory: [],
 };
 
@@ -121,21 +116,7 @@ export const defaultAppState: AppState = {
 export const defaultRepoPublishConfig: RepoPublishConfig = {
   selectedPreset: "release-fd",
   isCustomMode: false,
-  customConfig: {
-    configuration: "Release",
-    runtime: "",
-    framework: "",
-    selfContained: false,
-    outputDir: "",
-    noBuild: false,
-    noRestore: false,
-    verbosity: "",
-    noLogo: false,
-    properties: {},
-    define: [],
-    useProfile: false,
-    profileName: "",
-  },
+  customConfig: { ...defaultPublishConfigStore },
   profiles: [],
 };
 
@@ -143,12 +124,7 @@ export const defaultRepoPublishConfig: RepoPublishConfig = {
  * 获取应用状态
  */
 export async function getAppState(): Promise<AppState> {
-  try {
-    return await invoke<AppState>("get_app_state");
-  } catch (error) {
-    console.error("获取应用状态失败:", error);
-    return defaultAppState;
-  }
+  return await invoke<AppState>("get_app_state");
 }
 
 /**
@@ -156,13 +132,6 @@ export async function getAppState(): Promise<AppState> {
  */
 export async function getRepository(repoId: string): Promise<Repository> {
   return await invoke<Repository>("get_repository", { repoId });
-}
-
-/**
- * 保存完整应用状态
- */
-export async function saveAppState(state: AppState): Promise<void> {
-  await invoke("save_app_state", { state });
 }
 
 /**
@@ -314,6 +283,24 @@ export async function detectRepositoryProvider(path: string): Promise<string> {
  */
 export async function scanProjectFiles(path: string): Promise<string[]> {
   return await invoke<string[]>("scan_project_files", { path });
+}
+
+export async function scanProject(startPath?: string): Promise<ProjectInfo> {
+  return await invoke<ProjectInfo>("scan_project", { startPath });
+}
+
+export async function scanProjectCandidates(
+  startPath?: string
+): Promise<ProjectScanCandidates> {
+  return await invoke<ProjectScanCandidates>("scan_project_candidates", {
+    startPath,
+  });
+}
+
+export async function resolveProjectInfo(projectFile: string): Promise<ProjectInfo> {
+  return await invoke<ProjectInfo>("resolve_project_info", {
+    projectFile,
+  });
 }
 
 export interface RepositoryBranchScanResult {

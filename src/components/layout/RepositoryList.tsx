@@ -15,6 +15,7 @@ import { cn } from "@/lib/utils";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Search, Plus, Settings, ChevronDown, FolderGit2, Package } from "lucide-react";
+import type { ProjectScanCandidates } from "@/types/project";
 import type { Branch, Repository } from "@/types/repository";
 import { useI18n } from "@/hooks/useI18n";
 import type { RepositoryListFloatingBindings } from "@/components/layout/RepositoryListFloatingLayer";
@@ -75,7 +76,7 @@ interface RepositoryListProps {
     path: string,
     options?: { silentSuccess?: boolean }
   ) => Promise<string | null>;
-  onScanProjectFiles: (path: string) => Promise<string[]>;
+  onScanProjectCandidates: (path: string) => Promise<ProjectScanCandidates | null>;
   onRefreshBranches: (
     path: string,
     options?: { silentSuccess?: boolean }
@@ -94,7 +95,7 @@ export function RepositoryList({
   onEditRepo,
   onRemoveRepo,
   onDetectProvider,
-  onScanProjectFiles,
+  onScanProjectCandidates,
   onRefreshBranches,
   branchConnectivityByRepoId,
   onSettings,
@@ -387,7 +388,7 @@ export function RepositoryList({
             onOpenChange={handleEditDialogChange}
             onEditRepo={onEditRepo}
             onDetectProvider={onDetectProvider}
-            onScanProjectFiles={onScanProjectFiles}
+            onScanProjectCandidates={onScanProjectCandidates}
             onRefreshBranches={onRefreshBranches}
           />
         </Suspense>

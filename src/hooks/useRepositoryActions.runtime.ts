@@ -4,7 +4,7 @@ import { toast } from "sonner";
 import {
   defaultRepoPublishConfig,
   detectRepositoryProvider,
-  scanProjectFiles,
+  scanProjectCandidates,
   scanRepositoryBranches,
 } from "@/lib/store";
 import { getPathBasename } from "@/lib/paths";
@@ -14,6 +14,7 @@ import {
   analyzeProviderDetectFailure,
   extractInvokeErrorMessage,
 } from "@/lib/tauri/invokeErrors";
+import type { ProjectScanCandidates } from "@/types/project";
 import type { Branch, Repository } from "@/types/repository";
 
 interface TranslationMap {
@@ -248,16 +249,18 @@ export async function handleDetectRepoProviderRuntime(params: {
   }
 }
 
-export async function handleScanProjectFilesRuntime(path: string): Promise<string[]> {
+export async function handleScanProjectCandidatesRuntime(
+  path: string
+): Promise<ProjectScanCandidates | null> {
   const nextPath = path.trim();
   if (!nextPath) {
-    return [];
+    return null;
   }
 
   try {
-    return await scanProjectFiles(nextPath);
+    return await scanProjectCandidates(nextPath);
   } catch {
-    return [];
+    return null;
   }
 }
 

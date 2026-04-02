@@ -1,11 +1,19 @@
 import { useEffect } from "react";
-import { invoke, isTauri } from "@tauri-apps/api/core";
+import { isTauri } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 
 import { normalizeDotnetProjectBoundParameters } from "@/lib/dotnetPublishConfig";
+import { resolvePreferredDotnetProjectInfo } from "@/lib/dotnetProjectInfo";
 import { resolveDotnetProjectProfile } from "@/lib/dotnetProjectProfile";
 import { showSystemNotification } from "@/lib/systemNotification";
-import { getProfiles, getRepository, showMainWindow } from "@/lib/store";
+import {
+  getProfiles,
+  getRepository,
+  resolveProjectInfo,
+  scanProject,
+  showMainWindow,
+} from "@/lib/store";
+import { analyzeProjectScanFailure } from "@/lib/tauri/invokeErrors";
 import type { RunPublishOptions, ProviderPublishSpec } from "@/hooks/usePublishRunner";
 import type { ProjectInfo } from "@/types/project";
 import type { Repository } from "@/types/repository";
@@ -24,35 +32,35 @@ interface ResolvedTrayPublishRequest {
   options: RunPublishOptions;
 }
 
-function isSupportedDotnetProjectFile(path: string | null | undefined): path is string {
-  const trimmed = path?.trim();
-  if (!trimmed) {
-    return false;
-  }
-
-  const fileName = trimmed.split(/[\\/]/).pop() || "";
-  const extension = fileName.split(".").pop()?.toLowerCase() || "";
-  return extension.endsWith("proj");
-}
-
-async function scanProjectInfo(repoPath: string): Promise<ProjectInfo> {
-  return await invoke<ProjectInfo>("scan_project", {
-    startPath: repoPath,
-  });
-}
-
 async function resolveDotnetProjectInfo(repo: Repository): Promise<ProjectInfo> {
-  const manualProjectFile = repo.projectFile?.trim();
-  if (isSupportedDotnetProjectFile(manualProjectFile)) {
-    return {
-      root_path: repo.path,
-      project_file: manualProjectFile,
-      publish_profiles: [],
-      target_frameworks: [],
-    };
-  }
+  try {
+    const projectInfo = await resolvePreferredDotnetProjectInfo({
+      repoPath: repo.path,
+      projectFile: repo.projectFile,
+      resolveProjectInfo: async (projectFile) => {
+        try {
+          return await resolveProjectInfo(projectFile);
+        } catch {
+          return null;
+        }
+      },
+      scanProject: async (repoPath) => await scanProject(repoPath),
+    });
 
-  return await scanProjectInfo(repo.path);
+    if (!projectInfo) {
+      throw new Error("未能解析仓库对应的项目文件。");
+    }
+
+    return projectInfo;
+  } catch (error) {
+    if (analyzeProjectScanFailure(error) === "multiple_project_files_found") {
+      throw new Error(
+        "该仓库包含多个项目文件，请先在仓库设置中绑定明确的 Project File。"
+      );
+    }
+
+    throw error;
+  }
 }
 
 async function resolveUserProfileSpec(params: {
@@ -97,40 +105,19 @@ async function resolvePubxmlSpec(params: {
   specVersion: number;
   defaultOutputDir: string;
 }): Promise<ProviderPublishSpec> {
-  let projectInfo = await resolveDotnetProjectInfo(params.repo);
+  const projectInfo = await resolveDotnetProjectInfo(params.repo);
+  const resolvedProfile = await resolveDotnetProjectProfile({
+    projectInfo,
+    profileName: params.profileName,
+    defaultOutputDir: params.defaultOutputDir,
+  });
 
-  try {
-    const resolvedProfile = await resolveDotnetProjectProfile({
-      projectInfo,
-      profileName: params.profileName,
-      defaultOutputDir: params.defaultOutputDir,
-    });
-
-    return {
-      version: params.specVersion,
-      provider_id: "dotnet",
-      project_path: projectInfo.project_file,
-      parameters: resolvedProfile.parameters,
-    };
-  } catch (error) {
-    if (!isSupportedDotnetProjectFile(params.repo.projectFile)) {
-      throw error;
-    }
-
-    projectInfo = await scanProjectInfo(params.repo.path);
-    const resolvedProfile = await resolveDotnetProjectProfile({
-      projectInfo,
-      profileName: params.profileName,
-      defaultOutputDir: params.defaultOutputDir,
-    });
-
-    return {
-      version: params.specVersion,
-      provider_id: "dotnet",
-      project_path: projectInfo.project_file,
-      parameters: resolvedProfile.parameters,
-    };
-  }
+  return {
+    version: params.specVersion,
+    provider_id: "dotnet",
+    project_path: projectInfo.project_file,
+    parameters: resolvedProfile.parameters,
+  };
 }
 
 function createTrayRunOptions(

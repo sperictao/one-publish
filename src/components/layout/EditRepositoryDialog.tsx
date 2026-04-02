@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { cn } from "@/lib/utils";
 import { getPathBasename } from "@/lib/paths";
 import { AppDialogInset } from "@/components/ui/app-dialog-inset";
@@ -8,8 +8,15 @@ import { Dialog } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { toast } from "sonner";
 import { FileSearch, FolderGit2, RefreshCw } from "lucide-react";
+import type { ProjectScanCandidates } from "@/types/project";
 import type { Branch, Repository } from "@/types/repository";
+import {
+  repositoryProjectBindingPending,
+  reconcileProjectBinding,
+  repositoryRequiresProjectBinding,
+} from "@/components/layout/editRepositoryProjectBinding";
 
 interface ProviderOption {
   id: string;
@@ -27,7 +34,7 @@ interface EditRepositoryDialogProps {
     path: string,
     options?: { silentSuccess?: boolean }
   ) => Promise<string | null>;
-  onScanProjectFiles: (path: string) => Promise<string[]>;
+  onScanProjectCandidates: (path: string) => Promise<ProjectScanCandidates | null>;
   onRefreshBranches: (
     path: string,
     options?: { silentSuccess?: boolean }
@@ -59,7 +66,7 @@ export function EditRepositoryDialog({
   onOpenChange,
   onEditRepo,
   onDetectProvider,
-  onScanProjectFiles,
+  onScanProjectCandidates,
   onRefreshBranches,
 }: EditRepositoryDialogProps) {
   const [editingRepo, setEditingRepo] = useState<Repository | null>(null);
@@ -73,9 +80,13 @@ export function EditRepositoryDialog({
   const [isRefreshingBranches, setIsRefreshingBranches] = useState(false);
   const [shouldAutoDetectProvider, setShouldAutoDetectProvider] = useState(false);
   const [shouldAutoRefreshBranches, setShouldAutoRefreshBranches] = useState(false);
-  const [projectFileOptions, setProjectFileOptions] = useState<string[]>([]);
+  const [projectScan, setProjectScan] = useState<ProjectScanCandidates | null>(null);
+  const [projectScanResolvedPath, setProjectScanResolvedPath] = useState<string | null>(null);
   const [isScanningProjectFiles, setIsScanningProjectFiles] = useState(false);
+  const [isProjectScanPending, setIsProjectScanPending] = useState(false);
   const [isProjectFileManual, setIsProjectFileManual] = useState(false);
+  const editProjectFileRef = useRef("");
+  const projectScanRequestIdRef = useRef(0);
 
   const providerOptions = useMemo(() => {
     const uniqueOptions = Array.from(
@@ -117,6 +128,31 @@ export function EditRepositoryDialog({
     return options;
   }, [editCurrentBranch, editingRepo]);
 
+  const projectFileOptions = useMemo(
+    () => projectScan?.projectFiles ?? [],
+    [projectScan]
+  );
+
+  const requiresProjectBinding = useMemo(
+    () =>
+      repositoryRequiresProjectBinding({
+        providerId: editProviderId,
+        candidates: projectScan,
+        projectFile: editProjectFile,
+      }),
+    [editProjectFile, editProviderId, projectScan]
+  );
+  const isProjectBindingPending = useMemo(
+    () =>
+      repositoryProjectBindingPending({
+        providerId: editProviderId,
+        path: editPath,
+        scanResolvedPath: projectScanResolvedPath,
+        isScanning: isProjectScanPending,
+      }),
+    [editPath, editProviderId, isProjectScanPending, projectScanResolvedPath]
+  );
+
   const resetForm = useCallback(() => {
     setEditingRepo(null);
     setEditName("");
@@ -129,10 +165,18 @@ export function EditRepositoryDialog({
     setIsRefreshingBranches(false);
     setShouldAutoDetectProvider(false);
     setShouldAutoRefreshBranches(false);
-    setProjectFileOptions([]);
+    setProjectScan(null);
+    setProjectScanResolvedPath(null);
     setIsScanningProjectFiles(false);
+    setIsProjectScanPending(false);
     setIsProjectFileManual(false);
+    editProjectFileRef.current = "";
+    projectScanRequestIdRef.current = 0;
   }, []);
+
+  useEffect(() => {
+    editProjectFileRef.current = editProjectFile;
+  }, [editProjectFile]);
 
   useEffect(() => {
     if (!repository) {
@@ -154,49 +198,92 @@ export function EditRepositoryDialog({
     setIsRefreshingBranches(false);
     setShouldAutoDetectProvider(!initialProviderId);
     setShouldAutoRefreshBranches(true);
-    setProjectFileOptions([]);
+    setProjectScan(null);
+    setProjectScanResolvedPath(null);
     setIsScanningProjectFiles(false);
-    setIsProjectFileManual(false);
+    setIsProjectScanPending(false);
+    setIsProjectFileManual(Boolean(repository.projectFile?.trim()));
+    editProjectFileRef.current = repository.projectFile || "";
+    projectScanRequestIdRef.current = 0;
+  }, [repository, resetForm]);
 
-    if (!repository.path.trim()) {
-      setIsProjectFileManual(true);
+  const runProjectCandidateScan = useCallback(
+    async (path: string): Promise<ProjectScanCandidates | null> => {
+      const nextPath = path.trim();
+      if (!nextPath) {
+        projectScanRequestIdRef.current += 1;
+        setProjectScan(null);
+        setProjectScanResolvedPath(null);
+        setIsProjectFileManual(true);
+        setIsProjectScanPending(false);
+        return null;
+      }
+
+      const requestId = projectScanRequestIdRef.current + 1;
+      projectScanRequestIdRef.current = requestId;
+      setIsScanningProjectFiles(true);
+      setIsProjectScanPending(true);
+
+      try {
+        const candidates = await onScanProjectCandidates(nextPath);
+        if (projectScanRequestIdRef.current !== requestId) {
+          return candidates;
+        }
+
+        setProjectScanResolvedPath(nextPath);
+        if (!candidates) {
+          setProjectScan(null);
+          return null;
+        }
+
+        setProjectScan(candidates);
+        const resolution = reconcileProjectBinding(
+          editProjectFileRef.current,
+          candidates
+        );
+        setEditProjectFile(resolution.nextProjectFile);
+        setIsProjectFileManual(resolution.isManualInput);
+        return candidates;
+      } finally {
+        if (projectScanRequestIdRef.current === requestId) {
+          setIsScanningProjectFiles(false);
+          setIsProjectScanPending(false);
+        }
+      }
+    },
+    [onScanProjectCandidates]
+  );
+
+  useEffect(() => {
+    if (!editingRepo) {
       return;
     }
 
-    let cancelled = false;
+    const nextPath = editPath.trim();
+    if (!nextPath) {
+      projectScanRequestIdRef.current += 1;
+      setProjectScan(null);
+      setProjectScanResolvedPath(null);
+      setIsProjectFileManual(true);
+      setIsScanningProjectFiles(false);
+      setIsProjectScanPending(false);
+      return;
+    }
 
-    setIsScanningProjectFiles(true);
-    void onScanProjectFiles(repository.path.trim())
-      .then((files) => {
-        if (cancelled) {
-          return;
-        }
+    projectScanRequestIdRef.current += 1;
+    setProjectScan(null);
+    setProjectScanResolvedPath(null);
+    setIsProjectScanPending(true);
 
-        setProjectFileOptions(files);
-
-        const currentFile = repository.projectFile?.trim() || "";
-        if (files.length === 0) {
-          setIsProjectFileManual(true);
-          return;
-        }
-
-        if (currentFile && !files.includes(currentFile)) {
-          setIsProjectFileManual(true);
-          return;
-        }
-
-        setIsProjectFileManual(false);
-      })
-      .finally(() => {
-        if (!cancelled) {
-          setIsScanningProjectFiles(false);
-        }
-      });
+    const timer = window.setTimeout(() => {
+      void runProjectCandidateScan(nextPath);
+    }, 250);
 
     return () => {
-      cancelled = true;
+      window.clearTimeout(timer);
+      projectScanRequestIdRef.current += 1;
     };
-  }, [onScanProjectFiles, repository, resetForm]);
+  }, [editPath, editingRepo, runProjectCandidateScan]);
 
   useEffect(() => {
     if (!editingRepo || !shouldAutoDetectProvider) {
@@ -318,23 +405,8 @@ export function EditRepositoryDialog({
       return;
     }
 
-    setIsScanningProjectFiles(true);
-    try {
-      const files = await onScanProjectFiles(scanPath);
-      setProjectFileOptions(files);
-      if (files.length === 0) {
-        setIsProjectFileManual(true);
-        return;
-      }
-
-      setIsProjectFileManual(false);
-      if (!editProjectFile.trim()) {
-        setEditProjectFile(files[0]);
-      }
-    } finally {
-      setIsScanningProjectFiles(false);
-    }
-  }, [editPath, editProjectFile, onScanProjectFiles]);
+    await runProjectCandidateScan(scanPath);
+  }, [editPath, runProjectCandidateScan]);
 
   const handleRefreshBranches = useCallback(async () => {
     if (!editingRepo) {
@@ -398,13 +470,37 @@ export function EditRepositoryDialog({
         return;
       }
 
+      let validatedCandidates = projectScan;
+      if (isProjectBindingPending) {
+        validatedCandidates = await runProjectCandidateScan(nextPath);
+      }
+
+      const resolvedProjectFile = validatedCandidates
+        ? reconcileProjectBinding(nextProjectFile, validatedCandidates)
+            .nextProjectFile
+        : nextProjectFile;
+      const bindingRequired = repositoryRequiresProjectBinding({
+        providerId: editProviderId,
+        candidates: validatedCandidates,
+        projectFile: resolvedProjectFile,
+      });
+
+      if (bindingRequired) {
+        toast.error(repoT.projectFileBindingRequired || "请先绑定 Project File", {
+          description:
+            repoT.projectFileBindingRequiredDesc ||
+            "当前仓库包含多个项目文件，必须显式选择一个 Project File 才能继续。",
+        });
+        return;
+      }
+
       setIsSavingRepo(true);
       try {
         const updated = await onEditRepo({
           ...editingRepo,
           name: nextName,
           path: nextPath,
-          projectFile: nextProjectFile || undefined,
+          projectFile: resolvedProjectFile || undefined,
           currentBranch: nextCurrentBranch || fallbackBranch,
           providerId: normalizedProviderId || undefined,
         });
@@ -423,8 +519,12 @@ export function EditRepositoryDialog({
       editProjectFile,
       editProviderId,
       editingRepo,
+      isProjectBindingPending,
       onEditRepo,
       onOpenChange,
+      repoT,
+      projectScan,
+      runProjectCandidateScan,
     ]
   );
 
@@ -471,6 +571,8 @@ export function EditRepositoryDialog({
                   isSavingRepo ||
                   isDetectingProvider ||
                   isRefreshingBranches ||
+                  isProjectBindingPending ||
+                  requiresProjectBinding ||
                   isEditNameEmpty ||
                   isEditPathEmpty
                 }
@@ -606,6 +708,18 @@ export function EditRepositoryDialog({
                 <p className="text-xs text-muted-foreground">
                   {repoT.projectFileScanHint || "可从自动扫描结果中选择，或切换到手动输入。"}
                 </p>
+                {isProjectBindingPending ? (
+                  <p className="text-xs text-muted-foreground">
+                    {repoT.projectFileScanningPending ||
+                      "正在扫描项目文件，完成后才能保存。"}
+                  </p>
+                ) : null}
+                {requiresProjectBinding ? (
+                  <p className="text-xs text-destructive">
+                    {repoT.projectFileBindingRequiredInline ||
+                      "检测到多个项目文件，请先显式选择一个 Project File。"}
+                  </p>
+                ) : null}
               </div>
 
               <div className="space-y-2">

@@ -1,5 +1,6 @@
 import { useCallback } from "react";
 import type { Branch, Repository } from "@/types/repository";
+import type { ProjectScanCandidates } from "@/types/project";
 
 const loadRepositoryActionsRuntime = () =>
   import("@/hooks/useRepositoryActions.runtime");
@@ -69,11 +70,14 @@ export function useRepositoryActions({
     [appT]
   );
 
-  const handleScanProjectFiles = useCallback(async (path: string): Promise<string[]> => {
-    const { handleScanProjectFilesRuntime } =
+  const handleScanProjectCandidates = useCallback(
+    async (path: string): Promise<ProjectScanCandidates | null> => {
+      const { handleScanProjectCandidatesRuntime } =
       await loadRepositoryActionsRuntime();
-    return await handleScanProjectFilesRuntime(path);
-  }, []);
+      return await handleScanProjectCandidatesRuntime(path);
+    },
+    []
+  );
 
   const handleRefreshRepoBranches = useCallback(
     async (
@@ -92,7 +96,7 @@ export function useRepositoryActions({
     handleRemoveRepo,
     handleEditRepo,
     handleDetectRepoProvider,
-    handleScanProjectFiles,
+    handleScanProjectCandidates,
     handleRefreshRepoBranches,
   };
 }

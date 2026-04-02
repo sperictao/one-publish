@@ -69,6 +69,7 @@ vi.mock("@/hooks/useAppState", async () => {
         theme: "auto" as const,
         executionHistoryLimit: 20,
         environmentProviderIds: ["dotnet"],
+        startupNotice: null,
         setLanguage: mocks.noop,
         setMinimizeToTrayOnClose: mocks.noop,
         setDefaultOutputDir: mocks.noop,
@@ -162,7 +163,7 @@ vi.mock("@/hooks/useRepositoryActions", () => ({
     handleRemoveRepo: mocks.noop,
     handleEditRepo: mocks.noop,
     handleDetectRepoProvider: mocks.noop,
-    handleScanProjectFiles: mocks.noop,
+    handleScanProjectCandidates: mocks.noop,
     handleRefreshRepoBranches: mocks.noop,
   }),
 }));

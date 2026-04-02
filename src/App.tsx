@@ -13,6 +13,7 @@ import { useRepositoryActions } from "@/hooks/useRepositoryActions";
 import { useRepositoryViewState } from "@/hooks/useRepositoryViewState";
 import { useRecoverableSpec } from "@/hooks/useRecoverableSpec";
 import { useRerunFlow } from "@/hooks/useRerunFlow";
+import { useStartupRecoveryNotice } from "@/hooks/useStartupRecoveryNotice";
 import { usePresetText } from "@/hooks/usePresetText";
 import { usePublishRunner } from "@/hooks/usePublishRunner";
 import { useTrayRecentPublish } from "@/hooks/useTrayRecentPublish";
@@ -202,6 +203,7 @@ function App() {
     theme,
     executionHistoryLimit,
     environmentProviderIds,
+    startupNotice,
     setMinimizeToTrayOnClose,
     setDefaultOutputDir,
     setTheme,
@@ -209,6 +211,7 @@ function App() {
     setEnvironmentProviderIds,
     setLanguage: setPreferenceLanguage,
   } = useAppState();
+  useStartupRecoveryNotice(startupNotice);
 
   // 应用主题
   useTheme(theme);
@@ -272,7 +275,9 @@ function App() {
         !isStateLoading &&
         activeProviderId === "dotnet"
       ) {
-        scanProject(selectedRepo.path);
+        scanProject(selectedRepo.path, {
+          projectFile: selectedRepo.projectFile,
+        });
       }
     },
     onPublish: () => {
@@ -413,6 +418,7 @@ function App() {
     appT,
     selectedRepoId,
     selectedRepoPath: selectedRepo?.path,
+    selectedRepoProjectFile: selectedRepo?.projectFile,
     isStateLoading,
     activeProviderId,
   });
@@ -462,7 +468,7 @@ function App() {
     handleRemoveRepo,
     handleEditRepo,
     handleDetectRepoProvider,
-    handleScanProjectFiles,
+    handleScanProjectCandidates,
     handleRefreshRepoBranches,
   } = useRepositoryActions({
     appT,
@@ -660,7 +666,7 @@ function App() {
               onEditRepo={handleEditRepo}
               onRemoveRepo={handleRemoveRepo}
               onDetectProvider={handleDetectRepoProvider}
-              onScanProjectFiles={handleScanProjectFiles}
+              onScanProjectCandidates={handleScanProjectCandidates}
               onRefreshBranches={handleRefreshRepoBranches}
               branchConnectivityByRepoId={branchConnectivityByRepoId}
               onSettings={handleOpenSettings}
