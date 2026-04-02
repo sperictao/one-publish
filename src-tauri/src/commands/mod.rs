@@ -20,6 +20,7 @@ mod artifact;
 mod config;
 mod environment;
 mod export;
+mod notification;
 mod provider;
 mod repository;
 mod updater;
@@ -39,6 +40,8 @@ pub use export::{
     export_failure_group_bundle, export_preflight_report, open_execution_snapshot,
     open_output_directory,
 };
+pub(crate) use notification::__cmd__show_system_notification;
+pub use notification::show_system_notification;
 pub(crate) use provider::{
     __cmd__get_provider_schema, __cmd__import_from_command, __cmd__list_providers,
 };

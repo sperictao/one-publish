@@ -13,6 +13,7 @@ import {
   showMainWindow,
   type ExecutionRecord,
 } from "@/lib/store";
+import { showSystemNotification } from "@/lib/systemNotification";
 import { useDotnetPublishSelection } from "@/hooks/useDotnetPublishSelection";
 import { usePublishLogStream } from "@/hooks/usePublishLogStream";
 import { usePublishSpecBuilder } from "@/hooks/usePublishSpecBuilder";
@@ -49,6 +50,7 @@ export interface RunPublishOptions {
   recentConfigKey?: string | null;
   openOutputDirOnSuccess?: boolean;
   restoreWindowOnFailure?: boolean;
+  feedbackMode?: "toast" | "system";
 }
 
 interface DotnetPreset {
@@ -175,8 +177,44 @@ export function usePublishRunner({
     }
   }, []);
 
+  const notifyFeedback = useCallback(
+    async (
+      level: "success" | "warning" | "error",
+      title: string,
+      description?: string,
+      mode: "toast" | "system" = "toast"
+    ): Promise<boolean> => {
+      if (mode === "system") {
+        const notified = await showSystemNotification({
+          title,
+          body: description,
+        });
+        if (notified) {
+          return true;
+        }
+      }
+
+      const payload = description ? { description } : undefined;
+      if (level === "success") {
+        toast.success(title, payload);
+        return false;
+      }
+      if (level === "warning") {
+        toast.warning(title, payload);
+        return false;
+      }
+      toast.error(title, payload);
+      return false;
+    },
+    []
+  );
+
   const openOutputDirectoryIfNeeded = useCallback(
-    async (shouldOpen: boolean, outputDir: string) => {
+    async (
+      shouldOpen: boolean,
+      outputDir: string,
+      feedbackMode: "toast" | "system"
+    ) => {
       if (!shouldOpen || !outputDir.trim()) {
         return;
       }
@@ -184,12 +222,15 @@ export function usePublishRunner({
       try {
         await openOutputDirectory(outputDir);
       } catch (err) {
-        toast.error(appT.openOutputDirectoryFailed || "打开输出目录失败", {
-          description: String(err),
-        });
+        await notifyFeedback(
+          "error",
+          appT.openOutputDirectoryFailed || "打开输出目录失败",
+          String(err),
+          feedbackMode
+        );
       }
     },
-    [appT.openOutputDirectoryFailed]
+    [appT.openOutputDirectoryFailed, notifyFeedback]
   );
 
   const runPublishSpec = useCallback(
@@ -198,6 +239,7 @@ export function usePublishRunner({
       const recentConfigKey = options?.recentConfigKey;
       const openOutputDirOnSuccess = options?.openOutputDirOnSuccess ?? false;
       const restoreWindowOnFailure = options?.restoreWindowOnFailure ?? false;
+      const feedbackMode = options?.feedbackMode ?? "toast";
 
       try {
         const env = await runEnvironmentCheck([spec.provider_id]);
@@ -208,26 +250,37 @@ export function usePublishRunner({
 
         const critical = env.issues.find((item) => item.severity === "critical");
         if (critical) {
-          toast.error(appT.environmentBlocked || "环境未就绪，已阻止发布", {
-            description: critical.description,
-          });
-          openEnvironmentDialog(environmentCheck, [spec.provider_id]);
-          await restoreMainWindowIfNeeded(restoreWindowOnFailure);
+          const notified = await notifyFeedback(
+            "error",
+            appT.environmentBlocked || "环境未就绪，已阻止发布",
+            critical.description,
+            feedbackMode
+          );
+          if (feedbackMode === "toast" || !notified) {
+            openEnvironmentDialog(environmentCheck, [spec.provider_id]);
+          }
+          await restoreMainWindowIfNeeded(restoreWindowOnFailure || !notified);
           return;
         }
 
         const warning = env.issues.find((item) => item.severity === "warning");
         if (warning) {
-          toast.warning(appT.environmentWarning || "环境存在警告", {
-            description: warning.description,
-          });
+          await notifyFeedback(
+            "warning",
+            appT.environmentWarning || "环境存在警告",
+            warning.description,
+            feedbackMode
+          );
         }
       } catch (err) {
         const { extractInvokeErrorMessage } = await loadInvokeErrors();
-        toast.error(appT.environmentCheckFailed || "环境检查失败", {
-          description: extractInvokeErrorMessage(err),
-        });
-        await restoreMainWindowIfNeeded(restoreWindowOnFailure);
+        const notified = await notifyFeedback(
+          "error",
+          appT.environmentCheckFailed || "环境检查失败",
+          extractInvokeErrorMessage(err),
+          feedbackMode
+        );
+        await restoreMainWindowIfNeeded(restoreWindowOnFailure || !notified);
         return;
       }
 
@@ -256,27 +309,37 @@ export function usePublishRunner({
         if (result.success) {
           await openOutputDirectoryIfNeeded(
             openOutputDirOnSuccess,
-            result.output_dir
+            result.output_dir,
+            feedbackMode
           );
 
-          toast.success(publishT.success || "发布成功!", {
-            description: result.output_dir
+          await notifyFeedback(
+            "success",
+            publishT.success || "发布成功!",
+            result.output_dir
               ? (publishT.output || "输出目录: {{dir}}").replace(
                   "{{dir}}",
                   result.output_dir
                 )
               : appT.commandExecuted || "命令执行成功",
-          });
+            feedbackMode
+          );
         } else if (result.cancelled) {
-          toast.warning(appT.publishCancelled || "发布已取消", {
-            description: result.error || appT.userCancelledTask || "用户取消了执行任务",
-          });
-          await restoreMainWindowIfNeeded(restoreWindowOnFailure);
+          const notified = await notifyFeedback(
+            "warning",
+            appT.publishCancelled || "发布已取消",
+            result.error || appT.userCancelledTask || "用户取消了执行任务",
+            feedbackMode
+          );
+          await restoreMainWindowIfNeeded(restoreWindowOnFailure || !notified);
         } else {
-          toast.error(publishT.failed || "发布失败", {
-            description: result.error || appT.unknownError || "未知错误",
-          });
-          await restoreMainWindowIfNeeded(restoreWindowOnFailure);
+          const notified = await notifyFeedback(
+            "error",
+            publishT.failed || "发布失败",
+            result.error || appT.unknownError || "未知错误",
+            feedbackMode
+          );
+          await restoreMainWindowIfNeeded(restoreWindowOnFailure || !notified);
         }
 
         const record = createPublishExecutionRecord({
@@ -315,9 +378,12 @@ export function usePublishRunner({
           appT,
           rawErrorMessage
         );
-        toast.error(feedback.title, {
-          description: feedback.description,
-        });
+        const notified = await notifyFeedback(
+          "error",
+          feedback.title,
+          rawErrorMessage || feedback.description,
+          feedbackMode
+        );
 
         const record = createPublishExecutionRecord({
           spec,
@@ -329,7 +395,7 @@ export function usePublishRunner({
         });
         setCurrentPublishRecordId(record.id);
         savePublishRecord(record);
-        await restoreMainWindowIfNeeded(restoreWindowOnFailure);
+        await restoreMainWindowIfNeeded(restoreWindowOnFailure || !notified);
       } finally {
         setIsPublishing(false);
         setIsCancellingPublish(false);
@@ -343,6 +409,7 @@ export function usePublishRunner({
       savePublishRecord,
       selectedRepoId,
       setEnvironmentLastCheck,
+      notifyFeedback,
       openOutputDirectoryIfNeeded,
       restoreMainWindowIfNeeded,
       waitForOutputLogSnapshot,

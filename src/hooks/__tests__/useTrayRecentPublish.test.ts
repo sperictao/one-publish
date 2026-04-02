@@ -7,11 +7,9 @@ const mocks = vi.hoisted(() => ({
   invoke: vi.fn(),
   isTauri: vi.fn(() => true),
   listen: vi.fn(),
-  toast: {
-    error: vi.fn(),
-  },
   getProfiles: vi.fn(),
   showMainWindow: vi.fn(),
+  showSystemNotification: vi.fn(),
   resolveDotnetProjectProfile: vi.fn(),
 }));
 
@@ -22,10 +20,6 @@ vi.mock("@tauri-apps/api/core", () => ({
 
 vi.mock("@tauri-apps/api/event", () => ({
   listen: mocks.listen,
-}));
-
-vi.mock("sonner", () => ({
-  toast: mocks.toast,
 }));
 
 vi.mock("@/lib/store", async () => {
@@ -39,6 +33,10 @@ vi.mock("@/lib/store", async () => {
 
 vi.mock("@/lib/dotnetProjectProfile", () => ({
   resolveDotnetProjectProfile: mocks.resolveDotnetProjectProfile,
+}));
+
+vi.mock("@/lib/systemNotification", () => ({
+  showSystemNotification: mocks.showSystemNotification,
 }));
 
 import {
@@ -84,6 +82,7 @@ describe("useTrayRecentPublish", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.listen.mockResolvedValue(() => {});
+    mocks.showSystemNotification.mockResolvedValue(true);
     mocks.showMainWindow.mockResolvedValue(true);
   });
 
@@ -147,7 +146,8 @@ describe("useTrayRecentPublish", () => {
         repoId: "repo-1",
         recentConfigKey: "userprofile:alpha",
         openOutputDirOnSuccess: true,
-        restoreWindowOnFailure: true,
+        restoreWindowOnFailure: false,
+        feedbackMode: "system",
       })
     );
   });
@@ -391,7 +391,55 @@ describe("useTrayRecentPublish", () => {
     });
 
     expect(runPublishSpec).not.toHaveBeenCalled();
-    expect(mocks.toast.error).toHaveBeenCalled();
+    expect(mocks.showSystemNotification).toHaveBeenCalledWith({
+      title: "状态栏发布启动失败",
+      body: "missing user profile: missing",
+    });
+    expect(mocks.showMainWindow).not.toHaveBeenCalled();
+  });
+
+  it("如果系统通知发送失败会回退显示主窗口", async () => {
+    const runPublishSpec = vi.fn().mockResolvedValue(undefined);
+    let handler: ((event: { payload: TrayPublishRequestPayload }) => Promise<void>) | null =
+      null;
+    mocks.listen.mockImplementation(async (_eventName, callback) => {
+      handler = callback;
+      return () => {};
+    });
+    mocks.getProfiles.mockResolvedValue([]);
+    mocks.showSystemNotification.mockResolvedValue(false);
+
+    renderHook(() =>
+      useTrayRecentPublish({
+        appT: {
+          trayPublishFailed: "状态栏发布启动失败",
+        },
+        repositories: [createRepository()],
+        defaultOutputDir: "/exports",
+        specVersion: 1,
+        runPublishSpec,
+      })
+    );
+
+    await waitFor(() => {
+      expect(handler).not.toBeNull();
+    });
+
+    if (!handler) {
+      throw new Error("tray handler missing");
+    }
+
+    const trayHandler = handler as (
+      event: { payload: TrayPublishRequestPayload }
+    ) => Promise<void>;
+
+    await trayHandler({
+      payload: {
+        repoId: "repo-1",
+        configKey: "userprofile:missing",
+      },
+    });
+
     expect(mocks.showMainWindow).toHaveBeenCalled();
   });
 });

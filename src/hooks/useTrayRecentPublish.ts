@@ -1,10 +1,10 @@
 import { useEffect } from "react";
 import { invoke, isTauri } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
-import { toast } from "sonner";
 
 import { normalizeDotnetProjectBoundParameters } from "@/lib/dotnetPublishConfig";
 import { resolveDotnetProjectProfile } from "@/lib/dotnetProjectProfile";
+import { showSystemNotification } from "@/lib/systemNotification";
 import { getProfiles, showMainWindow } from "@/lib/store";
 import type { RunPublishOptions, ProviderPublishSpec } from "@/hooks/usePublishRunner";
 import type { ProjectInfo } from "@/types/project";
@@ -141,7 +141,8 @@ function createTrayRunOptions(
     repoId,
     recentConfigKey: configKey,
     openOutputDirOnSuccess: true,
-    restoreWindowOnFailure: true,
+    restoreWindowOnFailure: false,
+    feedbackMode: "system",
   };
 }
 
@@ -224,13 +225,13 @@ export function useTrayRecentPublish(params: {
       } catch (error) {
         const description =
           error instanceof Error ? error.message : String(error);
-        toast.error(
-          params.appT.trayPublishFailed || "状态栏发布启动失败",
-          {
-            description,
-          }
-        );
-        await showMainWindow().catch(() => {});
+        const notified = await showSystemNotification({
+          title: params.appT.trayPublishFailed || "状态栏发布启动失败",
+          body: description,
+        });
+        if (!notified) {
+          await showMainWindow().catch(() => {});
+        }
       }
     })
       .then((handler) => {

@@ -31,6 +31,7 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
+        .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .plugin(tauri_plugin_decorum::init())
         .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
@@ -156,6 +157,7 @@ pub fn run() {
             commands::export_diagnostics_index,
             commands::open_execution_snapshot,
             commands::open_output_directory,
+            commands::show_system_notification,
             commands::import_config,
             commands::apply_imported_config,
             commands::run_environment_check,
