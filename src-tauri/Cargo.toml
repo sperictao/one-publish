@@ -1,6 +1,6 @@
 [package]
 name = "one-publish"
-version = "0.3.6"
+version = "0.3.7"
 description = "Cross-platform .NET publish tool with GUI"
 authors = [""]
 license = "MIT"
