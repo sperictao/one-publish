@@ -1,120 +1,102 @@
-/**
- * Parameter Schema Types
- */
+import type {
+  JsonValue,
+  ParameterDefinition as TauriParameterDefinition,
+  ParameterSchema as TauriParameterSchema,
+  ParameterType,
+  SpecValue,
+} from "@/generated/tauri-contracts";
 
-export interface ParameterSchema {
+export type { ParameterType, SpecValue };
+
+export type SpecParameters = Record<string, SpecValue>;
+
+export interface ParameterDefinition
+  extends Omit<TauriParameterDefinition, "multiple" | "prefix" | "description"> {
+  multiple?: boolean | null;
+  prefix?: string | null;
+  description?: string | null;
+}
+
+export interface ParameterSchema extends Omit<TauriParameterSchema, "parameters"> {
   parameters: Record<string, ParameterDefinition>;
 }
 
-export interface ParameterDefinition {
-  type: 'boolean' | 'string' | 'array' | 'map';
-  flag: string;
-  multiple?: boolean;
-  prefix?: string;
-  description?: string;
-}
-
-/**
- * Spec Value Types (matches Rust SpecValue)
- */
-export type SpecValue = SpecNull | SpecBool | SpecNumber | SpecString | SpecArray | SpecMap;
-
-export interface SpecNull {
-  type: 'null';
-}
-
-export interface SpecBool {
-  type: 'bool';
-  value: boolean;
-}
-
-export interface SpecNumber {
-  type: 'number';
-  value: number;
-}
-
-export interface SpecString {
-  type: 'string';
-  value: string;
-}
-
-export interface SpecArray {
-  type: 'array';
-  value: SpecValue[];
-}
-
-export interface SpecMap {
-  type: 'map';
-  value: Record<string, SpecValue>;
-}
-
-/**
- * Simplified parameter value for UI (JSON-serializable)
- * Using interface to support recursive types
- */
 export interface ParameterValueObject {
   [key: string]: ParameterValue;
 }
+
 export interface ParameterValueArray extends Array<ParameterValue> {}
 
-export type ParameterValue = null | boolean | number | string | ParameterValueArray | ParameterValueObject;
+export type ParameterValue =
+  | JsonValue
+  | ParameterValueArray
+  | ParameterValueObject;
 
-/**
- * Convert ParameterValue to SpecValue
- */
 export function toSpecValue(value: ParameterValue): SpecValue {
   if (value === null) {
-    return { type: 'null' };
+    return null;
   }
-  if (typeof value === 'boolean') {
-    return { type: 'bool', value };
+
+  if (
+    typeof value === "string" ||
+    typeof value === "number" ||
+    typeof value === "boolean"
+  ) {
+    return value;
   }
-  if (typeof value === 'number') {
-    return { type: 'number', value };
-  }
-  if (typeof value === 'string') {
-    return { type: 'string', value };
-  }
+
   if (Array.isArray(value)) {
-    return { type: 'array', value: value.map(toSpecValue) };
+    return value.map((item) => toSpecValue(item));
   }
-  if (typeof value === 'object') {
-    const map: Record<string, SpecValue> = {};
-    for (const [key, val] of Object.entries(value)) {
-      map[key] = toSpecValue(val);
-    }
-    return { type: 'map', value: map };
+
+  const normalized: Record<string, SpecValue> = {};
+  for (const [key, item] of Object.entries(value)) {
+    normalized[key] = toSpecValue(item);
   }
-  return { type: 'null' };
+  return normalized;
 }
 
-/**
- * Convert SpecValue to ParameterValue
- */
 export function fromSpecValue(spec: SpecValue): ParameterValue {
-  switch (spec.type) {
-    case 'null':
-      return null;
-    case 'bool':
-      return spec.value;
-    case 'number':
-      return spec.value;
-    case 'string':
-      return spec.value;
-    case 'array':
-      return spec.value.map(fromSpecValue);
-    case 'map':
-      const obj: Record<string, ParameterValue> = {};
-      for (const [key, val] of Object.entries(spec.value)) {
-        obj[key] = fromSpecValue(val);
-      }
-      return obj;
+  if (
+    spec === null ||
+    typeof spec === "string" ||
+    typeof spec === "number" ||
+    typeof spec === "boolean"
+  ) {
+    return spec;
   }
+
+  if (Array.isArray(spec)) {
+    return spec.map((item) => fromSpecValue(item));
+  }
+
+  const normalized: Record<string, ParameterValue> = {};
+  for (const [key, value] of Object.entries(spec)) {
+    normalized[key] = fromSpecValue(value);
+  }
+  return normalized;
 }
 
-/**
- * Convert backend parameters (flat key-value) to ParameterValue map
- */
-export function normalizeParameters(params: Record<string, ParameterValue>): Record<string, ParameterValue> {
+export function normalizeParameters(
+  params: Record<string, ParameterValue>
+): Record<string, ParameterValue> {
   return params;
+}
+
+export function toSpecParameters(
+  params: Record<string, ParameterValue>
+): SpecParameters {
+  const normalized: SpecParameters = {};
+  for (const [key, value] of Object.entries(params)) {
+    normalized[key] = toSpecValue(value);
+  }
+  return normalized;
+}
+
+export function fromSpecParameters(params: SpecParameters): Record<string, ParameterValue> {
+  const normalized: Record<string, ParameterValue> = {};
+  for (const [key, value] of Object.entries(params)) {
+    normalized[key] = fromSpecValue(value);
+  }
+  return normalized;
 }

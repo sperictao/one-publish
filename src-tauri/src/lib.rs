@@ -5,6 +5,7 @@ pub mod command_parser;
 pub mod commands;
 pub mod compiler;
 pub mod config_export;
+pub mod contracts;
 pub mod environment;
 pub mod errors;
 pub mod parameter;
@@ -22,10 +23,27 @@ use tauri::Manager;
 #[cfg(target_os = "macos")]
 use tauri_plugin_decorum::WebviewWindowExt;
 
+fn build_log_plugin<R: tauri::Runtime>() -> tauri::plugin::TauriPlugin<R> {
+    #[cfg(debug_assertions)]
+    {
+        use tauri_plugin_log::{Target, TargetKind};
+
+        tauri_plugin_log::Builder::new()
+            .clear_targets()
+            .target(Target::new(TargetKind::Stdout))
+            .build()
+    }
+
+    #[cfg(not(debug_assertions))]
+    {
+        tauri_plugin_log::Builder::new().build()
+    }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let result = tauri::Builder::default()
-        .plugin(tauri_plugin_log::Builder::new().build())
+        .plugin(build_log_plugin())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_dialog::init())
@@ -141,6 +159,7 @@ pub fn run() {
             commands::execute_publish,
             commands::execute_provider_publish,
             commands::cancel_provider_publish,
+            commands::preflight_publish_output_access,
             commands::check_update,
             commands::install_update,
             commands::get_updater_help_paths,

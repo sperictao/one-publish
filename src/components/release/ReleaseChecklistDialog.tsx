@@ -209,7 +209,7 @@ export function ReleaseChecklistDialog({
           "将发布目录打包为可分发的 ZIP 产物",
         status: packageStatus,
         detail: packageResult
-          ? `${packageResult.artifact_path}\nsha256: ${packageResult.sha256}`
+          ? `${packageResult.artifactPath}\nsha256: ${packageResult.sha256}`
           : publishResult?.success
             ? checklistTranslations.steps?.package?.pendingDetail ||
               "请在输出日志卡片点击“打包 ZIP”。"
@@ -225,9 +225,9 @@ export function ReleaseChecklistDialog({
         status: signStatus,
         detail: signResult
           ? signResult.success
-            ? signResult.signature_path
+            ? signResult.signaturePath
             : signResult.stderr ||
-              `exitCode: ${signResult.exit_code}`
+              `exitCode: ${signResult.exitCode}`
           : packageResult
             ? checklistTranslations.steps?.sign?.pendingDetail ||
               "请在输出日志卡片点击“签名 (GPG)”。"

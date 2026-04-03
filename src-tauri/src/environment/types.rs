@@ -4,10 +4,12 @@
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 use std::process::Command as StdCommand;
+use ts_rs::TS;
 
 /// Severity level of environment issues
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, TS)]
 #[serde(rename_all = "lowercase")]
+#[ts(rename_all = "lowercase")]
 pub enum IssueSeverity {
     Critical, // Blocks publishing
     Warning,  // May cause issues
@@ -15,8 +17,9 @@ pub enum IssueSeverity {
 }
 
 /// Type of environment issue
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, TS)]
 #[serde(rename_all = "snake_case")]
+#[ts(rename_all = "snake_case")]
 pub enum IssueType {
     MissingTool,
     OutdatedVersion,
@@ -25,8 +28,9 @@ pub enum IssueType {
 }
 
 /// Type of fix action
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, TS)]
 #[serde(rename_all = "snake_case")]
+#[ts(rename_all = "snake_case")]
 pub enum FixType {
     OpenUrl,
     RunCommand,
@@ -35,7 +39,7 @@ pub enum FixType {
 }
 
 /// Fix action that user can apply
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
 pub struct FixAction {
     pub action_type: FixType,
     pub label: String,
@@ -44,7 +48,7 @@ pub struct FixAction {
 }
 
 /// Result of applying a fix
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
 #[serde(tag = "result", content = "data")]
 pub enum FixResult {
     OpenedUrl(String),
@@ -58,7 +62,7 @@ pub enum FixResult {
 }
 
 /// Environment issue detected
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
 pub struct EnvironmentIssue {
     pub severity: IssueSeverity,
     pub provider_id: String,
@@ -114,7 +118,7 @@ impl EnvironmentIssue {
 }
 
 /// Status of a provider in the environment
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
 pub struct ProviderStatus {
     pub provider_id: String,
     pub installed: bool,
@@ -123,7 +127,7 @@ pub struct ProviderStatus {
 }
 
 /// Result of environment check
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
 pub struct EnvironmentCheckResult {
     pub is_ready: bool,
     pub providers: Vec<ProviderStatus>,

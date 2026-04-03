@@ -9,8 +9,9 @@ import {
   matchesEnvironmentCheckSnapshot,
   type EnvironmentCheckSnapshot,
 } from "@/lib/environment";
-import type { PublishConfigStore } from "@/lib/store";
+import type { ConfigParameters, PublishConfigStore } from "@/lib/store";
 import type { ParameterSchema } from "@/types/parameters";
+import type { ParameterValue } from "@/types/parameters";
 
 export type DialogsCompositionParams = Omit<
   UseAppDialogsPropsParams,
@@ -23,7 +24,7 @@ export type DialogsCompositionParams = Omit<
   environmentLastCheck: EnvironmentCheckSnapshot | null;
   activeProviderId: string;
   customConfig: PublishConfigStore;
-  activeProviderParameters: Record<string, any>;
+  activeProviderParameters: Record<string, ParameterValue>;
   dotnetSchema?: ParameterSchema;
   projectFile?: string;
   projectFrameworkOptions: string[];
@@ -67,7 +68,7 @@ export function useDialogsCompositionState(params: DialogsCompositionParams) {
   return {
     environmentStatus,
     commandImportProjectPath,
-    currentConfigParameters,
+    currentConfigParameters: currentConfigParameters as ConfigParameters,
     appDialogsProps,
   };
 }

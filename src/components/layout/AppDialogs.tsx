@@ -5,11 +5,16 @@ import type {
 } from "@/lib/environment";
 import type {
   ConfigProfile,
+  ConfigParameters,
   ExecutionRecord,
   PublishConfigStore,
 } from "@/lib/store";
+import type { PackageResult, SignResult } from "@/lib/artifact";
 import type { AppUpdaterState } from "@/hooks/useAppUpdater";
-import type { PublishResult } from "@/hooks/usePublishRunner";
+import type {
+  ProviderPublishSpec,
+  PublishResult,
+} from "@/hooks/usePublishRunner";
 import type { Language } from "@/hooks/useI18n";
 import type { ParameterSchema } from "@/types/parameters";
 
@@ -122,8 +127,8 @@ export interface AppDialogsProps {
     onOpenChange: (open: boolean) => void;
     publishResult: PublishResult | null;
     environmentResult: EnvironmentCheckResult | null;
-    packageResult: any;
-    signResult: any;
+    packageResult: PackageResult | null;
+    signResult: SignResult | null;
     onOpenEnvironment: () => void;
     onOpenSettings: () => void;
   };
@@ -133,7 +138,7 @@ export interface AppDialogsProps {
     onOpenChange: (open: boolean) => void;
     providerId: string;
     projectPath: string;
-    onImport: (spec: any) => void;
+    onImport: (spec: ProviderPublishSpec) => void;
   };
   quickCreate: {
     open: boolean;
@@ -167,7 +172,7 @@ export interface AppDialogsProps {
     onLoadProfile: (profile: ConfigProfile) => void;
     currentProviderId: string;
     repoId: string | null;
-    currentParameters: Record<string, any>;
+    currentParameters: ConfigParameters;
     onProfilesChanged: () => void | Promise<void>;
   };
 }

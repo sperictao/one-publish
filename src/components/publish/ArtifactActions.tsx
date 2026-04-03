@@ -74,7 +74,9 @@ export function ArtifactActions({ outputDir, onStateChange }: ArtifactActionsPro
       });
 
       setPackageResult(res);
-      toast.success(artifactT.packageDone || "打包完成", { description: res.artifact_path });
+      toast.success(artifactT.packageDone || "打包完成", {
+        description: res.artifactPath,
+      });
     } catch (err) {
       toast.error(artifactT.packageFailed || "打包失败", { description: String(err) });
     } finally {
@@ -87,16 +89,18 @@ export function ArtifactActions({ outputDir, onStateChange }: ArtifactActionsPro
     try {
       setSigning(true);
       const res = await signArtifact({
-        artifactPath: packageResult.artifact_path,
+        artifactPath: packageResult.artifactPath,
         method: "gpg_detached",
       });
       setSignResult(res);
 
       if (res.success) {
-        toast.success(artifactT.signDone || "签名完成", { description: res.signature_path });
+        toast.success(artifactT.signDone || "签名完成", {
+          description: res.signaturePath,
+        });
       } else {
         toast.error(artifactT.signFailed || "签名失败", {
-          description: res.stderr || `exitCode: ${res.exit_code}`,
+          description: res.stderr || `exitCode: ${res.exitCode}`,
         });
       }
     } catch (err) {
@@ -132,9 +136,9 @@ export function ArtifactActions({ outputDir, onStateChange }: ArtifactActionsPro
 
       {packageResult && (
         <div className="text-xs text-muted-foreground space-y-1">
-          <div className="font-mono break-all">{packageResult.artifact_path}</div>
+          <div className="font-mono break-all">{packageResult.artifactPath}</div>
           <div>
-            {packageResult.file_count} files, {formatBytes(packageResult.bytes)}
+            {packageResult.fileCount} files, {formatBytes(packageResult.bytes)}
           </div>
           <div className="font-mono break-all">sha256: {packageResult.sha256}</div>
         </div>
@@ -142,7 +146,7 @@ export function ArtifactActions({ outputDir, onStateChange }: ArtifactActionsPro
 
       {signResult && (
         <div className="text-xs text-muted-foreground space-y-1">
-          <div className="font-mono break-all">{signResult.signature_path}</div>
+          <div className="font-mono break-all">{signResult.signaturePath}</div>
           {signResult.stdout && (
             <div className="font-mono break-all whitespace-pre-wrap">
               {signResult.stdout}

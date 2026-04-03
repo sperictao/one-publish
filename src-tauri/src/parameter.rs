@@ -1,26 +1,26 @@
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
+use ts_rs::TS;
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
 pub struct ParameterSchema {
     pub parameters: BTreeMap<String, ParameterDefinition>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
 pub struct ParameterDefinition {
     #[serde(rename = "type")]
+    #[ts(rename = "type")]
     pub param_type: ParameterType,
     pub flag: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub multiple: Option<bool>,
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub prefix: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
 #[serde(rename_all = "lowercase")]
+#[ts(rename_all = "lowercase")]
 pub enum ParameterType {
     Boolean,
     String,

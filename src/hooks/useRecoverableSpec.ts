@@ -2,7 +2,11 @@ import { useCallback } from "react";
 
 import { createDotnetPublishConfigFromParameters } from "@/lib/dotnetPublishConfig";
 import type { ExecutionRecord, PublishConfigStore } from "@/lib/store";
-import type { ParameterValue } from "@/types/parameters";
+import {
+  fromSpecParameters,
+  type ParameterValue,
+  type SpecParameters,
+} from "@/types/parameters";
 import type { ProviderPublishSpec } from "@/hooks/usePublishRunner";
 
 interface UseRecoverableSpecParams {
@@ -43,7 +47,7 @@ export function useRecoverableSpec({
         parametersRaw &&
         typeof parametersRaw === "object" &&
         !Array.isArray(parametersRaw)
-          ? (parametersRaw as Record<string, unknown>)
+          ? (parametersRaw as SpecParameters)
           : {};
 
       return {
@@ -72,7 +76,7 @@ export function useRecoverableSpec({
       } else {
         setProviderParameters((prev) => ({
           ...prev,
-          [spec.provider_id]: spec.parameters as Record<string, ParameterValue>,
+          [spec.provider_id]: fromSpecParameters(spec.parameters),
         }));
       }
     },

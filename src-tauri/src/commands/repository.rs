@@ -1,11 +1,28 @@
-use super::{ProjectInfo, ProjectPublishProfileFile};
 use crate::store::Branch;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use std::io::ErrorKind as IoErrorKind;
 use std::path::{Path, PathBuf};
 use tokio::process::Command;
 use tokio::time::{timeout, Duration};
+use ts_rs::TS;
 use walkdir::WalkDir;
+
+#[derive(Debug, Serialize, Deserialize, TS)]
+pub struct ProjectInfo {
+    pub root_path: String,
+    pub project_file: String,
+    pub publish_profiles: Vec<String>,
+    pub target_frameworks: Vec<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(rename_all = "camelCase")]
+pub struct ProjectPublishProfileFile {
+    pub profile_name: String,
+    pub file_path: String,
+    pub content: String,
+}
 
 fn format_git_command_failure(command: &str, stderr: &[u8]) -> String {
     let error = String::from_utf8_lossy(stderr).trim().to_string();
@@ -92,26 +109,28 @@ fn repository_error(
     crate::errors::AppError::repository_with_code(message, code)
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, TS)]
 #[serde(rename_all = "camelCase")]
+#[ts(rename_all = "camelCase")]
 pub struct RepositoryBranchScanResult {
     pub branches: Vec<Branch>,
     pub current_branch: String,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, TS)]
 #[serde(rename_all = "camelCase")]
+#[ts(rename_all = "camelCase")]
 pub struct RepositoryBranchConnectivityResult {
     pub can_connect: bool,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, TS)]
 #[serde(rename_all = "camelCase")]
+#[ts(rename_all = "camelCase")]
 pub struct ProjectScanCandidates {
     pub root_path: String,
     pub solution_files: Vec<String>,
     pub project_files: Vec<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub recommended_project_file: Option<String>,
 }
 

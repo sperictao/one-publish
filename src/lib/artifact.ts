@@ -1,14 +1,12 @@
 import { invoke } from "@tauri-apps/api/core";
+import type {
+  PackageFormat,
+  PackageResult,
+  SignMethod,
+  SignResult,
+} from "@/generated/tauri-contracts";
 
-export type PackageFormat = "zip";
-
-export interface PackageResult {
-  artifact_path: string;
-  format: PackageFormat;
-  file_count: number;
-  bytes: number;
-  sha256: string;
-}
+export type { PackageFormat, PackageResult, SignMethod, SignResult };
 
 export async function packageArtifact(params: {
   inputDir: string;
@@ -26,17 +24,6 @@ export async function packageArtifact(params: {
   });
 }
 
-export type SignMethod = "gpg_detached";
-
-export interface SignResult {
-  signature_path: string;
-  method: SignMethod;
-  stdout: string;
-  stderr: string;
-  exit_code: number;
-  success: boolean;
-}
-
 export async function signArtifact(params: {
   artifactPath: string;
   method?: SignMethod;
@@ -52,4 +39,3 @@ export async function signArtifact(params: {
     keyId,
   });
 }
-

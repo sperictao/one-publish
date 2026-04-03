@@ -15,6 +15,7 @@ import {
 } from "@/lib/store";
 import { analyzeProjectScanFailure } from "@/lib/tauri/invokeErrors";
 import type { RunPublishOptions, ProviderPublishSpec } from "@/hooks/usePublishRunner";
+import { toSpecParameters } from "@/types/parameters";
 import type { ProjectInfo } from "@/types/project";
 import type { Repository } from "@/types/repository";
 
@@ -79,23 +80,27 @@ async function resolveUserProfileSpec(params: {
   if (providerId === "dotnet") {
     const projectInfo = await resolveDotnetProjectInfo(params.repo);
     return {
-      version: params.specVersion,
-      provider_id: "dotnet",
-      project_path: projectInfo.project_file,
-      parameters: normalizeDotnetProjectBoundParameters({
-        parameters: (profile.parameters || {}) as Record<string, unknown>,
-        defaultOutputDir: params.defaultOutputDir,
-        projectFile: projectInfo.project_file,
-        projectRoot: projectInfo.root_path,
-      }),
-    };
+        version: params.specVersion,
+        provider_id: "dotnet",
+        project_path: projectInfo.project_file,
+        parameters: toSpecParameters(
+          normalizeDotnetProjectBoundParameters({
+            parameters: (profile.parameters || {}) as Record<string, unknown>,
+            defaultOutputDir: params.defaultOutputDir,
+            projectFile: projectInfo.project_file,
+            projectRoot: projectInfo.root_path,
+          })
+        ),
+      };
   }
 
   return {
     version: params.specVersion,
     provider_id: providerId,
     project_path: params.repo.path,
-    parameters: (profile.parameters || {}) as Record<string, unknown>,
+    parameters: toSpecParameters(
+      (profile.parameters || {}) as Record<string, never>
+    ),
   };
 }
 
@@ -116,7 +121,7 @@ async function resolvePubxmlSpec(params: {
     version: params.specVersion,
     provider_id: "dotnet",
     project_path: projectInfo.project_file,
-    parameters: resolvedProfile.parameters,
+    parameters: toSpecParameters(resolvedProfile.parameters),
   };
 }
 

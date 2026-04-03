@@ -15,6 +15,7 @@ import {
   getProfiles,
   saveProfile,
   updateProfile,
+  type ConfigParameters,
   type ConfigProfile,
   type PublishConfigStore,
 } from "@/lib/store";
@@ -104,7 +105,7 @@ interface UseProfilesParams {
     name: string;
     description: string;
   };
-  buildProfileParameters: (config: PublishConfigStore) => Record<string, unknown>;
+  buildProfileParameters: (config: PublishConfigStore) => ConfigParameters;
 }
 
 export const QUICK_CREATE_CUSTOM_TEMPLATE_ID = "custom";

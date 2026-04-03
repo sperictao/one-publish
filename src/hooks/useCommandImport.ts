@@ -9,6 +9,7 @@ import { toast } from "sonner";
 
 import { mapImportedSpecByProvider } from "@/lib/commandImportMapping";
 import { createDotnetPublishConfigFromParameters } from "@/lib/dotnetPublishConfig";
+import type { ProviderPublishSpec } from "@/hooks/usePublishRunner";
 import type { PublishConfigStore } from "@/lib/store";
 import type { ParameterSchema, ParameterValue } from "@/types/parameters";
 
@@ -51,9 +52,8 @@ export function useCommandImport({
   );
 
   const handleCommandImport = useCallback(
-    (spec: any) => {
-      const importedProviderId =
-        spec?.provider_id || spec?.providerId || activeProviderId;
+    (spec: ProviderPublishSpec) => {
+      const importedProviderId = spec.provider_id || activeProviderId;
       const schema = providerSchemas[importedProviderId];
       const mapping = mapImportedSpecByProvider(spec, activeProviderId, {
         supportedKeys: schema ? Object.keys(schema.parameters) : undefined,

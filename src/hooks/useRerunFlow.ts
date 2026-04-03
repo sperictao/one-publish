@@ -2,7 +2,10 @@ import { useCallback, useState } from "react";
 import { toast } from "sonner";
 
 import type { ExecutionRecord } from "@/lib/store";
-import type { RunPublishOptions } from "@/hooks/usePublishRunner";
+import type {
+  ProviderPublishSpec,
+  RunPublishOptions,
+} from "@/hooks/usePublishRunner";
 
 interface TranslationMap {
   [key: string]: string | undefined;
@@ -12,13 +15,6 @@ interface RerunChecklistState {
   branch: boolean;
   environment: boolean;
   output: boolean;
-}
-
-interface ProviderPublishSpec {
-  version: number;
-  provider_id: string;
-  project_path: string;
-  parameters: Record<string, unknown>;
 }
 
 interface UseRerunFlowParams {

@@ -3,16 +3,18 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use std::path::PathBuf;
+use ts_rs::TS;
 
 const CONFIG_VERSION: u32 = 1;
 
 /// Configuration profile for saving build settings
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[ts(rename = "ConfigExportProfile")]
 pub struct ConfigProfile {
     pub name: String,
     pub provider_id: String,
     pub parameters: BTreeMap<String, serde_json::Value>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(default)]
     pub profile_group: Option<String>,
     pub created_at: DateTime<Utc>,
     pub is_system_default: bool,
@@ -32,7 +34,7 @@ impl Default for ConfigProfile {
 }
 
 /// Exported configuration format
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
 pub struct ConfigExport {
     pub version: u32,
     pub exported_at: DateTime<Utc>,

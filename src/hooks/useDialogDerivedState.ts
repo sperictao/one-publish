@@ -1,7 +1,7 @@
 import { useMemo } from "react";
 
 import { buildDotnetProfileParameters } from "@/lib/dotnetPublishConfig";
-import type { PublishConfigStore } from "@/lib/store";
+import type { ConfigParameters, PublishConfigStore } from "@/lib/store";
 import type { ParameterValue } from "@/types/parameters";
 
 export function useDialogDerivedState(params: {
@@ -18,7 +18,7 @@ export function useDialogDerivedState(params: {
     return params.selectedRepoPath || "";
   }, [params.projectFile, params.selectedRepoPath]);
 
-  const currentConfigParameters = useMemo(() => {
+  const currentConfigParameters = useMemo<ConfigParameters>(() => {
     if (params.activeProviderId === "dotnet") {
       return buildDotnetProfileParameters(params.customConfig);
     }

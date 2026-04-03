@@ -10,6 +10,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Loader2, Terminal } from "lucide-react";
 import { useI18n } from "@/hooks/useI18n";
+import type { ProviderPublishSpec } from "@/hooks/usePublishRunner";
 
 const COMMAND_EXAMPLES: Record<string, string> = {
   dotnet: "dotnet publish MyProject.csproj -c Release -r win-x64 --self-contained",
@@ -31,7 +32,7 @@ interface CommandImportDialogProps {
   onOpenChange: (open: boolean) => void;
   providerId: string;
   projectPath: string;
-  onImport: (spec: any) => void;
+  onImport: (spec: ProviderPublishSpec) => void;
 }
 
 export function CommandImportDialog({
@@ -43,7 +44,7 @@ export function CommandImportDialog({
 }: CommandImportDialogProps) {
   const [command, setCommand] = useState("");
   const [isParsing, setIsParsing] = useState(false);
-  const [parsedSpec, setParsedSpec] = useState<any>(null);
+  const [parsedSpec, setParsedSpec] = useState<ProviderPublishSpec | null>(null);
   const [error, setError] = useState<string | null>(null);
   const { translations } = useI18n();
   const commandT = translations.commandImport || {};
@@ -62,7 +63,7 @@ export function CommandImportDialog({
     setParsedSpec(null);
 
     try {
-      const spec = await invoke("import_from_command", {
+      const spec = await invoke<ProviderPublishSpec>("import_from_command", {
         command,
         providerId,
         projectPath,

@@ -1,0 +1,436 @@
+use super::recent::{
+    push_recent_publish_config_state, remove_recent_publish_config_state,
+    replace_recent_publish_config_key_state,
+};
+use super::runtime::{
+    append_execution_history, apply_selected_repo_id_update, find_repository, find_repository_mut,
+    get_bootstrap_state, get_execution_history_snapshot, get_state, persist_state_and_refresh_tray,
+    refresh_tray_menu, update_state, validate_repository_project_binding, with_read_state,
+};
+use super::types::{
+    normalize_environment_provider_ids, normalize_execution_history_limit, trim_execution_history,
+    AppState, ConfigProfile, ExecutionRecord, PublishConfigStore, Repository,
+};
+use crate::errors::AppError;
+
+#[tauri::command]
+pub async fn get_app_state() -> Result<AppState, AppError> {
+    Ok(get_bootstrap_state())
+}
+
+#[tauri::command]
+pub async fn get_repository(repo_id: String) -> Result<Repository, AppError> {
+    with_read_state(|state| find_repository(&state.repositories, &repo_id).cloned())
+}
+
+#[tauri::command]
+pub async fn save_app_state(state: AppState) -> Result<(), AppError> {
+    update_state(state)
+}
+
+#[tauri::command]
+pub async fn add_repository(app: tauri::AppHandle, repo: Repository) -> Result<AppState, AppError> {
+    let mut state = get_state();
+
+    if state
+        .repositories
+        .iter()
+        .any(|repository| repository.path == repo.path)
+    {
+        return Err(AppError::validation_with_code(
+            "仓库已存在",
+            "repository_exists",
+        ));
+    }
+
+    state.repositories.push(repo.clone());
+    state.selected_repo_id = Some(repo.id);
+    persist_state_and_refresh_tray(&app, state).await?;
+    Ok(get_bootstrap_state())
+}
+
+#[tauri::command]
+pub async fn remove_repository(
+    app: tauri::AppHandle,
+    repo_id: String,
+) -> Result<AppState, AppError> {
+    let mut state = get_state();
+
+    state
+        .repositories
+        .retain(|repository| repository.id != repo_id);
+
+    if state.selected_repo_id.as_ref() == Some(&repo_id) {
+        state.selected_repo_id = state
+            .repositories
+            .first()
+            .map(|repository| repository.id.clone());
+    }
+
+    persist_state_and_refresh_tray(&app, state).await?;
+    Ok(get_bootstrap_state())
+}
+
+#[tauri::command]
+pub async fn update_repository(
+    app: tauri::AppHandle,
+    repo: Repository,
+) -> Result<AppState, AppError> {
+    let mut state = get_state();
+    validate_repository_project_binding(&repo).await?;
+
+    if let Some(existing) = state
+        .repositories
+        .iter_mut()
+        .find(|item| item.id == repo.id)
+    {
+        *existing = repo;
+    }
+
+    persist_state_and_refresh_tray(&app, state).await?;
+    Ok(get_bootstrap_state())
+}
+
+#[tauri::command]
+pub async fn update_ui_state(
+    left_panel_width: Option<i32>,
+    middle_panel_width: Option<i32>,
+    selected_repo_id: Option<String>,
+    clear_selected_repo_id: Option<bool>,
+) -> Result<(), AppError> {
+    let mut state = get_state();
+
+    if let Some(width) = left_panel_width {
+        state.left_panel_width = width;
+        state.panel_widths_customized = true;
+    }
+    if let Some(width) = middle_panel_width {
+        state.middle_panel_width = width;
+        state.panel_widths_customized = true;
+    }
+    apply_selected_repo_id_update(
+        &mut state,
+        selected_repo_id,
+        clear_selected_repo_id.unwrap_or(false),
+    );
+
+    update_state(state)
+}
+
+#[tauri::command]
+pub async fn update_preferences(
+    app: tauri::AppHandle,
+    language: Option<String>,
+    minimize_to_tray_on_close: Option<bool>,
+    default_output_dir: Option<String>,
+    theme: Option<String>,
+    execution_history_limit: Option<usize>,
+    environment_provider_ids: Option<Vec<String>>,
+) -> Result<AppState, AppError> {
+    let mut state = get_state();
+    let language_changed = language.is_some();
+
+    if let Some(lang) = language {
+        state.language = lang;
+    }
+    if let Some(minimize) = minimize_to_tray_on_close {
+        state.minimize_to_tray_on_close = minimize;
+    }
+    if let Some(output_dir) = default_output_dir {
+        state.default_output_dir = output_dir;
+    }
+    if let Some(theme) = theme {
+        state.theme = theme;
+    }
+    if let Some(limit) = execution_history_limit {
+        state.execution_history_limit = normalize_execution_history_limit(limit);
+        trim_execution_history(&mut state.execution_history, state.execution_history_limit);
+    }
+    if let Some(provider_ids) = environment_provider_ids {
+        state.environment_provider_ids = normalize_environment_provider_ids(provider_ids);
+    }
+
+    update_state(state)?;
+
+    if language_changed {
+        refresh_tray_menu(app).await;
+    }
+
+    Ok(get_bootstrap_state())
+}
+
+#[tauri::command]
+pub async fn update_publish_state(
+    repo_id: String,
+    selected_preset: Option<String>,
+    is_custom_mode: Option<bool>,
+    custom_config: Option<PublishConfigStore>,
+) -> Result<(), AppError> {
+    let mut state = get_state();
+    let repo = find_repository_mut(&mut state.repositories, &repo_id)?;
+
+    if let Some(preset) = selected_preset {
+        repo.publish_config.selected_preset = preset;
+    }
+    if let Some(mode) = is_custom_mode {
+        repo.publish_config.is_custom_mode = mode;
+    }
+    if let Some(config) = custom_config {
+        repo.publish_config.custom_config = config;
+    }
+
+    update_state(state)
+}
+
+#[tauri::command]
+pub async fn get_profiles(repo_id: String) -> Result<Vec<ConfigProfile>, AppError> {
+    with_read_state(|state| {
+        Ok(find_repository(&state.repositories, &repo_id)?
+            .publish_config
+            .profiles
+            .clone())
+    })
+}
+
+#[tauri::command]
+pub async fn save_profile(
+    app: tauri::AppHandle,
+    repo_id: String,
+    name: String,
+    provider_id: String,
+    parameters: serde_json::Value,
+    profile_group: Option<String>,
+) -> Result<AppState, AppError> {
+    let mut state = get_state();
+    let repo = find_repository_mut(&mut state.repositories, &repo_id)?;
+
+    if repo
+        .publish_config
+        .profiles
+        .iter()
+        .any(|profile| profile.name == name)
+    {
+        return Err(AppError::validation_with_code(
+            format!("配置文件 '{}' 已存在", name),
+            "profile_exists",
+        ));
+    }
+
+    let normalized_profile_group = profile_group
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty());
+
+    let profile = ConfigProfile {
+        name: name.clone(),
+        provider_id,
+        parameters,
+        profile_group: normalized_profile_group,
+        created_at: chrono::Utc::now().to_rfc3339(),
+        is_system_default: false,
+    };
+
+    repo.publish_config.profiles.push(profile);
+    let response = state.clone();
+    persist_state_and_refresh_tray(&app, state).await?;
+    Ok(response)
+}
+
+#[tauri::command]
+pub async fn update_profile(
+    app: tauri::AppHandle,
+    repo_id: String,
+    original_name: String,
+    name: String,
+    provider_id: String,
+    parameters: serde_json::Value,
+    profile_group: Option<String>,
+) -> Result<AppState, AppError> {
+    let mut state = get_state();
+    let repo = find_repository_mut(&mut state.repositories, &repo_id)?;
+
+    if original_name != name
+        && repo
+            .publish_config
+            .profiles
+            .iter()
+            .any(|profile| profile.name == name)
+    {
+        return Err(AppError::validation_with_code(
+            format!("配置文件 '{}' 已存在", name),
+            "profile_exists",
+        ));
+    }
+
+    let normalized_profile_group = profile_group
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty());
+
+    let profile = repo
+        .publish_config
+        .profiles
+        .iter_mut()
+        .find(|profile| profile.name == original_name)
+        .ok_or_else(|| {
+            AppError::validation_with_code(
+                format!("未找到配置文件: {}", original_name),
+                "profile_not_found",
+            )
+        })?;
+
+    if profile.is_system_default {
+        return Err(AppError::validation_with_code(
+            "不能编辑系统默认配置文件",
+            "system_profile_immutable",
+        ));
+    }
+
+    profile.name = name;
+    profile.provider_id = provider_id;
+    profile.parameters = parameters;
+    profile.profile_group = normalized_profile_group;
+
+    let response = state.clone();
+    persist_state_and_refresh_tray(&app, state).await?;
+    Ok(response)
+}
+
+#[tauri::command]
+pub async fn delete_profile(
+    app: tauri::AppHandle,
+    repo_id: String,
+    name: String,
+) -> Result<AppState, AppError> {
+    let mut state = get_state();
+    let repo = find_repository_mut(&mut state.repositories, &repo_id)?;
+
+    if let Some(profile) = repo
+        .publish_config
+        .profiles
+        .iter()
+        .find(|profile| profile.name == name)
+    {
+        if profile.is_system_default {
+            return Err(AppError::validation_with_code(
+                "不能删除系统默认配置文件",
+                "system_profile_immutable",
+            ));
+        }
+    }
+
+    repo.publish_config
+        .profiles
+        .retain(|profile| profile.name != name);
+    let response = state.clone();
+    persist_state_and_refresh_tray(&app, state).await?;
+    Ok(response)
+}
+
+#[tauri::command]
+pub async fn push_recent_publish_config(
+    app: tauri::AppHandle,
+    repo_id: String,
+    config_key: String,
+) -> Result<AppState, AppError> {
+    let mut state = get_state();
+    find_repository(&state.repositories, &repo_id)?;
+
+    if !push_recent_publish_config_state(
+        &mut state.recent_repo_ids,
+        &mut state.recent_config_keys_by_repo,
+        &repo_id,
+        &config_key,
+    ) {
+        return Ok(get_bootstrap_state());
+    }
+
+    persist_state_and_refresh_tray(&app, state).await?;
+    Ok(get_bootstrap_state())
+}
+
+#[tauri::command]
+pub async fn remove_recent_publish_config(
+    app: tauri::AppHandle,
+    repo_id: String,
+    config_key: String,
+) -> Result<AppState, AppError> {
+    let mut state = get_state();
+
+    if !remove_recent_publish_config_state(
+        &mut state.recent_repo_ids,
+        &mut state.recent_config_keys_by_repo,
+        &repo_id,
+        &config_key,
+    ) {
+        return Ok(get_bootstrap_state());
+    }
+
+    persist_state_and_refresh_tray(&app, state).await?;
+    Ok(get_bootstrap_state())
+}
+
+#[tauri::command]
+pub async fn replace_recent_publish_config_key(
+    app: tauri::AppHandle,
+    repo_id: String,
+    previous_key: String,
+    next_key: String,
+) -> Result<AppState, AppError> {
+    let mut state = get_state();
+
+    if !replace_recent_publish_config_key_state(
+        &mut state.recent_config_keys_by_repo,
+        &repo_id,
+        &previous_key,
+        &next_key,
+    ) {
+        return Ok(get_bootstrap_state());
+    }
+
+    persist_state_and_refresh_tray(&app, state).await?;
+    Ok(get_bootstrap_state())
+}
+
+#[tauri::command]
+pub async fn get_execution_history() -> Result<Vec<ExecutionRecord>, AppError> {
+    Ok(get_execution_history_snapshot())
+}
+
+#[tauri::command]
+pub async fn add_execution_record(
+    record: ExecutionRecord,
+) -> Result<Vec<ExecutionRecord>, AppError> {
+    let mut state = get_state();
+    let history_limit = state.execution_history_limit;
+    append_execution_history(&mut state.execution_history, record, history_limit);
+    let history = state.execution_history.clone();
+    update_state(state)?;
+    Ok(history)
+}
+
+#[tauri::command]
+pub async fn set_execution_record_snapshot(
+    record_id: String,
+    snapshot_path: String,
+) -> Result<Vec<ExecutionRecord>, AppError> {
+    let mut state = get_state();
+    let mut found = false;
+
+    for record in &mut state.execution_history {
+        if record.id == record_id {
+            record.snapshot_path = Some(snapshot_path.clone());
+            found = true;
+            break;
+        }
+    }
+
+    if !found {
+        return Err(AppError::validation_with_code(
+            format!("未找到执行记录: {}", record_id),
+            "execution_record_not_found",
+        ));
+    }
+
+    let history = state.execution_history.clone();
+    update_state(state)?;
+    Ok(history)
+}

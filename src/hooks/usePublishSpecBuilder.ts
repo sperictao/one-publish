@@ -1,7 +1,7 @@
 import { useCallback } from "react";
 
 import { buildDotnetProfileParameters } from "@/lib/dotnetPublishConfig";
-import type { ParameterValue } from "@/types/parameters";
+import { toSpecParameters, type ParameterValue } from "@/types/parameters";
 import type { ProviderPublishSpec } from "@/hooks/usePublishRunner";
 import type { ProjectInfo } from "@/types/project";
 
@@ -56,7 +56,7 @@ export function usePublishSpecBuilder(params: {
         version: params.specVersion,
         provider_id: "dotnet",
         project_path: params.projectInfo.project_file,
-        parameters,
+        parameters: toSpecParameters(parameters),
       };
     }
 
@@ -68,7 +68,7 @@ export function usePublishSpecBuilder(params: {
       version: params.specVersion,
       provider_id: params.activeProviderId,
       project_path: params.selectedRepo.path,
-      parameters: params.activeProviderParameters,
+      parameters: toSpecParameters(params.activeProviderParameters),
     };
   }, [params]);
 

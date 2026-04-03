@@ -1,77 +1,193 @@
-// Store API - 与 Rust 后端持久化模块交互
-
 import { invoke } from "@tauri-apps/api/core";
-import type { Branch, Repository, RepoPublishConfig } from "@/types/repository";
+
+import {
+  normalizeEnvironmentProviderIds,
+  type EnvironmentCheckResult,
+} from "@/lib/environment";
 import type { ParameterSchema } from "@/types/parameters";
-import type { ProjectInfo, ProjectScanCandidates } from "@/types/project";
-import { normalizeEnvironmentProviderIds } from "@/lib/environment";
+import type {
+  AppState as TauriAppState,
+  Branch as TauriBranch,
+  ConfigExport as TauriConfigExport,
+  ConfigExportProfile,
+  ConfigProfile as TauriConfigProfile,
+  ExecutionRecord as TauriExecutionRecord,
+  JsonValue,
+  ProjectInfo,
+  ProjectPublishProfileFile,
+  ProjectScanCandidates as TauriProjectScanCandidates,
+  ProviderManifest as TauriProviderManifest,
+  PublishConfigStore,
+  Repository as TauriRepository,
+  RepositoryBranchConnectivityResult,
+  RepositoryBranchScanResult,
+  RepoPublishConfig as TauriRepoPublishConfig,
+  ShortcutHelp,
+  UpdateInfo as TauriUpdateInfo,
+  UpdaterConfigHealth,
+  UpdaterHelpPaths,
+} from "@/generated/tauri-contracts";
 
-// 发布配置存储类型
-export interface PublishConfigStore {
-  configuration: string;
-  runtime: string;
-  framework: string;
-  selfContained: boolean;
-  outputDir: string;
-  noBuild: boolean;
-  noRestore: boolean;
-  verbosity: string;
-  noLogo: boolean;
-  properties: Record<string, string>;
-  define: string[];
-  useProfile: boolean;
-  profileName: string;
+export type { JsonValue, PublishConfigStore };
+export type {
+  ProjectInfo,
+  ProjectPublishProfileFile,
+  RepositoryBranchConnectivityResult,
+  RepositoryBranchScanResult,
+  ShortcutHelp,
+  UpdaterConfigHealth,
+  UpdaterHelpPaths,
+};
+
+export interface Branch extends Omit<TauriBranch, "commitCount"> {
+  commitCount?: number | null;
 }
 
-// 配置文件类型（用于配置导入导出）
-export interface ConfigProfile {
-  name: string;
-  providerId: string;
-  parameters: Record<string, any>;
-  profileGroup?: string;
-  createdAt: string;
-  isSystemDefault: boolean;
-}
-
-export interface ExecutionRecord {
-  id: string;
+export interface ExecutionRecord
+  extends Omit<
+    TauriExecutionRecord,
+    | "repoId"
+    | "outputDir"
+    | "error"
+    | "commandLine"
+    | "snapshotPath"
+    | "failureSignature"
+    | "spec"
+  > {
   repoId?: string | null;
-  providerId: string;
-  projectPath: string;
-  startedAt: string;
-  finishedAt: string;
-  success: boolean;
-  cancelled: boolean;
   outputDir?: string | null;
   error?: string | null;
   commandLine?: string | null;
   snapshotPath?: string | null;
   failureSignature?: string | null;
-  spec?: unknown;
-  fileCount: number;
+  spec?: JsonValue | null;
 }
 
-// 启动桥接状态：只保留首屏必需字段，避免把历史等大块数据带入前端常驻状态
-export interface BootstrapState {
+export interface ProjectScanCandidates
+  extends Omit<TauriProjectScanCandidates, "recommendedProjectFile"> {
+  recommendedProjectFile?: string | null;
+}
+
+export type ConfigParameters = Record<string, JsonValue>;
+
+export interface ConfigProfile
+  extends Omit<TauriConfigProfile, "parameters" | "profileGroup"> {
+  parameters: ConfigParameters;
+  profileGroup?: string | null;
+}
+
+export interface RepoPublishConfig
+  extends Omit<TauriRepoPublishConfig, "profiles"> {
+  profiles: ConfigProfile[];
+}
+
+export interface Repository
+  extends Omit<TauriRepository, "publishConfig" | "projectFile" | "providerId" | "isMain" | "branches"> {
+  projectFile?: string | null;
+  providerId?: string | null;
+  isMain?: boolean;
+  branches: Branch[];
+  publishConfig: RepoPublishConfig;
+}
+
+export type BootstrapState = Omit<AppState, "executionHistory">;
+
+export interface AppState
+  extends Omit<TauriAppState, "repositories" | "theme" | "startupNotice" | "executionHistory"> {
   repositories: Repository[];
-  selectedRepoId: string | null;
-  leftPanelWidth: number;
-  middlePanelWidth: number;
-  panelWidthsCustomized: boolean;
-  minimizeToTrayOnClose: boolean;
-  language: string;
-  defaultOutputDir: string;
   theme: "light" | "dark" | "auto";
-  executionHistoryLimit: number;
-  environmentProviderIds: string[];
-  recentRepoIds: string[];
-  recentConfigKeysByRepo: Record<string, string[]>;
   startupNotice?: string | null;
+  executionHistory: ExecutionRecord[];
 }
 
-// 完整应用状态：仅保留运行时实际使用字段
-export interface AppState extends BootstrapState {
-  executionHistory: ExecutionRecord[];
+export interface ProviderManifest {
+  id: string;
+  displayName: string;
+  version: string;
+}
+
+export interface UpdateInfo {
+  currentVersion: string;
+  availableVersion: string | null;
+  hasUpdate: boolean;
+  releaseNotes: string | null;
+  message: string | null;
+}
+
+export interface ConfigExport {
+  version: number;
+  exportedAt: string;
+  profiles: ConfigProfile[];
+}
+
+function isJsonRecord(value: JsonValue | null | undefined): value is ConfigParameters {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function normalizeConfigParameters(
+  value: JsonValue | null | undefined
+): ConfigParameters {
+  return isJsonRecord(value) ? value : {};
+}
+
+function normalizeConfigProfile(profile: TauriConfigProfile): ConfigProfile {
+  return {
+    ...profile,
+    parameters: normalizeConfigParameters(profile.parameters),
+  };
+}
+
+function normalizeImportedConfigProfile(profile: ConfigExportProfile): ConfigProfile {
+  return {
+    name: profile.name,
+    providerId: profile.provider_id,
+    parameters: normalizeConfigParameters(profile.parameters),
+    profileGroup: profile.profile_group,
+    createdAt: profile.created_at,
+    isSystemDefault: profile.is_system_default,
+  };
+}
+
+function toExportConfigProfile(profile: ConfigProfile): ConfigExportProfile {
+  return {
+    name: profile.name,
+    provider_id: profile.providerId,
+    parameters: profile.parameters,
+    profile_group: profile.profileGroup ?? null,
+    created_at: profile.createdAt,
+    is_system_default: profile.isSystemDefault,
+  };
+}
+
+function normalizeRepoPublishConfig(config: TauriRepoPublishConfig): RepoPublishConfig {
+  return {
+    ...config,
+    profiles: config.profiles.map(normalizeConfigProfile),
+  };
+}
+
+function normalizeRepository(repository: TauriRepository): Repository {
+  return {
+    ...repository,
+    branches: repository.branches.map((branch) => ({
+      ...branch,
+      commitCount: branch.commitCount ?? undefined,
+    })),
+    publishConfig: normalizeRepoPublishConfig(repository.publishConfig),
+  };
+}
+
+function normalizeAppState(state: TauriAppState): AppState {
+  return {
+    ...state,
+    repositories: state.repositories.map(normalizeRepository),
+    theme:
+      state.theme === "light" || state.theme === "dark" || state.theme === "auto"
+        ? state.theme
+        : "auto",
+    startupNotice: state.startupNotice ?? undefined,
+    executionHistory: state.executionHistory,
+  };
 }
 
 export const defaultBootstrapState: BootstrapState = {
@@ -112,7 +228,6 @@ export const defaultAppState: AppState = {
   executionHistory: [],
 };
 
-// 仓库级发布配置默认值
 export const defaultRepoPublishConfig: RepoPublishConfig = {
   selectedPreset: "release-fd",
   isCustomMode: false,
@@ -120,44 +235,31 @@ export const defaultRepoPublishConfig: RepoPublishConfig = {
   profiles: [],
 };
 
-/**
- * 获取应用状态
- */
 export async function getAppState(): Promise<AppState> {
-  return await invoke<AppState>("get_app_state");
+  const state = await invoke<TauriAppState>("get_app_state");
+  return normalizeAppState(state);
 }
 
-/**
- * 获取单个仓库快照
- */
 export async function getRepository(repoId: string): Promise<Repository> {
-  return await invoke<Repository>("get_repository", { repoId });
+  const repository = await invoke<TauriRepository>("get_repository", { repoId });
+  return normalizeRepository(repository);
 }
 
-/**
- * 添加仓库
- */
 export async function addRepository(repo: Repository): Promise<AppState> {
-  return await invoke<AppState>("add_repository", { repo });
+  const state = await invoke<TauriAppState>("add_repository", { repo });
+  return normalizeAppState(state);
 }
 
-/**
- * 删除仓库
- */
 export async function removeRepository(repoId: string): Promise<AppState> {
-  return await invoke<AppState>("remove_repository", { repoId });
+  const state = await invoke<TauriAppState>("remove_repository", { repoId });
+  return normalizeAppState(state);
 }
 
-/**
- * 更新仓库
- */
 export async function updateRepository(repo: Repository): Promise<AppState> {
-  return await invoke<AppState>("update_repository", { repo });
+  const state = await invoke<TauriAppState>("update_repository", { repo });
+  return normalizeAppState(state);
 }
 
-/**
- * 更新 UI 状态
- */
 export async function updateUIState(params: {
   leftPanelWidth?: number;
   middlePanelWidth?: number;
@@ -167,9 +269,6 @@ export async function updateUIState(params: {
   await invoke("update_ui_state", params);
 }
 
-/**
- * 更新发布配置状态（按仓库隔离）
- */
 export async function updatePublishState(params: {
   repoId: string;
   selectedPreset?: string;
@@ -179,9 +278,6 @@ export async function updatePublishState(params: {
   await invoke("update_publish_state", params);
 }
 
-/**
- * 更新通用偏好（语言、托盘行为、主题等）
- */
 export async function updatePreferences(params: {
   language?: string;
   minimizeToTrayOnClose?: boolean;
@@ -190,7 +286,7 @@ export async function updatePreferences(params: {
   executionHistoryLimit?: number;
   environmentProviderIds?: string[];
 }): Promise<AppState> {
-  return await invoke<AppState>("update_preferences", {
+  const state = await invoke<TauriAppState>("update_preferences", {
     ...params,
     default_output_dir: params.defaultOutputDir,
     execution_history_limit: params.executionHistoryLimit,
@@ -199,20 +295,24 @@ export async function updatePreferences(params: {
         ? normalizeEnvironmentProviderIds(params.environmentProviderIds)
         : undefined,
   });
+
+  return normalizeAppState(state);
 }
 
 export async function pushRecentPublishConfig(params: {
   repoId: string;
   configKey: string;
 }): Promise<AppState> {
-  return await invoke<AppState>("push_recent_publish_config", params);
+  const state = await invoke<TauriAppState>("push_recent_publish_config", params);
+  return normalizeAppState(state);
 }
 
 export async function removeRecentPublishConfig(params: {
   repoId: string;
   configKey: string;
 }): Promise<AppState> {
-  return await invoke<AppState>("remove_recent_publish_config", params);
+  const state = await invoke<TauriAppState>("remove_recent_publish_config", params);
+  return normalizeAppState(state);
 }
 
 export async function replaceRecentPublishConfigKey(params: {
@@ -220,41 +320,19 @@ export async function replaceRecentPublishConfigKey(params: {
   previousKey: string;
   nextKey: string;
 }): Promise<AppState> {
-  return await invoke<AppState>("replace_recent_publish_config_key", params);
+  const state = await invoke<TauriAppState>("replace_recent_publish_config_key", params);
+  return normalizeAppState(state);
 }
 
-// ==================== Provider 相关 ====================
-
-export interface ProviderManifest {
-  id: string;
-  displayName: string;
-  version: string;
-}
-
-export interface ProjectPublishProfileFile {
-  profileName: string;
-  filePath: string;
-  content: string;
-}
-
-/**
- * 获取 Provider 列表
- */
 export async function listProviders(): Promise<ProviderManifest[]> {
-  const manifests = await invoke<
-    Array<{ id: string; display_name: string; version: string }>
-  >("list_providers");
-
-  return manifests.map((item) => ({
-    id: item.id,
-    displayName: item.display_name,
-    version: item.version,
+  const manifests = await invoke<TauriProviderManifest[]>("list_providers");
+  return manifests.map((manifest) => ({
+    id: manifest.id,
+    displayName: manifest.display_name,
+    version: manifest.version,
   }));
 }
 
-/**
- * 获取指定 Provider 的参数 Schema
- */
 export async function getProviderSchema(
   providerId: string
 ): Promise<ParameterSchema> {
@@ -271,16 +349,10 @@ export async function readProjectPublishProfile(
   });
 }
 
-/**
- * 自动检测仓库 Provider
- */
 export async function detectRepositoryProvider(path: string): Promise<string> {
   return await invoke<string>("detect_repository_provider", { path });
 }
 
-/**
- * 扫描仓库目录下的项目文件列表
- */
 export async function scanProjectFiles(path: string): Promise<string[]> {
   return await invoke<string[]>("scan_project_files", { path });
 }
@@ -292,29 +364,19 @@ export async function scanProject(startPath?: string): Promise<ProjectInfo> {
 export async function scanProjectCandidates(
   startPath?: string
 ): Promise<ProjectScanCandidates> {
-  return await invoke<ProjectScanCandidates>("scan_project_candidates", {
+  const result = await invoke<TauriProjectScanCandidates>("scan_project_candidates", {
     startPath,
   });
+  return {
+    ...result,
+    recommendedProjectFile: result.recommendedProjectFile ?? undefined,
+  };
 }
 
 export async function resolveProjectInfo(projectFile: string): Promise<ProjectInfo> {
-  return await invoke<ProjectInfo>("resolve_project_info", {
-    projectFile,
-  });
+  return await invoke<ProjectInfo>("resolve_project_info", { projectFile });
 }
 
-export interface RepositoryBranchScanResult {
-  branches: Branch[];
-  currentBranch: string;
-}
-
-export interface RepositoryBranchConnectivityResult {
-  canConnect: boolean;
-}
-
-/**
- * 刷新仓库分支列表
- */
 export async function scanRepositoryBranches(
   path: string
 ): Promise<RepositoryBranchScanResult> {
@@ -323,9 +385,6 @@ export async function scanRepositoryBranches(
   });
 }
 
-/**
- * 检查当前分支与远端连接状态
- */
 export async function checkRepositoryBranchConnectivity(
   path: string,
   currentBranch?: string
@@ -339,38 +398,8 @@ export async function checkRepositoryBranchConnectivity(
   );
 }
 
-// ==================== 版本更新相关 ====================
-
-export interface UpdateInfo {
-  currentVersion: string;
-  availableVersion: string | null;
-  hasUpdate: boolean;
-  releaseNotes: string | null;
-  message: string | null;
-}
-
-export interface UpdaterHelpPaths {
-  docsPath: string;
-  templatePath: string;
-}
-
-export interface UpdaterConfigHealth {
-  configured: boolean;
-  message: string;
-}
-
-/**
- * 检查更新
- */
 export async function checkUpdate(): Promise<UpdateInfo> {
-  const result = await invoke<{
-    current_version: string;
-    available_version: string | null;
-    has_update: boolean;
-    release_notes: string | null;
-    message: string | null;
-  }>("check_update");
-
+  const result = await invoke<TauriUpdateInfo>("check_update");
   return {
     currentVersion: result.current_version,
     availableVersion: result.available_version,
@@ -380,167 +409,119 @@ export async function checkUpdate(): Promise<UpdateInfo> {
   };
 }
 
-/**
- * 安装更新
- */
 export async function installUpdate(
   expectedVersion?: string | null
 ): Promise<string> {
   return await invoke<string>("install_update", { expectedVersion });
 }
 
-/**
- * 获取 updater 指南与模板路径
- */
 export async function getUpdaterHelpPaths(): Promise<UpdaterHelpPaths> {
   return await invoke<UpdaterHelpPaths>("get_updater_help_paths");
 }
 
-/**
- * 获取 updater 配置健康状态
- */
 export async function getUpdaterConfigHealth(): Promise<UpdaterConfigHealth> {
   return await invoke<UpdaterConfigHealth>("get_updater_config_health");
 }
 
-/**
- * 打开 updater 指南或模板
- */
-export async function openUpdaterHelp(target: "docs" | "template"): Promise<string> {
+export async function openUpdaterHelp(
+  target: "docs" | "template"
+): Promise<string> {
   return await invoke<string>("open_updater_help", { target });
 }
 
-/**
- * 获取当前版本
- */
 export async function getCurrentVersion(): Promise<string> {
   return await invoke<string>("get_current_version");
 }
 
-// ==================== 快捷键相关 ====================
-
-export interface ShortcutHelp {
-  key: string;
-  description: string;
-}
-
-/**
- * 获取快捷键帮助
- */
 export async function getShortcutsHelp(): Promise<ShortcutHelp[]> {
   return await invoke<ShortcutHelp[]>("get_shortcuts_help");
 }
 
-// ==================== 配置导入导出相关 ====================
-
-export interface ConfigExport {
-  version: number;
-  exportedAt: string;
-  profiles: ConfigProfile[];
-}
-
-/**
- * 获取所有配置文件（按仓库隔离）
- */
 export async function getProfiles(repoId: string): Promise<ConfigProfile[]> {
-  return await invoke<ConfigProfile[]>("get_profiles", { repoId });
+  const profiles = await invoke<TauriConfigProfile[]>("get_profiles", { repoId });
+  return profiles.map(normalizeConfigProfile);
 }
 
-/**
- * 保存配置文件（按仓库隔离）
- */
 export async function saveProfile(params: {
   repoId: string;
   name: string;
   providerId: string;
-  parameters: Record<string, any>;
+  parameters: ConfigParameters;
   profileGroup?: string;
 }): Promise<AppState> {
-  return await invoke<AppState>("save_profile", params);
+  const state = await invoke<TauriAppState>("save_profile", params);
+  return normalizeAppState(state);
 }
 
-/**
- * 更新配置文件（按仓库隔离）
- */
 export async function updateProfile(params: {
   repoId: string;
   originalName: string;
   name: string;
   providerId: string;
-  parameters: Record<string, any>;
+  parameters: ConfigParameters;
   profileGroup?: string;
 }): Promise<AppState> {
-  return await invoke<AppState>("update_profile", params);
+  const state = await invoke<TauriAppState>("update_profile", params);
+  return normalizeAppState(state);
 }
 
-/**
- * 删除配置文件（按仓库隔离）
- */
 export async function deleteProfile(repoId: string, name: string): Promise<AppState> {
-  return await invoke<AppState>("delete_profile", { repoId, name });
+  const state = await invoke<TauriAppState>("delete_profile", { repoId, name });
+  return normalizeAppState(state);
 }
 
-/**
- * 导出配置到文件
- */
 export async function exportConfig(params: {
   profiles: ConfigProfile[];
   filePath: string;
 }): Promise<string> {
   return await invoke<string>("export_config", {
-    profiles: params.profiles,
+    profiles: params.profiles.map(toExportConfigProfile),
     file_path: params.filePath,
   });
 }
 
-/**
- * 从文件导入配置
- */
 export async function importConfig(filePath: string): Promise<ConfigExport> {
-  return await invoke<ConfigExport>("import_config", { file_path: filePath });
+  const config = await invoke<TauriConfigExport>("import_config", {
+    file_path: filePath,
+  });
+
+  return {
+    version: config.version,
+    exportedAt: config.exported_at,
+    profiles: config.profiles.map(normalizeImportedConfigProfile),
+  };
 }
 
-/**
- * 应用导入的配置（按仓库隔离）
- */
-export async function applyImportedConfig(repoId: string, profiles: ConfigProfile[]): Promise<void> {
-  await invoke("apply_imported_config", { repoId, profiles });
+export async function applyImportedConfig(
+  repoId: string,
+  profiles: ConfigProfile[]
+): Promise<void> {
+  await invoke("apply_imported_config", {
+    repoId,
+    profiles: profiles.map(toExportConfigProfile),
+  });
 }
 
-// ==================== 执行历史相关 ====================
-
-/**
- * 获取执行历史记录（最近 20 条）
- */
 export async function getExecutionHistory(): Promise<ExecutionRecord[]> {
-  return await invoke<ExecutionRecord[]>("get_execution_history");
+  return await invoke<TauriExecutionRecord[]>("get_execution_history");
 }
 
-/**
- * 追加执行历史记录
- */
 export async function addExecutionRecord(
   record: ExecutionRecord
 ): Promise<ExecutionRecord[]> {
-  return await invoke<ExecutionRecord[]>("add_execution_record", { record });
+  return await invoke<TauriExecutionRecord[]>("add_execution_record", { record });
 }
 
-/**
- * 更新执行记录对应的快照路径
- */
 export async function setExecutionRecordSnapshot(
   recordId: string,
   snapshotPath: string
 ): Promise<ExecutionRecord[]> {
-  return await invoke<ExecutionRecord[]>("set_execution_record_snapshot", {
+  return await invoke<TauriExecutionRecord[]>("set_execution_record_snapshot", {
     record_id: recordId,
     snapshot_path: snapshotPath,
   });
 }
 
-/**
- * 打开执行快照文件（优先记录路径，回退到输出目录自动解析）
- */
 export async function openExecutionSnapshot(params: {
   snapshotPath?: string | null;
   outputDir?: string | null;
@@ -552,11 +533,13 @@ export async function openExecutionSnapshot(params: {
 }
 
 export async function openOutputDirectory(outputDir: string): Promise<string> {
-  return await invoke<string>("open_output_directory", {
-    outputDir,
-  });
+  return await invoke<string>("open_output_directory", { outputDir });
 }
 
 export async function showMainWindow(): Promise<boolean> {
   return await invoke<boolean>("show_main_window");
 }
+
+export type {
+  EnvironmentCheckResult,
+};

@@ -5,6 +5,7 @@
 use tauri::AppHandle;
 use tauri_plugin_global_shortcut::Error as ShortcutError;
 use tauri_plugin_global_shortcut::GlobalShortcutExt;
+use ts_rs::TS;
 
 /// 注册全局快捷键
 pub fn register_shortcuts(app: &AppHandle) -> Result<(), ShortcutError> {
@@ -78,7 +79,7 @@ pub fn get_shortcuts_help() -> Vec<ShortcutHelp> {
     ]
 }
 
-#[derive(Debug, serde::Serialize)]
+#[derive(Debug, serde::Serialize, TS)]
 pub struct ShortcutHelp {
     pub key: String,
     pub description: String,

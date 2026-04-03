@@ -7,6 +7,7 @@ use std::{
 use tauri::{AppHandle, Emitter, State};
 use tauri_plugin_updater::{Error as UpdaterError, Update, Updater, UpdaterExt};
 use tokio::time::sleep;
+use ts_rs::TS;
 
 const UPDATE_CHECK_TIMEOUT: Duration = Duration::from_secs(20);
 const UPDATE_DOWNLOAD_TIMEOUT: Duration = Duration::from_secs(60 * 15);
@@ -24,7 +25,7 @@ struct DownloadFailure {
 }
 
 /// 版本信息
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, TS)]
 pub struct UpdateInfo {
     pub current_version: String,
     pub available_version: Option<String>,
@@ -33,26 +34,31 @@ pub struct UpdateInfo {
     pub message: Option<String>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, TS)]
 #[serde(rename_all = "camelCase")]
+#[ts(rename_all = "camelCase")]
 pub struct UpdaterHelpPaths {
     pub docs_path: String,
     pub template_path: String,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, TS)]
 #[serde(rename_all = "camelCase")]
+#[ts(rename_all = "camelCase")]
 pub struct UpdaterConfigHealth {
     pub configured: bool,
     pub message: String,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, TS)]
 #[serde(rename_all = "camelCase")]
-struct UpdateDownloadProgressPayload {
+#[ts(rename_all = "camelCase")]
+pub struct UpdateDownloadProgressPayload {
     stage: String,
     version: String,
+    #[ts(type = "number")]
     downloaded_bytes: u64,
+    #[ts(type = "number | null")]
     total_bytes: Option<u64>,
     percent: Option<f64>,
     attempt: usize,

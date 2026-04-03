@@ -2,8 +2,13 @@ import type { AppDialogsProps } from "@/components/layout/AppDialogs";
 import type { AppUpdaterState } from "@/hooks/useAppUpdater";
 import type { EnvironmentStatus } from "@/hooks/useEnvironmentStatus";
 import type { Language } from "@/hooks/useI18n";
-import type { PublishResult } from "@/hooks/usePublishRunner";
 import type {
+  ProviderPublishSpec,
+  PublishResult,
+} from "@/hooks/usePublishRunner";
+import type { PackageResult, SignResult } from "@/lib/artifact";
+import type {
+  ConfigParameters,
   ConfigProfile,
   ExecutionRecord,
   PublishConfigStore,
@@ -76,14 +81,14 @@ export interface UseAppDialogsPropsParams {
   releaseChecklistOpen: boolean;
   setReleaseChecklistOpen: (open: boolean) => void;
   publishResult: PublishResult | null;
-  packageResult: any;
-  signResult: any;
+  packageResult: PackageResult | null;
+  signResult: SignResult | null;
   handleOpenSettings: () => void;
   selectedRepoExists: boolean;
   commandImportProjectPath: string;
   commandImportOpen: boolean;
   setCommandImportOpen: (open: boolean) => void;
-  handleCommandImport: (spec: any) => void;
+  handleCommandImport: (spec: ProviderPublishSpec) => void;
   quickCreateProfileOpen: boolean;
   quickCreateTemplateId: string;
   quickCreateTemplateOptions: QuickCreateTemplateOption[];
@@ -112,7 +117,7 @@ export interface UseAppDialogsPropsParams {
   loadProfiles: () => void;
   handleLoadProfile: (profile: ConfigProfile) => void;
   selectedRepoId: string | null;
-  currentConfigParameters: Record<string, any>;
+  currentConfigParameters: ConfigParameters;
 }
 
 export function useAppDialogsProps(params: UseAppDialogsPropsParams): AppDialogsProps {
