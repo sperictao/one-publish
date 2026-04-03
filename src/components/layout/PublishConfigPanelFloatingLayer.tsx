@@ -25,6 +25,7 @@ interface PublishConfigPanelFloatingLayerProps {
   targetConfigId: string | null;
   restingTargetConfigId: string | null;
   selectedConfigId: string | null;
+  snapTargetConfigId: string | null;
   draggingConfigId: string | null;
   freezeFloating: boolean;
   onListPointerEnter: () => void;
@@ -38,6 +39,7 @@ export function PublishConfigPanelFloatingLayer({
   targetConfigId,
   restingTargetConfigId,
   selectedConfigId,
+  snapTargetConfigId,
   draggingConfigId,
   freezeFloating,
   onListPointerEnter,
@@ -62,6 +64,7 @@ export function PublishConfigPanelFloatingLayer({
     targetConfigId,
     restingTargetConfigId,
     selectedConfigId,
+    snapTargetConfigId,
     draggingConfigId,
     freezeFloating,
     onListPointerEnter,

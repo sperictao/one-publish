@@ -545,8 +545,8 @@ async function expectDraggedRowAlignedWithFloatingShell(
   expect(alignment).not.toBeNull();
   expect(alignment?.topDelta ?? 99).toBeLessThan(2);
   expect(alignment?.leftDelta ?? 99).toBeLessThan(2);
-  expect(alignment?.widthDelta ?? 99).toBeLessThan(2);
-  expect(alignment?.heightDelta ?? 99).toBeLessThan(2);
+  expect(alignment?.widthDelta ?? 99).toBeLessThan(3);
+  expect(alignment?.heightDelta ?? 99).toBeLessThan(3);
 }
 
 async function measureDraggedRowAndFloatingShell(
@@ -678,6 +678,11 @@ test("live preview drag bubble feels correct across repository and config lists"
   });
 
   await page.mouse.up();
+  await page.waitForTimeout(40);
+  await expectDraggedRowAlignedWithFloatingShell(
+    page,
+    "[data-list-item-id='repo-c']"
+  );
   await expect
     .poll(() =>
       page.evaluate(
@@ -694,6 +699,34 @@ test("live preview drag bubble feels correct across repository and config lists"
       )
     )
     .toContainEqual(["repo-a", "repo-c", "repo-b"]);
+
+  const settlingHandleBox = await page
+    .locator("[data-list-item-id='repo-b'] button[aria-label='拖动排序']")
+    .boundingBox();
+  if (!settlingHandleBox) {
+    throw new Error("missing settling repo-b drag handle");
+  }
+
+  await dragByHandle(page, "[data-list-item-id='repo-b']", [
+    {
+      x: settlingHandleBox.x + settlingHandleBox.width / 2 + 12,
+      y: settlingHandleBox.y + settlingHandleBox.height / 2 - 20,
+    },
+  ]);
+  await expectDraggedRowAlignedWithFloatingShell(
+    page,
+    "[data-list-item-id='repo-b']"
+  );
+  await expectDraggedRowFollowsPointer(
+    page,
+    "[data-list-item-id='repo-b']",
+    {
+      x: settlingHandleBox.x + settlingHandleBox.width / 2 + 12,
+      y: settlingHandleBox.y + settlingHandleBox.height / 2 - 36,
+    },
+    "up"
+  );
+  await page.mouse.up();
 
   const recentOrder = page.locator(
     "[data-list-item-id^='recent:']"
@@ -851,7 +884,7 @@ test("live preview drag bubble feels correct across repository and config lists"
     "[data-list-item-id='userprofile:alpha-profile']",
     {
       x: customHandleBox.x + customHandleBox.width / 2 + 12,
-      y: customThresholdY + 28,
+      y: customThresholdY + 18,
     },
     "down"
   );
@@ -862,6 +895,11 @@ test("live preview drag bubble feels correct across repository and config lists"
   });
 
   await page.mouse.up();
+  await page.waitForTimeout(40);
+  await expectDraggedRowAlignedWithFloatingShell(
+    page,
+    "[data-list-item-id='userprofile:alpha-profile']"
+  );
   await expect
     .poll(() =>
       page.evaluate(

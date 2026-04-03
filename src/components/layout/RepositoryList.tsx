@@ -24,7 +24,10 @@ import { useI18n } from "@/hooks/useI18n";
 import type { RepositoryListFloatingBindings } from "@/components/layout/RepositoryListFloatingLayer";
 import { RepositoryRow } from "@/components/layout/RepositoryRow";
 import { useRepositoryListInteractionState } from "@/components/layout/useRepositoryListInteractionState";
-import { usePointerListReorder } from "@/components/layout/usePointerListReorder";
+import {
+  type PointerListPointer,
+  usePointerListReorder,
+} from "@/components/layout/usePointerListReorder";
 import { composeNodeRefs } from "@/components/layout/composeNodeRefs";
 import { useListReorderMotion } from "@/components/layout/useListReorderMotion";
 
@@ -152,9 +155,52 @@ export function RepositoryList({
     filteredRepoIds,
     selectedRepoId,
   });
+  const [settledRepoId, setSettledRepoId] = useState<string | null>(null);
+  const settledRepoPointerRef = useRef<PointerListPointer | null>(null);
+  const clearSettledRepoId = useCallback(() => {
+    settledRepoPointerRef.current = null;
+    setSettledRepoId((previousId) => (previousId === null ? previousId : null));
+  }, []);
+  const setSettledRepoAnchor = useCallback(
+    (repoId: string | null, pointer: PointerListPointer | null) => {
+      settledRepoPointerRef.current = repoId ? pointer : null;
+      setSettledRepoId(repoId);
+    },
+    []
+  );
+  const shouldPreserveSettledRepoAnchor = useCallback(
+    (pointer: PointerListPointer) => {
+      if (!settledRepoId || !settledRepoPointerRef.current) {
+        return false;
+      }
+
+      const dx = Math.abs(pointer.x - settledRepoPointerRef.current.x);
+      const dy = Math.abs(pointer.y - settledRepoPointerRef.current.y);
+      return dx < 2 && dy < 2;
+    },
+    [settledRepoId]
+  );
+  const handleListPointerReentry = useCallback(
+    (event: ReactPointerEvent<HTMLDivElement>) => {
+      return shouldPreserveSettledRepoAnchor({
+        x: event.clientX,
+        y: event.clientY,
+      });
+    },
+    [shouldPreserveSettledRepoAnchor]
+  );
+  const handleListPointerLeave = useCallback(() => {
+    clearSettledRepoId();
+  }, [clearSettledRepoId]);
   const repositoryReorder = usePointerListReorder({
     enabled: repoDragEnabled,
-    onStart: interaction.handleListPointerLeave,
+    onStart: () => {
+      setSettledRepoAnchor(null, null);
+      interaction.handleListPointerLeave();
+    },
+    onEnd: ({ activeItemId, target, pointer }) => {
+      setSettledRepoAnchor(target && activeItemId ? activeItemId : null, pointer);
+    },
     onCommit: (activeRepoId, target) => {
       const nextRepoIds = reorderItemsByDrop(
         repositories,
@@ -197,10 +243,14 @@ export function RepositoryList({
   const repoMotion = useListReorderMotion({
     orderedIds: previewRepoIds,
     draggingItemId: draggingRepoId,
+    settledItemId: settledRepoId,
   });
-  const floatingTargetRepoId = draggingRepoId ?? interaction.visualTargetRepoId;
+  const visualTargetRepoId =
+    draggingRepoId ?? settledRepoId ?? interaction.visualTargetRepoId;
+  const floatingTargetRepoId = visualTargetRepoId;
   const restingTargetRepoId =
     draggingRepoId ??
+    settledRepoId ??
     interaction.activeMenuRepoId ??
     interaction.focusedRepoId ??
     selectedRepoId;
@@ -287,9 +337,24 @@ export function RepositoryList({
         <div
           ref={floating.listRef}
           className="list-scroll-shell scrollbar-fade glass-scrollbar relative flex-1 overflow-auto px-2.5 py-2"
-          onPointerEnter={floating.handleListPointerEnter}
-          onPointerMove={floating.handleListPointerMove}
-          onPointerLeave={floating.handleListMouseLeave}
+          onPointerEnter={(event) => {
+            if (handleListPointerReentry(event)) {
+              return;
+            }
+            clearSettledRepoId();
+            floating.handleListPointerEnter(event);
+          }}
+          onPointerMove={(event) => {
+            if (handleListPointerReentry(event)) {
+              return;
+            }
+            clearSettledRepoId();
+            floating.handleListPointerMove(event);
+          }}
+          onPointerLeave={() => {
+            handleListPointerLeave();
+            floating.handleListMouseLeave();
+          }}
           onScroll={floating.handleListScroll}
         >
           <div
@@ -338,7 +403,7 @@ export function RepositoryList({
                   key={repo.id}
                   repo={repo}
                   isSelected={selectedRepoId === repo.id}
-                  isVisualTarget={interaction.visualTargetRepoId === repo.id}
+                  isVisualTarget={visualTargetRepoId === repo.id}
                   isMenuOpen={interaction.isMenuOpenForRepo(repo.id)}
                   canConnectBranch={branchConnectivityByRepoId[repo.id] ?? false}
                   repoT={repoT}
@@ -372,7 +437,10 @@ export function RepositoryList({
     },
     [
       branchConnectivityByRepoId,
+      clearSettledRepoId,
       draggingRepoId,
+      handleListPointerLeave,
+      handleListPointerReentry,
       previewRepos,
       floatingTargetRepoId,
       interaction.handleMenuOpenChange,
@@ -380,7 +448,6 @@ export function RepositoryList({
       interaction.handleRowFocus,
       interaction.handleRowMouseEnter,
       interaction.isMenuOpenForRepo,
-      interaction.visualTargetRepoId,
       onRemoveRepo,
       onReorderRepositories,
       onSelectRepo,
@@ -392,7 +459,9 @@ export function RepositoryList({
       repositoryReorder.dropTarget,
       repositoryReorder.setItemRef,
       repositoryReorder.startDrag,
+      setSettledRepoAnchor,
       selectedRepoId,
+      visualTargetRepoId,
     ]
   );
 
@@ -481,6 +550,7 @@ export function RepositoryList({
             targetRepoId={floatingTargetRepoId}
             restingTargetRepoId={restingTargetRepoId}
             selectedRepoId={selectedRepoId}
+            snapTargetRepoId={settledRepoId}
             draggingRepoId={draggingRepoId}
             freezeFloating={freezeFloating}
             onListPointerEnter={interaction.handleListPointerEnter}

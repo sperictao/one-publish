@@ -25,6 +25,7 @@ interface RepositoryListFloatingLayerProps {
   targetRepoId: string | null;
   restingTargetRepoId: string | null;
   selectedRepoId: string | null;
+  snapTargetRepoId: string | null;
   draggingRepoId: string | null;
   freezeFloating: boolean;
   onListPointerEnter: () => void;
@@ -38,6 +39,7 @@ export function RepositoryListFloatingLayer({
   targetRepoId,
   restingTargetRepoId,
   selectedRepoId,
+  snapTargetRepoId,
   draggingRepoId,
   freezeFloating,
   onListPointerEnter,
@@ -50,6 +52,7 @@ export function RepositoryListFloatingLayer({
     targetRepoId,
     restingTargetRepoId,
     selectedRepoId,
+    snapTargetRepoId,
     draggingRepoId,
     freezeFloating,
     onListPointerEnter,

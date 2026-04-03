@@ -17,6 +17,7 @@ interface UseFloatingListCardOptions {
   targetItemId: string | null;
   restingTargetItemId: string | null;
   selectedItemId: string | null;
+  snapTargetItemId?: string | null;
   draggingItemId?: string | null;
   freezeFloating: boolean;
   onListPointerEnter: () => void;
@@ -44,6 +45,7 @@ export function useFloatingListCard({
   targetItemId,
   restingTargetItemId,
   selectedItemId,
+  snapTargetItemId = null,
   draggingItemId = null,
   freezeFloating,
   onListPointerEnter,
@@ -57,6 +59,7 @@ export function useFloatingListCard({
   const cardTargetItemIdRef = useRef<string | null>(null);
   const activePointerItemIdRef = useRef<string | null>(null);
   const previousTargetItemIdRef = useRef<string | null>(null);
+  const previousDraggingItemIdRef = useRef<string | null>(draggingItemId);
 
   const isReducedMotionRef = useReducedMotion();
 
@@ -94,13 +97,13 @@ export function useFloatingListCard({
     [filteredItemIds]
   );
   const updateTargetRect = useCallback(
-    (itemId: string | null) => {
+    (itemId: string | null, options?: { immediate?: boolean }) => {
       const isDraggingTarget =
         freezeFloating && draggingItemId !== null && itemId === draggingItemId;
 
       updateFloatingRect(itemId, {
         ignoreTransforms: isDraggingTarget,
-        immediate: isDraggingTarget,
+        immediate: options?.immediate ?? isDraggingTarget,
       });
     },
     [draggingItemId, freezeFloating, updateFloatingRect]
@@ -328,6 +331,10 @@ export function useFloatingListCard({
   }, [targetItemId]);
 
   useEffect(() => {
+    previousDraggingItemIdRef.current = draggingItemId;
+  }, [draggingItemId]);
+
+  useEffect(() => {
     const previousTargetItemId = previousTargetItemIdRef.current;
     previousTargetItemIdRef.current = targetItemId;
 
@@ -341,10 +348,49 @@ export function useFloatingListCard({
   }, [selectedItemId, targetItemId, triggerSelectedBounce]);
 
   useLayoutEffect(() => {
+    const justDroppedDraggedItem =
+      previousDraggingItemIdRef.current !== null &&
+      draggingItemId === null &&
+      targetItemId !== null &&
+      targetItemId === previousDraggingItemIdRef.current;
+    const shouldSnapToTarget =
+      targetItemId !== null && snapTargetItemId !== null && targetItemId === snapTargetItemId;
+    const scheduleImmediateResync = () => {
+      if (
+        !targetItemId ||
+        typeof window === "undefined" ||
+        typeof window.requestAnimationFrame !== "function"
+      ) {
+        return null;
+      }
+
+      return window.requestAnimationFrame(() => {
+        updateTargetRect(targetItemId, { immediate: true });
+      });
+    };
+    let resyncFrameId: number | null = null;
+
     if (freezeFloating) {
       isPointerFollowingRef.current = false;
-      updateTargetRect(targetItemId);
-      return;
+      updateTargetRect(targetItemId, {
+        immediate: shouldSnapToTarget,
+      });
+      resyncFrameId = scheduleImmediateResync();
+      return () => {
+        if (resyncFrameId !== null) {
+          window.cancelAnimationFrame(resyncFrameId);
+        }
+      };
+    }
+
+    if (shouldSnapToTarget || justDroppedDraggedItem) {
+      updateTargetRect(targetItemId, { immediate: true });
+      resyncFrameId = scheduleImmediateResync();
+      return () => {
+        if (resyncFrameId !== null) {
+          window.cancelAnimationFrame(resyncFrameId);
+        }
+      };
     }
 
     if (isPointerFollowingRef.current) return;
@@ -352,7 +398,9 @@ export function useFloatingListCard({
   }, [
     filteredItemIdsSignature,
     freezeFloating,
+    draggingItemId,
     isPointerFollowingRef,
+    snapTargetItemId,
     targetItemId,
     updateTargetRect,
   ]);

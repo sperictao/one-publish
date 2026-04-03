@@ -64,7 +64,10 @@ import {
 import {
   ListDragHandle,
 } from "@/components/layout/ListReorderControls";
-import { usePointerListReorder } from "@/components/layout/usePointerListReorder";
+import {
+  type PointerListPointer,
+  usePointerListReorder,
+} from "@/components/layout/usePointerListReorder";
 import { useListInteractionState } from "@/components/layout/useListInteractionState";
 import { composeNodeRefs } from "@/components/layout/composeNodeRefs";
 import { useListReorderMotion } from "@/components/layout/useListReorderMotion";
@@ -699,9 +702,59 @@ export function PublishConfigPanel({
     filteredItemIds: allConfigIds,
     selectedItemId: selectedRenderId,
   });
+  const [settledConfigRenderId, setSettledConfigRenderId] = useState<string | null>(
+    null
+  );
+  const settledConfigPointerRef = useRef<PointerListPointer | null>(null);
+  const clearSettledConfigRenderId = useCallback(() => {
+    settledConfigPointerRef.current = null;
+    setSettledConfigRenderId((previousId) =>
+      previousId === null ? previousId : null
+    );
+  }, []);
+  const setSettledConfigAnchor = useCallback(
+    (configRenderId: string | null, pointer: PointerListPointer | null) => {
+      settledConfigPointerRef.current = configRenderId ? pointer : null;
+      setSettledConfigRenderId(configRenderId);
+    },
+    []
+  );
+  const shouldPreserveSettledConfigAnchor = useCallback(
+    (pointer: PointerListPointer) => {
+      if (!settledConfigRenderId || !settledConfigPointerRef.current) {
+        return false;
+      }
+
+      const dx = Math.abs(pointer.x - settledConfigPointerRef.current.x);
+      const dy = Math.abs(pointer.y - settledConfigPointerRef.current.y);
+      return dx < 2 && dy < 2;
+    },
+    [settledConfigRenderId]
+  );
+  const handleConfigListPointerReentry = useCallback(
+    (event: ReactPointerEvent<HTMLDivElement>) => {
+      return shouldPreserveSettledConfigAnchor({
+        x: event.clientX,
+        y: event.clientY,
+      });
+    },
+    [shouldPreserveSettledConfigAnchor]
+  );
+  const handleConfigListPointerLeave = useCallback(() => {
+    clearSettledConfigRenderId();
+  }, [clearSettledConfigRenderId]);
   const recentReorder = usePointerListReorder<undefined>({
     enabled: recentDragEnabled,
-    onStart: interaction.handleListPointerLeave,
+    onStart: () => {
+      setSettledConfigAnchor(null, null);
+      interaction.handleListPointerLeave();
+    },
+    onEnd: ({ activeItemId, target, pointer }) => {
+      setSettledConfigAnchor(
+        target && activeItemId ? `recent:${activeItemId}` : null,
+        pointer
+      );
+    },
     onCommit: (activeConfigKey, target) => {
       const nextConfigKeys = reorderItemsByDrop(
         recentConfigKeys,
@@ -721,7 +774,16 @@ export function PublishConfigPanel({
 
   const projectProfileReorder = usePointerListReorder<undefined>({
     enabled: projectProfileDragEnabled,
-    onStart: interaction.handleListPointerLeave,
+    onStart: () => {
+      setSettledConfigAnchor(null, null);
+      interaction.handleListPointerLeave();
+    },
+    onEnd: ({ activeItemId, target, pointer }) => {
+      setSettledConfigAnchor(
+        target && activeItemId ? `pubxml:${activeItemId}` : null,
+        pointer
+      );
+    },
     onCommit: (activeProfileName, target) => {
       const nextProfileNames = reorderItemsByDrop(
         visibleProjectProfiles,
@@ -741,7 +803,16 @@ export function PublishConfigPanel({
 
   const customProfileReorder = usePointerListReorder<{ groupKey: string }>({
     enabled: customProfileDragEnabled,
-    onStart: interaction.handleListPointerLeave,
+    onStart: () => {
+      setSettledConfigAnchor(null, null);
+      interaction.handleListPointerLeave();
+    },
+    onEnd: ({ activeItemId, target, pointer }) => {
+      setSettledConfigAnchor(
+        target && activeItemId ? `userprofile:${activeItemId}` : null,
+        pointer
+      );
+    },
     onCommit: (activeProfileName, target) => {
       const nextProfiles = reorderProfilesByDrop({
         profiles,
@@ -875,14 +946,26 @@ export function PublishConfigPanel({
   const recentMotion = useListReorderMotion({
     orderedIds: previewRecentItems.map((item) => item.key),
     draggingItemId: recentReorder.draggingItemId,
+    settledItemId:
+      settledConfigRenderId?.startsWith("recent:")
+        ? settledConfigRenderId.slice("recent:".length)
+        : null,
   });
   const projectMotion = useListReorderMotion({
     orderedIds: previewProjectProfiles,
     draggingItemId: projectProfileReorder.draggingItemId,
+    settledItemId:
+      settledConfigRenderId?.startsWith("pubxml:")
+        ? settledConfigRenderId.slice("pubxml:".length)
+        : null,
   });
   const customMotion = useListReorderMotion({
     orderedIds: previewProfiles.map((profile) => profile.name),
     draggingItemId: customProfileReorder.draggingItemId,
+    settledItemId:
+      settledConfigRenderId?.startsWith("userprofile:")
+        ? settledConfigRenderId.slice("userprofile:".length)
+        : null,
   });
   const draggingFloatingConfig = useMemo(() => {
     if (recentReorder.draggingItemId) {
@@ -915,10 +998,14 @@ export function PublishConfigPanel({
     recentReorder.dragPreviewStyle,
     recentReorder.draggingItemId,
   ]);
-  const floatingTargetConfigId =
-    draggingFloatingConfig?.renderId ?? interaction.visualTargetItemId;
+  const visualTargetConfigId =
+    draggingFloatingConfig?.renderId ??
+    settledConfigRenderId ??
+    interaction.visualTargetItemId;
+  const floatingTargetConfigId = visualTargetConfigId;
   const restingTargetConfigId =
     draggingFloatingConfig?.renderId ??
+    settledConfigRenderId ??
     interaction.activeMenuItemId ??
     interaction.focusedItemId ??
     selectedRenderId;
@@ -1115,9 +1202,24 @@ export function PublishConfigPanel({
         <div
           ref={floating.listRef}
           className="list-scroll-shell scrollbar-fade glass-scrollbar relative flex-1 overflow-auto px-2.5 py-2"
-          onPointerEnter={floating.handleListPointerEnter}
-          onPointerMove={floating.handleListPointerMove}
-          onPointerLeave={floating.handleListMouseLeave}
+          onPointerEnter={(event) => {
+            if (handleConfigListPointerReentry(event)) {
+              return;
+            }
+            clearSettledConfigRenderId();
+            floating.handleListPointerEnter(event);
+          }}
+          onPointerMove={(event) => {
+            if (handleConfigListPointerReentry(event)) {
+              return;
+            }
+            clearSettledConfigRenderId();
+            floating.handleListPointerMove(event);
+          }}
+          onPointerLeave={() => {
+            handleConfigListPointerLeave();
+            floating.handleListMouseLeave();
+          }}
           onScroll={floating.handleListScroll}
         >
           <div
@@ -1162,7 +1264,7 @@ export function PublishConfigPanel({
                   data-list-row="true"
                   data-list-item-id={`recent:${item.key}`}
                   data-list-visual-target={
-                    interaction.visualTargetItemId === `recent:${item.key}`
+                    visualTargetConfigId === `recent:${item.key}`
                       ? "true"
                       : "false"
                   }
@@ -1308,7 +1410,7 @@ export function PublishConfigPanel({
                   data-list-row="true"
                   data-list-item-id={configKey}
                   data-list-visual-target={
-                    interaction.visualTargetItemId === configKey ? "true" : "false"
+                    visualTargetConfigId === configKey ? "true" : "false"
                   }
                   data-list-menu-open={
                     interaction.isMenuOpenForItem(configKey) ? "true" : "false"
@@ -1438,7 +1540,7 @@ export function PublishConfigPanel({
                     selectedRenderId === `userprofile:${profile.name}`
                   }
                   isVisualTarget={
-                    interaction.visualTargetItemId === `userprofile:${profile.name}`
+                    visualTargetConfigId === `userprofile:${profile.name}`
                   }
                   isFavorite={favoriteSet.has(`userprofile:${profile.name}`)}
                   isMenuOpen={interaction.isMenuOpenForItem(
@@ -1507,6 +1609,9 @@ export function PublishConfigPanel({
       favoriteSet,
       favoriteConfigLabel,
       floatingTargetConfigId,
+      clearSettledConfigRenderId,
+      handleConfigListPointerLeave,
+      handleConfigListPointerReentry,
       hasVisiblePreviewConfigResults,
       customProfileDragEnabled,
       customMotion,
@@ -1545,11 +1650,11 @@ export function PublishConfigPanel({
       interaction.handleRowFocus,
       interaction.handleRowMouseEnter,
       interaction.isMenuOpenForItem,
-      interaction.visualTargetItemId,
       customProfileReorder.draggingItemId,
       customProfileReorder.dropTarget,
       customProfileReorder.setItemRef,
       customProfileReorder.startDrag,
+      visualTargetConfigId,
     ]
   );
 
@@ -1724,6 +1829,7 @@ export function PublishConfigPanel({
             targetConfigId={floatingTargetConfigId}
             restingTargetConfigId={restingTargetConfigId}
             selectedConfigId={selectedRenderId}
+            snapTargetConfigId={settledConfigRenderId}
             draggingConfigId={draggingFloatingConfig?.renderId ?? null}
             freezeFloating={freezeFloating}
             onListPointerEnter={interaction.handleListPointerEnter}

@@ -9,6 +9,7 @@ interface UseFloatingConfigCardOptions {
   targetConfigId: string | null;
   restingTargetConfigId: string | null;
   selectedConfigId: string | null;
+  snapTargetConfigId: string | null;
   draggingConfigId: string | null;
   freezeFloating: boolean;
   onListPointerEnter: () => void;
@@ -35,6 +36,7 @@ export function useFloatingConfigCard({
   targetConfigId,
   restingTargetConfigId,
   selectedConfigId,
+  snapTargetConfigId,
   draggingConfigId,
   freezeFloating,
   onListPointerEnter,
@@ -46,6 +48,7 @@ export function useFloatingConfigCard({
     targetItemId: targetConfigId,
     restingTargetItemId: restingTargetConfigId,
     selectedItemId: selectedConfigId,
+    snapTargetItemId: snapTargetConfigId,
     draggingItemId: draggingConfigId,
     freezeFloating,
     onListPointerEnter,

@@ -15,13 +15,12 @@ import {
 } from "@/lib/listOrdering";
 
 export type PointerListDropTarget<TMeta> = ListDropTarget<TMeta>;
-
-type PointerListDragDirection = "up" | "down" | null;
-
-interface PointerListPointer {
+export interface PointerListPointer {
   x: number;
   y: number;
 }
+
+type PointerListDragDirection = "up" | "down" | null;
 
 interface PointerListSize {
   width: number;
@@ -36,9 +35,14 @@ interface PointerListItemEntry<TMeta> {
 export function usePointerListReorder<TMeta>(params: {
   enabled: boolean;
   onCommit: (activeItemId: string, target: PointerListDropTarget<TMeta>) => void;
+  onEnd?: (result: {
+    activeItemId: string | null;
+    target: PointerListDropTarget<TMeta> | null;
+    pointer: PointerListPointer | null;
+  }) => void;
   onStart?: () => void;
 }) {
-  const { enabled, onCommit, onStart } = params;
+  const { enabled, onCommit, onEnd, onStart } = params;
   const [draggingItemId, setDraggingItemId] = useState<string | null>(null);
   const [dropTarget, setDropTarget] =
     useState<PointerListDropTarget<TMeta> | null>(null);
@@ -248,32 +252,44 @@ export function usePointerListReorder<TMeta>(params: {
         return;
       }
 
-      const rowRect = rowElement.getBoundingClientRect();
+      const visualRowRect = rowElement.getBoundingClientRect();
+      const rowAnimations = rowElement.getAnimations?.() ?? [];
+      for (const animation of rowAnimations) {
+        animation.cancel();
+      }
+      const layoutRowRect =
+        rowAnimations.length > 0
+          ? rowElement.getBoundingClientRect()
+          : visualRowRect;
       const nextPointer = {
         x: event.clientX,
         y: event.clientY,
       };
       const nextAnchor = {
-        x: event.clientX - rowRect.left,
-        y: event.clientY - rowRect.top,
+        x: event.clientX - visualRowRect.left,
+        y: event.clientY - visualRowRect.top,
       };
       const nextItemSize = {
-        width: rowRect.width,
-        height: rowRect.height,
+        width: visualRowRect.width,
+        height: visualRowRect.height,
+      };
+      const initialPreviewOffset = {
+        x: visualRowRect.left - layoutRowRect.left,
+        y: visualRowRect.top - layoutRowRect.top,
       };
 
       clearGlobalDragEffects();
-      initialRowRectRef.current = rowRect;
+      initialRowRectRef.current = layoutRowRect;
       dragPointerRef.current = nextPointer;
       dragAnchorRef.current = nextAnchor;
       draggedItemSizeRef.current = nextItemSize;
+      dragPreviewOffsetRef.current = initialPreviewOffset;
       dragDirectionRef.current = null;
       lastPointerYRef.current = event.clientY;
       draggingItemIdRef.current = itemId;
       setDraggingItemId(itemId);
       setLiveTarget(null);
-      dragPreviewOffsetRef.current = { x: 0, y: 0 };
-      setDragPreviewOffset({ x: 0, y: 0 });
+      setDragPreviewOffset(initialPreviewOffset);
       setDragPointer(nextPointer);
       setDragAnchor(nextAnchor);
       setDraggedItemSize(nextItemSize);
@@ -323,11 +339,19 @@ export function usePointerListReorder<TMeta>(params: {
         updateLiveTargetFromPointer(nextPointer);
       };
 
-      const finishDrag = () => {
+      const finishDrag = (finishEvent?: PointerEvent | FocusEvent) => {
         const activeItemId = draggingItemIdRef.current;
         const target = dropTargetRef.current;
+        const pointer =
+          finishEvent instanceof PointerEvent
+            ? {
+                x: finishEvent.clientX,
+                y: finishEvent.clientY,
+              }
+            : dragPointerRef.current;
 
         clearDragState();
+        onEnd?.({ activeItemId, target, pointer });
 
         if (!activeItemId || !target || activeItemId === target.itemId) {
           return;
@@ -356,6 +380,7 @@ export function usePointerListReorder<TMeta>(params: {
       clearGlobalDragEffects,
       enabled,
       onCommit,
+      onEnd,
       onStart,
       setLiveTarget,
       syncDragPreviewOffset,
