@@ -13,10 +13,12 @@ import { mapImportedSpecByProvider } from "@/lib/commandImportMapping";
 import {
   deleteProfile,
   getProfiles,
+  reorderProfiles,
   saveProfile,
   updateProfile,
   type ConfigParameters,
   type ConfigProfile,
+  type ProfileOrderEntry,
   type PublishConfigStore,
 } from "@/lib/store";
 import {
@@ -157,6 +159,7 @@ export function useProfiles({
   const [quickCreateProfileSaving, setQuickCreateProfileSaving] = useState(false);
   const [editingProfileOriginalName, setEditingProfileOriginalName] = useState<string | null>(null);
   const loadProfilesRequestIdRef = useRef(0);
+  const reorderProfilesQueueRef = useRef<Promise<void>>(Promise.resolve());
   const selectedRepoIdRef = useRef(selectedRepoId);
 
   useEffect(() => {
@@ -571,6 +574,45 @@ export function useProfiles({
     ]
   );
 
+  const handleReorderProfiles = useCallback(
+    (nextProfiles: ConfigProfile[]) => {
+      if (!selectedRepoId) {
+        return;
+      }
+
+      const repoId = selectedRepoId;
+      const nextProfileOrder: ProfileOrderEntry[] = nextProfiles.map((profile) => ({
+        name: profile.name,
+        profileGroup: profile.profileGroup ?? null,
+      }));
+
+      setProfiles(nextProfiles);
+
+      reorderProfilesQueueRef.current = reorderProfilesQueueRef.current
+        .catch(() => undefined)
+        .then(async () => {
+          try {
+            await reorderProfiles({
+              repoId,
+              profiles: nextProfileOrder,
+            });
+          } catch (err) {
+            console.error("保存配置排序失败:", err);
+
+            if (selectedRepoIdRef.current === repoId) {
+              await loadProfiles();
+            }
+
+            const { extractInvokeErrorMessage } = await loadInvokeErrors();
+            toast.error(profileT.quickEditFailed || "更新配置文件失败", {
+              description: extractInvokeErrorMessage(err),
+            });
+          }
+        });
+    },
+    [loadProfiles, profileT.quickEditFailed, selectedRepoId]
+  );
+
   return {
     profiles,
     activeProfileName,
@@ -600,5 +642,6 @@ export function useProfiles({
     handleDeleteProfileFromPanel,
     handleLoadProfile,
     handleCreateProfileFromProjectProfile,
+    handleReorderProfiles,
   };
 }

@@ -3,6 +3,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
   getAppState: vi.fn(),
+  reorderRecentPublishConfigs: vi.fn(),
+  reorderRepositories: vi.fn(),
   updatePublishState: vi.fn(),
   updateUIState: vi.fn(),
   updatePreferences: vi.fn(),
@@ -20,6 +22,8 @@ vi.mock("@/lib/store", async () => {
   return {
     ...actual,
     getAppState: mocks.getAppState,
+    reorderRecentPublishConfigs: mocks.reorderRecentPublishConfigs,
+    reorderRepositories: mocks.reorderRepositories,
     updatePublishState: mocks.updatePublishState,
     updateUIState: mocks.updateUIState,
     updatePreferences: mocks.updatePreferences,
@@ -72,6 +76,8 @@ describe("useAppState", () => {
     vi.useFakeTimers();
     vi.clearAllMocks();
     mocks.getAppState.mockResolvedValue(createAppState());
+    mocks.reorderRecentPublishConfigs.mockResolvedValue(createAppState());
+    mocks.reorderRepositories.mockResolvedValue(createAppState());
     mocks.updatePublishState.mockResolvedValue(undefined);
     mocks.updateUIState.mockResolvedValue(undefined);
     mocks.updatePreferences.mockResolvedValue(createAppState());
@@ -194,6 +200,49 @@ describe("useAppState", () => {
     expect(result.current.theme).toBe("auto");
     expect(mocks.toastError).toHaveBeenCalledWith("保存偏好设置失败", {
       description: "preferences failed",
+    });
+  });
+
+  it("拖动仓库排序时会先乐观更新再持久化", async () => {
+    const { result } = renderHook(() => useAppState());
+
+    await waitForAppStateLoad();
+
+    await act(async () => {
+      result.current.reorderRepositories(["repo-1"]);
+      await Promise.resolve();
+    });
+
+    expect(result.current.repositories.map((repo) => repo.id)).toEqual(["repo-1"]);
+    expect(mocks.reorderRepositories).toHaveBeenCalledWith(["repo-1"]);
+  });
+
+  it("拖动最近使用排序时会乐观更新并调用持久化接口", async () => {
+    const initialState = createAppState();
+    initialState.recentConfigKeysByRepo = {
+      "repo-1": ["userprofile:alpha", "userprofile:beta"],
+    };
+    mocks.getAppState.mockResolvedValueOnce(initialState);
+
+    const { result } = renderHook(() => useAppState());
+
+    await waitForAppStateLoad();
+
+    await act(async () => {
+      result.current.reorderRecentPublishConfigs([
+        "userprofile:beta",
+        "userprofile:alpha",
+      ]);
+      await Promise.resolve();
+    });
+
+    expect(result.current.recentConfigKeysByRepo["repo-1"]).toEqual([
+      "userprofile:beta",
+      "userprofile:alpha",
+    ]);
+    expect(mocks.reorderRecentPublishConfigs).toHaveBeenCalledWith({
+      repoId: "repo-1",
+      configKeys: ["userprofile:beta", "userprofile:alpha"],
     });
   });
 });

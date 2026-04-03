@@ -76,6 +76,11 @@ export interface ConfigProfile
   profileGroup?: string | null;
 }
 
+export interface ProfileOrderEntry {
+  name: string;
+  profileGroup?: string | null;
+}
+
 export interface RepoPublishConfig
   extends Omit<TauriRepoPublishConfig, "profiles"> {
   profiles: ConfigProfile[];
@@ -260,6 +265,13 @@ export async function updateRepository(repo: Repository): Promise<AppState> {
   return normalizeAppState(state);
 }
 
+export async function reorderRepositories(repoIds: string[]): Promise<AppState> {
+  const state = await invoke<TauriAppState>("reorder_repositories", {
+    repoIds,
+  });
+  return normalizeAppState(state);
+}
+
 export async function updateUIState(params: {
   leftPanelWidth?: number;
   middlePanelWidth?: number;
@@ -321,6 +333,14 @@ export async function replaceRecentPublishConfigKey(params: {
   nextKey: string;
 }): Promise<AppState> {
   const state = await invoke<TauriAppState>("replace_recent_publish_config_key", params);
+  return normalizeAppState(state);
+}
+
+export async function reorderRecentPublishConfigs(params: {
+  repoId: string;
+  configKeys: string[];
+}): Promise<AppState> {
+  const state = await invoke<TauriAppState>("reorder_recent_publish_configs", params);
   return normalizeAppState(state);
 }
 
@@ -462,6 +482,20 @@ export async function updateProfile(params: {
   profileGroup?: string;
 }): Promise<AppState> {
   const state = await invoke<TauriAppState>("update_profile", params);
+  return normalizeAppState(state);
+}
+
+export async function reorderProfiles(params: {
+  repoId: string;
+  profiles: ProfileOrderEntry[];
+}): Promise<AppState> {
+  const state = await invoke<TauriAppState>("reorder_profiles", {
+    repoId: params.repoId,
+    profiles: params.profiles.map((profile) => ({
+      name: profile.name,
+      profileGroup: profile.profileGroup ?? null,
+    })),
+  });
   return normalizeAppState(state);
 }
 

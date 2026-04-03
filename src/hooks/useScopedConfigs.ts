@@ -63,6 +63,7 @@ export function useScopedConfigs(params: {
   recentConfigByRepo: Record<string, string[]>;
   pushRecentConfig: (key: string, repoId?: string | null) => void;
   removeRecentConfig: (key: string, repoId?: string | null) => void;
+  reorderRecentConfig: (keys: string[], repoId?: string | null) => void;
   replaceRecentConfigKey: (
     previousKey: string,
     nextKey: string,
@@ -74,6 +75,7 @@ export function useScopedConfigs(params: {
     recentConfigByRepo,
     pushRecentConfig,
     removeRecentConfig,
+    reorderRecentConfig,
     replaceRecentConfigKey,
   } = params;
   const [favoriteConfigByRepo, setFavoriteConfigByRepo] = useState<
@@ -178,6 +180,7 @@ export function useScopedConfigs(params: {
     favoriteConfigKeys,
     pushRecentConfig,
     removeRecentConfig,
+    reorderRecentConfig,
     toggleFavoriteConfig,
     replaceScopedConfigKey,
   };

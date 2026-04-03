@@ -11,6 +11,8 @@ import {
   updatePublishState,
   addRepository as apiAddRepository,
   removeRepository as apiRemoveRepository,
+  reorderRepositories as apiReorderRepositories,
+  reorderRecentPublishConfigs as apiReorderRecentPublishConfigs,
   updateRepository as apiUpdateRepository,
   pushRecentPublishConfig as apiPushRecentPublishConfig,
   removeRecentPublishConfig as apiRemoveRecentPublishConfig,
@@ -57,6 +59,7 @@ export function useAppState() {
   );
   const pendingPublishStateRef = useRef<Map<string, PublishStatePatch>>(new Map());
   const recentMutationQueueRef = useRef<Promise<void>>(Promise.resolve());
+  const repositoryMutationQueueRef = useRef<Promise<void>>(Promise.resolve());
 
   // 初始化加载状态
   useEffect(() => {
@@ -305,6 +308,53 @@ export function useAppState() {
     }
   }, []);
 
+  const enqueueRepositoryMutation = useCallback(
+    (mutation: () => Promise<unknown>, errorMessage: string) => {
+      repositoryMutationQueueRef.current = repositoryMutationQueueRef.current
+        .catch(() => undefined)
+        .then(async () => {
+          try {
+            await mutation();
+          } catch (err) {
+            await handlePersistenceFailure(errorMessage, err);
+          }
+        });
+    },
+    [handlePersistenceFailure]
+  );
+
+  const reorderRepositories = useCallback(
+    (repoIds: string[]) => {
+      setState((prev) => {
+        if (prev.repositories.length === 0) {
+          return prev;
+        }
+
+        const repositoryMap = new Map(
+          prev.repositories.map((repository) => [repository.id, repository])
+        );
+        const nextRepositories = repoIds
+          .map((repoId) => repositoryMap.get(repoId))
+          .filter((repository): repository is Repository => Boolean(repository));
+
+        if (nextRepositories.length !== prev.repositories.length) {
+          return prev;
+        }
+
+        return {
+          ...prev,
+          repositories: nextRepositories,
+        };
+      });
+
+      enqueueRepositoryMutation(
+        () => apiReorderRepositories(repoIds),
+        "保存仓库排序失败"
+      );
+    },
+    [enqueueRepositoryMutation]
+  );
+
   // 选中仓库的便捷方法
   const selectRepository = useCallback(
     (repoId: string | null) => {
@@ -410,7 +460,8 @@ export function useAppState() {
   const enqueueRecentMutation = useCallback(
     (
       mutation: () => Promise<AppState>,
-      errorMessage: string
+      errorMessage: string,
+      options?: { applyState?: boolean }
     ) => {
       // recent 由后端持久化状态做真相源；前端串行消费返回值，避免本地镜像规则再漂移。
       recentMutationQueueRef.current = recentMutationQueueRef.current
@@ -418,6 +469,9 @@ export function useAppState() {
         .then(async () => {
           try {
             const nextState = await mutation();
+            if (options?.applyState === false) {
+              return;
+            }
             setState((prev) => mergeRecentPublishState(prev, nextState));
           } catch (err) {
             await handlePersistenceFailure(errorMessage, err);
@@ -478,6 +532,34 @@ export function useAppState() {
     [enqueueRecentMutation, state.selectedRepoId]
   );
 
+  const reorderRecentPublishConfigs = useCallback(
+    (
+      configKeys: string[],
+      repoId: string | null = state.selectedRepoId
+    ) => {
+      if (!repoId) {
+        return;
+      }
+
+      setState((prev) =>
+        mergeRecentPublishState(prev, {
+          recentRepoIds: prev.recentRepoIds,
+          recentConfigKeysByRepo: {
+            ...prev.recentConfigKeysByRepo,
+            [repoId]: configKeys,
+          },
+        })
+      );
+
+      enqueueRecentMutation(
+        () => apiReorderRecentPublishConfigs({ repoId, configKeys }),
+        "保存最近使用排序失败",
+        { applyState: false }
+      );
+    },
+    [enqueueRecentMutation, state.selectedRepoId]
+  );
+
   return {
     // 状态
     state,
@@ -492,9 +574,11 @@ export function useAppState() {
     addRepository,
     removeRepository,
     updateRepository,
+    reorderRepositories,
     selectRepository,
     pushRecentPublishConfig,
     removeRecentPublishConfig,
+    reorderRecentPublishConfigs,
     replaceRecentPublishConfigKey,
 
     // UI 状态

@@ -12,6 +12,52 @@ use super::types::{
     AppState, ConfigProfile, ExecutionRecord, PublishConfigStore, Repository,
 };
 use crate::errors::AppError;
+use std::collections::{BTreeMap, BTreeSet};
+
+#[derive(Debug, Clone, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProfileOrderEntry {
+    pub name: String,
+    #[serde(default)]
+    pub profile_group: Option<String>,
+}
+
+fn normalize_ordered_ids(ids: Vec<String>) -> Vec<String> {
+    let mut normalized = Vec::with_capacity(ids.len());
+    let mut seen = BTreeSet::new();
+
+    for id in ids {
+        let trimmed = id.trim();
+        if trimmed.is_empty() {
+            continue;
+        }
+
+        let value = trimmed.to_string();
+        if seen.insert(value.clone()) {
+            normalized.push(value);
+        }
+    }
+
+    normalized
+}
+
+fn ensure_exact_order_match(
+    current_ids: &[String],
+    requested_ids: &[String],
+    error_code: &str,
+) -> Result<(), AppError> {
+    let current_set = current_ids.iter().cloned().collect::<BTreeSet<_>>();
+    let requested_set = requested_ids.iter().cloned().collect::<BTreeSet<_>>();
+
+    if current_ids.len() != requested_ids.len() || current_set != requested_set {
+        return Err(AppError::validation_with_code(
+            "排序目标与当前列表不一致",
+            error_code,
+        ));
+    }
+
+    Ok(())
+}
 
 #[tauri::command]
 pub async fn get_app_state() -> Result<AppState, AppError> {
@@ -86,6 +132,44 @@ pub async fn update_repository(
     {
         *existing = repo;
     }
+
+    persist_state_and_refresh_tray(&app, state).await?;
+    Ok(get_bootstrap_state())
+}
+
+#[tauri::command]
+pub async fn reorder_repositories(
+    app: tauri::AppHandle,
+    repo_ids: Vec<String>,
+) -> Result<AppState, AppError> {
+    let mut state = get_state();
+    let requested_ids = normalize_ordered_ids(repo_ids);
+    let current_ids = state
+        .repositories
+        .iter()
+        .map(|repository| repository.id.clone())
+        .collect::<Vec<_>>();
+
+    ensure_exact_order_match(
+        &current_ids,
+        &requested_ids,
+        "repository_order_mismatch",
+    )?;
+
+    if current_ids == requested_ids {
+        return Ok(get_bootstrap_state());
+    }
+
+    let mut repository_map = state
+        .repositories
+        .into_iter()
+        .map(|repository| (repository.id.clone(), repository))
+        .collect::<BTreeMap<_, _>>();
+
+    state.repositories = requested_ids
+        .into_iter()
+        .filter_map(|repo_id| repository_map.remove(&repo_id))
+        .collect();
 
     persist_state_and_refresh_tray(&app, state).await?;
     Ok(get_bootstrap_state())
@@ -388,6 +472,111 @@ pub async fn replace_recent_publish_config_key(
 
     persist_state_and_refresh_tray(&app, state).await?;
     Ok(get_bootstrap_state())
+}
+
+#[tauri::command]
+pub async fn reorder_recent_publish_configs(
+    app: tauri::AppHandle,
+    repo_id: String,
+    config_keys: Vec<String>,
+) -> Result<AppState, AppError> {
+    let mut state = get_state();
+    find_repository(&state.repositories, &repo_id)?;
+
+    let current_keys = state
+        .recent_config_keys_by_repo
+        .get(&repo_id)
+        .cloned()
+        .unwrap_or_default();
+    let requested_keys = normalize_ordered_ids(config_keys);
+
+    ensure_exact_order_match(
+        &current_keys,
+        &requested_keys,
+        "recent_config_order_mismatch",
+    )?;
+
+    if current_keys == requested_keys {
+        return Ok(get_bootstrap_state());
+    }
+
+    state
+        .recent_config_keys_by_repo
+        .insert(repo_id, requested_keys);
+
+    persist_state_and_refresh_tray(&app, state).await?;
+    Ok(get_bootstrap_state())
+}
+
+#[tauri::command]
+pub async fn reorder_profiles(
+    app: tauri::AppHandle,
+    repo_id: String,
+    profiles: Vec<ProfileOrderEntry>,
+) -> Result<AppState, AppError> {
+    let mut state = get_state();
+
+    {
+        let repo = find_repository_mut(&mut state.repositories, &repo_id)?;
+        let current_names = repo
+            .publish_config
+            .profiles
+            .iter()
+            .map(|profile| profile.name.clone())
+            .collect::<Vec<_>>();
+        let requested_names = normalize_ordered_ids(
+            profiles
+                .iter()
+                .map(|profile| profile.name.clone())
+                .collect::<Vec<_>>(),
+        );
+
+        ensure_exact_order_match(
+            &current_names,
+            &requested_names,
+            "profile_order_mismatch",
+        )?;
+
+        if current_names == requested_names
+            && repo
+                .publish_config
+                .profiles
+                .iter()
+                .zip(profiles.iter())
+                .all(|(current, next)| {
+                    current.profile_group.as_deref().unwrap_or("").trim()
+                        == next.profile_group.as_deref().unwrap_or("").trim()
+                })
+        {
+            return Ok(get_bootstrap_state());
+        }
+
+        let mut profile_map = repo
+            .publish_config
+            .profiles
+            .drain(..)
+            .map(|profile| (profile.name.clone(), profile))
+            .collect::<BTreeMap<_, _>>();
+
+        let next_profiles = profiles
+            .into_iter()
+            .filter_map(|entry| {
+                profile_map.remove(&entry.name).map(|mut profile| {
+                    profile.profile_group = entry
+                        .profile_group
+                        .map(|value| value.trim().to_string())
+                        .filter(|value| !value.is_empty());
+                    profile
+                })
+            })
+            .collect::<Vec<_>>();
+
+        repo.publish_config.profiles = next_profiles;
+    }
+
+    let response = state.clone();
+    persist_state_and_refresh_tray(&app, state).await?;
+    Ok(response)
 }
 
 #[tauri::command]
