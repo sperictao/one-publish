@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
-import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { RepositoryList } from "@/components/layout/RepositoryList";
 import { __setTranslationsCacheForTest } from "@/hooks/useI18n";
 import type { Repository } from "@/types/repository";
@@ -117,6 +117,8 @@ beforeAll(() => {
         editRepositoryAction: "编辑仓库",
         removeRepositoryAction: "移除仓库",
         addRepository: "添加仓库",
+        showReorderControls: "开启排序",
+        hideReorderControls: "关闭排序",
         searchRepository: "搜索仓库",
         all: "全部",
         currentBranchUnknown: "未知分支",
@@ -252,6 +254,62 @@ describe("RepositoryList", () => {
     expect(onSelectRepo).not.toHaveBeenCalled();
   });
 
+  it("点击排序按钮后会切换仓库拖拽手柄的常驻显示", () => {
+    const { container } = render(
+      <RepositoryList
+        repositories={[
+          createRepository("repo-a", "alpha-service"),
+          createRepository("repo-b", "beta-worker"),
+        ]}
+        selectedRepoId="repo-a"
+        providers={[]}
+        onSelectRepo={() => {}}
+        onAddRepo={() => {}}
+        onOpenRepoDirectory={() => {}}
+        onEditRepo={() => true}
+        onRemoveRepo={() => {}}
+        onDetectProvider={async () => null}
+        onScanProjectCandidates={async () => null}
+        onRefreshBranches={async () => null}
+        branchConnectivityByRepoId={{}}
+        onSettings={() => {}}
+        onReorderRepositories={() => {}}
+      />
+    );
+
+    const repoRow = container.querySelector<HTMLElement>(
+      '[data-list-item-id="repo-a"]'
+    );
+    expect(repoRow).not.toBeNull();
+    const repoMainButton = within(repoRow!).getByRole("button", {
+      name: "选择仓库: alpha-service",
+    });
+
+    expect(
+      within(repoRow!).queryByRole("button", {
+        name: "拖动排序",
+      })
+    ).toBeNull();
+    expect(repoMainButton.className).toContain("pl-3");
+
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "开启排序",
+      })
+    );
+
+    const dragHandle = within(repoRow!).getByRole("button", {
+      name: "拖动排序",
+    });
+    expect(
+      screen.getByRole("button", {
+        name: "关闭排序",
+      })
+    ).toHaveAttribute("aria-pressed", "true");
+    expect(dragHandle).toBeInTheDocument();
+    expect(repoMainButton.className).toContain("pl-10");
+  });
+
   it("拖动仓库排序时越过相邻项中线后会实时冒泡，并按 preview 顺序提交", async () => {
     const onReorderRepositories = vi.fn();
 
@@ -276,6 +334,12 @@ describe("RepositoryList", () => {
         onSettings={() => {}}
         onReorderRepositories={onReorderRepositories}
       />
+    );
+
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "开启排序",
+      })
     );
 
     const dragHandles = screen.getAllByRole("button", { name: "拖动排序" });

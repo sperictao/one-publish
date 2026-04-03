@@ -170,6 +170,8 @@ beforeAll(() => {
         profileGroup: "项目发布配置",
         moreActions: "更多操作",
         recentlyUsed: "最近使用",
+        showReorderControls: "开启排序",
+        hideReorderControls: "关闭排序",
         favoriteConfig: "收藏配置",
         unfavoriteConfig: "取消收藏",
         dragToReorder: "拖动排序",
@@ -271,6 +273,67 @@ describe("PublishConfigPanel", () => {
     expect(onSelectProjectProfile).not.toHaveBeenCalled();
   });
 
+  it("点击排序按钮后会切换发布配置拖拽手柄的常驻显示", () => {
+    const { container } = render(
+      <PublishConfigPanel
+        selectedPreset="release-fd"
+        isCustomMode={true}
+        profiles={[createProfile("alpha-profile"), createProfile("beta-profile")]}
+        activeProfileName="alpha-profile"
+        onSelectProfile={() => {}}
+        onCreateProfile={() => {}}
+        onEditProfile={() => {}}
+        onRefreshProfiles={() => {}}
+        onOpenConfigDialog={() => {}}
+        onDeleteProfile={() => {}}
+        dotnetSchema={dotnetSchema}
+        projectPublishProfiles={[]}
+        onSelectProjectProfile={() => {}}
+        onCopyProjectProfileToCustom={async (_name, _config: PublishConfigStore) => "copied"}
+        recentConfigKeys={[]}
+        favoriteConfigKeys={[]}
+        onToggleFavoriteConfig={() => {}}
+        onRemoveRecentConfig={() => {}}
+        onReorderRecentConfigs={() => {}}
+        onReorderProjectProfiles={() => {}}
+        onReorderProfiles={() => {}}
+      />
+    );
+
+    const profileRow = container.querySelector<HTMLElement>(
+      '[data-list-item-id="userprofile:alpha-profile"]'
+    );
+    expect(profileRow).not.toBeNull();
+    const profileMainButton = profileRow!.querySelector<HTMLButtonElement>(
+      "button[aria-pressed]"
+    );
+    expect(profileMainButton).not.toBeNull();
+
+    expect(
+      within(profileRow!).queryByRole("button", {
+        name: "拖动排序",
+      })
+    ).toBeNull();
+    expect(profileMainButton!.className).toContain("pl-3");
+
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "开启排序",
+      })
+    );
+
+    const dragHandle = within(profileRow!).getByRole("button", {
+      name: "拖动排序",
+    });
+    expect(
+      screen.getByRole("button", {
+        name: "关闭排序",
+      })
+    ).toHaveAttribute("aria-pressed", "true");
+    expect(dragHandle).toBeInTheDocument();
+    expect(profileMainButton!.className).toContain("pl-10");
+  });
+
   it("最近使用组越过相邻项中线后会实时冒泡，并按 preview 顺序提交", async () => {
     const onReorderRecentConfigs = vi.fn();
 
@@ -312,6 +375,12 @@ describe("PublishConfigPanel", () => {
 
     expect(sourceRow).not.toBeNull();
     expect(targetRow).not.toBeNull();
+
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "开启排序",
+      })
+    );
 
     act(() => {
       fireEvent.pointerDown(
@@ -398,6 +467,12 @@ describe("PublishConfigPanel", () => {
     expect(sourceRow).not.toBeNull();
     expect(targetRow).not.toBeNull();
 
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "开启排序",
+      })
+    );
+
     act(() => {
       fireEvent.pointerDown(
         within(sourceRow!).getByRole("button", { name: "拖动排序" }),
@@ -476,6 +551,12 @@ describe("PublishConfigPanel", () => {
 
     expect(sourceRow).not.toBeNull();
     expect(targetRow).not.toBeNull();
+
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "开启排序",
+      })
+    );
 
     act(() => {
       fireEvent.pointerDown(

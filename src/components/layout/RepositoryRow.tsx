@@ -25,6 +25,7 @@ interface RepositoryRowProps {
   onRowBlur: (repoId: string) => void;
   onMenuOpenChange: (repoId: string, open: boolean) => void;
   dragEnabled: boolean;
+  dragHandleVisible: boolean;
   dragHandleLabel: string;
   dragDisabledLabel: string;
   isDragging: boolean;
@@ -52,6 +53,7 @@ export function RepositoryRow({
   onRowBlur,
   onMenuOpenChange,
   dragEnabled,
+  dragHandleVisible,
   dragHandleLabel,
   dragDisabledLabel,
   isDragging,
@@ -89,6 +91,7 @@ export function RepositoryRow({
       }}
     >
       <ListDragHandle
+        visible={dragHandleVisible}
         enabled={dragEnabled}
         label={dragHandleLabel}
         disabledLabel={dragDisabledLabel}
@@ -100,7 +103,10 @@ export function RepositoryRow({
         type="button"
         aria-pressed={isSelected}
         aria-label={`${repoT.selectRepository || "选择仓库"}: ${repo.name}`}
-        className="flex w-full items-start gap-2.5 rounded-2xl border border-transparent bg-transparent py-2.5 pl-10 pr-11 text-left shadow-none outline-none transition-all duration-300 hover:bg-[var(--glass-bg)]/20 focus-visible:ring-2 focus-visible:ring-primary/30 focus-visible:ring-offset-1 focus-visible:ring-offset-background"
+        className={cn(
+          "flex w-full items-start gap-2.5 rounded-2xl border border-transparent bg-transparent py-2.5 pr-11 text-left shadow-none outline-none transition-all duration-300 hover:bg-[var(--glass-bg)]/20 focus-visible:ring-2 focus-visible:ring-primary/30 focus-visible:ring-offset-1 focus-visible:ring-offset-background",
+          dragHandleVisible ? "pl-10" : "pl-3"
+        )}
         onClick={() => {
           onSelect(repo.id);
         }}

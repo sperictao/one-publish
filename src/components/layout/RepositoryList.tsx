@@ -17,7 +17,15 @@ import {
 } from "@/lib/listOrdering";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { Search, Plus, Settings, ChevronDown, FolderGit2, Package } from "lucide-react";
+import {
+  Search,
+  Plus,
+  Settings,
+  ChevronDown,
+  FolderGit2,
+  Package,
+  ArrowUpDown,
+} from "lucide-react";
 import type { ProjectScanCandidates } from "@/types/project";
 import type { Branch, Repository } from "@/types/repository";
 import { useI18n } from "@/hooks/useI18n";
@@ -127,8 +135,14 @@ export function RepositoryList({
   const [filterExpanded, setFilterExpanded] = useState(true);
   const [editingRepo, setEditingRepo] = useState<Repository | null>(null);
   const [floatingEnhancerEnabled, setFloatingEnhancerEnabled] = useState(false);
+  const [showReorderControls, setShowReorderControls] = useState(false);
   const { translations } = useI18n();
   const repoT = translations.repositoryList || {};
+  const listActionButtonClass =
+    "glass-surface flex h-7 w-7 items-center justify-center rounded-full transition-all duration-300 hover:bg-[var(--glass-bg-hover)]";
+  const reorderControlsLabel = showReorderControls
+    ? repoT.hideReorderControls || "关闭排序"
+    : repoT.showReorderControls || "开启排序";
   const fallbackListRef = useRef<HTMLDivElement | null>(null);
   const fallbackFloatingCardSurfaceRef = useRef<HTMLDivElement | null>(null);
 
@@ -146,8 +160,11 @@ export function RepositoryList({
     () => filteredRepos.map((repo) => repo.id),
     [filteredRepos]
   );
+  const repoSortModeEnabled = showReorderControls;
   const repoDragEnabled =
-    searchQuery.trim().length === 0 && repositories.length > 1;
+    repoSortModeEnabled &&
+    searchQuery.trim().length === 0 &&
+    repositories.length > 1;
 
   const interaction = useRepositoryListInteractionState({
     filteredRepoIds,
@@ -400,6 +417,7 @@ export function RepositoryList({
                   onRowBlur={interaction.handleRowBlur}
                   onMenuOpenChange={interaction.handleMenuOpenChange}
                   dragEnabled={repoDragEnabled}
+                  dragHandleVisible={repoDragEnabled}
                   dragHandleLabel={repoT.dragToReorder || "拖动排序"}
                   dragDisabledLabel={
                     repoT.dragDisabledWhileSearching || "搜索时无法排序"
@@ -494,18 +512,45 @@ export function RepositoryList({
             )}
           />
         </button>
-        <button
-          type="button"
-          className="glass-surface flex h-7 w-7 items-center justify-center rounded-full transition-all duration-300 hover:bg-[var(--glass-bg-hover)]"
-          onClick={(event) => {
-            event.stopPropagation();
-            onAddRepo();
-          }}
-          title={repoT.addRepository || "添加仓库"}
-          data-tauri-no-drag
-        >
-          <Plus className="h-3.5 w-3.5 text-muted-foreground transition-transform duration-300 hover:rotate-90" />
-        </button>
+        <div className="flex items-center gap-1.5">
+          <button
+            type="button"
+            className={listActionButtonClass}
+            onClick={(event) => {
+              event.stopPropagation();
+              onAddRepo();
+            }}
+            title={repoT.addRepository || "添加仓库"}
+            data-tauri-no-drag
+          >
+            <Plus className="h-3.5 w-3.5 text-muted-foreground transition-transform duration-300 hover:rotate-90" />
+          </button>
+          <button
+            type="button"
+            className={cn(
+              listActionButtonClass,
+              showReorderControls &&
+                "bg-[var(--glass-bg-hover)] shadow-[inset_0_1px_0_rgba(255,255,255,0.72),0_1px_2px_rgba(15,23,42,0.06)] dark:bg-white/[0.06] dark:shadow-[inset_0_1px_0_rgba(255,255,255,0.08)]"
+            )}
+            onClick={(event) => {
+              event.stopPropagation();
+              setShowReorderControls((value) => !value);
+            }}
+            title={reorderControlsLabel}
+            aria-label={reorderControlsLabel}
+            aria-pressed={showReorderControls}
+            data-tauri-no-drag
+          >
+            <ArrowUpDown
+              className={cn(
+                "h-3.5 w-3.5 transition-[transform,color] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]",
+                showReorderControls
+                  ? "rotate-180 text-primary"
+                  : "rotate-0 text-muted-foreground"
+              )}
+            />
+          </button>
+        </div>
       </div>
 
       <div className="px-3 py-1.5">

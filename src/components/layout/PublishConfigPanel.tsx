@@ -43,6 +43,7 @@ import {
   Clock,
   Star,
   X,
+  ArrowUpDown,
 } from "lucide-react";
 import { toast } from "sonner";
 import {
@@ -264,6 +265,7 @@ function ProfileItem({
   onItemFocus,
   onItemBlur,
   dragEnabled,
+  dragHandleVisible,
   dragHandleLabel,
   dragDisabledLabel,
   isDragging,
@@ -294,6 +296,7 @@ function ProfileItem({
   onItemBlur: () => void;
   groupKey: string;
   dragEnabled: boolean;
+  dragHandleVisible: boolean;
   dragHandleLabel: string;
   dragDisabledLabel: string;
   isDragging: boolean;
@@ -359,6 +362,7 @@ function ProfileItem({
       }}
     >
       <ListDragHandle
+        visible={dragHandleVisible}
         enabled={dragEnabled}
         label={dragHandleLabel}
         disabledLabel={dragDisabledLabel}
@@ -369,7 +373,10 @@ function ProfileItem({
       <button
         type="button"
         aria-pressed={isSelected}
-        className="flex w-full items-center gap-2.5 rounded-2xl border border-transparent bg-transparent py-2 pl-10 pr-11 text-left shadow-none outline-none transition-all duration-300 hover:bg-[var(--glass-bg)]/20 focus-visible:ring-2 focus-visible:ring-primary/30 focus-visible:ring-offset-1 focus-visible:ring-offset-background"
+        className={cn(
+          "flex w-full items-center gap-2.5 rounded-2xl border border-transparent bg-transparent py-2 pr-11 text-left shadow-none outline-none transition-all duration-300 hover:bg-[var(--glass-bg)]/20 focus-visible:ring-2 focus-visible:ring-primary/30 focus-visible:ring-offset-1 focus-visible:ring-offset-background",
+          dragHandleVisible ? "pl-10" : "pl-3"
+        )}
         onClick={onClick}
       >
         <span
@@ -448,6 +455,7 @@ export function PublishConfigPanel({
   const [groupFilterOpen, setGroupFilterOpen] = useState(false);
   const [preferredSelectedRenderId, setPreferredSelectedRenderId] = useState<string | null>(null);
   const [floatingEnhancerEnabled, setFloatingEnhancerEnabled] = useState(false);
+  const [showReorderControls, setShowReorderControls] = useState(false);
   const [projectProfileViewerOpen, setProjectProfileViewerOpen] = useState(false);
   const [projectProfileViewerState, setProjectProfileViewerState] =
     useState<ProjectProfileViewerState>({
@@ -473,6 +481,11 @@ export function PublishConfigPanel({
   const deleteConfigLabel = t.deleteConfig || "删除配置";
   const headerButtonClass =
     "h-7 w-9 rounded-full p-0 text-muted-foreground/60 hover:bg-black/[0.045] hover:text-foreground hover:shadow-[inset_0_1px_0_rgba(255,255,255,0.72),0_1px_2px_rgba(15,23,42,0.06)] dark:hover:bg-white/[0.06] dark:hover:shadow-[inset_0_1px_0_rgba(255,255,255,0.08)]";
+  const listActionButtonClass =
+    "glass-surface flex h-7 w-7 items-center justify-center rounded-full transition-all duration-300 hover:bg-[var(--glass-bg-hover)]";
+  const reorderControlsLabel = showReorderControls
+    ? t.hideReorderControls || "关闭排序"
+    : t.showReorderControls || "开启排序";
   const fallbackListRef = useRef<HTMLDivElement | null>(null);
   const fallbackFloatingCardSurfaceRef = useRef<HTMLDivElement | null>(null);
   const latestProjectProfileRequestId = useRef(0);
@@ -638,15 +651,17 @@ export function PublishConfigPanel({
 
   const showRecentItems =
     !query && groupFilterValue === ALL_GROUP_FILTER && recentItems.length > 0;
-  const recentDragEnabled = showRecentItems && recentItems.length > 1;
+  const sortModeEnabled = showReorderControls;
+  const recentDragEnabled =
+    sortModeEnabled && showRecentItems && recentItems.length > 1;
   const projectProfileDragEnabled =
-    query.length === 0 && visibleProjectProfiles.length > 1;
+    sortModeEnabled && query.length === 0 && visibleProjectProfiles.length > 1;
   const visibleCustomProfileCount = visibleGroupedFilteredProfiles.reduce(
     (total, group) => total + group.items.length,
     0
   );
   const customProfileDragEnabled =
-    query.length === 0 && visibleCustomProfileCount > 1;
+    sortModeEnabled && query.length === 0 && visibleCustomProfileCount > 1;
 
   const selectedConfigId = useMemo(() => {
     if (isCustomMode && activeProfileName) {
@@ -1279,6 +1294,7 @@ export function PublishConfigPanel({
                   }}
                 >
                   <ListDragHandle
+                    visible={recentDragEnabled}
                     enabled={recentDragEnabled}
                     label={t.dragToReorder || "拖动排序"}
                     disabledLabel={
@@ -1291,7 +1307,10 @@ export function PublishConfigPanel({
                   <button
                     type="button"
                     aria-pressed={item.key === selectedConfigId}
-                    className="flex w-full items-center gap-2.5 rounded-2xl border border-transparent bg-transparent py-2 pl-10 pr-11 text-left shadow-none outline-none transition-all duration-300 hover:bg-[var(--glass-bg)]/20 focus-visible:ring-2 focus-visible:ring-primary/30 focus-visible:ring-offset-1 focus-visible:ring-offset-background"
+                    className={cn(
+                      "flex w-full items-center gap-2.5 rounded-2xl border border-transparent bg-transparent py-2 pr-11 text-left shadow-none outline-none transition-all duration-300 hover:bg-[var(--glass-bg)]/20 focus-visible:ring-2 focus-visible:ring-primary/30 focus-visible:ring-offset-1 focus-visible:ring-offset-background",
+                      recentDragEnabled ? "pl-10" : "pl-3"
+                    )}
                     onClick={() => {
                       setPreferredSelectedRenderId(`recent:${item.key}`);
                       item.onClick();
@@ -1417,6 +1436,7 @@ export function PublishConfigPanel({
                   }}
                 >
                   <ListDragHandle
+                    visible={projectProfileDragEnabled}
                     enabled={projectProfileDragEnabled}
                     label={t.dragToReorder || "拖动排序"}
                     disabledLabel={
@@ -1429,7 +1449,10 @@ export function PublishConfigPanel({
                   <button
                     type="button"
                     aria-pressed={isPubxmlSelected}
-                    className="flex w-full items-center gap-2.5 rounded-2xl border border-transparent bg-transparent py-2 pl-10 pr-11 text-left shadow-none outline-none transition-all duration-300 hover:bg-[var(--glass-bg)]/20 focus-visible:ring-2 focus-visible:ring-primary/30 focus-visible:ring-offset-1 focus-visible:ring-offset-background"
+                    className={cn(
+                      "flex w-full items-center gap-2.5 rounded-2xl border border-transparent bg-transparent py-2 pr-11 text-left shadow-none outline-none transition-all duration-300 hover:bg-[var(--glass-bg)]/20 focus-visible:ring-2 focus-visible:ring-primary/30 focus-visible:ring-offset-1 focus-visible:ring-offset-background",
+                      projectProfileDragEnabled ? "pl-10" : "pl-3"
+                    )}
                     onClick={() => {
                       setPreferredSelectedRenderId(configKey);
                       onSelectProjectProfile(name);
@@ -1560,6 +1583,7 @@ export function PublishConfigPanel({
                   }
                   groupKey={group.groupKey}
                   dragEnabled={customProfileDragEnabled}
+                  dragHandleVisible={customProfileDragEnabled}
                   dragHandleLabel={t.dragToReorder || "拖动排序"}
                   dragDisabledLabel={
                     t.dragDisabledWhileSearching || "搜索时无法排序"
@@ -1607,6 +1631,7 @@ export function PublishConfigPanel({
       previewVisibleGroupedFilteredProfiles,
       previewVisibleProjectProfiles,
       recentDragEnabled,
+      showReorderControls,
       recentMotion,
       recentReorder.draggingItemId,
       recentReorder.dropTarget,
@@ -1747,7 +1772,7 @@ export function PublishConfigPanel({
         <div className="flex items-center gap-1.5">
           <button
             type="button"
-            className="glass-surface flex h-7 w-7 items-center justify-center rounded-full transition-all duration-300 hover:bg-[var(--glass-bg-hover)]"
+            className={listActionButtonClass}
             onClick={(e) => {
               e.stopPropagation();
               onCreateProfile();
@@ -1759,7 +1784,32 @@ export function PublishConfigPanel({
           </button>
           <button
             type="button"
-            className="glass-surface flex h-7 w-7 items-center justify-center rounded-full transition-all duration-300 hover:bg-[var(--glass-bg-hover)]"
+            className={cn(
+              listActionButtonClass,
+              showReorderControls &&
+                "bg-[var(--glass-bg-hover)] shadow-[inset_0_1px_0_rgba(255,255,255,0.72),0_1px_2px_rgba(15,23,42,0.06)] dark:bg-white/[0.06] dark:shadow-[inset_0_1px_0_rgba(255,255,255,0.08)]"
+            )}
+            onClick={(e) => {
+              e.stopPropagation();
+              setShowReorderControls((value) => !value);
+            }}
+            title={reorderControlsLabel}
+            aria-label={reorderControlsLabel}
+            aria-pressed={showReorderControls}
+            data-tauri-no-drag
+          >
+            <ArrowUpDown
+              className={cn(
+                "h-3.5 w-3.5 transition-[transform,color] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]",
+                showReorderControls
+                  ? "rotate-180 text-primary"
+                  : "rotate-0 text-muted-foreground"
+              )}
+            />
+          </button>
+          <button
+            type="button"
+            className={listActionButtonClass}
             onClick={(e) => {
               e.stopPropagation();
               onRefreshProfiles();
@@ -1771,7 +1821,7 @@ export function PublishConfigPanel({
           </button>
           <button
             type="button"
-            className="glass-surface flex h-7 w-7 items-center justify-center rounded-full transition-all duration-300 hover:bg-[var(--glass-bg-hover)]"
+            className={listActionButtonClass}
             onClick={(e) => {
               e.stopPropagation();
               onOpenConfigDialog();
