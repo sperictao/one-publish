@@ -33,6 +33,7 @@ import {
   exportConfig,
   importConfig,
   applyImportedConfig,
+  type ConfigParameters,
   type ConfigProfile,
 } from "@/lib/store";
 import { useI18n } from "@/hooks/useI18n";
@@ -42,10 +43,14 @@ interface ConfigManagementContentProps {
   onLoadProfile: (profile: ConfigProfile) => void;
   currentProviderId: string;
   repoId: string | null;
-  currentParameters: Record<string, any>;
+  currentParameters: ConfigParameters;
   closeOnLoad?: boolean;
   onClose?: () => void;
   onProfilesChanged?: () => void | Promise<void>;
+}
+
+interface PendingImportState {
+  profiles: ConfigProfile[];
 }
 
 interface ConfigDialogProps {
@@ -54,7 +59,7 @@ interface ConfigDialogProps {
   onLoadProfile: (profile: ConfigProfile) => void;
   currentProviderId: string;
   repoId: string | null;
-  currentParameters: Record<string, any>;
+  currentParameters: ConfigParameters;
   onProfilesChanged?: () => void | Promise<void>;
 }
 
@@ -75,6 +80,8 @@ export function ConfigManagementContent({
   const [isLoading, setIsLoading] = useState(false);
   const [newProfileName, setNewProfileName] = useState("");
   const [isSaving, setIsSaving] = useState(false);
+  const [pendingImport, setPendingImport] = useState<PendingImportState | null>(null);
+  const [isApplyingImport, setIsApplyingImport] = useState(false);
 
   const notifyProfilesChanged = useCallback(async () => {
     await Promise.resolve(onProfilesChanged?.());
@@ -91,8 +98,9 @@ export function ConfigManagementContent({
       const data = await getProfiles(repoId);
       setProfiles(data);
     } catch (err) {
-      console.error("加载配置文件失败:", err);
-      toast.error(profileT.loadFailed || "加载配置文件失败");
+      toast.error(profileT.loadFailed || "加载配置文件失败", {
+        description: err instanceof Error ? err.message : String(err),
+      });
     } finally {
       setIsLoading(false);
     }
@@ -125,8 +133,9 @@ export function ConfigManagementContent({
       await loadProfiles();
       await notifyProfilesChanged();
     } catch (err) {
-      console.error("保存配置文件失败:", err);
-      toast.error(String(err) || profileT.saveFailed || "保存配置文件失败");
+      toast.error(profileT.saveFailed || "保存配置文件失败", {
+        description: err instanceof Error ? err.message : String(err),
+      });
     } finally {
       setIsSaving(false);
     }
@@ -145,8 +154,9 @@ export function ConfigManagementContent({
       await loadProfiles();
       await notifyProfilesChanged();
     } catch (err) {
-      console.error("删除配置文件失败:", err);
-      toast.error(profileT.deleteFailed || "删除配置文件失败");
+      toast.error(profileT.deleteFailed || "删除配置文件失败", {
+        description: err instanceof Error ? err.message : String(err),
+      });
     }
   };
 
@@ -177,10 +187,46 @@ export function ConfigManagementContent({
         toast.success(profileT.exportSuccess || "配置导出成功");
       }
     } catch (err) {
-      console.error("导出配置失败:", err);
-      toast.error(profileT.exportFailed || "导出配置失败");
+      toast.error(profileT.exportFailed || "导出配置失败", {
+        description: err instanceof Error ? err.message : String(err),
+      });
     }
   };
+
+  const closeImportPreview = useCallback(() => {
+    if (isApplyingImport) {
+      return;
+    }
+    setPendingImport(null);
+  }, [isApplyingImport]);
+
+  const confirmImportConfig = useCallback(async () => {
+    if (!repoId || !pendingImport) {
+      return;
+    }
+
+    setIsApplyingImport(true);
+    try {
+      await applyImportedConfig(repoId, pendingImport.profiles);
+      toast.success(profileT.importSuccess || "配置导入成功");
+      setPendingImport(null);
+      await loadProfiles();
+      await notifyProfilesChanged();
+    } catch (err) {
+      toast.error(profileT.importFailed || "导入配置失败", {
+        description: err instanceof Error ? err.message : String(err),
+      });
+    } finally {
+      setIsApplyingImport(false);
+    }
+  }, [
+    loadProfiles,
+    notifyProfilesChanged,
+    pendingImport,
+    profileT.importFailed,
+    profileT.importSuccess,
+    repoId,
+  ]);
 
   const handleImportConfig = async () => {
     if (!repoId) return;
@@ -198,32 +244,21 @@ export function ConfigManagementContent({
         setIsLoading(true);
         try {
           const config = await importConfig(filePath as string);
-
-          const confirm = window.confirm(
-            (profileT.importConfirm ||
-              "即将导入 {{count}} 个配置文件:\n{{profiles}}\n\n确认导入？")
-              .replace("{{count}}", String(config.profiles.length))
-              .replace(
-                "{{profiles}}",
-                config.profiles.map((profile) => `- ${profile.name}`).join("\n")
-              )
-          );
-
-          if (confirm) {
-            await applyImportedConfig(repoId, config.profiles);
-            toast.success(profileT.importSuccess || "配置导入成功");
-            await loadProfiles();
-            await notifyProfilesChanged();
-          }
+          setPendingImport({
+            profiles: config.profiles,
+          });
         } catch (err) {
-          console.error("导入配置失败:", err);
-          toast.error(String(err) || profileT.importFailed || "导入配置失败");
+          toast.error(profileT.importFailed || "导入配置失败", {
+            description: err instanceof Error ? err.message : String(err),
+          });
         } finally {
           setIsLoading(false);
         }
       }
     } catch (err) {
-      console.error("选择文件失败:", err);
+      toast.error(profileT.importFailed || "导入配置失败", {
+        description: err instanceof Error ? err.message : String(err),
+      });
     }
   };
 
@@ -372,6 +407,84 @@ export function ConfigManagementContent({
           </div>
         )}
       </SectionShell>
+
+      <Dialog open={Boolean(pendingImport)} onOpenChange={(open) => {
+        if (!open) {
+          closeImportPreview();
+        }
+      }}>
+        {pendingImport ? (
+          <AppDialogShell
+            size="compact"
+            title={profileT.importConfirmTitle || "确认导入配置"}
+            description={
+              (profileT.importConfirmDescription ||
+                "将把以下 {{count}} 个配置导入当前仓库，并按现有规则进行合并或覆盖。")
+                .replace("{{count}}", String(pendingImport.profiles.length))
+            }
+            icon={<Upload className="h-4 w-4" />}
+            bodyInnerClassName="space-y-4"
+            footer={
+              <div className="flex w-full flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={closeImportPreview}
+                  disabled={isApplyingImport}
+                >
+                  {translations.common?.cancel || "取消"}
+                </Button>
+                <Button
+                  type="button"
+                  onClick={() => void confirmImportConfig()}
+                  disabled={isApplyingImport}
+                >
+                  {isApplyingImport ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      {profileT.importing || "导入中..."}
+                    </>
+                  ) : (
+                    profileT.confirmImportAction || "确认导入"
+                  )}
+                </Button>
+              </div>
+            }
+          >
+            <AppDialogInset className="space-y-3">
+              <div className="flex items-start gap-3">
+                <AlertCircle className="mt-0.5 h-4 w-4 text-amber-600" />
+                <div className="space-y-1 text-sm">
+                  <p className="font-medium">
+                    {profileT.importConfirmListTitle || "待导入配置"}
+                  </p>
+                  <p className="text-muted-foreground">
+                    {profileT.importConfirmHint ||
+                      "导入后会立即刷新当前仓库的配置列表。"}
+                  </p>
+                </div>
+              </div>
+              <div className="rounded-2xl border border-border/70 bg-background/50 p-3">
+                <ul className="max-h-52 space-y-2 overflow-y-auto text-sm">
+                  {pendingImport.profiles.map((profile) => (
+                    <li
+                      key={`${profile.providerId}:${profile.name}`}
+                      className="flex items-center justify-between gap-3 rounded-xl px-2 py-1.5"
+                    >
+                      <span className="truncate font-medium text-foreground">
+                        {profile.name}
+                      </span>
+                      <span className="flex-shrink-0 text-xs text-muted-foreground">
+                        {profile.providerId}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            </AppDialogInset>
+          </AppDialogShell>
+        ) : null}
+      </Dialog>
     </div>
   );
 }

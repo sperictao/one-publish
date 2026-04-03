@@ -22,14 +22,16 @@ const en = {
   version: { current: "Current Version: v{}" },
 };
 
+type TestTranslationCache = Parameters<typeof __setTranslationsCacheForTest>[0];
+
 describe("useI18n.t", () => {
   beforeEach(() => {
     localStorage.clear();
-    __setTranslationsCacheForTest({ zh, en } as any);
+    __setTranslationsCacheForTest({ zh, en } as TestTranslationCache);
   });
 
   it("returns key when cache not loaded", () => {
-    __setTranslationsCacheForTest({} as any);
+    __setTranslationsCacheForTest({} as TestTranslationCache);
     localStorage.setItem("app-language", "zh");
     expect(t("settings.title")).toBe("settings.title");
   });
@@ -58,7 +60,7 @@ describe("useI18n.t", () => {
 describe("useI18n hook sync", () => {
   beforeEach(() => {
     localStorage.clear();
-    __setTranslationsCacheForTest({ zh, en } as any);
+    __setTranslationsCacheForTest({ zh, en } as TestTranslationCache);
   });
 
   it("syncs language across hook instances", async () => {

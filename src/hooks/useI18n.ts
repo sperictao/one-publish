@@ -11,7 +11,9 @@ const LANGUAGE_STORAGE_KEY = "app-language";
 const LANGUAGE_CHANGED_EVENT = "app-language-changed";
 
 // 导入翻译文件
+type TranslationLeaf = string;
 type TranslationTree = Record<string, any>;
+type TranslationNode = TranslationLeaf | TranslationTree;
 type TranslationModule = { default: TranslationTree };
 
 const translations: Record<Language, () => Promise<TranslationModule>> = {
@@ -81,7 +83,12 @@ function t(key: string, params?: Record<string, string | number>): string {
 
   const value = key
     .split(".")
-    .reduce<any>((acc, part) => (acc ? acc[part] : undefined), translations);
+    .reduce<TranslationNode | undefined>((acc, part) => {
+      if (!acc || typeof acc === "string") {
+        return undefined;
+      }
+      return acc[part];
+    }, translations);
 
   if (typeof value === "string") {
     text = value;
