@@ -28,7 +28,7 @@ import { usePublishLogStream } from "@/hooks/usePublishLogStream";
 import { usePublishSpecBuilder } from "@/hooks/usePublishSpecBuilder";
 import { usePublishUiState } from "@/hooks/usePublishUiState";
 import { createPublishExecutionRecord } from "@/lib/publishExecutionRecord";
-import { resolvePublishFailureMessage } from "@/lib/failureSignature";
+import { normalizePublishResult } from "@/lib/publishFailure";
 import type { PublishConfigStore } from "@/lib/store";
 import type { ProjectInfo } from "@/types/project";
 import type { ParameterValue } from "@/types/parameters";
@@ -495,17 +495,10 @@ export function usePublishRunner({
           spec,
         });
         const outputLogSnapshot = await waitForOutputLogSnapshot();
-        const resolvedError = resolvePublishFailureMessage({
-          error: result.error,
-          output: outputLogSnapshot,
+        const resolvedResult = normalizePublishResult({
+          result,
+          outputLog: outputLogSnapshot,
         });
-        const resolvedResult =
-          resolvedError === result.error
-            ? result
-            : {
-                ...result,
-                error: resolvedError,
-              };
 
         if (isCurrentPresentationRevision(runRevision)) {
           setPublishResult(resolvedResult);
@@ -570,19 +563,18 @@ export function usePublishRunner({
         const rawErrorMessage = extractInvokeErrorMessage(err);
         const failureReason = analyzePublishExecutionFailure(err);
         const outputLogSnapshot = await waitForOutputLogSnapshot();
-        const resolvedError = resolvePublishFailureMessage({
-          error: rawErrorMessage,
-          output: outputLogSnapshot,
-        });
 
-        const failedResult: PublishResult = {
-          provider_id: spec.provider_id,
-          success: false,
-          cancelled: false,
-          error: resolvedError,
-          output_dir: "",
-          file_count: 0,
-        };
+        const failedResult = normalizePublishResult({
+          result: {
+            provider_id: spec.provider_id,
+            success: false,
+            cancelled: false,
+            error: rawErrorMessage,
+            output_dir: "",
+            file_count: 0,
+          },
+          outputLog: outputLogSnapshot,
+        });
         if (isCurrentPresentationRevision(runRevision)) {
           setPublishResult(failedResult);
         }
@@ -590,12 +582,12 @@ export function usePublishRunner({
         const feedback = getPublishFailureFeedback(
           failureReason,
           appT,
-          resolvedError ?? rawErrorMessage
+          failedResult.error ?? rawErrorMessage
         );
         const notified = await notifyFeedback(
           "error",
           feedback.title,
-          resolvedError || feedback.description,
+          failedResult.error || feedback.description,
           feedbackMode
         );
 

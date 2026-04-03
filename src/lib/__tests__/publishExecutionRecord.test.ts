@@ -70,7 +70,8 @@ describe("createPublishExecutionRecord", () => {
         provider_id: "dotnet",
         success: false,
         cancelled: false,
-        error: "发布失败，退出代码: Some(1)",
+        error:
+          "[stderr] CSC : error CS0246: The type or namespace name 'Foo' could not be found",
         output_dir: "",
         file_count: 0,
       },

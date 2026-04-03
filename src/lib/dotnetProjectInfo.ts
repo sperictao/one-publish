@@ -33,32 +33,3 @@ export async function resolvePreferredDotnetProjectInfo(params: {
 
   return await params.scanProject(repoPath);
 }
-
-export function isProjectInfoInRepoScope(params: {
-  selectedRepoPath?: string | null;
-  selectedRepoProjectFile?: string | null;
-  projectInfo?: ProjectInfo | null;
-}): boolean {
-  const selectedRepoPath = params.selectedRepoPath?.trim();
-  const projectInfo = params.projectInfo;
-
-  if (!selectedRepoPath || !projectInfo) {
-    return false;
-  }
-
-  if (projectInfo.root_path !== selectedRepoPath) {
-    return false;
-  }
-
-  const boundProjectFile = isSupportedDotnetProjectFile(
-    params.selectedRepoProjectFile
-  )
-    ? params.selectedRepoProjectFile.trim()
-    : null;
-
-  if (boundProjectFile && projectInfo.project_file !== boundProjectFile) {
-    return false;
-  }
-
-  return true;
-}

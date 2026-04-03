@@ -1,7 +1,4 @@
-import {
-  deriveFailureSignature,
-  resolvePublishFailureMessage,
-} from "@/lib/failureSignature";
+import { deriveFailureSignature } from "@/lib/failureSignature";
 import type { ExecutionRecord, JsonValue } from "@/lib/store";
 import type {
   ProviderPublishSpec,
@@ -48,14 +45,10 @@ export function createPublishExecutionRecord(params: {
   outputLog: string;
 }): ExecutionRecord {
   const commandLine = extractCommandLine(params.outputLog);
-  const resolvedError = resolvePublishFailureMessage({
-    error: params.result.error,
-    output: params.outputLog,
-  });
   const failureSignature =
     !params.result.success && !params.result.cancelled
       ? deriveFailureSignature({
-          error: resolvedError,
+          error: params.result.error,
           output: params.outputLog,
         })
       : null;
@@ -70,7 +63,7 @@ export function createPublishExecutionRecord(params: {
     success: params.result.success,
     cancelled: params.result.cancelled,
     outputDir: params.result.output_dir || null,
-    error: resolvedError,
+    error: params.result.error,
     commandLine,
     snapshotPath: null,
     failureSignature,

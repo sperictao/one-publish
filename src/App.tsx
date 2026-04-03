@@ -30,7 +30,6 @@ import { useProviderRuntime } from "@/hooks/useProviderRuntime";
 import { useI18n, type Language } from "@/hooks/useI18n";
 import type { PublishConfigStore } from "@/lib/store";
 import { buildDotnetProfileParameters } from "@/lib/dotnetPublishConfig";
-import { isProjectInfoInRepoScope } from "@/lib/dotnetProjectInfo";
 
 // Layout Components
 import { ResizeHandle } from "@/components/layout/ResizeHandle";
@@ -291,7 +290,7 @@ function App() {
       }
 
       if (activeProviderId === "dotnet") {
-        if (scopedProjectInfo) {
+        if (projectInfo) {
           startPublish();
         }
         return;
@@ -456,20 +455,6 @@ function App() {
     handleCreateProfileFromProjectProfile,
   } = profilesState;
 
-  const scopedProjectInfo = useMemo(() => {
-    if (
-      !isProjectInfoInRepoScope({
-        selectedRepoPath: selectedRepo?.path,
-        selectedRepoProjectFile: selectedRepo?.projectFile,
-        projectInfo,
-      })
-    ) {
-      return null;
-    }
-
-    return projectInfo;
-  }, [projectInfo, selectedRepo]);
-
   const {
     isRerunChecklistEnabled,
     setIsRerunChecklistEnabled,
@@ -522,7 +507,7 @@ function App() {
     activeProfileName,
     customConfig,
     defaultOutputDir,
-    projectInfo: scopedProjectInfo,
+    projectInfo,
     presets: PRESETS,
     specVersion: SPEC_VERSION,
     pushRecentConfig,
@@ -575,7 +560,7 @@ function App() {
     appT,
     publishActions:
       selectedRepo &&
-      (activeProviderId === "dotnet" ? Boolean(scopedProjectInfo) : true)
+      (activeProviderId === "dotnet" ? Boolean(projectInfo) : true)
         ? {
             publishCommand:
               activeProviderId === "dotnet" ? dotnetPublishPreviewCommand : null,
@@ -776,9 +761,9 @@ function App() {
               onRefreshProfiles={loadProfiles}
               onOpenConfigDialog={() => handleConfigDialogOpenChange(true)}
               onDeleteProfile={handleDeleteProfileFromPanel}
-              projectPublishProfiles={scopedProjectInfo?.publish_profiles || []}
-              projectFilePath={scopedProjectInfo?.project_file}
-              projectFrameworkOptions={scopedProjectInfo?.target_frameworks || []}
+              projectPublishProfiles={projectInfo?.publish_profiles || []}
+              projectFilePath={projectInfo?.project_file}
+              projectFrameworkOptions={projectInfo?.target_frameworks || []}
               onSelectProjectProfile={handleSelectProjectProfile}
               onCopyProjectProfileToCustom={handleCreateProfileFromProjectProfile}
               recentConfigKeys={recentConfigKeys}
@@ -887,7 +872,7 @@ function App() {
             quickCreateProfileGroupOptions={quickCreateProfileGroupOptions}
             quickCreateProfileCustomGroup={quickCreateProfileCustomGroup}
             quickCreateProfileDraft={quickCreateProfileDraft}
-            projectFrameworkOptions={scopedProjectInfo?.target_frameworks || []}
+            projectFrameworkOptions={projectInfo?.target_frameworks || []}
             quickCreateProfileSaving={quickCreateProfileSaving}
             quickCreateEditing={isQuickCreateEditing}
             dotnetSchema={providerSchemas.dotnet}
@@ -909,7 +894,7 @@ function App() {
             selectedRepoId={selectedRepoId}
             customConfig={customConfig}
             activeProviderParameters={activeProviderParameters}
-            projectFile={scopedProjectInfo?.project_file}
+            projectFile={projectInfo?.project_file}
             selectedRepoPath={selectedRepo?.path}
           />
         </Suspense>

@@ -5,10 +5,6 @@ export interface FailureSignatureRecord {
 }
 
 const SIGNATURE_MAX_LENGTH = 160;
-const GENERIC_PUBLISH_FAILURE_PATTERNS = [
-  /(?:^发布失败|^publish failed|^process failed).*(?:退出代码|exit code)/i,
-  /(?:退出代码|exit code)\s*[:：]?\s*some\(\d+\)/i,
-];
 
 export function extractFailureContext(output: string): string | null {
   const lines = output
@@ -43,29 +39,6 @@ export function extractFailureContext(output: string): string | null {
   return lines.find((line) => line.startsWith("[stderr]")) || null;
 }
 
-export function isGenericPublishFailureMessage(message: string): boolean {
-  const normalizedMessage = message.trim();
-  return GENERIC_PUBLISH_FAILURE_PATTERNS.some((pattern) =>
-    pattern.test(normalizedMessage)
-  );
-}
-
-export function resolvePublishFailureMessage(params: {
-  error?: string | null;
-  output?: string;
-}): string | null {
-  const error = params.error?.trim() || null;
-  const outputContext = params.output
-    ? extractFailureContext(params.output)
-    : null;
-
-  if (outputContext && (!error || isGenericPublishFailureMessage(error))) {
-    return outputContext;
-  }
-
-  return error || outputContext || null;
-}
-
 export function normalizeFailureSignature(raw: string): string {
   return raw
     .trim()
@@ -84,7 +57,10 @@ export function deriveFailureSignature(params: {
   error?: string | null;
   output?: string;
 }): string | null {
-  const raw = resolvePublishFailureMessage(params);
+  const raw =
+    params.error?.trim() ||
+    (params.output ? extractFailureContext(params.output) : null) ||
+    null;
 
   if (!raw) {
     return null;
