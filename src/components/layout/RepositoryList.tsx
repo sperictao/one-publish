@@ -24,12 +24,10 @@ import { useI18n } from "@/hooks/useI18n";
 import type { RepositoryListFloatingBindings } from "@/components/layout/RepositoryListFloatingLayer";
 import { RepositoryRow } from "@/components/layout/RepositoryRow";
 import { useRepositoryListInteractionState } from "@/components/layout/useRepositoryListInteractionState";
-import {
-  type PointerListPointer,
-  usePointerListReorder,
-} from "@/components/layout/usePointerListReorder";
+import { usePointerListReorder } from "@/components/layout/usePointerListReorder";
 import { composeNodeRefs } from "@/components/layout/composeNodeRefs";
 import { useListReorderMotion } from "@/components/layout/useListReorderMotion";
+import { useListDropSettledState } from "@/components/layout/useListDropSettledState";
 
 const EditRepositoryDialog = lazy(async () => {
   const mod = await import("@/components/layout/EditRepositoryDialog");
@@ -155,39 +153,20 @@ export function RepositoryList({
     filteredRepoIds,
     selectedRepoId,
   });
-  const [settledRepoId, setSettledRepoId] = useState<string | null>(null);
-  const settledRepoPointerRef = useRef<PointerListPointer | null>(null);
-  const clearSettledRepoId = useCallback(() => {
-    settledRepoPointerRef.current = null;
-    setSettledRepoId((previousId) => (previousId === null ? previousId : null));
-  }, []);
-  const setSettledRepoAnchor = useCallback(
-    (repoId: string | null, pointer: PointerListPointer | null) => {
-      settledRepoPointerRef.current = repoId ? pointer : null;
-      setSettledRepoId(repoId);
-    },
-    []
-  );
-  const shouldPreserveSettledRepoAnchor = useCallback(
-    (pointer: PointerListPointer) => {
-      if (!settledRepoId || !settledRepoPointerRef.current) {
-        return false;
-      }
-
-      const dx = Math.abs(pointer.x - settledRepoPointerRef.current.x);
-      const dy = Math.abs(pointer.y - settledRepoPointerRef.current.y);
-      return dx < 2 && dy < 2;
-    },
-    [settledRepoId]
-  );
+  const {
+    settledItemId: settledRepoId,
+    clearSettledItem: clearSettledRepoId,
+    settleFromDragEnd: settleRepoFromDragEnd,
+    shouldIgnorePointerReentry: shouldIgnoreRepoPointerReentry,
+  } = useListDropSettledState<string>();
   const handleListPointerReentry = useCallback(
     (event: ReactPointerEvent<HTMLDivElement>) => {
-      return shouldPreserveSettledRepoAnchor({
+      return shouldIgnoreRepoPointerReentry({
         x: event.clientX,
         y: event.clientY,
       });
     },
-    [shouldPreserveSettledRepoAnchor]
+    [shouldIgnoreRepoPointerReentry]
   );
   const handleListPointerLeave = useCallback(() => {
     clearSettledRepoId();
@@ -195,11 +174,11 @@ export function RepositoryList({
   const repositoryReorder = usePointerListReorder({
     enabled: repoDragEnabled,
     onStart: () => {
-      setSettledRepoAnchor(null, null);
+      clearSettledRepoId();
       interaction.handleListPointerLeave();
     },
-    onEnd: ({ activeItemId, target, pointer }) => {
-      setSettledRepoAnchor(target && activeItemId ? activeItemId : null, pointer);
+    onEnd: (result) => {
+      settleRepoFromDragEnd(result, (itemId) => itemId);
     },
     onCommit: (activeRepoId, target) => {
       const nextRepoIds = reorderItemsByDrop(
@@ -437,7 +416,6 @@ export function RepositoryList({
     },
     [
       branchConnectivityByRepoId,
-      clearSettledRepoId,
       draggingRepoId,
       handleListPointerLeave,
       handleListPointerReentry,
@@ -459,7 +437,8 @@ export function RepositoryList({
       repositoryReorder.dropTarget,
       repositoryReorder.setItemRef,
       repositoryReorder.startDrag,
-      setSettledRepoAnchor,
+      settledRepoId,
+      clearSettledRepoId,
       selectedRepoId,
       visualTargetRepoId,
     ]

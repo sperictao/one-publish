@@ -499,11 +499,11 @@ async function getBubbleThresholdPointerY(
   return targetMidpointY - draggedCenterOffsetY;
 }
 
-async function expectDraggedRowAlignedWithFloatingShell(
+async function measureDraggedRowFloatingAlignment(
   page: Page,
   rowSelector: string
 ) {
-  const alignment = await page.evaluate((selector) => {
+  return page.evaluate((selector) => {
     const row = document.querySelector<HTMLElement>(selector);
     if (!row) {
       return null;
@@ -541,7 +541,39 @@ async function expectDraggedRowAlignedWithFloatingShell(
       heightDelta: Math.abs(nearestCard.height - rowRect.height),
     };
   }, rowSelector);
+}
 
+async function expectDraggedRowAlignedWithFloatingShell(
+  page: Page,
+  rowSelector: string
+) {
+  await expect
+    .poll(
+      async () => {
+        const alignment = await measureDraggedRowFloatingAlignment(page, rowSelector);
+        if (!alignment) {
+          return null;
+        }
+
+        return {
+          topOk: alignment.topDelta < 2,
+          leftOk: alignment.leftDelta < 2,
+          widthOk: alignment.widthDelta < 3,
+          heightOk: alignment.heightDelta < 3,
+        };
+      },
+      {
+        timeout: 300,
+      }
+    )
+    .toEqual({
+      topOk: true,
+      leftOk: true,
+      widthOk: true,
+      heightOk: true,
+    });
+
+  const alignment = await measureDraggedRowFloatingAlignment(page, rowSelector);
   expect(alignment).not.toBeNull();
   expect(alignment?.topDelta ?? 99).toBeLessThan(2);
   expect(alignment?.leftDelta ?? 99).toBeLessThan(2);

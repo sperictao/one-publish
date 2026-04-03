@@ -65,12 +65,12 @@ import {
   ListDragHandle,
 } from "@/components/layout/ListReorderControls";
 import {
-  type PointerListPointer,
   usePointerListReorder,
 } from "@/components/layout/usePointerListReorder";
 import { useListInteractionState } from "@/components/layout/useListInteractionState";
 import { composeNodeRefs } from "@/components/layout/composeNodeRefs";
 import { useListReorderMotion } from "@/components/layout/useListReorderMotion";
+import { useListDropSettledState } from "@/components/layout/useListDropSettledState";
 import type { ParameterSchema } from "@/types/parameters";
 
 const PublishConfigPanelFloatingLayer = lazy(async () => {
@@ -702,43 +702,20 @@ export function PublishConfigPanel({
     filteredItemIds: allConfigIds,
     selectedItemId: selectedRenderId,
   });
-  const [settledConfigRenderId, setSettledConfigRenderId] = useState<string | null>(
-    null
-  );
-  const settledConfigPointerRef = useRef<PointerListPointer | null>(null);
-  const clearSettledConfigRenderId = useCallback(() => {
-    settledConfigPointerRef.current = null;
-    setSettledConfigRenderId((previousId) =>
-      previousId === null ? previousId : null
-    );
-  }, []);
-  const setSettledConfigAnchor = useCallback(
-    (configRenderId: string | null, pointer: PointerListPointer | null) => {
-      settledConfigPointerRef.current = configRenderId ? pointer : null;
-      setSettledConfigRenderId(configRenderId);
-    },
-    []
-  );
-  const shouldPreserveSettledConfigAnchor = useCallback(
-    (pointer: PointerListPointer) => {
-      if (!settledConfigRenderId || !settledConfigPointerRef.current) {
-        return false;
-      }
-
-      const dx = Math.abs(pointer.x - settledConfigPointerRef.current.x);
-      const dy = Math.abs(pointer.y - settledConfigPointerRef.current.y);
-      return dx < 2 && dy < 2;
-    },
-    [settledConfigRenderId]
-  );
+  const {
+    settledItemId: settledConfigRenderId,
+    clearSettledItem: clearSettledConfigRenderId,
+    settleFromDragEnd: settleConfigFromDragEnd,
+    shouldIgnorePointerReentry: shouldIgnoreConfigPointerReentry,
+  } = useListDropSettledState<string>();
   const handleConfigListPointerReentry = useCallback(
     (event: ReactPointerEvent<HTMLDivElement>) => {
-      return shouldPreserveSettledConfigAnchor({
+      return shouldIgnoreConfigPointerReentry({
         x: event.clientX,
         y: event.clientY,
       });
     },
-    [shouldPreserveSettledConfigAnchor]
+    [shouldIgnoreConfigPointerReentry]
   );
   const handleConfigListPointerLeave = useCallback(() => {
     clearSettledConfigRenderId();
@@ -746,13 +723,13 @@ export function PublishConfigPanel({
   const recentReorder = usePointerListReorder<undefined>({
     enabled: recentDragEnabled,
     onStart: () => {
-      setSettledConfigAnchor(null, null);
+      clearSettledConfigRenderId();
       interaction.handleListPointerLeave();
     },
-    onEnd: ({ activeItemId, target, pointer }) => {
-      setSettledConfigAnchor(
-        target && activeItemId ? `recent:${activeItemId}` : null,
-        pointer
+    onEnd: (result) => {
+      settleConfigFromDragEnd(
+        result,
+        (itemId) => `recent:${itemId}`
       );
     },
     onCommit: (activeConfigKey, target) => {
@@ -775,13 +752,13 @@ export function PublishConfigPanel({
   const projectProfileReorder = usePointerListReorder<undefined>({
     enabled: projectProfileDragEnabled,
     onStart: () => {
-      setSettledConfigAnchor(null, null);
+      clearSettledConfigRenderId();
       interaction.handleListPointerLeave();
     },
-    onEnd: ({ activeItemId, target, pointer }) => {
-      setSettledConfigAnchor(
-        target && activeItemId ? `pubxml:${activeItemId}` : null,
-        pointer
+    onEnd: (result) => {
+      settleConfigFromDragEnd(
+        result,
+        (itemId) => `pubxml:${itemId}`
       );
     },
     onCommit: (activeProfileName, target) => {
@@ -804,13 +781,13 @@ export function PublishConfigPanel({
   const customProfileReorder = usePointerListReorder<{ groupKey: string }>({
     enabled: customProfileDragEnabled,
     onStart: () => {
-      setSettledConfigAnchor(null, null);
+      clearSettledConfigRenderId();
       interaction.handleListPointerLeave();
     },
-    onEnd: ({ activeItemId, target, pointer }) => {
-      setSettledConfigAnchor(
-        target && activeItemId ? `userprofile:${activeItemId}` : null,
-        pointer
+    onEnd: (result) => {
+      settleConfigFromDragEnd(
+        result,
+        (itemId) => `userprofile:${itemId}`
       );
     },
     onCommit: (activeProfileName, target) => {
@@ -1609,7 +1586,6 @@ export function PublishConfigPanel({
       favoriteSet,
       favoriteConfigLabel,
       floatingTargetConfigId,
-      clearSettledConfigRenderId,
       handleConfigListPointerLeave,
       handleConfigListPointerReentry,
       hasVisiblePreviewConfigResults,
@@ -1654,6 +1630,8 @@ export function PublishConfigPanel({
       customProfileReorder.dropTarget,
       customProfileReorder.setItemRef,
       customProfileReorder.startDrag,
+      settledConfigRenderId,
+      clearSettledConfigRenderId,
       visualTargetConfigId,
     ]
   );
