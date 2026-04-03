@@ -1,9 +1,18 @@
-import fs from "node:fs";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
 import process from "node:process";
-import { parseArgs as parseNodeArgs } from "node:util";
 import { pathToFileURL } from "node:url";
+
+import { parseGitHubRepo, normalizeGitHubUrl } from "./release/github.mjs";
+import { parseReleaseArgs, printReleaseUsage } from "./release/cli.mjs";
+import {
+  getCurrentJsonVersion,
+  readText,
+  updateCargoLockVersion,
+  updateCargoTomlVersion,
+  updateJsonVersion,
+  writeText,
+} from "./release/versioning.mjs";
 
 const rootDir = process.cwd();
 const packageJsonPath = path.join(rootDir, "package.json");
@@ -20,23 +29,6 @@ const workflowCreatedAtGraceMs = 2 * 60 * 1000;
 const maxFailureAnnotations = 5;
 const maxFailureLogLines = 80;
 const maxFailureLogChars = 4000;
-
-function printUsage() {
-  console.log(`用法:
-  pnpm release --version <version>
-  pnpm release --version <version> --dry-run
-  pnpm release -v <version> -d
-
-示例:
-  pnpm release --version 0.2.1
-  pnpm release --version 0.2.1 --dry-run
-  pnpm release -v 0.2.1 -d
-
-参数:
-  --version, -v  发布版本号，例如 0.2.1
-  --dry-run, -d  仅预演，不修改文件、不提交、不推送
-  --help, -h     显示帮助`);
-}
 
 function fail(message) {
   console.error(`❌ ${message}`);
@@ -76,121 +68,6 @@ function run(command, args, options = {}) {
   return result;
 }
 
-function parseArgs(argv) {
-  const normalizedArgv = argv.filter((arg) => arg !== "--");
-  let parsed;
-
-  try {
-    parsed = parseNodeArgs({
-      args: normalizedArgv,
-      options: {
-        version: {
-          type: "string",
-          short: "v",
-        },
-        "dry-run": {
-          type: "boolean",
-          short: "d",
-        },
-        help: {
-          type: "boolean",
-          short: "h",
-        },
-      },
-      allowPositionals: true,
-      strict: true,
-    });
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    fail(`参数解析失败：${message}`);
-  }
-
-  if (parsed.values.help) {
-    printUsage();
-    process.exit(0);
-  }
-
-  if (parsed.positionals.length > 0) {
-    const attemptedVersion = parsed.positionals[0];
-    fail(
-      `已移除位置参数，请改用命名参数：pnpm release --version ${attemptedVersion}${
-        parsed.values["dry-run"] ? " --dry-run" : ""
-      }`
-    );
-  }
-
-  const versionInput = parsed.values.version;
-
-  if (!versionInput) {
-    fail("缺少 --version 参数。\n示例：pnpm release --version 0.2.1");
-  }
-
-  const normalizedVersion = versionInput.replace(/^v/, "");
-  const validVersion = /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/.test(normalizedVersion);
-
-  if (!validVersion) {
-    fail(`版本号格式非法：${versionInput}`);
-  }
-
-  return {
-    version: normalizedVersion,
-    tag: `v${normalizedVersion}`,
-    dryRun: parsed.values["dry-run"] ?? false,
-  };
-}
-
-function readText(filePath) {
-  return fs.readFileSync(filePath, "utf8");
-}
-
-function writeText(filePath, content) {
-  fs.mkdirSync(path.dirname(filePath), { recursive: true });
-  fs.writeFileSync(filePath, content);
-}
-
-function updateJsonVersion(filePath, version) {
-  const data = JSON.parse(readText(filePath));
-  data.version = version;
-  writeText(filePath, `${JSON.stringify(data, null, 2)}\n`);
-}
-
-function replaceOrThrow(content, pattern, replacement, label) {
-  const nextContent = content.replace(pattern, replacement);
-
-  if (nextContent === content) {
-    fail(`未找到 ${label} 的版本字段，无法继续发布。`);
-  }
-
-  return nextContent;
-}
-
-function updateCargoTomlVersion(version) {
-  const content = readText(cargoTomlPath);
-  const nextContent = replaceOrThrow(
-    content,
-    /(\[package\][\s\S]*?^version = ")([^"]+)(")/m,
-    `$1${version}$3`,
-    "Cargo.toml"
-  );
-  writeText(cargoTomlPath, nextContent);
-}
-
-function updateCargoLockVersion(version) {
-  const content = readText(cargoLockPath);
-  const nextContent = replaceOrThrow(
-    content,
-    /(\[\[package\]\]\nname = "one-publish"\nversion = ")([^"]+)(")/,
-    `$1${version}$3`,
-    "Cargo.lock"
-  );
-  writeText(cargoLockPath, nextContent);
-}
-
-function getCurrentVersion() {
-  const pkg = JSON.parse(readText(packageJsonPath));
-  return pkg.version;
-}
-
 function getCurrentBranch() {
   return run("git", ["rev-parse", "--abbrev-ref", "HEAD"]).stdout;
 }
@@ -201,38 +78,6 @@ function getCurrentHeadSha() {
 
 function getOriginUrl() {
   return run("git", ["remote", "get-url", "origin"], { allowFailure: true }).stdout;
-}
-
-function normalizeGitHubUrl(remoteUrl) {
-  if (!remoteUrl) {
-    return "";
-  }
-
-  if (remoteUrl.startsWith("https://github.com/")) {
-    return remoteUrl.replace(/\.git$/, "");
-  }
-
-  if (remoteUrl.startsWith("git@github.com:")) {
-    return `https://github.com/${remoteUrl.slice("git@github.com:".length).replace(/\.git$/, "")}`;
-  }
-
-  return "";
-}
-
-function parseGitHubRepo(remoteUrl) {
-  const normalizedUrl = normalizeGitHubUrl(remoteUrl);
-  const match = normalizedUrl.match(/^https:\/\/github\.com\/([^/]+)\/([^/]+)$/);
-
-  if (!match) {
-    return null;
-  }
-
-  const [, owner, repo] = match;
-  return {
-    owner,
-    repo,
-    slug: `${owner}/${repo}`,
-  };
 }
 
 function ensureReleaseReady(tag, dryRun) {
@@ -946,8 +791,14 @@ async function waitForReleaseWorkflow(options) {
 }
 
 async function main() {
-  const { version, tag, dryRun } = parseArgs(process.argv.slice(2));
-  const currentVersion = getCurrentVersion();
+  const parsedArgs = parseReleaseArgs(process.argv.slice(2));
+  if (parsedArgs.helpRequested) {
+    printReleaseUsage();
+    process.exit(0);
+  }
+
+  const { version, tag, dryRun } = parsedArgs;
+  const currentVersion = getCurrentJsonVersion(packageJsonPath);
 
   if (currentVersion === version) {
     fail(`当前版本已经是 ${version}，无需重复发布。`);
@@ -982,9 +833,9 @@ async function main() {
   await ensureGitHubApiReachable(repo, gitHubToken);
 
   updateJsonVersion(packageJsonPath, version);
-  updateCargoTomlVersion(version);
+  updateCargoTomlVersion(cargoTomlPath, version);
   updateJsonVersion(tauriConfigPath, version);
-  updateCargoLockVersion(version);
+  updateCargoLockVersion(cargoLockPath, version);
   writeText(notesPath, releaseNotes);
 
   console.log("🚀 开始校验发布前状态...");

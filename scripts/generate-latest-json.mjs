@@ -1,6 +1,8 @@
 import fs from "node:fs";
 import path from "node:path";
 
+import { updaterManifestAssets } from "./release-asset-rules.mjs";
+
 function parseArgs(argv) {
   const args = {};
 
@@ -122,36 +124,18 @@ const files = fs
   .sort();
 
 const findAsset = createAssetMatcher(files);
-const macAarch64UpdaterAsset = requireSignedAsset(
-  findAsset,
-  files,
-  "macOS aarch64 updater 包",
-  [
-    { includes: ["aarch64"], endsWith: ".app.tar.gz" },
-    { includes: ["arm64"], endsWith: ".app.tar.gz" },
-  ]
-);
-const macX64UpdaterAsset = requireSignedAsset(findAsset, files, "macOS x64 updater 包", [
-  { includes: ["x64"], endsWith: ".app.tar.gz" },
-  { includes: ["x86_64"], endsWith: ".app.tar.gz" },
-]);
-const windowsUpdaterAsset = requireSignedAsset(findAsset, files, "Windows MSI updater 包", [
-  { includes: ["x64"], endsWith: ".msi" },
-  { includes: ["x86_64"], endsWith: ".msi" },
-  { endsWith: ".msi" },
-]);
-const linuxUpdaterAsset = requireSignedAsset(findAsset, files, "Linux AppImage updater 包", [
-  { includes: ["amd64"], endsWith: ".AppImage" },
-  { includes: ["x86_64"], endsWith: ".AppImage" },
-  { endsWith: ".AppImage" },
-]);
+const platforms = Object.fromEntries(
+  updaterManifestAssets.map((definition) => {
+    const asset = requireSignedAsset(
+      findAsset,
+      files,
+      definition.label,
+      definition.patterns
+    );
 
-const platforms = {
-  "darwin-aarch64": createPlatformEntry(inputDir, baseUrl, macAarch64UpdaterAsset),
-  "darwin-x86_64": createPlatformEntry(inputDir, baseUrl, macX64UpdaterAsset),
-  "windows-x86_64": createPlatformEntry(inputDir, baseUrl, windowsUpdaterAsset),
-  "linux-x86_64": createPlatformEntry(inputDir, baseUrl, linuxUpdaterAsset),
-};
+    return [definition.platform, createPlatformEntry(inputDir, baseUrl, asset)];
+  })
+);
 
 const payload = {
   version,

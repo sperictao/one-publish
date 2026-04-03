@@ -1,6 +1,11 @@
 import fs from "node:fs";
 import path from "node:path";
 
+import {
+  workflowReleaseAssetRules,
+  workflowUpdaterAssetRules,
+} from "./release-asset-rules.mjs";
+
 const workflowPath = path.resolve(".github/workflows/build-release.yml");
 const content = fs.readFileSync(workflowPath, "utf8");
 const lines = content.split(/\r?\n/);
@@ -165,38 +170,9 @@ assertContains(
   "mkdir -p ./updater-assets",
   "workflow 未创建 updater-assets staging 目录。"
 );
-assertContains(
-  "copy_single_as ./artifacts/bundles-macos-aarch64 '*.app.tar.gz' \"./updater-assets/OnePublish_${version}_aarch64.app.tar.gz\"",
-  "updater 资产未固定选取 macOS aarch64 tarball。"
-);
-assertContains(
-  "copy_single_as ./artifacts/bundles-macos-x86_64 '*.app.tar.gz' \"./updater-assets/OnePublish_${version}_x64.app.tar.gz\"",
-  "updater 资产未固定选取 macOS x64 tarball。"
-);
-assertContains(
-  "copy_single ./artifacts/bundles-windows '*.msi' ./updater-assets",
-  "updater 资产未固定选取 Windows msi。"
-);
-assertContains(
-  "copy_single ./artifacts/bundles-linux '*.AppImage' ./updater-assets",
-  "updater 资产未固定选取 Linux AppImage。"
-);
-assertContains(
-  "copy_single_as ./artifacts/bundles-macos-aarch64 '*.app.tar.gz.sig' \"./updater-assets/OnePublish_${version}_aarch64.app.tar.gz.sig\"",
-  "updater 资产未收集 macOS aarch64 签名。"
-);
-assertContains(
-  "copy_single_as ./artifacts/bundles-macos-x86_64 '*.app.tar.gz.sig' \"./updater-assets/OnePublish_${version}_x64.app.tar.gz.sig\"",
-  "updater 资产未收集 macOS x64 签名。"
-);
-assertContains(
-  "copy_single ./artifacts/bundles-windows '*.msi.sig' ./updater-assets",
-  "updater 资产未收集 Windows msi 签名。"
-);
-assertContains(
-  "copy_single ./artifacts/bundles-linux '*.AppImage.sig' ./updater-assets",
-  "updater 资产未收集 Linux AppImage 签名。"
-);
+for (const rule of workflowUpdaterAssetRules) {
+  assertContains(rule.fragment, rule.message);
+}
 assertContains(
   "- name: Prepare release assets",
   "缺少 release 资产预处理步骤。"
@@ -205,42 +181,9 @@ assertContains(
   "mkdir -p ./release-assets",
   "workflow 未创建 release-assets staging 目录。"
 );
-assertContains(
-  "copy_single ./updater-assets latest.json ./release-assets",
-  "release 资产未包含 latest.json。"
-);
-assertContains(
-  "copy_single ./updater-assets '*aarch64.app.tar.gz' ./release-assets",
-  "release 资产未包含 macOS aarch64 updater tarball。"
-);
-assertContains(
-  "copy_single ./updater-assets '*x64.app.tar.gz' ./release-assets",
-  "release 资产未包含 macOS x64 updater tarball。"
-);
-assertContains(
-  "copy_single ./artifacts/bundles-macos-aarch64 '*aarch64*.dmg' ./release-assets",
-  "release 资产未包含 macOS aarch64 dmg。"
-);
-assertContains(
-  "copy_single ./artifacts/bundles-macos-x86_64 '*x64*.dmg' ./release-assets",
-  "release 资产未包含 macOS x64 dmg。"
-);
-assertContains(
-  "copy_single ./artifacts/bundles-macos-universal '*universal*.dmg' ./release-assets",
-  "release 资产未固定选取 macOS universal dmg。"
-);
-assertContains(
-  "copy_single ./updater-assets '*.msi' ./release-assets",
-  "release 资产未包含 Windows msi。"
-);
-assertContains(
-  "copy_single ./updater-assets '*.AppImage' ./release-assets",
-  "release 资产未包含 Linux AppImage。"
-);
-assertContains(
-  "copy_single ./artifacts/bundles-linux '*.deb' ./release-assets",
-  "release 资产未包含 Linux deb。"
-);
+for (const rule of workflowReleaseAssetRules) {
+  assertContains(rule.fragment, rule.message);
+}
 assertContains(
   "- name: Remove existing release",
   "缺少旧 release 清理步骤。"
