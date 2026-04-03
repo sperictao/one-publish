@@ -1,5 +1,8 @@
-import { deriveFailureSignature } from "@/lib/failureSignature";
-import type { ExecutionRecord } from "@/lib/store";
+import {
+  deriveFailureSignature,
+  resolvePublishFailureMessage,
+} from "@/lib/failureSignature";
+import type { ExecutionRecord, JsonValue } from "@/lib/store";
 import type {
   ProviderPublishSpec,
   PublishResult,
@@ -32,6 +35,10 @@ function extractCommandLine(outputLog: string): string | null {
   return null;
 }
 
+function toStoredSpecValue(spec: ProviderPublishSpec): JsonValue {
+  return JSON.parse(JSON.stringify(spec)) as JsonValue;
+}
+
 export function createPublishExecutionRecord(params: {
   spec: ProviderPublishSpec;
   repoId: string | null;
@@ -41,10 +48,14 @@ export function createPublishExecutionRecord(params: {
   outputLog: string;
 }): ExecutionRecord {
   const commandLine = extractCommandLine(params.outputLog);
+  const resolvedError = resolvePublishFailureMessage({
+    error: params.result.error,
+    output: params.outputLog,
+  });
   const failureSignature =
     !params.result.success && !params.result.cancelled
       ? deriveFailureSignature({
-          error: params.result.error,
+          error: resolvedError,
           output: params.outputLog,
         })
       : null;
@@ -59,11 +70,11 @@ export function createPublishExecutionRecord(params: {
     success: params.result.success,
     cancelled: params.result.cancelled,
     outputDir: params.result.output_dir || null,
-    error: params.result.error,
+    error: resolvedError,
     commandLine,
     snapshotPath: null,
     failureSignature,
-    spec: params.spec,
+    spec: toStoredSpecValue(params.spec),
     fileCount: params.result.file_count,
   };
 }

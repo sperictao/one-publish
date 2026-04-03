@@ -2,33 +2,16 @@ import { useCallback } from "react";
 import { toast } from "sonner";
 
 import { buildGitHubActionsSnippet, buildShellHandoffSnippet, type HandoffSnippetFormat } from "@/lib/handoffSnippet";
-import { buildFailureIssueDraft, type IssueDraftTemplate } from "@/lib/issueDraft";
-import { getRepresentativeRecord, type FailureGroup } from "@/lib/failureGroups";
+import type { ProviderPublishSpec } from "@/hooks/usePublishRunner";
 import { openExecutionSnapshot, setExecutionRecordSnapshot, type ExecutionRecord } from "@/lib/store";
 
 interface TranslationMap {
   [key: string]: string | undefined;
 }
 
-interface IssueDraftSections {
-  impact: boolean;
-  workaround: boolean;
-  owner: boolean;
-}
-
-interface ProviderPublishSpec {
-  version: number;
-  provider_id: string;
-  project_path: string;
-  parameters: Record<string, unknown>;
-}
-
 interface UseHistoryActionsParams {
   appT: TranslationMap;
   historyT: TranslationMap;
-  failureT: TranslationMap;
-  issueDraftTemplate: IssueDraftTemplate;
-  issueDraftSections: IssueDraftSections;
   extractSpecFromRecord: (record: ExecutionRecord) => ProviderPublishSpec | null;
   setExecutionHistory: (history: ExecutionRecord[]) => void;
 }
@@ -36,9 +19,6 @@ interface UseHistoryActionsParams {
 export function useHistoryActions({
   appT,
   historyT,
-  failureT,
-  issueDraftTemplate,
-  issueDraftSections,
   extractSpecFromRecord,
   setExecutionHistory,
 }: UseHistoryActionsParams) {
@@ -77,44 +57,6 @@ export function useHistoryActions({
       });
     }
   }, [appT]);
-
-  const copyGroupSignature = useCallback(async (group: FailureGroup) => {
-    await copyText(group.signature, failureT.signatureLabel || "失败签名");
-  }, [copyText, failureT.signatureLabel]);
-
-  const copyFailureIssueDraft = useCallback(async (group: FailureGroup) => {
-    const representative = getRepresentativeRecord(group);
-    const draft = buildFailureIssueDraft({
-      providerId: group.providerId,
-      signature: group.signature,
-      frequency: group.count,
-      representativeCommand: representative.commandLine,
-      template: issueDraftTemplate,
-      includeImpact: issueDraftSections.impact,
-      includeWorkaround: issueDraftSections.workaround,
-      includeOwner: issueDraftSections.owner,
-      records: group.records.map((record) => ({
-        id: record.id,
-        finishedAt: record.finishedAt,
-        projectPath: record.projectPath,
-        error: record.error,
-        commandLine: record.commandLine,
-        snapshotPath: record.snapshotPath,
-        outputDir: record.outputDir,
-      })),
-    });
-
-    await copyText(draft, failureT.issueDraftLabel || "Issue 草稿");
-  }, [copyText, failureT.issueDraftLabel, issueDraftSections, issueDraftTemplate]);
-
-  const copyRecordCommand = useCallback(async (record: ExecutionRecord) => {
-    if (!record.commandLine) {
-      toast.error(failureT.missingCommandLine || "该记录缺少命令行信息");
-      return;
-    }
-
-    await copyText(record.commandLine, failureT.commandLineLabel || "命令行");
-  }, [copyText, failureT.commandLineLabel, failureT.missingCommandLine]);
 
   const copyHandoffSnippet = useCallback(async (record: ExecutionRecord, format: HandoffSnippetFormat) => {
     if (!record.success) {
@@ -159,9 +101,6 @@ export function useHistoryActions({
   }, [historyT.openSnapshotFailed, historyT.snapshotOpened, setExecutionHistory]);
 
   return {
-    copyGroupSignature,
-    copyFailureIssueDraft,
-    copyRecordCommand,
     copyHandoffSnippet,
     openSnapshotFromRecord,
   };

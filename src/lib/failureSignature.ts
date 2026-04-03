@@ -5,6 +5,10 @@ export interface FailureSignatureRecord {
 }
 
 const SIGNATURE_MAX_LENGTH = 160;
+const GENERIC_PUBLISH_FAILURE_PATTERNS = [
+  /(?:^发布失败|^publish failed|^process failed).*(?:退出代码|exit code)/i,
+  /(?:退出代码|exit code)\s*[:：]?\s*some\(\d+\)/i,
+];
 
 export function extractFailureContext(output: string): string | null {
   const lines = output
@@ -12,21 +16,54 @@ export function extractFailureContext(output: string): string | null {
     .map((line) => line.trim())
     .filter(Boolean);
 
-  const keywordCandidate = lines.find((line) => {
+  const strongKeywordCandidate = lines.find((line) => {
     const normalized = line.toLowerCase();
     return (
       normalized.includes("error") ||
-      normalized.includes("exception") ||
-      normalized.includes("failed") ||
       normalized.includes("panic")
     );
   });
 
-  if (keywordCandidate) {
-    return keywordCandidate;
+  if (strongKeywordCandidate) {
+    return strongKeywordCandidate;
+  }
+
+  const fallbackKeywordCandidate = lines.find((line) => {
+    const normalized = line.toLowerCase();
+    return (
+      normalized.includes("exception") ||
+      normalized.includes("failed")
+    );
+  });
+
+  if (fallbackKeywordCandidate) {
+    return fallbackKeywordCandidate;
   }
 
   return lines.find((line) => line.startsWith("[stderr]")) || null;
+}
+
+export function isGenericPublishFailureMessage(message: string): boolean {
+  const normalizedMessage = message.trim();
+  return GENERIC_PUBLISH_FAILURE_PATTERNS.some((pattern) =>
+    pattern.test(normalizedMessage)
+  );
+}
+
+export function resolvePublishFailureMessage(params: {
+  error?: string | null;
+  output?: string;
+}): string | null {
+  const error = params.error?.trim() || null;
+  const outputContext = params.output
+    ? extractFailureContext(params.output)
+    : null;
+
+  if (outputContext && (!error || isGenericPublishFailureMessage(error))) {
+    return outputContext;
+  }
+
+  return error || outputContext || null;
 }
 
 export function normalizeFailureSignature(raw: string): string {
@@ -47,10 +84,7 @@ export function deriveFailureSignature(params: {
   error?: string | null;
   output?: string;
 }): string | null {
-  const raw =
-    params.error?.trim() ||
-    (params.output ? extractFailureContext(params.output) : null) ||
-    null;
+  const raw = resolvePublishFailureMessage(params);
 
   if (!raw) {
     return null;

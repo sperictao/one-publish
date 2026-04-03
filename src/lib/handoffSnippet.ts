@@ -1,8 +1,9 @@
-export interface HandoffSpec {
-  provider_id: string;
-  project_path: string;
-  parameters: Record<string, unknown>;
-}
+import type { ProviderPublishSpec } from "@/hooks/usePublishRunner";
+
+export type HandoffSpec = Pick<
+  ProviderPublishSpec,
+  "provider_id" | "project_path" | "parameters"
+>;
 
 export type HandoffSnippetFormat = "shell" | "github-actions";
 

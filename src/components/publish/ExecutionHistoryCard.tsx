@@ -82,6 +82,14 @@ export function ExecutionHistoryCard({
     return null;
   }
 
+  const getFailureReason = (record: ExecutionRecord) => {
+    if (record.success || record.cancelled) {
+      return null;
+    }
+
+    return record.error?.trim() || record.failureSignature?.trim() || null;
+  };
+
   return (
     <Card>
       <CardHeader className="pb-3">
@@ -212,75 +220,87 @@ export function ExecutionHistoryCard({
             {historyT.noRecords || "当前筛选条件下无执行记录"}
           </div>
         ) : (
-          filteredExecutionHistory.slice(0, 6).map((record) => (
-            <div
-              key={record.id}
-              className="rounded-xl border border-[var(--glass-border-subtle)] px-3 py-2 text-sm"
-            >
-              <div className="flex items-center justify-between gap-2">
-                <span className="font-medium">{record.providerId}</span>
-                <span
-                  className={`text-xs rounded-md px-1.5 py-0.5 ${
-                    record.success
-                      ? "status-success"
+          filteredExecutionHistory.slice(0, 6).map((record) => {
+            const failureReason = getFailureReason(record);
+
+            return (
+              <div
+                key={record.id}
+                className="rounded-xl border border-[var(--glass-border-subtle)] px-3 py-2 text-sm"
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <span className="font-medium">{record.providerId}</span>
+                  <span
+                    className={`text-xs rounded-md px-1.5 py-0.5 ${
+                      record.success
+                        ? "status-success"
+                        : record.cancelled
+                          ? "status-cancelled"
+                          : "status-failed"
+                    }`}
+                  >
+                    {record.success
+                      ? appT.statusSuccess || "成功"
                       : record.cancelled
-                        ? "status-cancelled"
-                        : "status-failed"
-                  }`}
-                >
-                  {record.success
-                    ? appT.statusSuccess || "成功"
-                    : record.cancelled
-                      ? appT.statusCancelled || "已取消"
-                      : appT.statusFailed || "失败"}
-                </span>
-              </div>
-              <div className="text-xs text-muted-foreground truncate">{record.projectPath}</div>
-              <div className="text-xs text-muted-foreground">
-                {(historyT.completedAt || "完成时间")}: {new Date(record.finishedAt).toLocaleString()}
-              </div>
-              <div className="mt-2 flex flex-wrap gap-2">
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="outline"
-                  onClick={() => void onOpenSnapshotFromRecord(record)}
-                  disabled={!record.snapshotPath && !record.outputDir}
-                >
-                  {failureT.openSnapshot || "打开快照"}
-                </Button>
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="secondary"
-                  onClick={() => void onRerunFromHistory(record)}
-                  disabled={isPublishing}
-                >
-                  {historyT.rerun || "重新执行"}
-                </Button>
-                {record.success && (
-                  <>
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="outline"
-                      onClick={() => void onCopyHandoffSnippet(record, "shell")}
-                    >
-                      {historyT.copyShellSnippet || "复制 Shell 片段"}
-                    </Button>
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="outline"
-                      onClick={() => void onCopyHandoffSnippet(record, "github-actions")}
-                    >
-                      {historyT.copyGhaSnippet || "复制 GHA 片段"}
-                    </Button>
-                  </>
+                        ? appT.statusCancelled || "已取消"
+                        : appT.statusFailed || "失败"}
+                  </span>
+                </div>
+                <div className="text-xs text-muted-foreground truncate">{record.projectPath}</div>
+                <div className="text-xs text-muted-foreground">
+                  {(historyT.completedAt || "完成时间")}: {new Date(record.finishedAt).toLocaleString()}
+                </div>
+                {failureReason && (
+                  <div className="mt-2 rounded-lg border border-destructive/20 bg-destructive/5 px-2.5 py-2 text-xs text-destructive">
+                    <span className="font-medium">
+                      {historyT.failureReason || "失败原因"}:
+                    </span>{" "}
+                    <span className="break-words">{failureReason}</span>
+                  </div>
                 )}
+                <div className="mt-2 flex flex-wrap gap-2">
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    onClick={() => void onOpenSnapshotFromRecord(record)}
+                    disabled={!record.snapshotPath && !record.outputDir}
+                  >
+                    {failureT.openSnapshot || "打开快照"}
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="secondary"
+                    onClick={() => void onRerunFromHistory(record)}
+                    disabled={isPublishing}
+                  >
+                    {historyT.rerun || "重新执行"}
+                  </Button>
+                  {record.success && (
+                    <>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        onClick={() => void onCopyHandoffSnippet(record, "shell")}
+                      >
+                        {historyT.copyShellSnippet || "复制 Shell 片段"}
+                      </Button>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        onClick={() => void onCopyHandoffSnippet(record, "github-actions")}
+                      >
+                        {historyT.copyGhaSnippet || "复制 GHA 片段"}
+                      </Button>
+                    </>
+                  )}
+                </div>
               </div>
-            </div>
-          ))
+            );
+          })
         )}
       </CardContent>
     </Card>

@@ -54,4 +54,38 @@ describe("createPublishExecutionRecord", () => {
     expect(record.commandLine).toBe("$ dotnet publish /repo/App.csproj");
     expect(record.failureSignature).toBe("[stderr] build failed: boom");
   });
+
+  it("失败摘要只有退出码时，优先保存输出日志里的真实错误", () => {
+    const record = createPublishExecutionRecord({
+      spec: {
+        version: 1,
+        provider_id: "dotnet",
+        project_path: "/repo/App.csproj",
+        parameters: {},
+      },
+      repoId: "repo-1",
+      startedAt: "2026-03-28T10:00:00.000Z",
+      finishedAt: "2026-03-28T10:00:03.000Z",
+      result: {
+        provider_id: "dotnet",
+        success: false,
+        cancelled: false,
+        error: "发布失败，退出代码: Some(1)",
+        output_dir: "",
+        file_count: 0,
+      },
+      outputLog: [
+        "$ dotnet publish /repo/App.csproj",
+        "[stderr] CSC : error CS0246: The type or namespace name 'Foo' could not be found",
+        "[stderr] Build FAILED.",
+      ].join("\n"),
+    });
+
+    expect(record.error).toBe(
+      "[stderr] CSC : error CS0246: The type or namespace name 'Foo' could not be found"
+    );
+    expect(record.failureSignature).toBe(
+      "[stderr] csc : error cs0246: the type or namespace name <value> could not be found"
+    );
+  });
 });

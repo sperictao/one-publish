@@ -7,66 +7,125 @@ import {
 } from "@/lib/store";
 import type { ParameterSchema, ParameterValue } from "@/types/parameters";
 
+export type ResourceStatus = "idle" | "loading" | "ready" | "error";
+
+export interface ResourceState<T> {
+  status: ResourceStatus;
+  data: T | null;
+  error: unknown | null;
+}
+
+type ProviderSchemaStateMap = Record<string, ResourceState<ParameterSchema>>;
+
+function createIdleState<T>(): ResourceState<T> {
+  return {
+    status: "idle",
+    data: null,
+    error: null,
+  };
+}
+
 export function useProviderRuntime() {
-  const [providers, setProviders] = useState<ProviderManifest[]>([]);
+  const [providerListState, setProviderListState] = useState<
+    ResourceState<ProviderManifest[]>
+  >(createIdleState<ProviderManifest[]>);
   const [activeProviderId, setActiveProviderId] = useState("dotnet");
-  const [providerSchemas, setProviderSchemas] = useState<
-    Record<string, ParameterSchema>
-  >({});
+  const [providerSchemaStates, setProviderSchemaStates] =
+    useState<ProviderSchemaStateMap>({});
   const [providerParameters, setProviderParameters] = useState<
     Record<string, Record<string, ParameterValue>>
   >({});
 
-  useEffect(() => {
-    let mounted = true;
+  const loadProviders = useCallback(async () => {
+    setProviderListState((prev) => ({
+      status: "loading",
+      data: prev.data,
+      error: null,
+    }));
 
-    listProviders()
-      .then((items: ProviderManifest[]) => {
-        if (!mounted) return;
-        if (items.length > 0) {
-          setProviders(items);
-          if (!items.some((item) => item.id === activeProviderId)) {
-            setActiveProviderId(items[0].id);
-          }
-        }
-      })
-      .catch((err: unknown) => {
-        console.error("加载 Provider 列表失败:", err);
+    try {
+      const items = await listProviders();
+      setProviderListState({
+        status: "ready",
+        data: items,
+        error: null,
       });
 
-    return () => {
-      mounted = false;
-    };
+      if (items.length > 0 && !items.some((item) => item.id === activeProviderId)) {
+        setActiveProviderId(items[0].id);
+      }
+    } catch (error) {
+      setProviderListState((prev) => ({
+        status: "error",
+        data: prev.data,
+        error,
+      }));
+    }
+  }, [activeProviderId]);
+
+  const loadProviderSchema = useCallback(async (providerId: string) => {
+    setProviderSchemaStates((prev) => ({
+      ...prev,
+      [providerId]: {
+        status: "loading",
+        data: prev[providerId]?.data ?? null,
+        error: null,
+      },
+    }));
+
+    try {
+      const schema = await getProviderSchema(providerId);
+      setProviderSchemaStates((prev) => ({
+        ...prev,
+        [providerId]: {
+          status: "ready",
+          data: schema,
+          error: null,
+        },
+      }));
+    } catch (error) {
+      setProviderSchemaStates((prev) => ({
+        ...prev,
+        [providerId]: {
+          status: "error",
+          data: prev[providerId]?.data ?? null,
+          error,
+        },
+      }));
+    }
   }, []);
 
   useEffect(() => {
-    if (providerSchemas[activeProviderId]) return;
+    void loadProviders();
+  }, [loadProviders]);
 
-    let mounted = true;
+  useEffect(() => {
+    const schemaState =
+      providerSchemaStates[activeProviderId] ?? createIdleState<ParameterSchema>();
+    if (!activeProviderId || schemaState.status !== "idle") {
+      return;
+    }
 
-    getProviderSchema(activeProviderId)
-      .then((schema: ParameterSchema) => {
-        if (!mounted) return;
-        setProviderSchemas((prev) => ({
-          ...prev,
-          [activeProviderId]: schema,
-        }));
-      })
-      .catch((err: unknown) => {
-        console.error("加载 Provider Schema 失败:", err);
-      });
+    void loadProviderSchema(activeProviderId);
+  }, [activeProviderId, loadProviderSchema, providerSchemaStates]);
 
-    return () => {
-      mounted = false;
-    };
-  }, [activeProviderId, providerSchemas]);
-
+  const availableProviders = providerListState.data ?? [];
   const activeProvider = useMemo(
-    () => providers.find((provider) => provider.id === activeProviderId) || null,
-    [providers, activeProviderId]
+    () => availableProviders.find((provider) => provider.id === activeProviderId) || null,
+    [availableProviders, activeProviderId]
   );
-
-  const activeProviderSchema = providerSchemas[activeProviderId];
+  const activeProviderSchemaState =
+    providerSchemaStates[activeProviderId] ?? createIdleState<ParameterSchema>();
+  const providerSchemas = useMemo(
+    () =>
+      Object.fromEntries(
+        Object.entries(providerSchemaStates)
+          .filter(([, state]) => state.status === "ready" && state.data)
+          .map(([providerId, state]) => [providerId, state.data as ParameterSchema])
+      ),
+    [providerSchemaStates]
+  );
+  const activeProviderSchema = activeProviderSchemaState.data ?? undefined;
   const activeProviderParameters = providerParameters[activeProviderId] || {};
 
   const handleProviderParametersChange = useCallback(
@@ -79,12 +138,31 @@ export function useProviderRuntime() {
     [activeProviderId]
   );
 
+  const retryProviderList = useCallback(() => {
+    void loadProviders();
+  }, [loadProviders]);
+
+  const retryProviderSchema = useCallback(
+    (providerId = activeProviderId) => {
+      if (!providerId) {
+        return;
+      }
+      void loadProviderSchema(providerId);
+    },
+    [activeProviderId, loadProviderSchema]
+  );
+
   return {
     activeProviderId,
     setActiveProviderId,
+    providerListState,
+    providerSchemaStates,
+    activeProviderSchemaState,
+    retryProviderList,
+    retryProviderSchema,
     providerSchemas,
     setProviderParameters,
-    availableProviders: providers,
+    availableProviders,
     activeProvider,
     activeProviderSchema,
     activeProviderParameters,

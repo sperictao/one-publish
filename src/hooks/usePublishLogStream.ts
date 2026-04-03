@@ -1,18 +1,16 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { isTauri } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
-
-interface PublishLogChunkEvent {
-  sessionId: string;
-  line: string;
-}
+import type { PublishLogChunkEvent } from "@/generated/tauri-contracts";
 
 export function usePublishLogStream() {
   const [outputLog, setOutputLogState] = useState("");
-  const outputLogRef = useRef(outputLog);
+  const capturedOutputLogRef = useRef("");
+  const activeSessionIdRef = useRef<string | null>(null);
+  const isCaptureEnabledRef = useRef(false);
+  const isVisibleCaptureEnabledRef = useRef(false);
 
-  const setOutputLog = useCallback((nextLog: string) => {
-    outputLogRef.current = nextLog;
+  const replaceVisibleOutputLog = useCallback((nextLog: string) => {
     setOutputLogState(nextLog);
   }, []);
 
@@ -22,13 +20,35 @@ export function usePublishLogStream() {
     }
 
     setOutputLogState((prev) => {
-      const next = `${prev}${chunk}`;
-      outputLogRef.current = next;
-      return next;
+      return `${prev}${chunk}`;
     });
   }, []);
 
-  const getOutputLogSnapshot = useCallback(() => outputLogRef.current, []);
+  const getOutputLogSnapshot = useCallback(
+    () => capturedOutputLogRef.current,
+    []
+  );
+
+  const beginLogCapture = useCallback(() => {
+    isCaptureEnabledRef.current = true;
+    isVisibleCaptureEnabledRef.current = true;
+    activeSessionIdRef.current = null;
+    capturedOutputLogRef.current = "";
+    replaceVisibleOutputLog("");
+  }, [replaceVisibleOutputLog]);
+
+  const hideLogCapture = useCallback(() => {
+    isVisibleCaptureEnabledRef.current = false;
+    replaceVisibleOutputLog("");
+  }, [replaceVisibleOutputLog]);
+
+  const resetLogCapture = useCallback(() => {
+    isCaptureEnabledRef.current = false;
+    isVisibleCaptureEnabledRef.current = false;
+    activeSessionIdRef.current = null;
+    capturedOutputLogRef.current = "";
+    replaceVisibleOutputLog("");
+  }, [replaceVisibleOutputLog]);
 
   useEffect(() => {
     if (!isTauri()) {
@@ -38,10 +58,26 @@ export function usePublishLogStream() {
     let unlisten: (() => void) | null = null;
 
     listen<PublishLogChunkEvent>("provider-publish-log", (event) => {
+      const sessionId = event.payload?.sessionId?.trim();
       const line = event.payload?.line;
-      if (!line) return;
+      if (!isCaptureEnabledRef.current || !sessionId || !line) {
+        return;
+      }
 
-      appendOutputLog(line);
+      const activeSessionId = activeSessionIdRef.current;
+      if (activeSessionId && activeSessionId !== sessionId) {
+        return;
+      }
+
+      if (!activeSessionId) {
+        activeSessionIdRef.current = sessionId;
+      }
+
+      capturedOutputLogRef.current = `${capturedOutputLogRef.current}${line}`;
+
+      if (isVisibleCaptureEnabledRef.current) {
+        appendOutputLog(line);
+      }
     })
       .then((dispose) => {
         unlisten = dispose;
@@ -59,7 +95,9 @@ export function usePublishLogStream() {
 
   return {
     outputLog,
-    setOutputLog,
     getOutputLogSnapshot,
+    beginLogCapture,
+    hideLogCapture,
+    resetLogCapture,
   };
 }

@@ -7,6 +7,7 @@ const mocks = vi.hoisted(() => ({
   invoke: vi.fn(),
   isTauri: vi.fn(() => false),
   listen: vi.fn(),
+  preflightPublishOutputAccess: vi.fn(),
   runEnvironmentCheck: vi.fn(),
   showSystemNotification: vi.fn(),
   toast: {
@@ -52,6 +53,11 @@ vi.mock("@/hooks/useDotnetPublishSelection", () => ({
 
 vi.mock("@/hooks/usePublishSpecBuilder", () => ({
   usePublishSpecBuilder: mocks.usePublishSpecBuilder,
+}));
+
+vi.mock("@/lib/publishOutputAccess", () => ({
+  preflightPublishOutputAccess: mocks.preflightPublishOutputAccess,
+  buildProtectedOutputAccessDescription: () => "需要授权 Downloads",
 }));
 
 vi.mock("@/lib/systemNotification", () => ({
@@ -110,6 +116,7 @@ function createRunnerProps() {
   return {
     appT: {
       environmentBlocked: "环境阻断",
+      publishProtectedDirectoryAccessDenied: "缺少 macOS 受保护目录访问权限",
       selectRepositoryFirst: "请先选择仓库",
       selectDotnetProjectFirst: "请先选择项目",
       commandExecuted: "命令执行成功",
@@ -147,6 +154,14 @@ describe("usePublishRunner", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.showSystemNotification.mockResolvedValue(true);
+    mocks.preflightPublishOutputAccess.mockResolvedValue({
+      status: "not_applicable",
+      outputDir: "/exports/App/Release",
+      protectedLocation: null,
+      protectedRoot: null,
+      probeDirectory: null,
+      detail: null,
+    });
     buildPublishSpecMock = vi.fn(() => ({
       version: 1,
       provider_id: "dotnet",
@@ -317,6 +332,34 @@ describe("usePublishRunner", () => {
     expect(mocks.toast.error).toHaveBeenCalledWith("环境检查失败", {
       description: "env boom",
     });
+  });
+
+  it("macOS 受保护目录权限不足时阻止发布", async () => {
+    mocks.runEnvironmentCheck.mockResolvedValue(readyEnvironment);
+    mocks.preflightPublishOutputAccess.mockResolvedValue({
+      status: "denied",
+      outputDir: "/Users/test/Downloads/publish/App/Release",
+      protectedLocation: "downloads",
+      protectedRoot: "/Users/test/Downloads",
+      probeDirectory: "/Users/test/Downloads/publish",
+      detail: "Operation not permitted",
+    });
+
+    const props = createRunnerProps();
+    const { result } = renderHook(() => usePublishRunner(props));
+
+    await act(async () => {
+      await result.current.startPublish();
+    });
+
+    expect(mocks.invoke).not.toHaveBeenCalled();
+    expect(props.savePublishRecord).not.toHaveBeenCalled();
+    expect(mocks.toast.error).toHaveBeenCalledWith(
+      "缺少 macOS 受保护目录访问权限",
+      {
+        description: "需要授权 Downloads",
+      }
+    );
   });
 
   it("发布失败时仍然写入失败记录", async () => {
@@ -500,6 +543,72 @@ describe("usePublishRunner", () => {
     expect(mocks.showMainWindow).toHaveBeenCalled();
     expect(mocks.toast.error).toHaveBeenCalledWith("发布失败", {
       description: "publish failed",
+    });
+  });
+
+  it("切换仓库或发布配置时会清空右栏发布展示态", async () => {
+    mocks.runEnvironmentCheck.mockResolvedValue(readyEnvironment);
+    mocks.invoke.mockResolvedValue({
+      provider_id: "dotnet",
+      success: true,
+      cancelled: false,
+      error: null,
+      output_dir: "/exports/App/Release",
+      file_count: 3,
+    });
+
+    const props = createRunnerProps();
+    const { result, rerender } = renderHook(
+      (hookProps: ReturnType<typeof createRunnerProps>) =>
+        usePublishRunner(hookProps),
+      {
+        initialProps: props,
+      }
+    );
+
+    await act(async () => {
+      await result.current.runPublishSpec(
+        {
+          version: 1,
+          provider_id: "dotnet",
+          project_path: "/repo/App.csproj",
+          parameters: {
+            configuration: "Release",
+          },
+        },
+        {
+          repoId: "repo-1",
+          recentConfigKey: "pubxml:FolderProfile",
+        }
+      );
+    });
+
+    await waitFor(() => {
+      expect(result.current.publishResult).toEqual(
+        expect.objectContaining({
+          success: true,
+          output_dir: "/exports/App/Release",
+        })
+      );
+      expect(result.current.lastPublishSpec).toEqual(
+        expect.objectContaining({
+          project_path: "/repo/App.csproj",
+        })
+      );
+    });
+
+    rerender({
+      ...props,
+      selectedRepoId: "repo-2",
+      selectedRepo: { path: "/repo-b" },
+      selectedPreset: "release-fd",
+    });
+
+    await waitFor(() => {
+      expect(result.current.publishResult).toBeNull();
+      expect(result.current.lastPublishSpec).toBeNull();
+      expect(result.current.currentPublishRecordId).toBeNull();
+      expect(result.current.outputLog).toBe("");
     });
   });
 });

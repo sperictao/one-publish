@@ -30,16 +30,17 @@ import { useProviderRuntime } from "@/hooks/useProviderRuntime";
 import { useI18n, type Language } from "@/hooks/useI18n";
 import type { PublishConfigStore } from "@/lib/store";
 import { buildDotnetProfileParameters } from "@/lib/dotnetPublishConfig";
+import { isProjectInfoInRepoScope } from "@/lib/dotnetProjectInfo";
 
 // Layout Components
 import { ResizeHandle } from "@/components/layout/ResizeHandle";
 import { SidebarPanelShell } from "@/components/layout/SidebarPanelShell";
+import { ProviderRuntimeBanner } from "@/components/layout/ProviderRuntimeBanner";
 
 // UI Components
 import {
   Loader2,
 } from "lucide-react";
-import { isRecordInRepository } from "@/features/history/utils/historyFilters";
 
 // Types
 
@@ -260,6 +261,10 @@ function App() {
   const {
     activeProviderId,
     setActiveProviderId,
+    providerListState,
+    activeProviderSchemaState,
+    retryProviderList,
+    retryProviderSchema,
     providerSchemas,
     setProviderParameters,
     availableProviders: providerRuntimeProviders,
@@ -276,7 +281,7 @@ function App() {
         activeProviderId === "dotnet"
       ) {
         scanProject(selectedRepo.path, {
-          projectFile: selectedRepo.projectFile,
+          projectFile: selectedRepo.projectFile ?? undefined,
         });
       }
     },
@@ -286,7 +291,7 @@ function App() {
       }
 
       if (activeProviderId === "dotnet") {
-        if (projectInfo) {
+        if (scopedProjectInfo) {
           startPublish();
         }
         return;
@@ -346,9 +351,7 @@ function App() {
   const {
     environmentLastCheck,
     setEnvironmentLastCheck,
-    recentBundleExports,
     recentHistoryExports,
-    trackBundleExport,
     trackHistoryExport,
   } = useDiagnosticsUiState();
 
@@ -418,7 +421,7 @@ function App() {
     appT,
     selectedRepoId,
     selectedRepoPath: selectedRepo?.path,
-    selectedRepoProjectFile: selectedRepo?.projectFile,
+    selectedRepoProjectFile: selectedRepo?.projectFile ?? undefined,
     isStateLoading,
     activeProviderId,
   });
@@ -453,6 +456,20 @@ function App() {
     handleCreateProfileFromProjectProfile,
   } = profilesState;
 
+  const scopedProjectInfo = useMemo(() => {
+    if (
+      !isProjectInfoInRepoScope({
+        selectedRepoPath: selectedRepo?.path,
+        selectedRepoProjectFile: selectedRepo?.projectFile,
+        projectInfo,
+      })
+    ) {
+      return null;
+    }
+
+    return projectInfo;
+  }, [projectInfo, selectedRepo]);
+
   const {
     isRerunChecklistEnabled,
     setIsRerunChecklistEnabled,
@@ -484,8 +501,6 @@ function App() {
     isPublishing,
     isCancellingPublish,
     publishResult,
-    lastPublishSpec,
-    currentPublishRecordId,
     outputLog,
     releaseChecklistOpen,
     setReleaseChecklistOpen,
@@ -506,7 +521,7 @@ function App() {
     activeProfileName,
     customConfig,
     defaultOutputDir,
-    projectInfo,
+    projectInfo: scopedProjectInfo,
     presets: PRESETS,
     specVersion: SPEC_VERSION,
     pushRecentConfig,
@@ -558,7 +573,8 @@ function App() {
     publishResult,
     appT,
     publishActions:
-      selectedRepo && (activeProviderId === "dotnet" ? Boolean(projectInfo) : true)
+      selectedRepo &&
+      (activeProviderId === "dotnet" ? Boolean(scopedProjectInfo) : true)
         ? {
             publishCommand:
               activeProviderId === "dotnet" ? dotnetPublishPreviewCommand : null,
@@ -581,18 +597,76 @@ function App() {
     providerLabel: activeProviderLabel,
     appT,
   });
-  const hasSelectedRepoFailureHistory = useMemo(() => {
-    if (!selectedRepo) {
-      return false;
+
+  const providerRuntimeBanner = useMemo(() => {
+    if (providerListState.status === "loading" && !providerListState.data?.length) {
+      return {
+        key: "provider-loading",
+        status: "loading" as const,
+        title: appT.loadingProviders || "正在加载 Provider 列表...",
+        description:
+          appT.loadingProvidersDescription ||
+          "等待 Provider 运行时初始化完成后，参数编辑和命令导入功能才会恢复。",
+        onRetry: retryProviderList,
+      };
     }
 
-    return executionHistory.some(
-      (record) =>
-        !record.success &&
-        !record.cancelled &&
-        isRecordInRepository(record, selectedRepo)
-    );
-  }, [executionHistory, selectedRepo]);
+    if (providerListState.status === "error") {
+      return {
+        key: "provider-error",
+        status: "error" as const,
+        title: appT.providerListLoadFailed || "Provider 列表加载失败",
+        description:
+          String(providerListState.error) ||
+          appT.providerListLoadFailedDescription ||
+          "未能读取可用 Provider，请重试。",
+        onRetry: retryProviderList,
+      };
+    }
+
+    if (
+      activeProviderSchemaState.status === "loading" &&
+      !activeProviderSchemaState.data
+    ) {
+      return {
+        key: "provider-schema-loading",
+        status: "loading" as const,
+        title: appT.loadingProviderSchema || "正在加载 Provider 参数定义...",
+        description:
+          appT.loadingProviderSchemaDescription ||
+          "参数表单和命令映射会在 schema 就绪后继续可用。",
+        onRetry: retryProviderSchema,
+      };
+    }
+
+    if (activeProviderSchemaState.status === "error") {
+      return {
+        key: "provider-schema-error",
+        status: "error" as const,
+        title: appT.providerSchemaLoadFailed || "Provider 参数定义加载失败",
+        description:
+          String(activeProviderSchemaState.error) ||
+          appT.providerSchemaLoadFailedDescription ||
+          "无法读取当前 Provider 的参数定义，请重试。",
+        onRetry: retryProviderSchema,
+      };
+    }
+
+    return null;
+  }, [
+    activeProviderSchemaState,
+    appT.loadingProviderSchema,
+    appT.loadingProviderSchemaDescription,
+    appT.loadingProviders,
+    appT.loadingProvidersDescription,
+    appT.providerListLoadFailed,
+    appT.providerListLoadFailedDescription,
+    appT.providerSchemaLoadFailed,
+    appT.providerSchemaLoadFailedDescription,
+    providerListState,
+    retryProviderList,
+    retryProviderSchema,
+  ]);
 
   // Show loading state
   if (isStateLoading) {
@@ -610,8 +684,7 @@ function App() {
     selectedRepo && commandImportResultCardProps
   );
   const shouldLoadDiagnosticsSection = selectedRepo
-    ? rightPanelView === "history" ||
-      hasSelectedRepoFailureHistory
+    ? rightPanelView === "history"
     : false;
   const diagnosticsSectionProps = shouldLoadDiagnosticsSection && selectedRepo
     ? {
@@ -623,15 +696,8 @@ function App() {
         executionHistoryLimit,
         selectedRepo,
         isPublishing,
-        publishResult,
-        lastPublishSpec,
-        outputLog,
-        environmentLastCheck,
-        currentPublishRecordId,
-        recentBundleExports,
         recentHistoryExports,
         setExecutionHistory,
-        trackBundleExport,
         trackHistoryExport,
         extractSpecFromRecord,
         rerunFromHistory,
@@ -649,6 +715,17 @@ function App() {
 
   return (
     <div className="flex h-screen flex-col bg-background">
+      {providerRuntimeBanner ? (
+        <ProviderRuntimeBanner
+          key={providerRuntimeBanner.key}
+          title={providerRuntimeBanner.title}
+          description={providerRuntimeBanner.description}
+          status={providerRuntimeBanner.status}
+          retryLabel={appT.retryAction || "重试"}
+          onRetry={providerRuntimeBanner.onRetry}
+        />
+      ) : null}
+
       {/* Main Content - Three Column Layout (no separate title bar) */}
       <div className="flex flex-1 overflow-hidden">
         {/* Left Panel - Repository List */}
@@ -697,9 +774,9 @@ function App() {
               onRefreshProfiles={loadProfiles}
               onOpenConfigDialog={() => handleConfigDialogOpenChange(true)}
               onDeleteProfile={handleDeleteProfileFromPanel}
-              projectPublishProfiles={projectInfo?.publish_profiles || []}
-              projectFilePath={projectInfo?.project_file}
-              projectFrameworkOptions={projectInfo?.target_frameworks || []}
+              projectPublishProfiles={scopedProjectInfo?.publish_profiles || []}
+              projectFilePath={scopedProjectInfo?.project_file}
+              projectFrameworkOptions={scopedProjectInfo?.target_frameworks || []}
               onSelectProjectProfile={handleSelectProjectProfile}
               onCopyProjectProfileToCustom={handleCreateProfileFromProjectProfile}
               recentConfigKeys={recentConfigKeys}
@@ -808,7 +885,7 @@ function App() {
             quickCreateProfileGroupOptions={quickCreateProfileGroupOptions}
             quickCreateProfileCustomGroup={quickCreateProfileCustomGroup}
             quickCreateProfileDraft={quickCreateProfileDraft}
-            projectFrameworkOptions={projectInfo?.target_frameworks || []}
+            projectFrameworkOptions={scopedProjectInfo?.target_frameworks || []}
             quickCreateProfileSaving={quickCreateProfileSaving}
             quickCreateEditing={isQuickCreateEditing}
             dotnetSchema={providerSchemas.dotnet}
@@ -830,7 +907,7 @@ function App() {
             selectedRepoId={selectedRepoId}
             customConfig={customConfig}
             activeProviderParameters={activeProviderParameters}
-            projectFile={projectInfo?.project_file}
+            projectFile={scopedProjectInfo?.project_file}
             selectedRepoPath={selectedRepo?.path}
           />
         </Suspense>

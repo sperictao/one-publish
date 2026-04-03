@@ -112,9 +112,7 @@ vi.mock("@/hooks/useDiagnosticsUiState", () => ({
   useDiagnosticsUiState: () => ({
     environmentLastCheck: null,
     setEnvironmentLastCheck: mocks.noop,
-    recentBundleExports: [],
     recentHistoryExports: [],
-    trackBundleExport: mocks.noop,
     trackHistoryExport: mocks.noop,
   }),
 }));
@@ -319,6 +317,18 @@ vi.mock("@/hooks/useProviderRuntime", () => ({
   useProviderRuntime: () => ({
     activeProviderId: "dotnet",
     setActiveProviderId: mocks.noop,
+    providerListState: {
+      status: "ready",
+      data: [{ id: "dotnet", displayName: ".NET", version: "1.0.0" }],
+      error: null,
+    },
+    activeProviderSchemaState: {
+      status: "ready",
+      data: null,
+      error: null,
+    },
+    retryProviderList: mocks.noop,
+    retryProviderSchema: mocks.noop,
     providerSchemas: {},
     setProviderParameters: mocks.noop,
     availableProviders: [{ id: "dotnet", displayName: ".NET", version: "1.0.0" }],

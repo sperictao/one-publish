@@ -3,7 +3,9 @@ import { describe, expect, it } from "vitest";
 import {
   deriveFailureSignature,
   extractFailureContext,
+  isGenericPublishFailureMessage,
   normalizeFailureSignature,
+  resolvePublishFailureMessage,
   resolveFailureSignature,
 } from "@/lib/failureSignature";
 
@@ -40,6 +42,22 @@ describe("failureSignature", () => {
     });
 
     expect(signature).toBe("panic: unexpected eof in payload");
+  });
+
+  it("generic 退出码错误会回退到输出中的真实失败行", () => {
+    expect(isGenericPublishFailureMessage("发布失败，退出代码: Some(1)")).toBe(true);
+    expect(
+      resolvePublishFailureMessage({
+        error: "发布失败，退出代码: Some(1)",
+        output: [
+          "$ dotnet publish /repo/App.csproj",
+          "error CS0246: The type or namespace name Foo could not be found",
+          "Build FAILED.",
+        ].join("\n"),
+      })
+    ).toBe(
+      "error CS0246: The type or namespace name Foo could not be found"
+    );
   });
 
   it("支持回放已持久化的 failureSignature", () => {

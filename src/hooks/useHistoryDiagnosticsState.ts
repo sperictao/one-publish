@@ -1,11 +1,10 @@
 import { useMemo, useState } from "react";
 
-import { groupExecutionFailures, type FailureGroup } from "@/lib/failureGroups";
+import { groupExecutionFailures } from "@/lib/failureGroups";
 import {
   type HistoryFilterStatus,
   type HistoryFilterWindow,
 } from "@/lib/historyFilterPresets";
-import { type IssueDraftTemplate } from "@/lib/issueDraft";
 import { type ExecutionRecord } from "@/lib/store";
 import type { Repository } from "@/types/repository";
 import { isRecordInRepository } from "@/features/history/utils/historyFilters";
@@ -21,13 +20,6 @@ export function useHistoryDiagnosticsState(params: {
   const [historyFilterWindow, setHistoryFilterWindow] =
     useState<HistoryFilterWindow>("all");
   const [historyFilterKeyword, setHistoryFilterKeyword] = useState("");
-  const [issueDraftTemplate, setIssueDraftTemplate] =
-    useState<IssueDraftTemplate>("bug");
-  const [issueDraftSections, setIssueDraftSections] = useState({
-    impact: true,
-    workaround: true,
-    owner: false,
-  });
 
   const scopedExecutionHistory = useMemo(() => {
     if (!params.selectedRepo) {
@@ -73,8 +65,8 @@ export function useHistoryDiagnosticsState(params: {
     [scopedExecutionHistory]
   );
 
-  const failureGroups = useMemo<FailureGroup[]>(
-    () => groupExecutionFailures(historyViewState.filteredExecutionHistory),
+  const failureGroupCount = useMemo(
+    () => groupExecutionFailures(historyViewState.filteredExecutionHistory).length,
     [historyViewState.filteredExecutionHistory]
   );
 
@@ -87,14 +79,10 @@ export function useHistoryDiagnosticsState(params: {
     setHistoryFilterWindow,
     historyFilterKeyword,
     setHistoryFilterKeyword,
-    issueDraftTemplate,
-    setIssueDraftTemplate,
-    issueDraftSections,
-    setIssueDraftSections,
     scopedExecutionHistory,
     historyProviderOptions,
     snapshotPaths,
-    failureGroups,
+    failureGroupCount,
     ...historyViewState,
   };
 }

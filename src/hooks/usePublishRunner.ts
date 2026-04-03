@@ -1,7 +1,11 @@
-import { useCallback } from "react";
+import { useCallback, useEffect, useMemo, useRef } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { toast } from "sonner";
 
+import type {
+  PublishResult as TauriPublishResult,
+  PublishSpec as TauriPublishSpec,
+} from "@/generated/tauri-contracts";
 import type { TranslationMap } from "@/hooks/usePublishRunnerTypes";
 import {
   createEnvironmentCheckSnapshot,
@@ -13,12 +17,18 @@ import {
   showMainWindow,
   type ExecutionRecord,
 } from "@/lib/store";
+import {
+  buildProtectedOutputAccessDescription,
+  preflightPublishOutputAccess,
+  type PublishOutputAccessResult,
+} from "@/lib/publishOutputAccess";
 import { showSystemNotification } from "@/lib/systemNotification";
 import { useDotnetPublishSelection } from "@/hooks/useDotnetPublishSelection";
 import { usePublishLogStream } from "@/hooks/usePublishLogStream";
 import { usePublishSpecBuilder } from "@/hooks/usePublishSpecBuilder";
 import { usePublishUiState } from "@/hooks/usePublishUiState";
 import { createPublishExecutionRecord } from "@/lib/publishExecutionRecord";
+import { resolvePublishFailureMessage } from "@/lib/failureSignature";
 import type { PublishConfigStore } from "@/lib/store";
 import type { ProjectInfo } from "@/types/project";
 import type { ParameterValue } from "@/types/parameters";
@@ -29,21 +39,8 @@ const loadPublishFailureFeedback = () =>
 const loadCancelPublishFeedback = () =>
   import("@/hooks/useCancelPublishFeedback");
 
-export interface PublishResult {
-  provider_id: string;
-  success: boolean;
-  cancelled: boolean;
-  error: string | null;
-  output_dir: string;
-  file_count: number;
-}
-
-export interface ProviderPublishSpec {
-  version: number;
-  provider_id: string;
-  project_path: string;
-  parameters: Record<string, unknown>;
-}
+export type PublishResult = TauriPublishResult;
+export type ProviderPublishSpec = TauriPublishSpec;
 
 export interface RunPublishOptions {
   repoId?: string | null;
@@ -88,6 +85,47 @@ interface UsePublishRunnerParams {
   savePublishRecord: (record: ExecutionRecord) => void;
 }
 
+interface PublishPreparationOptions {
+  feedbackMode: "toast" | "system";
+  restoreWindowOnFailure: boolean;
+}
+
+interface AbortPublishPreparationOptions extends PublishPreparationOptions {
+  runRevision: number;
+  level: "error" | "warning";
+  title: string;
+  description: string;
+  onAfterNotify?: (notified: boolean) => void;
+}
+
+function buildPublishPresentationScopeKey(params: {
+  selectedRepoId: string | null;
+  selectedRepoPath: string | null;
+  activeProviderId: string;
+  activeProviderParameters: Record<string, ParameterValue>;
+  selectedPreset: string;
+  isCustomMode: boolean;
+  activeProfileName: string | null;
+  customConfig: PublishConfigStore;
+  defaultOutputDir?: string;
+  projectFile: string | null;
+  projectRoot: string | null;
+}) {
+  return JSON.stringify({
+    selectedRepoId: params.selectedRepoId,
+    selectedRepoPath: params.selectedRepoPath,
+    activeProviderId: params.activeProviderId,
+    activeProviderParameters: params.activeProviderParameters,
+    selectedPreset: params.selectedPreset,
+    isCustomMode: params.isCustomMode,
+    activeProfileName: params.activeProfileName,
+    customConfig: params.customConfig,
+    defaultOutputDir: params.defaultOutputDir ?? "",
+    projectFile: params.projectFile,
+    projectRoot: params.projectRoot,
+  });
+}
+
 export function usePublishRunner({
   appT,
   publishT,
@@ -124,7 +162,14 @@ export function usePublishRunner({
     artifactActionState,
     setArtifactActionState,
   } = usePublishUiState();
-  const { outputLog, setOutputLog, getOutputLogSnapshot } = usePublishLogStream();
+  const {
+    outputLog,
+    getOutputLogSnapshot,
+    beginLogCapture,
+    hideLogCapture,
+    resetLogCapture,
+  } = usePublishLogStream();
+  const presentationRevisionRef = useRef(0);
 
   const {
     getCurrentConfig,
@@ -233,14 +278,107 @@ export function usePublishRunner({
     [appT.openOutputDirectoryFailed, notifyFeedback]
   );
 
-  const runPublishSpec = useCallback(
-    async (spec: ProviderPublishSpec, options?: RunPublishOptions) => {
-      const effectiveRepoId = options?.repoId ?? selectedRepoId;
-      const recentConfigKey = options?.recentConfigKey;
-      const openOutputDirOnSuccess = options?.openOutputDirOnSuccess ?? false;
-      const restoreWindowOnFailure = options?.restoreWindowOnFailure ?? false;
-      const feedbackMode = options?.feedbackMode ?? "toast";
+  const clearPublishPresentationState = useCallback(() => {
+    setPublishResult(null);
+    setLastPublishSpec(null);
+    setCurrentPublishRecordId(null);
+    setReleaseChecklistOpen(false);
+    setArtifactActionState({ packageResult: null, signResult: null });
+  }, [
+    setArtifactActionState,
+    setCurrentPublishRecordId,
+    setLastPublishSpec,
+    setPublishResult,
+    setReleaseChecklistOpen,
+  ]);
 
+  const isCurrentPresentationRevision = useCallback((runRevision: number) => {
+    return presentationRevisionRef.current === runRevision;
+  }, []);
+
+  const startPublishPresentationRun = useCallback(() => {
+    const runRevision = presentationRevisionRef.current + 1;
+    presentationRevisionRef.current = runRevision;
+    beginLogCapture();
+    clearPublishPresentationState();
+    return runRevision;
+  }, [beginLogCapture, clearPublishPresentationState]);
+
+  const resetPublishPresentation = useCallback(() => {
+    presentationRevisionRef.current += 1;
+    hideLogCapture();
+    clearPublishPresentationState();
+  }, [clearPublishPresentationState, hideLogCapture]);
+
+  const publishPresentationScopeKey = useMemo(
+    () =>
+      buildPublishPresentationScopeKey({
+        selectedRepoId,
+        selectedRepoPath: selectedRepo?.path ?? null,
+        activeProviderId,
+        activeProviderParameters,
+        selectedPreset,
+        isCustomMode,
+        activeProfileName,
+        customConfig,
+        defaultOutputDir,
+        projectFile: projectInfo?.project_file ?? null,
+        projectRoot: projectInfo?.root_path ?? null,
+      }),
+    [
+      activeProfileName,
+      activeProviderId,
+      activeProviderParameters,
+      customConfig,
+      defaultOutputDir,
+      isCustomMode,
+      projectInfo?.project_file,
+      projectInfo?.root_path,
+      selectedPreset,
+      selectedRepo?.path,
+      selectedRepoId,
+    ]
+  );
+
+  useEffect(() => {
+    resetPublishPresentation();
+  }, [publishPresentationScopeKey, resetPublishPresentation]);
+
+  const abortPublishPreparation = useCallback(
+    async ({
+      runRevision,
+      feedbackMode,
+      restoreWindowOnFailure,
+      level,
+      title,
+      description,
+      onAfterNotify,
+    }: AbortPublishPreparationOptions) => {
+      const notified = await notifyFeedback(
+        level,
+        title,
+        description,
+        feedbackMode
+      );
+      onAfterNotify?.(notified);
+      if (isCurrentPresentationRevision(runRevision)) {
+        resetLogCapture();
+      }
+      await restoreMainWindowIfNeeded(restoreWindowOnFailure || !notified);
+    },
+    [
+      isCurrentPresentationRevision,
+      notifyFeedback,
+      resetLogCapture,
+      restoreMainWindowIfNeeded,
+    ]
+  );
+
+  const runPublishPreflight = useCallback(
+    async (
+      spec: ProviderPublishSpec,
+      options: PublishPreparationOptions & { runRevision: number }
+    ) => {
       try {
         const env = await runEnvironmentCheck([spec.provider_id]);
         const environmentCheck = createEnvironmentCheckSnapshot(env, [
@@ -250,17 +388,18 @@ export function usePublishRunner({
 
         const critical = env.issues.find((item) => item.severity === "critical");
         if (critical) {
-          const notified = await notifyFeedback(
-            "error",
-            appT.environmentBlocked || "环境未就绪，已阻止发布",
-            critical.description,
-            feedbackMode
-          );
-          if (feedbackMode === "toast" || !notified) {
-            openEnvironmentDialog(environmentCheck, [spec.provider_id]);
-          }
-          await restoreMainWindowIfNeeded(restoreWindowOnFailure || !notified);
-          return;
+          await abortPublishPreparation({
+            ...options,
+            level: "error",
+            title: appT.environmentBlocked || "环境未就绪，已阻止发布",
+            description: critical.description,
+            onAfterNotify: (notified) => {
+              if (options.feedbackMode === "toast" || !notified) {
+                openEnvironmentDialog(environmentCheck, [spec.provider_id]);
+              }
+            },
+          });
+          return false;
         }
 
         const warning = env.issues.find((item) => item.severity === "warning");
@@ -269,28 +408,81 @@ export function usePublishRunner({
             "warning",
             appT.environmentWarning || "环境存在警告",
             warning.description,
-            feedbackMode
+            options.feedbackMode
           );
         }
       } catch (err) {
         const { extractInvokeErrorMessage } = await loadInvokeErrors();
-        const notified = await notifyFeedback(
-          "error",
-          appT.environmentCheckFailed || "环境检查失败",
-          extractInvokeErrorMessage(err),
-          feedbackMode
-        );
-        await restoreMainWindowIfNeeded(restoreWindowOnFailure || !notified);
+        await abortPublishPreparation({
+          ...options,
+          level: "error",
+          title: appT.environmentCheckFailed || "环境检查失败",
+          description: extractInvokeErrorMessage(err),
+        });
+        return false;
+      }
+
+      let outputAccess: PublishOutputAccessResult;
+      try {
+        outputAccess = await preflightPublishOutputAccess(spec);
+      } catch (err) {
+        const { extractInvokeErrorMessage } = await loadInvokeErrors();
+        await abortPublishPreparation({
+          ...options,
+          level: "error",
+          title:
+            appT.publishProtectedDirectoryAccessDenied ||
+            "缺少 macOS 受保护目录访问权限",
+          description: extractInvokeErrorMessage(err),
+        });
+        return false;
+      }
+
+      if (outputAccess.status === "denied") {
+        await abortPublishPreparation({
+          ...options,
+          level: "error",
+          title:
+            appT.publishProtectedDirectoryAccessDenied ||
+            "缺少 macOS 受保护目录访问权限",
+          description: buildProtectedOutputAccessDescription(outputAccess, appT),
+        });
+        return false;
+      }
+
+      return true;
+    },
+    [
+      abortPublishPreparation,
+      appT,
+      notifyFeedback,
+      openEnvironmentDialog,
+      setEnvironmentLastCheck,
+    ]
+  );
+
+  const runPublishSpec = useCallback(
+    async (spec: ProviderPublishSpec, options?: RunPublishOptions) => {
+      const effectiveRepoId = options?.repoId ?? selectedRepoId;
+      const recentConfigKey = options?.recentConfigKey;
+      const openOutputDirOnSuccess = options?.openOutputDirOnSuccess ?? false;
+      const restoreWindowOnFailure = options?.restoreWindowOnFailure ?? false;
+      const feedbackMode = options?.feedbackMode ?? "toast";
+      const runRevision = startPublishPresentationRun();
+
+      const preflightPassed = await runPublishPreflight(spec, {
+        runRevision,
+        feedbackMode,
+        restoreWindowOnFailure,
+      });
+      if (!preflightPassed) {
         return;
       }
 
-      setLastPublishSpec(spec);
-      setCurrentPublishRecordId(null);
+      if (isCurrentPresentationRevision(runRevision)) {
+        setLastPublishSpec(spec);
+      }
       setIsPublishing(true);
-      setPublishResult(null);
-      setOutputLog("");
-      setReleaseChecklistOpen(false);
-      setArtifactActionState({ packageResult: null, signResult: null });
 
       const executionStartedAt = new Date().toISOString();
 
@@ -303,32 +495,45 @@ export function usePublishRunner({
           spec,
         });
         const outputLogSnapshot = await waitForOutputLogSnapshot();
+        const resolvedError = resolvePublishFailureMessage({
+          error: result.error,
+          output: outputLogSnapshot,
+        });
+        const resolvedResult =
+          resolvedError === result.error
+            ? result
+            : {
+                ...result,
+                error: resolvedError,
+              };
 
-        setPublishResult(result);
+        if (isCurrentPresentationRevision(runRevision)) {
+          setPublishResult(resolvedResult);
+        }
 
-        if (result.success) {
+        if (resolvedResult.success) {
           await openOutputDirectoryIfNeeded(
             openOutputDirOnSuccess,
-            result.output_dir,
+            resolvedResult.output_dir,
             feedbackMode
           );
 
           await notifyFeedback(
             "success",
             publishT.success || "发布成功!",
-            result.output_dir
+            resolvedResult.output_dir
               ? (publishT.output || "输出目录: {{dir}}").replace(
                   "{{dir}}",
-                  result.output_dir
+                  resolvedResult.output_dir
                 )
               : appT.commandExecuted || "命令执行成功",
             feedbackMode
           );
-        } else if (result.cancelled) {
+        } else if (resolvedResult.cancelled) {
           const notified = await notifyFeedback(
             "warning",
             appT.publishCancelled || "发布已取消",
-            result.error || appT.userCancelledTask || "用户取消了执行任务",
+            resolvedResult.error || appT.userCancelledTask || "用户取消了执行任务",
             feedbackMode
           );
           await restoreMainWindowIfNeeded(restoreWindowOnFailure || !notified);
@@ -336,7 +541,7 @@ export function usePublishRunner({
           const notified = await notifyFeedback(
             "error",
             publishT.failed || "发布失败",
-            result.error || appT.unknownError || "未知错误",
+            resolvedResult.error || appT.unknownError || "未知错误",
             feedbackMode
           );
           await restoreMainWindowIfNeeded(restoreWindowOnFailure || !notified);
@@ -347,10 +552,12 @@ export function usePublishRunner({
           repoId: effectiveRepoId,
           startedAt: executionStartedAt,
           finishedAt: new Date().toISOString(),
-          result,
+          result: resolvedResult,
           outputLog: outputLogSnapshot,
         });
-        setCurrentPublishRecordId(record.id);
+        if (isCurrentPresentationRevision(runRevision)) {
+          setCurrentPublishRecordId(record.id);
+        }
         savePublishRecord(record);
       } catch (err) {
         const [
@@ -362,26 +569,33 @@ export function usePublishRunner({
         ]);
         const rawErrorMessage = extractInvokeErrorMessage(err);
         const failureReason = analyzePublishExecutionFailure(err);
+        const outputLogSnapshot = await waitForOutputLogSnapshot();
+        const resolvedError = resolvePublishFailureMessage({
+          error: rawErrorMessage,
+          output: outputLogSnapshot,
+        });
 
         const failedResult: PublishResult = {
           provider_id: spec.provider_id,
           success: false,
           cancelled: false,
-          error: rawErrorMessage,
+          error: resolvedError,
           output_dir: "",
           file_count: 0,
         };
-        setPublishResult(failedResult);
+        if (isCurrentPresentationRevision(runRevision)) {
+          setPublishResult(failedResult);
+        }
 
         const feedback = getPublishFailureFeedback(
           failureReason,
           appT,
-          rawErrorMessage
+          resolvedError ?? rawErrorMessage
         );
         const notified = await notifyFeedback(
           "error",
           feedback.title,
-          rawErrorMessage || feedback.description,
+          resolvedError || feedback.description,
           feedbackMode
         );
 
@@ -391,9 +605,11 @@ export function usePublishRunner({
           startedAt: executionStartedAt,
           finishedAt: new Date().toISOString(),
           result: failedResult,
-          outputLog: await waitForOutputLogSnapshot(),
+          outputLog: outputLogSnapshot,
         });
-        setCurrentPublishRecordId(record.id);
+        if (isCurrentPresentationRevision(runRevision)) {
+          setCurrentPublishRecordId(record.id);
+        }
         savePublishRecord(record);
         await restoreMainWindowIfNeeded(restoreWindowOnFailure || !notified);
       } finally {
@@ -403,15 +619,19 @@ export function usePublishRunner({
     },
     [
       appT,
-      openEnvironmentDialog,
+      isCurrentPresentationRevision,
       publishT,
       pushRecentConfig,
+      runPublishPreflight,
       savePublishRecord,
       selectedRepoId,
-      setEnvironmentLastCheck,
-      notifyFeedback,
+      setIsCancellingPublish,
+      setIsPublishing,
+      setLastPublishSpec,
+      setCurrentPublishRecordId,
       openOutputDirectoryIfNeeded,
       restoreMainWindowIfNeeded,
+      startPublishPresentationRun,
       waitForOutputLogSnapshot,
     ]
   );
