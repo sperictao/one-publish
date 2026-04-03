@@ -1,5 +1,5 @@
 import type { Repository } from "@/types/repository";
-import { Pencil, Trash2 } from "lucide-react";
+import { FolderOpen, Pencil, Trash2 } from "lucide-react";
 import { RowActionsMenu } from "./RowActionsMenu";
 
 interface RepositoryRowActionsMenuProps {
@@ -7,6 +7,7 @@ interface RepositoryRowActionsMenuProps {
   open: boolean;
   repoT: Record<string, string | undefined>;
   onOpenChange: (open: boolean) => void;
+  onOpenDirectory: (repo: Repository) => Promise<unknown> | unknown;
   onEdit: (repo: Repository) => Promise<unknown> | unknown;
   onRemove: (repo: Repository) => Promise<unknown> | unknown;
 }
@@ -16,6 +17,7 @@ export function RepositoryRowActionsMenu({
   open,
   repoT,
   onOpenChange,
+  onOpenDirectory,
   onEdit,
   onRemove,
 }: RepositoryRowActionsMenuProps): JSX.Element {
@@ -28,14 +30,20 @@ export function RepositoryRowActionsMenu({
       itemLabel={repo.name}
       actions={[
         {
+          key: "open-directory",
+          label: repoT.openRepositoryDirectory || "打开目录",
+          icon: <FolderOpen className="h-3.5 w-3.5 text-muted-foreground/70" />,
+          onSelect: () => onOpenDirectory(repo),
+        },
+        {
           key: "edit",
-          label: repoT.edit || "编辑",
+          label: repoT.editRepositoryAction || "编辑仓库",
           icon: <Pencil className="h-3.5 w-3.5 text-muted-foreground/70" />,
           onSelect: () => onEdit(repo),
         },
         {
           key: "remove",
-          label: repoT.remove || "移除",
+          label: repoT.removeRepositoryAction || "移除仓库",
           icon: <Trash2 className="h-3.5 w-3.5" />,
           onSelect: () => onRemove(repo),
           destructive: true,

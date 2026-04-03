@@ -176,6 +176,7 @@ pub fn run() {
             commands::export_failure_group_bundle,
             commands::export_execution_history,
             commands::export_diagnostics_index,
+            commands::open_directory,
             commands::open_execution_snapshot,
             commands::open_output_directory,
             commands::show_system_notification,

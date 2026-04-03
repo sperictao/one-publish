@@ -46,6 +46,15 @@ export function useRepositoryActions({
     [appT, removeRepository]
   );
 
+  const handleOpenRepoDirectory = useCallback(
+    async (repo: Repository) => {
+      const { handleOpenRepoDirectoryRuntime } =
+        await loadRepositoryActionsRuntime();
+      await handleOpenRepoDirectoryRuntime({ appT, repo });
+    },
+    [appT]
+  );
+
   const handleEditRepo = useCallback(
     async (repo: Repository) => {
       const { handleEditRepoRuntime } = await loadRepositoryActionsRuntime();
@@ -94,6 +103,7 @@ export function useRepositoryActions({
   return {
     handleAddRepo,
     handleRemoveRepo,
+    handleOpenRepoDirectory,
     handleEditRepo,
     handleDetectRepoProvider,
     handleScanProjectCandidates,

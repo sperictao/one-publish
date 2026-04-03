@@ -532,6 +532,10 @@ export async function openExecutionSnapshot(params: {
   });
 }
 
+export async function openDirectory(path: string): Promise<string> {
+  return await invoke<string>("open_directory", { path });
+}
+
 export async function openOutputDirectory(outputDir: string): Promise<string> {
   return await invoke<string>("open_output_directory", { outputDir });
 }

@@ -483,6 +483,7 @@ function App() {
   const {
     handleAddRepo,
     handleRemoveRepo,
+    handleOpenRepoDirectory,
     handleEditRepo,
     handleDetectRepoProvider,
     handleScanProjectCandidates,
@@ -740,6 +741,7 @@ function App() {
               providers={repositoryProviders}
               onSelectRepo={selectRepository}
               onAddRepo={handleAddRepo}
+              onOpenRepoDirectory={handleOpenRepoDirectory}
               onEditRepo={handleEditRepo}
               onRemoveRepo={handleRemoveRepo}
               onDetectProvider={handleDetectRepoProvider}

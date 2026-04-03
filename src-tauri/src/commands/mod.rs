@@ -17,12 +17,13 @@ pub use environment::{apply_fix, run_environment_check};
 pub(crate) use export::{
     __cmd__export_diagnostics_index, __cmd__export_execution_history,
     __cmd__export_execution_snapshot, __cmd__export_failure_group_bundle,
-    __cmd__export_preflight_report, __cmd__open_execution_snapshot, __cmd__open_output_directory,
+    __cmd__export_preflight_report, __cmd__open_directory, __cmd__open_execution_snapshot,
+    __cmd__open_output_directory,
 };
 pub use export::{
     export_diagnostics_index, export_execution_history, export_execution_snapshot,
-    export_failure_group_bundle, export_preflight_report, open_execution_snapshot,
-    open_output_directory,
+    export_failure_group_bundle, export_preflight_report, open_directory,
+    open_execution_snapshot, open_output_directory,
 };
 pub(crate) use notification::__cmd__show_system_notification;
 pub use notification::show_system_notification;

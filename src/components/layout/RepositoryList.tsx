@@ -70,6 +70,7 @@ interface RepositoryListProps {
   providers: Array<{ id: string; displayName: string; label?: string }>;
   onSelectRepo: (id: string) => void;
   onAddRepo: () => void;
+  onOpenRepoDirectory: (repo: Repository) => Promise<unknown> | unknown;
   onEditRepo: (repo: Repository) => Promise<boolean> | boolean;
   onRemoveRepo: (repo: Repository) => Promise<void> | void;
   onDetectProvider: (
@@ -92,6 +93,7 @@ export function RepositoryList({
   providers,
   onSelectRepo,
   onAddRepo,
+  onOpenRepoDirectory,
   onEditRepo,
   onRemoveRepo,
   onDetectProvider,
@@ -253,6 +255,7 @@ export function RepositoryList({
                 repoT={repoT}
                 rowRef={floating.setRepoRowRef(repo.id)}
                 onSelect={onSelectRepo}
+                onOpenDirectory={onOpenRepoDirectory}
                 onEdit={openEditDialog}
                 onRemove={onRemoveRepo}
                 onRowMouseEnter={interaction.handleRowMouseEnter}

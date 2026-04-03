@@ -64,8 +64,9 @@ beforeAll(() => {
       repositoryList: {
         selectRepository: "选择仓库",
         moreActions: "更多操作",
-        edit: "编辑",
-        remove: "移除",
+        openRepositoryDirectory: "打开目录",
+        editRepositoryAction: "编辑仓库",
+        removeRepositoryAction: "移除仓库",
         addRepository: "添加仓库",
         searchRepository: "搜索仓库",
         all: "全部",
@@ -93,6 +94,7 @@ describe("RepositoryList", () => {
         providers={[]}
         onSelectRepo={onSelectRepo}
         onAddRepo={() => {}}
+        onOpenRepoDirectory={() => {}}
         onEditRepo={() => true}
         onRemoveRepo={() => {}}
         onDetectProvider={async () => null}
@@ -112,6 +114,7 @@ describe("RepositoryList", () => {
 
   it("打开未选中仓库菜单时不会误选中，并在离开列表后仍锁定菜单上下文", async () => {
     const onSelectRepo = vi.fn();
+    const onOpenRepoDirectory = vi.fn();
     const onRemoveRepo = vi.fn();
 
     const { container } = render(
@@ -124,6 +127,7 @@ describe("RepositoryList", () => {
         providers={[]}
         onSelectRepo={onSelectRepo}
         onAddRepo={() => {}}
+        onOpenRepoDirectory={onOpenRepoDirectory}
         onEditRepo={() => true}
         onRemoveRepo={onRemoveRepo}
         onDetectProvider={async () => null}
@@ -154,7 +158,9 @@ describe("RepositoryList", () => {
     fireEvent.pointerDown(trigger, { button: 0, ctrlKey: false });
     fireEvent.click(trigger);
 
-    const removeItem = await screen.findByRole("menuitem", { name: "移除" });
+    const openRepositoryDirectoryItem = await screen.findByRole("menuitem", {
+      name: "打开目录",
+    });
     expect(onSelectRepo).not.toHaveBeenCalled();
     const repoBRowAfterOpen = container.querySelector<HTMLElement>(
       '[data-list-item-id="repo-b"]'
@@ -165,7 +171,24 @@ describe("RepositoryList", () => {
     expect(repoBRowAfterOpen).toHaveAttribute("data-list-menu-open", "true");
     expect(repoBRowAfterOpen).toHaveAttribute("data-list-visual-target", "true");
 
-    fireEvent.click(removeItem);
+    fireEvent.click(openRepositoryDirectoryItem);
+
+    await waitFor(() => {
+      expect(onOpenRepoDirectory).toHaveBeenCalledTimes(1);
+    });
+    expect(onOpenRepoDirectory.mock.calls[0][0].id).toBe("repo-b");
+    expect(onSelectRepo).not.toHaveBeenCalled();
+
+    const triggerAfterDirectoryAction = screen.getByRole("button", {
+      name: "更多操作: beta-worker",
+    });
+    fireEvent.pointerDown(triggerAfterDirectoryAction, { button: 0, ctrlKey: false });
+    fireEvent.click(triggerAfterDirectoryAction);
+
+    const removeItemAfterReopen = await screen.findByRole("menuitem", {
+      name: "移除仓库",
+    });
+    fireEvent.click(removeItemAfterReopen);
 
     await waitFor(() => {
       expect(onRemoveRepo).toHaveBeenCalledTimes(1);

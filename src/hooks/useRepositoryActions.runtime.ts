@@ -4,6 +4,7 @@ import { toast } from "sonner";
 import {
   defaultRepoPublishConfig,
   detectRepositoryProvider,
+  openDirectory,
   scanProjectCandidates,
   scanRepositoryBranches,
 } from "@/lib/store";
@@ -43,9 +44,10 @@ export async function handleAddRepoRuntime(params: {
 
   const path = selected as string;
   const name = getPathBasename(path) || "Unknown";
+  let providerId: string;
 
   try {
-    await detectRepositoryProvider(path);
+    providerId = await detectRepositoryProvider(path);
   } catch {
     toast.error(appT.providerDetectUnsupported || "未识别到支持的 Provider", {
       description:
@@ -61,6 +63,7 @@ export async function handleAddRepoRuntime(params: {
     path,
     currentBranch: "main",
     branches: [{ name: "main", isMain: true, isCurrent: true, path }],
+    providerId,
     publishConfig: { ...defaultRepoPublishConfig },
   };
 
@@ -99,6 +102,30 @@ export async function handleRemoveRepoRuntime(params: {
     });
   } catch (err) {
     toast.error(appT.removeRepositoryFailed || "移除仓库失败", {
+      description: String(err),
+    });
+  }
+}
+
+export async function handleOpenRepoDirectoryRuntime(params: {
+  appT: TranslationMap;
+  repo: Repository;
+}) {
+  const { appT, repo } = params;
+  const repositoryPath = repo.path.trim();
+
+  if (!repositoryPath) {
+    toast.error(appT.repositoryPathRequired || "请输入 Project Root 路径");
+    return;
+  }
+
+  try {
+    const openedPath = await openDirectory(repositoryPath);
+    toast.success(appT.repositoryDirectoryOpened || "已打开仓库目录", {
+      description: openedPath,
+    });
+  } catch (err) {
+    toast.error(appT.openRepositoryDirectoryFailed || "打开仓库目录失败", {
       description: String(err),
     });
   }

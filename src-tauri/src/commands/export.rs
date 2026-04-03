@@ -896,6 +896,34 @@ pub async fn open_execution_snapshot(
 }
 
 #[tauri::command]
+pub async fn open_directory(path: String) -> Result<String, crate::errors::AppError> {
+    let trimmed = path.trim();
+    if trimmed.is_empty() {
+        return Err(export_error("目录路径为空", "directory_path_empty"));
+    }
+
+    let directory = PathBuf::from(trimmed);
+    if !directory.exists() {
+        return Err(export_error(
+            format!("目录不存在: {}", trimmed),
+            "directory_not_found",
+        ));
+    }
+
+    if !directory.is_dir() {
+        return Err(export_error(
+            format!("路径不是文件夹: {}", trimmed),
+            "directory_not_directory",
+        ));
+    }
+
+    open::that(&directory)
+        .map_err(|source| export_open_error("打开目录失败", source, "open_directory_failed"))?;
+
+    Ok(directory.to_string_lossy().to_string())
+}
+
+#[tauri::command]
 pub async fn open_output_directory(output_dir: String) -> Result<String, crate::errors::AppError> {
     let trimmed = output_dir.trim();
     if trimmed.is_empty() {

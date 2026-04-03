@@ -12,6 +12,7 @@ interface RepositoryRowProps {
   repoT: Record<string, string | undefined>;
   rowRef: (node: HTMLDivElement | null) => void;
   onSelect: (repoId: string) => void;
+  onOpenDirectory: (repo: Repository) => Promise<unknown> | unknown;
   onEdit: (repo: Repository) => Promise<unknown> | unknown;
   onRemove: (repo: Repository) => Promise<unknown> | unknown;
   onRowMouseEnter: (repoId: string) => void;
@@ -29,6 +30,7 @@ export function RepositoryRow({
   repoT,
   rowRef,
   onSelect,
+  onOpenDirectory,
   onEdit,
   onRemove,
   onRowMouseEnter,
@@ -143,6 +145,7 @@ export function RepositoryRow({
           onOpenChange={(open) => {
             onMenuOpenChange(repo.id, open);
           }}
+          onOpenDirectory={onOpenDirectory}
           onEdit={onEdit}
           onRemove={onRemove}
         />
