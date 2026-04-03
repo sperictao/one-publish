@@ -9,6 +9,7 @@ interface UseFloatingRepoCardOptions {
   targetRepoId: string | null;
   restingTargetRepoId: string | null;
   selectedRepoId: string | null;
+  draggingRepoId: string | null;
   freezeFloating: boolean;
   onListPointerEnter: () => void;
   onListPointerLeave: () => void;
@@ -34,6 +35,7 @@ export function useFloatingRepoCard({
   targetRepoId,
   restingTargetRepoId,
   selectedRepoId,
+  draggingRepoId,
   freezeFloating,
   onListPointerEnter,
   onListPointerLeave,
@@ -44,6 +46,7 @@ export function useFloatingRepoCard({
     targetItemId: targetRepoId,
     restingTargetItemId: restingTargetRepoId,
     selectedItemId: selectedRepoId,
+    draggingItemId: draggingRepoId,
     freezeFloating,
     onListPointerEnter,
     onListPointerLeave,

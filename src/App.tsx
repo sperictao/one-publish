@@ -17,6 +17,7 @@ import { useStartupRecoveryNotice } from "@/hooks/useStartupRecoveryNotice";
 import { usePresetText } from "@/hooks/usePresetText";
 import { usePublishRunner } from "@/hooks/usePublishRunner";
 import { useTrayRecentPublish } from "@/hooks/useTrayRecentPublish";
+import { useProjectPublishProfileOrder } from "@/hooks/useProjectPublishProfileOrder";
 import {
   useProfiles,
   QUICK_CREATE_PROFILE_GROUP_CUSTOM,
@@ -182,9 +183,11 @@ function App() {
     addRepository,
     removeRepository,
     updateRepository,
+    reorderRepositories,
     selectRepository,
     pushRecentPublishConfig,
     removeRecentPublishConfig,
+    reorderRecentPublishConfigs,
     replaceRecentPublishConfigKey,
     leftPanelWidth,
     middlePanelWidth,
@@ -359,6 +362,7 @@ function App() {
     favoriteConfigKeys,
     pushRecentConfig,
     removeRecentConfig,
+    reorderRecentConfig,
     toggleFavoriteConfig,
     replaceScopedConfigKey,
   } = useScopedConfigs({
@@ -366,6 +370,7 @@ function App() {
     recentConfigByRepo: recentConfigKeysByRepo,
     pushRecentConfig: pushRecentPublishConfig,
     removeRecentConfig: removeRecentPublishConfig,
+    reorderRecentConfig: reorderRecentPublishConfigs,
     replaceRecentConfigKey: replaceRecentPublishConfigKey,
   });
 
@@ -426,6 +431,15 @@ function App() {
   });
 
   const {
+    orderedProjectPublishProfiles,
+    reorderProjectPublishProfiles,
+  } = useProjectPublishProfileOrder({
+    repoId: selectedRepoId,
+    projectFilePath: projectInfo?.project_file,
+    projectPublishProfiles: projectInfo?.publish_profiles || [],
+  });
+
+  const {
     profiles,
     activeProfileName,
     quickCreateProfileOpen,
@@ -453,6 +467,7 @@ function App() {
     handleDeleteProfileFromPanel,
     handleLoadProfile,
     handleCreateProfileFromProjectProfile,
+    handleReorderProfiles,
   } = profilesState;
 
   const {
@@ -735,6 +750,7 @@ function App() {
               branchConnectivityByRepoId={branchConnectivityByRepoId}
               onSettings={handleOpenSettings}
               onCollapse={() => setLeftPanelCollapsed(true)}
+              onReorderRepositories={reorderRepositories}
             />
           </Suspense>
         </SidebarPanelShell>
@@ -761,7 +777,7 @@ function App() {
               onRefreshProfiles={loadProfiles}
               onOpenConfigDialog={() => handleConfigDialogOpenChange(true)}
               onDeleteProfile={handleDeleteProfileFromPanel}
-              projectPublishProfiles={projectInfo?.publish_profiles || []}
+              projectPublishProfiles={orderedProjectPublishProfiles}
               projectFilePath={projectInfo?.project_file}
               projectFrameworkOptions={projectInfo?.target_frameworks || []}
               onSelectProjectProfile={handleSelectProjectProfile}
@@ -770,6 +786,9 @@ function App() {
               favoriteConfigKeys={favoriteConfigKeys}
               onToggleFavoriteConfig={toggleFavoriteConfig}
               onRemoveRecentConfig={removeRecentConfig}
+              onReorderRecentConfigs={reorderRecentConfig}
+              onReorderProjectProfiles={reorderProjectPublishProfiles}
+              onReorderProfiles={handleReorderProfiles}
               onCollapse={() => setMiddlePanelCollapsed(true)}
               showExpandButton={leftPanelCollapsed}
               onExpandRepo={() => setLeftPanelCollapsed(false)}

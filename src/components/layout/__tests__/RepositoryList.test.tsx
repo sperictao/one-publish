@@ -1,9 +1,35 @@
-import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { RepositoryList } from "@/components/layout/RepositoryList";
 import { __setTranslationsCacheForTest } from "@/hooks/useI18n";
 import type { Repository } from "@/types/repository";
 import { defaultRepoPublishConfig } from "@/lib/store";
+
+const ROW_HEIGHT = 40;
+const ROW_GAP = 8;
+const ROW_STRIDE = ROW_HEIGHT + ROW_GAP;
+
+function createDomRect(top: number, height = ROW_HEIGHT): DOMRect {
+  return {
+    x: 0,
+    y: top,
+    top,
+    left: 0,
+    width: 320,
+    height,
+    right: 320,
+    bottom: top + height,
+    toJSON: () => ({}),
+  } as DOMRect;
+}
+
+function getRenderedRepoIds(container: HTMLElement): string[] {
+  return Array.from(
+    container.querySelectorAll<HTMLElement>(".repo-list-grid [data-list-item-id]")
+  ).map((row) => row.dataset.listItemId ?? "");
+}
+
+let getBoundingClientRectSpy: ReturnType<typeof vi.spyOn> | null = null;
 
 function createRepository(id: string, name: string): Repository {
   return {
@@ -59,6 +85,29 @@ beforeAll(() => {
     });
   }
 
+  getBoundingClientRectSpy = vi
+    .spyOn(HTMLElement.prototype, "getBoundingClientRect")
+    .mockImplementation(function mockRect(this: HTMLElement) {
+      const rowElement =
+        this.matches("[data-list-row='true']")
+          ? this
+          : this.closest<HTMLElement>("[data-list-row='true']");
+
+      if (rowElement) {
+        const rows = Array.from(
+          document.querySelectorAll<HTMLElement>("[data-list-row='true']")
+        );
+        const rowIndex = rows.indexOf(rowElement);
+        return createDomRect(Math.max(0, rowIndex) * ROW_STRIDE);
+      }
+
+      if (this.classList.contains("list-scroll-shell")) {
+        return createDomRect(0, 600);
+      }
+
+      return createDomRect(0);
+    });
+
   __setTranslationsCacheForTest({
     zh: {
       repositoryList: {
@@ -74,6 +123,10 @@ beforeAll(() => {
       },
     },
   });
+});
+
+afterAll(() => {
+  getBoundingClientRectSpy?.mockRestore();
 });
 
 beforeEach(() => {
@@ -102,6 +155,7 @@ describe("RepositoryList", () => {
         onRefreshBranches={async () => null}
         branchConnectivityByRepoId={{}}
         onSettings={() => {}}
+        onReorderRepositories={() => {}}
       />
     );
 
@@ -135,6 +189,7 @@ describe("RepositoryList", () => {
         onRefreshBranches={async () => null}
         branchConnectivityByRepoId={{ "repo-a": true, "repo-b": false }}
         onSettings={() => {}}
+        onReorderRepositories={() => {}}
       />
     );
 
@@ -195,5 +250,89 @@ describe("RepositoryList", () => {
     });
     expect(onRemoveRepo.mock.calls[0][0].id).toBe("repo-b");
     expect(onSelectRepo).not.toHaveBeenCalled();
+  });
+
+  it("拖动仓库排序时越过相邻项中线后会实时冒泡，并按 preview 顺序提交", async () => {
+    const onReorderRepositories = vi.fn();
+
+    const { container } = render(
+      <RepositoryList
+        repositories={[
+          createRepository("repo-a", "alpha-service"),
+          createRepository("repo-b", "beta-worker"),
+          createRepository("repo-c", "charlie-api"),
+        ]}
+        selectedRepoId="repo-a"
+        providers={[]}
+        onSelectRepo={() => {}}
+        onAddRepo={() => {}}
+        onOpenRepoDirectory={() => {}}
+        onEditRepo={() => true}
+        onRemoveRepo={() => {}}
+        onDetectProvider={async () => null}
+        onScanProjectCandidates={async () => null}
+        onRefreshBranches={async () => null}
+        branchConnectivityByRepoId={{}}
+        onSettings={() => {}}
+        onReorderRepositories={onReorderRepositories}
+      />
+    );
+
+    const dragHandles = screen.getAllByRole("button", { name: "拖动排序" });
+    const sourceRow = container.querySelector<HTMLElement>(
+      '[data-list-item-id="repo-c"]'
+    );
+    const repoBRow = container.querySelector<HTMLElement>(
+      '[data-list-item-id="repo-b"]'
+    );
+
+    expect(dragHandles).toHaveLength(3);
+    expect(sourceRow).not.toBeNull();
+    expect(repoBRow).not.toBeNull();
+
+    act(() => {
+      fireEvent.pointerDown(dragHandles[2], {
+        button: 0,
+        clientX: 14,
+        clientY: 126,
+      });
+      fireEvent.pointerMove(window, {
+        clientX: 26,
+        clientY: 79,
+      });
+    });
+
+    await waitFor(() => {
+      expect(getRenderedRepoIds(container)).toEqual([
+        "repo-a",
+        "repo-b",
+        "repo-c",
+      ]);
+    });
+
+    act(() => {
+      fireEvent.pointerMove(window, {
+        clientX: 26,
+        clientY: 77,
+      });
+    });
+
+    await waitFor(() => {
+      expect(getRenderedRepoIds(container)).toEqual([
+        "repo-a",
+        "repo-c",
+        "repo-b",
+      ]);
+    });
+
+    act(() => {
+      fireEvent.pointerUp(window);
+    });
+
+    expect(onReorderRepositories).toHaveBeenCalledWith([
+      "repo-a",
+      "repo-c",
+      "repo-b",
+    ]);
   });
 });

@@ -1,9 +1,37 @@
-import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { PublishConfigPanel } from "@/components/layout/PublishConfigPanel";
 import { __setTranslationsCacheForTest } from "@/hooks/useI18n";
 import type { ConfigProfile, PublishConfigStore } from "@/lib/store";
 import type { ParameterSchema } from "@/types/parameters";
+
+const ROW_HEIGHT = 40;
+const ROW_GAP = 8;
+const ROW_STRIDE = ROW_HEIGHT + ROW_GAP;
+
+function createDomRect(top: number, height = ROW_HEIGHT): DOMRect {
+  return {
+    x: 0,
+    y: top,
+    top,
+    left: 0,
+    width: 320,
+    height,
+    right: 320,
+    bottom: top + height,
+    toJSON: () => ({}),
+  } as DOMRect;
+}
+
+function getRenderedConfigIds(container: HTMLElement, prefix: string): string[] {
+  return Array.from(
+    container.querySelectorAll<HTMLElement>("[data-list-row='true'][data-list-item-id]")
+  )
+    .map((row) => row.dataset.listItemId ?? "")
+    .filter((itemId) => itemId.startsWith(prefix));
+}
+
+let getBoundingClientRectSpy: ReturnType<typeof vi.spyOn> | null = null;
 
 const { resolveDotnetProjectProfileMock } = vi.hoisted(() => ({
   resolveDotnetProjectProfileMock: vi.fn(),
@@ -13,11 +41,12 @@ vi.mock("@/lib/dotnetProjectProfile", () => ({
   resolveDotnetProjectProfile: resolveDotnetProjectProfileMock,
 }));
 
-function createProfile(name: string): ConfigProfile {
+function createProfile(name: string, profileGroup?: string): ConfigProfile {
   return {
     name,
     providerId: "dotnet",
     parameters: {},
+    profileGroup,
     createdAt: new Date().toISOString(),
     isSystemDefault: false,
   };
@@ -107,6 +136,29 @@ beforeAll(() => {
     });
   }
 
+  getBoundingClientRectSpy = vi
+    .spyOn(HTMLElement.prototype, "getBoundingClientRect")
+    .mockImplementation(function mockRect(this: HTMLElement) {
+      const rowElement =
+        this.matches("[data-list-row='true']")
+          ? this
+          : this.closest<HTMLElement>("[data-list-row='true']");
+
+      if (rowElement) {
+        const rows = Array.from(
+          document.querySelectorAll<HTMLElement>("[data-list-row='true']")
+        );
+        const rowIndex = rows.indexOf(rowElement);
+        return createDomRect(Math.max(0, rowIndex) * ROW_STRIDE);
+      }
+
+      if (this.classList.contains("list-scroll-shell")) {
+        return createDomRect(0, 600);
+      }
+
+      return createDomRect(0);
+    });
+
   __setTranslationsCacheForTest({
     zh: {
       repositoryList: {
@@ -120,6 +172,8 @@ beforeAll(() => {
         recentlyUsed: "最近使用",
         favoriteConfig: "收藏配置",
         unfavoriteConfig: "取消收藏",
+        dragToReorder: "拖动排序",
+        dragDisabledWhileSearching: "搜索时无法排序",
         removeRecent: "从最近使用移除",
         deleteConfig: "删除配置",
         editConfig: "编辑配置",
@@ -127,6 +181,10 @@ beforeAll(() => {
       },
     },
   });
+});
+
+afterAll(() => {
+  getBoundingClientRectSpy?.mockRestore();
 });
 
 beforeEach(() => {
@@ -161,6 +219,9 @@ describe("PublishConfigPanel", () => {
         favoriteConfigKeys={[]}
         onToggleFavoriteConfig={() => {}}
         onRemoveRecentConfig={onRemoveRecentConfig}
+        onReorderRecentConfigs={() => {}}
+        onReorderProjectProfiles={() => {}}
+        onReorderProfiles={() => {}}
       />
     );
 
@@ -208,6 +269,257 @@ describe("PublishConfigPanel", () => {
     });
     expect(onSelectProfile).not.toHaveBeenCalled();
     expect(onSelectProjectProfile).not.toHaveBeenCalled();
+  });
+
+  it("最近使用组越过相邻项中线后会实时冒泡，并按 preview 顺序提交", async () => {
+    const onReorderRecentConfigs = vi.fn();
+
+    const { container } = render(
+      <PublishConfigPanel
+        selectedPreset="release-fd"
+        isCustomMode={true}
+        profiles={[createProfile("alpha-profile"), createProfile("beta-profile")]}
+        activeProfileName="alpha-profile"
+        onSelectProfile={() => {}}
+        onCreateProfile={() => {}}
+        onEditProfile={() => {}}
+        onRefreshProfiles={() => {}}
+        onOpenConfigDialog={() => {}}
+        onDeleteProfile={() => {}}
+        dotnetSchema={dotnetSchema}
+        projectPublishProfiles={[]}
+        onSelectProjectProfile={() => {}}
+        onCopyProjectProfileToCustom={async (_name, _config: PublishConfigStore) => "copied"}
+        recentConfigKeys={[
+          "userprofile:alpha-profile",
+          "userprofile:beta-profile",
+        ]}
+        favoriteConfigKeys={[]}
+        onToggleFavoriteConfig={() => {}}
+        onRemoveRecentConfig={() => {}}
+        onReorderRecentConfigs={onReorderRecentConfigs}
+        onReorderProjectProfiles={() => {}}
+        onReorderProfiles={() => {}}
+      />
+    );
+
+    const sourceRow = container.querySelector<HTMLElement>(
+      '[data-list-item-id="recent:userprofile:beta-profile"]'
+    );
+    const targetRow = container.querySelector<HTMLElement>(
+      '[data-list-item-id="recent:userprofile:alpha-profile"]'
+    );
+
+    expect(sourceRow).not.toBeNull();
+    expect(targetRow).not.toBeNull();
+
+    act(() => {
+      fireEvent.pointerDown(
+        within(sourceRow!).getByRole("button", { name: "拖动排序" }),
+        {
+          button: 0,
+          clientX: 18,
+          clientY: 78,
+        }
+      );
+      fireEvent.pointerMove(window, {
+        clientX: 30,
+        clientY: 31,
+      });
+    });
+
+    await waitFor(() => {
+      expect(getRenderedConfigIds(container, "recent:")).toEqual([
+        "recent:userprofile:alpha-profile",
+        "recent:userprofile:beta-profile",
+      ]);
+    });
+
+    act(() => {
+      fireEvent.pointerMove(window, {
+        clientX: 30,
+        clientY: 29,
+      });
+    });
+
+    await waitFor(() => {
+      expect(getRenderedConfigIds(container, "recent:")).toEqual([
+        "recent:userprofile:beta-profile",
+        "recent:userprofile:alpha-profile",
+      ]);
+    });
+
+    act(() => {
+      fireEvent.pointerUp(window);
+    });
+
+    expect(onReorderRecentConfigs).toHaveBeenCalledWith([
+      "userprofile:beta-profile",
+      "userprofile:alpha-profile",
+    ]);
+  });
+
+  it("项目发布配置组越过相邻项中线后会实时冒泡，并按 preview 顺序提交", async () => {
+    const onReorderProjectProfiles = vi.fn();
+
+    const { container } = render(
+      <PublishConfigPanel
+        selectedPreset="release-fd"
+        isCustomMode={false}
+        profiles={[]}
+        activeProfileName={null}
+        onSelectProfile={() => {}}
+        onCreateProfile={() => {}}
+        onEditProfile={() => {}}
+        onRefreshProfiles={() => {}}
+        onOpenConfigDialog={() => {}}
+        onDeleteProfile={() => {}}
+        dotnetSchema={dotnetSchema}
+        projectPublishProfiles={["FolderProfile", "ZipProfile"]}
+        onSelectProjectProfile={() => {}}
+        onCopyProjectProfileToCustom={async (_name, _config: PublishConfigStore) => "copied"}
+        recentConfigKeys={[]}
+        favoriteConfigKeys={[]}
+        onToggleFavoriteConfig={() => {}}
+        onRemoveRecentConfig={() => {}}
+        onReorderRecentConfigs={() => {}}
+        onReorderProjectProfiles={onReorderProjectProfiles}
+        onReorderProfiles={() => {}}
+      />
+    );
+
+    const sourceRow = container.querySelector<HTMLElement>(
+      '[data-list-item-id="pubxml:ZipProfile"]'
+    );
+    const targetRow = container.querySelector<HTMLElement>(
+      '[data-list-item-id="pubxml:FolderProfile"]'
+    );
+
+    expect(sourceRow).not.toBeNull();
+    expect(targetRow).not.toBeNull();
+
+    act(() => {
+      fireEvent.pointerDown(
+        within(sourceRow!).getByRole("button", { name: "拖动排序" }),
+        { button: 0, clientY: 78 }
+      );
+      fireEvent.pointerMove(window, { clientY: 31 });
+    });
+
+    await waitFor(() => {
+      expect(getRenderedConfigIds(container, "pubxml:")).toEqual([
+        "pubxml:FolderProfile",
+        "pubxml:ZipProfile",
+      ]);
+    });
+
+    act(() => {
+      fireEvent.pointerMove(window, { clientY: 29 });
+    });
+
+    await waitFor(() => {
+      expect(getRenderedConfigIds(container, "pubxml:")).toEqual([
+        "pubxml:ZipProfile",
+        "pubxml:FolderProfile",
+      ]);
+    });
+
+    act(() => {
+      fireEvent.pointerUp(window);
+    });
+
+    expect(onReorderProjectProfiles).toHaveBeenCalledWith([
+      "ZipProfile",
+      "FolderProfile",
+    ]);
+  });
+
+  it("自定义组越过目标项中线后会实时跨组冒泡，并在松手后提交分组归属", async () => {
+    const onReorderProfiles = vi.fn();
+
+    const { container } = render(
+      <PublishConfigPanel
+        selectedPreset="release-fd"
+        isCustomMode={false}
+        profiles={[
+          createProfile("alpha-profile", "Group A"),
+          createProfile("beta-profile", "Group B"),
+          createProfile("gamma-profile", "Group B"),
+        ]}
+        activeProfileName={null}
+        onSelectProfile={() => {}}
+        onCreateProfile={() => {}}
+        onEditProfile={() => {}}
+        onRefreshProfiles={() => {}}
+        onOpenConfigDialog={() => {}}
+        onDeleteProfile={() => {}}
+        dotnetSchema={dotnetSchema}
+        projectPublishProfiles={[]}
+        onSelectProjectProfile={() => {}}
+        onCopyProjectProfileToCustom={async (_name, _config: PublishConfigStore) => "copied"}
+        recentConfigKeys={[]}
+        favoriteConfigKeys={[]}
+        onToggleFavoriteConfig={() => {}}
+        onRemoveRecentConfig={() => {}}
+        onReorderRecentConfigs={() => {}}
+        onReorderProjectProfiles={() => {}}
+        onReorderProfiles={onReorderProfiles}
+      />
+    );
+
+    const sourceRow = container.querySelector<HTMLElement>(
+      '[data-list-item-id="userprofile:alpha-profile"]'
+    );
+    const targetRow = container.querySelector<HTMLElement>(
+      '[data-list-item-id="userprofile:gamma-profile"]'
+    );
+
+    expect(sourceRow).not.toBeNull();
+    expect(targetRow).not.toBeNull();
+
+    act(() => {
+      fireEvent.pointerDown(
+        within(sourceRow!).getByRole("button", { name: "拖动排序" }),
+        { button: 0, clientY: 20 }
+      );
+      fireEvent.pointerMove(window, { clientY: 67 });
+    });
+
+    await waitFor(() => {
+      expect(getRenderedConfigIds(container, "userprofile:")).toEqual([
+        "userprofile:alpha-profile",
+        "userprofile:beta-profile",
+        "userprofile:gamma-profile",
+      ]);
+    });
+
+    act(() => {
+      fireEvent.pointerMove(window, { clientY: 69 });
+    });
+
+    await waitFor(() => {
+      expect(getRenderedConfigIds(container, "userprofile:")).toEqual([
+        "userprofile:beta-profile",
+        "userprofile:alpha-profile",
+        "userprofile:gamma-profile",
+      ]);
+    });
+
+    act(() => {
+      fireEvent.pointerUp(window);
+    });
+
+    expect(onReorderProfiles).toHaveBeenCalledTimes(1);
+    expect(
+      onReorderProfiles.mock.calls[0][0].map((profile: ConfigProfile) => ({
+        name: profile.name,
+        profileGroup: profile.profileGroup,
+      }))
+    ).toEqual([
+      { name: "beta-profile", profileGroup: "Group B" },
+      { name: "alpha-profile", profileGroup: "Group B" },
+      { name: "gamma-profile", profileGroup: "Group B" },
+    ]);
   });
 
   it("项目发布配置查看页保持只读表单一致，并在补充区展示未映射的 pubxml 信息", async () => {
@@ -308,6 +620,9 @@ describe("PublishConfigPanel", () => {
         favoriteConfigKeys={[]}
         onToggleFavoriteConfig={() => {}}
         onRemoveRecentConfig={() => {}}
+        onReorderRecentConfigs={() => {}}
+        onReorderProjectProfiles={() => {}}
+        onReorderProfiles={() => {}}
       />
     );
 
@@ -498,6 +813,9 @@ describe("PublishConfigPanel", () => {
         favoriteConfigKeys={[]}
         onToggleFavoriteConfig={() => {}}
         onRemoveRecentConfig={() => {}}
+        onReorderRecentConfigs={() => {}}
+        onReorderProjectProfiles={() => {}}
+        onReorderProfiles={() => {}}
       />
     );
 

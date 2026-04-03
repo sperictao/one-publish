@@ -12,6 +12,12 @@ import {
   type PointerEvent as ReactPointerEvent,
 } from "react";
 import { cn } from "@/lib/utils";
+import {
+  buildProfileGroups,
+  type DropPosition,
+  reorderItemsByDrop,
+  reorderProfilesByDrop,
+} from "@/lib/listOrdering";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import {
@@ -56,7 +62,14 @@ import {
   RowActionsMenu,
   type RowActionsMenuAction,
 } from "@/components/layout/RowActionsMenu";
+import {
+  ListDragHandle,
+  ListDropIndicator,
+} from "@/components/layout/ListReorderControls";
+import { usePointerListReorder } from "@/components/layout/usePointerListReorder";
 import { useListInteractionState } from "@/components/layout/useListInteractionState";
+import { composeNodeRefs } from "@/components/layout/composeNodeRefs";
+import { useListReorderMotion } from "@/components/layout/useListReorderMotion";
 import type { ParameterSchema } from "@/types/parameters";
 
 const PublishConfigPanelFloatingLayer = lazy(async () => {
@@ -99,6 +112,34 @@ function normalizeRenderableConfigId(configId: string | null) {
   return configId.startsWith("recent:") ? configId.slice("recent:".length) : configId;
 }
 
+function hasSameStringOrder(
+  left: readonly string[],
+  right: readonly string[]
+): boolean {
+  if (left.length !== right.length) {
+    return false;
+  }
+
+  return left.every((value, index) => value === right[index]);
+}
+
+function hasSameProfileOrder(
+  left: readonly ConfigProfile[],
+  right: readonly ConfigProfile[]
+): boolean {
+  if (left.length !== right.length) {
+    return false;
+  }
+
+  return left.every((profile, index) => {
+    const nextProfile = right[index];
+    return (
+      profile.name === nextProfile.name &&
+      (profile.profileGroup || "") === (nextProfile.profileGroup || "")
+    );
+  });
+}
+
 export interface PublishConfigPanelProps {
   selectedPreset: string;
   isCustomMode: boolean;
@@ -123,6 +164,9 @@ export interface PublishConfigPanelProps {
   favoriteConfigKeys: string[];
   onToggleFavoriteConfig: (configKey: string) => void;
   onRemoveRecentConfig: (configKey: string) => void;
+  onReorderRecentConfigs: (configKeys: string[]) => void;
+  onReorderProjectProfiles: (profileNames: string[]) => void;
+  onReorderProfiles: (profiles: ConfigProfile[]) => void;
   onCollapse?: () => void;
   showExpandButton?: boolean;
   onExpandRepo?: () => void;
@@ -218,6 +262,13 @@ function ProfileItem({
   onItemMouseEnter,
   onItemFocus,
   onItemBlur,
+  dragEnabled,
+  dragHandleLabel,
+  dragDisabledLabel,
+  isDragging,
+  dragPreviewStyle,
+  dropIndicatorPosition,
+  onHandlePointerDown,
 }: {
   profile: ConfigProfile;
   configKey: string;
@@ -241,6 +292,17 @@ function ProfileItem({
   onItemMouseEnter: () => void;
   onItemFocus: () => void;
   onItemBlur: () => void;
+  groupKey: string;
+  dragEnabled: boolean;
+  dragHandleLabel: string;
+  dragDisabledLabel: string;
+  isDragging: boolean;
+  dragPreviewStyle?: CSSProperties;
+  dropIndicatorPosition: DropPosition | null;
+  onHandlePointerDown: (
+    profileName: string,
+    event: ReactPointerEvent<HTMLButtonElement>
+  ) => void;
 }) {
   const actions: RowActionsMenuAction[] = [
     createFavoriteConfigAction({
@@ -278,7 +340,11 @@ function ProfileItem({
       data-list-item-id={configId}
       data-list-visual-target={isVisualTarget ? "true" : "false"}
       data-list-menu-open={isMenuOpen ? "true" : "false"}
-      className="group relative z-10"
+      className={cn(
+        "group relative z-10",
+        isDragging && "pointer-events-none z-40"
+      )}
+      style={isDragging ? dragPreviewStyle : undefined}
       onMouseEnter={onItemMouseEnter}
       onFocusCapture={onItemFocus}
       onBlurCapture={(event) => {
@@ -293,10 +359,19 @@ function ProfileItem({
         onItemBlur();
       }}
     >
+      <ListDropIndicator position={dropIndicatorPosition} />
+      <ListDragHandle
+        enabled={dragEnabled}
+        label={dragHandleLabel}
+        disabledLabel={dragDisabledLabel}
+        onPointerDown={(event) => {
+          onHandlePointerDown(profile.name, event);
+        }}
+      />
       <button
         type="button"
         aria-pressed={isSelected}
-        className="flex w-full items-center gap-2.5 rounded-2xl border border-transparent bg-transparent px-3 py-2 pr-11 text-left shadow-none outline-none transition-all duration-300 hover:bg-[var(--glass-bg)]/20 focus-visible:ring-2 focus-visible:ring-primary/30 focus-visible:ring-offset-1 focus-visible:ring-offset-background"
+        className="flex w-full items-center gap-2.5 rounded-2xl border border-transparent bg-transparent py-2 pl-10 pr-11 text-left shadow-none outline-none transition-all duration-300 hover:bg-[var(--glass-bg)]/20 focus-visible:ring-2 focus-visible:ring-primary/30 focus-visible:ring-offset-1 focus-visible:ring-offset-background"
         onClick={onClick}
       >
         <span
@@ -362,6 +437,9 @@ export function PublishConfigPanel({
   favoriteConfigKeys,
   onToggleFavoriteConfig,
   onRemoveRecentConfig,
+  onReorderRecentConfigs,
+  onReorderProjectProfiles,
+  onReorderProfiles,
   onCollapse,
   showExpandButton,
   onExpandRepo,
@@ -382,6 +460,7 @@ export function PublishConfigPanel({
   const t = translations.configPanel || {};
   const appT = translations.app || {};
   const profileT = translations.profiles || {};
+  const defaultGroupName = t.defaultProfileGroup || "默认分组";
   const configManagementLabel =
     translations.settings?.categories?.config ||
     translations.profiles?.title ||
@@ -476,25 +555,13 @@ export function PublishConfigPanel({
   const groupFilterOptions = useMemo<
     Array<{ value: GroupFilterValue; label: string; count: number }>
   >(() => {
-    const defaultGroupName = t.defaultProfileGroup || "默认分组";
-    const groupMap = new Map<string, number>();
-
-    for (const profile of profiles) {
-      const groupName = profile.profileGroup?.trim() || defaultGroupName;
-      groupMap.set(groupName, (groupMap.get(groupName) ?? 0) + 1);
-    }
-
-    const profileGroupOptions = Array.from(groupMap.entries())
-      .map(([groupName, count]) => ({
-        value: createProfileGroupFilterValue(groupName),
-        label: groupName,
-        count,
-      }))
-      .sort((left, right) => {
-        if (left.label === defaultGroupName) return -1;
-        if (right.label === defaultGroupName) return 1;
-        return left.label.localeCompare(right.label);
-      });
+    const profileGroupOptions = buildProfileGroups(profiles, defaultGroupName).map(
+      (group) => ({
+        value: createProfileGroupFilterValue(group.groupName),
+        label: group.groupName,
+        count: group.items.length,
+      })
+    );
 
     const options: Array<{ value: GroupFilterValue; label: string; count: number }> = [
       {
@@ -514,35 +581,16 @@ export function PublishConfigPanel({
 
     return [...options, ...profileGroupOptions];
   }, [
+    defaultGroupName,
     profiles,
     projectPublishProfiles.length,
     allConfigsLabel,
-    t.defaultProfileGroup,
     t.profileGroup,
   ]);
 
   const groupedFilteredProfiles = useMemo(() => {
-    const defaultGroupName = t.defaultProfileGroup || "默认分组";
-    const groupMap = new Map<string, ConfigProfile[]>();
-
-    for (const profile of filteredProfiles) {
-      const groupName = profile.profileGroup?.trim() || defaultGroupName;
-      const group = groupMap.get(groupName);
-      if (group) {
-        group.push(profile);
-      } else {
-        groupMap.set(groupName, [profile]);
-      }
-    }
-
-    return Array.from(groupMap.entries())
-      .map(([groupName, items]) => ({ groupName, items }))
-      .sort((left, right) => {
-        if (left.groupName === defaultGroupName) return -1;
-        if (right.groupName === defaultGroupName) return 1;
-        return left.groupName.localeCompare(right.groupName);
-      });
-  }, [filteredProfiles, t.defaultProfileGroup]);
+    return buildProfileGroups(filteredProfiles, defaultGroupName);
+  }, [defaultGroupName, filteredProfiles]);
 
   useEffect(() => {
     if (groupFilterOptions.some((option) => option.value === groupFilterValue)) {
@@ -592,8 +640,15 @@ export function PublishConfigPanel({
 
   const showRecentItems =
     !query && groupFilterValue === ALL_GROUP_FILTER && recentItems.length > 0;
-  const hasVisibleConfigResults =
-    visibleProjectProfiles.length > 0 || visibleGroupedFilteredProfiles.length > 0;
+  const recentDragEnabled = showRecentItems && recentItems.length > 1;
+  const projectProfileDragEnabled =
+    query.length === 0 && visibleProjectProfiles.length > 1;
+  const visibleCustomProfileCount = visibleGroupedFilteredProfiles.reduce(
+    (total, group) => total + group.items.length,
+    0
+  );
+  const customProfileDragEnabled =
+    query.length === 0 && visibleCustomProfileCount > 1;
 
   const selectedConfigId = useMemo(() => {
     if (isCustomMode && activeProfileName) {
@@ -649,6 +704,231 @@ export function PublishConfigPanel({
     filteredItemIds: allConfigIds,
     selectedItemId: selectedRenderId,
   });
+  const recentReorder = usePointerListReorder<undefined>({
+    enabled: recentDragEnabled,
+    onStart: interaction.handleListPointerLeave,
+    onCommit: (activeConfigKey, target) => {
+      const nextConfigKeys = reorderItemsByDrop(
+        recentConfigKeys,
+        (item) => item,
+        activeConfigKey,
+        target.itemId,
+        target.position
+      );
+
+      if (hasSameStringOrder(nextConfigKeys, recentConfigKeys)) {
+        return;
+      }
+
+      onReorderRecentConfigs(nextConfigKeys);
+    },
+  });
+
+  const projectProfileReorder = usePointerListReorder<undefined>({
+    enabled: projectProfileDragEnabled,
+    onStart: interaction.handleListPointerLeave,
+    onCommit: (activeProfileName, target) => {
+      const nextProfileNames = reorderItemsByDrop(
+        visibleProjectProfiles,
+        (item) => item,
+        activeProfileName,
+        target.itemId,
+        target.position
+      );
+
+      if (hasSameStringOrder(nextProfileNames, visibleProjectProfiles)) {
+        return;
+      }
+
+      onReorderProjectProfiles(nextProfileNames);
+    },
+  });
+
+  const customProfileReorder = usePointerListReorder<{ groupKey: string }>({
+    enabled: customProfileDragEnabled,
+    onStart: interaction.handleListPointerLeave,
+    onCommit: (activeProfileName, target) => {
+      const nextProfiles = reorderProfilesByDrop({
+        profiles,
+        activeProfileName,
+        targetProfileName: target.itemId,
+        targetGroupKey: target.meta.groupKey,
+        position: target.position,
+        defaultGroupName,
+      });
+
+      if (hasSameProfileOrder(nextProfiles, profiles)) {
+        return;
+      }
+
+      onReorderProfiles(nextProfiles);
+    },
+  });
+  const previewRecentItems = useMemo(
+    () =>
+      recentReorder.draggingItemId && recentReorder.dropTarget
+        ? reorderItemsByDrop(
+            recentItems,
+            (item) => item.key,
+            recentReorder.draggingItemId,
+            recentReorder.dropTarget.itemId,
+            recentReorder.dropTarget.position
+          )
+        : recentItems,
+    [recentItems, recentReorder.draggingItemId, recentReorder.dropTarget]
+  );
+  const previewProjectProfiles = useMemo(
+    () =>
+      projectProfileReorder.draggingItemId && projectProfileReorder.dropTarget
+        ? reorderItemsByDrop(
+            visibleProjectProfiles,
+            (item) => item,
+            projectProfileReorder.draggingItemId,
+            projectProfileReorder.dropTarget.itemId,
+            projectProfileReorder.dropTarget.position
+          )
+        : visibleProjectProfiles,
+    [
+      projectProfileReorder.draggingItemId,
+      projectProfileReorder.dropTarget,
+      visibleProjectProfiles,
+    ]
+  );
+  const previewProfiles = useMemo(
+    () =>
+      customProfileReorder.draggingItemId && customProfileReorder.dropTarget
+        ? reorderProfilesByDrop({
+            profiles,
+            activeProfileName: customProfileReorder.draggingItemId,
+            targetProfileName: customProfileReorder.dropTarget.itemId,
+            targetGroupKey: customProfileReorder.dropTarget.meta.groupKey,
+            position: customProfileReorder.dropTarget.position,
+            defaultGroupName,
+          })
+        : profiles,
+    [
+      customProfileReorder.draggingItemId,
+      customProfileReorder.dropTarget,
+      defaultGroupName,
+      profiles,
+    ]
+  );
+  const previewFilteredProfiles = useMemo(
+    () =>
+      previewProfiles.filter((profile) => {
+        if (!query) {
+          return true;
+        }
+
+        return (
+          profile.name.toLowerCase().includes(query) ||
+          profile.providerId.toLowerCase().includes(query) ||
+          (profile.profileGroup || "").toLowerCase().includes(query)
+        );
+      }),
+    [previewProfiles, query]
+  );
+  const previewGroupedFilteredProfiles = useMemo(
+    () => buildProfileGroups(previewFilteredProfiles, defaultGroupName),
+    [defaultGroupName, previewFilteredProfiles]
+  );
+  const previewVisibleProjectProfiles = useMemo(() => {
+    if (
+      groupFilterValue !== ALL_GROUP_FILTER &&
+      groupFilterValue !== PROJECT_GROUP_FILTER
+    ) {
+      return [];
+    }
+    return previewProjectProfiles;
+  }, [groupFilterValue, previewProjectProfiles]);
+  const previewVisibleGroupedFilteredProfiles = useMemo(() => {
+    if (groupFilterValue === ALL_GROUP_FILTER) {
+      return previewGroupedFilteredProfiles;
+    }
+    if (groupFilterValue === PROJECT_GROUP_FILTER) {
+      return [];
+    }
+    return previewGroupedFilteredProfiles.filter(
+      (group) => createProfileGroupFilterValue(group.groupName) === groupFilterValue
+    );
+  }, [groupFilterValue, previewGroupedFilteredProfiles]);
+  const previewConfigIds = useMemo(() => {
+    const ids: string[] = [];
+    if (showRecentItems) {
+      for (const item of previewRecentItems) {
+        ids.push(`recent:${item.key}`);
+      }
+    }
+    for (const name of previewVisibleProjectProfiles) {
+      ids.push(`pubxml:${name}`);
+    }
+    for (const group of previewVisibleGroupedFilteredProfiles) {
+      for (const profile of group.items) {
+        ids.push(`userprofile:${profile.name}`);
+      }
+    }
+    return ids;
+  }, [
+    previewRecentItems,
+    previewVisibleGroupedFilteredProfiles,
+    previewVisibleProjectProfiles,
+    showRecentItems,
+  ]);
+  const hasVisiblePreviewConfigResults =
+    previewVisibleProjectProfiles.length > 0 ||
+    previewVisibleGroupedFilteredProfiles.length > 0;
+  const recentMotion = useListReorderMotion({
+    orderedIds: previewRecentItems.map((item) => item.key),
+    draggingItemId: recentReorder.draggingItemId,
+  });
+  const projectMotion = useListReorderMotion({
+    orderedIds: previewProjectProfiles,
+    draggingItemId: projectProfileReorder.draggingItemId,
+  });
+  const customMotion = useListReorderMotion({
+    orderedIds: previewProfiles.map((profile) => profile.name),
+    draggingItemId: customProfileReorder.draggingItemId,
+  });
+  const draggingFloatingConfig = useMemo(() => {
+    if (recentReorder.draggingItemId) {
+      return {
+        renderId: `recent:${recentReorder.draggingItemId}`,
+        style: recentReorder.dragPreviewStyle,
+      };
+    }
+
+    if (projectProfileReorder.draggingItemId) {
+      return {
+        renderId: `pubxml:${projectProfileReorder.draggingItemId}`,
+        style: projectProfileReorder.dragPreviewStyle,
+      };
+    }
+
+    if (customProfileReorder.draggingItemId) {
+      return {
+        renderId: `userprofile:${customProfileReorder.draggingItemId}`,
+        style: customProfileReorder.dragPreviewStyle,
+      };
+    }
+
+    return null;
+  }, [
+    customProfileReorder.dragPreviewStyle,
+    customProfileReorder.draggingItemId,
+    projectProfileReorder.dragPreviewStyle,
+    projectProfileReorder.draggingItemId,
+    recentReorder.dragPreviewStyle,
+    recentReorder.draggingItemId,
+  ]);
+  const floatingTargetConfigId =
+    draggingFloatingConfig?.renderId ?? interaction.visualTargetItemId;
+  const restingTargetConfigId =
+    draggingFloatingConfig?.renderId ??
+    interaction.activeMenuItemId ??
+    interaction.focusedItemId ??
+    selectedRenderId;
+  const freezeFloating =
+    interaction.freezeFloating || draggingFloatingConfig !== null;
 
   useEffect(() => {
     if (floatingEnhancerEnabled) {
@@ -808,7 +1088,7 @@ export function PublishConfigPanel({
       listRef: fallbackListRef as MutableRefObject<HTMLDivElement | null>,
       floatingCardSurfaceRef:
         fallbackFloatingCardSurfaceRef as MutableRefObject<HTMLDivElement | null>,
-      cardTargetConfigId: interaction.visualTargetItemId,
+      cardTargetConfigId: floatingTargetConfigId,
       floatingVisible: false,
       floatingCardMotionStyle: EMPTY_FLOATING_STYLE,
       floatingCardSurfaceStyle: EMPTY_FLOATING_STYLE,
@@ -820,50 +1100,70 @@ export function PublishConfigPanel({
     }),
     [
       createFallbackRowRef,
+      floatingTargetConfigId,
       interaction.handleListPointerEnter,
       interaction.handleListPointerLeave,
-      interaction.visualTargetItemId,
       noopPointerHandler,
       noopVoidHandler,
     ]
   );
 
   const renderConfigList = useCallback(
-    (floating: PublishConfigFloatingBindings) => (
-      <div
-        ref={floating.listRef}
-        className="list-scroll-shell scrollbar-fade glass-scrollbar relative flex-1 overflow-auto px-2.5 py-2"
-        onPointerEnter={floating.handleListPointerEnter}
-        onPointerMove={floating.handleListPointerMove}
-        onPointerLeave={floating.handleListMouseLeave}
-        onScroll={floating.handleListScroll}
-      >
+    (floating: PublishConfigFloatingBindings) => {
+      const floatingDragPreviewStyle =
+        draggingFloatingConfig &&
+        draggingFloatingConfig.renderId === floating.cardTargetConfigId
+          ? draggingFloatingConfig.style
+          : undefined;
+
+      return (
         <div
-          aria-hidden
-          className={cn(
-            "pointer-events-none !absolute z-0 origin-top-left transition-opacity duration-120 ease-linear",
-            floating.floatingVisible ? "opacity-100" : "opacity-0"
-          )}
-          style={floating.floatingCardMotionStyle}
+          ref={floating.listRef}
+          className="list-scroll-shell scrollbar-fade glass-scrollbar relative flex-1 overflow-auto px-2.5 py-2"
+          onPointerEnter={floating.handleListPointerEnter}
+          onPointerMove={floating.handleListPointerMove}
+          onPointerLeave={floating.handleListMouseLeave}
+          onScroll={floating.handleListScroll}
         >
           <div
-            ref={floating.floatingCardSurfaceRef}
-            data-selected={floating.cardTargetConfigId === selectedRenderId ? "true" : "false"}
-            className="floating-list-card h-full w-full transition-[box-shadow] duration-320 ease-[cubic-bezier(0.16,1,0.3,1)]"
-            style={floating.floatingCardSurfaceStyle}
-          />
-        </div>
-        <div className="glass-stagger">
+            aria-hidden
+            className={cn(
+              "pointer-events-none !absolute origin-top-left transition-opacity duration-120 ease-linear",
+              floatingDragPreviewStyle ? "z-30" : "z-0",
+              floating.floatingVisible ? "opacity-100" : "opacity-0"
+            )}
+            style={floating.floatingCardMotionStyle}
+          >
+            <div
+              className={cn(
+                "h-full w-full",
+                floatingDragPreviewStyle && "will-change-transform"
+              )}
+              style={floatingDragPreviewStyle}
+            >
+              <div
+                ref={floating.floatingCardSurfaceRef}
+                data-selected={floating.cardTargetConfigId === selectedRenderId ? "true" : "false"}
+                className="floating-list-card h-full w-full transition-[box-shadow] duration-320 ease-[cubic-bezier(0.16,1,0.3,1)]"
+                style={floating.floatingCardSurfaceStyle}
+              />
+            </div>
+          </div>
+          <div className="glass-stagger">
           {showRecentItems && (
             <div className="space-y-1.5">
               <div className="flex items-center gap-1.5 px-3 py-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                 <Clock className="h-3.5 w-3.5" />
                 <span>{t.recentlyUsed || "最近使用"}</span>
               </div>
-              {recentItems.map((item) => (
+              {previewRecentItems.map((item) => (
                 <div
                   key={`recent-${item.key}`}
-                  ref={floating.setConfigRowRef(`recent:${item.key}`)}
+                  ref={composeNodeRefs(
+                    floating.setConfigRowRef(`recent:${item.key}`),
+                    recentReorder.setItemRef(item.key, undefined),
+                    recentMotion.setItemRef(item.key)
+                  )}
                   data-list-row="true"
                   data-list-item-id={`recent:${item.key}`}
                   data-list-visual-target={
@@ -876,7 +1176,16 @@ export function PublishConfigPanel({
                       ? "true"
                       : "false"
                   }
-                  className="group relative z-10"
+                  className={cn(
+                    "group relative z-10",
+                    recentReorder.draggingItemId === item.key &&
+                      "pointer-events-none z-40"
+                  )}
+                  style={
+                    recentReorder.draggingItemId === item.key
+                      ? recentReorder.dragPreviewStyle
+                      : undefined
+                  }
                   onMouseEnter={() =>
                     interaction.handleRowMouseEnter(`recent:${item.key}`)
                   }
@@ -895,10 +1204,27 @@ export function PublishConfigPanel({
                     interaction.handleRowBlur(`recent:${item.key}`);
                   }}
                 >
+                  <ListDropIndicator
+                    position={
+                      recentReorder.dropTarget?.itemId === item.key
+                        ? recentReorder.dropTarget.position
+                        : null
+                    }
+                  />
+                  <ListDragHandle
+                    enabled={recentDragEnabled}
+                    label={t.dragToReorder || "拖动排序"}
+                    disabledLabel={
+                      t.dragDisabledWhileSearching || "搜索时无法排序"
+                    }
+                    onPointerDown={(event) => {
+                      recentReorder.startDrag(item.key, event);
+                    }}
+                  />
                   <button
                     type="button"
                     aria-pressed={item.key === selectedConfigId}
-                    className="flex w-full items-center gap-2.5 rounded-2xl border border-transparent bg-transparent px-3 py-2 pr-11 text-left shadow-none outline-none transition-all duration-300 hover:bg-[var(--glass-bg)]/20 focus-visible:ring-2 focus-visible:ring-primary/30 focus-visible:ring-offset-1 focus-visible:ring-offset-background"
+                    className="flex w-full items-center gap-2.5 rounded-2xl border border-transparent bg-transparent py-2 pl-10 pr-11 text-left shadow-none outline-none transition-all duration-300 hover:bg-[var(--glass-bg)]/20 focus-visible:ring-2 focus-visible:ring-primary/30 focus-visible:ring-offset-1 focus-visible:ring-offset-background"
                     onClick={() => {
                       setPreferredSelectedRenderId(`recent:${item.key}`);
                       item.onClick();
@@ -976,17 +1302,21 @@ export function PublishConfigPanel({
 
           <ConfigGroup
             title={t.profileGroup || "项目发布配置"}
-            count={visibleProjectProfiles.length}
+            count={previewVisibleProjectProfiles.length}
             defaultExpanded={true}
-            visible={visibleProjectProfiles.length > 0}
+            visible={previewVisibleProjectProfiles.length > 0}
           >
-            {visibleProjectProfiles.map((name) => {
+            {previewVisibleProjectProfiles.map((name) => {
               const configKey = `pubxml:${name}`;
               const isPubxmlSelected = selectedRenderId === configKey;
               return (
                 <div
                   key={`pubxml-${name}`}
-                  ref={floating.setConfigRowRef(configKey)}
+                  ref={composeNodeRefs(
+                    floating.setConfigRowRef(configKey),
+                    projectProfileReorder.setItemRef(name, undefined),
+                    projectMotion.setItemRef(name)
+                  )}
                   data-list-row="true"
                   data-list-item-id={configKey}
                   data-list-visual-target={
@@ -995,7 +1325,16 @@ export function PublishConfigPanel({
                   data-list-menu-open={
                     interaction.isMenuOpenForItem(configKey) ? "true" : "false"
                   }
-                  className="group relative z-10"
+                  className={cn(
+                    "group relative z-10",
+                    projectProfileReorder.draggingItemId === name &&
+                      "pointer-events-none z-40"
+                  )}
+                  style={
+                    projectProfileReorder.draggingItemId === name
+                      ? projectProfileReorder.dragPreviewStyle
+                      : undefined
+                  }
                   onMouseEnter={() => interaction.handleRowMouseEnter(configKey)}
                   onFocusCapture={() => interaction.handleRowFocus(configKey)}
                   onBlurCapture={(event) => {
@@ -1010,10 +1349,27 @@ export function PublishConfigPanel({
                     interaction.handleRowBlur(configKey);
                   }}
                 >
+                  <ListDropIndicator
+                    position={
+                      projectProfileReorder.dropTarget?.itemId === name
+                        ? projectProfileReorder.dropTarget.position
+                        : null
+                    }
+                  />
+                  <ListDragHandle
+                    enabled={projectProfileDragEnabled}
+                    label={t.dragToReorder || "拖动排序"}
+                    disabledLabel={
+                      t.dragDisabledWhileSearching || "搜索时无法排序"
+                    }
+                    onPointerDown={(event) => {
+                      projectProfileReorder.startDrag(name, event);
+                    }}
+                  />
                   <button
                     type="button"
                     aria-pressed={isPubxmlSelected}
-                    className="flex w-full items-center gap-2.5 rounded-2xl border border-transparent bg-transparent px-3 py-2 pr-11 text-left shadow-none outline-none transition-all duration-300 hover:bg-[var(--glass-bg)]/20 focus-visible:ring-2 focus-visible:ring-primary/30 focus-visible:ring-offset-1 focus-visible:ring-offset-background"
+                    className="flex w-full items-center gap-2.5 rounded-2xl border border-transparent bg-transparent py-2 pl-10 pr-11 text-left shadow-none outline-none transition-all duration-300 hover:bg-[var(--glass-bg)]/20 focus-visible:ring-2 focus-visible:ring-primary/30 focus-visible:ring-offset-1 focus-visible:ring-offset-background"
                     onClick={() => {
                       setPreferredSelectedRenderId(configKey);
                       onSelectProjectProfile(name);
@@ -1083,7 +1439,7 @@ export function PublishConfigPanel({
             })}
           </ConfigGroup>
 
-          {visibleGroupedFilteredProfiles.map((group) => (
+          {previewVisibleGroupedFilteredProfiles.map((group) => (
             <ConfigGroup
               key={`userprofile-group-${group.groupName}`}
               title={group.groupName}
@@ -1126,7 +1482,13 @@ export function PublishConfigPanel({
                       open
                     );
                   }}
-                  rowRef={floating.setConfigRowRef(`userprofile:${profile.name}`)}
+                  rowRef={composeNodeRefs(
+                    floating.setConfigRowRef(`userprofile:${profile.name}`),
+                    customProfileReorder.setItemRef(profile.name, {
+                      groupKey: group.groupKey,
+                    }),
+                    customMotion.setItemRef(profile.name)
+                  )}
                   onItemMouseEnter={() =>
                     interaction.handleRowMouseEnter(`userprofile:${profile.name}`)
                   }
@@ -1136,30 +1498,65 @@ export function PublishConfigPanel({
                   onItemBlur={() =>
                     interaction.handleRowBlur(`userprofile:${profile.name}`)
                   }
+                  groupKey={group.groupKey}
+                  dragEnabled={customProfileDragEnabled}
+                  dragHandleLabel={t.dragToReorder || "拖动排序"}
+                  dragDisabledLabel={
+                    t.dragDisabledWhileSearching || "搜索时无法排序"
+                  }
+                  isDragging={customProfileReorder.draggingItemId === profile.name}
+                  dragPreviewStyle={customProfileReorder.dragPreviewStyle}
+                  dropIndicatorPosition={
+                    customProfileReorder.dropTarget?.itemId === profile.name &&
+                    customProfileReorder.dropTarget.meta.groupKey ===
+                      group.groupKey
+                      ? customProfileReorder.dropTarget.position
+                      : null
+                  }
+                  onHandlePointerDown={customProfileReorder.startDrag}
                 />
               ))}
             </ConfigGroup>
           ))}
-          {!showRecentItems && !hasVisibleConfigResults && (
+          {!showRecentItems && !hasVisiblePreviewConfigResults && (
             <div className="px-3 py-4 text-center text-xs text-muted-foreground">
               {t.noConfigs || "暂无配置"}
             </div>
           )}
+          </div>
         </div>
-      </div>
-    ),
+      );
+    },
     [
       deleteConfigLabel,
+      draggingFloatingConfig,
       favoriteSet,
       favoriteConfigLabel,
-      hasVisibleConfigResults,
+      floatingTargetConfigId,
+      hasVisiblePreviewConfigResults,
+      customProfileDragEnabled,
+      customMotion,
       onDeleteProfile,
       onEditProfile,
       onRemoveRecentConfig,
       onSelectProfile,
       onSelectProjectProfile,
       onToggleFavoriteConfig,
-      recentItems,
+      projectProfileDragEnabled,
+      projectMotion,
+      projectProfileReorder.draggingItemId,
+      projectProfileReorder.dropTarget,
+      projectProfileReorder.setItemRef,
+      projectProfileReorder.startDrag,
+      previewRecentItems,
+      previewVisibleGroupedFilteredProfiles,
+      previewVisibleProjectProfiles,
+      recentDragEnabled,
+      recentMotion,
+      recentReorder.draggingItemId,
+      recentReorder.dropTarget,
+      recentReorder.setItemRef,
+      recentReorder.startDrag,
       removeRecentLabel,
       selectedConfigId,
       selectedRenderId,
@@ -1175,8 +1572,10 @@ export function PublishConfigPanel({
       interaction.handleRowMouseEnter,
       interaction.isMenuOpenForItem,
       interaction.visualTargetItemId,
-      visibleGroupedFilteredProfiles,
-      visibleProjectProfiles,
+      customProfileReorder.draggingItemId,
+      customProfileReorder.dropTarget,
+      customProfileReorder.setItemRef,
+      customProfileReorder.startDrag,
     ]
   );
 
@@ -1191,7 +1590,7 @@ export function PublishConfigPanel({
         )}
       >
         <div className="flex items-center gap-0.5" data-tauri-no-drag>
-          {showExpandButton && onExpandRepo && (
+      {showExpandButton && onExpandRepo && (
             <Button
               variant="ghost"
               size="icon"
@@ -1347,15 +1746,12 @@ export function PublishConfigPanel({
       ) : (
         <Suspense fallback={renderConfigList(fallbackFloatingBindings)}>
           <PublishConfigPanelFloatingLayer
-            filteredConfigIds={allConfigIds}
-            targetConfigId={interaction.visualTargetItemId}
-            restingTargetConfigId={
-              interaction.activeMenuItemId ??
-              interaction.focusedItemId ??
-              selectedRenderId
-            }
+            filteredConfigIds={previewConfigIds}
+            targetConfigId={floatingTargetConfigId}
+            restingTargetConfigId={restingTargetConfigId}
             selectedConfigId={selectedRenderId}
-            freezeFloating={interaction.freezeFloating}
+            draggingConfigId={draggingFloatingConfig?.renderId ?? null}
+            freezeFloating={freezeFloating}
             onListPointerEnter={interaction.handleListPointerEnter}
             onListPointerLeave={interaction.handleListPointerLeave}
             onPointerConfigChange={interaction.handlePointerItemChange}

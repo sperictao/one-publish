@@ -17,6 +17,7 @@ interface UseFloatingListCardOptions {
   targetItemId: string | null;
   restingTargetItemId: string | null;
   selectedItemId: string | null;
+  draggingItemId?: string | null;
   freezeFloating: boolean;
   onListPointerEnter: () => void;
   onListPointerLeave: () => void;
@@ -43,6 +44,7 @@ export function useFloatingListCard({
   targetItemId,
   restingTargetItemId,
   selectedItemId,
+  draggingItemId = null,
   freezeFloating,
   onListPointerEnter,
   onListPointerLeave,
@@ -90,6 +92,18 @@ export function useFloatingListCard({
   const filteredItemIdsSignature = useMemo(
     () => filteredItemIds.join("|"),
     [filteredItemIds]
+  );
+  const updateTargetRect = useCallback(
+    (itemId: string | null) => {
+      const isDraggingTarget =
+        freezeFloating && draggingItemId !== null && itemId === draggingItemId;
+
+      updateFloatingRect(itemId, {
+        ignoreTransforms: isDraggingTarget,
+        immediate: isDraggingTarget,
+      });
+    },
+    [draggingItemId, freezeFloating, updateFloatingRect]
   );
 
   const setItemRowRef = useCallback(
@@ -222,11 +236,11 @@ export function useFloatingListCard({
     cancelFollow();
 
     if (freezeFloating) {
-      updateFloatingRect(targetItemId);
+      updateTargetRect(targetItemId);
       return;
     }
 
-    updateFloatingRect(restingTargetItemId);
+    updateTargetRect(restingTargetItemId);
     onPointerItemChange(null);
   }, [
     cancelFollow,
@@ -239,7 +253,7 @@ export function useFloatingListCard({
     startSelectedGlowDecay,
     targetItemId,
     triggerSelectedBounce,
-    updateFloatingRect,
+    updateTargetRect,
   ]);
 
   const floatingCardMotionStyle = useMemo<CSSProperties>(() => {
@@ -306,8 +320,8 @@ export function useFloatingListCard({
   );
 
   const handleListScroll = useCallback(() => {
-    updateFloatingRect(cardTargetItemIdRef.current);
-  }, [updateFloatingRect]);
+    updateTargetRect(cardTargetItemIdRef.current);
+  }, [updateTargetRect]);
 
   useEffect(() => {
     cardTargetItemIdRef.current = targetItemId;
@@ -329,18 +343,18 @@ export function useFloatingListCard({
   useLayoutEffect(() => {
     if (freezeFloating) {
       isPointerFollowingRef.current = false;
-      updateFloatingRect(targetItemId);
+      updateTargetRect(targetItemId);
       return;
     }
 
     if (isPointerFollowingRef.current) return;
-    updateFloatingRect(targetItemId);
+    updateTargetRect(targetItemId);
   }, [
     filteredItemIdsSignature,
     freezeFloating,
     isPointerFollowingRef,
     targetItemId,
-    updateFloatingRect,
+    updateTargetRect,
   ]);
 
   useEffect(() => {
@@ -355,14 +369,14 @@ export function useFloatingListCard({
     if (!listElement || typeof ResizeObserver === "undefined") return;
 
     const observer = new ResizeObserver(() => {
-      updateFloatingRect(cardTargetItemIdRef.current);
+      updateTargetRect(cardTargetItemIdRef.current);
     });
 
     observer.observe(listElement);
     return () => {
       observer.disconnect();
     };
-  }, [updateFloatingRect]);
+  }, [updateTargetRect]);
 
   useEffect(() => {
     return () => {

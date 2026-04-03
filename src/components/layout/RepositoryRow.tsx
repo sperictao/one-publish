@@ -1,6 +1,15 @@
+import type {
+  CSSProperties,
+  PointerEvent as ReactPointerEvent,
+} from "react";
 import { cn } from "@/lib/utils";
+import type { DropPosition } from "@/lib/listOrdering";
 import { FolderGit2, GitBranch } from "lucide-react";
 import type { Repository } from "@/types/repository";
+import {
+  ListDragHandle,
+  ListDropIndicator,
+} from "./ListReorderControls";
 import { RepositoryRowActionsMenu } from "./RepositoryRowActionsMenu";
 
 interface RepositoryRowProps {
@@ -19,6 +28,16 @@ interface RepositoryRowProps {
   onRowFocus: (repoId: string) => void;
   onRowBlur: (repoId: string) => void;
   onMenuOpenChange: (repoId: string, open: boolean) => void;
+  dragEnabled: boolean;
+  dragHandleLabel: string;
+  dragDisabledLabel: string;
+  isDragging: boolean;
+  dragPreviewStyle?: CSSProperties;
+  dropIndicatorPosition: DropPosition | null;
+  onHandlePointerDown: (
+    repoId: string,
+    event: ReactPointerEvent<HTMLButtonElement>
+  ) => void;
 }
 
 export function RepositoryRow({
@@ -37,6 +56,13 @@ export function RepositoryRow({
   onRowFocus,
   onRowBlur,
   onMenuOpenChange,
+  dragEnabled,
+  dragHandleLabel,
+  dragDisabledLabel,
+  isDragging,
+  dragPreviewStyle,
+  dropIndicatorPosition,
+  onHandlePointerDown,
 }: RepositoryRowProps): JSX.Element {
   const currentBranchName =
     repo.currentBranch?.trim() || repoT.currentBranchUnknown || "未知分支";
@@ -48,7 +74,11 @@ export function RepositoryRow({
       data-list-item-id={repo.id}
       data-list-visual-target={isVisualTarget ? "true" : "false"}
       data-list-menu-open={isMenuOpen ? "true" : "false"}
-      className="group relative z-10"
+      className={cn(
+        "group relative z-10",
+        isDragging && "pointer-events-none z-40"
+      )}
+      style={isDragging ? dragPreviewStyle : undefined}
       onMouseEnter={() => {
         onRowMouseEnter(repo.id);
       }}
@@ -64,11 +94,20 @@ export function RepositoryRow({
         onRowBlur(repo.id);
       }}
     >
+      <ListDropIndicator position={dropIndicatorPosition} />
+      <ListDragHandle
+        enabled={dragEnabled}
+        label={dragHandleLabel}
+        disabledLabel={dragDisabledLabel}
+        onPointerDown={(event) => {
+          onHandlePointerDown(repo.id, event);
+        }}
+      />
       <button
         type="button"
         aria-pressed={isSelected}
         aria-label={`${repoT.selectRepository || "选择仓库"}: ${repo.name}`}
-        className="flex w-full items-start gap-2.5 rounded-2xl border border-transparent bg-transparent px-3 py-2.5 pr-11 text-left shadow-none outline-none transition-all duration-300 hover:bg-[var(--glass-bg)]/20 focus-visible:ring-2 focus-visible:ring-primary/30 focus-visible:ring-offset-1 focus-visible:ring-offset-background"
+        className="flex w-full items-start gap-2.5 rounded-2xl border border-transparent bg-transparent py-2.5 pl-10 pr-11 text-left shadow-none outline-none transition-all duration-300 hover:bg-[var(--glass-bg)]/20 focus-visible:ring-2 focus-visible:ring-primary/30 focus-visible:ring-offset-1 focus-visible:ring-offset-background"
         onClick={() => {
           onSelect(repo.id);
         }}

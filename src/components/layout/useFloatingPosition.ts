@@ -40,6 +40,38 @@ interface UseFloatingPositionOptions {
   onRectCommitted: (nextRect: FloatingCardRectDraft | null, previousRect: FloatingCardRectDraft | null) => void;
 }
 
+interface UpdateFloatingRectOptions {
+  ignoreTransforms?: boolean;
+  immediate?: boolean;
+}
+
+function resolveOffsetWithinAncestor(
+  element: HTMLElement,
+  ancestor: HTMLElement
+): { top: number; left: number } | null {
+  let top = 0;
+  let left = 0;
+  let current: HTMLElement | null = element;
+
+  while (current && current !== ancestor) {
+    top += current.offsetTop;
+    left += current.offsetLeft;
+
+    const nextOffsetParent: Element | null = current.offsetParent;
+    if (!(nextOffsetParent instanceof HTMLElement)) {
+      return null;
+    }
+
+    current = nextOffsetParent;
+  }
+
+  if (current !== ancestor) {
+    return null;
+  }
+
+  return { top, left };
+}
+
 export function useFloatingPosition({
   isReducedMotionRef,
   rowRefs,
@@ -61,13 +93,29 @@ export function useFloatingPosition({
   const isPointerFollowingRef = useRef(false);
 
   const getRowRectDraft = useCallback(
-    (rowElement: HTMLDivElement): FloatingCardRectDraft => {
+    (
+      rowElement: HTMLDivElement,
+      options?: { ignoreTransforms?: boolean }
+    ): FloatingCardRectDraft => {
       const listElement = listRef.current;
       const rowWidth = rowElement.offsetWidth;
       const rowHeight = rowElement.offsetHeight;
       const insetX = Math.max(0, Math.min(rectInsetX, rowWidth / 2));
 
       if (listElement) {
+        if (options?.ignoreTransforms) {
+          const layoutOffset = resolveOffsetWithinAncestor(rowElement, listElement);
+
+          if (layoutOffset) {
+            return {
+              top: layoutOffset.top,
+              left: layoutOffset.left + insetX,
+              width: Math.max(0, rowWidth - insetX * 2),
+              height: rowHeight,
+            };
+          }
+        }
+
         const rowRect = rowElement.getBoundingClientRect();
         const listRect = listElement.getBoundingClientRect();
 
@@ -203,7 +251,10 @@ export function useFloatingPosition({
   }, [setFloatingAnimating]);
 
   const commitFloatingRect = useCallback(
-    (nextRect: FloatingCardRectDraft | null) => {
+    (
+      nextRect: FloatingCardRectDraft | null,
+      options?: { immediate?: boolean }
+    ) => {
       if (!nextRect) {
         const prev = previousFloatingRectRef.current;
         previousFloatingRectRef.current = null;
@@ -234,17 +285,44 @@ export function useFloatingPosition({
 
       floatingTargetRectRef.current = nextFloatingRect;
 
+      if (options?.immediate) {
+        floatingRenderRectRef.current = nextFloatingRect;
+        setFloatingRenderRect((prev) => {
+          const same =
+            prev.visible === nextFloatingRect.visible &&
+            Math.abs(prev.left - nextFloatingRect.left) < 0.01 &&
+            Math.abs(prev.top - nextFloatingRect.top) < 0.01 &&
+            Math.abs(prev.width - nextFloatingRect.width) < 0.01 &&
+            Math.abs(prev.height - nextFloatingRect.height) < 0.01;
+          return same ? prev : nextFloatingRect;
+        });
+        floatingFollowTimestampRef.current = null;
+        if (
+          floatingFollowRafRef.current !== null &&
+          typeof window !== "undefined" &&
+          typeof window.cancelAnimationFrame === "function"
+        ) {
+          window.cancelAnimationFrame(floatingFollowRafRef.current);
+          floatingFollowRafRef.current = null;
+        }
+        setFloatingAnimating(false);
+        return;
+      }
+
       if (targetChanged) {
         setFloatingAnimating(true);
       }
 
       startFloatingCardFollow();
     },
-    [onRectCommitted, setFloatingAnimating, startFloatingCardFollow]
+    [floatingFollowRafRef, onRectCommitted, setFloatingAnimating, startFloatingCardFollow]
   );
 
   const updateFloatingRect = useCallback(
-    (targetRepoId: string | null) => {
+    (
+      targetRepoId: string | null,
+      options?: UpdateFloatingRectOptions
+    ) => {
       if (!targetRepoId) {
         commitFloatingRect(null);
         return;
@@ -256,7 +334,9 @@ export function useFloatingPosition({
         return;
       }
 
-      commitFloatingRect(getRowRectDraft(rowElement));
+      commitFloatingRect(getRowRectDraft(rowElement, options), {
+        immediate: options?.immediate,
+      });
     },
     [commitFloatingRect, getRowRectDraft, rowRefs]
   );

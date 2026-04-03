@@ -12,6 +12,9 @@ import {
   type PointerEvent as ReactPointerEvent,
 } from "react";
 import { cn } from "@/lib/utils";
+import {
+  reorderItemsByDrop,
+} from "@/lib/listOrdering";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Search, Plus, Settings, ChevronDown, FolderGit2, Package } from "lucide-react";
@@ -21,6 +24,9 @@ import { useI18n } from "@/hooks/useI18n";
 import type { RepositoryListFloatingBindings } from "@/components/layout/RepositoryListFloatingLayer";
 import { RepositoryRow } from "@/components/layout/RepositoryRow";
 import { useRepositoryListInteractionState } from "@/components/layout/useRepositoryListInteractionState";
+import { usePointerListReorder } from "@/components/layout/usePointerListReorder";
+import { composeNodeRefs } from "@/components/layout/composeNodeRefs";
+import { useListReorderMotion } from "@/components/layout/useListReorderMotion";
 
 const EditRepositoryDialog = lazy(async () => {
   const mod = await import("@/components/layout/EditRepositoryDialog");
@@ -32,6 +38,17 @@ const RepositoryListFloatingLayer = lazy(async () => {
 });
 
 const EMPTY_FLOATING_STYLE: CSSProperties = {};
+
+function hasSameStringOrder(
+  left: readonly string[],
+  right: readonly string[]
+): boolean {
+  if (left.length !== right.length) {
+    return false;
+  }
+
+  return left.every((value, index) => value === right[index]);
+}
 
 function CollapseIcon(): JSX.Element {
   return (
@@ -85,6 +102,7 @@ interface RepositoryListProps {
   branchConnectivityByRepoId: Record<string, boolean>;
   onSettings: () => void;
   onCollapse?: () => void;
+  onReorderRepositories: (repoIds: string[]) => void;
 }
 
 export function RepositoryList({
@@ -102,6 +120,7 @@ export function RepositoryList({
   branchConnectivityByRepoId,
   onSettings,
   onCollapse,
+  onReorderRepositories,
 }: RepositoryListProps): JSX.Element {
   const [searchQuery, setSearchQuery] = useState("");
   const [filterExpanded, setFilterExpanded] = useState(true);
@@ -126,11 +145,66 @@ export function RepositoryList({
     () => filteredRepos.map((repo) => repo.id),
     [filteredRepos]
   );
+  const repoDragEnabled =
+    searchQuery.trim().length === 0 && repositories.length > 1;
 
   const interaction = useRepositoryListInteractionState({
     filteredRepoIds,
     selectedRepoId,
   });
+  const repositoryReorder = usePointerListReorder({
+    enabled: repoDragEnabled,
+    onStart: interaction.handleListPointerLeave,
+    onCommit: (activeRepoId, target) => {
+      const nextRepoIds = reorderItemsByDrop(
+        repositories,
+        (repo) => repo.id,
+        activeRepoId,
+        target.itemId,
+        target.position
+      ).map((repo) => repo.id);
+
+      if (
+        hasSameStringOrder(
+          nextRepoIds,
+          repositories.map((repo) => repo.id)
+        )
+      ) {
+        return;
+      }
+
+      onReorderRepositories(nextRepoIds);
+    },
+  });
+  const draggingRepoId = repositoryReorder.draggingItemId;
+  const previewRepos = useMemo(
+    () =>
+      draggingRepoId && repositoryReorder.dropTarget
+        ? reorderItemsByDrop(
+            filteredRepos,
+            (repo) => repo.id,
+            draggingRepoId,
+            repositoryReorder.dropTarget.itemId,
+            repositoryReorder.dropTarget.position
+          )
+        : filteredRepos,
+    [draggingRepoId, filteredRepos, repositoryReorder.dropTarget]
+  );
+  const previewRepoIds = useMemo(
+    () => previewRepos.map((repo) => repo.id),
+    [previewRepos]
+  );
+  const repoMotion = useListReorderMotion({
+    orderedIds: previewRepoIds,
+    draggingItemId: draggingRepoId,
+  });
+  const floatingTargetRepoId = draggingRepoId ?? interaction.visualTargetRepoId;
+  const restingTargetRepoId =
+    draggingRepoId ??
+    interaction.activeMenuRepoId ??
+    interaction.focusedRepoId ??
+    selectedRepoId;
+  const freezeFloating = interaction.freezeFloating || draggingRepoId !== null;
 
   useEffect(() => {
     if (floatingEnhancerEnabled) {
@@ -172,7 +246,7 @@ export function RepositoryList({
       listRef: fallbackListRef as MutableRefObject<HTMLDivElement | null>,
       floatingCardSurfaceRef:
         fallbackFloatingCardSurfaceRef as MutableRefObject<HTMLDivElement | null>,
-      cardTargetRepoId: interaction.visualTargetRepoId,
+      cardTargetRepoId: floatingTargetRepoId,
       floatingVisible: false,
       floatingCardMotionStyle: EMPTY_FLOATING_STYLE,
       floatingCardSurfaceStyle: EMPTY_FLOATING_STYLE,
@@ -184,9 +258,9 @@ export function RepositoryList({
     }),
     [
       createFallbackRowRef,
+      floatingTargetRepoId,
       handleFallbackListPointerEnter,
       handleFallbackListPointerLeave,
-      interaction.visualTargetRepoId,
       noopPointerHandler,
       noopVoidHandler,
     ]
@@ -203,74 +277,109 @@ export function RepositoryList({
   }, []);
 
   const renderRepoListContent = useCallback(
-    (floating: RepositoryListFloatingBindings) => (
-      <div
-        ref={floating.listRef}
-        className="list-scroll-shell scrollbar-fade glass-scrollbar relative flex-1 overflow-auto px-2.5 py-2"
-        onPointerEnter={floating.handleListPointerEnter}
-        onPointerMove={floating.handleListPointerMove}
-        onPointerLeave={floating.handleListMouseLeave}
-        onScroll={floating.handleListScroll}
-      >
+    (floating: RepositoryListFloatingBindings) => {
+      const floatingDragPreviewStyle =
+        draggingRepoId && floating.cardTargetRepoId === draggingRepoId
+          ? repositoryReorder.dragPreviewStyle
+          : undefined;
+
+      return (
         <div
-          aria-hidden
-          className={cn(
-            "pointer-events-none !absolute z-0 origin-top-left transition-opacity duration-120 ease-linear",
-            floating.floatingVisible ? "opacity-100" : "opacity-0"
-          )}
-          style={floating.floatingCardMotionStyle}
+          ref={floating.listRef}
+          className="list-scroll-shell scrollbar-fade glass-scrollbar relative flex-1 overflow-auto px-2.5 py-2"
+          onPointerEnter={floating.handleListPointerEnter}
+          onPointerMove={floating.handleListPointerMove}
+          onPointerLeave={floating.handleListMouseLeave}
+          onScroll={floating.handleListScroll}
         >
           <div
-            ref={floating.floatingCardSurfaceRef}
-            data-selected={floating.cardTargetRepoId === selectedRepoId ? "true" : "false"}
-            className="floating-list-card h-full w-full transition-[box-shadow] duration-320 ease-[cubic-bezier(0.16,1,0.3,1)]"
-            style={floating.floatingCardSurfaceStyle}
-          />
-        </div>
-
-        {filteredRepos.length === 0 ? (
-          <div className="flex h-full flex-col items-center justify-center gap-3 px-4 py-8">
-            <div className="glass-surface flex h-16 w-16 items-center justify-center rounded-2xl">
-              <FolderGit2 className="h-7 w-7 text-muted-foreground/30" />
-            </div>
-            <div className="text-center">
-              <p className="text-sm font-medium text-foreground/60">
-                {repoT.noRepositories || "暂无仓库"}
-              </p>
-              <p className="mt-1 text-xs text-muted-foreground/50">
-                {repoT.noRepositoriesHint || "点击下方添加仓库"}
-              </p>
-            </div>
-          </div>
-        ) : (
-          <div className="repo-list-grid space-y-1.5">
-            {filteredRepos.map((repo) => (
-              <RepositoryRow
-                key={repo.id}
-                repo={repo}
-                isSelected={selectedRepoId === repo.id}
-                isVisualTarget={interaction.visualTargetRepoId === repo.id}
-                isMenuOpen={interaction.isMenuOpenForRepo(repo.id)}
-                canConnectBranch={branchConnectivityByRepoId[repo.id] ?? false}
-                repoT={repoT}
-                rowRef={floating.setRepoRowRef(repo.id)}
-                onSelect={onSelectRepo}
-                onOpenDirectory={onOpenRepoDirectory}
-                onEdit={openEditDialog}
-                onRemove={onRemoveRepo}
-                onRowMouseEnter={interaction.handleRowMouseEnter}
-                onRowFocus={interaction.handleRowFocus}
-                onRowBlur={interaction.handleRowBlur}
-                onMenuOpenChange={interaction.handleMenuOpenChange}
+            aria-hidden
+            className={cn(
+              "pointer-events-none !absolute origin-top-left transition-opacity duration-120 ease-linear",
+              floatingDragPreviewStyle ? "z-30" : "z-0",
+              floating.floatingVisible ? "opacity-100" : "opacity-0"
+            )}
+            style={floating.floatingCardMotionStyle}
+          >
+            <div
+              className={cn(
+                "h-full w-full",
+                floatingDragPreviewStyle && "will-change-transform"
+              )}
+              style={floatingDragPreviewStyle}
+            >
+              <div
+                ref={floating.floatingCardSurfaceRef}
+                data-selected={floating.cardTargetRepoId === selectedRepoId ? "true" : "false"}
+                className="floating-list-card h-full w-full transition-[box-shadow] duration-320 ease-[cubic-bezier(0.16,1,0.3,1)]"
+                style={floating.floatingCardSurfaceStyle}
               />
-            ))}
+            </div>
           </div>
-        )}
-      </div>
-    ),
+
+          {previewRepos.length === 0 ? (
+            <div className="flex h-full flex-col items-center justify-center gap-3 px-4 py-8">
+              <div className="glass-surface flex h-16 w-16 items-center justify-center rounded-2xl">
+                <FolderGit2 className="h-7 w-7 text-muted-foreground/30" />
+              </div>
+              <div className="text-center">
+                <p className="text-sm font-medium text-foreground/60">
+                  {repoT.noRepositories || "暂无仓库"}
+                </p>
+                <p className="mt-1 text-xs text-muted-foreground/50">
+                  {repoT.noRepositoriesHint || "点击下方添加仓库"}
+                </p>
+              </div>
+            </div>
+          ) : (
+            <div className="repo-list-grid space-y-1.5">
+              {previewRepos.map((repo) => (
+                <RepositoryRow
+                  key={repo.id}
+                  repo={repo}
+                  isSelected={selectedRepoId === repo.id}
+                  isVisualTarget={interaction.visualTargetRepoId === repo.id}
+                  isMenuOpen={interaction.isMenuOpenForRepo(repo.id)}
+                  canConnectBranch={branchConnectivityByRepoId[repo.id] ?? false}
+                  repoT={repoT}
+                  rowRef={composeNodeRefs(
+                    floating.setRepoRowRef(repo.id),
+                    repositoryReorder.setItemRef(repo.id, undefined),
+                    repoMotion.setItemRef(repo.id)
+                  )}
+                  onSelect={onSelectRepo}
+                  onOpenDirectory={onOpenRepoDirectory}
+                  onEdit={openEditDialog}
+                  onRemove={onRemoveRepo}
+                  onRowMouseEnter={interaction.handleRowMouseEnter}
+                  onRowFocus={interaction.handleRowFocus}
+                  onRowBlur={interaction.handleRowBlur}
+                  onMenuOpenChange={interaction.handleMenuOpenChange}
+                  dragEnabled={repoDragEnabled}
+                  dragHandleLabel={repoT.dragToReorder || "拖动排序"}
+                  dragDisabledLabel={
+                    repoT.dragDisabledWhileSearching || "搜索时无法排序"
+                  }
+                  isDragging={repositoryReorder.draggingItemId === repo.id}
+                  dragPreviewStyle={repositoryReorder.dragPreviewStyle}
+                  dropIndicatorPosition={
+                    repositoryReorder.dropTarget?.itemId === repo.id
+                      ? repositoryReorder.dropTarget.position
+                      : null
+                  }
+                  onHandlePointerDown={repositoryReorder.startDrag}
+                />
+              ))}
+            </div>
+          )}
+        </div>
+      );
+    },
     [
       branchConnectivityByRepoId,
-      filteredRepos,
+      draggingRepoId,
+      previewRepos,
+      floatingTargetRepoId,
       interaction.handleMenuOpenChange,
       interaction.handleRowBlur,
       interaction.handleRowFocus,
@@ -278,9 +387,16 @@ export function RepositoryList({
       interaction.isMenuOpenForRepo,
       interaction.visualTargetRepoId,
       onRemoveRepo,
+      onReorderRepositories,
       onSelectRepo,
       openEditDialog,
       repoT,
+      repoMotion,
+      repoDragEnabled,
+      repositoryReorder.draggingItemId,
+      repositoryReorder.dropTarget,
+      repositoryReorder.setItemRef,
+      repositoryReorder.startDrag,
       selectedRepoId,
     ]
   );
@@ -366,13 +482,12 @@ export function RepositoryList({
       ) : (
         <Suspense fallback={renderRepoListContent(fallbackFloatingBindings)}>
           <RepositoryListFloatingLayer
-            filteredRepoIds={filteredRepoIds}
-            targetRepoId={interaction.visualTargetRepoId}
-            restingTargetRepoId={
-              interaction.activeMenuRepoId ?? interaction.focusedRepoId ?? selectedRepoId
-            }
+            filteredRepoIds={previewRepoIds}
+            targetRepoId={floatingTargetRepoId}
+            restingTargetRepoId={restingTargetRepoId}
             selectedRepoId={selectedRepoId}
-            freezeFloating={interaction.freezeFloating}
+            draggingRepoId={draggingRepoId}
+            freezeFloating={freezeFloating}
             onListPointerEnter={interaction.handleListPointerEnter}
             onListPointerLeave={interaction.handleListPointerLeave}
             onPointerRepoChange={interaction.handlePointerRepoChange}
