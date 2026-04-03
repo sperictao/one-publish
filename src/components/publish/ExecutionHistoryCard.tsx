@@ -32,7 +32,6 @@ export interface ExecutionHistoryCardProps {
   historyFilterWindow: HistoryFilterWindow;
   historyFilterKeyword: string;
   isExportingHistory: boolean;
-  isExportingDiagnosticsIndex: boolean;
   isPublishing: boolean;
   appT: Record<string, string | undefined>;
   historyT: Record<string, string | undefined>;
@@ -42,7 +41,6 @@ export interface ExecutionHistoryCardProps {
   onHistoryFilterWindowChange: (value: HistoryFilterWindow) => void;
   onHistoryFilterKeywordChange: (value: string) => void;
   onExportExecutionHistory: () => Promise<void>;
-  onExportDiagnosticsIndex: () => void;
   onClearFilters: () => void;
   onOpenSnapshotFromRecord: (record: ExecutionRecord) => Promise<void>;
   onRerunFromHistory: (record: ExecutionRecord) => Promise<void>;
@@ -62,7 +60,6 @@ export function ExecutionHistoryCard({
   historyFilterWindow,
   historyFilterKeyword,
   isExportingHistory,
-  isExportingDiagnosticsIndex,
   isPublishing,
   appT,
   historyT,
@@ -72,7 +69,6 @@ export function ExecutionHistoryCard({
   onHistoryFilterWindowChange,
   onHistoryFilterKeywordChange,
   onExportExecutionHistory,
-  onExportDiagnosticsIndex,
   onClearFilters,
   onOpenSnapshotFromRecord,
   onRerunFromHistory,
@@ -181,23 +177,6 @@ export function ExecutionHistoryCard({
                 historyT.exportHistory || "导出历史"
               )}
             </Button>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              className="w-fit"
-              onClick={onExportDiagnosticsIndex}
-              disabled={isExportingDiagnosticsIndex}
-            >
-              {isExportingDiagnosticsIndex ? (
-                <>
-                  <Loader2 className="mr-1 h-3 w-3 animate-spin" />
-                  {historyT.generating || "生成中..."}
-                </>
-              ) : (
-                historyT.exportDiagnosticsIndex || "导出诊断索引"
-              )}
-            </Button>
           </div>
           <Button
             type="button"
@@ -286,14 +265,6 @@ export function ExecutionHistoryCard({
                         onClick={() => void onCopyHandoffSnippet(record, "shell")}
                       >
                         {historyT.copyShellSnippet || "复制 Shell 片段"}
-                      </Button>
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant="outline"
-                        onClick={() => void onCopyHandoffSnippet(record, "github-actions")}
-                      >
-                        {historyT.copyGhaSnippet || "复制 GHA 片段"}
                       </Button>
                     </>
                   )}

@@ -22,7 +22,6 @@ interface UseExecutionHistoryCardPropsParams {
   historyFilterWindow: HistoryFilterWindow;
   historyFilterKeyword: string;
   isExportingHistory: boolean;
-  isExportingDiagnosticsIndex: boolean;
   isPublishing: boolean;
   appT: TranslationMap;
   historyT: TranslationMap;
@@ -32,7 +31,6 @@ interface UseExecutionHistoryCardPropsParams {
   setHistoryFilterWindow: (value: HistoryFilterWindow) => void;
   setHistoryFilterKeyword: (value: string) => void;
   exportExecutionHistory: () => Promise<void>;
-  exportDiagnosticsIndex: () => void;
   clearHistoryFilters: () => void;
   openSnapshotFromRecord: (record: ExecutionRecord) => Promise<void>;
   rerunFromHistory: (record: ExecutionRecord) => Promise<void>;
@@ -53,7 +51,6 @@ export function useExecutionHistoryCardProps(
       historyFilterWindow: params.historyFilterWindow,
       historyFilterKeyword: params.historyFilterKeyword,
       isExportingHistory: params.isExportingHistory,
-      isExportingDiagnosticsIndex: params.isExportingDiagnosticsIndex,
       isPublishing: params.isPublishing,
       appT: params.appT,
       historyT: params.historyT,
@@ -63,7 +60,6 @@ export function useExecutionHistoryCardProps(
       onHistoryFilterWindowChange: params.setHistoryFilterWindow,
       onHistoryFilterKeywordChange: params.setHistoryFilterKeyword,
       onExportExecutionHistory: params.exportExecutionHistory,
-      onExportDiagnosticsIndex: params.exportDiagnosticsIndex,
       onClearFilters: params.clearHistoryFilters,
       onOpenSnapshotFromRecord: params.openSnapshotFromRecord,
       onRerunFromHistory: params.rerunFromHistory,

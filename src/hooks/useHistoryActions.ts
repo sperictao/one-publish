@@ -4,6 +4,7 @@ import { toast } from "sonner";
 import { buildGitHubActionsSnippet, buildShellHandoffSnippet, type HandoffSnippetFormat } from "@/lib/handoffSnippet";
 import type { ProviderPublishSpec } from "@/hooks/usePublishRunner";
 import { openExecutionSnapshot, setExecutionRecordSnapshot, type ExecutionRecord } from "@/lib/store";
+import { extractInvokeErrorMessage } from "@/lib/tauri/invokeErrors";
 
 interface TranslationMap {
   [key: string]: string | undefined;
@@ -96,7 +97,9 @@ export function useHistoryActions({
 
       toast.success(historyT.snapshotOpened || "已打开执行快照", { description: openedPath });
     } catch (err) {
-      toast.error(historyT.openSnapshotFailed || "打开执行快照失败", { description: String(err) });
+      toast.error(historyT.openSnapshotFailed || "打开执行快照失败", {
+        description: extractInvokeErrorMessage(err),
+      });
     }
   }, [historyT.openSnapshotFailed, historyT.snapshotOpened, setExecutionHistory]);
 

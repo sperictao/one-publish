@@ -72,9 +72,7 @@ export function DiagnosticsSection({
 
   const {
     isExportingHistory,
-    isExportingDiagnosticsIndex,
     exportExecutionHistory,
-    exportDiagnosticsIndex,
   } = useDiagnosticsExports({
     historyT,
     snapshotPaths,
@@ -96,7 +94,6 @@ export function DiagnosticsSection({
     historyFilterWindow,
     historyFilterKeyword,
     isExportingHistory,
-    isExportingDiagnosticsIndex,
     isPublishing,
     appT,
     historyT,
@@ -106,7 +103,6 @@ export function DiagnosticsSection({
     setHistoryFilterWindow,
     setHistoryFilterKeyword,
     exportExecutionHistory,
-    exportDiagnosticsIndex,
     clearHistoryFilters,
     openSnapshotFromRecord,
     rerunFromHistory,
