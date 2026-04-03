@@ -362,11 +362,6 @@ export function RepositoryList({
                   }
                   isDragging={repositoryReorder.draggingItemId === repo.id}
                   dragPreviewStyle={repositoryReorder.dragPreviewStyle}
-                  dropIndicatorPosition={
-                    repositoryReorder.dropTarget?.itemId === repo.id
-                      ? repositoryReorder.dropTarget.position
-                      : null
-                  }
                   onHandlePointerDown={repositoryReorder.startDrag}
                 />
               ))}

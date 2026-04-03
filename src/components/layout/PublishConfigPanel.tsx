@@ -14,7 +14,6 @@ import {
 import { cn } from "@/lib/utils";
 import {
   buildProfileGroups,
-  type DropPosition,
   reorderItemsByDrop,
   reorderProfilesByDrop,
 } from "@/lib/listOrdering";
@@ -64,7 +63,6 @@ import {
 } from "@/components/layout/RowActionsMenu";
 import {
   ListDragHandle,
-  ListDropIndicator,
 } from "@/components/layout/ListReorderControls";
 import { usePointerListReorder } from "@/components/layout/usePointerListReorder";
 import { useListInteractionState } from "@/components/layout/useListInteractionState";
@@ -267,7 +265,6 @@ function ProfileItem({
   dragDisabledLabel,
   isDragging,
   dragPreviewStyle,
-  dropIndicatorPosition,
   onHandlePointerDown,
 }: {
   profile: ConfigProfile;
@@ -298,7 +295,6 @@ function ProfileItem({
   dragDisabledLabel: string;
   isDragging: boolean;
   dragPreviewStyle?: CSSProperties;
-  dropIndicatorPosition: DropPosition | null;
   onHandlePointerDown: (
     profileName: string,
     event: ReactPointerEvent<HTMLButtonElement>
@@ -359,7 +355,6 @@ function ProfileItem({
         onItemBlur();
       }}
     >
-      <ListDropIndicator position={dropIndicatorPosition} />
       <ListDragHandle
         enabled={dragEnabled}
         label={dragHandleLabel}
@@ -1204,13 +1199,6 @@ export function PublishConfigPanel({
                     interaction.handleRowBlur(`recent:${item.key}`);
                   }}
                 >
-                  <ListDropIndicator
-                    position={
-                      recentReorder.dropTarget?.itemId === item.key
-                        ? recentReorder.dropTarget.position
-                        : null
-                    }
-                  />
                   <ListDragHandle
                     enabled={recentDragEnabled}
                     label={t.dragToReorder || "拖动排序"}
@@ -1349,13 +1337,6 @@ export function PublishConfigPanel({
                     interaction.handleRowBlur(configKey);
                   }}
                 >
-                  <ListDropIndicator
-                    position={
-                      projectProfileReorder.dropTarget?.itemId === name
-                        ? projectProfileReorder.dropTarget.position
-                        : null
-                    }
-                  />
                   <ListDragHandle
                     enabled={projectProfileDragEnabled}
                     label={t.dragToReorder || "拖动排序"}
@@ -1506,13 +1487,6 @@ export function PublishConfigPanel({
                   }
                   isDragging={customProfileReorder.draggingItemId === profile.name}
                   dragPreviewStyle={customProfileReorder.dragPreviewStyle}
-                  dropIndicatorPosition={
-                    customProfileReorder.dropTarget?.itemId === profile.name &&
-                    customProfileReorder.dropTarget.meta.groupKey ===
-                      group.groupKey
-                      ? customProfileReorder.dropTarget.position
-                      : null
-                  }
                   onHandlePointerDown={customProfileReorder.startDrag}
                 />
               ))}

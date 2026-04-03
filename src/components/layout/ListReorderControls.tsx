@@ -1,7 +1,6 @@
 import type { PointerEvent as ReactPointerEvent } from "react";
 import { GripVertical } from "lucide-react";
 import { cn } from "@/lib/utils";
-import type { DropPosition } from "@/lib/listOrdering";
 
 interface ListDragHandleProps {
   enabled: boolean;
@@ -45,27 +44,5 @@ export function ListDragHandle({
         <GripVertical className="h-4 w-4" />
       </button>
     </div>
-  );
-}
-
-interface ListDropIndicatorProps {
-  position: DropPosition | null;
-}
-
-export function ListDropIndicator({
-  position,
-}: ListDropIndicatorProps): JSX.Element | null {
-  if (!position) {
-    return null;
-  }
-
-  return (
-    <div
-      aria-hidden
-      className={cn(
-        "pointer-events-none absolute left-3 right-3 z-30 h-0.5 rounded-full bg-primary/65 shadow-[0_0_0_1px_hsl(var(--background)),0_0_10px_hsl(var(--primary)/0.18)]",
-        position === "before" ? "top-0" : "bottom-0"
-      )}
-    />
   );
 }

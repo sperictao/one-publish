@@ -3,13 +3,9 @@ import type {
   PointerEvent as ReactPointerEvent,
 } from "react";
 import { cn } from "@/lib/utils";
-import type { DropPosition } from "@/lib/listOrdering";
 import { FolderGit2, GitBranch } from "lucide-react";
 import type { Repository } from "@/types/repository";
-import {
-  ListDragHandle,
-  ListDropIndicator,
-} from "./ListReorderControls";
+import { ListDragHandle } from "./ListReorderControls";
 import { RepositoryRowActionsMenu } from "./RepositoryRowActionsMenu";
 
 interface RepositoryRowProps {
@@ -33,7 +29,6 @@ interface RepositoryRowProps {
   dragDisabledLabel: string;
   isDragging: boolean;
   dragPreviewStyle?: CSSProperties;
-  dropIndicatorPosition: DropPosition | null;
   onHandlePointerDown: (
     repoId: string,
     event: ReactPointerEvent<HTMLButtonElement>
@@ -61,7 +56,6 @@ export function RepositoryRow({
   dragDisabledLabel,
   isDragging,
   dragPreviewStyle,
-  dropIndicatorPosition,
   onHandlePointerDown,
 }: RepositoryRowProps): JSX.Element {
   const currentBranchName =
@@ -94,7 +88,6 @@ export function RepositoryRow({
         onRowBlur(repo.id);
       }}
     >
-      <ListDropIndicator position={dropIndicatorPosition} />
       <ListDragHandle
         enabled={dragEnabled}
         label={dragHandleLabel}
