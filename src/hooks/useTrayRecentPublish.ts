@@ -11,6 +11,7 @@ import {
   getRepository,
   resolveProjectInfo,
   scanProject,
+  setTrayPublishStatus,
   showMainWindow,
 } from "@/lib/store";
 import { analyzeProjectScanFailure } from "@/lib/tauri/invokeErrors";
@@ -135,6 +136,7 @@ function createTrayRunOptions(
     openOutputDirOnSuccess: true,
     restoreWindowOnFailure: false,
     feedbackMode: "system",
+    trayStatusEffect: true,
   };
 }
 
@@ -209,6 +211,7 @@ export function useTrayRecentPublish(params: {
           await params.runPublishSpec(resolved.spec, resolved.options);
         }
       } catch (error) {
+        await setTrayPublishStatus("failure").catch(() => {});
         const description =
           error instanceof Error ? error.message : String(error);
         const notified = await showSystemNotification({

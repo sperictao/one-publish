@@ -12,6 +12,37 @@ vi.mock("@/lib/store", async () => {
 });
 
 describe("PublishRunCard", () => {
+  it("发布状态区只渲染一个状态图标", () => {
+    render(
+      <PublishRunCard
+        outputLog=""
+        publishResult={{
+          provider_id: "dotnet",
+          success: true,
+          cancelled: false,
+          error: null,
+          output_dir: "/tmp/output",
+          file_count: 3,
+        }}
+        appT={{
+          outputLogTitle: "执行发布",
+          publishStatusLabel: "发布状态",
+          statusSuccess: "成功",
+          publishStatusSuccessDetail: "发布已完成，可直接打开输出目录查看产物。",
+          outputDirectoryLabel: "输出目录",
+          fileCountUnit: "个文件",
+          noOutput: "无输出",
+        }}
+        publishActions={null}
+      />
+    );
+
+    const panel = screen.getByTestId("publish-status-panel");
+
+    expect(panel.querySelectorAll("svg")).toHaveLength(1);
+    expect(screen.getByText("成功")).toBeInTheDocument();
+  });
+
   it("刷新期间保留上一帧执行信息并显示遮罩", () => {
     const appT = {
       outputLogTitle: "执行发布",

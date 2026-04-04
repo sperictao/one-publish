@@ -2,8 +2,16 @@
 //!
 //! 处理系统托盘图标、菜单创建和事件处理
 
-use serde::Serialize;
-use std::path::{Path, PathBuf};
+use serde::{Deserialize, Serialize};
+use std::{
+    path::{Path, PathBuf},
+    sync::{
+        atomic::{AtomicU64, Ordering},
+        OnceLock,
+    },
+    thread,
+    time::Duration,
+};
 use tauri::{
     image::Image,
     menu::{Menu, MenuItem, PredefinedMenuItem},
@@ -13,11 +21,18 @@ use tauri::{
 
 const TRAY_PUBLISH_EVENT_PREFIX: &str = "tray_publish:";
 const MAX_TRAY_CONFIGS_PER_REPO: usize = 3;
+const TRAY_PUBLISHING_TITLE_INTERVAL: Duration = Duration::from_millis(420);
+const TRAY_RESULT_EFFECT_DURATION: Duration = Duration::from_secs(2);
+const TRAY_PUBLISHING_DOT_COUNT: usize = 3;
+const PUNCTUATION_SPACE: char = '\u{2008}';
 
 /// 托盘菜单文本（多语言支持）
 pub struct TrayTexts {
     pub show_main: String,
     pub quit: String,
+    pub publishing: String,
+    pub publish_success: String,
+    pub publish_failure: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -25,6 +40,15 @@ pub struct TrayTexts {
 pub struct TrayPublishRequestPayload {
     pub repo_id: String,
     pub config_key: String,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum TrayPublishStatus {
+    Idle,
+    Publishing,
+    Success,
+    Failure,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -46,11 +70,17 @@ impl TrayTexts {
             "en" => Self {
                 show_main: "Show Main Window".to_string(),
                 quit: "Quit".to_string(),
+                publishing: "Publishing".to_string(),
+                publish_success: "Publish Succeeded".to_string(),
+                publish_failure: "Publish Failed".to_string(),
             },
             _ => Self {
                 // 中文默认
                 show_main: "显示主界面".to_string(),
                 quit: "退出应用".to_string(),
+                publishing: "发布中".to_string(),
+                publish_success: "发布成功".to_string(),
+                publish_failure: "发布失败".to_string(),
             },
         }
     }
@@ -59,6 +89,174 @@ impl TrayTexts {
 impl Default for TrayTexts {
     fn default() -> Self {
         Self::from_language("zh")
+    }
+}
+
+#[derive(Default)]
+struct TrayAnimationController {
+    revision: AtomicU64,
+}
+
+impl TrayAnimationController {
+    fn begin_transition(&self) -> u64 {
+        self.revision.fetch_add(1, Ordering::SeqCst) + 1
+    }
+
+    fn is_current(&self, revision: u64) -> bool {
+        self.revision.load(Ordering::SeqCst) == revision
+    }
+}
+
+fn tray_animation_controller() -> &'static TrayAnimationController {
+    static CONTROLLER: OnceLock<TrayAnimationController> = OnceLock::new();
+    CONTROLLER.get_or_init(TrayAnimationController::default)
+}
+
+fn current_tray_texts() -> TrayTexts {
+    TrayTexts::from_language(crate::store::get_state().language.as_str())
+}
+
+fn resolve_status_title(
+    texts: &TrayTexts,
+    status: TrayPublishStatus,
+    frame_index: usize,
+) -> String {
+    match status {
+        TrayPublishStatus::Idle => String::new(),
+        TrayPublishStatus::Publishing => {
+            let visible_dots = (frame_index % TRAY_PUBLISHING_DOT_COUNT) + 1;
+            let reserved_spaces = TRAY_PUBLISHING_DOT_COUNT.saturating_sub(visible_dots);
+            format!(
+                "{}{}{}",
+                texts.publishing,
+                ".".repeat(visible_dots),
+                PUNCTUATION_SPACE.to_string().repeat(reserved_spaces)
+            )
+        }
+        TrayPublishStatus::Success => texts.publish_success.clone(),
+        TrayPublishStatus::Failure => texts.publish_failure.clone(),
+    }
+}
+
+fn apply_tray_status_title(
+    app: &AppHandle,
+    status: TrayPublishStatus,
+    frame_index: usize,
+) -> Result<bool, crate::errors::AppError> {
+    let Some(tray) = app.tray_by_id("main") else {
+        return Ok(false);
+    };
+    let texts = current_tray_texts();
+    let title = resolve_status_title(&texts, status, frame_index);
+
+    #[cfg(target_os = "windows")]
+    {
+        let tooltip = if title.is_empty() {
+            None::<&str>
+        } else {
+            Some(title.as_str())
+        };
+        tray.set_tooltip(tooltip).map_err(|source| {
+            crate::errors::AppError::tray_with_code(
+                format!("更新托盘提示失败: {}", source),
+                "tray_tooltip_update_failed",
+            )
+        })?;
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        // `tray-icon` 在 macOS 上把 `set_title(None)` 实现成 no-op，
+        // 空闲态需要显式写入空字符串才能真正清掉上一轮状态文字。
+        tray.set_title(Some(title.as_str())).map_err(|source| {
+            crate::errors::AppError::tray_with_code(
+                format!("更新托盘标题失败: {}", source),
+                "tray_title_update_failed",
+            )
+        })?;
+    }
+
+    Ok(true)
+}
+
+fn spawn_publishing_animation(app: AppHandle, revision: u64) {
+    thread::spawn(move || {
+        let mut frame_index = 1;
+        while tray_animation_controller().is_current(revision) {
+            thread::sleep(TRAY_PUBLISHING_TITLE_INTERVAL);
+            if !tray_animation_controller().is_current(revision) {
+                break;
+            }
+            if let Err(err) =
+                apply_tray_status_title(&app, TrayPublishStatus::Publishing, frame_index)
+            {
+                log::warn!("更新发布中托盘状态失败: {}", err);
+                break;
+            }
+            frame_index = (frame_index + 1) % TRAY_PUBLISHING_DOT_COUNT;
+        }
+    });
+}
+
+fn spawn_result_clear_animation(app: AppHandle, revision: u64) {
+    thread::spawn(move || {
+        thread::sleep(TRAY_RESULT_EFFECT_DURATION);
+
+        if tray_animation_controller().is_current(revision) {
+            if let Err(err) = apply_tray_status_title(&app, TrayPublishStatus::Idle, 0) {
+                log::warn!("恢复托盘空闲标题失败: {}", err);
+            }
+        }
+    });
+}
+
+fn set_tray_publish_status_internal(
+    app: &AppHandle,
+    status: TrayPublishStatus,
+) -> Result<bool, crate::errors::AppError> {
+    let revision = tray_animation_controller().begin_transition();
+    let updated = apply_tray_status_title(app, status, 0)?;
+
+    if !updated {
+        return Ok(false);
+    }
+
+    match status {
+        TrayPublishStatus::Idle => {}
+        TrayPublishStatus::Publishing => spawn_publishing_animation(app.clone(), revision),
+        TrayPublishStatus::Success | TrayPublishStatus::Failure => {
+            spawn_result_clear_animation(app.clone(), revision)
+        }
+    }
+
+    Ok(updated)
+}
+
+/// macOS 平台加载 template 图标
+#[cfg(target_os = "macos")]
+fn macos_tray_icon() -> Option<Image<'static>> {
+    const ICON_BYTES: &[u8] = include_bytes!("../icons/tray/macos/statusbar_template.png");
+
+    match Image::from_bytes(ICON_BYTES) {
+        Ok(icon) => Some(icon),
+        Err(err) => {
+            log::warn!("加载 macOS 托盘图标失败: {}", err);
+            None
+        }
+    }
+}
+
+/// Windows 平台加载彩色图标
+#[cfg(target_os = "windows")]
+fn windows_tray_icon() -> Option<Image<'static>> {
+    const ICON_BYTES: &[u8] = include_bytes!("../icons/tray/windows/tray_icon.png");
+
+    match Image::from_bytes(ICON_BYTES) {
+        Ok(icon) => Some(icon),
+        Err(err) => {
+            log::warn!("加载 Windows 托盘图标失败: {}", err);
+            None
+        }
     }
 }
 
@@ -260,8 +458,16 @@ pub fn create_tray_menu(app: &AppHandle) -> Result<Menu<Wry>, tauri::Error> {
 /// 处理托盘菜单事件
 pub fn handle_tray_menu_event(app: &AppHandle, event_id: &str) {
     if let Some(payload) = parse_tray_publish_event_id(event_id) {
+        if let Err(err) = set_tray_publish_status_internal(app, TrayPublishStatus::Publishing) {
+            log::warn!("切换托盘发布中状态失败: {}", err);
+        }
         if let Err(err) = app.emit("tray-publish-request", payload) {
             log::warn!("发送 tray-publish-request 失败: {}", err);
+            if let Err(status_err) =
+                set_tray_publish_status_internal(app, TrayPublishStatus::Failure)
+            {
+                log::warn!("切换托盘失败状态失败: {}", status_err);
+            }
         }
         return;
     }
@@ -307,7 +513,6 @@ pub fn init_tray(app: &AppHandle) -> Result<(), tauri::Error> {
             handle_tray_menu_event(app, event.id().as_ref());
         });
 
-    // macOS 使用 template 图标以适应亮暗色主题
     #[cfg(target_os = "macos")]
     {
         if let Some(icon) = macos_tray_icon() {
@@ -315,7 +520,6 @@ pub fn init_tray(app: &AppHandle) -> Result<(), tauri::Error> {
         }
     }
 
-    // Windows 使用彩色图标
     #[cfg(target_os = "windows")]
     {
         if let Some(icon) = windows_tray_icon() {
@@ -328,34 +532,6 @@ pub fn init_tray(app: &AppHandle) -> Result<(), tauri::Error> {
 
     log::info!("系统托盘初始化成功");
     Ok(())
-}
-
-/// macOS 平台加载 template 图标
-#[cfg(target_os = "macos")]
-fn macos_tray_icon() -> Option<Image<'static>> {
-    const ICON_BYTES: &[u8] = include_bytes!("../icons/tray/macos/statusbar_template.png");
-
-    match Image::from_bytes(ICON_BYTES) {
-        Ok(icon) => Some(icon),
-        Err(err) => {
-            log::warn!("加载 macOS 托盘图标失败: {}", err);
-            None
-        }
-    }
-}
-
-/// Windows 平台加载彩色图标
-#[cfg(target_os = "windows")]
-fn windows_tray_icon() -> Option<Image<'static>> {
-    const ICON_BYTES: &[u8] = include_bytes!("../icons/tray/windows/tray_icon.png");
-
-    match Image::from_bytes(ICON_BYTES) {
-        Ok(icon) => Some(icon),
-        Err(err) => {
-            log::warn!("加载 Windows 托盘图标失败: {}", err);
-            None
-        }
-    }
 }
 
 #[tauri::command]
@@ -388,6 +564,14 @@ pub async fn update_tray_menu(app: AppHandle) -> Result<bool, crate::errors::App
             ))
         }
     }
+}
+
+#[tauri::command]
+pub async fn set_tray_publish_status(
+    app: AppHandle,
+    status: TrayPublishStatus,
+) -> Result<bool, crate::errors::AppError> {
+    set_tray_publish_status_internal(&app, status)
 }
 
 #[cfg(test)]
@@ -470,6 +654,55 @@ mod tests {
                 repo_id: "repo-1".to_string(),
                 config_key: "userprofile:alpha".to_string(),
             })
+        );
+    }
+
+    #[test]
+    fn resolve_status_title_clears_idle_title() {
+        let texts = TrayTexts::default();
+
+        assert_eq!(
+            resolve_status_title(&texts, TrayPublishStatus::Idle, 0),
+            String::new()
+        );
+    }
+
+    #[test]
+    fn resolve_status_title_reserves_fixed_publishing_width() {
+        let texts = TrayTexts::default();
+        let titles = (0..TRAY_PUBLISHING_DOT_COUNT)
+            .map(|frame_index| {
+                resolve_status_title(&texts, TrayPublishStatus::Publishing, frame_index)
+            })
+            .collect::<Vec<_>>();
+
+        assert_eq!(
+            titles,
+            vec![
+                format!("发布中.{}{}", PUNCTUATION_SPACE, PUNCTUATION_SPACE),
+                format!("发布中..{}", PUNCTUATION_SPACE),
+                "发布中...".to_string(),
+            ]
+        );
+
+        let char_counts = titles
+            .iter()
+            .map(|title| title.chars().count())
+            .collect::<Vec<_>>();
+        assert!(char_counts.windows(2).all(|pair| pair[0] == pair[1]));
+    }
+
+    #[test]
+    fn resolve_status_title_returns_result_messages() {
+        let texts = TrayTexts::default();
+
+        assert_eq!(
+            resolve_status_title(&texts, TrayPublishStatus::Success, 0),
+            "发布成功"
+        );
+        assert_eq!(
+            resolve_status_title(&texts, TrayPublishStatus::Failure, 0),
+            "发布失败"
         );
     }
 

@@ -14,6 +14,7 @@ import {
 } from "@/lib/environment";
 import {
   openOutputDirectory,
+  setTrayPublishStatus,
   showMainWindow,
   type ExecutionRecord,
 } from "@/lib/store";
@@ -48,6 +49,7 @@ export interface RunPublishOptions {
   openOutputDirOnSuccess?: boolean;
   restoreWindowOnFailure?: boolean;
   feedbackMode?: "toast" | "system";
+  trayStatusEffect?: boolean;
 }
 
 interface DotnetPreset {
@@ -88,6 +90,7 @@ interface UsePublishRunnerParams {
 interface PublishPreparationOptions {
   feedbackMode: "toast" | "system";
   restoreWindowOnFailure: boolean;
+  trayStatusEffect: boolean;
 }
 
 interface AbortPublishPreparationOptions extends PublishPreparationOptions {
@@ -223,6 +226,17 @@ export function usePublishRunner({
     }
   }, []);
 
+  const syncTrayPublishStatus = useCallback(
+    async (status: "idle" | "success" | "failure") => {
+      try {
+        await setTrayPublishStatus(status);
+      } catch {
+        // noop
+      }
+    },
+    []
+  );
+
   const notifyFeedback = useCallback(
     async (
       level: "success" | "warning" | "error",
@@ -350,11 +364,15 @@ export function usePublishRunner({
       runRevision,
       feedbackMode,
       restoreWindowOnFailure,
+      trayStatusEffect,
       level,
       title,
       description,
       onAfterNotify,
     }: AbortPublishPreparationOptions) => {
+      if (trayStatusEffect) {
+        await syncTrayPublishStatus(level === "error" ? "failure" : "idle");
+      }
       const notified = await notifyFeedback(
         level,
         title,
@@ -372,6 +390,7 @@ export function usePublishRunner({
       notifyFeedback,
       resetLogCapture,
       restoreMainWindowIfNeeded,
+      syncTrayPublishStatus,
     ]
   );
 
@@ -469,12 +488,14 @@ export function usePublishRunner({
       const openOutputDirOnSuccess = options?.openOutputDirOnSuccess ?? false;
       const restoreWindowOnFailure = options?.restoreWindowOnFailure ?? false;
       const feedbackMode = options?.feedbackMode ?? "toast";
+      const trayStatusEffect = options?.trayStatusEffect ?? false;
       const runRevision = startPublishPresentationRun();
 
       const preflightPassed = await runPublishPreflight(spec, {
         runRevision,
         feedbackMode,
         restoreWindowOnFailure,
+        trayStatusEffect,
       });
       if (!preflightPassed) {
         return;
@@ -506,6 +527,9 @@ export function usePublishRunner({
         }
 
         if (resolvedResult.success) {
+          if (trayStatusEffect) {
+            await syncTrayPublishStatus("success");
+          }
           await openOutputDirectoryIfNeeded(
             openOutputDirOnSuccess,
             resolvedResult.output_dir,
@@ -524,6 +548,9 @@ export function usePublishRunner({
             feedbackMode
           );
         } else if (resolvedResult.cancelled) {
+          if (trayStatusEffect) {
+            await syncTrayPublishStatus("idle");
+          }
           const notified = await notifyFeedback(
             "warning",
             appT.publishCancelled || "发布已取消",
@@ -532,6 +559,9 @@ export function usePublishRunner({
           );
           await restoreMainWindowIfNeeded(restoreWindowOnFailure || !notified);
         } else {
+          if (trayStatusEffect) {
+            await syncTrayPublishStatus("failure");
+          }
           const notified = await notifyFeedback(
             "error",
             publishT.failed || "发布失败",
@@ -585,6 +615,9 @@ export function usePublishRunner({
           appT,
           failedResult.error ?? rawErrorMessage
         );
+        if (trayStatusEffect) {
+          await syncTrayPublishStatus("failure");
+        }
         const notified = await notifyFeedback(
           "error",
           feedback.title,
@@ -626,6 +659,7 @@ export function usePublishRunner({
       restoreMainWindowIfNeeded,
       startPublishPresentationRun,
       waitForOutputLogSnapshot,
+      syncTrayPublishStatus,
     ]
   );
 

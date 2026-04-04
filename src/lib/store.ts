@@ -119,6 +119,8 @@ export interface UpdateInfo {
   message: string | null;
 }
 
+export type TrayPublishStatus = "idle" | "publishing" | "success" | "failure";
+
 export interface ConfigExport {
   version: number;
   exportedAt: string;
@@ -576,6 +578,12 @@ export async function openOutputDirectory(outputDir: string): Promise<string> {
 
 export async function showMainWindow(): Promise<boolean> {
   return await invoke<boolean>("show_main_window");
+}
+
+export async function setTrayPublishStatus(
+  status: TrayPublishStatus
+): Promise<boolean> {
+  return await invoke<boolean>("set_tray_publish_status", { status });
 }
 
 export type {

@@ -11,6 +11,7 @@ const mocks = vi.hoisted(() => ({
   getProfiles: vi.fn(),
   resolveProjectInfo: vi.fn(),
   scanProject: vi.fn(),
+  setTrayPublishStatus: vi.fn(),
   showMainWindow: vi.fn(),
   showSystemNotification: vi.fn(),
   resolveDotnetProjectProfile: vi.fn(),
@@ -33,6 +34,7 @@ vi.mock("@/lib/store", async () => {
     getProfiles: mocks.getProfiles,
     resolveProjectInfo: mocks.resolveProjectInfo,
     scanProject: mocks.scanProject,
+    setTrayPublishStatus: mocks.setTrayPublishStatus,
     showMainWindow: mocks.showMainWindow,
   };
 });
@@ -101,6 +103,7 @@ describe("useTrayRecentPublish", () => {
       publish_profiles: ["FolderProfile"],
       target_frameworks: ["net8.0"],
     });
+    mocks.setTrayPublishStatus.mockResolvedValue(true);
     mocks.showSystemNotification.mockResolvedValue(true);
     mocks.showMainWindow.mockResolvedValue(true);
   });
@@ -166,6 +169,7 @@ describe("useTrayRecentPublish", () => {
         openOutputDirOnSuccess: true,
         restoreWindowOnFailure: false,
         feedbackMode: "system",
+        trayStatusEffect: true,
       })
     );
   });
@@ -226,6 +230,7 @@ describe("useTrayRecentPublish", () => {
       }),
       expect.objectContaining({
         repoId: "repo-1",
+        trayStatusEffect: true,
       })
     );
   });
@@ -293,6 +298,7 @@ describe("useTrayRecentPublish", () => {
       expect.objectContaining({
         repoId: "repo-1",
         recentConfigKey: "userprofile:alpha",
+        trayStatusEffect: true,
       })
     );
   });
@@ -360,6 +366,7 @@ describe("useTrayRecentPublish", () => {
       expect.objectContaining({
         repoId: "repo-1",
         recentConfigKey: "pubxml:FolderProfile",
+        trayStatusEffect: true,
       })
     );
   });
@@ -419,6 +426,7 @@ describe("useTrayRecentPublish", () => {
       expect.objectContaining({
         repoId: "repo-1",
         recentConfigKey: "userprofile:alpha",
+        trayStatusEffect: true,
       })
     );
   });
@@ -463,6 +471,7 @@ describe("useTrayRecentPublish", () => {
     });
 
     expect(runPublishSpec).not.toHaveBeenCalled();
+    expect(mocks.setTrayPublishStatus).toHaveBeenCalledWith("failure");
     expect(mocks.showSystemNotification).toHaveBeenCalledWith({
       title: "状态栏发布启动失败",
       body: "未找到仓库: repo-404",
@@ -509,6 +518,7 @@ describe("useTrayRecentPublish", () => {
     });
 
     expect(runPublishSpec).not.toHaveBeenCalled();
+    expect(mocks.setTrayPublishStatus).toHaveBeenCalledWith("failure");
     expect(mocks.showSystemNotification).toHaveBeenCalledWith({
       title: "状态栏发布启动失败",
       body: "missing user profile: missing",

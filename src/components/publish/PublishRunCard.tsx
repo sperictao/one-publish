@@ -287,6 +287,7 @@ export function PublishRunCard({
         )}
         <div className="space-y-3">
           <div
+            data-testid="publish-status-panel"
             className={cn(
               "glass-surface rounded-2xl border p-4",
               statusMeta.panelClassName
@@ -313,9 +314,6 @@ export function PublishRunCard({
                         statusMeta.badgeClassName
                       )}
                     >
-                      <StatusIcon
-                        className={cn("h-3.5 w-3.5", statusMeta.iconClassName)}
-                      />
                       {statusMeta.label}
                     </span>
                     {statusFact ? (

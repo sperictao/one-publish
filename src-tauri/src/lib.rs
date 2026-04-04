@@ -209,7 +209,8 @@ pub fn run() {
             store::add_execution_record,
             store::set_execution_record_snapshot,
             tray::update_tray_menu,
-            tray::show_main_window
+            tray::show_main_window,
+            tray::set_tray_publish_status
         ])
         .run(tauri::generate_context!());
 

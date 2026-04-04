@@ -17,6 +17,7 @@ const mocks = vi.hoisted(() => ({
     message: vi.fn(),
   },
   openOutputDirectory: vi.fn(),
+  setTrayPublishStatus: vi.fn(),
   showMainWindow: vi.fn(),
   useDotnetPublishSelection: vi.fn(),
   usePublishSpecBuilder: vi.fn(),
@@ -69,6 +70,7 @@ vi.mock("@/lib/store", async () => {
   return {
     ...actual,
     openOutputDirectory: mocks.openOutputDirectory,
+    setTrayPublishStatus: mocks.setTrayPublishStatus,
     showMainWindow: mocks.showMainWindow,
   };
 });
@@ -162,6 +164,7 @@ describe("usePublishRunner", () => {
       probeDirectory: null,
       detail: null,
     });
+    mocks.setTrayPublishStatus.mockResolvedValue(true);
     buildPublishSpecMock = vi.fn(() => ({
       version: 1,
       provider_id: "dotnet",
@@ -463,6 +466,42 @@ describe("usePublishRunner", () => {
     );
   });
 
+  it("tray 路径成功时会显示发布成功状态文字", async () => {
+    mocks.runEnvironmentCheck.mockResolvedValue(readyEnvironment);
+    mocks.invoke.mockResolvedValue({
+      provider_id: "dotnet",
+      success: true,
+      cancelled: false,
+      error: null,
+      output_dir: "/exports/App/Release",
+      file_count: 3,
+    });
+
+    const props = createRunnerProps();
+    const { result } = renderHook(() => usePublishRunner(props));
+
+    await act(async () => {
+      await result.current.runPublishSpec(
+        {
+          version: 1,
+          provider_id: "dotnet",
+          project_path: "/repo/App.csproj",
+          parameters: {
+            configuration: "Release",
+          },
+        },
+        {
+          repoId: "repo-1",
+          recentConfigKey: "pubxml:FolderProfile",
+          feedbackMode: "system",
+          trayStatusEffect: true,
+        }
+      );
+    });
+
+    expect(mocks.setTrayPublishStatus).toHaveBeenCalledWith("success");
+  });
+
   it("系统通知模式失败时不拉起主窗口并发送失败详情", async () => {
     mocks.runEnvironmentCheck.mockResolvedValue(readyEnvironment);
     mocks.invoke.mockResolvedValue({
@@ -544,6 +583,35 @@ describe("usePublishRunner", () => {
     expect(mocks.toast.error).toHaveBeenCalledWith("发布失败", {
       description: "publish failed",
     });
+  });
+
+  it("tray 路径前置检查失败时会显示发布失败状态文字", async () => {
+    mocks.runEnvironmentCheck.mockRejectedValue(new Error("env boom"));
+
+    const props = createRunnerProps();
+    const { result } = renderHook(() => usePublishRunner(props));
+
+    await act(async () => {
+      await result.current.runPublishSpec(
+        {
+          version: 1,
+          provider_id: "dotnet",
+          project_path: "/repo/App.csproj",
+          parameters: {
+            configuration: "Release",
+          },
+        },
+        {
+          repoId: "repo-1",
+          recentConfigKey: "pubxml:FolderProfile",
+          feedbackMode: "system",
+          trayStatusEffect: true,
+        }
+      );
+    });
+
+    expect(mocks.setTrayPublishStatus).toHaveBeenCalledWith("failure");
+    expect(mocks.invoke).not.toHaveBeenCalled();
   });
 
   it("切换仓库或发布配置时会清空右栏发布展示态", async () => {
