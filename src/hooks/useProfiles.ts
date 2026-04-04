@@ -143,6 +143,7 @@ export function useProfiles({
   buildProfileParameters,
 }: UseProfilesParams) {
   const [profiles, setProfiles] = useState<ConfigProfile[]>([]);
+  const [isProfilesRefreshing, setIsProfilesRefreshing] = useState(false);
   const [activeProfileName, setActiveProfileName] = useState<string | null>(null);
   const [quickCreateProfileOpen, setQuickCreateProfileOpen] = useState(false);
   const [quickCreateProfileName, setQuickCreateProfileName] = useState("");
@@ -170,9 +171,11 @@ export function useProfiles({
     const requestId = loadProfilesRequestIdRef.current + 1;
     loadProfilesRequestIdRef.current = requestId;
     const repoId = selectedRepoId;
+    setIsProfilesRefreshing(Boolean(repoId));
 
     if (!repoId) {
       setProfiles([]);
+      setIsProfilesRefreshing(false);
       return [];
     }
 
@@ -187,6 +190,7 @@ export function useProfiles({
       }
 
       setProfiles(data);
+      setIsProfilesRefreshing(false);
       return data;
     } catch (err) {
       if (
@@ -194,6 +198,7 @@ export function useProfiles({
         selectedRepoIdRef.current === repoId
       ) {
         setProfiles([]);
+        setIsProfilesRefreshing(false);
       }
       console.error("加载配置文件列表失败:", err);
       return [];
@@ -206,6 +211,7 @@ export function useProfiles({
 
   useEffect(() => {
     setProfiles([]);
+    setIsProfilesRefreshing(Boolean(selectedRepoId));
     setActiveProfileName(null);
     setEditingProfileOriginalName(null);
   }, [selectedRepoId]);
@@ -615,6 +621,7 @@ export function useProfiles({
 
   return {
     profiles,
+    isProfilesRefreshing,
     activeProfileName,
     quickCreateProfileOpen,
     quickCreateProfileName,

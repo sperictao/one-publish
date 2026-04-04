@@ -103,6 +103,64 @@ describe("useProjectShellState", () => {
     expect(result.current.projectInfo?.project_file).toBe("/repo-b/App.csproj");
   });
 
+  it("仓库切换扫描期间会暴露刷新状态，完成后再结束刷新", async () => {
+    const repoA = createDeferred<ProjectInfo | null>();
+    const repoB = createDeferred<ProjectInfo | null>();
+    mocks.scanProject
+      .mockImplementationOnce(() => repoA.promise)
+      .mockImplementationOnce(() => repoB.promise);
+
+    const { result, rerender } = renderHook(
+      (props: HookProps) =>
+        useProjectShellState({
+          appT: {},
+          isStateLoading: false,
+          ...props,
+        }),
+      {
+        initialProps: {
+          selectedRepoId: "repo-a",
+          selectedRepoPath: "/repo-a",
+          selectedRepoProjectFile: undefined,
+          activeProviderId: "dotnet",
+        },
+      }
+    );
+
+    await waitFor(() => {
+      expect(result.current.isProjectInfoRefreshing).toBe(true);
+    });
+
+    await act(async () => {
+      repoA.resolve(createProjectInfo("/repo-a"));
+    });
+
+    await waitFor(() => {
+      expect(result.current.isProjectInfoRefreshing).toBe(false);
+      expect(result.current.projectInfo?.project_file).toBe("/repo-a/App.csproj");
+    });
+
+    rerender({
+      selectedRepoId: "repo-b",
+      selectedRepoPath: "/repo-b",
+      selectedRepoProjectFile: undefined,
+      activeProviderId: "dotnet",
+    });
+
+    await waitFor(() => {
+      expect(result.current.isProjectInfoRefreshing).toBe(true);
+    });
+
+    await act(async () => {
+      repoB.resolve(createProjectInfo("/repo-b"));
+    });
+
+    await waitFor(() => {
+      expect(result.current.isProjectInfoRefreshing).toBe(false);
+      expect(result.current.projectInfo?.project_file).toBe("/repo-b/App.csproj");
+    });
+  });
+
   it("仓库被清空时会立即清除当前项目信息", async () => {
     mocks.scanProject.mockResolvedValue(createProjectInfo("/repo-a"));
     const initialProps: Omit<HookProps, "activeProviderId"> = {

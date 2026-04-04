@@ -170,6 +170,7 @@ const PRESETS: DotnetPreset[] = [
     },
   },
 ];
+const EMPTY_STRING_LIST: string[] = [];
 
 function App() {
   const [rightPanelView, setRightPanelView] = useState<RightPanelView>("home");
@@ -421,7 +422,7 @@ function App() {
     buildProfileParameters: buildDotnetProfileParameters,
   });
 
-  const { projectInfo, scanProject } = useProjectShellState({
+  const { projectInfo, isProjectInfoRefreshing, scanProject } = useProjectShellState({
     appT,
     selectedRepoId,
     selectedRepoPath: selectedRepo?.path,
@@ -441,6 +442,7 @@ function App() {
 
   const {
     profiles,
+    isProfilesRefreshing,
     activeProfileName,
     quickCreateProfileOpen,
     quickCreateProfileName,
@@ -503,6 +505,7 @@ function App() {
     isCancellingPublish,
     publishResult,
     outputLog,
+    isResolvingSelectedProjectProfile,
     releaseChecklistOpen,
     setReleaseChecklistOpen,
     artifactActionState,
@@ -569,29 +572,62 @@ function App() {
     runPublishSpec,
   });
 
-  const publishRunCardProps = {
-    outputLog,
-    publishResult,
-    appT,
-    publishActions:
-      selectedRepo &&
-      (activeProviderId === "dotnet" ? Boolean(projectInfo) : true)
-        ? {
-            publishCommand:
-              activeProviderId === "dotnet" ? dotnetPublishPreviewCommand : null,
-            publishCommandLabel: publishT.command || "将执行的命令:",
-            startLabel: configT.execute || "执行发布",
-            publishingLabel: configT.publishing || "发布中...",
-            cancelLabel: appT.cancelPublish || "取消发布",
-            cancellingLabel: appT.cancelling || "取消中...",
-            isPublishing,
-            isCancellingPublish,
-            startDisabled: !selectedRepo,
-            onStartPublish: startPublish,
-            onCancelPublish: cancelPublish,
-          }
-        : null,
-  };
+  const projectFrameworkOptions =
+    projectInfo?.target_frameworks ?? EMPTY_STRING_LIST;
+
+  const isPublishConfigPanelRefreshing = Boolean(selectedRepo) && (
+    isProfilesRefreshing ||
+    (activeProviderId === "dotnet" && isProjectInfoRefreshing)
+  );
+
+  const isPublishRunCardRefreshing =
+    Boolean(selectedRepo) &&
+    activeProviderId === "dotnet" &&
+    (isProjectInfoRefreshing || isResolvingSelectedProjectProfile);
+
+  const publishRunCardProps = useMemo(
+    () => ({
+      outputLog,
+      publishResult,
+      appT,
+      isRefreshing: isPublishRunCardRefreshing,
+      publishActions:
+        selectedRepo &&
+        (activeProviderId === "dotnet" ? Boolean(projectInfo) : true)
+          ? {
+              publishCommand:
+                activeProviderId === "dotnet" ? dotnetPublishPreviewCommand : null,
+              publishCommandLabel: publishT.command || "将执行的命令:",
+              startLabel: configT.execute || "执行发布",
+              publishingLabel: configT.publishing || "发布中...",
+              cancelLabel: appT.cancelPublish || "取消发布",
+              cancellingLabel: appT.cancelling || "取消中...",
+              isPublishing,
+              isCancellingPublish,
+              startDisabled: !selectedRepo,
+              onStartPublish: startPublish,
+              onCancelPublish: cancelPublish,
+            }
+          : null,
+    }),
+    [
+      activeProviderId,
+      appT,
+      cancelPublish,
+      configT.execute,
+      configT.publishing,
+      dotnetPublishPreviewCommand,
+      isCancellingPublish,
+      isPublishRunCardRefreshing,
+      isPublishing,
+      outputLog,
+      projectInfo,
+      publishResult,
+      publishT.command,
+      selectedRepo,
+      startPublish,
+    ]
+  );
 
   const commandImportResultCardProps = useCommandImportResultCardProps({
     activeImportFeedback,
@@ -767,6 +803,7 @@ function App() {
         >
           <Suspense fallback={<div className="flex h-full flex-col" />}>
             <PublishConfigPanel
+              isRefreshing={isPublishConfigPanelRefreshing}
               selectedPreset={selectedPreset}
               isCustomMode={isCustomMode}
               profiles={profiles}
@@ -779,7 +816,7 @@ function App() {
               onDeleteProfile={handleDeleteProfileFromPanel}
               projectPublishProfiles={orderedProjectPublishProfiles}
               projectFilePath={projectInfo?.project_file}
-              projectFrameworkOptions={projectInfo?.target_frameworks || []}
+              projectFrameworkOptions={projectFrameworkOptions}
               onSelectProjectProfile={handleSelectProjectProfile}
               onCopyProjectProfileToCustom={handleCreateProfileFromProjectProfile}
               recentConfigKeys={recentConfigKeys}
@@ -891,7 +928,7 @@ function App() {
             quickCreateProfileGroupOptions={quickCreateProfileGroupOptions}
             quickCreateProfileCustomGroup={quickCreateProfileCustomGroup}
             quickCreateProfileDraft={quickCreateProfileDraft}
-            projectFrameworkOptions={projectInfo?.target_frameworks || []}
+            projectFrameworkOptions={projectFrameworkOptions}
             quickCreateProfileSaving={quickCreateProfileSaving}
             quickCreateEditing={isQuickCreateEditing}
             dotnetSchema={providerSchemas.dotnet}

@@ -30,6 +30,7 @@ import {
   Search,
   Plus,
   RefreshCw,
+  Loader2,
   SlidersHorizontal,
   Folder,
   FileText,
@@ -80,6 +81,7 @@ const PublishConfigPanelFloatingLayer = lazy(async () => {
 });
 
 const EMPTY_FLOATING_STYLE: CSSProperties = {};
+const EMPTY_FRAMEWORK_OPTIONS: string[] = [];
 const ALL_GROUP_FILTER = "__all__";
 const PROJECT_GROUP_FILTER = "__project_profiles__";
 
@@ -143,6 +145,7 @@ function hasSameProfileOrder(
 }
 
 export interface PublishConfigPanelProps {
+  isRefreshing?: boolean;
   selectedPreset: string;
   isCustomMode: boolean;
   profiles: ConfigProfile[];
@@ -422,10 +425,11 @@ function ProfileItem({
 }
 
 export function PublishConfigPanel({
-  selectedPreset,
-  isCustomMode,
-  profiles,
-  activeProfileName,
+  isRefreshing = false,
+  selectedPreset: currentSelectedPreset,
+  isCustomMode: currentIsCustomMode,
+  profiles: currentProfiles,
+  activeProfileName: currentActiveProfileName,
   onSelectProfile,
   onCreateProfile,
   onEditProfile,
@@ -433,13 +437,13 @@ export function PublishConfigPanel({
   onOpenConfigDialog,
   onDeleteProfile,
   dotnetSchema,
-  projectPublishProfiles,
-  projectFilePath,
-  projectFrameworkOptions = [],
+  projectPublishProfiles: currentProjectPublishProfiles,
+  projectFilePath: currentProjectFilePath,
+  projectFrameworkOptions: currentProjectFrameworkOptions = EMPTY_FRAMEWORK_OPTIONS,
   onSelectProjectProfile,
   onCopyProjectProfileToCustom,
-  recentConfigKeys,
-  favoriteConfigKeys,
+  recentConfigKeys: currentRecentConfigKeys,
+  favoriteConfigKeys: currentFavoriteConfigKeys,
   onToggleFavoriteConfig,
   onRemoveRecentConfig,
   onReorderRecentConfigs,
@@ -449,6 +453,17 @@ export function PublishConfigPanel({
   showExpandButton,
   onExpandRepo,
 }: PublishConfigPanelProps) {
+  const [displaySnapshot, setDisplaySnapshot] = useState(() => ({
+    selectedPreset: currentSelectedPreset,
+    isCustomMode: currentIsCustomMode,
+    profiles: currentProfiles,
+    activeProfileName: currentActiveProfileName,
+    projectPublishProfiles: currentProjectPublishProfiles,
+    projectFilePath: currentProjectFilePath,
+    projectFrameworkOptions: currentProjectFrameworkOptions,
+    recentConfigKeys: currentRecentConfigKeys,
+    favoriteConfigKeys: currentFavoriteConfigKeys,
+  }));
   const [searchQuery, setSearchQuery] = useState("");
   const [groupFilterValue, setGroupFilterValue] =
     useState<GroupFilterValue>(ALL_GROUP_FILTER);
@@ -462,6 +477,61 @@ export function PublishConfigPanel({
       status: "idle",
       profileName: null,
     });
+
+  useEffect(() => {
+    if (isRefreshing) {
+      return;
+    }
+
+    setDisplaySnapshot({
+      selectedPreset: currentSelectedPreset,
+      isCustomMode: currentIsCustomMode,
+      profiles: currentProfiles,
+      activeProfileName: currentActiveProfileName,
+      projectPublishProfiles: currentProjectPublishProfiles,
+      projectFilePath: currentProjectFilePath,
+      projectFrameworkOptions: currentProjectFrameworkOptions,
+      recentConfigKeys: currentRecentConfigKeys,
+      favoriteConfigKeys: currentFavoriteConfigKeys,
+    });
+  }, [
+    currentActiveProfileName,
+    currentFavoriteConfigKeys,
+    currentIsCustomMode,
+    currentProfiles,
+    currentProjectFilePath,
+    currentProjectFrameworkOptions,
+    currentProjectPublishProfiles,
+    currentRecentConfigKeys,
+    currentSelectedPreset,
+    isRefreshing,
+  ]);
+
+  const selectedPreset = isRefreshing
+    ? displaySnapshot.selectedPreset
+    : currentSelectedPreset;
+  const isCustomMode = isRefreshing
+    ? displaySnapshot.isCustomMode
+    : currentIsCustomMode;
+  const profiles = isRefreshing ? displaySnapshot.profiles : currentProfiles;
+  const activeProfileName = isRefreshing
+    ? displaySnapshot.activeProfileName
+    : currentActiveProfileName;
+  const projectPublishProfiles = isRefreshing
+    ? displaySnapshot.projectPublishProfiles
+    : currentProjectPublishProfiles;
+  const projectFilePath = isRefreshing
+    ? displaySnapshot.projectFilePath
+    : currentProjectFilePath;
+  const projectFrameworkOptions = isRefreshing
+    ? displaySnapshot.projectFrameworkOptions
+    : currentProjectFrameworkOptions;
+  const recentConfigKeys = isRefreshing
+    ? displaySnapshot.recentConfigKeys
+    : currentRecentConfigKeys;
+  const favoriteConfigKeys = isRefreshing
+    ? displaySnapshot.favoriteConfigKeys
+    : currentFavoriteConfigKeys;
   const { translations } = useI18n();
   const t = translations.configPanel || {};
   const appT = translations.app || {};
@@ -1705,169 +1775,184 @@ export function PublishConfigPanel({
         </div>
       </div>
 
-      <div className="flex items-center justify-between px-3 py-2">
-        <DropdownMenu open={groupFilterOpen} onOpenChange={setGroupFilterOpen}>
-          <DropdownMenuTrigger asChild>
-            <button
-              type="button"
-              className="glass-surface flex items-center gap-1.5 rounded-full px-3 py-1 text-sm font-medium transition-all duration-300 hover:bg-[var(--glass-bg-hover)]"
-              aria-haspopup="menu"
-              aria-expanded={groupFilterOpen}
-            >
-              <span className="text-foreground/80">
-                {selectedGroupFilterOption?.label || allConfigsLabel}
-              </span>
-              <span className="flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-primary/12 px-1 text-[10px] font-bold leading-none text-primary">
-                {visibleConfigCount}
-              </span>
-              <ChevronDown
-                className={cn(
-                  "h-3 w-3 text-muted-foreground/60 transition-transform duration-300",
-                  groupFilterOpen ? "" : "-rotate-90"
-                )}
-              />
-            </button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="start" sideOffset={8} className="min-w-[13rem]">
-            <DropdownMenuItem
-              onSelect={() => setGroupFilterValue(ALL_GROUP_FILTER)}
-              className={cn(
-                "justify-between gap-3",
-                groupFilterValue === ALL_GROUP_FILTER && "bg-[var(--glass-bg-hover)]"
-              )}
-            >
-              <div className="flex min-w-0 flex-1 items-center gap-2">
-                <span className="truncate">{allConfigsLabel}</span>
-                <span className="flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-primary/12 px-1 text-[10px] font-bold leading-none text-primary">
-                  {groupFilterOptions[0]?.count ?? 0}
+      <div className="relative flex min-h-0 flex-1 flex-col">
+        <div className="flex items-center justify-between px-3 py-2">
+          <DropdownMenu open={groupFilterOpen} onOpenChange={setGroupFilterOpen}>
+            <DropdownMenuTrigger asChild>
+              <button
+                type="button"
+                className="glass-surface flex items-center gap-1.5 rounded-full px-3 py-1 text-sm font-medium transition-all duration-300 hover:bg-[var(--glass-bg-hover)]"
+                aria-haspopup="menu"
+                aria-expanded={groupFilterOpen}
+              >
+                <span className="text-foreground/80">
+                  {selectedGroupFilterOption?.label || allConfigsLabel}
                 </span>
-              </div>
-              {groupFilterValue === ALL_GROUP_FILTER ? (
-                <Check className="h-3.5 w-3.5 text-primary" />
-              ) : null}
-            </DropdownMenuItem>
-            {groupFilterOptions.length > 1 ? <DropdownMenuSeparator /> : null}
-            {groupFilterOptions.slice(1).map((option) => (
+                <span className="flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-primary/12 px-1 text-[10px] font-bold leading-none text-primary">
+                  {visibleConfigCount}
+                </span>
+                <ChevronDown
+                  className={cn(
+                    "h-3 w-3 text-muted-foreground/60 transition-transform duration-300",
+                    groupFilterOpen ? "" : "-rotate-90"
+                  )}
+                />
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="start" sideOffset={8} className="min-w-[13rem]">
               <DropdownMenuItem
-                key={option.value}
-                onSelect={() => setGroupFilterValue(option.value)}
+                onSelect={() => setGroupFilterValue(ALL_GROUP_FILTER)}
                 className={cn(
                   "justify-between gap-3",
-                  groupFilterValue === option.value && "bg-[var(--glass-bg-hover)]"
+                  groupFilterValue === ALL_GROUP_FILTER && "bg-[var(--glass-bg-hover)]"
                 )}
               >
                 <div className="flex min-w-0 flex-1 items-center gap-2">
-                  <span className="truncate">{option.label}</span>
+                  <span className="truncate">{allConfigsLabel}</span>
                   <span className="flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-primary/12 px-1 text-[10px] font-bold leading-none text-primary">
-                    {option.count}
+                    {groupFilterOptions[0]?.count ?? 0}
                   </span>
                 </div>
-                {groupFilterValue === option.value ? (
+                {groupFilterValue === ALL_GROUP_FILTER ? (
                   <Check className="h-3.5 w-3.5 text-primary" />
                 ) : null}
               </DropdownMenuItem>
-            ))}
-          </DropdownMenuContent>
-        </DropdownMenu>
-        <div className="flex items-center gap-1.5">
-          <button
-            type="button"
-            className={listActionButtonClass}
-            onClick={(e) => {
-              e.stopPropagation();
-              onCreateProfile();
-            }}
-            title={t.newConfig || "新建配置"}
-            data-tauri-no-drag
-          >
-            <Plus className="h-3.5 w-3.5 text-muted-foreground transition-transform duration-300 hover:rotate-90" />
-          </button>
-          <button
-            type="button"
-            className={cn(
-              listActionButtonClass,
-              showReorderControls &&
-                "bg-[var(--glass-bg-hover)] shadow-[inset_0_1px_0_rgba(255,255,255,0.72),0_1px_2px_rgba(15,23,42,0.06)] dark:bg-white/[0.06] dark:shadow-[inset_0_1px_0_rgba(255,255,255,0.08)]"
-            )}
-            onClick={(e) => {
-              e.stopPropagation();
-              setShowReorderControls((value) => !value);
-            }}
-            title={reorderControlsLabel}
-            aria-label={reorderControlsLabel}
-            aria-pressed={showReorderControls}
-            data-tauri-no-drag
-          >
-            <ArrowUpDown
+              {groupFilterOptions.length > 1 ? <DropdownMenuSeparator /> : null}
+              {groupFilterOptions.slice(1).map((option) => (
+                <DropdownMenuItem
+                  key={option.value}
+                  onSelect={() => setGroupFilterValue(option.value)}
+                  className={cn(
+                    "justify-between gap-3",
+                    groupFilterValue === option.value && "bg-[var(--glass-bg-hover)]"
+                  )}
+                >
+                  <div className="flex min-w-0 flex-1 items-center gap-2">
+                    <span className="truncate">{option.label}</span>
+                    <span className="flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-primary/12 px-1 text-[10px] font-bold leading-none text-primary">
+                      {option.count}
+                    </span>
+                  </div>
+                  {groupFilterValue === option.value ? (
+                    <Check className="h-3.5 w-3.5 text-primary" />
+                  ) : null}
+                </DropdownMenuItem>
+              ))}
+            </DropdownMenuContent>
+          </DropdownMenu>
+          <div className="flex items-center gap-1.5">
+            <button
+              type="button"
+              className={listActionButtonClass}
+              onClick={(e) => {
+                e.stopPropagation();
+                onCreateProfile();
+              }}
+              title={t.newConfig || "新建配置"}
+              data-tauri-no-drag
+            >
+              <Plus className="h-3.5 w-3.5 text-muted-foreground transition-transform duration-300 hover:rotate-90" />
+            </button>
+            <button
+              type="button"
               className={cn(
-                "h-3.5 w-3.5 transition-[transform,color] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]",
-                showReorderControls
-                  ? "rotate-180 text-primary"
-                  : "rotate-0 text-muted-foreground"
+                listActionButtonClass,
+                showReorderControls &&
+                  "bg-[var(--glass-bg-hover)] shadow-[inset_0_1px_0_rgba(255,255,255,0.72),0_1px_2px_rgba(15,23,42,0.06)] dark:bg-white/[0.06] dark:shadow-[inset_0_1px_0_rgba(255,255,255,0.08)]"
               )}
+              onClick={(e) => {
+                e.stopPropagation();
+                setShowReorderControls((value) => !value);
+              }}
+              title={reorderControlsLabel}
+              aria-label={reorderControlsLabel}
+              aria-pressed={showReorderControls}
+              data-tauri-no-drag
+            >
+              <ArrowUpDown
+                className={cn(
+                  "h-3.5 w-3.5 transition-[transform,color] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]",
+                  showReorderControls
+                    ? "rotate-180 text-primary"
+                    : "rotate-0 text-muted-foreground"
+                )}
+              />
+            </button>
+            <button
+              type="button"
+              className={listActionButtonClass}
+              onClick={(e) => {
+                e.stopPropagation();
+                onRefreshProfiles();
+              }}
+              title={t.refresh || "刷新配置"}
+              data-tauri-no-drag
+            >
+              <RefreshCw className="h-3.5 w-3.5 text-muted-foreground transition-all duration-300 hover:rotate-180" />
+            </button>
+            <button
+              type="button"
+              className={listActionButtonClass}
+              onClick={(e) => {
+                e.stopPropagation();
+                onOpenConfigDialog();
+              }}
+              title={configManagementLabel}
+              aria-label={configManagementLabel}
+              data-tauri-no-drag
+            >
+              <SlidersHorizontal className="h-3.5 w-3.5 text-muted-foreground transition-all duration-300 hover:rotate-180" />
+            </button>
+          </div>
+        </div>
+
+        {/* Search */}
+        <div className="px-3 py-1.5">
+          <div className="group/search glass-input relative rounded-xl">
+            <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground/50 transition-colors duration-300 group-focus-within/search:text-primary" />
+            <Input
+              placeholder={t.searchConfig || "搜索配置"}
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="h-8 border-none bg-transparent pl-8 text-sm shadow-none focus-visible:ring-0"
             />
-          </button>
-          <button
-            type="button"
-            className={listActionButtonClass}
-            onClick={(e) => {
-              e.stopPropagation();
-              onRefreshProfiles();
-            }}
-            title={t.refresh || "刷新配置"}
-            data-tauri-no-drag
-          >
-            <RefreshCw className="h-3.5 w-3.5 text-muted-foreground transition-all duration-300 hover:rotate-180" />
-          </button>
-          <button
-            type="button"
-            className={listActionButtonClass}
-            onClick={(e) => {
-              e.stopPropagation();
-              onOpenConfigDialog();
-            }}
-            title={configManagementLabel}
-            aria-label={configManagementLabel}
-            data-tauri-no-drag
-          >
-            <SlidersHorizontal className="h-3.5 w-3.5 text-muted-foreground transition-all duration-300 hover:rotate-180" />
-          </button>
+          </div>
         </div>
-      </div>
 
-      {/* Search */}
-      <div className="px-3 py-1.5">
-        <div className="group/search glass-input relative rounded-xl">
-          <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground/50 transition-colors duration-300 group-focus-within/search:text-primary" />
-          <Input
-            placeholder={t.searchConfig || "搜索配置"}
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="h-8 border-none bg-transparent pl-8 text-sm shadow-none focus-visible:ring-0"
-          />
-        </div>
-      </div>
+        {!floatingEnhancerEnabled ? (
+          renderConfigList(fallbackFloatingBindings)
+        ) : (
+          <Suspense fallback={renderConfigList(fallbackFloatingBindings)}>
+            <PublishConfigPanelFloatingLayer
+              filteredConfigIds={previewConfigIds}
+              targetConfigId={floatingTargetConfigId}
+              restingTargetConfigId={restingTargetConfigId}
+              selectedConfigId={selectedRenderId}
+              snapTargetConfigId={settledConfigRenderId}
+              draggingConfigId={draggingFloatingConfig?.renderId ?? null}
+              freezeFloating={freezeFloating}
+              onListPointerEnter={interaction.handleListPointerEnter}
+              onListPointerLeave={interaction.handleListPointerLeave}
+              onPointerConfigChange={interaction.handlePointerItemChange}
+            >
+              {renderConfigList}
+            </PublishConfigPanelFloatingLayer>
+          </Suspense>
+        )}
 
-      {!floatingEnhancerEnabled ? (
-        renderConfigList(fallbackFloatingBindings)
-      ) : (
-        <Suspense fallback={renderConfigList(fallbackFloatingBindings)}>
-          <PublishConfigPanelFloatingLayer
-            filteredConfigIds={previewConfigIds}
-            targetConfigId={floatingTargetConfigId}
-            restingTargetConfigId={restingTargetConfigId}
-            selectedConfigId={selectedRenderId}
-            snapTargetConfigId={settledConfigRenderId}
-            draggingConfigId={draggingFloatingConfig?.renderId ?? null}
-            freezeFloating={freezeFloating}
-            onListPointerEnter={interaction.handleListPointerEnter}
-            onListPointerLeave={interaction.handleListPointerLeave}
-            onPointerConfigChange={interaction.handlePointerItemChange}
-          >
-            {renderConfigList}
-          </PublishConfigPanelFloatingLayer>
-        </Suspense>
-      )}
+        {isRefreshing ? (
+          <div className="absolute inset-0 z-40 flex items-center justify-center bg-background/48 backdrop-blur-[2px]">
+            <div className="glass-surface flex items-center gap-2 rounded-full px-4 py-2 text-sm text-foreground shadow-[var(--glass-shadow)]">
+              <Loader2 className="h-4 w-4 animate-spin text-primary" />
+              <span>
+                {t.refreshingConfigs ||
+                  t.loadingConfig ||
+                  "正在刷新发布配置..."}
+              </span>
+            </div>
+          </div>
+        ) : null}
+      </div>
 
       <ProjectPublishProfileViewerDialog
         open={projectProfileViewerOpen}

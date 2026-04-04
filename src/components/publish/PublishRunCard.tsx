@@ -1,4 +1,4 @@
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import {
@@ -41,6 +41,7 @@ export interface PublishRunCardProps {
   publishResult: PublishResult | null;
   appT: Record<string, string | undefined>;
   publishActions: PublishRunCardActions | null;
+  isRefreshing?: boolean;
 }
 
 type PublishVisualState =
@@ -51,12 +52,49 @@ type PublishVisualState =
   | "failed";
 
 export function PublishRunCard({
-  outputLog,
-  publishResult,
+  outputLog: currentOutputLog,
+  publishResult: currentPublishResult,
   appT,
-  publishActions,
+  publishActions: currentPublishActions,
+  isRefreshing = false,
 }: PublishRunCardProps) {
   const [isOpeningOutputDir, setIsOpeningOutputDir] = useState(false);
+  const [displaySnapshot, setDisplaySnapshot] = useState<{
+    outputLog: string;
+    publishResult: PublishResult | null;
+    publishActions: PublishRunCardActions | null;
+  }>({
+    outputLog: currentOutputLog,
+    publishResult: currentPublishResult,
+    publishActions: currentPublishActions,
+  });
+
+  useEffect(() => {
+    if (isRefreshing) {
+      return;
+    }
+
+    setDisplaySnapshot({
+      outputLog: currentOutputLog,
+      publishResult: currentPublishResult,
+      publishActions: currentPublishActions,
+    });
+  }, [
+    currentOutputLog,
+    currentPublishActions,
+    currentPublishResult,
+    isRefreshing,
+  ]);
+
+  const outputLog = isRefreshing
+    ? displaySnapshot.outputLog
+    : currentOutputLog;
+  const publishResult = isRefreshing
+    ? displaySnapshot.publishResult
+    : currentPublishResult;
+  const publishActions = isRefreshing
+    ? displaySnapshot.publishActions
+    : currentPublishActions;
 
   const handleOpenOutputDir = useCallback(async () => {
     const outputDir = publishResult?.output_dir?.trim();
@@ -79,7 +117,7 @@ export function PublishRunCard({
     }
   }, [appT, publishResult?.output_dir]);
 
-  if (!outputLog && !publishResult && !publishActions) {
+  if (!outputLog && !publishResult && !publishActions && !isRefreshing) {
     return null;
   }
 
@@ -179,7 +217,10 @@ export function PublishRunCard({
     publishVisualState === "failed" ? publishResult?.error?.trim() : null;
 
   return (
-    <Card className="flex h-full min-h-[28rem] w-full flex-col lg:min-h-[calc(100vh-11rem)]">
+    <Card
+      aria-busy={isRefreshing}
+      className="relative flex h-full min-h-[28rem] w-full flex-col overflow-hidden lg:min-h-[calc(100vh-11rem)]"
+    >
       <CardHeader className="pb-4">
         <CardTitle className="flex items-center gap-2 text-lg">
           <Terminal className="h-5 w-5" />
@@ -332,10 +373,22 @@ export function PublishRunCard({
         </div>
         <div className="min-h-[20rem] flex-1 overflow-auto rounded-lg bg-gray-950 p-4 font-mono text-xs text-gray-100">
           <pre className="whitespace-pre-wrap">
-            {outputLog || publishResult?.error || appT.noOutput || "无输出"}
+            {outputLog ||
+              publishResult?.error ||
+              (isRefreshing
+                ? appT.refreshingPublishCard || "正在刷新发布信息..."
+                : appT.noOutput || "无输出")}
           </pre>
         </div>
       </CardContent>
+      {isRefreshing ? (
+        <div className="absolute inset-0 z-20 flex items-center justify-center bg-background/48 backdrop-blur-[2px]">
+          <div className="glass-surface flex items-center gap-2 rounded-full px-4 py-2 text-sm text-foreground shadow-[var(--glass-shadow)]">
+            <Loader2 className="h-4 w-4 animate-spin text-primary" />
+            <span>{appT.refreshingPublishCard || "正在刷新发布信息..."}</span>
+          </div>
+        </div>
+      ) : null}
     </Card>
   );
 }

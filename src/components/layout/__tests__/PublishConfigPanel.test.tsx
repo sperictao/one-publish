@@ -180,6 +180,7 @@ beforeAll(() => {
         deleteConfig: "删除配置",
         editConfig: "编辑配置",
         searchConfig: "搜索配置",
+        refreshingConfigs: "正在刷新发布配置...",
       },
     },
   });
@@ -195,6 +196,68 @@ beforeEach(() => {
 });
 
 describe("PublishConfigPanel", () => {
+  it("仓库切换刷新期间保留上一帧配置列表并显示遮罩", async () => {
+    const { rerender } = render(
+      <PublishConfigPanel
+        selectedPreset="profile-FolderProfile"
+        isCustomMode={false}
+        profiles={[createProfile("alpha-profile")]}
+        activeProfileName={null}
+        onSelectProfile={() => {}}
+        onCreateProfile={() => {}}
+        onEditProfile={() => {}}
+        onRefreshProfiles={() => {}}
+        onOpenConfigDialog={() => {}}
+        onDeleteProfile={() => {}}
+        dotnetSchema={dotnetSchema}
+        projectPublishProfiles={["FolderProfile"]}
+        onSelectProjectProfile={() => {}}
+        onCopyProjectProfileToCustom={async (_name, _config: PublishConfigStore) => "copied"}
+        recentConfigKeys={["pubxml:FolderProfile"]}
+        favoriteConfigKeys={[]}
+        onToggleFavoriteConfig={() => {}}
+        onRemoveRecentConfig={() => {}}
+        onReorderRecentConfigs={() => {}}
+        onReorderProjectProfiles={() => {}}
+        onReorderProfiles={() => {}}
+      />
+    );
+
+    expect(screen.getAllByText("FolderProfile").length).toBeGreaterThan(0);
+    expect(screen.getByText("alpha-profile")).toBeInTheDocument();
+
+    rerender(
+      <PublishConfigPanel
+        isRefreshing
+        selectedPreset="release-fd"
+        isCustomMode={false}
+        profiles={[]}
+        activeProfileName={null}
+        onSelectProfile={() => {}}
+        onCreateProfile={() => {}}
+        onEditProfile={() => {}}
+        onRefreshProfiles={() => {}}
+        onOpenConfigDialog={() => {}}
+        onDeleteProfile={() => {}}
+        dotnetSchema={dotnetSchema}
+        projectPublishProfiles={[]}
+        onSelectProjectProfile={() => {}}
+        onCopyProjectProfileToCustom={async (_name, _config: PublishConfigStore) => "copied"}
+        recentConfigKeys={[]}
+        favoriteConfigKeys={[]}
+        onToggleFavoriteConfig={() => {}}
+        onRemoveRecentConfig={() => {}}
+        onReorderRecentConfigs={() => {}}
+        onReorderProjectProfiles={() => {}}
+        onReorderProfiles={() => {}}
+      />
+    );
+
+    expect(screen.getAllByText("FolderProfile").length).toBeGreaterThan(0);
+    expect(screen.getByText("alpha-profile")).toBeInTheDocument();
+    expect(screen.getByText("正在刷新发布配置...")).toBeInTheDocument();
+  });
+
   it("打开未选中配置菜单时不会误选中，并在离开列表后仍锁定菜单上下文", async () => {
     const onSelectProfile = vi.fn();
     const onSelectProjectProfile = vi.fn();

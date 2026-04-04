@@ -177,6 +177,7 @@ export function usePublishRunner({
     recentConfigKeyForCurrentSelection,
     resolvedProjectProfile,
     resolveSelectedProjectProfile,
+    isResolvingSelectedProjectProfile,
   } = useDotnetPublishSelection({
     activeProviderId,
     selectedPreset,
@@ -732,6 +733,7 @@ export function usePublishRunner({
     lastPublishSpec,
     currentPublishRecordId,
     outputLog,
+    isResolvingSelectedProjectProfile,
     releaseChecklistOpen,
     setReleaseChecklistOpen,
     artifactActionState,

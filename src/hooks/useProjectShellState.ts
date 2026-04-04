@@ -19,6 +19,7 @@ export function useProjectShellState(params: {
   activeProviderId: string;
 }) {
   const [projectInfo, setProjectInfo] = useState<ProjectInfo | null>(null);
+  const [isProjectInfoRefreshing, setIsProjectInfoRefreshing] = useState(false);
   const scanRequestIdRef = useRef(0);
   const {
     scanProject: scanProjectRequest,
@@ -43,9 +44,11 @@ export function useProjectShellState(params: {
 
       if (!targetPath || params.activeProviderId !== "dotnet") {
         setProjectInfo(null);
+        setIsProjectInfoRefreshing(false);
         return null;
       }
 
+      setIsProjectInfoRefreshing(true);
       setProjectInfo(null);
       const info = await resolvePreferredDotnetProjectInfo({
         repoPath: targetPath,
@@ -68,10 +71,15 @@ export function useProjectShellState(params: {
         (boundProjectFile &&
           params.selectedRepoProjectFile?.trim() !== boundProjectFile)
       ) {
+        if (requestId === scanRequestIdRef.current && !info) {
+          setProjectInfo(null);
+          setIsProjectInfoRefreshing(false);
+        }
         return info;
       }
 
       setProjectInfo(info);
+      setIsProjectInfoRefreshing(false);
       return info;
     },
     [
@@ -91,6 +99,7 @@ export function useProjectShellState(params: {
     ) {
       scanRequestIdRef.current += 1;
       setProjectInfo(null);
+      setIsProjectInfoRefreshing(false);
       return;
     }
 
@@ -138,6 +147,7 @@ export function useProjectShellState(params: {
 
   return {
     projectInfo,
+    isProjectInfoRefreshing,
     setProjectInfo,
     scanProject,
   };

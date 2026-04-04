@@ -34,6 +34,7 @@ export function PublishContentSection({
   rightPanelView,
 }: PublishContentSectionProps) {
   const hasPublishRunCard =
+    Boolean(publishRunCardProps.isRefreshing) ||
     Boolean(publishRunCardProps.outputLog) ||
     publishRunCardProps.publishResult !== null ||
     publishRunCardProps.publishActions !== null;

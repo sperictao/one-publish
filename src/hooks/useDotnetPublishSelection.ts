@@ -73,6 +73,8 @@ export function useDotnetPublishSelection(params: {
 }) {
   const [resolvedProjectProfile, setResolvedProjectProfile] =
     useState<ResolvedDotnetProjectProfile | null>(null);
+  const [isResolvingSelectedProjectProfile, setIsResolvingSelectedProjectProfile] =
+    useState(false);
 
   const buildDefaultScopedOutputDir = useCallback(
     (configuration?: string) => {
@@ -132,20 +134,24 @@ export function useDotnetPublishSelection(params: {
 
     if (!selectedProjectProfileName) {
       setResolvedProjectProfile(null);
+      setIsResolvingSelectedProjectProfile(false);
       return () => {
         disposed = true;
       };
     }
 
+    setIsResolvingSelectedProjectProfile(true);
     void resolveSelectedProjectProfile()
       .then((profile) => {
         if (!disposed) {
           setResolvedProjectProfile(profile);
+          setIsResolvingSelectedProjectProfile(false);
         }
       })
       .catch(() => {
         if (!disposed) {
           setResolvedProjectProfile(null);
+          setIsResolvingSelectedProjectProfile(false);
         }
       });
 
@@ -295,5 +301,6 @@ export function useDotnetPublishSelection(params: {
     recentConfigKeyForCurrentSelection,
     resolvedProjectProfile,
     resolveSelectedProjectProfile,
+    isResolvingSelectedProjectProfile,
   };
 }
