@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { isTauri } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 
@@ -8,6 +8,49 @@ import type { ProjectInfo } from "@/types/project";
 
 interface TranslationMap {
   [key: string]: string | undefined;
+}
+
+interface ProjectInfoSnapshot {
+  projectInfo: ProjectInfo | null;
+  revision: number;
+  signature: string;
+}
+
+const EMPTY_PROJECT_INFO_SNAPSHOT: ProjectInfoSnapshot = {
+  projectInfo: null,
+  revision: 0,
+  signature: "",
+};
+
+function buildProjectInfoListSignature(projectInfo: ProjectInfo | null): string {
+  if (!projectInfo) {
+    return "";
+  }
+
+  return [
+    projectInfo.root_path,
+    projectInfo.project_file,
+    projectInfo.publish_profiles.join("\u0001"),
+  ].join("\u0000");
+}
+
+function createProjectInfoSnapshot(
+  projectInfo: ProjectInfo | null,
+  previousSnapshot: ProjectInfoSnapshot = EMPTY_PROJECT_INFO_SNAPSHOT
+): ProjectInfoSnapshot {
+  const signature = buildProjectInfoListSignature(projectInfo);
+  const isSameSnapshot = previousSnapshot.signature === signature;
+
+  return {
+    projectInfo,
+    revision:
+      isSameSnapshot
+        ? previousSnapshot.revision
+        : previousSnapshot.revision === 0 && signature === ""
+          ? 0
+          : previousSnapshot.revision + 1,
+    signature,
+  };
 }
 
 function buildProjectInfoScopeKey(params: {
@@ -38,16 +81,66 @@ export function useProjectShellState(params: {
   isStateLoading: boolean;
   activeProviderId: string;
 }) {
-  const [projectInfo, setProjectInfo] = useState<ProjectInfo | null>(null);
+  const [visibleProjectInfoSnapshot, setVisibleProjectInfoSnapshot] =
+    useState<ProjectInfoSnapshot>(EMPTY_PROJECT_INFO_SNAPSHOT);
   const [isProjectInfoRefreshing, setIsProjectInfoRefreshing] = useState(false);
   const scanRequestIdRef = useRef(0);
-  const projectInfoCacheRef = useRef<Record<string, ProjectInfo>>({});
+  const projectInfoCacheRef = useRef<Record<string, ProjectInfoSnapshot>>({});
+  const currentScopeKey = buildProjectInfoScopeKey({
+    selectedRepoId: params.selectedRepoId,
+    selectedRepoPath: params.selectedRepoPath,
+    selectedRepoProjectFile: params.selectedRepoProjectFile,
+  });
+  const selectedScopeKeyRef = useRef<string | null>(currentScopeKey);
+  const canExposeProjectInfoRef = useRef(
+    Boolean(
+      params.selectedRepoPath &&
+        !params.isStateLoading &&
+        params.activeProviderId === "dotnet"
+    )
+  );
+  const projectInfo = visibleProjectInfoSnapshot.projectInfo;
+  const projectProfilesRevision = visibleProjectInfoSnapshot.revision;
+  selectedScopeKeyRef.current = currentScopeKey;
+  canExposeProjectInfoRef.current = Boolean(
+    params.selectedRepoPath &&
+      !params.isStateLoading &&
+      params.activeProviderId === "dotnet"
+  );
   const {
     scanProject: scanProjectRequest,
     resolveProjectInfo: resolveProjectInfoRequest,
   } = useProjectScanner({
     appT: params.appT,
   });
+
+  const commitProjectInfoSnapshot = useCallback(
+    (scopeKey: string | null, nextProjectInfo: ProjectInfo | null) => {
+      const previousSnapshot =
+        scopeKey && projectInfoCacheRef.current[scopeKey]
+          ? projectInfoCacheRef.current[scopeKey]
+          : EMPTY_PROJECT_INFO_SNAPSHOT;
+      const nextSnapshot = createProjectInfoSnapshot(
+        nextProjectInfo,
+        previousSnapshot
+      );
+
+      if (scopeKey) {
+        if (nextProjectInfo) {
+          projectInfoCacheRef.current[scopeKey] = nextSnapshot;
+        } else {
+          delete projectInfoCacheRef.current[scopeKey];
+        }
+      }
+
+      if (selectedScopeKeyRef.current === scopeKey) {
+        setVisibleProjectInfoSnapshot(nextSnapshot);
+      }
+
+      return nextSnapshot;
+    },
+    []
+  );
 
   const scanProject = useCallback(
     async (
@@ -69,7 +162,7 @@ export function useProjectShellState(params: {
       });
 
       if (!targetPath || params.activeProviderId !== "dotnet") {
-        setProjectInfo(null);
+        setVisibleProjectInfoSnapshot(EMPTY_PROJECT_INFO_SNAPSHOT);
         setIsProjectInfoRefreshing(false);
         return null;
       }
@@ -91,29 +184,31 @@ export function useProjectShellState(params: {
 
       if (
         requestId !== scanRequestIdRef.current ||
+        selectedScopeKeyRef.current !== currentScopeKey ||
+        !canExposeProjectInfoRef.current ||
         !info ||
         params.selectedRepoPath?.trim() !== targetPath ||
         (boundProjectFile &&
           params.selectedRepoProjectFile?.trim() !== boundProjectFile)
       ) {
-        if (requestId === scanRequestIdRef.current && !info) {
-          if (currentScopeKey) {
-            delete projectInfoCacheRef.current[currentScopeKey];
-          }
-          setProjectInfo(null);
+        if (
+          requestId === scanRequestIdRef.current &&
+          selectedScopeKeyRef.current === currentScopeKey &&
+          canExposeProjectInfoRef.current &&
+          !info
+        ) {
+          commitProjectInfoSnapshot(currentScopeKey, null);
           setIsProjectInfoRefreshing(false);
         }
         return info;
       }
 
-      if (currentScopeKey) {
-        projectInfoCacheRef.current[currentScopeKey] = info;
-      }
-      setProjectInfo(info);
+      commitProjectInfoSnapshot(currentScopeKey, info);
       setIsProjectInfoRefreshing(false);
       return info;
     },
     [
+      commitProjectInfoSnapshot,
       params.activeProviderId,
       params.selectedRepoId,
       params.selectedRepoPath,
@@ -123,14 +218,14 @@ export function useProjectShellState(params: {
     ]
   );
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (
       !params.selectedRepoPath ||
       params.isStateLoading ||
       params.activeProviderId !== "dotnet"
     ) {
       scanRequestIdRef.current += 1;
-      setProjectInfo(null);
+      setVisibleProjectInfoSnapshot(EMPTY_PROJECT_INFO_SNAPSHOT);
       setIsProjectInfoRefreshing(false);
       return;
     }
@@ -140,11 +235,11 @@ export function useProjectShellState(params: {
       selectedRepoPath: params.selectedRepoPath,
       selectedRepoProjectFile: params.selectedRepoProjectFile,
     });
-    const cachedProjectInfo = currentScopeKey
-      ? projectInfoCacheRef.current[currentScopeKey] ?? null
-      : null;
+    const cachedSnapshot = currentScopeKey
+      ? projectInfoCacheRef.current[currentScopeKey] ?? EMPTY_PROJECT_INFO_SNAPSHOT
+      : EMPTY_PROJECT_INFO_SNAPSHOT;
 
-    setProjectInfo(cachedProjectInfo);
+    setVisibleProjectInfoSnapshot(cachedSnapshot);
     setIsProjectInfoRefreshing(true);
 
     void scanProject(params.selectedRepoPath, {
@@ -191,8 +286,8 @@ export function useProjectShellState(params: {
 
   return {
     projectInfo,
+    projectProfilesRevision,
     isProjectInfoRefreshing,
-    setProjectInfo,
     scanProject,
   };
 }

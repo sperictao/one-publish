@@ -1,8 +1,9 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 
 interface UseListInteractionStateOptions {
   filteredItemIds: string[];
   selectedItemId: string | null;
+  resetKey?: string | null;
 }
 
 export interface ListInteractionState {
@@ -24,6 +25,7 @@ export interface ListInteractionState {
 export function useListInteractionState({
   filteredItemIds,
   selectedItemId,
+  resetKey = null,
 }: UseListInteractionStateOptions): ListInteractionState {
   const [hoveredItemId, setHoveredItemId] = useState<string | null>(null);
   const [focusedItemId, setFocusedItemId] = useState<string | null>(null);
@@ -31,13 +33,14 @@ export function useListInteractionState({
   const [pointerInsideList, setPointerInsideList] = useState(false);
   const activeMenuItemIdRef = useRef<string | null>(null);
   const pointerInsideListRef = useRef(false);
+  const previousResetKeyRef = useRef<string | null | undefined>(resetKey);
 
   const filteredItemIdsSignature = useMemo(
     () => filteredItemIds.join("|"),
     [filteredItemIds]
   );
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     const filteredItemIdSet = new Set(filteredItemIds);
 
     setHoveredItemId((prev) =>
@@ -70,6 +73,20 @@ export function useListInteractionState({
   useEffect(() => {
     pointerInsideListRef.current = pointerInsideList;
   }, [pointerInsideList]);
+
+  useLayoutEffect(() => {
+    if (previousResetKeyRef.current === resetKey) {
+      return;
+    }
+
+    previousResetKeyRef.current = resetKey;
+    activeMenuItemIdRef.current = null;
+    pointerInsideListRef.current = false;
+    setHoveredItemId(null);
+    setFocusedItemId(null);
+    setActiveMenuItemId(null);
+    setPointerInsideList(false);
+  }, [resetKey]);
 
   const handleRowMouseEnter = useCallback((itemId: string) => {
     setHoveredItemId((prev) => (prev === itemId ? prev : itemId));

@@ -5,6 +5,7 @@ import {
   lazy,
   useCallback,
   useEffect,
+  useLayoutEffect,
   useRef,
   useState,
   useMemo,
@@ -146,9 +147,11 @@ function hasSameProfileOrder(
 }
 
 export interface PublishConfigPanelProps {
+  selectedRepoId?: string | null;
   selectedPreset: string;
   isCustomMode: boolean;
   profiles: ConfigProfile[];
+  profilesRevision?: number;
   isProfilesRefreshing?: boolean;
   activeProfileName: string | null;
   onSelectProfile: (profile: ConfigProfile) => void;
@@ -159,6 +162,7 @@ export interface PublishConfigPanelProps {
   onDeleteProfile: (name: string) => void;
   dotnetSchema?: ParameterSchema;
   projectPublishProfiles: string[];
+  projectProfilesRevision?: number;
   isProjectProfilesRefreshing?: boolean;
   projectFilePath?: string;
   projectFrameworkOptions?: string[];
@@ -177,6 +181,11 @@ export interface PublishConfigPanelProps {
   onCollapse?: () => void;
   showExpandButton?: boolean;
   onExpandRepo?: () => void;
+}
+
+interface PreferredSelectedRenderAnchor {
+  repoId: string | null;
+  renderId: string;
 }
 
 function ConfigGroup({
@@ -443,9 +452,11 @@ function ProfileItem({
 }
 
 export function PublishConfigPanel({
+  selectedRepoId,
   selectedPreset,
   isCustomMode,
   profiles,
+  profilesRevision = 0,
   isProfilesRefreshing = false,
   activeProfileName,
   onSelectProfile,
@@ -456,6 +467,7 @@ export function PublishConfigPanel({
   onDeleteProfile,
   dotnetSchema,
   projectPublishProfiles,
+  projectProfilesRevision = 0,
   isProjectProfilesRefreshing = false,
   projectFilePath,
   projectFrameworkOptions = EMPTY_FRAMEWORK_OPTIONS,
@@ -472,11 +484,13 @@ export function PublishConfigPanel({
   showExpandButton,
   onExpandRepo,
 }: PublishConfigPanelProps) {
+  const selectedRepoScopeId = selectedRepoId ?? null;
   const [searchQuery, setSearchQuery] = useState("");
   const [groupFilterValue, setGroupFilterValue] =
     useState<GroupFilterValue>(ALL_GROUP_FILTER);
   const [groupFilterOpen, setGroupFilterOpen] = useState(false);
-  const [preferredSelectedRenderId, setPreferredSelectedRenderId] = useState<string | null>(null);
+  const [preferredSelectedRenderAnchor, setPreferredSelectedRenderAnchor] =
+    useState<PreferredSelectedRenderAnchor | null>(null);
   const [floatingEnhancerEnabled, setFloatingEnhancerEnabled] = useState(false);
   const [showReorderControls, setShowReorderControls] = useState(false);
   const [projectProfileViewerOpen, setProjectProfileViewerOpen] = useState(false);
@@ -517,6 +531,9 @@ export function PublishConfigPanel({
   const fallbackListRef = useRef<HTMLDivElement | null>(null);
   const fallbackFloatingCardSurfaceRef = useRef<HTMLDivElement | null>(null);
   const latestProjectProfileRequestId = useRef(0);
+  const previousSelectedRepoIdRef = useRef<string | null | undefined>(
+    selectedRepoId
+  );
 
   const query = searchQuery.toLowerCase();
   const favoriteSet = useMemo(
@@ -736,6 +753,11 @@ export function PublishConfigPanel({
   ]);
 
   const selectedRenderId = useMemo(() => {
+    const preferredSelectedRenderId =
+      preferredSelectedRenderAnchor?.repoId === selectedRepoScopeId
+        ? preferredSelectedRenderAnchor.renderId
+        : null;
+
     if (!selectedConfigId) {
       return null;
     }
@@ -749,11 +771,17 @@ export function PublishConfigPanel({
     }
 
     return selectedConfigId;
-  }, [allConfigIds, preferredSelectedRenderId, selectedConfigId]);
+  }, [
+    allConfigIds,
+    preferredSelectedRenderAnchor,
+    selectedConfigId,
+    selectedRepoScopeId,
+  ]);
 
   const interaction = useListInteractionState({
     filteredItemIds: allConfigIds,
     selectedItemId: selectedRenderId,
+    resetKey: selectedRepoId ?? null,
   });
   const {
     settledItemId: settledConfigRenderId,
@@ -773,6 +801,14 @@ export function PublishConfigPanel({
   const handleConfigListPointerLeave = useCallback(() => {
     clearSettledConfigRenderId();
   }, [clearSettledConfigRenderId]);
+  useLayoutEffect(() => {
+    if (previousSelectedRepoIdRef.current === selectedRepoId) {
+      return;
+    }
+
+    previousSelectedRepoIdRef.current = selectedRepoId;
+    clearSettledConfigRenderId();
+  }, [clearSettledConfigRenderId, selectedRepoId]);
   const recentReorder = usePointerListReorder<undefined>({
     enabled: recentDragEnabled,
     onStart: () => {
@@ -970,6 +1006,13 @@ export function PublishConfigPanel({
     previewVisibleProjectProfiles,
     showRecentItems,
   ]);
+  const floatingLayerKey = useMemo(() => {
+    return [
+      selectedRepoScopeId ?? "__no-repo__",
+      profilesRevision,
+      projectProfilesRevision,
+    ].join("::");
+  }, [profilesRevision, projectProfilesRevision, selectedRepoScopeId]);
   const hasVisiblePreviewConfigResults =
     previewVisibleProjectProfiles.length > 0 ||
     previewVisibleGroupedFilteredProfiles.length > 0;
@@ -985,6 +1028,7 @@ export function PublishConfigPanel({
       settledConfigRenderId?.startsWith("recent:")
         ? settledConfigRenderId.slice("recent:".length)
         : null,
+    resetKey: selectedRepoScopeId,
   });
   const projectMotion = useListReorderMotion({
     orderedIds: previewProjectProfiles,
@@ -993,6 +1037,7 @@ export function PublishConfigPanel({
       settledConfigRenderId?.startsWith("pubxml:")
         ? settledConfigRenderId.slice("pubxml:".length)
         : null,
+    resetKey: selectedRepoScopeId,
   });
   const customMotion = useListReorderMotion({
     orderedIds: previewProfiles.map((profile) => profile.name),
@@ -1001,6 +1046,7 @@ export function PublishConfigPanel({
       settledConfigRenderId?.startsWith("userprofile:")
         ? settledConfigRenderId.slice("userprofile:".length)
         : null,
+    resetKey: selectedRepoScopeId,
   });
   const draggingFloatingConfig = useMemo(() => {
     if (recentReorder.draggingItemId) {
@@ -1355,7 +1401,10 @@ export function PublishConfigPanel({
                       recentDragEnabled ? "pl-10" : "pl-3"
                     )}
                     onClick={() => {
-                      setPreferredSelectedRenderId(`recent:${item.key}`);
+                      setPreferredSelectedRenderAnchor({
+                        repoId: selectedRepoScopeId,
+                        renderId: `recent:${item.key}`,
+                      });
                       item.onClick();
                     }}
                   >
@@ -1509,7 +1558,10 @@ export function PublishConfigPanel({
                       projectProfileDragEnabled ? "pl-10" : "pl-3"
                     )}
                     onClick={() => {
-                      setPreferredSelectedRenderId(configKey);
+                      setPreferredSelectedRenderAnchor({
+                        repoId: selectedRepoScopeId,
+                        renderId: configKey,
+                      });
                       onSelectProjectProfile(name);
                     }}
                   >
@@ -1602,7 +1654,10 @@ export function PublishConfigPanel({
                     `userprofile:${profile.name}`
                   )}
                   onClick={() => {
-                    setPreferredSelectedRenderId(`userprofile:${profile.name}`);
+                    setPreferredSelectedRenderAnchor({
+                      repoId: selectedRepoScopeId,
+                      renderId: `userprofile:${profile.name}`,
+                    });
                     onSelectProfile(profile);
                   }}
                   onToggleFavorite={onToggleFavoriteConfig}
@@ -1925,6 +1980,7 @@ export function PublishConfigPanel({
         ) : (
           <Suspense fallback={renderConfigList(fallbackFloatingBindings)}>
             <PublishConfigPanelFloatingLayer
+              key={floatingLayerKey}
               filteredConfigIds={previewConfigIds}
               targetConfigId={floatingTargetConfigId}
               restingTargetConfigId={restingTargetConfigId}

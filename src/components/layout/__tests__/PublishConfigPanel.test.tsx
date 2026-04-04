@@ -31,6 +31,13 @@ function getRenderedConfigIds(container: HTMLElement, prefix: string): string[] 
     .filter((itemId) => itemId.startsWith(prefix));
 }
 
+function getFloatingCardMotionElement(container: HTMLElement): HTMLElement | null {
+  const selectedSurface = container.querySelector<HTMLElement>(
+    ".floating-list-card[data-selected='true']"
+  );
+  return selectedSurface?.parentElement?.parentElement ?? null;
+}
+
 let getBoundingClientRectSpy: ReturnType<typeof vi.spyOn> | null = null;
 
 const { resolveDotnetProjectProfileMock } = vi.hoisted(() => ({
@@ -124,12 +131,16 @@ beforeAll(() => {
 
   if (!HTMLElement.prototype.getAnimations) {
     Object.defineProperty(HTMLElement.prototype, "getAnimations", {
+      configurable: true,
+      writable: true,
       value: () => [],
     });
   }
 
   if (!HTMLElement.prototype.animate) {
     Object.defineProperty(HTMLElement.prototype, "animate", {
+      configurable: true,
+      writable: true,
       value: () => ({
         cancel() {},
       }),
@@ -295,29 +306,31 @@ describe("PublishConfigPanel", () => {
       />
     );
 
-    const recentRow = container.querySelector<HTMLElement>(
-      '[data-list-item-id="recent:userprofile:beta-profile"]'
-    );
-    expect(recentRow).not.toBeNull();
+    const getRecentRow = () =>
+      container.querySelector<HTMLElement>(
+        '[data-list-item-id="recent:userprofile:beta-profile"]'
+      );
+    const getList = () =>
+      container.querySelector<HTMLElement>(".list-scroll-shell");
 
-    const list = container.querySelector<HTMLElement>(".list-scroll-shell");
-    expect(list).not.toBeNull();
+    expect(getRecentRow()).not.toBeNull();
+    expect(getList()).not.toBeNull();
 
-    fireEvent.pointerEnter(list!);
-    fireEvent.mouseOver(recentRow!);
+    fireEvent.pointerEnter(getList()!);
+    fireEvent.mouseOver(getRecentRow()!);
 
     await waitFor(() => {
-      expect(recentRow).toHaveAttribute("data-list-visual-target", "true");
+      expect(getRecentRow()).toHaveAttribute("data-list-visual-target", "true");
     });
 
-    const trigger = within(recentRow!).getByRole("button", {
+    const trigger = within(getRecentRow()!).getByRole("button", {
       name: "更多操作: beta-profile",
     });
     fireEvent.pointerDown(trigger, { button: 0, ctrlKey: false });
     fireEvent.click(trigger);
 
     await waitFor(() => {
-      expect(recentRow).toHaveAttribute("data-list-menu-open", "true");
+      expect(getRecentRow()).toHaveAttribute("data-list-menu-open", "true");
     });
 
     const removeRecentItem = await screen.findByRole("menuitem", {
@@ -327,10 +340,10 @@ describe("PublishConfigPanel", () => {
     expect(onSelectProfile).not.toHaveBeenCalled();
     expect(onSelectProjectProfile).not.toHaveBeenCalled();
 
-    fireEvent.pointerLeave(list!);
+    fireEvent.pointerLeave(getList()!);
 
-    expect(recentRow).toHaveAttribute("data-list-menu-open", "true");
-    expect(recentRow).toHaveAttribute("data-list-visual-target", "true");
+    expect(getRecentRow()).toHaveAttribute("data-list-menu-open", "true");
+    expect(getRecentRow()).toHaveAttribute("data-list-visual-target", "true");
 
     fireEvent.click(removeRecentItem);
 
@@ -339,6 +352,280 @@ describe("PublishConfigPanel", () => {
     });
     expect(onSelectProfile).not.toHaveBeenCalled();
     expect(onSelectProjectProfile).not.toHaveBeenCalled();
+  });
+
+  it("切换仓库时会重置 recent 视觉锚点，避免沿用上一仓库的高亮位置", async () => {
+    const { container, rerender } = render(
+      <PublishConfigPanel
+        selectedRepoId="repo-a"
+        selectedPreset="profile-FolderProfile"
+        isCustomMode={false}
+        profiles={[]}
+        activeProfileName={null}
+        onSelectProfile={() => {}}
+        onCreateProfile={() => {}}
+        onEditProfile={() => {}}
+        onRefreshProfiles={() => {}}
+        onOpenConfigDialog={() => {}}
+        onDeleteProfile={() => {}}
+        dotnetSchema={dotnetSchema}
+        projectPublishProfiles={["FolderProfile", "ZipProfile"]}
+        onSelectProjectProfile={() => {}}
+        onCopyProjectProfileToCustom={async (_name, _config: PublishConfigStore) => "copied"}
+        recentConfigKeys={["pubxml:FolderProfile"]}
+        favoriteConfigKeys={[]}
+        onToggleFavoriteConfig={() => {}}
+        onRemoveRecentConfig={() => {}}
+        onReorderRecentConfigs={() => {}}
+        onReorderProjectProfiles={() => {}}
+        onReorderProfiles={() => {}}
+      />
+    );
+
+    const getRecentRow = () =>
+      container.querySelector<HTMLElement>(
+        '[data-list-item-id="recent:pubxml:FolderProfile"]'
+      );
+    const getProjectRow = () =>
+      container.querySelector<HTMLElement>(
+        '[data-list-item-id="pubxml:FolderProfile"]'
+      );
+
+    expect(getProjectRow()).toHaveAttribute("data-list-visual-target", "true");
+    expect(getRecentRow()).toHaveAttribute("data-list-visual-target", "false");
+
+    fireEvent.click(
+      getRecentRow()!.querySelector<HTMLButtonElement>("button[aria-pressed]")!
+    );
+
+    await waitFor(() => {
+      expect(getRecentRow()).toHaveAttribute("data-list-visual-target", "true");
+    });
+    expect(getProjectRow()).toHaveAttribute("data-list-visual-target", "false");
+    await waitFor(() => {
+      expect(getFloatingCardMotionElement(container)?.style.transform).toContain(
+        "translate3d(0px, 0px, 0)"
+      );
+    });
+
+    rerender(
+      <PublishConfigPanel
+        selectedRepoId="repo-b"
+        selectedPreset="profile-FolderProfile"
+        isCustomMode={false}
+        profiles={[]}
+        activeProfileName={null}
+        onSelectProfile={() => {}}
+        onCreateProfile={() => {}}
+        onEditProfile={() => {}}
+        onRefreshProfiles={() => {}}
+        onOpenConfigDialog={() => {}}
+        onDeleteProfile={() => {}}
+        dotnetSchema={dotnetSchema}
+        projectPublishProfiles={["FolderProfile", "ZipProfile"]}
+        onSelectProjectProfile={() => {}}
+        onCopyProjectProfileToCustom={async (_name, _config: PublishConfigStore) => "copied"}
+        recentConfigKeys={["pubxml:FolderProfile"]}
+        favoriteConfigKeys={[]}
+        onToggleFavoriteConfig={() => {}}
+        onRemoveRecentConfig={() => {}}
+        onReorderRecentConfigs={() => {}}
+        onReorderProjectProfiles={() => {}}
+        onReorderProfiles={() => {}}
+      />
+    );
+
+    await waitFor(() => {
+      expect(getProjectRow()).toHaveAttribute("data-list-visual-target", "true");
+    });
+    expect(getRecentRow()).toHaveAttribute("data-list-visual-target", "false");
+    await waitFor(() => {
+      expect(getFloatingCardMotionElement(container)?.style.transform).toContain(
+        `translate3d(0px, ${ROW_STRIDE}px, 0)`
+      );
+    });
+  });
+
+  it("切换仓库时不会复用上一仓库的行重排动画，避免浮卡测量到过渡中的位置", async () => {
+    const animateSpy = vi.spyOn(HTMLElement.prototype, "animate");
+
+    try {
+      const { rerender } = render(
+        <PublishConfigPanel
+          selectedRepoId="repo-a"
+          selectedPreset="release-fd"
+          isCustomMode={true}
+          profiles={[createProfile("alpha-profile"), createProfile("beta-profile")]}
+          activeProfileName="alpha-profile"
+          onSelectProfile={() => {}}
+          onCreateProfile={() => {}}
+          onEditProfile={() => {}}
+          onRefreshProfiles={() => {}}
+          onOpenConfigDialog={() => {}}
+          onDeleteProfile={() => {}}
+          dotnetSchema={dotnetSchema}
+          projectPublishProfiles={[]}
+          onSelectProjectProfile={() => {}}
+          onCopyProjectProfileToCustom={async (_name, _config: PublishConfigStore) => "copied"}
+          recentConfigKeys={[]}
+          favoriteConfigKeys={[]}
+          onToggleFavoriteConfig={() => {}}
+          onRemoveRecentConfig={() => {}}
+          onReorderRecentConfigs={() => {}}
+          onReorderProjectProfiles={() => {}}
+          onReorderProfiles={() => {}}
+        />
+      );
+
+      await waitFor(() => {
+        expect(screen.getByText("alpha-profile")).toBeInTheDocument();
+      });
+
+      animateSpy.mockClear();
+
+      rerender(
+        <PublishConfigPanel
+          selectedRepoId="repo-b"
+          selectedPreset="release-fd"
+          isCustomMode={true}
+          profiles={[createProfile("beta-profile"), createProfile("alpha-profile")]}
+          activeProfileName="alpha-profile"
+          onSelectProfile={() => {}}
+          onCreateProfile={() => {}}
+          onEditProfile={() => {}}
+          onRefreshProfiles={() => {}}
+          onOpenConfigDialog={() => {}}
+          onDeleteProfile={() => {}}
+          dotnetSchema={dotnetSchema}
+          projectPublishProfiles={[]}
+          onSelectProjectProfile={() => {}}
+          onCopyProjectProfileToCustom={async (_name, _config: PublishConfigStore) => "copied"}
+          recentConfigKeys={[]}
+          favoriteConfigKeys={[]}
+          onToggleFavoriteConfig={() => {}}
+          onRemoveRecentConfig={() => {}}
+          onReorderRecentConfigs={() => {}}
+          onReorderProjectProfiles={() => {}}
+          onReorderProfiles={() => {}}
+        />
+      );
+
+      await waitFor(() => {
+        const hasCarryoverRowMotion = animateSpy.mock.calls.some(
+          ([keyframes, options]) => {
+            if (!Array.isArray(keyframes) || keyframes.length !== 2) {
+              return false;
+            }
+
+            const [firstFrame, lastFrame] = keyframes;
+            const firstTransform =
+              typeof firstFrame === "object" &&
+              firstFrame !== null &&
+              "transform" in firstFrame &&
+              typeof firstFrame.transform === "string"
+                ? firstFrame.transform
+                : null;
+            const lastTransform =
+              typeof lastFrame === "object" &&
+              lastFrame !== null &&
+              "transform" in lastFrame &&
+              typeof lastFrame.transform === "string"
+                ? lastFrame.transform
+                : null;
+
+            return (
+              firstTransform?.startsWith("translate3d(0, ") === true &&
+              lastTransform === "translate3d(0, 0, 0)" &&
+              typeof options === "object" &&
+              options !== null &&
+              "fill" in options &&
+              options.fill === "both"
+            );
+          }
+        );
+
+        expect(hasCarryoverRowMotion).toBe(false);
+      });
+    } finally {
+      animateSpy.mockRestore();
+    }
+  });
+
+  it("刷新期间项目配置列表在选中项上方增量补全时，浮卡会立即对齐新位置", async () => {
+    const { container, rerender } = render(
+      <PublishConfigPanel
+        selectedRepoId="repo-b"
+        selectedPreset="profile-C PRD"
+        isCustomMode={false}
+        profiles={[]}
+        activeProfileName={null}
+        onSelectProfile={() => {}}
+        onCreateProfile={() => {}}
+        onEditProfile={() => {}}
+        onRefreshProfiles={() => {}}
+        onOpenConfigDialog={() => {}}
+        onDeleteProfile={() => {}}
+        dotnetSchema={dotnetSchema}
+        projectPublishProfiles={["C PRD"]}
+        isProjectProfilesRefreshing
+        onSelectProjectProfile={() => {}}
+        onCopyProjectProfileToCustom={async (_name, _config: PublishConfigStore) => "copied"}
+        recentConfigKeys={[]}
+        favoriteConfigKeys={[]}
+        onToggleFavoriteConfig={() => {}}
+        onRemoveRecentConfig={() => {}}
+        onReorderRecentConfigs={() => {}}
+        onReorderProjectProfiles={() => {}}
+        onReorderProfiles={() => {}}
+      />
+    );
+
+    await waitFor(() => {
+      expect(getFloatingCardMotionElement(container)?.style.transform).toContain(
+        "translate3d(0px, 0px, 0)"
+      );
+    });
+
+    rerender(
+      <PublishConfigPanel
+        selectedRepoId="repo-b"
+        selectedPreset="profile-C PRD"
+        isCustomMode={false}
+        profiles={[]}
+        activeProfileName={null}
+        onSelectProfile={() => {}}
+        onCreateProfile={() => {}}
+        onEditProfile={() => {}}
+        onRefreshProfiles={() => {}}
+        onOpenConfigDialog={() => {}}
+        onDeleteProfile={() => {}}
+        dotnetSchema={dotnetSchema}
+        projectPublishProfiles={[
+          "C DEV",
+          "97 Basic",
+          "ET_Local_PRD",
+          "C PRD",
+          "ET_Local_QAS",
+          "SSO_DEV",
+        ]}
+        isProjectProfilesRefreshing
+        onSelectProjectProfile={() => {}}
+        onCopyProjectProfileToCustom={async (_name, _config: PublishConfigStore) => "copied"}
+        recentConfigKeys={[]}
+        favoriteConfigKeys={[]}
+        onToggleFavoriteConfig={() => {}}
+        onRemoveRecentConfig={() => {}}
+        onReorderRecentConfigs={() => {}}
+        onReorderProjectProfiles={() => {}}
+        onReorderProfiles={() => {}}
+      />
+    );
+
+    await waitFor(() => {
+      expect(getFloatingCardMotionElement(container)?.style.transform).toContain(
+        `translate3d(0px, ${ROW_STRIDE * 3}px, 0)`
+      );
+    });
   });
 
   it("点击排序按钮后会切换发布配置拖拽手柄的常驻显示", () => {

@@ -19,12 +19,19 @@ export function useListReorderMotion(params: {
   orderedIds: readonly string[];
   draggingItemId: string | null;
   settledItemId?: string | null;
+  resetKey?: string | null;
 }) {
-  const { orderedIds, draggingItemId, settledItemId = null } = params;
+  const {
+    orderedIds,
+    draggingItemId,
+    settledItemId = null,
+    resetKey = null,
+  } = params;
   const reducedMotionRef = useReducedMotion();
   const itemRefs = useRef<Record<string, HTMLElement | null>>({});
   const previousRectsRef = useRef<Record<string, DOMRect>>({});
   const animationRefs = useRef<Record<string, Animation | null>>({});
+  const previousResetKeyRef = useRef<string | null>(resetKey);
   const orderedIdsSignature = orderedIds.join("|");
 
   const setItemRef = useCallback(
@@ -38,6 +45,17 @@ export function useListReorderMotion(params: {
     },
     []
   );
+
+  useLayoutEffect(() => {
+    if (previousResetKeyRef.current !== resetKey) {
+      previousResetKeyRef.current = resetKey;
+      for (const animation of Object.values(animationRefs.current)) {
+        animation?.cancel();
+      }
+      animationRefs.current = {};
+      previousRectsRef.current = {};
+    }
+  }, [resetKey]);
 
   useLayoutEffect(() => {
     const nextRects: Record<string, DOMRect> = {};

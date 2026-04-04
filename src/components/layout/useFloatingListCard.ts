@@ -427,6 +427,58 @@ export function useFloatingListCard({
   }, [updateTargetRect]);
 
   useEffect(() => {
+    const listElement = listRef.current;
+    if (
+      !listElement ||
+      typeof window === "undefined" ||
+      typeof window.requestAnimationFrame !== "function" ||
+      typeof window.cancelAnimationFrame !== "function"
+    ) {
+      return;
+    }
+
+    let resyncFrameId: number | null = null;
+
+    const schedulePostAnimationResync = () => {
+      if (isPointerFollowingRef.current) {
+        return;
+      }
+
+      const targetItemId = cardTargetItemIdRef.current;
+      if (!targetItemId) {
+        return;
+      }
+
+      if (resyncFrameId !== null) {
+        window.cancelAnimationFrame(resyncFrameId);
+      }
+
+      resyncFrameId = window.requestAnimationFrame(() => {
+        resyncFrameId = null;
+        updateTargetRect(cardTargetItemIdRef.current, { immediate: true });
+      });
+    };
+
+    listElement.addEventListener("animationend", schedulePostAnimationResync);
+    listElement.addEventListener("animationcancel", schedulePostAnimationResync);
+
+    return () => {
+      listElement.removeEventListener(
+        "animationend",
+        schedulePostAnimationResync
+      );
+      listElement.removeEventListener(
+        "animationcancel",
+        schedulePostAnimationResync
+      );
+
+      if (resyncFrameId !== null) {
+        window.cancelAnimationFrame(resyncFrameId);
+      }
+    };
+  }, [isPointerFollowingRef, updateTargetRect]);
+
+  useEffect(() => {
     return () => {
       cleanupDynamics();
       if (

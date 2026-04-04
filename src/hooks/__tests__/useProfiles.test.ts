@@ -229,4 +229,81 @@ describe("useProfiles", () => {
       expect(result.current.isProfilesRefreshing).toBe(false);
     });
   });
+
+  it("切回已访问仓库时只回显缓存 revision，提交新快照后才推进 profilesRevision", async () => {
+    const repoAInitial = createDeferred<ConfigProfile[]>();
+    const repoB = createDeferred<ConfigProfile[]>();
+    const repoARefresh = createDeferred<ConfigProfile[]>();
+    mocks.getProfiles
+      .mockImplementationOnce(() => repoAInitial.promise)
+      .mockImplementationOnce(() => repoB.promise)
+      .mockImplementationOnce(() => repoARefresh.promise);
+
+    const { result, rerender } = renderHook(
+      (selectedRepoId: string | null) =>
+        useProfiles({
+          appT: {},
+          profileT: {},
+          language: "zh",
+          selectedRepoId,
+          activeProviderId: "dotnet",
+          providerSchemas: {},
+          setActiveProviderId: vi.fn(),
+          setIsCustomMode: vi.fn(),
+          isCustomMode: false,
+          setSelectedPreset: vi.fn(),
+          setProviderParameters: vi.fn(),
+          applyDotnetCustomConfig: vi.fn(),
+          replaceScopedConfigKey: vi.fn(),
+          presets: [],
+          defaultPresetId: "release-fd",
+          getPresetText: (_presetId, fallbackName, fallbackDescription) => ({
+            name: fallbackName,
+            description: fallbackDescription,
+          }),
+          buildProfileParameters: () => ({}),
+        }),
+      {
+        initialProps: "repo-a",
+      }
+    );
+
+    await act(async () => {
+      repoAInitial.resolve([createProfile("alpha")]);
+    });
+
+    await waitFor(() => {
+      expect(result.current.profiles.map((profile) => profile.name)).toEqual(["alpha"]);
+      expect(result.current.profilesRevision).toBe(1);
+    });
+
+    rerender("repo-b");
+
+    await act(async () => {
+      repoB.resolve([createProfile("beta")]);
+    });
+
+    await waitFor(() => {
+      expect(result.current.profiles.map((profile) => profile.name)).toEqual(["beta"]);
+      expect(result.current.profilesRevision).toBe(1);
+    });
+
+    rerender("repo-a");
+
+    expect(result.current.profiles.map((profile) => profile.name)).toEqual(["alpha"]);
+    expect(result.current.profilesRevision).toBe(1);
+    expect(result.current.isProfilesRefreshing).toBe(true);
+
+    await act(async () => {
+      repoARefresh.resolve([createProfile("alpha-new")]);
+    });
+
+    await waitFor(() => {
+      expect(result.current.profiles.map((profile) => profile.name)).toEqual([
+        "alpha-new",
+      ]);
+      expect(result.current.profilesRevision).toBe(2);
+      expect(result.current.isProfilesRefreshing).toBe(false);
+    });
+  });
 });
