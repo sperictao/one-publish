@@ -150,11 +150,7 @@ pub async fn reorder_repositories(
         .map(|repository| repository.id.clone())
         .collect::<Vec<_>>();
 
-    ensure_exact_order_match(
-        &current_ids,
-        &requested_ids,
-        "repository_order_mismatch",
-    )?;
+    ensure_exact_order_match(&current_ids, &requested_ids, "repository_order_mismatch")?;
 
     if current_ids == requested_ids {
         return Ok(get_bootstrap_state());
@@ -531,11 +527,7 @@ pub async fn reorder_profiles(
                 .collect::<Vec<_>>(),
         );
 
-        ensure_exact_order_match(
-            &current_names,
-            &requested_names,
-            "profile_order_mismatch",
-        )?;
+        ensure_exact_order_match(&current_names, &requested_names, "profile_order_mismatch")?;
 
         if current_names == requested_names
             && repo

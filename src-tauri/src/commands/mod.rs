@@ -22,8 +22,8 @@ pub(crate) use export::{
 };
 pub use export::{
     export_diagnostics_index, export_execution_history, export_execution_snapshot,
-    export_failure_group_bundle, export_preflight_report, open_directory,
-    open_execution_snapshot, open_output_directory,
+    export_failure_group_bundle, export_preflight_report, open_directory, open_execution_snapshot,
+    open_output_directory,
 };
 pub(crate) use notification::__cmd__show_system_notification;
 pub use notification::show_system_notification;
