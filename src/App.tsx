@@ -574,11 +574,10 @@ function App() {
 
   const projectFrameworkOptions =
     projectInfo?.target_frameworks ?? EMPTY_STRING_LIST;
-
-  const isPublishConfigPanelRefreshing = Boolean(selectedRepo) && (
-    isProfilesRefreshing ||
-    (activeProviderId === "dotnet" && isProjectInfoRefreshing)
-  );
+  const isProjectProfilesRefreshing =
+    Boolean(selectedRepo) &&
+    activeProviderId === "dotnet" &&
+    isProjectInfoRefreshing;
 
   const isPublishRunCardRefreshing =
     Boolean(selectedRepo) &&
@@ -803,10 +802,10 @@ function App() {
         >
           <Suspense fallback={<div className="flex h-full flex-col" />}>
             <PublishConfigPanel
-              isRefreshing={isPublishConfigPanelRefreshing}
               selectedPreset={selectedPreset}
               isCustomMode={isCustomMode}
               profiles={profiles}
+              isProfilesRefreshing={Boolean(selectedRepo) && isProfilesRefreshing}
               activeProfileName={activeProfileName}
               onSelectProfile={handleSelectProfileFromPanel}
               onCreateProfile={openQuickCreateProfileDialog}
@@ -815,6 +814,7 @@ function App() {
               onOpenConfigDialog={() => handleConfigDialogOpenChange(true)}
               onDeleteProfile={handleDeleteProfileFromPanel}
               projectPublishProfiles={orderedProjectPublishProfiles}
+              isProjectProfilesRefreshing={isProjectProfilesRefreshing}
               projectFilePath={projectInfo?.project_file}
               projectFrameworkOptions={projectFrameworkOptions}
               onSelectProjectProfile={handleSelectProjectProfile}

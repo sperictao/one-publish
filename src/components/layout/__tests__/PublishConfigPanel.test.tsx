@@ -180,7 +180,8 @@ beforeAll(() => {
         deleteConfig: "删除配置",
         editConfig: "编辑配置",
         searchConfig: "搜索配置",
-        refreshingConfigs: "正在刷新发布配置...",
+        refreshingProjectProfiles: "正在刷新项目发布配置...",
+        refreshingCustomProfiles: "正在刷新自定义配置...",
       },
     },
   });
@@ -196,13 +197,14 @@ beforeEach(() => {
 });
 
 describe("PublishConfigPanel", () => {
-  it("仓库切换刷新期间保留上一帧配置列表并显示遮罩", async () => {
-    const { rerender } = render(
+  it("项目发布配置刷新期间不会阻塞自定义配置组渲染", async () => {
+    render(
       <PublishConfigPanel
-        selectedPreset="profile-FolderProfile"
-        isCustomMode={false}
+        selectedPreset="release-fd"
+        isCustomMode={true}
         profiles={[createProfile("alpha-profile")]}
-        activeProfileName={null}
+        isProfilesRefreshing={false}
+        activeProfileName="alpha-profile"
         onSelectProfile={() => {}}
         onCreateProfile={() => {}}
         onEditProfile={() => {}}
@@ -210,10 +212,11 @@ describe("PublishConfigPanel", () => {
         onOpenConfigDialog={() => {}}
         onDeleteProfile={() => {}}
         dotnetSchema={dotnetSchema}
-        projectPublishProfiles={["FolderProfile"]}
+        projectPublishProfiles={[]}
+        isProjectProfilesRefreshing
         onSelectProjectProfile={() => {}}
         onCopyProjectProfileToCustom={async (_name, _config: PublishConfigStore) => "copied"}
-        recentConfigKeys={["pubxml:FolderProfile"]}
+        recentConfigKeys={[]}
         favoriteConfigKeys={[]}
         onToggleFavoriteConfig={() => {}}
         onRemoveRecentConfig={() => {}}
@@ -223,15 +226,17 @@ describe("PublishConfigPanel", () => {
       />
     );
 
-    expect(screen.getAllByText("FolderProfile").length).toBeGreaterThan(0);
     expect(screen.getByText("alpha-profile")).toBeInTheDocument();
+    expect(screen.getByText("正在刷新项目发布配置...")).toBeInTheDocument();
+  });
 
-    rerender(
+  it("自定义配置刷新期间不会阻塞项目发布配置组渲染", async () => {
+    render(
       <PublishConfigPanel
-        isRefreshing
-        selectedPreset="release-fd"
+        selectedPreset="profile-FolderProfile"
         isCustomMode={false}
         profiles={[]}
+        isProfilesRefreshing
         activeProfileName={null}
         onSelectProfile={() => {}}
         onCreateProfile={() => {}}
@@ -240,7 +245,8 @@ describe("PublishConfigPanel", () => {
         onOpenConfigDialog={() => {}}
         onDeleteProfile={() => {}}
         dotnetSchema={dotnetSchema}
-        projectPublishProfiles={[]}
+        projectPublishProfiles={["FolderProfile"]}
+        isProjectProfilesRefreshing={false}
         onSelectProjectProfile={() => {}}
         onCopyProjectProfileToCustom={async (_name, _config: PublishConfigStore) => "copied"}
         recentConfigKeys={[]}
@@ -254,8 +260,7 @@ describe("PublishConfigPanel", () => {
     );
 
     expect(screen.getAllByText("FolderProfile").length).toBeGreaterThan(0);
-    expect(screen.getByText("alpha-profile")).toBeInTheDocument();
-    expect(screen.getByText("正在刷新发布配置...")).toBeInTheDocument();
+    expect(screen.getByText("正在刷新自定义配置...")).toBeInTheDocument();
   });
 
   it("打开未选中配置菜单时不会误选中，并在离开列表后仍锁定菜单上下文", async () => {

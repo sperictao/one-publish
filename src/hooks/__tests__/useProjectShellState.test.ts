@@ -161,6 +161,81 @@ describe("useProjectShellState", () => {
     });
   });
 
+  it("切回已访问仓库时会立即回显缓存的项目信息，再后台刷新", async () => {
+    const repoAInitial = createDeferred<ProjectInfo | null>();
+    const repoB = createDeferred<ProjectInfo | null>();
+    const repoARefresh = createDeferred<ProjectInfo | null>();
+    mocks.scanProject
+      .mockImplementationOnce(() => repoAInitial.promise)
+      .mockImplementationOnce(() => repoB.promise)
+      .mockImplementationOnce(() => repoARefresh.promise);
+
+    const { result, rerender } = renderHook(
+      (props: HookProps) =>
+        useProjectShellState({
+          appT: {},
+          isStateLoading: false,
+          ...props,
+        }),
+      {
+        initialProps: {
+          selectedRepoId: "repo-a",
+          selectedRepoPath: "/repo-a",
+          selectedRepoProjectFile: undefined,
+          activeProviderId: "dotnet",
+        },
+      }
+    );
+
+    await act(async () => {
+      repoAInitial.resolve(createProjectInfo("/repo-a"));
+    });
+
+    await waitFor(() => {
+      expect(result.current.projectInfo?.project_file).toBe("/repo-a/App.csproj");
+    });
+
+    rerender({
+      selectedRepoId: "repo-b",
+      selectedRepoPath: "/repo-b",
+      selectedRepoProjectFile: undefined,
+      activeProviderId: "dotnet",
+    });
+
+    await act(async () => {
+      repoB.resolve(createProjectInfo("/repo-b"));
+    });
+
+    await waitFor(() => {
+      expect(result.current.projectInfo?.project_file).toBe("/repo-b/App.csproj");
+    });
+
+    rerender({
+      selectedRepoId: "repo-a",
+      selectedRepoPath: "/repo-a",
+      selectedRepoProjectFile: undefined,
+      activeProviderId: "dotnet",
+    });
+
+    expect(result.current.projectInfo?.project_file).toBe("/repo-a/App.csproj");
+    expect(result.current.isProjectInfoRefreshing).toBe(true);
+
+    await act(async () => {
+      repoARefresh.resolve({
+        ...createProjectInfo("/repo-a"),
+        publish_profiles: ["FolderProfile", "ClickOnce"],
+      });
+    });
+
+    await waitFor(() => {
+      expect(result.current.isProjectInfoRefreshing).toBe(false);
+      expect(result.current.projectInfo?.publish_profiles).toEqual([
+        "FolderProfile",
+        "ClickOnce",
+      ]);
+    });
+  });
+
   it("仓库被清空时会立即清除当前项目信息", async () => {
     mocks.scanProject.mockResolvedValue(createProjectInfo("/repo-a"));
     const initialProps: Omit<HookProps, "activeProviderId"> = {

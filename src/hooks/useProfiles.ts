@@ -161,6 +161,7 @@ export function useProfiles({
   const [editingProfileOriginalName, setEditingProfileOriginalName] = useState<string | null>(null);
   const loadProfilesRequestIdRef = useRef(0);
   const reorderProfilesQueueRef = useRef<Promise<void>>(Promise.resolve());
+  const profilesCacheRef = useRef<Record<string, ConfigProfile[]>>({});
   const selectedRepoIdRef = useRef(selectedRepoId);
 
   useEffect(() => {
@@ -171,13 +172,18 @@ export function useProfiles({
     const requestId = loadProfilesRequestIdRef.current + 1;
     loadProfilesRequestIdRef.current = requestId;
     const repoId = selectedRepoId;
-    setIsProfilesRefreshing(Boolean(repoId));
 
     if (!repoId) {
       setProfiles([]);
       setIsProfilesRefreshing(false);
       return [];
     }
+
+    const cachedProfiles = profilesCacheRef.current[repoId];
+    if (cachedProfiles) {
+      setProfiles(cachedProfiles);
+    }
+    setIsProfilesRefreshing(true);
 
     try {
       const data = await getProfiles(repoId);
@@ -189,6 +195,7 @@ export function useProfiles({
         return data;
       }
 
+      profilesCacheRef.current[repoId] = data;
       setProfiles(data);
       setIsProfilesRefreshing(false);
       return data;
@@ -197,7 +204,7 @@ export function useProfiles({
         loadProfilesRequestIdRef.current === requestId &&
         selectedRepoIdRef.current === repoId
       ) {
-        setProfiles([]);
+        setProfiles(cachedProfiles ?? []);
         setIsProfilesRefreshing(false);
       }
       console.error("加载配置文件列表失败:", err);
@@ -210,7 +217,11 @@ export function useProfiles({
   }, [loadProfiles]);
 
   useEffect(() => {
-    setProfiles([]);
+    const cachedProfiles = selectedRepoId
+      ? profilesCacheRef.current[selectedRepoId] ?? []
+      : [];
+
+    setProfiles(cachedProfiles);
     setIsProfilesRefreshing(Boolean(selectedRepoId));
     setActiveProfileName(null);
     setEditingProfileOriginalName(null);

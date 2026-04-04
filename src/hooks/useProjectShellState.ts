@@ -10,6 +10,26 @@ interface TranslationMap {
   [key: string]: string | undefined;
 }
 
+function buildProjectInfoScopeKey(params: {
+  selectedRepoId: string | null;
+  selectedRepoPath?: string;
+  selectedRepoProjectFile?: string;
+}) {
+  const normalizedRepoId = params.selectedRepoId?.trim() || "";
+  const normalizedRepoPath = params.selectedRepoPath?.trim() || "";
+  const normalizedProjectFile = params.selectedRepoProjectFile?.trim() || "";
+
+  if (!normalizedRepoId && !normalizedRepoPath && !normalizedProjectFile) {
+    return null;
+  }
+
+  return JSON.stringify({
+    selectedRepoId: normalizedRepoId,
+    selectedRepoPath: normalizedRepoPath,
+    selectedRepoProjectFile: normalizedProjectFile,
+  });
+}
+
 export function useProjectShellState(params: {
   appT: TranslationMap;
   selectedRepoId: string | null;
@@ -21,6 +41,7 @@ export function useProjectShellState(params: {
   const [projectInfo, setProjectInfo] = useState<ProjectInfo | null>(null);
   const [isProjectInfoRefreshing, setIsProjectInfoRefreshing] = useState(false);
   const scanRequestIdRef = useRef(0);
+  const projectInfoCacheRef = useRef<Record<string, ProjectInfo>>({});
   const {
     scanProject: scanProjectRequest,
     resolveProjectInfo: resolveProjectInfoRequest,
@@ -41,6 +62,11 @@ export function useProjectShellState(params: {
       const boundProjectFile = options?.projectFile?.trim();
       const requestId = scanRequestIdRef.current + 1;
       scanRequestIdRef.current = requestId;
+      const currentScopeKey = buildProjectInfoScopeKey({
+        selectedRepoId: params.selectedRepoId,
+        selectedRepoPath: params.selectedRepoPath,
+        selectedRepoProjectFile: params.selectedRepoProjectFile,
+      });
 
       if (!targetPath || params.activeProviderId !== "dotnet") {
         setProjectInfo(null);
@@ -49,7 +75,6 @@ export function useProjectShellState(params: {
       }
 
       setIsProjectInfoRefreshing(true);
-      setProjectInfo(null);
       const info = await resolvePreferredDotnetProjectInfo({
         repoPath: targetPath,
         projectFile: boundProjectFile,
@@ -72,18 +97,25 @@ export function useProjectShellState(params: {
           params.selectedRepoProjectFile?.trim() !== boundProjectFile)
       ) {
         if (requestId === scanRequestIdRef.current && !info) {
+          if (currentScopeKey) {
+            delete projectInfoCacheRef.current[currentScopeKey];
+          }
           setProjectInfo(null);
           setIsProjectInfoRefreshing(false);
         }
         return info;
       }
 
+      if (currentScopeKey) {
+        projectInfoCacheRef.current[currentScopeKey] = info;
+      }
       setProjectInfo(info);
       setIsProjectInfoRefreshing(false);
       return info;
     },
     [
       params.activeProviderId,
+      params.selectedRepoId,
       params.selectedRepoPath,
       params.selectedRepoProjectFile,
       resolveProjectInfoRequest,
@@ -102,6 +134,18 @@ export function useProjectShellState(params: {
       setIsProjectInfoRefreshing(false);
       return;
     }
+
+    const currentScopeKey = buildProjectInfoScopeKey({
+      selectedRepoId: params.selectedRepoId,
+      selectedRepoPath: params.selectedRepoPath,
+      selectedRepoProjectFile: params.selectedRepoProjectFile,
+    });
+    const cachedProjectInfo = currentScopeKey
+      ? projectInfoCacheRef.current[currentScopeKey] ?? null
+      : null;
+
+    setProjectInfo(cachedProjectInfo);
+    setIsProjectInfoRefreshing(true);
 
     void scanProject(params.selectedRepoPath, {
       silentSuccess: true,

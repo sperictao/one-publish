@@ -143,6 +143,7 @@ vi.mock("@/hooks/usePublishHistoryState", () => ({
 vi.mock("@/hooks/useProjectShellState", () => ({
   useProjectShellState: () => ({
     projectInfo: null,
+    isProjectInfoRefreshing: false,
     setProjectInfo: mocks.noop,
     scanProject: mocks.noop,
   }),
@@ -212,6 +213,7 @@ vi.mock("@/hooks/usePublishRunner", () => ({
     lastPublishSpec: null,
     currentPublishRecordId: null,
     outputLog: "",
+    isResolvingSelectedProjectProfile: false,
     releaseChecklistOpen: false,
     setReleaseChecklistOpen: mocks.noop,
     artifactActionState: {
@@ -234,6 +236,7 @@ vi.mock("@/hooks/useProfiles", () => ({
   QUICK_CREATE_PROFILE_GROUP_DEFAULT: "__default__",
   useProfiles: () => ({
     profiles: [],
+    isProfilesRefreshing: false,
     activeProfileName: null,
     quickCreateProfileOpen: false,
     quickCreateProfileName: "",

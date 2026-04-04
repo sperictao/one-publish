@@ -1,4 +1,5 @@
 import {
+  Children,
   startTransition,
   Suspense,
   lazy,
@@ -145,10 +146,10 @@ function hasSameProfileOrder(
 }
 
 export interface PublishConfigPanelProps {
-  isRefreshing?: boolean;
   selectedPreset: string;
   isCustomMode: boolean;
   profiles: ConfigProfile[];
+  isProfilesRefreshing?: boolean;
   activeProfileName: string | null;
   onSelectProfile: (profile: ConfigProfile) => void;
   onCreateProfile: () => void;
@@ -158,6 +159,7 @@ export interface PublishConfigPanelProps {
   onDeleteProfile: (name: string) => void;
   dotnetSchema?: ParameterSchema;
   projectPublishProfiles: string[];
+  isProjectProfilesRefreshing?: boolean;
   projectFilePath?: string;
   projectFrameworkOptions?: string[];
   onSelectProjectProfile: (profileName: string) => void;
@@ -183,14 +185,19 @@ function ConfigGroup({
   defaultExpanded = true,
   children,
   visible,
+  isRefreshing = false,
+  emptyState,
 }: {
   title: string;
   count: number;
   defaultExpanded?: boolean;
   children: React.ReactNode;
   visible: boolean;
+  isRefreshing?: boolean;
+  emptyState?: React.ReactNode;
 }) {
   const [expanded, setExpanded] = useState(defaultExpanded);
+  const hasChildren = Children.count(children) > 0;
 
   if (!visible) return null;
 
@@ -206,11 +213,22 @@ function ConfigGroup({
           <ChevronRight className="h-3.5 w-3.5" />
         )}
         <span className="flex-1 text-left">{title}</span>
+        {isRefreshing ? (
+          <Loader2 className="h-3.5 w-3.5 animate-spin text-primary/80" />
+        ) : null}
         <span className="rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-medium tabular-nums">
           {count}
         </span>
       </button>
-      {expanded && <div className="space-y-1.5">{children}</div>}
+      {expanded ? (
+        hasChildren ? (
+          <div className="space-y-1.5">{children}</div>
+        ) : emptyState ? (
+          <div className="px-3 py-4 text-xs text-muted-foreground">
+            {emptyState}
+          </div>
+        ) : null
+      ) : null}
     </div>
   );
 }
@@ -425,11 +443,11 @@ function ProfileItem({
 }
 
 export function PublishConfigPanel({
-  isRefreshing = false,
-  selectedPreset: currentSelectedPreset,
-  isCustomMode: currentIsCustomMode,
-  profiles: currentProfiles,
-  activeProfileName: currentActiveProfileName,
+  selectedPreset,
+  isCustomMode,
+  profiles,
+  isProfilesRefreshing = false,
+  activeProfileName,
   onSelectProfile,
   onCreateProfile,
   onEditProfile,
@@ -437,13 +455,14 @@ export function PublishConfigPanel({
   onOpenConfigDialog,
   onDeleteProfile,
   dotnetSchema,
-  projectPublishProfiles: currentProjectPublishProfiles,
-  projectFilePath: currentProjectFilePath,
-  projectFrameworkOptions: currentProjectFrameworkOptions = EMPTY_FRAMEWORK_OPTIONS,
+  projectPublishProfiles,
+  isProjectProfilesRefreshing = false,
+  projectFilePath,
+  projectFrameworkOptions = EMPTY_FRAMEWORK_OPTIONS,
   onSelectProjectProfile,
   onCopyProjectProfileToCustom,
-  recentConfigKeys: currentRecentConfigKeys,
-  favoriteConfigKeys: currentFavoriteConfigKeys,
+  recentConfigKeys,
+  favoriteConfigKeys,
   onToggleFavoriteConfig,
   onRemoveRecentConfig,
   onReorderRecentConfigs,
@@ -453,17 +472,6 @@ export function PublishConfigPanel({
   showExpandButton,
   onExpandRepo,
 }: PublishConfigPanelProps) {
-  const [displaySnapshot, setDisplaySnapshot] = useState(() => ({
-    selectedPreset: currentSelectedPreset,
-    isCustomMode: currentIsCustomMode,
-    profiles: currentProfiles,
-    activeProfileName: currentActiveProfileName,
-    projectPublishProfiles: currentProjectPublishProfiles,
-    projectFilePath: currentProjectFilePath,
-    projectFrameworkOptions: currentProjectFrameworkOptions,
-    recentConfigKeys: currentRecentConfigKeys,
-    favoriteConfigKeys: currentFavoriteConfigKeys,
-  }));
   const [searchQuery, setSearchQuery] = useState("");
   const [groupFilterValue, setGroupFilterValue] =
     useState<GroupFilterValue>(ALL_GROUP_FILTER);
@@ -477,61 +485,6 @@ export function PublishConfigPanel({
       status: "idle",
       profileName: null,
     });
-
-  useEffect(() => {
-    if (isRefreshing) {
-      return;
-    }
-
-    setDisplaySnapshot({
-      selectedPreset: currentSelectedPreset,
-      isCustomMode: currentIsCustomMode,
-      profiles: currentProfiles,
-      activeProfileName: currentActiveProfileName,
-      projectPublishProfiles: currentProjectPublishProfiles,
-      projectFilePath: currentProjectFilePath,
-      projectFrameworkOptions: currentProjectFrameworkOptions,
-      recentConfigKeys: currentRecentConfigKeys,
-      favoriteConfigKeys: currentFavoriteConfigKeys,
-    });
-  }, [
-    currentActiveProfileName,
-    currentFavoriteConfigKeys,
-    currentIsCustomMode,
-    currentProfiles,
-    currentProjectFilePath,
-    currentProjectFrameworkOptions,
-    currentProjectPublishProfiles,
-    currentRecentConfigKeys,
-    currentSelectedPreset,
-    isRefreshing,
-  ]);
-
-  const selectedPreset = isRefreshing
-    ? displaySnapshot.selectedPreset
-    : currentSelectedPreset;
-  const isCustomMode = isRefreshing
-    ? displaySnapshot.isCustomMode
-    : currentIsCustomMode;
-  const profiles = isRefreshing ? displaySnapshot.profiles : currentProfiles;
-  const activeProfileName = isRefreshing
-    ? displaySnapshot.activeProfileName
-    : currentActiveProfileName;
-  const projectPublishProfiles = isRefreshing
-    ? displaySnapshot.projectPublishProfiles
-    : currentProjectPublishProfiles;
-  const projectFilePath = isRefreshing
-    ? displaySnapshot.projectFilePath
-    : currentProjectFilePath;
-  const projectFrameworkOptions = isRefreshing
-    ? displaySnapshot.projectFrameworkOptions
-    : currentProjectFrameworkOptions;
-  const recentConfigKeys = isRefreshing
-    ? displaySnapshot.recentConfigKeys
-    : currentRecentConfigKeys;
-  const favoriteConfigKeys = isRefreshing
-    ? displaySnapshot.favoriteConfigKeys
-    : currentFavoriteConfigKeys;
   const { translations } = useI18n();
   const t = translations.configPanel || {};
   const appT = translations.app || {};
@@ -549,6 +502,11 @@ export function PublishConfigPanel({
   const unfavoriteConfigLabel = t.unfavoriteConfig || "取消收藏";
   const removeRecentLabel = t.removeRecent || "从最近使用移除";
   const deleteConfigLabel = t.deleteConfig || "删除配置";
+  const projectProfilesRefreshingLabel =
+    t.refreshingProjectProfiles || "正在刷新项目发布配置...";
+  const customProfilesRefreshingLabel =
+    t.refreshingCustomProfiles || "正在刷新自定义配置...";
+  const isAnyRefreshing = isProfilesRefreshing || isProjectProfilesRefreshing;
   const headerButtonClass =
     "h-7 w-9 rounded-full p-0 text-muted-foreground/60 hover:bg-black/[0.045] hover:text-foreground hover:shadow-[inset_0_1px_0_rgba(255,255,255,0.72),0_1px_2px_rgba(15,23,42,0.06)] dark:hover:bg-white/[0.06] dark:hover:shadow-[inset_0_1px_0_rgba(255,255,255,0.08)]";
   const listActionButtonClass =
@@ -730,6 +688,16 @@ export function PublishConfigPanel({
     (total, group) => total + group.items.length,
     0
   );
+  const shouldShowProjectProfilesLoadingState =
+    isProjectProfilesRefreshing &&
+    query.length === 0 &&
+    (groupFilterValue === ALL_GROUP_FILTER ||
+      groupFilterValue === PROJECT_GROUP_FILTER);
+  const shouldShowCustomProfilesLoadingState =
+    isProfilesRefreshing &&
+    query.length === 0 &&
+    groupFilterValue !== PROJECT_GROUP_FILTER &&
+    visibleCustomProfileCount === 0;
   const customProfileDragEnabled =
     sortModeEnabled && query.length === 0 && visibleCustomProfileCount > 1;
 
@@ -1005,6 +973,11 @@ export function PublishConfigPanel({
   const hasVisiblePreviewConfigResults =
     previewVisibleProjectProfiles.length > 0 ||
     previewVisibleGroupedFilteredProfiles.length > 0;
+  const shouldShowEmptyState =
+    !showRecentItems &&
+    !hasVisiblePreviewConfigResults &&
+    !shouldShowProjectProfilesLoadingState &&
+    !shouldShowCustomProfilesLoadingState;
   const recentMotion = useListReorderMotion({
     orderedIds: previewRecentItems.map((item) => item.key),
     draggingItemId: recentReorder.draggingItemId,
@@ -1460,7 +1433,19 @@ export function PublishConfigPanel({
             title={t.profileGroup || "项目发布配置"}
             count={previewVisibleProjectProfiles.length}
             defaultExpanded={true}
-            visible={previewVisibleProjectProfiles.length > 0}
+            visible={
+              previewVisibleProjectProfiles.length > 0 ||
+              shouldShowProjectProfilesLoadingState
+            }
+            isRefreshing={isProjectProfilesRefreshing}
+            emptyState={
+              shouldShowProjectProfilesLoadingState ? (
+                <span className="flex items-center gap-2">
+                  <Loader2 className="h-3.5 w-3.5 animate-spin text-primary/80" />
+                  {projectProfilesRefreshingLabel}
+                </span>
+              ) : null
+            }
           >
             {previewVisibleProjectProfiles.map((name) => {
               const configKey = `pubxml:${name}`;
@@ -1665,7 +1650,13 @@ export function PublishConfigPanel({
               ))}
             </ConfigGroup>
           ))}
-          {!showRecentItems && !hasVisiblePreviewConfigResults && (
+          {shouldShowCustomProfilesLoadingState ? (
+            <div className="flex items-center gap-2 px-3 py-4 text-xs text-muted-foreground">
+              <Loader2 className="h-3.5 w-3.5 animate-spin text-primary/80" />
+              <span>{customProfilesRefreshingLabel}</span>
+            </div>
+          ) : null}
+          {shouldShowEmptyState && (
             <div className="px-3 py-4 text-center text-xs text-muted-foreground">
               {t.noConfigs || "暂无配置"}
             </div>
@@ -1682,8 +1673,8 @@ export function PublishConfigPanel({
       floatingTargetConfigId,
       handleConfigListPointerLeave,
       handleConfigListPointerReentry,
-      hasVisiblePreviewConfigResults,
       customProfileDragEnabled,
+      customProfilesRefreshingLabel,
       customMotion,
       onDeleteProfile,
       onEditProfile,
@@ -1691,7 +1682,9 @@ export function PublishConfigPanel({
       onSelectProfile,
       onSelectProjectProfile,
       onToggleFavoriteConfig,
+      isProjectProfilesRefreshing,
       projectProfileDragEnabled,
+      projectProfilesRefreshingLabel,
       projectMotion,
       projectProfileReorder.draggingItemId,
       projectProfileReorder.dropTarget,
@@ -1711,6 +1704,9 @@ export function PublishConfigPanel({
       selectedConfigId,
       selectedRenderId,
       showRecentItems,
+      shouldShowCustomProfilesLoadingState,
+      shouldShowEmptyState,
+      shouldShowProjectProfilesLoadingState,
       t,
       moreActionsLabel,
       unfavoriteConfigLabel,
@@ -1888,7 +1884,12 @@ export function PublishConfigPanel({
               title={t.refresh || "刷新配置"}
               data-tauri-no-drag
             >
-              <RefreshCw className="h-3.5 w-3.5 text-muted-foreground transition-all duration-300 hover:rotate-180" />
+              <RefreshCw
+                className={cn(
+                  "h-3.5 w-3.5 text-muted-foreground transition-all duration-300 hover:rotate-180",
+                  isAnyRefreshing && "animate-spin hover:rotate-0"
+                )}
+              />
             </button>
             <button
               type="button"
@@ -1939,19 +1940,6 @@ export function PublishConfigPanel({
             </PublishConfigPanelFloatingLayer>
           </Suspense>
         )}
-
-        {isRefreshing ? (
-          <div className="absolute inset-0 z-40 flex items-center justify-center bg-background/48 backdrop-blur-[2px]">
-            <div className="glass-surface flex items-center gap-2 rounded-full px-4 py-2 text-sm text-foreground shadow-[var(--glass-shadow)]">
-              <Loader2 className="h-4 w-4 animate-spin text-primary" />
-              <span>
-                {t.refreshingConfigs ||
-                  t.loadingConfig ||
-                  "正在刷新发布配置..."}
-              </span>
-            </div>
-          </div>
-        ) : null}
       </div>
 
       <ProjectPublishProfileViewerDialog
