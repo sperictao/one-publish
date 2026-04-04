@@ -59,6 +59,7 @@ vi.mock("@/hooks/usePublishSpecBuilder", () => ({
 vi.mock("@/lib/publishOutputAccess", () => ({
   preflightPublishOutputAccess: mocks.preflightPublishOutputAccess,
   buildProtectedOutputAccessDescription: () => "需要授权 Downloads",
+  buildIncompatibleOutputPathDescription: () => "路径与当前系统不兼容",
 }));
 
 vi.mock("@/lib/systemNotification", () => ({
@@ -119,6 +120,7 @@ function createRunnerProps() {
     appT: {
       environmentBlocked: "环境阻断",
       publishProtectedDirectoryAccessDenied: "缺少 macOS 受保护目录访问权限",
+      publishOutputPathIncompatible: "发布目录路径与当前系统不兼容",
       selectRepositoryFirst: "请先选择仓库",
       selectDotnetProjectFirst: "请先选择项目",
       commandExecuted: "命令执行成功",
@@ -159,6 +161,9 @@ describe("usePublishRunner", () => {
     mocks.preflightPublishOutputAccess.mockResolvedValue({
       status: "not_applicable",
       outputDir: "/exports/App/Release",
+      configuredOutputDir: "/exports/App/Release",
+      pathCompatibilityStatus: "compatible",
+      pathCompatibilityIssue: null,
       protectedLocation: null,
       protectedRoot: null,
       probeDirectory: null,
@@ -361,6 +366,37 @@ describe("usePublishRunner", () => {
       "缺少 macOS 受保护目录访问权限",
       {
         description: "需要授权 Downloads",
+      }
+    );
+  });
+
+  it("发布目录路径与当前系统不兼容时阻止发布", async () => {
+    mocks.runEnvironmentCheck.mockResolvedValue(readyEnvironment);
+    mocks.preflightPublishOutputAccess.mockResolvedValue({
+      status: "not_applicable",
+      outputDir: "/repo/publish\\win-x64",
+      configuredOutputDir: ".\\publish\\win-x64",
+      pathCompatibilityStatus: "incompatible",
+      pathCompatibilityIssue: "windows_style_path_on_posix",
+      protectedLocation: null,
+      protectedRoot: null,
+      probeDirectory: null,
+      detail: null,
+    });
+
+    const props = createRunnerProps();
+    const { result } = renderHook(() => usePublishRunner(props));
+
+    await act(async () => {
+      await result.current.startPublish();
+    });
+
+    expect(mocks.invoke).not.toHaveBeenCalled();
+    expect(props.savePublishRecord).not.toHaveBeenCalled();
+    expect(mocks.toast.error).toHaveBeenCalledWith(
+      "发布目录路径与当前系统不兼容",
+      {
+        description: "路径与当前系统不兼容",
       }
     );
   });

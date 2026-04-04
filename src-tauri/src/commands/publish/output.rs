@@ -166,6 +166,15 @@ pub(crate) fn infer_output_dir(spec: &PublishSpec) -> String {
     }
 }
 
+pub(crate) fn configured_output_dir(spec: &PublishSpec) -> Option<String> {
+    match spec.provider_id.as_str() {
+        "dotnet" => read_parameter_string(&spec.parameters, "output"),
+        "cargo" => read_parameter_string(&spec.parameters, "target_dir"),
+        "go" => read_parameter_string(&spec.parameters, "output"),
+        _ => None,
+    }
+}
+
 fn read_parameter_string(parameters: &BTreeMap<String, SpecValue>, key: &str) -> Option<String> {
     match parameters.get(key) {
         Some(SpecValue::String(value)) if !value.is_empty() => Some(value.clone()),

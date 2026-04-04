@@ -19,6 +19,7 @@ import {
   type ExecutionRecord,
 } from "@/lib/store";
 import {
+  buildIncompatibleOutputPathDescription,
   buildProtectedOutputAccessDescription,
   preflightPublishOutputAccess,
   type PublishOutputAccessResult,
@@ -454,6 +455,18 @@ export function usePublishRunner({
             appT.publishProtectedDirectoryAccessDenied ||
             "缺少 macOS 受保护目录访问权限",
           description: extractInvokeErrorMessage(err),
+        });
+        return false;
+      }
+
+      if (outputAccess.pathCompatibilityStatus === "incompatible") {
+        await abortPublishPreparation({
+          ...options,
+          level: "error",
+          title:
+            appT.publishOutputPathIncompatible ||
+            "发布目录路径与当前系统不兼容",
+          description: buildIncompatibleOutputPathDescription(outputAccess, appT),
         });
         return false;
       }

@@ -12,9 +12,21 @@ export type PublishOutputAccessStatus =
   | "granted"
   | "denied";
 
+export type PublishOutputPathCompatibilityStatus =
+  | "not_applicable"
+  | "compatible"
+  | "incompatible";
+
+export type PublishOutputPathCompatibilityIssue =
+  | "windows_style_path_on_posix"
+  | "posix_absolute_path_on_windows";
+
 export interface PublishOutputAccessResult {
   status: PublishOutputAccessStatus;
   outputDir: string;
+  configuredOutputDir?: string | null;
+  pathCompatibilityStatus?: PublishOutputPathCompatibilityStatus | null;
+  pathCompatibilityIssue?: PublishOutputPathCompatibilityIssue | null;
   protectedLocation?: ProtectedDirectoryLocation | null;
   protectedRoot?: string | null;
   probeDirectory?: string | null;
@@ -71,4 +83,30 @@ export function buildProtectedOutputAccessDescription(
       "{{path}}",
       result.probeDirectory || result.outputDir || result.protectedRoot || "-"
     );
+}
+
+export function buildIncompatibleOutputPathDescription(
+  result: PublishOutputAccessResult,
+  appT: TranslationMap
+): string {
+  const path = result.configuredOutputDir?.trim() || result.outputDir?.trim() || "-";
+
+  if (result.pathCompatibilityIssue === "windows_style_path_on_posix") {
+    return (
+      appT.publishWindowsStyleOutputPathIncompatibleDesc ||
+      `当前发布目录看起来是 Windows 风格路径：${path}。请改为当前系统可识别的路径，或使用相对路径（如 ./publish）。`
+    ).replace(/\{\{path\}\}/g, path);
+  }
+
+  if (result.pathCompatibilityIssue === "posix_absolute_path_on_windows") {
+    return (
+      appT.publishPosixStyleOutputPathIncompatibleDesc ||
+      `当前发布目录看起来是 Unix 风格绝对路径：${path}。请改为当前系统可识别的 Windows 路径，或使用相对路径。`
+    ).replace(/\{\{path\}\}/g, path);
+  }
+
+  return (
+    appT.publishOutputPathIncompatibleDesc ||
+    `当前发布目录路径与当前系统不兼容：${path}。请改为当前系统可识别的路径，或使用相对路径。`
+  ).replace(/\{\{path\}\}/g, path);
 }
