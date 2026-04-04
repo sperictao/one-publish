@@ -2,7 +2,6 @@ use crate::store::Branch;
 use serde::{Deserialize, Serialize};
 use std::io::ErrorKind as IoErrorKind;
 use std::path::{Path, PathBuf};
-use tokio::process::Command;
 use tokio::time::{timeout, Duration};
 use ts_rs::TS;
 use walkdir::WalkDir;
@@ -564,7 +563,7 @@ pub async fn check_repository_branch_connectivity(
         .unwrap_or_default();
 
     if branch_name.is_empty() {
-        let head_output = match Command::new("git")
+        let head_output = match crate::process_utils::new_tokio_command("git")
             .arg("-C")
             .arg(&path)
             .arg("rev-parse")
@@ -586,7 +585,7 @@ pub async fn check_repository_branch_connectivity(
         return RepositoryBranchConnectivityResult { can_connect: false };
     }
 
-    let upstream_output = match Command::new("git")
+    let upstream_output = match crate::process_utils::new_tokio_command("git")
         .arg("-C")
         .arg(&path)
         .arg("rev-parse")
@@ -614,7 +613,7 @@ pub async fn check_repository_branch_connectivity(
     let remote_branch_ref = format!("refs/heads/{}", remote_branch);
     let ls_remote_output = match timeout(
         Duration::from_secs(5),
-        Command::new("git")
+        crate::process_utils::new_tokio_command("git")
             .arg("-C")
             .arg(&path)
             .arg("ls-remote")
@@ -635,9 +634,9 @@ pub async fn check_repository_branch_connectivity(
     }
 }
 
-#[tauri::command]
-pub async fn scan_repository_branches(
+async fn scan_repository_branches_internal(
     path: String,
+    refresh_remote: bool,
 ) -> Result<RepositoryBranchScanResult, crate::errors::AppError> {
     let repo_path = PathBuf::from(&path);
 
@@ -657,7 +656,7 @@ pub async fn scan_repository_branches(
 
     let remote_output = timeout(
         Duration::from_secs(5),
-        Command::new("git")
+        crate::process_utils::new_tokio_command("git")
             .arg("-C")
             .arg(&path)
             .arg("remote")
@@ -686,10 +685,10 @@ pub async fn scan_repository_branches(
         .lines()
         .any(|line| !line.trim().is_empty());
 
-    if has_remote {
+    if refresh_remote && has_remote {
         let fetch_output = timeout(
             Duration::from_secs(5),
-            Command::new("git")
+            crate::process_utils::new_tokio_command("git")
                 .arg("-C")
                 .arg(&path)
                 .arg("fetch")
@@ -719,7 +718,7 @@ pub async fn scan_repository_branches(
 
     let output = timeout(
         Duration::from_secs(5),
-        Command::new("git")
+        crate::process_utils::new_tokio_command("git")
             .arg("-C")
             .arg(&path)
             .arg("branch")
@@ -785,7 +784,7 @@ pub async fn scan_repository_branches(
     if current_branch.is_empty() {
         let head_output = timeout(
             Duration::from_secs(5),
-            Command::new("git")
+            crate::process_utils::new_tokio_command("git")
                 .arg("-C")
                 .arg(&path)
                 .arg("rev-parse")
@@ -821,6 +820,14 @@ pub async fn scan_repository_branches(
         branches,
         current_branch,
     })
+}
+
+#[tauri::command]
+pub async fn scan_repository_branches(
+    path: String,
+    refresh_remote: Option<bool>,
+) -> Result<RepositoryBranchScanResult, crate::errors::AppError> {
+    scan_repository_branches_internal(path, refresh_remote.unwrap_or(true)).await
 }
 
 /// Collect all recognizable project files under a repository root.

@@ -27,6 +27,74 @@ interface RefreshBranchesResult {
   currentBranch: string;
 }
 
+const DEFAULT_ADD_REPO_BRANCH = "main";
+
+function isMainBranch(name: string): boolean {
+  return name === "main" || name === "master";
+}
+
+function createFallbackBranches(path: string, currentBranch: string): Branch[] {
+  return [
+    {
+      name: currentBranch,
+      isMain: isMainBranch(currentBranch),
+      isCurrent: true,
+      path,
+    },
+  ];
+}
+
+function normalizeInitialBranchState(
+  path: string,
+  result: RefreshBranchesResult | null
+): RefreshBranchesResult {
+  if (!result || result.branches.length === 0) {
+    return {
+      currentBranch: DEFAULT_ADD_REPO_BRANCH,
+      branches: createFallbackBranches(path, DEFAULT_ADD_REPO_BRANCH),
+    };
+  }
+
+  const currentBranch =
+    result.currentBranch.trim() ||
+    result.branches.find((branch) => branch.isCurrent)?.name.trim() ||
+    result.branches[0]?.name.trim() ||
+    DEFAULT_ADD_REPO_BRANCH;
+
+  return {
+    currentBranch,
+    branches: result.branches.map((branch) => ({
+      ...branch,
+      isMain: branch.isMain || isMainBranch(branch.name),
+      isCurrent: branch.name === currentBranch,
+    })),
+  };
+}
+
+async function resolveInitialRepositoryMetadata(
+  path: string,
+  providerId: string
+): Promise<Pick<Repository, "branches" | "currentBranch" | "projectFile">> {
+  const [projectCandidates, branchResult] = await Promise.all([
+    providerId === "dotnet"
+      ? scanProjectCandidates(path).catch(() => null)
+      : Promise.resolve<ProjectScanCandidates | null>(null),
+    scanRepositoryBranches(path, { refreshRemote: false }).catch(() => null),
+  ]);
+
+  const branchState = normalizeInitialBranchState(path, branchResult);
+  const projectFile =
+    projectCandidates?.recommendedProjectFile ??
+    (projectCandidates?.projectFiles.length === 1
+      ? projectCandidates.projectFiles[0]
+      : undefined);
+
+  return {
+    ...branchState,
+    projectFile,
+  };
+}
+
 export async function handleAddRepoRuntime(params: {
   appT: TranslationMap;
   addRepository: (repo: Repository) => Promise<unknown>;
@@ -57,12 +125,14 @@ export async function handleAddRepoRuntime(params: {
     return;
   }
 
+  const initialMetadata = await resolveInitialRepositoryMetadata(path, providerId);
   const newRepo: Repository = {
     id: Date.now().toString(),
     name,
     path,
-    currentBranch: "main",
-    branches: [{ name: "main", isMain: true, isCurrent: true, path }],
+    projectFile: initialMetadata.projectFile,
+    currentBranch: initialMetadata.currentBranch,
+    branches: initialMetadata.branches,
     providerId,
     publishConfig: { ...defaultRepoPublishConfig },
   };

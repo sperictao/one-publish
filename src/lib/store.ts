@@ -400,10 +400,12 @@ export async function resolveProjectInfo(projectFile: string): Promise<ProjectIn
 }
 
 export async function scanRepositoryBranches(
-  path: string
+  path: string,
+  options?: { refreshRemote?: boolean }
 ): Promise<RepositoryBranchScanResult> {
   return await invoke<RepositoryBranchScanResult>("scan_repository_branches", {
     path,
+    refreshRemote: options?.refreshRemote,
   });
 }
 
