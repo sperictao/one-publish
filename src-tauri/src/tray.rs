@@ -182,7 +182,7 @@ fn append_recent_repo_section(
         let config_item = MenuItem::with_id(
             app,
             build_tray_publish_event_id(&repo_menu.repo_id, &config.config_key),
-            format!("    {}", config.label),
+            config.label.clone(),
             true,
             None::<&str>,
         )?;
@@ -241,6 +241,9 @@ pub fn create_tray_menu(app: &AppHandle) -> Result<Menu<Wry>, tauri::Error> {
     let show_main_item = MenuItem::with_id(app, "show_main", texts.show_main, true, None::<&str>)?;
     let quit_item = MenuItem::with_id(app, "quit", texts.quit, true, None::<&str>)?;
 
+    menu.append(&show_main_item)?;
+    menu.append(&PredefinedMenuItem::separator(app)?)?;
+
     for (index, repo_menu) in recent_repo_menus.iter().enumerate() {
         append_recent_repo_section(&menu, app, repo_menu, index > 0)?;
     }
@@ -249,8 +252,6 @@ pub fn create_tray_menu(app: &AppHandle) -> Result<Menu<Wry>, tauri::Error> {
         menu.append(&PredefinedMenuItem::separator(app)?)?;
     }
 
-    menu.append(&show_main_item)?;
-    menu.append(&PredefinedMenuItem::separator(app)?)?;
     menu.append(&quit_item)?;
 
     Ok(menu)
