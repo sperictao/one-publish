@@ -26,7 +26,7 @@ function fail(message, details = "") {
 const before = readContractFile();
 const result = spawnSync(
   "cargo",
-  ["run", "--manifest-path", manifestPath, "--bin", "generate_tauri_contracts"],
+  ["run", "--manifest-path", manifestPath, "--example", "generate_tauri_contracts"],
   {
     cwd: rootDir,
     encoding: "utf8",

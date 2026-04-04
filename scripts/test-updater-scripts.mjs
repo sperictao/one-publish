@@ -66,9 +66,36 @@ function runExpectFailure(command, args, options = {}) {
   return `${result.stderr || ""}${result.stdout || ""}`;
 }
 
+function getCargoMetadata() {
+  const result = run("cargo", [
+    "metadata",
+    "--manifest-path",
+    path.join(rootDir, "src-tauri", "Cargo.toml"),
+    "--no-deps",
+    "--format-version",
+    "1",
+  ]);
+
+  return JSON.parse(result.stdout);
+}
+
 const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "one-publish-updater-"));
 
 try {
+  const cargoMetadata = getCargoMetadata();
+  const packageMetadata = cargoMetadata.packages.find(
+    (entry) => entry.manifest_path === path.join(rootDir, "src-tauri", "Cargo.toml")
+  );
+  ensure(packageMetadata, "未找到 src-tauri Cargo package 元数据。");
+
+  const binTargets = packageMetadata.targets
+    .filter((target) => Array.isArray(target.kind) && target.kind.includes("bin"))
+    .map((target) => target.name);
+  ensure(
+    JSON.stringify(binTargets) === JSON.stringify(["one-publish"]),
+    `src-tauri app package 不应暴露额外 bin target，当前为：${binTargets.join(", ") || "(none)"}。`
+  );
+
   const forwardedArgs = normalizeForwardedArgs(["--", "--target", "universal-apple-darwin"]);
   ensure(
     JSON.stringify(forwardedArgs) === JSON.stringify(["--target", "universal-apple-darwin"]),
