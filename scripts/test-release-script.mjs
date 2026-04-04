@@ -3,10 +3,12 @@ import assert from "node:assert/strict";
 import {
   buildJobSnapshot,
   formatAnnotation,
+  formatGitHubFetchError,
   getFailedSteps,
   isFailingConclusion,
   normalizeGitHubUrl,
   parseGitHubRepo,
+  requestGitHub,
   selectWorkflowRun,
   trimLogForDisplay,
 } from "./release.mjs";
@@ -103,5 +105,89 @@ assert.equal(
 );
 
 assert.equal(trimLogForDisplay("\u001b[31merror line\u001b[0m\nsecond line"), "error line\nsecond line");
+
+assert.equal(
+  formatGitHubFetchError(
+    new TypeError("fetch failed", {
+      cause: {
+        code: "ECONNRESET",
+        message: "socket hang up",
+      },
+    })
+  ),
+  "fetch failed (ECONNRESET, socket hang up)"
+);
+
+let retryAttempts = 0;
+const originalWarn = console.warn;
+const warnings = [];
+
+console.warn = (...args) => {
+  warnings.push(args.join(" "));
+};
+
+try {
+  const retriedResponse = await requestGitHub("https://api.github.com/repos/sperictao/one-publish", "", "重试测试", {
+    fetchImpl: async () => {
+      retryAttempts += 1;
+      if (retryAttempts === 1) {
+        throw new TypeError("fetch failed", {
+          cause: {
+            code: "ECONNRESET",
+            message: "socket hang up",
+          },
+        });
+      }
+
+      return {
+        ok: true,
+        status: 200,
+        text: async () => '{"ok":true}',
+      };
+    },
+    sleepImpl: async () => {},
+  });
+
+  assert.equal(retryAttempts, 2);
+  assert.equal(await retriedResponse.text(), '{"ok":true}');
+
+  let ghFallbackCalled = false;
+  const fallbackResponse = await requestGitHub(
+    "https://api.github.com/repos/sperictao/one-publish/actions/workflows/build-release.yml/runs?event=push",
+    "",
+    "gh api 回退测试",
+    {
+      fetchImpl: async () => {
+        throw new TypeError("fetch failed", {
+          cause: {
+            code: "ENETUNREACH",
+            message: "network is unreachable",
+          },
+        });
+      },
+      ghApiRequest: async () => {
+        ghFallbackCalled = true;
+        return {
+          response: {
+            ok: true,
+            status: 200,
+            text: async () => '{"workflow_runs":[]}',
+          },
+        };
+      },
+      sleepImpl: async () => {},
+      fallbackToGh: true,
+    }
+  );
+
+  assert.equal(ghFallbackCalled, true);
+  assert.equal(await fallbackResponse.text(), '{"workflow_runs":[]}');
+} finally {
+  console.warn = originalWarn;
+}
+
+assert.equal(warnings.length, 2);
+assert.match(warnings[0], /请求 GitHub 重试测试 失败/);
+assert.match(warnings[1], /已回退到 gh api/);
 
 console.log("PASS: release 脚本等待与失败详情 helper 烟测通过。");

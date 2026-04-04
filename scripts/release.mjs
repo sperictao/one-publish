@@ -26,6 +26,9 @@ const workflowDiscoverTimeoutMs = 5 * 60 * 1000;
 const workflowCompletionTimeoutMs = 2 * 60 * 60 * 1000;
 const workflowPollIntervalMs = 10 * 1000;
 const workflowCreatedAtGraceMs = 2 * 60 * 1000;
+const gitHubRequestMaxAttempts = 3;
+const gitHubRequestRetryableStatuses = new Set([502, 503, 504]);
+const gitHubRequestRetryBaseDelayMs = 2 * 1000;
 const maxFailureAnnotations = 5;
 const maxFailureLogLines = 80;
 const maxFailureLogChars = 4000;
@@ -271,6 +274,14 @@ function sleep(durationMs) {
   });
 }
 
+function createStaticResponse(bodyText) {
+  return {
+    ok: true,
+    status: 200,
+    text: async () => bodyText,
+  };
+}
+
 function getGitHubToken() {
   const envToken = process.env.GH_TOKEN || process.env.GITHUB_TOKEN || "";
   if (envToken) {
@@ -321,43 +332,185 @@ function formatGitHubError(status, bodyText) {
   return `HTTP ${status}，${compactText.slice(0, 300)}`;
 }
 
-async function requestGitHub(url, token, label, options = {}) {
-  const { allowFailure = false, accept } = options;
+function formatGitHubFetchError(error) {
+  const rawMessage = error instanceof Error ? error.message : String(error);
+  const cause = error instanceof Error ? error.cause : null;
+  const details = [];
 
-  let response;
-  try {
-    response = await fetch(url, {
-      headers: buildGitHubHeaders(token, accept),
-      redirect: "follow",
-    });
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    if (allowFailure) {
-      return null;
-    }
-    fail(`请求 GitHub ${label} 失败：${message}`);
-  }
-
-  if (!response.ok) {
-    const bodyText = await response.text().catch(() => "");
-    const errorDetails = formatGitHubError(response.status, bodyText);
-    const authHint =
-      response.status === 401 || response.status === 403
-        ? " 如遇到权限或限流，请配置 GH_TOKEN / GITHUB_TOKEN，或重新执行 gh auth login。"
+  if (cause && typeof cause === "object") {
+    const code = typeof cause.code === "string" ? cause.code.trim() : "";
+    const errno =
+      typeof cause.errno === "string" || typeof cause.errno === "number"
+        ? String(cause.errno).trim()
         : "";
+    const causeMessage = typeof cause.message === "string" ? cause.message.trim() : "";
 
-    if (allowFailure) {
-      return null;
+    if (code) {
+      details.push(code);
     }
-
-    fail(`请求 GitHub ${label} 失败：${errorDetails}.${authHint}`);
+    if (errno && errno !== code) {
+      details.push(errno);
+    }
+    if (causeMessage && causeMessage !== rawMessage) {
+      details.push(causeMessage);
+    }
+  } else if (typeof cause === "string" && cause.trim()) {
+    details.push(cause.trim());
   }
 
-  return response;
+  return details.length > 0 ? `${rawMessage} (${details.join(", ")})` : rawMessage;
+}
+
+function getGitHubRetryDelayMs(attemptIndex) {
+  return Math.min(workflowPollIntervalMs, gitHubRequestRetryBaseDelayMs * (attemptIndex + 1));
+}
+
+function isRetryableGitHubStatus(status) {
+  return gitHubRequestRetryableStatuses.has(status);
+}
+
+async function requestGitHubViaGh(url, token, accept = "application/vnd.github+json") {
+  let apiPath = "";
+
+  try {
+    const parsedUrl = new URL(url);
+    if (parsedUrl.origin !== "https://api.github.com") {
+      return { error: "仅支持 api.github.com 请求" };
+    }
+    apiPath = `${parsedUrl.pathname}${parsedUrl.search}`;
+  } catch (error) {
+    return {
+      error: error instanceof Error ? error.message : String(error),
+    };
+  }
+
+  const env = token ? { ...process.env, GH_TOKEN: token } : process.env;
+  const result = runOptional(
+    "gh",
+    ["api", apiPath, "-H", `Accept: ${accept}`, "-H", "X-GitHub-Api-Version: 2022-11-28"],
+    { env }
+  );
+
+  if (result.error) {
+    return {
+      error: result.error.message,
+    };
+  }
+
+  if (result.status !== 0) {
+    return {
+      error: result.stderr || result.stdout || `退出码 ${result.status}`,
+    };
+  }
+
+  return {
+    response: createStaticResponse(result.stdout),
+  };
+}
+
+async function requestGitHub(url, token, label, options = {}) {
+  const {
+    allowFailure = false,
+    accept,
+    fallbackToGh = false,
+    fetchImpl = fetch,
+    ghApiRequest = requestGitHubViaGh,
+    sleepImpl = sleep,
+  } = options;
+  const requestAccept = accept || "application/vnd.github+json";
+
+  for (let attemptIndex = 0; attemptIndex < gitHubRequestMaxAttempts; attemptIndex += 1) {
+    let response;
+
+    try {
+      response = await fetchImpl(url, {
+        headers: buildGitHubHeaders(token, requestAccept),
+        redirect: "follow",
+      });
+    } catch (error) {
+      const fetchErrorMessage = formatGitHubFetchError(error);
+
+      if (fallbackToGh) {
+        const ghResult = await ghApiRequest(url, token, requestAccept);
+        if (ghResult?.response) {
+          console.warn(`⚠️ 请求 GitHub ${label} 时 Node fetch 失败，已回退到 gh api：${fetchErrorMessage}`);
+          return ghResult.response;
+        }
+
+        const ghError = ghResult?.error ? `；gh api 也失败：${ghResult.error}` : "";
+        const reason = `${fetchErrorMessage}${ghError}`;
+
+        if (attemptIndex < gitHubRequestMaxAttempts - 1) {
+          const delayMs = getGitHubRetryDelayMs(attemptIndex);
+          console.warn(
+            `⚠️ 请求 GitHub ${label} 失败（第 ${attemptIndex + 1}/${gitHubRequestMaxAttempts} 次）：${reason}；${Math.ceil(delayMs / 1000)} 秒后重试。`
+          );
+          await sleepImpl(delayMs);
+          continue;
+        }
+
+        if (allowFailure) {
+          return null;
+        }
+
+        fail(`请求 GitHub ${label} 失败：${reason}`);
+      }
+
+      if (attemptIndex < gitHubRequestMaxAttempts - 1) {
+        const delayMs = getGitHubRetryDelayMs(attemptIndex);
+        console.warn(
+          `⚠️ 请求 GitHub ${label} 失败（第 ${attemptIndex + 1}/${gitHubRequestMaxAttempts} 次）：${fetchErrorMessage}；${Math.ceil(delayMs / 1000)} 秒后重试。`
+        );
+        await sleepImpl(delayMs);
+        continue;
+      }
+
+      if (allowFailure) {
+        return null;
+      }
+
+      fail(`请求 GitHub ${label} 失败：${fetchErrorMessage}`);
+    }
+
+    if (!response.ok) {
+      const bodyText = await response.text().catch(() => "");
+      const errorDetails = formatGitHubError(response.status, bodyText);
+      const authHint =
+        response.status === 401 || response.status === 403
+          ? " 如遇到权限或限流，请配置 GH_TOKEN / GITHUB_TOKEN，或重新执行 gh auth login。"
+          : "";
+
+      if (isRetryableGitHubStatus(response.status) && attemptIndex < gitHubRequestMaxAttempts - 1) {
+        const delayMs = getGitHubRetryDelayMs(attemptIndex);
+        console.warn(
+          `⚠️ 请求 GitHub ${label} 返回 ${response.status}（第 ${attemptIndex + 1}/${gitHubRequestMaxAttempts} 次）；${Math.ceil(delayMs / 1000)} 秒后重试。`
+        );
+        await sleepImpl(delayMs);
+        continue;
+      }
+
+      if (allowFailure) {
+        return null;
+      }
+
+      fail(`请求 GitHub ${label} 失败：${errorDetails}.${authHint}`);
+    }
+
+    return response;
+  }
+
+  if (allowFailure) {
+    return null;
+  }
+
+  fail(`请求 GitHub ${label} 失败：超过最大重试次数。`);
 }
 
 async function fetchGitHubJson(url, token, label, options = {}) {
-  const response = await requestGitHub(url, token, label, options);
+  const response = await requestGitHub(url, token, label, {
+    ...options,
+    fallbackToGh: options.fallbackToGh ?? true,
+  });
   if (!response) {
     return null;
   }
@@ -886,10 +1039,12 @@ const isDirectExecution =
 export {
   buildJobSnapshot,
   formatAnnotation,
+  formatGitHubFetchError,
   getFailedSteps,
   isFailingConclusion,
   normalizeGitHubUrl,
   parseGitHubRepo,
+  requestGitHub,
   selectWorkflowRun,
   trimLogForDisplay,
 };
