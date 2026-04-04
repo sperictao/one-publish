@@ -2,7 +2,7 @@ use super::migration::{
     migrate_legacy_state, sanitize_state, LegacyStoredAppState, StoredAppState,
 };
 use super::types::AppState;
-use std::fs::{self, OpenOptions};
+use std::fs::{self};
 use std::io::Write;
 use std::path::{Path, PathBuf};
 
@@ -42,7 +42,10 @@ fn backup_corrupt_file(path: &Path) -> Option<PathBuf> {
 
     let backup_path = build_corrupt_backup_path(path);
     match fs::rename(path, &backup_path) {
-        Ok(()) => Some(backup_path),
+        Ok(()) => {
+            let _ = crate::security::harden_private_path(&backup_path);
+            Some(backup_path)
+        }
         Err(rename_error) => {
             log::warn!(
                 "重命名损坏配置文件失败，尝试复制备份。路径: {}, 错误: {}",
@@ -52,6 +55,7 @@ fn backup_corrupt_file(path: &Path) -> Option<PathBuf> {
             match fs::copy(path, &backup_path) {
                 Ok(_) => {
                     let _ = fs::remove_file(path);
+                    let _ = crate::security::harden_private_path(&backup_path);
                     Some(backup_path)
                 }
                 Err(copy_error) => {
@@ -160,21 +164,16 @@ fn replace_file_atomically(source: &Path, target: &Path) -> std::io::Result<()> 
 }
 
 fn write_json_atomically(path: &Path, json: &[u8]) -> Result<(), crate::errors::AppError> {
-    if let Some(parent) = path.parent() {
-        fs::create_dir_all(parent).map_err(|error| {
-            crate::errors::AppError::store_with_code(
-                format!("创建目录失败: {}", error),
-                "store_create_dir_failed",
-            )
-        })?;
-    }
+    crate::security::ensure_private_parent_dir(path).map_err(|error| {
+        crate::errors::AppError::store_with_code(
+            format!("创建目录失败: {}", error),
+            "store_create_dir_failed",
+        )
+    })?;
 
     let temp_path = build_temp_config_path(path);
-    let mut temp_file = OpenOptions::new()
-        .create_new(true)
-        .write(true)
-        .open(&temp_path)
-        .map_err(|error| {
+    let mut temp_file =
+        crate::security::open_private_file(&temp_path, true, false).map_err(|error| {
             crate::errors::AppError::store_with_code(
                 format!("创建临时文件失败: {}", error),
                 "store_temp_create_failed",
@@ -205,6 +204,12 @@ fn write_json_atomically(path: &Path, json: &[u8]) -> Result<(), crate::errors::
         crate::errors::AppError::store_with_code(
             format!("替换配置文件失败: {}", error),
             "store_rename_failed",
+        )
+    })?;
+    crate::security::harden_private_path(path).map_err(|error| {
+        crate::errors::AppError::store_with_code(
+            format!("更新配置文件权限失败: {}", error),
+            "store_permission_failed",
         )
     })?;
 

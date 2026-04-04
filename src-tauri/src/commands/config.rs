@@ -1,11 +1,16 @@
 use crate::config_export::{ConfigExport, ConfigProfile};
+use std::path::Path;
 
 /// 导出配置到文件
 #[tauri::command]
 pub async fn export_config(
-    profiles: Vec<ConfigProfile>,
+    mut profiles: Vec<ConfigProfile>,
     file_path: String,
 ) -> Result<String, crate::errors::AppError> {
+    for profile in &mut profiles {
+        crate::security::sanitize_json_map(&mut profile.parameters);
+    }
+
     let config = ConfigExport {
         version: 1,
         exported_at: chrono::Utc::now(),
@@ -17,7 +22,7 @@ pub async fn export_config(
             "export_config_serialize_failed",
         )
     })?;
-    std::fs::write(&file_path, json).map_err(|source| {
+    crate::security::write_private_text_file(Path::new(&file_path), &json).map_err(|source| {
         crate::errors::AppError::config_with_code(
             format!("write error: {}", source),
             "export_config_write_failed",

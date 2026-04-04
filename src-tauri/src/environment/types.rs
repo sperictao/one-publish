@@ -3,7 +3,6 @@
 
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
-use std::process::Command as StdCommand;
 use ts_rs::TS;
 
 /// Severity level of environment issues
@@ -195,7 +194,7 @@ pub fn parse_version(output: &[u8], prefix: &str) -> Option<String> {
 /// Check if a command is available in PATH
 pub fn command_exists(command: &str) -> bool {
     let resolved = resolve_command_path(command).unwrap_or_else(|| PathBuf::from(command));
-    StdCommand::new(resolved)
+    crate::process_utils::new_std_command(resolved)
         .arg("--version")
         .stdout(std::process::Stdio::null())
         .stderr(std::process::Stdio::null())
@@ -393,7 +392,7 @@ fn resolve_command_via_login_shell(command: &str) -> Option<(PathBuf, String)> {
 
         let shell_display = shell.to_string_lossy().to_string();
 
-        let Ok(output) = StdCommand::new(&shell)
+        let Ok(output) = crate::process_utils::new_std_command(&shell)
             .arg("-lc")
             .arg(format!("command -v {}", command))
             .output()
@@ -422,7 +421,10 @@ fn resolve_command_via_login_shell(command: &str) -> Option<(PathBuf, String)> {
 
 #[cfg(windows)]
 fn resolve_command_via_shell(command: &str) -> Option<PathBuf> {
-    let output = StdCommand::new("where").arg(command).output().ok()?;
+    let output = crate::process_utils::new_std_command("where")
+        .arg(command)
+        .output()
+        .ok()?;
     if !output.status.success() {
         return None;
     }

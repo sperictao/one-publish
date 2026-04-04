@@ -1,8 +1,6 @@
 // Go provider environment detection
 
 use crate::environment::types::*;
-use std::process::Command;
-
 /// Minimum required Go version
 const MIN_GO_VERSION: &str = "1.20";
 const PROVIDER_ID: &str = "go";
@@ -12,7 +10,10 @@ pub async fn check_go() -> ProviderStatus {
     let path = super::types::command_path("go");
     let program = path.clone().unwrap_or_else(|| "go".to_string());
 
-    match Command::new(&program).arg("version").output() {
+    match crate::process_utils::new_std_command(&program)
+        .arg("version")
+        .output()
+    {
         Ok(output) => {
             let version_str = parse_go_version(&output.stdout);
 

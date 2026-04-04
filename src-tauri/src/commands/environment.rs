@@ -1,5 +1,4 @@
 use crate::environment::{check_environment, FixAction, FixResult, FixType};
-use tokio::process::Command;
 use tokio::time::{timeout, Duration};
 
 /// Run environment check
@@ -42,7 +41,9 @@ pub async fn apply_fix(action: FixAction) -> Result<FixResult, crate::errors::Ap
             log::info!("Applying fix via command: {} {}", program, args.join(" "));
             let output = timeout(
                 Duration::from_secs(10 * 60),
-                Command::new(&resolved_program).args(&args).output(),
+                crate::process_utils::new_tokio_command(&resolved_program)
+                    .args(&args)
+                    .output(),
             )
             .await
             .map_err(|_| {

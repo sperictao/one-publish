@@ -1,8 +1,6 @@
 // Rust/Cargo provider environment detection
 
 use crate::environment::types::*;
-use std::process::Command;
-
 /// Minimum required cargo version
 const MIN_CARGO_VERSION: &str = "1.70.0";
 const PROVIDER_ID: &str = "cargo";
@@ -12,7 +10,10 @@ pub async fn check_cargo() -> ProviderStatus {
     let path = super::types::command_path("cargo");
     let program = path.clone().unwrap_or_else(|| "cargo".to_string());
 
-    match Command::new(&program).arg("--version").output() {
+    match crate::process_utils::new_std_command(&program)
+        .arg("--version")
+        .output()
+    {
         Ok(output) => {
             let version_str = super::types::parse_version(&output.stdout, "cargo")
                 .unwrap_or_else(|| "unknown".to_string());

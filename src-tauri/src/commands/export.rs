@@ -108,12 +108,14 @@ pub async fn export_preflight_report(
     report: Value,
     file_path: String,
 ) -> Result<String, crate::errors::AppError> {
+    let mut report = report;
     if !report.is_object() {
         return Err(export_error(
             "preflight report payload must be an object",
             "preflight_report_payload_invalid",
         ));
     }
+    crate::security::sanitize_export_value(&mut report);
     let ext = Path::new(&file_path)
         .extension()
         .and_then(|e| e.to_str())
@@ -130,9 +132,9 @@ pub async fn export_preflight_report(
             )
         })?
     };
-    std::fs::write(&file_path, content).map_err(|source| {
-        export_source_error("write error", source, "preflight_report_write_failed")
-    })?;
+    crate::security::write_private_text_file(Path::new(&file_path), &content).map_err(
+        |source| export_source_error("write error", source, "preflight_report_write_failed"),
+    )?;
     Ok(file_path)
 }
 
@@ -279,12 +281,14 @@ pub async fn export_execution_snapshot(
     snapshot: Value,
     file_path: String,
 ) -> Result<String, crate::errors::AppError> {
+    let mut snapshot = snapshot;
     if !snapshot.is_object() {
         return Err(export_error(
             "execution snapshot payload must be an object",
             "execution_snapshot_payload_invalid",
         ));
     }
+    crate::security::sanitize_export_value(&mut snapshot);
     let ext = Path::new(&file_path)
         .extension()
         .and_then(|e| e.to_str())
@@ -301,9 +305,9 @@ pub async fn export_execution_snapshot(
             )
         })?
     };
-    std::fs::write(&file_path, content).map_err(|source| {
-        export_source_error("write error", source, "execution_snapshot_write_failed")
-    })?;
+    crate::security::write_private_text_file(Path::new(&file_path), &content).map_err(
+        |source| export_source_error("write error", source, "execution_snapshot_write_failed"),
+    )?;
     Ok(file_path)
 }
 
@@ -428,12 +432,14 @@ pub async fn export_failure_group_bundle(
     bundle: Value,
     file_path: String,
 ) -> Result<String, crate::errors::AppError> {
+    let mut bundle = bundle;
     if !bundle.is_object() {
         return Err(export_error(
             "failure group bundle payload must be an object",
             "failure_group_bundle_payload_invalid",
         ));
     }
+    crate::security::sanitize_export_value(&mut bundle);
 
     let ext = Path::new(&file_path)
         .extension()
@@ -452,9 +458,9 @@ pub async fn export_failure_group_bundle(
         })?
     };
 
-    std::fs::write(&file_path, content).map_err(|source| {
-        export_source_error("write error", source, "failure_group_bundle_write_failed")
-    })?;
+    crate::security::write_private_text_file(Path::new(&file_path), &content).map_err(
+        |source| export_source_error("write error", source, "failure_group_bundle_write_failed"),
+    )?;
     Ok(file_path)
 }
 
@@ -552,6 +558,10 @@ pub async fn export_execution_history(
     history: Vec<Value>,
     file_path: String,
 ) -> Result<String, crate::errors::AppError> {
+    let mut history = history;
+    for item in &mut history {
+        crate::security::sanitize_export_value(item);
+    }
     let ext = Path::new(&file_path)
         .extension()
         .and_then(|e| e.to_str())
@@ -570,9 +580,9 @@ pub async fn export_execution_history(
         })?
     };
 
-    std::fs::write(&file_path, content).map_err(|source| {
-        export_source_error("write error", source, "execution_history_write_failed")
-    })?;
+    crate::security::write_private_text_file(Path::new(&file_path), &content).map_err(
+        |source| export_source_error("write error", source, "execution_history_write_failed"),
+    )?;
     Ok(file_path)
 }
 
@@ -743,12 +753,14 @@ pub async fn export_diagnostics_index(
     index: Value,
     file_path: String,
 ) -> Result<String, crate::errors::AppError> {
+    let mut index = index;
     if !index.is_object() {
         return Err(export_error(
             "diagnostics index payload must be an object",
             "diagnostics_index_payload_invalid",
         ));
     }
+    crate::security::sanitize_export_value(&mut index);
 
     let ext = Path::new(&file_path)
         .extension()
@@ -770,9 +782,9 @@ pub async fn export_diagnostics_index(
         })?
     };
 
-    std::fs::write(&file_path, content).map_err(|source| {
-        export_source_error("write error", source, "diagnostics_index_write_failed")
-    })?;
+    crate::security::write_private_text_file(Path::new(&file_path), &content).map_err(
+        |source| export_source_error("write error", source, "diagnostics_index_write_failed"),
+    )?;
     Ok(file_path)
 }
 

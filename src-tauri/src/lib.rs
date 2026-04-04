@@ -10,8 +10,10 @@ pub mod environment;
 pub mod errors;
 pub mod parameter;
 pub mod plan;
+pub mod process_utils;
 pub mod provider;
 pub mod publish;
+pub mod security;
 pub mod shortcuts;
 pub mod spec;
 pub mod store;
@@ -47,7 +49,6 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_dialog::init())
-        .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())

@@ -1,8 +1,6 @@
 // Java provider environment detection
 
 use crate::environment::types::*;
-use std::process::Command;
-
 /// Minimum required Java version
 const MIN_JAVA_VERSION: &str = "11";
 const PROVIDER_ID: &str = "java";
@@ -12,7 +10,10 @@ pub async fn check_java() -> ProviderStatus {
     let path = super::types::command_path("java");
     let program = path.clone().unwrap_or_else(|| "java".to_string());
 
-    match Command::new(&program).arg("-version").output() {
+    match crate::process_utils::new_std_command(&program)
+        .arg("-version")
+        .output()
+    {
         Ok(output) => {
             let version = parse_java_version(&output.stderr);
 

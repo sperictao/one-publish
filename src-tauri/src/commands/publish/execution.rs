@@ -15,7 +15,6 @@ use std::collections::BTreeMap;
 use std::process::Stdio;
 use std::sync::Arc;
 use tauri::AppHandle;
-use tokio::process::Command;
 use tokio::sync::{mpsc, Mutex};
 
 pub(crate) fn build_dotnet_spec_from_config(
@@ -140,7 +139,7 @@ pub(crate) async fn execute_publish_spec(
             args.join(" ")
         );
 
-        let mut command = Command::new(&program);
+        let mut command = crate::process_utils::new_tokio_command(&program);
         command
             .args(&args)
             .stdout(Stdio::piped())

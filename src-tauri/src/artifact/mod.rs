@@ -3,7 +3,6 @@ use sha2::{Digest, Sha256};
 use std::fs::{self, File};
 use std::io::Read;
 use std::path::{Path, PathBuf};
-use tokio::process::Command;
 use tokio::time::{timeout, Duration};
 use ts_rs::TS;
 use walkdir::WalkDir;
@@ -347,7 +346,9 @@ async fn sign_gpg_detached(
 
     let output = timeout(
         Duration::from_secs(10 * 60),
-        Command::new("gpg").args(&args).output(),
+        crate::process_utils::new_tokio_command("gpg")
+            .args(&args)
+            .output(),
     )
     .await
     .map_err(|_| ArtifactError::SignTimeout)?

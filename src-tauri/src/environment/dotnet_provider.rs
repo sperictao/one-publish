@@ -1,8 +1,6 @@
 // .NET provider environment detection
 
 use crate::environment::types::*;
-use std::process::Command;
-
 /// Minimum required .NET SDK version
 const MIN_DOTNET_VERSION: &str = "6.0.0";
 const PROVIDER_ID: &str = "dotnet";
@@ -12,7 +10,10 @@ pub async fn check_dotnet() -> ProviderStatus {
     let path = super::types::command_path("dotnet");
     let program = path.clone().unwrap_or_else(|| "dotnet".to_string());
 
-    match Command::new(&program).arg("--version").output() {
+    match crate::process_utils::new_std_command(&program)
+        .arg("--version")
+        .output()
+    {
         Ok(output) => {
             let version_str = super::types::parse_version(&output.stdout, "")
                 .unwrap_or_else(|| "unknown".to_string());
