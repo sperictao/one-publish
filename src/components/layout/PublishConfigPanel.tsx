@@ -5,7 +5,6 @@ import {
   lazy,
   useCallback,
   useEffect,
-  useLayoutEffect,
   useRef,
   useState,
   useMemo,
@@ -151,7 +150,6 @@ export interface PublishConfigPanelProps {
   selectedPreset: string;
   isCustomMode: boolean;
   profiles: ConfigProfile[];
-  profilesRevision?: number;
   isProfilesRefreshing?: boolean;
   activeProfileName: string | null;
   onSelectProfile: (profile: ConfigProfile) => void;
@@ -162,7 +160,6 @@ export interface PublishConfigPanelProps {
   onDeleteProfile: (name: string) => void;
   dotnetSchema?: ParameterSchema;
   projectPublishProfiles: string[];
-  projectProfilesRevision?: number;
   isProjectProfilesRefreshing?: boolean;
   projectFilePath?: string;
   projectFrameworkOptions?: string[];
@@ -456,7 +453,6 @@ export function PublishConfigPanel({
   selectedPreset,
   isCustomMode,
   profiles,
-  profilesRevision = 0,
   isProfilesRefreshing = false,
   activeProfileName,
   onSelectProfile,
@@ -467,7 +463,6 @@ export function PublishConfigPanel({
   onDeleteProfile,
   dotnetSchema,
   projectPublishProfiles,
-  projectProfilesRevision = 0,
   isProjectProfilesRefreshing = false,
   projectFilePath,
   projectFrameworkOptions = EMPTY_FRAMEWORK_OPTIONS,
@@ -531,9 +526,6 @@ export function PublishConfigPanel({
   const fallbackListRef = useRef<HTMLDivElement | null>(null);
   const fallbackFloatingCardSurfaceRef = useRef<HTMLDivElement | null>(null);
   const latestProjectProfileRequestId = useRef(0);
-  const previousSelectedRepoIdRef = useRef<string | null | undefined>(
-    selectedRepoId
-  );
 
   const query = searchQuery.toLowerCase();
   const favoriteSet = useMemo(
@@ -788,7 +780,9 @@ export function PublishConfigPanel({
     clearSettledItem: clearSettledConfigRenderId,
     settleFromDragEnd: settleConfigFromDragEnd,
     shouldIgnorePointerReentry: shouldIgnoreConfigPointerReentry,
-  } = useListDropSettledState<string>();
+  } = useListDropSettledState<string>({
+    resetKey: selectedRepoScopeId,
+  });
   const handleConfigListPointerReentry = useCallback(
     (event: ReactPointerEvent<HTMLDivElement>) => {
       return shouldIgnoreConfigPointerReentry({
@@ -801,14 +795,6 @@ export function PublishConfigPanel({
   const handleConfigListPointerLeave = useCallback(() => {
     clearSettledConfigRenderId();
   }, [clearSettledConfigRenderId]);
-  useLayoutEffect(() => {
-    if (previousSelectedRepoIdRef.current === selectedRepoId) {
-      return;
-    }
-
-    previousSelectedRepoIdRef.current = selectedRepoId;
-    clearSettledConfigRenderId();
-  }, [clearSettledConfigRenderId, selectedRepoId]);
   const recentReorder = usePointerListReorder<undefined>({
     enabled: recentDragEnabled,
     onStart: () => {
@@ -1006,13 +992,6 @@ export function PublishConfigPanel({
     previewVisibleProjectProfiles,
     showRecentItems,
   ]);
-  const floatingLayerKey = useMemo(() => {
-    return [
-      selectedRepoScopeId ?? "__no-repo__",
-      profilesRevision,
-      projectProfilesRevision,
-    ].join("::");
-  }, [profilesRevision, projectProfilesRevision, selectedRepoScopeId]);
   const hasVisiblePreviewConfigResults =
     previewVisibleProjectProfiles.length > 0 ||
     previewVisibleGroupedFilteredProfiles.length > 0;
@@ -1980,7 +1959,6 @@ export function PublishConfigPanel({
         ) : (
           <Suspense fallback={renderConfigList(fallbackFloatingBindings)}>
             <PublishConfigPanelFloatingLayer
-              key={floatingLayerKey}
               filteredConfigIds={previewConfigIds}
               targetConfigId={floatingTargetConfigId}
               restingTargetConfigId={restingTargetConfigId}

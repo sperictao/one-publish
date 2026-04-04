@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useLayoutEffect, useRef, useState } from "react";
 import type {
   PointerListDropTarget,
   PointerListPointer,
@@ -15,9 +15,23 @@ interface PointerListDragEndResult<TMeta> {
   pointer: PointerListPointer | null;
 }
 
-export function useListDropSettledState<TItemId extends string>() {
+export function useListDropSettledState<TItemId extends string>(
+  options?: { resetKey?: string | null }
+) {
+  const resetKey = options?.resetKey ?? null;
   const [settledItemId, setSettledItemId] = useState<TItemId | null>(null);
   const settledPointerRef = useRef<PointerListPointer | null>(null);
+  const previousResetKeyRef = useRef<string | null>(resetKey);
+
+  useLayoutEffect(() => {
+    if (previousResetKeyRef.current === resetKey) {
+      return;
+    }
+
+    previousResetKeyRef.current = resetKey;
+    settledPointerRef.current = null;
+    setSettledItemId((previousId) => (previousId === null ? previousId : null));
+  }, [resetKey]);
 
   const clearSettledItem = useCallback(() => {
     settledPointerRef.current = null;

@@ -422,12 +422,7 @@ function App() {
     buildProfileParameters: buildDotnetProfileParameters,
   });
 
-  const {
-    projectInfo,
-    projectProfilesRevision,
-    isProjectInfoRefreshing,
-    scanProject,
-  } = useProjectShellState({
+  const { projectInfo, isProjectInfoRefreshing, scanProject } = useProjectShellState({
     appT,
     selectedRepoId,
     selectedRepoPath: selectedRepo?.path,
@@ -447,7 +442,6 @@ function App() {
 
   const {
     profiles,
-    profilesRevision,
     isProfilesRefreshing,
     activeProfileName,
     quickCreateProfileOpen,
@@ -812,7 +806,6 @@ function App() {
               selectedPreset={selectedPreset}
               isCustomMode={isCustomMode}
               profiles={profiles}
-              profilesRevision={profilesRevision}
               isProfilesRefreshing={Boolean(selectedRepo) && isProfilesRefreshing}
               activeProfileName={activeProfileName}
               onSelectProfile={handleSelectProfileFromPanel}
@@ -822,7 +815,6 @@ function App() {
               onOpenConfigDialog={() => handleConfigDialogOpenChange(true)}
               onDeleteProfile={handleDeleteProfileFromPanel}
               projectPublishProfiles={orderedProjectPublishProfiles}
-              projectProfilesRevision={projectProfilesRevision}
               isProjectProfilesRefreshing={isProjectProfilesRefreshing}
               projectFilePath={projectInfo?.project_file}
               projectFrameworkOptions={projectFrameworkOptions}
