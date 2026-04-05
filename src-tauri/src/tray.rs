@@ -116,6 +116,10 @@ fn current_tray_texts() -> TrayTexts {
     TrayTexts::from_language(crate::store::get_state().language.as_str())
 }
 
+fn should_show_menu_on_left_click() -> bool {
+    cfg!(target_os = "macos")
+}
+
 fn resolve_status_title(
     texts: &TrayTexts,
     status: TrayPublishStatus,
@@ -232,32 +236,35 @@ fn set_tray_publish_status_internal(
     Ok(updated)
 }
 
+fn load_tray_icon(bytes: &'static [u8], platform_name: &str) -> Option<Image<'static>> {
+    match Image::from_bytes(bytes) {
+        Ok(icon) => Some(icon),
+        Err(err) => {
+            log::warn!("加载 {platform_name} 托盘图标失败: {}", err);
+            None
+        }
+    }
+}
+
 /// macOS 平台加载 template 图标
 #[cfg(target_os = "macos")]
 fn macos_tray_icon() -> Option<Image<'static>> {
     const ICON_BYTES: &[u8] = include_bytes!("../icons/tray/macos/statusbar_template.png");
-
-    match Image::from_bytes(ICON_BYTES) {
-        Ok(icon) => Some(icon),
-        Err(err) => {
-            log::warn!("加载 macOS 托盘图标失败: {}", err);
-            None
-        }
-    }
+    load_tray_icon(ICON_BYTES, "macOS")
 }
 
 /// Windows 平台加载彩色图标
 #[cfg(target_os = "windows")]
 fn windows_tray_icon() -> Option<Image<'static>> {
     const ICON_BYTES: &[u8] = include_bytes!("../icons/tray/windows/tray_icon.png");
+    load_tray_icon(ICON_BYTES, "Windows")
+}
 
-    match Image::from_bytes(ICON_BYTES) {
-        Ok(icon) => Some(icon),
-        Err(err) => {
-            log::warn!("加载 Windows 托盘图标失败: {}", err);
-            None
-        }
-    }
+/// Linux 平台显式设置托盘图标，避免部分桌面环境只挂了菜单却没有稳定入口。
+#[cfg(target_os = "linux")]
+fn linux_tray_icon() -> Option<Image<'static>> {
+    const ICON_BYTES: &[u8] = include_bytes!("../icons/32x32.png");
+    load_tray_icon(ICON_BYTES, "Linux")
 }
 
 fn build_tray_publish_event_id(repo_id: &str, config_key: &str) -> String {
@@ -508,7 +515,9 @@ pub fn init_tray(app: &AppHandle) -> Result<(), tauri::Error> {
 
     let mut tray_builder = TrayIconBuilder::with_id("main")
         .menu(&menu)
-        .show_menu_on_left_click(true)
+        // macOS 状态栏习惯左键出菜单；Windows / Linux 保持右键菜单语义。
+        // 其中 Linux 明确不支持 `show_menu_on_left_click`，这里保持 false 只表达我们的预期。
+        .show_menu_on_left_click(should_show_menu_on_left_click())
         .on_menu_event(|app, event| {
             handle_tray_menu_event(app, event.id().as_ref());
         });
@@ -523,6 +532,13 @@ pub fn init_tray(app: &AppHandle) -> Result<(), tauri::Error> {
     #[cfg(target_os = "windows")]
     {
         if let Some(icon) = windows_tray_icon() {
+            tray_builder = tray_builder.icon(icon);
+        }
+    }
+
+    #[cfg(target_os = "linux")]
+    {
+        if let Some(icon) = linux_tray_icon() {
             tray_builder = tray_builder.icon(icon);
         }
     }
@@ -704,6 +720,15 @@ mod tests {
             resolve_status_title(&texts, TrayPublishStatus::Failure, 0),
             "发布失败"
         );
+    }
+
+    #[test]
+    fn tray_menu_click_policy_matches_platform_convention() {
+        #[cfg(target_os = "macos")]
+        assert!(should_show_menu_on_left_click());
+
+        #[cfg(not(target_os = "macos"))]
+        assert!(!should_show_menu_on_left_click());
     }
 
     #[test]
