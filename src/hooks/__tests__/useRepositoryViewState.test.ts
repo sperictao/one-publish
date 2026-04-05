@@ -37,6 +37,16 @@ function createRepository(): Repository {
   };
 }
 
+function createRepositoryWithId(id: string, overrides?: Partial<Repository>): Repository {
+  return {
+    ...createRepository(),
+    id,
+    name: `repo-${id}`,
+    path: `/repo/${id}`,
+    ...overrides,
+  };
+}
+
 describe("useRepositoryViewState", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -95,5 +105,47 @@ describe("useRepositoryViewState", () => {
     await waitFor(() => {
       expect(mocks.checkRepositoryBranchConnectivity).toHaveBeenCalledTimes(2);
     });
+  });
+
+  it("新增仓库时只检查新增项，不重查已缓存仓库", async () => {
+    const repoA = createRepositoryWithId("repo-a");
+    const repoB = createRepositoryWithId("repo-b");
+    const { rerender } = renderHook(
+      ({ repositories, selectedRepoId }) =>
+        useRepositoryViewState({
+          repositories,
+          selectedRepoId,
+        }),
+      {
+        initialProps: {
+          repositories: [repoA],
+          selectedRepoId: repoA.id,
+        },
+      }
+    );
+
+    await waitFor(() => {
+      expect(mocks.checkRepositoryBranchConnectivity).toHaveBeenCalledTimes(1);
+    });
+
+    rerender({
+      repositories: [repoA, repoB],
+      selectedRepoId: repoA.id,
+    });
+
+    await waitFor(() => {
+      expect(mocks.checkRepositoryBranchConnectivity).toHaveBeenCalledTimes(2);
+    });
+
+    expect(mocks.checkRepositoryBranchConnectivity).toHaveBeenNthCalledWith(
+      1,
+      repoA.path,
+      repoA.currentBranch
+    );
+    expect(mocks.checkRepositoryBranchConnectivity).toHaveBeenNthCalledWith(
+      2,
+      repoB.path,
+      repoB.currentBranch
+    );
   });
 });

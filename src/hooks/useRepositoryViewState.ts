@@ -7,14 +7,19 @@ type BranchConnectivityTarget = {
   id: string;
   path: string;
   currentBranch: string;
+  signature: string;
 };
 
-function buildBranchConnectivitySignature(targets: BranchConnectivityTarget[]) {
-  return targets
-    .map(
-      (target) => `${target.id}\u0000${target.path}\u0000${target.currentBranch}`
-    )
-    .join("\u0001");
+function buildBranchConnectivityTarget(
+  repo: Repository
+): BranchConnectivityTarget {
+  const currentBranch = repo.currentBranch ?? "";
+  return {
+    id: repo.id,
+    path: repo.path,
+    currentBranch,
+    signature: `${repo.id}\u0000${repo.path}\u0000${currentBranch}`,
+  };
 }
 
 export function useRepositoryViewState(params: {
@@ -31,42 +36,67 @@ export function useRepositoryViewState(params: {
   );
 
   const branchConnectivityTargets = useMemo<BranchConnectivityTarget[]>(
-    () =>
-      params.repositories.map((repo) => ({
-        id: repo.id,
-        path: repo.path,
-        currentBranch: repo.currentBranch ?? "",
-      })),
+    () => params.repositories.map(buildBranchConnectivityTarget),
     [params.repositories]
   );
 
-  const branchConnectivitySignature = useMemo(
-    () => buildBranchConnectivitySignature(branchConnectivityTargets),
-    [branchConnectivityTargets]
-  );
+  const branchConnectivitySignature = useMemo(() => {
+    return branchConnectivityTargets
+      .map((target) => target.signature)
+      .join("\u0001");
+  }, [branchConnectivityTargets]);
   const branchConnectivityTargetsRef = useRef(branchConnectivityTargets);
   branchConnectivityTargetsRef.current = branchConnectivityTargets;
+  const cachedBranchSignatureByRepoIdRef = useRef<Record<string, string>>({});
+  const cachedBranchConnectivityByRepoIdRef = useRef<Record<string, boolean>>({});
 
   useEffect(() => {
     let cancelled = false;
     const connectivityTargets = branchConnectivityTargetsRef.current;
+    const cachedSignatures = cachedBranchSignatureByRepoIdRef.current;
+    const cachedConnectivity = cachedBranchConnectivityByRepoIdRef.current;
+    const nextConnectivityByRepoId: Record<string, boolean> = {};
+    const pendingTargets: BranchConnectivityTarget[] = [];
 
     if (connectivityTargets.length === 0) {
+      cachedBranchSignatureByRepoIdRef.current = {};
+      cachedBranchConnectivityByRepoIdRef.current = {};
       setBranchConnectivityByRepoId({});
+      return;
+    }
+
+    for (const target of connectivityTargets) {
+      if (
+        cachedSignatures[target.id] === target.signature &&
+        cachedConnectivity[target.id] !== undefined
+      ) {
+        nextConnectivityByRepoId[target.id] = cachedConnectivity[target.id];
+      } else {
+        pendingTargets.push(target);
+      }
+    }
+
+    setBranchConnectivityByRepoId(nextConnectivityByRepoId);
+
+    if (pendingTargets.length === 0) {
+      cachedBranchSignatureByRepoIdRef.current = Object.fromEntries(
+        connectivityTargets.map((target) => [target.id, target.signature])
+      );
+      cachedBranchConnectivityByRepoIdRef.current = nextConnectivityByRepoId;
       return;
     }
 
     const checkBranchConnectivity = async () => {
       const entries = await Promise.all(
-        connectivityTargets.map(async (repo) => {
+        pendingTargets.map(async (repo) => {
           try {
             const result = await checkRepositoryBranchConnectivity(
               repo.path,
               repo.currentBranch || undefined
             );
-            return [repo.id, result.canConnect] as const;
+            return [repo.id, repo.signature, result.canConnect] as const;
           } catch {
-            return [repo.id, false] as const;
+            return [repo.id, repo.signature, false] as const;
           }
         })
       );
@@ -75,9 +105,19 @@ export function useRepositoryViewState(params: {
         return;
       }
 
-      setBranchConnectivityByRepoId(
-        Object.fromEntries(entries) as Record<string, boolean>
-      );
+      const refreshedConnectivityByRepoId = { ...nextConnectivityByRepoId };
+      const refreshedSignatureByRepoId = Object.fromEntries(
+        connectivityTargets.map((target) => [target.id, target.signature])
+      ) as Record<string, string>;
+
+      for (const [repoId, signature, canConnect] of entries) {
+        refreshedConnectivityByRepoId[repoId] = canConnect;
+        refreshedSignatureByRepoId[repoId] = signature;
+      }
+
+      cachedBranchSignatureByRepoIdRef.current = refreshedSignatureByRepoId;
+      cachedBranchConnectivityByRepoIdRef.current = refreshedConnectivityByRepoId;
+      setBranchConnectivityByRepoId(refreshedConnectivityByRepoId);
     };
 
     void checkBranchConnectivity();
