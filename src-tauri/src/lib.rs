@@ -160,7 +160,7 @@ pub fn run() {
             commands::execute_publish,
             commands::execute_provider_publish,
             commands::cancel_provider_publish,
-            commands::preflight_publish_output_access,
+            commands::preflight_publish_output,
             commands::check_update,
             commands::install_update,
             commands::get_updater_help_paths,

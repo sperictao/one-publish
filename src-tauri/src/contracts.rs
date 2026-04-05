@@ -23,6 +23,13 @@ pub fn generate_tauri_contracts() -> String {
     push_contract::<crate::commands::ProjectInfo>(&mut declarations);
     push_contract::<crate::commands::ProjectPublishProfileFile>(&mut declarations);
     push_contract::<crate::commands::PublishLogChunkEvent>(&mut declarations);
+    push_contract::<crate::commands::ProtectedDirectoryLocation>(&mut declarations);
+    push_contract::<crate::commands::PublishOutputValidationStatus>(&mut declarations);
+    push_contract::<crate::commands::PublishOutputValidationIssue>(&mut declarations);
+    push_contract::<crate::commands::PublishOutputValidation>(&mut declarations);
+    push_contract::<crate::commands::PublishOutputAccessStatus>(&mut declarations);
+    push_contract::<crate::commands::PublishOutputAccess>(&mut declarations);
+    push_contract::<crate::commands::PublishOutputPreflightResult>(&mut declarations);
     push_contract::<crate::commands::PublishResult>(&mut declarations);
     push_contract::<crate::commands::ProjectScanCandidates>(&mut declarations);
     push_contract::<crate::commands::RepositoryBranchConnectivityResult>(&mut declarations);

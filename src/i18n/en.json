@@ -574,6 +574,7 @@
     "publishAlreadyRunningDesc": "Wait for the running task to finish, or cancel it before retrying.",
     "publishProjectPathNotFound": "Project path not found",
     "publishProjectPathNotFoundDesc": "Ensure project root / project file path is correct before retrying.",
+    "publishOutputPreflightFailed": "Publish output preflight failed",
     "publishOutputPathIncompatible": "Publish output path is incompatible with the current system",
     "publishOutputPathIncompatibleDesc": "The current publish output path is incompatible with this system: {{path}}. Switch to a path this system can resolve, or use a relative path instead.",
     "publishWindowsStyleOutputPathIncompatibleDesc": "The current publish output path looks like a Windows-style path: {{path}}. Switch to a path this system can resolve, or use a relative path such as ./publish.",

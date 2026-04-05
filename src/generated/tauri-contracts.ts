@@ -17,6 +17,20 @@ export type ProjectPublishProfileFile = { profileName: string, filePath: string,
 
 export type PublishLogChunkEvent = { sessionId: string, line: string, };
 
+export type ProtectedDirectoryLocation = "desktop" | "documents" | "downloads";
+
+export type PublishOutputValidationStatus = "not_applicable" | "compatible" | "incompatible";
+
+export type PublishOutputValidationIssue = "windows_style_path_on_posix" | "posix_absolute_path_on_windows";
+
+export type PublishOutputValidation = { status: PublishOutputValidationStatus, issue: PublishOutputValidationIssue | null, };
+
+export type PublishOutputAccessStatus = "skipped" | "not_applicable" | "granted" | "denied";
+
+export type PublishOutputAccess = { status: PublishOutputAccessStatus, protectedLocation: ProtectedDirectoryLocation | null, protectedRoot: string | null, probeDirectory: string | null, detail: string | null, };
+
+export type PublishOutputPreflightResult = { outputDir: string, configuredOutputDir: string | null, validation: PublishOutputValidation, access: PublishOutputAccess, };
+
 export type PublishResult = { provider_id: string, success: boolean, cancelled: boolean, error: string | null, output_dir: string, file_count: number, };
 
 export type ProjectScanCandidates = { rootPath: string, solutionFiles: Array<string>, projectFiles: Array<string>, recommendedProjectFile: string | null, };

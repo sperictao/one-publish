@@ -574,6 +574,7 @@
     "publishAlreadyRunningDesc": "请等待当前任务结束，或先取消后再重试。",
     "publishProjectPathNotFound": "项目路径不存在",
     "publishProjectPathNotFoundDesc": "请确认 Project Root / Project File 路径正确后重试。",
+    "publishOutputPreflightFailed": "发布目录预检失败",
     "publishOutputPathIncompatible": "发布目录路径与当前系统不兼容",
     "publishOutputPathIncompatibleDesc": "当前发布目录路径与当前系统不兼容：{{path}}。请改为当前系统可识别的路径，或使用相对路径。",
     "publishWindowsStyleOutputPathIncompatibleDesc": "当前发布目录看起来是 Windows 风格路径：{{path}}。请改为当前系统可识别的路径，或使用相对路径（如 ./publish）。",

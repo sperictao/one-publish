@@ -2,18 +2,20 @@ use crate::spec::PublishSpec;
 use std::path::PathBuf;
 use tauri::AppHandle;
 
-mod access;
 mod contracts;
 mod errors;
 mod execution;
 mod logs;
 mod output;
+mod preflight;
 mod session;
 
-pub use access::{
-    ProtectedDirectoryLocation, PublishOutputAccessResult, PublishOutputAccessStatus,
-};
 pub use contracts::{PublishConfig, PublishLogChunkEvent, PublishResult};
+pub use preflight::{
+    ProtectedDirectoryLocation, PublishOutputAccess, PublishOutputAccessStatus,
+    PublishOutputPreflightResult, PublishOutputValidation, PublishOutputValidationIssue,
+    PublishOutputValidationStatus,
+};
 
 #[cfg(test)]
 use self::errors::{publish_render_error, publish_schema_error};
@@ -59,8 +61,8 @@ pub async fn execute_provider_publish(
 }
 
 #[tauri::command]
-pub fn preflight_publish_output_access(spec: PublishSpec) -> PublishOutputAccessResult {
-    access::check_publish_output_access(&spec)
+pub fn preflight_publish_output(spec: PublishSpec) -> PublishOutputPreflightResult {
+    preflight::preflight_publish_output(&spec)
 }
 
 #[tauri::command]

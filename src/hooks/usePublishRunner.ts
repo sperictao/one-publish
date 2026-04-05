@@ -19,11 +19,11 @@ import {
   type ExecutionRecord,
 } from "@/lib/store";
 import {
-  buildIncompatibleOutputPathDescription,
+  buildPublishOutputValidationDescription,
   buildProtectedOutputAccessDescription,
-  preflightPublishOutputAccess,
-  type PublishOutputAccessResult,
-} from "@/lib/publishOutputAccess";
+  preflightPublishOutput,
+  type PublishOutputPreflightResult,
+} from "@/lib/publishOutputPreflight";
 import { showSystemNotification } from "@/lib/systemNotification";
 import { useDotnetPublishSelection } from "@/hooks/useDotnetPublishSelection";
 import { usePublishLogStream } from "@/hooks/usePublishLogStream";
@@ -443,42 +443,46 @@ export function usePublishRunner({
         return false;
       }
 
-      let outputAccess: PublishOutputAccessResult;
+      let outputPreflight: PublishOutputPreflightResult;
       try {
-        outputAccess = await preflightPublishOutputAccess(spec);
+        outputPreflight = await preflightPublishOutput(spec);
       } catch (err) {
         const { extractInvokeErrorMessage } = await loadInvokeErrors();
         await abortPublishPreparation({
           ...options,
           level: "error",
-          title:
-            appT.publishProtectedDirectoryAccessDenied ||
-            "缺少 macOS 受保护目录访问权限",
+          title: appT.publishOutputPreflightFailed || "发布目录预检失败",
           description: extractInvokeErrorMessage(err),
         });
         return false;
       }
 
-      if (outputAccess.pathCompatibilityStatus === "incompatible") {
+      if (outputPreflight.validation.status === "incompatible") {
         await abortPublishPreparation({
           ...options,
           level: "error",
           title:
             appT.publishOutputPathIncompatible ||
             "发布目录路径与当前系统不兼容",
-          description: buildIncompatibleOutputPathDescription(outputAccess, appT),
+          description: buildPublishOutputValidationDescription(
+            outputPreflight,
+            appT
+          ),
         });
         return false;
       }
 
-      if (outputAccess.status === "denied") {
+      if (outputPreflight.access.status === "denied") {
         await abortPublishPreparation({
           ...options,
           level: "error",
           title:
             appT.publishProtectedDirectoryAccessDenied ||
             "缺少 macOS 受保护目录访问权限",
-          description: buildProtectedOutputAccessDescription(outputAccess, appT),
+          description: buildProtectedOutputAccessDescription(
+            outputPreflight,
+            appT
+          ),
         });
         return false;
       }

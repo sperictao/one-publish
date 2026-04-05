@@ -1,47 +1,22 @@
 import { invoke } from "@tauri-apps/api/core";
 
-import type { PublishSpec } from "@/generated/tauri-contracts";
+import type {
+  ProtectedDirectoryLocation,
+  PublishOutputPreflightResult,
+  PublishSpec,
+} from "@/generated/tauri-contracts";
 
-export type ProtectedDirectoryLocation =
-  | "desktop"
-  | "documents"
-  | "downloads";
-
-export type PublishOutputAccessStatus =
-  | "not_applicable"
-  | "granted"
-  | "denied";
-
-export type PublishOutputPathCompatibilityStatus =
-  | "not_applicable"
-  | "compatible"
-  | "incompatible";
-
-export type PublishOutputPathCompatibilityIssue =
-  | "windows_style_path_on_posix"
-  | "posix_absolute_path_on_windows";
-
-export interface PublishOutputAccessResult {
-  status: PublishOutputAccessStatus;
-  outputDir: string;
-  configuredOutputDir?: string | null;
-  pathCompatibilityStatus?: PublishOutputPathCompatibilityStatus | null;
-  pathCompatibilityIssue?: PublishOutputPathCompatibilityIssue | null;
-  protectedLocation?: ProtectedDirectoryLocation | null;
-  protectedRoot?: string | null;
-  probeDirectory?: string | null;
-  detail?: string | null;
-}
+export type { PublishOutputPreflightResult } from "@/generated/tauri-contracts";
 
 interface TranslationMap {
   [key: string]: string | undefined;
 }
 
-export async function preflightPublishOutputAccess(
+export async function preflightPublishOutput(
   spec: PublishSpec
-): Promise<PublishOutputAccessResult> {
-  return await invoke<PublishOutputAccessResult>(
-    "preflight_publish_output_access",
+): Promise<PublishOutputPreflightResult> {
+  return await invoke<PublishOutputPreflightResult>(
+    "preflight_publish_output",
     { spec }
   );
 }
@@ -66,11 +41,11 @@ function getProtectedLocationLabel(
 }
 
 export function buildProtectedOutputAccessDescription(
-  result: PublishOutputAccessResult,
+  result: PublishOutputPreflightResult,
   appT: TranslationMap
 ): string {
   const location = getProtectedLocationLabel(
-    result.protectedLocation ?? null,
+    result.access.protectedLocation ?? null,
     appT
   );
   const template =
@@ -81,24 +56,27 @@ export function buildProtectedOutputAccessDescription(
     .replace(/\{\{location\}\}/g, location)
     .replace(
       "{{path}}",
-      result.probeDirectory || result.outputDir || result.protectedRoot || "-"
+      result.access.probeDirectory ||
+        result.outputDir ||
+        result.access.protectedRoot ||
+        "-"
     );
 }
 
-export function buildIncompatibleOutputPathDescription(
-  result: PublishOutputAccessResult,
+export function buildPublishOutputValidationDescription(
+  result: PublishOutputPreflightResult,
   appT: TranslationMap
 ): string {
   const path = result.configuredOutputDir?.trim() || result.outputDir?.trim() || "-";
 
-  if (result.pathCompatibilityIssue === "windows_style_path_on_posix") {
+  if (result.validation.issue === "windows_style_path_on_posix") {
     return (
       appT.publishWindowsStyleOutputPathIncompatibleDesc ||
       `当前发布目录看起来是 Windows 风格路径：${path}。请改为当前系统可识别的路径，或使用相对路径（如 ./publish）。`
     ).replace(/\{\{path\}\}/g, path);
   }
 
-  if (result.pathCompatibilityIssue === "posix_absolute_path_on_windows") {
+  if (result.validation.issue === "posix_absolute_path_on_windows") {
     return (
       appT.publishPosixStyleOutputPathIncompatibleDesc ||
       `当前发布目录看起来是 Unix 风格绝对路径：${path}。请改为当前系统可识别的 Windows 路径，或使用相对路径。`
