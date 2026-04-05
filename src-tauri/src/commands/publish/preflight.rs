@@ -40,6 +40,7 @@ pub enum PublishOutputValidationStatus {
 pub enum PublishOutputValidationIssue {
     WindowsStylePathOnPosix,
     PosixAbsolutePathOnWindows,
+    WindowsDriveRootMissing,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, TS)]
@@ -353,7 +354,7 @@ fn evaluate_publish_output_validation(
         return PublishOutputValidation::new(PublishOutputValidationStatus::NotApplicable, None);
     }
 
-    match detect_output_path_compatibility_issue(path_to_check) {
+    match detect_output_path_validation_issue(path_to_check) {
         Some(issue) => {
             PublishOutputValidation::new(PublishOutputValidationStatus::Incompatible, Some(issue))
         }
@@ -361,11 +362,10 @@ fn evaluate_publish_output_validation(
     }
 }
 
-fn detect_output_path_compatibility_issue(path: &str) -> Option<PublishOutputValidationIssue> {
+fn detect_output_path_validation_issue(path: &str) -> Option<PublishOutputValidationIssue> {
     #[cfg(target_os = "windows")]
     {
-        looks_like_posix_absolute_path(path)
-            .then_some(PublishOutputValidationIssue::PosixAbsolutePathOnWindows)
+        detect_windows_output_path_validation_issue(path)
     }
 
     #[cfg(not(target_os = "windows"))]
@@ -373,6 +373,19 @@ fn detect_output_path_compatibility_issue(path: &str) -> Option<PublishOutputVal
         looks_like_windows_path(path)
             .then_some(PublishOutputValidationIssue::WindowsStylePathOnPosix)
     }
+}
+
+#[cfg(target_os = "windows")]
+fn detect_windows_output_path_validation_issue(path: &str) -> Option<PublishOutputValidationIssue> {
+    if looks_like_posix_absolute_path(path) {
+        return Some(PublishOutputValidationIssue::PosixAbsolutePathOnWindows);
+    }
+
+    if has_missing_windows_drive_root(path) {
+        return Some(PublishOutputValidationIssue::WindowsDriveRootMissing);
+    }
+
+    None
 }
 
 fn looks_like_windows_path(path: &str) -> bool {
@@ -391,20 +404,57 @@ fn looks_like_windows_path(path: &str) -> bool {
 }
 
 #[cfg_attr(not(any(test, target_os = "windows")), allow(dead_code))]
+fn looks_like_windows_absolute_path(path: &str) -> bool {
+    let trimmed = path.trim();
+    if trimmed.is_empty() {
+        return false;
+    }
+
+    let bytes = trimmed.as_bytes();
+    let has_drive_prefix = bytes.len() >= 3
+        && bytes[0].is_ascii_alphabetic()
+        && bytes[1] == b':'
+        && (bytes[2] == b'\\' || bytes[2] == b'/');
+
+    has_drive_prefix || trimmed.starts_with("\\\\")
+}
+
+#[cfg_attr(not(any(test, target_os = "windows")), allow(dead_code))]
 fn looks_like_posix_absolute_path(path: &str) -> bool {
     let trimmed = path.trim();
     trimmed.starts_with('/') && !trimmed.starts_with("//")
+}
+
+#[cfg(target_os = "windows")]
+fn has_missing_windows_drive_root(path: &str) -> bool {
+    windows_absolute_root(Path::new(path)).is_some_and(|root| !root.exists())
+}
+
+#[cfg(target_os = "windows")]
+fn windows_absolute_root(path: &Path) -> Option<PathBuf> {
+    let mut components = path.components();
+    let prefix = match components.next()? {
+        Component::Prefix(prefix) => prefix,
+        _ => return None,
+    };
+    let Some(Component::RootDir) = components.next() else {
+        return None;
+    };
+
+    let mut root = PathBuf::from(prefix.as_os_str());
+    root.push(std::path::MAIN_SEPARATOR.to_string());
+    Some(root)
 }
 
 #[cfg(test)]
 mod tests {
     use super::{
         evaluate_publish_output_access_for_roots, find_protected_root_for_path,
-        looks_like_posix_absolute_path, looks_like_windows_path, normalize_lexical_path,
-        preflight_publish_output, resolve_existing_probe_directory, resolve_publish_output_context,
-        ProtectedDirectoryLocation, ProtectedRoot, PublishOutputAccess, PublishOutputAccessStatus,
-        PublishOutputPreflightResult, PublishOutputValidation, PublishOutputValidationIssue,
-        PublishOutputValidationStatus,
+        looks_like_posix_absolute_path, looks_like_windows_absolute_path, looks_like_windows_path,
+        normalize_lexical_path, preflight_publish_output, resolve_existing_probe_directory,
+        resolve_publish_output_context, ProtectedDirectoryLocation, ProtectedRoot,
+        PublishOutputAccess, PublishOutputAccessStatus, PublishOutputPreflightResult,
+        PublishOutputValidation, PublishOutputValidationIssue, PublishOutputValidationStatus,
     };
     use crate::spec::{PublishSpec, SpecValue, SPEC_VERSION};
     use std::collections::BTreeMap;
@@ -424,6 +474,7 @@ mod tests {
         platform: TestPlatform,
         configured_output_dir: Option<&str>,
         inferred_output_dir: &str,
+        windows_drive_root_exists: bool,
     ) -> PublishOutputValidation {
         let path_to_check = configured_output_dir.unwrap_or(inferred_output_dir).trim();
         if path_to_check.is_empty() {
@@ -434,8 +485,17 @@ mod tests {
         }
 
         let issue = match platform {
-            TestPlatform::Windows => looks_like_posix_absolute_path(path_to_check)
-                .then_some(PublishOutputValidationIssue::PosixAbsolutePathOnWindows),
+            TestPlatform::Windows => {
+                if looks_like_posix_absolute_path(path_to_check) {
+                    Some(PublishOutputValidationIssue::PosixAbsolutePathOnWindows)
+                } else if looks_like_windows_absolute_path(path_to_check)
+                    && !windows_drive_root_exists
+                {
+                    Some(PublishOutputValidationIssue::WindowsDriveRootMissing)
+                } else {
+                    None
+                }
+            }
             TestPlatform::Macos | TestPlatform::Posix => looks_like_windows_path(path_to_check)
                 .then_some(PublishOutputValidationIssue::WindowsStylePathOnPosix),
         };
@@ -452,6 +512,7 @@ mod tests {
     fn preflight_publish_output_for_test<F>(
         spec: &PublishSpec,
         platform: TestPlatform,
+        windows_drive_root_exists: bool,
         evaluate_access: F,
     ) -> PublishOutputPreflightResult
     where
@@ -462,6 +523,7 @@ mod tests {
             platform,
             context.configured_output_dir.as_deref(),
             &context.output_dir,
+            windows_drive_root_exists,
         );
         let access = if validation.status == PublishOutputValidationStatus::Incompatible {
             PublishOutputAccess::skipped()
@@ -538,6 +600,7 @@ mod tests {
                 parameters,
             },
             TestPlatform::Posix,
+            true,
             |_output_dir| panic!("access check should be skipped for incompatible output path"),
         );
 
@@ -572,6 +635,7 @@ mod tests {
                 parameters,
             },
             TestPlatform::Windows,
+            true,
             |_output_dir| panic!("access check should be skipped for incompatible output path"),
         );
 
@@ -595,7 +659,7 @@ mod tests {
         let mut parameters = BTreeMap::new();
         parameters.insert(
             "output".to_string(),
-            SpecValue::String(r".\publish\win-x64".to_string()),
+            SpecValue::String(r"D:\PRD".to_string()),
         );
 
         let result = preflight_publish_output_for_test(
@@ -606,6 +670,7 @@ mod tests {
                 parameters,
             },
             TestPlatform::Windows,
+            true,
             |_output_dir| PublishOutputAccess::not_applicable(),
         );
 
@@ -618,6 +683,41 @@ mod tests {
             result.access.status,
             PublishOutputAccessStatus::NotApplicable
         );
+        assert_eq!(result.access.protected_location, None);
+        assert_eq!(result.access.protected_root, None);
+        assert_eq!(result.access.probe_directory, None);
+        assert_eq!(result.access.detail, None);
+    }
+
+    #[test]
+    fn preflight_publish_output_should_skip_access_when_windows_drive_root_is_missing() {
+        let mut parameters = BTreeMap::new();
+        parameters.insert(
+            "output".to_string(),
+            SpecValue::String(r"D:\PRD".to_string()),
+        );
+
+        let result = preflight_publish_output_for_test(
+            &PublishSpec {
+                version: SPEC_VERSION,
+                provider_id: "dotnet".to_string(),
+                project_path: "repo/App.csproj".to_string(),
+                parameters,
+            },
+            TestPlatform::Windows,
+            false,
+            |_output_dir| panic!("access check should be skipped for missing Windows drive root"),
+        );
+
+        assert_eq!(
+            result.validation.status,
+            PublishOutputValidationStatus::Incompatible
+        );
+        assert_eq!(
+            result.validation.issue,
+            Some(PublishOutputValidationIssue::WindowsDriveRootMissing)
+        );
+        assert_eq!(result.access.status, PublishOutputAccessStatus::Skipped);
         assert_eq!(result.access.protected_location, None);
         assert_eq!(result.access.protected_root, None);
         assert_eq!(result.access.probe_directory, None);
@@ -640,6 +740,7 @@ mod tests {
                 parameters,
             },
             TestPlatform::Posix,
+            true,
             |_output_dir| PublishOutputAccess::not_applicable(),
         );
 
@@ -689,6 +790,7 @@ mod tests {
                 parameters,
             },
             TestPlatform::Macos,
+            true,
             |resolved_output_dir| {
                 evaluate_publish_output_access_for_roots(
                     resolved_output_dir,

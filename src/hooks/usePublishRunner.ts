@@ -20,6 +20,7 @@ import {
 } from "@/lib/store";
 import {
   buildPublishOutputValidationDescription,
+  buildPublishOutputValidationTitle,
   buildProtectedOutputAccessDescription,
   preflightPublishOutput,
   type PublishOutputPreflightResult,
@@ -461,9 +462,7 @@ export function usePublishRunner({
         await abortPublishPreparation({
           ...options,
           level: "error",
-          title:
-            appT.publishOutputPathIncompatible ||
-            "发布目录路径与当前系统不兼容",
+          title: buildPublishOutputValidationTitle(outputPreflight, appT),
           description: buildPublishOutputValidationDescription(
             outputPreflight,
             appT

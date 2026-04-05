@@ -59,7 +59,18 @@ vi.mock("@/hooks/usePublishSpecBuilder", () => ({
 vi.mock("@/lib/publishOutputPreflight", () => ({
   preflightPublishOutput: mocks.preflightPublishOutput,
   buildProtectedOutputAccessDescription: () => "需要授权 Downloads",
-  buildPublishOutputValidationDescription: () => "路径与当前系统不兼容",
+  buildPublishOutputValidationTitle: (result: {
+    validation: { issue: string | null };
+  }) =>
+    result.validation.issue === "windows_drive_root_missing"
+      ? "发布目录无效"
+      : "发布目录路径与当前系统不兼容",
+  buildPublishOutputValidationDescription: (result: {
+    validation: { issue: string | null };
+  }) =>
+    result.validation.issue === "windows_drive_root_missing"
+      ? "发布目录指向不存在的 Windows 盘符"
+      : "路径与当前系统不兼容",
 }));
 
 vi.mock("@/lib/systemNotification", () => ({
@@ -120,6 +131,7 @@ function createRunnerProps() {
     appT: {
       environmentBlocked: "环境阻断",
       publishOutputPreflightFailed: "发布目录预检失败",
+      publishOutputPathInvalid: "发布目录无效",
       publishProtectedDirectoryAccessDenied: "缺少 macOS 受保护目录访问权限",
       publishOutputPathIncompatible: "发布目录路径与当前系统不兼容",
       selectRepositoryFirst: "请先选择仓库",
@@ -415,6 +427,38 @@ describe("usePublishRunner", () => {
         description: "路径与当前系统不兼容",
       }
     );
+  });
+
+  it("发布目录指向不存在的 Windows 盘符时阻止发布", async () => {
+    mocks.runEnvironmentCheck.mockResolvedValue(readyEnvironment);
+    mocks.preflightPublishOutput.mockResolvedValue({
+      outputDir: "D:\\PRD",
+      configuredOutputDir: "D:\\PRD",
+      validation: {
+        status: "incompatible",
+        issue: "windows_drive_root_missing",
+      },
+      access: {
+        status: "skipped",
+        protectedLocation: null,
+        protectedRoot: null,
+        probeDirectory: null,
+        detail: null,
+      },
+    });
+
+    const props = createRunnerProps();
+    const { result } = renderHook(() => usePublishRunner(props));
+
+    await act(async () => {
+      await result.current.startPublish();
+    });
+
+    expect(mocks.invoke).not.toHaveBeenCalled();
+    expect(props.savePublishRecord).not.toHaveBeenCalled();
+    expect(mocks.toast.error).toHaveBeenCalledWith("发布目录无效", {
+      description: "发布目录指向不存在的 Windows 盘符",
+    });
   });
 
   it("发布失败时仍然写入失败记录", async () => {

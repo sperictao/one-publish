@@ -21,7 +21,7 @@ export type ProtectedDirectoryLocation = "desktop" | "documents" | "downloads";
 
 export type PublishOutputValidationStatus = "not_applicable" | "compatible" | "incompatible";
 
-export type PublishOutputValidationIssue = "windows_style_path_on_posix" | "posix_absolute_path_on_windows";
+export type PublishOutputValidationIssue = "windows_style_path_on_posix" | "posix_absolute_path_on_windows" | "windows_drive_root_missing";
 
 export type PublishOutputValidation = { status: PublishOutputValidationStatus, issue: PublishOutputValidationIssue | null, };
 

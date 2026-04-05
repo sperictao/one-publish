@@ -63,6 +63,19 @@ export function buildProtectedOutputAccessDescription(
     );
 }
 
+export function buildPublishOutputValidationTitle(
+  result: PublishOutputPreflightResult,
+  appT: TranslationMap
+): string {
+  if (result.validation.issue === "windows_drive_root_missing") {
+    return appT.publishOutputPathInvalid || "发布目录无效";
+  }
+
+  return (
+    appT.publishOutputPathIncompatible || "发布目录路径与当前系统不兼容"
+  );
+}
+
 export function buildPublishOutputValidationDescription(
   result: PublishOutputPreflightResult,
   appT: TranslationMap
@@ -80,6 +93,13 @@ export function buildPublishOutputValidationDescription(
     return (
       appT.publishPosixStyleOutputPathIncompatibleDesc ||
       `当前发布目录看起来是 Unix 风格绝对路径：${path}。请改为当前系统可识别的 Windows 路径，或使用相对路径。`
+    ).replace(/\{\{path\}\}/g, path);
+  }
+
+  if (result.validation.issue === "windows_drive_root_missing") {
+    return (
+      appT.publishWindowsDriveRootMissingDesc ||
+      `当前发布目录指向不存在的 Windows 盘符或共享根：${path}。请改为当前系统可访问的磁盘或目录后重试。`
     ).replace(/\{\{path\}\}/g, path);
   }
 
