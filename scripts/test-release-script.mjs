@@ -120,10 +120,16 @@ assert.equal(
 
 let retryAttempts = 0;
 const originalWarn = console.warn;
+const originalLog = console.log;
 const warnings = [];
+const logs = [];
 
 console.warn = (...args) => {
   warnings.push(args.join(" "));
+};
+
+console.log = (...args) => {
+  logs.push(args.join(" "));
 };
 
 try {
@@ -184,10 +190,12 @@ try {
   assert.equal(await fallbackResponse.text(), '{"workflow_runs":[]}');
 } finally {
   console.warn = originalWarn;
+  console.log = originalLog;
 }
 
-assert.equal(warnings.length, 2);
+assert.equal(warnings.length, 1);
+assert.equal(logs.length, 1);
 assert.match(warnings[0], /请求 GitHub 重试测试 失败/);
-assert.match(warnings[1], /已回退到 gh api/);
+assert.match(logs[0], /已自动切换 gh api 并继续/);
 
 console.log("PASS: release 脚本等待与失败详情 helper 烟测通过。");

@@ -369,6 +369,10 @@ function isRetryableGitHubStatus(status) {
   return gitHubRequestRetryableStatuses.has(status);
 }
 
+function logGitHubFallback(label, fetchErrorMessage) {
+  console.log(`ℹ️ 请求 GitHub ${label} 时 Node fetch 异常，已自动切换 gh api 并继续：${fetchErrorMessage}`);
+}
+
 async function requestGitHubViaGh(url, token, accept = "application/vnd.github+json") {
   let apiPath = "";
 
@@ -433,7 +437,7 @@ async function requestGitHub(url, token, label, options = {}) {
       if (fallbackToGh) {
         const ghResult = await ghApiRequest(url, token, requestAccept);
         if (ghResult?.response) {
-          console.warn(`⚠️ 请求 GitHub ${label} 时 Node fetch 失败，已回退到 gh api：${fetchErrorMessage}`);
+          logGitHubFallback(label, fetchErrorMessage);
           return ghResult.response;
         }
 
