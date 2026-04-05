@@ -82,6 +82,13 @@ function getCargoMetadata() {
 const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "one-publish-updater-"));
 
 try {
+  const windowsConfigPath = path.join(rootDir, "src-tauri", "tauri.windows.conf.json");
+  const windowsConfig = JSON.parse(fs.readFileSync(windowsConfigPath, "utf8"));
+  ensure(
+    JSON.stringify(windowsConfig.bundle?.targets) === JSON.stringify(["nsis"]),
+    "Windows 平台配置未固定为 NSIS installer。"
+  );
+
   const cargoMetadata = getCargoMetadata();
   const packageMetadata = cargoMetadata.packages.find(
     (entry) => entry.manifest_path === path.join(rootDir, "src-tauri", "Cargo.toml")
@@ -174,7 +181,7 @@ try {
     signature: "sig-darwin-x64",
   };
   const windowsUpdaterAsset = {
-    assetName: "OnePublish_0.2.0_x64_en-US.msi",
+    assetName: "OnePublish_0.2.0_x64-setup.exe",
     signature: "sig-windows-x86_64",
   };
   const linuxUpdaterAsset = {
@@ -318,7 +325,7 @@ try {
     "缺少 macOS x64 tarball 时未返回可读错误。"
   );
 
-  const missingWindowsDir = path.join(tempDir, "missing-windows-msi");
+  const missingWindowsDir = path.join(tempDir, "missing-windows-setup-exe");
   fs.mkdirSync(missingWindowsDir, { recursive: true });
   for (const asset of [macAarch64UpdaterAsset, macX64UpdaterAsset, linuxUpdaterAsset]) {
     fs.writeFileSync(path.join(missingWindowsDir, asset.assetName), "placeholder", "utf8");
@@ -343,8 +350,8 @@ try {
     notesPath,
   ]);
   ensure(
-    missingWindowsOutput.includes("缺少 Windows MSI updater 包"),
-    "缺少 Windows MSI 时未返回可读错误。"
+    missingWindowsOutput.includes("缺少 Windows setup.exe updater 包"),
+    "缺少 Windows setup.exe 时未返回可读错误。"
   );
 
   const missingLinuxDir = path.join(tempDir, "missing-linux-appimage");

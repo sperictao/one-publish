@@ -70,7 +70,7 @@ tag 推送后，`.github/workflows/build-release.yml` 会：
 - macOS `*aarch64*.dmg`
 - macOS `*x64*.dmg`
 - macOS `*universal*.dmg`
-- Windows `*.msi`
+- Windows `*-setup.exe`
 - Linux `*.AppImage`
 - Linux `*.deb`
 
@@ -95,6 +95,6 @@ tag 推送后，`.github/workflows/build-release.yml` 会：
 ## 发布后检查
 
 - GitHub Actions：`Actions` 页面确认 `build-release` 成功
-- GitHub Releases：确认 tag、release notes、附件齐全，且页面不再出现 `*.sig`、`*.rpm`、`setup.exe`
+- GitHub Releases：确认 tag、release notes、附件齐全，且页面不再出现 `*.sig`、`*.rpm`、`*.msi`
 - 本地版本文件与 release tag 一致
 - 若命令本身返回非 0，请优先查看控制台里输出的失败 job 链接、annotation 和日志摘录

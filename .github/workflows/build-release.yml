@@ -180,8 +180,8 @@ jobs:
           copy_single_as ./artifacts/bundles-macos-aarch64 '*.app.tar.gz.sig' "./updater-assets/OnePublish_${version}_aarch64.app.tar.gz.sig"
           copy_single_as ./artifacts/bundles-macos-x86_64 '*.app.tar.gz' "./updater-assets/OnePublish_${version}_x64.app.tar.gz"
           copy_single_as ./artifacts/bundles-macos-x86_64 '*.app.tar.gz.sig' "./updater-assets/OnePublish_${version}_x64.app.tar.gz.sig"
-          copy_single ./artifacts/bundles-windows '*.msi' ./updater-assets
-          copy_single ./artifacts/bundles-windows '*.msi.sig' ./updater-assets
+          copy_single ./artifacts/bundles-windows '*-setup.exe' ./updater-assets
+          copy_single ./artifacts/bundles-windows '*-setup.exe.sig' ./updater-assets
           copy_single ./artifacts/bundles-linux '*.AppImage' ./updater-assets
           copy_single ./artifacts/bundles-linux '*.AppImage.sig' ./updater-assets
 
@@ -236,7 +236,7 @@ jobs:
           copy_single ./artifacts/bundles-macos-aarch64 '*aarch64*.dmg' ./release-assets
           copy_single ./artifacts/bundles-macos-x86_64 '*x64*.dmg' ./release-assets
           copy_single ./artifacts/bundles-macos-universal '*universal*.dmg' ./release-assets
-          copy_single ./updater-assets '*.msi' ./release-assets
+          copy_single ./updater-assets '*-setup.exe' ./release-assets
           copy_single ./updater-assets '*.AppImage' ./release-assets
           copy_single ./artifacts/bundles-linux '*.deb' ./release-assets
 

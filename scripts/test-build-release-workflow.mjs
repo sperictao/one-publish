@@ -253,8 +253,28 @@ assertStepNotContains(
 );
 assertStepNotContains(
   "Prepare release assets",
+  "*.msi",
+  "release-assets 仍在公开收集 Windows msi。"
+);
+assertStepContains(
+  "Prepare release assets",
   "*-setup.exe",
-  "release-assets 仍在公开收集 setup.exe。"
+  "release-assets 未公开收集 Windows setup.exe。"
+);
+assertStepNotContains(
+  "Prepare updater assets",
+  "*.msi",
+  "updater-assets 仍在收集 Windows msi。"
+);
+assertStepNotContains(
+  "Prepare updater assets",
+  "*.msi.sig",
+  "updater-assets 仍在收集 Windows msi 签名。"
+);
+assertStepNotContains(
+  "Prepare release assets",
+  "*.msi.sig",
+  "release-assets 不应公开收集 Windows msi 签名。"
 );
 assertStepContains(
   "Create GitHub Release",
