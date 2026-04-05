@@ -156,16 +156,6 @@ impl PublishOutputPreflightResult {
 }
 
 pub(crate) fn preflight_publish_output(spec: &PublishSpec) -> PublishOutputPreflightResult {
-    preflight_publish_output_with_access(spec, evaluate_publish_output_access)
-}
-
-fn preflight_publish_output_with_access<F>(
-    spec: &PublishSpec,
-    evaluate_access: F,
-) -> PublishOutputPreflightResult
-where
-    F: FnOnce(&str) -> PublishOutputAccess,
-{
     let context = resolve_publish_output_context(spec);
     let validation = evaluate_publish_output_validation(
         context.configured_output_dir.as_deref(),
@@ -174,7 +164,7 @@ where
     let access = if validation.status == PublishOutputValidationStatus::Incompatible {
         PublishOutputAccess::skipped()
     } else {
-        evaluate_access(&context.output_dir)
+        evaluate_publish_output_access(&context.output_dir)
     };
 
     PublishOutputPreflightResult::new(
@@ -193,16 +183,6 @@ fn resolve_publish_output_context(spec: &PublishSpec) -> PublishOutputContext {
         output_dir,
         configured_output_dir,
     }
-}
-
-#[cfg(target_os = "macos")]
-fn evaluate_publish_output_access(output_dir: &str) -> PublishOutputAccess {
-    let protected_roots = macos_protected_roots();
-    evaluate_publish_output_access_for_roots(
-        output_dir,
-        &protected_roots,
-        probe_directory_write_access,
-    )
 }
 
 #[cfg(target_os = "macos")]
@@ -227,6 +207,16 @@ fn find_protected_root_for_path<'a>(
         let normalized_root = normalize_lexical_path(&root.path);
         normalized_path.starts_with(&normalized_root)
     })
+}
+
+#[cfg(target_os = "macos")]
+fn evaluate_publish_output_access(output_dir: &str) -> PublishOutputAccess {
+    let protected_roots = macos_protected_roots();
+    evaluate_publish_output_access_for_roots(
+        output_dir,
+        &protected_roots,
+        probe_directory_write_access,
+    )
 }
 
 #[cfg(not(target_os = "macos"))]
@@ -374,19 +364,15 @@ fn evaluate_publish_output_validation(
 fn detect_output_path_compatibility_issue(path: &str) -> Option<PublishOutputValidationIssue> {
     #[cfg(target_os = "windows")]
     {
-        if looks_like_posix_absolute_path(path) {
-            return Some(PublishOutputValidationIssue::PosixAbsolutePathOnWindows);
-        }
+        looks_like_posix_absolute_path(path)
+            .then_some(PublishOutputValidationIssue::PosixAbsolutePathOnWindows)
     }
 
     #[cfg(not(target_os = "windows"))]
     {
-        if looks_like_windows_path(path) {
-            return Some(PublishOutputValidationIssue::WindowsStylePathOnPosix);
-        }
+        looks_like_windows_path(path)
+            .then_some(PublishOutputValidationIssue::WindowsStylePathOnPosix)
     }
-
-    None
 }
 
 fn looks_like_windows_path(path: &str) -> bool {
@@ -404,7 +390,7 @@ fn looks_like_windows_path(path: &str) -> bool {
     has_drive_prefix || trimmed.starts_with("\\\\") || trimmed.contains('\\')
 }
 
-#[cfg(target_os = "windows")]
+#[cfg_attr(not(any(test, target_os = "windows")), allow(dead_code))]
 fn looks_like_posix_absolute_path(path: &str) -> bool {
     let trimmed = path.trim();
     trimmed.starts_with('/') && !trimmed.starts_with("//")
@@ -414,9 +400,11 @@ fn looks_like_posix_absolute_path(path: &str) -> bool {
 mod tests {
     use super::{
         evaluate_publish_output_access_for_roots, find_protected_root_for_path,
-        normalize_lexical_path, preflight_publish_output, preflight_publish_output_with_access,
-        resolve_existing_probe_directory, ProtectedDirectoryLocation, ProtectedRoot,
-        PublishOutputAccessStatus, PublishOutputValidationIssue, PublishOutputValidationStatus,
+        looks_like_posix_absolute_path, looks_like_windows_path, normalize_lexical_path,
+        preflight_publish_output, resolve_existing_probe_directory, resolve_publish_output_context,
+        ProtectedDirectoryLocation, ProtectedRoot, PublishOutputAccess, PublishOutputAccessStatus,
+        PublishOutputPreflightResult, PublishOutputValidation, PublishOutputValidationIssue,
+        PublishOutputValidationStatus,
     };
     use crate::spec::{PublishSpec, SpecValue, SPEC_VERSION};
     use std::collections::BTreeMap;
@@ -424,6 +412,70 @@ mod tests {
     use std::io::{self, ErrorKind};
     use std::path::{Path, PathBuf};
     use std::time::{SystemTime, UNIX_EPOCH};
+
+    #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+    enum TestPlatform {
+        Windows,
+        Macos,
+        Posix,
+    }
+
+    fn evaluate_publish_output_validation_for_platform(
+        platform: TestPlatform,
+        configured_output_dir: Option<&str>,
+        inferred_output_dir: &str,
+    ) -> PublishOutputValidation {
+        let path_to_check = configured_output_dir.unwrap_or(inferred_output_dir).trim();
+        if path_to_check.is_empty() {
+            return PublishOutputValidation::new(
+                PublishOutputValidationStatus::NotApplicable,
+                None,
+            );
+        }
+
+        let issue = match platform {
+            TestPlatform::Windows => looks_like_posix_absolute_path(path_to_check)
+                .then_some(PublishOutputValidationIssue::PosixAbsolutePathOnWindows),
+            TestPlatform::Macos | TestPlatform::Posix => looks_like_windows_path(path_to_check)
+                .then_some(PublishOutputValidationIssue::WindowsStylePathOnPosix),
+        };
+
+        match issue {
+            Some(issue) => PublishOutputValidation::new(
+                PublishOutputValidationStatus::Incompatible,
+                Some(issue),
+            ),
+            None => PublishOutputValidation::new(PublishOutputValidationStatus::Compatible, None),
+        }
+    }
+
+    fn preflight_publish_output_for_test<F>(
+        spec: &PublishSpec,
+        platform: TestPlatform,
+        evaluate_access: F,
+    ) -> PublishOutputPreflightResult
+    where
+        F: FnOnce(&str) -> PublishOutputAccess,
+    {
+        let context = resolve_publish_output_context(spec);
+        let validation = evaluate_publish_output_validation_for_platform(
+            platform,
+            context.configured_output_dir.as_deref(),
+            &context.output_dir,
+        );
+        let access = if validation.status == PublishOutputValidationStatus::Incompatible {
+            PublishOutputAccess::skipped()
+        } else {
+            evaluate_access(&context.output_dir)
+        };
+
+        PublishOutputPreflightResult::new(
+            context.output_dir,
+            context.configured_output_dir,
+            validation,
+            access,
+        )
+    }
 
     #[test]
     fn finds_nested_protected_root() {
@@ -470,43 +522,136 @@ mod tests {
         fs::remove_dir_all(&root).ok();
     }
 
-    #[cfg(not(target_os = "windows"))]
     #[test]
-    fn preflight_publish_output_should_skip_access_when_output_path_is_incompatible() {
+    fn preflight_publish_output_should_skip_access_when_output_path_is_windows_style_on_posix() {
         let mut parameters = BTreeMap::new();
-        #[cfg(target_os = "windows")]
-        parameters.insert(
-            "output".to_string(),
-            SpecValue::String("/Users/demo/publish".to_string()),
-        );
-        #[cfg(not(target_os = "windows"))]
         parameters.insert(
             "output".to_string(),
             SpecValue::String(r".\publish\win-x64".to_string()),
         );
 
-        let result = preflight_publish_output(&PublishSpec {
-            version: SPEC_VERSION,
-            provider_id: "dotnet".to_string(),
-            project_path: "repo/App.csproj".to_string(),
-            parameters,
-        });
+        let result = preflight_publish_output_for_test(
+            &PublishSpec {
+                version: SPEC_VERSION,
+                provider_id: "dotnet".to_string(),
+                project_path: "repo/App.csproj".to_string(),
+                parameters,
+            },
+            TestPlatform::Posix,
+            |_output_dir| panic!("access check should be skipped for incompatible output path"),
+        );
 
         assert_eq!(
             result.validation.status,
             PublishOutputValidationStatus::Incompatible
         );
-        #[cfg(target_os = "windows")]
-        assert_eq!(
-            result.validation.issue,
-            Some(PublishOutputValidationIssue::PosixAbsolutePathOnWindows)
-        );
-        #[cfg(not(target_os = "windows"))]
         assert_eq!(
             result.validation.issue,
             Some(PublishOutputValidationIssue::WindowsStylePathOnPosix)
         );
         assert_eq!(result.access.status, PublishOutputAccessStatus::Skipped);
+        assert_eq!(result.access.protected_location, None);
+        assert_eq!(result.access.protected_root, None);
+        assert_eq!(result.access.probe_directory, None);
+        assert_eq!(result.access.detail, None);
+    }
+
+    #[test]
+    fn preflight_publish_output_should_skip_access_when_output_path_is_posix_absolute_on_windows() {
+        let mut parameters = BTreeMap::new();
+        parameters.insert(
+            "output".to_string(),
+            SpecValue::String("/Users/demo/publish".to_string()),
+        );
+
+        let result = preflight_publish_output_for_test(
+            &PublishSpec {
+                version: SPEC_VERSION,
+                provider_id: "dotnet".to_string(),
+                project_path: "repo/App.csproj".to_string(),
+                parameters,
+            },
+            TestPlatform::Windows,
+            |_output_dir| panic!("access check should be skipped for incompatible output path"),
+        );
+
+        assert_eq!(
+            result.validation.status,
+            PublishOutputValidationStatus::Incompatible
+        );
+        assert_eq!(
+            result.validation.issue,
+            Some(PublishOutputValidationIssue::PosixAbsolutePathOnWindows)
+        );
+        assert_eq!(result.access.status, PublishOutputAccessStatus::Skipped);
+        assert_eq!(result.access.protected_location, None);
+        assert_eq!(result.access.protected_root, None);
+        assert_eq!(result.access.probe_directory, None);
+        assert_eq!(result.access.detail, None);
+    }
+
+    #[test]
+    fn preflight_publish_output_should_return_not_applicable_access_for_valid_windows_output() {
+        let mut parameters = BTreeMap::new();
+        parameters.insert(
+            "output".to_string(),
+            SpecValue::String(r".\publish\win-x64".to_string()),
+        );
+
+        let result = preflight_publish_output_for_test(
+            &PublishSpec {
+                version: SPEC_VERSION,
+                provider_id: "dotnet".to_string(),
+                project_path: "repo/App.csproj".to_string(),
+                parameters,
+            },
+            TestPlatform::Windows,
+            |_output_dir| PublishOutputAccess::not_applicable(),
+        );
+
+        assert_eq!(
+            result.validation.status,
+            PublishOutputValidationStatus::Compatible
+        );
+        assert_eq!(result.validation.issue, None);
+        assert_eq!(
+            result.access.status,
+            PublishOutputAccessStatus::NotApplicable
+        );
+        assert_eq!(result.access.protected_location, None);
+        assert_eq!(result.access.protected_root, None);
+        assert_eq!(result.access.probe_directory, None);
+        assert_eq!(result.access.detail, None);
+    }
+
+    #[test]
+    fn preflight_publish_output_should_return_not_applicable_access_for_valid_posix_output() {
+        let mut parameters = BTreeMap::new();
+        parameters.insert(
+            "output".to_string(),
+            SpecValue::String("./publish/linux-x64".to_string()),
+        );
+
+        let result = preflight_publish_output_for_test(
+            &PublishSpec {
+                version: SPEC_VERSION,
+                provider_id: "dotnet".to_string(),
+                project_path: "/repo/App.csproj".to_string(),
+                parameters,
+            },
+            TestPlatform::Posix,
+            |_output_dir| PublishOutputAccess::not_applicable(),
+        );
+
+        assert_eq!(
+            result.validation.status,
+            PublishOutputValidationStatus::Compatible
+        );
+        assert_eq!(result.validation.issue, None);
+        assert_eq!(
+            result.access.status,
+            PublishOutputAccessStatus::NotApplicable
+        );
         assert_eq!(result.access.protected_location, None);
         assert_eq!(result.access.protected_root, None);
         assert_eq!(result.access.probe_directory, None);
@@ -533,7 +678,7 @@ mod tests {
             SpecValue::String("publish/App/Release".to_string()),
         );
 
-        let result = preflight_publish_output_with_access(
+        let result = preflight_publish_output_for_test(
             &PublishSpec {
                 version: SPEC_VERSION,
                 provider_id: "dotnet".to_string(),
@@ -543,6 +688,7 @@ mod tests {
                     .to_string(),
                 parameters,
             },
+            TestPlatform::Macos,
             |resolved_output_dir| {
                 evaluate_publish_output_access_for_roots(
                     resolved_output_dir,
