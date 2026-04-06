@@ -43,6 +43,32 @@ describe("PublishRunCard", () => {
     expect(screen.getByText("成功")).toBeInTheDocument();
   });
 
+  it("长单行日志会被限制在卡片内部换行", () => {
+    const longLogLine = `${"C:/very-long-output-path".repeat(24)}/publish-output`;
+
+    render(
+      <PublishRunCard
+        outputLog={longLogLine}
+        publishResult={null}
+        appT={{
+          outputLogTitle: "执行发布",
+          noOutput: "无输出",
+        }}
+        publishActions={null}
+      />
+    );
+
+    const card = screen.getByText("执行发布").closest("[aria-busy]");
+    const logPre = screen.getByText(longLogLine).closest("pre");
+
+    expect(card).not.toBeNull();
+    expect(card).toHaveClass("min-w-0");
+    expect(card).toHaveClass("max-w-full");
+    expect(logPre).not.toBeNull();
+    expect(logPre).toHaveClass("break-all");
+    expect(logPre?.className).toContain("[overflow-wrap:anywhere]");
+  });
+
   it("刷新期间保留上一帧执行信息并显示遮罩", () => {
     const appT = {
       outputLogTitle: "执行发布",

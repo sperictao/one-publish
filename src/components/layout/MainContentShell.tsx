@@ -37,8 +37,8 @@ export function MainContentShell({
     "flex h-7 w-9 items-center justify-center rounded-full p-0 transition-all duration-200 active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 focus-visible:ring-offset-2 focus-visible:ring-offset-background";
 
   return (
-    <div className="flex-1 flex flex-col p-2">
-      <div className="glass-card repo-sidebar-shell flex h-full flex-col overflow-hidden rounded-2xl">
+    <div className="flex min-w-0 flex-1 flex-col p-2">
+      <div className="glass-card repo-sidebar-shell flex h-full min-w-0 flex-col overflow-hidden rounded-2xl">
         <div
           data-tauri-drag-region
           className="flex h-10 flex-shrink-0 items-center bg-[var(--glass-panel-bg)]/30"
@@ -124,7 +124,7 @@ export function MainContentShell({
             </button>
           </div>
         </div>
-        <div className="list-scroll-shell glass-scrollbar relative flex-1 overflow-auto">
+        <div className="list-scroll-shell glass-scrollbar relative flex-1 min-w-0 overflow-auto">
           {children}
         </div>
       </div>

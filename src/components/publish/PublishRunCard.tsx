@@ -219,7 +219,7 @@ export function PublishRunCard({
   return (
     <Card
       aria-busy={isRefreshing}
-      className="relative flex h-full min-h-[28rem] w-full flex-col overflow-hidden lg:min-h-[calc(100vh-11rem)]"
+      className="relative flex h-full min-h-[28rem] w-full min-w-0 max-w-full flex-col overflow-hidden lg:min-h-[calc(100vh-11rem)]"
     >
       <CardHeader className="pb-4">
         <CardTitle className="flex items-center gap-2 text-lg">
@@ -227,15 +227,15 @@ export function PublishRunCard({
           {appT.outputLogTitle || "执行发布"}
         </CardTitle>
       </CardHeader>
-      <CardContent className="flex min-h-0 flex-1 flex-col space-y-4">
+      <CardContent className="flex min-h-0 min-w-0 flex-1 flex-col space-y-4">
         {publishActions && (
-          <div className="space-y-3">
+          <div className="min-w-0 space-y-3">
             {publishActions.publishCommand && (
-              <div className="rounded-xl border border-[var(--glass-border-subtle)] bg-[var(--glass-input-bg)] p-3">
+              <div className="min-w-0 rounded-xl border border-[var(--glass-border-subtle)] bg-[var(--glass-input-bg)] p-3">
                 <div className="mb-2 text-xs text-muted-foreground">
                   {publishActions.publishCommandLabel || "将执行的命令:"}
                 </div>
-                <code className="text-xs font-mono break-all">
+                <code className="block text-xs font-mono break-all [overflow-wrap:anywhere]">
                   {publishActions.publishCommand}
                 </code>
               </div>
@@ -285,7 +285,7 @@ export function PublishRunCard({
             </div>
           </div>
         )}
-        <div className="space-y-3">
+        <div className="min-w-0 space-y-3">
           <div
             data-testid="publish-status-panel"
             className={cn(
@@ -369,8 +369,8 @@ export function PublishRunCard({
             </button>
           )}
         </div>
-        <div className="min-h-[20rem] flex-1 overflow-auto rounded-lg bg-gray-950 p-4 font-mono text-xs text-gray-100">
-          <pre className="whitespace-pre-wrap">
+        <div className="min-h-[20rem] min-w-0 flex-1 overflow-auto rounded-lg bg-gray-950 p-4 font-mono text-xs text-gray-100">
+          <pre className="min-w-0 whitespace-pre-wrap break-all [overflow-wrap:anywhere]">
             {outputLog ||
               publishResult?.error ||
               (isRefreshing

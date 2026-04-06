@@ -40,9 +40,9 @@ export function PublishContentSection({
     publishRunCardProps.publishActions !== null;
 
   return (
-    <div className="flex min-h-full flex-col gap-6 p-6">
+    <div className="flex min-h-full min-w-0 flex-col gap-6 p-6">
       {showCommandImportResultCard && commandImportResultCardProps && (
-        <div className="mx-auto w-full max-w-3xl">
+        <div className="mx-auto w-full max-w-3xl min-w-0">
           <Suspense fallback={null}>
             <CommandImportResultCard {...commandImportResultCardProps} />
           </Suspense>
@@ -51,7 +51,7 @@ export function PublishContentSection({
       {rightPanelView === "home" ? (
         <>
           {hasPublishRunCard && (
-            <div className="flex min-h-0 flex-1 flex-col">
+            <div className="flex min-h-0 min-w-0 flex-1 flex-col">
               <PublishRunCard {...publishRunCardProps} />
             </div>
           )}
