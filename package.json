@@ -1,6 +1,6 @@
 {
   "name": "one-publish",
-  "version": "0.5.6",
+  "version": "0.5.7",
   "description": "Cross-platform .NET publish tool with GUI",
   "type": "module",
   "scripts": {
