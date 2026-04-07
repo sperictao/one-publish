@@ -26,17 +26,7 @@ async function generateMacOSTemplateIcons() {
     .toFile(join(TRAY_DIR, "macos/statusbar_template.png"));
   console.log("  ✓ statusbar_template.png (22x22)");
 
-  const svg2x = `<?xml version="1.0" encoding="UTF-8"?>
-<svg width="44" height="44" viewBox="0 0 22 22" fill="none" xmlns="http://www.w3.org/2000/svg">
-  <circle cx="11" cy="11" r="2.5" fill="black"/>
-  <path d="M 5.5 5.5 A 7.5 7.5 0 1 1 5.5 16.5"
-        fill="none"
-        stroke="black"
-        stroke-width="2"
-        stroke-linecap="round"/>
-</svg>`;
-
-  await sharp(Buffer.from(svg2x))
+  await sharp(svgBuffer)
     .resize(44, 44)
     .png()
     .toFile(join(TRAY_DIR, "macos/statusbar_template@2x.png"));

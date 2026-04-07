@@ -4,7 +4,6 @@ import sharp from 'sharp';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { execSync } from 'child_process';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const iconsDir = path.join(__dirname, '..', 'src-tauri', 'icons');
@@ -37,6 +36,19 @@ const sizes = {
   'Square310x310Logo.png': 310,
   'StoreLogo.png': 50,
 };
+
+const icnsEntries = [
+  { type: 'icp4', size: 16 },
+  { type: 'ic11', size: 32 },
+  { type: 'icp5', size: 32 },
+  { type: 'ic12', size: 64 },
+  { type: 'ic07', size: 128 },
+  { type: 'ic13', size: 256 },
+  { type: 'ic08', size: 256 },
+  { type: 'ic14', size: 512 },
+  { type: 'ic09', size: 512 },
+  { type: 'ic10', size: 1024 },
+];
 
 /**
  * 使用超采样渲染高质量图标
@@ -91,10 +103,34 @@ async function renderHighQuality(svgContent, targetSize) {
   return resizedBuffer;
 }
 
+function buildIcns(entries) {
+  const chunks = entries.map(({ type, data }) => {
+    const header = Buffer.alloc(8);
+    header.write(type, 0, 'ascii');
+    header.writeUInt32BE(data.length + 8, 4);
+    return Buffer.concat([header, data]);
+  });
+
+  const fileHeader = Buffer.alloc(8);
+  fileHeader.write('icns', 0, 'ascii');
+  fileHeader.writeUInt32BE(8 + chunks.reduce((sum, chunk) => sum + chunk.length, 0), 4);
+
+  return Buffer.concat([fileHeader, ...chunks]);
+}
+
 console.log('🎨 生成高质量 PNG 图标 (4x 超采样 + Lanczos3)...\n');
 
+const renderedBufferCache = new Map();
+
+async function getRenderedBuffer(size) {
+  if (!renderedBufferCache.has(size)) {
+    renderedBufferCache.set(size, await renderHighQuality(svgContent, size));
+  }
+  return renderedBufferCache.get(size);
+}
+
 for (const [filename, size] of Object.entries(sizes)) {
-  const buffer = await renderHighQuality(svgContent, size);
+  const buffer = await getRenderedBuffer(size);
   const outputPath = path.join(iconsDir, filename);
   fs.writeFileSync(outputPath, buffer);
 
@@ -124,45 +160,20 @@ try {
 // 生成 ICNS 文件 (macOS)
 console.log('\n🍎 生成 macOS ICNS 文件...');
 try {
-  const iconsetDir = path.join(iconsDir, 'icon.iconset');
+  const icnsBuffer = buildIcns(
+    await Promise.all(
+      icnsEntries.map(async ({ type, size }) => ({
+        type,
+        data: await getRenderedBuffer(size),
+      }))
+    )
+  );
 
-  // 创建 iconset 目录
-  if (fs.existsSync(iconsetDir)) {
-    fs.rmSync(iconsetDir, { recursive: true });
-  }
-  fs.mkdirSync(iconsetDir);
-
-  // 生成 iconset 所需的所有尺寸（使用超采样）
-  const iconsetSizes = [
-    { name: 'icon_16x16.png', size: 16 },
-    { name: 'icon_16x16@2x.png', size: 32 },
-    { name: 'icon_32x32.png', size: 32 },
-    { name: 'icon_32x32@2x.png', size: 64 },
-    { name: 'icon_128x128.png', size: 128 },
-    { name: 'icon_128x128@2x.png', size: 256 },
-    { name: 'icon_256x256.png', size: 256 },
-    { name: 'icon_256x256@2x.png', size: 512 },
-    { name: 'icon_512x512.png', size: 512 },
-    { name: 'icon_512x512@2x.png', size: 1024 },
-  ];
-
-  for (const { name, size } of iconsetSizes) {
-    const buffer = await renderHighQuality(svgContent, size);
-    fs.writeFileSync(path.join(iconsetDir, name), buffer);
-  }
-
-  // 使用 iconutil 生成 ICNS
-  execSync(`iconutil -c icns "${iconsetDir}" -o "${path.join(iconsDir, 'icon.icns')}"`, {
-    stdio: 'pipe',
-  });
-
-  // 清理 iconset 目录
-  fs.rmSync(iconsetDir, { recursive: true });
-
+  fs.writeFileSync(path.join(iconsDir, 'icon.icns'), icnsBuffer);
   console.log('✅ icon.icns 生成成功');
 } catch (err) {
   console.error('❌ ICNS 生成失败:', err.message);
-  console.log('   提示: ICNS 生成需要 macOS 系统的 iconutil 工具');
+  console.log('   提示: ICNS 生成需要标准 PNG 数据与有效的 ICNS chunk 映射');
 }
 
 console.log('\n🎉 所有图标生成完成！');

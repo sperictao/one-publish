@@ -23,7 +23,6 @@ import {
   Settings,
   ChevronDown,
   FolderGit2,
-  Package,
   ArrowUpDown,
 } from "lucide-react";
 import type { ProjectScanCandidates } from "@/types/project";
@@ -86,6 +85,66 @@ function CollapseIcon(): JSX.Element {
         strokeLinecap="round"
         strokeLinejoin="round"
       />
+    </svg>
+  );
+}
+
+function AppBrandIcon(): JSX.Element {
+  return (
+    <svg
+      width="20"
+      height="20"
+      viewBox="0 0 128 128"
+      fill="none"
+      xmlns="http://www.w3.org/2000/svg"
+      aria-hidden="true"
+    >
+      <g transform="translate(64 64) scale(2.3) translate(-18 -18)">
+        <g fill="#3B82F6">
+          <rect x="0" y="12" width="36" height="12" rx="6" />
+          <rect
+            x="0"
+            y="12"
+            width="36"
+            height="12"
+            rx="6"
+            transform="rotate(45 18 18)"
+          />
+          <rect
+            x="0"
+            y="12"
+            width="36"
+            height="12"
+            rx="6"
+            transform="rotate(90 18 18)"
+          />
+          <rect
+            x="0"
+            y="12"
+            width="36"
+            height="12"
+            rx="6"
+            transform="rotate(135 18 18)"
+          />
+          <rect
+            x="0"
+            y="12"
+            width="36"
+            height="12"
+            rx="6"
+            transform="rotate(180 18 18)"
+          />
+          <rect
+            x="0"
+            y="12"
+            width="36"
+            height="12"
+            rx="6"
+            transform="rotate(225 18 18)"
+          />
+        </g>
+        <circle cx="18" cy="18" r="5" fill="#FCD34D" />
+      </g>
     </svg>
   );
 }
@@ -469,8 +528,8 @@ export function RepositoryList({
         className="flex h-10 items-center justify-between pl-[100px] pr-2"
       >
         <div className="flex items-center gap-1.5" data-tauri-no-drag>
-          <div className="flex h-5 w-5 items-center justify-center rounded-md bg-primary/10">
-            <Package className="h-3 w-3 text-primary" />
+          <div className="flex h-5 w-5 items-center justify-center">
+            <AppBrandIcon />
           </div>
           <span className="text-[10px] font-semibold uppercase tracking-[0.15em] text-muted-foreground/70">
             One Publish

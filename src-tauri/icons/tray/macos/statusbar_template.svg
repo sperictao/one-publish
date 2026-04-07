@@ -1,11 +1,18 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <svg width="22" height="22" viewBox="0 0 22 22" fill="none" xmlns="http://www.w3.org/2000/svg">
-  <!-- 中心圆点 -->
-  <circle cx="11" cy="11" r="2.5" fill="black"/>
-  <!-- 3/4 圆弧 -->
-  <path d="M 5.5 5.5 A 7.5 7.5 0 1 1 5.5 16.5"
-        fill="none"
-        stroke="black"
-        stroke-width="2"
-        stroke-linecap="round"/>
+  <g fill="black">
+    <g transform="rotate(0 11 11)">
+      <rect x="4.25" y="9.6" width="13.5" height="2.8" rx="1.4"/>
+    </g>
+    <g transform="rotate(45 11 11)">
+      <rect x="4.25" y="9.6" width="13.5" height="2.8" rx="1.4"/>
+    </g>
+    <g transform="rotate(90 11 11)">
+      <rect x="4.25" y="9.6" width="13.5" height="2.8" rx="1.4"/>
+    </g>
+    <g transform="rotate(135 11 11)">
+      <rect x="4.25" y="9.6" width="13.5" height="2.8" rx="1.4"/>
+    </g>
+    <circle cx="11" cy="11" r="2.35"/>
+  </g>
 </svg>
