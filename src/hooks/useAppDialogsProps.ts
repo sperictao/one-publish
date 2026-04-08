@@ -11,6 +11,7 @@ import type {
   ConfigParameters,
   ConfigProfile,
   ExecutionRecord,
+  ProviderManifest,
   PublishConfigStore,
 } from "@/lib/store";
 import type {
@@ -60,6 +61,8 @@ export interface UseAppDialogsPropsParams {
   environmentLastCheck: EnvironmentCheckSnapshot | null;
   environmentSettingsInitialCheck: EnvironmentCheckSnapshot | null;
   currentProviderEnvironmentResult: EnvironmentCheckResult | null;
+  availableProviders: ProviderManifest[];
+  activeProvider: ProviderManifest | null;
   openEnvironmentDialog: (
     initialCheck?: EnvironmentCheckSnapshot | null,
     providerIds?: string[]
@@ -129,6 +132,7 @@ export function useAppDialogsProps(params: UseAppDialogsPropsParams): AppDialogs
     environment: {
       dialogOpen: params.environmentDialogOpen,
       onDialogOpenChange: params.handleEnvironmentDialogOpenChange,
+      providers: params.availableProviders,
       defaultProviderIds: params.environmentDefaultProviderIds,
       initialCheck: params.environmentInitialCheck,
       onChecked: params.setEnvironmentLastCheck,
@@ -152,6 +156,7 @@ export function useAppDialogsProps(params: UseAppDialogsPropsParams): AppDialogs
       onOpenShortcuts: () => params.setShortcutsOpen(true),
       environmentStatus: params.environmentStatus,
       environmentCheckedAt: params.currentProviderEnvironmentResult?.checked_at,
+      providers: params.availableProviders,
       environmentProviderIds: params.environmentProviderIds,
       environmentInitialCheck: params.environmentSettingsInitialCheck,
       onEnvironmentProviderIdsChange: params.setEnvironmentProviderIds,
@@ -191,6 +196,7 @@ export function useAppDialogsProps(params: UseAppDialogsPropsParams): AppDialogs
       open: params.commandImportOpen,
       onOpenChange: params.setCommandImportOpen,
       providerId: params.activeProviderId,
+      provider: params.activeProvider,
       projectPath: params.commandImportProjectPath,
       onImport: params.handleCommandImport,
     },

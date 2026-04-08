@@ -23,6 +23,7 @@ interface PublishConfig {
 
 export function usePublishSpecBuilder(params: {
   activeProviderId: string;
+  activeProviderUsesProjectFile: boolean;
   activeProviderParameters: Record<string, ParameterValue>;
   projectInfo: ProjectInfo | null;
   selectedRepo: { path: string } | null;
@@ -30,11 +31,14 @@ export function usePublishSpecBuilder(params: {
   getCurrentConfig: () => PublishConfig;
 }) {
   const buildPublishSpec = useCallback((): ProviderPublishSpec | null => {
-    if (params.activeProviderId === "dotnet") {
-      if (!params.projectInfo) {
-        return null;
-      }
+    const resolvedProjectPath = params.activeProviderUsesProjectFile
+      ? params.projectInfo?.project_file
+      : params.selectedRepo?.path;
+    if (!resolvedProjectPath) {
+      return null;
+    }
 
+    if (params.activeProviderId === "dotnet") {
       const config = params.getCurrentConfig();
       const parameters = buildDotnetProfileParameters({
         configuration: config.configuration,
@@ -55,19 +59,15 @@ export function usePublishSpecBuilder(params: {
       return {
         version: params.specVersion,
         provider_id: "dotnet",
-        project_path: params.projectInfo.project_file,
+        project_path: resolvedProjectPath,
         parameters: toSpecParameters(parameters),
       };
-    }
-
-    if (!params.selectedRepo) {
-      return null;
     }
 
     return {
       version: params.specVersion,
       provider_id: params.activeProviderId,
-      project_path: params.selectedRepo.path,
+      project_path: resolvedProjectPath,
       parameters: toSpecParameters(params.activeProviderParameters),
     };
   }, [params]);

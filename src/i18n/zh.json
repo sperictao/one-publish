@@ -540,7 +540,7 @@
     "providerDetectPermissionDenied": "缺少目录访问权限",
     "providerDetectPermissionDeniedDesc": "请检查当前用户对 Project Root 的读取权限后重试。",
     "providerDetectUnsupported": "未识别到支持的 Provider",
-    "providerDetectUnsupportedDesc": "可手动选择 Provider，或确认项目根目录下包含可识别的构建文件。",
+    "providerDetectUnsupportedDesc": "可手动选择 Provider；若仓库只有 pom.xml，请注意当前 Java provider 仅支持 Gradle 项目。",
     "providerDetectReadFailed": "读取项目目录失败",
     "providerDetectReadFailedDesc": "请检查磁盘状态、网络盘连接和目录可访问性后重试。",
     "branchesRefreshed": "分支列表已刷新",

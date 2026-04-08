@@ -16,7 +16,8 @@ import type {
   ProjectInfo,
   ProjectPublishProfileFile,
   ProjectScanCandidates as TauriProjectScanCandidates,
-  ProviderManifest as TauriProviderManifest,
+  ProviderCatalogEntry as TauriProviderCatalogEntry,
+  ProviderProjectPathKind,
   PublishConfigStore,
   Repository as TauriRepository,
   RepositoryBranchConnectivityResult,
@@ -30,6 +31,7 @@ import type {
 
 export type { JsonValue, PublishConfigStore };
 export type {
+  ProviderProjectPathKind,
   ProjectInfo,
   ProjectPublishProfileFile,
   RepositoryBranchConnectivityResult,
@@ -111,6 +113,13 @@ export interface ProviderManifest {
   id: string;
   displayName: string;
   version: string;
+  label: string;
+  commandExample: string;
+  environmentLabel: string;
+  environmentDescription: string;
+  requiresProjectBinding: boolean;
+  projectPathKind: ProviderProjectPathKind;
+  supportsCommandImport: boolean;
 }
 
 export interface UpdateInfo {
@@ -349,11 +358,18 @@ export async function reorderRecentPublishConfigs(params: {
 }
 
 export async function listProviders(): Promise<ProviderManifest[]> {
-  const manifests = await invoke<TauriProviderManifest[]>("list_providers");
-  return manifests.map((manifest) => ({
-    id: manifest.id,
-    displayName: manifest.display_name,
-    version: manifest.version,
+  const catalog = await invoke<TauriProviderCatalogEntry[]>("list_providers");
+  return catalog.map((entry) => ({
+    id: entry.id,
+    displayName: entry.display_name,
+    version: entry.version,
+    label: entry.label,
+    commandExample: entry.command_example,
+    environmentLabel: entry.environment_label,
+    environmentDescription: entry.environment_description,
+    requiresProjectBinding: entry.requires_project_binding,
+    projectPathKind: entry.project_path_kind,
+    supportsCommandImport: entry.supports_command_import,
   }));
 }
 

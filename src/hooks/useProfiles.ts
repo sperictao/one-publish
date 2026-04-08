@@ -124,7 +124,7 @@ interface UseProfilesParams {
   selectedRepoId: string | null;
   activeProviderId: string;
   providerSchemas: Record<string, ParameterSchema>;
-  setActiveProviderId: (value: string) => void;
+  applyProfileProvider: (providerId: string) => void;
   setIsCustomMode: (value: boolean) => void;
   isCustomMode: boolean;
   setSelectedPreset: (value: string) => void;
@@ -170,7 +170,7 @@ export function useProfiles({
   selectedRepoId,
   activeProviderId,
   providerSchemas,
-  setActiveProviderId,
+  applyProfileProvider,
   setIsCustomMode,
   isCustomMode,
   setSelectedPreset,
@@ -412,7 +412,7 @@ export function useProfiles({
       );
 
       if (profileProviderId !== activeProviderId) {
-        setActiveProviderId(profileProviderId);
+        applyProfileProvider(profileProviderId);
       }
 
       if (mapping.providerId === "dotnet") {
@@ -437,10 +437,10 @@ export function useProfiles({
     },
     [
       activeProviderId,
+      applyProfileProvider,
       applyDotnetCustomConfig,
       appT,
       providerSchemas,
-      setActiveProviderId,
       setProviderParameters,
     ]
   );

@@ -501,8 +501,8 @@ fn detect_provider_from_path(path: &Path) -> Option<&'static str> {
         "build.gradle.kts",
         "settings.gradle",
         "settings.gradle.kts",
-        "pom.xml",
         "gradlew",
+        "gradlew.bat",
     ];
 
     if java_markers.iter().any(|marker| has_file(path, marker)) {
@@ -870,7 +870,8 @@ pub async fn scan_project_files(path: String) -> Result<Vec<String>, crate::erro
                         "build.gradle.kts",
                         "settings.gradle",
                         "settings.gradle.kts",
-                        "pom.xml",
+                        "gradlew",
+                        "gradlew.bat",
                     ]
                     .iter()
                     .any(|candidate| name.eq_ignore_ascii_case(candidate))
@@ -1098,5 +1099,57 @@ mod tests {
         assert_eq!(info.project_file, project_file.to_string_lossy());
         assert_eq!(info.publish_profiles, vec!["FolderProfile".to_string()]);
         assert_eq!(info.target_frameworks, vec!["net8.0".to_string()]);
+    }
+
+    #[test]
+    fn detect_provider_from_path_recognizes_gradle_repository() {
+        let temp_dir = TempDir::new().expect("temp dir");
+        fs::write(temp_dir.path().join("build.gradle.kts"), "plugins {}")
+            .expect("write gradle build file");
+
+        assert_eq!(detect_provider_from_path(temp_dir.path()), Some("java"));
+    }
+
+    #[test]
+    fn detect_provider_from_path_rejects_maven_only_repository() {
+        let temp_dir = TempDir::new().expect("temp dir");
+        fs::write(temp_dir.path().join("pom.xml"), "<project />").expect("write pom");
+
+        assert_eq!(detect_provider_from_path(temp_dir.path()), None);
+    }
+
+    #[tokio::test]
+    async fn detect_repository_provider_returns_unsupported_for_maven_only_repository() {
+        let temp_dir = TempDir::new().expect("temp dir");
+        fs::write(temp_dir.path().join("pom.xml"), "<project />").expect("write pom");
+
+        let error = detect_repository_provider(temp_dir.path().to_string_lossy().to_string())
+            .await
+            .expect_err("maven-only repository should be unsupported");
+
+        assert_eq!(error.code.as_deref(), Some("unsupported_provider"));
+    }
+
+    #[tokio::test]
+    async fn scan_project_files_for_java_returns_gradle_markers_only() {
+        let temp_dir = TempDir::new().expect("temp dir");
+        let gradle_file = temp_dir.path().join("build.gradle");
+        let settings_file = temp_dir.path().join("settings.gradle.kts");
+        let wrapper_file = temp_dir.path().join("gradlew");
+        let pom_file = temp_dir.path().join("pom.xml");
+
+        fs::write(&gradle_file, "plugins {}").expect("write gradle file");
+        fs::write(&settings_file, "rootProject.name = \"demo\"").expect("write settings file");
+        fs::write(&wrapper_file, "#!/bin/sh").expect("write wrapper file");
+        fs::write(&pom_file, "<project />").expect("write pom file");
+
+        let files = scan_project_files(temp_dir.path().to_string_lossy().to_string())
+            .await
+            .expect("scan project files");
+
+        assert!(files.contains(&gradle_file.to_string_lossy().to_string()));
+        assert!(files.contains(&settings_file.to_string_lossy().to_string()));
+        assert!(files.contains(&wrapper_file.to_string_lossy().to_string()));
+        assert!(!files.contains(&pom_file.to_string_lossy().to_string()));
     }
 }

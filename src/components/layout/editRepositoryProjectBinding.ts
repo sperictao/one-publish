@@ -1,13 +1,5 @@
 import type { ProjectScanCandidates } from "@/types/project";
 
-function normalizeProviderId(providerId: string): string {
-  const trimmed = providerId.trim();
-  if (trimmed === "__none__") {
-    return "";
-  }
-  return trimmed;
-}
-
 export interface ProjectBindingResolution {
   nextProjectFile: string;
   isManualInput: boolean;
@@ -65,13 +57,12 @@ export function reconcileProjectBinding(
 }
 
 export function repositoryProjectBindingPending(params: {
-  providerId: string;
+  requiresProjectBinding: boolean;
   path: string;
   scanResolvedPath: string | null;
   isScanning: boolean;
 }): boolean {
-  const normalizedProviderId = normalizeProviderId(params.providerId);
-  if (normalizedProviderId && normalizedProviderId !== "dotnet") {
+  if (!params.requiresProjectBinding) {
     return false;
   }
 
@@ -84,12 +75,11 @@ export function repositoryProjectBindingPending(params: {
 }
 
 export function repositoryRequiresProjectBinding(params: {
-  providerId: string;
+  requiresProjectBinding: boolean;
   candidates: ProjectScanCandidates | null;
   projectFile: string;
 }): boolean {
-  const normalizedProviderId = normalizeProviderId(params.providerId);
-  if (normalizedProviderId && normalizedProviderId !== "dotnet") {
+  if (!params.requiresProjectBinding) {
     return false;
   }
 

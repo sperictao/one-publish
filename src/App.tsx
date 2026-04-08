@@ -27,10 +27,15 @@ import { useCommandImport } from "@/hooks/useCommandImport";
 import { useScopedConfigs } from "@/hooks/useScopedConfigs";
 import { useAppUpdater } from "@/hooks/useAppUpdater";
 import { useCommandImportResultCardProps } from "@/hooks/useCommandImportResultCardProps";
+import { useEditorProviderState } from "@/hooks/useEditorProviderState";
 import { useProviderRuntime } from "@/hooks/useProviderRuntime";
 import { useI18n, type Language } from "@/hooks/useI18n";
 import type { PublishConfigStore } from "@/lib/store";
 import { buildDotnetProfileParameters } from "@/lib/dotnetPublishConfig";
+import {
+  providerRequiresProjectBinding,
+  providerUsesProjectFile,
+} from "@/lib/providers";
 
 // Layout Components
 import { ResizeHandle } from "@/components/layout/ResizeHandle";
@@ -278,11 +283,7 @@ function App() {
   // 快捷键处理
   useShortcuts({
     onRefresh: () => {
-      if (
-        selectedRepo &&
-        !isStateLoading &&
-        activeProviderId === "dotnet"
-      ) {
+      if (selectedRepo && !isStateLoading && activeProviderUsesProjectFile) {
         scanProject(selectedRepo.path, {
           projectFile: selectedRepo.projectFile ?? undefined,
         });
@@ -293,7 +294,7 @@ function App() {
         return;
       }
 
-      if (activeProviderId === "dotnet") {
+      if (activeProviderRequiresProjectBinding) {
         if (projectInfo) {
           startPublish();
         }
@@ -350,6 +351,19 @@ function App() {
     repositories,
     selectedRepoId,
   });
+  const {
+    applyProfileProvider,
+    applyRecoveredSpecProvider,
+    applySelectedRepositoryProvider,
+  } = useEditorProviderState({
+    availableProviders: providerRuntimeProviders,
+    selectedRepo,
+    setActiveProviderId,
+  });
+  const activeProviderUsesProjectFile = providerUsesProjectFile(activeProvider);
+  const activeProviderRequiresProjectBinding = providerRequiresProjectBinding(
+    activeProvider
+  );
 
   const {
     environmentLastCheck,
@@ -409,7 +423,7 @@ function App() {
     selectedRepoId,
     activeProviderId,
     providerSchemas,
-    setActiveProviderId,
+    applyProfileProvider,
     setIsCustomMode,
     isCustomMode,
     setSelectedPreset,
@@ -428,7 +442,7 @@ function App() {
     selectedRepoPath: selectedRepo?.path,
     selectedRepoProjectFile: selectedRepo?.projectFile ?? undefined,
     isStateLoading,
-    activeProviderId,
+    activeProviderUsesProjectFile,
   });
 
   const {
@@ -492,12 +506,13 @@ function App() {
     handleRefreshRepoBranches,
   } = useRepositoryActions({
     appT,
+    providers: providerRuntimeProviders,
     repositories,
     selectedRepoId,
     addRepository,
     removeRepository,
     updateRepository,
-    setActiveProviderId,
+    applySelectedRepositoryProvider,
   });
 
   const {
@@ -519,6 +534,7 @@ function App() {
     selectedRepoId,
     selectedRepo,
     activeProviderId,
+    activeProviderUsesProjectFile,
     activeProviderParameters,
     selectedPreset,
     isCustomMode,
@@ -542,7 +558,7 @@ function App() {
     specVersion: SPEC_VERSION,
     setCustomConfig,
     setIsCustomMode,
-    setActiveProviderId,
+    applyRecoveredSpecProvider,
     setProviderParameters,
   });
 
@@ -576,12 +592,12 @@ function App() {
     projectInfo?.target_frameworks ?? EMPTY_STRING_LIST;
   const isProjectProfilesRefreshing =
     Boolean(selectedRepo) &&
-    activeProviderId === "dotnet" &&
+    activeProviderUsesProjectFile &&
     isProjectInfoRefreshing;
 
   const isPublishRunCardRefreshing =
     Boolean(selectedRepo) &&
-    activeProviderId === "dotnet" &&
+    activeProviderUsesProjectFile &&
     (isProjectInfoRefreshing || isResolvingSelectedProjectProfile);
 
   const publishRunCardProps = useMemo(
@@ -592,7 +608,7 @@ function App() {
       isRefreshing: isPublishRunCardRefreshing,
       publishActions:
         selectedRepo &&
-        (activeProviderId === "dotnet" ? Boolean(projectInfo) : true)
+        (activeProviderRequiresProjectBinding ? Boolean(projectInfo) : true)
           ? {
               publishCommand: publishPreviewCommand || null,
               publishCommandLabel: publishT.command || "将执行的命令:",
@@ -610,6 +626,7 @@ function App() {
     }),
     [
       activeProviderId,
+      activeProviderRequiresProjectBinding,
       appT,
       cancelPublish,
       configT.execute,
@@ -895,6 +912,8 @@ function App() {
             environmentLastCheck={environmentLastCheck}
             openEnvironmentDialog={openEnvironmentDialog}
             activeProviderId={activeProviderId}
+            activeProvider={activeProvider}
+            availableProviders={providerRuntimeProviders}
             updaterState={updaterState}
             checkForUpdates={async () => {
               await checkForUpdates();

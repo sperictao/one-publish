@@ -38,6 +38,7 @@ import {
   useMemo,
   useState,
 } from "react";
+import type { ProviderManifest } from "@/lib/store";
 import { isTauri } from "@tauri-apps/api/core";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import { relaunch } from "@tauri-apps/plugin-process";
@@ -106,6 +107,7 @@ interface SettingsDialogProps {
   onOpenShortcuts?: () => void;
   environmentStatus?: "unknown" | "ready" | "warning" | "blocked";
   environmentCheckedAt?: string;
+  providers: ProviderManifest[];
   environmentProviderIds: string[];
   environmentInitialCheck?: EnvironmentCheckSnapshot | null;
   onEnvironmentProviderIdsChange: (providerIds: string[]) => void;
@@ -181,6 +183,7 @@ export function SettingsDialog({
   theme,
   onThemeChange,
   onOpenShortcuts,
+  providers,
   environmentProviderIds,
   environmentInitialCheck = null,
   onEnvironmentProviderIdsChange,
@@ -546,6 +549,7 @@ export function SettingsDialog({
     >
       <EnvironmentCheckContent
         active={isOpen && activeCategory === "environment"}
+        providers={providers}
         defaultProviderIds={environmentProviderIds}
         initialCheck={environmentInitialCheck}
         onChecked={onEnvironmentChecked}

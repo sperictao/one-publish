@@ -50,10 +50,6 @@ export function useProviderRuntime() {
         data: items,
         error: null,
       });
-
-      if (items.length > 0 && !items.some((item) => item.id === activeProviderId)) {
-        setActiveProviderId(items[0].id);
-      }
     } catch (error) {
       setProviderListState((prev) => ({
         status: "error",
@@ -61,7 +57,7 @@ export function useProviderRuntime() {
         error,
       }));
     }
-  }, [activeProviderId]);
+  }, []);
 
   const loadProviderSchema = useCallback(async (providerId: string) => {
     setProviderSchemaStates((prev) => ({
@@ -98,6 +94,18 @@ export function useProviderRuntime() {
   useEffect(() => {
     void loadProviders();
   }, [loadProviders]);
+
+  useEffect(() => {
+    const availableProviderIds = (providerListState.data ?? []).map(
+      (provider) => provider.id
+    );
+    if (
+      availableProviderIds.length > 0 &&
+      !availableProviderIds.includes(activeProviderId)
+    ) {
+      setActiveProviderId(availableProviderIds[0]);
+    }
+  }, [activeProviderId, providerListState.data]);
 
   useEffect(() => {
     const schemaState =

@@ -9,7 +9,12 @@ import {
   matchesEnvironmentCheckSnapshot,
   type EnvironmentCheckSnapshot,
 } from "@/lib/environment";
-import type { ConfigParameters, PublishConfigStore } from "@/lib/store";
+import { providerUsesProjectFile } from "@/lib/providers";
+import type {
+  ConfigParameters,
+  ProviderManifest,
+  PublishConfigStore,
+} from "@/lib/store";
 import type { ParameterSchema } from "@/types/parameters";
 import type { ParameterValue } from "@/types/parameters";
 
@@ -23,6 +28,8 @@ export type DialogsCompositionParams = Omit<
 > & {
   environmentLastCheck: EnvironmentCheckSnapshot | null;
   activeProviderId: string;
+  activeProvider: ProviderManifest | null;
+  availableProviders: ProviderManifest[];
   customConfig: PublishConfigStore;
   activeProviderParameters: Record<string, ParameterValue>;
   dotnetSchema?: ParameterSchema;
@@ -50,6 +57,7 @@ export function useDialogsCompositionState(params: DialogsCompositionParams) {
   const { commandImportProjectPath, currentConfigParameters } =
     useDialogDerivedState({
       activeProviderId: params.activeProviderId,
+      activeProviderUsesProjectFile: providerUsesProjectFile(params.activeProvider),
       customConfig: params.customConfig,
       activeProviderParameters: params.activeProviderParameters,
       projectFile: params.projectFile,
@@ -61,6 +69,8 @@ export function useDialogsCompositionState(params: DialogsCompositionParams) {
     environmentStatus,
     environmentSettingsInitialCheck,
     currentProviderEnvironmentResult,
+    activeProvider: params.activeProvider,
+    availableProviders: params.availableProviders,
     commandImportProjectPath,
     currentConfigParameters,
   });

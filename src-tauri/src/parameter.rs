@@ -219,7 +219,7 @@ impl ParameterRenderer {
     }
 }
 
-#[derive(Debug, thiserror::Error)]
+#[derive(Debug, Clone, thiserror::Error)]
 pub enum RenderError {
     #[error("{0}")]
     Schema(String),

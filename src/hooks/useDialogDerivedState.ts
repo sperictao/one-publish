@@ -6,17 +6,19 @@ import type { ParameterValue } from "@/types/parameters";
 
 export function useDialogDerivedState(params: {
   activeProviderId: string;
+  activeProviderUsesProjectFile?: boolean;
   customConfig: PublishConfigStore;
   activeProviderParameters: Record<string, ParameterValue>;
   projectFile?: string | null;
   selectedRepoPath?: string | null;
 }) {
+  const providerUsesProjectFile = params.activeProviderUsesProjectFile ?? false;
   const commandImportProjectPath = useMemo(() => {
-    if (params.projectFile) {
+    if (providerUsesProjectFile && params.projectFile) {
       return params.projectFile;
     }
     return params.selectedRepoPath || "";
-  }, [params.projectFile, params.selectedRepoPath]);
+  }, [params.projectFile, params.selectedRepoPath, providerUsesProjectFile]);
 
   const currentConfigParameters = useMemo<ConfigParameters>(() => {
     if (params.activeProviderId === "dotnet") {

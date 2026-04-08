@@ -11,26 +11,14 @@ import { Textarea } from "@/components/ui/textarea";
 import { Loader2, Terminal } from "lucide-react";
 import { useI18n } from "@/hooks/useI18n";
 import type { ProviderPublishSpec } from "@/hooks/usePublishRunner";
-
-const COMMAND_EXAMPLES: Record<string, string> = {
-  dotnet: "dotnet publish MyProject.csproj -c Release -r win-x64 --self-contained",
-  cargo: "cargo build --release --target x86_64-unknown-linux-gnu",
-  go: "go build -o ./bin/app ./cmd/app",
-  java: "./gradlew build --info",
-};
-
-function getProviderLabel(providerId: string) {
-  if (providerId === "dotnet") return ".NET (dotnet)";
-  if (providerId === "cargo") return "Rust (cargo)";
-  if (providerId === "go") return "Go";
-  if (providerId === "java") return "Java (gradle)";
-  return providerId;
-}
+import { resolveProviderCommandExample, resolveProviderLabel } from "@/lib/providers";
+import type { ProviderManifest } from "@/lib/store";
 
 interface CommandImportDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   providerId: string;
+  provider: ProviderManifest | null;
   projectPath: string;
   onImport: (spec: ProviderPublishSpec) => void;
 }
@@ -39,6 +27,7 @@ export function CommandImportDialog({
   open,
   onOpenChange,
   providerId,
+  provider,
   projectPath,
   onImport,
 }: CommandImportDialogProps) {
@@ -49,8 +38,8 @@ export function CommandImportDialog({
   const { translations } = useI18n();
   const commandT = translations.commandImport || {};
 
-  const commandExample = COMMAND_EXAMPLES[providerId] || COMMAND_EXAMPLES.dotnet;
-  const providerLabel = getProviderLabel(providerId);
+  const commandExample = resolveProviderCommandExample(provider);
+  const providerLabel = resolveProviderLabel(provider, providerId);
 
   const handleParse = async () => {
     if (!command.trim()) {
@@ -131,7 +120,11 @@ export function CommandImportDialog({
               <Label htmlFor="command-input">{commandT.commandLabel || "构建命令"}</Label>
               <Textarea
                 id="command-input"
-                placeholder={`${commandT.examplePrefix || "示例"}: ${commandExample}`}
+                placeholder={
+                  commandExample
+                    ? `${commandT.examplePrefix || "示例"}: ${commandExample}`
+                    : undefined
+                }
                 value={command}
                 onChange={(e) => setCommand(e.target.value)}
                 rows={4}

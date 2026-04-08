@@ -75,7 +75,9 @@ export type ParameterSchema = { parameters: { [key: string]: ParameterDefinition
 
 export type ParameterType = "boolean" | "string" | "array" | "map";
 
-export type ProviderManifest = { id: string, display_name: string, version: string, };
+export type ProviderCatalogEntry = { id: string, display_name: string, version: string, label: string, command_example: string, environment_label: string, environment_description: string, requires_project_binding: boolean, project_path_kind: ProviderProjectPathKind, supports_command_import: boolean, };
+
+export type ProviderProjectPathKind = "repository_root" | "project_file";
 
 export type ShortcutHelp = { key: string, description: string, };
 

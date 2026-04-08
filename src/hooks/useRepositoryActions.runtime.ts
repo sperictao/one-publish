@@ -5,10 +5,12 @@ import {
   defaultRepoPublishConfig,
   detectRepositoryProvider,
   openDirectory,
+  type ProviderManifest,
   scanProjectCandidates,
   scanRepositoryBranches,
 } from "@/lib/store";
 import { getPathBasename } from "@/lib/paths";
+import { providerRequiresProjectBinding } from "@/lib/providers";
 import { remapPathPrefix } from "@/features/repository/utils/pathUtils";
 import {
   analyzeBranchRefreshFailure,
@@ -73,10 +75,13 @@ function normalizeInitialBranchState(
 
 async function resolveInitialRepositoryMetadata(
   path: string,
-  providerId: string
+  providerId: string,
+  providers: ProviderManifest[]
 ): Promise<Pick<Repository, "branches" | "currentBranch" | "projectFile">> {
+  const matchedProvider =
+    providers.find((provider) => provider.id === providerId) ?? null;
   const [projectCandidates, branchResult] = await Promise.all([
-    providerId === "dotnet"
+    providerRequiresProjectBinding(matchedProvider)
       ? scanProjectCandidates(path).catch(() => null)
       : Promise.resolve<ProjectScanCandidates | null>(null),
     scanRepositoryBranches(path, { refreshRemote: false }).catch(() => null),
@@ -97,9 +102,10 @@ async function resolveInitialRepositoryMetadata(
 
 export async function handleAddRepoRuntime(params: {
   appT: TranslationMap;
+  providers: ProviderManifest[];
   addRepository: (repo: Repository) => Promise<unknown>;
 }) {
-  const { appT, addRepository } = params;
+  const { appT, providers, addRepository } = params;
   const selected = await open({
     directory: true,
     multiple: false,
@@ -125,7 +131,11 @@ export async function handleAddRepoRuntime(params: {
     return;
   }
 
-  const initialMetadata = await resolveInitialRepositoryMetadata(path, providerId);
+  const initialMetadata = await resolveInitialRepositoryMetadata(
+    path,
+    providerId,
+    providers
+  );
   const newRepo: Repository = {
     id: Date.now().toString(),
     name,
@@ -206,7 +216,7 @@ export async function handleEditRepoRuntime(params: {
   repo: Repository;
   repositories: Repository[];
   selectedRepoId: string | null;
-  setActiveProviderId: (value: string) => void;
+  applySelectedRepositoryProvider: (providerId?: string | null) => void;
   updateRepository: (repo: Repository) => Promise<unknown>;
 }) {
   const {
@@ -214,7 +224,7 @@ export async function handleEditRepoRuntime(params: {
     repo,
     repositories,
     selectedRepoId,
-    setActiveProviderId,
+    applySelectedRepositoryProvider,
     updateRepository,
   } = params;
   const targetRepo = repositories.find((item) => item.id === repo.id);
@@ -253,7 +263,7 @@ export async function handleEditRepoRuntime(params: {
     await updateRepository(normalizedRepo);
 
     if (selectedRepoId === repo.id && nextProviderId) {
-      setActiveProviderId(nextProviderId);
+      applySelectedRepositoryProvider(nextProviderId);
     }
 
     toast.success(appT.repositoryUpdated || "仓库信息已更新", {
@@ -325,7 +335,7 @@ export async function handleDetectRepoProviderRuntime(params: {
       toast.error(appT.providerDetectUnsupported || "未识别到支持的 Provider", {
         description:
           appT.providerDetectUnsupportedDesc ||
-          "可手动选择 Provider，或确认项目根目录下包含可识别的构建文件。",
+          "可手动选择 Provider；若当前仓库只有 pom.xml，请注意 Java provider 本轮仅支持 Gradle 项目。",
       });
       return null;
     }

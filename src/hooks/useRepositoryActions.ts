@@ -1,6 +1,7 @@
 import { useCallback } from "react";
-import type { Branch, Repository } from "@/types/repository";
+import type { ProviderManifest } from "@/lib/store";
 import type { ProjectScanCandidates } from "@/types/project";
+import type { Branch, Repository } from "@/types/repository";
 
 const loadRepositoryActionsRuntime = () =>
   import("@/hooks/useRepositoryActions.runtime");
@@ -11,12 +12,13 @@ interface TranslationMap {
 
 interface UseRepositoryActionsParams {
   appT: TranslationMap;
+  providers: ProviderManifest[];
   repositories: Repository[];
   selectedRepoId: string | null;
   addRepository: (repo: Repository) => Promise<unknown>;
   removeRepository: (repoId: string) => Promise<unknown>;
   updateRepository: (repo: Repository) => Promise<unknown>;
-  setActiveProviderId: (value: string) => void;
+  applySelectedRepositoryProvider: (providerId?: string | null) => void;
 }
 
 interface RefreshBranchesResult {
@@ -26,17 +28,18 @@ interface RefreshBranchesResult {
 
 export function useRepositoryActions({
   appT,
+  providers,
   repositories,
   selectedRepoId,
   addRepository,
   removeRepository,
   updateRepository,
-  setActiveProviderId,
+  applySelectedRepositoryProvider,
 }: UseRepositoryActionsParams) {
   const handleAddRepo = useCallback(async () => {
     const { handleAddRepoRuntime } = await loadRepositoryActionsRuntime();
-    await handleAddRepoRuntime({ appT, addRepository });
-  }, [addRepository, appT]);
+    await handleAddRepoRuntime({ appT, providers, addRepository });
+  }, [addRepository, appT, providers]);
 
   const handleRemoveRepo = useCallback(
     async (repo: Repository) => {
@@ -63,11 +66,17 @@ export function useRepositoryActions({
         repo,
         repositories,
         selectedRepoId,
-        setActiveProviderId,
+        applySelectedRepositoryProvider,
         updateRepository,
       });
     },
-    [appT, repositories, selectedRepoId, setActiveProviderId, updateRepository]
+    [
+      appT,
+      repositories,
+      selectedRepoId,
+      applySelectedRepositoryProvider,
+      updateRepository,
+    ]
   );
 
   const handleDetectRepoProvider = useCallback(

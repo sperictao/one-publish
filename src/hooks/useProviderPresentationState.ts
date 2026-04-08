@@ -1,21 +1,7 @@
 import { useCallback, useMemo } from "react";
 
 import type { PublishConfigStore, ProviderManifest } from "@/lib/store";
-
-const FALLBACK_PROVIDERS: ProviderManifest[] = [
-  { id: "dotnet", displayName: "dotnet", version: "1" },
-  { id: "cargo", displayName: "cargo", version: "1" },
-  { id: "go", displayName: "go", version: "1" },
-  { id: "java", displayName: "java", version: "1" },
-];
-
-function formatProviderLabel(provider: ProviderManifest): string {
-  if (provider.id === "dotnet") return ".NET (dotnet)";
-  if (provider.id === "cargo") return "Rust (cargo)";
-  if (provider.id === "go") return "Go";
-  if (provider.id === "java") return "Java (gradle)";
-  return provider.displayName || provider.id;
-}
+import { resolveProviderLabel } from "@/lib/providers";
 
 export function useProviderPresentationState(params: {
   providerRuntimeProviders: ProviderManifest[];
@@ -25,10 +11,7 @@ export function useProviderPresentationState(params: {
   setCustomConfig: (value: PublishConfigStore) => void;
 }) {
   const availableProviders = useMemo(
-    () =>
-      params.providerRuntimeProviders.length > 0
-        ? params.providerRuntimeProviders
-        : FALLBACK_PROVIDERS,
+    () => params.providerRuntimeProviders,
     [params.providerRuntimeProviders]
   );
 
@@ -37,20 +20,20 @@ export function useProviderPresentationState(params: {
       params.activeProvider ||
       availableProviders.find((provider) => provider.id === params.activeProviderId) ||
       availableProviders[0] ||
-      FALLBACK_PROVIDERS[0],
+      null,
     [params.activeProvider, params.activeProviderId, availableProviders]
   );
 
   const activeProviderLabel = useMemo(
-    () => formatProviderLabel(resolvedActiveProvider),
-    [resolvedActiveProvider]
+    () => resolveProviderLabel(resolvedActiveProvider, params.activeProviderId),
+    [params.activeProviderId, resolvedActiveProvider]
   );
 
   const repositoryProviders = useMemo(
     () =>
       availableProviders.map((provider) => ({
         ...provider,
-        label: formatProviderLabel(provider),
+        label: resolveProviderLabel(provider),
       })),
     [availableProviders]
   );

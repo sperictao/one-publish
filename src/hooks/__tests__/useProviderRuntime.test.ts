@@ -18,6 +18,20 @@ vi.mock("@/lib/store", async () => {
 import { useProviderRuntime } from "@/hooks/useProviderRuntime";
 
 describe("useProviderRuntime", () => {
+  const dotnetProvider = {
+    id: "dotnet",
+    displayName: ".NET (dotnet)",
+    version: "1.0.0",
+    label: ".NET (dotnet)",
+    commandExample:
+      "dotnet publish MyProject.csproj -c Release -r win-x64 --self-contained",
+    environmentLabel: ".NET",
+    environmentDescription: "dotnet SDK",
+    requiresProjectBinding: true,
+    projectPathKind: "project_file" as const,
+    supportsCommandImport: true,
+  };
+
   beforeEach(() => {
     vi.clearAllMocks();
   });
@@ -25,13 +39,7 @@ describe("useProviderRuntime", () => {
   it("provider 列表加载失败后可通过 retry 恢复", async () => {
     mocks.listProviders
       .mockRejectedValueOnce(new Error("provider list failed"))
-      .mockResolvedValueOnce([
-        {
-          id: "dotnet",
-          displayName: ".NET",
-          version: "1.0.0",
-        },
-      ]);
+      .mockResolvedValueOnce([dotnetProvider]);
     mocks.getProviderSchema.mockResolvedValue({
       parameters: {},
     });
@@ -53,13 +61,7 @@ describe("useProviderRuntime", () => {
   });
 
   it("schema 加载失败后会暴露错误态，并支持 retry", async () => {
-    mocks.listProviders.mockResolvedValue([
-      {
-        id: "dotnet",
-        displayName: ".NET",
-        version: "1.0.0",
-      },
-    ]);
+    mocks.listProviders.mockResolvedValue([dotnetProvider]);
     mocks.getProviderSchema
       .mockRejectedValueOnce(new Error("schema failed"))
       .mockResolvedValueOnce({
@@ -88,5 +90,42 @@ describe("useProviderRuntime", () => {
       expect(result.current.activeProviderSchemaState.status).toBe("ready");
       expect(result.current.providerSchemas.dotnet).toBeDefined();
     });
+  });
+
+  it("切换 activeProviderId 不会重复请求 provider 列表", async () => {
+    mocks.listProviders.mockResolvedValue([
+      dotnetProvider,
+      {
+        ...dotnetProvider,
+        id: "java",
+        displayName: "java",
+        label: "Java (Gradle)",
+        commandExample: "./gradlew build --info",
+        environmentLabel: "Java (Gradle)",
+        environmentDescription: "gradle / java runtime",
+        requiresProjectBinding: false,
+        projectPathKind: "repository_root" as const,
+      },
+    ]);
+    mocks.getProviderSchema.mockResolvedValue({ parameters: {} });
+
+    const { result } = renderHook(() => useProviderRuntime());
+
+    await waitFor(() => {
+      expect(result.current.providerListState.status).toBe("ready");
+    });
+
+    expect(mocks.listProviders).toHaveBeenCalledTimes(1);
+
+    act(() => {
+      result.current.setActiveProviderId("java");
+    });
+
+    await waitFor(() => {
+      expect(result.current.activeProviderId).toBe("java");
+      expect(result.current.activeProviderSchemaState.status).toBe("ready");
+    });
+
+    expect(mocks.listProviders).toHaveBeenCalledTimes(1);
   });
 });

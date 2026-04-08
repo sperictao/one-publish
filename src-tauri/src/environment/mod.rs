@@ -34,12 +34,7 @@ fn cache() -> &'static Mutex<EnvironmentCache> {
 }
 
 fn normalize_provider_ids(provider_ids: Option<Vec<String>>) -> Vec<String> {
-    let mut default_all = vec![
-        "dotnet".to_string(),
-        "cargo".to_string(),
-        "go".to_string(),
-        "java".to_string(),
-    ];
+    let mut default_all = crate::provider::registry::provider_registry().known_ids();
     default_all.sort();
 
     let ids = match provider_ids {

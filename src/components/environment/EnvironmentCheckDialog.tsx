@@ -32,14 +32,8 @@ import {
   type IssueSeverity,
 } from "@/lib/environment";
 import { useI18n } from "@/hooks/useI18n";
-
-const ALL_PROVIDERS: Array<{ id: string; label: string; description: string }> =
-  [
-    { id: "dotnet", label: ".NET", description: "dotnet SDK" },
-    { id: "cargo", label: "Rust", description: "cargo" },
-    { id: "go", label: "Go", description: "go" },
-    { id: "java", label: "Java", description: "java/javac" },
-  ];
+import { resolveEnvironmentProviderOptions } from "@/lib/providers";
+import type { ProviderManifest } from "@/lib/store";
 
 function severityRank(sev: IssueSeverity) {
   if (sev === "critical") return 0;
@@ -74,6 +68,7 @@ function formatFixResult(result: FixResult | null) {
 export interface EnvironmentCheckDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  providers: ProviderManifest[];
   defaultProviderIds?: string[];
   initialCheck?: EnvironmentCheckSnapshot | null;
   onChecked?: (snapshot: EnvironmentCheckSnapshot) => void;
@@ -82,6 +77,7 @@ export interface EnvironmentCheckDialogProps {
 
 export interface EnvironmentCheckContentProps {
   active: boolean;
+  providers: ProviderManifest[];
   defaultProviderIds?: string[];
   initialCheck?: EnvironmentCheckSnapshot | null;
   onChecked?: (snapshot: EnvironmentCheckSnapshot) => void;
@@ -90,15 +86,36 @@ export interface EnvironmentCheckContentProps {
 
 export function EnvironmentCheckContent({
   active,
+  providers,
   defaultProviderIds = DEFAULT_ENVIRONMENT_PROVIDER_IDS,
   initialCheck = null,
   onChecked,
   onProviderIdsChange,
 }: EnvironmentCheckContentProps) {
   const { translations } = useI18n();
+  const providerOptions = useMemo(
+    () => resolveEnvironmentProviderOptions(providers),
+    [providers]
+  );
+  const availableProviderIds = useMemo(
+    () => providerOptions.map((provider) => provider.id),
+    [providerOptions]
+  );
+
+  const normalizeVisibleProviderIds = (providerIds?: string[]) => {
+    const normalizedIds = normalizeEnvironmentProviderIds(providerIds);
+    if (availableProviderIds.length === 0) {
+      return normalizedIds;
+    }
+
+    const visibleIds = normalizedIds.filter((providerId) =>
+      availableProviderIds.includes(providerId)
+    );
+    return visibleIds.length > 0 ? visibleIds : [availableProviderIds[0]];
+  };
 
   const [selectedProviderIds, setSelectedProviderIds] = useState<string[]>(
-    normalizeEnvironmentProviderIds(defaultProviderIds)
+    normalizeVisibleProviderIds(defaultProviderIds)
   );
   const [checking, setChecking] = useState(false);
   const [result, setResult] = useState<EnvironmentCheckResult | null>(
@@ -112,13 +129,13 @@ export function EnvironmentCheckContent({
 
   useEffect(() => {
     if (!active) return;
-    setSelectedProviderIds(normalizeEnvironmentProviderIds(defaultProviderIds));
+    setSelectedProviderIds(normalizeVisibleProviderIds(defaultProviderIds));
     setResult(initialCheck?.result || null);
     setError(null);
     setLastFixResult(null);
     setPendingRun(null);
     setRunningFix(false);
-  }, [active, defaultProviderIds, initialCheck]);
+  }, [active, defaultProviderIds, initialCheck, availableProviderIds]);
 
   const issues = useMemo(() => {
     return (result?.issues || []).slice().sort(issueSort);
@@ -266,7 +283,7 @@ export function EnvironmentCheckContent({
         <AppDialogInset className="space-y-3">
           <Label>{translations.environment?.scope || "检查范围"}</Label>
           <div className="grid grid-cols-2 gap-3">
-            {ALL_PROVIDERS.map((p) => {
+            {providerOptions.map((p) => {
               const checked = selectedProviderIds.includes(p.id);
               return (
                 <div
@@ -513,6 +530,7 @@ export function EnvironmentCheckContent({
 export function EnvironmentCheckDialog({
   open,
   onOpenChange,
+  providers,
   defaultProviderIds = DEFAULT_ENVIRONMENT_PROVIDER_IDS,
   initialCheck = null,
   onChecked,
@@ -539,6 +557,7 @@ export function EnvironmentCheckDialog({
       >
         <EnvironmentCheckContent
           active={open}
+          providers={providers}
           defaultProviderIds={defaultProviderIds}
           initialCheck={initialCheck}
           onChecked={onChecked}

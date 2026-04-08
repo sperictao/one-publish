@@ -35,6 +35,21 @@ vi.mock("@/lib/store", async () => {
 import { handleAddRepoRuntime } from "@/hooks/useRepositoryActions.runtime";
 
 describe("handleAddRepoRuntime", () => {
+  const providers = [
+    {
+      id: "dotnet",
+      displayName: ".NET (dotnet)",
+      version: "1.0.0",
+      label: ".NET (dotnet)",
+      commandExample: "dotnet publish App.csproj",
+      environmentLabel: ".NET",
+      environmentDescription: "dotnet SDK",
+      requiresProjectBinding: true,
+      projectPathKind: "project_file" as const,
+      supportsCommandImport: true,
+    },
+  ];
+
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.openDialog.mockResolvedValue("/tmp/demo-repo");
@@ -71,6 +86,7 @@ describe("handleAddRepoRuntime", () => {
         selectRepositoryDirectory: "选择仓库目录",
         repositoryAdded: "仓库已添加",
       },
+      providers,
       addRepository: mocks.addRepository,
     });
 
@@ -105,6 +121,7 @@ describe("handleAddRepoRuntime", () => {
         selectRepositoryDirectory: "选择仓库目录",
         repositoryAdded: "仓库已添加",
       },
+      providers,
       addRepository: mocks.addRepository,
     });
 

@@ -72,6 +72,7 @@ interface UsePublishRunnerParams {
   selectedRepoId: string | null;
   selectedRepo: { path: string } | null;
   activeProviderId: string;
+  activeProviderUsesProjectFile: boolean;
   activeProviderParameters: Record<string, ParameterValue>;
   selectedPreset: string;
   isCustomMode: boolean;
@@ -127,6 +128,7 @@ export function usePublishRunner({
   selectedRepoId,
   selectedRepo,
   activeProviderId,
+  activeProviderUsesProjectFile,
   activeProviderParameters,
   selectedPreset,
   isCustomMode,
@@ -187,6 +189,7 @@ export function usePublishRunner({
 
   const { buildPublishSpec } = usePublishSpecBuilder({
     activeProviderId,
+    activeProviderUsesProjectFile,
     activeProviderParameters,
     projectInfo,
     selectedRepo,
@@ -221,17 +224,21 @@ export function usePublishRunner({
       return null;
     }
 
+    if (activeProviderUsesProjectFile && !projectInfo) {
+      return null;
+    }
+
     if (activeProviderId === "dotnet") {
-      if (!projectInfo) {
+      const resolvedProjectInfo = projectInfo;
+      if (!resolvedProjectInfo) {
         return null;
       }
-
       if (!isCustomMode && selectedPreset.startsWith("profile-")) {
         if (resolvedProjectProfile) {
           return {
             version: specVersion,
             provider_id: "dotnet",
-            project_path: projectInfo.project_file,
+            project_path: resolvedProjectInfo.project_file,
             parameters: resolvedProjectProfile.parameters,
           };
         }
@@ -241,6 +248,7 @@ export function usePublishRunner({
     return buildPublishSpec();
   }, [
     activeProviderId,
+    activeProviderUsesProjectFile,
     buildPublishSpec,
     isCustomMode,
     projectInfo,
@@ -761,7 +769,7 @@ export function usePublishRunner({
       return;
     }
 
-    if (activeProviderId === "dotnet" && !projectInfo) {
+    if (activeProviderUsesProjectFile && !projectInfo) {
       toast.error(appT.selectDotnetProjectFirst || "请先选择 .NET 项目");
       return;
     }
@@ -803,6 +811,7 @@ export function usePublishRunner({
     });
   }, [
     activeProviderId,
+    activeProviderUsesProjectFile,
     appT,
     buildPublishSpec,
     isCustomMode,

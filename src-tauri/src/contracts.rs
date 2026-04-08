@@ -52,7 +52,8 @@ pub fn generate_tauri_contracts() -> String {
     push_contract::<crate::parameter::ParameterDefinition>(&mut declarations);
     push_contract::<crate::parameter::ParameterSchema>(&mut declarations);
     push_contract::<crate::parameter::ParameterType>(&mut declarations);
-    push_contract::<crate::provider::ProviderManifest>(&mut declarations);
+    push_contract::<crate::provider::ProviderCatalogEntry>(&mut declarations);
+    push_contract::<crate::provider::ProviderProjectPathKind>(&mut declarations);
     push_contract::<crate::shortcuts::ShortcutHelp>(&mut declarations);
     push_contract::<crate::spec::PublishSpec>(&mut declarations);
     push_contract::<crate::spec::SpecValue>(&mut declarations);

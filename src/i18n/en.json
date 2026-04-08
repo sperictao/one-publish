@@ -540,7 +540,7 @@
     "providerDetectPermissionDenied": "Insufficient directory permissions",
     "providerDetectPermissionDeniedDesc": "Check current user read permission for the project root and retry.",
     "providerDetectUnsupported": "No supported provider detected",
-    "providerDetectUnsupportedDesc": "Select a provider manually or ensure recognizable build files exist in project root.",
+    "providerDetectUnsupportedDesc": "Select a provider manually; if the repo only has pom.xml, note that the current Java provider supports Gradle projects only.",
     "providerDetectReadFailed": "Failed to read project directory",
     "providerDetectReadFailedDesc": "Check disk status, network drive connection, and directory accessibility, then retry.",
     "branchesRefreshed": "Branches refreshed",

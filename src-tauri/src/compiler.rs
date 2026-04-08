@@ -1,6 +1,6 @@
 use crate::parameter::{ParameterRenderer, RenderError};
 use crate::plan::ExecutionPlan;
-use crate::provider::registry::ProviderRegistry;
+use crate::provider::registry::provider_registry;
 use crate::spec::PublishSpec;
 
 #[derive(Debug, thiserror::Error)]
@@ -22,14 +22,12 @@ impl From<RenderError> for CompileError {
 }
 
 pub fn compile(spec: &PublishSpec) -> Result<ExecutionPlan, CompileError> {
-    let registry = ProviderRegistry::new();
-    let provider = registry.get(&spec.provider_id)?;
+    let provider = provider_registry().get(&spec.provider_id)?;
     provider.compile(spec)
 }
 
 pub fn compile_with_renderer(spec: &PublishSpec) -> Result<ExecutionPlan, CompileError> {
-    let registry = ProviderRegistry::new();
-    let provider = registry.get(&spec.provider_id)?;
+    let provider = provider_registry().get(&spec.provider_id)?;
 
     // Get provider schema
     let schema = provider.get_schema()?;

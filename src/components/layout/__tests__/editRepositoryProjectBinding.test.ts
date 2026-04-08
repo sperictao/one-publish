@@ -53,7 +53,7 @@ describe("editRepositoryProjectBinding", () => {
     expect(resolution.requiresExplicitBinding).toBe(true);
     expect(
       repositoryRequiresProjectBinding({
-        providerId: "dotnet",
+        requiresProjectBinding: true,
         candidates,
         projectFile: resolution.nextProjectFile,
       })
@@ -71,7 +71,7 @@ describe("editRepositoryProjectBinding", () => {
     ).toBe(false);
     expect(
       repositoryRequiresProjectBinding({
-        providerId: "dotnet",
+        requiresProjectBinding: true,
         candidates,
         projectFile: "/repo/manual/Other.csproj",
       })
@@ -81,7 +81,7 @@ describe("editRepositoryProjectBinding", () => {
   it("当前路径尚未完成扫描时会阻止保存", () => {
     expect(
       repositoryProjectBindingPending({
-        providerId: "dotnet",
+        requiresProjectBinding: true,
         path: "/repo",
         scanResolvedPath: null,
         isScanning: true,
@@ -89,7 +89,7 @@ describe("editRepositoryProjectBinding", () => {
     ).toBe(true);
     expect(
       repositoryProjectBindingPending({
-        providerId: "dotnet",
+        requiresProjectBinding: true,
         path: "/repo",
         scanResolvedPath: "/other",
         isScanning: false,
@@ -97,7 +97,7 @@ describe("editRepositoryProjectBinding", () => {
     ).toBe(true);
     expect(
       repositoryProjectBindingPending({
-        providerId: "dotnet",
+        requiresProjectBinding: true,
         path: "/repo",
         scanResolvedPath: "/repo",
         isScanning: false,

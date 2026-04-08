@@ -23,7 +23,7 @@ use self::execution::{
     build_dotnet_spec_from_config, execute_publish_spec, render_publish_command,
 };
 #[cfg(test)]
-use self::output::{infer_output_dir, resolve_java_program, resolve_plan_command};
+use self::output::{infer_output_dir, resolve_plan_command, resolve_runtime_program};
 use self::session::cancel_running_execution;
 #[cfg(test)]
 use self::session::{clear_running_execution, force_clear_running_execution, reserve_execution};

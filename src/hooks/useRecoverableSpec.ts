@@ -13,7 +13,7 @@ interface UseRecoverableSpecParams {
   specVersion: number;
   setCustomConfig: (config: PublishConfigStore) => void;
   setIsCustomMode: (value: boolean) => void;
-  setActiveProviderId: (providerId: string) => void;
+  applyRecoveredSpecProvider: (providerId: string) => void;
   setProviderParameters: React.Dispatch<
     React.SetStateAction<Record<string, Record<string, ParameterValue>>>
   >;
@@ -23,7 +23,7 @@ export function useRecoverableSpec({
   specVersion,
   setCustomConfig,
   setIsCustomMode,
-  setActiveProviderId,
+  applyRecoveredSpecProvider,
   setProviderParameters,
 }: UseRecoverableSpecParams) {
   const extractSpecFromRecord = useCallback(
@@ -62,7 +62,7 @@ export function useRecoverableSpec({
 
   const restoreSpecToEditor = useCallback(
     (spec: ProviderPublishSpec) => {
-      setActiveProviderId(spec.provider_id);
+      applyRecoveredSpecProvider(spec.provider_id);
 
       if (spec.provider_id === "dotnet") {
         const parameters = spec.parameters || {};
@@ -81,7 +81,7 @@ export function useRecoverableSpec({
       }
     },
     [
-      setActiveProviderId,
+      applyRecoveredSpecProvider,
       setCustomConfig,
       setIsCustomMode,
       setProviderParameters,

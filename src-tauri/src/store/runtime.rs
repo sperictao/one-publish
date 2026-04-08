@@ -27,10 +27,13 @@ fn repository_not_found_error(repo_id: &str) -> AppError {
 }
 
 fn provider_requires_project_binding(provider_id: Option<&str>) -> bool {
-    provider_id
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
-        .map(|value| value == "dotnet")
+    let Some(provider_id) = provider_id.map(str::trim).filter(|value| !value.is_empty()) else {
+        return true;
+    };
+
+    crate::provider::registry::provider_registry()
+        .get(provider_id)
+        .map(|provider| provider.capabilities().requires_project_binding)
         .unwrap_or(true)
 }
 

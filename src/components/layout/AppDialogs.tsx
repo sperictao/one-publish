@@ -7,6 +7,7 @@ import type {
   ConfigProfile,
   ConfigParameters,
   ExecutionRecord,
+  ProviderManifest,
   PublishConfigStore,
 } from "@/lib/store";
 import type { PackageResult, SignResult } from "@/lib/artifact";
@@ -78,6 +79,7 @@ export interface AppDialogsProps {
   environment: {
     dialogOpen: boolean;
     onDialogOpenChange: (open: boolean) => void;
+    providers: ProviderManifest[];
     defaultProviderIds: string[];
     initialCheck: EnvironmentCheckSnapshot | null;
     onChecked: (snapshot: EnvironmentCheckSnapshot) => void;
@@ -101,6 +103,7 @@ export interface AppDialogsProps {
     onOpenShortcuts: () => void;
     environmentStatus: "unknown" | "ready" | "warning" | "blocked";
     environmentCheckedAt?: string;
+    providers: ProviderManifest[];
     environmentProviderIds: string[];
     environmentInitialCheck: EnvironmentCheckSnapshot | null;
     onEnvironmentProviderIdsChange: (providerIds: string[]) => void;
@@ -137,6 +140,7 @@ export interface AppDialogsProps {
     open: boolean;
     onOpenChange: (open: boolean) => void;
     providerId: string;
+    provider: ProviderManifest | null;
     projectPath: string;
     onImport: (spec: ProviderPublishSpec) => void;
   };
@@ -196,6 +200,7 @@ export function AppDialogs(props: AppDialogsProps) {
             onOpenChange={(open) => {
               props.environment.onDialogOpenChange(open);
             }}
+            providers={props.environment.providers}
             defaultProviderIds={props.environment.defaultProviderIds}
             initialCheck={props.environment.initialCheck}
             onChecked={props.environment.onChecked}
@@ -224,6 +229,7 @@ export function AppDialogs(props: AppDialogsProps) {
             onOpenShortcuts={props.settings.onOpenShortcuts}
             environmentStatus={props.settings.environmentStatus}
             environmentCheckedAt={props.settings.environmentCheckedAt}
+            providers={props.settings.providers}
             environmentProviderIds={props.settings.environmentProviderIds}
             environmentInitialCheck={props.settings.environmentInitialCheck}
             onEnvironmentProviderIdsChange={props.settings.onEnvironmentProviderIdsChange}
@@ -282,6 +288,7 @@ export function AppDialogs(props: AppDialogsProps) {
             open={props.commandImport.open}
             onOpenChange={props.commandImport.onOpenChange}
             providerId={props.commandImport.providerId}
+            provider={props.commandImport.provider}
             projectPath={props.commandImport.projectPath}
             onImport={props.commandImport.onImport}
           />

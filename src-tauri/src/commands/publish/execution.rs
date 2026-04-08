@@ -4,15 +4,15 @@ use super::errors::{
 };
 use super::logs::{collect_log_chunks, emit_publish_log, read_stream_chunks};
 use super::output::{
-    build_display_command, count_output_files, infer_output_dir, resolve_java_program,
-    resolve_plan_command, resolve_spawn_program, resolve_working_dir,
+    build_display_command, count_output_files, infer_output_dir, resolve_plan_command,
+    resolve_runtime_program, resolve_spawn_program, resolve_working_dir,
 };
 use super::session::reserve_execution;
 use super::{
     preflight::{self, ProtectedDirectoryLocation, PublishOutputValidationIssue},
     PublishConfig, PublishResult, RenderedPublishCommand,
 };
-use crate::provider::registry::ProviderRegistry;
+use crate::provider::registry::provider_registry;
 use crate::spec::{PublishSpec, SpecValue, SPEC_VERSION};
 use std::collections::BTreeMap;
 use std::path::PathBuf;
@@ -193,8 +193,7 @@ fn prepare_publish_command(
     spec: &PublishSpec,
 ) -> Result<PreparedPublishCommand, crate::errors::AppError> {
     let plan = crate::compiler::compile(spec).map_err(crate::errors::AppError::from)?;
-    let registry = ProviderRegistry::new();
-    let provider = registry
+    let provider = provider_registry()
         .get(&spec.provider_id)
         .map_err(crate::errors::AppError::from)?;
     let schema = provider.get_schema().map_err(publish_schema_error)?;
@@ -211,12 +210,7 @@ fn prepare_publish_command(
 
     let working_dir_path = resolve_working_dir(spec);
     let display_command = build_display_command(&base_program, &args);
-
-    let spawn_program = if spec.provider_id == "java" {
-        resolve_java_program(&base_program, working_dir_path.as_ref())?
-    } else {
-        base_program
-    };
+    let spawn_program = resolve_runtime_program(spec, &base_program, working_dir_path.as_ref())?;
 
     Ok(PreparedPublishCommand {
         command: RenderedPublishCommand {

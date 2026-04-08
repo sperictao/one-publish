@@ -12,6 +12,15 @@ fn base_dotnet_config() -> PublishConfig {
     PublishConfig::default()
 }
 
+fn base_java_spec(project_path: &str) -> PublishSpec {
+    PublishSpec {
+        version: SPEC_VERSION,
+        provider_id: "java".to_string(),
+        project_path: project_path.to_string(),
+        parameters: BTreeMap::new(),
+    }
+}
+
 fn sample_rendered_command() -> RenderedPublishCommand {
     RenderedPublishCommand {
         program: "dotnet".to_string(),
@@ -120,7 +129,12 @@ fn resolve_java_program_prefers_wrapper_script_when_present() {
     let wrapper = dir.join(wrapper_name);
     std::fs::write(&wrapper, "echo wrapper").expect("write wrapper");
 
-    let resolved = resolve_java_program("./gradlew", Some(&dir)).expect("resolve wrapper");
+    let resolved = resolve_runtime_program(
+        &base_java_spec(&dir.to_string_lossy()),
+        "./gradlew",
+        Some(&dir),
+    )
+    .expect("resolve wrapper");
     assert_eq!(resolved, wrapper.to_string_lossy().to_string());
 
     std::fs::remove_dir_all(&dir).ok();
@@ -128,7 +142,8 @@ fn resolve_java_program_prefers_wrapper_script_when_present() {
 
 #[test]
 fn resolve_java_program_requires_project_dir_for_wrapper_mode() {
-    let err = resolve_java_program("./gradlew", None).expect_err("missing dir should fail");
+    let err = resolve_runtime_program(&base_java_spec("/tmp/demo"), "./gradlew", None)
+        .expect_err("missing dir should fail");
     assert!(err.message.contains("project directory"));
 }
 

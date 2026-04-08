@@ -79,8 +79,10 @@ export function useProjectShellState(params: {
   selectedRepoPath?: string;
   selectedRepoProjectFile?: string;
   isStateLoading: boolean;
-  activeProviderId: string;
+  activeProviderId?: string;
+  activeProviderUsesProjectFile?: boolean;
 }) {
+  const providerUsesProjectFile = params.activeProviderUsesProjectFile ?? true;
   const [visibleProjectInfoSnapshot, setVisibleProjectInfoSnapshot] =
     useState<ProjectInfoSnapshot>(EMPTY_PROJECT_INFO_SNAPSHOT);
   const [isProjectInfoRefreshing, setIsProjectInfoRefreshing] = useState(false);
@@ -96,7 +98,7 @@ export function useProjectShellState(params: {
     Boolean(
       params.selectedRepoPath &&
         !params.isStateLoading &&
-        params.activeProviderId === "dotnet"
+        providerUsesProjectFile
     )
   );
   const projectInfo = visibleProjectInfoSnapshot.projectInfo;
@@ -105,7 +107,7 @@ export function useProjectShellState(params: {
   canExposeProjectInfoRef.current = Boolean(
     params.selectedRepoPath &&
       !params.isStateLoading &&
-      params.activeProviderId === "dotnet"
+      providerUsesProjectFile
   );
   const {
     scanProject: scanProjectRequest,
@@ -161,7 +163,7 @@ export function useProjectShellState(params: {
         selectedRepoProjectFile: params.selectedRepoProjectFile,
       });
 
-      if (!targetPath || params.activeProviderId !== "dotnet") {
+      if (!targetPath || !providerUsesProjectFile) {
         setVisibleProjectInfoSnapshot(EMPTY_PROJECT_INFO_SNAPSHOT);
         setIsProjectInfoRefreshing(false);
         return null;
@@ -209,7 +211,7 @@ export function useProjectShellState(params: {
     },
     [
       commitProjectInfoSnapshot,
-      params.activeProviderId,
+      providerUsesProjectFile,
       params.selectedRepoId,
       params.selectedRepoPath,
       params.selectedRepoProjectFile,
@@ -222,7 +224,7 @@ export function useProjectShellState(params: {
     if (
       !params.selectedRepoPath ||
       params.isStateLoading ||
-      params.activeProviderId !== "dotnet"
+      !providerUsesProjectFile
     ) {
       scanRequestIdRef.current += 1;
       setVisibleProjectInfoSnapshot(EMPTY_PROJECT_INFO_SNAPSHOT);
@@ -252,7 +254,7 @@ export function useProjectShellState(params: {
     params.selectedRepoPath,
     params.selectedRepoProjectFile,
     params.isStateLoading,
-    params.activeProviderId,
+    providerUsesProjectFile,
     scanProject,
   ]);
 

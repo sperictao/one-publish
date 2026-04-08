@@ -22,6 +22,7 @@ interface ProviderOption {
   id: string;
   displayName: string;
   label?: string;
+  requiresProjectBinding?: boolean;
 }
 
 interface EditRepositoryDialogProps {
@@ -132,25 +133,36 @@ export function EditRepositoryDialog({
     () => projectScan?.projectFiles ?? [],
     [projectScan]
   );
+  const selectedProviderOption = useMemo(
+    () => providerOptions.find((provider) => provider.id === editProviderId) ?? null,
+    [editProviderId, providerOptions]
+  );
+  const selectedProviderRequiresProjectBinding =
+    selectedProviderOption?.requiresProjectBinding ?? false;
 
   const requiresProjectBinding = useMemo(
     () =>
       repositoryRequiresProjectBinding({
-        providerId: editProviderId,
+        requiresProjectBinding: selectedProviderRequiresProjectBinding,
         candidates: projectScan,
         projectFile: editProjectFile,
       }),
-    [editProjectFile, editProviderId, projectScan]
+    [editProjectFile, projectScan, selectedProviderRequiresProjectBinding]
   );
   const isProjectBindingPending = useMemo(
     () =>
       repositoryProjectBindingPending({
-        providerId: editProviderId,
+        requiresProjectBinding: selectedProviderRequiresProjectBinding,
         path: editPath,
         scanResolvedPath: projectScanResolvedPath,
         isScanning: isProjectScanPending,
       }),
-    [editPath, editProviderId, isProjectScanPending, projectScanResolvedPath]
+    [
+      editPath,
+      isProjectScanPending,
+      projectScanResolvedPath,
+      selectedProviderRequiresProjectBinding,
+    ]
   );
 
   const resetForm = useCallback(() => {
@@ -480,7 +492,7 @@ export function EditRepositoryDialog({
             .nextProjectFile
         : nextProjectFile;
       const bindingRequired = repositoryRequiresProjectBinding({
-        providerId: editProviderId,
+        requiresProjectBinding: selectedProviderRequiresProjectBinding,
         candidates: validatedCandidates,
         projectFile: resolvedProjectFile,
       });

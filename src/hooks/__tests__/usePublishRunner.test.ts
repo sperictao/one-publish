@@ -187,6 +187,7 @@ function createRunnerProps() {
     selectedRepoId: "repo-1",
     selectedRepo: { path: "/repo" },
     activeProviderId: "dotnet",
+    activeProviderUsesProjectFile: true,
     activeProviderParameters: {},
     selectedPreset: "profile-FolderProfile",
     isCustomMode: false,
