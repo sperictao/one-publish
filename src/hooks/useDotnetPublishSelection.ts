@@ -1,9 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 
-import {
-  buildDotnetProfileParameters,
-  buildDotnetPublishCommand,
-} from "@/lib/dotnetPublishConfig";
 import { getPathBasename, joinPath } from "@/lib/paths";
 import {
   resolveDotnetProjectProfile,
@@ -224,54 +220,6 @@ export function useDotnetPublishSelection(params: {
     };
   }, [buildDefaultScopedOutputDir, params]);
 
-  const fallbackDotnetPublishPreviewCommand = useMemo(() => {
-    if (!params.projectInfo || params.activeProviderId !== "dotnet") {
-      return "";
-    }
-
-    const config = getCurrentConfig();
-    const parameterRecord = buildDotnetProfileParameters({
-      configuration: config.configuration,
-      runtime: config.runtime,
-      framework: config.framework,
-      selfContained: config.self_contained,
-      outputDir: config.output_dir,
-      noBuild: config.no_build,
-      noRestore: config.no_restore,
-      verbosity: config.verbosity,
-      noLogo: config.no_logo,
-      properties: config.properties,
-      define: config.define,
-      useProfile: config.use_profile,
-      profileName: config.profile_name,
-    });
-
-    return buildDotnetPublishCommand(
-      params.projectInfo.project_file,
-      parameterRecord
-    );
-  }, [params.activeProviderId, getCurrentConfig, params.projectInfo]);
-
-  const dotnetPublishPreviewCommand = useMemo(() => {
-    if (!params.projectInfo || params.activeProviderId !== "dotnet") {
-      return "";
-    }
-
-    if (resolvedProjectProfile) {
-      return buildDotnetPublishCommand(
-        params.projectInfo.project_file,
-        resolvedProjectProfile.parameters
-      );
-    }
-
-    return fallbackDotnetPublishPreviewCommand;
-  }, [
-    fallbackDotnetPublishPreviewCommand,
-    params.activeProviderId,
-    params.projectInfo,
-    resolvedProjectProfile,
-  ]);
-
   const recentConfigKeyForCurrentSelection = useMemo(() => {
     if (params.activeProviderId !== "dotnet") {
       return null;
@@ -297,7 +245,6 @@ export function useDotnetPublishSelection(params: {
 
   return {
     getCurrentConfig,
-    dotnetPublishPreviewCommand,
     recentConfigKeyForCurrentSelection,
     resolvedProjectProfile,
     resolveSelectedProjectProfile,

@@ -83,7 +83,12 @@ export function ExecutionHistoryCard({
       return null;
     }
 
-    return record.error?.trim() || record.failureSignature?.trim() || null;
+    return (
+      record.error?.trim() ||
+      record.failureSignature?.trim() ||
+      record.outputExcerpt?.trim() ||
+      null
+    );
   };
 
   return (

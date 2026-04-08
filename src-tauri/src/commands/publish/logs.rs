@@ -40,6 +40,7 @@ pub(crate) async fn collect_log_chunks(
 ) -> PublishLogSummary {
     let mut stderr_needs_prefix = true;
     let mut ends_with_newline = true;
+    let mut output = String::new();
 
     while let Some((stream, chunk)) = receiver.recv().await {
         let rendered = render_stream_chunk(&stream, &chunk, &mut stderr_needs_prefix);
@@ -48,10 +49,14 @@ pub(crate) async fn collect_log_chunks(
         }
 
         emit_publish_log(&app, &session_id, &rendered);
+        output.push_str(&rendered);
         ends_with_newline = rendered.ends_with('\n') || rendered.ends_with('\r');
     }
 
-    PublishLogSummary { ends_with_newline }
+    PublishLogSummary {
+        ends_with_newline,
+        output,
+    }
 }
 
 pub(crate) async fn read_stream_chunks<R>(

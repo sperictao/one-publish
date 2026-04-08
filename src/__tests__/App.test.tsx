@@ -220,7 +220,7 @@ vi.mock("@/hooks/usePublishRunner", () => ({
       packageResult: null,
       signResult: null,
     },
-    dotnetPublishPreviewCommand: null,
+    publishPreviewCommand: null,
     runPublishSpec: mocks.noop,
     startPublish: mocks.noop,
     cancelPublish: mocks.noop,

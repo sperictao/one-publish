@@ -346,6 +346,9 @@ export function analyzeProjectScanFailure(
 export type PublishExecutionFailureReason =
   | "already_running"
   | "project_path_not_found"
+  | "output_path_invalid"
+  | "output_path_incompatible"
+  | "protected_directory_access_denied"
   | "unsupported_provider"
   | "render_error"
   | "tool_missing"
@@ -366,6 +369,22 @@ export function analyzePublishExecutionFailure(
 
     if (errorCode === "project_path_not_found") {
       return "project_path_not_found";
+    }
+
+    if (errorCode === "publish_output_windows_drive_root_missing") {
+      return "output_path_invalid";
+    }
+
+    if (
+      errorCode === "publish_output_windows_style_path_on_posix" ||
+      errorCode === "publish_output_posix_absolute_path_on_windows" ||
+      errorCode === "publish_output_path_incompatible"
+    ) {
+      return "output_path_incompatible";
+    }
+
+    if (errorCode === "publish_protected_directory_access_denied") {
+      return "protected_directory_access_denied";
     }
 
     if (errorCode === "unsupported_provider") {
@@ -413,6 +432,22 @@ export function analyzePublishExecutionFailure(
 
   if (normalized.includes("project path does not exist")) {
     return "project_path_not_found";
+  }
+
+  if (normalized.includes("missing windows drive or share root")) {
+    return "output_path_invalid";
+  }
+
+  if (
+    normalized.includes("publish output path is incompatible with this system")
+  ) {
+    return "output_path_incompatible";
+  }
+
+  if (
+    normalized.includes("publish output directory requires macos protected folder access")
+  ) {
+    return "protected_directory_access_denied";
   }
 
   if (normalized.includes("unsupported provider")) {

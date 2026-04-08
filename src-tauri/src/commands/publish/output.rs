@@ -3,6 +3,29 @@ use crate::spec::{PublishSpec, SpecValue};
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
+fn should_quote_display_arg(arg: &str) -> bool {
+    arg.is_empty()
+        || arg.chars().any(char::is_whitespace)
+        || arg.contains('/')
+        || arg.contains('\\')
+        || arg.starts_with('.')
+}
+
+fn display_arg(arg: &str) -> String {
+    if !should_quote_display_arg(arg) {
+        return arg.to_string();
+    }
+
+    format!("\"{}\"", arg.replace('\\', "\\\\").replace('"', "\\\""))
+}
+
+pub(crate) fn build_display_command(program: &str, args: &[String]) -> String {
+    let mut parts = Vec::with_capacity(args.len() + 1);
+    parts.push(display_arg(program));
+    parts.extend(args.iter().map(|arg| display_arg(arg)));
+    parts.join(" ")
+}
+
 pub(crate) fn resolve_plan_command(
     plan: &crate::plan::ExecutionPlan,
 ) -> Result<(String, Vec<String>), crate::errors::AppError> {
@@ -193,11 +216,30 @@ pub(crate) fn count_output_files(output_dir: &str) -> usize {
     }
 
     let path = Path::new(output_dir);
+    if path.is_file() {
+        return 1;
+    }
     if !path.is_dir() {
         return 0;
     }
 
-    std::fs::read_dir(path)
-        .map(|entries| entries.count())
-        .unwrap_or(0)
+    let mut file_count = 0usize;
+    let mut pending_dirs = vec![path.to_path_buf()];
+
+    while let Some(current_dir) = pending_dirs.pop() {
+        let Ok(entries) = std::fs::read_dir(&current_dir) else {
+            continue;
+        };
+
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.is_dir() {
+                pending_dirs.push(path);
+            } else {
+                file_count += 1;
+            }
+        }
+    }
+
+    file_count
 }

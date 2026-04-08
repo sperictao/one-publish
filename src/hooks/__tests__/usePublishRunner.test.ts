@@ -19,6 +19,7 @@ const mocks = vi.hoisted(() => ({
   openOutputDirectory: vi.fn(),
   setTrayPublishStatus: vi.fn(),
   showMainWindow: vi.fn(),
+  renderPublishCommand: vi.fn(),
   useDotnetPublishSelection: vi.fn(),
   usePublishSpecBuilder: vi.fn(),
 }));
@@ -77,6 +78,10 @@ vi.mock("@/lib/systemNotification", () => ({
   showSystemNotification: mocks.showSystemNotification,
 }));
 
+vi.mock("@/lib/renderPublishCommand", () => ({
+  renderPublishCommand: mocks.renderPublishCommand,
+}));
+
 vi.mock("@/lib/store", async () => {
   const actual = await vi.importActual<typeof import("@/lib/store")>("@/lib/store");
   return {
@@ -125,6 +130,42 @@ const defaultCustomConfig: PublishConfigStore = {
   useProfile: false,
   profileName: "",
 };
+
+function createRenderedCommand(
+  displayCommand = 'dotnet publish "/repo/App.csproj"'
+) {
+  return {
+    program: "dotnet",
+    args: ["publish", "/repo/App.csproj"],
+    working_dir: "/repo",
+    display_command: displayCommand,
+  };
+}
+
+function createPublishResult(
+  overrides: Partial<{
+    provider_id: string;
+    success: boolean;
+    cancelled: boolean;
+    error: string | null;
+    output_log: string;
+    output_dir: string;
+    file_count: number;
+    command: ReturnType<typeof createRenderedCommand>;
+  }> = {}
+) {
+  return {
+    provider_id: "dotnet",
+    success: true,
+    cancelled: false,
+    error: null,
+    command: createRenderedCommand(),
+    output_log: '$ dotnet publish "/repo/App.csproj"\nBuild succeeded.\n',
+    output_dir: "/exports/App/Release",
+    file_count: 3,
+    ...overrides,
+  };
+}
 
 function createRunnerProps() {
   return {
@@ -187,6 +228,7 @@ describe("usePublishRunner", () => {
       },
     });
     mocks.setTrayPublishStatus.mockResolvedValue(true);
+    mocks.renderPublishCommand.mockResolvedValue(createRenderedCommand());
     buildPublishSpecMock = vi.fn(() => ({
       version: 1,
       provider_id: "dotnet",
@@ -198,7 +240,6 @@ describe("usePublishRunner", () => {
 
     mocks.useDotnetPublishSelection.mockReturnValue({
       getCurrentConfig: vi.fn(),
-      dotnetPublishPreviewCommand: 'dotnet publish "/repo/App.csproj"',
       recentConfigKeyForCurrentSelection: "pubxml:FolderProfile",
       resolvedProjectProfile: {
         profileName: "FolderProfile",
@@ -224,14 +265,7 @@ describe("usePublishRunner", () => {
 
   it("选中 pubxml 时直接使用解析后的参数执行发布", async () => {
     mocks.runEnvironmentCheck.mockResolvedValue(readyEnvironment);
-    mocks.invoke.mockResolvedValue({
-      provider_id: "dotnet",
-      success: true,
-      cancelled: false,
-      error: null,
-      output_dir: "/exports/App/Release",
-      file_count: 3,
-    });
+    mocks.invoke.mockResolvedValue(createPublishResult());
 
     const props = createRunnerProps();
     const { result } = renderHook(() => usePublishRunner(props));
@@ -276,6 +310,43 @@ describe("usePublishRunner", () => {
     expect(buildPublishSpecMock).not.toHaveBeenCalled();
   });
 
+  it("执行结果优先使用后端返回的命令与最终日志写入历史", async () => {
+    mocks.runEnvironmentCheck.mockResolvedValue(readyEnvironment);
+    mocks.invoke.mockResolvedValue(
+      createPublishResult({
+        success: false,
+        error: "发布失败，退出代码: Some(1)",
+        command: createRenderedCommand(
+          'dotnet publish "/repo/App.csproj" -c Release -o "/exports/App/Release"'
+        ),
+        output_log: [
+          '$ dotnet publish "/repo/App.csproj" -c Release -o "/exports/App/Release"',
+          "[stderr] CSC : error CS0246: The type or namespace name 'Foo' could not be found",
+          "[stderr] Build FAILED.",
+        ].join("\n"),
+        output_dir: "",
+        file_count: 0,
+      })
+    );
+
+    const props = createRunnerProps();
+    const { result } = renderHook(() => usePublishRunner(props));
+
+    await act(async () => {
+      await result.current.startPublish();
+    });
+
+    expect(props.savePublishRecord).toHaveBeenCalledWith(
+      expect.objectContaining({
+        commandLine:
+          '$ dotnet publish "/repo/App.csproj" -c Release -o "/exports/App/Release"',
+        outputExcerpt: expect.stringContaining("Build FAILED."),
+        error:
+          "[stderr] CSC : error CS0246: The type or namespace name 'Foo' could not be found",
+      })
+    );
+  });
+
   it("环境阻断时不执行发布并打开环境弹窗", async () => {
     mocks.runEnvironmentCheck.mockResolvedValue({
       ...readyEnvironment,
@@ -290,14 +361,11 @@ describe("usePublishRunner", () => {
         },
       ],
     });
-    mocks.invoke.mockResolvedValue({
-      provider_id: "dotnet",
-      success: true,
-      cancelled: false,
-      error: null,
-      output_dir: "/exports/App/Release",
-      file_count: 0,
-    });
+    mocks.invoke.mockResolvedValue(
+      createPublishResult({
+        file_count: 0,
+      })
+    );
 
     const props = createRunnerProps();
     const { result } = renderHook(() => usePublishRunner(props));
@@ -321,14 +389,11 @@ describe("usePublishRunner", () => {
 
   it("环境检查失败时不会继续执行发布", async () => {
     mocks.runEnvironmentCheck.mockRejectedValue(new Error("env boom"));
-    mocks.invoke.mockResolvedValue({
-      provider_id: "dotnet",
-      success: true,
-      cancelled: false,
-      error: null,
-      output_dir: "/exports/App/Release",
-      file_count: 0,
-    });
+    mocks.invoke.mockResolvedValue(
+      createPublishResult({
+        file_count: 0,
+      })
+    );
 
     const props = createRunnerProps();
     const { result } = renderHook(() => usePublishRunner(props));
@@ -480,7 +545,6 @@ describe("usePublishRunner", () => {
     });
     mocks.useDotnetPublishSelection.mockReturnValue({
       getCurrentConfig: vi.fn(),
-      dotnetPublishPreviewCommand: 'dotnet publish "/repo/App.csproj"',
       recentConfigKeyForCurrentSelection: "preset:release-fd",
       resolvedProjectProfile: null,
       resolveSelectedProjectProfile: vi.fn(),
@@ -514,14 +578,7 @@ describe("usePublishRunner", () => {
 
   it("系统通知模式成功时自动打开输出目录且不显示 toast", async () => {
     mocks.runEnvironmentCheck.mockResolvedValue(readyEnvironment);
-    mocks.invoke.mockResolvedValue({
-      provider_id: "dotnet",
-      success: true,
-      cancelled: false,
-      error: null,
-      output_dir: "/exports/App/Release",
-      file_count: 3,
-    });
+    mocks.invoke.mockResolvedValue(createPublishResult());
     mocks.openOutputDirectory.mockResolvedValue("/exports/App/Release");
 
     const props = createRunnerProps();
@@ -564,14 +621,7 @@ describe("usePublishRunner", () => {
 
   it("tray 路径成功时会显示发布成功状态文字", async () => {
     mocks.runEnvironmentCheck.mockResolvedValue(readyEnvironment);
-    mocks.invoke.mockResolvedValue({
-      provider_id: "dotnet",
-      success: true,
-      cancelled: false,
-      error: null,
-      output_dir: "/exports/App/Release",
-      file_count: 3,
-    });
+    mocks.invoke.mockResolvedValue(createPublishResult());
 
     const props = createRunnerProps();
     const { result } = renderHook(() => usePublishRunner(props));
@@ -600,14 +650,15 @@ describe("usePublishRunner", () => {
 
   it("系统通知模式失败时不拉起主窗口并发送失败详情", async () => {
     mocks.runEnvironmentCheck.mockResolvedValue(readyEnvironment);
-    mocks.invoke.mockResolvedValue({
-      provider_id: "dotnet",
-      success: false,
-      cancelled: false,
-      error: "publish failed",
-      output_dir: "",
-      file_count: 0,
-    });
+    mocks.invoke.mockResolvedValue(
+      createPublishResult({
+        success: false,
+        error: "publish failed",
+        output_log: '$ dotnet publish "/repo/App.csproj"\n[stderr] publish failed\n',
+        output_dir: "",
+        file_count: 0,
+      })
+    );
 
     const props = createRunnerProps();
     const { result } = renderHook(() => usePublishRunner(props));
@@ -643,14 +694,15 @@ describe("usePublishRunner", () => {
 
   it("系统通知发送失败时会回退拉起主窗口暴露错误", async () => {
     mocks.runEnvironmentCheck.mockResolvedValue(readyEnvironment);
-    mocks.invoke.mockResolvedValue({
-      provider_id: "dotnet",
-      success: false,
-      cancelled: false,
-      error: "publish failed",
-      output_dir: "",
-      file_count: 0,
-    });
+    mocks.invoke.mockResolvedValue(
+      createPublishResult({
+        success: false,
+        error: "publish failed",
+        output_log: '$ dotnet publish "/repo/App.csproj"\n[stderr] publish failed\n',
+        output_dir: "",
+        file_count: 0,
+      })
+    );
     mocks.showSystemNotification.mockResolvedValue(false);
 
     const props = createRunnerProps();
@@ -712,14 +764,7 @@ describe("usePublishRunner", () => {
 
   it("切换仓库或发布配置时会清空右栏发布展示态", async () => {
     mocks.runEnvironmentCheck.mockResolvedValue(readyEnvironment);
-    mocks.invoke.mockResolvedValue({
-      provider_id: "dotnet",
-      success: true,
-      cancelled: false,
-      error: null,
-      output_dir: "/exports/App/Release",
-      file_count: 3,
-    });
+    mocks.invoke.mockResolvedValue(createPublishResult());
 
     const props = createRunnerProps();
     const { result, rerender } = renderHook(
@@ -773,6 +818,77 @@ describe("usePublishRunner", () => {
       expect(result.current.lastPublishSpec).toBeNull();
       expect(result.current.currentPublishRecordId).toBeNull();
       expect(result.current.outputLog).toBe("");
+    });
+  });
+
+  it("编辑自定义发布参数时保留当前右栏发布展示态", async () => {
+    mocks.runEnvironmentCheck.mockResolvedValue(readyEnvironment);
+    mocks.invoke.mockResolvedValue(createPublishResult());
+
+    const props = createRunnerProps();
+    props.isCustomMode = true;
+    props.selectedPreset = "release-fd";
+    mocks.useDotnetPublishSelection.mockReturnValue({
+      getCurrentConfig: vi.fn(),
+      recentConfigKeyForCurrentSelection: null,
+      resolvedProjectProfile: null,
+      resolveSelectedProjectProfile: vi.fn(),
+    });
+
+    const { result, rerender } = renderHook(
+      (hookProps: ReturnType<typeof createRunnerProps>) =>
+        usePublishRunner(hookProps),
+      {
+        initialProps: props,
+      }
+    );
+
+    await act(async () => {
+      await result.current.runPublishSpec(
+        {
+          version: 1,
+          provider_id: "dotnet",
+          project_path: "/repo/App.csproj",
+          parameters: {
+            configuration: "Release",
+          },
+        },
+        {
+          repoId: "repo-1",
+        }
+      );
+    });
+
+    await waitFor(() => {
+      expect(result.current.publishResult).toEqual(
+        expect.objectContaining({
+          success: true,
+          output_dir: "/exports/App/Release",
+        })
+      );
+    });
+
+    rerender({
+      ...props,
+      customConfig: {
+        ...props.customConfig,
+        outputDir: "/exports/App/Custom",
+      },
+    });
+
+    await waitFor(() => {
+      expect(result.current.publishResult).toEqual(
+        expect.objectContaining({
+          success: true,
+          output_dir: "/exports/App/Release",
+        })
+      );
+      expect(result.current.lastPublishSpec).toEqual(
+        expect.objectContaining({
+          project_path: "/repo/App.csproj",
+        })
+      );
+      expect(result.current.outputLog).toContain("Build succeeded.");
     });
   });
 });

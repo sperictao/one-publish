@@ -2,8 +2,17 @@ import { describe, expect, it } from "vitest";
 
 import { createPublishExecutionRecord } from "@/lib/publishExecutionRecord";
 
+function createCommand(displayCommand = "dotnet publish /repo/App.csproj") {
+  return {
+    program: "dotnet",
+    args: ["publish", "/repo/App.csproj"],
+    working_dir: "/repo",
+    display_command: displayCommand,
+  };
+}
+
 describe("createPublishExecutionRecord", () => {
-  it("从输出日志中提取命令行", () => {
+  it("优先使用后端返回的命令行", () => {
     const record = createPublishExecutionRecord({
       spec: {
         version: 1,
@@ -19,13 +28,15 @@ describe("createPublishExecutionRecord", () => {
         success: true,
         cancelled: false,
         error: null,
+        command: createCommand('dotnet publish "/repo/App.csproj" -c Release'),
+        output_log: '$ dotnet publish "/repo/App.csproj" -c Release\nbuild ok',
         output_dir: "/repo/out",
         file_count: 2,
       },
       outputLog: "$ dotnet publish /repo/App.csproj\nbuild ok",
     });
 
-    expect(record.commandLine).toBe("$ dotnet publish /repo/App.csproj");
+    expect(record.commandLine).toBe('$ dotnet publish "/repo/App.csproj" -c Release');
     expect(record.failureSignature).toBeNull();
   });
 
@@ -45,6 +56,9 @@ describe("createPublishExecutionRecord", () => {
         success: false,
         cancelled: false,
         error: null,
+        command: createCommand(),
+        output_log:
+          "$ dotnet publish /repo/App.csproj\n[stderr] Build failed: boom",
         output_dir: "",
         file_count: 0,
       },
@@ -53,6 +67,9 @@ describe("createPublishExecutionRecord", () => {
 
     expect(record.commandLine).toBe("$ dotnet publish /repo/App.csproj");
     expect(record.failureSignature).toBe("[stderr] build failed: boom");
+    expect(record.outputExcerpt).toBe(
+      "$ dotnet publish /repo/App.csproj\n[stderr] Build failed: boom"
+    );
   });
 
   it("失败摘要只有退出码时，优先保存输出日志里的真实错误", () => {
@@ -72,6 +89,12 @@ describe("createPublishExecutionRecord", () => {
         cancelled: false,
         error:
           "[stderr] CSC : error CS0246: The type or namespace name 'Foo' could not be found",
+        command: createCommand(),
+        output_log: [
+          "$ dotnet publish /repo/App.csproj",
+          "[stderr] CSC : error CS0246: The type or namespace name 'Foo' could not be found",
+          "[stderr] Build FAILED.",
+        ].join("\n"),
         output_dir: "",
         file_count: 0,
       },

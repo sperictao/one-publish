@@ -55,6 +55,7 @@ fn bootstrap_state_serialization_excludes_execution_history() {
             command_line: None,
             snapshot_path: None,
             failure_signature: None,
+            output_excerpt: None,
             spec: None,
             file_count: 2,
         }],

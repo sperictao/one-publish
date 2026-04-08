@@ -25,6 +25,29 @@ export function getPublishFailureFeedback(
     };
   }
 
+  if (failureReason === "output_path_invalid") {
+    return {
+      title: appT.publishOutputPathInvalid || "发布目录无效",
+      description: rawErrorMessage,
+    };
+  }
+
+  if (failureReason === "output_path_incompatible") {
+    return {
+      title: appT.publishOutputPathIncompatible || "发布目录路径与当前系统不兼容",
+      description: rawErrorMessage,
+    };
+  }
+
+  if (failureReason === "protected_directory_access_denied") {
+    return {
+      title:
+        appT.publishProtectedDirectoryAccessDenied ||
+        "缺少 macOS 受保护目录访问权限",
+      description: rawErrorMessage,
+    };
+  }
+
   if (failureReason === "unsupported_provider") {
     return {
       title: appT.publishProviderUnsupported || "不支持的 Provider",

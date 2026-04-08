@@ -5,7 +5,17 @@ import type {
   PublishResult,
 } from "@/hooks/usePublishRunner";
 
-function extractCommandLine(outputLog: string): string | null {
+const OUTPUT_EXCERPT_MAX_LINES = 40;
+const OUTPUT_EXCERPT_MAX_CHARS = 16_000;
+
+function extractCommandLine(
+  result: PublishResult,
+  outputLog: string
+): string | null {
+  if (result.command?.display_command?.trim()) {
+    return `$ ${result.command.display_command.trim()}`;
+  }
+
   if (!outputLog) {
     return null;
   }
@@ -32,6 +42,27 @@ function extractCommandLine(outputLog: string): string | null {
   return null;
 }
 
+function buildOutputExcerpt(outputLog: string): string | null {
+  if (!outputLog.trim()) {
+    return null;
+  }
+
+  const lines = outputLog
+    .split(/\r?\n/)
+    .filter((line) => line.trim().length > 0)
+    .slice(-OUTPUT_EXCERPT_MAX_LINES);
+  if (lines.length === 0) {
+    return null;
+  }
+
+  const excerpt = lines.join("\n");
+  if (excerpt.length <= OUTPUT_EXCERPT_MAX_CHARS) {
+    return excerpt;
+  }
+
+  return excerpt.slice(excerpt.length - OUTPUT_EXCERPT_MAX_CHARS);
+}
+
 function toStoredSpecValue(spec: ProviderPublishSpec): JsonValue {
   return JSON.parse(JSON.stringify(spec)) as JsonValue;
 }
@@ -44,13 +75,17 @@ export function createPublishExecutionRecord(params: {
   result: PublishResult;
   outputLog: string;
 }): ExecutionRecord {
-  const commandLine = extractCommandLine(params.outputLog);
+  const commandLine = extractCommandLine(params.result, params.outputLog);
   const failureSignature =
     !params.result.success && !params.result.cancelled
       ? deriveFailureSignature({
           error: params.result.error,
           output: params.outputLog,
         })
+      : null;
+  const outputExcerpt =
+    !params.result.success && !params.result.cancelled
+      ? buildOutputExcerpt(params.outputLog)
       : null;
 
   return {
@@ -67,6 +102,7 @@ export function createPublishExecutionRecord(params: {
     commandLine,
     snapshotPath: null,
     failureSignature,
+    outputExcerpt,
     spec: toStoredSpecValue(params.spec),
     fileCount: params.result.file_count,
   };

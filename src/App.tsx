@@ -509,7 +509,7 @@ function App() {
     releaseChecklistOpen,
     setReleaseChecklistOpen,
     artifactActionState,
-    dotnetPublishPreviewCommand,
+    publishPreviewCommand,
     runPublishSpec,
     startPublish,
     cancelPublish,
@@ -594,8 +594,7 @@ function App() {
         selectedRepo &&
         (activeProviderId === "dotnet" ? Boolean(projectInfo) : true)
           ? {
-              publishCommand:
-                activeProviderId === "dotnet" ? dotnetPublishPreviewCommand : null,
+              publishCommand: publishPreviewCommand || null,
               publishCommandLabel: publishT.command || "将执行的命令:",
               startLabel: configT.execute || "执行发布",
               publishingLabel: configT.publishing || "发布中...",
@@ -615,11 +614,11 @@ function App() {
       cancelPublish,
       configT.execute,
       configT.publishing,
-      dotnetPublishPreviewCommand,
       isCancellingPublish,
       isPublishRunCardRefreshing,
       isPublishing,
       outputLog,
+      publishPreviewCommand,
       projectInfo,
       publishResult,
       publishT.command,

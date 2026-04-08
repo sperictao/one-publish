@@ -83,6 +83,8 @@ pub struct ExecutionRecord {
     pub command_line: Option<String>,
     pub snapshot_path: Option<String>,
     pub failure_signature: Option<String>,
+    #[serde(default)]
+    pub output_excerpt: Option<String>,
     pub spec: Option<serde_json::Value>,
     #[serde(default)]
     pub file_count: usize,

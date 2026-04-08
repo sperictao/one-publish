@@ -50,6 +50,16 @@ export function usePublishLogStream() {
     replaceVisibleOutputLog("");
   }, [replaceVisibleOutputLog]);
 
+  const replaceCapturedOutputLog = useCallback(
+    (nextLog: string) => {
+      capturedOutputLogRef.current = nextLog;
+      if (isVisibleCaptureEnabledRef.current) {
+        replaceVisibleOutputLog(nextLog);
+      }
+    },
+    [replaceVisibleOutputLog]
+  );
+
   useEffect(() => {
     if (!isTauri()) {
       return;
@@ -99,5 +109,6 @@ export function usePublishLogStream() {
     beginLogCapture,
     hideLogCapture,
     resetLogCapture,
+    replaceCapturedOutputLog,
   };
 }

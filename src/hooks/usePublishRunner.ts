@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { toast } from "sonner";
 
@@ -32,6 +32,7 @@ import { usePublishSpecBuilder } from "@/hooks/usePublishSpecBuilder";
 import { usePublishUiState } from "@/hooks/usePublishUiState";
 import { createPublishExecutionRecord } from "@/lib/publishExecutionRecord";
 import { normalizePublishResult } from "@/lib/publishFailure";
+import { renderPublishCommand } from "@/lib/renderPublishCommand";
 import type { PublishConfigStore } from "@/lib/store";
 import type { ProjectInfo } from "@/types/project";
 import type { ParameterValue } from "@/types/parameters";
@@ -107,27 +108,16 @@ function buildPublishPresentationScopeKey(params: {
   selectedRepoId: string | null;
   selectedRepoPath: string | null;
   activeProviderId: string;
-  activeProviderParameters: Record<string, ParameterValue>;
-  selectedPreset: string;
-  isCustomMode: boolean;
-  activeProfileName: string | null;
-  customConfig: PublishConfigStore;
-  defaultOutputDir?: string;
+  selectionKey: string;
   projectFile: string | null;
-  projectRoot: string | null;
+  specVersion: number;
 }) {
   return JSON.stringify({
-    selectedRepoId: params.selectedRepoId,
-    selectedRepoPath: params.selectedRepoPath,
+    selectedRepoId: params.selectedRepoId ?? params.selectedRepoPath,
     activeProviderId: params.activeProviderId,
-    activeProviderParameters: params.activeProviderParameters,
-    selectedPreset: params.selectedPreset,
-    isCustomMode: params.isCustomMode,
-    activeProfileName: params.activeProfileName,
-    customConfig: params.customConfig,
-    defaultOutputDir: params.defaultOutputDir ?? "",
+    selectionKey: params.selectionKey,
     projectFile: params.projectFile,
-    projectRoot: params.projectRoot,
+    specVersion: params.specVersion,
   });
 }
 
@@ -173,12 +163,13 @@ export function usePublishRunner({
     beginLogCapture,
     hideLogCapture,
     resetLogCapture,
+    replaceCapturedOutputLog,
   } = usePublishLogStream();
   const presentationRevisionRef = useRef(0);
+  const [publishPreviewCommand, setPublishPreviewCommand] = useState("");
 
   const {
     getCurrentConfig,
-    dotnetPublishPreviewCommand,
     recentConfigKeyForCurrentSelection,
     resolvedProjectProfile,
     resolveSelectedProjectProfile,
@@ -202,6 +193,90 @@ export function usePublishRunner({
     specVersion,
     getCurrentConfig,
   });
+
+  const publishPresentationSelectionKey = useMemo(() => {
+    if (activeProviderId !== "dotnet") {
+      return `provider:${activeProviderId}`;
+    }
+
+    if (recentConfigKeyForCurrentSelection) {
+      return recentConfigKeyForCurrentSelection;
+    }
+
+    if (isCustomMode) {
+      return activeProfileName ? `userprofile:${activeProfileName}` : "custom";
+    }
+
+    return `preset:${selectedPreset}`;
+  }, [
+    activeProfileName,
+    activeProviderId,
+    isCustomMode,
+    recentConfigKeyForCurrentSelection,
+    selectedPreset,
+  ]);
+
+  const buildCurrentPublishSpec = useCallback((): ProviderPublishSpec | null => {
+    if (!selectedRepo) {
+      return null;
+    }
+
+    if (activeProviderId === "dotnet") {
+      if (!projectInfo) {
+        return null;
+      }
+
+      if (!isCustomMode && selectedPreset.startsWith("profile-")) {
+        if (resolvedProjectProfile) {
+          return {
+            version: specVersion,
+            provider_id: "dotnet",
+            project_path: projectInfo.project_file,
+            parameters: resolvedProjectProfile.parameters,
+          };
+        }
+      }
+    }
+
+    return buildPublishSpec();
+  }, [
+    activeProviderId,
+    buildPublishSpec,
+    isCustomMode,
+    projectInfo,
+    resolvedProjectProfile,
+    selectedPreset,
+    selectedRepo,
+    specVersion,
+  ]);
+
+  useEffect(() => {
+    let disposed = false;
+    const spec = buildCurrentPublishSpec();
+
+    if (!spec) {
+      setPublishPreviewCommand("");
+      return () => {
+        disposed = true;
+      };
+    }
+
+    void renderPublishCommand(spec)
+      .then((command) => {
+        if (!disposed) {
+          setPublishPreviewCommand(command.display_command);
+        }
+      })
+      .catch(() => {
+        if (!disposed) {
+          setPublishPreviewCommand("");
+        }
+      });
+
+    return () => {
+      disposed = true;
+    };
+  }, [buildCurrentPublishSpec]);
 
   const waitForOutputLogSnapshot = useCallback(async (): Promise<string> => {
     await new Promise<void>((resolve) => {
@@ -333,27 +408,17 @@ export function usePublishRunner({
         selectedRepoId,
         selectedRepoPath: selectedRepo?.path ?? null,
         activeProviderId,
-        activeProviderParameters,
-        selectedPreset,
-        isCustomMode,
-        activeProfileName,
-        customConfig,
-        defaultOutputDir,
+        selectionKey: publishPresentationSelectionKey,
         projectFile: projectInfo?.project_file ?? null,
-        projectRoot: projectInfo?.root_path ?? null,
+        specVersion,
       }),
     [
-      activeProfileName,
       activeProviderId,
-      activeProviderParameters,
-      customConfig,
-      defaultOutputDir,
-      isCustomMode,
       projectInfo?.project_file,
-      projectInfo?.root_path,
-      selectedPreset,
+      publishPresentationSelectionKey,
       selectedRepo?.path,
       selectedRepoId,
+      specVersion,
     ]
   );
 
@@ -532,13 +597,15 @@ export function usePublishRunner({
         const result = await invoke<PublishResult>("execute_provider_publish", {
           spec,
         });
-        const outputLogSnapshot = await waitForOutputLogSnapshot();
+        const outputLogSnapshot =
+          result.output_log || (await waitForOutputLogSnapshot());
         const resolvedResult = normalizePublishResult({
           result,
           outputLog: outputLogSnapshot,
         });
 
         if (isCurrentPresentationRevision(runRevision)) {
+          replaceCapturedOutputLog(outputLogSnapshot);
           setPublishResult(resolvedResult);
         }
 
@@ -617,12 +684,20 @@ export function usePublishRunner({
             success: false,
             cancelled: false,
             error: rawErrorMessage,
+            command: {
+              program: "",
+              args: [],
+              working_dir: null,
+              display_command: "",
+            },
+            output_log: "",
             output_dir: "",
             file_count: 0,
           },
           outputLog: outputLogSnapshot,
         });
         if (isCurrentPresentationRevision(runRevision)) {
+          replaceCapturedOutputLog(outputLogSnapshot);
           setPublishResult(failedResult);
         }
 
@@ -672,6 +747,7 @@ export function usePublishRunner({
       setLastPublishSpec,
       setCurrentPublishRecordId,
       openOutputDirectoryIfNeeded,
+      replaceCapturedOutputLog,
       restoreMainWindowIfNeeded,
       startPublishPresentationRun,
       waitForOutputLogSnapshot,
@@ -788,7 +864,7 @@ export function usePublishRunner({
     setReleaseChecklistOpen,
     artifactActionState,
     setArtifactActionState,
-    dotnetPublishPreviewCommand,
+    publishPreviewCommand,
     runPublishSpec,
     startPublish,
     cancelPublish,

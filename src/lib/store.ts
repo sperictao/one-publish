@@ -52,6 +52,7 @@ export interface ExecutionRecord
     | "commandLine"
     | "snapshotPath"
     | "failureSignature"
+    | "outputExcerpt"
     | "spec"
   > {
   repoId?: string | null;
@@ -60,6 +61,7 @@ export interface ExecutionRecord
   commandLine?: string | null;
   snapshotPath?: string | null;
   failureSignature?: string | null;
+  outputExcerpt?: string | null;
   spec?: JsonValue | null;
 }
 

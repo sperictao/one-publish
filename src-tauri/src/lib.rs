@@ -159,6 +159,7 @@ pub fn run() {
             commands::check_repository_branch_connectivity,
             commands::execute_publish,
             commands::execute_provider_publish,
+            commands::render_provider_publish,
             commands::cancel_provider_publish,
             commands::preflight_publish_output,
             commands::check_update,

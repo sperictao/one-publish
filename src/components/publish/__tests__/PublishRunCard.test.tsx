@@ -21,6 +21,13 @@ describe("PublishRunCard", () => {
           success: true,
           cancelled: false,
           error: null,
+          command: {
+            program: "dotnet",
+            args: ["publish", "/tmp/output/App.csproj"],
+            working_dir: "/tmp/output",
+            display_command: 'dotnet publish "/tmp/output/App.csproj"',
+          },
+          output_log: "",
           output_dir: "/tmp/output",
           file_count: 3,
         }}

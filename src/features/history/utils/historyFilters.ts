@@ -60,6 +60,7 @@ export function filterExecutionHistory(
       record.error || "",
       record.commandLine || "",
       record.failureSignature || "",
+      record.outputExcerpt || "",
     ]
       .join("\n")
       .toLowerCase();
