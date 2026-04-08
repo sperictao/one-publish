@@ -409,6 +409,16 @@ pub fn restore_main_window(app: &AppHandle) {
         return;
     };
 
+    // macOS 从状态栏恢复时，先把整个 app 从隐藏态切回可见，
+    // 否则只 show 主窗口可能仍然留在 app hidden 状态。
+    #[cfg(target_os = "macos")]
+    {
+        apply_tray_policy(app, true);
+        if let Err(e) = app.show() {
+            log::warn!("显示应用失败: {}", e);
+        }
+    }
+
     // Windows 平台恢复任务栏显示
     #[cfg(target_os = "windows")]
     {
@@ -428,11 +438,39 @@ pub fn restore_main_window(app: &AppHandle) {
     if let Err(e) = window.set_focus() {
         log::warn!("设置焦点失败: {}", e);
     }
+}
 
-    // macOS 平台设置为 Regular 模式并显示 Dock 图标
+/// 将主窗口最小化到托盘
+///
+/// 统一处理窗口隐藏逻辑，包括：
+/// - Windows: 隐藏任务栏图标
+/// - macOS: 隐藏整个 app 并切换到 Accessory 模式
+/// - 通用: 隐藏主窗口
+pub fn minimize_main_window_to_tray(app: &AppHandle) {
+    let Some(window) = app.get_webview_window("main") else {
+        log::warn!("无法获取主窗口");
+        return;
+    };
+
+    if let Err(e) = window.hide() {
+        log::warn!("隐藏窗口失败: {}", e);
+    }
+
+    #[cfg(target_os = "windows")]
+    {
+        if let Err(e) = window.set_skip_taskbar(true) {
+            log::warn!("隐藏任务栏图标失败: {}", e);
+        }
+    }
+
     #[cfg(target_os = "macos")]
     {
-        apply_tray_policy(app, true);
+        // macOS 上只隐藏主窗口仍可能让应用保持活跃态，
+        // 导致后续系统通知只进入通知中心而不弹出 banner。
+        if let Err(e) = app.hide() {
+            log::warn!("隐藏应用失败: {}", e);
+        }
+        apply_tray_policy(app, false);
     }
 }
 
