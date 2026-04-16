@@ -75,6 +75,7 @@ function createRepository(overrides?: Partial<Repository>): Repository {
         noRestore: false,
         verbosity: "",
         noLogo: false,
+        deleteExistingFiles: false,
         properties: {},
         define: [],
         useProfile: false,

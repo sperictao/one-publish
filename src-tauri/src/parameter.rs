@@ -82,7 +82,9 @@ impl ParameterRenderer {
     ) -> Result<(), RenderError> {
         match value {
             crate::spec::SpecValue::Bool(true) => {
-                args.push(def.flag.clone());
+                if !def.flag.is_empty() {
+                    args.push(def.flag.clone());
+                }
             }
             crate::spec::SpecValue::Bool(false) => {
                 // Omit flag when false

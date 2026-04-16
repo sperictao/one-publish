@@ -1021,8 +1021,8 @@ describe("PublishConfigPanel", () => {
         noRestore: false,
         verbosity: "",
         noLogo: false,
+        deleteExistingFiles: true,
         properties: {
-          DeleteExistingFiles: "true",
           PublishProvider: "FileSystem",
           ProjectGuid: "{12345678-1234-1234-1234-1234567890AB}",
           _TargetId: "Folder",
@@ -1218,6 +1218,7 @@ describe("PublishConfigPanel", () => {
         noRestore: false,
         verbosity: "",
         noLogo: false,
+        deleteExistingFiles: false,
         properties: {
           PublishSingleFile: "true",
         },

@@ -11,6 +11,7 @@ export const DOTNET_ADVANCED_PARAMETER_KEYS = [
   "no_restore",
   "verbosity",
   "no_logo",
+  "delete_existing_files",
   "properties",
   "define",
 ] as const;
@@ -111,6 +112,7 @@ export function buildDotnetAdvancedParameters(
     no_restore: config.noRestore,
     verbosity: config.verbosity,
     no_logo: config.noLogo,
+    delete_existing_files: config.deleteExistingFiles,
     properties: { ...config.properties },
     define: [...config.define],
   };
@@ -219,6 +221,10 @@ export function buildDotnetProfileParameters(
     parameters.no_logo = true;
   }
 
+  if (config.deleteExistingFiles) {
+    parameters.delete_existing_files = true;
+  }
+
   const properties = normalizeDotnetPropertyMap(config.properties);
   if (config.useProfile && config.profileName.trim()) {
     properties.PublishProfile = config.profileName.trim();
@@ -286,6 +292,7 @@ export function createDotnetPublishConfigFromParameters(
         ? parameters.verbosity
         : defaults.verbosity,
     noLogo: parameters.no_logo === true,
+    deleteExistingFiles: parameters.delete_existing_files === true,
     properties,
     define: normalizeDotnetStringArray(parameters.define),
     useProfile: options?.inferProfileSelection === true && publishProfile.length > 0,

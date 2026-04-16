@@ -93,7 +93,7 @@ export type ConfigProfile = { name: string, providerId: string, parameters: Json
 
 export type ExecutionRecord = { id: string, repoId: string | null, providerId: string, projectPath: string, startedAt: string, finishedAt: string, success: boolean, cancelled: boolean, outputDir: string | null, error: string | null, commandLine: string | null, snapshotPath: string | null, failureSignature: string | null, outputExcerpt: string | null, spec: JsonValue | null, fileCount: number, };
 
-export type PublishConfigStore = { configuration: string, runtime: string, framework: string, selfContained: boolean, outputDir: string, noBuild: boolean, noRestore: boolean, verbosity: string, noLogo: boolean, properties: { [key: string]: string }, define: Array<string>, useProfile: boolean, profileName: string, };
+export type PublishConfigStore = { configuration: string, runtime: string, framework: string, selfContained: boolean, outputDir: string, noBuild: boolean, noRestore: boolean, verbosity: string, noLogo: boolean, deleteExistingFiles: boolean, properties: { [key: string]: string }, define: Array<string>, useProfile: boolean, profileName: string, };
 
 export type RepoPublishConfig = { selectedPreset: string, isCustomMode: boolean, customConfig: PublishConfigStore, profiles: Array<ConfigProfile>, };
 

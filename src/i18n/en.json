@@ -407,7 +407,7 @@
     "advancedFieldNoLogoLabel": "Hide .NET logo",
     "advancedFieldNoLogoDescription": "Maps to --no-logo. Hides the startup banner from dotnet publish.",
     "advancedFieldDeleteExistingFilesLabel": "Delete existing target files",
-    "advancedFieldDeleteExistingFilesDescription": "Maps to the MSBuild property DeleteExistingFiles. Remove existing files from the target directory before publishing.",
+    "advancedFieldDeleteExistingFilesDescription": "Remove existing files from the target directory before publishing.",
     "advancedFieldExcludeAppDataLabel": "Exclude App_Data",
     "advancedFieldExcludeAppDataDescription": "Maps to the MSBuild property ExcludeApp_Data. Exclude the App_Data folder during publish.",
     "advancedFieldLaunchSiteAfterPublishLabel": "Launch site after publish",
