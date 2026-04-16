@@ -226,6 +226,7 @@ export const defaultPublishConfigStore: PublishConfigStore = {
   noRestore: false,
   verbosity: "",
   noLogo: false,
+  deleteExistingFiles: false,
   properties: {},
   define: [],
   useProfile: false,

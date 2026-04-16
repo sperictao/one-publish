@@ -401,11 +401,12 @@ function getLocalizedAdvancedFieldText(
         "对应 --no-logo。隐藏 dotnet publish 的启动标识输出。"
       );
     case "DeleteExistingFiles":
+    case "delete_existing_files":
       return localized(
         "advancedFieldDeleteExistingFilesLabel",
         "发布前清空目标目录",
         "advancedFieldDeleteExistingFilesDescription",
-        "对应 MSBuild 属性 DeleteExistingFiles。发布前删除目标目录中的现有文件。"
+        "发布前删除目标目录中的现有文件。"
       );
     case "ExcludeApp_Data":
       return localized(
@@ -1255,6 +1256,9 @@ export function DotnetPublishConfigFormSections({
             return;
           case "noLogo":
             updateDraft({ noLogo: value === true });
+            return;
+          case "deleteExistingFiles":
+            updateDraft({ deleteExistingFiles: value === true });
             return;
           case "define":
             updateDraft({ define: normalizeDotnetStringArray(value) });

@@ -63,13 +63,6 @@ type FixedPropertyFieldConfig = {
 
 const FIXED_PROPERTY_FIELD_CONFIGS: ReadonlyArray<FixedPropertyFieldConfig> = [
   {
-    key: "DeleteExistingFiles",
-    group: "base",
-    control: "boolean",
-    description:
-      "Delete the existing files in the target publish directory before deployment.",
-  },
-  {
     key: "ExcludeApp_Data",
     group: "base",
     control: "boolean",
@@ -153,6 +146,7 @@ export type DotnetAdvancedFieldSource =
         | "noRestore"
         | "verbosity"
         | "noLogo"
+        | "deleteExistingFiles"
         | "define";
       valueType: "string" | "boolean" | "stringArray";
     }
@@ -224,6 +218,11 @@ export function buildDotnetAdvancedFieldsModel(params: {
       dotnetSchema?.parameters.framework || FALLBACK_FRAMEWORK_DEFINITION,
       config.framework,
       projectFrameworkOptions
+    ),
+    createBooleanDraftField(
+      "delete_existing_files",
+      dotnetSchema?.parameters.delete_existing_files,
+      config.deleteExistingFiles
     )
   );
 
@@ -329,35 +328,36 @@ function createVerbosityField(
 }
 
 function createBooleanDraftField(
-  key: "no_build" | "no_restore" | "no_logo",
+  key: "no_build" | "no_restore" | "no_logo" | "delete_existing_files",
   definition: ParameterDefinition | undefined,
   value: boolean
 ): DotnetAdvancedFieldModel {
+  const fallbackFlagMap: Record<string, string> = {
+    no_build: "--no-build",
+    no_restore: "--no-restore",
+    no_logo: "--no-logo",
+    delete_existing_files: "",
+  };
   const resolvedDefinition = definition || {
     ...FALLBACK_BOOLEAN_DEFINITION,
-    flag:
-      key === "no_build"
-        ? "--no-build"
-        : key === "no_restore"
-          ? "--no-restore"
-          : "--no-logo",
+    flag: fallbackFlagMap[key] || "",
   };
-  const draftKey =
-    key === "no_build" ? "noBuild" : key === "no_restore" ? "noRestore" : "noLogo";
+  const draftKeyMap: Record<string, DotnetAdvancedFieldSource & { kind: "draft" }> = {
+    no_build: { kind: "draft", draftKey: "noBuild", valueType: "boolean" },
+    no_restore: { kind: "draft", draftKey: "noRestore", valueType: "boolean" },
+    no_logo: { kind: "draft", draftKey: "noLogo", valueType: "boolean" },
+    delete_existing_files: { kind: "draft", draftKey: "deleteExistingFiles", valueType: "boolean" },
+  };
 
   return {
     key,
     title: key,
-    label: resolvedDefinition.flag,
+    label: resolvedDefinition.flag || key,
     description: resolvedDefinition.description ?? undefined,
     definition: resolvedDefinition,
     control: "boolean",
     value,
-    source: {
-      kind: "draft",
-      draftKey,
-      valueType: "boolean",
-    },
+    source: draftKeyMap[key],
   };
 }
 
