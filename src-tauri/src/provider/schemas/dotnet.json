@@ -45,6 +45,11 @@
       "flag": "--no-logo",
       "description": "Display startup banner or not"
     },
+    "delete_existing_files": {
+      "type": "boolean",
+      "flag": "",
+      "description": "Delete existing files in the output directory before publishing (app-level behavior)"
+    },
     "properties": {
       "type": "map",
       "flag": "-p",

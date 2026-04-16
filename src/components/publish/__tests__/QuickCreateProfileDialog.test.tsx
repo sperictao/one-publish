@@ -72,6 +72,7 @@ const baseDraft: PublishConfigStore = {
   noRestore: false,
   verbosity: "",
   noLogo: false,
+  deleteExistingFiles: false,
   properties: {},
   define: [],
   useProfile: false,
@@ -211,9 +212,7 @@ describe("QuickCreateProfileDialog", () => {
     fireEvent.click(screen.getByRole("switch", { name: "发布前清空目标目录" }));
 
     expect(onDraftChange).toHaveBeenCalledWith({
-      properties: {
-        DeleteExistingFiles: "true",
-      },
+      deleteExistingFiles: true,
     });
 
     fireEvent.click(screen.getByRole("button", { name: /其余参数/ }));

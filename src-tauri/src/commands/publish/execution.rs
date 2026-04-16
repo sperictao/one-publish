@@ -67,6 +67,9 @@ pub(crate) fn build_dotnet_spec_from_config(
     if config.no_logo {
         parameters.insert("no_logo".to_string(), SpecValue::Bool(true));
     }
+    if config.delete_existing_files {
+        parameters.insert("delete_existing_files".to_string(), SpecValue::Bool(true));
+    }
     if !config.define.is_empty() {
         parameters.insert(
             "define".to_string(),
@@ -237,12 +240,135 @@ pub(crate) fn render_publish_command(
     Ok(prepare_publish_command(spec)?.command)
 }
 
+fn should_delete_existing_files(spec: &PublishSpec) -> bool {
+    matches!(
+        spec.parameters.get("delete_existing_files"),
+        Some(SpecValue::Bool(true))
+    )
+}
+
+fn clean_output_directory(
+    output_dir: &str,
+    project_path: &str,
+) -> Result<bool, crate::errors::AppError> {
+    if output_dir.is_empty() {
+        return Ok(false);
+    }
+
+    let output_path = PathBuf::from(output_dir);
+    if !output_path.is_dir() {
+        return Ok(false);
+    }
+
+    // Safety: never clean a directory that is (or contains) the project source
+    let canonical_output = output_path
+        .canonicalize()
+        .unwrap_or_else(|_| output_path.clone());
+    if !project_path.is_empty() {
+        let project_dir = std::path::Path::new(project_path)
+            .parent()
+            .map(|dir| dir.to_path_buf())
+            .unwrap_or_default();
+        if !project_dir.as_os_str().is_empty() {
+            let canonical_project_dir = project_dir
+                .canonicalize()
+                .unwrap_or_else(|_| project_dir.clone());
+            // Reject if the output directory is a parent of (or equal to) the project directory
+            if canonical_project_dir.starts_with(&canonical_output) {
+                return Err(publish_error(
+                    format!(
+                        "refusing to clean output directory because it contains the project source: {}",
+                        output_dir
+                    ),
+                    "delete_existing_files_safety_project_overlap",
+                ));
+            }
+            // Reject if the output directory is inside the project source tree
+            if canonical_output.starts_with(&canonical_project_dir) {
+                // Allow only well-known build output subdirectories
+                let relative = canonical_output
+                    .strip_prefix(&canonical_project_dir)
+                    .unwrap_or(std::path::Path::new(""));
+                let first_component = relative
+                    .components()
+                    .next()
+                    .map(|c| c.as_os_str().to_string_lossy().to_string())
+                    .unwrap_or_default();
+                if !matches!(first_component.as_str(), "bin" | "obj" | "publish" | "out" | "output" | "artifacts") {
+                    return Err(publish_error(
+                        format!(
+                            "refusing to clean output directory inside the project source tree: {}",
+                            output_dir
+                        ),
+                        "delete_existing_files_safety_inside_project",
+                    ));
+                }
+            }
+        }
+    }
+
+    // Safety: reject root-level directories (e.g. "/" or "C:\")
+    if canonical_output.parent().is_none() {
+        return Err(publish_error(
+            format!(
+                "refusing to clean a root-level directory: {}",
+                output_dir
+            ),
+            "delete_existing_files_safety_root_directory",
+        ));
+    }
+
+    std::fs::remove_dir_all(&output_path).map_err(|error| {
+        publish_error(
+            format!(
+                "failed to clean output directory {}: {}",
+                output_dir, error
+            ),
+            "delete_existing_files_remove_failed",
+        )
+    })?;
+    std::fs::create_dir_all(&output_path).map_err(|error| {
+        publish_error(
+            format!(
+                "failed to recreate output directory {}: {}",
+                output_dir, error
+            ),
+            "delete_existing_files_recreate_failed",
+        )
+    })?;
+
+    Ok(true)
+}
+
 pub(crate) async fn execute_publish_spec(
     app: &AppHandle,
     spec: PublishSpec,
 ) -> Result<PublishResult, crate::errors::AppError> {
     let prepared = prepare_publish_command(&spec)?;
     ensure_publish_output_preflight(&spec)?;
+
+    // Pre-publish: clean output directory if delete_existing_files is set
+    if should_delete_existing_files(&spec) {
+        let output_dir = infer_output_dir(&spec);
+        match clean_output_directory(&output_dir, &spec.project_path) {
+            Ok(true) => {
+                log::info!(
+                    "[pre-publish] cleaned output directory: {}",
+                    output_dir
+                );
+            }
+            Ok(false) => {
+                log::info!(
+                    "[pre-publish] output directory does not exist or is empty, skipping cleanup: {}",
+                    output_dir
+                );
+            }
+            Err(error) => {
+                return Err(error);
+            }
+        }
+    }
+
     let session_id = build_publish_session_id(&spec.provider_id);
     let permit = reserve_execution(session_id.clone()).await?;
     let execution_result: Result<PublishResult, crate::errors::AppError> = async {

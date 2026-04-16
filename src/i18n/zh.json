@@ -407,7 +407,7 @@
     "advancedFieldNoLogoLabel": "隐藏 .NET 标识",
     "advancedFieldNoLogoDescription": "对应 --no-logo。隐藏 dotnet publish 的启动标识输出。",
     "advancedFieldDeleteExistingFilesLabel": "发布前清空目标目录",
-    "advancedFieldDeleteExistingFilesDescription": "对应 MSBuild 属性 DeleteExistingFiles。发布前删除目标目录中的现有文件。",
+    "advancedFieldDeleteExistingFilesDescription": "发布前删除目标目录中的现有文件。",
     "advancedFieldExcludeAppDataLabel": "排除 App_Data 目录",
     "advancedFieldExcludeAppDataDescription": "对应 MSBuild 属性 ExcludeApp_Data。发布时排除 App_Data 目录。",
     "advancedFieldLaunchSiteAfterPublishLabel": "发布后打开站点",

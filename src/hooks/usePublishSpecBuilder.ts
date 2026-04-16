@@ -15,6 +15,7 @@ interface PublishConfig {
   no_restore: boolean;
   verbosity: string;
   no_logo: boolean;
+  delete_existing_files: boolean;
   properties: Record<string, string>;
   define: string[];
   use_profile: boolean;
@@ -46,6 +47,7 @@ export function usePublishSpecBuilder(params: {
         noRestore: config.no_restore,
         verbosity: config.verbosity,
         noLogo: config.no_logo,
+        deleteExistingFiles: config.delete_existing_files,
         properties: config.properties,
         define: config.define,
         useProfile: config.use_profile,

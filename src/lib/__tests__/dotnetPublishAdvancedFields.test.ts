@@ -71,8 +71,8 @@ const config: PublishConfigStore = {
   noRestore: false,
   verbosity: "minimal",
   noLogo: false,
+  deleteExistingFiles: true,
   properties: {
-    DeleteExistingFiles: "true",
     PublishProvider: "FileSystem",
     LastUsedBuildConfiguration: "Release",
     PublishSingleFile: "true",
@@ -95,7 +95,7 @@ describe("buildDotnetAdvancedFieldsModel", () => {
     const verbosity = model.fieldMap.get("verbosity");
     const noBuild = model.fieldMap.get("no_build");
     const publishProvider = model.fieldMap.get("PublishProvider");
-    const deleteExistingFiles = model.fieldMap.get("DeleteExistingFiles");
+    const deleteExistingFiles = model.fieldMap.get("delete_existing_files");
     const publishSingleFile = model.fieldMap.get("PublishSingleFile");
     const define = model.fieldMap.get("define");
     const properties = model.fieldMap.get("properties");
@@ -103,7 +103,7 @@ describe("buildDotnetAdvancedFieldsModel", () => {
     expect(model.baseFields.map((field) => field.key)).toEqual(
       expect.arrayContaining([
         "framework",
-        "DeleteExistingFiles",
+        "delete_existing_files",
         "LastUsedBuildConfiguration",
         "PublishProvider",
       ])

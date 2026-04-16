@@ -29,6 +29,7 @@ interface PublishConfig {
   no_restore: boolean;
   verbosity: string;
   no_logo: boolean;
+  delete_existing_files: boolean;
   properties: Record<string, string>;
   define: string[];
   use_profile: boolean;
@@ -47,6 +48,7 @@ const storeConfigToPublishConfig = (
   no_restore: config.noRestore,
   verbosity: config.verbosity,
   no_logo: config.noLogo,
+  delete_existing_files: config.deleteExistingFiles,
   properties: { ...config.properties },
   define: [...config.define],
   use_profile: config.useProfile,
@@ -181,6 +183,7 @@ export function useDotnetPublishSelection(params: {
           no_restore: false,
           verbosity: "",
           no_logo: false,
+          delete_existing_files: false,
           properties: {},
           define: [],
           use_profile: true,
@@ -213,6 +216,7 @@ export function useDotnetPublishSelection(params: {
       no_restore: false,
       verbosity: "",
       no_logo: false,
+      delete_existing_files: false,
       properties: {},
       define: [],
       use_profile: false,
