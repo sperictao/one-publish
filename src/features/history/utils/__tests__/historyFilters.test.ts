@@ -24,6 +24,7 @@ function createRepository(path: string): Repository {
         noRestore: false,
         verbosity: "",
         noLogo: false,
+        deleteExistingFiles: false,
         properties: {},
         define: [],
         useProfile: false,
