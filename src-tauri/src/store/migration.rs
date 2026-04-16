@@ -146,7 +146,24 @@ pub(crate) fn sanitize_state(mut state: AppState) -> AppState {
         normalize_environment_provider_ids(state.environment_provider_ids);
     sanitize_recent_publish_state(&mut state);
 
+    // Migrate DeleteExistingFiles from properties map to first-class field
+    for repo in &mut state.repositories {
+        migrate_delete_existing_files_property(&mut repo.publish_config.custom_config);
+    }
+
     state
+}
+
+fn migrate_delete_existing_files_property(config: &mut PublishConfigStore) {
+    if let Some(value) = config.properties.remove("DeleteExistingFiles") {
+        let is_true = matches!(
+            value.trim().to_lowercase().as_str(),
+            "true" | "1" | "yes"
+        );
+        if is_true {
+            config.delete_existing_files = true;
+        }
+    }
 }
 
 pub(crate) fn migrate_legacy_state(legacy: LegacyStoredAppState) -> AppState {

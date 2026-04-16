@@ -6,6 +6,12 @@ pub struct DotnetPublishPlan {
     pub args: Vec<String>,
 }
 
+/// Build the CLI argument list for `dotnet publish`.
+///
+/// **Deprecated**: This function is retained for backward-compatibility with
+/// the legacy `execute_publish` command.  New code should go through the
+/// Provider system (`execute_provider_publish`).
+#[deprecated(note = "Use the provider system (execute_provider_publish) instead")]
 pub fn build_dotnet_publish_plan(project_path: &str, config: &PublishConfig) -> DotnetPublishPlan {
     let mut args = vec!["publish".to_string(), project_path.to_string()];
 
