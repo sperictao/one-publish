@@ -349,10 +349,17 @@ function createBooleanDraftField(
     delete_existing_files: { kind: "draft", draftKey: "deleteExistingFiles", valueType: "boolean" },
   };
 
+  const fallbackLabelMap: Record<string, string> = {
+    no_build: "--no-build",
+    no_restore: "--no-restore",
+    no_logo: "--no-logo",
+    delete_existing_files: "DeleteExistingFiles",
+  };
+
   return {
     key,
     title: key,
-    label: resolvedDefinition.flag || key,
+    label: resolvedDefinition.flag || fallbackLabelMap[key] || key,
     description: resolvedDefinition.description ?? undefined,
     definition: resolvedDefinition,
     control: "boolean",

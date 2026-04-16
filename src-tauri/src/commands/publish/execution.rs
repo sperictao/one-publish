@@ -260,7 +260,7 @@ fn clean_output_directory(
         return Ok(false);
     }
 
-    // Safety: never clean a directory that is a parent of (or equal to) the project file
+    // Safety: never clean a directory that is (or contains) the project source
     let canonical_output = output_path
         .canonicalize()
         .unwrap_or_else(|_| output_path.clone());
@@ -273,14 +273,36 @@ fn clean_output_directory(
             let canonical_project_dir = project_dir
                 .canonicalize()
                 .unwrap_or_else(|_| project_dir.clone());
+            // Reject if the output directory is a parent of (or equal to) the project directory
             if canonical_project_dir.starts_with(&canonical_output) {
                 return Err(publish_error(
                     format!(
-                        "refusing to clean output directory because it contains the project: {}",
+                        "refusing to clean output directory because it contains the project source: {}",
                         output_dir
                     ),
                     "delete_existing_files_safety_project_overlap",
                 ));
+            }
+            // Reject if the output directory is inside the project source tree
+            if canonical_output.starts_with(&canonical_project_dir) {
+                // Allow only well-known build output subdirectories
+                let relative = canonical_output
+                    .strip_prefix(&canonical_project_dir)
+                    .unwrap_or(std::path::Path::new(""));
+                let first_component = relative
+                    .components()
+                    .next()
+                    .map(|c| c.as_os_str().to_string_lossy().to_string())
+                    .unwrap_or_default();
+                if !matches!(first_component.as_str(), "bin" | "obj" | "publish" | "out" | "output" | "artifacts") {
+                    return Err(publish_error(
+                        format!(
+                            "refusing to clean output directory inside the project source tree: {}",
+                            output_dir
+                        ),
+                        "delete_existing_files_safety_inside_project",
+                    ));
+                }
             }
         }
     }
