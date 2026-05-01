@@ -87,6 +87,34 @@ describe("mapImportedSpecByProvider", () => {
     expect(result.unmappedKeys).toEqual(["unknown"]);
   });
 
+  it("兼容 DeleteExistingFiles 旗标并剥离属性映射", () => {
+    const result = mapImportedSpecByProvider(
+      {
+        provider_id: "dotnet",
+        parameters: {
+          delete_existing_files: true,
+          properties: {
+            DeleteExistingFiles: "true",
+            Version: "1.0.0",
+          },
+        },
+      },
+      "dotnet"
+    );
+
+    expect(result.dotnetUpdates).toEqual({
+      deleteExistingFiles: true,
+      properties: {
+        Version: "1.0.0",
+      },
+    });
+    expect(result.mappedKeys).toEqual([
+      "delete_existing_files",
+      "properties",
+    ]);
+    expect(result.unmappedKeys).toEqual([]);
+  });
+
   it("保留 java map/array 参数结构", () => {
     const result = mapImportedSpecByProvider(
       {

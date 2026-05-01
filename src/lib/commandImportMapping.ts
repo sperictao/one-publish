@@ -1,6 +1,7 @@
 import type { PublishConfigStore } from "@/lib/store";
 import {
   normalizeDotnetPropertyMap,
+  normalizeDeleteExistingFilesProperty,
   normalizeDotnetStringArray,
 } from "@/lib/dotnetPublishConfig";
 import type { ParameterValue } from "@/types/parameters";
@@ -176,9 +177,27 @@ export function mapImportedSpecByProvider(
         continue;
       }
 
+      if (key === "delete_existing_files") {
+        if (typeof rawValue === "boolean") {
+          dotnetUpdates.deleteExistingFiles = rawValue;
+          mappedKeys.push(key);
+        } else {
+          unmappedKeys.push(key);
+        }
+        continue;
+      }
+
       if (key === "properties") {
         if (isPlainObject(rawValue)) {
-          dotnetUpdates.properties = normalizeDotnetPropertyMap(rawValue);
+          const normalized = normalizeDotnetPropertyMap(rawValue);
+          const {
+            deleteExistingFiles,
+            properties,
+          } = normalizeDeleteExistingFilesProperty(normalized);
+          dotnetUpdates.properties = properties;
+          if (deleteExistingFiles) {
+            dotnetUpdates.deleteExistingFiles = true;
+          }
           mappedKeys.push(key);
         } else {
           unmappedKeys.push(key);

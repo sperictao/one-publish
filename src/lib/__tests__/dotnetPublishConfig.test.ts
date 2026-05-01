@@ -81,6 +81,26 @@ describe("dotnetPublishConfig", () => {
     });
   });
 
+  it("从属性映射中提取 DeleteExistingFiles 并标准化为布尔值", () => {
+    const restored = createDotnetPublishConfigFromParameters({
+      properties: {
+        DeleteExistingFiles: "true",
+        PublishTrimmed: "false",
+      },
+    });
+
+    expect(restored.deleteExistingFiles).toBe(true);
+    expect(restored.properties).toEqual({
+      PublishTrimmed: "false",
+    });
+    expect(buildDotnetProfileParameters(restored)).toEqual({
+      delete_existing_files: true,
+      properties: {
+        PublishTrimmed: "false",
+      },
+    });
+  });
+
   it("生成高级参数草稿", () => {
     const config = {
       ...createDefaultDotnetPublishConfig(),

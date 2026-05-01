@@ -103,6 +103,45 @@ export function normalizeDotnetStringArray(value: unknown): string[] {
     .filter((item) => item.length > 0);
 }
 
+function parseBooleanString(value: string | undefined): boolean | null {
+  if (!value) {
+    return null;
+  }
+
+  const normalized = value.trim().toLowerCase();
+  if (normalized === "true" || normalized === "1" || normalized === "yes") {
+    return true;
+  }
+
+  if (normalized === "false" || normalized === "0" || normalized === "no") {
+    return false;
+  }
+
+  return null;
+}
+
+export function normalizeDeleteExistingFilesProperty(
+  properties: Record<string, string>
+): { deleteExistingFiles: boolean; properties: Record<string, string> } {
+  const rawDeleteExistingFiles =
+    properties.DeleteExistingFiles ?? properties.deleteExistingFiles;
+
+  if (typeof rawDeleteExistingFiles !== "string") {
+    return { deleteExistingFiles: false, properties };
+  }
+
+  const parsed = parseBooleanString(rawDeleteExistingFiles);
+  if (parsed === null) {
+    return { deleteExistingFiles: false, properties };
+  }
+
+  const nextProperties = { ...properties };
+  delete nextProperties.DeleteExistingFiles;
+  delete nextProperties.deleteExistingFiles;
+
+  return { deleteExistingFiles: parsed, properties: nextProperties };
+}
+
 export function buildDotnetAdvancedParameters(
   config: PublishConfigStore
 ): Record<string, ParameterValue> {
@@ -266,7 +305,11 @@ export function createDotnetPublishConfigFromParameters(
   options?: { inferProfileSelection?: boolean }
 ): PublishConfigStore {
   const defaults = createDefaultDotnetPublishConfig();
-  const properties = normalizeDotnetPropertyMap(parameters.properties);
+  const normalizedProperties = normalizeDotnetPropertyMap(parameters.properties);
+  const {
+    deleteExistingFiles,
+    properties,
+  } = normalizeDeleteExistingFilesProperty(normalizedProperties);
   const publishProfile = properties.PublishProfile?.trim() || "";
 
   return {
@@ -292,7 +335,8 @@ export function createDotnetPublishConfigFromParameters(
         ? parameters.verbosity
         : defaults.verbosity,
     noLogo: parameters.no_logo === true,
-    deleteExistingFiles: parameters.delete_existing_files === true,
+    deleteExistingFiles:
+      parameters.delete_existing_files === true || deleteExistingFiles,
     properties,
     define: normalizeDotnetStringArray(parameters.define),
     useProfile: options?.inferProfileSelection === true && publishProfile.length > 0,
