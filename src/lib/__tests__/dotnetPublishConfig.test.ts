@@ -94,10 +94,26 @@ describe("dotnetPublishConfig", () => {
       PublishTrimmed: "false",
     });
     expect(buildDotnetProfileParameters(restored)).toEqual({
+      configuration: "Release",
       delete_existing_files: true,
       properties: {
         PublishTrimmed: "false",
       },
+    });
+  });
+
+  it("一等 delete_existing_files 优先于属性映射里的 DeleteExistingFiles", () => {
+    const restored = createDotnetPublishConfigFromParameters({
+      delete_existing_files: false,
+      properties: {
+        DeleteExistingFiles: "true",
+        PublishTrimmed: "false",
+      },
+    });
+
+    expect(restored.deleteExistingFiles).toBe(false);
+    expect(restored.properties).toEqual({
+      PublishTrimmed: "false",
     });
   });
 
@@ -118,6 +134,7 @@ describe("dotnetPublishConfig", () => {
       no_restore: false,
       verbosity: "",
       no_logo: false,
+      delete_existing_files: false,
       properties: {
         Version: "1.0.0",
       },

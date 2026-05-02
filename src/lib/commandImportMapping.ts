@@ -195,8 +195,11 @@ export function mapImportedSpecByProvider(
             properties,
           } = normalizeDeleteExistingFilesProperty(normalized);
           dotnetUpdates.properties = properties;
-          if (deleteExistingFiles) {
-            dotnetUpdates.deleteExistingFiles = true;
+          if (
+            deleteExistingFiles !== null &&
+            dotnetUpdates.deleteExistingFiles === undefined
+          ) {
+            dotnetUpdates.deleteExistingFiles = deleteExistingFiles;
           }
           mappedKeys.push(key);
         } else {

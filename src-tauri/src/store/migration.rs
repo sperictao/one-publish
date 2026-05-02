@@ -155,15 +155,19 @@ pub(crate) fn sanitize_state(mut state: AppState) -> AppState {
 }
 
 fn migrate_delete_existing_files_property(config: &mut PublishConfigStore) {
-    if let Some(value) = config.properties.remove("DeleteExistingFiles") {
-        let is_true = matches!(
-            value.trim().to_lowercase().as_str(),
-            "true" | "1" | "yes"
-        );
-        if is_true {
+    for key in ["DeleteExistingFiles", "deleteExistingFiles"] {
+        if config
+            .properties
+            .remove(key)
+            .is_some_and(|value| is_truthy_delete_existing_files_property(&value))
+        {
             config.delete_existing_files = true;
         }
     }
+}
+
+fn is_truthy_delete_existing_files_property(value: &str) -> bool {
+    matches!(value.trim().to_lowercase().as_str(), "true" | "1" | "yes")
 }
 
 pub(crate) fn migrate_legacy_state(legacy: LegacyStoredAppState) -> AppState {

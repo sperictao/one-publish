@@ -115,6 +115,55 @@ describe("mapImportedSpecByProvider", () => {
     expect(result.unmappedKeys).toEqual([]);
   });
 
+  it("从属性映射中接住 DeleteExistingFiles=false 并剥离原属性", () => {
+    const result = mapImportedSpecByProvider(
+      {
+        provider_id: "dotnet",
+        parameters: {
+          properties: {
+            DeleteExistingFiles: "false",
+            Version: "1.0.0",
+          },
+        },
+      },
+      "dotnet"
+    );
+
+    expect(result.dotnetUpdates).toEqual({
+      deleteExistingFiles: false,
+      properties: {
+        Version: "1.0.0",
+      },
+    });
+    expect(result.mappedKeys).toEqual(["properties"]);
+    expect(result.unmappedKeys).toEqual([]);
+  });
+
+  it("一等 delete_existing_files 优先于属性映射里的旧值", () => {
+    const result = mapImportedSpecByProvider(
+      {
+        provider_id: "dotnet",
+        parameters: {
+          delete_existing_files: false,
+          properties: {
+            DeleteExistingFiles: "true",
+          },
+        },
+      },
+      "dotnet"
+    );
+
+    expect(result.dotnetUpdates).toEqual({
+      deleteExistingFiles: false,
+      properties: {},
+    });
+    expect(result.mappedKeys).toEqual([
+      "delete_existing_files",
+      "properties",
+    ]);
+    expect(result.unmappedKeys).toEqual([]);
+  });
+
   it("保留 java map/array 参数结构", () => {
     const result = mapImportedSpecByProvider(
       {

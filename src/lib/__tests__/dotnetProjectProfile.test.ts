@@ -116,6 +116,36 @@ describe("resolveDotnetProjectProfile", () => {
     expect(resolved.editableConfig.properties.DeleteExistingFiles).toBeUndefined();
   });
 
+  it("将 pubxml 中的 DeleteExistingFiles=false 视为显式关闭并清理属性集", async () => {
+    mocks.readProjectPublishProfile.mockResolvedValue({
+      profileName: "FolderProfile",
+      filePath: "/repo/Properties/PublishProfiles/FolderProfile.pubxml",
+      content: `
+        <Project>
+          <PropertyGroup>
+            <PublishDir>./publish</PublishDir>
+            <DeleteExistingFiles>false</DeleteExistingFiles>
+          </PropertyGroup>
+        </Project>
+      `,
+    });
+
+    const resolved = await resolveDotnetProjectProfile({
+      projectInfo: {
+        root_path: "/repo",
+        project_file: "/repo/MyApp.csproj",
+      },
+      profileName: "FolderProfile",
+    });
+
+    expect(resolved.parameters).toEqual({
+      configuration: "Release",
+      output: "./publish",
+    });
+    expect(resolved.editableConfig.deleteExistingFiles).toBe(false);
+    expect(resolved.editableConfig.properties.DeleteExistingFiles).toBeUndefined();
+  });
+
   it("根据共享参数结果生成可编辑的自定义配置", async () => {
     mocks.readProjectPublishProfile.mockResolvedValue({
       profileName: "FolderProfile",

@@ -1,4 +1,4 @@
-use super::migration::StoredAppState;
+use super::migration::{sanitize_state, StoredAppState};
 use super::persistence::{load_from_path, save_to_path};
 use super::recent::{
     push_recent_publish_config_state, remove_recent_publish_config_state,
@@ -206,6 +206,36 @@ fn load_from_path_migrates_legacy_global_publish_fields() {
     assert_eq!(repo_publish_config.custom_config.configuration, "Debug");
     assert_eq!(repo_publish_config.profiles.len(), 1);
     assert!(state.startup_notice.is_none());
+}
+
+#[test]
+fn sanitize_state_migrates_delete_existing_files_properties() {
+    let mut legacy_true_repo = test_repo("repo-true");
+    legacy_true_repo
+        .publish_config
+        .custom_config
+        .properties
+        .insert("deleteExistingFiles".to_string(), "true".to_string());
+
+    let mut legacy_false_repo = test_repo("repo-false");
+    legacy_false_repo
+        .publish_config
+        .custom_config
+        .properties
+        .insert("DeleteExistingFiles".to_string(), "false".to_string());
+
+    let state = sanitize_state(AppState {
+        repositories: vec![legacy_true_repo, legacy_false_repo],
+        ..AppState::default()
+    });
+
+    let true_config = &state.repositories[0].publish_config.custom_config;
+    assert!(true_config.delete_existing_files);
+    assert!(!true_config.properties.contains_key("deleteExistingFiles"));
+
+    let false_config = &state.repositories[1].publish_config.custom_config;
+    assert!(!false_config.delete_existing_files);
+    assert!(!false_config.properties.contains_key("DeleteExistingFiles"));
 }
 
 #[test]

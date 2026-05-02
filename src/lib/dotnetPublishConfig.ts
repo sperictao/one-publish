@@ -122,17 +122,20 @@ function parseBooleanString(value: string | undefined): boolean | null {
 
 export function normalizeDeleteExistingFilesProperty(
   properties: Record<string, string>
-): { deleteExistingFiles: boolean; properties: Record<string, string> } {
+): {
+  deleteExistingFiles: boolean | null;
+  properties: Record<string, string>;
+} {
   const rawDeleteExistingFiles =
     properties.DeleteExistingFiles ?? properties.deleteExistingFiles;
 
   if (typeof rawDeleteExistingFiles !== "string") {
-    return { deleteExistingFiles: false, properties };
+    return { deleteExistingFiles: null, properties };
   }
 
   const parsed = parseBooleanString(rawDeleteExistingFiles);
   if (parsed === null) {
-    return { deleteExistingFiles: false, properties };
+    return { deleteExistingFiles: null, properties };
   }
 
   const nextProperties = { ...properties };
@@ -310,6 +313,10 @@ export function createDotnetPublishConfigFromParameters(
     deleteExistingFiles,
     properties,
   } = normalizeDeleteExistingFilesProperty(normalizedProperties);
+  const resolvedDeleteExistingFiles =
+    typeof parameters.delete_existing_files === "boolean"
+      ? parameters.delete_existing_files
+      : deleteExistingFiles === true;
   const publishProfile = properties.PublishProfile?.trim() || "";
 
   return {
@@ -335,8 +342,7 @@ export function createDotnetPublishConfigFromParameters(
         ? parameters.verbosity
         : defaults.verbosity,
     noLogo: parameters.no_logo === true,
-    deleteExistingFiles:
-      parameters.delete_existing_files === true || deleteExistingFiles,
+    deleteExistingFiles: resolvedDeleteExistingFiles,
     properties,
     define: normalizeDotnetStringArray(parameters.define),
     useProfile: options?.inferProfileSelection === true && publishProfile.length > 0,
