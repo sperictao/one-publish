@@ -8,6 +8,8 @@ const mocks = vi.hoisted(() => ({
   isTauri: vi.fn(() => false),
   listen: vi.fn(),
   preflightPublishOutput: vi.fn(),
+  requestProtectedOutputAccess: vi.fn(),
+  analyzePublishExecutionFailure: vi.fn(() => "process_failed"),
   runEnvironmentCheck: vi.fn(),
   showSystemNotification: vi.fn(),
   toast: {
@@ -59,6 +61,7 @@ vi.mock("@/hooks/usePublishSpecBuilder", () => ({
 
 vi.mock("@/lib/publishOutputPreflight", () => ({
   preflightPublishOutput: mocks.preflightPublishOutput,
+  requestProtectedOutputAccess: mocks.requestProtectedOutputAccess,
   buildProtectedOutputAccessDescription: () => "需要授权 Downloads",
   buildPublishOutputValidationTitle: (result: {
     validation: { issue: string | null };
@@ -96,7 +99,7 @@ vi.mock("@/lib/tauri/invokeErrors", () => ({
   extractInvokeErrorMessage: (error: unknown) =>
     error instanceof Error ? error.message : String(error),
   extractInvokeErrorCode: () => "publish_cancel_failed",
-  analyzePublishExecutionFailure: () => "process_failed",
+  analyzePublishExecutionFailure: mocks.analyzePublishExecutionFailure,
 }));
 
 vi.mock("@/hooks/usePublishFailureFeedback", () => ({
@@ -229,6 +232,13 @@ describe("usePublishRunner", () => {
         detail: null,
       },
     });
+    mocks.requestProtectedOutputAccess.mockImplementation(
+      async (_spec, result) => ({
+        preflight: result,
+        selectedDirectory: null,
+      })
+    );
+    mocks.analyzePublishExecutionFailure.mockReturnValue("process_failed");
     mocks.setTrayPublishStatus.mockResolvedValue(true);
     mocks.renderPublishCommand.mockResolvedValue(createRenderedCommand());
     buildPublishSpecMock = vi.fn(() => ({
@@ -453,11 +463,218 @@ describe("usePublishRunner", () => {
 
     expect(mocks.invoke).not.toHaveBeenCalled();
     expect(props.savePublishRecord).not.toHaveBeenCalled();
+    expect(mocks.showMainWindow).toHaveBeenCalled();
+    expect(mocks.requestProtectedOutputAccess).toHaveBeenCalled();
     expect(mocks.toast.error).toHaveBeenCalledWith(
       "缺少 macOS 受保护目录访问权限",
       {
         description: "需要授权 Downloads",
       }
+    );
+  });
+
+  it("macOS 受保护目录授权成功后继续发布", async () => {
+    mocks.runEnvironmentCheck.mockResolvedValue(readyEnvironment);
+    const deniedPreflight = {
+      outputDir: "/Users/test/Downloads/publish/App/Release",
+      configuredOutputDir: "/Users/test/Downloads/publish/App/Release",
+      validation: {
+        status: "compatible",
+        issue: null,
+      },
+      access: {
+        status: "denied",
+        protectedLocation: "downloads",
+        protectedRoot: "/Users/test/Downloads",
+        probeDirectory: "/Users/test/Downloads/publish/App",
+        detail: "Operation not permitted",
+      },
+    };
+    mocks.preflightPublishOutput.mockResolvedValue(deniedPreflight);
+    mocks.requestProtectedOutputAccess.mockResolvedValue({
+      preflight: {
+        ...deniedPreflight,
+        access: {
+          status: "granted",
+          protectedLocation: "downloads",
+          protectedRoot: "/Users/test/Downloads",
+          probeDirectory: "/Users/test/Downloads/publish/App",
+          detail: null,
+        },
+      },
+      selectedDirectory: "/Users/test/Downloads/publish/App",
+    });
+    mocks.invoke.mockResolvedValue(createPublishResult());
+
+    const props = createRunnerProps();
+    const { result } = renderHook(() => usePublishRunner(props));
+
+    await act(async () => {
+      await result.current.startPublish();
+    });
+
+    expect(mocks.showMainWindow).toHaveBeenCalled();
+    expect(mocks.requestProtectedOutputAccess).toHaveBeenCalledWith(
+      {
+        version: 1,
+        provider_id: "dotnet",
+        project_path: "/repo/App.csproj",
+        parameters: {
+          configuration: "Release",
+          output: "/exports/App/Release",
+        },
+      },
+      deniedPreflight,
+      props.appT
+    );
+    expect(mocks.invoke).toHaveBeenCalledWith("execute_provider_publish", {
+      spec: {
+        version: 1,
+        provider_id: "dotnet",
+        project_path: "/repo/App.csproj",
+        parameters: {
+          configuration: "Release",
+          output: "/exports/App/Release",
+        },
+      },
+    });
+    expect(props.savePublishRecord).toHaveBeenCalledWith(
+      expect.objectContaining({
+        success: true,
+        outputDir: "/exports/App/Release",
+      })
+    );
+  });
+
+  it("执行阶段受保护目录错误授权后只重试一次并写入成功记录", async () => {
+    mocks.runEnvironmentCheck.mockResolvedValue(readyEnvironment);
+    const grantedPreflight = {
+      outputDir: "/Users/test/Downloads/publish/App/Release",
+      configuredOutputDir: "/Users/test/Downloads/publish/App/Release",
+      validation: {
+        status: "compatible",
+        issue: null,
+      },
+      access: {
+        status: "granted",
+        protectedLocation: "downloads",
+        protectedRoot: "/Users/test/Downloads",
+        probeDirectory: "/Users/test/Downloads/publish/App",
+        detail: null,
+      },
+    };
+    mocks.preflightPublishOutput.mockResolvedValue(grantedPreflight);
+    mocks.requestProtectedOutputAccess.mockResolvedValue({
+      preflight: grantedPreflight,
+      selectedDirectory: "/Users/test/Downloads/publish/App",
+    });
+    mocks.analyzePublishExecutionFailure.mockReturnValue(
+      "protected_directory_access_denied"
+    );
+    mocks.invoke
+      .mockRejectedValueOnce(
+        new Error(
+          "publish output directory requires macOS protected folder access (Downloads): /Users/test/Downloads/publish/App/Release | Operation not permitted"
+        )
+      )
+      .mockResolvedValueOnce(createPublishResult());
+
+    const props = createRunnerProps();
+    const { result } = renderHook(() => usePublishRunner(props));
+
+    await act(async () => {
+      await result.current.startPublish();
+    });
+
+    expect(mocks.invoke).toHaveBeenCalledTimes(2);
+    expect(mocks.requestProtectedOutputAccess).toHaveBeenCalledWith(
+      {
+        version: 1,
+        provider_id: "dotnet",
+        project_path: "/repo/App.csproj",
+        parameters: {
+          configuration: "Release",
+          output: "/exports/App/Release",
+        },
+      },
+      grantedPreflight,
+      props.appT
+    );
+    expect(mocks.showMainWindow).toHaveBeenCalled();
+    expect(props.savePublishRecord).toHaveBeenCalledTimes(1);
+    expect(props.savePublishRecord).toHaveBeenCalledWith(
+      expect.objectContaining({
+        success: true,
+        outputDir: "/exports/App/Release",
+      })
+    );
+  });
+
+  it("MSBuild 进程输出受保护目录错误时授权后重试发布", async () => {
+    mocks.runEnvironmentCheck.mockResolvedValue(readyEnvironment);
+    const grantedPreflight = {
+      outputDir: "/Users/test/Downloads/publish/App/Debug",
+      configuredOutputDir: "/Users/test/Downloads/publish/App/Debug",
+      validation: {
+        status: "compatible",
+        issue: null,
+      },
+      access: {
+        status: "granted",
+        protectedLocation: "downloads",
+        protectedRoot: "/Users/test/Downloads",
+        probeDirectory: "/Users/test/Downloads/publish/App",
+        detail: null,
+      },
+    };
+    mocks.preflightPublishOutput.mockResolvedValue(grantedPreflight);
+    mocks.requestProtectedOutputAccess.mockResolvedValue({
+      preflight: grantedPreflight,
+      selectedDirectory: "/Users/test/Downloads/publish/App",
+    });
+    mocks.invoke
+      .mockResolvedValueOnce(
+        createPublishResult({
+          success: false,
+          error: "发布失败，退出代码: Some(1)",
+          output_log: [
+            "$ dotnet publish \"/repo/App.csproj\"",
+            "/repo/App.csproj(79,3): error MSB3021: Unable to copy file \"/Users/test/.nuget/packages/hip.core/2.7.2.1/lib/net8.0/HiP.Core.xml\" to \"/Users/test/Downloads/publish/App/Debug/../HiP.Core.xml\".",
+            "Access to the path '/Users/test/Downloads/publish/App/HiP.Core.xml' is denied.",
+          ].join("\n"),
+          output_dir: "",
+          file_count: 0,
+        })
+      )
+      .mockResolvedValueOnce(createPublishResult());
+
+    const props = createRunnerProps();
+    const { result } = renderHook(() => usePublishRunner(props));
+
+    await act(async () => {
+      await result.current.startPublish();
+    });
+
+    expect(mocks.invoke).toHaveBeenCalledTimes(2);
+    expect(mocks.requestProtectedOutputAccess).toHaveBeenCalledWith(
+      {
+        version: 1,
+        provider_id: "dotnet",
+        project_path: "/repo/App.csproj",
+        parameters: {
+          configuration: "Release",
+          output: "/exports/App/Release",
+        },
+      },
+      grantedPreflight,
+      props.appT
+    );
+    expect(props.savePublishRecord).toHaveBeenCalledTimes(1);
+    expect(props.savePublishRecord).toHaveBeenCalledWith(
+      expect.objectContaining({
+        success: true,
+        outputDir: "/exports/App/Release",
+      })
     );
   });
 

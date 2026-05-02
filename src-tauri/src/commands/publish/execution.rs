@@ -6,6 +6,7 @@ use super::logs::{collect_log_chunks, emit_publish_log, read_stream_chunks};
 use super::output::{
     build_display_command, count_output_files, infer_output_dir, resolve_plan_command,
     resolve_runtime_program, resolve_spawn_program, resolve_working_dir,
+    should_delete_existing_files,
 };
 use super::session::reserve_execution;
 use super::{
@@ -15,6 +16,7 @@ use super::{
 use crate::provider::registry::provider_registry;
 use crate::spec::{PublishSpec, SpecValue, SPEC_VERSION};
 use std::collections::BTreeMap;
+use std::io::ErrorKind as IoErrorKind;
 use std::path::PathBuf;
 use std::process::Stdio;
 use std::sync::Arc;
@@ -153,11 +155,15 @@ fn build_preflight_validation_error(
 fn build_preflight_access_error(
     result: &preflight::PublishOutputPreflightResult,
 ) -> crate::errors::AppError {
-    let location = result
-        .access
-        .protected_location
-        .map(protected_location_label)
-        .unwrap_or("protected folder");
+    let Some(location) = result.access.protected_location else {
+        return publish_error(
+            format!(
+                "publish output directory requires macOS protected folder access: {}",
+                result.output_dir
+            ),
+            "publish_protected_directory_access_denied",
+        );
+    };
     let path = result
         .access
         .probe_directory
@@ -168,12 +174,7 @@ fn build_preflight_access_error(
         .unwrap_or("-");
     let detail = result.access.detail.as_deref().unwrap_or("access denied");
 
-    publish_error(
-        format!(
-            "publish output directory requires macOS protected folder access ({location}): {path} | {detail}"
-        ),
-        "publish_protected_directory_access_denied",
-    )
+    build_protected_directory_access_error(location, path, detail)
 }
 
 pub(crate) fn ensure_publish_output_preflight(
@@ -234,11 +235,34 @@ pub(crate) fn render_publish_command(
     Ok(prepare_publish_command(spec)?.command)
 }
 
-fn should_delete_existing_files(spec: &PublishSpec) -> bool {
-    matches!(
-        spec.parameters.get("delete_existing_files"),
-        Some(SpecValue::Bool(true))
+fn build_protected_directory_access_error(
+    location: ProtectedDirectoryLocation,
+    path: &str,
+    detail: &str,
+) -> crate::errors::AppError {
+    let location = protected_location_label(location);
+    publish_error(
+        format!(
+            "publish output directory requires macOS protected folder access ({location}): {path} | {detail}"
+        ),
+        "publish_protected_directory_access_denied",
     )
+}
+
+fn build_cleanup_access_error(
+    output_dir: &str,
+    error: &std::io::Error,
+) -> Option<crate::errors::AppError> {
+    if error.kind() != IoErrorKind::PermissionDenied {
+        return None;
+    }
+
+    let location = preflight::protected_location_for_output_dir(output_dir)?;
+    Some(build_protected_directory_access_error(
+        location,
+        output_dir,
+        &error.to_string(),
+    ))
 }
 
 fn clean_output_directory(
@@ -288,7 +312,10 @@ fn clean_output_directory(
                     .next()
                     .map(|c| c.as_os_str().to_string_lossy().to_string())
                     .unwrap_or_default();
-                if !matches!(first_component.as_str(), "bin" | "obj" | "publish" | "out" | "output" | "artifacts") {
+                if !matches!(
+                    first_component.as_str(),
+                    "bin" | "obj" | "publish" | "out" | "output" | "artifacts"
+                ) {
                     return Err(publish_error(
                         format!(
                             "refusing to clean output directory inside the project source tree: {}",
@@ -304,24 +331,36 @@ fn clean_output_directory(
     // Safety: reject root-level directories (e.g. "/" or "C:\")
     if canonical_output.parent().is_none() {
         return Err(publish_error(
-            format!(
-                "refusing to clean a root-level directory: {}",
-                output_dir
-            ),
+            format!("refusing to clean a root-level directory: {}", output_dir),
             "delete_existing_files_safety_root_directory",
         ));
     }
 
-    std::fs::remove_dir_all(&output_path).map_err(|error| {
-        publish_error(
+    if preflight::is_protected_root_output_dir(output_dir) {
+        return Err(publish_error(
             format!(
-                "failed to clean output directory {}: {}",
-                output_dir, error
+                "refusing to clean a macOS protected root directory: {}",
+                output_dir
             ),
+            "delete_existing_files_safety_protected_root_directory",
+        ));
+    }
+
+    std::fs::remove_dir_all(&output_path).map_err(|error| {
+        if let Some(access_error) = build_cleanup_access_error(output_dir, &error) {
+            return access_error;
+        }
+
+        publish_error(
+            format!("failed to clean output directory {}: {}", output_dir, error),
             "delete_existing_files_remove_failed",
         )
     })?;
     std::fs::create_dir_all(&output_path).map_err(|error| {
+        if let Some(access_error) = build_cleanup_access_error(output_dir, &error) {
+            return access_error;
+        }
+
         publish_error(
             format!(
                 "failed to recreate output directory {}: {}",
@@ -346,10 +385,7 @@ pub(crate) async fn execute_publish_spec(
         let output_dir = infer_output_dir(&spec);
         match clean_output_directory(&output_dir, &spec.project_path) {
             Ok(true) => {
-                log::info!(
-                    "[pre-publish] cleaned output directory: {}",
-                    output_dir
-                );
+                log::info!("[pre-publish] cleaned output directory: {}", output_dir);
             }
             Ok(false) => {
                 log::info!(

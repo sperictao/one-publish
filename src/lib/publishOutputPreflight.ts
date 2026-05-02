@@ -1,4 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
+import { open as openDialog } from "@tauri-apps/plugin-dialog";
 
 import type {
   ProtectedDirectoryLocation,
@@ -12,6 +13,11 @@ interface TranslationMap {
   [key: string]: string | undefined;
 }
 
+export interface ProtectedOutputAccessRequestResult {
+  preflight: PublishOutputPreflightResult;
+  selectedDirectory: string | null;
+}
+
 export async function preflightPublishOutput(
   spec: PublishSpec
 ): Promise<PublishOutputPreflightResult> {
@@ -19,6 +25,45 @@ export async function preflightPublishOutput(
     "preflight_publish_output",
     { spec }
   );
+}
+
+function resolveProtectedOutputRequestDirectory(
+  result: PublishOutputPreflightResult
+): string | undefined {
+  return (
+    result.access.probeDirectory ||
+    result.access.protectedRoot ||
+    result.outputDir ||
+    undefined
+  );
+}
+
+export async function requestProtectedOutputAccess(
+  spec: PublishSpec,
+  result: PublishOutputPreflightResult,
+  appT: TranslationMap
+): Promise<ProtectedOutputAccessRequestResult> {
+  const defaultPath = resolveProtectedOutputRequestDirectory(result);
+  const selected = await openDialog({
+    directory: true,
+    multiple: false,
+    defaultPath,
+    title:
+      appT.publishProtectedDirectoryAccessRequestTitle ||
+      "选择目录以授权 OnePublish 访问",
+  });
+
+  if (typeof selected !== "string" || selected.trim().length === 0) {
+    return {
+      preflight: result,
+      selectedDirectory: null,
+    };
+  }
+
+  return {
+    preflight: await preflightPublishOutput(spec),
+    selectedDirectory: selected,
+  };
 }
 
 function getProtectedLocationLabel(

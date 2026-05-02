@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   isGenericPublishFailureMessage,
+  isProtectedOutputAccessFailure,
   normalizePublishResult,
   resolvePublishFailureMessage,
 } from "@/lib/publishFailure";
@@ -64,5 +65,24 @@ describe("publishFailure", () => {
           "$ dotnet publish /repo/App.csproj\nerror CS0246: Foo missing",
       }).error
     ).toBe("MSBuild failed: missing SDK");
+  });
+
+  it("识别 MSBuild 在 macOS 受保护输出目录下的访问拒绝", () => {
+    expect(
+      isProtectedOutputAccessFailure({
+        error: "发布失败，退出代码: Some(1)",
+        outputLog: [
+          "/Users/test/source/App.csproj(79,3): error MSB3021: Unable to copy file \"/Users/test/.nuget/packages/hip.core/2.7.2.1/lib/net8.0/HiP.Core.xml\" to \"/Users/test/Downloads/publish/App/Debug/../HiP.Core.xml\".",
+          "Access to the path '/Users/test/Downloads/publish/App/HiP.Core.xml' is denied.",
+        ].join("\n"),
+      })
+    ).toBe(true);
+
+    expect(
+      isProtectedOutputAccessFailure({
+        error: "error CS0246: Foo missing",
+        outputLog: "error CS0246: Foo missing",
+      })
+    ).toBe(false);
   });
 });

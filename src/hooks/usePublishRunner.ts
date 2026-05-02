@@ -23,6 +23,7 @@ import {
   buildPublishOutputValidationTitle,
   buildProtectedOutputAccessDescription,
   preflightPublishOutput,
+  requestProtectedOutputAccess,
   type PublishOutputPreflightResult,
 } from "@/lib/publishOutputPreflight";
 import { showSystemNotification } from "@/lib/systemNotification";
@@ -31,7 +32,10 @@ import { usePublishLogStream } from "@/hooks/usePublishLogStream";
 import { usePublishSpecBuilder } from "@/hooks/usePublishSpecBuilder";
 import { usePublishUiState } from "@/hooks/usePublishUiState";
 import { createPublishExecutionRecord } from "@/lib/publishExecutionRecord";
-import { normalizePublishResult } from "@/lib/publishFailure";
+import {
+  isProtectedOutputAccessFailure,
+  normalizePublishResult,
+} from "@/lib/publishFailure";
 import { renderPublishCommand } from "@/lib/renderPublishCommand";
 import type { PublishConfigStore } from "@/lib/store";
 import type { ProjectInfo } from "@/types/project";
@@ -45,6 +49,14 @@ const loadCancelPublishFeedback = () =>
 
 export type PublishResult = TauriPublishResult;
 export type ProviderPublishSpec = TauriPublishSpec;
+
+async function executeProviderPublish(
+  spec: ProviderPublishSpec
+): Promise<PublishResult> {
+  return await invoke<PublishResult>("execute_provider_publish", {
+    spec,
+  });
+}
 
 export interface RunPublishOptions {
   repoId?: string | null;
@@ -469,6 +481,17 @@ export function usePublishRunner({
     ]
   );
 
+  const requestProtectedOutputAccessWithWindow = useCallback(
+    async (
+      spec: ProviderPublishSpec,
+      outputPreflight: PublishOutputPreflightResult
+    ) => {
+      await restoreMainWindowIfNeeded(true);
+      return await requestProtectedOutputAccess(spec, outputPreflight, appT);
+    },
+    [appT, restoreMainWindowIfNeeded]
+  );
+
   const runPublishPreflight = useCallback(
     async (
       spec: ProviderPublishSpec,
@@ -545,6 +568,27 @@ export function usePublishRunner({
       }
 
       if (outputPreflight.access.status === "denied") {
+        try {
+          const accessRequest = await requestProtectedOutputAccessWithWindow(
+            spec,
+            outputPreflight
+          );
+          outputPreflight = accessRequest.preflight;
+        } catch (err) {
+          const { extractInvokeErrorMessage } = await loadInvokeErrors();
+          await abortPublishPreparation({
+            ...options,
+            level: "error",
+            title:
+              appT.publishProtectedDirectoryAccessRequestFailed ||
+              "申请目录访问权限失败",
+            description: extractInvokeErrorMessage(err),
+          });
+          return false;
+        }
+      }
+
+      if (outputPreflight.access.status === "denied") {
         await abortPublishPreparation({
           ...options,
           level: "error",
@@ -566,8 +610,88 @@ export function usePublishRunner({
       appT,
       notifyFeedback,
       openEnvironmentDialog,
+      requestProtectedOutputAccessWithWindow,
       setEnvironmentLastCheck,
     ]
+  );
+
+  const requestProtectedOutputAccessForRetry = useCallback(
+    async (spec: ProviderPublishSpec): Promise<boolean> => {
+      const outputPreflight = await preflightPublishOutput(spec);
+      if (outputPreflight.validation.status === "incompatible") {
+        return false;
+      }
+
+      if (
+        outputPreflight.access.status !== "granted" &&
+        outputPreflight.access.status !== "denied"
+      ) {
+        return false;
+      }
+
+      const accessRequest = await requestProtectedOutputAccessWithWindow(
+        spec,
+        outputPreflight
+      );
+      return (
+        accessRequest.selectedDirectory !== null &&
+        accessRequest.preflight.access.status !== "denied"
+      );
+    },
+    [requestProtectedOutputAccessWithWindow]
+  );
+
+  const executePublishWithProtectedAccessRecovery = useCallback(
+    async (spec: ProviderPublishSpec): Promise<PublishResult> => {
+      let result: PublishResult;
+      try {
+        result = await executeProviderPublish(spec);
+      } catch (err) {
+        const { analyzePublishExecutionFailure } = await loadInvokeErrors();
+        if (
+          analyzePublishExecutionFailure(err) !==
+          "protected_directory_access_denied"
+        ) {
+          throw err;
+        }
+
+        let shouldRetry = false;
+        try {
+          shouldRetry = await requestProtectedOutputAccessForRetry(spec);
+        } catch {
+          throw err;
+        }
+
+        if (!shouldRetry) {
+          throw err;
+        }
+
+        return await executeProviderPublish(spec);
+      }
+
+      if (
+        !isProtectedOutputAccessFailure({
+          error: result.error,
+          outputLog: result.output_log,
+        })
+      ) {
+        return result;
+      }
+
+      let shouldRetry = false;
+      try {
+        shouldRetry = await requestProtectedOutputAccessForRetry(spec);
+      } catch {
+        return result;
+      }
+
+      if (!shouldRetry) {
+        return result;
+      }
+
+      return await executeProviderPublish(spec);
+    },
+    [requestProtectedOutputAccessForRetry]
   );
 
   const runPublishSpec = useCallback(
@@ -602,9 +726,7 @@ export function usePublishRunner({
           pushRecentConfig(recentConfigKey, effectiveRepoId);
         }
 
-        const result = await invoke<PublishResult>("execute_provider_publish", {
-          spec,
-        });
+        const result = await executePublishWithProtectedAccessRecovery(spec);
         const outputLogSnapshot =
           result.output_log || (await waitForOutputLogSnapshot());
         const resolvedResult = normalizePublishResult({
@@ -747,6 +869,7 @@ export function usePublishRunner({
       isCurrentPresentationRevision,
       publishT,
       pushRecentConfig,
+      executePublishWithProtectedAccessRecovery,
       runPublishPreflight,
       savePublishRecord,
       selectedRepoId,

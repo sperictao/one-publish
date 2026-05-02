@@ -1,6 +1,6 @@
 use super::errors::publish_error;
 use crate::provider::registry::provider_registry;
-use crate::spec::PublishSpec;
+use crate::spec::{PublishSpec, SpecValue};
 use std::path::{Path, PathBuf};
 
 fn should_quote_display_arg(arg: &str) -> bool {
@@ -69,6 +69,13 @@ pub(crate) fn configured_output_dir(spec: &PublishSpec) -> Option<String> {
         .get(&spec.provider_id)
         .ok()
         .and_then(|provider| provider.configured_output_dir(spec))
+}
+
+pub(crate) fn should_delete_existing_files(spec: &PublishSpec) -> bool {
+    matches!(
+        spec.parameters.get("delete_existing_files"),
+        Some(SpecValue::Bool(true))
+    )
 }
 
 pub(crate) fn resolve_runtime_program(

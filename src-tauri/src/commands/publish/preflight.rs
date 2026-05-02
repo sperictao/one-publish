@@ -1,4 +1,4 @@
-use super::output::{configured_output_dir, infer_output_dir};
+use super::output::{configured_output_dir, infer_output_dir, should_delete_existing_files};
 use crate::spec::PublishSpec;
 use serde::Serialize;
 use std::fs::{self, OpenOptions};
@@ -76,6 +76,13 @@ pub struct PublishOutputPreflightResult {
 struct ProtectedRoot {
     location: ProtectedDirectoryLocation,
     path: PathBuf,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum PublishOutputAccessIntent {
+    WriteOutput,
+    WriteOutputParent,
+    CleanExistingOutput,
 }
 
 #[derive(Debug, Clone)]
@@ -158,6 +165,7 @@ impl PublishOutputPreflightResult {
 
 pub(crate) fn preflight_publish_output(spec: &PublishSpec) -> PublishOutputPreflightResult {
     let context = resolve_publish_output_context(spec);
+    let access_intent = resolve_publish_output_access_intent(spec);
     let validation = evaluate_publish_output_validation(
         context.configured_output_dir.as_deref(),
         &context.output_dir,
@@ -165,7 +173,7 @@ pub(crate) fn preflight_publish_output(spec: &PublishSpec) -> PublishOutputPrefl
     let access = if validation.status == PublishOutputValidationStatus::Incompatible {
         PublishOutputAccess::skipped()
     } else {
-        evaluate_publish_output_access(&context.output_dir)
+        evaluate_publish_output_access(&context.output_dir, access_intent)
     };
 
     PublishOutputPreflightResult::new(
@@ -174,6 +182,18 @@ pub(crate) fn preflight_publish_output(spec: &PublishSpec) -> PublishOutputPrefl
         validation,
         access,
     )
+}
+
+fn resolve_publish_output_access_intent(spec: &PublishSpec) -> PublishOutputAccessIntent {
+    if should_delete_existing_files(spec) {
+        return PublishOutputAccessIntent::CleanExistingOutput;
+    }
+
+    if spec.provider_id == "dotnet" {
+        return PublishOutputAccessIntent::WriteOutputParent;
+    }
+
+    PublishOutputAccessIntent::WriteOutput
 }
 
 fn resolve_publish_output_context(spec: &PublishSpec) -> PublishOutputContext {
@@ -211,22 +231,32 @@ fn find_protected_root_for_path<'a>(
 }
 
 #[cfg(target_os = "macos")]
-fn evaluate_publish_output_access(output_dir: &str) -> PublishOutputAccess {
+fn evaluate_publish_output_access(
+    output_dir: &str,
+    access_intent: PublishOutputAccessIntent,
+) -> PublishOutputAccess {
     let protected_roots = macos_protected_roots();
+    let probe_access =
+        |probe_directory: &Path| probe_publish_output_access(probe_directory, access_intent);
     evaluate_publish_output_access_for_roots(
         output_dir,
+        access_intent,
         &protected_roots,
-        probe_directory_write_access,
+        probe_access,
     )
 }
 
 #[cfg(not(target_os = "macos"))]
-fn evaluate_publish_output_access(_output_dir: &str) -> PublishOutputAccess {
+fn evaluate_publish_output_access(
+    _output_dir: &str,
+    _access_intent: PublishOutputAccessIntent,
+) -> PublishOutputAccess {
     PublishOutputAccess::not_applicable()
 }
 
 fn evaluate_publish_output_access_for_roots<F>(
     output_dir: &str,
+    access_intent: PublishOutputAccessIntent,
     roots: &[ProtectedRoot],
     probe_write_access: F,
 ) -> PublishOutputAccess
@@ -244,7 +274,7 @@ where
     };
 
     let probe_directory =
-        resolve_existing_probe_directory(&normalized_output_dir, &protected_root.path);
+        resolve_probe_directory(&normalized_output_dir, &protected_root.path, access_intent);
 
     match probe_write_access(&probe_directory) {
         Ok(()) => {
@@ -276,8 +306,66 @@ where
     }
 }
 
+pub(crate) fn protected_location_for_output_dir(
+    output_dir: &str,
+) -> Option<ProtectedDirectoryLocation> {
+    let trimmed = output_dir.trim();
+    if trimmed.is_empty() {
+        return None;
+    }
+
+    let protected_roots = platform_protected_roots();
+    let normalized_output_dir = normalize_lexical_path(Path::new(trimmed));
+    find_protected_root_for_path(&normalized_output_dir, &protected_roots).map(|root| root.location)
+}
+
+pub(crate) fn is_protected_root_output_dir(output_dir: &str) -> bool {
+    let trimmed = output_dir.trim();
+    if trimmed.is_empty() {
+        return false;
+    }
+
+    let protected_roots = platform_protected_roots();
+    let normalized_output_dir = normalize_lexical_path(Path::new(trimmed));
+    is_protected_root_path(&normalized_output_dir, &protected_roots)
+}
+
+fn is_protected_root_path(path: &Path, roots: &[ProtectedRoot]) -> bool {
+    roots
+        .iter()
+        .any(|root| normalize_lexical_path(&root.path) == normalize_lexical_path(path))
+}
+
+#[cfg(target_os = "macos")]
+fn platform_protected_roots() -> Vec<ProtectedRoot> {
+    macos_protected_roots()
+}
+
+#[cfg(not(target_os = "macos"))]
+fn platform_protected_roots() -> Vec<ProtectedRoot> {
+    Vec::new()
+}
+
+#[cfg(test)]
 fn resolve_existing_probe_directory(path: &Path, fallback_root: &Path) -> PathBuf {
+    resolve_probe_directory(path, fallback_root, PublishOutputAccessIntent::WriteOutput)
+}
+
+fn resolve_probe_directory(
+    path: &Path,
+    fallback_root: &Path,
+    access_intent: PublishOutputAccessIntent,
+) -> PathBuf {
     let normalized_path = normalize_lexical_path(path);
+
+    if matches!(
+        access_intent,
+        PublishOutputAccessIntent::CleanExistingOutput
+            | PublishOutputAccessIntent::WriteOutputParent
+    ) && normalized_path.is_dir()
+    {
+        return resolve_parent_probe_directory(&normalized_path, fallback_root);
+    }
 
     if normalized_path.is_dir() {
         return normalized_path;
@@ -299,6 +387,14 @@ fn resolve_existing_probe_directory(path: &Path, fallback_root: &Path) -> PathBu
     normalize_lexical_path(fallback_root)
 }
 
+fn resolve_parent_probe_directory(path: &Path, fallback_root: &Path) -> PathBuf {
+    let normalized_fallback_root = normalize_lexical_path(fallback_root);
+    path.parent()
+        .map(normalize_lexical_path)
+        .filter(|parent| parent.starts_with(&normalized_fallback_root))
+        .unwrap_or(normalized_fallback_root)
+}
+
 #[cfg(target_os = "macos")]
 fn probe_directory_write_access(directory: &Path) -> std::io::Result<()> {
     let probe_file = build_probe_file_path(directory);
@@ -309,6 +405,27 @@ fn probe_directory_write_access(directory: &Path) -> std::io::Result<()> {
     drop(file);
     let _ = fs::remove_file(&probe_file);
     Ok(())
+}
+
+#[cfg(target_os = "macos")]
+fn probe_directory_cleanup_access(directory: &Path) -> std::io::Result<()> {
+    let probe_directory = build_probe_file_path(directory);
+    fs::create_dir(&probe_directory)?;
+    fs::remove_dir(&probe_directory)?;
+    Ok(())
+}
+
+#[cfg(target_os = "macos")]
+fn probe_publish_output_access(
+    directory: &Path,
+    access_intent: PublishOutputAccessIntent,
+) -> std::io::Result<()> {
+    match access_intent {
+        PublishOutputAccessIntent::WriteOutput | PublishOutputAccessIntent::WriteOutputParent => {
+            probe_directory_write_access(directory)
+        }
+        PublishOutputAccessIntent::CleanExistingOutput => probe_directory_cleanup_access(directory),
+    }
 }
 
 #[cfg(target_os = "macos")]
@@ -450,11 +567,12 @@ fn windows_absolute_root(path: &Path) -> Option<PathBuf> {
 mod tests {
     use super::{
         evaluate_publish_output_access_for_roots, find_protected_root_for_path,
-        looks_like_posix_absolute_path, looks_like_windows_absolute_path, looks_like_windows_path,
-        normalize_lexical_path, preflight_publish_output, resolve_existing_probe_directory,
-        resolve_publish_output_context, ProtectedDirectoryLocation, ProtectedRoot,
-        PublishOutputAccess, PublishOutputAccessStatus, PublishOutputPreflightResult,
-        PublishOutputValidation, PublishOutputValidationIssue, PublishOutputValidationStatus,
+        is_protected_root_path, looks_like_posix_absolute_path, looks_like_windows_absolute_path,
+        looks_like_windows_path, normalize_lexical_path, preflight_publish_output,
+        resolve_existing_probe_directory, resolve_probe_directory, resolve_publish_output_context,
+        ProtectedDirectoryLocation, ProtectedRoot, PublishOutputAccess, PublishOutputAccessIntent,
+        PublishOutputAccessStatus, PublishOutputPreflightResult, PublishOutputValidation,
+        PublishOutputValidationIssue, PublishOutputValidationStatus,
     };
     use crate::spec::{PublishSpec, SpecValue, SPEC_VERSION};
     use std::collections::BTreeMap;
@@ -556,6 +674,23 @@ mod tests {
     }
 
     #[test]
+    fn detects_exact_protected_root_path() {
+        let roots = vec![ProtectedRoot {
+            location: ProtectedDirectoryLocation::Downloads,
+            path: "/Users/test/Downloads".into(),
+        }];
+
+        assert!(is_protected_root_path(
+            Path::new("/Users/test/Downloads"),
+            &roots
+        ));
+        assert!(!is_protected_root_path(
+            Path::new("/Users/test/Downloads/publish/App"),
+            &roots
+        ));
+    }
+
+    #[test]
     fn normalizes_curdir_and_parent_segments() {
         let normalized = normalize_lexical_path(Path::new(
             "/Users/test/Downloads/publish/Debug/../Release/./artifacts",
@@ -580,6 +715,48 @@ mod tests {
         let probe = resolve_existing_probe_directory(&existing.join("App/Release"), &root);
 
         assert_eq!(probe, existing);
+
+        fs::remove_dir_all(&root).ok();
+    }
+
+    #[test]
+    fn resolves_cleanup_probe_directory_to_output_parent_when_output_exists() {
+        let stamp = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("clock")
+            .as_nanos();
+        let root = std::env::temp_dir().join(format!("one-publish-cleanup-probe-root-{stamp}"));
+        let output_dir = root.join("publish").join("App").join("Debug");
+        fs::create_dir_all(&output_dir).expect("create output dir");
+
+        let probe = resolve_probe_directory(
+            &output_dir,
+            &root,
+            PublishOutputAccessIntent::CleanExistingOutput,
+        );
+
+        assert_eq!(probe, output_dir.parent().expect("output parent"));
+
+        fs::remove_dir_all(&root).ok();
+    }
+
+    #[test]
+    fn resolves_dotnet_publish_probe_directory_to_output_parent_when_output_exists() {
+        let stamp = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("clock")
+            .as_nanos();
+        let root = std::env::temp_dir().join(format!("one-publish-dotnet-probe-root-{stamp}"));
+        let output_dir = root.join("publish").join("App").join("Debug");
+        fs::create_dir_all(&output_dir).expect("create output dir");
+
+        let probe = resolve_probe_directory(
+            &output_dir,
+            &root,
+            PublishOutputAccessIntent::WriteOutputParent,
+        );
+
+        assert_eq!(probe, output_dir.parent().expect("output parent"));
 
         fs::remove_dir_all(&root).ok();
     }
@@ -794,6 +971,7 @@ mod tests {
             |resolved_output_dir| {
                 evaluate_publish_output_access_for_roots(
                     resolved_output_dir,
+                    PublishOutputAccessIntent::WriteOutput,
                     &roots,
                     |_probe_directory| {
                         Err(io::Error::new(
@@ -827,6 +1005,48 @@ mod tests {
         assert_eq!(
             result.access.detail,
             Some("Operation not permitted".to_string())
+        );
+
+        fs::remove_dir_all(&protected_root).ok();
+    }
+
+    #[test]
+    fn preflight_publish_output_should_probe_parent_when_cleanup_is_enabled() {
+        let stamp = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("clock")
+            .as_nanos();
+        let protected_root = std::env::temp_dir().join(format!("one-publish-cleanup-root-{stamp}"));
+        let output_dir = protected_root.join("publish").join("App").join("Debug");
+        fs::create_dir_all(&output_dir).expect("create output dir");
+        let roots = vec![ProtectedRoot {
+            location: ProtectedDirectoryLocation::Downloads,
+            path: protected_root.clone(),
+        }];
+
+        let access = evaluate_publish_output_access_for_roots(
+            &output_dir.to_string_lossy(),
+            PublishOutputAccessIntent::CleanExistingOutput,
+            &roots,
+            |probe_directory| {
+                assert_eq!(probe_directory, output_dir.parent().expect("output parent"));
+                Err(io::Error::new(
+                    ErrorKind::PermissionDenied,
+                    "Operation not permitted",
+                ))
+            },
+        );
+
+        assert_eq!(access.status, PublishOutputAccessStatus::Denied);
+        assert_eq!(
+            access.probe_directory,
+            Some(
+                output_dir
+                    .parent()
+                    .expect("output parent")
+                    .to_string_lossy()
+                    .to_string()
+            )
         );
 
         fs::remove_dir_all(&protected_root).ok();
