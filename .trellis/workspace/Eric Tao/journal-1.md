@@ -38,3 +38,37 @@
 ### Next Steps
 
 - None - task complete
+
+
+## Session 2: Optimize gitignore rules
+
+**Date**: 2026-05-03
+**Task**: Optimize gitignore rules
+**Branch**: `main`
+
+### Summary
+
+完成仓库 .gitignore 规则收口、Git index ownership 修正，并记录本地状态 ignore guardrail。
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `1514ba3` | (see git log) |
+| `52710ca` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
