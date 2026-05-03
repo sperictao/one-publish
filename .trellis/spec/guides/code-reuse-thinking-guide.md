@@ -97,6 +97,20 @@ When you've made similar changes to multiple files:
 
 ---
 
+## Gotcha: Ignore Rules Hiding Project Configuration
+
+**Problem**: Broad ignore rules for tool directories can hide project-scoped configuration files (for example platform agents, hooks, or environment templates) while still allowing local runtime state to stay out of Git.
+
+**Symptom**: A generated platform integration exists on disk, but `git status` never shows it, or tracked files appear in `git ls-files -ci --exclude-standard`.
+
+**Prevention checklist**:
+- [ ] Before adding or broadening ignore rules, search for project docs that name the affected directory
+- [ ] Verify project-owned files with `git check-ignore -vn -- <paths>`
+- [ ] Verify no tracked file is ignored with `git ls-files -ci --exclude-standard`
+- [ ] Prefer precise local-runtime rules over ignoring an entire platform/config directory
+
+---
+
 ## Checklist Before Commit
 
 - [ ] Searched for existing similar code
