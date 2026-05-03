@@ -24,11 +24,11 @@ Replace the repository root `.gitignore` with rules that match the current OnePu
 
 ## Acceptance Criteria
 
-- [ ] `.gitignore` no longer ignores itself.
-- [ ] `.codex/agents/`, `.codex/hooks/`, `.codex/hooks.json`, and `.codex/config.toml` are no longer hidden by ignore rules.
-- [ ] Local root metadata paths are ignored by project rules.
-- [ ] Local-only tracked runtime files are removed from the Git index without deleting them from disk.
-- [ ] `git status --porcelain --ignored` reflects a clean, intentional split between tracked project files and ignored local state.
+- [x] `.gitignore` no longer ignores itself.
+- [x] `.codex/agents/`, `.codex/hooks/`, `.codex/hooks.json`, and `.codex/config.toml` are no longer hidden by ignore rules.
+- [x] Local root metadata paths are ignored by project rules.
+- [x] Local-only tracked runtime files are removed from the Git index without deleting them from disk.
+- [x] `git status --porcelain --ignored` reflects a clean, intentional split between tracked project files and ignored local state.
 
 ## Out of Scope
 
