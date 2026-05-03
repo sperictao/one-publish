@@ -1,0 +1,2 @@
+{"file": ".trellis/spec/guides/index.md", "reason": "General repository change thinking guide index for scoped maintenance work."}
+{"file": ".trellis/spec/guides/code-reuse-thinking-guide.md", "reason": "Use the repository search-before-change rule before changing shared configuration values."}

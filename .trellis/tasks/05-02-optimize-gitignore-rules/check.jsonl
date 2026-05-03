@@ -1,0 +1,2 @@
+{"file": ".trellis/spec/guides/index.md", "reason": "General repository change thinking guide index for verification."}
+{"file": ".trellis/spec/guides/code-reuse-thinking-guide.md", "reason": "Verify shared configuration changes were searched and kept scoped."}
