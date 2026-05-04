@@ -72,3 +72,36 @@
 ### Next Steps
 
 - None - task complete
+
+
+## Session 3: Profile domain owner consolidation
+
+**Date**: 2026-05-04
+**Task**: Profile domain owner consolidation
+**Branch**: `main`
+
+### Summary
+
+Consolidated profile list and mutations into the useProfiles profileManagement facade; moved ConfigDialog to owner callbacks and updated focused tests and frontend state spec.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `77e5c44` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
