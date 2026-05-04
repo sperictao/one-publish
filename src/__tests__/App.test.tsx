@@ -263,6 +263,16 @@ vi.mock("@/hooks/useProfiles", () => ({
     handleDeleteProfileFromPanel: mocks.noop,
     handleLoadProfile: mocks.noop,
     handleCreateProfileFromProjectProfile: mocks.noop,
+    handleReorderProfiles: mocks.noop,
+    profileManagement: {
+      profiles: [],
+      isRefreshing: false,
+      refreshProfiles: mocks.noop,
+      saveProfile: mocks.noop,
+      deleteProfile: mocks.noop,
+      exportProfiles: mocks.noop,
+      applyImportedProfiles: mocks.noop,
+    },
   }),
 }));
 

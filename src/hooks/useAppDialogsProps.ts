@@ -19,6 +19,7 @@ import type {
   EnvironmentCheckSnapshot,
 } from "@/lib/environment";
 import type { ParameterSchema } from "@/types/parameters";
+import type { ProfileManagementActions } from "@/hooks/useProfiles";
 
 interface QuickCreateTemplateOption {
   id: string;
@@ -117,7 +118,7 @@ export interface UseAppDialogsPropsParams {
   updateQuickCreateProfileDraft: (patch: Partial<PublishConfigStore>) => void;
   handleQuickCreateProfileSave: () => void;
   configDialogOpen: boolean;
-  loadProfiles: () => void;
+  profileManagement: ProfileManagementActions;
   handleLoadProfile: (profile: ConfigProfile) => void;
   selectedRepoId: string | null;
   currentConfigParameters: ConfigParameters;
@@ -228,13 +229,12 @@ export function useAppDialogsProps(params: UseAppDialogsPropsParams): AppDialogs
     },
     config: {
       open: params.configDialogOpen,
-      onOpenChange: (open) =>
-        params.handleConfigDialogOpenChange(open, params.loadProfiles),
+      onOpenChange: params.handleConfigDialogOpenChange,
+      profileManagement: params.profileManagement,
       onLoadProfile: params.handleLoadProfile,
       currentProviderId: params.activeProviderId,
       repoId: params.selectedRepoId,
       currentParameters: params.currentConfigParameters,
-      onProfilesChanged: params.loadProfiles,
     },
   };
 }

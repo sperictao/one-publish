@@ -3,12 +3,12 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 
 const mocks = vi.hoisted(() => ({
   openDialog: vi.fn(),
-  getProfiles: vi.fn(),
+  importConfig: vi.fn(),
+  refreshProfiles: vi.fn(),
   saveProfile: vi.fn(),
   deleteProfile: vi.fn(),
-  exportConfig: vi.fn(),
-  importConfig: vi.fn(),
-  applyImportedConfig: vi.fn(),
+  exportProfiles: vi.fn(),
+  applyImportedProfiles: vi.fn(),
   toastSuccess: vi.fn(),
   toastError: vi.fn(),
 }));
@@ -40,16 +40,12 @@ vi.mock("@/lib/store", async () => {
   const actual = await vi.importActual<typeof import("@/lib/store")>("@/lib/store");
   return {
     ...actual,
-    getProfiles: mocks.getProfiles,
-    saveProfile: mocks.saveProfile,
-    deleteProfile: mocks.deleteProfile,
-    exportConfig: mocks.exportConfig,
     importConfig: mocks.importConfig,
-    applyImportedConfig: mocks.applyImportedConfig,
   };
 });
 
 import { ConfigManagementContent } from "@/components/publish/ConfigDialog";
+import type { ConfigParameters, ConfigProfile } from "@/lib/store";
 
 beforeAll(() => {
   vi.stubGlobal(
@@ -97,8 +93,81 @@ beforeAll(() => {
 describe("ConfigManagementContent", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mocks.getProfiles.mockResolvedValue([]);
     mocks.openDialog.mockResolvedValue("/tmp/one-publish-config.json");
+    mocks.refreshProfiles.mockResolvedValue([]);
+    mocks.saveProfile.mockResolvedValue(undefined);
+    mocks.deleteProfile.mockResolvedValue(undefined);
+    mocks.exportProfiles.mockResolvedValue(undefined);
+    mocks.applyImportedProfiles.mockResolvedValue(undefined);
+  });
+
+  function renderConfigManagementContent({
+    profiles = [],
+    currentParameters = {},
+  }: {
+    profiles?: ConfigProfile[];
+    currentParameters?: ConfigParameters;
+  } = {}) {
+    return render(
+      <ConfigManagementContent
+        active
+        profiles={profiles}
+        isProfilesRefreshing={false}
+        onRefreshProfiles={mocks.refreshProfiles}
+        onSaveProfile={mocks.saveProfile}
+        onDeleteProfile={mocks.deleteProfile}
+        onExportProfiles={mocks.exportProfiles}
+        onApplyImportedProfiles={mocks.applyImportedProfiles}
+        onLoadProfile={vi.fn()}
+        currentProviderId="dotnet"
+        repoId="repo-1"
+        currentParameters={currentParameters}
+      />
+    );
+  }
+
+  it("打开后通过 profile owner 刷新，并渲染 owner 提供的列表", async () => {
+    renderConfigManagementContent({
+      profiles: [
+        {
+          name: "Release",
+          providerId: "dotnet",
+          parameters: {},
+          profileGroup: null,
+          createdAt: "2026-04-02T12:00:00.000Z",
+          isSystemDefault: false,
+        },
+      ],
+    });
+
+    await waitFor(() => {
+      expect(mocks.refreshProfiles).toHaveBeenCalledTimes(1);
+    });
+    expect(screen.getByText("Release")).toBeInTheDocument();
+  });
+
+  it("保存当前配置时只调用 profile owner mutation", async () => {
+    renderConfigManagementContent({
+      currentParameters: {
+        configuration: "Release",
+      },
+    });
+
+    fireEvent.change(screen.getByLabelText("输入配置文件名称"), {
+      target: { value: "Release" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "保存配置" }));
+
+    await waitFor(() => {
+      expect(mocks.saveProfile).toHaveBeenCalledWith({
+        name: "Release",
+        providerId: "dotnet",
+        parameters: {
+          configuration: "Release",
+        },
+      });
+    });
+    expect(mocks.toastSuccess).toHaveBeenCalledWith("配置文件保存成功");
   });
 
   it("导入配置时先显示应用内确认对话框，再执行真正导入", async () => {
@@ -127,21 +196,7 @@ describe("ConfigManagementContent", () => {
       exportedAt: "2026-04-02T12:00:00.000Z",
       profiles: importedProfiles,
     });
-    mocks.applyImportedConfig.mockResolvedValue(undefined);
-
-    render(
-      <ConfigManagementContent
-        active
-        onLoadProfile={vi.fn()}
-        currentProviderId="dotnet"
-        repoId="repo-1"
-        currentParameters={{}}
-      />
-    );
-
-    await waitFor(() => {
-      expect(mocks.getProfiles).toHaveBeenCalledWith("repo-1");
-    });
+    renderConfigManagementContent();
 
     fireEvent.click(screen.getByRole("button", { name: "导入配置" }));
 
@@ -149,7 +204,7 @@ describe("ConfigManagementContent", () => {
       expect(mocks.importConfig).toHaveBeenCalledWith("/tmp/one-publish-config.json");
     });
 
-    expect(mocks.applyImportedConfig).not.toHaveBeenCalled();
+    expect(mocks.applyImportedProfiles).not.toHaveBeenCalled();
     expect(screen.getByText("确认导入配置")).toBeInTheDocument();
     expect(screen.getByText("待导入配置")).toBeInTheDocument();
     expect(screen.getByText("Release")).toBeInTheDocument();
@@ -158,10 +213,7 @@ describe("ConfigManagementContent", () => {
     fireEvent.click(screen.getByRole("button", { name: "确认导入" }));
 
     await waitFor(() => {
-      expect(mocks.applyImportedConfig).toHaveBeenCalledWith(
-        "repo-1",
-        importedProfiles
-      );
+      expect(mocks.applyImportedProfiles).toHaveBeenCalledWith(importedProfiles);
     });
   });
 });

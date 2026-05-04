@@ -3,7 +3,7 @@
   "name": "profile-domain-module-boundary",
   "title": "Profile Domain Module 边界收敛",
   "description": "收敛 Profile Domain owner，避免 ConfigDialog 和 useProfiles 双重管理 profile 列表与 mutation。",
-  "status": "planning",
+  "status": "in_progress",
   "dev_type": null,
   "scope": null,
   "package": null,
@@ -21,6 +21,6 @@
   "children": [],
   "parent": "05-04-publish-workflow-module-architecture",
   "relatedFiles": [],
-  "notes": "",
+  "notes": "Profile domain owner facade implemented and verified; awaiting commit.",
   "meta": {}
 }

@@ -14,10 +14,10 @@
 
 ## Acceptance Criteria
 
-* [ ] `ConfigDialog` 不再直接绕过 profile owner 执行列表加载、保存、删除后再触发 `onProfilesChanged` 双写补偿。
-* [ ] quick create/edit、配置管理弹窗、导入导出、中栏 profile list 对同一 repo 显示一致。
-* [ ] `src/hooks/__tests__/useProfiles.test.ts` 和 `src/components/publish/__tests__/ConfigDialog.test.tsx` 的受影响测试通过或被等价测试替代。
-* [ ] `pnpm typecheck` 通过。
+* [x] `ConfigDialog` 不再直接绕过 profile owner 执行列表加载、保存、删除后再触发 `onProfilesChanged` 双写补偿。
+* [x] quick create/edit、配置管理弹窗、导入导出、中栏 profile list 对同一 repo 显示一致。
+* [x] `src/hooks/__tests__/useProfiles.test.ts` 和 `src/components/publish/__tests__/ConfigDialog.test.tsx` 的受影响测试通过或被等价测试替代。
+* [x] `pnpm typecheck` 通过。
 
 ## Technical Approach
 
@@ -34,6 +34,15 @@
 ## Technical Notes
 
 * Parent task: `.trellis/tasks/05-04-publish-workflow-module-architecture`
+* Implementation:
+  * `src/hooks/useProfiles.ts` exposes `profileManagement` as the profile domain facade.
+  * `src/components/publish/ConfigDialog.tsx` receives owner-provided state/actions and keeps only local UI/import-confirmation state.
+  * `src/hooks/useAppDialogsProps.ts` and `src/components/layout/AppDialogs.tsx` pass one facade through composition and only expand it at the dialog boundary.
+* Validation:
+  * `git diff --check`
+  * `pnpm test "src/hooks/__tests__/useProfiles.test.ts" "src/components/publish/__tests__/ConfigDialog.test.tsx"`
+  * `pnpm test "src/hooks/__tests__/useDialogsCompositionState.test.ts" "src/__tests__/App.test.tsx"`
+  * `pnpm typecheck`
 * Key files:
   * `src/hooks/useProfiles.ts`
   * `src/components/publish/ConfigDialog.tsx`

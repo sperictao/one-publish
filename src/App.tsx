@@ -484,6 +484,7 @@ function App() {
     handleLoadProfile,
     handleCreateProfileFromProjectProfile,
     handleReorderProfiles,
+    profileManagement,
   } = profilesState;
 
   const {
@@ -964,7 +965,7 @@ function App() {
             updateQuickCreateProfileDraft={updateQuickCreateProfileDraft}
             handleQuickCreateProfileSave={handleQuickCreateProfileSave}
             configDialogOpen={configDialogOpen}
-            loadProfiles={loadProfiles}
+            profileManagement={profileManagement}
             handleLoadProfile={handleLoadProfile}
             selectedRepoId={selectedRepoId}
             customConfig={customConfig}

@@ -12,10 +12,12 @@ import { toast } from "sonner";
 
 import { mapImportedSpecByProvider } from "@/lib/commandImportMapping";
 import {
-  deleteProfile,
+  applyImportedConfig,
+  deleteProfile as deleteProfileFromStore,
+  exportConfig,
   getProfiles,
   reorderProfiles,
-  saveProfile,
+  saveProfile as saveProfileToStore,
   updateProfile,
   type ConfigParameters,
   type ConfigProfile,
@@ -150,6 +152,23 @@ interface UseProfilesParams {
   buildProfileParameters: (config: PublishConfigStore) => ConfigParameters;
 }
 
+export interface ProfileManagementSaveParams {
+  name: string;
+  providerId: string;
+  parameters: ConfigParameters;
+  profileGroup?: string;
+}
+
+export interface ProfileManagementActions {
+  profiles: ConfigProfile[];
+  isRefreshing: boolean;
+  refreshProfiles: () => Promise<ConfigProfile[]>;
+  saveProfile: (params: ProfileManagementSaveParams) => Promise<void>;
+  deleteProfile: (profile: ConfigProfile) => Promise<void>;
+  exportProfiles: (filePath: string) => Promise<void>;
+  applyImportedProfiles: (profiles: ConfigProfile[]) => Promise<void>;
+}
+
 export const QUICK_CREATE_CUSTOM_TEMPLATE_ID = "custom";
 export const QUICK_CREATE_PROFILE_GROUP_DEFAULT = "__default__";
 export const QUICK_CREATE_PROFILE_GROUP_CUSTOM = "__custom__";
@@ -266,6 +285,19 @@ export function useProfiles({
       return [];
     }
   }, [commitProfilesSnapshot, selectedRepoId]);
+
+  const refreshProfilesAfterMutation = useCallback(
+    async (repoId: string) => {
+      if (selectedRepoIdRef.current === repoId) {
+        return await loadProfiles();
+      }
+
+      const data = await getProfiles(repoId);
+      commitProfilesSnapshot(repoId, data);
+      return data;
+    },
+    [commitProfilesSnapshot, loadProfiles]
+  );
 
   useEffect(() => {
     void loadProfiles();
@@ -509,7 +541,7 @@ export function useProfiles({
           profileGroup: resolvedProfileGroup || undefined,
         });
       } else {
-        await saveProfile({
+        await saveProfileToStore({
           repoId: selectedRepoId,
           name: profileName,
           providerId: "dotnet",
@@ -518,7 +550,7 @@ export function useProfiles({
         });
       }
 
-      await loadProfiles();
+      await refreshProfilesAfterMutation(selectedRepoId);
 
       handleSelectProfileFromPanel({
         name: profileName,
@@ -562,7 +594,6 @@ export function useProfiles({
     editingProfileOriginalName,
     handleQuickCreateProfileOpenChange,
     handleSelectProfileFromPanel,
-    loadProfiles,
     profileT,
     quickCreateProfileCustomGroup,
     quickCreateProfileDraft,
@@ -570,8 +601,34 @@ export function useProfiles({
     quickCreateProfileName,
     quickCreateProfileSaving,
     replaceScopedConfigKey,
+    refreshProfilesAfterMutation,
     selectedRepoId,
   ]);
+
+  const deleteProfileByName = useCallback(
+    async (repoId: string, name: string) => {
+      await deleteProfileFromStore(repoId, name);
+      await refreshProfilesAfterMutation(repoId);
+
+      if (selectedRepoIdRef.current === repoId) {
+        if (activeProfileName === name) {
+          setActiveProfileName(null);
+          if (isCustomMode) {
+            setIsCustomMode(false);
+            setSelectedPreset(defaultPresetId);
+          }
+        }
+      }
+    },
+    [
+      activeProfileName,
+      defaultPresetId,
+      isCustomMode,
+      refreshProfilesAfterMutation,
+      setIsCustomMode,
+      setSelectedPreset,
+    ]
+  );
 
   const handleDeleteProfileFromPanel = useCallback(
     async (name: string) => {
@@ -580,28 +637,75 @@ export function useProfiles({
       }
 
       try {
-        await deleteProfile(selectedRepoId, name);
-        await loadProfiles();
-        if (activeProfileName === name) {
-          setActiveProfileName(null);
-          if (isCustomMode) {
-            setIsCustomMode(false);
-            setSelectedPreset(defaultPresetId);
-          }
-        }
+        await deleteProfileByName(selectedRepoId, name);
       } catch (err) {
         console.error("删除配置文件失败:", err);
       }
     },
     [
-      activeProfileName,
-      defaultPresetId,
-      isCustomMode,
-      loadProfiles,
+      deleteProfileByName,
       selectedRepoId,
-      setIsCustomMode,
-      setSelectedPreset,
     ]
+  );
+
+  const saveProfileFromManagement = useCallback(
+    async ({
+      name,
+      providerId,
+      parameters,
+      profileGroup,
+    }: ProfileManagementSaveParams) => {
+      if (!selectedRepoId) {
+        throw new Error(profileT.saveFailed || "保存配置文件失败");
+      }
+
+      const repoId = selectedRepoId;
+
+      await saveProfileToStore({
+        repoId,
+        name,
+        providerId,
+        parameters,
+        profileGroup,
+      });
+      await refreshProfilesAfterMutation(repoId);
+    },
+    [profileT.saveFailed, refreshProfilesAfterMutation, selectedRepoId]
+  );
+
+  const deleteProfileFromManagement = useCallback(
+    async (profile: ConfigProfile) => {
+      if (!selectedRepoId) {
+        throw new Error(profileT.deleteFailed || "删除配置文件失败");
+      }
+
+      await deleteProfileByName(selectedRepoId, profile.name);
+    },
+    [deleteProfileByName, profileT.deleteFailed, selectedRepoId]
+  );
+
+  const exportProfilesFromManagement = useCallback(
+    async (filePath: string) => {
+      await exportConfig({
+        profiles,
+        filePath,
+      });
+    },
+    [profiles]
+  );
+
+  const applyImportedProfilesFromManagement = useCallback(
+    async (importedProfiles: ConfigProfile[]) => {
+      if (!selectedRepoId) {
+        throw new Error(profileT.importFailed || "导入配置失败");
+      }
+
+      const repoId = selectedRepoId;
+
+      await applyImportedConfig(repoId, importedProfiles);
+      await refreshProfilesAfterMutation(repoId);
+    },
+    [profileT.importFailed, refreshProfilesAfterMutation, selectedRepoId]
   );
 
   const handleLoadProfile = useCallback(
@@ -621,14 +725,14 @@ export function useProfiles({
       const profileName = buildCopiedProfileName(sourceProfileName, existingNames);
       const parameters = buildProfileParameters(config);
 
-      await saveProfile({
+      await saveProfileToStore({
         repoId: selectedRepoId,
         name: profileName,
         providerId: "dotnet",
         parameters,
       });
 
-      await loadProfiles();
+      await refreshProfilesAfterMutation(selectedRepoId);
 
       setActiveProfileName(profileName);
       applyDotnetCustomConfig(config);
@@ -638,9 +742,9 @@ export function useProfiles({
     [
       applyDotnetCustomConfig,
       buildProfileParameters,
-      loadProfiles,
       profileT.saveFailed,
       profiles,
+      refreshProfilesAfterMutation,
       selectedRepoId,
       setActiveProfileName,
     ]
@@ -685,6 +789,27 @@ export function useProfiles({
     [commitProfilesSnapshot, loadProfiles, profileT.quickEditFailed, selectedRepoId]
   );
 
+  const profileManagement = useMemo<ProfileManagementActions>(
+    () => ({
+      profiles,
+      isRefreshing: isProfilesRefreshing,
+      refreshProfiles: loadProfiles,
+      saveProfile: saveProfileFromManagement,
+      deleteProfile: deleteProfileFromManagement,
+      exportProfiles: exportProfilesFromManagement,
+      applyImportedProfiles: applyImportedProfilesFromManagement,
+    }),
+    [
+      applyImportedProfilesFromManagement,
+      deleteProfileFromManagement,
+      exportProfilesFromManagement,
+      isProfilesRefreshing,
+      loadProfiles,
+      profiles,
+      saveProfileFromManagement,
+    ]
+  );
+
   return {
     profiles,
     profilesRevision,
@@ -717,5 +842,6 @@ export function useProfiles({
     handleLoadProfile,
     handleCreateProfileFromProjectProfile,
     handleReorderProfiles,
+    profileManagement,
   };
 }

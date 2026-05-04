@@ -43,6 +43,33 @@
 - `src/hooks/useProfiles.ts`：按 repo 缓存 profile snapshot 与 revision。
 - `src/lib/environment.ts`、`src/hooks/useEnvironmentStatus.ts`：环境检查结果按 provider ids 过滤和判断状态。
 
+## Profile Domain Owner
+
+- `useProfiles` 是 repo-scoped profile list、snapshot revision、刷新、保存、删除、导出和应用导入的唯一 owner。
+- 组合层向配置管理弹窗传递 `ProfileManagementActions` facade；只允许在 UI 边界展开为 `profiles`、`isRefreshing`、`refreshProfiles`、`saveProfile`、`deleteProfile`、`exportProfiles`、`applyImportedProfiles` 回调。
+- `ConfigDialog` / `ConfigManagementContent` 只能保留文件选择、导入解析和确认对话框这类局部 UI 状态；不得直接调用 `getProfiles`、`saveProfile`、`deleteProfile`、`exportConfig`、`applyImportedConfig` 来维护第二套列表。
+- profile mutation 必须先捕获目标 `repoId`，mutation 成功后刷新同一个 repo 的 owner snapshot；如果用户已切换仓库，只更新该 repo cache，不把旧 repo 结果写入当前可见列表。
+
+错误示例：
+
+```tsx
+// Bad: dialog 绕过 owner 直接改 store，再用刷新回调补偿中栏列表。
+await saveProfile({ repoId, name, providerId, parameters });
+await onProfilesChanged?.();
+```
+
+正确示例：
+
+```tsx
+// Good: dialog 调用 owner action，snapshot 刷新和 repo scope 由 useProfiles 负责。
+await onSaveProfile({ name, providerId, parameters });
+```
+
+测试要求：
+
+- `src/hooks/__tests__/useProfiles.test.ts` 覆盖 facade mutation 后刷新同一个 owner snapshot，并保持 repo 切换时的 stale result 防护。
+- `src/components/publish/__tests__/ConfigDialog.test.tsx` 覆盖弹窗通过 owner callbacks 保存、删除、导出和应用导入，不 mock store mutation API。
+
 ## UI 状态与布局
 
 - 三栏折叠、宽度和主视图切换由 `App.tsx` 组合多个 hooks 后传给布局组件。

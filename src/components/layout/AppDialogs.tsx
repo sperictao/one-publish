@@ -4,8 +4,8 @@ import type {
   EnvironmentCheckSnapshot,
 } from "@/lib/environment";
 import type {
-  ConfigProfile,
   ConfigParameters,
+  ConfigProfile,
   ExecutionRecord,
   ProviderManifest,
   PublishConfigStore,
@@ -16,6 +16,7 @@ import type {
   ProviderPublishSpec,
   PublishResult,
 } from "@/lib/publishRuntime";
+import type { ProfileManagementActions } from "@/hooks/useProfiles";
 import type { Language } from "@/hooks/useI18n";
 import type { ParameterSchema } from "@/types/parameters";
 
@@ -173,11 +174,11 @@ export interface AppDialogsProps {
   config: {
     open: boolean;
     onOpenChange: (open: boolean) => void;
+    profileManagement: ProfileManagementActions;
     onLoadProfile: (profile: ConfigProfile) => void;
     currentProviderId: string;
     repoId: string | null;
     currentParameters: ConfigParameters;
-    onProfilesChanged: () => void | Promise<void>;
   };
 }
 
@@ -332,11 +333,17 @@ export function AppDialogs(props: AppDialogsProps) {
           <ConfigDialog
             open={props.config.open}
             onOpenChange={props.config.onOpenChange}
+            profiles={props.config.profileManagement.profiles}
+            isProfilesRefreshing={props.config.profileManagement.isRefreshing}
+            onRefreshProfiles={props.config.profileManagement.refreshProfiles}
+            onSaveProfile={props.config.profileManagement.saveProfile}
+            onDeleteProfile={props.config.profileManagement.deleteProfile}
+            onExportProfiles={props.config.profileManagement.exportProfiles}
+            onApplyImportedProfiles={props.config.profileManagement.applyImportedProfiles}
             onLoadProfile={props.config.onLoadProfile}
             currentProviderId={props.config.currentProviderId}
             repoId={props.config.repoId}
             currentParameters={props.config.currentParameters}
-            onProfilesChanged={props.config.onProfilesChanged}
           />
         </Suspense>
       ) : null}

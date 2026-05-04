@@ -27,12 +27,7 @@ import { useCallback, useEffect, useState } from "react";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import { toast } from "sonner";
 import {
-  getProfiles,
-  saveProfile,
-  deleteProfile,
-  exportConfig,
   importConfig,
-  applyImportedConfig,
   type ConfigParameters,
   type ConfigProfile,
 } from "@/lib/store";
@@ -40,13 +35,23 @@ import { useI18n } from "@/hooks/useI18n";
 
 interface ConfigManagementContentProps {
   active: boolean;
+  profiles: ConfigProfile[];
+  isProfilesRefreshing?: boolean;
+  onRefreshProfiles: () => void | Promise<ConfigProfile[]>;
+  onSaveProfile: (params: {
+    name: string;
+    providerId: string;
+    parameters: ConfigParameters;
+  }) => Promise<void>;
+  onDeleteProfile: (profile: ConfigProfile) => Promise<void>;
+  onExportProfiles: (filePath: string) => Promise<void>;
+  onApplyImportedProfiles: (profiles: ConfigProfile[]) => Promise<void>;
   onLoadProfile: (profile: ConfigProfile) => void;
   currentProviderId: string;
   repoId: string | null;
   currentParameters: ConfigParameters;
   closeOnLoad?: boolean;
   onClose?: () => void;
-  onProfilesChanged?: () => void | Promise<void>;
 }
 
 interface PendingImportState {
@@ -56,62 +61,55 @@ interface PendingImportState {
 interface ConfigDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  profiles: ConfigProfile[];
+  isProfilesRefreshing?: boolean;
+  onRefreshProfiles: () => void | Promise<ConfigProfile[]>;
+  onSaveProfile: (params: {
+    name: string;
+    providerId: string;
+    parameters: ConfigParameters;
+  }) => Promise<void>;
+  onDeleteProfile: (profile: ConfigProfile) => Promise<void>;
+  onExportProfiles: (filePath: string) => Promise<void>;
+  onApplyImportedProfiles: (profiles: ConfigProfile[]) => Promise<void>;
   onLoadProfile: (profile: ConfigProfile) => void;
   currentProviderId: string;
   repoId: string | null;
   currentParameters: ConfigParameters;
-  onProfilesChanged?: () => void | Promise<void>;
 }
 
 export function ConfigManagementContent({
   active,
+  profiles,
+  isProfilesRefreshing = false,
+  onRefreshProfiles,
+  onSaveProfile,
+  onDeleteProfile,
+  onExportProfiles,
+  onApplyImportedProfiles,
   onLoadProfile,
   currentProviderId,
   repoId,
   currentParameters,
   closeOnLoad = false,
   onClose,
-  onProfilesChanged,
 }: ConfigManagementContentProps) {
   const { translations, language } = useI18n();
   const profileT = translations.profiles || {};
   const dateLocale = language === "en" ? "en-US" : "zh-CN";
-  const [profiles, setProfiles] = useState<ConfigProfile[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
   const [newProfileName, setNewProfileName] = useState("");
   const [isSaving, setIsSaving] = useState(false);
   const [pendingImport, setPendingImport] = useState<PendingImportState | null>(null);
+  const [isImportLoading, setIsImportLoading] = useState(false);
   const [isApplyingImport, setIsApplyingImport] = useState(false);
-
-  const notifyProfilesChanged = useCallback(async () => {
-    await Promise.resolve(onProfilesChanged?.());
-  }, [onProfilesChanged]);
-
-  const loadProfiles = useCallback(async () => {
-    if (!repoId) {
-      setProfiles([]);
-      return;
-    }
-
-    setIsLoading(true);
-    try {
-      const data = await getProfiles(repoId);
-      setProfiles(data);
-    } catch (err) {
-      toast.error(profileT.loadFailed || "加载配置文件失败", {
-        description: err instanceof Error ? err.message : String(err),
-      });
-    } finally {
-      setIsLoading(false);
-    }
-  }, [profileT.loadFailed, repoId]);
+  const isLoading = isProfilesRefreshing || isImportLoading;
 
   useEffect(() => {
     if (!active) {
       return;
     }
-    void loadProfiles();
-  }, [active, loadProfiles]);
+    void onRefreshProfiles();
+  }, [active, onRefreshProfiles]);
 
   const handleSaveProfile = async () => {
     if (!repoId) return;
@@ -122,16 +120,13 @@ export function ConfigManagementContent({
 
     setIsSaving(true);
     try {
-      await saveProfile({
-        repoId,
+      await onSaveProfile({
         name: newProfileName,
         providerId: currentProviderId,
         parameters: currentParameters,
       });
       toast.success(profileT.saveSuccess || "配置文件保存成功");
       setNewProfileName("");
-      await loadProfiles();
-      await notifyProfilesChanged();
     } catch (err) {
       toast.error(profileT.saveFailed || "保存配置文件失败", {
         description: err instanceof Error ? err.message : String(err),
@@ -149,10 +144,8 @@ export function ConfigManagementContent({
     }
 
     try {
-      await deleteProfile(repoId, profile.name);
+      await onDeleteProfile(profile);
       toast.success(profileT.deleteSuccess || "配置文件删除成功");
-      await loadProfiles();
-      await notifyProfilesChanged();
     } catch (err) {
       toast.error(profileT.deleteFailed || "删除配置文件失败", {
         description: err instanceof Error ? err.message : String(err),
@@ -180,10 +173,7 @@ export function ConfigManagementContent({
       });
 
       if (filePath) {
-        await exportConfig({
-          profiles,
-          filePath: filePath as string,
-        });
+        await onExportProfiles(filePath as string);
         toast.success(profileT.exportSuccess || "配置导出成功");
       }
     } catch (err) {
@@ -207,11 +197,9 @@ export function ConfigManagementContent({
 
     setIsApplyingImport(true);
     try {
-      await applyImportedConfig(repoId, pendingImport.profiles);
+      await onApplyImportedProfiles(pendingImport.profiles);
       toast.success(profileT.importSuccess || "配置导入成功");
       setPendingImport(null);
-      await loadProfiles();
-      await notifyProfilesChanged();
     } catch (err) {
       toast.error(profileT.importFailed || "导入配置失败", {
         description: err instanceof Error ? err.message : String(err),
@@ -220,8 +208,7 @@ export function ConfigManagementContent({
       setIsApplyingImport(false);
     }
   }, [
-    loadProfiles,
-    notifyProfilesChanged,
+    onApplyImportedProfiles,
     pendingImport,
     profileT.importFailed,
     profileT.importSuccess,
@@ -241,7 +228,7 @@ export function ConfigManagementContent({
       });
 
       if (filePath) {
-        setIsLoading(true);
+        setIsImportLoading(true);
         try {
           const config = await importConfig(filePath as string);
           setPendingImport({
@@ -252,7 +239,7 @@ export function ConfigManagementContent({
             description: err instanceof Error ? err.message : String(err),
           });
         } finally {
-          setIsLoading(false);
+          setIsImportLoading(false);
         }
       }
     } catch (err) {
@@ -492,11 +479,17 @@ export function ConfigManagementContent({
 export function ConfigDialog({
   open: isOpen,
   onOpenChange,
+  profiles,
+  isProfilesRefreshing,
+  onRefreshProfiles,
+  onSaveProfile,
+  onDeleteProfile,
+  onExportProfiles,
+  onApplyImportedProfiles,
   onLoadProfile,
   currentProviderId,
   repoId,
   currentParameters,
-  onProfilesChanged,
 }: ConfigDialogProps) {
   const { translations } = useI18n();
   const profileT = translations.profiles || {};
@@ -531,13 +524,19 @@ export function ConfigDialog({
       >
         <ConfigManagementContent
           active={isOpen}
+          profiles={profiles}
+          isProfilesRefreshing={isProfilesRefreshing}
+          onRefreshProfiles={onRefreshProfiles}
+          onSaveProfile={onSaveProfile}
+          onDeleteProfile={onDeleteProfile}
+          onExportProfiles={onExportProfiles}
+          onApplyImportedProfiles={onApplyImportedProfiles}
           onLoadProfile={onLoadProfile}
           currentProviderId={currentProviderId}
           repoId={repoId}
           currentParameters={currentParameters}
           closeOnLoad
           onClose={() => onOpenChange(false)}
-          onProfilesChanged={onProfilesChanged}
         />
       </AppDialogShell>
     </Dialog>

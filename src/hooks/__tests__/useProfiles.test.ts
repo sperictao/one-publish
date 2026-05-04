@@ -3,6 +3,10 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
   getProfiles: vi.fn(),
+  saveProfile: vi.fn(),
+  deleteProfile: vi.fn(),
+  exportConfig: vi.fn(),
+  applyImportedConfig: vi.fn(),
   toast: {
     success: vi.fn(),
     error: vi.fn(),
@@ -18,6 +22,10 @@ vi.mock("@/lib/store", async () => {
   return {
     ...actual,
     getProfiles: mocks.getProfiles,
+    saveProfile: mocks.saveProfile,
+    deleteProfile: mocks.deleteProfile,
+    exportConfig: mocks.exportConfig,
+    applyImportedConfig: mocks.applyImportedConfig,
   };
 });
 
@@ -46,6 +54,10 @@ function createDeferred<T>() {
 describe("useProfiles", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mocks.saveProfile.mockResolvedValue({});
+    mocks.deleteProfile.mockResolvedValue({});
+    mocks.exportConfig.mockResolvedValue("/tmp/one-publish-config.json");
+    mocks.applyImportedConfig.mockResolvedValue(undefined);
   });
 
   it("会忽略旧仓库晚到的配置列表响应", async () => {
@@ -304,6 +316,116 @@ describe("useProfiles", () => {
       ]);
       expect(result.current.profilesRevision).toBe(2);
       expect(result.current.isProfilesRefreshing).toBe(false);
+    });
+  });
+
+  it("通过 profileManagement 保存配置后刷新同一个 owner snapshot", async () => {
+    mocks.getProfiles
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([createProfile("Release")]);
+
+    const { result } = renderHook(() =>
+      useProfiles({
+        appT: {},
+        profileT: {},
+        language: "zh",
+        selectedRepoId: "repo-1",
+        activeProviderId: "dotnet",
+        providerSchemas: {},
+        applyProfileProvider: vi.fn(),
+        setIsCustomMode: vi.fn(),
+        isCustomMode: false,
+        setSelectedPreset: vi.fn(),
+        setProviderParameters: vi.fn(),
+        applyDotnetCustomConfig: vi.fn(),
+        replaceScopedConfigKey: vi.fn(),
+        presets: [],
+        defaultPresetId: "release-fd",
+        getPresetText: (_presetId, fallbackName, fallbackDescription) => ({
+          name: fallbackName,
+          description: fallbackDescription,
+        }),
+        buildProfileParameters: () => ({}),
+      })
+    );
+
+    await waitFor(() => {
+      expect(mocks.getProfiles).toHaveBeenCalledWith("repo-1");
+    });
+
+    await act(async () => {
+      await result.current.profileManagement.saveProfile({
+        name: "Release",
+        providerId: "dotnet",
+        parameters: {
+          configuration: "Release",
+        },
+      });
+    });
+
+    expect(mocks.saveProfile).toHaveBeenCalledWith({
+      repoId: "repo-1",
+      name: "Release",
+      providerId: "dotnet",
+      parameters: {
+        configuration: "Release",
+      },
+      profileGroup: undefined,
+    });
+    await waitFor(() => {
+      expect(result.current.profiles.map((profile) => profile.name)).toEqual([
+        "Release",
+      ]);
+    });
+  });
+
+  it("通过 profileManagement 应用导入配置后刷新同一个 owner snapshot", async () => {
+    const importedProfiles = [createProfile("Imported")];
+    mocks.getProfiles
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce(importedProfiles);
+
+    const { result } = renderHook(() =>
+      useProfiles({
+        appT: {},
+        profileT: {},
+        language: "zh",
+        selectedRepoId: "repo-1",
+        activeProviderId: "dotnet",
+        providerSchemas: {},
+        applyProfileProvider: vi.fn(),
+        setIsCustomMode: vi.fn(),
+        isCustomMode: false,
+        setSelectedPreset: vi.fn(),
+        setProviderParameters: vi.fn(),
+        applyDotnetCustomConfig: vi.fn(),
+        replaceScopedConfigKey: vi.fn(),
+        presets: [],
+        defaultPresetId: "release-fd",
+        getPresetText: (_presetId, fallbackName, fallbackDescription) => ({
+          name: fallbackName,
+          description: fallbackDescription,
+        }),
+        buildProfileParameters: () => ({}),
+      })
+    );
+
+    await waitFor(() => {
+      expect(mocks.getProfiles).toHaveBeenCalledWith("repo-1");
+    });
+
+    await act(async () => {
+      await result.current.profileManagement.applyImportedProfiles(importedProfiles);
+    });
+
+    expect(mocks.applyImportedConfig).toHaveBeenCalledWith(
+      "repo-1",
+      importedProfiles
+    );
+    await waitFor(() => {
+      expect(result.current.profiles.map((profile) => profile.name)).toEqual([
+        "Imported",
+      ]);
     });
   });
 });
