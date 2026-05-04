@@ -1,12 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { invoke } from "@tauri-apps/api/core";
 import { toast } from "sonner";
 
 import type {
-  PublishResult as TauriPublishResult,
-  PublishSpec as TauriPublishSpec,
-} from "@/generated/tauri-contracts";
-import type { TranslationMap } from "@/hooks/usePublishRunnerTypes";
+  RunPublishOptions,
+  TranslationMap,
+} from "@/hooks/usePublishRunnerTypes";
 import {
   createEnvironmentCheckSnapshot,
   runEnvironmentCheck,
@@ -24,7 +22,6 @@ import {
   buildProtectedOutputAccessDescription,
   preflightPublishOutput,
   requestProtectedOutputAccess,
-  type PublishOutputPreflightResult,
 } from "@/lib/publishOutputPreflight";
 import { showSystemNotification } from "@/lib/systemNotification";
 import { useDotnetPublishSelection } from "@/hooks/useDotnetPublishSelection";
@@ -36,6 +33,13 @@ import {
   isProtectedOutputAccessFailure,
   normalizePublishResult,
 } from "@/lib/publishFailure";
+import {
+  cancelProviderPublish,
+  executeProviderPublish,
+  type ProviderPublishSpec,
+  type PublishOutputPreflightResult,
+  type PublishResult,
+} from "@/lib/publishRuntime";
 import { renderPublishCommand } from "@/lib/renderPublishCommand";
 import type { PublishConfigStore } from "@/lib/store";
 import type { ProjectInfo } from "@/types/project";
@@ -46,26 +50,6 @@ const loadPublishFailureFeedback = () =>
   import("@/hooks/usePublishFailureFeedback");
 const loadCancelPublishFeedback = () =>
   import("@/hooks/useCancelPublishFeedback");
-
-export type PublishResult = TauriPublishResult;
-export type ProviderPublishSpec = TauriPublishSpec;
-
-async function executeProviderPublish(
-  spec: ProviderPublishSpec
-): Promise<PublishResult> {
-  return await invoke<PublishResult>("execute_provider_publish", {
-    spec,
-  });
-}
-
-export interface RunPublishOptions {
-  repoId?: string | null;
-  recentConfigKey?: string | null;
-  openOutputDirOnSuccess?: boolean;
-  restoreWindowOnFailure?: boolean;
-  feedbackMode?: "toast" | "system";
-  trayStatusEffect?: boolean;
-}
 
 interface DotnetPreset {
   id: string;
@@ -956,7 +940,7 @@ export function usePublishRunner({
 
     setIsCancellingPublish(true);
     try {
-      const cancelled = await invoke<boolean>("cancel_provider_publish");
+      const cancelled = await cancelProviderPublish();
       if (cancelled) {
         toast.message(appT.cancellingPublish || "正在取消发布...");
       } else {

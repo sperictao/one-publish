@@ -7,7 +7,7 @@ import {
   type ParameterValue,
   type SpecParameters,
 } from "@/types/parameters";
-import type { ProviderPublishSpec } from "@/hooks/usePublishRunner";
+import type { ProviderPublishSpec } from "@/lib/publishRuntime";
 
 interface UseRecoverableSpecParams {
   specVersion: number;

@@ -2,7 +2,7 @@ import { useCallback } from "react";
 
 import { buildDotnetProfileParameters } from "@/lib/dotnetPublishConfig";
 import { toSpecParameters, type ParameterValue } from "@/types/parameters";
-import type { ProviderPublishSpec } from "@/hooks/usePublishRunner";
+import type { ProviderPublishSpec } from "@/lib/publishRuntime";
 import type { ProjectInfo } from "@/types/project";
 
 interface PublishConfig {

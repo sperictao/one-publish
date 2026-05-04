@@ -3,7 +3,7 @@ import type { ExecutionRecord, JsonValue } from "@/lib/store";
 import type {
   ProviderPublishSpec,
   PublishResult,
-} from "@/hooks/usePublishRunner";
+} from "@/lib/publishRuntime";
 
 const OUTPUT_EXCERPT_MAX_LINES = 40;
 const OUTPUT_EXCERPT_MAX_CHARS = 16_000;

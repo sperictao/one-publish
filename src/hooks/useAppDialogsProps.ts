@@ -5,7 +5,7 @@ import type { Language } from "@/hooks/useI18n";
 import type {
   ProviderPublishSpec,
   PublishResult,
-} from "@/hooks/usePublishRunner";
+} from "@/lib/publishRuntime";
 import type { PackageResult, SignResult } from "@/lib/artifact";
 import type {
   ConfigParameters,

@@ -1,0 +1,5 @@
+{"file": ".trellis/spec/frontend/state-management.md", "reason": "verify profile owner consistency and no duplicate source of truth remains"}
+{"file": ".trellis/spec/frontend/quality-guidelines.md", "reason": "run targeted hook/component tests and typecheck for profile changes"}
+{"file": ".trellis/spec/frontend/component-guidelines.md", "reason": "verify ConfigDialog keeps UI behavior and accessibility intact"}
+{"file": ".trellis/spec/guides/code-reuse-thinking-guide.md", "reason": "check profile mutation logic is shared rather than copied"}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "verify profile data flow remains consistent across import, store, hook, and panel"}

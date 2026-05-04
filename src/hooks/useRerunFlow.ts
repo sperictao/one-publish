@@ -2,10 +2,8 @@ import { useCallback, useState } from "react";
 import { toast } from "sonner";
 
 import type { ExecutionRecord } from "@/lib/store";
-import type {
-  ProviderPublishSpec,
-  RunPublishOptions,
-} from "@/hooks/usePublishRunner";
+import type { ProviderPublishSpec } from "@/lib/publishRuntime";
+import type { RunPublishOptions } from "@/hooks/usePublishRunnerTypes";
 
 interface TranslationMap {
   [key: string]: string | undefined;

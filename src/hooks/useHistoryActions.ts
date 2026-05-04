@@ -2,7 +2,7 @@ import { useCallback } from "react";
 import { toast } from "sonner";
 
 import { buildGitHubActionsSnippet, buildShellHandoffSnippet, type HandoffSnippetFormat } from "@/lib/handoffSnippet";
-import type { ProviderPublishSpec } from "@/hooks/usePublishRunner";
+import type { ProviderPublishSpec } from "@/lib/publishRuntime";
 import { openExecutionSnapshot, setExecutionRecordSnapshot, type ExecutionRecord } from "@/lib/store";
 import { extractInvokeErrorMessage } from "@/lib/tauri/invokeErrors";
 

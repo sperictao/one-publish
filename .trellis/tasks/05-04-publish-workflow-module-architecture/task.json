@@ -1,0 +1,30 @@
+{
+  "id": "publish-workflow-module-architecture",
+  "name": "publish-workflow-module-architecture",
+  "title": "发布、Profile、Provider Module 架构优化",
+  "description": "收敛发布工作流、Profile Domain、Provider Runtime 三条模块边界，减少大型 hook、重复 owner 和跨层耦合。",
+  "status": "planning",
+  "dev_type": null,
+  "scope": null,
+  "package": null,
+  "priority": "P2",
+  "creator": "Eric Tao",
+  "assignee": "Eric Tao",
+  "createdAt": "2026-05-04",
+  "completedAt": null,
+  "branch": null,
+  "base_branch": "main",
+  "worktree_path": null,
+  "commit": null,
+  "pr_url": null,
+  "subtasks": [],
+  "children": [
+    "05-04-publish-workflow-module-boundary",
+    "05-04-profile-domain-module-boundary",
+    "05-04-provider-runtime-module-boundary"
+  ],
+  "parent": null,
+  "relatedFiles": [],
+  "notes": "",
+  "meta": {}
+}

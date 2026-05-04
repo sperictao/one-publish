@@ -4,7 +4,7 @@ import type { ArtifactActionState } from "@/components/publish/ArtifactActions";
 import type {
   ProviderPublishSpec,
   PublishResult,
-} from "@/hooks/usePublishRunner";
+} from "@/lib/publishRuntime";
 
 export function usePublishUiState() {
   const [isPublishing, setIsPublishing] = useState(false);

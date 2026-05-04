@@ -85,6 +85,14 @@ vi.mock("@/lib/renderPublishCommand", () => ({
   renderPublishCommand: mocks.renderPublishCommand,
 }));
 
+vi.mock("@/lib/publishRuntime", () => ({
+  executeProviderPublish: (spec: unknown) =>
+    mocks.invoke("execute_provider_publish", { spec }),
+  cancelProviderPublish: () => mocks.invoke("cancel_provider_publish"),
+  renderProviderPublish: mocks.renderPublishCommand,
+  preflightProviderPublishOutput: mocks.preflightPublishOutput,
+}));
+
 vi.mock("@/lib/store", async () => {
   const actual = await vi.importActual<typeof import("@/lib/store")>("@/lib/store");
   return {

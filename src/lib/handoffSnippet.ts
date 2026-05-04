@@ -1,4 +1,4 @@
-import type { ProviderPublishSpec } from "@/hooks/usePublishRunner";
+import type { ProviderPublishSpec } from "@/lib/publishRuntime";
 
 export type HandoffSpec = Pick<
   ProviderPublishSpec,

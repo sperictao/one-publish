@@ -1,0 +1,6 @@
+{"file": ".trellis/spec/frontend/directory-structure.md", "reason": "publish workflow boundary needs correct frontend module placement"}
+{"file": ".trellis/spec/frontend/type-safety.md", "reason": "publish contract aliases must come from generated Tauri contracts or approved adapters"}
+{"file": ".trellis/spec/frontend/hook-guidelines.md", "reason": "usePublishRunner remains a hook but should delegate non-React work"}
+{"file": ".trellis/spec/frontend/state-management.md", "reason": "publish execution state owner and history side effects must stay scoped"}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "publish flow crosses React hooks, Tauri commands, Rust provider execution, and persisted history"}
+{"file": ".trellis/spec/guides/code-reuse-thinking-guide.md", "reason": "extract shared publish helpers without duplicating existing lib logic"}

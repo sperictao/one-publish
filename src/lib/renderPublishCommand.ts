@@ -1,12 +1,11 @@
-import { invoke } from "@tauri-apps/api/core";
-
-import type {
-  PublishSpec,
-  RenderedPublishCommand,
-} from "@/generated/tauri-contracts";
+import {
+  renderProviderPublish,
+  type ProviderPublishSpec,
+  type RenderedPublishCommand,
+} from "@/lib/publishRuntime";
 
 export async function renderPublishCommand(
-  spec: PublishSpec
+  spec: ProviderPublishSpec
 ): Promise<RenderedPublishCommand> {
-  return await invoke<RenderedPublishCommand>("render_provider_publish", { spec });
+  return await renderProviderPublish(spec);
 }

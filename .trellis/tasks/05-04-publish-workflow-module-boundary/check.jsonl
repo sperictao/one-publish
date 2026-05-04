@@ -1,0 +1,5 @@
+{"file": ".trellis/spec/frontend/type-safety.md", "reason": "verify no generated contract duplication or unsafe type assertions are introduced"}
+{"file": ".trellis/spec/frontend/quality-guidelines.md", "reason": "select typecheck and targeted Vitest coverage for publish workflow changes"}
+{"file": ".trellis/spec/frontend/state-management.md", "reason": "check publish state owner, stale result guards, and persisted history behavior"}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "verify publish spec/result data survives boundary changes across layers"}
+{"file": ".trellis/spec/guides/code-reuse-thinking-guide.md", "reason": "verify extracted helpers reduce duplication instead of creating parallel paths"}

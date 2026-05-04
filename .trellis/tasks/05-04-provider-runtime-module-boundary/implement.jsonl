@@ -1,0 +1,6 @@
+{"file": ".trellis/spec/frontend/state-management.md", "reason": "provider runtime state, schema cache, and parameters need clear frontend ownership"}
+{"file": ".trellis/spec/frontend/hook-guidelines.md", "reason": "provider runtime and presentation logic should be exposed through focused hooks"}
+{"file": ".trellis/spec/frontend/type-safety.md", "reason": "provider catalog/schema types must stay aligned with generated Tauri contracts"}
+{"file": ".trellis/spec/frontend/quality-guidelines.md", "reason": "provider changes need typecheck plus targeted frontend/Rust verification"}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "provider facts cross frontend runtime, Tauri commands, Rust registry, environment, and repository scanning"}
+{"file": ".trellis/spec/guides/code-reuse-thinking-guide.md", "reason": "avoid new provider facts being repeated across unrelated modules"}

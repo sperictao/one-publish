@@ -1,0 +1,5 @@
+{"file": ".trellis/spec/frontend/type-safety.md", "reason": "verify provider contracts and schema types remain generated-contract aligned"}
+{"file": ".trellis/spec/frontend/quality-guidelines.md", "reason": "select frontend typecheck and Rust checks for provider boundary changes"}
+{"file": ".trellis/spec/frontend/state-management.md", "reason": "verify provider runtime/presentation/parameters owner boundaries"}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "check provider facts flow consistently across frontend and Rust layers"}
+{"file": ".trellis/spec/guides/code-reuse-thinking-guide.md", "reason": "verify provider metadata is centralized and not duplicated"}

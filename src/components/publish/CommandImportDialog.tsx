@@ -1,5 +1,4 @@
 import { useState } from "react";
-import { invoke } from "@tauri-apps/api/core";
 import { toast } from "sonner";
 
 import { AppDialogShell } from "@/components/ui/app-dialog-shell";
@@ -10,7 +9,10 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Loader2, Terminal } from "lucide-react";
 import { useI18n } from "@/hooks/useI18n";
-import type { ProviderPublishSpec } from "@/hooks/usePublishRunner";
+import {
+  importProviderPublishSpecFromCommand,
+  type ProviderPublishSpec,
+} from "@/lib/publishRuntime";
 import { resolveProviderCommandExample, resolveProviderLabel } from "@/lib/providers";
 import type { ProviderManifest } from "@/lib/store";
 
@@ -52,7 +54,7 @@ export function CommandImportDialog({
     setParsedSpec(null);
 
     try {
-      const spec = await invoke<ProviderPublishSpec>("import_from_command", {
+      const spec = await importProviderPublishSpecFromCommand({
         command,
         providerId,
         projectPath,

@@ -1,13 +1,13 @@
-import { invoke } from "@tauri-apps/api/core";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
 
-import type {
-  ProtectedDirectoryLocation,
-  PublishOutputPreflightResult,
-  PublishSpec,
-} from "@/generated/tauri-contracts";
+import type { ProtectedDirectoryLocation } from "@/generated/tauri-contracts";
+import {
+  preflightProviderPublishOutput,
+  type ProviderPublishSpec,
+  type PublishOutputPreflightResult,
+} from "@/lib/publishRuntime";
 
-export type { PublishOutputPreflightResult } from "@/generated/tauri-contracts";
+export type { PublishOutputPreflightResult } from "@/lib/publishRuntime";
 
 interface TranslationMap {
   [key: string]: string | undefined;
@@ -19,12 +19,9 @@ export interface ProtectedOutputAccessRequestResult {
 }
 
 export async function preflightPublishOutput(
-  spec: PublishSpec
+  spec: ProviderPublishSpec
 ): Promise<PublishOutputPreflightResult> {
-  return await invoke<PublishOutputPreflightResult>(
-    "preflight_publish_output",
-    { spec }
-  );
+  return await preflightProviderPublishOutput(spec);
 }
 
 function resolveProtectedOutputRequestDirectory(
@@ -39,7 +36,7 @@ function resolveProtectedOutputRequestDirectory(
 }
 
 export async function requestProtectedOutputAccess(
-  spec: PublishSpec,
+  spec: ProviderPublishSpec,
   result: PublishOutputPreflightResult,
   appT: TranslationMap
 ): Promise<ProtectedOutputAccessRequestResult> {

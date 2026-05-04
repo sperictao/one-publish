@@ -15,7 +15,8 @@ import {
   showMainWindow,
 } from "@/lib/store";
 import { analyzeProjectScanFailure } from "@/lib/tauri/invokeErrors";
-import type { RunPublishOptions, ProviderPublishSpec } from "@/hooks/usePublishRunner";
+import type { ProviderPublishSpec } from "@/lib/publishRuntime";
+import type { RunPublishOptions } from "@/hooks/usePublishRunnerTypes";
 import { toSpecParameters } from "@/types/parameters";
 import type { ProjectInfo } from "@/types/project";
 import type { Repository } from "@/types/repository";

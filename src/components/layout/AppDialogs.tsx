@@ -15,7 +15,7 @@ import type { AppUpdaterState } from "@/hooks/useAppUpdater";
 import type {
   ProviderPublishSpec,
   PublishResult,
-} from "@/hooks/usePublishRunner";
+} from "@/lib/publishRuntime";
 import type { Language } from "@/hooks/useI18n";
 import type { ParameterSchema } from "@/types/parameters";
 

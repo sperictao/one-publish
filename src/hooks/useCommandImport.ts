@@ -9,7 +9,7 @@ import { toast } from "sonner";
 
 import { mapImportedSpecByProvider } from "@/lib/commandImportMapping";
 import { createDotnetPublishConfigFromParameters } from "@/lib/dotnetPublishConfig";
-import type { ProviderPublishSpec } from "@/hooks/usePublishRunner";
+import type { ProviderPublishSpec } from "@/lib/publishRuntime";
 import type { PublishConfigStore } from "@/lib/store";
 import type { ParameterSchema, ParameterValue } from "@/types/parameters";
 

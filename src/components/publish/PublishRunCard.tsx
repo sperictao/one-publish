@@ -18,7 +18,7 @@ import {
   Terminal,
   XCircle,
 } from "lucide-react";
-import type { PublishResult } from "@/hooks/usePublishRunner";
+import type { PublishResult } from "@/lib/publishRuntime";
 import { openOutputDirectory } from "@/lib/store";
 import { cn } from "@/lib/utils";
 

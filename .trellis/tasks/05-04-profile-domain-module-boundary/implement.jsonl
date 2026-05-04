@@ -1,0 +1,6 @@
+{"file": ".trellis/spec/frontend/state-management.md", "reason": "profile list, cache, mutation, and import/export need a single repo-scoped owner"}
+{"file": ".trellis/spec/frontend/hook-guidelines.md", "reason": "profile domain should expose hook-owned state/actions without leaking store details into UI"}
+{"file": ".trellis/spec/frontend/component-guidelines.md", "reason": "ConfigDialog should remain presentation-focused and reuse existing UI primitives"}
+{"file": ".trellis/spec/frontend/type-safety.md", "reason": "profile parameters and store adapters must preserve generated contract-derived types"}
+{"file": ".trellis/spec/guides/code-reuse-thinking-guide.md", "reason": "remove duplicated profile load/save/delete flows between hook and dialog"}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "profile import/export crosses file dialog, store commands, hook state, and UI lists"}

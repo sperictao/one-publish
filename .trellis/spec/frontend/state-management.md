@@ -21,10 +21,13 @@
 - 乐观更新允许改善 UI 响应，但失败必须回读 authoritative state 并提示用户。
 - 新增持久化字段时，要同时检查生成契约、默认值、迁移/兼容、前端 normalization 和测试。
 - 不要绕过 `lib/store.ts` 在组件里直接 `invoke("save...")`。
+- 发布命令运行时通过 `src/lib/publishRuntime.ts` 集中调用 Tauri commands；`usePublishRunner` 只保留发布 UI 编排、反馈、日志和历史记录接线，不重新导出 `PublishSpec` / `PublishResult` 等契约类型。
+- 发布预览和输出目录预检继续走语义 helper（如 `src/lib/renderPublishCommand.ts`、`src/lib/publishOutputPreflight.ts`），这些 helper 再委托到 `publishRuntime`，避免 hook 直接绕过领域语义层。
 
 真实参考路径：
 
 - `src/lib/store.ts`：从 `src/generated/tauri-contracts.ts` 引入 Tauri 类型，再 normalize 成前端类型。
+- `src/lib/publishRuntime.ts`：发布执行、取消、命令渲染、输出目录预检、命令导入的非 React Tauri 边界。
 - `src/hooks/useAppState.ts`：`restoreAuthoritativeState()` 与 `handlePersistenceFailure()`。
 - `src/hooks/usePublishHistoryState.ts`：执行历史通过 `getExecutionHistory()` / `addExecutionRecord()` 同步。
 

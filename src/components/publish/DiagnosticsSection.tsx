@@ -3,7 +3,7 @@ import { useDiagnosticsExports } from "@/hooks/useDiagnosticsExports";
 import { useExecutionHistoryCardProps } from "@/hooks/useExecutionHistoryCardProps";
 import { useHistoryActions } from "@/hooks/useHistoryActions";
 import { useHistoryDiagnosticsState } from "@/hooks/useHistoryDiagnosticsState";
-import type { ProviderPublishSpec } from "@/hooks/usePublishRunner";
+import type { ProviderPublishSpec } from "@/lib/publishRuntime";
 import type { ExecutionRecord } from "@/lib/store";
 import type { Repository } from "@/types/repository";
 
