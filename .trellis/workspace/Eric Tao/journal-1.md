@@ -105,3 +105,36 @@ Consolidated profile list and mutations into the useProfiles profileManagement f
 ### Next Steps
 
 - None - task complete
+
+
+## Session 4: Provider runtime boundary consolidation
+
+**Date**: 2026-05-05
+**Task**: Provider runtime boundary consolidation
+**Branch**: `main`
+
+### Summary
+
+Separated provider runtime state, provider-scoped parameter drafts, and presentation derivation; centralized repository discovery metadata in the Rust provider registry; kept environment runtime probes separate and verified frontend/Rust checks.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `c21dcc1` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
