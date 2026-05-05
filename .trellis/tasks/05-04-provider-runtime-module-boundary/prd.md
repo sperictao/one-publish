@@ -14,11 +14,11 @@
 
 ## Acceptance Criteria
 
-* [ ] 前端 provider runtime/presentation/parameters 边界清晰，新增 provider UI 不需要在 `App.tsx` 增加无关分发逻辑。
-* [ ] Rust provider catalog/schema/compile/output 与 environment/project-discovery 职责边界被代码结构或文档化 helper 体现。
-* [ ] 新增 provider 所需登记点减少或集中，至少不再扩散新的硬编码入口。
-* [ ] provider registry、environment scoped check、repository scan/detection 或受影响 command 的 Rust 测试通过。
-* [ ] `pnpm typecheck` 通过；若 Rust 侧改动，相关 `cargo test` / `cargo check` 通过。
+* [x] 前端 provider runtime/presentation/parameters 边界清晰，新增 provider UI 不需要在 `App.tsx` 增加无关分发逻辑。
+* [x] Rust provider catalog/schema/compile/output 与 environment/project-discovery 职责边界被代码结构或文档化 helper 体现。
+* [x] 新增 provider 所需登记点减少或集中，至少不再扩散新的硬编码入口。
+* [x] provider registry、environment scoped check、repository scan/detection 或受影响 command 的 Rust 测试通过。
+* [x] `pnpm typecheck` 通过；若 Rust 侧改动，相关 `cargo test` / `cargo check` 通过。
 
 ## Technical Approach
 
@@ -35,9 +35,24 @@
 ## Technical Notes
 
 * Parent task: `.trellis/tasks/05-04-publish-workflow-module-architecture`
+* Implementation:
+  * `src/hooks/useProviderRuntime.ts` now owns provider catalog, active provider id, schema resource state and schema cache only.
+  * `src/hooks/useProviderParametersState.ts` owns provider-scoped parameter drafts.
+  * `src/hooks/useProviderPresentationState.ts` owns provider label, project binding capability, repository options and runtime banner derivation.
+  * Rust `ProviderRepositoryDiscovery` metadata lives in `src-tauri/src/provider/registry.rs`; repository commands consume it for provider detection and project-file scanning.
+  * `src-tauri/src/environment/mod.rs` keeps runtime probe dispatch separate from provider catalog/discovery facts.
+* Validation:
+  * `git diff --check`
+  * `pnpm exec vitest run "src/hooks/__tests__/useProviderRuntime.test.ts" "src/hooks/__tests__/useProviderParametersState.test.ts" "src/hooks/__tests__/useProviderPresentationState.test.ts" "src/hooks/__tests__/useDialogsCompositionState.test.ts" "src/__tests__/App.test.tsx"`
+  * `pnpm typecheck`
+  * `cargo test --manifest-path "src-tauri/Cargo.toml"`
+  * `cargo check --manifest-path "src-tauri/Cargo.toml"`
+* Residual risk:
+  * `cargo test` still reports existing deprecated warnings from `src/publish.rs` tests that call `build_dotnet_publish_plan`; this task did not expand into publish legacy cleanup.
 * Key files:
   * `src/hooks/useProviderRuntime.ts`
   * `src/hooks/useProviderPresentationState.ts`
+  * `src/hooks/useProviderParametersState.ts`
   * `src/lib/providers.ts`
   * `src-tauri/src/provider/mod.rs`
   * `src-tauri/src/provider/registry.rs`

@@ -5,7 +5,7 @@ import {
   listProviders,
   type ProviderManifest,
 } from "@/lib/store";
-import type { ParameterSchema, ParameterValue } from "@/types/parameters";
+import type { ParameterSchema } from "@/types/parameters";
 
 export type ResourceStatus = "idle" | "loading" | "ready" | "error";
 
@@ -32,9 +32,6 @@ export function useProviderRuntime() {
   const [activeProviderId, setActiveProviderId] = useState("dotnet");
   const [providerSchemaStates, setProviderSchemaStates] =
     useState<ProviderSchemaStateMap>({});
-  const [providerParameters, setProviderParameters] = useState<
-    Record<string, Record<string, ParameterValue>>
-  >({});
 
   const loadProviders = useCallback(async () => {
     setProviderListState((prev) => ({
@@ -134,17 +131,6 @@ export function useProviderRuntime() {
     [providerSchemaStates]
   );
   const activeProviderSchema = activeProviderSchemaState.data ?? undefined;
-  const activeProviderParameters = providerParameters[activeProviderId] || {};
-
-  const handleProviderParametersChange = useCallback(
-    (parameters: Record<string, ParameterValue>) => {
-      setProviderParameters((prev) => ({
-        ...prev,
-        [activeProviderId]: parameters,
-      }));
-    },
-    [activeProviderId]
-  );
 
   const retryProviderList = useCallback(() => {
     void loadProviders();
@@ -169,11 +155,8 @@ export function useProviderRuntime() {
     retryProviderList,
     retryProviderSchema,
     providerSchemas,
-    setProviderParameters,
     availableProviders,
     activeProvider,
     activeProviderSchema,
-    activeProviderParameters,
-    handleProviderParametersChange,
   };
 }

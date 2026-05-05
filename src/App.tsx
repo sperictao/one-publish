@@ -29,13 +29,10 @@ import { useAppUpdater } from "@/hooks/useAppUpdater";
 import { useCommandImportResultCardProps } from "@/hooks/useCommandImportResultCardProps";
 import { useEditorProviderState } from "@/hooks/useEditorProviderState";
 import { useProviderRuntime } from "@/hooks/useProviderRuntime";
+import { useProviderParametersState } from "@/hooks/useProviderParametersState";
 import { useI18n, type Language } from "@/hooks/useI18n";
 import type { PublishConfigStore } from "@/lib/store";
 import { buildDotnetProfileParameters } from "@/lib/dotnetPublishConfig";
-import {
-  providerRequiresProjectBinding,
-  providerUsesProjectFile,
-} from "@/lib/providers";
 
 // Layout Components
 import { ResizeHandle } from "@/components/layout/ResizeHandle";
@@ -274,11 +271,11 @@ function App() {
     retryProviderList,
     retryProviderSchema,
     providerSchemas,
-    setProviderParameters,
     availableProviders: providerRuntimeProviders,
     activeProvider,
-    activeProviderParameters,
   } = useProviderRuntime();
+  const { activeProviderParameters, setProviderParameters } =
+    useProviderParametersState({ activeProviderId });
 
   // 快捷键处理
   useShortcuts({
@@ -360,11 +357,6 @@ function App() {
     selectedRepo,
     setActiveProviderId,
   });
-  const activeProviderUsesProjectFile = providerUsesProjectFile(activeProvider);
-  const activeProviderRequiresProjectBinding = providerRequiresProjectBinding(
-    activeProvider
-  );
-
   const {
     environmentLastCheck,
     setEnvironmentLastCheck,
@@ -391,13 +383,19 @@ function App() {
 
   const {
     activeProviderLabel,
+    activeProviderUsesProjectFile,
+    activeProviderRequiresProjectBinding,
     repositoryProviders,
+    providerRuntimeBanner,
   } = useProviderPresentationState({
     providerRuntimeProviders,
+    providerListState,
+    activeProviderSchemaState,
     activeProvider,
     activeProviderId,
-    customConfig,
-    setCustomConfig,
+    appT,
+    retryProviderList,
+    retryProviderSchema,
   });
 
   const applyDotnetCustomConfig = useCallback(
@@ -651,76 +649,6 @@ function App() {
     appT,
   });
 
-  const providerRuntimeBanner = useMemo(() => {
-    if (providerListState.status === "loading" && !providerListState.data?.length) {
-      return {
-        key: "provider-loading",
-        status: "loading" as const,
-        title: appT.loadingProviders || "正在加载 Provider 列表...",
-        description:
-          appT.loadingProvidersDescription ||
-          "等待 Provider 运行时初始化完成后，参数编辑和命令导入功能才会恢复。",
-        onRetry: retryProviderList,
-      };
-    }
-
-    if (providerListState.status === "error") {
-      return {
-        key: "provider-error",
-        status: "error" as const,
-        title: appT.providerListLoadFailed || "Provider 列表加载失败",
-        description:
-          String(providerListState.error) ||
-          appT.providerListLoadFailedDescription ||
-          "未能读取可用 Provider，请重试。",
-        onRetry: retryProviderList,
-      };
-    }
-
-    if (
-      activeProviderSchemaState.status === "loading" &&
-      !activeProviderSchemaState.data
-    ) {
-      return {
-        key: "provider-schema-loading",
-        status: "loading" as const,
-        title: appT.loadingProviderSchema || "正在加载 Provider 参数定义...",
-        description:
-          appT.loadingProviderSchemaDescription ||
-          "参数表单和命令映射会在 schema 就绪后继续可用。",
-        onRetry: retryProviderSchema,
-      };
-    }
-
-    if (activeProviderSchemaState.status === "error") {
-      return {
-        key: "provider-schema-error",
-        status: "error" as const,
-        title: appT.providerSchemaLoadFailed || "Provider 参数定义加载失败",
-        description:
-          String(activeProviderSchemaState.error) ||
-          appT.providerSchemaLoadFailedDescription ||
-          "无法读取当前 Provider 的参数定义，请重试。",
-        onRetry: retryProviderSchema,
-      };
-    }
-
-    return null;
-  }, [
-    activeProviderSchemaState,
-    appT.loadingProviderSchema,
-    appT.loadingProviderSchemaDescription,
-    appT.loadingProviders,
-    appT.loadingProvidersDescription,
-    appT.providerListLoadFailed,
-    appT.providerListLoadFailedDescription,
-    appT.providerSchemaLoadFailed,
-    appT.providerSchemaLoadFailedDescription,
-    providerListState,
-    retryProviderList,
-    retryProviderSchema,
-  ]);
-
   // Show loading state
   if (isStateLoading) {
     return (
@@ -913,6 +841,7 @@ function App() {
             environmentLastCheck={environmentLastCheck}
             openEnvironmentDialog={openEnvironmentDialog}
             activeProviderId={activeProviderId}
+            activeProviderUsesProjectFile={activeProviderUsesProjectFile}
             activeProvider={activeProvider}
             availableProviders={providerRuntimeProviders}
             updaterState={updaterState}

@@ -67,6 +67,7 @@ describe("useDialogsCompositionState", () => {
         environmentLastCheck: snapshot,
         openEnvironmentDialog: vi.fn(),
         activeProviderId: "dotnet",
+        activeProviderUsesProjectFile: true,
         activeProvider: {
           id: "dotnet",
           displayName: ".NET (dotnet)",
@@ -190,6 +191,11 @@ describe("useDialogsCompositionState", () => {
     );
     expect(result.current.appDialogsProps.commandImport.projectPath).toBe(
       "/repo/App.csproj"
+    );
+    expect(mocks.useDialogDerivedState).toHaveBeenCalledWith(
+      expect.objectContaining({
+        activeProviderUsesProjectFile: true,
+      })
     );
   });
 });

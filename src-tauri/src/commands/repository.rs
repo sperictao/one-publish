@@ -1,3 +1,7 @@
+use crate::provider::registry::provider_registry;
+use crate::provider::{
+    ProviderProjectFileMatcher, ProviderRepositoryDiscovery, ProviderRepositoryMarker,
+};
 use crate::store::Branch;
 use serde::{Deserialize, Serialize};
 use std::io::ErrorKind as IoErrorKind;
@@ -474,42 +478,74 @@ fn has_extension_file(path: &Path, extension: &str) -> bool {
     })
 }
 
+fn has_extension_file_recursively(path: &Path, extension: &str) -> bool {
+    if !path.is_dir() {
+        return false;
+    }
+
+    WalkDir::new(path)
+        .follow_links(false)
+        .into_iter()
+        .filter_entry(|entry| !should_skip_walk_entry(entry, path))
+        .filter_map(Result::ok)
+        .any(|entry| {
+            let entry_path = entry.path();
+            entry_path.is_file()
+                && entry_path
+                    .extension()
+                    .and_then(|ext| ext.to_str())
+                    .map(|ext| ext.eq_ignore_ascii_case(extension))
+                    .unwrap_or(false)
+        })
+}
+
 fn has_file(path: &Path, file_name: &str) -> bool {
     path.join(file_name).is_file()
 }
 
-fn detect_provider_from_path(path: &Path) -> Option<&'static str> {
-    let dotnet_detected = has_extension_file(path, "sln")
-        || has_extension_file(path, "csproj")
-        || has_extension_file(&path.join("src"), "csproj")
-        || has_extension_file(&path.join("UI"), "csproj");
-
-    if dotnet_detected {
-        return Some("dotnet");
+fn matches_repository_marker(path: &Path, marker: &ProviderRepositoryMarker) -> bool {
+    match marker {
+        ProviderRepositoryMarker::FileName(file_name) => has_file(path, file_name.as_str()),
+        ProviderRepositoryMarker::Extension(extension) => {
+            has_extension_file(path, extension.as_str())
+        }
+        ProviderRepositoryMarker::NestedExtension {
+            directory,
+            extension,
+        } => has_extension_file_recursively(&path.join(directory.as_str()), extension.as_str()),
     }
+}
 
-    if has_file(path, "Cargo.toml") {
-        return Some("cargo");
+fn matches_project_file(path: &Path, matcher: &ProviderProjectFileMatcher) -> bool {
+    match matcher {
+        ProviderProjectFileMatcher::FileName(file_name) => path
+            .file_name()
+            .and_then(|name| name.to_str())
+            .map(|name| name.eq_ignore_ascii_case(file_name.as_str()))
+            .unwrap_or(false),
+        ProviderProjectFileMatcher::Extension(extension) => path
+            .extension()
+            .and_then(|ext| ext.to_str())
+            .map(|ext| ext.eq_ignore_ascii_case(extension.as_str()))
+            .unwrap_or(false),
     }
+}
 
-    if has_file(path, "go.mod") {
-        return Some("go");
-    }
+fn detect_provider_discovery_from_path(
+    path: &Path,
+) -> Option<&'static ProviderRepositoryDiscovery> {
+    provider_registry()
+        .repository_discoveries()
+        .find(|discovery| {
+            discovery
+                .repository_markers
+                .iter()
+                .any(|marker| matches_repository_marker(path, marker))
+        })
+}
 
-    let java_markers = [
-        "build.gradle",
-        "build.gradle.kts",
-        "settings.gradle",
-        "settings.gradle.kts",
-        "gradlew",
-        "gradlew.bat",
-    ];
-
-    if java_markers.iter().any(|marker| has_file(path, marker)) {
-        return Some("java");
-    }
-
-    None
+fn detect_provider_from_path(path: &Path) -> Option<String> {
+    detect_provider_discovery_from_path(path).map(|discovery| discovery.provider_id.clone())
 }
 
 #[tauri::command]
@@ -537,14 +573,12 @@ pub async fn detect_repository_provider(path: String) -> Result<String, crate::e
         ));
     }
 
-    detect_provider_from_path(&repo_path)
-        .map(ToString::to_string)
-        .ok_or_else(|| {
-            repository_error(
-                "cannot detect provider from repository path",
-                "unsupported_provider",
-            )
-        })
+    detect_provider_from_path(&repo_path).ok_or_else(|| {
+        repository_error(
+            "cannot detect provider from repository path",
+            "unsupported_provider",
+        )
+    })
 }
 
 #[tauri::command]
@@ -832,57 +866,27 @@ pub async fn scan_repository_branches(
 
 /// Collect all recognizable project files under a repository root.
 ///
-/// Scans well-known subdirectories (UI/, root, src/) for project files whose
-/// extension matches the detected provider (e.g. `.csproj` for dotnet,
-/// `Cargo.toml` for cargo). Returns a sorted, deduplicated list of absolute
-/// paths. An empty list is valid – it simply means nothing was found.
+/// Uses provider registry discovery metadata to match project files for the
+/// detected provider. Returns a sorted, deduplicated list of absolute paths.
+/// An empty list is valid – it simply means nothing was found.
 #[tauri::command]
 pub async fn scan_project_files(path: String) -> Result<Vec<String>, crate::errors::AppError> {
     let root = PathBuf::from(&path);
     let root = normalize_scan_root(&root)?;
 
-    let provider = detect_provider_from_path(&root);
-    let results = match provider {
-        Some("dotnet") => collect_files_recursively(&root, |entry_path| {
-            is_dotnet_project_file(entry_path) || is_dotnet_solution_file(entry_path)
-        }),
-        Some("cargo") => collect_files_recursively(&root, |entry_path| {
-            entry_path
-                .file_name()
-                .and_then(|name| name.to_str())
-                .map(|name| name.eq_ignore_ascii_case("Cargo.toml"))
-                .unwrap_or(false)
-        }),
-        Some("go") => collect_files_recursively(&root, |entry_path| {
-            entry_path
-                .file_name()
-                .and_then(|name| name.to_str())
-                .map(|name| name.eq_ignore_ascii_case("go.mod"))
-                .unwrap_or(false)
-        }),
-        Some("java") => collect_files_recursively(&root, |entry_path| {
-            entry_path
-                .file_name()
-                .and_then(|name| name.to_str())
-                .map(|name| {
-                    [
-                        "build.gradle",
-                        "build.gradle.kts",
-                        "settings.gradle",
-                        "settings.gradle.kts",
-                        "gradlew",
-                        "gradlew.bat",
-                    ]
+    let results = detect_provider_discovery_from_path(&root)
+        .map(|discovery| {
+            collect_files_recursively(&root, |entry_path| {
+                discovery
+                    .project_file_matchers
                     .iter()
-                    .any(|candidate| name.eq_ignore_ascii_case(candidate))
-                })
-                .unwrap_or(false)
-        }),
-        _ => Vec::new(),
-    }
-    .into_iter()
-    .map(|entry_path| entry_path.to_string_lossy().to_string())
-    .collect();
+                    .any(|matcher| matches_project_file(entry_path, matcher))
+            })
+        })
+        .unwrap_or_default()
+        .into_iter()
+        .map(|entry_path| entry_path.to_string_lossy().to_string())
+        .collect();
     Ok(results)
 }
 
@@ -1107,7 +1111,10 @@ mod tests {
         fs::write(temp_dir.path().join("build.gradle.kts"), "plugins {}")
             .expect("write gradle build file");
 
-        assert_eq!(detect_provider_from_path(temp_dir.path()), Some("java"));
+        assert_eq!(
+            detect_provider_from_path(temp_dir.path()),
+            Some("java".to_string())
+        );
     }
 
     #[test]
@@ -1116,6 +1123,19 @@ mod tests {
         fs::write(temp_dir.path().join("pom.xml"), "<project />").expect("write pom");
 
         assert_eq!(detect_provider_from_path(temp_dir.path()), None);
+    }
+
+    #[test]
+    fn detect_provider_from_path_uses_dotnet_discovery_metadata() {
+        let temp_dir = TempDir::new().expect("temp dir");
+        let project_dir = temp_dir.path().join("src").join("App");
+        fs::create_dir_all(&project_dir).expect("create project dir");
+        fs::write(project_dir.join("App.fsproj"), "<Project />").expect("write fsproj");
+
+        assert_eq!(
+            detect_provider_from_path(temp_dir.path()),
+            Some("dotnet".to_string())
+        );
     }
 
     #[tokio::test]
@@ -1151,5 +1171,20 @@ mod tests {
         assert!(files.contains(&settings_file.to_string_lossy().to_string()));
         assert!(files.contains(&wrapper_file.to_string_lossy().to_string()));
         assert!(!files.contains(&pom_file.to_string_lossy().to_string()));
+    }
+
+    #[tokio::test]
+    async fn scan_project_files_for_dotnet_uses_discovery_metadata() {
+        let temp_dir = TempDir::new().expect("temp dir");
+        let project_dir = temp_dir.path().join("src").join("App");
+        let project_file = project_dir.join("App.fsproj");
+        fs::create_dir_all(&project_dir).expect("create project dir");
+        fs::write(&project_file, "<Project />").expect("write fsproj");
+
+        let files = scan_project_files(temp_dir.path().to_string_lossy().to_string())
+            .await
+            .expect("scan project files");
+
+        assert_eq!(files, vec![project_file.to_string_lossy().to_string()]);
     }
 }

@@ -70,6 +70,101 @@ await onSaveProfile({ name, providerId, parameters });
 - `src/hooks/__tests__/useProfiles.test.ts` 覆盖 facade mutation 后刷新同一个 owner snapshot，并保持 repo 切换时的 stale result 防护。
 - `src/components/publish/__tests__/ConfigDialog.test.tsx` 覆盖弹窗通过 owner callbacks 保存、删除、导出和应用导入，不 mock store mutation API。
 
+## Provider Runtime Domain Owner
+
+### 1. Scope / Trigger
+
+- Trigger: 修改 provider catalog、schema resource state、provider 参数草稿、project binding capability、repository discovery 或 environment check 时，必须按本节收口 owner。
+- 目标：Provider 事实不要在 `App.tsx`、dialog、Rust repository command、environment probe 之间重复登记。
+
+### 2. Signatures
+
+- `useProviderRuntime()` owns:
+  - `providerListState`
+  - `activeProviderId`
+  - `setActiveProviderId`
+  - `activeProviderSchemaState`
+  - `providerSchemas`
+  - `availableProviders`
+  - `activeProvider`
+- `useProviderParametersState({ activeProviderId })` owns:
+  - `activeProviderParameters`
+  - `setProviderParameters`
+- `useProviderPresentationState(...)` derives:
+  - `activeProviderLabel`
+  - `activeProviderUsesProjectFile`
+  - `activeProviderRequiresProjectBinding`
+  - `repositoryProviders`
+  - `providerRuntimeBanner`
+- Rust provider registry exposes repository discovery facts through:
+  - `Provider::repository_discovery() -> &ProviderRepositoryDiscovery`
+  - `ProviderRegistry::repository_discoveries() -> impl Iterator<Item = &ProviderRepositoryDiscovery>`
+
+### 3. Contracts
+
+- `useProviderRuntime` 只拥有 provider catalog、active provider id、schema resource state 和 schema cache；不要把 provider 参数草稿、文案派生或 UI banner 放回 runtime hook。
+- `useProviderParametersState` 是 provider-scoped 参数草稿 owner；命令导入、profile 恢复和历史恢复通过它的 setter 更新对应 provider id 的参数。
+- `useProviderPresentationState` 负责从 provider catalog/schema resource state 派生 label、project binding capability、repository provider option 和 runtime banner；`App.tsx` 只组合这些 facade，不再直接判断 provider capability。
+- provider 文案、capability 和 command example 继续来自 Rust `ProviderCatalogEntry`，前端只通过 `src/lib/providers.ts` 做展示级 fallback，不新增 provider 常量分发点。
+- Rust provider registry owns repository discovery metadata (`ProviderRepositoryDiscovery`) for built-in providers; `commands/repository.rs` consumes that metadata instead of re-declaring provider marker lists.
+- `environment/mod.rs` owns runtime tool probing only. It may still dispatch to built-in probe helpers, but it must not become the catalog/discovery authority.
+
+### 4. Validation & Error Matrix
+
+- Provider list `loading` with no data -> `providerRuntimeBanner.status = "loading"` from `useProviderPresentationState`.
+- Provider list `error` with empty/null error -> use fallback copy, never render `"null"` or `"undefined"`.
+- Active schema `error` with empty/null error -> use fallback copy, never render `"null"` or `"undefined"`.
+- Unknown `provider_id` in environment check -> scoped info issue, no fake provider status.
+- Repository without matching registry discovery markers -> `unsupported_provider`.
+- Java repository with only Maven `pom.xml` -> unsupported by design; Java provider remains Gradle-only.
+
+### 5. Good/Base/Bad Cases
+
+- Good: adding a project-file marker updates `ProviderRepositoryDiscovery` in Rust registry and repository commands consume it automatically.
+- Base: adding presentation-only fallback text updates `src/lib/providers.ts` or i18n copy, not `App.tsx`.
+- Bad: adding `providerUsesProjectFile(...)` calls in dialog composition or `App.tsx` after `useProviderPresentationState` already derives the capability.
+
+### 6. Tests Required
+
+- `src/hooks/__tests__/useProviderRuntime.test.ts` 覆盖 catalog/schema resource state 与 retry。
+- `src/hooks/__tests__/useProviderParametersState.test.ts` 覆盖参数草稿按 provider id 隔离。
+- `src/hooks/__tests__/useProviderPresentationState.test.ts` 覆盖 catalog/schema resource state 组合后的 capability、repository option 与 runtime banner 派生。
+- `src/hooks/__tests__/useDialogsCompositionState.test.ts` 覆盖 dialog composition 消费 derived capability，不重新调用 provider capability helper。
+- Rust provider registry tests must cover discovery entries for every known provider and provider-specific marker constraints.
+- Rust repository command tests must cover provider detection and `scan_project_files(...)` through registry discovery metadata.
+
+### 7. Wrong vs Correct
+
+错误示例：
+
+```tsx
+// Bad: App 或 dialog composition 二次判断 provider capability。
+const usesProjectFile = providerUsesProjectFile(activeProvider);
+```
+
+正确示例：
+
+```tsx
+// Good: capability 只从 presentation facade 传入。
+const { activeProviderUsesProjectFile } = useProviderPresentationState(...);
+```
+
+错误示例：
+
+```rust
+// Bad: repository command 重新硬编码 provider marker。
+if has_file(path, "Cargo.toml") {
+    return Some("cargo");
+}
+```
+
+正确示例：
+
+```rust
+// Good: repository command 只消费 registry discovery metadata。
+provider_registry().repository_discoveries()
+```
+
 ## UI 状态与布局
 
 - 三栏折叠、宽度和主视图切换由 `App.tsx` 组合多个 hooks 后传给布局组件。

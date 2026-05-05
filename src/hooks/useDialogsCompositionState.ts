@@ -9,7 +9,6 @@ import {
   matchesEnvironmentCheckSnapshot,
   type EnvironmentCheckSnapshot,
 } from "@/lib/environment";
-import { providerUsesProjectFile } from "@/lib/providers";
 import type {
   ConfigParameters,
   ProviderManifest,
@@ -28,6 +27,7 @@ export type DialogsCompositionParams = Omit<
 > & {
   environmentLastCheck: EnvironmentCheckSnapshot | null;
   activeProviderId: string;
+  activeProviderUsesProjectFile: boolean;
   activeProvider: ProviderManifest | null;
   availableProviders: ProviderManifest[];
   customConfig: PublishConfigStore;
@@ -57,7 +57,7 @@ export function useDialogsCompositionState(params: DialogsCompositionParams) {
   const { commandImportProjectPath, currentConfigParameters } =
     useDialogDerivedState({
       activeProviderId: params.activeProviderId,
-      activeProviderUsesProjectFile: providerUsesProjectFile(params.activeProvider),
+      activeProviderUsesProjectFile: params.activeProviderUsesProjectFile,
       customConfig: params.customConfig,
       activeProviderParameters: params.activeProviderParameters,
       projectFile: params.projectFile,

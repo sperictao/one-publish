@@ -152,7 +152,10 @@ vi.mock("@/hooks/useProjectShellState", () => ({
 vi.mock("@/hooks/useProviderPresentationState", () => ({
   useProviderPresentationState: () => ({
     activeProviderLabel: "dotnet",
+    activeProviderUsesProjectFile: true,
+    activeProviderRequiresProjectBinding: true,
     repositoryProviders: [],
+    providerRuntimeBanner: null,
   }),
 }));
 

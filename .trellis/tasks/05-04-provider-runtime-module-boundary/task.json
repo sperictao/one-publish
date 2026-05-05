@@ -3,7 +3,7 @@
   "name": "provider-runtime-module-boundary",
   "title": "Provider Runtime Module 边界收敛",
   "description": "收敛 Provider Runtime 前后端边界，梳理 catalog、schema、environment、project discovery 的职责分界。",
-  "status": "planning",
+  "status": "in_progress",
   "dev_type": null,
   "scope": null,
   "package": null,
@@ -21,6 +21,6 @@
   "children": [],
   "parent": "05-04-publish-workflow-module-architecture",
   "relatedFiles": [],
-  "notes": "",
+  "notes": "Provider runtime boundary implemented and verified; awaiting commit.",
   "meta": {}
 }

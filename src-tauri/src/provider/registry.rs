@@ -1,5 +1,7 @@
 use super::{
-    Provider, ProviderCapabilities, ProviderCatalogEntry, ProviderManifest, ProviderProjectPathKind,
+    Provider, ProviderCapabilities, ProviderCatalogEntry, ProviderManifest,
+    ProviderProjectFileMatcher, ProviderProjectPathKind, ProviderRepositoryDiscovery,
+    ProviderRepositoryMarker,
 };
 use crate::compiler::CompileError;
 use crate::parameter::{parse_schema_json, ParameterSchema, RenderError};
@@ -57,6 +59,12 @@ impl ProviderRegistry {
             .map(|provider| provider.manifest().id.clone())
             .collect()
     }
+
+    pub fn repository_discoveries(&self) -> impl Iterator<Item = &ProviderRepositoryDiscovery> {
+        self.providers
+            .iter()
+            .map(|provider| &provider.repository_discovery)
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -67,11 +75,24 @@ enum BuiltInProviderKind {
     JavaGradle,
 }
 
+const DOTNET_PROJECT_EXTENSIONS: &[&str] = &["csproj", "fsproj", "vbproj"];
+const DOTNET_SOLUTION_EXTENSION: &str = "sln";
+const DOTNET_NESTED_PROJECT_DIRECTORIES: &[&str] = &["src", "UI"];
+const GRADLE_PROJECT_FILES: &[&str] = &[
+    "build.gradle",
+    "build.gradle.kts",
+    "settings.gradle",
+    "settings.gradle.kts",
+    "gradlew",
+    "gradlew.bat",
+];
+
 struct BuiltInProvider {
     kind: BuiltInProviderKind,
     manifest: ProviderManifest,
     capabilities: ProviderCapabilities,
     catalog: ProviderCatalogEntry,
+    repository_discovery: ProviderRepositoryDiscovery,
     schema_json: &'static str,
     schema_cache: OnceLock<Result<ParameterSchema, RenderError>>,
     compile_step_id: &'static str,
@@ -106,6 +127,11 @@ impl BuiltInProvider {
                 project_path_kind: ProviderProjectPathKind::ProjectFile,
                 supports_command_import: true,
             },
+            ProviderRepositoryDiscovery {
+                provider_id: "dotnet".to_string(),
+                repository_markers: dotnet_repository_markers(),
+                project_file_matchers: dotnet_project_file_matchers(),
+            },
             include_str!("schemas/dotnet.json"),
             "dotnet.publish",
             "dotnet publish",
@@ -138,6 +164,15 @@ impl BuiltInProvider {
                 project_path_kind: ProviderProjectPathKind::RepositoryRoot,
                 supports_command_import: true,
             },
+            ProviderRepositoryDiscovery {
+                provider_id: "cargo".to_string(),
+                repository_markers: vec![ProviderRepositoryMarker::FileName(
+                    "Cargo.toml".to_string(),
+                )],
+                project_file_matchers: vec![ProviderProjectFileMatcher::FileName(
+                    "Cargo.toml".to_string(),
+                )],
+            },
             include_str!("schemas/cargo.json"),
             "cargo.build",
             "cargo build",
@@ -168,6 +203,13 @@ impl BuiltInProvider {
                 requires_project_binding: false,
                 project_path_kind: ProviderProjectPathKind::RepositoryRoot,
                 supports_command_import: true,
+            },
+            ProviderRepositoryDiscovery {
+                provider_id: "go".to_string(),
+                repository_markers: vec![ProviderRepositoryMarker::FileName("go.mod".to_string())],
+                project_file_matchers: vec![ProviderProjectFileMatcher::FileName(
+                    "go.mod".to_string(),
+                )],
             },
             include_str!("schemas/go.json"),
             "go.build",
@@ -200,6 +242,21 @@ impl BuiltInProvider {
                 project_path_kind: ProviderProjectPathKind::RepositoryRoot,
                 supports_command_import: true,
             },
+            ProviderRepositoryDiscovery {
+                provider_id: "java".to_string(),
+                repository_markers: gradle_project_file_matchers()
+                    .into_iter()
+                    .map(|matcher| match matcher {
+                        ProviderProjectFileMatcher::FileName(name) => {
+                            ProviderRepositoryMarker::FileName(name)
+                        }
+                        ProviderProjectFileMatcher::Extension(extension) => {
+                            ProviderRepositoryMarker::Extension(extension)
+                        }
+                    })
+                    .collect(),
+                project_file_matchers: gradle_project_file_matchers(),
+            },
             include_str!("schemas/java.json"),
             "gradle.build",
             "./gradlew build",
@@ -211,6 +268,7 @@ impl BuiltInProvider {
         manifest: ProviderManifest,
         capabilities: ProviderCapabilities,
         catalog: ProviderCatalogEntry,
+        repository_discovery: ProviderRepositoryDiscovery,
         schema_json: &'static str,
         compile_step_id: &'static str,
         compile_title: &'static str,
@@ -220,6 +278,7 @@ impl BuiltInProvider {
             manifest,
             capabilities,
             catalog,
+            repository_discovery,
             schema_json,
             schema_cache: OnceLock::new(),
             compile_step_id,
@@ -241,6 +300,10 @@ impl Provider for BuiltInProvider {
         &self.catalog
     }
 
+    fn repository_discovery(&self) -> &ProviderRepositoryDiscovery {
+        &self.repository_discovery
+    }
+
     fn get_schema(&self) -> Result<ParameterSchema, RenderError> {
         self.schema_cache
             .get_or_init(|| parse_schema_json(self.schema_json))
@@ -257,17 +320,9 @@ impl Provider for BuiltInProvider {
             BuiltInProviderKind::Dotnet => path.parent().map(Path::to_path_buf),
             BuiltInProviderKind::Cargo => resolve_provider_project_dir(path, &["Cargo.toml"]),
             BuiltInProviderKind::Go => resolve_provider_project_dir(path, &["go.mod"]),
-            BuiltInProviderKind::JavaGradle => resolve_provider_project_dir(
-                path,
-                &[
-                    "build.gradle",
-                    "build.gradle.kts",
-                    "settings.gradle",
-                    "settings.gradle.kts",
-                    "gradlew",
-                    "gradlew.bat",
-                ],
-            ),
+            BuiltInProviderKind::JavaGradle => {
+                resolve_provider_project_dir(path, GRADLE_PROJECT_FILES)
+            }
         }
     }
 
@@ -340,6 +395,42 @@ impl Provider for BuiltInProvider {
             _ => Ok(program.to_string()),
         }
     }
+}
+
+fn gradle_project_file_matchers() -> Vec<ProviderProjectFileMatcher> {
+    GRADLE_PROJECT_FILES
+        .iter()
+        .map(|name| ProviderProjectFileMatcher::FileName((*name).to_string()))
+        .collect()
+}
+
+fn dotnet_project_file_matchers() -> Vec<ProviderProjectFileMatcher> {
+    DOTNET_PROJECT_EXTENSIONS
+        .iter()
+        .copied()
+        .chain(std::iter::once(DOTNET_SOLUTION_EXTENSION))
+        .map(|extension| ProviderProjectFileMatcher::Extension(extension.to_string()))
+        .collect()
+}
+
+fn dotnet_repository_markers() -> Vec<ProviderRepositoryMarker> {
+    let mut markers = vec![ProviderRepositoryMarker::Extension(
+        DOTNET_SOLUTION_EXTENSION.to_string(),
+    )];
+
+    for extension in DOTNET_PROJECT_EXTENSIONS {
+        markers.push(ProviderRepositoryMarker::Extension(
+            (*extension).to_string(),
+        ));
+        for directory in DOTNET_NESTED_PROJECT_DIRECTORIES {
+            markers.push(ProviderRepositoryMarker::NestedExtension {
+                directory: (*directory).to_string(),
+                extension: (*extension).to_string(),
+            });
+        }
+    }
+
+    markers
 }
 
 fn compile_single_step(
@@ -545,6 +636,57 @@ mod tests {
             .collect::<Vec<_>>();
 
         assert_eq!(catalog_ids, registry.known_ids());
+    }
+
+    #[test]
+    fn repository_discoveries_cover_all_known_provider_ids() {
+        let registry = ProviderRegistry::new();
+        let discovery_ids = registry
+            .repository_discoveries()
+            .map(|entry| entry.provider_id.clone())
+            .collect::<Vec<_>>();
+
+        assert_eq!(discovery_ids, registry.known_ids());
+    }
+
+    #[test]
+    fn dotnet_repository_discovery_covers_project_extensions() {
+        let registry = ProviderRegistry::new();
+        let dotnet = registry
+            .repository_discoveries()
+            .find(|entry| entry.provider_id == "dotnet")
+            .expect("dotnet discovery");
+
+        assert!(dotnet
+            .repository_markers
+            .contains(&ProviderRepositoryMarker::Extension("fsproj".to_string())));
+        assert!(dotnet
+            .repository_markers
+            .contains(&ProviderRepositoryMarker::NestedExtension {
+                directory: "src".to_string(),
+                extension: "vbproj".to_string(),
+            }));
+        assert!(dotnet
+            .project_file_matchers
+            .contains(&ProviderProjectFileMatcher::Extension("fsproj".to_string())));
+    }
+
+    #[test]
+    fn java_repository_discovery_is_gradle_only() {
+        let registry = ProviderRegistry::new();
+        let java = registry
+            .repository_discoveries()
+            .find(|entry| entry.provider_id == "java")
+            .expect("java discovery");
+
+        assert!(java
+            .project_file_matchers
+            .contains(&ProviderProjectFileMatcher::FileName(
+                "build.gradle".to_string()
+            )));
+        assert!(!java
+            .project_file_matchers
+            .contains(&ProviderProjectFileMatcher::FileName("pom.xml".to_string())));
     }
 
     #[test]

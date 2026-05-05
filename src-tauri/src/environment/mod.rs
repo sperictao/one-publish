@@ -59,6 +59,49 @@ fn make_cache_key(provider_ids: &[String]) -> String {
     provider_ids.join(",")
 }
 
+struct ProviderEnvironmentCheck {
+    status: ProviderStatus,
+    issues: Vec<EnvironmentIssue>,
+}
+
+fn unsupported_environment_provider_issue(provider_id: &str) -> EnvironmentIssue {
+    EnvironmentIssue::new(
+        IssueSeverity::Info,
+        provider_id.to_string(),
+        IssueType::MissingTool,
+        format!("Unsupported provider_id: {}", provider_id),
+    )
+}
+
+async fn check_provider_runtime_environment(
+    provider_id: &str,
+) -> Result<ProviderEnvironmentCheck, EnvironmentIssue> {
+    // Runtime probing stays in environment; provider registry owns catalog and discovery facts.
+    match provider_id {
+        "cargo" => {
+            let status = check_cargo().await;
+            let issues = cargo_provider::detect_cargo_issues(&status);
+            Ok(ProviderEnvironmentCheck { status, issues })
+        }
+        "dotnet" => {
+            let status = check_dotnet().await;
+            let issues = dotnet_provider::detect_dotnet_issues(&status);
+            Ok(ProviderEnvironmentCheck { status, issues })
+        }
+        "go" => {
+            let status = check_go().await;
+            let issues = go_provider::detect_go_issues(&status);
+            Ok(ProviderEnvironmentCheck { status, issues })
+        }
+        "java" => {
+            let status = check_java().await;
+            let issues = java_provider::detect_java_issues(&status);
+            Ok(ProviderEnvironmentCheck { status, issues })
+        }
+        _ => Err(unsupported_environment_provider_issue(provider_id)),
+    }
+}
+
 pub fn invalidate_environment_cache() {
     if let Ok(mut guard) = cache().lock() {
         guard.entries.clear();
@@ -81,42 +124,15 @@ pub async fn check_environment(provider_ids: Option<Vec<String>>) -> Environment
     let mut result = EnvironmentCheckResult::new();
 
     for provider_id in provider_ids {
-        match provider_id.as_str() {
-            "cargo" => {
-                let status = check_cargo().await;
-                for issue in cargo_provider::detect_cargo_issues(&status) {
+        match check_provider_runtime_environment(&provider_id).await {
+            Ok(check) => {
+                for issue in check.issues {
                     result = result.with_issue(issue);
                 }
-                result = result.with_provider(status);
+                result = result.with_provider(check.status);
             }
-            "dotnet" => {
-                let status = check_dotnet().await;
-                for issue in dotnet_provider::detect_dotnet_issues(&status) {
-                    result = result.with_issue(issue);
-                }
-                result = result.with_provider(status);
-            }
-            "go" => {
-                let status = check_go().await;
-                for issue in go_provider::detect_go_issues(&status) {
-                    result = result.with_issue(issue);
-                }
-                result = result.with_provider(status);
-            }
-            "java" => {
-                let status = check_java().await;
-                for issue in java_provider::detect_java_issues(&status) {
-                    result = result.with_issue(issue);
-                }
-                result = result.with_provider(status);
-            }
-            _ => {
-                result = result.with_issue(EnvironmentIssue::new(
-                    IssueSeverity::Info,
-                    provider_id.clone(),
-                    IssueType::MissingTool,
-                    format!("Unsupported provider_id: {}", provider_id),
-                ));
+            Err(issue) => {
+                result = result.with_issue(issue);
             }
         }
     }
@@ -145,5 +161,14 @@ mod tests {
         let result = check_environment(None).await;
         // The result will depend on what's installed on the test machine
         assert!(!result.providers.is_empty());
+    }
+
+    #[tokio::test]
+    async fn unknown_provider_id_stays_scoped_to_environment_issue() {
+        let result = check_environment(Some(vec!["unknown".to_string()])).await;
+
+        assert!(result.providers.is_empty());
+        assert_eq!(result.issues.len(), 1);
+        assert_eq!(result.issues[0].provider_id, "unknown");
     }
 }

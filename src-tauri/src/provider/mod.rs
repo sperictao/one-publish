@@ -44,12 +44,37 @@ pub struct ProviderCatalogEntry {
     pub supports_command_import: bool,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ProviderRepositoryMarker {
+    FileName(String),
+    Extension(String),
+    NestedExtension {
+        directory: String,
+        extension: String,
+    },
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ProviderProjectFileMatcher {
+    FileName(String),
+    Extension(String),
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ProviderRepositoryDiscovery {
+    pub provider_id: String,
+    pub repository_markers: Vec<ProviderRepositoryMarker>,
+    pub project_file_matchers: Vec<ProviderProjectFileMatcher>,
+}
+
 pub trait Provider: Send + Sync {
     fn manifest(&self) -> &ProviderManifest;
 
     fn capabilities(&self) -> &ProviderCapabilities;
 
     fn catalog(&self) -> &ProviderCatalogEntry;
+
+    fn repository_discovery(&self) -> &ProviderRepositoryDiscovery;
 
     fn get_schema(&self) -> Result<ParameterSchema, RenderError>;
 
