@@ -408,6 +408,7 @@ fn resolve_updater_help_paths() -> Result<(PathBuf, PathBuf), crate::errors::App
 
 #[tauri::command]
 pub fn get_updater_help_paths() -> Result<UpdaterHelpPaths, crate::errors::AppError> {
+    let _timer = crate::commands::middleware::CommandTimer::new("commands::updater::get_updater_help_paths");
     let (docs, template) = resolve_updater_help_paths()?;
     Ok(UpdaterHelpPaths {
         docs_path: docs.to_string_lossy().to_string(),
@@ -417,6 +418,7 @@ pub fn get_updater_help_paths() -> Result<UpdaterHelpPaths, crate::errors::AppEr
 
 #[tauri::command]
 pub fn get_updater_config_health(app: AppHandle) -> UpdaterConfigHealth {
+    let _timer = crate::commands::middleware::CommandTimer::new("commands::updater::get_updater_config_health");
     match app.updater() {
         Ok(_) => UpdaterConfigHealth {
             configured: true,
@@ -431,6 +433,7 @@ pub fn get_updater_config_health(app: AppHandle) -> UpdaterConfigHealth {
 
 #[tauri::command]
 pub fn open_updater_help(target: String) -> Result<String, crate::errors::AppError> {
+    let _timer = crate::commands::middleware::CommandTimer::new("commands::updater::open_updater_help");
     let (docs, template) = resolve_updater_help_paths()?;
     let path = match target.as_str() {
         "docs" => docs,
@@ -457,6 +460,7 @@ pub async fn check_update(
     app: AppHandle,
     pending_update_state: State<'_, PendingUpdateState>,
 ) -> Result<UpdateInfo, crate::errors::AppError> {
+    let _timer = crate::commands::middleware::CommandTimer::new("commands::updater::check_update");
     match fetch_remote_update(&app, pending_update_state.inner()).await {
         Ok(Some(update)) => Ok(available_update_info(&update)),
         Ok(None) => Ok(no_update_info(Some("当前已是最新版本".to_string()))),
@@ -474,6 +478,7 @@ pub async fn install_update(
     pending_update_state: State<'_, PendingUpdateState>,
     expected_version: Option<String>,
 ) -> Result<String, crate::errors::AppError> {
+    let _timer = crate::commands::middleware::CommandTimer::new("commands::updater::install_update");
     let expected_version = normalize_expected_version(expected_version);
     let Some((selected_update, used_cached_update)) = resolve_install_update(
         &app,
@@ -550,12 +555,14 @@ pub async fn install_update(
 /// 获取当前版本
 #[tauri::command]
 pub fn get_current_version() -> String {
+    let _timer = crate::commands::middleware::CommandTimer::new("commands::updater::get_current_version");
     env!("CARGO_PKG_VERSION").to_string()
 }
 
 /// 获取快捷键帮助
 #[tauri::command]
 pub fn get_shortcuts_help() -> Vec<crate::shortcuts::ShortcutHelp> {
+    let _timer = crate::commands::middleware::CommandTimer::new("commands::updater::get_shortcuts_help");
     crate::shortcuts::get_shortcuts_help()
 }
 

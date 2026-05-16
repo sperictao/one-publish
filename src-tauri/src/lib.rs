@@ -12,7 +12,6 @@ pub mod parameter;
 pub mod plan;
 pub mod process_utils;
 pub mod provider;
-pub mod publish;
 pub mod security;
 pub mod shortcuts;
 pub mod spec;
@@ -130,7 +129,6 @@ pub fn run() {
             commands::detect_repository_provider,
             commands::scan_repository_branches,
             commands::check_repository_branch_connectivity,
-            commands::execute_publish,
             commands::execute_provider_publish,
             commands::render_provider_publish,
             commands::cancel_provider_publish,

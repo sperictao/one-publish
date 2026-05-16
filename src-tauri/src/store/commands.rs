@@ -61,21 +61,25 @@ fn ensure_exact_order_match(
 
 #[tauri::command]
 pub async fn get_app_state() -> Result<AppState, AppError> {
+    let _timer = crate::commands::middleware::CommandTimer::new("store::commands::get_app_state");
     Ok(get_bootstrap_state())
 }
 
 #[tauri::command]
 pub async fn get_repository(repo_id: String) -> Result<Repository, AppError> {
+    let _timer = crate::commands::middleware::CommandTimer::new("store::commands::get_repository");
     with_read_state(|state| find_repository(&state.repositories, &repo_id).cloned())
 }
 
 #[tauri::command]
 pub async fn save_app_state(state: AppState) -> Result<(), AppError> {
+    let _timer = crate::commands::middleware::CommandTimer::new("store::commands::save_app_state");
     update_state(state)
 }
 
 #[tauri::command]
 pub async fn add_repository(app: tauri::AppHandle, repo: Repository) -> Result<AppState, AppError> {
+    let _timer = crate::commands::middleware::CommandTimer::new("store::commands::add_repository");
     let mut state = get_state();
 
     if state
@@ -100,6 +104,7 @@ pub async fn remove_repository(
     app: tauri::AppHandle,
     repo_id: String,
 ) -> Result<AppState, AppError> {
+    let _timer = crate::commands::middleware::CommandTimer::new("store::commands::remove_repository");
     let mut state = get_state();
 
     state
@@ -122,6 +127,7 @@ pub async fn update_repository(
     app: tauri::AppHandle,
     repo: Repository,
 ) -> Result<AppState, AppError> {
+    let _timer = crate::commands::middleware::CommandTimer::new("store::commands::update_repository");
     let mut state = get_state();
     validate_repository_project_binding(&repo).await?;
 
@@ -142,6 +148,7 @@ pub async fn reorder_repositories(
     app: tauri::AppHandle,
     repo_ids: Vec<String>,
 ) -> Result<AppState, AppError> {
+    let _timer = crate::commands::middleware::CommandTimer::new("store::commands::reorder_repositories");
     let mut state = get_state();
     let requested_ids = normalize_ordered_ids(repo_ids);
     let current_ids = state
@@ -178,6 +185,7 @@ pub async fn update_ui_state(
     selected_repo_id: Option<String>,
     clear_selected_repo_id: Option<bool>,
 ) -> Result<(), AppError> {
+    let _timer = crate::commands::middleware::CommandTimer::new("store::commands::update_ui_state");
     let mut state = get_state();
 
     if let Some(width) = left_panel_width {
@@ -207,6 +215,7 @@ pub async fn update_preferences(
     execution_history_limit: Option<usize>,
     environment_provider_ids: Option<Vec<String>>,
 ) -> Result<AppState, AppError> {
+    let _timer = crate::commands::middleware::CommandTimer::new("store::commands::update_preferences");
     let mut state = get_state();
     let language_changed = language.is_some();
 
@@ -246,6 +255,7 @@ pub async fn update_publish_state(
     is_custom_mode: Option<bool>,
     custom_config: Option<PublishConfigStore>,
 ) -> Result<(), AppError> {
+    let _timer = crate::commands::middleware::CommandTimer::new("store::commands::update_publish_state");
     let mut state = get_state();
     let repo = find_repository_mut(&mut state.repositories, &repo_id)?;
 
@@ -264,6 +274,7 @@ pub async fn update_publish_state(
 
 #[tauri::command]
 pub async fn get_profiles(repo_id: String) -> Result<Vec<ConfigProfile>, AppError> {
+    let _timer = crate::commands::middleware::CommandTimer::new("store::commands::get_profiles");
     with_read_state(|state| {
         Ok(find_repository(&state.repositories, &repo_id)?
             .publish_config
@@ -281,6 +292,7 @@ pub async fn save_profile(
     parameters: serde_json::Value,
     profile_group: Option<String>,
 ) -> Result<AppState, AppError> {
+    let _timer = crate::commands::middleware::CommandTimer::new("store::commands::save_profile");
     let mut state = get_state();
     let repo = find_repository_mut(&mut state.repositories, &repo_id)?;
 
@@ -325,6 +337,7 @@ pub async fn update_profile(
     parameters: serde_json::Value,
     profile_group: Option<String>,
 ) -> Result<AppState, AppError> {
+    let _timer = crate::commands::middleware::CommandTimer::new("store::commands::update_profile");
     let mut state = get_state();
     let repo = find_repository_mut(&mut state.repositories, &repo_id)?;
 
@@ -380,6 +393,7 @@ pub async fn delete_profile(
     repo_id: String,
     name: String,
 ) -> Result<AppState, AppError> {
+    let _timer = crate::commands::middleware::CommandTimer::new("store::commands::delete_profile");
     let mut state = get_state();
     let repo = find_repository_mut(&mut state.repositories, &repo_id)?;
 
@@ -411,6 +425,7 @@ pub async fn push_recent_publish_config(
     repo_id: String,
     config_key: String,
 ) -> Result<AppState, AppError> {
+    let _timer = crate::commands::middleware::CommandTimer::new("store::commands::push_recent_publish_config");
     let mut state = get_state();
     find_repository(&state.repositories, &repo_id)?;
 
@@ -433,6 +448,7 @@ pub async fn remove_recent_publish_config(
     repo_id: String,
     config_key: String,
 ) -> Result<AppState, AppError> {
+    let _timer = crate::commands::middleware::CommandTimer::new("store::commands::remove_recent_publish_config");
     let mut state = get_state();
 
     if !remove_recent_publish_config_state(
@@ -455,6 +471,7 @@ pub async fn replace_recent_publish_config_key(
     previous_key: String,
     next_key: String,
 ) -> Result<AppState, AppError> {
+    let _timer = crate::commands::middleware::CommandTimer::new("store::commands::replace_recent_publish_config_key");
     let mut state = get_state();
 
     if !replace_recent_publish_config_key_state(
@@ -476,6 +493,7 @@ pub async fn reorder_recent_publish_configs(
     repo_id: String,
     config_keys: Vec<String>,
 ) -> Result<AppState, AppError> {
+    let _timer = crate::commands::middleware::CommandTimer::new("store::commands::reorder_recent_publish_configs");
     let mut state = get_state();
     find_repository(&state.repositories, &repo_id)?;
 
@@ -510,6 +528,7 @@ pub async fn reorder_profiles(
     repo_id: String,
     profiles: Vec<ProfileOrderEntry>,
 ) -> Result<AppState, AppError> {
+    let _timer = crate::commands::middleware::CommandTimer::new("store::commands::reorder_profiles");
     let mut state = get_state();
 
     {
@@ -573,6 +592,7 @@ pub async fn reorder_profiles(
 
 #[tauri::command]
 pub async fn get_execution_history() -> Result<Vec<ExecutionRecord>, AppError> {
+    let _timer = crate::commands::middleware::CommandTimer::new("store::commands::get_execution_history");
     Ok(get_execution_history_snapshot())
 }
 
@@ -580,6 +600,7 @@ pub async fn get_execution_history() -> Result<Vec<ExecutionRecord>, AppError> {
 pub async fn add_execution_record(
     record: ExecutionRecord,
 ) -> Result<Vec<ExecutionRecord>, AppError> {
+    let _timer = crate::commands::middleware::CommandTimer::new("store::commands::add_execution_record");
     let mut state = get_state();
     let history_limit = state.execution_history_limit;
     append_execution_history(&mut state.execution_history, record, history_limit);
@@ -593,6 +614,7 @@ pub async fn set_execution_record_snapshot(
     record_id: String,
     snapshot_path: String,
 ) -> Result<Vec<ExecutionRecord>, AppError> {
+    let _timer = crate::commands::middleware::CommandTimer::new("store::commands::set_execution_record_snapshot");
     let mut state = get_state();
     let mut found = false;
 

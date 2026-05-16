@@ -590,6 +590,7 @@ pub fn init_tray(app: &AppHandle) -> Result<(), tauri::Error> {
 
 #[tauri::command]
 pub async fn show_main_window(app: AppHandle) -> Result<bool, crate::errors::AppError> {
+    let _timer = crate::commands::middleware::CommandTimer::new("tray::show_main_window");
     restore_main_window(&app);
     Ok(true)
 }
@@ -597,6 +598,7 @@ pub async fn show_main_window(app: AppHandle) -> Result<bool, crate::errors::App
 /// 更新托盘菜单
 #[tauri::command]
 pub async fn update_tray_menu(app: AppHandle) -> Result<bool, crate::errors::AppError> {
+    let _timer = crate::commands::middleware::CommandTimer::new("tray::update_tray_menu");
     match create_tray_menu(&app) {
         Ok(new_menu) => {
             if let Some(tray) = app.tray_by_id("main") {
@@ -625,6 +627,7 @@ pub async fn set_tray_publish_status(
     app: AppHandle,
     status: TrayPublishStatus,
 ) -> Result<bool, crate::errors::AppError> {
+    let _timer = crate::commands::middleware::CommandTimer::new("tray::set_tray_publish_status");
     set_tray_publish_status_internal(&app, status)
 }
 

@@ -6,12 +6,14 @@ use tokio::time::{timeout, Duration};
 pub async fn run_environment_check(
     provider_ids: Option<Vec<String>>,
 ) -> Result<crate::environment::EnvironmentCheckResult, crate::errors::AppError> {
+    let _timer = crate::commands::middleware::CommandTimer::new("commands::environment::run_environment_check");
     Ok(check_environment(provider_ids).await)
 }
 
 /// Apply a fix action
 #[tauri::command]
 pub async fn apply_fix(action: FixAction) -> Result<FixResult, crate::errors::AppError> {
+    let _timer = crate::commands::middleware::CommandTimer::new("commands::environment::apply_fix");
     match action.action_type {
         FixType::OpenUrl => {
             let url = action.url.ok_or_else(|| {

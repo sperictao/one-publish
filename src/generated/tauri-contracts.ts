@@ -39,7 +39,7 @@ export type ProjectScanCandidates = { rootPath: string, solutionFiles: Array<str
 
 export type RepositoryBranchConnectivityResult = { canConnect: boolean, };
 
-export type RepositoryBranchScanResult = { branches: Array<Branch>, currentBranch: string, };
+export type RepositoryBranchScanResult = { branches: Array<Branch>, current_branch: string, };
 
 export type UpdateDownloadProgressPayload = { stage: string, version: string, downloadedBytes: number, totalBytes: number | null, percent: number | null, attempt: number, maxAttempts: number, message: string | null, };
 

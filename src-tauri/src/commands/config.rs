@@ -7,6 +7,7 @@ pub async fn export_config(
     mut profiles: Vec<ConfigProfile>,
     file_path: String,
 ) -> Result<String, crate::errors::AppError> {
+    let _timer = crate::commands::middleware::CommandTimer::new("commands::config::export_config");
     for profile in &mut profiles {
         crate::security::sanitize_json_map(&mut profile.parameters);
     }
@@ -34,6 +35,7 @@ pub async fn export_config(
 /// 导入配置从文件
 #[tauri::command]
 pub async fn import_config(file_path: String) -> Result<ConfigExport, crate::errors::AppError> {
+    let _timer = crate::commands::middleware::CommandTimer::new("commands::config::import_config");
     let content = std::fs::read_to_string(&file_path).map_err(|source| {
         crate::errors::AppError::config_with_code(
             format!("read error: {}", source),
@@ -63,6 +65,7 @@ pub async fn apply_imported_config(
     repo_id: String,
     profiles: Vec<ConfigProfile>,
 ) -> Result<(), crate::errors::AppError> {
+    let _timer = crate::commands::middleware::CommandTimer::new("commands::config::apply_imported_config");
     let mut state = crate::store::get_state();
     let repo = state
         .repositories

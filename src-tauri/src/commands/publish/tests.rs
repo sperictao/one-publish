@@ -8,10 +8,6 @@ use std::time::Duration;
 use tokio::process::{Child, Command};
 use tokio::sync::Mutex as AsyncMutex;
 
-fn base_dotnet_config() -> PublishConfig {
-    PublishConfig::default()
-}
-
 fn base_java_spec(project_path: &str) -> PublishSpec {
     PublishSpec {
         version: SPEC_VERSION,
@@ -49,24 +45,6 @@ async fn spawn_test_sleep_child() -> Child {
         .arg("5")
         .spawn()
         .expect("spawn sleep child")
-}
-
-#[test]
-fn build_dotnet_spec_maps_profile_to_properties() {
-    let mut config = base_dotnet_config();
-    config.use_profile = true;
-    config.profile_name = "FolderProfile".to_string();
-    let spec = build_dotnet_spec_from_config("/tmp/app.csproj".to_string(), config);
-    let properties = spec.parameters.get("properties").expect("properties");
-    match properties {
-        SpecValue::Map(map) => {
-            assert_eq!(
-                map.get("PublishProfile"),
-                Some(&SpecValue::String("FolderProfile".to_string()))
-            );
-        }
-        _ => panic!("expected properties map"),
-    }
 }
 
 #[test]

@@ -210,19 +210,8 @@ vi.mock("@/hooks/usePresetText", () => ({
 
 vi.mock("@/hooks/usePublishRunner", () => ({
   usePublishRunner: () => ({
-    isPublishing: false,
-    isCancellingPublish: false,
-    publishResult: null,
-    lastPublishSpec: null,
-    currentPublishRecordId: null,
     outputLog: "",
     isResolvingSelectedProjectProfile: false,
-    releaseChecklistOpen: false,
-    setReleaseChecklistOpen: mocks.noop,
-    artifactActionState: {
-      packageResult: null,
-      signResult: null,
-    },
     publishPreviewCommand: null,
     runPublishSpec: mocks.noop,
     startPublish: mocks.noop,

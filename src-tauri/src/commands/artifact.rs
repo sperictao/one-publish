@@ -9,6 +9,7 @@ pub async fn package_artifact(
     format: Option<PackageFormat>,
     include_root_dir: Option<bool>,
 ) -> Result<PackageResult, crate::errors::AppError> {
+    let _timer = crate::commands::middleware::CommandTimer::new("commands::artifact::package_artifact");
     let format = format.unwrap_or(PackageFormat::Zip);
     let include_root_dir = include_root_dir.unwrap_or(true);
     crate::artifact::package_directory(
@@ -34,6 +35,7 @@ pub async fn sign_artifact(
     output_path: Option<String>,
     key_id: Option<String>,
 ) -> Result<SignResult, crate::errors::AppError> {
+    let _timer = crate::commands::middleware::CommandTimer::new("commands::artifact::sign_artifact");
     crate::artifact::sign_artifact(
         Path::new(&artifact_path),
         method,

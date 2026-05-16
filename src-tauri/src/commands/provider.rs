@@ -4,6 +4,7 @@ use crate::provider::ProviderCatalogEntry;
 
 #[tauri::command]
 pub fn list_providers() -> Vec<ProviderCatalogEntry> {
+    let _timer = crate::commands::middleware::CommandTimer::new("commands::provider::list_providers");
     provider_registry().catalog_entries()
 }
 
@@ -12,6 +13,7 @@ pub fn list_providers() -> Vec<ProviderCatalogEntry> {
 pub async fn get_provider_schema(
     provider_id: String,
 ) -> Result<crate::parameter::ParameterSchema, crate::errors::AppError> {
+    let _timer = crate::commands::middleware::CommandTimer::new("commands::provider::get_provider_schema");
     let provider = provider_registry()
         .get(&provider_id)
         .map_err(crate::errors::AppError::from)?;
@@ -31,6 +33,7 @@ pub async fn import_from_command(
     provider_id: String,
     project_path: String,
 ) -> Result<crate::spec::PublishSpec, crate::errors::AppError> {
+    let _timer = crate::commands::middleware::CommandTimer::new("commands::provider::import_from_command");
     let provider = provider_registry()
         .get(&provider_id)
         .map_err(crate::errors::AppError::from)?;

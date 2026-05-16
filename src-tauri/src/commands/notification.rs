@@ -9,6 +9,7 @@ pub async fn show_system_notification(
     title: String,
     body: Option<String>,
 ) -> Result<bool, AppError> {
+    let _timer = crate::commands::middleware::CommandTimer::new("commands::notification::show_system_notification");
     let title = title.trim();
     if title.is_empty() {
         return Ok(false);

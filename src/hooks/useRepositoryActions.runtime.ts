@@ -19,6 +19,7 @@ import {
 } from "@/lib/tauri/invokeErrors";
 import type { ProjectScanCandidates } from "@/types/project";
 import type { Branch, Repository } from "@/types/repository";
+import type { RepositoryBranchScanResult } from "@/lib/store";
 
 interface TranslationMap {
   [key: string]: string | undefined;
@@ -48,7 +49,7 @@ function createFallbackBranches(path: string, currentBranch: string): Branch[] {
 
 function normalizeInitialBranchState(
   path: string,
-  result: RefreshBranchesResult | null
+  result: RepositoryBranchScanResult | null
 ): RefreshBranchesResult {
   if (!result || result.branches.length === 0) {
     return {
@@ -58,7 +59,7 @@ function normalizeInitialBranchState(
   }
 
   const currentBranch =
-    result.currentBranch.trim() ||
+    (result.current_branch ?? "").trim() ||
     result.branches.find((branch) => branch.isCurrent)?.name.trim() ||
     result.branches[0]?.name.trim() ||
     DEFAULT_ADD_REPO_BRANCH;
@@ -395,7 +396,10 @@ export async function handleRefreshRepoBranchesRuntime(params: {
       });
     }
 
-    return result;
+    return {
+      branches: result.branches,
+      currentBranch: result.current_branch,
+    };
   } catch (err) {
     const rawErrorMessage = extractInvokeErrorMessage(err);
     const failureReason = analyzeBranchRefreshFailure(err);

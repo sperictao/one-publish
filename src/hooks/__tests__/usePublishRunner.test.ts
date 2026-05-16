@@ -118,6 +118,7 @@ vi.mock("@/hooks/usePublishFailureFeedback", () => ({
 }));
 
 import { usePublishRunner } from "@/hooks/usePublishRunner";
+import { usePublishStore } from "@/store/publishStore";
 
 const readyEnvironment: EnvironmentCheckResult = {
   is_ready: true,
@@ -1020,13 +1021,13 @@ describe("usePublishRunner", () => {
     });
 
     await waitFor(() => {
-      expect(result.current.publishResult).toEqual(
+      expect(usePublishStore.getState().publishResult).toEqual(
         expect.objectContaining({
           success: true,
           output_dir: "/exports/App/Release",
         })
       );
-      expect(result.current.lastPublishSpec).toEqual(
+      expect(usePublishStore.getState().lastPublishSpec).toEqual(
         expect.objectContaining({
           project_path: "/repo/App.csproj",
         })
@@ -1041,9 +1042,9 @@ describe("usePublishRunner", () => {
     });
 
     await waitFor(() => {
-      expect(result.current.publishResult).toBeNull();
-      expect(result.current.lastPublishSpec).toBeNull();
-      expect(result.current.currentPublishRecordId).toBeNull();
+      expect(usePublishStore.getState().publishResult).toBeNull();
+      expect(usePublishStore.getState().lastPublishSpec).toBeNull();
+      expect(usePublishStore.getState().currentPublishRecordId).toBeNull();
       expect(result.current.outputLog).toBe("");
     });
   });
@@ -1087,7 +1088,7 @@ describe("usePublishRunner", () => {
     });
 
     await waitFor(() => {
-      expect(result.current.publishResult).toEqual(
+      expect(usePublishStore.getState().publishResult).toEqual(
         expect.objectContaining({
           success: true,
           output_dir: "/exports/App/Release",
@@ -1104,13 +1105,13 @@ describe("usePublishRunner", () => {
     });
 
     await waitFor(() => {
-      expect(result.current.publishResult).toEqual(
+      expect(usePublishStore.getState().publishResult).toEqual(
         expect.objectContaining({
           success: true,
           output_dir: "/exports/App/Release",
         })
       );
-      expect(result.current.lastPublishSpec).toEqual(
+      expect(usePublishStore.getState().lastPublishSpec).toEqual(
         expect.objectContaining({
           project_path: "/repo/App.csproj",
         })

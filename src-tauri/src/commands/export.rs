@@ -108,6 +108,7 @@ pub async fn export_preflight_report(
     report: Value,
     file_path: String,
 ) -> Result<String, crate::errors::AppError> {
+    let _timer = crate::commands::middleware::CommandTimer::new("commands::export::export_preflight_report");
     let mut report = report;
     if !report.is_object() {
         return Err(export_error(
@@ -281,6 +282,7 @@ pub async fn export_execution_snapshot(
     snapshot: Value,
     file_path: String,
 ) -> Result<String, crate::errors::AppError> {
+    let _timer = crate::commands::middleware::CommandTimer::new("commands::export::export_execution_snapshot");
     let mut snapshot = snapshot;
     if !snapshot.is_object() {
         return Err(export_error(
@@ -432,6 +434,7 @@ pub async fn export_failure_group_bundle(
     bundle: Value,
     file_path: String,
 ) -> Result<String, crate::errors::AppError> {
+    let _timer = crate::commands::middleware::CommandTimer::new("commands::export::export_failure_group_bundle");
     let mut bundle = bundle;
     if !bundle.is_object() {
         return Err(export_error(
@@ -558,6 +561,7 @@ pub async fn export_execution_history(
     history: Vec<Value>,
     file_path: String,
 ) -> Result<String, crate::errors::AppError> {
+    let _timer = crate::commands::middleware::CommandTimer::new("commands::export::export_execution_history");
     let mut history = history;
     for item in &mut history {
         crate::security::sanitize_export_value(item);
@@ -753,6 +757,7 @@ pub async fn export_diagnostics_index(
     index: Value,
     file_path: String,
 ) -> Result<String, crate::errors::AppError> {
+    let _timer = crate::commands::middleware::CommandTimer::new("commands::export::export_diagnostics_index");
     let mut index = index;
     if !index.is_object() {
         return Err(export_error(
@@ -868,6 +873,7 @@ pub async fn open_execution_snapshot(
     snapshot_path: Option<String>,
     output_dir: Option<String>,
 ) -> Result<String, crate::errors::AppError> {
+    let _timer = crate::commands::middleware::CommandTimer::new("commands::export::open_execution_snapshot");
     let path = if let Some(snapshot_path) = snapshot_path {
         let trimmed = snapshot_path.trim();
         if trimmed.is_empty() {
@@ -909,6 +915,7 @@ pub async fn open_execution_snapshot(
 
 #[tauri::command]
 pub async fn open_directory(path: String) -> Result<String, crate::errors::AppError> {
+    let _timer = crate::commands::middleware::CommandTimer::new("commands::export::open_directory");
     let trimmed = path.trim();
     if trimmed.is_empty() {
         return Err(export_error("目录路径为空", "directory_path_empty"));
@@ -937,6 +944,7 @@ pub async fn open_directory(path: String) -> Result<String, crate::errors::AppEr
 
 #[tauri::command]
 pub async fn open_output_directory(output_dir: String) -> Result<String, crate::errors::AppError> {
+    let _timer = crate::commands::middleware::CommandTimer::new("commands::export::open_output_directory");
     let trimmed = output_dir.trim();
     if trimmed.is_empty() {
         return Err(export_error("输出目录为空", "output_dir_empty"));

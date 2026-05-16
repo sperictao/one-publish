@@ -43,7 +43,7 @@
 
 ### 前端关键函数 / Hooks
 *   **`useAppState()`**: 管理全局应用配置、界面偏好（侧边栏宽度、语言、主题等），与 Rust 后端的 `store` 进行同步。
-*   **`usePublishRunner()`**: 发布管线核心 Hook。负责收集发布配置、触发 `execute_publish` IPC 调用、控制发布流程中的状态（如 `isPublishing`）、并接收日志流。
+*   **`usePublishRunner()`**: 发布管线核心 Hook。负责收集发布配置、触发 `execute_provider_publish` IPC 调用、控制发布流程中的状态（如 `isPublishing`）、并接收日志流。
 *   **`getAppState() / updatePreferences() / scanProject() ` (`src/lib/store.ts`)**: 封装了向 Tauri 发送 IPC 请求的 Promise API。
 
 ### 后端关键函数 / Structs

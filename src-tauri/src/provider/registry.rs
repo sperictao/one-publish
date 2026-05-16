@@ -1,8 +1,9 @@
 use super::{
     Provider, ProviderCapabilities, ProviderCatalogEntry, ProviderManifest,
-    ProviderProjectFileMatcher, ProviderProjectPathKind, ProviderRepositoryDiscovery,
-    ProviderRepositoryMarker,
+    ProviderRepositoryDiscovery,
 };
+#[cfg(test)]
+use super::{ProviderProjectFileMatcher, ProviderProjectPathKind, ProviderRepositoryMarker};
 use crate::compiler::CompileError;
 use crate::parameter::{parse_schema_json, ParameterSchema, RenderError};
 use crate::plan::{ExecutionPlan, PlanStep, PLAN_VERSION};
@@ -10,6 +11,15 @@ use crate::spec::{PublishSpec, SpecValue, SPEC_VERSION};
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use std::sync::OnceLock;
+
+pub(crate) const GRADLE_PROJECT_FILES: &[&str] = &[
+    "build.gradle",
+    "build.gradle.kts",
+    "settings.gradle",
+    "settings.gradle.kts",
+    "gradlew",
+    "gradlew.bat",
+];
 
 pub struct ProviderRegistry {
     providers: Vec<BuiltInProvider>,
@@ -29,12 +39,7 @@ pub fn provider_registry() -> &'static ProviderRegistry {
 impl ProviderRegistry {
     pub fn new() -> Self {
         Self {
-            providers: vec![
-                BuiltInProvider::dotnet(),
-                BuiltInProvider::cargo(),
-                BuiltInProvider::go(),
-                BuiltInProvider::java_gradle(),
-            ],
+            providers: super::providers::all(),
         }
     }
 
@@ -68,202 +73,28 @@ impl ProviderRegistry {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum BuiltInProviderKind {
+pub(crate) enum BuiltInProviderKind {
     Dotnet,
     Cargo,
     Go,
     JavaGradle,
 }
 
-const DOTNET_PROJECT_EXTENSIONS: &[&str] = &["csproj", "fsproj", "vbproj"];
-const DOTNET_SOLUTION_EXTENSION: &str = "sln";
-const DOTNET_NESTED_PROJECT_DIRECTORIES: &[&str] = &["src", "UI"];
-const GRADLE_PROJECT_FILES: &[&str] = &[
-    "build.gradle",
-    "build.gradle.kts",
-    "settings.gradle",
-    "settings.gradle.kts",
-    "gradlew",
-    "gradlew.bat",
-];
-
-struct BuiltInProvider {
-    kind: BuiltInProviderKind,
-    manifest: ProviderManifest,
-    capabilities: ProviderCapabilities,
-    catalog: ProviderCatalogEntry,
-    repository_discovery: ProviderRepositoryDiscovery,
-    schema_json: &'static str,
-    schema_cache: OnceLock<Result<ParameterSchema, RenderError>>,
-    compile_step_id: &'static str,
-    compile_title: &'static str,
+pub(crate) struct BuiltInProvider {
+    pub(crate) kind: BuiltInProviderKind,
+    pub(crate) manifest: ProviderManifest,
+    pub(crate) capabilities: ProviderCapabilities,
+    pub(crate) catalog: ProviderCatalogEntry,
+    pub(crate) repository_discovery: ProviderRepositoryDiscovery,
+    pub(crate) schema_json: &'static str,
+    pub(crate) schema_cache: OnceLock<Result<ParameterSchema, RenderError>>,
+    pub(crate) compile_step_id: &'static str,
+    pub(crate) compile_title: &'static str,
 }
 
 impl BuiltInProvider {
-    fn dotnet() -> Self {
-        Self::new(
-            BuiltInProviderKind::Dotnet,
-            ProviderManifest {
-                id: "dotnet".to_string(),
-                display_name: "dotnet".to_string(),
-                version: "1".to_string(),
-            },
-            ProviderCapabilities {
-                requires_project_binding: true,
-                project_path_kind: ProviderProjectPathKind::ProjectFile,
-                supports_command_import: true,
-            },
-            ProviderCatalogEntry {
-                id: "dotnet".to_string(),
-                display_name: "dotnet".to_string(),
-                version: "1".to_string(),
-                label: ".NET (dotnet)".to_string(),
-                command_example:
-                    "dotnet publish MyProject.csproj -c Release -r win-x64 --self-contained"
-                        .to_string(),
-                environment_label: ".NET".to_string(),
-                environment_description: "dotnet SDK".to_string(),
-                requires_project_binding: true,
-                project_path_kind: ProviderProjectPathKind::ProjectFile,
-                supports_command_import: true,
-            },
-            ProviderRepositoryDiscovery {
-                provider_id: "dotnet".to_string(),
-                repository_markers: dotnet_repository_markers(),
-                project_file_matchers: dotnet_project_file_matchers(),
-            },
-            include_str!("schemas/dotnet.json"),
-            "dotnet.publish",
-            "dotnet publish",
-        )
-    }
-
-    fn cargo() -> Self {
-        Self::new(
-            BuiltInProviderKind::Cargo,
-            ProviderManifest {
-                id: "cargo".to_string(),
-                display_name: "cargo".to_string(),
-                version: "1".to_string(),
-            },
-            ProviderCapabilities {
-                requires_project_binding: false,
-                project_path_kind: ProviderProjectPathKind::RepositoryRoot,
-                supports_command_import: true,
-            },
-            ProviderCatalogEntry {
-                id: "cargo".to_string(),
-                display_name: "cargo".to_string(),
-                version: "1".to_string(),
-                label: "Rust (cargo)".to_string(),
-                command_example: "cargo build --release --target x86_64-unknown-linux-gnu"
-                    .to_string(),
-                environment_label: "Rust".to_string(),
-                environment_description: "cargo".to_string(),
-                requires_project_binding: false,
-                project_path_kind: ProviderProjectPathKind::RepositoryRoot,
-                supports_command_import: true,
-            },
-            ProviderRepositoryDiscovery {
-                provider_id: "cargo".to_string(),
-                repository_markers: vec![ProviderRepositoryMarker::FileName(
-                    "Cargo.toml".to_string(),
-                )],
-                project_file_matchers: vec![ProviderProjectFileMatcher::FileName(
-                    "Cargo.toml".to_string(),
-                )],
-            },
-            include_str!("schemas/cargo.json"),
-            "cargo.build",
-            "cargo build",
-        )
-    }
-
-    fn go() -> Self {
-        Self::new(
-            BuiltInProviderKind::Go,
-            ProviderManifest {
-                id: "go".to_string(),
-                display_name: "go".to_string(),
-                version: "1".to_string(),
-            },
-            ProviderCapabilities {
-                requires_project_binding: false,
-                project_path_kind: ProviderProjectPathKind::RepositoryRoot,
-                supports_command_import: true,
-            },
-            ProviderCatalogEntry {
-                id: "go".to_string(),
-                display_name: "go".to_string(),
-                version: "1".to_string(),
-                label: "Go".to_string(),
-                command_example: "go build -o ./bin/app ./cmd/app".to_string(),
-                environment_label: "Go".to_string(),
-                environment_description: "go".to_string(),
-                requires_project_binding: false,
-                project_path_kind: ProviderProjectPathKind::RepositoryRoot,
-                supports_command_import: true,
-            },
-            ProviderRepositoryDiscovery {
-                provider_id: "go".to_string(),
-                repository_markers: vec![ProviderRepositoryMarker::FileName("go.mod".to_string())],
-                project_file_matchers: vec![ProviderProjectFileMatcher::FileName(
-                    "go.mod".to_string(),
-                )],
-            },
-            include_str!("schemas/go.json"),
-            "go.build",
-            "go build",
-        )
-    }
-
-    fn java_gradle() -> Self {
-        Self::new(
-            BuiltInProviderKind::JavaGradle,
-            ProviderManifest {
-                id: "java".to_string(),
-                display_name: "java".to_string(),
-                version: "1".to_string(),
-            },
-            ProviderCapabilities {
-                requires_project_binding: false,
-                project_path_kind: ProviderProjectPathKind::RepositoryRoot,
-                supports_command_import: true,
-            },
-            ProviderCatalogEntry {
-                id: "java".to_string(),
-                display_name: "java".to_string(),
-                version: "1".to_string(),
-                label: "Java (Gradle)".to_string(),
-                command_example: "./gradlew build --info".to_string(),
-                environment_label: "Java (Gradle)".to_string(),
-                environment_description: "gradle / java runtime".to_string(),
-                requires_project_binding: false,
-                project_path_kind: ProviderProjectPathKind::RepositoryRoot,
-                supports_command_import: true,
-            },
-            ProviderRepositoryDiscovery {
-                provider_id: "java".to_string(),
-                repository_markers: gradle_project_file_matchers()
-                    .into_iter()
-                    .map(|matcher| match matcher {
-                        ProviderProjectFileMatcher::FileName(name) => {
-                            ProviderRepositoryMarker::FileName(name)
-                        }
-                        ProviderProjectFileMatcher::Extension(extension) => {
-                            ProviderRepositoryMarker::Extension(extension)
-                        }
-                    })
-                    .collect(),
-                project_file_matchers: gradle_project_file_matchers(),
-            },
-            include_str!("schemas/java.json"),
-            "gradle.build",
-            "./gradlew build",
-        )
-    }
-
-    fn new(
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn new(
         kind: BuiltInProviderKind,
         manifest: ProviderManifest,
         capabilities: ProviderCapabilities,
@@ -395,42 +226,6 @@ impl Provider for BuiltInProvider {
             _ => Ok(program.to_string()),
         }
     }
-}
-
-fn gradle_project_file_matchers() -> Vec<ProviderProjectFileMatcher> {
-    GRADLE_PROJECT_FILES
-        .iter()
-        .map(|name| ProviderProjectFileMatcher::FileName((*name).to_string()))
-        .collect()
-}
-
-fn dotnet_project_file_matchers() -> Vec<ProviderProjectFileMatcher> {
-    DOTNET_PROJECT_EXTENSIONS
-        .iter()
-        .copied()
-        .chain(std::iter::once(DOTNET_SOLUTION_EXTENSION))
-        .map(|extension| ProviderProjectFileMatcher::Extension(extension.to_string()))
-        .collect()
-}
-
-fn dotnet_repository_markers() -> Vec<ProviderRepositoryMarker> {
-    let mut markers = vec![ProviderRepositoryMarker::Extension(
-        DOTNET_SOLUTION_EXTENSION.to_string(),
-    )];
-
-    for extension in DOTNET_PROJECT_EXTENSIONS {
-        markers.push(ProviderRepositoryMarker::Extension(
-            (*extension).to_string(),
-        ));
-        for directory in DOTNET_NESTED_PROJECT_DIRECTORIES {
-            markers.push(ProviderRepositoryMarker::NestedExtension {
-                directory: (*directory).to_string(),
-                extension: (*extension).to_string(),
-            });
-        }
-    }
-
-    markers
 }
 
 fn compile_single_step(

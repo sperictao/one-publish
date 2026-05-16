@@ -3,6 +3,7 @@ mod artifact;
 mod config;
 mod environment;
 mod export;
+pub mod middleware;
 mod notification;
 mod provider;
 mod publish;
@@ -32,12 +33,12 @@ pub(crate) use provider::{
 };
 pub use provider::{get_provider_schema, import_from_command, list_providers};
 pub(crate) use publish::{
-    __cmd__cancel_provider_publish, __cmd__execute_provider_publish, __cmd__execute_publish,
+    __cmd__cancel_provider_publish, __cmd__execute_provider_publish,
     __cmd__preflight_publish_output, __cmd__render_provider_publish,
 };
 pub use publish::{
-    cancel_provider_publish, execute_provider_publish, execute_publish, preflight_publish_output,
-    render_provider_publish, ProtectedDirectoryLocation, PublishConfig, PublishLogChunkEvent,
+    cancel_provider_publish, execute_provider_publish, preflight_publish_output,
+    render_provider_publish, ProtectedDirectoryLocation, PublishLogChunkEvent,
     PublishOutputAccess, PublishOutputAccessStatus, PublishOutputPreflightResult,
     PublishOutputValidation, PublishOutputValidationIssue, PublishOutputValidationStatus,
     PublishResult, RenderedPublishCommand,

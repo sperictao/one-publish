@@ -11,84 +11,16 @@ use super::output::{
 use super::session::reserve_execution;
 use super::{
     preflight::{self, ProtectedDirectoryLocation, PublishOutputValidationIssue},
-    PublishConfig, PublishResult, RenderedPublishCommand,
+    PublishResult, RenderedPublishCommand,
 };
 use crate::provider::registry::provider_registry;
-use crate::spec::{PublishSpec, SpecValue, SPEC_VERSION};
-use std::collections::BTreeMap;
+use crate::spec::PublishSpec;
 use std::io::ErrorKind as IoErrorKind;
 use std::path::PathBuf;
 use std::process::Stdio;
 use std::sync::Arc;
 use tauri::AppHandle;
 use tokio::sync::{mpsc, Mutex};
-
-pub(crate) fn build_dotnet_spec_from_config(
-    project_path: String,
-    config: PublishConfig,
-) -> PublishSpec {
-    let mut parameters = BTreeMap::<String, SpecValue>::new();
-    let mut properties = config
-        .properties
-        .into_iter()
-        .map(|(key, value)| (key, SpecValue::String(value)))
-        .collect::<BTreeMap<String, SpecValue>>();
-
-    if config.use_profile && !config.profile_name.is_empty() {
-        properties.insert(
-            "PublishProfile".to_string(),
-            SpecValue::String(config.profile_name),
-        );
-    } else {
-        parameters.insert(
-            "configuration".to_string(),
-            SpecValue::String(config.configuration),
-        );
-        if !config.runtime.is_empty() {
-            parameters.insert("runtime".to_string(), SpecValue::String(config.runtime));
-        }
-        if !config.framework.is_empty() {
-            parameters.insert("framework".to_string(), SpecValue::String(config.framework));
-        }
-        if config.self_contained {
-            parameters.insert("self_contained".to_string(), SpecValue::Bool(true));
-        }
-    }
-    if !config.output_dir.is_empty() {
-        parameters.insert("output".to_string(), SpecValue::String(config.output_dir));
-    }
-    if config.no_build {
-        parameters.insert("no_build".to_string(), SpecValue::Bool(true));
-    }
-    if config.no_restore {
-        parameters.insert("no_restore".to_string(), SpecValue::Bool(true));
-    }
-    if !config.verbosity.is_empty() {
-        parameters.insert("verbosity".to_string(), SpecValue::String(config.verbosity));
-    }
-    if config.no_logo {
-        parameters.insert("no_logo".to_string(), SpecValue::Bool(true));
-    }
-    if config.delete_existing_files {
-        parameters.insert("delete_existing_files".to_string(), SpecValue::Bool(true));
-    }
-    if !config.define.is_empty() {
-        parameters.insert(
-            "define".to_string(),
-            SpecValue::List(config.define.into_iter().map(SpecValue::String).collect()),
-        );
-    }
-    if !properties.is_empty() {
-        parameters.insert("properties".to_string(), SpecValue::Map(properties));
-    }
-
-    PublishSpec {
-        version: SPEC_VERSION,
-        provider_id: "dotnet".to_string(),
-        project_path,
-        parameters,
-    }
-}
 
 fn build_publish_session_id(provider_id: &str) -> String {
     let nanos = std::time::SystemTime::now()
