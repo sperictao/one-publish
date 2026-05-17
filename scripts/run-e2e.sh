@@ -43,7 +43,7 @@ summary() {
     echo -e "  ${GREEN}全部通过 🎉${NC}"
     echo ""
     echo "报告位置:"
-    echo "  HTML: test-results/report/index.html"
+    echo "  HTML: playwright-report/index.html"
     echo "  JSON: test-results/results.json"
   else
     echo -e "  ${RED}存在失败，请检查上方输出${NC}"
