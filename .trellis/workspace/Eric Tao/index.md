@@ -8,8 +8,8 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 5
-- **Last Active**: 2026-05-05
+- **Total Sessions**: 6
+- **Last Active**: 2026-05-17
 <!-- @@@/auto:current-status -->
 
 ---
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~175 | Active |
+| `journal-1.md` | ~208 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 6 | 2026-05-17 | Fix publish config selection state | `07313e4` | `main` |
 | 5 | 2026-05-05 | Publish workflow architecture task group completed | `f5373c0`, `77e5c44`, `c21dcc1` | `main` |
 | 4 | 2026-05-05 | Provider runtime boundary consolidation | `c21dcc1` | `main` |
 | 3 | 2026-05-04 | Profile domain owner consolidation | `77e5c44` | `main` |

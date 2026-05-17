@@ -173,3 +173,36 @@ Completed and archived the publish workflow architecture parent task after finis
 ### Next Steps
 
 - None - task complete
+
+
+## Session 6: Fix publish config selection state
+
+**Date**: 2026-05-17
+**Task**: Fix publish config selection state
+**Branch**: `main`
+
+### Summary
+
+Fix stale publish config derivation so pubxml profile selection updates the middle panel and command preview; restore hook and e2e regression coverage.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `07313e4` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
