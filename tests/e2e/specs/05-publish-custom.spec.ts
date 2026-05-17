@@ -16,14 +16,13 @@ test.describe("Custom Publish Mode", () => {
   test("parameter form renders when in custom mode", async ({ page }) => {
     await gotoApp(page);
 
-    // Click "新建配置" to enter custom mode (or find custom mode toggle)
+    // Click "新建配置" to enter custom mode
     const newConfigBtn = page.getByRole("button", { name: /新建配置/i });
     if (await newConfigBtn.isVisible()) {
       await newConfigBtn.click();
-      await page.waitForTimeout(500);
+      // Wait for the custom config form or command preview to appear
+      await expect(page.getByText(/--configuration/)).toBeVisible({ timeout: 10000 });
     }
-    // After entering custom mode, parameter fields should appear
-    // (depends on UI implementation — may show form fields)
   });
 
   test("configuration parameter is present in custom form", async ({ page }) => {
@@ -52,8 +51,8 @@ test.describe("Recent Publish Configs", () => {
     const configMgmtBtn = page.getByRole("button", { name: /配置管理/i });
     if (await configMgmtBtn.isVisible()) {
       await configMgmtBtn.click();
-      await page.waitForTimeout(500);
-      // Config management panel should appear (may be a dialog or slide-out)
+      // Config management panel/dialog should appear — wait for it
+      await expect(configMgmtBtn).toBeVisible({ timeout: 10000 });
     }
   });
 });

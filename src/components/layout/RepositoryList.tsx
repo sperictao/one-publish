@@ -616,6 +616,7 @@ export function RepositoryList({
         <div className="group/search glass-input relative rounded-xl">
           <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground/50 transition-colors duration-300 group-focus-within/search:text-primary" />
           <Input
+            data-testid="repo-search-input"
             placeholder={repoT.searchRepository || "搜索仓库"}
             value={searchQuery}
             onChange={(event) => setSearchQuery(event.target.value)}

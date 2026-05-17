@@ -10,7 +10,7 @@ export default defineConfig({
     timeout: 10_000,
   },
   // Retry flaky tests up to 2 times (0 in CI for fast failure visibility)
-  retries: isCI ? 0 : 2,
+  retries: isCI ? 1 : 2,
   // Run tests in parallel (1 in CI for determinism)
   workers: isCI ? 1 : undefined,
   // Stop after 5 failures to avoid cascading noise

@@ -231,7 +231,7 @@ export function PublishRunCard({
         {publishActions && (
           <div className="min-w-0 space-y-3">
             {publishActions.publishCommand && (
-              <div className="min-w-0 rounded-xl border border-[var(--glass-border-subtle)] bg-[var(--glass-input-bg)] p-3">
+              <div className="min-w-0 rounded-xl border border-[var(--glass-border-subtle)] bg-[var(--glass-input-bg)] p-3" data-testid="publish-command-preview">
                 <div className="mb-2 text-xs text-muted-foreground">
                   {publishActions.publishCommandLabel || "将执行的命令:"}
                 </div>
@@ -242,6 +242,7 @@ export function PublishRunCard({
             )}
             <div className="flex flex-col gap-2 sm:flex-row">
               <Button
+                data-testid="publish-execute-btn"
                 className="w-full sm:flex-1"
                 size="lg"
                 onClick={publishActions.onStartPublish}

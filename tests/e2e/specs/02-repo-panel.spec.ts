@@ -32,7 +32,9 @@ test.describe("Repository List", () => {
 
     // Click repo-b
     await page.locator("[data-list-item-id='repo-b'] button[aria-pressed]").click();
-    await page.waitForTimeout(300);
+
+    // Wait for selection to propagate — repo-b should now be pressed
+    await expect(page.locator("[data-list-item-id='repo-b'] button[aria-pressed]")).toHaveAttribute("aria-pressed", "true");
 
     // repo-b should now be pressed, repo-a should not
     await expect(page.locator("[data-list-item-id='repo-b'] button[aria-pressed]")).toHaveAttribute("aria-pressed", "true");
@@ -63,11 +65,9 @@ test.describe("Repository List", () => {
     const searchBox = page.locator("input[placeholder*='搜索仓库']");
     if (await searchBox.isVisible()) {
       await searchBox.fill("alpha");
-      await page.waitForTimeout(300);
 
-      // repo-a should still be visible
+      // repo-a should still be visible, repo-b should be hidden
       await expect(page.locator("[data-list-item-id='repo-a']")).toBeVisible();
-      // repo-b should be hidden
       await expect(page.locator("[data-list-item-id='repo-b']")).not.toBeVisible();
     }
   });

@@ -282,12 +282,14 @@ export interface MockTauriOptions {
   repositories?: Repository[];
   /** Override provider list */
   providers?: ProviderCatalogEntry[];
+  /** Map of Tauri command name → error message to inject for testing error paths */
+  errors?: Record<string, string>;
   /** Whether to log all invoke calls to console (for debugging) */
   debug?: boolean;
 }
 
 export async function installMockTauri(page: Page, options: MockTauriOptions = {}) {
-  const { initialState, repositories, providers, debug } = options;
+  const { initialState, repositories, providers, errors, debug } = options;
 
   const clone = <T>(v: T): T => (v === undefined ? undefined : JSON.parse(JSON.stringify(v))) as T;
 
@@ -302,6 +304,7 @@ export async function installMockTauri(page: Page, options: MockTauriOptions = {
     const providerList = clone(opts.providers) as ProviderCatalogEntry[];
     const dotnetSchema = clone(opts.dotnetSchema) as ParameterSchema;
     const envCheck = clone(opts.envCheck) as EnvironmentCheckResult;
+    const errMap = (opts.errors ?? {}) as Record<string, string>;
     const d = (opts.debug ?? false) as boolean;
 
     const log = (...args: unknown[]) => { if (d) console.log("[mock-tauri]", ...args); };
@@ -312,8 +315,13 @@ export async function installMockTauri(page: Page, options: MockTauriOptions = {
       invoke: async (cmd: string, args?: Record<string, unknown>) => {
         log("invoke:", cmd, args);
 
+        // Error injection: throw if this command is in the errors map
+        if (errMap[cmd]) {
+          throw new Error(errMap[cmd]);
+        }
+
         switch (cmd) {
-          // ── Store ──
+          // Store
           case "get_app_state":
             return clone(appState);
 
@@ -590,6 +598,7 @@ export async function installMockTauri(page: Page, options: MockTauriOptions = {
     providers: clone(effectiveProviders),
     dotnetSchema: clone(DOTNET_SCHEMA),
     envCheck: clone(DEFAULT_ENV_CHECK),
+    errors: clone(errors ?? {}),
     debug,
   } as unknown as Record<string, unknown>);
 }

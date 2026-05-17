@@ -49,7 +49,9 @@ test.describe("App Boot", () => {
     // Click repo-b selection button
     const repoBBtn = page.locator("[data-list-item-id='repo-b'] button[aria-pressed]");
     await repoBBtn.click();
-    await page.waitForTimeout(500);
+
+    // Wait for repo-b to become selected (aria-pressed="true")
+    await expect(page.locator("[data-list-item-id='repo-b'] button[aria-pressed]")).toHaveAttribute("aria-pressed", "true");
 
     // After selecting repo-b, publish config should still be visible
     // (the panel updates to show repo-b's config)

@@ -29,7 +29,6 @@ test.describe("Preset Publish Workflow", () => {
     const zipRow = page.locator("[data-list-item-id='pubxml:ZipProfile']");
     await expect(zipRow).toBeVisible();
     await zipRow.click();
-    await page.waitForTimeout(500);
 
     // ZipProfile row should still be visible after clicking
     await expect(zipRow).toBeVisible();

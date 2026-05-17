@@ -1874,6 +1874,7 @@ export function PublishConfigPanel({
             <button
               type="button"
               className={listActionButtonClass}
+              data-testid="new-config-btn"
               onClick={(e) => {
                 e.stopPropagation();
                 onCreateProfile();
@@ -1928,6 +1929,7 @@ export function PublishConfigPanel({
             <button
               type="button"
               className={listActionButtonClass}
+              data-testid="config-management-btn"
               onClick={(e) => {
                 e.stopPropagation();
                 onOpenConfigDialog();
