@@ -1,10 +1,20 @@
+mod access;
+mod path_validation;
+
+use access::{
+    evaluate_publish_output_access,
+    find_protected_root_for_path, is_protected_root_path, platform_protected_roots,
+};
+use path_validation::{
+    evaluate_publish_output_validation, normalize_lexical_path,
+};
+
 use super::output::{configured_output_dir, infer_output_dir, should_delete_existing_files};
 use crate::spec::PublishSpec;
 use serde::Serialize;
-use std::fs::{self, OpenOptions};
-use std::path::{Component, Path, PathBuf};
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::path::Path;
 use ts_rs::TS;
+
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, TS)]
 #[serde(rename_all = "snake_case")]
@@ -70,12 +80,6 @@ pub struct PublishOutputPreflightResult {
     pub configured_output_dir: Option<String>,
     pub validation: PublishOutputValidation,
     pub access: PublishOutputAccess,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-struct ProtectedRoot {
-    location: ProtectedDirectoryLocation,
-    path: PathBuf,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -163,6 +167,7 @@ impl PublishOutputPreflightResult {
     }
 }
 
+
 pub(crate) fn preflight_publish_output(spec: &PublishSpec) -> PublishOutputPreflightResult {
     let context = resolve_publish_output_context(spec);
     let access_intent = resolve_publish_output_access_intent(spec);
@@ -207,105 +212,6 @@ fn resolve_publish_output_context(spec: &PublishSpec) -> PublishOutputContext {
 }
 
 #[cfg(target_os = "macos")]
-fn macos_protected_roots() -> Vec<ProtectedRoot> {
-    [
-        (ProtectedDirectoryLocation::Desktop, dirs::desktop_dir()),
-        (ProtectedDirectoryLocation::Documents, dirs::document_dir()),
-        (ProtectedDirectoryLocation::Downloads, dirs::download_dir()),
-    ]
-    .into_iter()
-    .filter_map(|(location, path)| path.map(|path| ProtectedRoot { location, path }))
-    .collect()
-}
-
-fn find_protected_root_for_path<'a>(
-    path: &Path,
-    roots: &'a [ProtectedRoot],
-) -> Option<&'a ProtectedRoot> {
-    let normalized_path = normalize_lexical_path(path);
-
-    roots.iter().find(|root| {
-        let normalized_root = normalize_lexical_path(&root.path);
-        normalized_path.starts_with(&normalized_root)
-    })
-}
-
-#[cfg(target_os = "macos")]
-fn evaluate_publish_output_access(
-    output_dir: &str,
-    access_intent: PublishOutputAccessIntent,
-) -> PublishOutputAccess {
-    let protected_roots = macos_protected_roots();
-    let probe_access =
-        |probe_directory: &Path| probe_publish_output_access(probe_directory, access_intent);
-    evaluate_publish_output_access_for_roots(
-        output_dir,
-        access_intent,
-        &protected_roots,
-        probe_access,
-    )
-}
-
-#[cfg(not(target_os = "macos"))]
-fn evaluate_publish_output_access(
-    _output_dir: &str,
-    _access_intent: PublishOutputAccessIntent,
-) -> PublishOutputAccess {
-    PublishOutputAccess::not_applicable()
-}
-
-fn evaluate_publish_output_access_for_roots<F>(
-    output_dir: &str,
-    access_intent: PublishOutputAccessIntent,
-    roots: &[ProtectedRoot],
-    probe_write_access: F,
-) -> PublishOutputAccess
-where
-    F: Fn(&Path) -> std::io::Result<()>,
-{
-    let trimmed = output_dir.trim();
-    if trimmed.is_empty() {
-        return PublishOutputAccess::not_applicable();
-    }
-
-    let normalized_output_dir = normalize_lexical_path(Path::new(trimmed));
-    let Some(protected_root) = find_protected_root_for_path(&normalized_output_dir, roots) else {
-        return PublishOutputAccess::not_applicable();
-    };
-
-    let probe_directory =
-        resolve_probe_directory(&normalized_output_dir, &protected_root.path, access_intent);
-
-    match probe_write_access(&probe_directory) {
-        Ok(()) => {
-            log::info!(
-                "publish output access granted: output_dir={} probe_directory={}",
-                normalized_output_dir.display(),
-                probe_directory.display()
-            );
-            PublishOutputAccess::granted(
-                protected_root.location,
-                &protected_root.path,
-                &probe_directory,
-            )
-        }
-        Err(error) => {
-            log::warn!(
-                "publish output access denied: output_dir={} probe_directory={} error={}",
-                normalized_output_dir.display(),
-                probe_directory.display(),
-                error
-            );
-            PublishOutputAccess::denied(
-                protected_root.location,
-                &protected_root.path,
-                &probe_directory,
-                error.to_string(),
-            )
-        }
-    }
-}
-
 pub(crate) fn protected_location_for_output_dir(
     output_dir: &str,
 ) -> Option<ProtectedDirectoryLocation> {
@@ -330,238 +236,6 @@ pub(crate) fn is_protected_root_output_dir(output_dir: &str) -> bool {
     is_protected_root_path(&normalized_output_dir, &protected_roots)
 }
 
-fn is_protected_root_path(path: &Path, roots: &[ProtectedRoot]) -> bool {
-    roots
-        .iter()
-        .any(|root| normalize_lexical_path(&root.path) == normalize_lexical_path(path))
-}
-
-#[cfg(target_os = "macos")]
-fn platform_protected_roots() -> Vec<ProtectedRoot> {
-    macos_protected_roots()
-}
-
-#[cfg(not(target_os = "macos"))]
-fn platform_protected_roots() -> Vec<ProtectedRoot> {
-    Vec::new()
-}
-
-#[cfg(test)]
-fn resolve_existing_probe_directory(path: &Path, fallback_root: &Path) -> PathBuf {
-    resolve_probe_directory(path, fallback_root, PublishOutputAccessIntent::WriteOutput)
-}
-
-fn resolve_probe_directory(
-    path: &Path,
-    fallback_root: &Path,
-    access_intent: PublishOutputAccessIntent,
-) -> PathBuf {
-    let normalized_path = normalize_lexical_path(path);
-
-    if matches!(
-        access_intent,
-        PublishOutputAccessIntent::CleanExistingOutput
-            | PublishOutputAccessIntent::WriteOutputParent
-    ) && normalized_path.is_dir()
-    {
-        return resolve_parent_probe_directory(&normalized_path, fallback_root);
-    }
-
-    if normalized_path.is_dir() {
-        return normalized_path;
-    }
-
-    if normalized_path.is_file() {
-        return normalized_path
-            .parent()
-            .map(Path::to_path_buf)
-            .unwrap_or_else(|| normalize_lexical_path(fallback_root));
-    }
-
-    for ancestor in normalized_path.ancestors() {
-        if ancestor.exists() {
-            return ancestor.to_path_buf();
-        }
-    }
-
-    normalize_lexical_path(fallback_root)
-}
-
-fn resolve_parent_probe_directory(path: &Path, fallback_root: &Path) -> PathBuf {
-    let normalized_fallback_root = normalize_lexical_path(fallback_root);
-    path.parent()
-        .map(normalize_lexical_path)
-        .filter(|parent| parent.starts_with(&normalized_fallback_root))
-        .unwrap_or(normalized_fallback_root)
-}
-
-#[cfg(target_os = "macos")]
-fn probe_directory_write_access(directory: &Path) -> std::io::Result<()> {
-    let probe_file = build_probe_file_path(directory);
-    let file = OpenOptions::new()
-        .create_new(true)
-        .write(true)
-        .open(&probe_file)?;
-    drop(file);
-    let _ = fs::remove_file(&probe_file);
-    Ok(())
-}
-
-#[cfg(target_os = "macos")]
-fn probe_directory_cleanup_access(directory: &Path) -> std::io::Result<()> {
-    let probe_directory = build_probe_file_path(directory);
-    fs::create_dir(&probe_directory)?;
-    fs::remove_dir(&probe_directory)?;
-    Ok(())
-}
-
-#[cfg(target_os = "macos")]
-fn probe_publish_output_access(
-    directory: &Path,
-    access_intent: PublishOutputAccessIntent,
-) -> std::io::Result<()> {
-    match access_intent {
-        PublishOutputAccessIntent::WriteOutput | PublishOutputAccessIntent::WriteOutputParent => {
-            probe_directory_write_access(directory)
-        }
-        PublishOutputAccessIntent::CleanExistingOutput => probe_directory_cleanup_access(directory),
-    }
-}
-
-#[cfg(target_os = "macos")]
-fn build_probe_file_path(directory: &Path) -> PathBuf {
-    let timestamp = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|value| value.as_nanos())
-        .unwrap_or(0);
-    directory.join(format!(
-        ".one-publish-access-check-{}-{}",
-        std::process::id(),
-        timestamp
-    ))
-}
-
-fn normalize_lexical_path(path: &Path) -> PathBuf {
-    let mut normalized = PathBuf::new();
-
-    for component in path.components() {
-        match component {
-            Component::CurDir => {}
-            Component::ParentDir => {
-                normalized.pop();
-            }
-            Component::RootDir | Component::Prefix(_) => {
-                normalized.push(component.as_os_str());
-            }
-            Component::Normal(segment) => {
-                normalized.push(segment);
-            }
-        }
-    }
-
-    normalized
-}
-
-fn evaluate_publish_output_validation(
-    configured_output_dir: Option<&str>,
-    inferred_output_dir: &str,
-) -> PublishOutputValidation {
-    let path_to_check = configured_output_dir.unwrap_or(inferred_output_dir).trim();
-    if path_to_check.is_empty() {
-        return PublishOutputValidation::new(PublishOutputValidationStatus::NotApplicable, None);
-    }
-
-    match detect_output_path_validation_issue(path_to_check) {
-        Some(issue) => {
-            PublishOutputValidation::new(PublishOutputValidationStatus::Incompatible, Some(issue))
-        }
-        None => PublishOutputValidation::new(PublishOutputValidationStatus::Compatible, None),
-    }
-}
-
-fn detect_output_path_validation_issue(path: &str) -> Option<PublishOutputValidationIssue> {
-    #[cfg(target_os = "windows")]
-    {
-        detect_windows_output_path_validation_issue(path)
-    }
-
-    #[cfg(not(target_os = "windows"))]
-    {
-        looks_like_windows_path(path)
-            .then_some(PublishOutputValidationIssue::WindowsStylePathOnPosix)
-    }
-}
-
-#[cfg(target_os = "windows")]
-fn detect_windows_output_path_validation_issue(path: &str) -> Option<PublishOutputValidationIssue> {
-    if looks_like_posix_absolute_path(path) {
-        return Some(PublishOutputValidationIssue::PosixAbsolutePathOnWindows);
-    }
-
-    if has_missing_windows_drive_root(path) {
-        return Some(PublishOutputValidationIssue::WindowsDriveRootMissing);
-    }
-
-    None
-}
-
-fn looks_like_windows_path(path: &str) -> bool {
-    let trimmed = path.trim();
-    if trimmed.is_empty() {
-        return false;
-    }
-
-    let bytes = trimmed.as_bytes();
-    let has_drive_prefix = bytes.len() >= 3
-        && bytes[0].is_ascii_alphabetic()
-        && bytes[1] == b':'
-        && (bytes[2] == b'\\' || bytes[2] == b'/');
-
-    has_drive_prefix || trimmed.starts_with("\\\\") || trimmed.contains('\\')
-}
-
-#[cfg_attr(not(any(test, target_os = "windows")), allow(dead_code))]
-fn looks_like_windows_absolute_path(path: &str) -> bool {
-    let trimmed = path.trim();
-    if trimmed.is_empty() {
-        return false;
-    }
-
-    let bytes = trimmed.as_bytes();
-    let has_drive_prefix = bytes.len() >= 3
-        && bytes[0].is_ascii_alphabetic()
-        && bytes[1] == b':'
-        && (bytes[2] == b'\\' || bytes[2] == b'/');
-
-    has_drive_prefix || trimmed.starts_with("\\\\")
-}
-
-#[cfg_attr(not(any(test, target_os = "windows")), allow(dead_code))]
-fn looks_like_posix_absolute_path(path: &str) -> bool {
-    let trimmed = path.trim();
-    trimmed.starts_with('/') && !trimmed.starts_with("//")
-}
-
-#[cfg(target_os = "windows")]
-fn has_missing_windows_drive_root(path: &str) -> bool {
-    windows_absolute_root(Path::new(path)).is_some_and(|root| !root.exists())
-}
-
-#[cfg(target_os = "windows")]
-fn windows_absolute_root(path: &Path) -> Option<PathBuf> {
-    let mut components = path.components();
-    let prefix = match components.next()? {
-        Component::Prefix(prefix) => prefix,
-        _ => return None,
-    };
-    let Some(Component::RootDir) = components.next() else {
-        return None;
-    };
-
-    let mut root = PathBuf::from(prefix.as_os_str());
-    root.push(std::path::MAIN_SEPARATOR.to_string());
-    Some(root)
-}
 
 #[cfg(test)]
 mod tests {
