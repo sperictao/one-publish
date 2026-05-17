@@ -35,6 +35,7 @@ import {
   defaultPublishConfigStore,
   type AppState,
 } from "@/lib/store";
+import { useAppStore } from "@/stores/appStore";
 import { useAppState } from "@/hooks/useAppState";
 
 function createAppState(): AppState {
@@ -75,6 +76,8 @@ describe("useAppState", () => {
   beforeEach(() => {
     vi.useFakeTimers();
     vi.clearAllMocks();
+    // 重置 Zustand 单例 store，保证测试隔离
+    useAppStore.setState({ ...defaultAppState, isLoading: true, error: null });
     mocks.getAppState.mockResolvedValue(createAppState());
     mocks.reorderRecentPublishConfigs.mockResolvedValue(createAppState());
     mocks.reorderRepositories.mockResolvedValue(createAppState());
@@ -144,6 +147,12 @@ describe("useAppState", () => {
     await act(async () => {
       result.current.setSelectedPreset("profile-FolderProfile");
       vi.advanceTimersByTime(500);
+      await Promise.resolve();
+    });
+
+    // Zustand store 的 handlePersistenceFailure 是 async（await getAppState 回滚），
+    // 需要额外一轮微任务刷新让回滚 + toast 完成
+    await act(async () => {
       await Promise.resolve();
     });
 
