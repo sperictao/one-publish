@@ -1,0 +1,5 @@
+{"file": ".trellis/spec/frontend/index.md", "reason": "Frontend quality gate and checklist index."}
+{"file": ".trellis/spec/frontend/state-management.md", "reason": "Review state owner boundaries and derived-state correctness."}
+{"file": ".trellis/spec/frontend/hook-guidelines.md", "reason": "Review hook behavior and async persistence failure handling."}
+{"file": ".trellis/spec/frontend/quality-guidelines.md", "reason": "Select and verify relevant Vitest, e2e, and typecheck coverage."}
+{"file": ".trellis/spec/guides/code-reuse-thinking-guide.md", "reason": "Check that shared state logic is not duplicated unnecessarily."}
