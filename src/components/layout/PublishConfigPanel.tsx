@@ -1532,6 +1532,7 @@ export function PublishConfigPanel({
                   <button
                     type="button"
                     data-testid={`pubxml-select-${name}`}
+                    data-selected={isPubxmlSelected}
                     aria-pressed={isPubxmlSelected}
                     className={cn(
                       "flex w-full items-center gap-2.5 rounded-2xl border border-transparent bg-transparent py-2 pr-11 text-left shadow-none outline-none transition-all duration-300 hover:bg-[var(--glass-bg)]/20 focus-visible:ring-2 focus-visible:ring-primary/30 focus-visible:ring-offset-1 focus-visible:ring-offset-background",

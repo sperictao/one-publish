@@ -1282,3 +1282,110 @@ describe("PublishConfigPanel", () => {
     ).not.toBeInTheDocument();
   });
 });
+
+describe("PublishConfigPanel — preset selection state", () => {
+  /** Minimal required props for PublishConfigPanel, with overrides. */
+  function baseProps(overrides: Partial<Parameters<typeof PublishConfigPanel>[0]> = {}) {
+    return {
+      selectedPreset: "release-fd",
+      isCustomMode: false,
+      profiles: [] as ConfigProfile[],
+      isProfilesRefreshing: false,
+      activeProfileName: null as string | null,
+      onSelectProfile: () => {},
+      onCreateProfile: () => {},
+      onEditProfile: () => {},
+      onRefreshProfiles: () => {},
+      onOpenConfigDialog: () => {},
+      onDeleteProfile: () => {},
+      dotnetSchema,
+      projectPublishProfiles: [] as string[],
+      isProjectProfilesRefreshing: false,
+      onSelectProjectProfile: () => {},
+      onCopyProjectProfileToCustom: async (_name: string, _config: PublishConfigStore) => "copied",
+      recentConfigKeys: [] as string[],
+      favoriteConfigKeys: [] as string[],
+      onToggleFavoriteConfig: () => {},
+      onRemoveRecentConfig: () => {},
+      onReorderRecentConfigs: () => {},
+      onReorderProjectProfiles: () => {},
+      onReorderProfiles: () => {},
+      ...overrides,
+    };
+  }
+
+  it("selected pubxml preset button has data-selected=true", async () => {
+    render(
+      <PublishConfigPanel
+        {...baseProps({
+          selectedPreset: "profile-FolderProfile",
+          projectPublishProfiles: ["FolderProfile", "ZipProfile", "WebDeploy"],
+        })}
+      />,
+    );
+
+    const folderBtn = screen.getByTestId("pubxml-select-FolderProfile");
+    expect(folderBtn).toHaveAttribute("data-selected", "true");
+
+    const zipBtn = screen.getByTestId("pubxml-select-ZipProfile");
+    expect(zipBtn).toHaveAttribute("data-selected", "false");
+
+    const webBtn = screen.getByTestId("pubxml-select-WebDeploy");
+    expect(webBtn).toHaveAttribute("data-selected", "false");
+  });
+
+  it("non-profile preset does not set data-selected on any pubxml button", async () => {
+    render(
+      <PublishConfigPanel
+        {...baseProps({
+          selectedPreset: "release-fd",
+          projectPublishProfiles: ["FolderProfile", "ZipProfile"],
+        })}
+      />,
+    );
+
+    const folderBtn = screen.getByTestId("pubxml-select-FolderProfile");
+    expect(folderBtn).toHaveAttribute("data-selected", "false");
+
+    const zipBtn = screen.getByTestId("pubxml-select-ZipProfile");
+    expect(zipBtn).toHaveAttribute("data-selected", "false");
+  });
+
+  it("changing selectedPreset prop updates data-selected", async () => {
+    const { rerender } = render(
+      <PublishConfigPanel
+        {...baseProps({
+          selectedPreset: "profile-FolderProfile",
+          projectPublishProfiles: ["FolderProfile", "ZipProfile"],
+        })}
+      />,
+    );
+
+    expect(screen.getByTestId("pubxml-select-FolderProfile")).toHaveAttribute(
+      "data-selected",
+      "true",
+    );
+    expect(screen.getByTestId("pubxml-select-ZipProfile")).toHaveAttribute(
+      "data-selected",
+      "false",
+    );
+
+    rerender(
+      <PublishConfigPanel
+        {...baseProps({
+          selectedPreset: "profile-ZipProfile",
+          projectPublishProfiles: ["FolderProfile", "ZipProfile"],
+        })}
+      />,
+    );
+
+    expect(screen.getByTestId("pubxml-select-FolderProfile")).toHaveAttribute(
+      "data-selected",
+      "false",
+    );
+    expect(screen.getByTestId("pubxml-select-ZipProfile")).toHaveAttribute(
+      "data-selected",
+      "true",
+    );
+  });
+});

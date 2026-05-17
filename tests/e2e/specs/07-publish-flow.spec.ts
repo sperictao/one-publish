@@ -62,28 +62,24 @@ test.describe("Full Publish Flow — Happy Path", () => {
     await expect(publishBtn).not.toBeDisabled();
   });
 
-  test("publish command updates when switching presets", async ({ page }) => {
+  test("publish command visible and survives preset switching", async ({ page }) => {
     await gotoAppWithPublishConfig(page);
 
-    // Default preset is FolderProfile — verify its button exists
     const folder = page.locator("[data-testid='pubxml-select-FolderProfile']");
     const zip = page.locator("[data-testid='pubxml-select-ZipProfile']");
 
     await expect(folder).toBeVisible({ timeout: 10000 });
-    await expect(zip).toBeVisible({ timeout: 10000 });
+    await expect(zip).toBeVisible();
 
     // Command preview should be visible
     const commandPreview = page.locator("[data-testid='publish-command-preview']");
     await expect(commandPreview).toBeVisible({ timeout: 10000 });
 
-    // Click on ZipProfile
+    // Switch presets — command preview should stay visible (no crash)
     await zip.click();
+    await expect(commandPreview).toBeVisible({ timeout: 5000 });
 
-    // Both buttons should still be visible after switching
-    await expect(zip).toBeVisible();
-    await expect(folder).toBeVisible();
-
-    // Command preview should still be visible after switching
+    await folder.click();
     await expect(commandPreview).toBeVisible({ timeout: 5000 });
   });
 });
