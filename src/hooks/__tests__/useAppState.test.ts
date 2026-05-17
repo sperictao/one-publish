@@ -96,6 +96,8 @@ describe("useAppState", () => {
 
     await waitForAppStateLoad();
     expect(result.current.isLoading).toBe(false);
+    expect(result.current.selectedPreset).toBe("release-fd");
+    expect(result.current.isCustomMode).toBe(true);
 
     await act(async () => {
       result.current.setSelectedPreset("profile-FolderProfile");
@@ -104,6 +106,8 @@ describe("useAppState", () => {
       await Promise.resolve();
     });
 
+    expect(result.current.selectedPreset).toBe("profile-FolderProfile");
+    expect(result.current.isCustomMode).toBe(false);
     expect(mocks.updatePublishState).toHaveBeenCalledWith({
       repoId: "repo-1",
       selectedPreset: "profile-FolderProfile",

@@ -448,7 +448,7 @@ export async function installMockTauri(page: Page, options: MockTauriOptions = {
             return {
               profileName,
               filePath: `/workspace/alpha-service/Properties/PublishProfiles/${profileName}.pubxml`,
-              content: `<Project><PropertyGroup><PublishDir>bin/Release/net8.0/publish/</PublishDir></PropertyGroup></Project>`,
+              content: `<Project><PropertyGroup><PublishDir>bin/Release/net8.0/${profileName}/</PublishDir></PropertyGroup></Project>`,
             };
           }
 
@@ -467,7 +467,17 @@ export async function installMockTauri(page: Page, options: MockTauriOptions = {
 
           case "render_provider_publish": {
             const providerId = (args?.providerId as string) || "dotnet";
-            return { program: providerId, args: ["publish", "--configuration", "Release"], working_dir: "/workspace/alpha-service", display_command: `${providerId} publish --configuration Release` };
+            const spec = args?.spec as Record<string, unknown> | undefined;
+            const parameters = (spec?.parameters ?? {}) as Record<string, unknown>;
+            const output = typeof parameters.output === "string" ? parameters.output : "";
+            const outputArgs = output ? ["--output", output] : [];
+            const displayOutput = output ? ` --output ${output}` : "";
+            return {
+              program: providerId,
+              args: ["publish", "--configuration", "Release", ...outputArgs],
+              working_dir: "/workspace/alpha-service",
+              display_command: `${providerId} publish --configuration Release${displayOutput}`,
+            };
           }
 
           case "execute_provider_publish": {

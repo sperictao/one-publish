@@ -19,10 +19,8 @@ import {
   type AppState,
   type PublishConfigStore,
   defaultAppState,
-  defaultPublishConfigStore,
-  defaultRepoPublishConfig,
 } from "@/lib/store";
-import type { Repository, RepoPublishConfig } from "@/types/repository";
+import type { Repository } from "@/types/repository";
 
 // ── Types ──
 type PublishStatePatch = {
@@ -42,21 +40,6 @@ function mergeRecentPublishState(
   };
 }
 
-// ── Derived helpers ──
-function deriveCurrentRepo(state: AppState): Repository | null {
-  return state.repositories.find((r) => r.id === state.selectedRepoId) ?? null;
-}
-
-function deriveCurrentPublishConfig(state: AppState): RepoPublishConfig {
-  const repo = deriveCurrentRepo(state);
-  return (
-    repo?.publishConfig ?? {
-      ...defaultRepoPublishConfig,
-      customConfig: { ...defaultPublishConfigStore },
-    }
-  );
-}
-
 // ── Store interface ──
 interface AppStore extends AppState {
   // Lifecycle
@@ -64,10 +47,6 @@ interface AppStore extends AppState {
   error: string | null;
   loadState: () => Promise<void>;
   _restoreAuthoritativeState: () => Promise<AppState>;
-
-  // Derived (via getters, exposed for backward compat)
-  readonly currentRepo: Repository | null;
-  readonly currentPublishConfig: RepoPublishConfig;
 
   // UI state
   setUIState: (params: {
@@ -197,13 +176,6 @@ export const useAppStore = create<AppStore>((set, get) => {
     ...defaultAppState,
     isLoading: true,
     error: null,
-
-    get currentRepo() {
-      return deriveCurrentRepo(get());
-    },
-    get currentPublishConfig() {
-      return deriveCurrentPublishConfig(get());
-    },
 
     // ── Lifecycle ──
     loadState: async () => {

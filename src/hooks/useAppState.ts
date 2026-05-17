@@ -1,11 +1,26 @@
 // useAppState - 应用状态管理 Hook（Zustand store wrapper）
 // 提供向后兼容的接口，底层使用 useAppStore()
 
-import { useEffect } from "react";
+import { useEffect, useMemo } from "react";
 import { useAppStore } from "@/stores/appStore";
+import {
+  defaultPublishConfigStore,
+  defaultRepoPublishConfig,
+} from "@/lib/store";
 
 export function useAppState() {
   const store = useAppStore();
+  const currentPublishConfig = useMemo(() => {
+    const repo =
+      store.repositories.find((item) => item.id === store.selectedRepoId) ?? null;
+
+    return (
+      repo?.publishConfig ?? {
+        ...defaultRepoPublishConfig,
+        customConfig: { ...defaultPublishConfigStore },
+      }
+    );
+  }, [store.repositories, store.selectedRepoId]);
 
   // 初始化加载（仅一次，store 内部保证幂等）
   useEffect(() => {
@@ -42,10 +57,10 @@ export function useAppState() {
     setLeftPanelWidth: store.setLeftPanelWidth,
     setMiddlePanelWidth: store.setMiddlePanelWidth,
 
-    // 发布配置（从 currentPublishConfig 派生）
-    selectedPreset: store.currentPublishConfig.selectedPreset,
-    isCustomMode: store.currentPublishConfig.isCustomMode,
-    customConfig: store.currentPublishConfig.customConfig,
+    // 发布配置（从当前仓库派生）
+    selectedPreset: currentPublishConfig.selectedPreset,
+    isCustomMode: currentPublishConfig.isCustomMode,
+    customConfig: currentPublishConfig.customConfig,
     setSelectedPreset: store.setSelectedPreset,
     setIsCustomMode: store.setIsCustomMode,
     setCustomConfig: store.setCustomConfig,

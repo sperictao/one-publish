@@ -74,13 +74,20 @@ test.describe("Full Publish Flow — Happy Path", () => {
     // Command preview should be visible
     const commandPreview = page.locator("[data-testid='publish-command-preview']");
     await expect(commandPreview).toBeVisible({ timeout: 10000 });
+    await expect(folder).toHaveAttribute("data-selected", "true");
+    await expect(commandPreview).toContainText("FolderProfile");
 
-    // Switch presets — command preview should stay visible (no crash)
     await zip.click();
+    await expect(folder).toHaveAttribute("data-selected", "false");
+    await expect(zip).toHaveAttribute("data-selected", "true");
     await expect(commandPreview).toBeVisible({ timeout: 5000 });
+    await expect(commandPreview).toContainText("ZipProfile");
 
     await folder.click();
+    await expect(folder).toHaveAttribute("data-selected", "true");
+    await expect(zip).toHaveAttribute("data-selected", "false");
     await expect(commandPreview).toBeVisible({ timeout: 5000 });
+    await expect(commandPreview).toContainText("FolderProfile");
   });
 });
 
