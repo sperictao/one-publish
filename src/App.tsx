@@ -34,12 +34,12 @@ function App() {
   const boot = useAppBoot();
 
   // Show loading state
-  if (boot.isStateLoading) {
+  if (boot.shell.isStateLoading) {
     return (
       <div className="flex h-screen items-center justify-center bg-background">
         <div className="flex flex-col items-center gap-4">
           <Loader2 className="h-8 w-8 animate-spin text-primary" />
-          <span className="text-muted-foreground">{boot.appT.loading || "加载中..."}</span>
+          <span className="text-muted-foreground">{boot.shell.appT.loading || "加载中..."}</span>
         </div>
       </div>
     );
@@ -47,14 +47,14 @@ function App() {
 
   return (
     <div className="flex h-screen flex-col bg-background">
-      {boot.providerRuntimeBanner ? (
+      {boot.publish.providerRuntimeBanner ? (
         <ProviderRuntimeBanner
-          key={boot.providerRuntimeBanner.key}
-          title={boot.providerRuntimeBanner.title}
-          description={boot.providerRuntimeBanner.description}
-          status={boot.providerRuntimeBanner.status}
-          retryLabel={boot.appT.retryAction || "重试"}
-          onRetry={boot.providerRuntimeBanner.onRetry}
+          key={boot.publish.providerRuntimeBanner.key}
+          title={boot.publish.providerRuntimeBanner.title}
+          description={boot.publish.providerRuntimeBanner.description}
+          status={boot.publish.providerRuntimeBanner.status}
+          retryLabel={boot.shell.appT.retryAction || "重试"}
+          onRetry={boot.publish.providerRuntimeBanner.onRetry}
         />
       ) : null}
 
@@ -62,196 +62,196 @@ function App() {
       <div className="flex flex-1 overflow-hidden">
         {/* Left Panel - Repository List */}
         <SidebarPanelShell
-          collapsed={boot.leftPanelCollapsed}
-          width={`${boot.effectiveLeftPanelWidth}px`}
+          collapsed={boot.shell.leftPanelCollapsed}
+          width={`${boot.shell.effectiveLeftPanelWidth}px`}
         >
           <Suspense fallback={<div className="flex h-full flex-col" />}>
             <RepositoryList
-              repositories={boot.repositories}
-              selectedRepoId={boot.selectedRepoId}
-              providers={boot.repositoryProviders}
-              onSelectRepo={boot.selectRepository}
-              onAddRepo={boot.handleAddRepo}
-              onOpenRepoDirectory={boot.handleOpenRepoDirectory}
-              onEditRepo={boot.handleEditRepo}
-              onRemoveRepo={boot.handleRemoveRepo}
-              onDetectProvider={boot.handleDetectRepoProvider}
-              onScanProjectCandidates={boot.handleScanProjectCandidates}
-              onRefreshBranches={boot.handleRefreshRepoBranches}
-              branchConnectivityByRepoId={boot.branchConnectivityByRepoId}
-              onSettings={boot.handleOpenSettings}
-              onCollapse={() => boot.setLeftPanelCollapsed(true)}
-              onReorderRepositories={boot.reorderRepositories}
+              repositories={boot.repo.repositories}
+              selectedRepoId={boot.repo.selectedRepoId}
+              providers={boot.repo.repositoryProviders}
+              onSelectRepo={boot.repo.selectRepository}
+              onAddRepo={boot.repo.handleAddRepo}
+              onOpenRepoDirectory={boot.repo.handleOpenRepoDirectory}
+              onEditRepo={boot.repo.handleEditRepo}
+              onRemoveRepo={boot.repo.handleRemoveRepo}
+              onDetectProvider={boot.repo.handleDetectRepoProvider}
+              onScanProjectCandidates={boot.repo.handleScanProjectCandidates}
+              onRefreshBranches={boot.repo.handleRefreshRepoBranches}
+              branchConnectivityByRepoId={boot.repo.branchConnectivityByRepoId}
+              onSettings={boot.shell.handleOpenSettings}
+              onCollapse={() => boot.shell.setLeftPanelCollapsed(true)}
+              onReorderRepositories={boot.repo.reorderRepositories}
             />
           </Suspense>
         </SidebarPanelShell>
 
         {/* Left Resize Handle */}
-        {!boot.leftPanelCollapsed && (
-          <ResizeHandle onResize={boot.handleLeftPanelResize} showHeaderBorder={false} />
+        {!boot.shell.leftPanelCollapsed && (
+          <ResizeHandle onResize={boot.shell.handleLeftPanelResize} showHeaderBorder={false} />
         )}
 
         {/* Middle Panel - Publish Config */}
         <SidebarPanelShell
-          collapsed={boot.middlePanelCollapsed}
-          width={`${boot.effectiveMiddlePanelWidth}px`}
+          collapsed={boot.shell.middlePanelCollapsed}
+          width={`${boot.shell.effectiveMiddlePanelWidth}px`}
         >
           <Suspense fallback={<div className="flex h-full flex-col" />}>
             <PublishConfigPanel
-              selectedRepoId={boot.selectedRepoId}
-              selectedPreset={boot.selectedPreset}
-              isCustomMode={boot.isCustomMode}
-              profiles={boot.profiles}
-              isProfilesRefreshing={Boolean(boot.selectedRepo) && boot.isProfilesRefreshing}
-              activeProfileName={boot.activeProfileName}
-              onSelectProfile={boot.handleSelectProfileFromPanel}
-              onCreateProfile={boot.openQuickCreateProfileDialog}
-              onEditProfile={boot.openQuickEditProfileDialog}
-              onRefreshProfiles={boot.loadProfiles}
-              onOpenConfigDialog={() => boot.handleConfigDialogOpenChange(true)}
-              onDeleteProfile={boot.handleDeleteProfileFromPanel}
-              projectPublishProfiles={boot.orderedProjectPublishProfiles}
-              isProjectProfilesRefreshing={boot.isProjectProfilesRefreshing}
-              projectFilePath={boot.projectInfo?.project_file}
-              projectFrameworkOptions={boot.projectFrameworkOptions}
-              onSelectProjectProfile={boot.handleSelectProjectProfile}
-              onCopyProjectProfileToCustom={boot.handleCreateProfileFromProjectProfile}
-              recentConfigKeys={boot.recentConfigKeys}
-              favoriteConfigKeys={boot.favoriteConfigKeys}
-              onToggleFavoriteConfig={boot.toggleFavoriteConfig}
-              onRemoveRecentConfig={boot.removeRecentConfig}
-              onReorderRecentConfigs={boot.reorderRecentConfig}
-              onReorderProjectProfiles={boot.reorderProjectPublishProfiles}
-              onReorderProfiles={boot.handleReorderProfiles}
-              onCollapse={() => boot.setMiddlePanelCollapsed(true)}
-              showExpandButton={boot.leftPanelCollapsed}
-              onExpandRepo={() => boot.setLeftPanelCollapsed(false)}
+              selectedRepoId={boot.repo.selectedRepoId}
+              selectedPreset={boot.publish.selectedPreset}
+              isCustomMode={boot.publish.isCustomMode}
+              profiles={boot.publish.profiles}
+              isProfilesRefreshing={Boolean(boot.repo.selectedRepo) && boot.publish.isProfilesRefreshing}
+              activeProfileName={boot.publish.activeProfileName}
+              onSelectProfile={boot.publish.handleSelectProfileFromPanel}
+              onCreateProfile={boot.publish.openQuickCreateProfileDialog}
+              onEditProfile={boot.publish.openQuickEditProfileDialog}
+              onRefreshProfiles={boot.publish.loadProfiles}
+              onOpenConfigDialog={() => boot.shell.handleConfigDialogOpenChange(true)}
+              onDeleteProfile={boot.publish.handleDeleteProfileFromPanel}
+              projectPublishProfiles={boot.publish.orderedProjectPublishProfiles}
+              isProjectProfilesRefreshing={boot.publish.isProjectProfilesRefreshing}
+              projectFilePath={boot.publish.projectInfo?.project_file}
+              projectFrameworkOptions={boot.publish.projectFrameworkOptions}
+              onSelectProjectProfile={boot.publish.handleSelectProjectProfile}
+              onCopyProjectProfileToCustom={boot.publish.handleCreateProfileFromProjectProfile}
+              recentConfigKeys={boot.publish.recentConfigKeys}
+              favoriteConfigKeys={boot.publish.favoriteConfigKeys}
+              onToggleFavoriteConfig={boot.publish.toggleFavoriteConfig}
+              onRemoveRecentConfig={boot.publish.removeRecentConfig}
+              onReorderRecentConfigs={boot.publish.reorderRecentConfig}
+              onReorderProjectProfiles={boot.publish.reorderProjectPublishProfiles}
+              onReorderProfiles={boot.publish.handleReorderProfiles}
+              onCollapse={() => boot.shell.setMiddlePanelCollapsed(true)}
+              showExpandButton={boot.shell.leftPanelCollapsed}
+              onExpandRepo={() => boot.shell.setLeftPanelCollapsed(false)}
             />
           </Suspense>
         </SidebarPanelShell>
 
         {/* Middle Resize Handle */}
-        {!boot.middlePanelCollapsed && (
-          <ResizeHandle onResize={boot.handleMiddlePanelResize} />
+        {!boot.shell.middlePanelCollapsed && (
+          <ResizeHandle onResize={boot.shell.handleMiddlePanelResize} />
         )}
 
         {/* Right Panel - Main Content */}
         <Suspense fallback={<div className="flex h-full flex-1 flex-col" />}>
           <MainContentShell
-            leftPanelCollapsed={boot.leftPanelCollapsed}
-            middlePanelCollapsed={boot.middlePanelCollapsed}
-            appT={boot.appT}
-            configPanelT={boot.translations.configPanel || {}}
-            rightPanelView={boot.rightPanelView}
-            onExpandLeftPanel={() => boot.setLeftPanelCollapsed(false)}
-            onExpandMiddlePanel={() => boot.setMiddlePanelCollapsed(false)}
-            onSelectHomeView={() => boot.setRightPanelView("home")}
-            onSelectHistoryView={() => boot.setRightPanelView("history")}
+            leftPanelCollapsed={boot.shell.leftPanelCollapsed}
+            middlePanelCollapsed={boot.shell.middlePanelCollapsed}
+            appT={boot.shell.appT}
+            configPanelT={boot.shell.translations.configPanel || {}}
+            rightPanelView={boot.shell.rightPanelView}
+            onExpandLeftPanel={() => boot.shell.setLeftPanelCollapsed(false)}
+            onExpandMiddlePanel={() => boot.shell.setMiddlePanelCollapsed(false)}
+            onSelectHomeView={() => boot.shell.setRightPanelView("home")}
+            onSelectHistoryView={() => boot.shell.setRightPanelView("history")}
           >
             <Suspense fallback={<div className="flex h-full flex-col" />}>
               <PublishContentSection
-                showCommandImportResultCard={boot.showCommandImportResultCard}
-                commandImportResultCardProps={boot.commandImportResultCardProps}
-                publishRunCardProps={boot.publishRunCardProps}
-                shouldLoadDiagnosticsSection={boot.shouldLoadDiagnosticsSection}
-                diagnosticsSectionProps={boot.diagnosticsSectionProps}
-                rightPanelView={boot.rightPanelView}
+                showCommandImportResultCard={boot.publish.showCommandImportResultCard}
+                commandImportResultCardProps={boot.publish.commandImportResultCardProps}
+                publishRunCardProps={boot.publish.publishRunCardProps}
+                shouldLoadDiagnosticsSection={boot.publish.shouldLoadDiagnosticsSection}
+                diagnosticsSectionProps={boot.publish.diagnosticsSectionProps}
+                rightPanelView={boot.shell.rightPanelView}
               />
             </Suspense>
           </MainContentShell>
         </Suspense>
       </div>
 
-      {boot.shouldLoadAppDialogsHost ? (
+      {boot.shell.shouldLoadAppDialogsHost ? (
         <Suspense fallback={null}>
           <AppDialogsHost
-            shortcutsOpen={boot.shortcutsOpen}
-            setShortcutsOpen={boot.setShortcutsOpen}
-            environmentDialogOpen={boot.environmentDialogOpen}
-            handleEnvironmentDialogOpenChange={boot.handleEnvironmentDialogOpenChange}
-            environmentDefaultProviderIds={boot.environmentDefaultProviderIds}
-            environmentInitialCheck={boot.environmentInitialCheck}
-            setEnvironmentLastCheck={boot.setEnvironmentLastCheck}
-            settingsOpen={boot.settingsOpen}
-            setSettingsOpen={boot.setSettingsOpen}
-            language={boot.language}
-            handleLanguageChange={boot.handleLanguageChange}
-            minimizeToTrayOnClose={boot.minimizeToTrayOnClose}
-            setMinimizeToTrayOnClose={boot.setMinimizeToTrayOnClose}
-            defaultOutputDir={boot.defaultOutputDir}
-            setDefaultOutputDir={boot.setDefaultOutputDir}
-            executionHistoryLimit={boot.executionHistoryLimit}
-            setExecutionHistoryLimit={boot.setExecutionHistoryLimit}
-            environmentProviderIds={boot.environmentProviderIds}
-            setEnvironmentProviderIds={boot.setEnvironmentProviderIds}
-            isRerunChecklistEnabled={boot.isRerunChecklistEnabled}
-            setIsRerunChecklistEnabled={boot.setIsRerunChecklistEnabled}
-            theme={boot.theme}
-            setTheme={boot.setTheme}
-            handleConfigDialogOpenChange={boot.handleConfigDialogOpenChange}
-            environmentLastCheck={boot.environmentLastCheck}
-            openEnvironmentDialog={boot.openEnvironmentDialog}
-            activeProviderId={boot.activeProviderId}
-            activeProviderUsesProjectFile={boot.activeProviderUsesProjectFile}
-            activeProvider={boot.activeProvider}
-            availableProviders={boot.providerRuntimeProviders}
-            updaterState={boot.updaterState}
+            shortcutsOpen={boot.shell.shortcutsOpen}
+            setShortcutsOpen={boot.shell.setShortcutsOpen}
+            environmentDialogOpen={boot.shell.environmentDialogOpen}
+            handleEnvironmentDialogOpenChange={boot.shell.handleEnvironmentDialogOpenChange}
+            environmentDefaultProviderIds={boot.shell.environmentDefaultProviderIds}
+            environmentInitialCheck={boot.shell.environmentInitialCheck}
+            setEnvironmentLastCheck={boot.repo.setEnvironmentLastCheck}
+            settingsOpen={boot.shell.settingsOpen}
+            setSettingsOpen={boot.shell.setSettingsOpen}
+            language={boot.shell.language}
+            handleLanguageChange={boot.shell.handleLanguageChange}
+            minimizeToTrayOnClose={boot.shell.minimizeToTrayOnClose}
+            setMinimizeToTrayOnClose={boot.shell.setMinimizeToTrayOnClose}
+            defaultOutputDir={boot.shell.defaultOutputDir}
+            setDefaultOutputDir={boot.shell.setDefaultOutputDir}
+            executionHistoryLimit={boot.shell.executionHistoryLimit}
+            setExecutionHistoryLimit={boot.shell.setExecutionHistoryLimit}
+            environmentProviderIds={boot.shell.environmentProviderIds}
+            setEnvironmentProviderIds={boot.shell.setEnvironmentProviderIds}
+            isRerunChecklistEnabled={boot.publish.isRerunChecklistEnabled}
+            setIsRerunChecklistEnabled={boot.publish.setIsRerunChecklistEnabled}
+            theme={boot.shell.theme}
+            setTheme={boot.shell.setTheme}
+            handleConfigDialogOpenChange={boot.shell.handleConfigDialogOpenChange}
+            environmentLastCheck={boot.repo.environmentLastCheck}
+            openEnvironmentDialog={boot.shell.openEnvironmentDialog}
+            activeProviderId={boot.publish.activeProviderId}
+            activeProviderUsesProjectFile={boot.publish.activeProviderUsesProjectFile}
+            activeProvider={boot.publish.activeProvider}
+            availableProviders={boot.publish.providerRuntimeProviders}
+            updaterState={boot.shell.updaterState}
             checkForUpdates={async () => {
-              await boot.checkForUpdates();
+              await boot.shell.checkForUpdates();
             }}
-            installAvailableUpdate={boot.installAvailableUpdate}
-            openUpdaterHelpTarget={boot.openUpdaterHelpTarget}
-            rerunChecklistOpen={boot.rerunChecklistOpen}
-            pendingRerunRecord={boot.pendingRerunRecord}
-            selectedRepoCurrentBranch={boot.selectedRepo?.currentBranch}
-            rerunChecklistState={boot.rerunChecklistState}
-            rerunT={boot.rerunT}
-            setRerunChecklistOpen={boot.setRerunChecklistOpen}
-            setRerunChecklistState={boot.setRerunChecklistState}
-            closeRerunChecklistDialog={boot.closeRerunChecklistDialog}
-            confirmRerunWithChecklist={boot.confirmRerunWithChecklist}
-            releaseChecklistOpen={boot.releaseChecklistOpen}
-            setReleaseChecklistOpen={boot.setReleaseChecklistOpen}
-            publishResult={boot.publishResult}
-            packageResult={boot.artifactActionState.packageResult}
-            signResult={boot.artifactActionState.signResult}
-            handleOpenSettings={boot.handleOpenSettings}
-            selectedRepoExists={Boolean(boot.selectedRepo)}
-            commandImportOpen={boot.commandImportOpen}
-            setCommandImportOpen={boot.setCommandImportOpen}
-            handleCommandImport={boot.handleCommandImport}
-            quickCreateProfileOpen={boot.quickCreateProfileOpen}
-            quickCreateTemplateId={boot.quickCreateTemplateId}
-            quickCreateTemplateOptions={boot.quickCreateTemplateOptions}
-            quickCreateProfileName={boot.quickCreateProfileName}
-            quickCreateProfileGroup={boot.quickCreateProfileGroup}
-            quickCreateProfileGroupOptions={boot.quickCreateProfileGroupOptions}
-            quickCreateProfileCustomGroup={boot.quickCreateProfileCustomGroup}
-            quickCreateProfileDraft={boot.quickCreateProfileDraft}
-            projectFrameworkOptions={boot.projectFrameworkOptions}
-            quickCreateProfileSaving={boot.quickCreateProfileSaving}
-            quickCreateEditing={boot.isQuickCreateEditing}
-            dotnetSchema={boot.providerSchemas.dotnet}
-            quickCreateGroupDefaultValue={boot.QUICK_CREATE_PROFILE_GROUP_DEFAULT}
-            quickCreateGroupCustomValue={boot.QUICK_CREATE_PROFILE_GROUP_CUSTOM}
-            profileT={boot.profileT}
-            appT={boot.appT}
-            cancelLabel={boot.rerunT.cancel || "取消"}
-            handleQuickCreateProfileOpenChange={boot.handleQuickCreateProfileOpenChange}
-            applyQuickCreateTemplate={boot.applyQuickCreateTemplate}
-            setQuickCreateProfileName={boot.setQuickCreateProfileName}
-            setQuickCreateProfileGroup={boot.setQuickCreateProfileGroup}
-            setQuickCreateProfileCustomGroup={boot.setQuickCreateProfileCustomGroup}
-            updateQuickCreateProfileDraft={boot.updateQuickCreateProfileDraft}
-            handleQuickCreateProfileSave={boot.handleQuickCreateProfileSave}
-            configDialogOpen={boot.configDialogOpen}
-            profileManagement={boot.profileManagement}
-            handleLoadProfile={boot.handleLoadProfile}
-            selectedRepoId={boot.selectedRepoId}
-            customConfig={boot.customConfig}
-            activeProviderParameters={boot.activeProviderParameters}
-            projectFile={boot.projectInfo?.project_file}
-            selectedRepoPath={boot.selectedRepo?.path}
+            installAvailableUpdate={boot.shell.installAvailableUpdate}
+            openUpdaterHelpTarget={boot.shell.openUpdaterHelpTarget}
+            rerunChecklistOpen={boot.publish.rerunChecklistOpen}
+            pendingRerunRecord={boot.publish.pendingRerunRecord}
+            selectedRepoCurrentBranch={boot.repo.selectedRepo?.currentBranch}
+            rerunChecklistState={boot.publish.rerunChecklistState}
+            rerunT={boot.shell.rerunT}
+            setRerunChecklistOpen={boot.publish.setRerunChecklistOpen}
+            setRerunChecklistState={boot.publish.setRerunChecklistState}
+            closeRerunChecklistDialog={boot.publish.closeRerunChecklistDialog}
+            confirmRerunWithChecklist={boot.publish.confirmRerunWithChecklist}
+            releaseChecklistOpen={boot.publish.releaseChecklistOpen}
+            setReleaseChecklistOpen={boot.publish.setReleaseChecklistOpen}
+            publishResult={boot.publish.publishResult}
+            packageResult={boot.publish.artifactActionState.packageResult}
+            signResult={boot.publish.artifactActionState.signResult}
+            handleOpenSettings={boot.shell.handleOpenSettings}
+            selectedRepoExists={Boolean(boot.repo.selectedRepo)}
+            commandImportOpen={boot.shell.commandImportOpen}
+            setCommandImportOpen={boot.shell.setCommandImportOpen}
+            handleCommandImport={boot.publish.handleCommandImport}
+            quickCreateProfileOpen={boot.publish.quickCreateProfileOpen}
+            quickCreateTemplateId={boot.publish.quickCreateTemplateId}
+            quickCreateTemplateOptions={boot.publish.quickCreateTemplateOptions}
+            quickCreateProfileName={boot.publish.quickCreateProfileName}
+            quickCreateProfileGroup={boot.publish.quickCreateProfileGroup}
+            quickCreateProfileGroupOptions={boot.publish.quickCreateProfileGroupOptions}
+            quickCreateProfileCustomGroup={boot.publish.quickCreateProfileCustomGroup}
+            quickCreateProfileDraft={boot.publish.quickCreateProfileDraft}
+            projectFrameworkOptions={boot.publish.projectFrameworkOptions}
+            quickCreateProfileSaving={boot.publish.quickCreateProfileSaving}
+            quickCreateEditing={boot.publish.isQuickCreateEditing}
+            dotnetSchema={boot.publish.providerSchemas.dotnet}
+            quickCreateGroupDefaultValue={boot.publish.QUICK_CREATE_PROFILE_GROUP_DEFAULT}
+            quickCreateGroupCustomValue={boot.publish.QUICK_CREATE_PROFILE_GROUP_CUSTOM}
+            profileT={boot.shell.profileT}
+            appT={boot.shell.appT}
+            cancelLabel={boot.shell.rerunT.cancel || "取消"}
+            handleQuickCreateProfileOpenChange={boot.publish.handleQuickCreateProfileOpenChange}
+            applyQuickCreateTemplate={boot.publish.applyQuickCreateTemplate}
+            setQuickCreateProfileName={boot.publish.setQuickCreateProfileName}
+            setQuickCreateProfileGroup={boot.publish.setQuickCreateProfileGroup}
+            setQuickCreateProfileCustomGroup={boot.publish.setQuickCreateProfileCustomGroup}
+            updateQuickCreateProfileDraft={boot.publish.updateQuickCreateProfileDraft}
+            handleQuickCreateProfileSave={boot.publish.handleQuickCreateProfileSave}
+            configDialogOpen={boot.shell.configDialogOpen}
+            profileManagement={boot.publish.profileManagement}
+            handleLoadProfile={boot.publish.handleLoadProfile}
+            selectedRepoId={boot.repo.selectedRepoId}
+            customConfig={boot.publish.customConfig}
+            activeProviderParameters={boot.publish.activeProviderParameters}
+            projectFile={boot.publish.projectInfo?.project_file}
+            selectedRepoPath={boot.repo.selectedRepo?.path}
           />
         </Suspense>
       ) : null}

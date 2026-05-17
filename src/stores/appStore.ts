@@ -24,20 +24,6 @@ import {
 } from "@/lib/store";
 import type { Repository, RepoPublishConfig } from "@/types/repository";
 
-// ── Debounce timers (module-level, like useRef) ──
-const DEBOUNCE_DELAY = 500;
-
-let uiDebounceTimer: ReturnType<typeof setTimeout> | null = null;
-let publishDebounceTimer: ReturnType<typeof setTimeout> | null = null;
-let preferenceDebounceTimer: ReturnType<typeof setTimeout> | null = null;
-
-// ── Mutation queues ──
-let recentMutationQueue: Promise<void> = Promise.resolve();
-let repositoryMutationQueue: Promise<void> = Promise.resolve();
-
-// ── Pending publish state (per repo, like useRef Map) ──
-const pendingPublishState = new Map<string, PublishStatePatch>();
-
 // ── Types ──
 type PublishStatePatch = {
   selectedPreset?: string;
@@ -142,6 +128,20 @@ interface AppStore extends AppState {
 }
 
 export const useAppStore = create<AppStore>((set, get) => {
+  // ── Debounce timers (closure-scoped, like useRef) ──
+  const DEBOUNCE_DELAY = 500;
+
+  let uiDebounceTimer: ReturnType<typeof setTimeout> | null = null;
+  let publishDebounceTimer: ReturnType<typeof setTimeout> | null = null;
+  let preferenceDebounceTimer: ReturnType<typeof setTimeout> | null = null;
+
+  // ── Mutation queues ──
+  let recentMutationQueue: Promise<void> = Promise.resolve();
+  let repositoryMutationQueue: Promise<void> = Promise.resolve();
+
+  // ── Pending publish state (per repo, like useRef Map) ──
+  const pendingPublishState = new Map<string, PublishStatePatch>();
+
   // ── Internal helpers ──
 
   const handlePersistenceFailure = async (title: string, err: unknown) => {
