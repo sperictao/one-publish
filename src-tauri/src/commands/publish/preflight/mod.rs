@@ -2,11 +2,13 @@ mod access;
 mod path_validation;
 
 use access::{
-    evaluate_publish_output_access,
+    evaluate_publish_output_access, evaluate_publish_output_access_for_roots,
     find_protected_root_for_path, is_protected_root_path, platform_protected_roots,
+    resolve_existing_probe_directory, resolve_probe_directory, ProtectedRoot,
 };
 use path_validation::{
-    evaluate_publish_output_validation, normalize_lexical_path,
+    evaluate_publish_output_validation, looks_like_posix_absolute_path,
+    looks_like_windows_absolute_path, looks_like_windows_path, normalize_lexical_path,
 };
 
 use super::output::{configured_output_dir, infer_output_dir, should_delete_existing_files};
