@@ -65,14 +65,25 @@ test.describe("Full Publish Flow — Happy Path", () => {
   test("publish command updates when switching presets", async ({ page }) => {
     await gotoAppWithPublishConfig(page);
 
-    // Default preset is FolderProfile — command preview shows dotnet publish
+    // Default preset is FolderProfile — verify its button exists
+    const folder = page.locator("[data-testid='pubxml-select-FolderProfile']");
+    const zip = page.locator("[data-testid='pubxml-select-ZipProfile']");
+
+    await expect(folder).toBeVisible({ timeout: 10000 });
+    await expect(zip).toBeVisible({ timeout: 10000 });
+
+    // Command preview should be visible
     const commandPreview = page.locator("[data-testid='publish-command-preview']");
     await expect(commandPreview).toBeVisible({ timeout: 10000 });
 
     // Click on ZipProfile
-    await page.locator("[data-list-item-id='pubxml:ZipProfile']").click();
+    await zip.click();
 
-    // Command preview should still be visible (specific command may differ)
+    // Both buttons should still be visible after switching
+    await expect(zip).toBeVisible();
+    await expect(folder).toBeVisible();
+
+    // Command preview should still be visible after switching
     await expect(commandPreview).toBeVisible({ timeout: 5000 });
   });
 });
