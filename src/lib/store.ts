@@ -291,8 +291,9 @@ export async function updateUIState(params: {
   middlePanelWidth?: number;
   selectedRepoId?: string | null;
   clearSelectedRepoId?: boolean;
-}): Promise<void> {
-  await invoke("update_ui_state", params);
+}): Promise<AppState> {
+  const state = await invoke<TauriAppState>("update_ui_state", params);
+  return normalizeAppState(state);
 }
 
 export async function updatePublishState(params: {
@@ -300,8 +301,9 @@ export async function updatePublishState(params: {
   selectedPreset?: string;
   isCustomMode?: boolean;
   customConfig?: PublishConfigStore;
-}): Promise<void> {
-  await invoke("update_publish_state", params);
+}): Promise<AppState> {
+  const state = await invoke<TauriAppState>("update_publish_state", params);
+  return normalizeAppState(state);
 }
 
 export async function updatePreferences(params: {
