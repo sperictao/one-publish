@@ -88,7 +88,9 @@ pub async fn check_repository_branch_connectivity(
     path: String,
     current_branch: Option<String>,
 ) -> RepositoryBranchConnectivityResult {
-    let _timer = crate::commands::middleware::CommandTimer::new("commands::repository::connector::check_repository_branch_connectivity");
+    let _timer = crate::commands::middleware::CommandTimer::new(
+        "commands::repository::connector::check_repository_branch_connectivity",
+    );
     let repo_path = PathBuf::from(&path);
 
     if !repo_path.exists() || !repo_path.is_dir() {
@@ -364,6 +366,8 @@ pub async fn scan_repository_branches(
     path: String,
     refresh_remote: Option<bool>,
 ) -> Result<RepositoryBranchScanResult, crate::errors::AppError> {
-    let _timer = crate::commands::middleware::CommandTimer::new("commands::repository::connector::scan_repository_branches");
+    let _timer = crate::commands::middleware::CommandTimer::new(
+        "commands::repository::connector::scan_repository_branches",
+    );
     scan_repository_branches_internal(path, refresh_remote.unwrap_or(true)).await
 }

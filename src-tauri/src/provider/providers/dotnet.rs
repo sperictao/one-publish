@@ -1,8 +1,7 @@
 use crate::provider::registry::{BuiltInProvider, BuiltInProviderKind};
 use crate::provider::{
-    ProviderCapabilities, ProviderCatalogEntry, ProviderManifest,
-    ProviderProjectFileMatcher, ProviderProjectPathKind, ProviderRepositoryDiscovery,
-    ProviderRepositoryMarker,
+    ProviderCapabilities, ProviderCatalogEntry, ProviderManifest, ProviderProjectFileMatcher,
+    ProviderProjectPathKind, ProviderRepositoryDiscovery, ProviderRepositoryMarker,
 };
 
 const DOTNET_PROJECT_EXTENSIONS: &[&str] = &["csproj", "fsproj", "vbproj"];

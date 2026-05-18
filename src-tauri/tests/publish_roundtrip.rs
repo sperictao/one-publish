@@ -5,8 +5,7 @@
 //! Uses temp directories with real files to satisfy path existence checks.
 
 use one_publish_lib::commands::{
-    preflight_publish_output, render_provider_publish,
-    PublishOutputAccessStatus,
+    preflight_publish_output, render_provider_publish, PublishOutputAccessStatus,
 };
 use one_publish_lib::spec::{PublishSpec, SpecValue, SPEC_VERSION};
 use std::collections::BTreeMap;
@@ -53,7 +52,11 @@ fn render_dotnet_release_publish() {
         cmd.program
     );
     let args_str = cmd.args.join(" ");
-    assert!(args_str.contains("publish"), "args should contain 'publish': {}", args_str);
+    assert!(
+        args_str.contains("publish"),
+        "args should contain 'publish': {}",
+        args_str
+    );
     assert!(
         args_str.contains("configuration") || args_str.contains("Release"),
         "args should contain configuration or Release: {}",
@@ -109,7 +112,10 @@ fn different_configurations_produce_different_args() {
     let (_dir, project_path) = setup_project();
 
     let mut release_params = BTreeMap::new();
-    release_params.insert("configuration".to_string(), SpecValue::String("Release".to_string()));
+    release_params.insert(
+        "configuration".to_string(),
+        SpecValue::String("Release".to_string()),
+    );
     let release_spec = PublishSpec {
         version: SPEC_VERSION,
         provider_id: "dotnet".to_string(),
@@ -118,7 +124,10 @@ fn different_configurations_produce_different_args() {
     };
 
     let mut debug_params = BTreeMap::new();
-    debug_params.insert("configuration".to_string(), SpecValue::String("Debug".to_string()));
+    debug_params.insert(
+        "configuration".to_string(),
+        SpecValue::String("Debug".to_string()),
+    );
     let debug_spec = PublishSpec {
         version: SPEC_VERSION,
         provider_id: "dotnet".to_string(),
@@ -140,8 +149,14 @@ fn different_configurations_produce_different_args() {
 fn spec_with_multiple_flags_renders_all() {
     let (_dir, project_path) = setup_project();
     let mut params = BTreeMap::new();
-    params.insert("configuration".to_string(), SpecValue::String("Release".to_string()));
-    params.insert("runtime".to_string(), SpecValue::String("linux-x64".to_string()));
+    params.insert(
+        "configuration".to_string(),
+        SpecValue::String("Release".to_string()),
+    );
+    params.insert(
+        "runtime".to_string(),
+        SpecValue::String("linux-x64".to_string()),
+    );
     params.insert("self_contained".to_string(), SpecValue::Bool(true));
 
     let spec = PublishSpec {

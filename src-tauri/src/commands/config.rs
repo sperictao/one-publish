@@ -65,7 +65,8 @@ pub async fn apply_imported_config(
     repo_id: String,
     profiles: Vec<ConfigProfile>,
 ) -> Result<(), crate::errors::AppError> {
-    let _timer = crate::commands::middleware::CommandTimer::new("commands::config::apply_imported_config");
+    let _timer =
+        crate::commands::middleware::CommandTimer::new("commands::config::apply_imported_config");
     let mut state = crate::store::get_state();
     let repo = state
         .repositories

@@ -84,7 +84,9 @@ pub fn render_preflight_markdown(report: &Value) -> Result<String, crate::errors
     Ok(lines.join("\n"))
 }
 
-pub fn render_execution_snapshot_markdown(snapshot: &Value) -> Result<String, crate::errors::AppError> {
+pub fn render_execution_snapshot_markdown(
+    snapshot: &Value,
+) -> Result<String, crate::errors::AppError> {
     let generated_at = snapshot
         .get("generatedAt")
         .and_then(Value::as_str)
@@ -222,7 +224,9 @@ pub fn render_execution_snapshot_markdown(snapshot: &Value) -> Result<String, cr
     Ok(lines.join("\n"))
 }
 
-pub fn render_failure_group_bundle_markdown(bundle: &Value) -> Result<String, crate::errors::AppError> {
+pub fn render_failure_group_bundle_markdown(
+    bundle: &Value,
+) -> Result<String, crate::errors::AppError> {
     let generated_at = bundle
         .get("generatedAt")
         .and_then(Value::as_str)

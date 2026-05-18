@@ -1,10 +1,10 @@
-mod scanner;
 mod connector;
 mod resolver;
+mod scanner;
 
-pub use scanner::*;
 pub use connector::*;
 pub use resolver::*;
+pub use scanner::*;
 
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
@@ -61,7 +61,8 @@ pub struct ProjectScanCandidates {
 pub async fn scan_project(
     start_path: Option<String>,
 ) -> Result<ProjectInfo, crate::errors::AppError> {
-    let _timer = crate::commands::middleware::CommandTimer::new("commands::repository::mod::scan_project");
+    let _timer =
+        crate::commands::middleware::CommandTimer::new("commands::repository::mod::scan_project");
     let candidates = scan_project_candidates(start_path).await?;
 
     match candidates.project_files.as_slice() {
@@ -86,7 +87,9 @@ pub async fn read_project_publish_profile(
     project_file: String,
     profile_name: String,
 ) -> Result<ProjectPublishProfileFile, crate::errors::AppError> {
-    let _timer = crate::commands::middleware::CommandTimer::new("commands::repository::mod::read_project_publish_profile");
+    let _timer = crate::commands::middleware::CommandTimer::new(
+        "commands::repository::mod::read_project_publish_profile",
+    );
     let project_file_path = PathBuf::from(project_file);
     if !project_file_path.is_file() {
         return Err(repository_error(

@@ -420,7 +420,9 @@ pub fn detect_provider_from_path(path: &Path) -> Option<String> {
 
 #[tauri::command]
 pub async fn detect_repository_provider(path: String) -> Result<String, crate::errors::AppError> {
-    let _timer = crate::commands::middleware::CommandTimer::new("commands::repository::scanner::detect_repository_provider");
+    let _timer = crate::commands::middleware::CommandTimer::new(
+        "commands::repository::scanner::detect_repository_provider",
+    );
     let repo_path = PathBuf::from(&path);
 
     if !repo_path.exists() {
@@ -456,7 +458,9 @@ pub async fn detect_repository_provider(path: String) -> Result<String, crate::e
 /// An empty list is valid – it simply means nothing was found.
 #[tauri::command]
 pub async fn scan_project_files(path: String) -> Result<Vec<String>, crate::errors::AppError> {
-    let _timer = crate::commands::middleware::CommandTimer::new("commands::repository::scanner::scan_project_files");
+    let _timer = crate::commands::middleware::CommandTimer::new(
+        "commands::repository::scanner::scan_project_files",
+    );
     let root = PathBuf::from(&path);
     let root = normalize_scan_root(&root)?;
 

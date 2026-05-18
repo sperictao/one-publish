@@ -76,7 +76,10 @@ fn provider_catalog_entries_are_well_formed() {
     for entry in entries {
         assert!(!entry.id.is_empty(), "catalog entry should have an id");
         assert!(!entry.label.is_empty(), "catalog entry should have a label");
-        assert!(!entry.command_example.is_empty(), "catalog entry should have a command_example");
+        assert!(
+            !entry.command_example.is_empty(),
+            "catalog entry should have a command_example"
+        );
     }
 }
 
@@ -85,7 +88,10 @@ fn provider_catalog_entries_are_well_formed() {
 #[test]
 fn spec_construction() {
     let mut params = BTreeMap::new();
-    params.insert("configuration".to_string(), SpecValue::String("Release".to_string()));
+    params.insert(
+        "configuration".to_string(),
+        SpecValue::String("Release".to_string()),
+    );
     params.insert("selfContained".to_string(), SpecValue::Bool(true));
 
     let spec = PublishSpec {

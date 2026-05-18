@@ -6,7 +6,9 @@ use super::*;
 pub async fn scan_project_candidates(
     start_path: Option<String>,
 ) -> Result<ProjectScanCandidates, crate::errors::AppError> {
-    let _timer = crate::commands::middleware::CommandTimer::new("commands::repository::resolver::scan_project_candidates");
+    let _timer = crate::commands::middleware::CommandTimer::new(
+        "commands::repository::resolver::scan_project_candidates",
+    );
     let search_path = match start_path {
         Some(path) => PathBuf::from(path),
         None => std::env::current_dir().map_err(|error| {
@@ -23,7 +25,9 @@ pub async fn scan_project_candidates(
 pub async fn resolve_project_info(
     project_file: String,
 ) -> Result<ProjectInfo, crate::errors::AppError> {
-    let _timer = crate::commands::middleware::CommandTimer::new("commands::repository::resolver::resolve_project_info");
+    let _timer = crate::commands::middleware::CommandTimer::new(
+        "commands::repository::resolver::resolve_project_info",
+    );
     let project_file_path = PathBuf::from(&project_file);
     if !project_file_path.is_file() || !is_dotnet_project_file(&project_file_path) {
         return Err(repository_error(
