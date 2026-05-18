@@ -206,3 +206,40 @@ Fix stale publish config derivation so pubxml profile selection updates the midd
 ### Next Steps
 
 - None - task complete
+
+
+## Session 7: Deepen publish architecture seams
+
+**Date**: 2026-05-18
+**Task**: Deepen publish architecture seams
+**Branch**: `main`
+
+### Summary
+
+Deepened publish config, profile, publish runner, store mutation, preset catalog, and Rust preflight seams; split the work into focused commits and archived the completed Trellis task.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `64bc266` | (see git log) |
+| `421a95c` | (see git log) |
+| `8706c61` | (see git log) |
+| `4dbf921` | (see git log) |
+| `94fe94c` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
