@@ -1,9 +1,6 @@
 use std::path::{Component, Path, PathBuf};
 
-use super::{
-    PublishOutputValidation, PublishOutputValidationIssue,
-    PublishOutputValidationStatus,
-};
+use super::{PublishOutputValidation, PublishOutputValidationIssue, PublishOutputValidationStatus};
 
 pub(super) fn normalize_lexical_path(path: &Path) -> PathBuf {
     let mut normalized = PathBuf::new();
@@ -43,7 +40,9 @@ pub(super) fn evaluate_publish_output_validation(
     }
 }
 
-pub(super) fn detect_output_path_validation_issue(path: &str) -> Option<PublishOutputValidationIssue> {
+pub(super) fn detect_output_path_validation_issue(
+    path: &str,
+) -> Option<PublishOutputValidationIssue> {
     #[cfg(target_os = "windows")]
     {
         detect_windows_output_path_validation_issue(path)
@@ -57,7 +56,9 @@ pub(super) fn detect_output_path_validation_issue(path: &str) -> Option<PublishO
 }
 
 #[cfg(target_os = "windows")]
-pub(super) fn detect_windows_output_path_validation_issue(path: &str) -> Option<PublishOutputValidationIssue> {
+pub(super) fn detect_windows_output_path_validation_issue(
+    path: &str,
+) -> Option<PublishOutputValidationIssue> {
     if looks_like_posix_absolute_path(path) {
         return Some(PublishOutputValidationIssue::PosixAbsolutePathOnWindows);
     }

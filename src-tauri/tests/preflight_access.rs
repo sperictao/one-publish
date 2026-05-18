@@ -5,9 +5,7 @@
 //! validation logic.
 
 use one_publish_lib::commands::preflight_publish_output;
-use one_publish_lib::commands::{
-    PublishOutputAccessStatus, PublishOutputValidationStatus,
-};
+use one_publish_lib::commands::{PublishOutputAccessStatus, PublishOutputValidationStatus};
 use one_publish_lib::spec::{PublishSpec, SpecValue, SPEC_VERSION};
 use std::collections::BTreeMap;
 use std::fs;
@@ -55,10 +53,7 @@ fn preflight_with_default_output_dir_is_not_protected() {
 
 #[test]
 fn preflight_with_temp_dir_is_not_protected() {
-    let temp = std::env::temp_dir().join(format!(
-        "one-publish-test-{}",
-        std::process::id()
-    ));
+    let temp = std::env::temp_dir().join(format!("one-publish-test-{}", std::process::id()));
     fs::create_dir_all(&temp).unwrap();
 
     let spec = make_spec(temp.to_str().unwrap());
@@ -88,9 +83,10 @@ fn preflight_output_dir_matches_specified() {
         "output_dir should not be empty"
     );
     // macOS normalizes /tmp to /private/tmp, so check for either variant
-    let contains_path = result.output_dir.contains("tmp")
-        || result.output_dir.contains("one-publish-test-output");
-    assert!(contains_path,
+    let contains_path =
+        result.output_dir.contains("tmp") || result.output_dir.contains("one-publish-test-output");
+    assert!(
+        contains_path,
         "output_dir should contain expected path component, got: {}",
         result.output_dir
     );
@@ -126,7 +122,10 @@ fn preflight_result_has_all_required_fields() {
     let result = preflight_publish_output(spec);
 
     // Verify the structure is complete
-    assert!(!result.output_dir.is_empty(), "output_dir should not be empty");
+    assert!(
+        !result.output_dir.is_empty(),
+        "output_dir should not be empty"
+    );
     // configured_output_dir may be null for some paths
     // access.detail may be null
     // validation.issue may be null

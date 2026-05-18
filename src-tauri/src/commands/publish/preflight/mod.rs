@@ -1,22 +1,15 @@
 mod access;
 mod path_validation;
 
-use access::{
-    evaluate_publish_output_access, evaluate_publish_output_access_for_roots,
-    find_protected_root_for_path, is_protected_root_path, platform_protected_roots,
-    resolve_existing_probe_directory, resolve_probe_directory, ProtectedRoot,
-};
-use path_validation::{
-    evaluate_publish_output_validation, looks_like_posix_absolute_path,
-    looks_like_windows_absolute_path, looks_like_windows_path, normalize_lexical_path,
-};
+use access::evaluate_publish_output_access;
+pub(crate) use access::{is_protected_root_output_dir, protected_location_for_output_dir};
+use path_validation::evaluate_publish_output_validation;
 
 use super::output::{configured_output_dir, infer_output_dir, should_delete_existing_files};
 use crate::spec::PublishSpec;
 use serde::Serialize;
 use std::path::Path;
 use ts_rs::TS;
-
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, TS)]
 #[serde(rename_all = "snake_case")]
@@ -169,7 +162,6 @@ impl PublishOutputPreflightResult {
     }
 }
 
-
 pub(crate) fn preflight_publish_output(spec: &PublishSpec) -> PublishOutputPreflightResult {
     let context = resolve_publish_output_context(spec);
     let access_intent = resolve_publish_output_access_intent(spec);
@@ -213,42 +205,22 @@ fn resolve_publish_output_context(spec: &PublishSpec) -> PublishOutputContext {
     }
 }
 
-#[cfg(target_os = "macos")]
-pub(crate) fn protected_location_for_output_dir(
-    output_dir: &str,
-) -> Option<ProtectedDirectoryLocation> {
-    let trimmed = output_dir.trim();
-    if trimmed.is_empty() {
-        return None;
-    }
-
-    let protected_roots = platform_protected_roots();
-    let normalized_output_dir = normalize_lexical_path(Path::new(trimmed));
-    find_protected_root_for_path(&normalized_output_dir, &protected_roots).map(|root| root.location)
-}
-
-pub(crate) fn is_protected_root_output_dir(output_dir: &str) -> bool {
-    let trimmed = output_dir.trim();
-    if trimmed.is_empty() {
-        return false;
-    }
-
-    let protected_roots = platform_protected_roots();
-    let normalized_output_dir = normalize_lexical_path(Path::new(trimmed));
-    is_protected_root_path(&normalized_output_dir, &protected_roots)
-}
-
-
 #[cfg(test)]
 mod tests {
-    use super::{
+    use super::access::{
         evaluate_publish_output_access_for_roots, find_protected_root_for_path,
-        is_protected_root_path, looks_like_posix_absolute_path, looks_like_windows_absolute_path,
-        looks_like_windows_path, normalize_lexical_path, preflight_publish_output,
-        resolve_existing_probe_directory, resolve_probe_directory, resolve_publish_output_context,
-        ProtectedDirectoryLocation, ProtectedRoot, PublishOutputAccess, PublishOutputAccessIntent,
-        PublishOutputAccessStatus, PublishOutputPreflightResult, PublishOutputValidation,
-        PublishOutputValidationIssue, PublishOutputValidationStatus,
+        is_protected_root_path, resolve_existing_probe_directory, resolve_probe_directory,
+        ProtectedRoot,
+    };
+    use super::path_validation::{
+        looks_like_posix_absolute_path, looks_like_windows_absolute_path, looks_like_windows_path,
+        normalize_lexical_path,
+    };
+    use super::{
+        preflight_publish_output, resolve_publish_output_context, ProtectedDirectoryLocation,
+        PublishOutputAccess, PublishOutputAccessIntent, PublishOutputAccessStatus,
+        PublishOutputPreflightResult, PublishOutputValidation, PublishOutputValidationIssue,
+        PublishOutputValidationStatus,
     };
     use crate::spec::{PublishSpec, SpecValue, SPEC_VERSION};
     use std::collections::BTreeMap;

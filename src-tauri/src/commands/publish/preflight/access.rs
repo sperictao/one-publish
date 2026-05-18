@@ -2,17 +2,13 @@ use std::fs::{self, OpenOptions};
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use super::{
-    PublishOutputAccess, PublishOutputAccessIntent,
-    ProtectedDirectoryLocation,
-};
 use super::path_validation::normalize_lexical_path;
+use super::{ProtectedDirectoryLocation, PublishOutputAccess, PublishOutputAccessIntent};
 
 pub(super) struct ProtectedRoot {
     pub(super) location: ProtectedDirectoryLocation,
     pub(super) path: PathBuf,
 }
-
 
 #[cfg(target_os = "macos")]
 pub(super) fn macos_protected_roots() -> Vec<ProtectedRoot> {
@@ -154,6 +150,7 @@ pub(super) fn platform_protected_roots() -> Vec<ProtectedRoot> {
     Vec::new()
 }
 
+#[cfg(test)]
 pub(super) fn resolve_existing_probe_directory(path: &Path, fallback_root: &Path) -> PathBuf {
     resolve_probe_directory(path, fallback_root, PublishOutputAccessIntent::WriteOutput)
 }
