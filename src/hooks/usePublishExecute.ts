@@ -15,7 +15,6 @@ import {
   type ProviderPublishSpec,
 } from "@/lib/publishRuntime";
 import type { UsePublishValidateResult } from "@/hooks/usePublishValidate";
-import type { SpecValue } from "@/generated/tauri-contracts";
 import { emit } from "@/lib/eventBus";
 import {
   type PublishCancelledEvent,
@@ -33,13 +32,6 @@ export interface UsePublishExecuteParams {
   appT: TranslationMap;
   publishT: TranslationMap;
   selectedRepoId: string | null;
-  selectedRepo: { path: string } | null;
-  activeProviderId: string;
-  activeProviderUsesProjectFile: boolean;
-  selectedPreset: string;
-  isCustomMode: boolean;
-  projectInfo: { project_file?: string } | null;
-  specVersion: number;
   pushRecentConfig: (key: string, repoId?: string | null) => void;
   beginLogCapture: () => void;
   hideLogCapture: () => void;
@@ -61,13 +53,6 @@ export function usePublishExecute({
   appT,
   publishT,
   selectedRepoId,
-  selectedRepo,
-  activeProviderId,
-  activeProviderUsesProjectFile,
-  selectedPreset,
-  isCustomMode,
-  projectInfo,
-  specVersion,
   pushRecentConfig,
   beginLogCapture,
   hideLogCapture,
@@ -331,66 +316,31 @@ export function usePublishExecute({
   );
 
   const startPublish = useCallback(async () => {
-    if (!selectedRepo) {
+    const blocker = validate.getPublishStartBlocker();
+
+    if (blocker === "missing-repository") {
       toast.error(appT.selectRepositoryFirst || "请先选择仓库");
       return;
     }
 
-    if (activeProviderUsesProjectFile && !projectInfo) {
+    if (blocker === "missing-project") {
       toast.error(appT.selectDotnetProjectFirst || "请先选择 .NET 项目");
       return;
     }
 
-    if (
-      activeProviderId === "dotnet" &&
-      projectInfo &&
-      !isCustomMode &&
-      selectedPreset.startsWith("profile-")
-    ) {
-      const projectProfile =
-        validate.resolvedProjectProfile ??
-        (await validate.resolveSelectedProjectProfile());
-
-      if (projectProfile) {
-        await runPublishSpec(
-          {
-            version: specVersion,
-            provider_id: "dotnet",
-            project_path: projectInfo.project_file!,
-            parameters:
-              projectProfile.parameters as Record<string, SpecValue>,
-          },
-          {
-            repoId: selectedRepoId,
-            recentConfigKey:
-              validate.recentConfigKeyForCurrentSelection ?? undefined,
-          }
-        );
-        return;
-      }
-    }
-
-    const spec = validate.buildPublishSpec();
-    if (!spec) {
+    const request = await validate.resolvePublishRequest();
+    if (!request) {
       return;
     }
 
-    await runPublishSpec(spec, {
+    await runPublishSpec(request.spec, {
       repoId: selectedRepoId,
-      recentConfigKey:
-        validate.recentConfigKeyForCurrentSelection ?? undefined,
+      recentConfigKey: request.recentConfigKey,
     });
   }, [
-    activeProviderId,
-    activeProviderUsesProjectFile,
     appT,
-    isCustomMode,
-    projectInfo,
     runPublishSpec,
     selectedRepoId,
-    selectedRepo,
-    selectedPreset,
-    specVersion,
     validate,
   ]);
 

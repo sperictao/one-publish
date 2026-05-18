@@ -34,114 +34,14 @@ import { useI18n, type Language } from "@/hooks/useI18n";
 import type { PublishConfigStore } from "@/lib/store";
 import { usePublishStore } from "@/store/publishStore";
 import { buildDotnetProfileParameters } from "@/lib/dotnetPublishConfig";
-
-// Types
-interface DotnetPreset {
-  id: string;
-  name: string;
-  description: string;
-  config: {
-    configuration: string;
-    runtime: string;
-    self_contained: boolean;
-  };
-}
+import {
+  DEFAULT_DOTNET_PRESET_ID,
+  DOTNET_PRESETS,
+} from "@/lib/dotnetPresets";
 
 type RightPanelView = "home" | "history";
 
 const SPEC_VERSION = 1;
-
-// Preset configurations
-const PRESETS: DotnetPreset[] = [
-  {
-    id: "release-fd",
-    name: "Release - 框架依赖",
-    description: "推荐用于开发/测试",
-    config: { configuration: "Release", runtime: "", self_contained: false },
-  },
-  {
-    id: "release-win-x64",
-    name: "Release - Windows x64",
-    description: "自包含部署",
-    config: {
-      configuration: "Release",
-      runtime: "win-x64",
-      self_contained: true,
-    },
-  },
-  {
-    id: "release-osx-arm64",
-    name: "Release - macOS ARM64",
-    description: "Apple Silicon",
-    config: {
-      configuration: "Release",
-      runtime: "osx-arm64",
-      self_contained: true,
-    },
-  },
-  {
-    id: "release-osx-x64",
-    name: "Release - macOS x64",
-    description: "Intel Mac",
-    config: {
-      configuration: "Release",
-      runtime: "osx-x64",
-      self_contained: true,
-    },
-  },
-  {
-    id: "release-linux-x64",
-    name: "Release - Linux x64",
-    description: "自包含部署",
-    config: {
-      configuration: "Release",
-      runtime: "linux-x64",
-      self_contained: true,
-    },
-  },
-  {
-    id: "debug-fd",
-    name: "Debug - 框架依赖",
-    description: "调试模式",
-    config: { configuration: "Debug", runtime: "", self_contained: false },
-  },
-  {
-    id: "debug-win-x64",
-    name: "Debug - Windows x64",
-    description: "自包含部署",
-    config: {
-      configuration: "Debug",
-      runtime: "win-x64",
-      self_contained: true,
-    },
-  },
-  {
-    id: "debug-osx-arm64",
-    name: "Debug - macOS ARM64",
-    description: "Apple Silicon",
-    config: {
-      configuration: "Debug",
-      runtime: "osx-arm64",
-      self_contained: true,
-    },
-  },
-  {
-    id: "debug-osx-x64",
-    name: "Debug - macOS x64",
-    description: "Intel Mac",
-    config: { configuration: "Debug", runtime: "osx-x64", self_contained: true },
-  },
-  {
-    id: "debug-linux-x64",
-    name: "Debug - Linux x64",
-    description: "自包含部署",
-    config: {
-      configuration: "Debug",
-      runtime: "linux-x64",
-      self_contained: true,
-    },
-  },
-];
 const EMPTY_STRING_LIST: string[] = [];
 
 export function useAppBoot() {
@@ -398,8 +298,8 @@ export function useAppBoot() {
     setProviderParameters,
     applyDotnetCustomConfig,
     replaceScopedConfigKey,
-    presets: PRESETS,
-    defaultPresetId: PRESETS[0]?.id ?? "release-fd",
+    presets: DOTNET_PRESETS,
+    defaultPresetId: DEFAULT_DOTNET_PRESET_ID,
     getPresetText,
     buildProfileParameters: buildDotnetProfileParameters,
   });
@@ -518,7 +418,7 @@ export function useAppBoot() {
     customConfig,
     defaultOutputDir,
     projectInfo,
-    presets: PRESETS,
+    presets: DOTNET_PRESETS,
     specVersion: SPEC_VERSION,
     pushRecentConfig,
     openEnvironmentDialog,

@@ -1,9 +1,6 @@
 import {
   useCallback,
-  useEffect,
-  useLayoutEffect,
   useMemo,
-  useRef,
   useState,
   type Dispatch,
   type SetStateAction,
@@ -15,37 +12,26 @@ import {
   applyImportedConfig,
   deleteProfile as deleteProfileFromStore,
   exportConfig,
-  getProfiles,
-  reorderProfiles,
   saveProfile as saveProfileToStore,
   updateProfile,
   type ConfigParameters,
   type ConfigProfile,
-  type ProfileOrderEntry,
   type PublishConfigStore,
 } from "@/lib/store";
 import {
   createDefaultDotnetPublishConfig,
   createDotnetPublishConfigFromParameters,
 } from "@/lib/dotnetPublishConfig";
+import type { DotnetPreset } from "@/lib/dotnetPresets";
+import { buildCopiedProfileName } from "@/lib/profileListSnapshot";
 import type { Language } from "@/hooks/useI18n";
+import { useProfileListState } from "@/hooks/useProfileListState";
 import type { ParameterSchema, ParameterValue } from "@/types/parameters";
 
 const loadInvokeErrors = () => import("@/lib/tauri/invokeErrors");
 
 interface TranslationMap {
   [key: string]: string | undefined;
-}
-
-interface DotnetPreset {
-  id: string;
-  name: string;
-  description: string;
-  config: {
-    configuration: string;
-    runtime: string;
-    self_contained: boolean;
-  };
 }
 
 interface QuickCreateTemplateOption {
@@ -59,64 +45,6 @@ interface LoadableProfile {
   providerId?: string;
   provider_id?: string;
   parameters?: Record<string, unknown>;
-}
-
-interface ProfileListSnapshot {
-  profiles: ConfigProfile[];
-  revision: number;
-  signature: string;
-}
-
-const EMPTY_PROFILE_LIST_SNAPSHOT: ProfileListSnapshot = {
-  profiles: [],
-  revision: 0,
-  signature: "",
-};
-
-function buildProfileListSignature(profiles: readonly ConfigProfile[]): string {
-  return profiles
-    .map((profile) =>
-      [profile.name, profile.providerId, profile.profileGroup || ""].join("\u0000")
-    )
-    .join("\u0001");
-}
-
-function createProfileListSnapshot(
-  profiles: ConfigProfile[],
-  previousSnapshot: ProfileListSnapshot = EMPTY_PROFILE_LIST_SNAPSHOT
-): ProfileListSnapshot {
-  const signature = buildProfileListSignature(profiles);
-  const isSameSnapshot = previousSnapshot.signature === signature;
-
-  return {
-    profiles,
-    revision:
-      isSameSnapshot
-        ? previousSnapshot.revision
-        : previousSnapshot.revision === 0 && signature === ""
-          ? 0
-          : previousSnapshot.revision + 1,
-    signature,
-  };
-}
-
-function buildCopiedProfileName(
-  sourceProfileName: string,
-  existingNames: Set<string>
-): string {
-  const normalizedSourceName = sourceProfileName.trim() || "Profile";
-  const baseName = `${normalizedSourceName}-copy`;
-
-  if (!existingNames.has(baseName)) {
-    return baseName;
-  }
-
-  let index = 2;
-  while (existingNames.has(`${baseName}${index}`)) {
-    index += 1;
-  }
-
-  return `${baseName}${index}`;
 }
 
 interface UseProfilesParams {
@@ -201,9 +129,6 @@ export function useProfiles({
   getPresetText,
   buildProfileParameters,
 }: UseProfilesParams) {
-  const [visibleProfilesSnapshot, setVisibleProfilesSnapshot] =
-    useState<ProfileListSnapshot>(EMPTY_PROFILE_LIST_SNAPSHOT);
-  const [isProfilesRefreshing, setIsProfilesRefreshing] = useState(false);
   const [activeProfileName, setActiveProfileName] = useState<string | null>(null);
   const [quickCreateProfileOpen, setQuickCreateProfileOpen] = useState(false);
   const [quickCreateProfileName, setQuickCreateProfileName] = useState("");
@@ -219,100 +144,25 @@ export function useProfiles({
     useState("");
   const [quickCreateProfileSaving, setQuickCreateProfileSaving] = useState(false);
   const [editingProfileOriginalName, setEditingProfileOriginalName] = useState<string | null>(null);
-  const loadProfilesRequestIdRef = useRef(0);
-  const reorderProfilesQueueRef = useRef<Promise<void>>(Promise.resolve());
-  const profilesCacheRef = useRef<Record<string, ProfileListSnapshot>>({});
-  const selectedRepoIdRef = useRef(selectedRepoId);
-  const profiles = visibleProfilesSnapshot.profiles;
-  const profilesRevision = visibleProfilesSnapshot.revision;
-  selectedRepoIdRef.current = selectedRepoId;
 
-  const commitProfilesSnapshot = useCallback(
-    (repoId: string, nextProfiles: ConfigProfile[]) => {
-      const previousSnapshot =
-        profilesCacheRef.current[repoId] ?? EMPTY_PROFILE_LIST_SNAPSHOT;
-      const nextSnapshot = createProfileListSnapshot(nextProfiles, previousSnapshot);
-
-      profilesCacheRef.current[repoId] = nextSnapshot;
-
-      if (selectedRepoIdRef.current === repoId) {
-        setVisibleProfilesSnapshot(nextSnapshot);
-      }
-
-      return nextSnapshot;
-    },
-    []
-  );
-
-  const loadProfiles = useCallback(async () => {
-    const requestId = loadProfilesRequestIdRef.current + 1;
-    loadProfilesRequestIdRef.current = requestId;
-    const repoId = selectedRepoId;
-
-    if (!repoId) {
-      setVisibleProfilesSnapshot(EMPTY_PROFILE_LIST_SNAPSHOT);
-      setIsProfilesRefreshing(false);
-      return [];
-    }
-
-    const cachedSnapshot =
-      profilesCacheRef.current[repoId] ?? EMPTY_PROFILE_LIST_SNAPSHOT;
-    setVisibleProfilesSnapshot(cachedSnapshot);
-    setIsProfilesRefreshing(true);
-
-    try {
-      const data = await getProfiles(repoId);
-
-      if (
-        loadProfilesRequestIdRef.current !== requestId ||
-        selectedRepoIdRef.current !== repoId
-      ) {
-        return data;
-      }
-
-      commitProfilesSnapshot(repoId, data);
-      setIsProfilesRefreshing(false);
-      return data;
-    } catch (err) {
-      if (
-        loadProfilesRequestIdRef.current === requestId &&
-        selectedRepoIdRef.current === repoId
-      ) {
-        setVisibleProfilesSnapshot(cachedSnapshot);
-        setIsProfilesRefreshing(false);
-      }
-      console.error("加载配置文件列表失败:", err);
-      return [];
-    }
-  }, [commitProfilesSnapshot, selectedRepoId]);
-
-  const refreshProfilesAfterMutation = useCallback(
-    async (repoId: string) => {
-      if (selectedRepoIdRef.current === repoId) {
-        return await loadProfiles();
-      }
-
-      const data = await getProfiles(repoId);
-      commitProfilesSnapshot(repoId, data);
-      return data;
-    },
-    [commitProfilesSnapshot, loadProfiles]
-  );
-
-  useEffect(() => {
-    void loadProfiles();
-  }, [loadProfiles]);
-
-  useLayoutEffect(() => {
-    const cachedSnapshot = selectedRepoId
-      ? profilesCacheRef.current[selectedRepoId] ?? EMPTY_PROFILE_LIST_SNAPSHOT
-      : EMPTY_PROFILE_LIST_SNAPSHOT;
-
-    setVisibleProfilesSnapshot(cachedSnapshot);
-    setIsProfilesRefreshing(Boolean(selectedRepoId));
+  const handleRepositoryScopeChange = useCallback(() => {
     setActiveProfileName(null);
     setEditingProfileOriginalName(null);
-  }, [selectedRepoId]);
+  }, []);
+
+  const {
+    profiles,
+    profilesRevision,
+    isProfilesRefreshing,
+    loadProfiles,
+    refreshProfilesAfterMutation,
+    reorderVisibleProfiles,
+    isCurrentRepo,
+  } = useProfileListState({
+    selectedRepoId,
+    profileT,
+    onRepositoryScopeChange: handleRepositoryScopeChange,
+  });
 
   const resetQuickCreateProfileState = useCallback(() => {
     setQuickCreateProfileName("");
@@ -610,7 +460,7 @@ export function useProfiles({
       await deleteProfileFromStore(repoId, name);
       await refreshProfilesAfterMutation(repoId);
 
-      if (selectedRepoIdRef.current === repoId) {
+      if (isCurrentRepo(repoId)) {
         if (activeProfileName === name) {
           setActiveProfileName(null);
           if (isCustomMode) {
@@ -623,6 +473,7 @@ export function useProfiles({
     [
       activeProfileName,
       defaultPresetId,
+      isCurrentRepo,
       isCustomMode,
       refreshProfilesAfterMutation,
       setIsCustomMode,
@@ -750,45 +601,6 @@ export function useProfiles({
     ]
   );
 
-  const handleReorderProfiles = useCallback(
-    (nextProfiles: ConfigProfile[]) => {
-      if (!selectedRepoId) {
-        return;
-      }
-
-      const repoId = selectedRepoId;
-      const nextProfileOrder: ProfileOrderEntry[] = nextProfiles.map((profile) => ({
-        name: profile.name,
-        profileGroup: profile.profileGroup ?? null,
-      }));
-
-      commitProfilesSnapshot(repoId, nextProfiles);
-
-      reorderProfilesQueueRef.current = reorderProfilesQueueRef.current
-        .catch(() => undefined)
-        .then(async () => {
-          try {
-            await reorderProfiles({
-              repoId,
-              profiles: nextProfileOrder,
-            });
-          } catch (err) {
-            console.error("保存配置排序失败:", err);
-
-            if (selectedRepoIdRef.current === repoId) {
-              await loadProfiles();
-            }
-
-            const { extractInvokeErrorMessage } = await loadInvokeErrors();
-            toast.error(profileT.quickEditFailed || "更新配置文件失败", {
-              description: extractInvokeErrorMessage(err),
-            });
-          }
-        });
-    },
-    [commitProfilesSnapshot, loadProfiles, profileT.quickEditFailed, selectedRepoId]
-  );
-
   const profileManagement = useMemo<ProfileManagementActions>(
     () => ({
       profiles,
@@ -841,7 +653,7 @@ export function useProfiles({
     handleDeleteProfileFromPanel,
     handleLoadProfile,
     handleCreateProfileFromProjectProfile,
-    handleReorderProfiles,
+    handleReorderProfiles: reorderVisibleProfiles,
     profileManagement,
   };
 }

@@ -5,19 +5,9 @@ import {
   resolveDotnetProjectProfile,
   type ResolvedDotnetProjectProfile,
 } from "@/lib/dotnetProjectProfile";
+import type { DotnetPreset } from "@/lib/dotnetPresets";
 import type { PublishConfigStore } from "@/lib/store";
 import type { ProjectInfo } from "@/types/project";
-
-interface DotnetPreset {
-  id: string;
-  name: string;
-  description: string;
-  config: {
-    configuration: string;
-    runtime: string;
-    self_contained: boolean;
-  };
-}
 
 interface PublishConfig {
   configuration: string;

@@ -6,22 +6,12 @@ import type { TranslationMap } from "@/hooks/usePublishRunnerTypes";
 import type { EnvironmentCheckSnapshot } from "@/lib/environment";
 import { renderPublishCommand } from "@/lib/renderPublishCommand";
 import { createPublishPreflightPipeline } from "@/lib/publishPreflight";
+import type { DotnetPreset } from "@/lib/dotnetPresets";
 import type { ProviderPublishSpec } from "@/lib/publishRuntime";
 import type { PublishConfigStore } from "@/lib/store";
 import type { ProjectInfo } from "@/types/project";
 import type { ParameterValue } from "@/types/parameters";
-import type { PublishResult } from "@/generated/tauri-contracts";
-
-interface DotnetPreset {
-  id: string;
-  name: string;
-  description: string;
-  config: {
-    configuration: string;
-    runtime: string;
-    self_contained: boolean;
-  };
-}
+import type { PublishResult, SpecValue } from "@/generated/tauri-contracts";
 
 export function buildPublishPresentationScopeKey(params: {
   selectedRepoId: string | null;
@@ -77,7 +67,14 @@ export interface UsePublishValidateParams {
 }
 
 export interface UsePublishValidateResult {
-  buildCurrentPublishSpec: () => ProviderPublishSpec | null;
+  getPublishStartBlocker: () =>
+    | "missing-repository"
+    | "missing-project"
+    | null;
+  resolvePublishRequest: () => Promise<{
+    spec: ProviderPublishSpec;
+    recentConfigKey?: string;
+  } | null>;
   runPublishPreflight: (
     spec: ProviderPublishSpec,
     options: {
@@ -93,14 +90,6 @@ export interface UsePublishValidateResult {
   publishPreviewCommand: string;
   isResolvingSelectedProjectProfile: boolean;
   publishPresentationScopeKey: string;
-  buildPublishSpec: () => ProviderPublishSpec | null;
-  resolveSelectedProjectProfile: () => Promise<{
-    parameters: Record<string, unknown>;
-  } | null>;
-  recentConfigKeyForCurrentSelection: string | null;
-  resolvedProjectProfile: {
-    parameters: Record<string, unknown>;
-  } | null;
 }
 
 export function usePublishValidate({
@@ -219,6 +208,67 @@ export function usePublishValidate({
     specVersion,
   ]);
 
+  const getPublishStartBlocker = useCallback(() => {
+    if (!selectedRepo) {
+      return "missing-repository";
+    }
+
+    if (activeProviderUsesProjectFile && !projectInfo) {
+      return "missing-project";
+    }
+
+    return null;
+  }, [activeProviderUsesProjectFile, projectInfo, selectedRepo]);
+
+  const resolvePublishRequest = useCallback(async () => {
+    if (getPublishStartBlocker()) {
+      return null;
+    }
+
+    if (
+      activeProviderId === "dotnet" &&
+      projectInfo &&
+      !isCustomMode &&
+      selectedPreset.startsWith("profile-")
+    ) {
+      const projectProfile =
+        resolvedProjectProfile ?? (await resolveSelectedProjectProfile());
+
+      if (projectProfile) {
+        return {
+          spec: {
+            version: specVersion,
+            provider_id: "dotnet",
+            project_path: projectInfo.project_file,
+            parameters: projectProfile.parameters as Record<string, SpecValue>,
+          },
+          recentConfigKey: recentConfigKeyForCurrentSelection ?? undefined,
+        };
+      }
+    }
+
+    const spec = buildPublishSpec();
+    if (!spec) {
+      return null;
+    }
+
+    return {
+      spec,
+      recentConfigKey: recentConfigKeyForCurrentSelection ?? undefined,
+    };
+  }, [
+    activeProviderId,
+    buildPublishSpec,
+    getPublishStartBlocker,
+    isCustomMode,
+    projectInfo,
+    recentConfigKeyForCurrentSelection,
+    resolveSelectedProjectProfile,
+    resolvedProjectProfile,
+    selectedPreset,
+    specVersion,
+  ]);
+
   const publishPresentationScopeKey = useMemo(
     () =>
       buildPublishPresentationScopeKey({
@@ -300,15 +350,12 @@ export function usePublishValidate({
     );
 
   return {
-    buildCurrentPublishSpec,
+    getPublishStartBlocker,
+    resolvePublishRequest,
     runPublishPreflight,
     executePublishWithProtectedAccessRecovery,
     publishPreviewCommand,
     isResolvingSelectedProjectProfile,
     publishPresentationScopeKey,
-    buildPublishSpec,
-    resolveSelectedProjectProfile,
-    recentConfigKeyForCurrentSelection,
-    resolvedProjectProfile,
   };
 }

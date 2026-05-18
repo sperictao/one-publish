@@ -2,6 +2,7 @@ import type {
   TranslationMap,
 } from "@/hooks/usePublishRunnerTypes";
 import type { EnvironmentCheckSnapshot } from "@/lib/environment";
+import type { DotnetPreset } from "@/lib/dotnetPresets";
 import { type ExecutionRecord } from "@/lib/store";
 import { usePublishLogStream } from "@/hooks/usePublishLogStream";
 import type { PublishConfigStore } from "@/lib/store";
@@ -11,17 +12,6 @@ import type { ParameterValue } from "@/types/parameters";
 import { usePublishNotify } from "@/hooks/usePublishNotify";
 import { usePublishValidate } from "@/hooks/usePublishValidate";
 import { usePublishExecute } from "@/hooks/usePublishExecute";
-
-interface DotnetPreset {
-  id: string;
-  name: string;
-  description: string;
-  config: {
-    configuration: string;
-    runtime: string;
-    self_contained: boolean;
-  };
-}
 
 interface UsePublishRunnerParams {
   appT: TranslationMap;
@@ -114,13 +104,6 @@ export function usePublishRunner({
     appT,
     publishT,
     selectedRepoId,
-    selectedRepo,
-    activeProviderId,
-    activeProviderUsesProjectFile,
-    selectedPreset,
-    isCustomMode,
-    projectInfo,
-    specVersion,
     pushRecentConfig,
     beginLogCapture,
     hideLogCapture,

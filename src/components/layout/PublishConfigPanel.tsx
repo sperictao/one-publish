@@ -14,7 +14,6 @@ import {
 } from "react";
 import { cn } from "@/lib/utils";
 import {
-  buildProfileGroups,
   reorderItemsByDrop,
   reorderProfilesByDrop,
 } from "@/lib/listOrdering";
@@ -74,6 +73,13 @@ import { useListInteractionState } from "@/components/layout/useListInteractionS
 import { composeNodeRefs } from "@/components/layout/composeNodeRefs";
 import { useListReorderMotion } from "@/components/layout/useListReorderMotion";
 import { useListDropSettledState } from "@/components/layout/useListDropSettledState";
+import {
+  ALL_GROUP_FILTER,
+  type GroupFilterValue,
+  type PreferredSelectedRenderAnchor,
+  usePublishConfigListModel,
+  usePublishConfigPreviewModel,
+} from "@/components/layout/usePublishConfigListModel";
 import type { ParameterSchema } from "@/types/parameters";
 
 const PublishConfigPanelFloatingLayer = lazy(async () => {
@@ -83,17 +89,6 @@ const PublishConfigPanelFloatingLayer = lazy(async () => {
 
 const EMPTY_FLOATING_STYLE: CSSProperties = {};
 const EMPTY_FRAMEWORK_OPTIONS: string[] = [];
-const ALL_GROUP_FILTER = "__all__";
-const PROJECT_GROUP_FILTER = "__project_profiles__";
-
-type GroupFilterValue =
-  | typeof ALL_GROUP_FILTER
-  | typeof PROJECT_GROUP_FILTER
-  | `profile-group:${string}`;
-
-function createProfileGroupFilterValue(groupName: string): GroupFilterValue {
-  return `profile-group:${groupName}`;
-}
 
 // Collapse toggle icon (reused from BranchPanel)
 function CollapseIcon() {
@@ -110,11 +105,6 @@ function CollapseIcon() {
       <path d="M11 6L8 8L11 10" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
   );
-}
-
-function normalizeRenderableConfigId(configId: string | null) {
-  if (!configId) return null;
-  return configId.startsWith("recent:") ? configId.slice("recent:".length) : configId;
 }
 
 function hasSameStringOrder(
@@ -178,11 +168,6 @@ export interface PublishConfigPanelProps {
   onCollapse?: () => void;
   showExpandButton?: boolean;
   onExpandRepo?: () => void;
-}
-
-interface PreferredSelectedRenderAnchor {
-  repoId: string | null;
-  renderId: string;
 }
 
 function ConfigGroup({
@@ -527,248 +512,43 @@ export function PublishConfigPanel({
   const fallbackFloatingCardSurfaceRef = useRef<HTMLDivElement | null>(null);
   const latestProjectProfileRequestId = useRef(0);
 
-  const query = searchQuery.toLowerCase();
-  const favoriteSet = useMemo(
-    () => new Set(favoriteConfigKeys),
-    [favoriteConfigKeys]
-  );
-
-  // Build lookup maps for resolving recent keys
-  const profileMap = useMemo(
-    () => new Map(profiles.map((p) => [p.name, p])),
-    [profiles]
-  );
-  const pubxmlSet = useMemo(
-    () => new Set(projectPublishProfiles),
-    [projectPublishProfiles]
-  );
-
-  // Resolve recent config keys to renderable items (max 6, skip stale entries)
-  const recentItems = useMemo(() => {
-    const items: Array<{
-      key: string;
-      name: string;
-      description?: string;
-      onClick: () => void;
-    }> = [];
-
-    for (const rk of recentConfigKeys) {
-      if (items.length >= 6) break;
-      const [type, ...rest] = rk.split(":");
-      const id = rest.join(":");
-
-      if (type === "pubxml") {
-        if (!pubxmlSet.has(id)) continue;
-        items.push({
-          key: rk,
-          name: id,
-          onClick: () => onSelectProjectProfile(id),
-        });
-      } else if (type === "userprofile") {
-        const profile = profileMap.get(id);
-        if (!profile) continue;
-        items.push({
-          key: rk,
-          name: profile.name,
-          description: profile.providerId,
-          onClick: () => onSelectProfile(profile),
-        });
-      }
-    }
-    return items;
-  }, [
-    recentConfigKeys,
-    profileMap,
-    pubxmlSet,
-    onSelectProjectProfile,
-    onSelectProfile,
-  ]);
-
-  // Filter profiles
-  const filteredProfiles = profiles.filter((p) => {
-    if (!query) return true;
-    return (
-      p.name.toLowerCase().includes(query) ||
-      p.providerId.toLowerCase().includes(query) ||
-      (p.profileGroup || "").toLowerCase().includes(query)
-    );
-  });
-
-  // Filter project publish profiles (.pubxml)
-  const filteredProjectProfiles = projectPublishProfiles.filter((name) => {
-    if (!query) return true;
-    return name.toLowerCase().includes(query);
-  });
-
-  const groupFilterOptions = useMemo<
-    Array<{ value: GroupFilterValue; label: string; count: number }>
-  >(() => {
-    const profileGroupOptions = buildProfileGroups(profiles, defaultGroupName).map(
-      (group) => ({
-        value: createProfileGroupFilterValue(group.groupName),
-        label: group.groupName,
-        count: group.items.length,
-      })
-    );
-
-    const options: Array<{ value: GroupFilterValue; label: string; count: number }> = [
-      {
-        value: ALL_GROUP_FILTER,
-        label: allConfigsLabel,
-        count: projectPublishProfiles.length + profiles.length,
-      },
-    ];
-
-    if (projectPublishProfiles.length > 0) {
-      options.push({
-        value: PROJECT_GROUP_FILTER,
-        label: t.profileGroup || "项目发布配置",
-        count: projectPublishProfiles.length,
-      });
-    }
-
-    return [...options, ...profileGroupOptions];
-  }, [
-    defaultGroupName,
-    profiles,
-    projectPublishProfiles.length,
-    allConfigsLabel,
-    t.profileGroup,
-  ]);
-
-  const groupedFilteredProfiles = useMemo(() => {
-    return buildProfileGroups(filteredProfiles, defaultGroupName);
-  }, [defaultGroupName, filteredProfiles]);
-
-  useEffect(() => {
-    if (groupFilterOptions.some((option) => option.value === groupFilterValue)) {
-      return;
-    }
-    setGroupFilterValue(ALL_GROUP_FILTER);
-  }, [groupFilterOptions, groupFilterValue]);
-
-  const selectedGroupFilterOption = useMemo(
-    () =>
-      groupFilterOptions.find((option) => option.value === groupFilterValue) ??
-      groupFilterOptions[0],
-    [groupFilterOptions, groupFilterValue]
-  );
-
-  const visibleProjectProfiles = useMemo(() => {
-    if (
-      groupFilterValue !== ALL_GROUP_FILTER &&
-      groupFilterValue !== PROJECT_GROUP_FILTER
-    ) {
-      return [];
-    }
-    return filteredProjectProfiles;
-  }, [filteredProjectProfiles, groupFilterValue]);
-
-  const visibleGroupedFilteredProfiles = useMemo(() => {
-    if (groupFilterValue === ALL_GROUP_FILTER) {
-      return groupedFilteredProfiles;
-    }
-    if (groupFilterValue === PROJECT_GROUP_FILTER) {
-      return [];
-    }
-    return groupedFilteredProfiles.filter(
-      (group) => createProfileGroupFilterValue(group.groupName) === groupFilterValue
-    );
-  }, [groupFilterValue, groupedFilteredProfiles]);
-
-  const visibleConfigCount = useMemo(
-    () =>
-      visibleProjectProfiles.length +
-      visibleGroupedFilteredProfiles.reduce(
-        (total, group) => total + group.items.length,
-        0
-      ),
-    [visibleGroupedFilteredProfiles, visibleProjectProfiles.length]
-  );
-
-  const showRecentItems =
-    !query && groupFilterValue === ALL_GROUP_FILTER && recentItems.length > 0;
-  const sortModeEnabled = showReorderControls;
-  const recentDragEnabled =
-    sortModeEnabled && showRecentItems && recentItems.length > 1;
-  const projectProfileDragEnabled =
-    sortModeEnabled && query.length === 0 && visibleProjectProfiles.length > 1;
-  const visibleCustomProfileCount = visibleGroupedFilteredProfiles.reduce(
-    (total, group) => total + group.items.length,
-    0
-  );
-  const shouldShowProjectProfilesLoadingState =
-    isProjectProfilesRefreshing &&
-    query.length === 0 &&
-    (groupFilterValue === ALL_GROUP_FILTER ||
-      groupFilterValue === PROJECT_GROUP_FILTER);
-  const shouldShowCustomProfilesLoadingState =
-    isProfilesRefreshing &&
-    query.length === 0 &&
-    groupFilterValue !== PROJECT_GROUP_FILTER &&
-    visibleCustomProfileCount === 0;
-  const customProfileDragEnabled =
-    sortModeEnabled && query.length === 0 && visibleCustomProfileCount > 1;
-
-  const selectedConfigId = useMemo(() => {
-    if (isCustomMode && activeProfileName) {
-      return `userprofile:${activeProfileName}`;
-    }
-    if (!isCustomMode && selectedPreset?.startsWith("profile-")) {
-      const name = selectedPreset.slice("profile-".length);
-      if (pubxmlSet.has(name)) return `pubxml:${name}`;
-    }
-    return null;
-  }, [isCustomMode, activeProfileName, selectedPreset, pubxmlSet]);
-
-  const allConfigIds = useMemo(() => {
-    const ids: string[] = [];
-    if (showRecentItems) {
-      for (const item of recentItems) {
-        ids.push(`recent:${item.key}`);
-      }
-    }
-    for (const name of visibleProjectProfiles) {
-      ids.push(`pubxml:${name}`);
-    }
-    for (const group of visibleGroupedFilteredProfiles) {
-      for (const profile of group.items) {
-        ids.push(`userprofile:${profile.name}`);
-      }
-    }
-    return ids;
-  }, [
+  const {
+    query,
+    favoriteSet,
     recentItems,
-    showRecentItems,
-    visibleGroupedFilteredProfiles,
+    groupFilterOptions,
+    selectedGroupFilterOption,
     visibleProjectProfiles,
-  ]);
-
-  const selectedRenderId = useMemo(() => {
-    const preferredSelectedRenderId =
-      preferredSelectedRenderAnchor?.repoId === selectedRepoScopeId
-        ? preferredSelectedRenderAnchor.renderId
-        : null;
-
-    if (!selectedConfigId) {
-      return null;
-    }
-
-    if (
-      preferredSelectedRenderId &&
-      normalizeRenderableConfigId(preferredSelectedRenderId) === selectedConfigId &&
-      allConfigIds.includes(preferredSelectedRenderId)
-    ) {
-      return preferredSelectedRenderId;
-    }
-
-    return selectedConfigId;
-  }, [
-    allConfigIds,
-    preferredSelectedRenderAnchor,
+    visibleConfigCount,
+    showRecentItems,
+    recentDragEnabled,
+    projectProfileDragEnabled,
+    customProfileDragEnabled,
+    shouldShowProjectProfilesLoadingState,
+    shouldShowCustomProfilesLoadingState,
     selectedConfigId,
+    allConfigIds,
+    selectedRenderId,
+  } = usePublishConfigListModel({
     selectedRepoScopeId,
-  ]);
+    selectedPreset,
+    isCustomMode,
+    activeProfileName,
+    profiles,
+    projectPublishProfiles,
+    recentConfigKeys,
+    favoriteConfigKeys,
+    searchQuery,
+    groupFilterValue,
+    onGroupFilterValueChange: setGroupFilterValue,
+    defaultGroupName,
+    allConfigsLabel,
+    projectProfilesLabel: t.profileGroup || "项目发布配置",
+    preferredSelectedRenderAnchor,
+    showReorderControls,
+    isProfilesRefreshing,
+    isProjectProfilesRefreshing,
+  });
 
   const interaction = useListInteractionState({
     filteredItemIds: allConfigIds,
@@ -931,75 +711,22 @@ export function PublishConfigPanel({
       profiles,
     ]
   );
-  const previewFilteredProfiles = useMemo(
-    () =>
-      previewProfiles.filter((profile) => {
-        if (!query) {
-          return true;
-        }
-
-        return (
-          profile.name.toLowerCase().includes(query) ||
-          profile.providerId.toLowerCase().includes(query) ||
-          (profile.profileGroup || "").toLowerCase().includes(query)
-        );
-      }),
-    [previewProfiles, query]
-  );
-  const previewGroupedFilteredProfiles = useMemo(
-    () => buildProfileGroups(previewFilteredProfiles, defaultGroupName),
-    [defaultGroupName, previewFilteredProfiles]
-  );
-  const previewVisibleProjectProfiles = useMemo(() => {
-    if (
-      groupFilterValue !== ALL_GROUP_FILTER &&
-      groupFilterValue !== PROJECT_GROUP_FILTER
-    ) {
-      return [];
-    }
-    return previewProjectProfiles;
-  }, [groupFilterValue, previewProjectProfiles]);
-  const previewVisibleGroupedFilteredProfiles = useMemo(() => {
-    if (groupFilterValue === ALL_GROUP_FILTER) {
-      return previewGroupedFilteredProfiles;
-    }
-    if (groupFilterValue === PROJECT_GROUP_FILTER) {
-      return [];
-    }
-    return previewGroupedFilteredProfiles.filter(
-      (group) => createProfileGroupFilterValue(group.groupName) === groupFilterValue
-    );
-  }, [groupFilterValue, previewGroupedFilteredProfiles]);
-  const previewConfigIds = useMemo(() => {
-    const ids: string[] = [];
-    if (showRecentItems) {
-      for (const item of previewRecentItems) {
-        ids.push(`recent:${item.key}`);
-      }
-    }
-    for (const name of previewVisibleProjectProfiles) {
-      ids.push(`pubxml:${name}`);
-    }
-    for (const group of previewVisibleGroupedFilteredProfiles) {
-      for (const profile of group.items) {
-        ids.push(`userprofile:${profile.name}`);
-      }
-    }
-    return ids;
-  }, [
-    previewRecentItems,
-    previewVisibleGroupedFilteredProfiles,
+  const {
     previewVisibleProjectProfiles,
+    previewVisibleGroupedFilteredProfiles,
+    previewConfigIds,
+    shouldShowEmptyState,
+  } = usePublishConfigPreviewModel({
+    query,
+    groupFilterValue,
+    defaultGroupName,
     showRecentItems,
-  ]);
-  const hasVisiblePreviewConfigResults =
-    previewVisibleProjectProfiles.length > 0 ||
-    previewVisibleGroupedFilteredProfiles.length > 0;
-  const shouldShowEmptyState =
-    !showRecentItems &&
-    !hasVisiblePreviewConfigResults &&
-    !shouldShowProjectProfilesLoadingState &&
-    !shouldShowCustomProfilesLoadingState;
+    previewRecentItems,
+    previewProjectProfiles,
+    previewProfiles,
+    shouldShowProjectProfilesLoadingState,
+    shouldShowCustomProfilesLoadingState,
+  });
   const recentMotion = useListReorderMotion({
     orderedIds: previewRecentItems.map((item) => item.key),
     draggingItemId: recentReorder.draggingItemId,
@@ -1225,6 +952,20 @@ export function PublishConfigPanel({
     setProjectProfileViewerOpen(open);
   }, []);
 
+  const handleSelectRecentItem = useCallback(
+    (item: (typeof recentItems)[number]) => {
+      if (item.kind === "pubxml") {
+        onSelectProjectProfile(item.name);
+        return;
+      }
+
+      if (item.profile) {
+        onSelectProfile(item.profile);
+      }
+    },
+    [onSelectProfile, onSelectProjectProfile]
+  );
+
   const fallbackFloatingBindings = useMemo<PublishConfigFloatingBindings>(
     () => ({
       listRef: fallbackListRef as MutableRefObject<HTMLDivElement | null>,
@@ -1384,7 +1125,7 @@ export function PublishConfigPanel({
                         repoId: selectedRepoScopeId,
                         renderId: `recent:${item.key}`,
                       });
-                      item.onClick();
+                      handleSelectRecentItem(item);
                     }}
                   >
                     <span
@@ -1709,6 +1450,7 @@ export function PublishConfigPanel({
       floatingTargetConfigId,
       handleConfigListPointerLeave,
       handleConfigListPointerReentry,
+      handleSelectRecentItem,
       customProfileDragEnabled,
       customProfilesRefreshingLabel,
       customMotion,
