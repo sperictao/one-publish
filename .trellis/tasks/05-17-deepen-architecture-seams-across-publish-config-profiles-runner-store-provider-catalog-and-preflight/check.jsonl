@@ -1,0 +1,7 @@
+{"file": ".trellis/spec/frontend/component-guidelines.md", "reason": "Verify component seam and UI behavior preservation."}
+{"file": ".trellis/spec/frontend/hook-guidelines.md", "reason": "Verify hook surface remains narrow and testable."}
+{"file": ".trellis/spec/frontend/state-management.md", "reason": "Verify ownership and persistence contracts."}
+{"file": ".trellis/spec/frontend/type-safety.md", "reason": "Verify contract/type drift is caught."}
+{"file": ".trellis/spec/frontend/quality-guidelines.md", "reason": "Verify required checks and test coverage."}
+{"file": ".trellis/spec/guides/code-reuse-thinking-guide.md", "reason": "Check consolidation does not create pass-through modules."}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "Check frontend/Rust contract flow and failure modes."}

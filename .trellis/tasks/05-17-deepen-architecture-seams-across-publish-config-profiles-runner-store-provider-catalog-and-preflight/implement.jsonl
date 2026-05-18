@@ -1,0 +1,8 @@
+{"file": ".trellis/spec/frontend/directory-structure.md", "reason": "Refactor will add or move frontend modules."}
+{"file": ".trellis/spec/frontend/component-guidelines.md", "reason": "PublishConfigPanel extraction touches component seams and rendering props."}
+{"file": ".trellis/spec/frontend/hook-guidelines.md", "reason": "ProfileDomain and publish runner work touches hook seams."}
+{"file": ".trellis/spec/frontend/state-management.md", "reason": "Store mutation contract and publish/profile state ownership are in scope."}
+{"file": ".trellis/spec/frontend/type-safety.md", "reason": "Tauri contracts, publish specs, and provider/preset catalog types are in scope."}
+{"file": ".trellis/spec/frontend/quality-guidelines.md", "reason": "Quality gate and focused test selection for frontend refactors."}
+{"file": ".trellis/spec/guides/code-reuse-thinking-guide.md", "reason": "Task consolidates repeated list/profile/provider/publish logic."}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "Task spans React state, Tauri command contracts, and Rust preflight."}
