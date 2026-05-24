@@ -57,6 +57,14 @@ import {
 } from "@/components/publish/ProjectPublishProfileViewerDialog";
 import { resolveDotnetProjectProfile } from "@/lib/dotnetProjectProfile";
 import { extractInvokeErrorMessage } from "@/lib/tauri/invokeErrors";
+import {
+  createProjectProfileConfigKey,
+  createRecentConfigRenderId,
+  createUserProfileConfigKey,
+  getProjectProfileNameFromRenderId,
+  getRecentConfigKeyFromRenderId,
+  getUserProfileNameFromRenderId,
+} from "@/lib/publishConfigIdentity";
 import { useI18n } from "@/hooks/useI18n";
 import type { PublishConfigFloatingBindings } from "@/components/layout/PublishConfigPanelFloatingLayer";
 import {
@@ -584,7 +592,7 @@ export function PublishConfigPanel({
     onEnd: (result) => {
       settleConfigFromDragEnd(
         result,
-        (itemId) => `recent:${itemId}`
+        (itemId) => createRecentConfigRenderId(itemId)
       );
     },
     onCommit: (activeConfigKey, target) => {
@@ -613,7 +621,7 @@ export function PublishConfigPanel({
     onEnd: (result) => {
       settleConfigFromDragEnd(
         result,
-        (itemId) => `pubxml:${itemId}`
+        (itemId) => createProjectProfileConfigKey(itemId)
       );
     },
     onCommit: (activeProfileName, target) => {
@@ -642,7 +650,7 @@ export function PublishConfigPanel({
     onEnd: (result) => {
       settleConfigFromDragEnd(
         result,
-        (itemId) => `userprofile:${itemId}`
+        (itemId) => createUserProfileConfigKey(itemId)
       );
     },
     onCommit: (activeProfileName, target) => {
@@ -730,48 +738,41 @@ export function PublishConfigPanel({
   const recentMotion = useListReorderMotion({
     orderedIds: previewRecentItems.map((item) => item.key),
     draggingItemId: recentReorder.draggingItemId,
-    settledItemId:
-      settledConfigRenderId?.startsWith("recent:")
-        ? settledConfigRenderId.slice("recent:".length)
-        : null,
+    settledItemId: getRecentConfigKeyFromRenderId(settledConfigRenderId),
     resetKey: selectedRepoScopeId,
   });
   const projectMotion = useListReorderMotion({
     orderedIds: previewProjectProfiles,
     draggingItemId: projectProfileReorder.draggingItemId,
-    settledItemId:
-      settledConfigRenderId?.startsWith("pubxml:")
-        ? settledConfigRenderId.slice("pubxml:".length)
-        : null,
+    settledItemId: getProjectProfileNameFromRenderId(settledConfigRenderId),
     resetKey: selectedRepoScopeId,
   });
   const customMotion = useListReorderMotion({
     orderedIds: previewProfiles.map((profile) => profile.name),
     draggingItemId: customProfileReorder.draggingItemId,
-    settledItemId:
-      settledConfigRenderId?.startsWith("userprofile:")
-        ? settledConfigRenderId.slice("userprofile:".length)
-        : null,
+    settledItemId: getUserProfileNameFromRenderId(settledConfigRenderId),
     resetKey: selectedRepoScopeId,
   });
   const draggingFloatingConfig = useMemo(() => {
     if (recentReorder.draggingItemId) {
       return {
-        renderId: `recent:${recentReorder.draggingItemId}`,
+        renderId: createRecentConfigRenderId(recentReorder.draggingItemId),
         style: recentReorder.dragPreviewStyle,
       };
     }
 
     if (projectProfileReorder.draggingItemId) {
       return {
-        renderId: `pubxml:${projectProfileReorder.draggingItemId}`,
+        renderId: createProjectProfileConfigKey(
+          projectProfileReorder.draggingItemId
+        ),
         style: projectProfileReorder.dragPreviewStyle,
       };
     }
 
     if (customProfileReorder.draggingItemId) {
       return {
-        renderId: `userprofile:${customProfileReorder.draggingItemId}`,
+        renderId: createUserProfileConfigKey(customProfileReorder.draggingItemId),
         style: customProfileReorder.dragPreviewStyle,
       };
     }
@@ -1054,23 +1055,25 @@ export function PublishConfigPanel({
                 <Clock className="h-3.5 w-3.5" />
                 <span>{t.recentlyUsed || "最近使用"}</span>
               </div>
-              {previewRecentItems.map((item) => (
+              {previewRecentItems.map((item) => {
+                const renderId = createRecentConfigRenderId(item.key);
+                return (
                 <div
                   key={`recent-${item.key}`}
                   ref={composeNodeRefs(
-                    floating.setConfigRowRef(`recent:${item.key}`),
+                    floating.setConfigRowRef(renderId),
                     recentReorder.setItemRef(item.key, undefined),
                     recentMotion.setItemRef(item.key)
                   )}
                   data-list-row="true"
-                  data-list-item-id={`recent:${item.key}`}
+                  data-list-item-id={renderId}
                   data-list-visual-target={
-                    visualTargetConfigId === `recent:${item.key}`
+                    visualTargetConfigId === renderId
                       ? "true"
                       : "false"
                   }
                   data-list-menu-open={
-                    interaction.isMenuOpenForItem(`recent:${item.key}`)
+                    interaction.isMenuOpenForItem(renderId)
                       ? "true"
                       : "false"
                   }
@@ -1085,10 +1088,10 @@ export function PublishConfigPanel({
                       : undefined
                   }
                   onMouseEnter={() =>
-                    interaction.handleRowMouseEnter(`recent:${item.key}`)
+                    interaction.handleRowMouseEnter(renderId)
                   }
                   onFocusCapture={() =>
-                    interaction.handleRowFocus(`recent:${item.key}`)
+                    interaction.handleRowFocus(renderId)
                   }
                   onBlurCapture={(event) => {
                     const nextFocusTarget = event.relatedTarget;
@@ -1099,7 +1102,7 @@ export function PublishConfigPanel({
                       return;
                     }
 
-                    interaction.handleRowBlur(`recent:${item.key}`);
+                    interaction.handleRowBlur(renderId);
                   }}
                 >
                   <ListDragHandle
@@ -1123,7 +1126,7 @@ export function PublishConfigPanel({
                     onClick={() => {
                       setPreferredSelectedRenderAnchor({
                         repoId: selectedRepoScopeId,
-                        renderId: `recent:${item.key}`,
+                        renderId,
                       });
                       handleSelectRecentItem(item);
                     }}
@@ -1131,7 +1134,7 @@ export function PublishConfigPanel({
                     <span
                       className={cn(
                         "flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-[14px] transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]",
-                        selectedRenderId === `recent:${item.key}`
+                        selectedRenderId === renderId
                           ? "scale-105 bg-primary/10 shadow-[0_0_18px_hsl(var(--primary)/0.24)]"
                           : "bg-[var(--glass-icon-bg)] shadow-[var(--glass-icon-highlight)] group-hover:scale-105 group-hover:bg-primary/8"
                       )}
@@ -1139,7 +1142,7 @@ export function PublishConfigPanel({
                       <FileText
                         className={cn(
                           "h-4 w-4 transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]",
-                          selectedRenderId === `recent:${item.key}`
+                          selectedRenderId === renderId
                             ? "scale-110 text-primary drop-shadow-[0_0_4px_hsl(var(--primary)/0.3)]"
                             : "text-muted-foreground/60 group-hover:text-primary group-hover:drop-shadow-[0_0_3px_hsl(var(--primary)/0.15)]"
                         )}
@@ -1149,7 +1152,7 @@ export function PublishConfigPanel({
                       <span
                         className={cn(
                           "truncate text-[13px] font-medium tracking-tight transition-colors duration-300",
-                          selectedRenderId === `recent:${item.key}`
+                          selectedRenderId === renderId
                             ? "text-foreground"
                             : "text-foreground/78"
                         )}
@@ -1168,7 +1171,7 @@ export function PublishConfigPanel({
                   </button>
                   <div className="absolute inset-y-0 right-3 flex items-center">
                     <RowActionsMenu
-                      open={interaction.isMenuOpenForItem(`recent:${item.key}`)}
+                      open={interaction.isMenuOpenForItem(renderId)}
                       moreActionsLabel={moreActionsLabel}
                       itemLabel={item.name}
                       actions={[
@@ -1188,13 +1191,14 @@ export function PublishConfigPanel({
                         },
                       ]}
                       onOpenChange={(open) => {
-                        interaction.handleMenuOpenChange(`recent:${item.key}`, open);
+                        interaction.handleMenuOpenChange(renderId, open);
                       }}
                       stopPropagation
                     />
                   </div>
                 </div>
-              ))}
+                );
+              })}
             </div>
           )}
 
@@ -1217,7 +1221,7 @@ export function PublishConfigPanel({
             }
           >
             {previewVisibleProjectProfiles.map((name) => {
-              const configKey = `pubxml:${name}`;
+              const configKey = createProjectProfileConfigKey(name);
               const isPubxmlSelected = selectedRenderId === configKey;
               return (
                 <div
@@ -1359,26 +1363,22 @@ export function PublishConfigPanel({
               defaultExpanded={true}
               visible={true}
             >
-              {group.items.map((profile) => (
+              {group.items.map((profile) => {
+                const configKey = createUserProfileConfigKey(profile.name);
+                return (
                 <ProfileItem
                   key={profile.name}
                   profile={profile}
-                  configKey={`userprofile:${profile.name}`}
-                  configId={`userprofile:${profile.name}`}
-                  isSelected={
-                    selectedRenderId === `userprofile:${profile.name}`
-                  }
-                  isVisualTarget={
-                    visualTargetConfigId === `userprofile:${profile.name}`
-                  }
-                  isFavorite={favoriteSet.has(`userprofile:${profile.name}`)}
-                  isMenuOpen={interaction.isMenuOpenForItem(
-                    `userprofile:${profile.name}`
-                  )}
+                  configKey={configKey}
+                  configId={configKey}
+                  isSelected={selectedRenderId === configKey}
+                  isVisualTarget={visualTargetConfigId === configKey}
+                  isFavorite={favoriteSet.has(configKey)}
+                  isMenuOpen={interaction.isMenuOpenForItem(configKey)}
                   onClick={() => {
                     setPreferredSelectedRenderAnchor({
                       repoId: selectedRepoScopeId,
-                      renderId: `userprofile:${profile.name}`,
+                      renderId: configKey,
                     });
                     onSelectProfile(profile);
                   }}
@@ -1392,26 +1392,23 @@ export function PublishConfigPanel({
                   moreActionsLabel={moreActionsLabel}
                   onDelete={() => onDeleteProfile(profile.name)}
                   onMenuOpenChange={(open) => {
-                    interaction.handleMenuOpenChange(
-                      `userprofile:${profile.name}`,
-                      open
-                    );
+                    interaction.handleMenuOpenChange(configKey, open);
                   }}
                   rowRef={composeNodeRefs(
-                    floating.setConfigRowRef(`userprofile:${profile.name}`),
+                    floating.setConfigRowRef(configKey),
                     customProfileReorder.setItemRef(profile.name, {
                       groupKey: group.groupKey,
                     }),
                     customMotion.setItemRef(profile.name)
                   )}
                   onItemMouseEnter={() =>
-                    interaction.handleRowMouseEnter(`userprofile:${profile.name}`)
+                    interaction.handleRowMouseEnter(configKey)
                   }
                   onItemFocus={() =>
-                    interaction.handleRowFocus(`userprofile:${profile.name}`)
+                    interaction.handleRowFocus(configKey)
                   }
                   onItemBlur={() =>
-                    interaction.handleRowBlur(`userprofile:${profile.name}`)
+                    interaction.handleRowBlur(configKey)
                   }
                   groupKey={group.groupKey}
                   dragEnabled={customProfileDragEnabled}
@@ -1424,7 +1421,8 @@ export function PublishConfigPanel({
                   dragPreviewStyle={customProfileReorder.dragPreviewStyle}
                   onHandlePointerDown={customProfileReorder.startDrag}
                 />
-              ))}
+                );
+              })}
             </ConfigGroup>
           ))}
           {shouldShowCustomProfilesLoadingState ? (

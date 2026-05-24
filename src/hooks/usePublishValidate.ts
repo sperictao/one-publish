@@ -6,6 +6,11 @@ import type { TranslationMap } from "@/hooks/usePublishRunnerTypes";
 import type { EnvironmentCheckSnapshot } from "@/lib/environment";
 import { renderPublishCommand } from "@/lib/renderPublishCommand";
 import { createPublishPreflightPipeline } from "@/lib/publishPreflight";
+import {
+  createPresetConfigKey,
+  createUserProfileConfigKey,
+  getSelectedProjectProfileName,
+} from "@/lib/publishConfigIdentity";
 import type { DotnetPreset } from "@/lib/dotnetPresets";
 import type { ProviderPublishSpec } from "@/lib/publishRuntime";
 import type { PublishConfigStore } from "@/lib/store";
@@ -145,6 +150,14 @@ export function usePublishValidate({
     getCurrentConfig,
   });
 
+  const selectedProjectProfileName = useMemo(() => {
+    if (activeProviderId !== "dotnet" || isCustomMode) {
+      return null;
+    }
+
+    return getSelectedProjectProfileName(selectedPreset);
+  }, [activeProviderId, isCustomMode, selectedPreset]);
+
   const publishPresentationSelectionKey = useMemo(() => {
     if (activeProviderId !== "dotnet") {
       return `provider:${activeProviderId}`;
@@ -156,11 +169,11 @@ export function usePublishValidate({
 
     if (isCustomMode) {
       return activeProfileName
-        ? `userprofile:${activeProfileName}`
+        ? createUserProfileConfigKey(activeProfileName)
         : "custom";
     }
 
-    return `preset:${selectedPreset}`;
+    return createPresetConfigKey(selectedPreset);
   }, [
     activeProfileName,
     activeProviderId,
@@ -183,7 +196,7 @@ export function usePublishValidate({
       if (!resolvedProjectInfo) {
         return null;
       }
-      if (!isCustomMode && selectedPreset.startsWith("profile-")) {
+      if (selectedProjectProfileName) {
         if (resolvedProjectProfile) {
           return {
             version: specVersion,
@@ -203,7 +216,7 @@ export function usePublishValidate({
     isCustomMode,
     projectInfo,
     resolvedProjectProfile,
-    selectedPreset,
+    selectedProjectProfileName,
     selectedRepo,
     specVersion,
   ]);
@@ -228,8 +241,7 @@ export function usePublishValidate({
     if (
       activeProviderId === "dotnet" &&
       projectInfo &&
-      !isCustomMode &&
-      selectedPreset.startsWith("profile-")
+      selectedProjectProfileName
     ) {
       const projectProfile =
         resolvedProjectProfile ?? (await resolveSelectedProjectProfile());
@@ -265,7 +277,7 @@ export function usePublishValidate({
     recentConfigKeyForCurrentSelection,
     resolveSelectedProjectProfile,
     resolvedProjectProfile,
-    selectedPreset,
+    selectedProjectProfileName,
     specVersion,
   ]);
 

@@ -14,6 +14,11 @@ import {
   cancelProviderPublish,
   type ProviderPublishSpec,
 } from "@/lib/publishRuntime";
+import {
+  createFailedPublishTransactionResult,
+  createPublishTransactionContext,
+  shouldRecordRecentConfig,
+} from "@/lib/publishTransaction";
 import type { UsePublishValidateResult } from "@/hooks/usePublishValidate";
 import { emit } from "@/lib/eventBus";
 import {
@@ -136,21 +141,17 @@ export function usePublishExecute({
 
   const runPublishSpec = useCallback(
     async (spec: ProviderPublishSpec, options?: RunPublishOptions) => {
-      const effectiveRepoId = options?.repoId ?? selectedRepoId;
-      const recentConfigKey = options?.recentConfigKey;
-      const openOutputDirOnSuccess =
-        options?.openOutputDirOnSuccess ?? false;
-      const restoreWindowOnFailure =
-        options?.restoreWindowOnFailure ?? false;
-      const feedbackMode = options?.feedbackMode ?? "toast";
-      const trayStatusEffect = options?.trayStatusEffect ?? false;
+      const transaction = createPublishTransactionContext({
+        selectedRepoId,
+        options,
+      });
       const runRevision = startPublishPresentationRun();
 
       const preflightPassed = await validate.runPublishPreflight(spec, {
         runRevision,
-        feedbackMode,
-        restoreWindowOnFailure,
-        trayStatusEffect,
+        feedbackMode: transaction.feedbackMode,
+        restoreWindowOnFailure: transaction.restoreWindowOnFailure,
+        trayStatusEffect: transaction.trayStatusEffect,
       });
       if (!preflightPassed) {
         return;
@@ -161,11 +162,9 @@ export function usePublishExecute({
       }
       setIsPublishing(true);
 
-      const executionStartedAt = new Date().toISOString();
-
       try {
-        if (recentConfigKey) {
-          pushRecentConfig(recentConfigKey, effectiveRepoId);
+        if (shouldRecordRecentConfig(transaction)) {
+          pushRecentConfig(transaction.recentConfigKey!, transaction.repoId);
         }
 
         const result =
@@ -184,8 +183,8 @@ export function usePublishExecute({
 
         const record = createPublishExecutionRecord({
           spec,
-          repoId: effectiveRepoId,
-          startedAt: executionStartedAt,
+          repoId: transaction.repoId,
+          startedAt: transaction.startedAt,
           finishedAt: new Date().toISOString(),
           result: resolvedResult,
           outputLog: outputLogSnapshot,
@@ -196,36 +195,36 @@ export function usePublishExecute({
 
         if (resolvedResult.success) {
           emit<PublishCompletedEvent>("publish:completed", {
-            repoId: effectiveRepoId,
+            repoId: transaction.repoId,
             outputDir: resolvedResult.output_dir,
             outputLog: outputLogSnapshot,
-            shouldOpenOutputDir: openOutputDirOnSuccess,
-            feedbackMode,
-            trayStatusEffect,
-            restoreWindowOnFailure,
+            shouldOpenOutputDir: transaction.openOutputDirOnSuccess,
+            feedbackMode: transaction.feedbackMode,
+            trayStatusEffect: transaction.trayStatusEffect,
+            restoreWindowOnFailure: transaction.restoreWindowOnFailure,
             record,
           });
         } else if (resolvedResult.cancelled) {
           emit<PublishCancelledEvent>("publish:cancelled", {
-            repoId: effectiveRepoId,
+            repoId: transaction.repoId,
             error: resolvedResult.error || "",
             outputLog: outputLogSnapshot,
-            feedbackMode,
-            trayStatusEffect,
-            restoreWindowOnFailure,
+            feedbackMode: transaction.feedbackMode,
+            trayStatusEffect: transaction.trayStatusEffect,
+            restoreWindowOnFailure: transaction.restoreWindowOnFailure,
             record,
           });
         } else {
           emit<PublishFailedEvent>("publish:failed", {
-            repoId: effectiveRepoId,
+            repoId: transaction.repoId,
             error: resolvedResult.error || "",
             outputLog: outputLogSnapshot,
             feedbackTitle: publishT.failed || "发布失败",
             feedbackDescription:
               resolvedResult.error || appT.unknownError || "未知错误",
-            feedbackMode,
-            trayStatusEffect,
-            restoreWindowOnFailure,
+            feedbackMode: transaction.feedbackMode,
+            trayStatusEffect: transaction.trayStatusEffect,
+            restoreWindowOnFailure: transaction.restoreWindowOnFailure,
             record,
           });
         }
@@ -241,22 +240,9 @@ export function usePublishExecute({
         const failureReason = analyzePublishExecutionFailure(err);
         const outputLogSnapshot = await waitForOutputLogSnapshot();
 
-        const failedResult = normalizePublishResult({
-          result: {
-            provider_id: spec.provider_id,
-            success: false,
-            cancelled: false,
-            error: rawErrorMessage,
-            command: {
-              program: "",
-              args: [],
-              working_dir: null,
-              display_command: "",
-            },
-            output_log: "",
-            output_dir: "",
-            file_count: 0,
-          },
+        const failedResult = createFailedPublishTransactionResult({
+          spec,
+          errorMessage: rawErrorMessage,
           outputLog: outputLogSnapshot,
         });
         if (isCurrentPresentationRevision(runRevision)) {
@@ -272,8 +258,8 @@ export function usePublishExecute({
 
         const record = createPublishExecutionRecord({
           spec,
-          repoId: effectiveRepoId,
-          startedAt: executionStartedAt,
+          repoId: transaction.repoId,
+          startedAt: transaction.startedAt,
           finishedAt: new Date().toISOString(),
           result: failedResult,
           outputLog: outputLogSnapshot,
@@ -283,14 +269,14 @@ export function usePublishExecute({
         }
 
         emit<PublishFailedEvent>("publish:failed", {
-          repoId: effectiveRepoId,
+          repoId: transaction.repoId,
           error: failedResult.error || rawErrorMessage || "",
           outputLog: outputLogSnapshot,
           feedbackTitle: feedback.title,
           feedbackDescription: failedResult.error || feedback.description,
-          feedbackMode,
-          trayStatusEffect,
-          restoreWindowOnFailure,
+          feedbackMode: transaction.feedbackMode,
+          trayStatusEffect: transaction.trayStatusEffect,
+          restoreWindowOnFailure: transaction.restoreWindowOnFailure,
           record,
         });
       } finally {

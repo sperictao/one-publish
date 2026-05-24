@@ -98,34 +98,7 @@ function App() {
         >
           <Suspense fallback={<div className="flex h-full flex-col" />}>
             <PublishConfigPanel
-              selectedRepoId={boot.repo.selectedRepoId}
-              selectedPreset={boot.publish.selectedPreset}
-              isCustomMode={boot.publish.isCustomMode}
-              profiles={boot.publish.profiles}
-              isProfilesRefreshing={Boolean(boot.repo.selectedRepo) && boot.publish.isProfilesRefreshing}
-              activeProfileName={boot.publish.activeProfileName}
-              onSelectProfile={boot.publish.handleSelectProfileFromPanel}
-              onCreateProfile={boot.publish.openQuickCreateProfileDialog}
-              onEditProfile={boot.publish.openQuickEditProfileDialog}
-              onRefreshProfiles={boot.publish.loadProfiles}
-              onOpenConfigDialog={() => boot.shell.handleConfigDialogOpenChange(true)}
-              onDeleteProfile={boot.publish.handleDeleteProfileFromPanel}
-              projectPublishProfiles={boot.publish.orderedProjectPublishProfiles}
-              isProjectProfilesRefreshing={boot.publish.isProjectProfilesRefreshing}
-              projectFilePath={boot.publish.projectInfo?.project_file}
-              projectFrameworkOptions={boot.publish.projectFrameworkOptions}
-              onSelectProjectProfile={boot.publish.handleSelectProjectProfile}
-              onCopyProjectProfileToCustom={boot.publish.handleCreateProfileFromProjectProfile}
-              recentConfigKeys={boot.publish.recentConfigKeys}
-              favoriteConfigKeys={boot.publish.favoriteConfigKeys}
-              onToggleFavoriteConfig={boot.publish.toggleFavoriteConfig}
-              onRemoveRecentConfig={boot.publish.removeRecentConfig}
-              onReorderRecentConfigs={boot.publish.reorderRecentConfig}
-              onReorderProjectProfiles={boot.publish.reorderProjectPublishProfiles}
-              onReorderProfiles={boot.publish.handleReorderProfiles}
-              onCollapse={() => boot.shell.setMiddlePanelCollapsed(true)}
-              showExpandButton={boot.shell.leftPanelCollapsed}
-              onExpandRepo={() => boot.shell.setLeftPanelCollapsed(false)}
+              {...boot.publish.publishConfigPanelProps}
             />
           </Suspense>
         </SidebarPanelShell>

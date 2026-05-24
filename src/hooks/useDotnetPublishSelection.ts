@@ -5,6 +5,10 @@ import {
   resolveDotnetProjectProfile,
   type ResolvedDotnetProjectProfile,
 } from "@/lib/dotnetProjectProfile";
+import {
+  getSelectedProjectProfileName,
+  resolveDotnetRecentConfigKeyForSelection,
+} from "@/lib/publishConfigIdentity";
 import type { DotnetPreset } from "@/lib/dotnetPresets";
 import type { PublishConfigStore } from "@/lib/store";
 import type { ProjectInfo } from "@/types/project";
@@ -87,14 +91,12 @@ export function useDotnetPublishSelection(params: {
   const selectedProjectProfileName = useMemo(() => {
     if (
       params.activeProviderId !== "dotnet" ||
-      params.isCustomMode ||
-      !params.selectedPreset.startsWith("profile-")
+      params.isCustomMode
     ) {
       return null;
     }
 
-    const profileName = params.selectedPreset.slice("profile-".length).trim();
-    return profileName || null;
+    return getSelectedProjectProfileName(params.selectedPreset);
   }, [
     params.activeProviderId,
     params.isCustomMode,
@@ -160,26 +162,24 @@ export function useDotnetPublishSelection(params: {
       return config;
     }
 
-    if (params.selectedPreset.startsWith("profile-")) {
-      const profileName = params.selectedPreset.slice("profile-".length).trim();
-      if (profileName) {
-        return {
-          configuration: "Release",
-          runtime: "",
-          framework: "",
-          self_contained: false,
-          output_dir: buildDefaultScopedOutputDir("Release"),
-          no_build: false,
-          no_restore: false,
-          verbosity: "",
-          no_logo: false,
-          delete_existing_files: false,
-          properties: {},
-          define: [],
-          use_profile: true,
-          profile_name: profileName,
-        };
-      }
+    const profileName = getSelectedProjectProfileName(params.selectedPreset);
+    if (profileName) {
+      return {
+        configuration: "Release",
+        runtime: "",
+        framework: "",
+        self_contained: false,
+        output_dir: buildDefaultScopedOutputDir("Release"),
+        no_build: false,
+        no_restore: false,
+        verbosity: "",
+        no_logo: false,
+        delete_existing_files: false,
+        properties: {},
+        define: [],
+        use_profile: true,
+        profile_name: profileName,
+      };
     }
 
     const preset = params.presets.find((item) => item.id === params.selectedPreset);
@@ -215,21 +215,12 @@ export function useDotnetPublishSelection(params: {
   }, [buildDefaultScopedOutputDir, params]);
 
   const recentConfigKeyForCurrentSelection = useMemo(() => {
-    if (params.activeProviderId !== "dotnet") {
-      return null;
-    }
-
-    if (params.isCustomMode) {
-      return params.activeProfileName
-        ? `userprofile:${params.activeProfileName}`
-        : null;
-    }
-
-    if (params.selectedPreset.startsWith("profile-")) {
-      return `pubxml:${params.selectedPreset.slice("profile-".length)}`;
-    }
-
-    return `preset:${params.selectedPreset}`;
+    return resolveDotnetRecentConfigKeyForSelection({
+      activeProviderId: params.activeProviderId,
+      isCustomMode: params.isCustomMode,
+      activeProfileName: params.activeProfileName,
+      selectedPreset: params.selectedPreset,
+    });
   }, [
     params.activeProfileName,
     params.activeProviderId,

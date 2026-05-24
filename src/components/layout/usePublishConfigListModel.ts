@@ -4,6 +4,14 @@ import {
   buildProfileGroups,
   type ProfileGroupBucket,
 } from "@/lib/listOrdering";
+import {
+  createProjectProfileConfigKey,
+  createRecentConfigRenderId,
+  createUserProfileConfigKey,
+  normalizeRenderableConfigId,
+  parsePublishConfigKey,
+  resolveSelectedPublishConfigKey,
+} from "@/lib/publishConfigIdentity";
 import type { ConfigProfile } from "@/lib/store";
 
 export const ALL_GROUP_FILTER = "__all__";
@@ -39,16 +47,6 @@ export function createProfileGroupFilterValue(
   return `profile-group:${groupName}`;
 }
 
-export function normalizeRenderableConfigId(configId: string | null) {
-  if (!configId) {
-    return null;
-  }
-
-  return configId.startsWith("recent:")
-    ? configId.slice("recent:".length)
-    : configId;
-}
-
 function profileMatchesQuery(profile: ConfigProfile, query: string) {
   if (!query) {
     return true;
@@ -77,24 +75,23 @@ function buildRecentItems(params: {
       break;
     }
 
-    const [type, ...rest] = recentConfigKey.split(":");
-    const id = rest.join(":");
+    const identity = parsePublishConfigKey(recentConfigKey);
 
-    if (type === "pubxml") {
-      if (!params.pubxmlSet.has(id)) {
+    if (identity?.kind === "project-profile") {
+      if (!params.pubxmlSet.has(identity.profileName)) {
         continue;
       }
 
       items.push({
         key: recentConfigKey,
         kind: "pubxml",
-        name: id,
+        name: identity.profileName,
       });
       continue;
     }
 
-    if (type === "userprofile") {
-      const profile = params.profileMap.get(id);
+    if (identity?.kind === "user-profile") {
+      const profile = params.profileMap.get(identity.profileName);
       if (!profile) {
         continue;
       }
@@ -189,18 +186,12 @@ function resolveSelectedConfigId(params: {
   selectedPreset: string;
   pubxmlSet: ReadonlySet<string>;
 }) {
-  if (params.isCustomMode && params.activeProfileName) {
-    return `userprofile:${params.activeProfileName}`;
-  }
-
-  if (!params.isCustomMode && params.selectedPreset?.startsWith("profile-")) {
-    const name = params.selectedPreset.slice("profile-".length);
-    if (params.pubxmlSet.has(name)) {
-      return `pubxml:${name}`;
-    }
-  }
-
-  return null;
+  return resolveSelectedPublishConfigKey({
+    isCustomMode: params.isCustomMode,
+    activeProfileName: params.activeProfileName,
+    selectedPreset: params.selectedPreset,
+    hasProjectProfile: (profileName) => params.pubxmlSet.has(profileName),
+  });
 }
 
 function buildConfigIds(params: {
@@ -213,17 +204,17 @@ function buildConfigIds(params: {
 
   if (params.showRecentItems) {
     for (const item of params.recentItems) {
-      ids.push(`recent:${item.key}`);
+      ids.push(createRecentConfigRenderId(item.key));
     }
   }
 
   for (const name of params.visibleProjectProfiles) {
-    ids.push(`pubxml:${name}`);
+    ids.push(createProjectProfileConfigKey(name));
   }
 
   for (const group of params.visibleProfileGroups) {
     for (const profile of group.items) {
-      ids.push(`userprofile:${profile.name}`);
+      ids.push(createUserProfileConfigKey(profile.name));
     }
   }
 

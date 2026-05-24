@@ -5,6 +5,7 @@ import { listen } from "@tauri-apps/api/event";
 import { normalizeDotnetProjectBoundParameters } from "@/lib/dotnetPublishConfig";
 import { resolvePreferredDotnetProjectInfo } from "@/lib/dotnetProjectInfo";
 import { resolveDotnetProjectProfile } from "@/lib/dotnetProjectProfile";
+import { parsePublishConfigKey } from "@/lib/publishConfigIdentity";
 import { showSystemNotification } from "@/lib/systemNotification";
 import {
   getProfiles,
@@ -149,16 +150,15 @@ export async function resolveTrayPublishRequest(params: {
   const repo = await getRepository(params.payload.repoId);
 
   const { configKey } = params.payload;
-  const [keyType, ...rest] = configKey.split(":");
-  const keyValue = rest.join(":").trim();
-  if (!keyType || !keyValue) {
+  const identity = parsePublishConfigKey(configKey);
+  if (!identity) {
     throw new Error(`invalid tray config key: ${configKey}`);
   }
 
-  if (keyType === "userprofile") {
+  if (identity.kind === "user-profile") {
     const spec = await resolveUserProfileSpec({
       repo,
-      profileName: keyValue,
+      profileName: identity.profileName,
       specVersion: params.specVersion,
       defaultOutputDir: params.defaultOutputDir,
     });
@@ -168,10 +168,10 @@ export async function resolveTrayPublishRequest(params: {
     };
   }
 
-  if (keyType === "pubxml") {
+  if (identity.kind === "project-profile") {
     const spec = await resolvePubxmlSpec({
       repo,
-      profileName: keyValue,
+      profileName: identity.profileName,
       specVersion: params.specVersion,
       defaultOutputDir: params.defaultOutputDir,
     });

@@ -9,6 +9,10 @@ import { toast } from "sonner";
 
 import { mapImportedSpecByProvider } from "@/lib/commandImportMapping";
 import {
+  createProjectProfileSelectedPreset,
+  createUserProfileConfigKey,
+} from "@/lib/publishConfigIdentity";
+import {
   applyImportedConfig,
   deleteProfile as deleteProfileFromStore,
   exportConfig,
@@ -329,7 +333,7 @@ export function useProfiles({
 
   const handleSelectProjectProfile = useCallback(
     (profileName: string) => {
-      setSelectedPreset(`profile-${profileName}`);
+      setSelectedPreset(createProjectProfileSelectedPreset(profileName));
       setIsCustomMode(false);
       setActiveProfileName(null);
     },
@@ -379,7 +383,7 @@ export function useProfiles({
     try {
       const parameters = buildProfileParameters(quickCreateProfileDraft);
       const isEditing = Boolean(editingProfileOriginalName);
-      const nextProfileKey = `userprofile:${profileName}`;
+      const nextProfileKey = createUserProfileConfigKey(profileName);
 
       if (editingProfileOriginalName) {
         await updateProfile({
@@ -415,7 +419,7 @@ export function useProfiles({
         editingProfileOriginalName !== profileName
       ) {
         replaceScopedConfigKey(
-          `userprofile:${editingProfileOriginalName}`,
+          createUserProfileConfigKey(editingProfileOriginalName),
           nextProfileKey,
           selectedRepoId
         );

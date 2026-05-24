@@ -32,6 +32,7 @@ import { useProviderRuntime } from "@/hooks/useProviderRuntime";
 import { useProviderParametersState } from "@/hooks/useProviderParametersState";
 import { useI18n, type Language } from "@/hooks/useI18n";
 import type { PublishConfigStore } from "@/lib/store";
+import type { PublishConfigPanelProps } from "@/components/layout/PublishConfigPanel";
 import { usePublishStore } from "@/store/publishStore";
 import { buildDotnetProfileParameters } from "@/lib/dotnetPublishConfig";
 import {
@@ -559,6 +560,70 @@ export function useAppBoot() {
     quickCreateProfileOpen ||
     configDialogOpen;
 
+  const publishConfigPanelProps = useMemo<PublishConfigPanelProps>(
+    () => ({
+      selectedRepoId,
+      selectedPreset,
+      isCustomMode,
+      profiles,
+      isProfilesRefreshing: Boolean(selectedRepo) && isProfilesRefreshing,
+      activeProfileName,
+      onSelectProfile: handleSelectProfileFromPanel,
+      onCreateProfile: openQuickCreateProfileDialog,
+      onEditProfile: openQuickEditProfileDialog,
+      onRefreshProfiles: loadProfiles,
+      onOpenConfigDialog: () => handleConfigDialogOpenChange(true),
+      onDeleteProfile: handleDeleteProfileFromPanel,
+      projectPublishProfiles: orderedProjectPublishProfiles,
+      isProjectProfilesRefreshing,
+      projectFilePath: projectInfo?.project_file,
+      projectFrameworkOptions,
+      onSelectProjectProfile: handleSelectProjectProfile,
+      onCopyProjectProfileToCustom: handleCreateProfileFromProjectProfile,
+      recentConfigKeys,
+      favoriteConfigKeys,
+      onToggleFavoriteConfig: toggleFavoriteConfig,
+      onRemoveRecentConfig: removeRecentConfig,
+      onReorderRecentConfigs: reorderRecentConfig,
+      onReorderProjectProfiles: reorderProjectPublishProfiles,
+      onReorderProfiles: handleReorderProfiles,
+      onCollapse: () => setMiddlePanelCollapsed(true),
+      showExpandButton: leftPanelCollapsed,
+      onExpandRepo: () => setLeftPanelCollapsed(false),
+    }),
+    [
+      activeProfileName,
+      favoriteConfigKeys,
+      handleCreateProfileFromProjectProfile,
+      handleConfigDialogOpenChange,
+      handleDeleteProfileFromPanel,
+      handleReorderProfiles,
+      handleSelectProfileFromPanel,
+      handleSelectProjectProfile,
+      isCustomMode,
+      isProfilesRefreshing,
+      isProjectProfilesRefreshing,
+      leftPanelCollapsed,
+      loadProfiles,
+      openQuickCreateProfileDialog,
+      openQuickEditProfileDialog,
+      orderedProjectPublishProfiles,
+      profiles,
+      projectFrameworkOptions,
+      projectInfo?.project_file,
+      recentConfigKeys,
+      removeRecentConfig,
+      reorderProjectPublishProfiles,
+      reorderRecentConfig,
+      selectedPreset,
+      selectedRepo,
+      selectedRepoId,
+      setLeftPanelCollapsed,
+      setMiddlePanelCollapsed,
+      toggleFavoriteConfig,
+    ]
+  );
+
   return {
     // Domain-grouped return values
     shell: {
@@ -752,6 +817,7 @@ export function useAppBoot() {
       projectFrameworkOptions,
       isProjectProfilesRefreshing,
       isPublishRunCardRefreshing,
+      publishConfigPanelProps,
       publishRunCardProps,
       commandImportResultCardProps,
       showCommandImportResultCard,

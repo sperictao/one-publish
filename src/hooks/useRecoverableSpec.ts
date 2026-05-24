@@ -1,6 +1,7 @@
 import { useCallback } from "react";
 
 import { createDotnetPublishConfigFromParameters } from "@/lib/dotnetPublishConfig";
+import { createProjectProfileConfigKey } from "@/lib/publishConfigIdentity";
 import type { ExecutionRecord, PublishConfigStore } from "@/lib/store";
 import {
   fromSpecParameters,
@@ -101,7 +102,7 @@ export function useRecoverableSpec({
     ) {
       const profileName = (propertiesRaw as Record<string, unknown>).PublishProfile;
       if (typeof profileName === "string" && profileName.trim()) {
-        return `pubxml:${profileName.trim()}`;
+        return createProjectProfileConfigKey(profileName);
       }
     }
 

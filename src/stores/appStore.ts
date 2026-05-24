@@ -1,7 +1,6 @@
 import { create } from "zustand";
 import { toast } from "sonner";
 
-import { normalizeEnvironmentProviderIds } from "@/lib/environment";
 import { extractInvokeErrorMessage } from "@/lib/tauri/invokeErrors";
 import {
   getAppState,
@@ -20,25 +19,17 @@ import {
   type PublishConfigStore,
   defaultAppState,
 } from "@/lib/store";
+import {
+  applyPreferenceStateMutation,
+  applyPublishStateMutation,
+  applyUiStateMutation,
+  mergeRecentPublishState,
+  resolveScopedMutationRepoId,
+  type PreferenceStateMutation,
+  type PublishStatePatch,
+  type UiStateMutation,
+} from "@/stores/appStoreMutations";
 import type { Repository } from "@/types/repository";
-
-// ── Types ──
-type PublishStatePatch = {
-  selectedPreset?: string;
-  isCustomMode?: boolean;
-  customConfig?: PublishConfigStore;
-};
-
-function mergeRecentPublishState(
-  state: AppState,
-  nextState: Pick<AppState, "recentRepoIds" | "recentConfigKeysByRepo">
-): AppState {
-  return {
-    ...state,
-    recentRepoIds: nextState.recentRepoIds,
-    recentConfigKeysByRepo: nextState.recentConfigKeysByRepo,
-  };
-}
 
 // ── Store interface ──
 interface AppStore extends AppState {
@@ -49,22 +40,10 @@ interface AppStore extends AppState {
   _restoreAuthoritativeState: () => Promise<AppState>;
 
   // UI state
-  setUIState: (params: {
-    leftPanelWidth?: number;
-    middlePanelWidth?: number;
-    selectedRepoId?: string | null;
-    clearSelectedRepoId?: boolean;
-  }) => void;
+  setUIState: (params: UiStateMutation) => void;
 
   // Preferences
-  setPreferences: (params: {
-    language?: string;
-    minimizeToTrayOnClose?: boolean;
-    defaultOutputDir?: string;
-    theme?: "light" | "dark" | "auto";
-    executionHistoryLimit?: number;
-    environmentProviderIds?: string[];
-  }) => void;
+  setPreferences: (params: PreferenceStateMutation) => void;
 
   // Publish state
   setPublishState: (params: PublishStatePatch) => void;
@@ -196,20 +175,7 @@ export const useAppStore = create<AppStore>((set, get) => {
 
     // ── UI State ──
     setUIState: (params) => {
-      set((prev) => ({
-        ...prev,
-        ...(params.leftPanelWidth !== undefined && {
-          leftPanelWidth: params.leftPanelWidth,
-        }),
-        ...(params.middlePanelWidth !== undefined && {
-          middlePanelWidth: params.middlePanelWidth,
-        }),
-        ...(params.clearSelectedRepoId
-          ? { selectedRepoId: null as string | null }
-          : params.selectedRepoId !== undefined
-            ? { selectedRepoId: params.selectedRepoId }
-            : {}),
-      }));
+      set((prev) => applyUiStateMutation(prev, params));
 
       if (uiDebounceTimer) clearTimeout(uiDebounceTimer);
       uiDebounceTimer = setTimeout(() => {
@@ -221,25 +187,7 @@ export const useAppStore = create<AppStore>((set, get) => {
 
     // ── Preferences ──
     setPreferences: (params) => {
-      set((prev) => ({
-        ...prev,
-        ...(params.language !== undefined && { language: params.language }),
-        ...(params.minimizeToTrayOnClose !== undefined && {
-          minimizeToTrayOnClose: params.minimizeToTrayOnClose,
-        }),
-        ...(params.defaultOutputDir !== undefined && {
-          defaultOutputDir: params.defaultOutputDir,
-        }),
-        ...(params.theme !== undefined && { theme: params.theme }),
-        ...(params.executionHistoryLimit !== undefined && {
-          executionHistoryLimit: params.executionHistoryLimit,
-        }),
-        ...(params.environmentProviderIds !== undefined && {
-          environmentProviderIds: normalizeEnvironmentProviderIds(
-            params.environmentProviderIds
-          ),
-        }),
-      }));
+      set((prev) => applyPreferenceStateMutation(prev, params));
 
       if (preferenceDebounceTimer) clearTimeout(preferenceDebounceTimer);
       preferenceDebounceTimer = setTimeout(() => {
@@ -254,27 +202,7 @@ export const useAppStore = create<AppStore>((set, get) => {
       const { selectedRepoId } = get();
       if (!selectedRepoId) return;
 
-      set((prev) => ({
-        ...prev,
-        repositories: prev.repositories.map((repo) => {
-          if (repo.id !== selectedRepoId) return repo;
-          return {
-            ...repo,
-            publishConfig: {
-              ...repo.publishConfig,
-              ...(params.selectedPreset !== undefined && {
-                selectedPreset: params.selectedPreset,
-              }),
-              ...(params.isCustomMode !== undefined && {
-                isCustomMode: params.isCustomMode,
-              }),
-              ...(params.customConfig !== undefined && {
-                customConfig: params.customConfig,
-              }),
-            },
-          };
-        }),
-      }));
+      set((prev) => applyPublishStateMutation(prev, selectedRepoId, params));
 
       if (publishDebounceTimer) clearTimeout(publishDebounceTimer);
       const previousPending = pendingPublishState.get(selectedRepoId) ?? {};
@@ -390,13 +318,13 @@ export const useAppStore = create<AppStore>((set, get) => {
 
     setEnvironmentProviderIds: (providerIds) => {
       get().setPreferences({
-        environmentProviderIds: normalizeEnvironmentProviderIds(providerIds),
+        environmentProviderIds: providerIds,
       });
     },
 
     // ── Recent configs ──
     pushRecentPublishConfig: (configKey, repoId) => {
-      const id = repoId ?? get().selectedRepoId;
+      const id = resolveScopedMutationRepoId(get().selectedRepoId, repoId);
       if (!id || !configKey.trim()) return;
       enqueueRecentMutation(
         () => apiPushRecentPublishConfig({ repoId: id, configKey }),
@@ -405,7 +333,7 @@ export const useAppStore = create<AppStore>((set, get) => {
     },
 
     removeRecentPublishConfig: (configKey, repoId) => {
-      const id = repoId ?? get().selectedRepoId;
+      const id = resolveScopedMutationRepoId(get().selectedRepoId, repoId);
       if (!id || !configKey.trim()) return;
       enqueueRecentMutation(
         () => apiRemoveRecentPublishConfig({ repoId: id, configKey }),
@@ -414,7 +342,7 @@ export const useAppStore = create<AppStore>((set, get) => {
     },
 
     replaceRecentPublishConfigKey: (previousKey, nextKey, repoId) => {
-      const id = repoId ?? get().selectedRepoId;
+      const id = resolveScopedMutationRepoId(get().selectedRepoId, repoId);
       if (!id || !previousKey.trim() || !nextKey.trim()) return;
       enqueueRecentMutation(
         () =>
@@ -428,7 +356,7 @@ export const useAppStore = create<AppStore>((set, get) => {
     },
 
     reorderRecentPublishConfigs: (configKeys, repoId) => {
-      const id = repoId ?? get().selectedRepoId;
+      const id = resolveScopedMutationRepoId(get().selectedRepoId, repoId);
       if (!id) return;
 
       set((prev) =>

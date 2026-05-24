@@ -1,12 +1,7 @@
+import type { PublishTransactionRunOptions } from "@/lib/publishTransaction";
+
 export interface TranslationMap {
   [key: string]: string | undefined;
 }
 
-export interface RunPublishOptions {
-  repoId?: string | null;
-  recentConfigKey?: string | null;
-  openOutputDirOnSuccess?: boolean;
-  restoreWindowOnFailure?: boolean;
-  feedbackMode?: "toast" | "system";
-  trayStatusEffect?: boolean;
-}
+export interface RunPublishOptions extends PublishTransactionRunOptions {}

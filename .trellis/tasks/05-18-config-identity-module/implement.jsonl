@@ -1,0 +1,8 @@
+{"file":".trellis/spec/frontend/index.md","reason":"Frontend stack overview, required spec routing, and default quality command expectations."}
+{"file":".trellis/spec/frontend/directory-structure.md","reason":"New frontend lib/test files must follow repository placement and import conventions."}
+{"file":".trellis/spec/frontend/hook-guidelines.md","reason":"Architecture slices modify publish/profile hooks and must preserve owner, stale-result, and object-parameter conventions."}
+{"file":".trellis/spec/frontend/state-management.md","reason":"State owner boundaries are central to config identity, store mutation contract, workbench composition, and profile domain slices."}
+{"file":".trellis/spec/frontend/type-safety.md","reason":"Typed identity, transaction, and provider adapter boundaries must preserve strict TypeScript and generated contract rules."}
+{"file":".trellis/spec/frontend/component-guidelines.md","reason":"Workbench composition changes may touch layout components while preserving existing UI structure."}
+{"file":".trellis/spec/guides/code-reuse-thinking-guide.md","reason":"The task explicitly removes repeated parser/formatter and mutation patterns; search-before-helper rules apply."}
+{"file":".trellis/spec/guides/cross-layer-thinking-guide.md","reason":"Publish transaction and store/provider boundaries cross frontend hooks, Tauri commands, and persisted state."}

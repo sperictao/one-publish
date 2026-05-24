@@ -1,0 +1,7 @@
+{"file":".trellis/spec/frontend/index.md","reason":"Checker should verify the correct frontend quality gates for the touched surface."}
+{"file":".trellis/spec/frontend/quality-guidelines.md","reason":"Defines testing, accessibility, and verification expectations for frontend changes."}
+{"file":".trellis/spec/frontend/state-management.md","reason":"Checker must audit state owner boundaries and ensure no component-level domain ownership leaks."}
+{"file":".trellis/spec/frontend/type-safety.md","reason":"Checker must verify strict TypeScript boundaries and generated Tauri contract usage."}
+{"file":".trellis/spec/frontend/hook-guidelines.md","reason":"Checker should review hook dependency, stale async result, and effect ownership risks."}
+{"file":".trellis/spec/guides/code-reuse-thinking-guide.md","reason":"Checker should confirm duplicated parser/formatter/mutation logic was actually removed."}
+{"file":".trellis/spec/guides/cross-layer-thinking-guide.md","reason":"Checker should validate publish transaction and provider/store data flow across layers."}
