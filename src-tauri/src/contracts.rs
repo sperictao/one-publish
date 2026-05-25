@@ -28,6 +28,8 @@ pub fn generate_tauri_contracts() -> String {
     push_contract::<crate::commands::PublishOutputValidationIssue>(&mut declarations);
     push_contract::<crate::commands::PublishOutputValidation>(&mut declarations);
     push_contract::<crate::commands::PublishOutputAccessStatus>(&mut declarations);
+    push_contract::<crate::commands::RemoteLocationKind>(&mut declarations);
+    push_contract::<crate::commands::RemoteLocationSummary>(&mut declarations);
     push_contract::<crate::commands::PublishOutputAccess>(&mut declarations);
     push_contract::<crate::commands::PublishOutputPreflightResult>(&mut declarations);
     push_contract::<crate::output_target::OutputTargetKind>(&mut declarations);

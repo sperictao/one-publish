@@ -6,10 +6,13 @@ pub(crate) use access::{is_protected_root_output_dir, protected_location_for_out
 use path_validation::evaluate_publish_output_validation;
 
 use super::output::{configured_output_dir, infer_output_dir, should_delete_existing_files};
+use crate::output_target::{parse_output_target, MountKind, OutputTarget, RemoteUri};
 use crate::spec::PublishSpec;
 use serde::Serialize;
 use std::path::Path;
 use ts_rs::TS;
+
+const REMOTE_PROBE_PENDING_DETAIL: &str = "remote_probe_pending";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, TS)]
 #[serde(rename_all = "snake_case")]
@@ -56,6 +59,26 @@ pub struct PublishOutputValidation {
     pub issue: Option<PublishOutputValidationIssue>,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, TS)]
+#[serde(rename_all = "snake_case")]
+#[ts(rename_all = "snake_case")]
+pub enum RemoteLocationKind {
+    Unc,
+    Mounted,
+    Remote,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(rename_all = "camelCase")]
+pub struct RemoteLocationSummary {
+    pub kind: RemoteLocationKind,
+    pub display: String,
+    pub host: Option<String>,
+    pub scheme: Option<String>,
+    pub fs_type: Option<String>,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, TS)]
 #[serde(rename_all = "camelCase")]
 #[ts(rename_all = "camelCase")]
@@ -65,6 +88,8 @@ pub struct PublishOutputAccess {
     pub protected_root: Option<String>,
     pub probe_directory: Option<String>,
     pub detail: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub remote_location: Option<RemoteLocationSummary>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, TS)]
@@ -107,6 +132,7 @@ impl PublishOutputAccess {
             protected_root: None,
             probe_directory: None,
             detail: None,
+            remote_location: None,
         }
     }
 
@@ -117,6 +143,7 @@ impl PublishOutputAccess {
             protected_root: None,
             probe_directory: None,
             detail: None,
+            remote_location: None,
         }
     }
 
@@ -127,6 +154,7 @@ impl PublishOutputAccess {
             protected_root: Some(root.to_string_lossy().to_string()),
             probe_directory: Some(probe_directory.to_string_lossy().to_string()),
             detail: None,
+            remote_location: None,
         }
     }
 
@@ -142,7 +170,84 @@ impl PublishOutputAccess {
             protected_root: Some(root.to_string_lossy().to_string()),
             probe_directory: Some(probe_directory.to_string_lossy().to_string()),
             detail: Some(detail.into()),
+            remote_location: None,
         }
+    }
+
+    fn mounted_remote_granted(summary: RemoteLocationSummary) -> Self {
+        Self {
+            status: PublishOutputAccessStatus::Granted,
+            protected_location: None,
+            protected_root: None,
+            probe_directory: None,
+            detail: None,
+            remote_location: Some(summary),
+        }
+    }
+
+    fn remote_skipped(summary: RemoteLocationSummary) -> Self {
+        Self {
+            status: PublishOutputAccessStatus::Skipped,
+            protected_location: None,
+            protected_root: None,
+            probe_directory: None,
+            detail: Some(REMOTE_PROBE_PENDING_DETAIL.to_string()),
+            remote_location: Some(summary),
+        }
+    }
+}
+
+impl RemoteLocationSummary {
+    fn from_mounted_remote(kind: MountKind, path: &Path, fs_type: Option<&str>) -> Self {
+        let (location_kind, host) = match kind {
+            MountKind::Unc => (
+                RemoteLocationKind::Unc,
+                extract_unc_host(&path.to_string_lossy()),
+            ),
+            MountKind::Mounted => (RemoteLocationKind::Mounted, None),
+        };
+        Self {
+            kind: location_kind,
+            display: path.to_string_lossy().to_string(),
+            host,
+            scheme: None,
+            fs_type: fs_type.map(str::to_string),
+        }
+    }
+
+    fn from_remote(uri: &RemoteUri) -> Self {
+        let mut display = format!("{}://{}", uri.scheme, uri.host);
+        if let Some(port) = uri.port {
+            display.push_str(&format!(":{port}"));
+        }
+        if !uri.path.is_empty() {
+            if !uri.path.starts_with('/') {
+                display.push('/');
+            }
+            display.push_str(&uri.path);
+        }
+        Self {
+            kind: RemoteLocationKind::Remote,
+            display,
+            host: Some(uri.host.clone()),
+            scheme: Some(uri.scheme.clone()),
+            fs_type: None,
+        }
+    }
+}
+
+fn extract_unc_host(path: &str) -> Option<String> {
+    let stripped = path
+        .strip_prefix("\\\\")
+        .or_else(|| path.strip_prefix("//"))?;
+    let host: String = stripped
+        .chars()
+        .take_while(|c| *c != '\\' && *c != '/')
+        .collect();
+    if host.is_empty() {
+        None
+    } else {
+        Some(host)
     }
 }
 
@@ -172,7 +277,27 @@ pub(crate) fn preflight_publish_output(spec: &PublishSpec) -> PublishOutputPrefl
     let access = if validation.status == PublishOutputValidationStatus::Incompatible {
         PublishOutputAccess::skipped()
     } else {
-        evaluate_publish_output_access(&context.output_dir, access_intent)
+        let raw_output = context
+            .configured_output_dir
+            .as_deref()
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+            .unwrap_or_else(|| context.output_dir.as_str());
+        match parse_output_target(raw_output) {
+            OutputTarget::MountedRemote {
+                kind,
+                path,
+                fs_type,
+            } => PublishOutputAccess::mounted_remote_granted(
+                RemoteLocationSummary::from_mounted_remote(kind, &path, fs_type.as_deref()),
+            ),
+            OutputTarget::Remote(uri) => {
+                PublishOutputAccess::remote_skipped(RemoteLocationSummary::from_remote(&uri))
+            }
+            OutputTarget::Local(_) => {
+                evaluate_publish_output_access(&context.output_dir, access_intent)
+            }
+        }
     };
 
     PublishOutputPreflightResult::new(
@@ -220,7 +345,8 @@ mod tests {
         preflight_publish_output, resolve_publish_output_context, ProtectedDirectoryLocation,
         PublishOutputAccess, PublishOutputAccessIntent, PublishOutputAccessStatus,
         PublishOutputPreflightResult, PublishOutputValidation, PublishOutputValidationIssue,
-        PublishOutputValidationStatus,
+        PublishOutputValidationStatus, RemoteLocationKind, RemoteLocationSummary,
+        REMOTE_PROBE_PENDING_DETAIL,
     };
     use crate::spec::{PublishSpec, SpecValue, SPEC_VERSION};
     use std::collections::BTreeMap;
@@ -295,6 +421,7 @@ mod tests {
     where
         F: FnOnce(&str) -> PublishOutputAccess,
     {
+        use crate::output_target::{parse_output_target, OutputTarget};
         let context = resolve_publish_output_context(spec);
         let validation = evaluate_publish_output_validation_for_platform(
             platform,
@@ -305,7 +432,25 @@ mod tests {
         let access = if validation.status == PublishOutputValidationStatus::Incompatible {
             PublishOutputAccess::skipped()
         } else {
-            evaluate_access(&context.output_dir)
+            let raw_output = context
+                .configured_output_dir
+                .as_deref()
+                .map(str::trim)
+                .filter(|s| !s.is_empty())
+                .unwrap_or(context.output_dir.as_str());
+            match parse_output_target(raw_output) {
+                OutputTarget::MountedRemote {
+                    kind,
+                    path,
+                    fs_type,
+                } => PublishOutputAccess::mounted_remote_granted(
+                    RemoteLocationSummary::from_mounted_remote(kind, &path, fs_type.as_deref()),
+                ),
+                OutputTarget::Remote(uri) => {
+                    PublishOutputAccess::remote_skipped(RemoteLocationSummary::from_remote(&uri))
+                }
+                OutputTarget::Local(_) => evaluate_access(&context.output_dir),
+            }
         };
 
         PublishOutputPreflightResult::new(
@@ -915,5 +1060,103 @@ mod tests {
             result.validation.issue,
             Some(PublishOutputValidationIssue::WindowsStylePathOnPosix)
         );
+    }
+
+    #[test]
+    fn preflight_publish_output_grants_mounted_remote_for_unc_with_summary() {
+        let mut parameters = BTreeMap::new();
+        parameters.insert(
+            "output".to_string(),
+            SpecValue::String(r"\\nas01\releases\app".to_string()),
+        );
+
+        let result = preflight_publish_output_for_test(
+            &PublishSpec {
+                version: SPEC_VERSION,
+                provider_id: "dotnet".to_string(),
+                project_path: "repo/App.csproj".to_string(),
+                parameters,
+            },
+            TestPlatform::Posix,
+            true,
+            |_output_dir| panic!("mounted remote should skip local access probe"),
+        );
+
+        assert_eq!(result.access.status, PublishOutputAccessStatus::Granted);
+        assert_eq!(result.access.protected_location, None);
+        assert_eq!(result.access.protected_root, None);
+        assert_eq!(result.access.probe_directory, None);
+        assert_eq!(result.access.detail, None);
+
+        let summary = result
+            .access
+            .remote_location
+            .expect("expected remote_location for UNC target");
+        assert_eq!(summary.kind, RemoteLocationKind::Unc);
+        assert_eq!(summary.host.as_deref(), Some("nas01"));
+        assert_eq!(summary.scheme, None);
+        assert_eq!(summary.fs_type, None);
+        assert!(summary.display.starts_with(r"\\nas01"));
+    }
+
+    #[test]
+    fn preflight_publish_output_skips_remote_target_with_summary() {
+        let mut parameters = BTreeMap::new();
+        parameters.insert(
+            "output".to_string(),
+            SpecValue::String("sftp://deploy@host:22/var/www".to_string()),
+        );
+
+        let result = preflight_publish_output_for_test(
+            &PublishSpec {
+                version: SPEC_VERSION,
+                provider_id: "dotnet".to_string(),
+                project_path: "repo/App.csproj".to_string(),
+                parameters,
+            },
+            TestPlatform::Posix,
+            true,
+            |_output_dir| panic!("remote target should skip local access probe"),
+        );
+
+        assert_eq!(result.access.status, PublishOutputAccessStatus::Skipped);
+        assert_eq!(
+            result.access.detail.as_deref(),
+            Some(REMOTE_PROBE_PENDING_DETAIL)
+        );
+
+        let summary = result
+            .access
+            .remote_location
+            .expect("expected remote_location for sftp target");
+        assert_eq!(summary.kind, RemoteLocationKind::Remote);
+        assert_eq!(summary.scheme.as_deref(), Some("sftp"));
+        assert_eq!(summary.host.as_deref(), Some("host"));
+        assert_eq!(summary.display, "sftp://host:22/var/www");
+    }
+
+    #[test]
+    fn remote_location_summary_strips_password_from_display() {
+        use crate::output_target::{parse_output_target, OutputTarget};
+        match parse_output_target("sftp://deploy:secret@host/path") {
+            OutputTarget::Remote(uri) => {
+                let summary = RemoteLocationSummary::from_remote(&uri);
+                assert!(!summary.display.contains("secret"));
+                assert!(!summary.display.contains("deploy"));
+                assert_eq!(summary.host.as_deref(), Some("host"));
+            }
+            other => panic!("expected Remote, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn preflight_publish_output_local_path_keeps_remote_location_none() {
+        let result = preflight_publish_output(&PublishSpec {
+            version: SPEC_VERSION,
+            provider_id: "custom".to_string(),
+            project_path: "repo/App.csproj".to_string(),
+            parameters: BTreeMap::new(),
+        });
+        assert!(result.access.remote_location.is_none());
     }
 }

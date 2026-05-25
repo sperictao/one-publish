@@ -14,7 +14,7 @@ pub use contracts::{PublishLogChunkEvent, PublishResult, RenderedPublishCommand}
 pub use preflight::{
     ProtectedDirectoryLocation, PublishOutputAccess, PublishOutputAccessStatus,
     PublishOutputPreflightResult, PublishOutputValidation, PublishOutputValidationIssue,
-    PublishOutputValidationStatus,
+    PublishOutputValidationStatus, RemoteLocationKind, RemoteLocationSummary,
 };
 
 #[cfg(test)]
