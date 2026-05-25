@@ -239,6 +239,18 @@ mod tests {
     }
 
     #[test]
+    fn single_letter_scheme_treated_as_local_windows_drive() {
+        match parse_output_target("C://Users/foo") {
+            OutputTarget::Local(path) => assert_eq!(path.to_string_lossy(), "C://Users/foo"),
+            other => panic!("expected Local for C://, got {:?}", other),
+        }
+        match parse_output_target("d://share/out") {
+            OutputTarget::Local(_) => {}
+            other => panic!("expected Local for d://, got {:?}", other),
+        }
+    }
+
+    #[test]
     fn empty_string_classified_as_local() {
         match parse_output_target("") {
             OutputTarget::Local(path) => assert_eq!(path.to_string_lossy(), ""),

@@ -68,4 +68,30 @@ describe("OutputTargetBadge", () => {
       expect(screen.getByText(/挂载远程卷 \(smbfs\)/)).toBeInTheDocument();
     });
   });
+
+  it("drops stale remote descriptor immediately when input changes", async () => {
+    invokeMock.mockResolvedValue({
+      kind: "remote",
+      raw: "sftp://deploy@nas01/var/www",
+      path: "/var/www",
+      mountKind: null,
+      fsType: null,
+      scheme: "sftp",
+      host: "nas01",
+      port: null,
+      user: "deploy",
+      query: null,
+    } satisfies OutputTargetDescriptor);
+
+    const { rerender } = render(
+      <OutputTargetBadge raw="sftp://deploy@nas01/var/www" />
+    );
+    await waitFor(() => {
+      expect(screen.getByText(/SFTP/)).toBeInTheDocument();
+    });
+
+    rerender(<OutputTargetBadge raw="/Users/alice/build" />);
+    expect(screen.queryByText(/SFTP/)).toBeNull();
+    expect(screen.getByText("本地")).toBeInTheDocument();
+  });
 });

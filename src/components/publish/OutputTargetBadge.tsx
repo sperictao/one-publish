@@ -104,8 +104,8 @@ export function OutputTargetBadge({
   const [remote, setRemote] = useState<OutputTargetDescriptor | null>(null);
 
   useEffect(() => {
+    setRemote(null);
     if (trimmed.length === 0) {
-      setRemote(null);
       return;
     }
 

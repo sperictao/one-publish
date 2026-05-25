@@ -42,6 +42,9 @@ fn is_valid_scheme(scheme: &str) -> bool {
     if !first.is_ascii_alphabetic() {
         return false;
     }
+    if chars.clone().next().is_none() {
+        return false;
+    }
     chars.all(|ch| ch.is_ascii_alphanumeric() || ch == '+' || ch == '.' || ch == '-')
 }
 
@@ -153,5 +156,12 @@ mod tests {
     fn rejects_non_scheme_input() {
         assert!(try_parse_remote("/Users/alice/build").is_none());
         assert!(try_parse_remote("\\\\nas01\\share\\out").is_none());
+    }
+
+    #[test]
+    fn rejects_single_letter_scheme_matches_windows_drive() {
+        assert!(try_parse_remote("c://Users/foo").is_none());
+        assert!(try_parse_remote("C://Users/foo").is_none());
+        assert!(try_parse_remote("d://share/out").is_none());
     }
 }
