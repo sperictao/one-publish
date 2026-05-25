@@ -349,6 +349,7 @@ export type PublishExecutionFailureReason =
   | "output_path_invalid"
   | "output_path_incompatible"
   | "protected_directory_access_denied"
+  | "remote_target_not_implemented"
   | "unsupported_provider"
   | "render_error"
   | "tool_missing"
@@ -385,6 +386,10 @@ export function analyzePublishExecutionFailure(
 
     if (errorCode === "publish_protected_directory_access_denied") {
       return "protected_directory_access_denied";
+    }
+
+    if (errorCode === "publish_remote_target_not_implemented") {
+      return "remote_target_not_implemented";
     }
 
     if (errorCode === "unsupported_provider") {
@@ -448,6 +453,10 @@ export function analyzePublishExecutionFailure(
     normalized.includes("publish output directory requires macos protected folder access")
   ) {
     return "protected_directory_access_denied";
+  }
+
+  if (normalized.includes("remote publish target is not implemented yet")) {
+    return "remote_target_not_implemented";
   }
 
   if (normalized.includes("unsupported provider")) {

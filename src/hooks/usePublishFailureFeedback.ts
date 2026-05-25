@@ -48,6 +48,17 @@ export function getPublishFailureFeedback(
     };
   }
 
+  if (failureReason === "remote_target_not_implemented") {
+    return {
+      title:
+        appT.publishRemoteTargetNotImplemented ||
+        "远程发布通道尚未启用",
+      description:
+        appT.publishRemoteTargetNotImplementedDesc ||
+        "当前版本仅支持本地或已挂载远程卷作为输出目录；请改用本地路径或 UNC/挂载点，远端协议（sftp / s3 / webdav）将在后续版本启用。",
+    };
+  }
+
   if (failureReason === "unsupported_provider") {
     return {
       title: appT.publishProviderUnsupported || "不支持的 Provider",

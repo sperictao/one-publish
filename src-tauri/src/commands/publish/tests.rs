@@ -298,6 +298,83 @@ fn execute_path_preflight_rejects_windows_style_output_when_frontend_is_bypassed
     );
 }
 
+fn remote_spec(output: &str) -> PublishSpec {
+    let mut parameters = BTreeMap::new();
+    parameters.insert("output".to_string(), SpecValue::String(output.to_string()));
+    PublishSpec {
+        version: SPEC_VERSION,
+        provider_id: "dotnet".to_string(),
+        project_path: "/tmp/demo-project/src/App.csproj".to_string(),
+        parameters,
+    }
+}
+
+#[test]
+fn execute_preflight_rejects_sftp_remote_output_until_upload_pipeline_lands() {
+    let spec = remote_spec("sftp://deploy@nas01.example.com/var/www/publish-out");
+
+    let error = super::execution::ensure_publish_output_preflight(&spec)
+        .expect_err("sftp remote target must be rejected at execution");
+
+    assert_eq!(
+        error.code.as_deref(),
+        Some("publish_remote_target_not_implemented")
+    );
+    assert!(
+        error.message.contains("sftp"),
+        "error message should reference the scheme: {}",
+        error.message
+    );
+}
+
+#[test]
+fn execute_preflight_rejects_s3_remote_output_until_upload_pipeline_lands() {
+    let spec = remote_spec("s3://my-bucket/artifacts/release");
+
+    let error = super::execution::ensure_publish_output_preflight(&spec)
+        .expect_err("s3 remote target must be rejected at execution");
+
+    assert_eq!(
+        error.code.as_deref(),
+        Some("publish_remote_target_not_implemented")
+    );
+    assert!(
+        error.message.contains("s3"),
+        "error message should reference the scheme: {}",
+        error.message
+    );
+}
+
+#[test]
+fn execute_preflight_rejects_webdav_remote_output_until_upload_pipeline_lands() {
+    let spec = remote_spec("webdav://files.example.com/team/publish");
+
+    let error = super::execution::ensure_publish_output_preflight(&spec)
+        .expect_err("webdav remote target must be rejected at execution");
+
+    assert_eq!(
+        error.code.as_deref(),
+        Some("publish_remote_target_not_implemented")
+    );
+}
+
+#[test]
+fn execute_preflight_allows_local_output() {
+    let spec = remote_spec("/tmp/op-publish-out-local");
+
+    super::execution::ensure_publish_output_preflight(&spec)
+        .expect("local output should pass preflight");
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn execute_preflight_allows_mounted_remote_output_on_linux() {
+    let spec = remote_spec("/mnt/fake-nas/publish-out");
+
+    super::execution::ensure_publish_output_preflight(&spec)
+        .expect("mounted /mnt/ output should pass preflight (granted)");
+}
+
 #[tokio::test]
 async fn reserve_execution_blocks_second_start_while_starting() {
     let _guard = execution_test_lock().lock().await;
