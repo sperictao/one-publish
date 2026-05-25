@@ -250,6 +250,17 @@ mod tests {
             );
         }
 
+        use crate::output_target::{parse_output_target, MountKind, OutputTarget};
+        if matches!(
+            parse_output_target(path_to_check),
+            OutputTarget::MountedRemote {
+                kind: MountKind::Unc,
+                ..
+            } | OutputTarget::Remote(_)
+        ) {
+            return PublishOutputValidation::new(PublishOutputValidationStatus::Compatible, None);
+        }
+
         let issue = match platform {
             TestPlatform::Windows => {
                 if looks_like_posix_absolute_path(path_to_check) {
@@ -720,5 +731,189 @@ mod tests {
         );
         assert_eq!(result.output_dir, "");
         assert_eq!(result.configured_output_dir, None);
+    }
+
+    #[test]
+    fn looks_like_unc_path_recognises_windows_and_posix_unc() {
+        use super::path_validation::looks_like_unc_path;
+        assert!(looks_like_unc_path(r"\\nas01\share\publish"));
+        assert!(looks_like_unc_path("//nas01/share/publish"));
+        assert!(!looks_like_unc_path(r"C:\publish"));
+        assert!(!looks_like_unc_path("/Users/demo/publish"));
+        assert!(!looks_like_unc_path("./publish/win-x64"));
+        assert!(!looks_like_unc_path("sftp://nas01/publish"));
+    }
+
+    #[test]
+    fn looks_like_windows_path_no_longer_matches_unc() {
+        assert!(!looks_like_windows_path(r"\\nas01\share\publish"));
+        assert!(!looks_like_windows_path("//nas01/share/publish"));
+        assert!(looks_like_windows_path(r"D:\publish"));
+        assert!(looks_like_windows_path(r".\publish"));
+    }
+
+    #[test]
+    fn preflight_publish_output_should_accept_unc_path_on_posix() {
+        let mut parameters = BTreeMap::new();
+        parameters.insert(
+            "output".to_string(),
+            SpecValue::String(r"\\nas01\share\publish".to_string()),
+        );
+
+        let result = preflight_publish_output_for_test(
+            &PublishSpec {
+                version: SPEC_VERSION,
+                provider_id: "dotnet".to_string(),
+                project_path: "repo/App.csproj".to_string(),
+                parameters,
+            },
+            TestPlatform::Posix,
+            true,
+            |_output_dir| PublishOutputAccess::not_applicable(),
+        );
+
+        assert_eq!(
+            result.validation.status,
+            PublishOutputValidationStatus::Compatible
+        );
+        assert_eq!(result.validation.issue, None);
+    }
+
+    #[test]
+    fn preflight_publish_output_should_accept_posix_style_unc_on_macos() {
+        let mut parameters = BTreeMap::new();
+        parameters.insert(
+            "output".to_string(),
+            SpecValue::String("//nas01/share/publish".to_string()),
+        );
+
+        let result = preflight_publish_output_for_test(
+            &PublishSpec {
+                version: SPEC_VERSION,
+                provider_id: "dotnet".to_string(),
+                project_path: "repo/App.csproj".to_string(),
+                parameters,
+            },
+            TestPlatform::Macos,
+            true,
+            |_output_dir| PublishOutputAccess::not_applicable(),
+        );
+
+        assert_eq!(
+            result.validation.status,
+            PublishOutputValidationStatus::Compatible
+        );
+        assert_eq!(result.validation.issue, None);
+    }
+
+    #[test]
+    fn preflight_publish_output_should_accept_unc_path_on_windows() {
+        let mut parameters = BTreeMap::new();
+        parameters.insert(
+            "output".to_string(),
+            SpecValue::String(r"\\nas01\share\publish".to_string()),
+        );
+
+        let result = preflight_publish_output_for_test(
+            &PublishSpec {
+                version: SPEC_VERSION,
+                provider_id: "dotnet".to_string(),
+                project_path: "repo/App.csproj".to_string(),
+                parameters,
+            },
+            TestPlatform::Windows,
+            true,
+            |_output_dir| PublishOutputAccess::not_applicable(),
+        );
+
+        assert_eq!(
+            result.validation.status,
+            PublishOutputValidationStatus::Compatible
+        );
+        assert_eq!(result.validation.issue, None);
+    }
+
+    #[test]
+    fn preflight_publish_output_should_accept_sftp_scheme_on_posix() {
+        let mut parameters = BTreeMap::new();
+        parameters.insert(
+            "output".to_string(),
+            SpecValue::String("sftp://deploy@nas01/srv/publish".to_string()),
+        );
+
+        let result = preflight_publish_output_for_test(
+            &PublishSpec {
+                version: SPEC_VERSION,
+                provider_id: "dotnet".to_string(),
+                project_path: "repo/App.csproj".to_string(),
+                parameters,
+            },
+            TestPlatform::Posix,
+            true,
+            |_output_dir| PublishOutputAccess::not_applicable(),
+        );
+
+        assert_eq!(
+            result.validation.status,
+            PublishOutputValidationStatus::Compatible
+        );
+        assert_eq!(result.validation.issue, None);
+    }
+
+    #[test]
+    fn preflight_publish_output_should_accept_s3_scheme_on_windows() {
+        let mut parameters = BTreeMap::new();
+        parameters.insert(
+            "output".to_string(),
+            SpecValue::String("s3://release-bucket/app/".to_string()),
+        );
+
+        let result = preflight_publish_output_for_test(
+            &PublishSpec {
+                version: SPEC_VERSION,
+                provider_id: "dotnet".to_string(),
+                project_path: "repo/App.csproj".to_string(),
+                parameters,
+            },
+            TestPlatform::Windows,
+            true,
+            |_output_dir| PublishOutputAccess::not_applicable(),
+        );
+
+        assert_eq!(
+            result.validation.status,
+            PublishOutputValidationStatus::Compatible
+        );
+        assert_eq!(result.validation.issue, None);
+    }
+
+    #[test]
+    fn preflight_publish_output_should_still_flag_windows_path_on_posix_for_relative() {
+        let mut parameters = BTreeMap::new();
+        parameters.insert(
+            "output".to_string(),
+            SpecValue::String(r".\publish\win-x64".to_string()),
+        );
+
+        let result = preflight_publish_output_for_test(
+            &PublishSpec {
+                version: SPEC_VERSION,
+                provider_id: "dotnet".to_string(),
+                project_path: "repo/App.csproj".to_string(),
+                parameters,
+            },
+            TestPlatform::Posix,
+            true,
+            |_output_dir| panic!("access check should be skipped for incompatible output path"),
+        );
+
+        assert_eq!(
+            result.validation.status,
+            PublishOutputValidationStatus::Incompatible
+        );
+        assert_eq!(
+            result.validation.issue,
+            Some(PublishOutputValidationIssue::WindowsStylePathOnPosix)
+        );
     }
 }
