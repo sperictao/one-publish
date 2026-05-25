@@ -88,3 +88,14 @@ Status legend:
 - [done] TASK-1103 Export schedule preset for daily triage report (docs/roadmap/tasks/TASK-1103.md)
 - [done] TASK-1104 Lightweight approval checklist before rerun (docs/roadmap/tasks/TASK-1104.md)
 
+
+## Phase 12: Remote Output Target Compatibility (R0)
+
+发布配置 `output` 目录支持远程目录场景。R0 聚焦"识别 + 预检兼容"，零网络 IO，
+为后续 Phase 13 (R1: SFTP) 等真实远程协议接入建立基础设施。
+
+- [todo] TASK-1201 OutputTarget parser — unify Local/UNC/MountedRemote/Remote (docs/roadmap/tasks/TASK-1201.md)
+- [todo] TASK-1202 Path validation accept UNC and URL-scheme outputs (docs/roadmap/tasks/TASK-1202.md)
+- [todo] TASK-1203 PublishOutputAccess extend with remote location summary (docs/roadmap/tasks/TASK-1203.md)
+- [todo] TASK-1204 Frontend OutputTarget badge + preflight remote context (docs/roadmap/tasks/TASK-1204.md)
+
