@@ -282,7 +282,7 @@ pub(crate) fn preflight_publish_output(spec: &PublishSpec) -> PublishOutputPrefl
             .as_deref()
             .map(str::trim)
             .filter(|s| !s.is_empty())
-            .unwrap_or_else(|| context.output_dir.as_str());
+            .unwrap_or(context.output_dir.as_str());
         match parse_output_target(raw_output) {
             OutputTarget::MountedRemote {
                 kind,

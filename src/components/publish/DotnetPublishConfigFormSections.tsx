@@ -7,6 +7,7 @@ import {
   X,
 } from "lucide-react";
 
+import { OutputTargetBadge } from "@/components/publish/OutputTargetBadge";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -182,9 +183,23 @@ const DotnetPublishOutputSection = memo(function DotnetPublishOutputSection({
     >
       <div className="space-y-4">
         <div className="space-y-2">
-          <Label htmlFor="quick-profile-output">
-            {appT.outputDirLabel || "输出目录"}
-          </Label>
+          <div className="flex flex-wrap items-center gap-2">
+            <Label htmlFor="quick-profile-output">
+              {appT.outputDirLabel || "输出目录"}
+            </Label>
+            <OutputTargetBadge
+              raw={outputDir}
+              translations={{
+                outputTargetBadgeLocal: appT.outputTargetBadgeLocal,
+                outputTargetBadgeUnc: appT.outputTargetBadgeUnc,
+                outputTargetBadgeMounted: appT.outputTargetBadgeMounted,
+                outputTargetBadgeRemoteSuffix:
+                  appT.outputTargetBadgeRemoteSuffix,
+                outputTargetBadgeRemoteTooltip:
+                  appT.outputTargetBadgeRemoteTooltip,
+              }}
+            />
+          </div>
           <Input
             id="quick-profile-output"
             value={outputDir}
