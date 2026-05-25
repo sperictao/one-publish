@@ -31,6 +31,12 @@ export type PublishOutputAccess = { status: PublishOutputAccessStatus, protected
 
 export type PublishOutputPreflightResult = { outputDir: string, configuredOutputDir: string | null, validation: PublishOutputValidation, access: PublishOutputAccess, };
 
+export type OutputTargetKind = "local" | "mounted_remote" | "remote";
+
+export type MountKindDescriptor = "unc" | "mounted";
+
+export type OutputTargetDescriptor = { kind: OutputTargetKind, raw: string, path: string | null, mountKind: MountKindDescriptor | null, fsType: string | null, scheme: string | null, host: string | null, port: number | null, user: string | null, query: { [key: string]: string } | null, };
+
 export type RenderedPublishCommand = { program: string, args: Array<string>, working_dir: string | null, display_command: string, };
 
 export type PublishResult = { provider_id: string, success: boolean, cancelled: boolean, error: string | null, command: RenderedPublishCommand, output_log: string, output_dir: string, file_count: number, };

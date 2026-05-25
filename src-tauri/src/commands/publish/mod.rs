@@ -72,6 +72,16 @@ pub fn preflight_publish_output(spec: PublishSpec) -> PublishOutputPreflightResu
 }
 
 #[tauri::command]
+pub fn describe_publish_output_target(
+    raw: String,
+) -> crate::output_target::OutputTargetDescriptor {
+    let _timer = crate::commands::middleware::CommandTimer::new(
+        "commands::publish::mod::describe_publish_output_target",
+    );
+    crate::output_target::describe_output_target(&raw)
+}
+
+#[tauri::command]
 pub async fn cancel_provider_publish() -> Result<bool, crate::errors::AppError> {
     let _timer = crate::commands::middleware::CommandTimer::new(
         "commands::publish::mod::cancel_provider_publish",
