@@ -593,6 +593,8 @@
     "publishProtectedDirectoryAccessRequestTitle": "选择目录以授权 OnePublish 访问",
     "publishProtectedDirectoryAccessRequestFailed": "申请目录访问权限失败",
     "publishProtectedDirectoryAccessDeniedDesc": "当前输出目录位于 macOS 受保护位置「{{location}}」下。OnePublish 已尝试向系统申请写入权限，但仍无法访问：{{path}}。请在“系统设置 > 隐私与安全性 > 文件与文件夹”中允许 OnePublish 访问「{{location}}」后重试；如果没有出现授权弹窗，请改用非受保护目录。",
+    "publishRemoteTargetNotImplemented": "远程发布通道尚未启用",
+    "publishRemoteTargetNotImplementedDesc": "当前版本仅支持本地或已挂载远程卷作为输出目录；请改用本地路径或 UNC/挂载点。远端协议（sftp / s3 / webdav）将在后续版本启用。",
     "publishPlanInvalid": "发布计划无效",
     "publishPlanInvalidDesc": "当前发布命令计划不可执行，请检查 Provider 与参数。",
     "publishGradleMissing": "未检测到 Gradle",

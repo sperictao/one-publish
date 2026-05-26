@@ -10,7 +10,10 @@ use super::output::{
 };
 use super::session::reserve_execution;
 use super::{
-    preflight::{self, ProtectedDirectoryLocation, PublishOutputValidationIssue},
+    preflight::{
+        self, ProtectedDirectoryLocation, PublishOutputValidationIssue, RemoteLocationKind,
+        RemoteLocationSummary,
+    },
     PublishResult, RenderedPublishCommand,
 };
 use crate::provider::registry::provider_registry;
@@ -109,6 +112,21 @@ fn build_preflight_access_error(
     build_protected_directory_access_error(location, path, detail)
 }
 
+fn build_remote_target_not_implemented_error(summary: &RemoteLocationSummary) -> crate::errors::AppError {
+    let scheme = summary
+        .scheme
+        .as_deref()
+        .filter(|s| !s.trim().is_empty())
+        .unwrap_or("remote");
+    publish_error(
+        format!(
+            "remote publish target is not implemented yet: scheme={} target={}",
+            scheme, summary.display
+        ),
+        "publish_remote_target_not_implemented",
+    )
+}
+
 pub(crate) fn ensure_publish_output_preflight(
     spec: &PublishSpec,
 ) -> Result<(), crate::errors::AppError> {
@@ -120,6 +138,12 @@ pub(crate) fn ensure_publish_output_preflight(
 
     if result.access.status == preflight::PublishOutputAccessStatus::Denied {
         return Err(build_preflight_access_error(&result));
+    }
+
+    if let Some(summary) = result.access.remote_location.as_ref() {
+        if summary.kind == RemoteLocationKind::Remote {
+            return Err(build_remote_target_not_implemented_error(summary));
+        }
     }
 
     Ok(())

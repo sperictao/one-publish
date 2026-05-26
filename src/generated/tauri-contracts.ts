@@ -27,9 +27,19 @@ export type PublishOutputValidation = { status: PublishOutputValidationStatus, i
 
 export type PublishOutputAccessStatus = "skipped" | "not_applicable" | "granted" | "denied";
 
-export type PublishOutputAccess = { status: PublishOutputAccessStatus, protectedLocation: ProtectedDirectoryLocation | null, protectedRoot: string | null, probeDirectory: string | null, detail: string | null, };
+export type RemoteLocationKind = "unc" | "mounted" | "remote";
+
+export type RemoteLocationSummary = { kind: RemoteLocationKind, display: string, host: string | null, scheme: string | null, fsType: string | null, };
+
+export type PublishOutputAccess = { status: PublishOutputAccessStatus, protectedLocation: ProtectedDirectoryLocation | null, protectedRoot: string | null, probeDirectory: string | null, detail: string | null, remoteLocation: RemoteLocationSummary | null, };
 
 export type PublishOutputPreflightResult = { outputDir: string, configuredOutputDir: string | null, validation: PublishOutputValidation, access: PublishOutputAccess, };
+
+export type OutputTargetKind = "local" | "mounted_remote" | "remote";
+
+export type MountKindDescriptor = "unc" | "mounted";
+
+export type OutputTargetDescriptor = { kind: OutputTargetKind, raw: string, path: string | null, mountKind: MountKindDescriptor | null, fsType: string | null, scheme: string | null, host: string | null, port: number | null, user: string | null, query: { [key: string]: string } | null, };
 
 export type RenderedPublishCommand = { program: string, args: Array<string>, working_dir: string | null, display_command: string, };
 

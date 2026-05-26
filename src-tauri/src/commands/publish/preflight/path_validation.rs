@@ -1,6 +1,7 @@
 use std::path::{Component, Path, PathBuf};
 
 use super::{PublishOutputValidation, PublishOutputValidationIssue, PublishOutputValidationStatus};
+use crate::output_target::{parse_output_target, MountKind, OutputTarget};
 
 pub(super) fn normalize_lexical_path(path: &Path) -> PathBuf {
     let mut normalized = PathBuf::new();
@@ -30,6 +31,16 @@ pub(super) fn evaluate_publish_output_validation(
     let path_to_check = configured_output_dir.unwrap_or(inferred_output_dir).trim();
     if path_to_check.is_empty() {
         return PublishOutputValidation::new(PublishOutputValidationStatus::NotApplicable, None);
+    }
+
+    if matches!(
+        parse_output_target(path_to_check),
+        OutputTarget::MountedRemote {
+            kind: MountKind::Unc,
+            ..
+        } | OutputTarget::Remote(_)
+    ) {
+        return PublishOutputValidation::new(PublishOutputValidationStatus::Compatible, None);
     }
 
     match detect_output_path_validation_issue(path_to_check) {
@@ -70,9 +81,18 @@ pub(super) fn detect_windows_output_path_validation_issue(
     None
 }
 
+pub(super) fn looks_like_unc_path(path: &str) -> bool {
+    let trimmed = path.trim();
+    trimmed.starts_with("\\\\") || trimmed.starts_with("//")
+}
+
 pub(super) fn looks_like_windows_path(path: &str) -> bool {
     let trimmed = path.trim();
     if trimmed.is_empty() {
+        return false;
+    }
+
+    if looks_like_unc_path(trimmed) {
         return false;
     }
 
@@ -82,7 +102,7 @@ pub(super) fn looks_like_windows_path(path: &str) -> bool {
         && bytes[1] == b':'
         && (bytes[2] == b'\\' || bytes[2] == b'/');
 
-    has_drive_prefix || trimmed.starts_with("\\\\") || trimmed.contains('\\')
+    has_drive_prefix || trimmed.contains('\\')
 }
 
 #[cfg_attr(not(any(test, target_os = "windows")), allow(dead_code))]

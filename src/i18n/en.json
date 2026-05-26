@@ -593,6 +593,8 @@
     "publishProtectedDirectoryAccessRequestTitle": "Select a folder to allow OnePublish access",
     "publishProtectedDirectoryAccessRequestFailed": "Failed to request folder access",
     "publishProtectedDirectoryAccessDeniedDesc": "The output directory is inside the macOS protected {{location}} folder. OnePublish already attempted to request write access from the system, but still cannot access: {{path}}. Allow OnePublish to access {{location}} in System Settings > Privacy & Security > Files and Folders, then try again. If no permission prompt appeared, switch to a non-protected output directory.",
+    "publishRemoteTargetNotImplemented": "Remote publish target is not enabled yet",
+    "publishRemoteTargetNotImplementedDesc": "This release only supports local paths and mounted remote volumes (UNC / mount points) as the output directory. Remote protocols (sftp / s3 / webdav) will be enabled in a future release.",
     "publishPlanInvalid": "Invalid publish plan",
     "publishPlanInvalidDesc": "Publish plan is not executable. Check provider and parameters.",
     "publishGradleMissing": "Gradle not found",

@@ -14,7 +14,7 @@ pub use contracts::{PublishLogChunkEvent, PublishResult, RenderedPublishCommand}
 pub use preflight::{
     ProtectedDirectoryLocation, PublishOutputAccess, PublishOutputAccessStatus,
     PublishOutputPreflightResult, PublishOutputValidation, PublishOutputValidationIssue,
-    PublishOutputValidationStatus,
+    PublishOutputValidationStatus, RemoteLocationKind, RemoteLocationSummary,
 };
 
 #[cfg(test)]
@@ -69,6 +69,16 @@ pub fn preflight_publish_output(spec: PublishSpec) -> PublishOutputPreflightResu
         "commands::publish::mod::preflight_publish_output",
     );
     preflight::preflight_publish_output(&spec)
+}
+
+#[tauri::command]
+pub fn describe_publish_output_target(
+    raw: String,
+) -> crate::output_target::OutputTargetDescriptor {
+    let _timer = crate::commands::middleware::CommandTimer::new(
+        "commands::publish::mod::describe_publish_output_target",
+    );
+    crate::output_target::describe_output_target(&raw)
 }
 
 #[tauri::command]

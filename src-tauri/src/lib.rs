@@ -8,6 +8,7 @@ pub mod config_export;
 pub mod contracts;
 pub mod environment;
 pub mod errors;
+pub mod output_target;
 pub mod parameter;
 pub mod plan;
 pub mod process_utils;
@@ -133,6 +134,7 @@ pub fn run() {
             commands::render_provider_publish,
             commands::cancel_provider_publish,
             commands::preflight_publish_output,
+            commands::describe_publish_output_target,
             commands::check_update,
             commands::install_update,
             commands::get_updater_help_paths,
