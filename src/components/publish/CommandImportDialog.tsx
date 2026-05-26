@@ -142,7 +142,9 @@ export function CommandImportDialog({
           >
             {isParsing ? (
               <>
-                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                <span className="inline-block animate-spin mr-2">
+                  <Loader2 className="h-4 w-4" />
+                </span>
                 {commandT.parsing || "解析中..."}
               </>
             ) : (

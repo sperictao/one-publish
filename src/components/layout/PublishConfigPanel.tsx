@@ -8,6 +8,7 @@ import {
   useRef,
   useState,
   useMemo,
+  memo,
   type CSSProperties,
   type MutableRefObject,
   type PointerEvent as ReactPointerEvent,
@@ -213,7 +214,9 @@ function ConfigGroup({
         )}
         <span className="flex-1 text-left">{title}</span>
         {isRefreshing ? (
-          <Loader2 className="h-3.5 w-3.5 animate-spin text-primary/80" />
+          <span className="inline-block animate-spin text-primary/80">
+            <Loader2 className="h-3.5 w-3.5" />
+          </span>
         ) : null}
         <span className="rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-medium tabular-nums">
           {count}
@@ -441,7 +444,7 @@ function ProfileItem({
   );
 }
 
-export function PublishConfigPanel({
+export const PublishConfigPanel = memo(function PublishConfigPanel({
   selectedRepoId,
   selectedPreset,
   isCustomMode,
@@ -1214,7 +1217,9 @@ export function PublishConfigPanel({
             emptyState={
               shouldShowProjectProfilesLoadingState ? (
                 <span className="flex items-center gap-2">
-                  <Loader2 className="h-3.5 w-3.5 animate-spin text-primary/80" />
+                  <span className="inline-block animate-spin text-primary/80">
+                    <Loader2 className="h-3.5 w-3.5" />
+                  </span>
                   {projectProfilesRefreshingLabel}
                 </span>
               ) : null
@@ -1427,7 +1432,9 @@ export function PublishConfigPanel({
           ))}
           {shouldShowCustomProfilesLoadingState ? (
             <div className="flex items-center gap-2 px-3 py-4 text-xs text-muted-foreground">
-              <Loader2 className="h-3.5 w-3.5 animate-spin text-primary/80" />
+              <span className="inline-block animate-spin text-primary/80">
+                <Loader2 className="h-3.5 w-3.5" />
+              </span>
               <span>{customProfilesRefreshingLabel}</span>
             </div>
           ) : null}
@@ -1732,4 +1739,4 @@ export function PublishConfigPanel({
       />
     </div>
   );
-}
+});

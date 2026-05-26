@@ -252,7 +252,9 @@ export function PublishRunCard({
               >
                 {publishActions.isPublishing ? (
                   <>
-                    <Loader2 className="h-5 w-5 mr-2 animate-spin" />
+                    <span className="inline-block animate-spin mr-2">
+                      <Loader2 className="h-5 w-5" />
+                    </span>
                     {publishActions.publishingLabel || "发布中..."}
                   </>
                 ) : (
@@ -272,7 +274,9 @@ export function PublishRunCard({
                 >
                   {publishActions.isCancellingPublish ? (
                     <>
-                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      <span className="inline-block animate-spin mr-2">
+                        <Loader2 className="h-4 w-4" />
+                      </span>
                       {publishActions.cancellingLabel || "取消中..."}
                     </>
                   ) : (
@@ -302,7 +306,9 @@ export function PublishRunCard({
                     statusMeta.iconWrapClassName
                   )}
                 >
-                  <StatusIcon className={cn("h-5 w-5", statusMeta.iconClassName)} />
+                  <span className={cn("inline-block", statusMeta.iconClassName)}>
+                    <StatusIcon className="h-5 w-5" />
+                  </span>
                 </span>
                 <div className="min-w-0">
                   <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground/70">
@@ -350,7 +356,9 @@ export function PublishRunCard({
               <div className="flex items-center gap-3">
                 <span className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-2xl bg-primary/10 text-primary shadow-[0_0_0_1px_hsl(var(--primary)/0.08)]">
                   {isOpeningOutputDir ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
+                    <span className="inline-block animate-spin">
+                      <Loader2 className="h-4 w-4" />
+                    </span>
                   ) : (
                     <FolderOpen className="h-4 w-4" />
                   )}
@@ -383,7 +391,9 @@ export function PublishRunCard({
       {isRefreshing ? (
         <div className="absolute inset-0 z-20 flex items-center justify-center bg-background/48 backdrop-blur-[2px]">
           <div className="glass-surface flex items-center gap-2 rounded-full px-4 py-2 text-sm text-foreground shadow-[var(--glass-shadow)]">
-            <Loader2 className="h-4 w-4 animate-spin text-primary" />
+            <span className="inline-block animate-spin text-primary">
+              <Loader2 className="h-4 w-4" />
+            </span>
             <span>{appT.refreshingPublishCard || "正在刷新发布信息..."}</span>
           </div>
         </div>

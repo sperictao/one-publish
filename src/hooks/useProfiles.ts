@@ -239,16 +239,17 @@ export function useProfiles({
   );
 
   const quickCreateProfileGroupOptions = useMemo(() => {
-    const groupSet = new Set(
-      profiles
-        .map((profile) => profile.profileGroup?.trim() || "")
-        .filter(
-          (value) =>
-            value.length > 0 &&
-            value !== QUICK_CREATE_PROFILE_GROUP_DEFAULT &&
-            value !== QUICK_CREATE_PROFILE_GROUP_CUSTOM
-        )
-    );
+    const groupSet = new Set<string>();
+    for (const profile of profiles) {
+      const group = profile.profileGroup?.trim() || "";
+      if (
+        group.length > 0 &&
+        group !== QUICK_CREATE_PROFILE_GROUP_DEFAULT &&
+        group !== QUICK_CREATE_PROFILE_GROUP_CUSTOM
+      ) {
+        groupSet.add(group);
+      }
+    }
 
     return Array.from(groupSet).sort((left, right) =>
       left.localeCompare(right, language === "en" ? "en" : "zh-CN")

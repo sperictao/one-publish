@@ -38,7 +38,9 @@ function App() {
     return (
       <div className="flex h-screen items-center justify-center bg-background">
         <div className="flex flex-col items-center gap-4">
-          <Loader2 className="h-8 w-8 animate-spin text-primary" />
+          <span className="inline-block animate-spin text-primary">
+            <Loader2 className="h-8 w-8" />
+          </span>
           <span className="text-muted-foreground">{boot.shell.appT.loading || "加载中..."}</span>
         </div>
       </div>

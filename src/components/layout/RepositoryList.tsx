@@ -7,6 +7,7 @@ import {
   useMemo,
   useRef,
   useState,
+  memo,
   type CSSProperties,
   type MutableRefObject,
   type PointerEvent as ReactPointerEvent,
@@ -173,7 +174,7 @@ interface RepositoryListProps {
   onReorderRepositories: (repoIds: string[]) => void;
 }
 
-export function RepositoryList({
+export const RepositoryList = memo(function RepositoryList({
   repositories,
   selectedRepoId,
   providers,
@@ -673,4 +674,4 @@ export function RepositoryList({
       </div>
     </div>
   );
-}
+});

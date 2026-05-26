@@ -318,7 +318,9 @@ export function ConfigManagementContent({
           >
             {isSaving ? (
               <>
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                <span className="inline-block animate-spin mr-2">
+                  <Loader2 className="h-4 w-4" />
+                </span>
                 {profileT.quickCreateSaving || "保存中..."}
               </>
             ) : (
@@ -341,7 +343,9 @@ export function ConfigManagementContent({
       >
         {isLoading && profiles.length === 0 ? (
           <AppDialogInset className="flex min-h-[180px] items-center justify-center">
-            <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+            <span className="inline-block animate-spin text-muted-foreground">
+              <Loader2 className="h-6 w-6" />
+            </span>
           </AppDialogInset>
         ) : profiles.length === 0 ? (
           <AppDialogInset className="px-5 py-10 text-center text-muted-foreground">
@@ -428,7 +432,9 @@ export function ConfigManagementContent({
                 >
                   {isApplyingImport ? (
                     <>
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      <span className="inline-block animate-spin mr-2">
+                        <Loader2 className="h-4 w-4" />
+                      </span>
                       {profileT.importing || "导入中..."}
                     </>
                   ) : (
