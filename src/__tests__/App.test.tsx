@@ -83,6 +83,44 @@ vi.mock("@/hooks/useAppState", async () => {
 
 vi.mock("@/hooks/useTheme", () => ({
   useTheme: () => undefined,
+  useAccentColor: () => ({
+    accentColor: "blue",
+    setAccentColor: mocks.noop,
+  }),
+  ACCENT_COLORS: {
+    blue: {
+      light: {
+        accent: "#0066cc",
+        accentFocus: "#0071e3",
+        sidebarSelectedBg: "rgba(0, 102, 204, 0.08)",
+        sidebarSelectedText: "#0066cc",
+        cardSelectedBorder: "rgba(0, 102, 204, 0.4)",
+      },
+      dark: {
+        accent: "#2997ff",
+        accentFocus: "#2997ff",
+        sidebarSelectedBg: "rgba(41, 151, 255, 0.16)",
+        sidebarSelectedText: "#2997ff",
+        cardSelectedBorder: "rgba(41, 151, 255, 0.6)",
+      },
+    },
+    brand: {
+      light: {
+        accent: "#2462db",
+        accentFocus: "#1f54bd",
+        sidebarSelectedBg: "rgba(36, 98, 219, 0.08)",
+        sidebarSelectedText: "#2462db",
+        cardSelectedBorder: "rgba(36, 98, 219, 0.4)",
+      },
+      dark: {
+        accent: "#4983de",
+        accentFocus: "#5d93e6",
+        sidebarSelectedBg: "rgba(73, 131, 222, 0.16)",
+        sidebarSelectedText: "#4983de",
+        cardSelectedBorder: "rgba(73, 131, 222, 0.6)",
+      },
+    },
+  },
 }));
 
 vi.mock("@/hooks/useShortcuts", () => ({

@@ -1,5 +1,6 @@
 import { Suspense, lazy } from "react";
 import { useAppBoot } from "@/hooks/useAppBoot";
+import { useAccentColor } from "@/hooks/useTheme";
 
 import { ResizeHandle } from "@/components/layout/ResizeHandle";
 import { SidebarPanelShell } from "@/components/layout/SidebarPanelShell";
@@ -31,6 +32,7 @@ const MainContentShell = lazy(async () => {
 });
 
 function App() {
+  useAccentColor();
   const boot = useAppBoot();
 
   // Show loading state
