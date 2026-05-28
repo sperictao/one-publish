@@ -1214,14 +1214,14 @@ export function SettingsDialog({
           translations.settings?.description || "配置语言、外观、输出目录等偏好设置"
         }
         icon={undefined}
-        surfaceClassName="bg-white dark:bg-[#1d1d1f] border border-[var(--settings-hairline)] shadow-2xl"
-        headerClassName="border-[var(--settings-hairline)] bg-transparent"
+        surfaceClassName="bg-[#f5f5f7] dark:bg-[#1e1e20] border border-[var(--settings-hairline)] shadow-2xl"
+        headerClassName="border-b border-[var(--settings-hairline)] bg-transparent"
         titleClassName="text-[17px] font-semibold text-[var(--settings-ink)]"
         descriptionClassName="text-[13px] text-[var(--settings-ink-muted)]"
       >
-        <div className="grid h-full min-h-0 gap-0 sm:grid-cols-[200px_minmax(0,1fr)] bg-white dark:bg-[#1d1d1f]">
+        <div className="grid h-full min-h-0 gap-0 sm:grid-cols-[200px_minmax(0,1fr)]">
           {/* Sidebar */}
-          <aside className="min-h-0 overflow-y-auto border-r border-[var(--settings-hairline)] bg-[#f5f5f7]/50 dark:bg-[#252527]/50 px-3 py-4 glass-scrollbar">
+          <aside className="min-h-0 overflow-y-auto border-r border-[var(--settings-hairline)] bg-transparent px-3 py-4 glass-scrollbar">
             <nav className="flex gap-0.5 overflow-x-auto sm:flex-col sm:overflow-visible">
               {categoryItems.map((item) => {
                 const Icon = item.icon;
@@ -1261,16 +1261,16 @@ export function SettingsDialog({
           </aside>
 
           {/* Content */}
-          <section className="min-h-0 flex flex-col overflow-hidden bg-white dark:bg-[#1d1d1f]">
-            <div className="border-b border-[var(--settings-hairline)] px-6 pb-4 pt-5">
-              <h3 className="text-[17px] font-semibold tracking-[-0.374px] text-[var(--settings-ink)]">
+          <section className="min-h-0 flex flex-col overflow-hidden bg-transparent">
+            <div className="px-6 pb-2 pt-4">
+              <h3 className="text-[15px] font-semibold tracking-[-0.3px] text-[var(--settings-ink)]">
                 {activeCategoryItem.label}
               </h3>
-              <p className="mt-0.5 text-[14px] leading-[1.43] tracking-[-0.224px] text-[var(--settings-ink-muted)]">
+              <p className="mt-0.5 text-[12px] leading-[1.4] tracking-[-0.1px] text-[var(--settings-ink-muted)]">
                 {categoryDescriptions[activeCategory]}
               </p>
             </div>
-            <div className="glass-scrollbar min-h-0 flex-1 overflow-y-auto px-6 py-5">
+            <div className="glass-scrollbar min-h-0 flex-1 overflow-y-auto px-6 py-4">
               {renderCategoryContent()}
             </div>
           </section>
