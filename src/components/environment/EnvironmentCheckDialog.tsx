@@ -328,15 +328,15 @@ export function EnvironmentCheckContent({
             variant="outline"
             onClick={handleCheck}
             disabled={checking || runningFix}
-            className="glass-interactive rounded-full border border-white/15 dark:border-white/5 bg-white/20 dark:bg-white/5 text-[#0066cc] dark:text-[#2997ff] hover:bg-white/30 dark:hover:bg-white/10 active:scale-95 transition-all duration-200 shadow-none text-xs font-semibold h-8 px-4 shrink-0"
+            className="rounded-full border border-[#d1d1d6] border-b-[#b5b5ba] bg-gradient-to-b from-white to-[#f5f5f7] text-[12px] font-bold text-black/80 shadow-[0_1px_1px_rgba(0,0,0,0.05)] hover:from-[#f5f5f7] hover:to-[#e9e9eb] dark:from-[#3a3a3c] dark:to-[#2c2c2e] dark:border-[#48484a] dark:border-b-[#1c1c1e] dark:hover:from-[#48484a] dark:hover:to-[#3a3a3c] dark:text-white/90 active:scale-[0.97] transition-all shrink-0 flex items-center gap-1.5 h-8 px-4"
           >
             {checking ? (
               <>
-                <Loader2 className="size-3.5 mr-1.5 animate-spin" />
-                {translations.environment?.checking || "检查中..."}
+                <Loader2 className="size-3.5 animate-spin" />
+                <span>{translations.environment?.checking || "检查中..."}</span>
               </>
             ) : (
-              translations.environment?.recheck || "重新检查"
+              <span>{translations.environment?.recheck || "重新检查"}</span>
             )}
           </Button>
         </div>
@@ -509,20 +509,20 @@ export function EnvironmentCheckContent({
                                 onClick={() => handleApplyFix(fix)}
                                 disabled={checking || runningFix}
                                 className={cn(
-                                  "transition-all duration-200 active:scale-95 shadow-none text-xs h-8 px-4 font-semibold rounded-full",
+                                  "transition-all duration-200 active:scale-95 text-xs h-8 px-4 font-bold rounded-full flex items-center gap-1.5 shrink-0 border",
                                   fix.action_type === "run_command"
-                                    ? "bg-gradient-to-b from-[#4fa2ff] to-[#0066cc] text-white shadow-[0_2px_8px_rgba(0,102,204,0.2)] hover:from-[#5cb0ff] hover:to-[#0073e6] border-none"
-                                    : "glass-interactive border border-white/15 dark:border-white/5 bg-white/20 dark:bg-white/5 text-zinc-700 dark:text-zinc-300 hover:bg-white/30 dark:hover:bg-white/10"
+                                    ? "bg-gradient-to-b from-[#007aff] to-[#0066cc] border-[#0055b3] text-white shadow-[0_1px_2px_rgba(0,102,204,0.35),inset_0_1px_0_rgba(255,255,255,0.15)] hover:from-[#0088ff] hover:to-[#007aff] dark:from-[#0066cc] dark:to-[#0055b3] dark:border-[#004499]"
+                                    : "border-[#d1d1d6] border-b-[#b5b5ba] bg-gradient-to-b from-white to-[#f5f5f7] text-black/80 shadow-[0_1px_1px_rgba(0,0,0,0.05)] hover:from-[#f5f5f7] hover:to-[#e9e9eb] dark:from-[#3a3a3c] dark:to-[#2c2c2e] dark:border-[#48484a] dark:border-b-[#1c1c1e] dark:hover:from-[#48484a] dark:hover:to-[#3a3a3c] dark:text-white/90"
                                 )}
                               >
                                 {fix.action_type === "open_url" ? (
-                                  <ExternalLink className="size-3.5 mr-1.5" />
+                                  <ExternalLink className="size-3.5" />
                                 ) : fix.action_type === "copy_command" ? (
-                                  <Copy className="size-3.5 mr-1.5" />
+                                  <Copy className="size-3.5" />
                                 ) : (
-                                  <Terminal className="size-3.5 mr-1.5" />
+                                  <Terminal className="size-3.5" />
                                 )}
-                                {fix.label}
+                                <span>{fix.label}</span>
                               </Button>
                             ))}
                           </div>
@@ -550,12 +550,12 @@ export function EnvironmentCheckContent({
                   </div>
                   <Button
                     size="sm"
-                    variant="ghost"
+                    variant="outline"
                     onClick={() => handleCopy(fixResultText)}
-                    className="glass-interactive h-7 px-3.5 text-xs text-muted-foreground hover:text-foreground active:scale-95 transition-all duration-200 rounded-full border border-white/15 dark:border-white/5 bg-white/20 dark:bg-white/5 font-semibold"
+                    className="rounded-full border border-[#d1d1d6] border-b-[#b5b5ba] bg-gradient-to-b from-white to-[#f5f5f7] text-[11px] font-bold text-black/80 shadow-[0_1px_1px_rgba(0,0,0,0.05)] hover:from-[#f5f5f7] hover:to-[#e9e9eb] dark:from-[#3a3a3c] dark:to-[#2c2c2e] dark:border-[#48484a] dark:border-b-[#1c1c1e] dark:hover:from-[#48484a] dark:hover:to-[#3a3a3c] dark:text-white/90 active:scale-[0.97] transition-all h-7 px-3.5 flex items-center gap-1 shrink-0"
                   >
-                    <Copy className="size-3 mr-1" />
-                    {translations.environment?.copied ? "复制" : "复制"}
+                    <Copy className="size-3 text-black/50 dark:text-white/50" />
+                    <span>{translations.environment?.copied ? "复制" : "复制"}</span>
                   </Button>
                 </div>
                 <pre className="rounded-xl border border-black/5 dark:border-white/5 bg-black/10 dark:bg-black/30 p-3 text-xs font-mono text-foreground/90 whitespace-pre-wrap max-h-56 overflow-auto glass-scrollbar shadow-none">
@@ -587,22 +587,22 @@ export function EnvironmentCheckContent({
                 variant="outline"
                 onClick={() => setPendingRun(null)}
                 disabled={runningFix}
-                className="glass-interactive h-9 px-4 text-xs rounded-full border border-white/15 dark:border-white/5 bg-white/20 dark:bg-white/5 text-zinc-700 dark:text-zinc-300 hover:bg-white/30 dark:hover:bg-white/10 transition-all duration-200 active:scale-95 shadow-none font-semibold"
+                className="rounded-full border border-[#d1d1d6] border-b-[#b5b5ba] bg-gradient-to-b from-white to-[#f5f5f7] text-[12px] font-bold text-black/80 shadow-[0_1px_1px_rgba(0,0,0,0.05)] hover:from-[#f5f5f7] hover:to-[#e9e9eb] dark:from-[#3a3a3c] dark:to-[#2c2c2e] dark:border-[#48484a] dark:border-b-[#1c1c1e] dark:hover:from-[#48484a] dark:hover:to-[#3a3a3c] dark:text-white/90 active:scale-[0.97] transition-all h-9 px-4 shrink-0 flex items-center justify-center"
               >
-                {translations.environment?.cancel || "取消"}
+                <span>{translations.environment?.cancel || "取消"}</span>
               </Button>
               <Button
                 onClick={confirmRun}
                 disabled={runningFix}
-                className="h-9 px-4.5 text-xs rounded-full bg-gradient-to-b from-[#4fa2ff] to-[#0066cc] text-white shadow-[0_2px_8px_rgba(0,102,204,0.2)] hover:from-[#5cb0ff] hover:to-[#0073e6] transition-all duration-200 active:scale-95 border-none font-bold"
+                className="rounded-full bg-gradient-to-b from-[#007aff] to-[#0066cc] border border-[#0055b3] text-white shadow-[0_1px_2px_rgba(0,102,204,0.35),inset_0_1px_0_rgba(255,255,255,0.15)] hover:from-[#0088ff] hover:to-[#007aff] dark:from-[#0066cc] dark:to-[#0055b3] dark:border-[#004499] active:scale-[0.97] transition-all text-[12px] font-bold h-9 px-4.5 shrink-0 flex items-center justify-center"
               >
                 {runningFix ? (
                   <>
-                    <Loader2 className="mr-2 size-4 animate-spin" />
-                    {translations.environment?.running || "执行中..."}
+                    <Loader2 className="mr-1.5 size-4 animate-spin" />
+                    <span>{translations.environment?.running || "执行中..."}</span>
                   </>
                 ) : (
-                  translations.environment?.run || "执行"
+                  <span>{translations.environment?.run || "执行"}</span>
                 )}
               </Button>
             </div>
@@ -647,9 +647,9 @@ export function EnvironmentCheckDialog({
             <Button 
               variant="outline" 
               onClick={() => onOpenChange(false)}
-              className="glass-interactive rounded-full border border-white/15 dark:border-white/5 bg-white/20 dark:bg-white/5 text-zinc-700 dark:text-zinc-300 hover:bg-white/30 dark:hover:bg-white/10 transition-all duration-200 active:scale-95 shadow-none text-sm font-semibold h-9 px-5"
+              className="rounded-full border border-[#d1d1d6] border-b-[#b5b5ba] bg-gradient-to-b from-white to-[#f5f5f7] text-sm font-bold text-black/80 shadow-[0_1px_1px_rgba(0,0,0,0.05)] hover:from-[#f5f5f7] hover:to-[#e9e9eb] dark:from-[#3a3a3c] dark:to-[#2c2c2e] dark:border-[#48484a] dark:border-b-[#1c1c1e] dark:hover:from-[#48484a] dark:hover:to-[#3a3a3c] dark:text-white/90 active:scale-[0.97] transition-all h-9 px-5 shrink-0 flex items-center justify-center"
             >
-              {translations.environment?.close || "关闭"}
+              <span>{translations.environment?.close || "关闭"}</span>
             </Button>
           </div>
         }
