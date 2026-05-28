@@ -26,17 +26,17 @@ export function SectionShell({
 
   const headerContent = (
     <>
-      <span className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-2xl bg-primary/10 text-primary shadow-[0_8px_20px_hsl(var(--primary)/0.16)]">
-        <Icon className="h-4 w-4" />
+      <span className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary shadow-[0_4px_12px_hsl(var(--primary)/0.12)]">
+        <Icon className="h-3.5 w-3.5" />
       </span>
       <div className="min-w-0 flex-1 text-left">
-        <h3 className="text-base font-semibold text-foreground">{title}</h3>
-        <CardDescription className="mt-1 text-xs leading-5">
+        <h3 className="text-sm font-semibold text-foreground">{title}</h3>
+        <CardDescription className="mt-0.5 text-[11px] leading-4 text-muted-foreground/80">
           {description}
         </CardDescription>
       </div>
       {badge ? (
-        <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[11px] font-medium text-primary">
+        <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-medium text-primary">
           {badge}
         </span>
       ) : null}
@@ -45,27 +45,27 @@ export function SectionShell({
 
   return (
     <Card className="rounded-2xl">
-      <CardHeader className="pb-3">
+      <CardHeader className="p-4 pb-2.5">
         {collapsible ? (
           <button
             type="button"
-            className="flex w-full items-start gap-3 text-left"
+            className="flex w-full items-start gap-2.5 text-left"
             aria-expanded={expanded}
             onClick={() => setExpanded((previous) => !previous)}
           >
             {headerContent}
             {expanded ? (
-              <ChevronDown className="mt-1 h-4 w-4 flex-shrink-0 text-muted-foreground" />
+              <ChevronDown className="mt-0.5 h-4 w-4 flex-shrink-0 text-muted-foreground" />
             ) : (
-              <ChevronRight className="mt-1 h-4 w-4 flex-shrink-0 text-muted-foreground" />
+              <ChevronRight className="mt-0.5 h-4 w-4 flex-shrink-0 text-muted-foreground" />
             )}
           </button>
         ) : (
-          <div className="flex items-start gap-3">{headerContent}</div>
+          <div className="flex items-start gap-2.5">{headerContent}</div>
         )}
       </CardHeader>
       {!collapsible || expanded ? (
-        <CardContent className="pt-0">{children}</CardContent>
+        <CardContent className="p-4 pt-0">{children}</CardContent>
       ) : null}
     </Card>
   );

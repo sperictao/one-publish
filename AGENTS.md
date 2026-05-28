@@ -14,6 +14,7 @@
 - Rust 侧：`cd src-tauri && cargo check|test|clippy` 进行检查/测试/静态分析。
 
 ## 编码风格与命名约定
+- 始终使用中文（Chinese）与用户进行交流与回复。
 - TypeScript 严格模式，默认 2 空格缩进，保持 Vite/Prettier 默认格式（仓库未启用 ESLint）。
 - 路径别名 `@/*` 指向 `src/*`；组件文件用 PascalCase，Hook 以 `useXxx` 命名。
 - Tailwind 设计令牌定义于 `src/index.css`，优先复用现有变量与 shadcn/ui 组件。

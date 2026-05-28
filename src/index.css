@@ -151,6 +151,19 @@ html.dark {
   --glass-branch-disconnected-bg: rgba(255, 255, 255, 0.34);
   --glass-branch-disconnected-border: rgba(255, 255, 255, 0.55);
   --glass-branch-disconnected-highlight: inset 0 1px 0 rgba(255, 255, 255, 0.5);
+
+  /* Settings page — Apple design tokens */
+  --settings-sidebar-item-active: #f5f5f7;
+  --settings-sidebar-item-hover: rgba(0, 0, 0, 0.04);
+  --settings-hairline: rgba(0, 0, 0, 0.08);
+  --settings-ink: #1d1d1f;
+  --settings-ink-muted: #86868b;
+  --settings-accent: #0066cc;
+  --settings-accent-focus: #0071e3;
+  --settings-section-bg: #ffffff;
+  --settings-icon-muted: #86868b;
+  --settings-icon-active: #0066cc;
+
   --repo-sidebar-shell-bg: linear-gradient(
     172deg,
     rgba(254, 252, 248, 0.8) 0%,
@@ -197,6 +210,19 @@ html.dark {
   --glass-branch-disconnected-bg: rgba(255, 255, 255, 0.08);
   --glass-branch-disconnected-border: rgba(255, 255, 255, 0.15);
   --glass-branch-disconnected-highlight: inset 0 1px 0 rgba(255, 255, 255, 0.06);
+
+  /* Settings page — Apple design tokens (dark) */
+  --settings-sidebar-item-active: rgba(255, 255, 255, 0.1);
+  --settings-sidebar-item-hover: rgba(255, 255, 255, 0.06);
+  --settings-hairline: rgba(255, 255, 255, 0.1);
+  --settings-ink: #f5f5f7;
+  --settings-ink-muted: #86868b;
+  --settings-accent: #2997ff;
+  --settings-accent-focus: #2997ff;
+  --settings-section-bg: rgba(255, 255, 255, 0.04);
+  --settings-icon-muted: #86868b;
+  --settings-icon-active: #2997ff;
+
   --repo-sidebar-shell-bg: linear-gradient(
     172deg,
     rgba(41, 48, 62, 0.47) 0%,

@@ -123,6 +123,7 @@ Custom title bar with drag support using `data-tauri-drag-region` attribute.
 ## Notes
 
 - UI language is Chinese (中文)
+- **Always reply in Chinese (始终使用中文进行回复)**
 - Minimum Rust version: 1.77.0
 - Minimum macOS version: 10.15
 - Window uses overlay title bar style (titleBarStyle: "Overlay")

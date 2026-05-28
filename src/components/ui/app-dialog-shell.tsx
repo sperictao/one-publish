@@ -9,7 +9,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 
-type AppDialogShellSize = "compact" | "default" | "wide" | "workspace";
+type AppDialogShellSize = "compact" | "default" | "wide" | "workspace" | "responsive";
 type AppDialogShellPadding = "default" | "none";
 
 const contentSizeClassName: Record<AppDialogShellSize, string> = {
@@ -17,6 +17,7 @@ const contentSizeClassName: Record<AppDialogShellSize, string> = {
   default: "sm:max-w-[720px]",
   wide: "sm:max-w-[920px]",
   workspace: "sm:max-w-[960px]",
+  responsive: "sm:max-w-[78vw]",
 };
 
 const surfaceSizeClassName: Record<AppDialogShellSize, string> = {
@@ -24,6 +25,7 @@ const surfaceSizeClassName: Record<AppDialogShellSize, string> = {
   default: "max-h-[82vh] min-h-[520px]",
   wide: "max-h-[85vh] min-h-[640px]",
   workspace: "h-[82vh]",
+  responsive: "h-[82vh]",
 };
 
 interface AppDialogShellProps {
@@ -71,6 +73,8 @@ export function AppDialogShell({
   closeButtonClassName = "right-6 top-6",
   headerAside,
 }: AppDialogShellProps): JSX.Element {
+  const isFixedSecondaryHeight = size === "workspace" || size === "responsive";
+
   return (
     <DialogContent
       chrome="bare"
@@ -79,14 +83,15 @@ export function AppDialogShell({
       className={cn(
         "overflow-visible border-none bg-transparent p-0 shadow-none backdrop-blur-none",
         contentSizeClassName[size],
+        isFixedSecondaryHeight && "h-[82vh]",
         dialogClassName
       )}
     >
-      <div className="p-1">
+      <div className={cn("p-1", isFixedSecondaryHeight && "h-full min-h-0 flex flex-col")}>
         <div
           className={cn(
             "glass-card repo-sidebar-shell flex min-h-0 flex-col overflow-hidden rounded-2xl",
-            surfaceSizeClassName[size],
+            isFixedSecondaryHeight ? "h-full" : surfaceSizeClassName[size],
             surfaceClassName
           )}
         >
@@ -128,14 +133,14 @@ export function AppDialogShell({
           <div
             className={cn(
               "min-h-0 flex-1",
-              bodyScrollable && "glass-scrollbar overflow-y-auto",
+              bodyScrollable ? "glass-scrollbar overflow-y-auto" : "relative overflow-hidden",
               bodyClassName
             )}
           >
             <div
               className={cn(
-                "min-h-0",
-                !bodyScrollable && "h-full",
+                !bodyScrollable && "absolute inset-0 h-full w-full flex flex-col",
+                bodyScrollable && "min-h-0",
                 bodyPadding === "default" && "p-5 sm:p-6",
                 bodyInnerClassName
               )}

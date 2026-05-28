@@ -2,6 +2,7 @@ import { memo, useCallback, useMemo, useState } from "react";
 import {
   FileCog,
   FolderOutput,
+  HelpCircle,
   Plus,
   SlidersHorizontal,
   X,
@@ -9,12 +10,6 @@ import {
 
 import { OutputTargetBadge } from "@/components/publish/OutputTargetBadge";
 import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-} from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { SectionShell } from "@/components/ui/section-shell";
@@ -106,47 +101,53 @@ const DotnetPublishParametersSection = memo(function DotnetPublishParametersSect
         "先确定构建配置和运行时，再决定输出部署方式。"
       }
     >
-      <div className="grid gap-4 md:grid-cols-2">
-        <div className="space-y-2">
-          <Label htmlFor="quick-profile-configuration">
+      <div className="grid gap-3 md:grid-cols-2">
+        <div className="space-y-1">
+          <Label htmlFor="quick-profile-configuration" className="text-xs">
             {appT.configurationType || "配置类型"}
           </Label>
           <Select value={configuration} onValueChange={onConfigurationChange}>
             <SelectTrigger
               id="quick-profile-configuration"
               disabled={readOnly}
+              className="h-9 text-xs"
             >
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="Release">Release</SelectItem>
-              <SelectItem value="Debug">Debug</SelectItem>
+              <SelectItem value="Release" className="text-xs">Release</SelectItem>
+              <SelectItem value="Debug" className="text-xs">Debug</SelectItem>
             </SelectContent>
           </Select>
         </div>
 
-        <div className="space-y-2">
-          <Label htmlFor="quick-profile-runtime">
-            {appT.runtimeLabel || "运行时"}
-          </Label>
+        <div className="space-y-1">
+          <div className="flex items-center gap-1.5">
+            <Label htmlFor="quick-profile-runtime" className="text-xs">
+              {appT.runtimeLabel || "运行时"}
+            </Label>
+            <div className="group relative inline-block">
+              <HelpCircle className="h-3.5 w-3.5 text-muted-foreground/60 cursor-help hover:text-foreground transition-colors" />
+              <div className="absolute left-0 bottom-full mb-2 hidden group-hover:block w-64 p-2 bg-[var(--glass-panel-bg)] backdrop-blur-xl text-popover-foreground text-xs rounded-xl shadow-[var(--glass-shadow-lg)] border border-[var(--glass-border)] z-10 leading-4 font-normal">
+                {profileT.quickCreateRuntimeHint ||
+                  "未指定运行时时将保持框架依赖模式。"}
+              </div>
+            </div>
+          </div>
           <Select value={runtime || "none"} onValueChange={onRuntimeChange}>
-            <SelectTrigger id="quick-profile-runtime" disabled={readOnly}>
+            <SelectTrigger id="quick-profile-runtime" disabled={readOnly} className="h-9 text-xs">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="none">
+              <SelectItem value="none" className="text-xs">
                 {appT.frameworkDependent || "框架依赖"}
               </SelectItem>
-              <SelectItem value="win-x64">Windows x64</SelectItem>
-              <SelectItem value="osx-arm64">macOS ARM64</SelectItem>
-              <SelectItem value="osx-x64">macOS x64</SelectItem>
-              <SelectItem value="linux-x64">Linux x64</SelectItem>
+              <SelectItem value="win-x64" className="text-xs">Windows x64</SelectItem>
+              <SelectItem value="osx-arm64" className="text-xs">macOS ARM64</SelectItem>
+              <SelectItem value="osx-x64" className="text-xs">macOS x64</SelectItem>
+              <SelectItem value="linux-x64" className="text-xs">Linux x64</SelectItem>
             </SelectContent>
           </Select>
-          <p className="text-xs leading-5 text-muted-foreground">
-            {profileT.quickCreateRuntimeHint ||
-              "未指定运行时时将保持框架依赖模式。"}
-          </p>
         </div>
       </div>
     </SectionShell>
@@ -181,12 +182,19 @@ const DotnetPublishOutputSection = memo(function DotnetPublishOutputSection({
         "控制产物输出目录和部署形态，保存后会按这些参数执行发布。"
       }
     >
-      <div className="space-y-4">
-        <div className="space-y-2">
+      <div className="grid gap-3 md:grid-cols-2">
+        <div className="space-y-1">
           <div className="flex flex-wrap items-center gap-2">
-            <Label htmlFor="quick-profile-output">
+            <Label htmlFor="quick-profile-output" className="text-xs">
               {appT.outputDirLabel || "输出目录"}
             </Label>
+            <div className="group relative inline-block">
+              <HelpCircle className="h-3.5 w-3.5 text-muted-foreground/60 cursor-help hover:text-foreground transition-colors" />
+              <div className="absolute left-0 bottom-full mb-2 hidden group-hover:block w-64 p-2 bg-[var(--glass-panel-bg)] backdrop-blur-xl text-popover-foreground text-xs rounded-xl shadow-[var(--glass-shadow-lg)] border border-[var(--glass-border)] z-10 leading-4 font-normal">
+                {profileT.quickCreateOutputHint ||
+                  "留空时会回落到默认输出目录规则。"}
+              </div>
+            </div>
             <OutputTargetBadge
               raw={outputDir}
               translations={{
@@ -206,41 +214,61 @@ const DotnetPublishOutputSection = memo(function DotnetPublishOutputSection({
             onChange={(event) => onOutputDirChange(event.target.value)}
             placeholder={appT.outputDirPlaceholder || "留空使用默认目录"}
             readOnly={readOnly}
+            className="h-9 text-xs"
           />
-          <p className="text-xs leading-5 text-muted-foreground">
-            {profileT.quickCreateOutputHint ||
-              "留空时会回落到默认输出目录规则。"}
-          </p>
         </div>
 
-        <div
-          className={cn(
-            "rounded-2xl border border-[var(--glass-border-subtle)] bg-[var(--glass-input-bg)] p-4 shadow-[var(--glass-inset-shadow)]",
-            isRuntimeRequired && "opacity-90"
-          )}
-        >
-          <div className="flex items-start justify-between gap-4">
-            <div className="min-w-0">
-              <Label
-                htmlFor="quick-profile-self-contained"
-                className="text-sm font-medium text-foreground"
-              >
-                {appT.selfContained || "自包含部署"}
-              </Label>
-              <p className="mt-1 text-xs leading-5 text-muted-foreground">
+        <div className="space-y-1">
+          <div className="flex items-center gap-1.5 h-5">
+            <Label
+              htmlFor="quick-profile-self-contained"
+              className="text-xs"
+            >
+              {appT.selfContained || "自包含部署"}
+            </Label>
+            <div className="group relative inline-block">
+              <HelpCircle className="h-3.5 w-3.5 text-muted-foreground/60 cursor-help hover:text-foreground transition-colors" />
+              <div className="absolute right-0 bottom-full mb-2 hidden group-hover:block w-56 p-2 bg-[var(--glass-panel-bg)] backdrop-blur-xl text-popover-foreground text-xs rounded-xl shadow-[var(--glass-shadow-lg)] border border-[var(--glass-border)] z-10 leading-4 font-normal">
                 {isRuntimeRequired
                   ? profileT.quickCreateSelfContainedRuntimeRequired ||
-                    "请先选择运行时，自包含部署才可启用。"
+                    "需先选运行时才可启用自包含。"
                   : profileT.quickCreateSelfContainedHint ||
-                    "启用后会将运行时一起打包，产物更独立，但体积更大。"}
-              </p>
+                    "包含运行时，体积大但更独立。"}
+              </div>
             </div>
-            <Switch
-              id="quick-profile-self-contained"
-              checked={selfContained}
-              onCheckedChange={onSelfContainedChange}
-              disabled={readOnly || isRuntimeRequired}
-            />
+          </div>
+
+          <div
+            className={cn(
+              "glass-input flex h-9 w-full items-center justify-between rounded-xl px-3 transition-all duration-300",
+              !readOnly && !isRuntimeRequired && "hover:border-primary/30 cursor-pointer select-none",
+              isRuntimeRequired && "opacity-50 cursor-not-allowed bg-black/5 dark:bg-white/5"
+            )}
+            onClick={() => {
+              if (!readOnly && !isRuntimeRequired) {
+                onSelfContainedChange(!selfContained);
+              }
+            }}
+          >
+            <span className="text-xs text-muted-foreground select-none truncate">
+              {isRuntimeRequired
+                ? "未指定运行时 (不可用)"
+                : selfContained
+                ? "Self-Contained (独立运行)"
+                : "Framework-Dependent (依赖框架)"}
+            </span>
+
+            <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
+              {selfContained && !isRuntimeRequired && (
+                <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse shrink-0" />
+              )}
+              <Switch
+                id="quick-profile-self-contained"
+                checked={selfContained}
+                onCheckedChange={onSelfContainedChange}
+                disabled={readOnly || isRuntimeRequired}
+              />
+            </div>
           </div>
         </div>
       </div>
@@ -591,35 +619,27 @@ const DotnetAdvancedFieldCards = memo(function DotnetAdvancedFieldCards({
   onParameterChange: (key: string, value: ParameterValue) => void;
 }): JSX.Element {
   return (
-    <div className="space-y-4">
+    <div className="grid gap-3.5 md:grid-cols-2">
       {fields.map((field) => {
         const localizedFieldText = getLocalizedAdvancedFieldText(profileT, field);
+        const isFullWidth = field.control === "property-map" || field.control === "tags";
 
         return (
-          <Card key={field.key} className="rounded-2xl">
-            <CardHeader className="pb-2">
-              <div className="text-sm font-semibold text-foreground">
-                {localizedFieldText.title}
-              </div>
-              <CardDescription className="text-xs leading-5">
-                <span className="block">{localizedFieldText.description}</span>
-                <span className="mt-1 block text-[11px] text-muted-foreground/80">
-                  {localizedFieldText.technicalLabelPrefix}
-                  {" · "}
-                  <span className="font-mono">{localizedFieldText.technicalLabel}</span>
-                </span>
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="pt-0">
-              <DotnetAdvancedFieldControl
-                field={field}
-                fieldText={localizedFieldText}
-                profileT={profileT}
-                readOnly={readOnly}
-                onChange={(value) => onParameterChange(field.key, value)}
-              />
-            </CardContent>
-          </Card>
+          <div
+            key={field.key}
+            className={cn(
+              "rounded-xl border border-[var(--glass-border-subtle)] bg-background/20 p-3 shadow-[var(--glass-inset-shadow)] flex flex-col justify-between",
+              isFullWidth && "md:col-span-2"
+            )}
+          >
+            <DotnetAdvancedFieldControl
+              field={field}
+              fieldText={localizedFieldText}
+              profileT={profileT}
+              readOnly={readOnly}
+              onChange={(value) => onParameterChange(field.key, value)}
+            />
+          </div>
         );
       })}
     </div>
@@ -727,12 +747,14 @@ function DotnetAdvancedFieldControl({
   fieldText,
   profileT,
   readOnly,
+  align = "left",
   onChange,
 }: {
   field: DotnetAdvancedFieldModel;
   fieldText: LocalizedAdvancedFieldText;
   profileT: FormTranslations;
   readOnly: boolean;
+  align?: "left" | "right";
   onChange: (value: ParameterValue) => void;
 }): JSX.Element {
   switch (field.control) {
@@ -742,6 +764,7 @@ function DotnetAdvancedFieldControl({
           field={field}
           fieldText={fieldText}
           readOnly={readOnly}
+          align={align}
           onChange={onChange}
         />
       );
@@ -752,6 +775,7 @@ function DotnetAdvancedFieldControl({
           fieldText={fieldText}
           profileT={profileT}
           readOnly={readOnly}
+          align={align}
           onChange={onChange}
         />
       );
@@ -761,6 +785,7 @@ function DotnetAdvancedFieldControl({
           field={field}
           fieldText={fieldText}
           readOnly={readOnly}
+          align={align}
           onChange={onChange}
         />
       );
@@ -770,6 +795,7 @@ function DotnetAdvancedFieldControl({
           field={field}
           fieldText={fieldText}
           readOnly={readOnly}
+          align={align}
           onChange={onChange}
         />
       );
@@ -779,6 +805,7 @@ function DotnetAdvancedFieldControl({
           field={field}
           fieldText={fieldText}
           readOnly={readOnly}
+          align={align}
           onChange={onChange}
         />
       );
@@ -789,6 +816,7 @@ function DotnetAdvancedFieldControl({
           field={field}
           fieldText={fieldText}
           readOnly={readOnly}
+          align={align}
           onChange={onChange}
         />
       );
@@ -799,19 +827,41 @@ function DotnetFrameworkSuggestionsField({
   field,
   fieldText,
   readOnly,
+  align = "left",
   onChange,
 }: {
   field: DotnetAdvancedFieldModel;
   fieldText: LocalizedAdvancedFieldText;
   readOnly: boolean;
+  align?: "left" | "right";
   onChange: (value: ParameterValue) => void;
 }): JSX.Element {
   const value = typeof field.value === "string" ? field.value : "";
   const datalistId = `framework-options-${field.key}`;
 
   return (
-    <div className="space-y-2 py-2">
-      <Label htmlFor={field.key}>{fieldText.label}</Label>
+    <div className="space-y-1.5 w-full">
+      <div className="flex flex-wrap items-center gap-1.5">
+        <Label htmlFor={field.key} className="text-xs font-semibold text-foreground">
+          {fieldText.label}
+        </Label>
+        {fieldText.technicalLabel && (
+          <span className="font-mono text-[9px] text-muted-foreground/60 bg-black/5 dark:bg-white/5 border border-black/5 dark:border-white/10 px-1.5 py-0.5 rounded-md">
+            {fieldText.technicalLabel}
+          </span>
+        )}
+        <div className="group relative inline-block">
+          <HelpCircle className="h-3.5 w-3.5 text-muted-foreground/60 cursor-help hover:text-foreground transition-colors" />
+          <div
+            className={cn(
+              "absolute bottom-full mb-2 hidden group-hover:block w-64 p-2 bg-[var(--glass-panel-bg)] backdrop-blur-xl text-popover-foreground text-xs rounded-xl shadow-[var(--glass-shadow-lg)] border border-[var(--glass-border)] z-10 leading-4 font-normal",
+              align === "right" ? "right-0 translate-x-0 origin-bottom-right" : "left-0 translate-x-0 origin-bottom-left"
+            )}
+          >
+            {fieldText.description}
+          </div>
+        </div>
+      </div>
       <Input
         id={field.key}
         aria-label={fieldText.label}
@@ -820,6 +870,7 @@ function DotnetFrameworkSuggestionsField({
         onChange={(event) => onChange(event.target.value)}
         placeholder={fieldText.inputPlaceholder}
         readOnly={readOnly}
+        className="h-9 text-xs"
       />
       {!readOnly && field.options && field.options.length > 0 ? (
         <datalist id={datalistId}>
@@ -830,9 +881,6 @@ function DotnetFrameworkSuggestionsField({
           ))}
         </datalist>
       ) : null}
-      <p className="text-xs leading-5 text-muted-foreground">
-        {fieldText.helperText}
-      </p>
     </div>
   );
 }
@@ -842,20 +890,42 @@ function DotnetSelectField({
   fieldText,
   profileT,
   readOnly,
+  align = "left",
   onChange,
 }: {
   field: DotnetAdvancedFieldModel;
   fieldText: LocalizedAdvancedFieldText;
   profileT: FormTranslations;
   readOnly: boolean;
+  align?: "left" | "right";
   onChange: (value: ParameterValue) => void;
 }): JSX.Element {
   const value = typeof field.value === "string" ? field.value : "";
   const options = getLocalizedSelectOptions(profileT, field);
 
   return (
-    <div className="space-y-2 py-2">
-      <Label htmlFor={field.key}>{fieldText.label}</Label>
+    <div className="space-y-1.5 w-full">
+      <div className="flex flex-wrap items-center gap-1.5">
+        <Label htmlFor={field.key} className="text-xs font-semibold text-foreground">
+          {fieldText.label}
+        </Label>
+        {fieldText.technicalLabel && (
+          <span className="font-mono text-[9px] text-muted-foreground/60 bg-black/5 dark:bg-white/5 border border-black/5 dark:border-white/10 px-1.5 py-0.5 rounded-md">
+            {fieldText.technicalLabel}
+          </span>
+        )}
+        <div className="group relative inline-block">
+          <HelpCircle className="h-3.5 w-3.5 text-muted-foreground/60 cursor-help hover:text-foreground transition-colors" />
+          <div
+            className={cn(
+              "absolute bottom-full mb-2 hidden group-hover:block w-64 p-2 bg-[var(--glass-panel-bg)] backdrop-blur-xl text-popover-foreground text-xs rounded-xl shadow-[var(--glass-shadow-lg)] border border-[var(--glass-border)] z-10 leading-4 font-normal",
+              align === "right" ? "right-0 translate-x-0 origin-bottom-right" : "left-0 translate-x-0 origin-bottom-left"
+            )}
+          >
+            {fieldText.description}
+          </div>
+        </div>
+      </div>
       <Select
         value={value || EMPTY_SELECT_VALUE}
         onValueChange={(nextValue) =>
@@ -866,15 +936,16 @@ function DotnetSelectField({
           id={field.key}
           aria-label={fieldText.label}
           disabled={readOnly}
+          className="h-9 text-xs"
         >
           <SelectValue placeholder={fieldText.emptyOptionLabel} />
         </SelectTrigger>
         <SelectContent>
-          <SelectItem value={EMPTY_SELECT_VALUE}>
+          <SelectItem value={EMPTY_SELECT_VALUE} className="text-xs">
             {fieldText.emptyOptionLabel}
           </SelectItem>
           {options.map((option) => (
-            <SelectItem key={option.value} value={option.value}>
+            <SelectItem key={option.value} value={option.value} className="text-xs">
               {option.label}
             </SelectItem>
           ))}
@@ -888,33 +959,46 @@ function DotnetBooleanField({
   field,
   fieldText,
   readOnly,
+  align = "left",
   onChange,
 }: {
   field: DotnetAdvancedFieldModel;
   fieldText: LocalizedAdvancedFieldText;
   readOnly: boolean;
+  align?: "left" | "right";
   onChange: (value: ParameterValue) => void;
 }): JSX.Element {
   const checked = field.value === true;
 
   return (
-    <div className="rounded-2xl border border-[var(--glass-border-subtle)] bg-[var(--glass-input-bg)] p-4 shadow-[var(--glass-inset-shadow)]">
-      <div className="flex items-start justify-between gap-4">
-        <div className="min-w-0">
-          <div className="text-sm font-medium text-foreground">
-            {fieldText.label}
+    <div className="flex items-center justify-between gap-4 h-full w-full py-0.5">
+      <div className="min-w-0 flex-1">
+        <div className="flex flex-wrap items-center gap-1.5 text-xs font-semibold text-foreground">
+          <span>{fieldText.label}</span>
+          {fieldText.technicalLabel && (
+            <span className="font-mono text-[9px] text-muted-foreground/60 bg-black/5 dark:bg-white/5 border border-black/5 dark:border-white/10 px-1.5 py-0.5 rounded-md animate-fade-in">
+              {fieldText.technicalLabel}
+            </span>
+          )}
+          <div className="group relative inline-block">
+            <HelpCircle className="h-3.5 w-3.5 text-muted-foreground/60 cursor-help hover:text-foreground transition-colors" />
+            <div
+              className={cn(
+                "absolute bottom-full mb-2 hidden group-hover:block w-64 p-2 bg-[var(--glass-panel-bg)] backdrop-blur-xl text-popover-foreground text-xs rounded-xl shadow-[var(--glass-shadow-lg)] border border-[var(--glass-border)] z-10 leading-4 font-normal",
+                align === "right" ? "right-0 translate-x-0 origin-bottom-right" : "left-0 translate-x-0 origin-bottom-left"
+              )}
+            >
+              {fieldText.description}
+            </div>
           </div>
-          <p className="mt-1 text-xs leading-5 text-muted-foreground">
-            {fieldText.description}
-          </p>
         </div>
-        <Switch
-          aria-label={fieldText.label}
-          checked={checked}
-          onCheckedChange={(nextChecked) => onChange(nextChecked)}
-          disabled={readOnly}
-        />
       </div>
+      <Switch
+        aria-label={fieldText.label}
+        checked={checked}
+        onCheckedChange={(nextChecked) => onChange(nextChecked)}
+        disabled={readOnly}
+      />
     </div>
   );
 }
@@ -923,18 +1007,40 @@ function DotnetStringField({
   field,
   fieldText,
   readOnly,
+  align = "left",
   onChange,
 }: {
   field: DotnetAdvancedFieldModel;
   fieldText: LocalizedAdvancedFieldText;
   readOnly: boolean;
+  align?: "left" | "right";
   onChange: (value: ParameterValue) => void;
 }): JSX.Element {
   const value = typeof field.value === "string" ? field.value : "";
 
   return (
-    <div className="space-y-2 py-2">
-      <Label htmlFor={field.key}>{fieldText.label}</Label>
+    <div className="space-y-1.5 w-full">
+      <div className="flex flex-wrap items-center gap-1.5">
+        <Label htmlFor={field.key} className="text-xs font-semibold text-foreground">
+          {fieldText.label}
+        </Label>
+        {fieldText.technicalLabel && (
+          <span className="font-mono text-[9px] text-muted-foreground/60 bg-black/5 dark:bg-white/5 border border-black/5 dark:border-white/10 px-1.5 py-0.5 rounded-md">
+            {fieldText.technicalLabel}
+          </span>
+        )}
+        <div className="group relative inline-block">
+          <HelpCircle className="h-3.5 w-3.5 text-muted-foreground/60 cursor-help hover:text-foreground transition-colors" />
+          <div
+            className={cn(
+              "absolute bottom-full mb-2 hidden group-hover:block w-64 p-2 bg-[var(--glass-panel-bg)] backdrop-blur-xl text-popover-foreground text-xs rounded-xl shadow-[var(--glass-shadow-lg)] border border-[var(--glass-border)] z-10 leading-4 font-normal",
+              align === "right" ? "right-0 translate-x-0 origin-bottom-right" : "left-0 translate-x-0 origin-bottom-left"
+            )}
+          >
+            {fieldText.description}
+          </div>
+        </div>
+      </div>
       <Input
         id={field.key}
         aria-label={fieldText.label}
@@ -942,6 +1048,7 @@ function DotnetStringField({
         onChange={(event) => onChange(event.target.value)}
         readOnly={readOnly}
         placeholder={fieldText.inputPlaceholder}
+        className="h-9 text-xs"
       />
     </div>
   );
@@ -951,11 +1058,13 @@ function DotnetTagListField({
   field,
   fieldText,
   readOnly,
+  align = "left",
   onChange,
 }: {
   field: DotnetAdvancedFieldModel;
   fieldText: LocalizedAdvancedFieldText;
   readOnly: boolean;
+  align?: "left" | "right";
   onChange: (value: ParameterValue) => void;
 }): JSX.Element {
   const tags = normalizeDotnetStringArray(field.value);
@@ -988,8 +1097,29 @@ function DotnetTagListField({
   );
 
   return (
-    <div className="space-y-3 py-2">
-      <Label htmlFor={field.key}>{fieldText.label}</Label>
+    <div className="space-y-2 w-full">
+      <div className="flex flex-wrap items-center gap-1.5">
+        <Label htmlFor={field.key} className="text-xs font-semibold text-foreground">
+          {fieldText.label}
+        </Label>
+        {fieldText.technicalLabel && (
+          <span className="font-mono text-[9px] text-muted-foreground/60 bg-black/5 dark:bg-white/5 border border-black/5 dark:border-white/10 px-1.5 py-0.5 rounded-md">
+            {fieldText.technicalLabel}
+          </span>
+        )}
+        <div className="group relative inline-block">
+          <HelpCircle className="h-3.5 w-3.5 text-muted-foreground/60 cursor-help hover:text-foreground transition-colors" />
+          <div
+            className={cn(
+              "absolute bottom-full mb-2 hidden group-hover:block w-64 p-2 bg-[var(--glass-panel-bg)] backdrop-blur-xl text-popover-foreground text-xs rounded-xl shadow-[var(--glass-shadow-lg)] border border-[var(--glass-border)] z-10 leading-4 font-normal",
+              align === "right" ? "right-0 translate-x-0 origin-bottom-right" : "left-0 translate-x-0 origin-bottom-left"
+            )}
+          >
+            {fieldText.description}
+          </div>
+        </div>
+      </div>
+
       {!readOnly ? (
         <div className="flex gap-2">
           <Input
@@ -1004,20 +1134,21 @@ function DotnetTagListField({
               }
             }}
             placeholder={fieldText.tagInputPlaceholder}
+            className="h-9 text-xs"
           />
-          <Button type="button" variant="outline" onClick={addTags}>
-            <Plus className="mr-2 h-4 w-4" />
+          <Button type="button" variant="outline" size="sm" onClick={addTags} className="h-9 text-xs">
+            <Plus className="mr-1.5 h-3.5 w-3.5" />
             {fieldText.tagAddLabel}
           </Button>
         </div>
       ) : null}
 
       {tags.length > 0 ? (
-        <div className="flex flex-wrap gap-2">
+        <div className="flex flex-wrap gap-1.5">
           {tags.map((tag) => (
             <span
               key={tag}
-              className="inline-flex items-center gap-1 rounded-full border border-[var(--glass-border-subtle)] bg-[var(--glass-input-bg)] px-3 py-1 text-xs font-medium text-foreground shadow-[var(--glass-inset-shadow)]"
+              className="inline-flex items-center gap-1 rounded-full border border-[var(--glass-border-subtle)] bg-[var(--glass-input-bg)] px-2 py-0.5 text-xs font-medium text-foreground shadow-[var(--glass-inset-shadow)]"
             >
               {tag}
               {!readOnly ? (
@@ -1036,7 +1167,7 @@ function DotnetTagListField({
           ))}
         </div>
       ) : (
-        <div className="rounded-2xl border border-dashed border-[var(--glass-border-subtle)] px-3 py-2 text-xs leading-5 text-muted-foreground">
+        <div className="rounded-xl border border-dashed border-[var(--glass-border-subtle)] px-2.5 py-2 text-xs leading-4 text-muted-foreground">
           {readOnly ? fieldText.tagEmptyReadonlyText : fieldText.tagEmptyText}
         </div>
       )}
@@ -1048,11 +1179,13 @@ function DotnetPropertyTableField({
   field,
   fieldText,
   readOnly,
+  align = "left",
   onChange,
 }: {
   field: DotnetAdvancedFieldModel;
   fieldText: LocalizedAdvancedFieldText;
   readOnly: boolean;
+  align?: "left" | "right";
   onChange: (value: ParameterValue) => void;
 }): JSX.Element {
   const properties = normalizeDotnetPropertyMap(field.value);
@@ -1112,25 +1245,40 @@ function DotnetPropertyTableField({
   }, [onChange, properties, readOnly]);
 
   return (
-    <div className="space-y-3 py-2">
+    <div className="space-y-2 w-full">
       <div className="flex items-center justify-between gap-3">
         <div>
-          <Label>{fieldText.label}</Label>
-          <p className="mt-1 text-xs leading-5 text-muted-foreground">
-            {fieldText.propertiesHint}
-          </p>
+          <div className="flex flex-wrap items-center gap-1.5">
+            <Label className="text-xs font-semibold text-foreground">{fieldText.label}</Label>
+            {fieldText.technicalLabel && (
+              <span className="font-mono text-[9px] text-muted-foreground/60 bg-black/5 dark:bg-white/5 border border-black/5 dark:border-white/10 px-1.5 py-0.5 rounded-md">
+                {fieldText.technicalLabel}
+              </span>
+            )}
+            <div className="group relative inline-block">
+              <HelpCircle className="h-3.5 w-3.5 text-muted-foreground/60 cursor-help hover:text-foreground transition-colors" />
+              <div
+                className={cn(
+                  "absolute bottom-full mb-2 hidden group-hover:block w-64 p-2 bg-[var(--glass-panel-bg)] backdrop-blur-xl text-popover-foreground text-xs rounded-xl shadow-[var(--glass-shadow-lg)] border border-[var(--glass-border)] z-10 leading-4 font-normal",
+                  align === "right" ? "right-0 translate-x-0 origin-bottom-right" : "left-0 translate-x-0 origin-bottom-left"
+                )}
+              >
+                {fieldText.propertiesHint}
+              </div>
+            </div>
+          </div>
         </div>
         {!readOnly ? (
-          <Button type="button" variant="outline" onClick={addEntry}>
-            <Plus className="mr-2 h-4 w-4" />
+          <Button type="button" variant="outline" size="sm" onClick={addEntry} className="h-8 text-xs">
+            <Plus className="mr-1.5 h-3.5 w-3.5" />
             {fieldText.propertiesAddLabel}
           </Button>
         ) : null}
       </div>
 
       {entries.length > 0 ? (
-        <div className="space-y-2">
-          <div className="grid grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)_auto] gap-2 px-1 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+        <div className="space-y-1.5">
+          <div className="grid grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)_auto] gap-1.5 px-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
             <span>{fieldText.propertyKeyColumnLabel}</span>
             <span>{fieldText.propertyValueColumnLabel}</span>
             <span className="sr-only">Actions</span>
@@ -1138,7 +1286,7 @@ function DotnetPropertyTableField({
           {entries.map(([key, value], index) => (
             <div
               key={`${key}-${index}`}
-              className="grid grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)_auto] gap-2"
+              className="grid grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)_auto] gap-1.5 items-center"
             >
               <Input
                 aria-label={`${fieldText.label}-${fieldText.propertyKeyColumnLabel}-${index + 1}`}
@@ -1146,6 +1294,7 @@ function DotnetPropertyTableField({
                 onChange={(event) => updateKey(key, event.target.value)}
                 readOnly={readOnly}
                 placeholder={fieldText.propertyKeyPlaceholder}
+                className="h-8 text-xs"
               />
               <Input
                 aria-label={`${fieldText.label}-${fieldText.propertyValueColumnLabel}-${index + 1}`}
@@ -1153,27 +1302,29 @@ function DotnetPropertyTableField({
                 onChange={(event) => updateValue(key, event.target.value)}
                 readOnly={readOnly}
                 placeholder={fieldText.propertyValuePlaceholder}
+                className="h-8 text-xs"
               />
               {!readOnly ? (
                 <Button
                   type="button"
                   variant="ghost"
                   size="icon"
+                  className="h-8 w-8 text-destructive hover:text-destructive"
                   aria-label={formatTemplate(fieldText.removePropertyLabel, {
                     value: key,
                   })}
                   onClick={() => removeEntry(key)}
                 >
-                  <X className="h-4 w-4" />
+                  <X className="h-3.5 w-3.5" />
                 </Button>
               ) : (
-                <div />
+                <div className="w-8" />
               )}
             </div>
           ))}
         </div>
       ) : (
-        <div className="rounded-2xl border border-dashed border-[var(--glass-border-subtle)] px-3 py-2 text-xs leading-5 text-muted-foreground">
+        <div className="rounded-xl border border-dashed border-[var(--glass-border-subtle)] px-2.5 py-2 text-xs leading-4 text-muted-foreground">
           {fieldText.propertiesEmptyText}
         </div>
       )}

@@ -1,7 +1,6 @@
 import {
   Dialog,
 } from "@/components/ui/dialog";
-import { AppDialogInset } from "@/components/ui/app-dialog-inset";
 import { AppDialogShell } from "@/components/ui/app-dialog-shell";
 import {
   Select,
@@ -32,6 +31,7 @@ import {
 import {
   Suspense,
   lazy,
+  memo,
   startTransition,
   useCallback,
   useEffect,
@@ -86,7 +86,6 @@ interface SettingsCategoryItem {
   id: SettingsCategoryId;
   icon: LucideIcon;
   label: string;
-  description: string;
 }
 
 interface SettingsDialogProps {
@@ -121,9 +120,9 @@ interface SettingsDialogProps {
 function SettingsSectionFallback({ label }: { label: string }) {
   return (
     <div className="space-y-3">
-      <div className="h-10 rounded-xl border border-[var(--glass-border-subtle)] bg-[var(--glass-input-bg)]" />
-      <div className="h-24 rounded-xl border border-[var(--glass-border-subtle)] bg-[var(--glass-input-bg)]" />
-      <p className="text-xs text-muted-foreground">{label}</p>
+      <div className="h-10 rounded-lg border border-[var(--settings-hairline)] bg-[var(--settings-section-bg)]" />
+      <div className="h-24 rounded-lg border border-[var(--settings-hairline)] bg-[var(--settings-section-bg)]" />
+      <p className="text-xs text-[var(--settings-ink-muted)]">{label}</p>
     </div>
   );
 }
@@ -144,28 +143,244 @@ function SettingsSwitchRow({
   onCheckedChange: (value: boolean) => void;
 }) {
   return (
-    <AppDialogInset className="flex items-start justify-between gap-4">
-      <div className="min-w-0 space-y-1">
-        <div className="flex items-center gap-2">
-          <span className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl bg-background/60 text-foreground/75">
-            <Icon className="h-4 w-4" />
-          </span>
-          <Label className="cursor-pointer text-sm font-medium" htmlFor={id}>
+    <div className="rounded-lg border border-[var(--settings-hairline)] bg-[var(--settings-section-bg)] px-4 py-3.5">
+      <div className="flex items-center justify-between gap-4">
+        <div className="flex items-center gap-3 min-w-0">
+          <Icon className="h-[18px] w-[18px] flex-shrink-0 text-[var(--settings-ink-muted)]" />
+          <Label className="cursor-pointer text-[14px] font-semibold tracking-[-0.224px] text-[var(--settings-ink)]" htmlFor={id}>
             {label}
           </Label>
         </div>
-        <p className="text-xs leading-5 text-muted-foreground">
-          {description}
-        </p>
+        <Switch
+          id={id}
+          checked={checked}
+          onCheckedChange={onCheckedChange}
+        />
       </div>
-      <Switch
-        id={id}
-        checked={checked}
-        onCheckedChange={onCheckedChange}
-      />
-    </AppDialogInset>
+      <p className="mt-1.5 pl-[30px] text-[12px] leading-[1.4] tracking-[-0.12px] text-[var(--settings-ink-muted)]">
+        {description}
+      </p>
+    </div>
   );
 }
+
+export interface GeneralSettingsSectionProps {
+  translations: any;
+  language: Language;
+  onLanguageChange: (nextLanguage: string) => void;
+  executionHistoryLimit: number;
+  onExecutionHistoryLimitChange: (limit: number) => void;
+  defaultOutputDir: string;
+  onDefaultOutputDirChange: (dir: string) => void;
+  onSelectDirectory: () => void | Promise<void>;
+  preRerunChecklistEnabled: boolean;
+  onPreRerunChecklistEnabledChange: (value: boolean) => void;
+  minimizeToTrayOnClose: boolean;
+  onMinimizeToTrayOnCloseChange: (value: boolean) => void;
+}
+
+export const GeneralSettingsSection = memo(function GeneralSettingsSection({
+  translations,
+  language,
+  onLanguageChange,
+  executionHistoryLimit,
+  onExecutionHistoryLimitChange,
+  defaultOutputDir,
+  onDefaultOutputDirChange,
+  onSelectDirectory,
+  preRerunChecklistEnabled,
+  onPreRerunChecklistEnabledChange,
+  minimizeToTrayOnClose,
+  onMinimizeToTrayOnCloseChange,
+}: GeneralSettingsSectionProps) {
+  return (
+    <div className="space-y-5">
+      <div className="grid gap-5 xl:grid-cols-2">
+        <div className="space-y-2">
+          <Label htmlFor="settings-language" className="text-[14px] font-semibold tracking-[-0.224px] text-[var(--settings-ink)]">
+            {translations.language?.label || "界面语言"}
+          </Label>
+          <Select value={language} onValueChange={onLanguageChange}>
+            <SelectTrigger id="settings-language">
+              <SelectValue
+                placeholder={translations.language?.placeholder || "选择语言"}
+              />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="zh">
+                {translations.language?.chinese || "简体中文"}
+              </SelectItem>
+              <SelectItem value="en">
+                {translations.language?.english || "English"}
+              </SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+
+        <div className="space-y-2">
+          <Label htmlFor="settings-execution-history" className="text-[14px] font-semibold tracking-[-0.224px] text-[var(--settings-ink)]">
+            {translations.settings?.general?.executionHistoryLimitLabel ||
+              "执行历史保留上限"}
+          </Label>
+          <Input
+            id="settings-execution-history"
+            type="number"
+            min={5}
+            max={200}
+            value={executionHistoryLimit}
+            onChange={(e) => {
+              const next = Math.trunc(Number(e.target.value));
+              if (Number.isNaN(next)) {
+                return;
+              }
+              const normalized = Math.min(200, Math.max(5, next));
+              onExecutionHistoryLimitChange(normalized);
+            }}
+          />
+          <p className="text-[12px] leading-[1.4] tracking-[-0.12px] text-[var(--settings-ink-muted)]">
+            {translations.settings?.general?.executionHistoryLimitDescription ||
+              "可设置 5~200 条，超出范围会自动修正并即时生效。"}
+          </p>
+        </div>
+      </div>
+
+      <div className="space-y-2">
+        <Label
+          htmlFor="settings-default-output-dir"
+          className="flex items-center gap-2 text-[14px] font-semibold tracking-[-0.224px] text-[var(--settings-ink)]"
+        >
+          <FolderOpen className="h-4 w-4 text-[var(--settings-ink-muted)]" />
+          {translations.outputDir?.label || "默认发布目录"}
+        </Label>
+        <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto]">
+          <Input
+            id="settings-default-output-dir"
+            value={defaultOutputDir}
+            onChange={(e) => onDefaultOutputDirChange(e.target.value)}
+            placeholder={
+              translations.outputDir?.placeholder || "留空使用项目默认目录"
+            }
+          />
+          <Button
+            variant="outline"
+            size="icon"
+            className="h-10 w-10 shrink-0 active:scale-[0.97]"
+            onClick={onSelectDirectory}
+            title={translations.outputDir?.label || "选择默认发布目录"}
+          >
+            <FolderOpen className="h-4 w-4" />
+          </Button>
+        </div>
+        <p className="text-[12px] leading-[1.4] tracking-[-0.12px] text-[var(--settings-ink-muted)]">
+          {translations.outputDir?.support ||
+            "支持相对路径（如 ./publish）或绝对路径"}
+        </p>
+      </div>
+
+      <div className="h-px bg-[var(--settings-hairline)]" />
+
+      <div className="space-y-3">
+        <SettingsSwitchRow
+          id="rerun-checklist-enabled"
+          icon={ListChecks}
+          label={
+            translations.settings?.general?.preRerunChecklistLabel ||
+            "重跑前确认清单"
+          }
+          description={
+            translations.settings?.general?.preRerunChecklistDescription ||
+            "启用后，点击“重跑记录”会先检查分支、环境和输出目标确认项。"
+          }
+          checked={preRerunChecklistEnabled}
+          onCheckedChange={onPreRerunChecklistEnabledChange}
+        />
+
+        <SettingsSwitchRow
+          id="minimize-to-tray"
+          icon={Minimize2}
+          label={translations.tray?.label || "关闭窗口时最小化到托盘"}
+          description={
+            translations.tray?.description ||
+            "启用后点击关闭按钮会隐藏窗口，继续驻留托盘。"
+          }
+          checked={minimizeToTrayOnClose}
+          onCheckedChange={onMinimizeToTrayOnCloseChange}
+        />
+      </div>
+    </div>
+  );
+});
+
+export interface UpdaterProgressBarProps {
+  translations: any;
+  downloadProgress: {
+    stage: string;
+    attempt?: number;
+    maxAttempts?: number;
+    downloadedBytes: number;
+    totalBytes: number | null;
+    percent: number | null;
+  };
+}
+
+export const UpdaterProgressBar = memo(function UpdaterProgressBar({
+  translations,
+  downloadProgress,
+}: UpdaterProgressBarProps) {
+  return (
+    <div className="space-y-3 rounded-lg border border-[var(--settings-hairline)] bg-[var(--settings-section-bg)] p-4">
+      <div className="flex items-start justify-between gap-3">
+        <div className="space-y-1">
+          <div className="text-[14px] font-semibold tracking-[-0.224px] text-[var(--settings-ink)]">
+            {downloadProgress.stage === "installing"
+              ? translations.version?.installing || "正在安装更新..."
+              : translations.version?.downloading || "正在下载更新..."}
+          </div>
+          <div className="text-[12px] tracking-[-0.12px] text-[var(--settings-ink-muted)]">
+            {downloadProgress.stage === "retrying"
+              ? formatMessage(
+                  translations.version?.retrying ||
+                    "下载中断，正在进行第 {} / {} 次尝试",
+                  downloadProgress.attempt || 1,
+                  downloadProgress.maxAttempts || 1
+                )
+              : downloadProgress.totalBytes && downloadProgress.totalBytes > 0
+                ? formatMessage(
+                    translations.version?.downloadProgress ||
+                      "已下载 {} / {}",
+                    formatBytes(downloadProgress.downloadedBytes),
+                    formatBytes(downloadProgress.totalBytes)
+                  )
+                : formatMessage(
+                    translations.version?.downloadProgressUnknown ||
+                      "已下载 {}",
+                    formatBytes(downloadProgress.downloadedBytes)
+                  )}
+          </div>
+        </div>
+        {downloadProgress.percent !== null && (
+          <div className="text-[12px] font-semibold tabular-nums tracking-[-0.12px] text-[var(--settings-ink-muted)]">
+            {Math.round(downloadProgress.percent)}%
+          </div>
+        )}
+      </div>
+
+      <div className="h-1.5 overflow-hidden rounded-full bg-[var(--settings-sidebar-item-active)]">
+        <div
+          className={cn(
+            "h-full rounded-full bg-[var(--settings-accent)] transition-[width] duration-200",
+            downloadProgress.percent === null && "animate-pulse w-1/3"
+          )}
+          style={
+            downloadProgress.percent !== null
+              ? { width: `${Math.max(0, Math.min(downloadProgress.percent, 100))}%` }
+              : undefined
+          }
+        />
+      </div>
+    </div>
+  );
+});
 
 export function SettingsDialog({
   open: isOpen,
@@ -211,42 +426,27 @@ export function SettingsDialog({
       {
         id: "general",
         icon: Languages,
-        label: translations.settings?.categories?.general || "通用",
-        description:
-          translations.settings?.sections?.generalDescription ||
-          "管理语言、默认输出目录与运行偏好。",
+        label: translations.settings?.categories?.general || "\u901A\u7528",
       },
       {
         id: "appearance",
         icon: Palette,
-        label: translations.settings?.categories?.appearance || "外观",
-        description:
-          translations.settings?.sections?.appearanceDescription ||
-          "调整主题显示风格，匹配你的系统与使用习惯。",
+        label: translations.settings?.categories?.appearance || "\u5916\u89C2",
       },
       {
         id: "environment",
         icon: ListChecks,
-        label: translations.settings?.categories?.environment || "环境检查",
-        description:
-          translations.settings?.sections?.environmentDescription ||
-          "查看环境诊断结果并快速进入检查页。",
+        label: translations.settings?.categories?.environment || "\u73AF\u5883\u68C0\u67E5",
       },
       {
         id: "shortcuts",
         icon: Keyboard,
-        label: translations.settings?.categories?.shortcuts || "快捷键",
-        description:
-          translations.settings?.sections?.shortcutsDescription ||
-          "查看全局快捷键，提高常用操作效率。",
+        label: translations.settings?.categories?.shortcuts || "\u5FEB\u6377\u952E",
       },
       {
         id: "about",
         icon: Info,
-        label: translations.settings?.categories?.about || "关于",
-        description:
-          translations.settings?.sections?.aboutDescription ||
-          "查看版本信息、更新状态与更新日志。",
+        label: translations.settings?.categories?.about || "\u5173\u4E8E",
       },
     ],
     [translations]
@@ -259,19 +459,41 @@ export function SettingsDialog({
     [activeCategory, categoryItems]
   );
 
+  /** Section descriptions - kept here so sidebar stays icon+label only */
+  const categoryDescriptions = useMemo<Record<SettingsCategoryId, string>>(
+    () => ({
+      general:
+        translations.settings?.sections?.generalDescription ||
+        "\u7BA1\u7406\u8BED\u8A00\u3001\u9ED8\u8BA4\u8F93\u51FA\u76EE\u5F55\u4E0E\u8FD0\u884C\u504F\u597D\u3002",
+      appearance:
+        translations.settings?.sections?.appearanceDescription ||
+        "\u8C03\u6574\u4E3B\u9898\u663E\u793A\u98CE\u683C\uFF0C\u5339\u914D\u4F60\u7684\u7CFB\u7EDF\u4E0E\u4F7F\u7528\u4E60\u60EF\u3002",
+      environment:
+        translations.settings?.sections?.environmentDescription ||
+        "\u67E5\u770B\u73AF\u5883\u8BCA\u65AD\u7ED3\u679C\u5E76\u5FEB\u901F\u8FDB\u5165\u68C0\u67E5\u9875\u3002",
+      shortcuts:
+        translations.settings?.sections?.shortcutsDescription ||
+        "\u67E5\u770B\u5168\u5C40\u5FEB\u6377\u952E\uFF0C\u63D0\u9AD8\u5E38\u7528\u64CD\u4F5C\u6548\u7387\u3002",
+      about:
+        translations.settings?.sections?.aboutDescription ||
+        "\u67E5\u770B\u7248\u672C\u4FE1\u606F\u3001\u66F4\u65B0\u72B6\u6001\u4E0E\u66F4\u65B0\u65E5\u5FD7\u3002",
+    }),
+    [translations]
+  );
+
   const shortcutsItems = useMemo(
     () => [
       {
         key: "Cmd/Ctrl + R",
-        description: translations.shortcuts?.refresh || "刷新项目",
+        description: translations.shortcuts?.refresh || "\u5237\u65B0\u9879\u76EE",
       },
       {
         key: "Cmd/Ctrl + P",
-        description: translations.shortcuts?.publish || "执行发布",
+        description: translations.shortcuts?.publish || "\u6267\u884C\u53D1\u5E03",
       },
       {
         key: "Cmd/Ctrl + ,",
-        description: translations.shortcuts?.settings || "打开设置",
+        description: translations.shortcuts?.settings || "\u6253\u5F00\u8BBE\u7F6E",
       },
     ],
     [
@@ -303,7 +525,7 @@ export function SettingsDialog({
           );
         })
         .catch((error) => {
-          console.error("切换语言失败:", error);
+          console.error("\u5207\u6362\u8BED\u8A00\u5931\u8D25:", error);
           toast.error(t("language.changeFailed"));
         });
     },
@@ -331,7 +553,7 @@ export function SettingsDialog({
   const shouldHideDefaultUpdaterConfigMessage =
     !hasRequestedUpdateCheck &&
     Boolean(
-      updateInfo?.message?.includes("更新源未配置或不可用:") &&
+      updateInfo?.message?.includes("\u66F4\u65B0\u6E90\u672A\u914D\u7F6E\u6216\u4E0D\u53EF\u7528:") &&
         updateInfo.message.includes("endpoints") &&
         updateInfo.message.includes("pubkey")
     );
@@ -354,10 +576,10 @@ export function SettingsDialog({
     setIsRestarting(true);
 
     void relaunch().catch((error) => {
-      console.error("重启应用失败:", error);
+      console.error("\u91CD\u542F\u5E94\u7528\u5931\u8D25:", error);
       setIsRestarting(false);
       toast.error(
-        translations.version?.restartFailed || "重启应用失败，请稍后重试"
+        translations.version?.restartFailed || "\u91CD\u542F\u5E94\u7528\u5931\u8D25\uFF0C\u8BF7\u7A0D\u540E\u91CD\u8BD5"
       );
     });
   }, [translations.version?.restartFailed]);
@@ -367,175 +589,73 @@ export function SettingsDialog({
       const selected = await openDialog({
         directory: true,
         multiple: false,
-        title: translations.outputDir?.label || "选择默认发布目录",
+        title: translations.outputDir?.label || "\u9009\u62E9\u9ED8\u8BA4\u53D1\u5E03\u76EE\u5F55",
       });
       if (selected) {
         onDefaultOutputDirChange(selected as string);
       }
     } catch (err) {
-      console.error("选择目录失败:", err);
+      console.error("\u9009\u62E9\u76EE\u5F55\u5931\u8D25:", err);
     }
   };
 
   const renderGeneralSettings = () => (
-    <div className="space-y-4">
-        <div className="grid gap-4 xl:grid-cols-2">
-          <div className="space-y-2">
-            <Label htmlFor="settings-language">
-              {translations.language?.label || "界面语言"}
-            </Label>
-            <Select value={language} onValueChange={handleLanguageChange}>
-              <SelectTrigger id="settings-language">
-                <SelectValue
-                  placeholder={translations.language?.placeholder || "选择语言"}
-                />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="zh">
-                  {translations.language?.chinese || "简体中文"}
-                </SelectItem>
-                <SelectItem value="en">
-                  {translations.language?.english || "English"}
-                </SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="settings-execution-history">
-              {translations.settings?.general?.executionHistoryLimitLabel ||
-                "执行历史保留上限"}
-            </Label>
-            <Input
-              id="settings-execution-history"
-              type="number"
-              min={5}
-              max={200}
-              value={executionHistoryLimit}
-              onChange={(e) => {
-                const next = Math.trunc(Number(e.target.value));
-                if (Number.isNaN(next)) {
-                  return;
-                }
-                const normalized = Math.min(200, Math.max(5, next));
-                onExecutionHistoryLimitChange(normalized);
-              }}
-            />
-            <p className="text-xs leading-5 text-muted-foreground">
-              {translations.settings?.general?.executionHistoryLimitDescription ||
-                "可设置 5~200 条，超出范围会自动修正并即时生效。"}
-            </p>
-          </div>
-        </div>
-
-        <AppDialogInset>
-          <div className="space-y-2">
-            <Label
-              htmlFor="settings-default-output-dir"
-              className="flex items-center gap-2"
-            >
-              <FolderOpen className="h-4 w-4" />
-              {translations.outputDir?.label || "默认发布目录"}
-            </Label>
-            <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto]">
-              <Input
-                id="settings-default-output-dir"
-                value={defaultOutputDir}
-                onChange={(e) => onDefaultOutputDirChange(e.target.value)}
-                placeholder={
-                  translations.outputDir?.placeholder || "留空使用项目默认目录"
-                }
-              />
-              <Button
-                variant="outline"
-                size="icon"
-                className="h-10 w-10 shrink-0"
-                onClick={handleSelectDirectory}
-                title={translations.outputDir?.label || "选择默认发布目录"}
-              >
-                <FolderOpen className="h-4 w-4" />
-              </Button>
-            </div>
-            <p className="text-xs leading-5 text-muted-foreground">
-              {translations.outputDir?.support ||
-                "支持相对路径（如 ./publish）或绝对路径"}
-            </p>
-          </div>
-        </AppDialogInset>
-
-        <div className="space-y-3">
-          <SettingsSwitchRow
-            id="rerun-checklist-enabled"
-            icon={ListChecks}
-            label={
-              translations.settings?.general?.preRerunChecklistLabel ||
-              "重跑前确认清单"
-            }
-            description={
-              translations.settings?.general?.preRerunChecklistDescription ||
-              "启用后，点击“重跑记录”会先检查分支、环境和输出目标确认项。"
-            }
-            checked={preRerunChecklistEnabled}
-            onCheckedChange={onPreRerunChecklistEnabledChange}
-          />
-
-          <SettingsSwitchRow
-            id="minimize-to-tray"
-            icon={Minimize2}
-            label={translations.tray?.label || "关闭窗口时最小化到托盘"}
-            description={
-              translations.tray?.description ||
-              "启用后点击关闭按钮会隐藏窗口，继续驻留托盘。"
-            }
-            checked={minimizeToTrayOnClose}
-            onCheckedChange={onMinimizeToTrayOnCloseChange}
-          />
-        </div>
-      </div>
+    <GeneralSettingsSection
+      translations={translations}
+      language={language}
+      onLanguageChange={handleLanguageChange}
+      executionHistoryLimit={executionHistoryLimit}
+      onExecutionHistoryLimitChange={onExecutionHistoryLimitChange}
+      defaultOutputDir={defaultOutputDir}
+      onDefaultOutputDirChange={onDefaultOutputDirChange}
+      onSelectDirectory={handleSelectDirectory}
+      preRerunChecklistEnabled={preRerunChecklistEnabled}
+      onPreRerunChecklistEnabledChange={onPreRerunChecklistEnabledChange}
+      minimizeToTrayOnClose={minimizeToTrayOnClose}
+      onMinimizeToTrayOnCloseChange={onMinimizeToTrayOnCloseChange}
+    />
   );
 
   const renderAppearanceSettings = () => (
-    <div className="space-y-4">
+    <div className="space-y-5">
         <div className="space-y-2">
-          <Label htmlFor="settings-theme" className="flex items-center gap-2">
-            <Palette className="h-4 w-4" />
-            {translations.theme?.label || "外观主题"}
+          <Label htmlFor="settings-theme" className="flex items-center gap-2 text-[14px] font-semibold tracking-[-0.224px] text-[var(--settings-ink)]">
+            <Palette className="h-4 w-4 text-[var(--settings-ink-muted)]" />
+            {translations.theme?.label || "\u5916\u89C2\u4E3B\u9898"}
           </Label>
           <Select value={theme} onValueChange={onThemeChange}>
             <SelectTrigger id="settings-theme">
               <SelectValue
-                placeholder={translations.theme?.placeholder || "选择主题"}
+                placeholder={translations.theme?.placeholder || "\u9009\u62E9\u4E3B\u9898"}
               />
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="auto">
                 <div className="flex items-center gap-2">
                   <Monitor className="h-4 w-4" />
-                  <span>{translations.theme?.auto || "跟随系统"}</span>
+                  <span>{translations.theme?.auto || "\u8DDF\u968F\u7CFB\u7EDF"}</span>
                 </div>
               </SelectItem>
               <SelectItem value="light">
                 <div className="flex items-center gap-2">
                   <Sun className="h-4 w-4" />
-                  <span>{translations.theme?.light || "亮色"}</span>
+                  <span>{translations.theme?.light || "\u4EAE\u8272"}</span>
                 </div>
               </SelectItem>
               <SelectItem value="dark">
                 <div className="flex items-center gap-2">
                   <Moon className="h-4 w-4" />
-                  <span>{translations.theme?.dark || "暗色"}</span>
+                  <span>{translations.theme?.dark || "\u6697\u8272"}</span>
                 </div>
               </SelectItem>
             </SelectContent>
           </Select>
         </div>
 
-        <AppDialogInset>
-          <p className="text-xs leading-5 text-muted-foreground">
-            {translations.settings?.sections?.appearanceDescription ||
-              "主题切换会立即作用到当前窗口与后续打开的设置面板。"}
-          </p>
-        </AppDialogInset>
+        <p className="text-[12px] leading-[1.4] tracking-[-0.12px] text-[var(--settings-ink-muted)]">
+          {translations.settings?.sections?.appearanceDescription ||
+            "\u4E3B\u9898\u5207\u6362\u4F1A\u7ACB\u5373\u4F5C\u7528\u5230\u5F53\u524D\u7A97\u53E3\u4E0E\u540E\u7EED\u6253\u5F00\u7684\u8BBE\u7F6E\u9762\u677F\u3002"}
+        </p>
       </div>
   );
 
@@ -543,7 +663,7 @@ export function SettingsDialog({
     <Suspense
       fallback={
         <SettingsSectionFallback
-          label={translations.app?.loading || "加载中..."}
+          label={translations.app?.loading || "\u52A0\u8F7D\u4E2D..."}
         />
       }
     >
@@ -564,10 +684,10 @@ export function SettingsDialog({
           {shortcutsItems.map((shortcut) => (
             <div
               key={shortcut.key}
-              className="flex items-center justify-between rounded-2xl border border-[var(--glass-border-subtle)] bg-[var(--glass-input-bg)] px-4 py-3 glass-transition"
+              className="flex items-center justify-between rounded-lg border border-[var(--settings-hairline)] bg-[var(--settings-section-bg)] px-4 py-3"
             >
-              <span className="text-sm">{shortcut.description}</span>
-              <kbd className="rounded-lg border border-[var(--glass-kbd-border)] bg-[var(--glass-kbd-bg)] px-2 py-1 text-xs font-semibold">
+              <span className="text-[14px] tracking-[-0.224px] text-[var(--settings-ink)]">{shortcut.description}</span>
+              <kbd className="rounded-md border border-[var(--settings-hairline)] bg-[var(--settings-sidebar-item-active)] px-2.5 py-1 text-[12px] font-semibold tracking-[-0.12px] text-[var(--settings-ink-muted)]">
                 {shortcut.key}
               </kbd>
             </div>
@@ -575,44 +695,44 @@ export function SettingsDialog({
 
           <Button
             variant="outline"
-            className="h-11 w-full justify-start"
+            className="h-11 w-full justify-start active:scale-[0.97]"
             onClick={onOpenShortcuts}
             disabled={!onOpenShortcuts}
           >
             <Keyboard className="mr-2 h-4 w-4" />
-            {translations.shortcuts?.button || "查看快捷键"}
+            {translations.shortcuts?.button || "\u67E5\u770B\u5FEB\u6377\u952E"}
           </Button>
         </div>
     );
   };
 
   const renderAboutSettings = () => (
-    <div className="space-y-4">
-        <AppDialogInset className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+    <div className="space-y-5">
+        <div className="flex flex-col gap-4 rounded-lg border border-[var(--settings-hairline)] bg-[var(--settings-section-bg)] p-4 sm:flex-row sm:items-start sm:justify-between">
           <div className="space-y-1">
-            <div className="text-sm font-medium">
+            <div className="text-[14px] font-semibold tracking-[-0.224px] text-[var(--settings-ink)]">
               {formatMessage(
                 t("version.current"),
-                updateInfo?.currentVersion || currentVersion || "—"
+                updateInfo?.currentVersion || currentVersion || "\u2014"
               )}
             </div>
             {updateInfo?.hasUpdate && (
-              <div className="text-sm text-green-600 dark:text-green-400">
+              <div className="text-[14px] tracking-[-0.224px] text-[var(--settings-accent)]">
                 {formatMessage(t("version.new"), updateInfo.availableVersion || "")}
               </div>
             )}
             {!updateInfo && (
-              <div className="text-xs text-muted-foreground">
-                {translations.version?.clickToCheck || "点击检查更新以获取最新版本信息"}
+              <div className="text-[12px] tracking-[-0.12px] text-[var(--settings-ink-muted)]">
+                {translations.version?.clickToCheck || "\u70B9\u51FB\u68C0\u67E5\u66F4\u65B0\u4EE5\u83B7\u53D6\u6700\u65B0\u7248\u672C\u4FE1\u606F"}
               </div>
             )}
             {updateInfo && !updateInfo.hasUpdate && !updateInfo.message && (
-              <div className="text-xs text-muted-foreground">
-                {translations.version?.none || "没有可用的更新"}
+              <div className="text-[12px] tracking-[-0.12px] text-[var(--settings-ink-muted)]">
+                {translations.version?.none || "\u6CA1\u6709\u53EF\u7528\u7684\u66F4\u65B0"}
               </div>
             )}
             {updateInfo?.message && !shouldHideDefaultUpdaterConfigMessage && (
-              <div className="text-xs text-muted-foreground">
+              <div className="text-[12px] tracking-[-0.12px] text-[var(--settings-ink-muted)]">
                 {updateInfo.message}
               </div>
             )}
@@ -623,6 +743,7 @@ export function SettingsDialog({
               <Button
                 variant="outline"
                 size="sm"
+                className="active:scale-[0.97]"
                 onClick={handleRestartApp}
                 disabled={isRestarting || isCheckingUpdate || isInstallingUpdate}
               >
@@ -633,14 +754,15 @@ export function SettingsDialog({
                 )}
                 <span className="ml-1">
                   {isRestarting
-                    ? translations.version?.restarting || "重启中..."
-                    : translations.version?.restart || "重启应用"}
+                    ? translations.version?.restarting || "\u91CD\u542F\u4E2D..."
+                    : translations.version?.restart || "\u91CD\u542F\u5E94\u7528"}
                 </span>
               </Button>
             )}
             <Button
               variant="outline"
               size="sm"
+              className="active:scale-[0.97]"
               onClick={handleCheckUpdate}
               disabled={isCheckingUpdate || isInstallingUpdate}
             >
@@ -649,12 +771,13 @@ export function SettingsDialog({
               ) : (
                 <RefreshCw className="h-4 w-4" />
               )}
-              <span className="ml-1">{translations.version?.check || "检查更新"}</span>
+              <span className="ml-1">{translations.version?.check || "\u68C0\u67E5\u66F4\u65B0"}</span>
             </Button>
             {updateInfo?.hasUpdate && !isRestartRequired && (
               <Button
                 variant="default"
                 size="sm"
+                className="active:scale-[0.97]"
                 onClick={handleInstallUpdate}
                 disabled={isInstallingUpdate}
               >
@@ -663,73 +786,26 @@ export function SettingsDialog({
                 ) : (
                   <Download className="h-4 w-4" />
                 )}
-                <span className="ml-1">{translations.version?.update || "更新"}</span>
+                <span className="ml-1">{translations.version?.update || "\u66F4\u65B0"}</span>
               </Button>
             )}
           </div>
-        </AppDialogInset>
-
+        </div>
+ 
         {isInstallingUpdate && (
-          <AppDialogInset className="space-y-3">
-            <div className="flex items-start justify-between gap-3">
-              <div className="space-y-1">
-                <div className="text-sm font-medium">
-                  {downloadProgress.stage === "installing"
-                    ? translations.version?.installing || "正在安装更新..."
-                    : translations.version?.downloading || "正在下载更新..."}
-                </div>
-                <div className="text-xs text-muted-foreground">
-                  {downloadProgress.stage === "retrying"
-                    ? formatMessage(
-                        translations.version?.retrying ||
-                          "下载中断，正在进行第 {} / {} 次尝试",
-                        downloadProgress.attempt || 1,
-                        downloadProgress.maxAttempts || 1
-                      )
-                    : downloadProgress.totalBytes && downloadProgress.totalBytes > 0
-                      ? formatMessage(
-                          translations.version?.downloadProgress ||
-                            "已下载 {} / {}",
-                          formatBytes(downloadProgress.downloadedBytes),
-                          formatBytes(downloadProgress.totalBytes)
-                        )
-                      : formatMessage(
-                          translations.version?.downloadProgressUnknown ||
-                            "已下载 {}",
-                          formatBytes(downloadProgress.downloadedBytes)
-                        )}
-                </div>
-              </div>
-              {downloadProgress.percent !== null && (
-                <div className="text-xs font-medium tabular-nums text-muted-foreground">
-                  {Math.round(downloadProgress.percent)}%
-                </div>
-              )}
-            </div>
-
-            <div className="h-2 overflow-hidden rounded-full bg-[var(--glass-input-bg)]">
-              <div
-                className={cn(
-                  "h-full rounded-full bg-primary transition-[width] duration-200",
-                  downloadProgress.percent === null && "animate-pulse w-1/3"
-                )}
-                style={
-                  downloadProgress.percent !== null
-                    ? { width: `${Math.max(0, Math.min(downloadProgress.percent, 100))}%` }
-                    : undefined
-                }
-              />
-            </div>
-          </AppDialogInset>
+          <UpdaterProgressBar
+            translations={translations}
+            downloadProgress={downloadProgress}
+          />
         )}
-
+ 
         {updateInfo?.releaseNotes && (
-          <AppDialogInset className="max-h-56 overflow-y-auto glass-scrollbar text-xs">
-            <div className="mb-1 font-medium">
-              {translations.version?.notes || "更新说明:"}
+          <div className="max-h-56 overflow-y-auto rounded-lg border border-[var(--settings-hairline)] bg-[var(--settings-section-bg)] p-4 glass-scrollbar text-[12px] tracking-[-0.12px] text-[var(--settings-ink)]">
+            <div className="mb-1.5 font-semibold">
+              {translations.version?.notes || "\u66F4\u65B0\u8BF4\u660E:"}
             </div>
-            <div className="whitespace-pre-wrap">{updateInfo.releaseNotes}</div>
-          </AppDialogInset>
+            <div className="whitespace-pre-wrap text-[var(--settings-ink-muted)]">{updateInfo.releaseNotes}</div>
+          </div>
         )}
       </div>
   );
@@ -751,8 +827,6 @@ export function SettingsDialog({
     }
   };
 
-  const ActiveCategoryIcon = activeCategoryItem.icon;
-
   return (
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
       <AppDialogShell
@@ -760,15 +834,16 @@ export function SettingsDialog({
         bodyPadding="none"
         bodyScrollable={false}
         bodyInnerClassName="min-h-0 h-full"
-        title={translations.settings?.title || "应用设置"}
+        title={translations.settings?.title || "\u5E94\u7528\u8BBE\u7F6E"}
         description={
-          translations.settings?.description || "配置语言、外观、输出目录等偏好设置"
+          translations.settings?.description || "\u914D\u7F6E\u8BED\u8A00\u3001\u5916\u89C2\u3001\u8F93\u51FA\u76EE\u5F55\u7B49\u504F\u597D\u8BBE\u7F6E"
         }
         icon={<Languages className="h-4 w-4" />}
       >
-        <div className="grid h-full min-h-0 gap-5 p-5 sm:grid-cols-[240px_minmax(0,1fr)] sm:p-6">
-          <aside className="glass-card min-h-0 overflow-y-auto rounded-2xl p-2.5">
-            <nav className="flex gap-2 overflow-x-auto pb-1 sm:flex-col sm:overflow-visible sm:pb-0">
+        <div className="grid h-full min-h-0 gap-0 sm:grid-cols-[200px_minmax(0,1fr)]">
+          {/* Sidebar */}
+          <aside className="min-h-0 overflow-y-auto border-r border-[var(--settings-hairline)] px-3 py-4 glass-scrollbar">
+            <nav className="flex gap-0.5 overflow-x-auto sm:flex-col sm:overflow-visible">
               {categoryItems.map((item) => {
                 const Icon = item.icon;
                 const isActive = item.id === activeCategory;
@@ -779,30 +854,23 @@ export function SettingsDialog({
                     type="button"
                     aria-current={isActive ? "page" : undefined}
                     className={cn(
-                      "glass-press flex min-w-[170px] items-start gap-3 rounded-2xl border px-3.5 py-3 text-left glass-transition sm:min-w-0",
+                      "flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left transition-colors duration-150",
                       isActive
-                        ? "border-[var(--glass-border)] bg-[var(--glass-bg-active)] text-foreground shadow-[var(--glass-shadow)]"
-                        : "border-transparent text-muted-foreground hover:border-[var(--glass-border-subtle)] hover:bg-[var(--glass-input-bg)] hover:text-foreground"
+                        ? "bg-[var(--settings-sidebar-item-active)] text-[var(--settings-ink)]"
+                        : "text-[var(--settings-ink-muted)] hover:bg-[var(--settings-sidebar-item-hover)] hover:text-[var(--settings-ink)]"
                     )}
                     onClick={() => handleCategoryChange(item.id)}
                   >
-                    <span
+                    <Icon
                       className={cn(
-                        "mt-0.5 flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl",
+                        "h-[18px] w-[18px] flex-shrink-0 transition-colors duration-150",
                         isActive
-                          ? "bg-primary/10 text-primary shadow-[var(--glass-inset-shadow)]"
-                          : "bg-[var(--glass-input-bg)] text-foreground/70"
+                          ? "text-[var(--settings-icon-active)]"
+                          : "text-[var(--settings-icon-muted)]"
                       )}
-                    >
-                      <Icon className="h-4 w-4 shrink-0" />
-                    </span>
-                    <span className="min-w-0">
-                      <span className="block truncate text-sm font-medium">
-                        {item.label}
-                      </span>
-                      <span className="mt-1 block text-[11px] leading-4 text-muted-foreground">
-                        {item.description}
-                      </span>
+                    />
+                    <span className="truncate text-[13px] font-semibold tracking-[-0.12px]">
+                      {item.label}
                     </span>
                   </button>
                 );
@@ -810,23 +878,17 @@ export function SettingsDialog({
             </nav>
           </aside>
 
-          <section className="glass-card min-h-0 flex flex-col overflow-hidden rounded-2xl">
-            <div className="border-b border-[var(--glass-divider)] px-5 pb-4 pt-5 sm:px-6 sm:pb-4 sm:pt-6">
-              <div className="flex items-start gap-3">
-                <span className="mt-0.5 flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-2xl bg-primary/10 text-primary shadow-[0_8px_20px_hsl(var(--primary)/0.16)]">
-                  <ActiveCategoryIcon className="h-4 w-4" />
-                </span>
-                <div className="min-w-0">
-                  <h3 className="text-base font-semibold text-foreground">
-                    {activeCategoryItem.label}
-                  </h3>
-                  <p className="mt-1 text-xs leading-5 text-muted-foreground">
-                    {activeCategoryItem.description}
-                  </p>
-                </div>
-              </div>
+          {/* Content */}
+          <section className="min-h-0 flex flex-col overflow-hidden">
+            <div className="border-b border-[var(--settings-hairline)] px-6 pb-4 pt-5">
+              <h3 className="text-[17px] font-semibold tracking-[-0.374px] text-[var(--settings-ink)]">
+                {activeCategoryItem.label}
+              </h3>
+              <p className="mt-0.5 text-[14px] leading-[1.43] tracking-[-0.224px] text-[var(--settings-ink-muted)]">
+                {categoryDescriptions[activeCategory]}
+              </p>
             </div>
-            <div className="glass-scrollbar min-h-0 flex-1 overflow-y-auto p-5 sm:p-6">
+            <div className="glass-scrollbar min-h-0 flex-1 overflow-y-auto px-6 py-5">
               {renderCategoryContent()}
             </div>
           </section>

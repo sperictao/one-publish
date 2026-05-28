@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import { Eye, FileCode2, RefreshCw } from "lucide-react";
+import { Eye, FileCode2, HelpCircle, RefreshCw } from "lucide-react";
 
 import { DotnetPublishConfigFormSections } from "@/components/publish/DotnetPublishConfigFormSections";
 import { Button } from "@/components/ui/button";
@@ -79,8 +79,21 @@ export function ProjectPublishProfileViewerDialog({
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <AppDialogShell
-        size="wide"
-        title={t.viewConfigTitle || "查看发布配置"}
+        size="responsive"
+        bodyPadding="none"
+        bodyInnerClassName="space-y-4 p-5 sm:p-6"
+        title={
+          <div className="flex items-center gap-1.5">
+            <span>{t.viewConfigTitle || "查看发布配置"}</span>
+            <div className="group relative inline-block">
+              <HelpCircle className="h-3.5 w-3.5 text-muted-foreground/60 cursor-help hover:text-foreground transition-colors" />
+              <div className="absolute left-1/2 -translate-x-1/2 bottom-full mb-2 hidden group-hover:block w-64 p-2 bg-[var(--glass-panel-bg)] backdrop-blur-xl text-popover-foreground text-xs rounded-xl shadow-[var(--glass-shadow-lg)] border border-[var(--glass-border)] z-10 leading-4 font-normal">
+                {t.viewConfigFocusedHint ||
+                  "主表单与新建、编辑配置保持一致；其余无法在表单里完整表达的 .pubxml 信息收起在下方补充区中。"}
+              </div>
+            </div>
+          </div>
+        }
         description={
           viewerState.profileName
             ? `${
@@ -91,7 +104,6 @@ export function ProjectPublishProfileViewerDialog({
               "查看项目发布配置文件中的全部参数。"
         }
         icon={<Eye className="h-4 w-4" />}
-        bodyInnerClassName="max-h-[70vh] space-y-4 pr-1"
         footer={
           <div className="flex w-full justify-end">
             <Button
@@ -104,55 +116,48 @@ export function ProjectPublishProfileViewerDialog({
           </div>
         }
       >
-        <div className="space-y-4">
-          {viewerState.status === "loading" ? (
-            <div className="flex min-h-40 items-center justify-center rounded-2xl border border-dashed border-border/70 bg-muted/20 text-sm text-muted-foreground">
-              <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
-              {t.loadingConfig || "正在加载配置..."}
-            </div>
-          ) : null}
+        {viewerState.status === "loading" ? (
+          <div className="flex min-h-40 items-center justify-center rounded-2xl border border-dashed border-border/70 bg-muted/20 text-sm text-muted-foreground">
+            <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
+            {t.loadingConfig || "正在加载配置..."}
+          </div>
+        ) : null}
 
-          {viewerState.status === "error" ? (
-            <AppDialogInset className="border-destructive/30 bg-destructive/5 text-sm text-destructive shadow-none">
-              {viewerState.errorMessage}
+        {viewerState.status === "error" ? (
+          <AppDialogInset className="border-destructive/30 bg-destructive/5 text-sm text-destructive shadow-none">
+            {viewerState.errorMessage}
+          </AppDialogInset>
+        ) : null}
+
+        {viewerState.status === "ready" ? (
+          <>
+            <AppDialogInset>
+              <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                {t.configFilePath || "配置文件路径"}
+              </div>
+              <div className="mt-2 break-all font-mono text-xs text-foreground/80">
+                {viewerState.filePath}
+              </div>
             </AppDialogInset>
-          ) : null}
 
-          {viewerState.status === "ready" ? (
-            <>
-              <AppDialogInset>
-                <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                  {t.configFilePath || "配置文件路径"}
-                </div>
-                <div className="mt-2 break-all font-mono text-xs text-foreground/80">
-                  {viewerState.filePath}
-                </div>
-              </AppDialogInset>
+            <DotnetPublishConfigFormSections
+              mode="readonly"
+              presentation="focused"
+              profileT={profileT}
+              appT={appT}
+              config={viewerState.editableConfig}
+              dotnetSchema={dotnetSchema}
+              projectFrameworkOptions={projectFrameworkOptions}
+            />
 
-              <AppDialogInset className="text-xs leading-5 text-muted-foreground">
-                {t.viewConfigFocusedHint ||
-                  "主表单与新建、编辑配置保持一致；其余无法在表单里完整表达的 .pubxml 信息收起在下方补充区中。"}
-              </AppDialogInset>
-
-              <DotnetPublishConfigFormSections
-                mode="readonly"
-                presentation="focused"
-                profileT={profileT}
-                appT={appT}
-                config={viewerState.editableConfig}
-                dotnetSchema={dotnetSchema}
-                projectFrameworkOptions={projectFrameworkOptions}
+            {supplementSections.length > 0 ? (
+              <ProjectPublishProfileSupplementSectionList
+                sections={supplementSections}
+                translations={t}
               />
-
-              {supplementSections.length > 0 ? (
-                <ProjectPublishProfileSupplementSectionList
-                  sections={supplementSections}
-                  translations={t}
-                />
-              ) : null}
-            </>
-          ) : null}
-        </div>
+            ) : null}
+          </>
+        ) : null}
       </AppDialogShell>
     </Dialog>
   );
