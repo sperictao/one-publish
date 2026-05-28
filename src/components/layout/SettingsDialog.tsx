@@ -51,6 +51,8 @@ import type { Language } from "@/hooks/useI18n";
 import type { EnvironmentCheckSnapshot } from "@/lib/environment";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
+import { useAccentColor, ACCENT_COLORS } from "@/hooks/useTheme";
+import type { AccentColor } from "@/hooks/useTheme";
 
 const EnvironmentCheckContent = lazy(async () => {
   const mod = await import("@/components/environment/EnvironmentCheckDialog");
@@ -347,9 +349,28 @@ export const AppearanceSettingsSection = memo(function AppearanceSettingsSection
   theme,
   onThemeChange,
 }: AppearanceSettingsSectionProps) {
+  const { accentColor, setAccentColor } = useAccentColor();
+
+  const accentList: Array<{ id: AccentColor; name: string; lightColor: string; darkColor: string }> = [
+    { id: "brand", name: "按钮蓝", lightColor: "#2462db", darkColor: "#4983de" },
+    { id: "blue", name: "系统蓝", lightColor: "#007aff", darkColor: "#2997ff" },
+    { id: "purple", name: "紫色", lightColor: "#af52de", darkColor: "#d946ef" },
+    { id: "pink", name: "粉色", lightColor: "#ff2d55", darkColor: "#f472b6" },
+    { id: "red", name: "红色", lightColor: "#ff3b30", darkColor: "#ff453a" },
+    { id: "orange", name: "橙色", lightColor: "#ff9500", darkColor: "#ff9f0a" },
+    { id: "yellow", name: "黄色", lightColor: "#ffcc00", darkColor: "#ffd60a" },
+    { id: "green", name: "绿色", lightColor: "#34c759", darkColor: "#30d158" },
+    { id: "gray", name: "石墨", lightColor: "#8e8e93", darkColor: "#98989d" },
+  ];
+
+  const activeColorToken = ACCENT_COLORS[accentColor] || ACCENT_COLORS.blue;
+  const lightPreviewColor = activeColorToken.light.accent;
+  const darkPreviewColor = activeColorToken.dark.accent;
+
   return (
     <div className="space-y-6">
-      <div className="rounded-xl border border-[var(--settings-hairline)] bg-[var(--settings-section-bg)] p-6">
+      {/* 主题选择卡片 */}
+      <div className="rounded-xl border border-[var(--settings-hairline)] bg-[var(--settings-section-bg)] p-6 shadow-[0_1px_3px_rgba(0,0,0,0.02)] dark:shadow-none">
         <div className="flex items-center justify-between mb-4">
           <Label htmlFor="settings-theme" className="text-[14px] font-semibold tracking-[-0.224px] text-[var(--settings-ink)]">
             {translations.theme?.label || "外观主题"}
@@ -372,10 +393,10 @@ export const AppearanceSettingsSection = memo(function AppearanceSettingsSection
           <button
             type="button"
             className={cn(
-              "group relative flex flex-col items-center gap-2.5 rounded-xl border p-2.5 text-center transition-all duration-200 active:scale-[0.97]",
+              "group relative flex flex-col items-center gap-2.5 rounded-xl border p-2.5 text-center transition-all duration-300 active:scale-[0.97] glass-press",
               theme === "auto"
-                ? "border-[var(--settings-card-selected-border)] bg-[var(--settings-card-selected-bg)] shadow-[0_4px_12px_rgba(0,102,204,0.04)]"
-                : "border-[var(--settings-hairline)] bg-transparent hover:bg-black/[0.01] dark:hover:bg-white/[0.01] hover:border-black/20 dark:hover:border-white/20"
+                ? "border-[var(--settings-card-selected-border)] bg-[var(--settings-card-selected-bg)] shadow-[0_4px_20px_rgba(0,102,204,0.06),0_1px_3px_rgba(0,102,204,0.04)]"
+                : "border-[var(--settings-hairline)] bg-transparent hover:bg-black/[0.015] dark:hover:bg-white/[0.015] hover:border-black/20 dark:hover:border-white/20"
             )}
             onClick={() => onThemeChange("auto")}
           >
@@ -384,32 +405,55 @@ export const AppearanceSettingsSection = memo(function AppearanceSettingsSection
                 <Check className="size-2.5 stroke-[3.5]" />
               </div>
             )}
+            
             {/* 自动主题微缩图 */}
-            <div className="relative h-16 w-full overflow-hidden rounded-md border border-[var(--settings-hairline)] flex bg-transparent select-none pointer-events-none">
+            <div className="relative h-20 w-full overflow-hidden rounded-lg border border-[var(--settings-hairline)] flex bg-transparent select-none pointer-events-none shadow-sm">
               {/* Left half: Light theme */}
-              <div className="w-1/2 h-full relative bg-gradient-to-br from-[#dce0f9] to-[#f4f5fa] border-r border-black/5 overflow-hidden">
+              <div className="w-1/2 h-full relative bg-gradient-to-br from-[#c9d6ff] to-[#f5f7fa] border-r border-black/5 overflow-hidden flex flex-col justify-end">
                 {/* Mock macOS Window (Left part) */}
-                <div className="absolute left-4 right-0 bottom-0 top-4 rounded-tl-md border-t border-l border-black/10 bg-white shadow-[0_2px_6px_rgba(0,0,0,0.04)] flex overflow-hidden">
-                  {/* Sidebar */}
-                  <div className="w-5 border-r border-black/5 bg-[#fafafc] h-full p-1 space-y-1 shrink-0">
-                    <div className="h-1 w-full rounded-sm bg-black/[0.08]" />
-                    <div className="h-1 w-2/3 rounded-sm bg-black/[0.05]" />
+                <div className="absolute left-3 right-0 bottom-0 top-3 rounded-tl-md border-t border-l border-black/10 bg-white shadow-[0_2px_10px_rgba(0,0,0,0.06)] flex flex-col overflow-hidden">
+                  {/* Title Bar with Traffic Lights */}
+                  <div className="h-3 border-b border-black/[0.04] bg-[#fafafc] flex items-center px-1 gap-[3px] shrink-0">
+                    <div className="size-1 rounded-full bg-[#ff5f56]" />
+                    <div className="size-1 rounded-full bg-[#ffbd2e]" />
+                    <div className="size-1 rounded-full bg-[#27c93f]" />
                   </div>
-                  {/* Content Area (Left Part) */}
-                  <div className="flex-1 bg-white p-1 space-y-1">
-                    <div className="h-1 w-1/2 rounded-sm bg-blue-500/20" />
-                    <div className="h-2 w-full rounded-sm bg-black/[0.03]" />
+                  <div className="flex flex-1 min-h-0">
+                    {/* Sidebar */}
+                    <div className="w-[14px] border-r border-black/5 bg-[#f5f5f7] h-full p-0.5 space-y-0.5 shrink-0">
+                      <div 
+                        className="h-1.5 w-full rounded-[2px] transition-colors duration-300"
+                        style={{ backgroundColor: lightPreviewColor }}
+                      />
+                      <div className="h-1 w-2/3 rounded-[2px] bg-black/[0.06]" />
+                    </div>
+                    {/* Content Area (Left Part) */}
+                    <div className="flex-1 bg-white p-0.5 space-y-0.5">
+                      <div className="h-1.5 w-full rounded-[1px] bg-black/[0.04]" />
+                      <div className="h-1 w-1/2 rounded-[1px] bg-black/[0.03]" />
+                    </div>
                   </div>
                 </div>
               </div>
               {/* Right half: Dark theme */}
-              <div className="w-1/2 h-full relative bg-gradient-to-br from-[#2a2935] to-[#15141b] overflow-hidden">
+              <div className="w-1/2 h-full relative bg-gradient-to-br from-[#1b1d2a] to-[#0f101b] overflow-hidden flex flex-col justify-end">
                 {/* Mock macOS Window (Right part) */}
-                <div className="absolute left-0 right-4 bottom-0 top-4 rounded-tr-md border-t border-r border-white/10 bg-[#1d1d1f] shadow-[0_2px_6px_rgba(0,0,0,0.2)] flex overflow-hidden">
-                  {/* Content Area (Right Part) */}
-                  <div className="flex-1 bg-[#1d1d1f] p-1 space-y-1">
-                    <div className="h-1 w-1/3 rounded-sm bg-blue-500/40" />
-                    <div className="h-2 w-full rounded-sm bg-white/[0.04]" />
+                <div className="absolute left-0 right-3 bottom-0 top-3 rounded-tr-md border-t border-r border-white/10 bg-[#1e1e1f] shadow-[0_2px_10px_rgba(0,0,0,0.3)] flex flex-col overflow-hidden">
+                  {/* Title Bar with Traffic Lights */}
+                  <div className="h-3 border-b border-white/[0.04] bg-[#252527] flex items-center px-1 gap-[3px] shrink-0">
+                    <div className="size-1 rounded-full bg-[#ff5f56]" />
+                    <div className="size-1 rounded-full bg-[#ffbd2e]" />
+                    <div className="size-1 rounded-full bg-[#27c93f]" />
+                  </div>
+                  <div className="flex flex-1 min-h-0">
+                    {/* Content Area (Right Part) */}
+                    <div className="flex-1 bg-[#1e1e1f] p-0.5 space-y-0.5">
+                      <div className="h-1.5 w-full rounded-[1px] bg-white/[0.06]" />
+                      <div 
+                        className="h-1 w-1/2 rounded-[1px] transition-colors duration-300" 
+                        style={{ backgroundColor: darkPreviewColor }}
+                      />
+                    </div>
                   </div>
                 </div>
               </div>
@@ -423,10 +467,10 @@ export const AppearanceSettingsSection = memo(function AppearanceSettingsSection
           <button
             type="button"
             className={cn(
-              "group relative flex flex-col items-center gap-2.5 rounded-xl border p-2.5 text-center transition-all duration-200 active:scale-[0.97]",
+              "group relative flex flex-col items-center gap-2.5 rounded-xl border p-2.5 text-center transition-all duration-300 active:scale-[0.97] glass-press",
               theme === "light"
-                ? "border-[var(--settings-card-selected-border)] bg-[var(--settings-card-selected-bg)] shadow-[0_4px_12px_rgba(0,102,204,0.04)]"
-                : "border-[var(--settings-hairline)] bg-transparent hover:bg-black/[0.01] dark:hover:bg-white/[0.01] hover:border-black/20 dark:hover:border-white/20"
+                ? "border-[var(--settings-card-selected-border)] bg-[var(--settings-card-selected-bg)] shadow-[0_4px_20px_rgba(0,102,204,0.06),0_1px_3px_rgba(0,102,204,0.04)]"
+                : "border-[var(--settings-hairline)] bg-transparent hover:bg-black/[0.015] dark:hover:bg-white/[0.015] hover:border-black/20 dark:hover:border-white/20"
             )}
             onClick={() => onThemeChange("light")}
           >
@@ -436,20 +480,31 @@ export const AppearanceSettingsSection = memo(function AppearanceSettingsSection
               </div>
             )}
             {/* 亮色主题微缩图 */}
-            <div className="relative h-16 w-full overflow-hidden rounded-md border border-[var(--settings-hairline)] bg-gradient-to-br from-[#dce0f9] via-[#f4f5fa] to-[#e4e9f7] flex select-none pointer-events-none">
+            <div className="relative h-20 w-full overflow-hidden rounded-lg border border-[var(--settings-hairline)] bg-gradient-to-br from-[#c9d6ff] via-[#e2e2e2] to-[#f5f7fa] flex select-none pointer-events-none shadow-sm">
               {/* Mock macOS Window */}
-              <div className="absolute inset-x-4 bottom-0 top-4 rounded-t-md border-t border-x border-black/10 bg-white shadow-[0_2px_8px_rgba(0,0,0,0.04)] flex overflow-hidden">
-                {/* Sidebar */}
-                <div className="w-5 border-r border-black/5 bg-[#fafafc] h-full p-1 space-y-1 shrink-0">
-                  <div className="h-1 w-full rounded-sm bg-black/[0.08]" />
-                  <div className="h-1 w-2/3 rounded-sm bg-black/[0.05]" />
-                  <div className="h-1 w-3/4 rounded-sm bg-black/[0.05]" />
+              <div className="absolute inset-x-3 bottom-0 top-3 rounded-t-md border-t border-x border-black/10 bg-white shadow-[0_2px_12px_rgba(0,0,0,0.06)] flex flex-col overflow-hidden">
+                {/* Title Bar with Traffic Lights */}
+                <div className="h-3 border-b border-black/[0.04] bg-[#fafafc] flex items-center px-1.5 gap-[3px] shrink-0">
+                  <div className="size-1 rounded-full bg-[#ff5f56]" />
+                  <div className="size-1 rounded-full bg-[#ffbd2e]" />
+                  <div className="size-1 rounded-full bg-[#27c93f]" />
                 </div>
-                {/* Content Area */}
-                <div className="flex-1 bg-white p-1 space-y-1">
-                  <div className="h-1 w-1/3 rounded-sm bg-blue-500/20" />
-                  <div className="h-2 w-full rounded-sm bg-black/[0.03]" />
-                  <div className="h-2 w-full rounded-sm bg-black/[0.03]" />
+                <div className="flex flex-1 min-h-0">
+                  {/* Sidebar */}
+                  <div className="w-[18px] border-r border-black/5 bg-[#fafafc] h-full p-0.5 space-y-0.5 shrink-0">
+                    <div 
+                      className="h-1.5 w-full rounded-[2px] transition-colors duration-300" 
+                      style={{ backgroundColor: lightPreviewColor }}
+                    />
+                    <div className="h-1 w-2/3 rounded-[2px] bg-black/[0.06]" />
+                    <div className="h-1 w-3/4 rounded-[2px] bg-black/[0.05]" />
+                  </div>
+                  {/* Content Area */}
+                  <div className="flex-1 bg-white p-0.5 space-y-0.5">
+                    <div className="h-1.5 w-2/3 rounded-[1px] bg-black/[0.04]" />
+                    <div className="h-1.5 w-full rounded-[1px] bg-black/[0.03]" />
+                    <div className="h-1.5 w-1/2 rounded-[1px] bg-black/[0.03]" />
+                  </div>
                 </div>
               </div>
             </div>
@@ -462,10 +517,10 @@ export const AppearanceSettingsSection = memo(function AppearanceSettingsSection
           <button
             type="button"
             className={cn(
-              "group relative flex flex-col items-center gap-2.5 rounded-xl border p-2.5 text-center transition-all duration-200 active:scale-[0.97]",
+              "group relative flex flex-col items-center gap-2.5 rounded-xl border p-2.5 text-center transition-all duration-300 active:scale-[0.97] glass-press",
               theme === "dark"
-                ? "border-[var(--settings-card-selected-border)] bg-[var(--settings-card-selected-bg)] shadow-[0_4px_12px_rgba(0,102,204,0.04)]"
-                : "border-[var(--settings-hairline)] bg-transparent hover:bg-black/[0.01] dark:hover:bg-white/[0.01] hover:border-black/20 dark:hover:border-white/20"
+                ? "border-[var(--settings-card-selected-border)] bg-[var(--settings-card-selected-bg)] shadow-[0_4px_20px_rgba(0,102,204,0.06),0_1px_3px_rgba(0,102,204,0.04)]"
+                : "border-[var(--settings-hairline)] bg-transparent hover:bg-black/[0.015] dark:hover:bg-white/[0.015] hover:border-black/20 dark:hover:border-white/20"
             )}
             onClick={() => onThemeChange("dark")}
           >
@@ -475,20 +530,31 @@ export const AppearanceSettingsSection = memo(function AppearanceSettingsSection
               </div>
             )}
             {/* 暗色主题微缩图 */}
-            <div className="relative h-16 w-full overflow-hidden rounded-md border border-[var(--settings-hairline)] bg-gradient-to-br from-[#1b1a23] via-[#2a2935] to-[#15141b] flex select-none pointer-events-none">
+            <div className="relative h-20 w-full overflow-hidden rounded-lg border border-[var(--settings-hairline)] bg-gradient-to-br from-[#1b1c29] via-[#23253f] to-[#13141f] flex select-none pointer-events-none shadow-sm">
               {/* Mock macOS Window */}
-              <div className="absolute inset-x-4 bottom-0 top-4 rounded-t-md border-t border-x border-white/10 bg-[#1d1d1f] shadow-[0_3px_10px_rgba(0,0,0,0.3)] flex overflow-hidden">
-                {/* Sidebar */}
-                <div className="w-5 border-r border-white/5 bg-[#252527] h-full p-1 space-y-1 shrink-0">
-                  <div className="h-1 w-full rounded-sm bg-white/[0.12]" />
-                  <div className="h-1 w-2/3 rounded-sm bg-white/[0.08]" />
-                  <div className="h-1 w-3/4 rounded-sm bg-white/[0.08]" />
+              <div className="absolute inset-x-3 bottom-0 top-3 rounded-t-md border-t border-x border-white/10 bg-[#1e1e1f] shadow-[0_2px_12px_rgba(0,0,0,0.35)] flex flex-col overflow-hidden">
+                {/* Title Bar with Traffic Lights */}
+                <div className="h-3 border-b border-white/[0.04] bg-[#252527] flex items-center px-1.5 gap-[3px] shrink-0">
+                  <div className="size-1 rounded-full bg-[#ff5f56]" />
+                  <div className="size-1 rounded-full bg-[#ffbd2e]" />
+                  <div className="size-1 rounded-full bg-[#27c93f]" />
                 </div>
-                {/* Content Area */}
-                <div className="flex-1 bg-[#1d1d1f] p-1 space-y-1">
-                  <div className="h-1 w-1/3 rounded-sm bg-blue-500/40" />
-                  <div className="h-2 w-full rounded-sm bg-white/[0.04]" />
-                  <div className="h-2 w-full rounded-sm bg-white/[0.04]" />
+                <div className="flex flex-1 min-h-0">
+                  {/* Sidebar */}
+                  <div className="w-[18px] border-r border-white/5 bg-[#252527] h-full p-0.5 space-y-0.5 shrink-0">
+                    <div 
+                      className="h-1.5 w-full rounded-[2px] transition-colors duration-300" 
+                      style={{ backgroundColor: darkPreviewColor }}
+                    />
+                    <div className="h-1 w-2/3 rounded-[2px] bg-white/[0.08]" />
+                    <div className="h-1 w-3/4 rounded-[2px] bg-white/[0.08]" />
+                  </div>
+                  {/* Content Area */}
+                  <div className="flex-1 bg-[#1e1e1f] p-0.5 space-y-0.5">
+                    <div className="h-1.5 w-2/3 rounded-[1px] bg-white/[0.06]" />
+                    <div className="h-1.5 w-full rounded-[1px] bg-white/[0.04]" />
+                    <div className="h-1.5 w-1/2 rounded-[1px] bg-white/[0.04]" />
+                  </div>
                 </div>
               </div>
             </div>
@@ -499,9 +565,49 @@ export const AppearanceSettingsSection = memo(function AppearanceSettingsSection
         </div>
       </div>
 
+      {/* 强调色选择卡片 */}
+      <div className="rounded-xl border border-[var(--settings-hairline)] bg-[var(--settings-section-bg)] p-6 shadow-[0_1px_3px_rgba(0,0,0,0.02)] dark:shadow-none">
+        <div className="space-y-0.5 mb-4">
+          <Label className="text-[14px] font-semibold tracking-[-0.224px] text-[var(--settings-ink)]">
+            强调色 (Accent Color)
+          </Label>
+          <p className="text-[12px] leading-[1.4] tracking-[-0.12px] text-[var(--settings-ink-muted)]">
+            选择应用在按钮、聚焦框、激活项等交互元素下的系统主色调。
+          </p>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-3">
+          {accentList.map((item) => {
+            const isSelected = item.id === accentColor;
+            return (
+              <button
+                key={item.id}
+                type="button"
+                className={cn(
+                  "relative flex size-7 shrink-0 items-center justify-center rounded-full shadow-[0_1px_3px_rgba(0,0,0,0.15)] transition-all duration-300 hover:scale-110 active:scale-95 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2",
+                  isSelected 
+                    ? "ring-2 ring-offset-2 ring-[var(--settings-accent)] scale-105" 
+                    : "hover:shadow-[0_2px_6px_rgba(0,0,0,0.2)]"
+                )}
+                style={{
+                  background: `linear-gradient(135deg, ${item.lightColor} 50%, ${item.darkColor} 50%)`,
+                }}
+                onClick={() => setAccentColor(item.id)}
+                title={item.name}
+                aria-label={`强调色: ${item.name}`}
+              >
+                {isSelected && (
+                  <Check className="size-3 text-white drop-shadow-[0_1px_1px_rgba(0,0,0,0.45)] stroke-[3.5]" />
+                )}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
       <p className="text-[12px] leading-[1.4] tracking-[-0.12px] text-[var(--settings-ink-muted)] px-1">
         {translations.settings?.sections?.appearanceDescription ||
-          "主题切换会立即作用到当前窗口与后续打开的设置面板。"}
+          "主题与强调色切换会立即作用到当前窗口与后续打开的设置面板。"}
       </p>
     </div>
   );
