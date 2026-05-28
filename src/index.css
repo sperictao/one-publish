@@ -163,6 +163,10 @@ html.dark {
   --settings-section-bg: #ffffff;
   --settings-icon-muted: #86868b;
   --settings-icon-active: #0066cc;
+  --settings-sidebar-selected-bg: rgba(0, 102, 204, 0.08);
+  --settings-sidebar-selected-text: #0066cc;
+  --settings-card-selected-border: rgba(0, 102, 204, 0.4);
+  --settings-card-selected-bg: rgba(0, 102, 204, 0.02);
 
   --repo-sidebar-shell-bg: linear-gradient(
     172deg,
@@ -222,6 +226,10 @@ html.dark {
   --settings-section-bg: rgba(255, 255, 255, 0.04);
   --settings-icon-muted: #86868b;
   --settings-icon-active: #2997ff;
+  --settings-sidebar-selected-bg: rgba(41, 151, 255, 0.16);
+  --settings-sidebar-selected-text: #2997ff;
+  --settings-card-selected-border: rgba(41, 151, 255, 0.6);
+  --settings-card-selected-bg: rgba(255, 255, 255, 0.02);
 
   --repo-sidebar-shell-bg: linear-gradient(
     172deg,
