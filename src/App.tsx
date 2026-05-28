@@ -50,7 +50,7 @@ function App() {
   }
 
   return (
-    <div className="flex h-screen flex-col bg-background">
+    <div className="flex h-screen flex-col bg-[#f0f0f2] dark:bg-[#121214]">
       {boot.publish.providerRuntimeBanner ? (
         <ProviderRuntimeBanner
           key={boot.publish.providerRuntimeBanner.key}
