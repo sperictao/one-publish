@@ -1013,7 +1013,7 @@ export function SettingsDialog({
                 跨平台 .NET 自动化发布与签名客户端
               </p>
             </div>
-            <span className="rounded-md border border-[#d1d1d6] border-b-[#b5b5ba] bg-gradient-to-b from-white to-[#f5f5f7] px-2 py-0.5 text-[11px] font-bold tracking-tight text-black/80 shadow-[0_1.5px_0_rgba(0,0,0,0.06),0_1px_1.5px_rgba(0,0,0,0.04)] font-mono dark:from-[#3a3a3c] dark:to-[#2c2c2e] dark:border-[#48484a] dark:border-b-[#1c1c1e] dark:shadow-[0_1.5px_0_rgba(0,0,0,0.4),0_1px_1.5px_rgba(0,0,0,0.2)] dark:text-white/90 shrink-0">
+            <span className="inline-flex items-center rounded-md border border-[var(--settings-hairline)] bg-black/[0.03] dark:bg-white/[0.03] px-2 py-0.5 text-[11px] font-semibold text-[var(--settings-ink-muted)] font-mono shrink-0">
               {formatMessage(
                 t("version.current"),
                 updateInfo?.currentVersion || currentVersion || "—"
@@ -1084,20 +1084,20 @@ export function SettingsDialog({
                   <Button
                     variant="outline"
                     size="sm"
-                    className="h-8 px-3 rounded-lg border border-[#d1d1d6] border-b-[#b5b5ba] bg-gradient-to-b from-white to-[#f5f5f7] text-[12px] font-bold text-black/80 shadow-[0_1px_1px_rgba(0,0,0,0.05)] hover:from-[#f5f5f7] hover:to-[#e9e9eb] dark:from-[#3a3a3c] dark:to-[#2c2c2e] dark:border-[#48484a] dark:border-b-[#1c1c1e] dark:hover:from-[#48484a] dark:hover:to-[#3a3a3c] dark:text-white/90 active:scale-[0.97] transition-all shrink-0 flex items-center gap-1.5"
+                    className="h-8 px-3 rounded-lg border border-[var(--settings-hairline)] bg-transparent hover:bg-black/[0.02] dark:hover:bg-white/[0.02] text-[12px] font-medium text-[var(--settings-ink)] active:scale-[0.97] transition-all shrink-0 flex items-center gap-1.5"
                     onClick={() => _onOpenUpdaterHelpTarget("docs")}
                   >
                     <span>{translations.version?.openGuide || "打开配置指南"}</span>
-                    <ExternalLink className="size-3 text-black/50 dark:text-white/50" />
+                    <ExternalLink className="size-3 text-[var(--settings-ink-muted)]" />
                   </Button>
                   <Button
                     variant="outline"
                     size="sm"
-                    className="h-8 px-3 rounded-lg border border-[#d1d1d6] border-b-[#b5b5ba] bg-gradient-to-b from-white to-[#f5f5f7] text-[12px] font-bold text-black/80 shadow-[0_1px_1px_rgba(0,0,0,0.05)] hover:from-[#f5f5f7] hover:to-[#e9e9eb] dark:from-[#3a3a3c] dark:to-[#2c2c2e] dark:border-[#48484a] dark:border-b-[#1c1c1e] dark:hover:from-[#48484a] dark:hover:to-[#3a3a3c] dark:text-white/90 active:scale-[0.97] transition-all shrink-0 flex items-center gap-1.5"
+                    className="h-8 px-3 rounded-lg border border-[var(--settings-hairline)] bg-transparent hover:bg-black/[0.02] dark:hover:bg-white/[0.02] text-[12px] font-medium text-[var(--settings-ink)] active:scale-[0.97] transition-all shrink-0 flex items-center gap-1.5"
                     onClick={() => _onOpenUpdaterHelpTarget("template")}
                   >
                     <span>{translations.version?.openTemplate || "下载模板文件"}</span>
-                    <Download className="size-3 text-black/50 dark:text-white/50" />
+                    <Download className="size-3 text-[var(--settings-ink-muted)]" />
                   </Button>
                 </div>
               ) : (
@@ -1122,11 +1122,11 @@ export function SettingsDialog({
                   <Button
                     variant="outline"
                     size="sm"
-                    className="h-8 px-3 rounded-lg border border-[#d1d1d6] border-b-[#b5b5ba] bg-gradient-to-b from-white to-[#f5f5f7] text-[12px] font-bold text-black/80 shadow-[0_1px_1px_rgba(0,0,0,0.05)] hover:from-[#f5f5f7] hover:to-[#e9e9eb] dark:from-[#3a3a3c] dark:to-[#2c2c2e] dark:border-[#48484a] dark:border-b-[#1c1c1e] dark:hover:from-[#48484a] dark:hover:to-[#3a3a3c] dark:text-white/90 active:scale-[0.97] transition-all shrink-0 flex items-center gap-1.5"
+                    className="h-8 px-3 rounded-lg border border-[var(--settings-hairline)] bg-transparent hover:bg-black/[0.02] dark:hover:bg-white/[0.02] text-[12px] font-medium text-[var(--settings-ink)] active:scale-[0.97] transition-all shrink-0 flex items-center gap-1.5"
                     onClick={handleCheckUpdate}
                     disabled={isCheckingUpdate || isInstallingUpdate}
                   >
-                    <RefreshCw className={cn("size-3 text-black/50 dark:text-white/50", isCheckingUpdate && "animate-spin")} />
+                    <RefreshCw className={cn("size-3 text-[var(--settings-ink-muted)]", isCheckingUpdate && "animate-spin")} />
                     <span>{translations.version?.check || "检查更新"}</span>
                   </Button>
 

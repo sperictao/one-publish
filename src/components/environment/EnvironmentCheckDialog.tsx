@@ -523,8 +523,8 @@ export function EnvironmentCheckContent({
                                   className={cn(
                                     "transition-all duration-200 active:scale-95 text-xs h-7.5 px-3.5 font-bold rounded-lg flex items-center gap-1.5 shrink-0 border",
                                     fix.action_type === "run_command"
-                                      ? "bg-gradient-to-b from-[var(--settings-accent)] to-[var(--settings-accent)]/90 border-[var(--settings-accent)]/80 text-white shadow-[0_1px_2px_rgba(0,102,204,0.15)] hover:opacity-90"
-                                      : "border-[#d1d1d6] border-b-[#b5b5ba] bg-gradient-to-b from-white to-[#f5f5f7] text-black/80 shadow-[0_1px_1px_rgba(0,0,0,0.05)] hover:from-[#f5f5f7] hover:to-[#e9e9eb] dark:from-[#3a3a3c] dark:to-[#2c2c2e] dark:border-[#48484a] dark:border-b-[#1c1c1e] dark:hover:from-[#48484a] dark:hover:to-[#3a3a3c] dark:text-white/90"
+                                      ? "bg-gradient-to-b from-[var(--settings-accent)] to-[var(--settings-accent)]/90 border-[var(--settings-accent)]/80 text-white shadow-[0_1px_2px_rgba(0,0,0,0.08),inset_0_1px_0_rgba(255,255,255,0.15)] hover:opacity-90"
+                                      : "border-[var(--settings-hairline)] bg-transparent text-[var(--settings-ink)] hover:bg-black/[0.02] dark:hover:bg-white/[0.02]"
                                   )}
                                 >
                                   {fix.action_type === "open_url" ? (
@@ -565,7 +565,7 @@ export function EnvironmentCheckContent({
                     size="sm"
                     variant="outline"
                     onClick={() => handleCopy(fixResultText)}
-                    className="rounded-lg border border-[#d1d1d6] border-b-[#b5b5ba] bg-gradient-to-b from-white to-[#f5f5f7] text-[11px] font-bold text-black/80 shadow-[0_1px_1px_rgba(0,0,0,0.05)] hover:from-[#f5f5f7] hover:to-[#e9e9eb] dark:from-[#3a3a3c] dark:to-[#2c2c2e] dark:border-[#48484a] dark:border-b-[#1c1c1e] dark:hover:from-[#48484a] dark:hover:to-[#3a3a3c] dark:text-white/90 active:scale-[0.97] transition-all h-7 px-3.5 flex items-center gap-1 shrink-0"
+                    className="rounded-lg border border-[var(--settings-hairline)] bg-transparent hover:bg-black/[0.02] dark:hover:bg-white/[0.02] text-[11px] font-medium text-[var(--settings-ink)] active:scale-[0.97] transition-all h-7 px-3.5 flex items-center gap-1 shrink-0"
                   >
                     <Copy className="size-3 text-[var(--settings-ink-muted)]" />
                     <span>{translations.environment?.copied ? "复制" : "复制"}</span>
@@ -600,7 +600,7 @@ export function EnvironmentCheckContent({
                 variant="outline"
                 onClick={() => setPendingRun(null)}
                 disabled={runningFix}
-                className="rounded-lg border border-[#d1d1d6] border-b-[#b5b5ba] bg-gradient-to-b from-white to-[#f5f5f7] text-[12px] font-bold text-black/80 shadow-[0_1px_1px_rgba(0,0,0,0.05)] hover:from-[#f5f5f7] hover:to-[#e9e9eb] dark:from-[#3a3a3c] dark:to-[#2c2c2e] dark:border-[#48484a] dark:border-b-[#1c1c1e] dark:hover:from-[#48484a] dark:hover:to-[#3a3a3c] dark:text-white/90 active:scale-[0.97] transition-all h-9 px-4 shrink-0"
+                className="rounded-lg border border-[var(--settings-hairline)] bg-transparent hover:bg-black/[0.02] dark:hover:bg-white/[0.02] text-[12px] font-medium text-[var(--settings-ink)] active:scale-[0.97] transition-all h-9 px-4 shrink-0"
               >
                 <span>{translations.environment?.cancel || "取消"}</span>
               </Button>
