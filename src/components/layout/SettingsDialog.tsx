@@ -28,6 +28,7 @@ import {
   ArrowUpCircle,
   ExternalLink,
   Terminal,
+  Check,
   type LucideIcon,
 } from "lucide-react";
 import {
@@ -245,7 +246,7 @@ export const GeneralSettingsSection = memo(function GeneralSettingsSection({
             <Input
               id="settings-execution-history"
               type="number"
-              className="h-9 text-right rounded-lg border-[var(--settings-hairline)] bg-transparent focus-visible:ring-1 focus-visible:ring-[var(--settings-accent)]"
+              className="h-9 text-right rounded-lg border-[var(--settings-hairline)] bg-transparent focus-visible:border-[var(--settings-accent)] focus-visible:shadow-[0_0_0_3px_rgba(0,122,255,0.25)] focus-visible:ring-0 transition-all duration-200"
               min={5}
               max={200}
               value={executionHistoryLimit}
@@ -285,7 +286,7 @@ export const GeneralSettingsSection = memo(function GeneralSettingsSection({
               placeholder={
                 translations.outputDir?.placeholder || "留空使用项目默认目录"
               }
-              className="h-10 rounded-lg border-[var(--settings-hairline)] bg-transparent focus-visible:ring-1 focus-visible:ring-[var(--settings-accent)]"
+              className="h-10 rounded-lg border-[var(--settings-hairline)] bg-transparent focus-visible:border-[var(--settings-accent)] focus-visible:shadow-[0_0_0_3px_rgba(0,122,255,0.25)] focus-visible:ring-0 transition-all duration-200"
             />
             <Button
               variant="outline"
@@ -371,20 +372,47 @@ export const AppearanceSettingsSection = memo(function AppearanceSettingsSection
           <button
             type="button"
             className={cn(
-              "group relative flex flex-col items-center gap-2 rounded-lg border p-2 text-center transition-all duration-150 active:scale-[0.97]",
+              "group relative flex flex-col items-center gap-2.5 rounded-xl border p-2.5 text-center transition-all duration-200 active:scale-[0.97]",
               theme === "auto"
-                ? "border-[var(--settings-card-selected-border)] bg-[var(--settings-card-selected-bg)]"
-                : "border-[var(--settings-hairline)] bg-transparent hover:bg-black/[0.01] dark:hover:bg-white/[0.01]"
+                ? "border-[var(--settings-card-selected-border)] bg-[var(--settings-card-selected-bg)] shadow-[0_4px_12px_rgba(0,102,204,0.04)]"
+                : "border-[var(--settings-hairline)] bg-transparent hover:bg-black/[0.01] dark:hover:bg-white/[0.01] hover:border-black/20 dark:hover:border-white/20"
             )}
             onClick={() => onThemeChange("auto")}
           >
+            {theme === "auto" && (
+              <div className="absolute top-1.5 right-1.5 flex size-4 items-center justify-center rounded-full bg-[var(--settings-accent)] text-white shadow-sm border border-white/10 animate-in zoom-in-50 duration-200 z-10">
+                <Check className="size-2.5 stroke-[3.5]" />
+              </div>
+            )}
             {/* 自动主题微缩图 */}
-            <div className="relative h-16 w-full overflow-hidden rounded-md border border-[var(--settings-hairline)] bg-gradient-to-br from-[#f5f5f7] via-[#f5f5f7] to-[#1e1e1f] dark:from-[#3a3a3c] dark:to-[#1c1c1e] transition-colors duration-150">
-              <div className="absolute inset-y-0 left-0 w-1/2 bg-[#ffffff] dark:bg-[#1e1e1f]" />
-              <div className="absolute inset-y-0 right-0 w-1/2 bg-[#f5f5f7] dark:bg-[#2c2c2e]" />
-              <div className="absolute top-2 left-2 h-1.5 w-6 rounded-full bg-black/10 dark:bg-white/10" />
-              <div className="absolute top-2 right-2 h-1.5 w-6 rounded-full bg-black/5 dark:bg-white/5" />
-              <div className="absolute inset-0 bg-gradient-to-tr from-transparent via-transparent to-black/5" />
+            <div className="relative h-16 w-full overflow-hidden rounded-md border border-[var(--settings-hairline)] flex bg-transparent select-none pointer-events-none">
+              {/* Left half: Light theme */}
+              <div className="w-1/2 h-full relative bg-gradient-to-br from-[#dce0f9] to-[#f4f5fa] border-r border-black/5 overflow-hidden">
+                {/* Mock macOS Window (Left part) */}
+                <div className="absolute left-4 right-0 bottom-0 top-4 rounded-tl-md border-t border-l border-black/10 bg-white shadow-[0_2px_6px_rgba(0,0,0,0.04)] flex overflow-hidden">
+                  {/* Sidebar */}
+                  <div className="w-5 border-r border-black/5 bg-[#fafafc] h-full p-1 space-y-1 shrink-0">
+                    <div className="h-1 w-full rounded-sm bg-black/[0.08]" />
+                    <div className="h-1 w-2/3 rounded-sm bg-black/[0.05]" />
+                  </div>
+                  {/* Content Area (Left Part) */}
+                  <div className="flex-1 bg-white p-1 space-y-1">
+                    <div className="h-1 w-1/2 rounded-sm bg-blue-500/20" />
+                    <div className="h-2 w-full rounded-sm bg-black/[0.03]" />
+                  </div>
+                </div>
+              </div>
+              {/* Right half: Dark theme */}
+              <div className="w-1/2 h-full relative bg-gradient-to-br from-[#2a2935] to-[#15141b] overflow-hidden">
+                {/* Mock macOS Window (Right part) */}
+                <div className="absolute left-0 right-4 bottom-0 top-4 rounded-tr-md border-t border-r border-white/10 bg-[#1d1d1f] shadow-[0_2px_6px_rgba(0,0,0,0.2)] flex overflow-hidden">
+                  {/* Content Area (Right Part) */}
+                  <div className="flex-1 bg-[#1d1d1f] p-1 space-y-1">
+                    <div className="h-1 w-1/3 rounded-sm bg-blue-500/40" />
+                    <div className="h-2 w-full rounded-sm bg-white/[0.04]" />
+                  </div>
+                </div>
+              </div>
             </div>
             <span className="text-[12px] font-medium text-[var(--settings-ink)]">
               {translations.theme?.auto || "跟随系统"}
@@ -395,21 +423,35 @@ export const AppearanceSettingsSection = memo(function AppearanceSettingsSection
           <button
             type="button"
             className={cn(
-              "group relative flex flex-col items-center gap-2 rounded-lg border p-2 text-center transition-all duration-150 active:scale-[0.97]",
+              "group relative flex flex-col items-center gap-2.5 rounded-xl border p-2.5 text-center transition-all duration-200 active:scale-[0.97]",
               theme === "light"
-                ? "border-[var(--settings-card-selected-border)] bg-[var(--settings-card-selected-bg)]"
-                : "border-[var(--settings-hairline)] bg-transparent hover:bg-black/[0.01] dark:hover:bg-white/[0.01]"
+                ? "border-[var(--settings-card-selected-border)] bg-[var(--settings-card-selected-bg)] shadow-[0_4px_12px_rgba(0,102,204,0.04)]"
+                : "border-[var(--settings-hairline)] bg-transparent hover:bg-black/[0.01] dark:hover:bg-white/[0.01] hover:border-black/20 dark:hover:border-white/20"
             )}
             onClick={() => onThemeChange("light")}
           >
+            {theme === "light" && (
+              <div className="absolute top-1.5 right-1.5 flex size-4 items-center justify-center rounded-full bg-[var(--settings-accent)] text-white shadow-sm border border-white/10 animate-in zoom-in-50 duration-200 z-10">
+                <Check className="size-2.5 stroke-[3.5]" />
+              </div>
+            )}
             {/* 亮色主题微缩图 */}
-            <div className="relative h-16 w-full overflow-hidden rounded-md border border-[var(--settings-hairline)] bg-[#ffffff] transition-colors duration-150">
-              {/* 模拟顶栏 */}
-              <div className="h-3 border-b border-[#e0e0e0] bg-[#f5f5f7]" />
-              {/* 模拟侧边栏 */}
-              <div className="absolute top-3 left-0 bottom-0 w-6 border-r border-[#e0e0e0] bg-[#fafafc]" />
-              <div className="absolute top-5 left-8 h-1.5 w-6 rounded-full bg-black/10" />
-              <div className="absolute top-9 left-8 h-2.5 w-12 rounded-md bg-[#0066cc]/10" />
+            <div className="relative h-16 w-full overflow-hidden rounded-md border border-[var(--settings-hairline)] bg-gradient-to-br from-[#dce0f9] via-[#f4f5fa] to-[#e4e9f7] flex select-none pointer-events-none">
+              {/* Mock macOS Window */}
+              <div className="absolute inset-x-4 bottom-0 top-4 rounded-t-md border-t border-x border-black/10 bg-white shadow-[0_2px_8px_rgba(0,0,0,0.04)] flex overflow-hidden">
+                {/* Sidebar */}
+                <div className="w-5 border-r border-black/5 bg-[#fafafc] h-full p-1 space-y-1 shrink-0">
+                  <div className="h-1 w-full rounded-sm bg-black/[0.08]" />
+                  <div className="h-1 w-2/3 rounded-sm bg-black/[0.05]" />
+                  <div className="h-1 w-3/4 rounded-sm bg-black/[0.05]" />
+                </div>
+                {/* Content Area */}
+                <div className="flex-1 bg-white p-1 space-y-1">
+                  <div className="h-1 w-1/3 rounded-sm bg-blue-500/20" />
+                  <div className="h-2 w-full rounded-sm bg-black/[0.03]" />
+                  <div className="h-2 w-full rounded-sm bg-black/[0.03]" />
+                </div>
+              </div>
             </div>
             <span className="text-[12px] font-medium text-[var(--settings-ink)]">
               {translations.theme?.light || "亮色"}
@@ -420,21 +462,35 @@ export const AppearanceSettingsSection = memo(function AppearanceSettingsSection
           <button
             type="button"
             className={cn(
-              "group relative flex flex-col items-center gap-2 rounded-lg border p-2 text-center transition-all duration-150 active:scale-[0.97]",
+              "group relative flex flex-col items-center gap-2.5 rounded-xl border p-2.5 text-center transition-all duration-200 active:scale-[0.97]",
               theme === "dark"
-                ? "border-[var(--settings-card-selected-border)] bg-[var(--settings-card-selected-bg)]"
-                : "border-[var(--settings-hairline)] bg-transparent hover:bg-black/[0.01] dark:hover:bg-white/[0.01]"
+                ? "border-[var(--settings-card-selected-border)] bg-[var(--settings-card-selected-bg)] shadow-[0_4px_12px_rgba(0,102,204,0.04)]"
+                : "border-[var(--settings-hairline)] bg-transparent hover:bg-black/[0.01] dark:hover:bg-white/[0.01] hover:border-black/20 dark:hover:border-white/20"
             )}
             onClick={() => onThemeChange("dark")}
           >
+            {theme === "dark" && (
+              <div className="absolute top-1.5 right-1.5 flex size-4 items-center justify-center rounded-full bg-[var(--settings-accent)] text-white shadow-sm border border-white/10 animate-in zoom-in-50 duration-200 z-10">
+                <Check className="size-2.5 stroke-[3.5]" />
+              </div>
+            )}
             {/* 暗色主题微缩图 */}
-            <div className="relative h-16 w-full overflow-hidden rounded-md border border-[var(--settings-hairline)] bg-[#1e1e1f] transition-colors duration-150">
-              {/* 模拟顶栏 */}
-              <div className="h-3 border-b border-[#2c2c2e] bg-[#2a2a2c]" />
-              {/* 模拟侧边栏 */}
-              <div className="absolute top-3 left-0 bottom-0 w-6 border-r border-[#2c2c2e] bg-[#252527]" />
-              <div className="absolute top-5 left-8 h-1.5 w-6 rounded-full bg-white/10" />
-              <div className="absolute top-9 left-8 h-2.5 w-12 rounded-md bg-[#2997ff]/20" />
+            <div className="relative h-16 w-full overflow-hidden rounded-md border border-[var(--settings-hairline)] bg-gradient-to-br from-[#1b1a23] via-[#2a2935] to-[#15141b] flex select-none pointer-events-none">
+              {/* Mock macOS Window */}
+              <div className="absolute inset-x-4 bottom-0 top-4 rounded-t-md border-t border-x border-white/10 bg-[#1d1d1f] shadow-[0_3px_10px_rgba(0,0,0,0.3)] flex overflow-hidden">
+                {/* Sidebar */}
+                <div className="w-5 border-r border-white/5 bg-[#252527] h-full p-1 space-y-1 shrink-0">
+                  <div className="h-1 w-full rounded-sm bg-white/[0.12]" />
+                  <div className="h-1 w-2/3 rounded-sm bg-white/[0.08]" />
+                  <div className="h-1 w-3/4 rounded-sm bg-white/[0.08]" />
+                </div>
+                {/* Content Area */}
+                <div className="flex-1 bg-[#1d1d1f] p-1 space-y-1">
+                  <div className="h-1 w-1/3 rounded-sm bg-blue-500/40" />
+                  <div className="h-2 w-full rounded-sm bg-white/[0.04]" />
+                  <div className="h-2 w-full rounded-sm bg-white/[0.04]" />
+                </div>
+              </div>
             </div>
             <span className="text-[12px] font-medium text-[var(--settings-ink)]">
               {translations.theme?.dark || "暗色"}
@@ -472,7 +528,7 @@ export const ShortcutsSettingsSection = memo(function ShortcutsSettingsSection({
               <span className="text-[14px] font-medium tracking-[-0.224px] text-[var(--settings-ink)]">
                 {shortcut.description}
               </span>
-              <kbd className="rounded-md border border-[var(--settings-hairline)] bg-[var(--settings-sidebar-item-active)] px-2 py-0.5 text-[12px] font-semibold tracking-[-0.12px] text-[var(--settings-ink-muted)] font-mono shadow-sm">
+              <kbd className="rounded-md border border-[#d1d1d6] border-b-[#b5b5ba] bg-gradient-to-b from-white to-[#f5f5f7] px-2.5 py-0.5 text-[11px] font-bold tracking-tight text-black/80 shadow-[0_1.5px_0_rgba(0,0,0,0.06),0_1px_1.5px_rgba(0,0,0,0.04)] font-sans dark:from-[#3a3a3c] dark:to-[#2c2c2e] dark:border-[#48484a] dark:border-b-[#1c1c1e] dark:shadow-[0_1.5px_0_rgba(0,0,0,0.4),0_1px_1.5px_rgba(0,0,0,0.2)] dark:text-white/90 shrink-0">
                 {shortcut.key}
               </kbd>
             </div>
@@ -851,7 +907,7 @@ export function SettingsDialog({
                 跨平台 .NET 自动化发布与签名客户端
               </p>
             </div>
-            <span className="rounded-md border border-[var(--settings-hairline)] bg-[var(--settings-sidebar-item-active)] px-2 py-0.5 text-[12px] font-semibold tracking-[-0.12px] text-[var(--settings-ink-muted)] font-mono shadow-sm shrink-0">
+            <span className="rounded-md border border-[#d1d1d6] border-b-[#b5b5ba] bg-gradient-to-b from-white to-[#f5f5f7] px-2 py-0.5 text-[11px] font-bold tracking-tight text-black/80 shadow-[0_1.5px_0_rgba(0,0,0,0.06),0_1px_1.5px_rgba(0,0,0,0.04)] font-mono dark:from-[#3a3a3c] dark:to-[#2c2c2e] dark:border-[#48484a] dark:border-b-[#1c1c1e] dark:shadow-[0_1.5px_0_rgba(0,0,0,0.4),0_1px_1.5px_rgba(0,0,0,0.2)] dark:text-white/90 shrink-0">
               {formatMessage(
                 t("version.current"),
                 updateInfo?.currentVersion || currentVersion || "—"
@@ -922,20 +978,20 @@ export function SettingsDialog({
                   <Button
                     variant="outline"
                     size="sm"
-                    className="h-8 px-3 rounded-lg border-[var(--settings-hairline)] bg-transparent hover:bg-black/[0.02] dark:hover:bg-white/[0.02] text-[12px] font-semibold active:scale-[0.97] shadow-sm text-[var(--settings-ink)]"
+                    className="h-8 px-3 rounded-lg border border-[#d1d1d6] border-b-[#b5b5ba] bg-gradient-to-b from-white to-[#f5f5f7] text-[12px] font-bold text-black/80 shadow-[0_1px_1px_rgba(0,0,0,0.05)] hover:from-[#f5f5f7] hover:to-[#e9e9eb] dark:from-[#3a3a3c] dark:to-[#2c2c2e] dark:border-[#48484a] dark:border-b-[#1c1c1e] dark:hover:from-[#48484a] dark:hover:to-[#3a3a3c] dark:text-white/90 active:scale-[0.97] transition-all shrink-0 flex items-center gap-1.5"
                     onClick={() => _onOpenUpdaterHelpTarget("docs")}
                   >
                     <span>{translations.version?.openGuide || "打开配置指南"}</span>
-                    <ExternalLink className="ml-1 size-3 text-[var(--settings-ink-muted)]" />
+                    <ExternalLink className="size-3 text-black/50 dark:text-white/50" />
                   </Button>
                   <Button
                     variant="outline"
                     size="sm"
-                    className="h-8 px-3 rounded-lg border-[var(--settings-hairline)] bg-transparent hover:bg-black/[0.02] dark:hover:bg-white/[0.02] text-[12px] font-semibold active:scale-[0.97] shadow-sm text-[var(--settings-ink)]"
+                    className="h-8 px-3 rounded-lg border border-[#d1d1d6] border-b-[#b5b5ba] bg-gradient-to-b from-white to-[#f5f5f7] text-[12px] font-bold text-black/80 shadow-[0_1px_1px_rgba(0,0,0,0.05)] hover:from-[#f5f5f7] hover:to-[#e9e9eb] dark:from-[#3a3a3c] dark:to-[#2c2c2e] dark:border-[#48484a] dark:border-b-[#1c1c1e] dark:hover:from-[#48484a] dark:hover:to-[#3a3a3c] dark:text-white/90 active:scale-[0.97] transition-all shrink-0 flex items-center gap-1.5"
                     onClick={() => _onOpenUpdaterHelpTarget("template")}
                   >
                     <span>{translations.version?.openTemplate || "下载模板文件"}</span>
-                    <Download className="ml-1 size-3 text-[var(--settings-ink-muted)]" />
+                    <Download className="size-3 text-black/50 dark:text-white/50" />
                   </Button>
                 </div>
               ) : (
@@ -944,12 +1000,12 @@ export function SettingsDialog({
                     <Button
                       variant="default"
                       size="sm"
-                      className="h-8 px-3 rounded-lg bg-[var(--settings-accent)] text-white hover:bg-[var(--settings-accent-focus)] shadow-sm font-semibold text-[12px] active:scale-[0.97]"
+                      className="h-8 px-3 rounded-lg bg-gradient-to-b from-[#007aff] to-[#0066cc] border border-[#0055b3] text-white shadow-[0_1px_2px_rgba(0,102,204,0.35),inset_0_1px_0_rgba(255,255,255,0.15)] hover:from-[#0088ff] hover:to-[#007aff] dark:from-[#0066cc] dark:to-[#0055b3] dark:border-[#004499] active:scale-[0.97] transition-all font-bold text-[12px] shrink-0 flex items-center gap-1.5"
                       onClick={handleRestartApp}
                       disabled={isRestarting || isCheckingUpdate || isInstallingUpdate}
                     >
-                      <RefreshCw className="size-3" />
-                      <span className="ml-1.5">
+                      <RefreshCw className={cn("size-3", isRestarting && "animate-spin")} />
+                      <span>
                         {isRestarting
                           ? translations.version?.restarting || "重启中..."
                           : translations.version?.restart || "重启应用"}
@@ -960,24 +1016,24 @@ export function SettingsDialog({
                   <Button
                     variant="outline"
                     size="sm"
-                    className="h-8 px-3 rounded-lg border-[var(--settings-hairline)] bg-transparent hover:bg-black/[0.02] dark:hover:bg-white/[0.02] font-semibold text-[12px] active:scale-[0.97] shadow-sm text-[var(--settings-ink)]"
+                    className="h-8 px-3 rounded-lg border border-[#d1d1d6] border-b-[#b5b5ba] bg-gradient-to-b from-white to-[#f5f5f7] text-[12px] font-bold text-black/80 shadow-[0_1px_1px_rgba(0,0,0,0.05)] hover:from-[#f5f5f7] hover:to-[#e9e9eb] dark:from-[#3a3a3c] dark:to-[#2c2c2e] dark:border-[#48484a] dark:border-b-[#1c1c1e] dark:hover:from-[#48484a] dark:hover:to-[#3a3a3c] dark:text-white/90 active:scale-[0.97] transition-all shrink-0 flex items-center gap-1.5"
                     onClick={handleCheckUpdate}
                     disabled={isCheckingUpdate || isInstallingUpdate}
                   >
-                    <RefreshCw className="size-3 text-[var(--settings-ink-muted)]" />
-                    <span className="ml-1.5">{translations.version?.check || "检查更新"}</span>
+                    <RefreshCw className={cn("size-3 text-black/50 dark:text-white/50", isCheckingUpdate && "animate-spin")} />
+                    <span>{translations.version?.check || "检查更新"}</span>
                   </Button>
 
                   {updateInfo?.hasUpdate && !isRestartRequired && (
                     <Button
                       variant="default"
                       size="sm"
-                      className="h-8 px-3 rounded-lg bg-[var(--settings-accent)] text-white hover:bg-[var(--settings-accent-focus)] shadow-sm font-semibold text-[12px] active:scale-[0.97]"
+                      className="h-8 px-3 rounded-lg bg-gradient-to-b from-[#007aff] to-[#0066cc] border border-[#0055b3] text-white shadow-[0_1px_2px_rgba(0,102,204,0.35),inset_0_1px_0_rgba(255,255,255,0.15)] hover:from-[#0088ff] hover:to-[#007aff] dark:from-[#0066cc] dark:to-[#0055b3] dark:border-[#004499] active:scale-[0.97] transition-all font-bold text-[12px] shrink-0 flex items-center gap-1.5"
                       onClick={handleInstallUpdate}
                       disabled={isInstallingUpdate}
                     >
                       <Download className="size-3" />
-                      <span className="ml-1.5">{translations.version?.update || "立即更新"}</span>
+                      <span>{translations.version?.update || "立即更新"}</span>
                     </Button>
                   )}
                 </>
@@ -1071,13 +1127,16 @@ export function SettingsDialog({
                     type="button"
                     aria-current={isActive ? "page" : undefined}
                     className={cn(
-                      "flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left transition-all duration-150 active:scale-[0.97]",
+                      "group relative flex w-full items-center gap-2.5 rounded-lg pl-4 pr-3 py-2 text-left transition-all duration-150 active:scale-[0.97]",
                       isActive
                         ? "bg-[var(--settings-sidebar-selected-bg)] text-[var(--settings-sidebar-selected-text)] shadow-sm font-semibold"
                         : "text-[var(--settings-ink)]/80 hover:bg-black/[0.04] dark:hover:bg-white/[0.04]"
                     )}
                     onClick={() => handleCategoryChange(item.id)}
                   >
+                    {isActive && (
+                      <div className="absolute left-1.5 w-1 h-3.5 rounded-full bg-[var(--settings-accent)] transition-all duration-200" />
+                    )}
                     <Icon
                       className={cn(
                         "size-[18px] flex-shrink-0 transition-colors duration-150",
