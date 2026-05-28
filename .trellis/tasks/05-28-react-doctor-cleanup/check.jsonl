@@ -1,0 +1,5 @@
+{"file": ".trellis/spec/frontend/component-guidelines.md", "reason": "Check that component-level edits remain idiomatic and do not introduce avoidable prop or rendering churn."}
+{"file": ".trellis/spec/frontend/hook-guidelines.md", "reason": "Check hook dependency, cleanup, and state/effect changes against repository conventions."}
+{"file": ".trellis/spec/frontend/state-management.md", "reason": "Check that state/effect warnings were resolved by preserving source-of-truth ownership rather than adding sync effects."}
+{"file": ".trellis/spec/frontend/quality-guidelines.md", "reason": "Check required verification commands and residual risk reporting for frontend cleanup work."}
+{"file": ".trellis/spec/guides/code-reuse-thinking-guide.md", "reason": "Check that repeated mechanical cleanups use a consistent pattern and avoid divergent one-off edits."}

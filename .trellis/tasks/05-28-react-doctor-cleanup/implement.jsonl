@@ -1,0 +1,5 @@
+{"file": ".trellis/spec/frontend/component-guidelines.md", "reason": "React component cleanup must preserve existing composition, props, styling conventions, and component boundaries."}
+{"file": ".trellis/spec/frontend/hook-guidelines.md", "reason": "Focused state/effect fixes touch custom hooks and must follow the repo's hook ownership and dependency practices."}
+{"file": ".trellis/spec/frontend/state-management.md", "reason": "React Doctor state findings require preserving existing app state authority and avoiding duplicate derived state."}
+{"file": ".trellis/spec/frontend/quality-guidelines.md", "reason": "Defines verification expectations for frontend changes, including typecheck and interaction-sensitive checks."}
+{"file": ".trellis/spec/guides/code-reuse-thinking-guide.md", "reason": "The cleanup includes mechanical repeated class and utility patterns; reuse guidance prevents patch-by-patch drift."}
