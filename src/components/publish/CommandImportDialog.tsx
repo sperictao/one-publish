@@ -91,7 +91,7 @@ export function CommandImportDialog({
         dialogClassName="sm:max-w-[640px]"
         title={commandT.title || "从命令导入"}
         description={commandT.description || "粘贴你的构建命令，自动提取参数"}
-        icon={<Terminal className="h-4 w-4" />}
+        icon={<Terminal className="size-4" />}
         bodyInnerClassName="space-y-4"
         footer={
           <div className="flex w-full flex-col-reverse gap-2 sm:flex-row sm:justify-end">
@@ -143,7 +143,7 @@ export function CommandImportDialog({
             {isParsing ? (
               <>
                 <span className="inline-block animate-spin mr-2">
-                  <Loader2 className="h-4 w-4" />
+                  <Loader2 className="size-4" />
                 </span>
                 {commandT.parsing || "解析中..."}
               </>

@@ -25,14 +25,14 @@ export function BooleanParameter({
 
   return (
     <div className="flex items-center justify-between py-2">
-      <div className="flex items-center space-x-2">
+      <div className="flex items-center gap-x-2">
         <Label htmlFor={resolvedInputId} className="cursor-pointer">
           {resolvedLabel}
         </Label>
         {definition.description && (
           <div className="group relative inline-block">
             <HelpCircle
-              className="h-4 w-4 text-muted-foreground cursor-help"
+              className="size-4 text-muted-foreground cursor-help"
               aria-label="Help"
               aria-hidden={false}
             />

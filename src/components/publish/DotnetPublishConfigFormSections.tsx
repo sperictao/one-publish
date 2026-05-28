@@ -20,7 +20,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Switch } from "@/components/ui/switch";
+import { Switch, SwitchIndicator } from "@/components/ui/switch";
 import {
   buildDotnetAdvancedFieldsModel,
   type DotnetAdvancedFieldModel,
@@ -50,6 +50,8 @@ interface DotnetPublishConfigFormSectionsProps {
 }
 
 const EMPTY_SELECT_VALUE = "__empty__";
+const EMPTY_PROJECT_FRAMEWORK_OPTIONS: string[] = [];
+const EMPTY_ADVANCED_FIELDS: DotnetAdvancedFieldModel[] = [];
 
 interface LocalizedAdvancedFieldText {
   title: string;
@@ -127,7 +129,7 @@ const DotnetPublishParametersSection = memo(function DotnetPublishParametersSect
               {appT.runtimeLabel || "运行时"}
             </Label>
             <div className="group relative inline-block">
-              <HelpCircle className="h-3.5 w-3.5 text-muted-foreground/60 cursor-help hover:text-foreground transition-colors" />
+              <HelpCircle className="size-3.5 text-muted-foreground/60 cursor-help hover:text-foreground transition-colors" />
               <div className="absolute left-0 bottom-full mb-2 hidden group-hover:block w-64 p-2 bg-[var(--glass-panel-bg)] backdrop-blur-xl text-popover-foreground text-xs rounded-xl shadow-[var(--glass-shadow-lg)] border border-[var(--glass-border)] z-10 leading-4 font-normal">
                 {profileT.quickCreateRuntimeHint ||
                   "未指定运行时时将保持框架依赖模式。"}
@@ -189,7 +191,7 @@ const DotnetPublishOutputSection = memo(function DotnetPublishOutputSection({
               {appT.outputDirLabel || "输出目录"}
             </Label>
             <div className="group relative inline-block">
-              <HelpCircle className="h-3.5 w-3.5 text-muted-foreground/60 cursor-help hover:text-foreground transition-colors" />
+              <HelpCircle className="size-3.5 text-muted-foreground/60 cursor-help hover:text-foreground transition-colors" />
               <div className="absolute left-0 bottom-full mb-2 hidden group-hover:block w-64 p-2 bg-[var(--glass-panel-bg)] backdrop-blur-xl text-popover-foreground text-xs rounded-xl shadow-[var(--glass-shadow-lg)] border border-[var(--glass-border)] z-10 leading-4 font-normal">
                 {profileT.quickCreateOutputHint ||
                   "留空时会回落到默认输出目录规则。"}
@@ -227,7 +229,7 @@ const DotnetPublishOutputSection = memo(function DotnetPublishOutputSection({
               {appT.selfContained || "自包含部署"}
             </Label>
             <div className="group relative inline-block">
-              <HelpCircle className="h-3.5 w-3.5 text-muted-foreground/60 cursor-help hover:text-foreground transition-colors" />
+              <HelpCircle className="size-3.5 text-muted-foreground/60 cursor-help hover:text-foreground transition-colors" />
               <div className="absolute right-0 bottom-full mb-2 hidden group-hover:block w-56 p-2 bg-[var(--glass-panel-bg)] backdrop-blur-xl text-popover-foreground text-xs rounded-xl shadow-[var(--glass-shadow-lg)] border border-[var(--glass-border)] z-10 leading-4 font-normal">
                 {isRuntimeRequired
                   ? profileT.quickCreateSelfContainedRuntimeRequired ||
@@ -238,16 +240,19 @@ const DotnetPublishOutputSection = memo(function DotnetPublishOutputSection({
             </div>
           </div>
 
-          <div
+          <button
+            type="button"
+            role="switch"
+            aria-checked={selfContained}
+            aria-label={appT.selfContained || "自包含部署"}
+            disabled={readOnly || isRuntimeRequired}
             className={cn(
-              "glass-input flex h-9 w-full items-center justify-between rounded-xl px-3 transition-all duration-300",
+              "glass-input flex h-9 w-full items-center justify-between rounded-xl px-3 text-left transition-all duration-300 disabled:pointer-events-none",
               !readOnly && !isRuntimeRequired && "hover:border-primary/30 cursor-pointer select-none",
               isRuntimeRequired && "opacity-50 cursor-not-allowed bg-black/5 dark:bg-white/5"
             )}
             onClick={() => {
-              if (!readOnly && !isRuntimeRequired) {
-                onSelfContainedChange(!selfContained);
-              }
+              onSelfContainedChange(!selfContained);
             }}
           >
             <span className="text-xs text-muted-foreground select-none truncate">
@@ -258,18 +263,13 @@ const DotnetPublishOutputSection = memo(function DotnetPublishOutputSection({
                 : "Framework-Dependent (依赖框架)"}
             </span>
 
-            <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center gap-2">
               {selfContained && !isRuntimeRequired && (
-                <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse shrink-0" />
+                <span className="size-1.5 rounded-full bg-emerald-500 animate-pulse shrink-0" />
               )}
-              <Switch
-                id="quick-profile-self-contained"
-                checked={selfContained}
-                onCheckedChange={onSelfContainedChange}
-                disabled={readOnly || isRuntimeRequired}
-              />
+              <SwitchIndicator checked={selfContained} />
             </div>
-          </div>
+          </button>
         </div>
       </div>
     </SectionShell>
@@ -851,7 +851,7 @@ function DotnetFrameworkSuggestionsField({
           </span>
         )}
         <div className="group relative inline-block">
-          <HelpCircle className="h-3.5 w-3.5 text-muted-foreground/60 cursor-help hover:text-foreground transition-colors" />
+          <HelpCircle className="size-3.5 text-muted-foreground/60 cursor-help hover:text-foreground transition-colors" />
           <div
             className={cn(
               "absolute bottom-full mb-2 hidden group-hover:block w-64 p-2 bg-[var(--glass-panel-bg)] backdrop-blur-xl text-popover-foreground text-xs rounded-xl shadow-[var(--glass-shadow-lg)] border border-[var(--glass-border)] z-10 leading-4 font-normal",
@@ -915,7 +915,7 @@ function DotnetSelectField({
           </span>
         )}
         <div className="group relative inline-block">
-          <HelpCircle className="h-3.5 w-3.5 text-muted-foreground/60 cursor-help hover:text-foreground transition-colors" />
+          <HelpCircle className="size-3.5 text-muted-foreground/60 cursor-help hover:text-foreground transition-colors" />
           <div
             className={cn(
               "absolute bottom-full mb-2 hidden group-hover:block w-64 p-2 bg-[var(--glass-panel-bg)] backdrop-blur-xl text-popover-foreground text-xs rounded-xl shadow-[var(--glass-shadow-lg)] border border-[var(--glass-border)] z-10 leading-4 font-normal",
@@ -981,7 +981,7 @@ function DotnetBooleanField({
             </span>
           )}
           <div className="group relative inline-block">
-            <HelpCircle className="h-3.5 w-3.5 text-muted-foreground/60 cursor-help hover:text-foreground transition-colors" />
+            <HelpCircle className="size-3.5 text-muted-foreground/60 cursor-help hover:text-foreground transition-colors" />
             <div
               className={cn(
                 "absolute bottom-full mb-2 hidden group-hover:block w-64 p-2 bg-[var(--glass-panel-bg)] backdrop-blur-xl text-popover-foreground text-xs rounded-xl shadow-[var(--glass-shadow-lg)] border border-[var(--glass-border)] z-10 leading-4 font-normal",
@@ -1030,7 +1030,7 @@ function DotnetStringField({
           </span>
         )}
         <div className="group relative inline-block">
-          <HelpCircle className="h-3.5 w-3.5 text-muted-foreground/60 cursor-help hover:text-foreground transition-colors" />
+          <HelpCircle className="size-3.5 text-muted-foreground/60 cursor-help hover:text-foreground transition-colors" />
           <div
             className={cn(
               "absolute bottom-full mb-2 hidden group-hover:block w-64 p-2 bg-[var(--glass-panel-bg)] backdrop-blur-xl text-popover-foreground text-xs rounded-xl shadow-[var(--glass-shadow-lg)] border border-[var(--glass-border)] z-10 leading-4 font-normal",
@@ -1108,7 +1108,7 @@ function DotnetTagListField({
           </span>
         )}
         <div className="group relative inline-block">
-          <HelpCircle className="h-3.5 w-3.5 text-muted-foreground/60 cursor-help hover:text-foreground transition-colors" />
+          <HelpCircle className="size-3.5 text-muted-foreground/60 cursor-help hover:text-foreground transition-colors" />
           <div
             className={cn(
               "absolute bottom-full mb-2 hidden group-hover:block w-64 p-2 bg-[var(--glass-panel-bg)] backdrop-blur-xl text-popover-foreground text-xs rounded-xl shadow-[var(--glass-shadow-lg)] border border-[var(--glass-border)] z-10 leading-4 font-normal",
@@ -1137,7 +1137,7 @@ function DotnetTagListField({
             className="h-9 text-xs"
           />
           <Button type="button" variant="outline" size="sm" onClick={addTags} className="h-9 text-xs">
-            <Plus className="mr-1.5 h-3.5 w-3.5" />
+            <Plus className="mr-1.5 size-3.5" />
             {fieldText.tagAddLabel}
           </Button>
         </div>
@@ -1160,7 +1160,7 @@ function DotnetTagListField({
                   })}
                   onClick={() => removeTag(tag)}
                 >
-                  <X className="h-3 w-3" />
+                  <X className="size-3" />
                 </button>
               ) : null}
             </span>
@@ -1256,7 +1256,7 @@ function DotnetPropertyTableField({
               </span>
             )}
             <div className="group relative inline-block">
-              <HelpCircle className="h-3.5 w-3.5 text-muted-foreground/60 cursor-help hover:text-foreground transition-colors" />
+              <HelpCircle className="size-3.5 text-muted-foreground/60 cursor-help hover:text-foreground transition-colors" />
               <div
                 className={cn(
                   "absolute bottom-full mb-2 hidden group-hover:block w-64 p-2 bg-[var(--glass-panel-bg)] backdrop-blur-xl text-popover-foreground text-xs rounded-xl shadow-[var(--glass-shadow-lg)] border border-[var(--glass-border)] z-10 leading-4 font-normal",
@@ -1270,7 +1270,7 @@ function DotnetPropertyTableField({
         </div>
         {!readOnly ? (
           <Button type="button" variant="outline" size="sm" onClick={addEntry} className="h-8 text-xs">
-            <Plus className="mr-1.5 h-3.5 w-3.5" />
+            <Plus className="mr-1.5 size-3.5" />
             {fieldText.propertiesAddLabel}
           </Button>
         ) : null}
@@ -1309,13 +1309,13 @@ function DotnetPropertyTableField({
                   type="button"
                   variant="ghost"
                   size="icon"
-                  className="h-8 w-8 text-destructive hover:text-destructive"
+                  className="size-8 text-destructive hover:text-destructive"
                   aria-label={formatTemplate(fieldText.removePropertyLabel, {
                     value: key,
                   })}
                   onClick={() => removeEntry(key)}
                 >
-                  <X className="h-3.5 w-3.5" />
+                  <X className="size-3.5" />
                 </Button>
               ) : (
                 <div className="w-8" />
@@ -1339,7 +1339,7 @@ export function DotnetPublishConfigFormSections({
   appT,
   config,
   dotnetSchema,
-  projectFrameworkOptions = [],
+  projectFrameworkOptions = EMPTY_PROJECT_FRAMEWORK_OPTIONS,
   onDraftChange,
 }: DotnetPublishConfigFormSectionsProps): JSX.Element {
   const readOnly = mode === "readonly";
@@ -1503,7 +1503,9 @@ export function DotnetPublishConfigFormSections({
             : advancedFieldsModel.allFields
         }
         collapsedFields={
-          focusedPresentation ? advancedFieldsModel.collapsedFields : []
+          focusedPresentation
+            ? advancedFieldsModel.collapsedFields
+            : EMPTY_ADVANCED_FIELDS
         }
         readOnly={readOnly}
         onParameterChange={handleAdvancedParameterChange}

@@ -13,7 +13,7 @@ export function useAppDialogs(environmentProviderIds: string[]) {
   const [configDialogOpen, setConfigDialogOpen] = useState(false);
   const [environmentDialogOpen, setEnvironmentDialogOpen] = useState(false);
   const [environmentDefaultProviderIds, setEnvironmentDefaultProviderIds] =
-    useState<string[]>(normalizeEnvironmentProviderIds(environmentProviderIds));
+    useState<string[]>(() => normalizeEnvironmentProviderIds(environmentProviderIds));
   const [environmentInitialCheck, setEnvironmentInitialCheck] =
     useState<EnvironmentCheckSnapshot | null>(null);
 

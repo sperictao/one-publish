@@ -49,7 +49,7 @@ export function RowActionsMenu({
           type="button"
           variant="ghost"
           size="icon"
-          className="h-6 w-6 rounded-lg transition-all duration-300 opacity-0 group-hover:opacity-75 group-focus-within:opacity-75 data-[state=open]:bg-[var(--glass-bg-active)] data-[state=open]:opacity-100"
+          className="size-6 rounded-lg transition-all duration-300 opacity-0 group-hover:opacity-75 group-focus-within:opacity-75 data-[state=open]:bg-[var(--glass-bg-active)] data-[state=open]:opacity-100"
           title={moreActionsLabel}
           aria-haspopup="menu"
           aria-expanded={open}
@@ -58,7 +58,7 @@ export function RowActionsMenu({
           onClick={handleTriggerEvent}
           onKeyDown={handleTriggerEvent}
         >
-          <MoreHorizontal className="h-3.5 w-3.5" />
+          <MoreHorizontal className="size-3.5" />
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" sideOffset={6}>

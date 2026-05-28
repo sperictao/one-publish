@@ -25,12 +25,12 @@ export function StringParameter({
 
   return (
     <div className="space-y-2 py-2">
-      <div className="flex items-center space-x-2">
+      <div className="flex items-center gap-x-2">
         <Label htmlFor={resolvedInputId}>{resolvedLabel}</Label>
         {definition.description && (
           <div className="group relative inline-block">
             <HelpCircle
-              className="h-4 w-4 text-muted-foreground cursor-help"
+              className="size-4 text-muted-foreground cursor-help"
               aria-label="Help"
               aria-hidden={false}
             />

@@ -101,10 +101,13 @@ export function OutputTargetBadge({
 }: OutputTargetBadgeProps): JSX.Element | null {
   const trimmed = raw.trim();
   const hint = useMemo(() => parseOutputTargetLocal(trimmed), [trimmed]);
-  const [remote, setRemote] = useState<OutputTargetDescriptor | null>(null);
+  const [remoteResult, setRemoteResult] = useState<{
+    raw: string;
+    descriptor: OutputTargetDescriptor | null;
+  } | null>(null);
+  const remote = remoteResult?.raw === trimmed ? remoteResult.descriptor : null;
 
   useEffect(() => {
-    setRemote(null);
     if (trimmed.length === 0) {
       return;
     }
@@ -114,12 +117,12 @@ export function OutputTargetBadge({
       parseOutputTargetRemote(trimmed)
         .then((descriptor) => {
           if (!cancelled) {
-            setRemote(descriptor);
+            setRemoteResult({ raw: trimmed, descriptor });
           }
         })
         .catch(() => {
           if (!cancelled) {
-            setRemote(null);
+            setRemoteResult({ raw: trimmed, descriptor: null });
           }
         });
     }, REMOTE_DEBOUNCE_MS);

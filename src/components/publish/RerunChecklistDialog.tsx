@@ -83,7 +83,7 @@ export function RerunChecklistDialog({
         description={
           rerunT.description || "请确认以下检查项，避免在敏感分支或错误目标上触发重跑。"
         }
-        icon={<ListChecks className="h-4 w-4" />}
+        icon={<ListChecks className="size-4" />}
         bodyInnerClassName="space-y-3"
         footer={
           <div className="flex w-full flex-col-reverse gap-2 sm:flex-row sm:justify-end">
@@ -139,8 +139,8 @@ export function RerunChecklistDialog({
                   className="flex items-center justify-between gap-4 px-4 py-3"
                 >
                   <div className="flex min-w-0 items-center gap-3">
-                    <span className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl bg-background/60 text-foreground/75">
-                      <Icon className="h-4 w-4" />
+                    <span className="flex size-9 flex-shrink-0 items-center justify-center rounded-xl bg-background/60 text-foreground/75">
+                      <Icon className="size-4" />
                     </span>
                     <Label htmlFor={item.id} className="text-sm leading-5">
                       {item.label}

@@ -63,7 +63,7 @@ export function MainContentShell({
                     title={appT.expandRepoList || "展开仓库列表"}
                     data-tauri-no-drag
                   >
-                    <Folder className="h-4 w-4" />
+                    <Folder className="size-4" />
                   </Button>
                 )}
                 <Button
@@ -77,7 +77,7 @@ export function MainContentShell({
                   title={configPanelT.expandConfigList || "展开配置列表"}
                   data-tauri-no-drag
                 >
-                  <FileCog className="h-4 w-4" />
+                  <FileCog className="size-4" />
                 </Button>
               </div>
             </div>
@@ -101,7 +101,7 @@ export function MainContentShell({
               aria-pressed={rightPanelView === "home"}
               data-tauri-no-drag
             >
-              <LayoutDashboard className="h-3.5 w-3.5" />
+              <LayoutDashboard className="size-3.5" />
             </button>
             <button
               type="button"
@@ -120,7 +120,7 @@ export function MainContentShell({
               aria-pressed={rightPanelView === "history"}
               data-tauri-no-drag
             >
-              <History className="h-3.5 w-3.5" />
+              <History className="size-3.5" />
             </button>
           </div>
         </div>

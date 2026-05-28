@@ -27,7 +27,7 @@ export function useAppState() {
     if (store.isLoading) {
       void store.loadState();
     }
-  }, []);
+  }, [store.isLoading, store.loadState]);
 
   return {
     // 状态

@@ -52,7 +52,9 @@ export function useListReorderMotion(params: {
       for (const animation of Object.values(animationRefs.current)) {
         animation?.cancel();
       }
-      animationRefs.current = {};
+      for (const itemId of Object.keys(animationRefs.current)) {
+        delete animationRefs.current[itemId];
+      }
       previousRectsRef.current = {};
     }
   }, [resetKey]);
@@ -124,11 +126,14 @@ export function useListReorderMotion(params: {
   }, [draggingItemId, orderedIdsSignature, reducedMotionRef, settledItemId]);
 
   useEffect(() => {
+    const activeAnimationRefs = animationRefs.current;
     return () => {
-      for (const animation of Object.values(animationRefs.current)) {
+      for (const animation of Object.values(activeAnimationRefs)) {
         animation?.cancel();
       }
-      animationRefs.current = {};
+      for (const itemId of Object.keys(activeAnimationRefs)) {
+        delete activeAnimationRefs[itemId];
+      }
     };
   }, []);
 

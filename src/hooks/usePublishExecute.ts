@@ -294,6 +294,7 @@ export function usePublishExecute({
       setIsCancellingPublish,
       setIsPublishing,
       setLastPublishSpec,
+      setPublishResult,
       setCurrentPublishRecordId,
       replaceCapturedOutputLog,
       startPublishPresentationRun,

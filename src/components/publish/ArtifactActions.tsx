@@ -34,19 +34,25 @@ export interface ArtifactActionsProps {
 }
 
 export function ArtifactActions({ outputDir, onStateChange }: ArtifactActionsProps) {
+  return (
+    <ArtifactActionsContent
+      key={outputDir}
+      outputDir={outputDir}
+      onStateChange={onStateChange}
+    />
+  );
+}
+
+function ArtifactActionsContent({
+  outputDir,
+  onStateChange,
+}: ArtifactActionsProps) {
   const [packaging, setPackaging] = useState(false);
   const { translations } = useI18n();
   const artifactT = translations.artifact || {};
   const [signing, setSigning] = useState(false);
   const [packageResult, setPackageResult] = useState<PackageResult | null>(null);
   const [signResult, setSignResult] = useState<SignResult | null>(null);
-
-  useEffect(() => {
-    setPackageResult(null);
-    setSignResult(null);
-    setPackaging(false);
-    setSigning(false);
-  }, [outputDir]);
 
   useEffect(() => {
     onStateChange?.({ packageResult, signResult });

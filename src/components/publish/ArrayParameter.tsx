@@ -38,12 +38,12 @@ export function ArrayParameter({
   return (
     <div className="space-y-2 py-2">
       <div className="flex items-center justify-between">
-        <div className="flex items-center space-x-2">
+        <div className="flex items-center gap-x-2">
           <Label>{resolvedLabel}</Label>
           {definition.description && (
             <div className="group relative inline-block">
               <HelpCircle
-                className="h-4 w-4 text-muted-foreground cursor-help"
+                className="size-4 text-muted-foreground cursor-help"
                 aria-label="Help"
                 aria-hidden={false}
               />
@@ -60,14 +60,14 @@ export function ArrayParameter({
             size="sm"
             onClick={addItem}
           >
-            <Plus className="h-4 w-4 mr-1" />
+            <Plus className="size-4 mr-1" />
             Add
           </Button>
         ) : null}
       </div>
       <div className="space-y-2">
         {value.map((item, index) => (
-          <div key={index} className="flex items-center space-x-2">
+          <div key={index} className="flex items-center gap-x-2">
             <Input
               type="text"
               value={String(item)}
@@ -83,7 +83,7 @@ export function ArrayParameter({
                 aria-label={`Remove item ${index + 1}`}
                 onClick={() => removeItem(index)}
               >
-                <X className="h-4 w-4" />
+                <X className="size-4" />
               </Button>
             ) : null}
           </div>

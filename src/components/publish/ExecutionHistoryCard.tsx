@@ -175,7 +175,7 @@ export function ExecutionHistoryCard({
             >
               {isExportingHistory ? (
                 <>
-                  <Loader2 className="mr-1 h-3 w-3 animate-spin" />
+                  <Loader2 className="mr-1 size-3 animate-spin" />
                   {appT.exporting || "导出中..."}
                 </>
               ) : (

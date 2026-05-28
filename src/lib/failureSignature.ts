@@ -9,8 +9,10 @@ const SIGNATURE_MAX_LENGTH = 160;
 export function extractFailureContext(output: string): string | null {
   const lines = output
     .split("\n")
-    .map((line) => line.trim())
-    .filter(Boolean);
+    .flatMap((line) => {
+      const normalizedLine = line.trim();
+      return normalizedLine ? [normalizedLine] : [];
+    });
 
   const strongKeywordCandidate = lines.find((line) => {
     const normalized = line.toLowerCase();

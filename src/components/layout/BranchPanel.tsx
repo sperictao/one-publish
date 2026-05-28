@@ -66,7 +66,7 @@ export function BranchPanel({
               <Button
                 variant="ghost"
                 size="icon"
-                className="h-6 w-6"
+                className="size-6"
                 onClick={(e) => {
                   e.stopPropagation();
                   onExpandRepo();
@@ -74,20 +74,20 @@ export function BranchPanel({
                 title={branchT.expandRepoList || "展开仓库列表"}
                 data-tauri-no-drag
               >
-                <Folder className="h-4 w-4" />
+                <Folder className="size-4" />
               </Button>
             )}
-            <Button variant="ghost" size="icon" className="h-6 w-6" disabled>
-              <Plus className="h-4 w-4" />
+            <Button variant="ghost" size="icon" className="size-6" disabled>
+              <Plus className="size-4" />
             </Button>
-            <Button variant="ghost" size="icon" className="h-6 w-6" disabled>
-              <RefreshCw className="h-4 w-4" />
+            <Button variant="ghost" size="icon" className="size-6" disabled>
+              <RefreshCw className="size-4" />
             </Button>
             {onCollapse && (
               <Button
                 variant="ghost"
                 size="icon"
-                className="h-6 w-6"
+                className="size-6"
                 onClick={(e) => {
                   e.stopPropagation();
                   onCollapse();
@@ -103,7 +103,7 @@ export function BranchPanel({
         {/* Search (disabled) */}
         <div className="border-b border-[var(--glass-divider)] px-3 py-2">
           <div className="glass-input relative rounded-xl">
-            <Search className="absolute left-2 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <Search className="absolute left-2 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
             <Input
               placeholder={branchT.searchWorktree || "搜索 worktree"}
               disabled
@@ -137,7 +137,7 @@ export function BranchPanel({
             <Button
               variant="ghost"
               size="icon"
-              className="h-6 w-6"
+              className="size-6"
               onClick={(e) => {
                 e.stopPropagation();
                 onExpandRepo();
@@ -145,13 +145,13 @@ export function BranchPanel({
               title={branchT.expandRepoList || "展开仓库列表"}
               data-tauri-no-drag
             >
-              <Folder className="h-4 w-4" />
+              <Folder className="size-4" />
             </Button>
           )}
           <Button
             variant="ghost"
             size="icon"
-            className="h-6 w-6"
+            className="size-6"
             onClick={(e) => {
               e.stopPropagation();
               onCreateBranch?.();
@@ -159,12 +159,12 @@ export function BranchPanel({
             title={branchT.newWorktree || "新建 worktree"}
             data-tauri-no-drag
           >
-            <Plus className="h-4 w-4" />
+            <Plus className="size-4" />
           </Button>
           <Button
             variant="ghost"
             size="icon"
-            className="h-6 w-6"
+            className="size-6"
             onClick={(e) => {
               e.stopPropagation();
               onRefresh?.();
@@ -172,13 +172,13 @@ export function BranchPanel({
             title={branchT.refresh || "刷新"}
             data-tauri-no-drag
           >
-            <RefreshCw className="h-4 w-4" />
+            <RefreshCw className="size-4" />
           </Button>
           {onCollapse && (
             <Button
               variant="ghost"
               size="icon"
-              className="h-6 w-6"
+              className="size-6"
               onClick={(e) => {
                 e.stopPropagation();
                 onCollapse();
@@ -195,7 +195,7 @@ export function BranchPanel({
       {/* Search */}
       <div className="border-b border-[var(--glass-divider)] px-3 py-2">
         <div className="glass-input relative rounded-xl">
-          <Search className="absolute left-2 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <Search className="absolute left-2 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
           <Input
             placeholder={branchT.searchWorktree || "搜索 worktree"}
             value={searchQuery}
@@ -218,7 +218,7 @@ export function BranchPanel({
           >
             <GitBranch
               className={cn(
-                "mt-0.5 h-4 w-4 flex-shrink-0",
+                "mt-0.5 size-4 flex-shrink-0",
                 branch.isCurrent ? "text-primary" : "text-muted-foreground"
               )}
             />
@@ -240,7 +240,7 @@ export function BranchPanel({
             {/* Green dot for current branch */}
             {branch.isCurrent && (
               <div className="flex-shrink-0 mt-1">
-                <div className="h-2.5 w-2.5 rounded-full bg-green-500" />
+                <div className="size-2.5 rounded-full bg-green-500" />
               </div>
             )}
           </div>

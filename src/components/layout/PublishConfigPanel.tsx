@@ -120,28 +120,26 @@ function hasSameStringOrder(
   left: readonly string[],
   right: readonly string[]
 ): boolean {
-  if (left.length !== right.length) {
-    return false;
-  }
-
-  return left.every((value, index) => value === right[index]);
+  return (
+    left.length === right.length &&
+    left.every((value, index) => value === right[index])
+  );
 }
 
 function hasSameProfileOrder(
   left: readonly ConfigProfile[],
   right: readonly ConfigProfile[]
 ): boolean {
-  if (left.length !== right.length) {
-    return false;
-  }
-
-  return left.every((profile, index) => {
-    const nextProfile = right[index];
-    return (
-      profile.name === nextProfile.name &&
-      (profile.profileGroup || "") === (nextProfile.profileGroup || "")
-    );
-  });
+  return (
+    left.length === right.length &&
+    left.every((profile, index) => {
+      const nextProfile = right[index];
+      return (
+        profile.name === nextProfile.name &&
+        (profile.profileGroup || "") === (nextProfile.profileGroup || "")
+      );
+    })
+  );
 }
 
 export interface PublishConfigPanelProps {
@@ -204,18 +202,19 @@ function ConfigGroup({
   return (
     <div>
       <button
+        type="button"
         className="flex w-full items-center gap-1.5 px-3 py-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground hover:text-foreground glass-transition"
         onClick={() => setExpanded(!expanded)}
       >
         {expanded ? (
-          <ChevronDown className="h-3.5 w-3.5" />
+          <ChevronDown className="size-3.5" />
         ) : (
-          <ChevronRight className="h-3.5 w-3.5" />
+          <ChevronRight className="size-3.5" />
         )}
         <span className="flex-1 text-left">{title}</span>
         {isRefreshing ? (
           <span className="inline-block animate-spin text-primary/80">
-            <Loader2 className="h-3.5 w-3.5" />
+            <Loader2 className="size-3.5" />
           </span>
         ) : null}
         <span className="rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-medium tabular-nums">
@@ -252,7 +251,7 @@ function createFavoriteConfigAction({
     icon: (
       <Star
         className={cn(
-          "h-3.5 w-3.5",
+          "size-3.5",
           isFavorite
             ? "fill-green-500 text-green-500"
             : "text-muted-foreground/70"
@@ -342,7 +341,7 @@ function ProfileItem({
     actions.push({
       key: "edit",
       label: editTitle,
-      icon: <Pencil className="h-3.5 w-3.5 text-muted-foreground/70" />,
+      icon: <Pencil className="size-3.5 text-muted-foreground/70" />,
       onSelect: onEdit,
     });
   }
@@ -351,7 +350,7 @@ function ProfileItem({
     actions.push({
       key: "delete",
       label: deleteTitle,
-      icon: <Trash2 className="h-3.5 w-3.5" />,
+      icon: <Trash2 className="size-3.5" />,
       onSelect: onDelete,
       destructive: true,
       separatorBefore: canEdit,
@@ -404,7 +403,7 @@ function ProfileItem({
       >
         <span
           className={cn(
-            "flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-[14px] transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]",
+            "flex size-8 flex-shrink-0 items-center justify-center rounded-[14px] transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]",
             isSelected
               ? "scale-105 bg-primary/10 shadow-[0_0_18px_hsl(var(--primary)/0.24)]"
               : "bg-[var(--glass-icon-bg)] shadow-[var(--glass-icon-highlight)] group-hover:scale-105 group-hover:bg-primary/8"
@@ -412,7 +411,7 @@ function ProfileItem({
         >
           <FileText
             className={cn(
-              "h-4 w-4 transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]",
+              "size-4 transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]",
               isSelected
                 ? "scale-110 text-primary drop-shadow-[0_0_4px_hsl(var(--primary)/0.3)]"
                 : "text-muted-foreground/60 group-hover:text-primary group-hover:drop-shadow-[0_0_3px_hsl(var(--primary)/0.15)]"
@@ -515,7 +514,7 @@ export const PublishConfigPanel = memo(function PublishConfigPanel({
   const headerButtonClass =
     "h-7 w-9 rounded-full p-0 text-muted-foreground/60 hover:bg-black/[0.045] hover:text-foreground hover:shadow-[inset_0_1px_0_rgba(255,255,255,0.72),0_1px_2px_rgba(15,23,42,0.06)] dark:hover:bg-white/[0.06] dark:hover:shadow-[inset_0_1px_0_rgba(255,255,255,0.08)]";
   const listActionButtonClass =
-    "glass-surface flex h-7 w-7 items-center justify-center rounded-full transition-all duration-300 hover:bg-[var(--glass-bg-hover)]";
+    "glass-surface flex size-7 items-center justify-center rounded-full transition-all duration-300 hover:bg-[var(--glass-bg-hover)]";
   const reorderControlsLabel = showReorderControls
     ? t.hideReorderControls || "关闭排序"
     : t.showReorderControls || "开启排序";
@@ -1055,7 +1054,7 @@ export const PublishConfigPanel = memo(function PublishConfigPanel({
           {showRecentItems && (
             <div className="space-y-1.5">
               <div className="flex items-center gap-1.5 px-3 py-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                <Clock className="h-3.5 w-3.5" />
+                <Clock className="size-3.5" />
                 <span>{t.recentlyUsed || "最近使用"}</span>
               </div>
               {previewRecentItems.map((item) => {
@@ -1136,7 +1135,7 @@ export const PublishConfigPanel = memo(function PublishConfigPanel({
                   >
                     <span
                       className={cn(
-                        "flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-[14px] transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]",
+                        "flex size-8 flex-shrink-0 items-center justify-center rounded-[14px] transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]",
                         selectedRenderId === renderId
                           ? "scale-105 bg-primary/10 shadow-[0_0_18px_hsl(var(--primary)/0.24)]"
                           : "bg-[var(--glass-icon-bg)] shadow-[var(--glass-icon-highlight)] group-hover:scale-105 group-hover:bg-primary/8"
@@ -1144,7 +1143,7 @@ export const PublishConfigPanel = memo(function PublishConfigPanel({
                     >
                       <FileText
                         className={cn(
-                          "h-4 w-4 transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]",
+                          "size-4 transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]",
                           selectedRenderId === renderId
                             ? "scale-110 text-primary drop-shadow-[0_0_4px_hsl(var(--primary)/0.3)]"
                             : "text-muted-foreground/60 group-hover:text-primary group-hover:drop-shadow-[0_0_3px_hsl(var(--primary)/0.15)]"
@@ -1187,7 +1186,7 @@ export const PublishConfigPanel = memo(function PublishConfigPanel({
                         {
                           key: "removeRecent",
                           label: removeRecentLabel,
-                          icon: <X className="h-3.5 w-3.5" />,
+                          icon: <X className="size-3.5" />,
                           onSelect: () => onRemoveRecentConfig(item.key),
                           destructive: true,
                           separatorBefore: true,
@@ -1218,7 +1217,7 @@ export const PublishConfigPanel = memo(function PublishConfigPanel({
               shouldShowProjectProfilesLoadingState ? (
                 <span className="flex items-center gap-2">
                   <span className="inline-block animate-spin text-primary/80">
-                    <Loader2 className="h-3.5 w-3.5" />
+                    <Loader2 className="size-3.5" />
                   </span>
                   {projectProfilesRefreshingLabel}
                 </span>
@@ -1298,7 +1297,7 @@ export const PublishConfigPanel = memo(function PublishConfigPanel({
                   >
                     <span
                       className={cn(
-                        "flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-[14px] transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]",
+                        "flex size-8 flex-shrink-0 items-center justify-center rounded-[14px] transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]",
                         isPubxmlSelected
                           ? "scale-105 bg-primary/10 shadow-[0_0_18px_hsl(var(--primary)/0.24)]"
                           : "bg-[var(--glass-icon-bg)] shadow-[var(--glass-icon-highlight)] group-hover:scale-105 group-hover:bg-primary/8"
@@ -1306,7 +1305,7 @@ export const PublishConfigPanel = memo(function PublishConfigPanel({
                     >
                       <FileText
                         className={cn(
-                          "h-4 w-4 transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]",
+                          "size-4 transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]",
                           isPubxmlSelected
                             ? "scale-110 text-primary drop-shadow-[0_0_4px_hsl(var(--primary)/0.3)]"
                             : "text-muted-foreground/60 group-hover:text-primary group-hover:drop-shadow-[0_0_3px_hsl(var(--primary)/0.15)]"
@@ -1339,13 +1338,13 @@ export const PublishConfigPanel = memo(function PublishConfigPanel({
                         {
                           key: "copy",
                           label: t.copyConfig || "复制为自定义配置",
-                          icon: <Copy className="h-3.5 w-3.5 text-muted-foreground/70" />,
+                          icon: <Copy className="size-3.5 text-muted-foreground/70" />,
                           onSelect: () => handleCopyProjectProfileToCustom(name),
                         },
                         {
                           key: "view",
                           label: t.viewConfig || "查看配置",
-                          icon: <Eye className="h-3.5 w-3.5 text-muted-foreground/70" />,
+                          icon: <Eye className="size-3.5 text-muted-foreground/70" />,
                           onSelect: () => handleViewProjectProfile(name),
                         },
                       ]}
@@ -1433,7 +1432,7 @@ export const PublishConfigPanel = memo(function PublishConfigPanel({
           {shouldShowCustomProfilesLoadingState ? (
             <div className="flex items-center gap-2 px-3 py-4 text-xs text-muted-foreground">
               <span className="inline-block animate-spin text-primary/80">
-                <Loader2 className="h-3.5 w-3.5" />
+                <Loader2 className="size-3.5" />
               </span>
               <span>{customProfilesRefreshingLabel}</span>
             </div>
@@ -1533,7 +1532,7 @@ export const PublishConfigPanel = memo(function PublishConfigPanel({
               title={t.expandRepoList || "展开仓库列表"}
               data-tauri-no-drag
             >
-              <Folder className="h-4 w-4" />
+              <Folder className="size-4" />
             </Button>
           )}
           {onCollapse && (
@@ -1572,7 +1571,7 @@ export const PublishConfigPanel = memo(function PublishConfigPanel({
                 </span>
                 <ChevronDown
                   className={cn(
-                    "h-3 w-3 text-muted-foreground/60 transition-transform duration-300",
+                    "size-3 text-muted-foreground/60 transition-transform duration-300",
                     groupFilterOpen ? "" : "-rotate-90"
                   )}
                 />
@@ -1593,7 +1592,7 @@ export const PublishConfigPanel = memo(function PublishConfigPanel({
                   </span>
                 </div>
                 {groupFilterValue === ALL_GROUP_FILTER ? (
-                  <Check className="h-3.5 w-3.5 text-primary" />
+                  <Check className="size-3.5 text-primary" />
                 ) : null}
               </DropdownMenuItem>
               {groupFilterOptions.length > 1 ? <DropdownMenuSeparator /> : null}
@@ -1613,7 +1612,7 @@ export const PublishConfigPanel = memo(function PublishConfigPanel({
                     </span>
                   </div>
                   {groupFilterValue === option.value ? (
-                    <Check className="h-3.5 w-3.5 text-primary" />
+                    <Check className="size-3.5 text-primary" />
                   ) : null}
                 </DropdownMenuItem>
               ))}
@@ -1631,7 +1630,7 @@ export const PublishConfigPanel = memo(function PublishConfigPanel({
               title={t.newConfig || "新建配置"}
               data-tauri-no-drag
             >
-              <Plus className="h-3.5 w-3.5 text-muted-foreground transition-transform duration-300 hover:rotate-90" />
+              <Plus className="size-3.5 text-muted-foreground transition-transform duration-300 hover:rotate-90" />
             </button>
             <button
               type="button"
@@ -1651,7 +1650,7 @@ export const PublishConfigPanel = memo(function PublishConfigPanel({
             >
               <ArrowUpDown
                 className={cn(
-                  "h-3.5 w-3.5 transition-[transform,color] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]",
+                  "size-3.5 transition-[transform,color] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]",
                   showReorderControls
                     ? "rotate-180 text-primary"
                     : "rotate-0 text-muted-foreground"
@@ -1670,7 +1669,7 @@ export const PublishConfigPanel = memo(function PublishConfigPanel({
             >
               <RefreshCw
                 className={cn(
-                  "h-3.5 w-3.5 text-muted-foreground transition-all duration-300 hover:rotate-180",
+                  "size-3.5 text-muted-foreground transition-all duration-300 hover:rotate-180",
                   isAnyRefreshing && "animate-spin hover:rotate-0"
                 )}
               />
@@ -1687,7 +1686,7 @@ export const PublishConfigPanel = memo(function PublishConfigPanel({
               aria-label={configManagementLabel}
               data-tauri-no-drag
             >
-              <SlidersHorizontal className="h-3.5 w-3.5 text-muted-foreground transition-all duration-300 hover:rotate-180" />
+              <SlidersHorizontal className="size-3.5 text-muted-foreground transition-all duration-300 hover:rotate-180" />
             </button>
           </div>
         </div>
@@ -1695,7 +1694,7 @@ export const PublishConfigPanel = memo(function PublishConfigPanel({
         {/* Search */}
         <div className="px-3 py-1.5">
           <div className="group/search glass-input relative rounded-xl">
-            <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground/50 transition-colors duration-300 group-focus-within/search:text-primary" />
+            <Search className="absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground/50 transition-colors duration-300 group-focus-within/search:text-primary" />
             <Input
               placeholder={t.searchConfig || "搜索配置"}
               value={searchQuery}

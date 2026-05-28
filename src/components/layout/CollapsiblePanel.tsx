@@ -63,6 +63,7 @@ export function PanelToggleButton({
 
   return (
     <button
+      type="button"
       onClick={onToggle}
       className={cn(
         "flex h-7 w-7 items-center justify-center rounded hover:bg-accent transition-colors",
@@ -98,7 +99,7 @@ function FolderIcon() {
     >
       {/* Folder back */}
       <path
-        d="M2 6C2 4.89543 2.89543 4 4 4H9L11 6H20C21.1046 6 22 6.89543 22 8V18C22 19.1046 21.1046 20 20 20H4C2.89543 20 2 19.1046 2 18V6Z"
+        d="M2 6c0-1.1.9-2 2-2h5l2 2h9c1.1 0 2 .9 2 2v10c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6Z"
         stroke="currentColor"
         strokeWidth="1.5"
         strokeLinecap="round"

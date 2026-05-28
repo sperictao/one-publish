@@ -127,7 +127,9 @@ export const useAppStore = create<AppStore>((set, get) => {
       .then(async () => {
         try {
           const nextState = await mutation();
-          if (options?.applyState === false) return;
+          if (options?.applyState === false) {
+            return;
+          }
           set((prev) => mergeRecentPublishState(prev, nextState));
         } catch (err) {
           await handlePersistenceFailure(errorMessage, err);

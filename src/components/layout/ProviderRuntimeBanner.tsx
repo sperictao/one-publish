@@ -25,9 +25,9 @@ export function ProviderRuntimeBanner({
         <div className="min-w-0 space-y-1">
           <div className="flex items-center gap-2 text-sm font-medium">
             {isLoading ? (
-              <Loader2 className="h-4 w-4 animate-spin text-amber-600" />
+              <Loader2 className="size-4 animate-spin text-amber-600" />
             ) : (
-              <AlertTriangle className="h-4 w-4 text-amber-600" />
+              <AlertTriangle className="size-4 text-amber-600" />
             )}
             <span>{title}</span>
           </div>
@@ -41,7 +41,7 @@ export function ProviderRuntimeBanner({
           disabled={isLoading}
           className="min-w-[112px]"
         >
-          <RefreshCw className="mr-2 h-4 w-4" />
+          <RefreshCw className="mr-2 size-4" />
           {retryLabel}
         </Button>
       </div>

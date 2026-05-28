@@ -223,11 +223,11 @@ export function PublishRunCard({
     >
       <CardHeader className="pb-4">
         <CardTitle className="flex items-center gap-2 text-lg">
-          <Terminal className="h-5 w-5" />
+          <Terminal className="size-5" />
           {appT.outputLogTitle || "执行发布"}
         </CardTitle>
       </CardHeader>
-      <CardContent className="flex min-h-0 min-w-0 flex-1 flex-col space-y-4">
+      <CardContent className="flex min-h-0 min-w-0 flex-1 flex-col gap-y-4">
         {publishActions && (
           <div className="min-w-0 space-y-3">
             {publishActions.publishCommand && (
@@ -253,13 +253,13 @@ export function PublishRunCard({
                 {publishActions.isPublishing ? (
                   <>
                     <span className="inline-block animate-spin mr-2">
-                      <Loader2 className="h-5 w-5" />
+                      <Loader2 className="size-5" />
                     </span>
                     {publishActions.publishingLabel || "发布中..."}
                   </>
                 ) : (
                   <>
-                    <Play className="h-5 w-5 mr-2" />
+                    <Play className="size-5 mr-2" />
                     {publishActions.startLabel || "执行发布"}
                   </>
                 )}
@@ -275,13 +275,13 @@ export function PublishRunCard({
                   {publishActions.isCancellingPublish ? (
                     <>
                       <span className="inline-block animate-spin mr-2">
-                        <Loader2 className="h-4 w-4" />
+                        <Loader2 className="size-4" />
                       </span>
                       {publishActions.cancellingLabel || "取消中..."}
                     </>
                   ) : (
                     <>
-                      <Square className="h-4 w-4 mr-2" />
+                      <Square className="size-4 mr-2" />
                       {publishActions.cancelLabel || "取消发布"}
                     </>
                   )}
@@ -302,12 +302,12 @@ export function PublishRunCard({
               <div className="flex min-w-0 items-start gap-3">
                 <span
                   className={cn(
-                    "mt-0.5 flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-2xl",
+                    "mt-0.5 flex size-10 flex-shrink-0 items-center justify-center rounded-2xl",
                     statusMeta.iconWrapClassName
                   )}
                 >
                   <span className={cn("inline-block", statusMeta.iconClassName)}>
-                    <StatusIcon className="h-5 w-5" />
+                    <StatusIcon className="size-5" />
                   </span>
                 </span>
                 <div className="min-w-0">
@@ -354,13 +354,13 @@ export function PublishRunCard({
               disabled={isOpeningOutputDir}
             >
               <div className="flex items-center gap-3">
-                <span className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-2xl bg-primary/10 text-primary shadow-[0_0_0_1px_hsl(var(--primary)/0.08)]">
+                <span className="flex size-10 flex-shrink-0 items-center justify-center rounded-2xl bg-primary/10 text-primary shadow-[0_0_0_1px_hsl(var(--primary)/0.08)]">
                   {isOpeningOutputDir ? (
                     <span className="inline-block animate-spin">
-                      <Loader2 className="h-4 w-4" />
+                      <Loader2 className="size-4" />
                     </span>
                   ) : (
-                    <FolderOpen className="h-4 w-4" />
+                    <FolderOpen className="size-4" />
                   )}
                 </span>
                 <span className="min-w-0 flex flex-1 items-center gap-3 overflow-hidden">
@@ -371,8 +371,8 @@ export function PublishRunCard({
                     {publishResult.output_dir}
                   </span>
                 </span>
-                <span className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-xl text-muted-foreground/65 transition-all duration-300 group-hover:bg-primary/10 group-hover:text-primary">
-                  <ArrowUpRight className="h-4 w-4" />
+                <span className="flex size-8 flex-shrink-0 items-center justify-center rounded-xl text-muted-foreground/65 transition-all duration-300 group-hover:bg-primary/10 group-hover:text-primary">
+                  <ArrowUpRight className="size-4" />
                 </span>
               </div>
             </button>
@@ -392,7 +392,7 @@ export function PublishRunCard({
         <div className="absolute inset-0 z-20 flex items-center justify-center bg-background/48 backdrop-blur-[2px]">
           <div className="glass-surface flex items-center gap-2 rounded-full px-4 py-2 text-sm text-foreground shadow-[var(--glass-shadow)]">
             <span className="inline-block animate-spin text-primary">
-              <Loader2 className="h-4 w-4" />
+              <Loader2 className="size-4" />
             </span>
             <span>{appT.refreshingPublishCard || "正在刷新发布信息..."}</span>
           </div>

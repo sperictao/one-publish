@@ -481,13 +481,16 @@ export function useFloatingListCard({
   useEffect(() => {
     return () => {
       cleanupDynamics();
+      const floatingFollowRaf = floatingFollowRafRef.current;
       if (
-        floatingFollowRafRef.current !== null &&
+        floatingFollowRaf !== null &&
         typeof window !== "undefined" &&
         typeof window.cancelAnimationFrame === "function"
       ) {
-        window.cancelAnimationFrame(floatingFollowRafRef.current);
-        floatingFollowRafRef.current = null;
+        window.cancelAnimationFrame(floatingFollowRaf);
+        if (floatingFollowRafRef.current === floatingFollowRaf) {
+          floatingFollowRafRef.current = null;
+        }
       }
       setFloatingAnimating(false);
     };

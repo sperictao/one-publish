@@ -89,18 +89,17 @@ export function normalizeDotnetStringArray(value: unknown): string[] {
     return [];
   }
 
-  return value
-    .map((item) => {
-      if (
-        typeof item === "string" ||
-        typeof item === "number" ||
-        typeof item === "boolean"
-      ) {
-        return String(item).trim();
-      }
-      return "";
-    })
-    .filter((item) => item.length > 0);
+  return value.flatMap((item) => {
+    if (
+      typeof item === "string" ||
+      typeof item === "number" ||
+      typeof item === "boolean"
+    ) {
+      const normalizedItem = String(item).trim();
+      return normalizedItem ? [normalizedItem] : [];
+    }
+    return [];
+  });
 }
 
 function parseBooleanString(value: string | undefined): boolean | null {

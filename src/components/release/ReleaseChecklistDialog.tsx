@@ -60,24 +60,24 @@ export interface ReleaseChecklistDialogProps {
 function statusStyles(status: ChecklistStatus) {
   if (status === "pass") {
     return {
-      icon: <CheckCircle2 className="h-4 w-4 text-green-600" />,
+      icon: <CheckCircle2 className="size-4 text-green-600" />,
       badgeVariant: "success" as const,
     };
   }
   if (status === "warning") {
     return {
-      icon: <AlertTriangle className="h-4 w-4 text-amber-600" />,
+      icon: <AlertTriangle className="size-4 text-amber-600" />,
       badgeVariant: "warning" as const,
     };
   }
   if (status === "fail") {
     return {
-      icon: <XCircle className="h-4 w-4 text-red-600" />,
+      icon: <XCircle className="size-4 text-red-600" />,
       badgeVariant: "danger" as const,
     };
   }
   return {
-    icon: <Circle className="h-4 w-4 text-muted-foreground" />,
+    icon: <Circle className="size-4 text-muted-foreground" />,
     badgeVariant: "neutral" as const,
   };
 }
@@ -399,7 +399,7 @@ export function ReleaseChecklistDialog({
           checklistTranslations.description ||
           "按步骤核对发布条件，确保产物可分发且可验证。"
         }
-        icon={<ListChecks className="h-4 w-4" />}
+        icon={<ListChecks className="size-4" />}
         bodyInnerClassName="space-y-4"
         footerClassName="sm:space-x-0"
         footer={
@@ -412,7 +412,7 @@ export function ReleaseChecklistDialog({
             >
               {exporting ? (
                 <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  <Loader2 className="mr-2 size-4 animate-spin" />
                   {checklistTranslations.exporting || "导出中..."}
                 </>
               ) : (
@@ -450,19 +450,19 @@ export function ReleaseChecklistDialog({
         <AppDialogInset className="flex flex-wrap gap-2 p-3 text-xs sm:text-sm">
           <AppDialogBadge
             variant="success"
-            icon={<CheckCircle2 className="h-3.5 w-3.5" />}
+            icon={<CheckCircle2 className="size-3.5" />}
           >
             {(checklistTranslations.summary?.passed || "已通过") + `: ${passedCount}`}
           </AppDialogBadge>
           <AppDialogBadge
             variant="warning"
-            icon={<AlertTriangle className="h-3.5 w-3.5" />}
+            icon={<AlertTriangle className="size-3.5" />}
           >
             {(checklistTranslations.summary?.warning || "警告") + `: ${warningCount}`}
           </AppDialogBadge>
           <AppDialogBadge
             variant="danger"
-            icon={<XCircle className="h-3.5 w-3.5" />}
+            icon={<XCircle className="size-3.5" />}
           >
             {(checklistTranslations.summary?.failed || "失败") + `: ${failedCount}`}
           </AppDialogBadge>
@@ -470,9 +470,9 @@ export function ReleaseChecklistDialog({
             variant={blockingReady ? "success" : "warning"}
             icon={
               blockingReady ? (
-                <ShieldCheck className="h-3.5 w-3.5" />
+                <ShieldCheck className="size-3.5" />
               ) : (
-                <AlertTriangle className="h-3.5 w-3.5" />
+                <AlertTriangle className="size-3.5" />
               )
             }
           >

@@ -248,7 +248,7 @@ export function useFloatingPosition({
 
     setFloatingAnimating(true);
     floatingFollowRafRef.current = window.requestAnimationFrame(step);
-  }, [setFloatingAnimating]);
+  }, [isReducedMotionRef, setFloatingAnimating]);
 
   const commitFloatingRect = useCallback(
     (

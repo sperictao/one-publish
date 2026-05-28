@@ -113,7 +113,7 @@ export function RepositoryRow({
       >
         <span
           className={cn(
-            "mt-0.5 flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-[14px] transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]",
+            "mt-0.5 flex size-8 flex-shrink-0 items-center justify-center rounded-[14px] transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]",
             isSelected
               ? "scale-105 bg-primary/10 shadow-[0_0_18px_hsl(var(--primary)/0.24)]"
               : "bg-[var(--glass-icon-bg)] shadow-[var(--glass-icon-highlight)] group-hover:scale-105 group-hover:bg-primary/8"
@@ -121,7 +121,7 @@ export function RepositoryRow({
         >
           <FolderGit2
             className={cn(
-              "h-4 w-4 transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]",
+              "size-4 transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]",
               isSelected
                 ? "scale-110 text-primary drop-shadow-[0_0_4px_hsl(var(--primary)/0.3)]"
                 : "text-muted-foreground/60 group-hover:text-primary group-hover:drop-shadow-[0_0_3px_hsl(var(--primary)/0.15)]"
@@ -168,7 +168,7 @@ export function RepositoryRow({
                   : repoT.branchUnreachable || "分支不可连接"
               }
             >
-              <GitBranch className="h-3 w-3 flex-shrink-0" />
+              <GitBranch className="size-3 flex-shrink-0" />
               <span className="truncate">{currentBranchName}</span>
             </span>
           </div>

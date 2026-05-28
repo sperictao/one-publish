@@ -502,7 +502,6 @@ export function useAppBoot() {
           : null,
     }),
     [
-      activeProviderId,
       activeProviderRequiresProjectBinding,
       appT,
       cancelPublish,

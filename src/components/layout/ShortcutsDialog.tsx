@@ -33,13 +33,13 @@ export function ShortcutsDialog({
         size="compact"
         title={shortcutT.title || "快捷键"}
         description={shortcutT.description || "可用的全局快捷键"}
-        icon={<Keyboard className="h-4 w-4" />}
+        icon={<Keyboard className="size-4" />}
         bodyInnerClassName="space-y-2 glass-stagger"
       >
         <div className="space-y-2">
-          {shortcuts.map((shortcut, index) => (
+          {shortcuts.map((shortcut) => (
             <div
-              key={index}
+              key={`${shortcut.key}:${shortcut.description}`}
               className="flex items-center justify-between p-3 bg-[var(--glass-input-bg)] rounded-xl glass-transition"
             >
               <span className="text-sm">{shortcut.description}</span>

@@ -49,12 +49,12 @@ export function MapParameter({
   return (
     <div className="space-y-2 py-2">
       <div className="flex items-center justify-between">
-        <div className="flex items-center space-x-2">
+        <div className="flex items-center gap-x-2">
           <Label>{resolvedLabel}</Label>
           {definition.description && (
             <div className="group relative inline-block">
               <HelpCircle
-                className="h-4 w-4 text-muted-foreground cursor-help"
+                className="size-4 text-muted-foreground cursor-help"
                 aria-label="Help"
                 aria-hidden={false}
               />
@@ -71,14 +71,14 @@ export function MapParameter({
             size="sm"
             onClick={addEntry}
           >
-            <Plus className="h-4 w-4 mr-1" />
+            <Plus className="size-4 mr-1" />
             Add
           </Button>
         ) : null}
       </div>
       <div className="space-y-2">
         {entries.map(([key, val]) => (
-          <div key={key} className="flex items-center space-x-2">
+          <div key={key} className="flex items-center gap-x-2">
             <Input
               type="text"
               value={key}
@@ -103,7 +103,7 @@ export function MapParameter({
                 aria-label={`Remove entry ${key}`}
                 onClick={() => removeEntry(key)}
               >
-                <X className="h-4 w-4" />
+                <X className="size-4" />
               </Button>
             ) : null}
           </div>

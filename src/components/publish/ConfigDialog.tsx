@@ -265,7 +265,7 @@ export function ConfigManagementContent({
             onClick={handleExportConfig}
             className="h-11 justify-start"
           >
-            <Download className="mr-2 h-4 w-4" />
+            <Download className="mr-2 size-4" />
             {profileT.export || "导出配置"}
           </Button>
           <Button
@@ -274,7 +274,7 @@ export function ConfigManagementContent({
             className="h-11 justify-start"
             disabled={!repoId}
           >
-            <Upload className="mr-2 h-4 w-4" />
+            <Upload className="mr-2 size-4" />
             {profileT.import || "导入配置"}
           </Button>
         </div>
@@ -319,13 +319,13 @@ export function ConfigManagementContent({
             {isSaving ? (
               <>
                 <span className="inline-block animate-spin mr-2">
-                  <Loader2 className="h-4 w-4" />
+                  <Loader2 className="size-4" />
                 </span>
                 {profileT.quickCreateSaving || "保存中..."}
               </>
             ) : (
               <>
-                <Save className="mr-2 h-4 w-4" />
+                <Save className="mr-2 size-4" />
                 {profileT.saveCurrentAction || "保存配置"}
               </>
             )}
@@ -344,12 +344,12 @@ export function ConfigManagementContent({
         {isLoading && profiles.length === 0 ? (
           <AppDialogInset className="flex min-h-[180px] items-center justify-center">
             <span className="inline-block animate-spin text-muted-foreground">
-              <Loader2 className="h-6 w-6" />
+              <Loader2 className="size-6" />
             </span>
           </AppDialogInset>
         ) : profiles.length === 0 ? (
           <AppDialogInset className="px-5 py-10 text-center text-muted-foreground">
-            <AlertCircle className="mx-auto mb-3 h-8 w-8" />
+            <AlertCircle className="mx-auto mb-3 size-8" />
             <p className="text-sm">{profileT.noProfiles || "暂无保存的配置文件"}</p>
           </AppDialogInset>
         ) : (
@@ -379,7 +379,7 @@ export function ConfigManagementContent({
                       onClick={() => handleLoadSelectedProfile(profile)}
                       className="h-10 min-w-[112px]"
                     >
-                      <Play className="mr-2 h-4 w-4" />
+                      <Play className="mr-2 size-4" />
                       {profileT.load || "加载"}
                     </Button>
                     {!profile.isSystemDefault ? (
@@ -388,7 +388,7 @@ export function ConfigManagementContent({
                         onClick={() => void handleDeleteProfile(profile)}
                         className="h-10 px-3 text-destructive hover:text-destructive"
                       >
-                        <Trash2 className="h-4 w-4" />
+                        <Trash2 className="size-4" />
                       </Button>
                     ) : null}
                   </div>
@@ -413,7 +413,7 @@ export function ConfigManagementContent({
                 "将把以下 {{count}} 个配置导入当前仓库，并按现有规则进行合并或覆盖。")
                 .replace("{{count}}", String(pendingImport.profiles.length))
             }
-            icon={<Upload className="h-4 w-4" />}
+            icon={<Upload className="size-4" />}
             bodyInnerClassName="space-y-4"
             footer={
               <div className="flex w-full flex-col-reverse gap-2 sm:flex-row sm:justify-end">
@@ -433,7 +433,7 @@ export function ConfigManagementContent({
                   {isApplyingImport ? (
                     <>
                       <span className="inline-block animate-spin mr-2">
-                        <Loader2 className="h-4 w-4" />
+                        <Loader2 className="size-4" />
                       </span>
                       {profileT.importing || "导入中..."}
                     </>
@@ -446,7 +446,7 @@ export function ConfigManagementContent({
           >
             <AppDialogInset className="space-y-3">
               <div className="flex items-start gap-3">
-                <AlertCircle className="mt-0.5 h-4 w-4 text-amber-600" />
+                <AlertCircle className="mt-0.5 size-4 text-amber-600" />
                 <div className="space-y-1 text-sm">
                   <p className="font-medium">
                     {profileT.importConfirmListTitle || "待导入配置"}
@@ -507,7 +507,7 @@ export function ConfigDialog({
         size="workspace"
         title={profileT.title || "配置管理"}
         description={profileT.description || "管理、导入、导出发布配置文件"}
-        icon={<FileCog className="h-4 w-4" />}
+        icon={<FileCog className="size-4" />}
         bodyInnerClassName="space-y-5"
         footerClassName="sm:space-x-0"
         footer={

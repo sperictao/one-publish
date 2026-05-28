@@ -16,7 +16,7 @@ import { AppDialogShell } from "@/components/ui/app-dialog-shell";
 import { Dialog } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
-import { Switch } from "@/components/ui/switch";
+import { SwitchIndicator } from "@/components/ui/switch";
 
 import {
   applyFix,
@@ -115,7 +115,7 @@ export function EnvironmentCheckContent({
   };
 
   const [selectedProviderIds, setSelectedProviderIds] = useState<string[]>(
-    normalizeVisibleProviderIds(defaultProviderIds)
+    () => normalizeVisibleProviderIds(defaultProviderIds)
   );
   const [checking, setChecking] = useState(false);
   const [result, setResult] = useState<EnvironmentCheckResult | null>(
@@ -152,20 +152,20 @@ export function EnvironmentCheckContent({
     if (!result) return null;
     if (grouped.critical.length > 0) {
       return {
-        icon: <XCircle className="h-4 w-4 text-red-600" />,
+        icon: <XCircle className="size-4 text-red-600" />,
         text: translations.environment?.blocked || "存在阻断问题",
         variant: "danger" as const,
       };
     }
     if (grouped.warning.length > 0) {
       return {
-        icon: <AlertTriangle className="h-4 w-4 text-yellow-600" />,
+        icon: <AlertTriangle className="size-4 text-yellow-600" />,
         text: translations.environment?.warning || "存在警告",
         variant: "warning" as const,
       };
     }
     return {
-      icon: <CheckCircle2 className="h-4 w-4 text-green-600" />,
+      icon: <CheckCircle2 className="size-4 text-green-600" />,
       text: translations.environment?.ready || "已就绪",
       variant: "success" as const,
     };
@@ -332,7 +332,7 @@ export function EnvironmentCheckContent({
           >
             {checking ? (
               <>
-                <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
+                <Loader2 className="size-3.5 mr-1.5 animate-spin" />
                 {translations.environment?.checking || "检查中..."}
               </>
             ) : (
@@ -350,10 +350,12 @@ export function EnvironmentCheckContent({
             {providerOptions.map((p) => {
               const checked = selectedProviderIds.includes(p.id);
               return (
-                <div
+                <button
+                  type="button"
                   key={p.id}
+                  aria-pressed={checked}
                   onClick={() => toggleProvider(p.id, !checked)}
-                  className="glass-interactive flex items-center justify-between rounded-xl border border-white/15 dark:border-white/5 bg-white/30 dark:bg-black/10 p-3 transition-all duration-200 cursor-pointer select-none active:scale-[0.99] shadow-none"
+                  className="glass-interactive flex items-center justify-between rounded-xl border border-white/15 dark:border-white/5 bg-white/30 dark:bg-black/10 p-3 text-left transition-all duration-200 cursor-pointer select-none active:scale-[0.99] shadow-none"
                 >
                   <div className="space-y-0.5 pr-2">
                     <div className="text-sm font-medium">{p.label}</div>
@@ -361,11 +363,11 @@ export function EnvironmentCheckContent({
                       {p.description}
                     </div>
                   </div>
-                  <Switch
+                  <SwitchIndicator
                     checked={checked}
                     className="data-[state=checked]:bg-gradient-to-b data-[state=checked]:from-[#4cd964] data-[state=checked]:to-[#34c759] data-[state=checked]:shadow-[0_2px_8px_rgba(52,199,89,0.3)] data-[state=unchecked]:bg-black/10 dark:data-[state=unchecked]:bg-white/10 pointer-events-none border-none shadow-none"
                   />
-                </div>
+                </button>
               );
             })}
           </div>
@@ -395,7 +397,7 @@ export function EnvironmentCheckContent({
                     <div className="flex min-w-0 items-center gap-2.5">
                       <span
                         className={cn(
-                          "h-2 w-2 rounded-full shrink-0",
+                          "size-2 rounded-full shrink-0",
                           provider.installed ? "bg-emerald-500 animate-pulse" : "bg-red-500"
                         )}
                       />
@@ -441,11 +443,11 @@ export function EnvironmentCheckContent({
                         <div className="flex items-start gap-3">
                           <div className="mt-0.5 shrink-0">
                             {isCritical ? (
-                              <XCircle className="h-4.5 w-4.5 text-red-500" />
+                              <XCircle className="size-4.5 text-red-500" />
                             ) : isWarning ? (
-                              <AlertTriangle className="h-4.5 w-4.5 text-amber-500" />
+                              <AlertTriangle className="size-4.5 text-amber-500" />
                             ) : (
-                              <CheckCircle2 className="h-4.5 w-4.5 text-[#0066cc]" />
+                              <CheckCircle2 className="size-4.5 text-[#0066cc]" />
                             )}
                           </div>
 
@@ -514,11 +516,11 @@ export function EnvironmentCheckContent({
                                 )}
                               >
                                 {fix.action_type === "open_url" ? (
-                                  <ExternalLink className="h-3.5 w-3.5 mr-1.5" />
+                                  <ExternalLink className="size-3.5 mr-1.5" />
                                 ) : fix.action_type === "copy_command" ? (
-                                  <Copy className="h-3.5 w-3.5 mr-1.5" />
+                                  <Copy className="size-3.5 mr-1.5" />
                                 ) : (
-                                  <Terminal className="h-3.5 w-3.5 mr-1.5" />
+                                  <Terminal className="size-3.5 mr-1.5" />
                                 )}
                                 {fix.label}
                               </Button>
@@ -538,9 +540,9 @@ export function EnvironmentCheckContent({
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     <div className="flex gap-1 shrink-0">
-                      <span className="h-2 w-2 rounded-full bg-red-500/60" />
-                      <span className="h-2 w-2 rounded-full bg-yellow-500/60" />
-                      <span className="h-2 w-2 rounded-full bg-green-500/60" />
+                      <span className="size-2 rounded-full bg-red-500/60" />
+                      <span className="size-2 rounded-full bg-yellow-500/60" />
+                      <span className="size-2 rounded-full bg-green-500/60" />
                     </div>
                     <span className="text-xs font-semibold text-zinc-500/80 uppercase tracking-wider ml-1">
                       {translations.environment?.result || "执行结果"}
@@ -552,7 +554,7 @@ export function EnvironmentCheckContent({
                     onClick={() => handleCopy(fixResultText)}
                     className="glass-interactive h-7 px-3.5 text-xs text-muted-foreground hover:text-foreground active:scale-95 transition-all duration-200 rounded-full border border-white/15 dark:border-white/5 bg-white/20 dark:bg-white/5 font-semibold"
                   >
-                    <Copy className="h-3 w-3 mr-1" />
+                    <Copy className="size-3 mr-1" />
                     {translations.environment?.copied ? "复制" : "复制"}
                   </Button>
                 </div>
@@ -577,7 +579,7 @@ export function EnvironmentCheckContent({
             translations.environment?.confirmDesc ||
             "该操作将执行系统命令，可能会安装或修改本地环境。请确认命令内容无误。"
           }
-          icon={<Terminal className="h-4 w-4" />}
+          icon={<Terminal className="size-4" />}
           bodyInnerClassName="space-y-2"
           footer={
             <div className="flex w-full flex-col-reverse gap-2 sm:flex-row sm:justify-end">
@@ -596,7 +598,7 @@ export function EnvironmentCheckContent({
               >
                 {runningFix ? (
                   <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    <Loader2 className="mr-2 size-4 animate-spin" />
                     {translations.environment?.running || "执行中..."}
                   </>
                 ) : (
@@ -638,7 +640,7 @@ export function EnvironmentCheckDialog({
         surfaceClassName="max-h-[80vh]"
         title={translations.environment?.title || "环境检查"}
         description={translations.environment?.description || "检测本机工具链并提供修复建议"}
-        icon={<Terminal className="h-4 w-4" />}
+        icon={<Terminal className="size-4" />}
         bodyInnerClassName="pr-1"
         footer={
           <div className="flex w-full justify-end">

@@ -88,8 +88,8 @@ const QuickCreateTemplateCard = memo(function QuickCreateTemplateCard({
         <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
           <div className="min-w-0">
             <div className="flex items-center gap-2 text-sm font-semibold text-foreground">
-              <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-primary/10 text-primary shadow-[var(--glass-inset-shadow)]">
-                <Sparkles className="h-3.5 w-3.5" />
+              <span className="flex size-7 items-center justify-center rounded-lg bg-primary/10 text-primary shadow-[var(--glass-inset-shadow)]">
+                <Sparkles className="size-3.5" />
               </span>
               {profileT.quickCreateTemplateCompactTitle || "快速套用模板"}
             </div>
@@ -293,10 +293,6 @@ export function QuickCreateProfileDialog({
   onDraftChange,
   onSave,
 }: QuickCreateProfileDialogProps) {
-  if (!open && !quickCreateProfileOpen) {
-    return null;
-  }
-
   const selectedTemplate =
     quickCreateTemplateOptions.find(
       (option) => option.id === quickCreateTemplateId
@@ -325,6 +321,10 @@ export function QuickCreateProfileDialog({
     [onSave, quickCreateProfileSaving]
   );
 
+  if (!open && !quickCreateProfileOpen) {
+    return null;
+  }
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <AppDialogShell
@@ -344,9 +344,9 @@ export function QuickCreateProfileDialog({
         }
         icon={
           quickCreateEditing ? (
-            <Layers3 className="h-4 w-4" />
+            <Layers3 className="size-4" />
           ) : (
-            <Sparkles className="h-4 w-4" />
+            <Sparkles className="size-4" />
           )
         }
         iconWrapperClassName={cn(
@@ -382,14 +382,14 @@ export function QuickCreateProfileDialog({
               >
                 {quickCreateProfileSaving ? (
                   <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    <Loader2 className="mr-2 size-4 animate-spin" />
                     {quickCreateEditing
                       ? profileT.quickEditSaving || "更新中..."
                       : profileT.quickCreateSaving || "保存中..."}
                   </>
                 ) : (
                   <>
-                    <Save className="mr-2 h-4 w-4" />
+                    <Save className="mr-2 size-4" />
                     {quickCreateEditing
                       ? profileT.quickEditAction || "保存修改"
                       : profileT.quickCreateAction || "创建并保存"}

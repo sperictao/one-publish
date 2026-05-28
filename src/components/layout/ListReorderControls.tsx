@@ -28,7 +28,7 @@ export function ListDragHandle({
         aria-label={enabled ? label : disabledLabel || label}
         title={enabled ? label : disabledLabel || label}
         className={cn(
-          "flex h-7 w-7 touch-none items-center justify-center rounded-xl transition-all duration-200",
+          "flex size-7 touch-none items-center justify-center rounded-xl transition-all duration-200",
           enabled
             ? "cursor-grab text-muted-foreground/35 hover:bg-[var(--glass-bg)] hover:text-foreground/65 active:cursor-grabbing"
             : "cursor-not-allowed text-muted-foreground/20"
@@ -47,7 +47,7 @@ export function ListDragHandle({
           onPointerDown(event);
         }}
       >
-        <GripVertical className="h-4 w-4" />
+        <GripVertical className="size-4" />
       </button>
     </div>
   );

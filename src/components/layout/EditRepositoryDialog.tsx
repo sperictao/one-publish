@@ -124,13 +124,15 @@ export function EditRepositoryDialog({
       return [] as string[];
     }
 
-    const options = Array.from(
-      new Set(
-        editingRepo.branches
-          .map((branch) => branch.name.trim())
-          .filter((branchName) => branchName.length > 0)
-      )
-    );
+    const branchNames = new Set<string>();
+    for (const branch of editingRepo.branches) {
+      const branchName = branch.name.trim();
+      if (branchName) {
+        branchNames.add(branchName);
+      }
+    }
+
+    const options = Array.from(branchNames);
 
     if (editCurrentBranch && !options.includes(editCurrentBranch)) {
       options.unshift(editCurrentBranch);
@@ -586,7 +588,7 @@ export function EditRepositoryDialog({
           <div className="flex items-center gap-1.5">
             <span>{repoT.editRepository || "编辑项目信息"}</span>
             <div className="group relative inline-block">
-              <HelpCircle className="h-3.5 w-3.5 text-muted-foreground/60 cursor-help hover:text-foreground transition-colors" />
+              <HelpCircle className="size-3.5 text-muted-foreground/60 cursor-help hover:text-foreground transition-colors" />
               <div className="absolute left-1/2 -translate-x-1/2 bottom-full mb-2 hidden group-hover:block w-64 p-2 bg-[var(--glass-panel-bg)] backdrop-blur-xl text-popover-foreground text-xs rounded-xl shadow-[var(--glass-shadow-lg)] border border-[var(--glass-border)] z-10 leading-4 font-normal">
                 {repoT.editRepositoryHint || "修改仓库基础信息后会立即刷新左栏展示与关联状态。"}
               </div>
@@ -597,7 +599,7 @@ export function EditRepositoryDialog({
           repoT.editRepositoryDescription ||
           "可编辑仓库名称、Project Root、Project File 与当前分支信息。"
         }
-        icon={<FolderGit2 className="h-4 w-4" />}
+        icon={<FolderGit2 className="size-4" />}
         footer={
           <>
             <div className="flex flex-col-reverse gap-2 sm:flex-row sm:items-center sm:ml-auto">
@@ -633,14 +635,14 @@ export function EditRepositoryDialog({
           <aside className="glass-card flex flex-col items-center justify-between rounded-2xl p-5 text-center bg-gradient-to-b from-primary/[0.03] to-transparent border border-[var(--glass-border-subtle)] min-h-0 overflow-y-auto glass-scrollbar">
             <div className="flex flex-col items-center w-full">
               {/* Glowing Icon Wrapper */}
-              <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-tr from-primary/20 to-primary/5 text-primary shadow-[0_8px_30px_rgba(59,130,246,0.12)] ring-1 ring-primary/20">
-                <FolderGit2 className="h-8 w-8" />
+              <div className="flex size-16 items-center justify-center rounded-2xl bg-gradient-to-tr from-primary/20 to-primary/5 text-primary shadow-[0_8px_30px_rgba(59,130,246,0.12)] ring-1 ring-primary/20">
+                <FolderGit2 className="size-8" />
               </div>
               
               <h3 className="mt-4 text-base font-semibold tracking-tight truncate max-w-full text-foreground flex items-center justify-center gap-1.5 w-full">
                 <span className="truncate">{editName || "未命名仓库"}</span>
                 <div className="group relative inline-block shrink-0">
-                  <HelpCircle className="h-3.5 w-3.5 text-muted-foreground/60 cursor-help hover:text-foreground transition-colors" />
+                  <HelpCircle className="size-3.5 text-muted-foreground/60 cursor-help hover:text-foreground transition-colors" />
                   <div className="absolute left-1/2 -translate-x-1/2 bottom-full mb-2 hidden group-hover:block w-48 p-2 bg-[var(--glass-panel-bg)] backdrop-blur-xl text-popover-foreground text-xs rounded-xl shadow-[var(--glass-shadow-lg)] border border-[var(--glass-border)] z-10 leading-4 font-normal text-left">
                     请确保仓库路径和项目绑定正确，这会直接影响后续的自动化发布配置构建。
                   </div>
@@ -655,7 +657,7 @@ export function EditRepositoryDialog({
               <div className="w-full mt-6 space-y-2 text-left">
                 <div className="flex items-center justify-between rounded-xl border border-[var(--glass-border-subtle)] bg-background/40 px-3.5 py-2.5">
                   <span className="text-xs text-muted-foreground flex items-center gap-1.5">
-                    <GitBranch className="h-3.5 w-3.5 text-muted-foreground" />
+                    <GitBranch className="size-3.5 text-muted-foreground" />
                     分支数量
                   </span>
                   <span className="text-xs font-semibold font-mono text-foreground bg-primary/10 px-2 py-0.5 rounded-full">
@@ -665,7 +667,7 @@ export function EditRepositoryDialog({
  
                 <div className="flex items-center justify-between rounded-xl border border-[var(--glass-border-subtle)] bg-background/40 px-3.5 py-2.5">
                   <span className="text-xs text-muted-foreground flex items-center gap-1.5">
-                    <Activity className="h-3.5 w-3.5 text-muted-foreground" />
+                    <Activity className="size-3.5 text-muted-foreground" />
                     绑定状态
                   </span>
                   <span className={cn(
@@ -681,7 +683,7 @@ export function EditRepositoryDialog({
                 {editProviderId && editProviderId !== NO_PROVIDER_VALUE ? (
                   <div className="flex items-center justify-between rounded-xl border border-[var(--glass-border-subtle)] bg-background/40 px-3.5 py-2.5">
                     <span className="text-xs text-muted-foreground flex items-center gap-1.5">
-                      <Info className="h-3.5 w-3.5 text-muted-foreground" />
+                      <Info className="size-3.5 text-muted-foreground" />
                       当前服务
                     </span>
                     <span className="text-xs font-semibold text-foreground font-mono truncate max-w-[120px]">
@@ -694,11 +696,11 @@ export function EditRepositoryDialog({
           </aside>
  
           {/* Right Panel: Form Fields */}
-          <form id="edit-repository-form" className="flex flex-col min-h-0 overflow-y-auto glass-scrollbar space-y-4 pb-1 pr-1" onSubmit={handleSubmit}>
+          <form id="edit-repository-form" className="flex flex-col min-h-0 overflow-y-auto glass-scrollbar gap-y-4 pb-1 pr-1" onSubmit={handleSubmit}>
             {/* Card 1: Basic Config */}
             <AppDialogInset className="space-y-4 p-5 bg-gradient-to-br from-background/30 to-background/5 border border-[var(--glass-border-subtle)]">
               <h4 className="text-xs font-semibold uppercase tracking-[0.12em] text-primary flex items-center gap-1.5 mb-1">
-                <span className="h-1.5 w-1.5 rounded-full bg-primary" />
+                <span className="size-1.5 rounded-full bg-primary" />
                 基础配置
               </h4>
 
@@ -739,11 +741,11 @@ export function EditRepositoryDialog({
                       type="button"
                       variant="outline"
                       size="icon"
-                      className="h-9 w-9 shrink-0 hover:bg-primary/5 hover:text-primary transition-colors duration-300"
+                      className="size-9 shrink-0 hover:bg-primary/5 hover:text-primary transition-colors duration-300"
                       onClick={handleBrowsePath}
                       title="浏览文件夹"
                     >
-                      <FolderGit2 className="h-4 w-4" />
+                      <FolderGit2 className="size-4" />
                     </Button>
                   </div>
                   {isEditPathEmpty ? (
@@ -758,7 +760,7 @@ export function EditRepositoryDialog({
             {/* Card 2: Project File & Provider / Git */}
             <AppDialogInset className="space-y-4 p-5 bg-gradient-to-br from-background/30 to-background/5 border border-[var(--glass-border-subtle)]">
               <h4 className="text-xs font-semibold uppercase tracking-[0.12em] text-primary flex items-center gap-1.5 mb-1">
-                <span className="h-1.5 w-1.5 rounded-full bg-primary" />
+                <span className="size-1.5 rounded-full bg-primary" />
                 项目定位与分支
               </h4>
 
@@ -817,7 +819,7 @@ export function EditRepositoryDialog({
                       type="button"
                       variant="outline"
                       size="icon"
-                      className="h-9 w-9 shrink-0 hover:bg-primary/5 hover:text-primary transition-colors"
+                      className="size-9 shrink-0 hover:bg-primary/5 hover:text-primary transition-colors"
                       onClick={() => {
                         if (isProjectFileManual && projectFileOptions.length > 0) {
                           setIsProjectFileManual(false);
@@ -829,7 +831,7 @@ export function EditRepositoryDialog({
                       disabled={isSavingRepo || isScanningProjectFiles || !editPath.trim()}
                     >
                       <FileSearch
-                        className={cn("h-4 w-4", isScanningProjectFiles && "animate-spin")}
+                        className={cn("size-4", isScanningProjectFiles && "animate-spin")}
                       />
                     </Button>
                   </div>
@@ -877,14 +879,14 @@ export function EditRepositoryDialog({
                       type="button"
                       variant="outline"
                       size="icon"
-                      className="h-9 w-9 shrink-0 hover:bg-primary/5 hover:text-primary transition-colors"
+                      className="size-9 shrink-0 hover:bg-primary/5 hover:text-primary transition-colors"
                       onClick={() => {
                         void handleDetectProvider();
                       }}
                       title={repoT.detectProvider || "自动检测 Provider"}
                       disabled={isSavingRepo || isDetectingProvider || isRefreshingBranches}
                     >
-                      <RefreshCw className={cn("h-4 w-4", isDetectingProvider && "animate-spin")} />
+                      <RefreshCw className={cn("size-4", isDetectingProvider && "animate-spin")} />
                     </Button>
                   </div>
                 </div>
@@ -916,14 +918,14 @@ export function EditRepositoryDialog({
                     type="button"
                     variant="outline"
                     size="icon"
-                    className="h-9 w-9 shrink-0 hover:bg-primary/5 hover:text-primary transition-colors"
+                    className="size-9 shrink-0 hover:bg-primary/5 hover:text-primary transition-colors"
                     onClick={() => {
                       void handleRefreshBranches();
                     }}
                     title={repoT.refreshBranches || "刷新分支"}
                     disabled={isSavingRepo || isDetectingProvider || isRefreshingBranches}
                   >
-                    <RefreshCw className={cn("h-4 w-4", isRefreshingBranches && "animate-spin")} />
+                    <RefreshCw className={cn("size-4", isRefreshingBranches && "animate-spin")} />
                   </Button>
                 </div>
               </div>

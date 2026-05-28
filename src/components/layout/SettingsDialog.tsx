@@ -146,7 +146,7 @@ function SettingsSwitchRow({
     <div className="rounded-lg border border-[var(--settings-hairline)] bg-[var(--settings-section-bg)] px-4 py-3.5">
       <div className="flex items-center justify-between gap-4">
         <div className="flex items-center gap-3 min-w-0">
-          <Icon className="h-[18px] w-[18px] flex-shrink-0 text-[var(--settings-ink-muted)]" />
+          <Icon className="size-[18px] flex-shrink-0 text-[var(--settings-ink-muted)]" />
           <Label className="cursor-pointer text-[14px] font-semibold tracking-[-0.224px] text-[var(--settings-ink)]" htmlFor={id}>
             {label}
           </Label>
@@ -249,7 +249,7 @@ export const GeneralSettingsSection = memo(function GeneralSettingsSection({
           htmlFor="settings-default-output-dir"
           className="flex items-center gap-2 text-[14px] font-semibold tracking-[-0.224px] text-[var(--settings-ink)]"
         >
-          <FolderOpen className="h-4 w-4 text-[var(--settings-ink-muted)]" />
+          <FolderOpen className="size-4 text-[var(--settings-ink-muted)]" />
           {translations.outputDir?.label || "默认发布目录"}
         </Label>
         <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto]">
@@ -264,11 +264,11 @@ export const GeneralSettingsSection = memo(function GeneralSettingsSection({
           <Button
             variant="outline"
             size="icon"
-            className="h-10 w-10 shrink-0 active:scale-[0.97]"
+            className="size-10 shrink-0 active:scale-[0.97]"
             onClick={onSelectDirectory}
             title={translations.outputDir?.label || "选择默认发布目录"}
           >
-            <FolderOpen className="h-4 w-4" />
+            <FolderOpen className="size-4" />
           </Button>
         </div>
         <p className="text-[12px] leading-[1.4] tracking-[-0.12px] text-[var(--settings-ink-muted)]">
@@ -584,7 +584,7 @@ export function SettingsDialog({
     });
   }, [translations.version?.restartFailed]);
 
-  const handleSelectDirectory = async () => {
+  const handleSelectDirectory = useCallback(async () => {
     try {
       const selected = await openDialog({
         directory: true,
@@ -597,7 +597,7 @@ export function SettingsDialog({
     } catch (err) {
       console.error("\u9009\u62E9\u76EE\u5F55\u5931\u8D25:", err);
     }
-  };
+  }, [onDefaultOutputDirChange, translations.outputDir?.label]);
 
   const renderGeneralSettings = () => (
     <GeneralSettingsSection
@@ -620,7 +620,7 @@ export function SettingsDialog({
     <div className="space-y-5">
         <div className="space-y-2">
           <Label htmlFor="settings-theme" className="flex items-center gap-2 text-[14px] font-semibold tracking-[-0.224px] text-[var(--settings-ink)]">
-            <Palette className="h-4 w-4 text-[var(--settings-ink-muted)]" />
+            <Palette className="size-4 text-[var(--settings-ink-muted)]" />
             {translations.theme?.label || "\u5916\u89C2\u4E3B\u9898"}
           </Label>
           <Select value={theme} onValueChange={onThemeChange}>
@@ -632,19 +632,19 @@ export function SettingsDialog({
             <SelectContent>
               <SelectItem value="auto">
                 <div className="flex items-center gap-2">
-                  <Monitor className="h-4 w-4" />
+                  <Monitor className="size-4" />
                   <span>{translations.theme?.auto || "\u8DDF\u968F\u7CFB\u7EDF"}</span>
                 </div>
               </SelectItem>
               <SelectItem value="light">
                 <div className="flex items-center gap-2">
-                  <Sun className="h-4 w-4" />
+                  <Sun className="size-4" />
                   <span>{translations.theme?.light || "\u4EAE\u8272"}</span>
                 </div>
               </SelectItem>
               <SelectItem value="dark">
                 <div className="flex items-center gap-2">
-                  <Moon className="h-4 w-4" />
+                  <Moon className="size-4" />
                   <span>{translations.theme?.dark || "\u6697\u8272"}</span>
                 </div>
               </SelectItem>
@@ -699,7 +699,7 @@ export function SettingsDialog({
             onClick={onOpenShortcuts}
             disabled={!onOpenShortcuts}
           >
-            <Keyboard className="mr-2 h-4 w-4" />
+            <Keyboard className="mr-2 size-4" />
             {translations.shortcuts?.button || "\u67E5\u770B\u5FEB\u6377\u952E"}
           </Button>
         </div>
@@ -748,9 +748,9 @@ export function SettingsDialog({
                 disabled={isRestarting || isCheckingUpdate || isInstallingUpdate}
               >
                 {isRestarting ? (
-                  <RefreshCw className="h-4 w-4 animate-spin" />
+                  <RefreshCw className="size-4 animate-spin" />
                 ) : (
-                  <RefreshCw className="h-4 w-4" />
+                  <RefreshCw className="size-4" />
                 )}
                 <span className="ml-1">
                   {isRestarting
@@ -767,9 +767,9 @@ export function SettingsDialog({
               disabled={isCheckingUpdate || isInstallingUpdate}
             >
               {isCheckingUpdate ? (
-                <RefreshCw className="h-4 w-4 animate-spin" />
+                <RefreshCw className="size-4 animate-spin" />
               ) : (
-                <RefreshCw className="h-4 w-4" />
+                <RefreshCw className="size-4" />
               )}
               <span className="ml-1">{translations.version?.check || "\u68C0\u67E5\u66F4\u65B0"}</span>
             </Button>
@@ -782,9 +782,9 @@ export function SettingsDialog({
                 disabled={isInstallingUpdate}
               >
                 {isInstallingUpdate ? (
-                  <RefreshCw className="h-4 w-4 animate-spin" />
+                  <RefreshCw className="size-4 animate-spin" />
                 ) : (
-                  <Download className="h-4 w-4" />
+                  <Download className="size-4" />
                 )}
                 <span className="ml-1">{translations.version?.update || "\u66F4\u65B0"}</span>
               </Button>
@@ -838,7 +838,7 @@ export function SettingsDialog({
         description={
           translations.settings?.description || "\u914D\u7F6E\u8BED\u8A00\u3001\u5916\u89C2\u3001\u8F93\u51FA\u76EE\u5F55\u7B49\u504F\u597D\u8BBE\u7F6E"
         }
-        icon={<Languages className="h-4 w-4" />}
+        icon={<Languages className="size-4" />}
       >
         <div className="grid h-full min-h-0 gap-0 sm:grid-cols-[200px_minmax(0,1fr)]">
           {/* Sidebar */}
@@ -863,7 +863,7 @@ export function SettingsDialog({
                   >
                     <Icon
                       className={cn(
-                        "h-[18px] w-[18px] flex-shrink-0 transition-colors duration-150",
+                        "size-[18px] flex-shrink-0 transition-colors duration-150",
                         isActive
                           ? "text-[var(--settings-icon-active)]"
                           : "text-[var(--settings-icon-muted)]"

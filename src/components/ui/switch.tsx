@@ -23,4 +23,33 @@ const Switch = React.forwardRef<
 ));
 Switch.displayName = SwitchPrimitives.Root.displayName;
 
-export { Switch };
+interface SwitchIndicatorProps extends React.HTMLAttributes<HTMLSpanElement> {
+  checked: boolean;
+  thumbClassName?: string;
+}
+
+const SwitchIndicator = React.forwardRef<HTMLSpanElement, SwitchIndicatorProps>(
+  ({ checked, className, thumbClassName, ...props }, ref) => (
+    <span
+      aria-hidden="true"
+      data-state={checked ? "checked" : "unchecked"}
+      className={cn(
+        "inline-flex h-6 w-11 shrink-0 items-center rounded-full border-2 border-transparent transition-all duration-200 data-[state=checked]:bg-primary data-[state=unchecked]:bg-[var(--glass-input-bg)] data-[state=unchecked]:border-[var(--glass-border)] data-[state=unchecked]:shadow-[var(--glass-inset-shadow)]",
+        className
+      )}
+      {...props}
+      ref={ref}
+    >
+      <span
+        data-state={checked ? "checked" : "unchecked"}
+        className={cn(
+          "pointer-events-none block size-5 rounded-full bg-background shadow-lg ring-0 transition-transform duration-200 data-[state=checked]:translate-x-5 data-[state=unchecked]:translate-x-0",
+          thumbClassName
+        )}
+      />
+    </span>
+  )
+);
+SwitchIndicator.displayName = "SwitchIndicator";
+
+export { Switch, SwitchIndicator };

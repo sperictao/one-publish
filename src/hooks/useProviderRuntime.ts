@@ -122,12 +122,17 @@ export function useProviderRuntime() {
   const activeProviderSchemaState =
     providerSchemaStates[activeProviderId] ?? createIdleState<ParameterSchema>();
   const providerSchemas = useMemo(
-    () =>
-      Object.fromEntries(
-        Object.entries(providerSchemaStates)
-          .filter(([, state]) => state.status === "ready" && state.data)
-          .map(([providerId, state]) => [providerId, state.data as ParameterSchema])
-      ),
+    () => {
+      const entries: [string, ParameterSchema][] = [];
+
+      for (const [providerId, state] of Object.entries(providerSchemaStates)) {
+        if (state.status === "ready" && state.data) {
+          entries.push([providerId, state.data]);
+        }
+      }
+
+      return Object.fromEntries(entries);
+    },
     [providerSchemaStates]
   );
   const activeProviderSchema = activeProviderSchemaState.data ?? undefined;

@@ -40,11 +40,11 @@ function getElementAttributes(element: Element): Record<string, string> {
 
 function getOwnTextContent(element: Element): string {
   return Array.from(element.childNodes)
-    .filter(
-      (node) =>
-        node.nodeType === TEXT_NODE || node.nodeType === CDATA_SECTION_NODE
+    .flatMap((node) =>
+      node.nodeType === TEXT_NODE || node.nodeType === CDATA_SECTION_NODE
+        ? [node.textContent ?? ""]
+        : []
     )
-    .map((node) => node.textContent ?? "")
     .join(" ")
     .replace(/\s+/g, " ")
     .trim();

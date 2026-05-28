@@ -132,12 +132,15 @@ function matchesStringArrayParameter(
   }
 
   const expected = splitDotnetDefineConstants(rawValue);
-  if (expected.length === 0 || candidate.length !== expected.length) {
+  if (expected.length === 0) {
     return false;
   }
 
-  return candidate.every(
-    (item, index) => typeof item === "string" && item === expected[index]
+  return (
+    candidate.length === expected.length &&
+    candidate.every(
+      (item, index) => typeof item === "string" && item === expected[index]
+    )
   );
 }
 
@@ -146,15 +149,21 @@ function normalizePropertyValueMap(value: unknown): Record<string, string> {
     return {};
   }
 
-  return Object.fromEntries(
-    Object.entries(value)
-      .filter(
-        (entry): entry is [string, string] =>
-          typeof entry[0] === "string" && typeof entry[1] === "string"
-      )
-      .map(([key, itemValue]) => [key.trim(), itemValue.trim()])
-      .filter(([key, itemValue]) => key.length > 0 && itemValue.length > 0)
-  );
+  const entries: [string, string][] = [];
+
+  for (const [key, itemValue] of Object.entries(value)) {
+    if (typeof key !== "string" || typeof itemValue !== "string") {
+      continue;
+    }
+
+    const normalizedKey = key.trim();
+    const normalizedValue = itemValue.trim();
+    if (normalizedKey && normalizedValue) {
+      entries.push([normalizedKey, normalizedValue]);
+    }
+  }
+
+  return Object.fromEntries(entries);
 }
 
 function splitDotnetDefineConstants(value: string): string[] {

@@ -26,8 +26,8 @@ export function SectionShell({
 
   const headerContent = (
     <>
-      <span className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary shadow-[0_4px_12px_hsl(var(--primary)/0.12)]">
-        <Icon className="h-3.5 w-3.5" />
+      <span className="flex size-8 flex-shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary shadow-[0_4px_12px_hsl(var(--primary)/0.12)]">
+        <Icon className="size-3.5" />
       </span>
       <div className="min-w-0 flex-1 text-left">
         <h3 className="text-sm font-semibold text-foreground">{title}</h3>
@@ -55,9 +55,9 @@ export function SectionShell({
           >
             {headerContent}
             {expanded ? (
-              <ChevronDown className="mt-0.5 h-4 w-4 flex-shrink-0 text-muted-foreground" />
+              <ChevronDown className="mt-0.5 size-4 flex-shrink-0 text-muted-foreground" />
             ) : (
-              <ChevronRight className="mt-0.5 h-4 w-4 flex-shrink-0 text-muted-foreground" />
+              <ChevronRight className="mt-0.5 size-4 flex-shrink-0 text-muted-foreground" />
             )}
           </button>
         ) : (

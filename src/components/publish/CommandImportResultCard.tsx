@@ -29,7 +29,7 @@ export function CommandImportResultCard({
     <Card>
       <CardHeader className="pb-3">
         <CardTitle className="text-lg flex items-center gap-2">
-          <Import className="h-5 w-5" />
+          <Import className="size-5" />
           {appT.commandImportResult || "命令导入映射结果"}
         </CardTitle>
         <CardDescription>Provider: {providerLabel}</CardDescription>

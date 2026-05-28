@@ -59,7 +59,12 @@ export const DEFAULT_ENVIRONMENT_PROVIDER_IDS = ["dotnet"];
 
 function normalizeProviderIds(providerIds?: string[]) {
   return Array.from(
-    new Set((providerIds || []).map((id) => id.trim()).filter(Boolean))
+    new Set(
+      (providerIds || []).flatMap((id) => {
+        const normalizedId = id.trim();
+        return normalizedId ? [normalizedId] : [];
+      })
+    )
   ).sort();
 }
 
@@ -127,12 +132,11 @@ export function matchesEnvironmentCheckSnapshot(
   }
 
   const normalizedProviderIds = normalizeEnvironmentProviderIds(providerIds);
-  if (snapshot.providerIds.length !== normalizedProviderIds.length) {
-    return false;
-  }
-
-  return snapshot.providerIds.every(
-    (providerId, index) => providerId === normalizedProviderIds[index]
+  return (
+    snapshot.providerIds.length === normalizedProviderIds.length &&
+    snapshot.providerIds.every(
+      (providerId, index) => providerId === normalizedProviderIds[index]
+    )
   );
 }
 

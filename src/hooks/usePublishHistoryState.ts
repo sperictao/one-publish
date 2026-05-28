@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { getExecutionHistory, addExecutionRecord, type ExecutionRecord } from "@/lib/store";
 import {
@@ -13,6 +13,10 @@ export function usePublishHistoryState(params: {
     () => loadRerunChecklistPreference().enabled
   );
   const [executionHistory, setExecutionHistory] = useState<ExecutionRecord[]>([]);
+  const visibleExecutionHistory = useMemo(
+    () => executionHistory.slice(0, params.executionHistoryLimit),
+    [executionHistory, params.executionHistoryLimit]
+  );
 
   const savePublishRecord = useCallback((record: ExecutionRecord) => {
     addExecutionRecord(record)
@@ -38,14 +42,10 @@ export function usePublishHistoryState(params: {
     saveRerunChecklistPreference({ enabled: isRerunChecklistEnabled });
   }, [isRerunChecklistEnabled]);
 
-  useEffect(() => {
-    setExecutionHistory((prev) => prev.slice(0, params.executionHistoryLimit));
-  }, [params.executionHistoryLimit]);
-
   return {
     isRerunChecklistEnabled,
     setIsRerunChecklistEnabled,
-    executionHistory,
+    executionHistory: visibleExecutionHistory,
     setExecutionHistory,
     savePublishRecord,
   };

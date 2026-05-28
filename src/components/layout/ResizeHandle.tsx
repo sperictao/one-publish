@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { cn } from "@/lib/utils";
 
 interface ResizeHandleProps {
@@ -21,13 +21,13 @@ export function ResizeHandle({
   showHeaderBorder = true,
 }: ResizeHandleProps) {
   const [isDragging, setIsDragging] = useState(false);
-  const [startPos, setStartPos] = useState(0);
+  const startPosRef = useRef(0);
 
   const handleMouseDown = useCallback(
     (e: React.MouseEvent) => {
       e.preventDefault();
       setIsDragging(true);
-      setStartPos(direction === "horizontal" ? e.clientX : e.clientY);
+      startPosRef.current = direction === "horizontal" ? e.clientX : e.clientY;
     },
     [direction]
   );
@@ -37,10 +37,10 @@ export function ResizeHandle({
 
     const handleMouseMove = (e: MouseEvent) => {
       const currentPos = direction === "horizontal" ? e.clientX : e.clientY;
-      const delta = currentPos - startPos;
+      const delta = currentPos - startPosRef.current;
       if (delta !== 0) {
         onResize(delta);
-        setStartPos(currentPos);
+        startPosRef.current = currentPos;
       }
     };
 
@@ -53,7 +53,8 @@ export function ResizeHandle({
     document.addEventListener("mouseup", handleMouseUp);
 
     // Change cursor globally while dragging
-    document.body.style.cursor = direction === "horizontal" ? "col-resize" : "row-resize";
+    document.body.style.cursor =
+      direction === "horizontal" ? "col-resize" : "row-resize";
     document.body.style.userSelect = "none";
 
     return () => {
@@ -62,12 +63,14 @@ export function ResizeHandle({
       document.body.style.cursor = "";
       document.body.style.userSelect = "";
     };
-  }, [isDragging, startPos, direction, onResize, onResizeEnd]);
+  }, [isDragging, direction, onResize, onResizeEnd]);
 
   return (
-    <div
+    <button
+      type="button"
+      aria-label={direction === "horizontal" ? "调整面板宽度" : "调整面板高度"}
       className={cn(
-        "group relative flex-shrink-0 glass-transition flex flex-col",
+        "group relative flex flex-col flex-shrink-0 appearance-none border-0 bg-transparent p-0 glass-transition",
         direction === "horizontal"
           ? "w-1 cursor-col-resize hover:bg-[var(--glass-bg-hover)]"
           : "h-1 cursor-row-resize hover:bg-[var(--glass-bg-hover)]",
@@ -78,7 +81,14 @@ export function ResizeHandle({
     >
       {/* Header spacer to align with adjacent panel headers */}
       {direction === "horizontal" && headerHeight && (
-        <div data-tauri-drag-region className={cn(headerHeight, "flex-shrink-0", showHeaderBorder && "border-b border-[var(--glass-divider)]")} />
+        <div
+          data-tauri-drag-region
+          className={cn(
+            headerHeight,
+            "flex-shrink-0",
+            showHeaderBorder && "border-b border-[var(--glass-divider)]"
+          )}
+        />
       )}
       {/* Remaining space */}
       <div className="flex-1" />
@@ -92,6 +102,6 @@ export function ResizeHandle({
           isDragging && "opacity-100"
         )}
       />
-    </div>
+    </button>
   );
 }

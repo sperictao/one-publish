@@ -32,19 +32,19 @@ export function RepositoryRowActionsMenu({
         {
           key: "open-directory",
           label: repoT.openRepositoryDirectory || "打开目录",
-          icon: <FolderOpen className="h-3.5 w-3.5 text-muted-foreground/70" />,
+          icon: <FolderOpen className="size-3.5 text-muted-foreground/70" />,
           onSelect: () => onOpenDirectory(repo),
         },
         {
           key: "edit",
           label: repoT.editRepositoryAction || "编辑仓库",
-          icon: <Pencil className="h-3.5 w-3.5 text-muted-foreground/70" />,
+          icon: <Pencil className="size-3.5 text-muted-foreground/70" />,
           onSelect: () => onEdit(repo),
         },
         {
           key: "remove",
           label: repoT.removeRepositoryAction || "移除仓库",
-          icon: <Trash2 className="h-3.5 w-3.5" />,
+          icon: <Trash2 className="size-3.5" />,
           onSelect: () => onRemove(repo),
           destructive: true,
           separatorBefore: true,

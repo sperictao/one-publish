@@ -52,11 +52,10 @@ function hasSameStringOrder(
   left: readonly string[],
   right: readonly string[]
 ): boolean {
-  if (left.length !== right.length) {
-    return false;
-  }
-
-  return left.every((value, index) => value === right[index]);
+  return (
+    left.length === right.length &&
+    left.every((value, index) => value === right[index])
+  );
 }
 
 function CollapseIcon(): JSX.Element {
@@ -199,7 +198,7 @@ export const RepositoryList = memo(function RepositoryList({
   const { translations } = useI18n();
   const repoT = translations.repositoryList || {};
   const listActionButtonClass =
-    "glass-surface flex h-7 w-7 items-center justify-center rounded-full transition-all duration-300 hover:bg-[var(--glass-bg-hover)]";
+    "glass-surface flex size-7 items-center justify-center rounded-full transition-all duration-300 hover:bg-[var(--glass-bg-hover)]";
   const reorderControlsLabel = showReorderControls
     ? repoT.hideReorderControls || "关闭排序"
     : repoT.showReorderControls || "开启排序";
@@ -440,8 +439,8 @@ export const RepositoryList = memo(function RepositoryList({
 
           {previewRepos.length === 0 ? (
             <div className="flex h-full flex-col items-center justify-center gap-3 px-4 py-8">
-              <div className="glass-surface flex h-16 w-16 items-center justify-center rounded-2xl">
-                <FolderGit2 className="h-7 w-7 text-muted-foreground/30" />
+              <div className="glass-surface flex size-16 items-center justify-center rounded-2xl">
+                <FolderGit2 className="size-7 text-muted-foreground/30" />
               </div>
               <div className="text-center">
                 <p className="text-sm font-medium text-foreground/60">
@@ -529,7 +528,7 @@ export const RepositoryList = memo(function RepositoryList({
         className="flex h-10 items-center justify-between pl-[100px] pr-2"
       >
         <div className="flex items-center gap-1.5" data-tauri-no-drag>
-          <div className="flex h-5 w-5 items-center justify-center">
+          <div className="flex size-5 items-center justify-center">
             <AppBrandIcon />
           </div>
           <span className="text-[10px] font-semibold uppercase tracking-[0.15em] text-muted-foreground/70">
@@ -567,7 +566,7 @@ export const RepositoryList = memo(function RepositoryList({
           </span>
           <ChevronDown
             className={cn(
-              "h-3 w-3 text-muted-foreground/60 transition-transform duration-300",
+              "size-3 text-muted-foreground/60 transition-transform duration-300",
               filterExpanded ? "" : "-rotate-90"
             )}
           />
@@ -583,7 +582,7 @@ export const RepositoryList = memo(function RepositoryList({
             title={repoT.addRepository || "添加仓库"}
             data-tauri-no-drag
           >
-            <Plus className="h-3.5 w-3.5 text-muted-foreground transition-transform duration-300 hover:rotate-90" />
+            <Plus className="size-3.5 text-muted-foreground transition-transform duration-300 hover:rotate-90" />
           </button>
           <button
             type="button"
@@ -603,7 +602,7 @@ export const RepositoryList = memo(function RepositoryList({
           >
             <ArrowUpDown
               className={cn(
-                "h-3.5 w-3.5 transition-[transform,color] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]",
+                "size-3.5 transition-[transform,color] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]",
                 showReorderControls
                   ? "rotate-180 text-primary"
                   : "rotate-0 text-muted-foreground"
@@ -615,7 +614,7 @@ export const RepositoryList = memo(function RepositoryList({
 
       <div className="px-3 py-1.5">
         <div className="group/search glass-input relative rounded-xl">
-          <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground/50 transition-colors duration-300 group-focus-within/search:text-primary" />
+          <Search className="absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground/50 transition-colors duration-300 group-focus-within/search:text-primary" />
           <Input
             data-testid="repo-search-input"
             placeholder={repoT.searchRepository || "搜索仓库"}
@@ -666,10 +665,10 @@ export const RepositoryList = memo(function RepositoryList({
         <div className="pointer-events-none absolute -top-6 left-0 right-0 h-6 bg-gradient-to-t from-[var(--glass-panel-bg)] to-transparent" />
         <button
           type="button"
-          className="flex h-7 w-7 items-center justify-center rounded-xl text-muted-foreground/50 transition-all duration-300 hover:bg-[var(--glass-bg)] hover:text-foreground/70"
+          className="flex size-7 items-center justify-center rounded-xl text-muted-foreground/50 transition-all duration-300 hover:bg-[var(--glass-bg)] hover:text-foreground/70"
           onClick={onSettings}
         >
-          <Settings className="h-3.5 w-3.5 transition-transform duration-500 hover:rotate-90" />
+          <Settings className="size-3.5 transition-transform duration-500 hover:rotate-90" />
         </button>
       </div>
     </div>
