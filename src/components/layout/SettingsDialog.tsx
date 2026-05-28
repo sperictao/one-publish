@@ -248,7 +248,7 @@ export const GeneralSettingsSection = memo(function GeneralSettingsSection({
             <Input
               id="settings-execution-history"
               type="number"
-              className="h-9 text-right rounded-lg border-[var(--settings-hairline)] bg-transparent focus-visible:border-[var(--settings-accent)] focus-visible:shadow-[0_0_0_3px_rgba(0,122,255,0.25)] focus-visible:ring-0 transition-all duration-200"
+              className="h-9 text-right rounded-lg border-[var(--settings-hairline)] bg-transparent focus-visible:border-[var(--settings-accent)] focus-visible:ring-2 focus-visible:ring-[var(--settings-accent)]/25 focus-visible:ring-offset-0 focus-visible:outline-none transition-all duration-200"
               min={5}
               max={200}
               value={executionHistoryLimit}
@@ -288,7 +288,7 @@ export const GeneralSettingsSection = memo(function GeneralSettingsSection({
               placeholder={
                 translations.outputDir?.placeholder || "留空使用项目默认目录"
               }
-              className="h-10 rounded-lg border-[var(--settings-hairline)] bg-transparent focus-visible:border-[var(--settings-accent)] focus-visible:shadow-[0_0_0_3px_rgba(0,122,255,0.25)] focus-visible:ring-0 transition-all duration-200"
+              className="h-10 rounded-lg border-[var(--settings-hairline)] bg-transparent focus-visible:border-[var(--settings-accent)] focus-visible:ring-2 focus-visible:ring-[var(--settings-accent)]/25 focus-visible:ring-offset-0 focus-visible:outline-none transition-all duration-200"
             />
             <Button
               variant="outline"
@@ -393,7 +393,7 @@ export const AppearanceSettingsSection = memo(function AppearanceSettingsSection
           <button
             type="button"
             className={cn(
-              "group relative flex flex-col items-center gap-2.5 rounded-xl border p-2.5 text-center transition-all duration-300 active:scale-[0.97] glass-press",
+              "group relative flex flex-col items-center gap-2.5 rounded-xl border p-2.5 text-center transition-all duration-300 active:scale-[0.97] glass-interactive",
               theme === "auto"
                 ? "border-[var(--settings-card-selected-border)] bg-[var(--settings-card-selected-bg)] shadow-[0_4px_20px_rgba(0,102,204,0.06),0_1px_3px_rgba(0,102,204,0.04)]"
                 : "border-[var(--settings-hairline)] bg-transparent hover:bg-black/[0.015] dark:hover:bg-white/[0.015] hover:border-black/20 dark:hover:border-white/20"
@@ -467,7 +467,7 @@ export const AppearanceSettingsSection = memo(function AppearanceSettingsSection
           <button
             type="button"
             className={cn(
-              "group relative flex flex-col items-center gap-2.5 rounded-xl border p-2.5 text-center transition-all duration-300 active:scale-[0.97] glass-press",
+              "group relative flex flex-col items-center gap-2.5 rounded-xl border p-2.5 text-center transition-all duration-300 active:scale-[0.97] glass-interactive",
               theme === "light"
                 ? "border-[var(--settings-card-selected-border)] bg-[var(--settings-card-selected-bg)] shadow-[0_4px_20px_rgba(0,102,204,0.06),0_1px_3px_rgba(0,102,204,0.04)]"
                 : "border-[var(--settings-hairline)] bg-transparent hover:bg-black/[0.015] dark:hover:bg-white/[0.015] hover:border-black/20 dark:hover:border-white/20"
@@ -517,7 +517,7 @@ export const AppearanceSettingsSection = memo(function AppearanceSettingsSection
           <button
             type="button"
             className={cn(
-              "group relative flex flex-col items-center gap-2.5 rounded-xl border p-2.5 text-center transition-all duration-300 active:scale-[0.97] glass-press",
+              "group relative flex flex-col items-center gap-2.5 rounded-xl border p-2.5 text-center transition-all duration-300 active:scale-[0.97] glass-interactive",
               theme === "dark"
                 ? "border-[var(--settings-card-selected-border)] bg-[var(--settings-card-selected-bg)] shadow-[0_4px_20px_rgba(0,102,204,0.06),0_1px_3px_rgba(0,102,204,0.04)]"
                 : "border-[var(--settings-hairline)] bg-transparent hover:bg-black/[0.015] dark:hover:bg-white/[0.015] hover:border-black/20 dark:hover:border-white/20"
@@ -1002,7 +1002,7 @@ export function SettingsDialog({
     return (
       <div className="space-y-6">
         {/* Product Info & Update Status Group */}
-        <div className="rounded-xl border border-[var(--settings-hairline)] bg-[var(--settings-section-bg)] overflow-hidden">
+        <div className="rounded-xl border border-[var(--settings-hairline)] bg-[var(--settings-section-bg)] overflow-hidden glass-hover-lift">
           {/* Brand Row */}
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 hover:bg-black/[0.005] dark:hover:bg-white/[0.005] transition-colors duration-150">
             <div className="space-y-0.5 min-w-0">
@@ -1106,7 +1106,7 @@ export function SettingsDialog({
                     <Button
                       variant="default"
                       size="sm"
-                      className="h-8 px-3 rounded-lg bg-gradient-to-b from-[#007aff] to-[#0066cc] border border-[#0055b3] text-white shadow-[0_1px_2px_rgba(0,102,204,0.35),inset_0_1px_0_rgba(255,255,255,0.15)] hover:from-[#0088ff] hover:to-[#007aff] dark:from-[#0066cc] dark:to-[#0055b3] dark:border-[#004499] active:scale-[0.97] transition-all font-bold text-[12px] shrink-0 flex items-center gap-1.5"
+                      className="h-8 px-3 rounded-lg bg-gradient-to-b from-[var(--settings-accent)] to-[var(--settings-accent)]/90 border-[var(--settings-accent)]/80 text-white shadow-[0_1px_2px_rgba(0,0,0,0.08),inset_0_1px_0_rgba(255,255,255,0.15)] hover:opacity-90 active:scale-[0.97] transition-all font-bold text-[12px] shrink-0 flex items-center gap-1.5"
                       onClick={handleRestartApp}
                       disabled={isRestarting || isCheckingUpdate || isInstallingUpdate}
                     >
@@ -1134,7 +1134,7 @@ export function SettingsDialog({
                     <Button
                       variant="default"
                       size="sm"
-                      className="h-8 px-3 rounded-lg bg-gradient-to-b from-[#007aff] to-[#0066cc] border border-[#0055b3] text-white shadow-[0_1px_2px_rgba(0,102,204,0.35),inset_0_1px_0_rgba(255,255,255,0.15)] hover:from-[#0088ff] hover:to-[#007aff] dark:from-[#0066cc] dark:to-[#0055b3] dark:border-[#004499] active:scale-[0.97] transition-all font-bold text-[12px] shrink-0 flex items-center gap-1.5"
+                      className="h-8 px-3 rounded-lg bg-gradient-to-b from-[var(--settings-accent)] to-[var(--settings-accent)]/90 border-[var(--settings-accent)]/80 text-white shadow-[0_1px_2px_rgba(0,0,0,0.08),inset_0_1px_0_rgba(255,255,255,0.15)] hover:opacity-90 active:scale-[0.97] transition-all font-bold text-[12px] shrink-0 flex items-center gap-1.5"
                       onClick={handleInstallUpdate}
                       disabled={isInstallingUpdate}
                     >
@@ -1167,7 +1167,7 @@ export function SettingsDialog({
 
         {/* Release Notes */}
         {updateInfo?.releaseNotes && (
-          <div className="rounded-xl border border-[var(--settings-hairline)] bg-[var(--settings-section-bg)] overflow-hidden">
+          <div className="rounded-xl border border-[var(--settings-hairline)] bg-[var(--settings-section-bg)] overflow-hidden glass-hover-lift">
             <div className="flex items-center gap-3 p-4 border-b border-[var(--settings-hairline)] bg-black/[0.005] dark:bg-white/[0.005]">
               <Terminal className="size-[18px] text-[var(--settings-ink-muted)]" />
               <span className="text-[14px] font-semibold tracking-[-0.224px] text-[var(--settings-ink)]">
