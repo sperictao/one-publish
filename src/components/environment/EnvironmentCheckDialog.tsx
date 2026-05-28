@@ -290,7 +290,7 @@ export function EnvironmentCheckContent({
                 : grouped.warning.length > 0
                   ? "bg-amber-500/[0.04] border-amber-500/20 dark:bg-amber-500/[0.06]"
                   : "bg-emerald-500/[0.04] border-emerald-500/20 dark:bg-emerald-500/[0.06]"
-              : "glass-card bg-white/25 dark:bg-black/15 border-white/10 dark:border-white/5"
+              : "border-[var(--settings-hairline)] bg-[var(--settings-section-bg)]"
           )}
         >
           <div className="space-y-1 flex-1 min-w-0">
@@ -342,7 +342,7 @@ export function EnvironmentCheckContent({
         </div>
 
         {/* 2. 检查范围 */}
-        <div className="glass-card bg-white/25 dark:bg-black/15 border border-white/10 dark:border-white/5 rounded-xl p-5 space-y-3 shadow-none">
+        <div className="rounded-xl border border-[var(--settings-hairline)] bg-[var(--settings-section-bg)] p-5 space-y-3 shadow-[0_1px_3px_rgba(0,0,0,0.01)]">
           <Label className="text-xs font-semibold text-[var(--settings-ink-muted)] uppercase tracking-wider block mb-1">
             {translations.environment?.scope || "检查范围"}
           </Label>
@@ -355,7 +355,12 @@ export function EnvironmentCheckContent({
                   key={p.id}
                   aria-pressed={checked}
                   onClick={() => toggleProvider(p.id, !checked)}
-                  className="glass-interactive flex items-center justify-between rounded-xl border border-white/15 dark:border-white/5 bg-white/30 dark:bg-black/10 p-3 text-left transition-all duration-200 cursor-pointer select-none active:scale-[0.99] shadow-none"
+                  className={cn(
+                    "flex items-center justify-between rounded-xl border p-3.5 text-left transition-all duration-300 cursor-pointer select-none active:scale-[0.98] glass-interactive shadow-none",
+                    checked
+                      ? "border-[var(--settings-card-selected-border)] bg-[var(--settings-card-selected-bg)]"
+                      : "border-[var(--settings-hairline)] bg-transparent hover:bg-black/[0.015] dark:hover:bg-white/[0.015] hover:border-black/20 dark:hover:border-white/20"
+                  )}
                 >
                   <div className="space-y-0.5 pr-2">
                     <div className="text-sm font-semibold tracking-[-0.224px] text-[var(--settings-ink)]">{p.label}</div>
@@ -384,15 +389,17 @@ export function EnvironmentCheckContent({
         {result && (
           <div className="space-y-4">
             {/* 工具状态 */}
-            <div className="glass-card bg-white/25 dark:bg-black/15 border border-white/10 dark:border-white/5 rounded-xl p-5 space-y-3 shadow-none">
-              <Label className="text-xs font-semibold text-[var(--settings-ink-muted)] uppercase tracking-wider block mb-1">
-                {translations.environment?.providers || "工具状态"}
-              </Label>
-              <div className="grid grid-cols-1 gap-2">
+            <div className="rounded-xl border border-[var(--settings-hairline)] bg-[var(--settings-section-bg)] overflow-hidden shadow-[0_1px_3px_rgba(0,0,0,0.01)]">
+              <div className="px-5 py-4 border-b border-[var(--settings-hairline)]">
+                <Label className="text-xs font-semibold text-[var(--settings-ink-muted)] uppercase tracking-wider block">
+                  {translations.environment?.providers || "工具状态"}
+                </Label>
+              </div>
+              <div className="divide-y divide-[var(--settings-hairline)]">
                 {result.providers.map((provider) => (
                   <div
                     key={provider.provider_id}
-                    className="border border-white/15 dark:border-white/5 bg-white/30 dark:bg-black/10 p-3 text-sm shadow-none rounded-xl flex items-center justify-between"
+                    className="flex items-center justify-between gap-4 p-4 hover:bg-black/[0.005] dark:hover:bg-white/[0.005] transition-colors duration-150 text-sm"
                   >
                     <div className="flex min-w-0 items-center gap-2.5">
                       <span
@@ -404,11 +411,11 @@ export function EnvironmentCheckContent({
                         )}
                       />
                       <span className="font-semibold text-[13.5px] text-[var(--settings-ink)]">{provider.provider_id}</span>
-                      <span className="text-[10px] text-[var(--settings-ink-muted)] px-1.5 py-0.5 rounded bg-black/5 dark:bg-white/10 font-mono font-medium border border-black/10 dark:border-white/10">
+                      <span className="text-[10px] text-[var(--settings-ink-muted)] px-1.5 py-0.5 rounded bg-black/[0.03] dark:bg-white/[0.06] font-mono font-medium border border-[var(--settings-hairline)]">
                         {provider.version || "unknown"}
                       </span>
                     </div>
-                    <div className="text-[11px] text-[var(--settings-ink-muted)] font-mono truncate max-w-[280px] sm:max-w-[360px] bg-black/10 dark:bg-black/40 px-2 py-0.5 rounded border border-black/10 dark:border-white/5 font-medium">
+                    <div className="text-[11px] text-[var(--settings-ink-muted)] font-mono truncate max-w-[280px] sm:max-w-[360px] bg-black/[0.02] dark:bg-white/[0.03] px-2 py-0.5 rounded border border-[var(--settings-hairline)] font-medium">
                       {provider.path || ""}
                     </div>
                   </div>
@@ -417,128 +424,132 @@ export function EnvironmentCheckContent({
             </div>
 
             {/* 发现的问题 */}
-            <div className="glass-card bg-white/25 dark:bg-black/15 border border-white/10 dark:border-white/5 rounded-xl p-5 space-y-3 shadow-none">
-              <Label className="text-xs font-semibold text-[var(--settings-ink-muted)] uppercase tracking-wider block mb-1">
-                {translations.environment?.issues || "发现的问题"}
-              </Label>
-              {issues.length === 0 ? (
-                <div className="border border-white/15 dark:border-white/5 bg-white/30 dark:bg-black/10 p-3.5 text-sm text-zinc-500 shadow-none rounded-xl">
-                  {translations.environment?.noIssues || "未发现问题"}
-                </div>
-              ) : (
-                <div className="space-y-2">
-                  {issues.map((issue, idx) => {
-                    const isCritical = issue.severity === "critical";
-                    const isWarning = issue.severity === "warning";
-                    return (
-                      <div
-                        key={`${issue.provider_id}-${issue.issue_type}-${idx}`}
-                        className={cn(
-                          "rounded-xl border p-4 transition-all duration-200",
-                          isCritical
-                            ? "border-red-500/20 bg-red-500/[0.03] shadow-none text-red-600 dark:text-red-400"
-                            : isWarning
-                              ? "border-amber-500/20 bg-amber-500/[0.03] shadow-none text-amber-600 dark:text-amber-400"
-                              : "border-white/15 dark:border-white/5 bg-white/30 dark:bg-black/10 shadow-none"
-                        )}
-                      >
-                        <div className="flex items-start gap-3">
-                          <div className="mt-0.5 shrink-0">
-                            {isCritical ? (
-                              <XCircle className="size-4.5 text-red-500" />
-                            ) : isWarning ? (
-                              <AlertTriangle className="size-4.5 text-amber-500" />
-                            ) : (
-                              <CheckCircle2 className="size-4.5 text-[var(--settings-accent)]" />
-                            )}
-                          </div>
-
-                          <div className="space-y-1.5 flex-1 min-w-0">
-                            <div className="flex flex-wrap items-center gap-2">
-                              <span className="text-sm font-semibold tracking-tight text-[var(--settings-ink)]">
-                                {issue.description}
-                              </span>
-                              <span
-                                className={cn(
-                                  "text-[9px] font-bold px-1.5 py-0.5 rounded-full uppercase tracking-wider shrink-0",
-                                  isCritical
-                                    ? "bg-red-100 text-red-700 dark:bg-red-950/50 dark:text-red-400"
-                                    : isWarning
-                                      ? "bg-amber-100 text-amber-700 dark:bg-amber-950/50 dark:text-amber-400"
-                                      : "bg-blue-100 text-blue-700 dark:bg-blue-950/50 dark:text-blue-400"
-                                )}
-                              >
-                                {issue.severity}
-                              </span>
+            <div className="rounded-xl border border-[var(--settings-hairline)] bg-[var(--settings-section-bg)] overflow-hidden shadow-[0_1px_3px_rgba(0,0,0,0.01)]">
+              <div className="px-5 py-4 border-b border-[var(--settings-hairline)]">
+                <Label className="text-xs font-semibold text-[var(--settings-ink-muted)] uppercase tracking-wider block">
+                  {translations.environment?.issues || "发现的问题"}
+                </Label>
+              </div>
+              <div className="p-5">
+                {issues.length === 0 ? (
+                  <div className="border border-[var(--settings-hairline)] bg-black/[0.01] dark:bg-white/[0.01] p-4 text-sm text-[var(--settings-ink-muted)] text-center rounded-xl">
+                    {translations.environment?.noIssues || "未发现问题"}
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    {issues.map((issue, idx) => {
+                      const isCritical = issue.severity === "critical";
+                      const isWarning = issue.severity === "warning";
+                      return (
+                        <div
+                          key={`${issue.provider_id}-${issue.issue_type}-${idx}`}
+                          className={cn(
+                            "rounded-xl border p-4 transition-all duration-200 glass-hover-lift",
+                            isCritical
+                              ? "border-red-500/15 bg-red-500/[0.01] dark:bg-red-500/[0.03] text-red-600 dark:text-red-400"
+                              : isWarning
+                                ? "border-amber-500/15 bg-amber-500/[0.01] dark:bg-amber-500/[0.03] text-amber-600 dark:text-amber-400"
+                                : "border-[var(--settings-hairline)] bg-black/[0.01] dark:bg-white/[0.01] text-[var(--settings-ink)]"
+                          )}
+                        >
+                          <div className="flex items-start gap-3">
+                            <div className="mt-0.5 shrink-0">
+                              {isCritical ? (
+                                <XCircle className="size-4.5 text-red-500" />
+                              ) : isWarning ? (
+                                <AlertTriangle className="size-4.5 text-amber-500" />
+                              ) : (
+                                <CheckCircle2 className="size-4.5 text-[var(--settings-accent)]" />
+                              )}
                             </div>
 
-                            <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-[var(--settings-ink-muted)]/80 font-mono">
-                              <div>
-                                <span className="opacity-60">provider:</span>{" "}
-                                <span className="text-[var(--settings-ink)] opacity-90 font-medium">
-                                  {issue.provider_id}
+                            <div className="space-y-1.5 flex-1 min-w-0">
+                              <div className="flex flex-wrap items-center gap-2">
+                                <span className="text-sm font-semibold tracking-tight text-[var(--settings-ink)]">
+                                  {issue.description}
+                                </span>
+                                <span
+                                  className={cn(
+                                    "text-[9px] font-bold px-1.5 py-0.5 rounded-full uppercase tracking-wider shrink-0",
+                                    isCritical
+                                      ? "bg-red-100 text-red-700 dark:bg-red-950/50 dark:text-red-400"
+                                      : isWarning
+                                        ? "bg-amber-100 text-amber-700 dark:bg-amber-950/50 dark:text-amber-400"
+                                        : "bg-blue-100 text-blue-700 dark:bg-blue-950/50 dark:text-blue-400"
+                                  )}
+                                >
+                                  {issue.severity}
                                 </span>
                               </div>
-                              {issue.current_value && (
+
+                              <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-[var(--settings-ink-muted)]/80 font-mono">
                                 <div>
-                                  <span className="opacity-60">current:</span>{" "}
+                                  <span className="opacity-60">provider:</span>{" "}
                                   <span className="text-[var(--settings-ink)] opacity-90 font-medium">
-                                    {issue.current_value}
+                                    {issue.provider_id}
                                   </span>
                                 </div>
-                              )}
-                              {issue.expected_value && (
-                                <div>
-                                  <span className="opacity-60">expected:</span>{" "}
-                                  <span className="text-[var(--settings-ink)] opacity-90 font-medium">
-                                    {issue.expected_value}
-                                  </span>
-                                </div>
-                              )}
+                                {issue.current_value && (
+                                  <div>
+                                    <span className="opacity-60">current:</span>{" "}
+                                    <span className="text-[var(--settings-ink)] opacity-90 font-medium">
+                                      {issue.current_value}
+                                    </span>
+                                  </div>
+                                )}
+                                {issue.expected_value && (
+                                  <div>
+                                    <span className="opacity-60">expected:</span>{" "}
+                                    <span className="text-[var(--settings-ink)] opacity-90 font-medium">
+                                      {issue.expected_value}
+                                    </span>
+                                  </div>
+                                )}
+                              </div>
                             </div>
                           </div>
-                        </div>
 
-                        {issue.fixes.length > 0 && (
-                          <div className="mt-3.5 flex flex-wrap gap-2 pt-2 border-t border-dashed border-[var(--settings-hairline)]">
-                            {issue.fixes.map((fix, fixIdx) => (
-                              <Button
-                                key={`${fix.label}-${fixIdx}`}
-                                size="sm"
-                                variant={
-                                  fix.action_type === "run_command" ? "default" : "outline"
-                                }
-                                onClick={() => handleApplyFix(fix)}
-                                disabled={checking || runningFix}
-                                className={cn(
-                                  "transition-all duration-200 active:scale-95 text-xs h-7.5 px-3.5 font-bold rounded-full flex items-center gap-1.5 shrink-0 border",
-                                  fix.action_type === "run_command"
-                                    ? "bg-gradient-to-b from-[var(--settings-accent)] to-[var(--settings-accent)]/90 border-[var(--settings-accent)]/80 text-white shadow-[0_1px_2px_rgba(0,102,204,0.15)] hover:opacity-90"
-                                    : "border-[#d1d1d6] border-b-[#b5b5ba] bg-gradient-to-b from-white to-[#f5f5f7] text-black/80 shadow-[0_1px_1px_rgba(0,0,0,0.05)] hover:from-[#f5f5f7] hover:to-[#e9e9eb] dark:from-[#3a3a3c] dark:to-[#2c2c2e] dark:border-[#48484a] dark:border-b-[#1c1c1e] dark:hover:from-[#48484a] dark:hover:to-[#3a3a3c] dark:text-white/90"
-                                )}
-                              >
-                                {fix.action_type === "open_url" ? (
-                                  <ExternalLink className="size-3" />
-                                ) : fix.action_type === "copy_command" ? (
-                                  <Copy className="size-3" />
-                                ) : (
-                                  <Terminal className="size-3" />
-                                )}
-                                <span>{fix.label}</span>
-                              </Button>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
+                          {issue.fixes.length > 0 && (
+                            <div className="mt-3.5 flex flex-wrap gap-2 pt-2 border-t border-dashed border-[var(--settings-hairline)]">
+                              {issue.fixes.map((fix, fixIdx) => (
+                                <Button
+                                  key={`${fix.label}-${fixIdx}`}
+                                  size="sm"
+                                  variant={
+                                    fix.action_type === "run_command" ? "default" : "outline"
+                                  }
+                                  onClick={() => handleApplyFix(fix)}
+                                  disabled={checking || runningFix}
+                                  className={cn(
+                                    "transition-all duration-200 active:scale-95 text-xs h-7.5 px-3.5 font-bold rounded-lg flex items-center gap-1.5 shrink-0 border",
+                                    fix.action_type === "run_command"
+                                      ? "bg-gradient-to-b from-[var(--settings-accent)] to-[var(--settings-accent)]/90 border-[var(--settings-accent)]/80 text-white shadow-[0_1px_2px_rgba(0,102,204,0.15)] hover:opacity-90"
+                                      : "border-[#d1d1d6] border-b-[#b5b5ba] bg-gradient-to-b from-white to-[#f5f5f7] text-black/80 shadow-[0_1px_1px_rgba(0,0,0,0.05)] hover:from-[#f5f5f7] hover:to-[#e9e9eb] dark:from-[#3a3a3c] dark:to-[#2c2c2e] dark:border-[#48484a] dark:border-b-[#1c1c1e] dark:hover:from-[#48484a] dark:hover:to-[#3a3a3c] dark:text-white/90"
+                                  )}
+                                >
+                                  {fix.action_type === "open_url" ? (
+                                    <ExternalLink className="size-3" />
+                                  ) : fix.action_type === "copy_command" ? (
+                                    <Copy className="size-3" />
+                                  ) : (
+                                    <Terminal className="size-3" />
+                                  )}
+                                  <span>{fix.label}</span>
+                                </Button>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
             </div>
 
             {/* 执行结果 */}
             {fixResultText && (
-              <div className="glass-card bg-white/25 dark:bg-black/15 border border-white/10 dark:border-white/5 rounded-xl p-5 space-y-3 shadow-none">
+              <div className="rounded-xl border border-[var(--settings-hairline)] bg-[var(--settings-section-bg)] p-5 space-y-3 shadow-[0_1px_3px_rgba(0,0,0,0.01)]">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     <div className="flex gap-1 shrink-0">
@@ -554,13 +565,13 @@ export function EnvironmentCheckContent({
                     size="sm"
                     variant="outline"
                     onClick={() => handleCopy(fixResultText)}
-                    className="rounded-full border border-[#d1d1d6] border-b-[#b5b5ba] bg-gradient-to-b from-white to-[#f5f5f7] text-[11px] font-bold text-black/80 shadow-[0_1px_1px_rgba(0,0,0,0.05)] hover:from-[#f5f5f7] hover:to-[#e9e9eb] dark:from-[#3a3a3c] dark:to-[#2c2c2e] dark:border-[#48484a] dark:border-b-[#1c1c1e] dark:hover:from-[#48484a] dark:hover:to-[#3a3a3c] dark:text-white/90 active:scale-[0.97] transition-all h-7 px-3.5 flex items-center gap-1 shrink-0"
+                    className="rounded-lg border border-[#d1d1d6] border-b-[#b5b5ba] bg-gradient-to-b from-white to-[#f5f5f7] text-[11px] font-bold text-black/80 shadow-[0_1px_1px_rgba(0,0,0,0.05)] hover:from-[#f5f5f7] hover:to-[#e9e9eb] dark:from-[#3a3a3c] dark:to-[#2c2c2e] dark:border-[#48484a] dark:border-b-[#1c1c1e] dark:hover:from-[#48484a] dark:hover:to-[#3a3a3c] dark:text-white/90 active:scale-[0.97] transition-all h-7 px-3.5 flex items-center gap-1 shrink-0"
                   >
                     <Copy className="size-3 text-[var(--settings-ink-muted)]" />
                     <span>{translations.environment?.copied ? "复制" : "复制"}</span>
                   </Button>
                 </div>
-                <pre className="rounded-xl border border-white/10 dark:border-white/5 bg-black/15 dark:bg-black/35 p-3 text-xs font-mono text-[var(--settings-ink)]/90 whitespace-pre-wrap max-h-56 overflow-auto glass-scrollbar shadow-none">
+                <pre className="rounded-lg border border-[var(--settings-hairline)] bg-black/[0.03] dark:bg-white/[0.03] p-3 text-xs font-mono text-[var(--settings-ink)]/90 whitespace-pre-wrap max-h-56 overflow-auto glass-scrollbar shadow-none">
                   {fixResultText}
                 </pre>
               </div>
@@ -589,14 +600,14 @@ export function EnvironmentCheckContent({
                 variant="outline"
                 onClick={() => setPendingRun(null)}
                 disabled={runningFix}
-                className="rounded-full border border-[#d1d1d6] border-b-[#b5b5ba] bg-gradient-to-b from-white to-[#f5f5f7] text-[12px] font-bold text-black/80 shadow-[0_1px_1px_rgba(0,0,0,0.05)] hover:from-[#f5f5f7] hover:to-[#e9e9eb] dark:from-[#3a3a3c] dark:to-[#2c2c2e] dark:border-[#48484a] dark:border-b-[#1c1c1e] dark:hover:from-[#48484a] dark:hover:to-[#3a3a3c] dark:text-white/90 active:scale-[0.97] transition-all h-9 px-4 shrink-0 flex items-center justify-center"
+                className="rounded-lg border border-[#d1d1d6] border-b-[#b5b5ba] bg-gradient-to-b from-white to-[#f5f5f7] text-[12px] font-bold text-black/80 shadow-[0_1px_1px_rgba(0,0,0,0.05)] hover:from-[#f5f5f7] hover:to-[#e9e9eb] dark:from-[#3a3a3c] dark:to-[#2c2c2e] dark:border-[#48484a] dark:border-b-[#1c1c1e] dark:hover:from-[#48484a] dark:hover:to-[#3a3a3c] dark:text-white/90 active:scale-[0.97] transition-all h-9 px-4 shrink-0"
               >
                 <span>{translations.environment?.cancel || "取消"}</span>
               </Button>
               <Button
                 onClick={confirmRun}
                 disabled={runningFix}
-                className="rounded-full bg-gradient-to-b from-[var(--settings-accent)] to-[var(--settings-accent)]/90 border-[var(--settings-accent)]/80 text-white shadow-[0_1px_2px_rgba(0,102,204,0.35),inset_0_1px_0_rgba(255,255,255,0.15)] hover:opacity-90 active:scale-[0.97] transition-all text-[12px] font-bold h-9 px-4.5 shrink-0 flex items-center justify-center"
+                className="rounded-lg bg-gradient-to-b from-[var(--settings-accent)] to-[var(--settings-accent)]/90 border-[var(--settings-accent)]/80 text-white shadow-[0_1px_2px_rgba(0,0,0,0.08),inset_0_1px_0_rgba(255,255,255,0.15)] hover:opacity-90 active:scale-[0.97] transition-all text-[12px] font-bold h-9 px-4.5 shrink-0 flex items-center justify-center"
               >
                 {runningFix ? (
                   <>
@@ -610,11 +621,11 @@ export function EnvironmentCheckContent({
             </div>
           }
         >
-          <div className="glass-card bg-white/25 dark:bg-black/15 border border-white/10 dark:border-white/5 rounded-xl p-4 space-y-3 shadow-none mt-2">
+          <div className="rounded-xl border border-[var(--settings-hairline)] bg-[var(--settings-section-bg)] p-4 space-y-3 shadow-[0_1px_3px_rgba(0,0,0,0.01)] mt-2">
             <Label className="text-xs font-semibold text-[var(--settings-ink-muted)] uppercase tracking-wider block mb-1">
               {translations.environment?.commandPreview || "命令预览"}
             </Label>
-            <pre className="rounded-xl border border-white/10 dark:border-white/5 bg-black/15 dark:bg-black/35 p-3 text-xs font-mono whitespace-pre-wrap max-h-40 overflow-auto text-[var(--settings-ink)]/90 shadow-none">
+            <pre className="rounded-lg border border-[var(--settings-hairline)] bg-black/[0.03] dark:bg-white/[0.03] p-3 text-xs font-mono whitespace-pre-wrap max-h-40 overflow-auto text-[var(--settings-ink)]/90 shadow-none">
               {pendingRun?.command || ""}
             </pre>
           </div>
