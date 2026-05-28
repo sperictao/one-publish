@@ -283,18 +283,18 @@ export function EnvironmentCheckContent({
         {/* 1. 环境健康状态 (Hero Section) */}
         <div
           className={cn(
-            "border rounded-2xl p-4 flex items-center justify-between gap-4 shadow-none transition-all duration-300",
+            "border rounded-xl p-4 flex items-center justify-between gap-4 shadow-[0_1px_3px_rgba(0,0,0,0.01)] transition-all duration-300",
             result
               ? grouped.critical.length > 0
-                ? "bg-red-500/[0.04] border-red-500/20 shadow-[0_4px_16px_rgba(239,68,68,0.06)]"
+                ? "bg-red-500/[0.04] border-red-500/20 dark:bg-red-500/[0.06]"
                 : grouped.warning.length > 0
-                  ? "bg-amber-500/[0.04] border-amber-500/20 shadow-[0_4px_16px_rgba(245,158,11,0.06)]"
-                  : "bg-emerald-500/[0.04] border-emerald-500/20 shadow-[0_4px_16px_rgba(16,185,129,0.06)]"
+                  ? "bg-amber-500/[0.04] border-amber-500/20 dark:bg-amber-500/[0.06]"
+                  : "bg-emerald-500/[0.04] border-emerald-500/20 dark:bg-emerald-500/[0.06]"
               : "glass-card bg-white/25 dark:bg-black/15 border-white/10 dark:border-white/5"
           )}
         >
-          <div className="space-y-1.5 flex-1 min-w-0">
-            <div className="text-xs font-semibold text-zinc-500/80 uppercase tracking-wider px-1">
+          <div className="space-y-1 flex-1 min-w-0">
+            <div className="text-xs font-semibold text-[var(--settings-ink-muted)] uppercase tracking-wider px-1">
               {translations.environment?.status || "环境状态"}
             </div>
             <div className="flex flex-wrap items-center gap-2">
@@ -313,12 +313,12 @@ export function EnvironmentCheckContent({
                     {statusBadge?.icon}
                     {statusBadge?.text}
                   </span>
-                  <span className="text-xs text-muted-foreground opacity-80 self-center">
+                  <span className="text-xs text-[var(--settings-ink-muted)] opacity-80 self-center">
                     {result.checked_at}
                   </span>
                 </>
               ) : (
-                <span className="text-xs text-muted-foreground">
+                <span className="text-xs text-[var(--settings-ink-muted)]">
                   {translations.environment?.unknown || "未检查"}
                 </span>
               )}
@@ -328,7 +328,7 @@ export function EnvironmentCheckContent({
             variant="outline"
             onClick={handleCheck}
             disabled={checking || runningFix}
-            className="rounded-full border border-[#d1d1d6] border-b-[#b5b5ba] bg-gradient-to-b from-white to-[#f5f5f7] text-[12px] font-bold text-black/80 shadow-[0_1px_1px_rgba(0,0,0,0.05)] hover:from-[#f5f5f7] hover:to-[#e9e9eb] dark:from-[#3a3a3c] dark:to-[#2c2c2e] dark:border-[#48484a] dark:border-b-[#1c1c1e] dark:hover:from-[#48484a] dark:hover:to-[#3a3a3c] dark:text-white/90 active:scale-[0.97] transition-all shrink-0 flex items-center gap-1.5 h-8 px-4"
+            className="rounded-lg border border-[#d1d1d6] border-b-[#b5b5ba] bg-gradient-to-b from-white to-[#f5f5f7] text-[12px] font-bold text-black/80 shadow-[0_1px_1px_rgba(0,0,0,0.05)] hover:from-[#f5f5f7] hover:to-[#e9e9eb] dark:from-[#3a3a3c] dark:to-[#2c2c2e] dark:border-[#48484a] dark:border-b-[#1c1c1e] dark:hover:from-[#48484a] dark:hover:to-[#3a3a3c] dark:text-white/90 active:scale-[0.97] transition-all shrink-0 flex items-center gap-1.5 h-8 px-4"
           >
             {checking ? (
               <>
@@ -342,8 +342,8 @@ export function EnvironmentCheckContent({
         </div>
 
         {/* 2. 检查范围 */}
-        <div className="glass-card bg-white/25 dark:bg-black/15 border border-white/10 dark:border-white/5 rounded-2xl p-5 space-y-3 shadow-none">
-          <Label className="text-xs font-semibold text-zinc-500/80 uppercase tracking-wider block mb-1">
+        <div className="glass-card bg-white/25 dark:bg-black/15 border border-white/10 dark:border-white/5 rounded-xl p-5 space-y-3 shadow-none">
+          <Label className="text-xs font-semibold text-[var(--settings-ink-muted)] uppercase tracking-wider block mb-1">
             {translations.environment?.scope || "检查范围"}
           </Label>
           <div className="grid grid-cols-2 gap-3">
@@ -358,14 +358,14 @@ export function EnvironmentCheckContent({
                   className="glass-interactive flex items-center justify-between rounded-xl border border-white/15 dark:border-white/5 bg-white/30 dark:bg-black/10 p-3 text-left transition-all duration-200 cursor-pointer select-none active:scale-[0.99] shadow-none"
                 >
                   <div className="space-y-0.5 pr-2">
-                    <div className="text-sm font-medium">{p.label}</div>
-                    <div className="text-xs text-muted-foreground line-clamp-1">
+                    <div className="text-sm font-semibold tracking-[-0.224px] text-[var(--settings-ink)]">{p.label}</div>
+                    <div className="text-xs text-[var(--settings-ink-muted)] line-clamp-1">
                       {p.description}
                     </div>
                   </div>
                   <SwitchIndicator
                     checked={checked}
-                    className="data-[state=checked]:bg-gradient-to-b data-[state=checked]:from-[#4cd964] data-[state=checked]:to-[#34c759] data-[state=checked]:shadow-[0_2px_8px_rgba(52,199,89,0.3)] data-[state=unchecked]:bg-black/10 dark:data-[state=unchecked]:bg-white/10 pointer-events-none border-none shadow-none"
+                    className="data-[state=checked]:bg-[var(--settings-accent)] data-[state=unchecked]:bg-black/10 dark:data-[state=unchecked]:bg-white/10 pointer-events-none border-none shadow-none"
                   />
                 </button>
               );
@@ -375,7 +375,7 @@ export function EnvironmentCheckContent({
 
         {/* 错误提示 */}
         {error && (
-          <div className="border border-red-500/20 bg-red-500/[0.04] text-sm text-red-950 dark:text-red-400 rounded-2xl p-4 shadow-[0_4px_16px_rgba(239,68,68,0.06)]">
+          <div className="border border-red-500/20 bg-red-500/[0.04] text-sm text-red-950 dark:text-red-400 rounded-xl p-4 shadow-[0_4px_16px_rgba(239,68,68,0.06)]">
             {error}
           </div>
         )}
@@ -384,8 +384,8 @@ export function EnvironmentCheckContent({
         {result && (
           <div className="space-y-4">
             {/* 工具状态 */}
-            <div className="glass-card bg-white/25 dark:bg-black/15 border border-white/10 dark:border-white/5 rounded-2xl p-5 space-y-3 shadow-none">
-              <Label className="text-xs font-semibold text-zinc-500/80 uppercase tracking-wider block mb-1">
+            <div className="glass-card bg-white/25 dark:bg-black/15 border border-white/10 dark:border-white/5 rounded-xl p-5 space-y-3 shadow-none">
+              <Label className="text-xs font-semibold text-[var(--settings-ink-muted)] uppercase tracking-wider block mb-1">
                 {translations.environment?.providers || "工具状态"}
               </Label>
               <div className="grid grid-cols-1 gap-2">
@@ -397,16 +397,18 @@ export function EnvironmentCheckContent({
                     <div className="flex min-w-0 items-center gap-2.5">
                       <span
                         className={cn(
-                          "size-2 rounded-full shrink-0",
-                          provider.installed ? "bg-emerald-500 animate-pulse" : "bg-red-500"
+                          "size-2 rounded-full shrink-0 transition-all duration-300",
+                          provider.installed
+                            ? "bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.6)] subtle-pulse"
+                            : "bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.6)]"
                         )}
                       />
-                      <span className="font-semibold text-sm">{provider.provider_id}</span>
-                      <span className="text-[11px] text-zinc-500 px-1.5 py-0.5 rounded bg-zinc-100 dark:bg-zinc-800 font-mono border-none font-medium">
+                      <span className="font-semibold text-[13.5px] text-[var(--settings-ink)]">{provider.provider_id}</span>
+                      <span className="text-[10px] text-[var(--settings-ink-muted)] px-1.5 py-0.5 rounded bg-black/5 dark:bg-white/10 font-mono font-medium border border-black/10 dark:border-white/10">
                         {provider.version || "unknown"}
                       </span>
                     </div>
-                    <div className="text-[11px] text-zinc-500 font-mono truncate max-w-[280px] sm:max-w-[360px] bg-zinc-50 dark:bg-zinc-900/60 px-2 py-0.5 rounded border border-[#e0e0e0] dark:border-zinc-800 font-medium">
+                    <div className="text-[11px] text-[var(--settings-ink-muted)] font-mono truncate max-w-[280px] sm:max-w-[360px] bg-black/10 dark:bg-black/40 px-2 py-0.5 rounded border border-black/10 dark:border-white/5 font-medium">
                       {provider.path || ""}
                     </div>
                   </div>
@@ -415,8 +417,8 @@ export function EnvironmentCheckContent({
             </div>
 
             {/* 发现的问题 */}
-            <div className="glass-card bg-white/25 dark:bg-black/15 border border-white/10 dark:border-white/5 rounded-2xl p-5 space-y-3 shadow-none">
-              <Label className="text-xs font-semibold text-zinc-500/80 uppercase tracking-wider block mb-1">
+            <div className="glass-card bg-white/25 dark:bg-black/15 border border-white/10 dark:border-white/5 rounded-xl p-5 space-y-3 shadow-none">
+              <Label className="text-xs font-semibold text-[var(--settings-ink-muted)] uppercase tracking-wider block mb-1">
                 {translations.environment?.issues || "发现的问题"}
               </Label>
               {issues.length === 0 ? (
@@ -434,9 +436,9 @@ export function EnvironmentCheckContent({
                         className={cn(
                           "rounded-xl border p-4 transition-all duration-200",
                           isCritical
-                            ? "border-red-500/20 bg-red-500/[0.03] shadow-[0_4px_12px_rgba(239,68,68,0.04)] text-red-950 dark:text-red-400"
+                            ? "border-red-500/20 bg-red-500/[0.03] shadow-none text-red-600 dark:text-red-400"
                             : isWarning
-                              ? "border-amber-500/20 bg-amber-500/[0.03] shadow-[0_4px_12px_rgba(245,158,11,0.04)] text-amber-950 dark:text-amber-400"
+                              ? "border-amber-500/20 bg-amber-500/[0.03] shadow-none text-amber-600 dark:text-amber-400"
                               : "border-white/15 dark:border-white/5 bg-white/30 dark:bg-black/10 shadow-none"
                         )}
                       >
@@ -447,18 +449,18 @@ export function EnvironmentCheckContent({
                             ) : isWarning ? (
                               <AlertTriangle className="size-4.5 text-amber-500" />
                             ) : (
-                              <CheckCircle2 className="size-4.5 text-[#0066cc]" />
+                              <CheckCircle2 className="size-4.5 text-[var(--settings-accent)]" />
                             )}
                           </div>
 
                           <div className="space-y-1.5 flex-1 min-w-0">
                             <div className="flex flex-wrap items-center gap-2">
-                              <span className="text-sm font-semibold tracking-tight">
+                              <span className="text-sm font-semibold tracking-tight text-[var(--settings-ink)]">
                                 {issue.description}
                               </span>
                               <span
                                 className={cn(
-                                  "text-[10px] font-bold px-1.5 py-0.5 rounded-full uppercase tracking-wider shrink-0",
+                                  "text-[9px] font-bold px-1.5 py-0.5 rounded-full uppercase tracking-wider shrink-0",
                                   isCritical
                                     ? "bg-red-100 text-red-700 dark:bg-red-950/50 dark:text-red-400"
                                     : isWarning
@@ -470,25 +472,25 @@ export function EnvironmentCheckContent({
                               </span>
                             </div>
 
-                            <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground/80 font-mono">
+                            <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-[var(--settings-ink-muted)]/80 font-mono">
                               <div>
-                                <span className="text-muted-foreground/50">provider:</span>{" "}
-                                <span className="text-foreground/75 font-medium">
+                                <span className="opacity-60">provider:</span>{" "}
+                                <span className="text-[var(--settings-ink)] opacity-90 font-medium">
                                   {issue.provider_id}
                                 </span>
                               </div>
                               {issue.current_value && (
                                 <div>
-                                  <span className="text-muted-foreground/50">current:</span>{" "}
-                                  <span className="text-foreground/75 font-medium">
+                                  <span className="opacity-60">current:</span>{" "}
+                                  <span className="text-[var(--settings-ink)] opacity-90 font-medium">
                                     {issue.current_value}
                                   </span>
                                 </div>
                               )}
                               {issue.expected_value && (
                                 <div>
-                                  <span className="text-muted-foreground/50">expected:</span>{" "}
-                                  <span className="text-foreground/75 font-medium">
+                                  <span className="opacity-60">expected:</span>{" "}
+                                  <span className="text-[var(--settings-ink)] opacity-90 font-medium">
                                     {issue.expected_value}
                                   </span>
                                 </div>
@@ -498,7 +500,7 @@ export function EnvironmentCheckContent({
                         </div>
 
                         {issue.fixes.length > 0 && (
-                          <div className="mt-3.5 flex flex-wrap gap-2 pt-2 border-t border-dashed border-black/5 dark:border-white/5">
+                          <div className="mt-3.5 flex flex-wrap gap-2 pt-2 border-t border-dashed border-[var(--settings-hairline)]">
                             {issue.fixes.map((fix, fixIdx) => (
                               <Button
                                 key={`${fix.label}-${fixIdx}`}
@@ -509,18 +511,18 @@ export function EnvironmentCheckContent({
                                 onClick={() => handleApplyFix(fix)}
                                 disabled={checking || runningFix}
                                 className={cn(
-                                  "transition-all duration-200 active:scale-95 text-xs h-8 px-4 font-bold rounded-full flex items-center gap-1.5 shrink-0 border",
+                                  "transition-all duration-200 active:scale-95 text-xs h-7.5 px-3.5 font-bold rounded-full flex items-center gap-1.5 shrink-0 border",
                                   fix.action_type === "run_command"
-                                    ? "bg-gradient-to-b from-[#007aff] to-[#0066cc] border-[#0055b3] text-white shadow-[0_1px_2px_rgba(0,102,204,0.35),inset_0_1px_0_rgba(255,255,255,0.15)] hover:from-[#0088ff] hover:to-[#007aff] dark:from-[#0066cc] dark:to-[#0055b3] dark:border-[#004499]"
+                                    ? "bg-gradient-to-b from-[var(--settings-accent)] to-[var(--settings-accent)]/90 border-[var(--settings-accent)]/80 text-white shadow-[0_1px_2px_rgba(0,102,204,0.15)] hover:opacity-90"
                                     : "border-[#d1d1d6] border-b-[#b5b5ba] bg-gradient-to-b from-white to-[#f5f5f7] text-black/80 shadow-[0_1px_1px_rgba(0,0,0,0.05)] hover:from-[#f5f5f7] hover:to-[#e9e9eb] dark:from-[#3a3a3c] dark:to-[#2c2c2e] dark:border-[#48484a] dark:border-b-[#1c1c1e] dark:hover:from-[#48484a] dark:hover:to-[#3a3a3c] dark:text-white/90"
                                 )}
                               >
                                 {fix.action_type === "open_url" ? (
-                                  <ExternalLink className="size-3.5" />
+                                  <ExternalLink className="size-3" />
                                 ) : fix.action_type === "copy_command" ? (
-                                  <Copy className="size-3.5" />
+                                  <Copy className="size-3" />
                                 ) : (
-                                  <Terminal className="size-3.5" />
+                                  <Terminal className="size-3" />
                                 )}
                                 <span>{fix.label}</span>
                               </Button>
@@ -536,7 +538,7 @@ export function EnvironmentCheckContent({
 
             {/* 执行结果 */}
             {fixResultText && (
-              <div className="glass-card bg-white/25 dark:bg-black/15 border border-white/10 dark:border-white/5 rounded-2xl p-5 space-y-3 shadow-none">
+              <div className="glass-card bg-white/25 dark:bg-black/15 border border-white/10 dark:border-white/5 rounded-xl p-5 space-y-3 shadow-none">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     <div className="flex gap-1 shrink-0">
@@ -544,7 +546,7 @@ export function EnvironmentCheckContent({
                       <span className="size-2 rounded-full bg-yellow-500/60" />
                       <span className="size-2 rounded-full bg-green-500/60" />
                     </div>
-                    <span className="text-xs font-semibold text-zinc-500/80 uppercase tracking-wider ml-1">
+                    <span className="text-xs font-semibold text-[var(--settings-ink-muted)] uppercase tracking-wider ml-1">
                       {translations.environment?.result || "执行结果"}
                     </span>
                   </div>
@@ -554,11 +556,11 @@ export function EnvironmentCheckContent({
                     onClick={() => handleCopy(fixResultText)}
                     className="rounded-full border border-[#d1d1d6] border-b-[#b5b5ba] bg-gradient-to-b from-white to-[#f5f5f7] text-[11px] font-bold text-black/80 shadow-[0_1px_1px_rgba(0,0,0,0.05)] hover:from-[#f5f5f7] hover:to-[#e9e9eb] dark:from-[#3a3a3c] dark:to-[#2c2c2e] dark:border-[#48484a] dark:border-b-[#1c1c1e] dark:hover:from-[#48484a] dark:hover:to-[#3a3a3c] dark:text-white/90 active:scale-[0.97] transition-all h-7 px-3.5 flex items-center gap-1 shrink-0"
                   >
-                    <Copy className="size-3 text-black/50 dark:text-white/50" />
+                    <Copy className="size-3 text-[var(--settings-ink-muted)]" />
                     <span>{translations.environment?.copied ? "复制" : "复制"}</span>
                   </Button>
                 </div>
-                <pre className="rounded-xl border border-black/5 dark:border-white/5 bg-black/10 dark:bg-black/30 p-3 text-xs font-mono text-foreground/90 whitespace-pre-wrap max-h-56 overflow-auto glass-scrollbar shadow-none">
+                <pre className="rounded-xl border border-white/10 dark:border-white/5 bg-black/15 dark:bg-black/35 p-3 text-xs font-mono text-[var(--settings-ink)]/90 whitespace-pre-wrap max-h-56 overflow-auto glass-scrollbar shadow-none">
                   {fixResultText}
                 </pre>
               </div>
@@ -594,7 +596,7 @@ export function EnvironmentCheckContent({
               <Button
                 onClick={confirmRun}
                 disabled={runningFix}
-                className="rounded-full bg-gradient-to-b from-[#007aff] to-[#0066cc] border border-[#0055b3] text-white shadow-[0_1px_2px_rgba(0,102,204,0.35),inset_0_1px_0_rgba(255,255,255,0.15)] hover:from-[#0088ff] hover:to-[#007aff] dark:from-[#0066cc] dark:to-[#0055b3] dark:border-[#004499] active:scale-[0.97] transition-all text-[12px] font-bold h-9 px-4.5 shrink-0 flex items-center justify-center"
+                className="rounded-full bg-gradient-to-b from-[var(--settings-accent)] to-[var(--settings-accent)]/90 border-[var(--settings-accent)]/80 text-white shadow-[0_1px_2px_rgba(0,102,204,0.35),inset_0_1px_0_rgba(255,255,255,0.15)] hover:opacity-90 active:scale-[0.97] transition-all text-[12px] font-bold h-9 px-4.5 shrink-0 flex items-center justify-center"
               >
                 {runningFix ? (
                   <>
@@ -608,11 +610,11 @@ export function EnvironmentCheckContent({
             </div>
           }
         >
-          <div className="glass-card bg-white/25 dark:bg-black/15 border border-white/10 dark:border-white/5 rounded-2xl p-4 space-y-3 shadow-none mt-2">
-            <Label className="text-xs font-semibold text-zinc-500/80 uppercase tracking-wider block mb-1">
+          <div className="glass-card bg-white/25 dark:bg-black/15 border border-white/10 dark:border-white/5 rounded-xl p-4 space-y-3 shadow-none mt-2">
+            <Label className="text-xs font-semibold text-[var(--settings-ink-muted)] uppercase tracking-wider block mb-1">
               {translations.environment?.commandPreview || "命令预览"}
             </Label>
-            <pre className="rounded-xl border border-black/5 dark:border-white/5 bg-black/10 dark:bg-black/30 p-3 text-xs font-mono whitespace-pre-wrap max-h-40 overflow-auto text-foreground/90 shadow-none">
+            <pre className="rounded-xl border border-white/10 dark:border-white/5 bg-black/15 dark:bg-black/35 p-3 text-xs font-mono whitespace-pre-wrap max-h-40 overflow-auto text-[var(--settings-ink)]/90 shadow-none">
               {pendingRun?.command || ""}
             </pre>
           </div>
