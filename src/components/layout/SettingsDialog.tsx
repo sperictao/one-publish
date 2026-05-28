@@ -23,6 +23,11 @@ import {
   Info,
   ListChecks,
   Keyboard,
+  CheckCircle2,
+  AlertTriangle,
+  ArrowUpCircle,
+  ExternalLink,
+  Terminal,
   type LucideIcon,
 } from "lucide-react";
 import {
@@ -505,15 +510,15 @@ export const UpdaterProgressBar = memo(function UpdaterProgressBar({
   downloadProgress,
 }: UpdaterProgressBarProps) {
   return (
-    <div className="space-y-3 rounded-lg border border-[var(--settings-hairline)] bg-[var(--settings-section-bg)] p-4">
+    <div className="space-y-3 rounded-xl border border-[var(--settings-hairline)] bg-black/[0.015] dark:bg-white/[0.015] p-4.5 transition-all duration-200">
       <div className="flex items-start justify-between gap-3">
         <div className="space-y-1">
-          <div className="text-[14px] font-semibold tracking-[-0.224px] text-[var(--settings-ink)]">
+          <div className="text-[13.5px] font-semibold tracking-[-0.2px] text-[var(--settings-ink)]">
             {downloadProgress.stage === "installing"
               ? translations.version?.installing || "正在安装更新..."
               : translations.version?.downloading || "正在下载更新..."}
           </div>
-          <div className="text-[12px] tracking-[-0.12px] text-[var(--settings-ink-muted)]">
+          <div className="text-[12px] tracking-[-0.1px] font-medium text-[var(--settings-ink-muted)]">
             {downloadProgress.stage === "retrying"
               ? formatMessage(
                   translations.version?.retrying ||
@@ -536,16 +541,16 @@ export const UpdaterProgressBar = memo(function UpdaterProgressBar({
           </div>
         </div>
         {downloadProgress.percent !== null && (
-          <div className="text-[12px] font-semibold tabular-nums tracking-[-0.12px] text-[var(--settings-ink-muted)]">
+          <div className="text-[13px] font-bold tabular-nums font-mono tracking-tight text-[var(--settings-ink)] bg-[var(--settings-sidebar-item-active)] px-2 py-0.5 rounded-md border border-[var(--settings-hairline)]">
             {Math.round(downloadProgress.percent)}%
           </div>
         )}
       </div>
 
-      <div className="h-1.5 overflow-hidden rounded-full bg-[var(--settings-sidebar-item-active)]">
+      <div className="h-2 overflow-hidden rounded-full bg-black/5 dark:bg-white/5 border border-black/[0.02] dark:border-white/[0.02]">
         <div
           className={cn(
-            "h-full rounded-full bg-[var(--settings-accent)] transition-[width] duration-200",
+            "h-full rounded-full bg-gradient-to-r from-blue-500 to-indigo-500 shadow-[0_0_8px_rgba(59,130,246,0.35)] transition-[width] duration-200",
             downloadProgress.percent === null && "animate-pulse w-1/3"
           )}
           style={
@@ -596,6 +601,7 @@ export function SettingsDialog({
     isCheckingUpdate,
     isInstallingUpdate,
     downloadProgress,
+    updaterConfigHealth,
   } = updaterState;
 
   const categoryItems = useMemo<SettingsCategoryItem[]>(
@@ -828,109 +834,194 @@ export function SettingsDialog({
     />
   );
 
-  const renderAboutSettings = () => (
-    <div className="space-y-5">
-        <div className="flex flex-col gap-4 rounded-lg border border-[var(--settings-hairline)] bg-[var(--settings-section-bg)] p-4 sm:flex-row sm:items-start sm:justify-between">
-          <div className="space-y-1">
-            <div className="text-[14px] font-semibold tracking-[-0.224px] text-[var(--settings-ink)]">
+  const renderAboutSettings = () => {
+    const isConfigUnhealthy = updaterConfigHealth && !updaterConfigHealth.configured;
+
+    return (
+      <div className="space-y-6">
+        {/* Product Info & Update Status Group */}
+        <div className="rounded-xl border border-[var(--settings-hairline)] bg-[var(--settings-section-bg)] overflow-hidden">
+          {/* Brand Row */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 hover:bg-black/[0.005] dark:hover:bg-white/[0.005] transition-colors duration-150">
+            <div className="space-y-0.5 min-w-0">
+              <h4 className="text-[14px] font-semibold tracking-[-0.224px] text-[var(--settings-ink)]">
+                OnePublish
+              </h4>
+              <p className="text-[12px] leading-[1.4] tracking-[-0.12px] text-[var(--settings-ink-muted)]">
+                跨平台 .NET 自动化发布与签名客户端
+              </p>
+            </div>
+            <span className="rounded-md border border-[var(--settings-hairline)] bg-[var(--settings-sidebar-item-active)] px-2 py-0.5 text-[12px] font-semibold tracking-[-0.12px] text-[var(--settings-ink-muted)] font-mono shadow-sm shrink-0">
               {formatMessage(
                 t("version.current"),
                 updateInfo?.currentVersion || currentVersion || "—"
               )}
-            </div>
-            {updateInfo?.hasUpdate && (
-              <div className="text-[14px] tracking-[-0.224px] text-[var(--settings-accent)]">
-                {formatMessage(t("version.new"), updateInfo.availableVersion || "")}
-              </div>
-            )}
-            {!updateInfo && (
-              <div className="text-[12px] tracking-[-0.12px] text-[var(--settings-ink-muted)]">
-                {translations.version?.clickToCheck || "点击检查更新以获取最新版本信息"}
-              </div>
-            )}
-            {updateInfo && !updateInfo.hasUpdate && !updateInfo.message && (
-              <div className="text-[12px] tracking-[-0.12px] text-[var(--settings-ink-muted)]">
-                {translations.version?.none || "没有可用的更新"}
-              </div>
-            )}
-            {updateInfo?.message && !shouldHideDefaultUpdaterConfigMessage && (
-              <div className="text-[12px] tracking-[-0.12px] text-[var(--settings-ink-muted)]">
-                {updateInfo.message}
-              </div>
-            )}
+            </span>
           </div>
 
-          <div className="flex flex-wrap gap-2">
-            {isTauri() && isRestartRequired && (
-              <Button
-                variant="outline"
-                size="sm"
-                className="active:scale-[0.97]"
-                onClick={handleRestartApp}
-                disabled={isRestarting || isCheckingUpdate || isInstallingUpdate}
-              >
-                {isRestarting ? (
-                  <RefreshCw className="size-4 animate-spin" />
-                ) : (
-                  <RefreshCw className="size-4" />
-                )}
-                <span className="ml-1">
-                  {isRestarting
-                    ? translations.version?.restarting || "重启中..."
-                    : translations.version?.restart || "重启应用"}
-                </span>
-              </Button>
-            )}
-            <Button
-              variant="outline"
-              size="sm"
-              className="active:scale-[0.97]"
-              onClick={handleCheckUpdate}
-              disabled={isCheckingUpdate || isInstallingUpdate}
-            >
-              {isCheckingUpdate ? (
-                <RefreshCw className="size-4 animate-spin" />
+          <div className="h-px bg-[var(--settings-hairline)] mx-4" />
+
+          {/* Dynamic Update Row */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 hover:bg-black/[0.005] dark:hover:bg-white/[0.005] transition-colors duration-150">
+            <div className="flex items-center gap-3 min-w-0">
+              {isConfigUnhealthy ? (
+                <>
+                  <AlertTriangle className="size-[18px] flex-shrink-0 text-amber-500" />
+                  <div className="space-y-0.5 min-w-0">
+                    <Label className="text-[14px] font-semibold tracking-[-0.224px] text-[var(--settings-ink)]">
+                      更新通道未配置
+                    </Label>
+                    <p className="text-[12px] leading-[1.4] tracking-[-0.12px] text-[var(--settings-ink-muted)]">
+                      检测到本地更新配置未设置，无法建立版本检查。
+                    </p>
+                  </div>
+                </>
+              ) : isRestartRequired ? (
+                <>
+                  <RefreshCw className="size-[18px] flex-shrink-0 text-emerald-500" />
+                  <div className="space-y-0.5 min-w-0">
+                    <Label className="text-[14px] font-semibold tracking-[-0.224px] text-[var(--settings-ink)]">
+                      新版本已准备就绪
+                    </Label>
+                    <p className="text-[12px] leading-[1.4] tracking-[-0.12px] text-[var(--settings-ink-muted)]">
+                      升级补丁已下载完成，请重启客户端应用更新。
+                    </p>
+                  </div>
+                </>
+              ) : updateInfo?.hasUpdate ? (
+                <>
+                  <ArrowUpCircle className="size-[18px] flex-shrink-0 text-blue-500" />
+                  <div className="space-y-0.5 min-w-0">
+                    <Label className="text-[14px] font-semibold tracking-[-0.224px] text-[var(--settings-ink)]">
+                      {formatMessage(t("version.new"), updateInfo.availableVersion || "")}
+                    </Label>
+                    <p className="text-[12px] leading-[1.4] tracking-[-0.12px] text-[var(--settings-ink-muted)]">
+                      发现可用新版本。
+                    </p>
+                  </div>
+                </>
               ) : (
-                <RefreshCw className="size-4" />
+                <>
+                  <CheckCircle2 className="size-[18px] flex-shrink-0 text-emerald-500" />
+                  <div className="space-y-0.5 min-w-0">
+                    <Label className="text-[14px] font-semibold tracking-[-0.224px] text-[var(--settings-ink)]">
+                      软件已是最新版本
+                    </Label>
+                    <p className="text-[12px] leading-[1.4] tracking-[-0.12px] text-[var(--settings-ink-muted)]">
+                      上次检查时间：{new Date().toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })}。
+                    </p>
+                  </div>
+                </>
               )}
-              <span className="ml-1">{translations.version?.check || "检查更新"}</span>
-            </Button>
-            {updateInfo?.hasUpdate && !isRestartRequired && (
-              <Button
-                variant="default"
-                size="sm"
-                className="active:scale-[0.97]"
-                onClick={handleInstallUpdate}
-                disabled={isInstallingUpdate}
-              >
-                {isInstallingUpdate ? (
-                  <RefreshCw className="size-4 animate-spin" />
-                ) : (
-                  <Download className="size-4" />
-                )}
-                <span className="ml-1">{translations.version?.update || "更新"}</span>
-              </Button>
-            )}
-          </div>
-        </div>
- 
-        {isInstallingUpdate && (
-          <UpdaterProgressBar
-            translations={translations}
-            downloadProgress={downloadProgress}
-          />
-        )}
- 
-        {updateInfo?.releaseNotes && (
-          <div className="max-h-56 overflow-y-auto rounded-lg border border-[var(--settings-hairline)] bg-[var(--settings-section-bg)] p-4 glass-scrollbar text-[12px] tracking-[-0.12px] text-[var(--settings-ink)]">
-            <div className="mb-1.5 font-semibold">
-              {translations.version?.notes || "更新说明:"}
             </div>
-            <div className="whitespace-pre-wrap text-[var(--settings-ink-muted)]">{updateInfo.releaseNotes}</div>
+
+            {/* Actions Buttons (Right) */}
+            <div className="flex flex-wrap items-center gap-2 sm:shrink-0">
+              {isConfigUnhealthy ? (
+                <div className="flex flex-wrap gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-8 px-3 rounded-lg border-[var(--settings-hairline)] bg-transparent hover:bg-black/[0.02] dark:hover:bg-white/[0.02] text-[12px] font-semibold active:scale-[0.97] shadow-sm text-[var(--settings-ink)]"
+                    onClick={() => _onOpenUpdaterHelpTarget("docs")}
+                  >
+                    <span>{translations.version?.openGuide || "打开配置指南"}</span>
+                    <ExternalLink className="ml-1 size-3 text-[var(--settings-ink-muted)]" />
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-8 px-3 rounded-lg border-[var(--settings-hairline)] bg-transparent hover:bg-black/[0.02] dark:hover:bg-white/[0.02] text-[12px] font-semibold active:scale-[0.97] shadow-sm text-[var(--settings-ink)]"
+                    onClick={() => _onOpenUpdaterHelpTarget("template")}
+                  >
+                    <span>{translations.version?.openTemplate || "下载模板文件"}</span>
+                    <Download className="ml-1 size-3 text-[var(--settings-ink-muted)]" />
+                  </Button>
+                </div>
+              ) : (
+                <>
+                  {isTauri() && isRestartRequired && (
+                    <Button
+                      variant="default"
+                      size="sm"
+                      className="h-8 px-3 rounded-lg bg-[var(--settings-accent)] text-white hover:bg-[var(--settings-accent-focus)] shadow-sm font-semibold text-[12px] active:scale-[0.97]"
+                      onClick={handleRestartApp}
+                      disabled={isRestarting || isCheckingUpdate || isInstallingUpdate}
+                    >
+                      <RefreshCw className="size-3" />
+                      <span className="ml-1.5">
+                        {isRestarting
+                          ? translations.version?.restarting || "重启中..."
+                          : translations.version?.restart || "重启应用"}
+                      </span>
+                    </Button>
+                  )}
+                  
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-8 px-3 rounded-lg border-[var(--settings-hairline)] bg-transparent hover:bg-black/[0.02] dark:hover:bg-white/[0.02] font-semibold text-[12px] active:scale-[0.97] shadow-sm text-[var(--settings-ink)]"
+                    onClick={handleCheckUpdate}
+                    disabled={isCheckingUpdate || isInstallingUpdate}
+                  >
+                    <RefreshCw className="size-3 text-[var(--settings-ink-muted)]" />
+                    <span className="ml-1.5">{translations.version?.check || "检查更新"}</span>
+                  </Button>
+
+                  {updateInfo?.hasUpdate && !isRestartRequired && (
+                    <Button
+                      variant="default"
+                      size="sm"
+                      className="h-8 px-3 rounded-lg bg-[var(--settings-accent)] text-white hover:bg-[var(--settings-accent-focus)] shadow-sm font-semibold text-[12px] active:scale-[0.97]"
+                      onClick={handleInstallUpdate}
+                      disabled={isInstallingUpdate}
+                    >
+                      <Download className="size-3" />
+                      <span className="ml-1.5">{translations.version?.update || "立即更新"}</span>
+                    </Button>
+                  )}
+                </>
+              )}
+            </div>
+          </div>
+
+          {updateInfo?.message && !shouldHideDefaultUpdaterConfigMessage && (
+            <div className="p-4 border-t border-[var(--settings-hairline)] bg-red-500/[0.01] dark:bg-red-500/[0.02]">
+              <div className="rounded-lg border border-red-500/10 bg-red-500/[0.01] dark:bg-red-500/[0.03] p-3 text-[11.5px] leading-relaxed text-red-600 dark:text-red-400 font-medium">
+                {updateInfo.message}
+              </div>
+            </div>
+          )}
+
+          {isInstallingUpdate && (
+            <div className="p-4 border-t border-[var(--settings-hairline)]">
+              <UpdaterProgressBar
+                translations={translations}
+                downloadProgress={downloadProgress}
+              />
+            </div>
+          )}
+        </div>
+
+        {/* Release Notes */}
+        {updateInfo?.releaseNotes && (
+          <div className="rounded-xl border border-[var(--settings-hairline)] bg-[var(--settings-section-bg)] overflow-hidden">
+            <div className="flex items-center gap-3 p-4 border-b border-[var(--settings-hairline)] bg-black/[0.005] dark:bg-white/[0.005]">
+              <Terminal className="size-[18px] text-[var(--settings-ink-muted)]" />
+              <span className="text-[14px] font-semibold tracking-[-0.224px] text-[var(--settings-ink)]">
+                {translations.version?.notes || "发布日志"}
+              </span>
+            </div>
+            <div className="p-4">
+              <div className="max-h-56 overflow-y-auto glass-scrollbar text-[12px] leading-relaxed tracking-[-0.1px] text-[var(--settings-ink-muted)] whitespace-pre-wrap font-medium bg-black/[0.005] dark:bg-white/[0.005] rounded-lg p-3 border border-[var(--settings-hairline)]">
+                {updateInfo.releaseNotes}
+              </div>
+            </div>
           </div>
         )}
       </div>
-  );
+    );
+  };
 
   const renderCategoryContent = () => {
     switch (activeCategory) {
