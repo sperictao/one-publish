@@ -5,7 +5,7 @@ import {
   isProtectedOutputAccessFailure,
   normalizePublishResult,
   resolvePublishFailureMessage,
-} from "@/lib/publishFailure";
+} from "@/features/history/publishFailure";
 
 describe("publishFailure", () => {
   const command = {

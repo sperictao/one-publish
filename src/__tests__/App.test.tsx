@@ -146,15 +146,6 @@ vi.mock("@/hooks/useAppDialogs", () => ({
   }),
 }));
 
-vi.mock("@/hooks/useDiagnosticsUiState", () => ({
-  useDiagnosticsUiState: () => ({
-    environmentLastCheck: null,
-    setEnvironmentLastCheck: mocks.noop,
-    recentHistoryExports: [],
-    trackHistoryExport: mocks.noop,
-  }),
-}));
-
 vi.mock("@/hooks/useLayoutShellState", () => ({
   useLayoutShellState: () => ({
     leftPanelCollapsed: false,
@@ -168,7 +159,7 @@ vi.mock("@/hooks/useLayoutShellState", () => ({
   }),
 }));
 
-vi.mock("@/hooks/usePublishHistoryState", () => ({
+vi.mock("@/features/history/usePublishHistoryState", () => ({
   usePublishHistoryState: () => ({
     isRerunChecklistEnabled: false,
     setIsRerunChecklistEnabled: mocks.noop,
@@ -178,7 +169,7 @@ vi.mock("@/hooks/usePublishHistoryState", () => ({
   }),
 }));
 
-vi.mock("@/hooks/useProjectShellState", () => ({
+vi.mock("@/features/repository/useProjectShellState", () => ({
   useProjectShellState: () => ({
     projectInfo: null,
     isProjectInfoRefreshing: false,
@@ -187,7 +178,7 @@ vi.mock("@/hooks/useProjectShellState", () => ({
   }),
 }));
 
-vi.mock("@/hooks/useProviderPresentationState", () => ({
+vi.mock("@/features/provider/useProviderPresentationState", () => ({
   useProviderPresentationState: () => ({
     activeProviderLabel: "dotnet",
     activeProviderUsesProjectFile: true,
@@ -197,7 +188,7 @@ vi.mock("@/hooks/useProviderPresentationState", () => ({
   }),
 }));
 
-vi.mock("@/hooks/useRepositoryActions", () => ({
+vi.mock("@/features/repository/useRepositoryActions", () => ({
   useRepositoryActions: () => ({
     handleAddRepo: mocks.noop,
     handleRemoveRepo: mocks.noop,
@@ -208,7 +199,7 @@ vi.mock("@/hooks/useRepositoryActions", () => ({
   }),
 }));
 
-vi.mock("@/hooks/useRepositoryViewState", () => ({
+vi.mock("@/features/repository/useRepositoryViewState", () => ({
   useRepositoryViewState: () => ({
     selectedRepo: null,
     branchConnectivityByRepoId: {},
@@ -246,7 +237,7 @@ vi.mock("@/hooks/usePresetText", () => ({
   }),
 }));
 
-vi.mock("@/hooks/usePublishRunner", () => ({
+vi.mock("@/features/publish/usePublishRunner", () => ({
   usePublishRunner: () => ({
     outputLog: "",
     isResolvingSelectedProjectProfile: false,
@@ -261,7 +252,7 @@ vi.mock("@/hooks/useTrayRecentPublish", () => ({
   useTrayRecentPublish: () => undefined,
 }));
 
-vi.mock("@/hooks/useProfiles", () => ({
+vi.mock("@/features/config/useProfiles", () => ({
   QUICK_CREATE_PROFILE_GROUP_CUSTOM: "__custom__",
   QUICK_CREATE_PROFILE_GROUP_DEFAULT: "__default__",
   useProfiles: () => ({
@@ -313,7 +304,7 @@ vi.mock("@/hooks/useCommandImport", () => ({
   }),
 }));
 
-vi.mock("@/hooks/useScopedConfigs", () => ({
+vi.mock("@/features/config/useScopedConfigs", () => ({
   useScopedConfigs: () => ({
     recentConfigKeys: [],
     favoriteConfigKeys: [],
@@ -352,11 +343,7 @@ vi.mock("@/hooks/useAppUpdater", () => ({
   }),
 }));
 
-vi.mock("@/hooks/useCommandImportResultCardProps", () => ({
-  useCommandImportResultCardProps: () => null,
-}));
-
-vi.mock("@/hooks/useProviderRuntime", () => ({
+vi.mock("@/features/provider/useProviderRuntime", () => ({
   useProviderRuntime: () => ({
     activeProviderId: "dotnet",
     setActiveProviderId: mocks.noop,

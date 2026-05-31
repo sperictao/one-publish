@@ -36,8 +36,8 @@ vi.mock("@/hooks/useI18n", () => ({
   }),
 }));
 
-vi.mock("@/lib/store", async () => {
-  const actual = await vi.importActual<typeof import("@/lib/store")>("@/lib/store");
+vi.mock("@/lib/store/api", async () => {
+  const actual = await vi.importActual<typeof import("@/lib/store/api")>("@/lib/store/api");
   return {
     ...actual,
     importConfig: mocks.importConfig,
@@ -45,7 +45,7 @@ vi.mock("@/lib/store", async () => {
 });
 
 import { ConfigManagementContent } from "@/components/publish/ConfigDialog";
-import type { ConfigParameters, ConfigProfile } from "@/lib/store";
+import type { ConfigParameters, ConfigProfile } from "@/lib/store/types";
 
 beforeAll(() => {
   vi.stubGlobal(

@@ -1,7 +1,7 @@
 import { renderHook, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import type { Repository } from "@/types/repository";
+import type { Repository } from "@/lib/store/types";
 
 const mocks = vi.hoisted(() => ({
   invoke: vi.fn(),
@@ -26,8 +26,8 @@ vi.mock("@tauri-apps/api/event", () => ({
   listen: mocks.listen,
 }));
 
-vi.mock("@/lib/store", async () => {
-  const actual = await vi.importActual<typeof import("@/lib/store")>("@/lib/store");
+vi.mock("@/lib/store/api", async () => {
+  const actual = await vi.importActual<typeof import("@/lib/store/api")>("@/lib/store/api");
   return {
     ...actual,
     getRepository: mocks.getRepository,

@@ -1,7 +1,7 @@
 import { useMemo } from "react";
 
-import { buildDotnetProfileParameters } from "@/lib/dotnetPublishConfig";
-import type { ConfigParameters, PublishConfigStore } from "@/lib/store";
+import { buildDotnetProfileParameters } from "@/features/config/dotnetPublishConfig";
+import type { ConfigParameters, PublishConfigStore } from "@/lib/store/types";
 import type { ParameterValue } from "@/types/parameters";
 
 export function useDialogDerivedState(params: {

@@ -26,8 +26,8 @@ import {
   FolderGit2,
   ArrowUpDown,
 } from "lucide-react";
-import type { ProjectScanCandidates } from "@/types/project";
-import type { Branch, Repository } from "@/types/repository";
+import type { ProjectScanCandidates } from "@/lib/store/types";
+import type { Branch, Repository } from "@/lib/store/types";
 import { useI18n } from "@/hooks/useI18n";
 import type { RepositoryListFloatingBindings } from "@/components/layout/RepositoryListFloatingLayer";
 import { RepositoryRow } from "@/components/layout/RepositoryRow";

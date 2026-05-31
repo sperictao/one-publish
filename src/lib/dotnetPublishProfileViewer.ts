@@ -1,4 +1,4 @@
-import { parseDotnetBooleanValue } from "@/lib/dotnetPublishAdvancedFields";
+import { parseDotnetBooleanValue } from "@/features/config/dotnetPublishAdvancedFields";
 import {
   extractDotnetPublishParametersFromProjectProfile,
   type ParsedProjectPublishProfile,

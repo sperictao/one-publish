@@ -2,8 +2,8 @@ import { AppDialogShell } from "@/components/ui/app-dialog-shell";
 import { Dialog } from "@/components/ui/dialog";
 import { Keyboard } from "lucide-react";
 import { useEffect, useState } from "react";
-import { getShortcutsHelp } from "@/lib/store";
-import type { ShortcutHelp } from "@/lib/store";
+import { getShortcutsHelp } from "@/lib/store/api";
+import type { ShortcutHelp } from "@/lib/store/types";
 import { useI18n } from "@/hooks/useI18n";
 
 interface ShortcutsDialogProps {

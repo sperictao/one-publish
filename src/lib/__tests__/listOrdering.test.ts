@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { ConfigProfile } from "@/lib/store";
+import type { ConfigProfile } from "@/lib/store/types";
 import {
   applyStoredOrder,
   projectDraggedItemPosition,

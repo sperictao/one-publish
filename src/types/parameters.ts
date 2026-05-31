@@ -77,12 +77,6 @@ export function fromSpecValue(spec: SpecValue): ParameterValue {
   return normalized;
 }
 
-export function normalizeParameters(
-  params: Record<string, ParameterValue>
-): Record<string, ParameterValue> {
-  return params;
-}
-
 export function toSpecParameters(
   params: Record<string, ParameterValue>
 ): SpecParameters {

@@ -1,7 +1,7 @@
 import { act, renderHook } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 
-import { useProviderParametersState } from "@/hooks/useProviderParametersState";
+import { useProviderParametersState } from "@/features/provider/useProviderParametersState";
 
 describe("useProviderParametersState", () => {
   it("keeps provider parameters scoped by active provider id", () => {

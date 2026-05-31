@@ -1,11 +1,11 @@
 import type { AppDialogsProps } from "@/components/layout/AppDialogs";
 import type { AppUpdaterState } from "@/hooks/useAppUpdater";
-import type { EnvironmentStatus } from "@/hooks/useEnvironmentStatus";
+import type { EnvironmentStatus } from "@/features/environment/useEnvironmentStatus";
 import type { Language } from "@/hooks/useI18n";
 import type {
   ProviderPublishSpec,
   PublishResult,
-} from "@/lib/publishRuntime";
+} from "@/features/publish/publishRuntime";
 import type { PackageResult, SignResult } from "@/lib/artifact";
 import type {
   ConfigParameters,
@@ -13,13 +13,13 @@ import type {
   ExecutionRecord,
   ProviderManifest,
   PublishConfigStore,
-} from "@/lib/store";
+} from "@/lib/store/types";
 import type {
   EnvironmentCheckResult,
   EnvironmentCheckSnapshot,
-} from "@/lib/environment";
+} from "@/features/environment/environment";
 import type { ParameterSchema } from "@/types/parameters";
-import type { ProfileManagementActions } from "@/hooks/useProfiles";
+import type { ProfileManagementActions } from "@/features/config/useProfiles";
 
 interface QuickCreateTemplateOption {
   id: string;

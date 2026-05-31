@@ -41,14 +41,14 @@ import {
   useMemo,
   useState,
 } from "react";
-import type { ProviderManifest } from "@/lib/store";
+import type { ProviderManifest } from "@/lib/store/types";
 import { isTauri } from "@tauri-apps/api/core";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import { relaunch } from "@tauri-apps/plugin-process";
 import type { AppUpdaterState } from "@/hooks/useAppUpdater";
 import { useI18n, t } from "@/hooks/useI18n";
 import type { Language } from "@/hooks/useI18n";
-import type { EnvironmentCheckSnapshot } from "@/lib/environment";
+import type { EnvironmentCheckSnapshot } from "@/features/environment/environment";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { useAccentColor, ACCENT_COLORS } from "@/hooks/useTheme";

@@ -2,8 +2,8 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vites
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { RepositoryList } from "@/components/layout/RepositoryList";
 import { __setTranslationsCacheForTest } from "@/hooks/useI18n";
-import type { Repository } from "@/types/repository";
-import { defaultRepoPublishConfig } from "@/lib/store";
+import type { Repository } from "@/lib/store/types";
+import { defaultRepoPublishConfig } from "@/lib/store/types";
 
 const ROW_HEIGHT = 40;
 const ROW_GAP = 8;

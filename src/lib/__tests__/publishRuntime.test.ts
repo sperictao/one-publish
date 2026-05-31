@@ -13,7 +13,7 @@ import {
   preflightProviderPublishOutput,
   renderProviderPublish,
   type ProviderPublishSpec,
-} from "@/lib/publishRuntime";
+} from "@/features/publish/publishRuntime";
 
 const spec: ProviderPublishSpec = {
   version: 1,

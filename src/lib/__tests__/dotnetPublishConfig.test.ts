@@ -6,7 +6,7 @@ import {
   buildDotnetProfileParameters,
   createDefaultDotnetPublishConfig,
   createDotnetPublishConfigFromParameters,
-} from "@/lib/dotnetPublishConfig";
+} from "@/features/config/dotnetPublishConfig";
 
 describe("dotnetPublishConfig", () => {
   it("构建 dotnet 参数时包含高级字段", () => {

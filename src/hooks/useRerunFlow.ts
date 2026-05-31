@@ -1,9 +1,9 @@
 import { useCallback, useState } from "react";
 import { toast } from "sonner";
 
-import type { ExecutionRecord } from "@/lib/store";
-import type { ProviderPublishSpec } from "@/lib/publishRuntime";
-import type { RunPublishOptions } from "@/hooks/usePublishRunnerTypes";
+import type { ExecutionRecord } from "@/lib/store/types";
+import type { ProviderPublishSpec } from "@/features/publish/publishRuntime";
+import type { RunPublishOptions } from "@/features/publish/publishTransaction";
 
 interface TranslationMap {
   [key: string]: string | undefined;

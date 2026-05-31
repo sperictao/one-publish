@@ -5,16 +5,16 @@ const mocks = vi.hoisted(() => ({
   checkRepositoryBranchConnectivity: vi.fn(),
 }));
 
-vi.mock("@/lib/store", async () => {
-  const actual = await vi.importActual<typeof import("@/lib/store")>("@/lib/store");
+vi.mock("@/lib/store/api", async () => {
+  const actual = await vi.importActual<typeof import("@/lib/store/api")>("@/lib/store/api");
   return {
     ...actual,
     checkRepositoryBranchConnectivity: mocks.checkRepositoryBranchConnectivity,
   };
 });
 
-import { useRepositoryViewState } from "@/hooks/useRepositoryViewState";
-import { defaultPublishConfigStore, type Repository } from "@/lib/store";
+import { useRepositoryViewState } from "@/features/repository/useRepositoryViewState";
+import { defaultPublishConfigStore, type Repository } from "@/lib/store/types";
 
 function createRepository(): Repository {
   return {

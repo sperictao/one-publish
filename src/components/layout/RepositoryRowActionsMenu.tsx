@@ -1,4 +1,4 @@
-import type { Repository } from "@/types/repository";
+import type { Repository } from "@/lib/store/types";
 import { FolderOpen, Pencil, Trash2 } from "lucide-react";
 import { RowActionsMenu } from "./RowActionsMenu";
 

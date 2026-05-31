@@ -2,10 +2,10 @@ import { useEffect } from "react";
 import { isTauri } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 
-import { normalizeDotnetProjectBoundParameters } from "@/lib/dotnetPublishConfig";
+import { normalizeDotnetProjectBoundParameters } from "@/features/config/dotnetPublishConfig";
 import { resolvePreferredDotnetProjectInfo } from "@/lib/dotnetProjectInfo";
 import { resolveDotnetProjectProfile } from "@/lib/dotnetProjectProfile";
-import { parsePublishConfigKey } from "@/lib/publishConfigIdentity";
+import { parsePublishConfigKey } from "@/features/config/publishConfigIdentity";
 import { showSystemNotification } from "@/lib/systemNotification";
 import {
   getProfiles,
@@ -14,13 +14,13 @@ import {
   scanProject,
   setTrayPublishStatus,
   showMainWindow,
-} from "@/lib/store";
+} from "@/lib/store/api";
 import { analyzeProjectScanFailure } from "@/lib/tauri/invokeErrors";
-import type { ProviderPublishSpec } from "@/lib/publishRuntime";
-import type { RunPublishOptions } from "@/hooks/usePublishRunnerTypes";
+import type { ProviderPublishSpec } from "@/features/publish/publishRuntime";
+import type { RunPublishOptions } from "@/features/publish/publishTransaction";
 import { toSpecParameters } from "@/types/parameters";
-import type { ProjectInfo } from "@/types/project";
-import type { Repository } from "@/types/repository";
+import type { ProjectInfo } from "@/lib/store/types";
+import type { Repository } from "@/lib/store/types";
 
 interface TranslationMap {
   [key: string]: string | undefined;

@@ -18,8 +18,8 @@ import {
   Terminal,
   XCircle,
 } from "lucide-react";
-import type { PublishResult } from "@/lib/publishRuntime";
-import { openOutputDirectory } from "@/lib/store";
+import type { PublishResult } from "@/features/publish/publishRuntime";
+import { openOutputDirectory } from "@/lib/store/api";
 import { cn } from "@/lib/utils";
 
 export interface PublishRunCardActions {

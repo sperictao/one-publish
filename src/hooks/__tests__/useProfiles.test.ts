@@ -17,8 +17,8 @@ vi.mock("sonner", () => ({
   toast: mocks.toast,
 }));
 
-vi.mock("@/lib/store", async () => {
-  const actual = await vi.importActual<typeof import("@/lib/store")>("@/lib/store");
+vi.mock("@/lib/store/api", async () => {
+  const actual = await vi.importActual<typeof import("@/lib/store/api")>("@/lib/store/api");
   return {
     ...actual,
     getProfiles: mocks.getProfiles,
@@ -29,8 +29,8 @@ vi.mock("@/lib/store", async () => {
   };
 });
 
-import { useProfiles } from "@/hooks/useProfiles";
-import type { ConfigProfile } from "@/lib/store";
+import { useProfiles } from "@/features/config/useProfiles";
+import type { ConfigProfile } from "@/lib/store/types";
 
 function createProfile(name: string): ConfigProfile {
   return {

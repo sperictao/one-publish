@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { createPublishExecutionRecord } from "@/lib/publishExecutionRecord";
+import { createPublishExecutionRecord } from "@/features/history/publishExecutionRecord";
 
 function createCommand(displayCommand = "dotnet publish /repo/App.csproj") {
   return {

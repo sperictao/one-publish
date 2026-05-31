@@ -24,12 +24,12 @@ import { Switch, SwitchIndicator } from "@/components/ui/switch";
 import {
   buildDotnetAdvancedFieldsModel,
   type DotnetAdvancedFieldModel,
-} from "@/lib/dotnetPublishAdvancedFields";
+} from "@/features/config/dotnetPublishAdvancedFields";
 import {
   normalizeDotnetPropertyMap,
   normalizeDotnetStringArray,
-} from "@/lib/dotnetPublishConfig";
-import type { PublishConfigStore } from "@/lib/store";
+} from "@/features/config/dotnetPublishConfig";
+import type { PublishConfigStore } from "@/lib/store/types";
 import { cn } from "@/lib/utils";
 import type { ParameterSchema, ParameterValue } from "@/types/parameters";
 

@@ -26,7 +26,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { DotnetPublishConfigFormSections } from "@/components/publish/DotnetPublishConfigFormSections";
-import type { PublishConfigStore } from "@/lib/store";
+import type { PublishConfigStore } from "@/lib/store/types";
 import { cn } from "@/lib/utils";
 import type { ParameterSchema } from "@/types/parameters";
 

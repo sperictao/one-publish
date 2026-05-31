@@ -5,7 +5,7 @@ import {
   extractFailureContext,
   normalizeFailureSignature,
   resolveFailureSignature,
-} from "@/lib/failureSignature";
+} from "@/features/history/failureSignature";
 
 describe("failureSignature", () => {
   it("优先从输出中提取错误关键词行", () => {

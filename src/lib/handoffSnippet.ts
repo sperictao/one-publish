@@ -1,4 +1,4 @@
-import type { ProviderPublishSpec } from "@/lib/publishRuntime";
+import type { ProviderPublishSpec } from "@/features/publish/publishRuntime";
 
 export type HandoffSpec = Pick<
   ProviderPublishSpec,

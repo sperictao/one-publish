@@ -7,10 +7,10 @@ import {
 } from "react";
 import { toast } from "sonner";
 
-import { mapImportedSpecByProvider } from "@/lib/commandImportMapping";
-import { createDotnetPublishConfigFromParameters } from "@/lib/dotnetPublishConfig";
-import type { ProviderPublishSpec } from "@/lib/publishRuntime";
-import type { PublishConfigStore } from "@/lib/store";
+import { mapImportedSpecByProvider } from "@/features/provider/commandImportMapping";
+import { createDotnetPublishConfigFromParameters } from "@/features/config/dotnetPublishConfig";
+import type { ProviderPublishSpec } from "@/features/publish/publishRuntime";
+import type { PublishConfigStore } from "@/lib/store/types";
 import type { ParameterSchema, ParameterValue } from "@/types/parameters";
 
 export interface ImportFeedback {

@@ -11,8 +11,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { toast } from "sonner";
 import { FileSearch, FolderGit2, RefreshCw, GitBranch, Activity, Info, HelpCircle } from "lucide-react";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
-import type { ProjectScanCandidates } from "@/types/project";
-import type { Branch, Repository } from "@/types/repository";
+import type { ProjectScanCandidates } from "@/lib/store/types";
+import type { Branch, Repository } from "@/lib/store/types";
 import {
   repositoryProjectBindingPending,
   reconcileProjectBinding,

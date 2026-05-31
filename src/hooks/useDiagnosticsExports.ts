@@ -3,9 +3,9 @@ import { invoke } from "@tauri-apps/api/core";
 import { save } from "@tauri-apps/plugin-dialog";
 import { toast } from "sonner";
 
-import type { HistoryExportFormat } from "@/lib/historyFilterPresets";
+import type { HistoryExportFormat } from "@/features/history/historyFilterPresets";
 import { joinPath } from "@/lib/paths";
-import { type ExecutionRecord } from "@/lib/store";
+import { type ExecutionRecord } from "@/lib/store/types";
 
 interface DiagnosticsIndexPayload {
   generatedAt: string;

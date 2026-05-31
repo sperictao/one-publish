@@ -6,7 +6,7 @@ import { useAppStore } from "@/stores/appStore";
 import {
   defaultPublishConfigStore,
   defaultRepoPublishConfig,
-} from "@/lib/store";
+} from "@/lib/store/types";
 
 export function useAppState() {
   const store = useAppStore();

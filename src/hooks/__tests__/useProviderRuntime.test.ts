@@ -6,8 +6,8 @@ const mocks = vi.hoisted(() => ({
   getProviderSchema: vi.fn(),
 }));
 
-vi.mock("@/lib/store", async () => {
-  const actual = await vi.importActual<typeof import("@/lib/store")>("@/lib/store");
+vi.mock("@/lib/store/api", async () => {
+  const actual = await vi.importActual<typeof import("@/lib/store/api")>("@/lib/store/api");
   return {
     ...actual,
     listProviders: mocks.listProviders,
@@ -15,7 +15,7 @@ vi.mock("@/lib/store", async () => {
   };
 });
 
-import { useProviderRuntime } from "@/hooks/useProviderRuntime";
+import { useProviderRuntime } from "@/features/provider/useProviderRuntime";
 
 describe("useProviderRuntime", () => {
   const dotnetProvider = {

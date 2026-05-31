@@ -2,7 +2,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vites
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { PublishConfigPanel } from "@/components/layout/PublishConfigPanel";
 import { __setTranslationsCacheForTest } from "@/hooks/useI18n";
-import type { ConfigProfile, PublishConfigStore } from "@/lib/store";
+import type { ConfigProfile, PublishConfigStore } from "@/lib/store/types";
 import type { ParameterSchema } from "@/types/parameters";
 
 const ROW_HEIGHT = 40;

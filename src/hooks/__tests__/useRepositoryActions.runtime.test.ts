@@ -22,8 +22,8 @@ vi.mock("sonner", () => ({
   },
 }));
 
-vi.mock("@/lib/store", async () => {
-  const actual = await vi.importActual<typeof import("@/lib/store")>("@/lib/store");
+vi.mock("@/lib/store/api", async () => {
+  const actual = await vi.importActual<typeof import("@/lib/store/api")>("@/lib/store/api");
   return {
     ...actual,
     detectRepositoryProvider: mocks.detectRepositoryProvider,
@@ -32,7 +32,7 @@ vi.mock("@/lib/store", async () => {
   };
 });
 
-import { handleAddRepoRuntime } from "@/hooks/useRepositoryActions.runtime";
+import { handleAddRepoRuntime } from "@/features/repository/useRepositoryActions.runtime";
 
 describe("handleAddRepoRuntime", () => {
   const providers = [

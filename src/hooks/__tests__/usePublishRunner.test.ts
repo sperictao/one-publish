@@ -1,7 +1,7 @@
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { EnvironmentCheckResult } from "@/lib/environment";
-import type { PublishConfigStore } from "@/lib/store";
+import type { EnvironmentCheckResult } from "@/features/environment/environment";
+import type { PublishConfigStore } from "@/lib/store/types";
 
 const mocks = vi.hoisted(() => ({
   invoke: vi.fn(),
@@ -40,7 +40,7 @@ vi.mock("sonner", () => ({
   toast: mocks.toast,
 }));
 
-vi.mock("@/lib/environment", () => ({
+vi.mock("@/features/environment/environment", () => ({
   runEnvironmentCheck: mocks.runEnvironmentCheck,
   createEnvironmentCheckSnapshot: (
     result: EnvironmentCheckResult,
@@ -51,15 +51,15 @@ vi.mock("@/lib/environment", () => ({
   }),
 }));
 
-vi.mock("@/hooks/useDotnetPublishSelection", () => ({
+vi.mock("@/features/config/useDotnetPublishSelection", () => ({
   useDotnetPublishSelection: mocks.useDotnetPublishSelection,
 }));
 
-vi.mock("@/hooks/usePublishSpecBuilder", () => ({
+vi.mock("@/features/publish/usePublishSpecBuilder", () => ({
   usePublishSpecBuilder: mocks.usePublishSpecBuilder,
 }));
 
-vi.mock("@/lib/publishOutputPreflight", () => ({
+vi.mock("@/features/publish/publishOutputPreflight", () => ({
   preflightPublishOutput: mocks.preflightPublishOutput,
   requestProtectedOutputAccess: mocks.requestProtectedOutputAccess,
   buildProtectedOutputAccessDescription: () => "需要授权 Downloads",
@@ -81,11 +81,11 @@ vi.mock("@/lib/systemNotification", () => ({
   showSystemNotification: mocks.showSystemNotification,
 }));
 
-vi.mock("@/lib/renderPublishCommand", () => ({
+vi.mock("@/features/publish/renderPublishCommand", () => ({
   renderPublishCommand: mocks.renderPublishCommand,
 }));
 
-vi.mock("@/lib/publishRuntime", () => ({
+vi.mock("@/features/publish/publishRuntime", () => ({
   executeProviderPublish: (spec: unknown) =>
     mocks.invoke("execute_provider_publish", { spec }),
   cancelProviderPublish: () => mocks.invoke("cancel_provider_publish"),
@@ -93,8 +93,8 @@ vi.mock("@/lib/publishRuntime", () => ({
   preflightProviderPublishOutput: mocks.preflightPublishOutput,
 }));
 
-vi.mock("@/lib/store", async () => {
-  const actual = await vi.importActual<typeof import("@/lib/store")>("@/lib/store");
+vi.mock("@/lib/store/api", async () => {
+  const actual = await vi.importActual<typeof import("@/lib/store/api")>("@/lib/store/api");
   return {
     ...actual,
     openOutputDirectory: mocks.openOutputDirectory,
@@ -110,14 +110,14 @@ vi.mock("@/lib/tauri/invokeErrors", () => ({
   analyzePublishExecutionFailure: mocks.analyzePublishExecutionFailure,
 }));
 
-vi.mock("@/hooks/usePublishFailureFeedback", () => ({
+vi.mock("@/features/publish/usePublishFailureFeedback", () => ({
   getPublishFailureFeedback: () => ({
     title: "发布失败",
     description: "boom",
   }),
 }));
 
-import { usePublishRunner } from "@/hooks/usePublishRunner";
+import { usePublishRunner } from "@/features/publish/usePublishRunner";
 import { usePublishStore } from "@/store/publishStore";
 
 const readyEnvironment: EnvironmentCheckResult = {

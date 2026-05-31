@@ -4,7 +4,7 @@ import type { ArtifactActionState } from "@/components/publish/ArtifactActions";
 import type {
   ProviderPublishSpec,
   PublishResult,
-} from "@/lib/publishRuntime";
+} from "@/features/publish/publishRuntime";
 
 interface PublishStore {
   // ── State ──

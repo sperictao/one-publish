@@ -15,11 +15,11 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Loader2 } from "lucide-react";
-import type { ExecutionRecord } from "@/lib/store";
+import type { ExecutionRecord } from "@/lib/store/types";
 import type {
   HistoryFilterStatus,
   HistoryFilterWindow,
-} from "@/lib/historyFilterPresets";
+} from "@/features/history/historyFilterPresets";
 import type { HandoffSnippetFormat } from "@/lib/handoffSnippet";
 
 export interface ExecutionHistoryCardProps {

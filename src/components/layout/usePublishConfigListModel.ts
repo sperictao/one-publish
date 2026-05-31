@@ -11,8 +11,8 @@ import {
   normalizeRenderableConfigId,
   parsePublishConfigKey,
   resolveSelectedPublishConfigKey,
-} from "@/lib/publishConfigIdentity";
-import type { ConfigProfile } from "@/lib/store";
+} from "@/features/config/publishConfigIdentity";
+import type { ConfigProfile } from "@/lib/store/types";
 
 export const ALL_GROUP_FILTER = "__all__";
 export const PROJECT_GROUP_FILTER = "__project_profiles__";

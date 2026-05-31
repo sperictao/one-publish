@@ -9,7 +9,7 @@ import {
   GitBranch,
   Folder,
 } from "lucide-react";
-import type { Repository } from "@/types/repository";
+import type { Repository } from "@/lib/store/types";
 import { useI18n } from "@/hooks/useI18n";
 
 // Collapse toggle icon

@@ -2,21 +2,21 @@ import { Suspense, lazy } from "react";
 import type {
   EnvironmentCheckResult,
   EnvironmentCheckSnapshot,
-} from "@/lib/environment";
+} from "@/features/environment/environment";
 import type {
   ConfigParameters,
   ConfigProfile,
   ExecutionRecord,
   ProviderManifest,
   PublishConfigStore,
-} from "@/lib/store";
+} from "@/lib/store/types";
 import type { PackageResult, SignResult } from "@/lib/artifact";
 import type { AppUpdaterState } from "@/hooks/useAppUpdater";
 import type {
   ProviderPublishSpec,
   PublishResult,
-} from "@/lib/publishRuntime";
-import type { ProfileManagementActions } from "@/hooks/useProfiles";
+} from "@/features/publish/publishRuntime";
+import type { ProfileManagementActions } from "@/features/config/useProfiles";
 import type { Language } from "@/hooks/useI18n";
 import type { ParameterSchema } from "@/types/parameters";
 

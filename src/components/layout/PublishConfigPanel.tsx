@@ -51,7 +51,7 @@ import { toast } from "sonner";
 import {
   type ConfigProfile,
   type PublishConfigStore,
-} from "@/lib/store";
+} from "@/lib/store/types";
 import {
   ProjectPublishProfileViewerDialog,
   type ProjectProfileViewerState,
@@ -65,7 +65,7 @@ import {
   getProjectProfileNameFromRenderId,
   getRecentConfigKeyFromRenderId,
   getUserProfileNameFromRenderId,
-} from "@/lib/publishConfigIdentity";
+} from "@/features/config/publishConfigIdentity";
 import { useI18n } from "@/hooks/useI18n";
 import type { PublishConfigFloatingBindings } from "@/components/layout/PublishConfigPanelFloatingLayer";
 import {

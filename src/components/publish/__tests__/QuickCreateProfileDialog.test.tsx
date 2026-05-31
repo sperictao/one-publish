@@ -2,7 +2,7 @@ import { beforeAll, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen } from "@testing-library/react";
 
 import { QuickCreateProfileDialog } from "@/components/publish/QuickCreateProfileDialog";
-import type { PublishConfigStore } from "@/lib/store";
+import type { PublishConfigStore } from "@/lib/store/types";
 import type { ParameterSchema } from "@/types/parameters";
 
 const dotnetSchema: ParameterSchema = {

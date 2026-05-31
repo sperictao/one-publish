@@ -18,7 +18,7 @@ import {
   type ProjectPublishProfileSupplementSection,
 } from "@/lib/dotnetPublishProfileViewer";
 import type { ParsedProjectPublishProfile } from "@/lib/projectPublishProfileXml";
-import type { PublishConfigStore } from "@/lib/store";
+import type { PublishConfigStore } from "@/lib/store/types";
 import { cn } from "@/lib/utils";
 import type { ParameterSchema } from "@/types/parameters";
 

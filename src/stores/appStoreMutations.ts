@@ -1,5 +1,5 @@
-import { normalizeEnvironmentProviderIds } from "@/lib/environment";
-import type { AppState, PublishConfigStore } from "@/lib/store";
+import { normalizeEnvironmentProviderIds } from "@/features/environment/environment";
+import type { AppState, PublishConfigStore } from "@/lib/store/types";
 
 export type UiStateMutation = {
   leftPanelWidth?: number;

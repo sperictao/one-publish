@@ -4,8 +4,8 @@ const mocks = vi.hoisted(() => ({
   readProjectPublishProfile: vi.fn(),
 }));
 
-vi.mock("@/lib/store", async () => {
-  const actual = await vi.importActual<typeof import("@/lib/store")>("@/lib/store");
+vi.mock("@/lib/store/api", async () => {
+  const actual = await vi.importActual<typeof import("@/lib/store/api")>("@/lib/store/api");
   return {
     ...actual,
     readProjectPublishProfile: mocks.readProjectPublishProfile,

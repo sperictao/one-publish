@@ -13,7 +13,7 @@ import {
   defaultRepoPublishConfig,
   type AppState,
   type Repository,
-} from "@/lib/store";
+} from "@/lib/store/types";
 
 function createRepository(id: string): Repository {
   return {

@@ -4,7 +4,7 @@ import { AppDialogShell } from "@/components/ui/app-dialog-shell";
 import { Dialog } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
-import type { ExecutionRecord } from "@/lib/store";
+import type { ExecutionRecord } from "@/lib/store/types";
 import { AlertTriangle, GitBranch, ListChecks, TerminalSquare } from "lucide-react";
 
 interface RerunChecklistState {

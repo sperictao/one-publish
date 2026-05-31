@@ -1,4 +1,4 @@
-import type { ProjectInfo } from "@/types/project";
+import type { ProjectInfo } from "@/lib/store/types";
 
 export function isSupportedDotnetProjectFile(
   path: string | null | undefined

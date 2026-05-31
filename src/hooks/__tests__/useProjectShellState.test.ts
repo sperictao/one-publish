@@ -1,7 +1,7 @@
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import type { ProjectInfo } from "@/types/project";
+import type { ProjectInfo } from "@/lib/store/types";
 
 const mocks = vi.hoisted(() => ({
   scanProject: vi.fn(),
@@ -18,14 +18,14 @@ vi.mock("@tauri-apps/api/window", () => ({
   getCurrentWindow: mocks.getCurrentWindow,
 }));
 
-vi.mock("@/hooks/useProjectScanner", () => ({
+vi.mock("@/features/repository/useProjectScanner", () => ({
   useProjectScanner: () => ({
     scanProject: mocks.scanProject,
     resolveProjectInfo: mocks.resolveProjectInfo,
   }),
 }));
 
-import { useProjectShellState } from "@/hooks/useProjectShellState";
+import { useProjectShellState } from "@/features/repository/useProjectShellState";
 
 type HookProps = {
   selectedRepoId: string | null;

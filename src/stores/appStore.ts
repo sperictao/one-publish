@@ -15,10 +15,12 @@ import {
   removeRecentPublishConfig as apiRemoveRecentPublishConfig,
   replaceRecentPublishConfigKey as apiReplaceRecentPublishConfigKey,
   updatePreferences,
+} from "@/lib/store/api";
+import {
   type AppState,
   type PublishConfigStore,
   defaultAppState,
-} from "@/lib/store";
+} from "@/lib/store/types";
 import {
   applyPreferenceStateMutation,
   applyPublishStateMutation,
@@ -29,7 +31,7 @@ import {
   type PublishStatePatch,
   type UiStateMutation,
 } from "@/stores/appStoreMutations";
-import type { Repository } from "@/types/repository";
+import type { Repository } from "@/lib/store/types";
 
 // ── Store interface ──
 interface AppStore extends AppState {

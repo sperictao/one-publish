@@ -6,7 +6,7 @@ import {
   repositoryProjectBindingPending,
   repositoryRequiresProjectBinding,
 } from "@/components/layout/editRepositoryProjectBinding";
-import type { ProjectScanCandidates } from "@/types/project";
+import type { ProjectScanCandidates } from "@/lib/store/types";
 
 function createCandidates(projectFiles: string[]): ProjectScanCandidates {
   return {

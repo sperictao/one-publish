@@ -17,8 +17,8 @@ vi.mock("sonner", () => ({
   },
 }));
 
-vi.mock("@/lib/store", async () => {
-  const actual = await vi.importActual<typeof import("@/lib/store")>("@/lib/store");
+vi.mock("@/lib/store/api", async () => {
+  const actual = await vi.importActual<typeof import("@/lib/store/api")>("@/lib/store/api");
   return {
     ...actual,
     getAppState: mocks.getAppState,
@@ -34,7 +34,7 @@ import {
   defaultAppState,
   defaultPublishConfigStore,
   type AppState,
-} from "@/lib/store";
+} from "@/lib/store/types";
 import { useAppStore } from "@/stores/appStore";
 import { useAppState } from "@/hooks/useAppState";
 

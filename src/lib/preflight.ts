@@ -1,8 +1,8 @@
 import { invoke } from "@tauri-apps/api/core";
 
 import type { PackageResult, SignResult } from "@/lib/artifact";
-import type { EnvironmentCheckResult } from "@/lib/environment";
-import type { UpdaterConfigHealth } from "@/lib/store";
+import type { EnvironmentCheckResult } from "@/features/environment/environment";
+import type { UpdaterConfigHealth } from "@/lib/store/types";
 
 export type PreflightStepStatus = "pass" | "warning" | "fail" | "pending";
 

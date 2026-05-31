@@ -12,7 +12,7 @@ import {
   parsePublishConfigKey,
   resolveDotnetRecentConfigKeyForSelection,
   resolveSelectedPublishConfigKey,
-} from "@/lib/publishConfigIdentity";
+} from "@/features/config/publishConfigIdentity";
 
 describe("publishConfigIdentity", () => {
   it("round-trips project profile selected presets", () => {

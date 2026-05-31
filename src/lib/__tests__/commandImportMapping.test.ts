@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { mapImportedSpecByProvider } from "@/lib/commandImportMapping";
+import { mapImportedSpecByProvider } from "@/features/provider/commandImportMapping";
 
 describe("mapImportedSpecByProvider", () => {
   it("映射 dotnet 可落地字段并保留高级参数", () => {

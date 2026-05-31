@@ -1,10 +1,10 @@
 import { describe, expect, it } from "vitest";
 
-import type { ExecutionRecord } from "@/lib/store";
+import type { ExecutionRecord } from "@/lib/store/types";
 import {
   getRepresentativeRecord,
   groupExecutionFailures,
-} from "@/lib/failureGroups";
+} from "@/features/history/failureGroups";
 
 function createRecord(
   overrides: Partial<ExecutionRecord> & Pick<ExecutionRecord, "id" | "finishedAt">

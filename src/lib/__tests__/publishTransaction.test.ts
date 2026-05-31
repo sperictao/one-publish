@@ -4,8 +4,8 @@ import {
   createFailedPublishTransactionResult,
   createPublishTransactionContext,
   shouldRecordRecentConfig,
-} from "@/lib/publishTransaction";
-import type { ProviderPublishSpec } from "@/lib/publishRuntime";
+} from "@/features/publish/publishTransaction";
+import type { ProviderPublishSpec } from "@/features/publish/publishRuntime";
 
 const spec: ProviderPublishSpec = {
   version: 1,

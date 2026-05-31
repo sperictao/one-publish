@@ -11,10 +11,12 @@ import {
   getUpdaterHelpPaths,
   installUpdate,
   openUpdaterHelp,
+} from "@/lib/store/api";
+import {
   type UpdateInfo,
   type UpdaterConfigHealth,
   type UpdaterHelpPaths,
-} from "@/lib/store";
+} from "@/lib/store/types";
 
 function formatMessage(template: string, ...args: Array<string | number>) {
   let output = template;

@@ -28,9 +28,11 @@ import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import { toast } from "sonner";
 import {
   importConfig,
+} from "@/lib/store/api";
+import {
   type ConfigParameters,
   type ConfigProfile,
-} from "@/lib/store";
+} from "@/lib/store/types";
 import { useI18n } from "@/hooks/useI18n";
 
 interface ConfigManagementContentProps {

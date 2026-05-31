@@ -2,7 +2,7 @@ import { render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
 import { ExecutionHistoryCard } from "@/components/publish/ExecutionHistoryCard";
-import type { ExecutionRecord } from "@/lib/store";
+import type { ExecutionRecord } from "@/lib/store/types";
 
 function createRecord(overrides?: Partial<ExecutionRecord>): ExecutionRecord {
   return {

@@ -1,11 +1,11 @@
 import { ExecutionHistoryCard } from "@/components/publish/ExecutionHistoryCard";
 import { useDiagnosticsExports } from "@/hooks/useDiagnosticsExports";
-import { useExecutionHistoryCardProps } from "@/hooks/useExecutionHistoryCardProps";
-import { useHistoryActions } from "@/hooks/useHistoryActions";
-import { useHistoryDiagnosticsState } from "@/hooks/useHistoryDiagnosticsState";
-import type { ProviderPublishSpec } from "@/lib/publishRuntime";
-import type { ExecutionRecord } from "@/lib/store";
-import type { Repository } from "@/types/repository";
+import { useExecutionHistoryCardProps } from "@/features/history/useExecutionHistoryCardProps";
+import { useHistoryActions } from "@/features/history/useHistoryActions";
+import { useHistoryDiagnosticsState } from "@/features/history/useHistoryDiagnosticsState";
+import type { ProviderPublishSpec } from "@/features/publish/publishRuntime";
+import type { ExecutionRecord } from "@/lib/store/types";
+import type { Repository } from "@/lib/store/types";
 
 type TranslationMap = Record<string, string | undefined>;
 

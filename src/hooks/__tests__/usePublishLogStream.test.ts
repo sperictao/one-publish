@@ -22,7 +22,7 @@ vi.mock("@tauri-apps/api/event", () => ({
   listen: mocks.listen,
 }));
 
-import { usePublishLogStream } from "@/hooks/usePublishLogStream";
+import { usePublishLogStream } from "@/features/publish/usePublishLogStream";
 
 describe("usePublishLogStream", () => {
   beforeEach(() => {

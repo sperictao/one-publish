@@ -4,7 +4,7 @@ import type {
 } from "react";
 import { cn } from "@/lib/utils";
 import { FolderGit2, GitBranch } from "lucide-react";
-import type { Repository } from "@/types/repository";
+import type { Repository } from "@/lib/store/types";
 import { ListDragHandle } from "./ListReorderControls";
 import { RepositoryRowActionsMenu } from "./RepositoryRowActionsMenu";
 

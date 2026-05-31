@@ -1,10 +1,10 @@
-import type { Repository } from "@/types/repository";
-import type { ExecutionRecord } from "@/lib/store";
+import type { Repository } from "@/lib/store/types";
+import type { ExecutionRecord } from "@/lib/store/types";
 import { isPathEqualOrInside } from "@/lib/paths";
 import type {
   HistoryFilterStatus,
   HistoryFilterWindow,
-} from "@/lib/historyFilterPresets";
+} from "@/features/history/historyFilterPresets";
 
 interface HistoryFilterState {
   provider: string;

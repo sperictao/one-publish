@@ -1,4 +1,4 @@
-import { useEnvironmentStatus } from "@/hooks/useEnvironmentStatus";
+import { useEnvironmentStatus } from "@/features/environment/useEnvironmentStatus";
 import { useDialogDerivedState } from "@/hooks/useDialogDerivedState";
 import {
   useAppDialogsProps,
@@ -8,12 +8,12 @@ import {
   getEnvironmentCheckSnapshotResult,
   matchesEnvironmentCheckSnapshot,
   type EnvironmentCheckSnapshot,
-} from "@/lib/environment";
+} from "@/features/environment/environment";
 import type {
   ConfigParameters,
   ProviderManifest,
   PublishConfigStore,
-} from "@/lib/store";
+} from "@/lib/store/types";
 import type { ParameterSchema } from "@/types/parameters";
 import type { ParameterValue } from "@/types/parameters";
 

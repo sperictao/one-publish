@@ -1,9 +1,9 @@
 import { renderHook } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
-import { useProviderPresentationState } from "@/hooks/useProviderPresentationState";
-import type { ResourceState } from "@/hooks/useProviderRuntime";
-import type { ProviderManifest } from "@/lib/store";
+import { useProviderPresentationState } from "@/features/provider/useProviderPresentationState";
+import type { ResourceState } from "@/features/provider/useProviderRuntime";
+import type { ProviderManifest } from "@/lib/store/types";
 import type { ParameterSchema } from "@/types/parameters";
 
 const dotnetProvider: ProviderManifest = {

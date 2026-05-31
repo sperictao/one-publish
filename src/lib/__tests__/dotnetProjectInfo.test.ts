@@ -4,7 +4,7 @@ import {
   isSupportedDotnetProjectFile,
   resolvePreferredDotnetProjectInfo,
 } from "@/lib/dotnetProjectInfo";
-import type { ProjectInfo } from "@/types/project";
+import type { ProjectInfo } from "@/lib/store/types";
 
 function createProjectInfo(overrides?: Partial<ProjectInfo>): ProjectInfo {
   return {

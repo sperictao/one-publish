@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
-import { buildDotnetAdvancedFieldsModel } from "@/lib/dotnetPublishAdvancedFields";
-import type { PublishConfigStore } from "@/lib/store";
+import { buildDotnetAdvancedFieldsModel } from "@/features/config/dotnetPublishAdvancedFields";
+import type { PublishConfigStore } from "@/lib/store/types";
 import type { ParameterSchema } from "@/types/parameters";
 
 const dotnetSchema: ParameterSchema = {

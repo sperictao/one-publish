@@ -10,9 +10,11 @@ import { toast } from "sonner";
 import {
   getProfiles,
   reorderProfiles,
+} from "@/lib/store/api";
+import {
   type ConfigProfile,
   type ProfileOrderEntry,
-} from "@/lib/store";
+} from "@/lib/store/types";
 import {
   createProfileListSnapshot,
   EMPTY_PROFILE_LIST_SNAPSHOT,

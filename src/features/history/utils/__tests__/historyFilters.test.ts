@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
-import type { ExecutionRecord } from "@/lib/store";
-import type { Repository } from "@/types/repository";
+import type { ExecutionRecord } from "@/lib/store/types";
+import type { Repository } from "@/lib/store/types";
 import { isRecordInRepository } from "@/features/history/utils/historyFilters";
 
 function createRepository(path: string): Repository {

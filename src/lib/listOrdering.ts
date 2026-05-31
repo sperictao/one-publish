@@ -1,4 +1,4 @@
-import type { ConfigProfile } from "@/lib/store";
+import type { ConfigProfile } from "@/lib/store/types";
 
 export type DropPosition = "before" | "after";
 

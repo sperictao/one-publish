@@ -1,4 +1,4 @@
-import type { ProjectScanCandidates } from "@/types/project";
+import type { ProjectScanCandidates } from "@/lib/store/types";
 
 export interface ProjectBindingResolution {
   nextProjectFile: string;

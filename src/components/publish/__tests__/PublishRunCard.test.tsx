@@ -3,8 +3,8 @@ import { describe, expect, it, vi } from "vitest";
 
 import { PublishRunCard } from "@/components/publish/PublishRunCard";
 
-vi.mock("@/lib/store", async () => {
-  const actual = await vi.importActual<typeof import("@/lib/store")>("@/lib/store");
+vi.mock("@/lib/store/api", async () => {
+  const actual = await vi.importActual<typeof import("@/lib/store/api")>("@/lib/store/api");
   return {
     ...actual,
     openOutputDirectory: vi.fn(),

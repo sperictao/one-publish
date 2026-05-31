@@ -30,10 +30,10 @@ import {
   type FixAction,
   type FixResult,
   type IssueSeverity,
-} from "@/lib/environment";
+} from "@/features/environment/environment";
 import { useI18n } from "@/hooks/useI18n";
-import { resolveEnvironmentProviderOptions } from "@/lib/providers";
-import type { ProviderManifest } from "@/lib/store";
+import { resolveEnvironmentProviderOptions } from "@/features/provider/providers";
+import type { ProviderManifest } from "@/lib/store/types";
 
 function severityRank(sev: IssueSeverity) {
   if (sev === "critical") return 0;

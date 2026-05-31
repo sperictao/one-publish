@@ -9,7 +9,7 @@ const mocks = vi.hoisted(() => ({
   })),
 }));
 
-vi.mock("@/hooks/useEnvironmentStatus", () => ({
+vi.mock("@/features/environment/useEnvironmentStatus", () => ({
   useEnvironmentStatus: mocks.useEnvironmentStatus,
 }));
 
@@ -17,8 +17,8 @@ vi.mock("@/hooks/useDialogDerivedState", () => ({
   useDialogDerivedState: mocks.useDialogDerivedState,
 }));
 
-import { createEnvironmentCheckSnapshot } from "@/lib/environment";
-import { defaultPublishConfigStore } from "@/lib/store";
+import { createEnvironmentCheckSnapshot } from "@/features/environment/environment";
+import { defaultPublishConfigStore } from "@/lib/store/types";
 import { useDialogsCompositionState } from "@/hooks/useDialogsCompositionState";
 
 describe("useDialogsCompositionState", () => {

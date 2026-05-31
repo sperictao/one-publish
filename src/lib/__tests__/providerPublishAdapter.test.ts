@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   buildProviderPublishSpec,
   type DotnetPublishIntentConfig,
-} from "@/lib/providerPublishAdapter";
+} from "@/features/config/providerPublishAdapter";
 
 const dotnetConfig: DotnetPublishIntentConfig = {
   configuration: "Release",

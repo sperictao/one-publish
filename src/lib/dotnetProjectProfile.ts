@@ -1,15 +1,19 @@
 import {
   createDotnetPublishConfigFromParameters,
   normalizeDotnetProjectBoundParameters,
-} from "@/lib/dotnetPublishConfig";
+} from "@/features/config/dotnetPublishConfig";
 import {
   extractDotnetPublishParametersFromProjectProfile,
   parseProjectPublishProfileXml,
   type ParsedProjectPublishProfile,
 } from "@/lib/projectPublishProfileXml";
-import { readProjectPublishProfile, type PublishConfigStore } from "@/lib/store";
-import type { DotnetProjectInfo } from "@/types/project";
+import { readProjectPublishProfile } from "@/lib/store/api";
+import { type ProjectInfo, type PublishConfigStore } from "@/lib/store/types";
 import type { ParameterValue } from "@/types/parameters";
+
+export type DotnetProjectInfo = Pick<ProjectInfo, "root_path" | "project_file"> & {
+  target_frameworks?: string[];
+};
 
 export interface ResolvedDotnetProjectProfile {
   profileName: string;

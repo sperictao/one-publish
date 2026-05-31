@@ -12,9 +12,9 @@ import { useI18n } from "@/hooks/useI18n";
 import {
   importProviderPublishSpecFromCommand,
   type ProviderPublishSpec,
-} from "@/lib/publishRuntime";
-import { resolveProviderCommandExample, resolveProviderLabel } from "@/lib/providers";
-import type { ProviderManifest } from "@/lib/store";
+} from "@/features/publish/publishRuntime";
+import { resolveProviderCommandExample, resolveProviderLabel } from "@/features/provider/providers";
+import type { ProviderManifest } from "@/lib/store/types";
 
 interface CommandImportDialogProps {
   open: boolean;

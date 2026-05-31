@@ -4,7 +4,7 @@ import {
   scopeEnvironmentCheckSnapshot,
   normalizeEnvironmentProviderIds,
   type EnvironmentCheckSnapshot,
-} from "@/lib/environment";
+} from "@/features/environment/environment";
 
 export function useAppDialogs(environmentProviderIds: string[]) {
   const [settingsOpen, setSettingsOpen] = useState(false);

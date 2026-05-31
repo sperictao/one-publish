@@ -19,8 +19,9 @@ import { Button } from "@/components/ui/button";
 import { useI18n } from "@/hooks/useI18n";
 import { joinPath } from "@/lib/paths";
 import type { PackageResult, SignResult } from "@/lib/artifact";
-import type { EnvironmentCheckResult } from "@/lib/environment";
-import { getUpdaterConfigHealth, type UpdaterConfigHealth } from "@/lib/store";
+import type { EnvironmentCheckResult } from "@/features/environment/environment";
+import { getUpdaterConfigHealth } from "@/lib/store/api";
+import { type UpdaterConfigHealth } from "@/lib/store/types";
 import {
   exportPreflightReport,
   type PreflightChecklistItem,

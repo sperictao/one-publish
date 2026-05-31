@@ -1,14 +1,14 @@
 import { useCallback } from "react";
 
-import { createDotnetPublishConfigFromParameters } from "@/lib/dotnetPublishConfig";
-import { createProjectProfileConfigKey } from "@/lib/publishConfigIdentity";
-import type { ExecutionRecord, PublishConfigStore } from "@/lib/store";
+import { createDotnetPublishConfigFromParameters } from "@/features/config/dotnetPublishConfig";
+import { createProjectProfileConfigKey } from "@/features/config/publishConfigIdentity";
+import type { ExecutionRecord, PublishConfigStore } from "@/lib/store/types";
 import {
   fromSpecParameters,
   type ParameterValue,
   type SpecParameters,
 } from "@/types/parameters";
-import type { ProviderPublishSpec } from "@/lib/publishRuntime";
+import type { ProviderPublishSpec } from "@/features/publish/publishRuntime";
 
 interface UseRecoverableSpecParams {
   specVersion: number;
