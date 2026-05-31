@@ -276,3 +276,36 @@ Refactor publish config forms to compact layout with smaller labels/inputs; repl
 ### Next Steps
 
 - None - task complete
+
+
+## Session 9: Config Identity Module Slice 1-2 + React Doctor 归档
+
+**Date**: 2026-05-31
+**Task**: Config Identity Module Slice 1-2 + React Doctor 归档
+**Branch**: `main`
+
+### Summary
+
+归档 React Doctor 清理任务。Config Identity Slice 1: 创建 lib/publishConfigIdentity.ts barrel re-export，补充 6 个测试用例。Slice 2: 执行历史和收藏配置收口到 Zustand appStore，profile mutation 消除双重 Tauri 调用。剩余 Slice 3-6 (Publish Transaction, Provider Adapter, Workbench, Profile Phase 2) 留待后续任务。
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `34216c4` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete

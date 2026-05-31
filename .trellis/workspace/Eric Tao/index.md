@@ -8,8 +8,8 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 8
-- **Last Active**: 2026-05-28
+- **Total Sessions**: 9
+- **Last Active**: 2026-05-31
 <!-- @@@/auto:current-status -->
 
 ---
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~278 | Active |
+| `journal-1.md` | ~311 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 9 | 2026-05-31 | Config Identity Module Slice 1-2 + React Doctor 归档 | `34216c4` | `main` |
 | 8 | 2026-05-28 | Compact form layout, Apple-style settings, inline tooltips | `8e5ea4c` | `main` |
 | 7 | 2026-05-18 | Deepen publish architecture seams | `64bc266`, `421a95c`, `8706c61`, `4dbf921`, `94fe94c` | `main` |
 | 6 | 2026-05-17 | Fix publish config selection state | `07313e4` | `main` |
