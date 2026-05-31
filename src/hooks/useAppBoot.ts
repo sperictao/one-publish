@@ -1,4 +1,4 @@
-import { useCallback, useMemo } from "react";
+import { useMemo } from "react";
 import { useAppState } from "@/hooks/useAppState";
 import { useShellBoot, type UseShellBootReturn } from "@/hooks/useShellBoot";
 import { useRepoBoot, type UseRepoBootReturn } from "@/hooks/useRepoBoot";
@@ -11,6 +11,7 @@ import { useProviderPresentationState } from "@/features/provider/useProviderPre
 import { useRerunFlow } from "@/hooks/useRerunFlow";
 import { useTrayRecentPublish } from "@/hooks/useTrayRecentPublish";
 import { usePublishStore } from "@/store/publishStore";
+import { useAppShortcutsProps } from "@/hooks/useAppShortcutsProps";
 
 const SPEC_VERSION = 1;
 
@@ -262,28 +263,16 @@ export function useAppBoot() {
   // ============================================================
   // 8. Shortcut callbacks (built after all domains for correct closures)
   // ============================================================
-  const onRefreshShortcut = useCallback(() => {
-    if (repo.selectedRepo && !appState.isLoading && activeProviderUsesProjectFile) {
-      repo.scanProject(repo.selectedRepo.path, {
-        projectFile: repo.selectedRepo.projectFile ?? undefined,
-      });
-    }
-  }, [repo.selectedRepo, appState.isLoading, activeProviderUsesProjectFile, repo.scanProject]);
-
-  const onPublishShortcut = useCallback(() => {
-    if (isPublishing) {
-      return;
-    }
-    if (activeProviderRequiresProjectBinding) {
-      if (repo.projectInfo) {
-        publish.startPublish();
-      }
-      return;
-    }
-    if (repo.selectedRepo) {
-      publish.startPublish();
-    }
-  }, [isPublishing, activeProviderRequiresProjectBinding, repo.projectInfo, repo.selectedRepo, publish.startPublish]);
+  const { onRefreshShortcut, onPublishShortcut } = useAppShortcutsProps({
+    selectedRepo: repo.selectedRepo,
+    isStateLoading: appState.isLoading,
+    activeProviderUsesProjectFile,
+    activeProviderRequiresProjectBinding,
+    projectInfo: repo.projectInfo,
+    isPublishing,
+    scanProject: repo.scanProject,
+    startPublish: publish.startPublish,
+  });
 
   // ============================================================
   // 9. Fix up diagnosticsSectionProps with actual rerunFromHistory

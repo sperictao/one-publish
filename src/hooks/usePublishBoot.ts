@@ -5,10 +5,11 @@ import { useCommandImport } from "@/hooks/useCommandImport";
 import { useScopedConfigs } from "@/features/config/useScopedConfigs";
 import { useProviderPresentationState } from "@/features/provider/useProviderPresentationState";
 import { usePresetText } from "@/hooks/usePresetText";
+import { usePublishConfigPanelProps } from "@/hooks/usePublishConfigPanelProps";
+import { usePublishRunCardProps } from "@/hooks/usePublishRunCardProps";
 import { buildDotnetProfileParameters } from "@/features/config/dotnetPublishConfig";
 import { DEFAULT_DOTNET_PRESET_ID, DOTNET_PRESETS } from "@/features/config/dotnetPresets";
 import type { PublishConfigStore } from "@/lib/store/types";
-import type { PublishConfigPanelProps } from "@/components/layout/PublishConfigPanel";
 import type { EnvironmentCheckSnapshot } from "@/features/environment/environment";
 import type { CommandImportResultCardProps } from "@/components/publish/CommandImportResultCard";
 import type { ProviderPublishSpec } from "@/features/publish/publishRuntime";
@@ -258,48 +259,22 @@ export function usePublishBoot(params: UsePublishBootParams) {
     (params.isProjectInfoRefreshing || isResolvingSelectedProjectProfile);
 
   // Memoized publish run card props
-  const publishRunCardProps = useMemo(
-    () => ({
-      outputLog,
-      publishResult: params.publishResult,
-      appT: params.appT,
-      isRefreshing: isPublishRunCardRefreshing,
-      publishActions:
-        params.selectedRepo &&
-        (activeProviderRequiresProjectBinding ? Boolean(params.projectInfo) : true)
-          ? {
-              publishCommand: publishPreviewCommand || null,
-              publishCommandLabel: params.publishT.command || "将执行的命令:",
-              startLabel: params.configT.execute || "执行发布",
-              publishingLabel: params.configT.publishing || "发布中...",
-              cancelLabel: params.appT.cancelPublish || "取消发布",
-              cancellingLabel: params.appT.cancelling || "取消中...",
-              isPublishing: params.isPublishing,
-              isCancellingPublish: params.isCancellingPublish,
-              startDisabled: !params.selectedRepo,
-              onStartPublish: startPublish,
-              onCancelPublish: cancelPublish,
-            }
-          : null,
-    }),
-    [
-      activeProviderRequiresProjectBinding,
-      params.appT,
-      cancelPublish,
-      params.configT.execute,
-      params.configT.publishing,
-      params.isCancellingPublish,
-      isPublishRunCardRefreshing,
-      params.isPublishing,
-      outputLog,
-      publishPreviewCommand,
-      params.projectInfo,
-      params.publishResult,
-      params.publishT.command,
-      params.selectedRepo,
-      startPublish,
-    ]
-  );
+  const publishRunCardProps = usePublishRunCardProps({
+    outputLog,
+    publishResult: params.publishResult,
+    appT: params.appT,
+    publishT: params.publishT,
+    configT: params.configT,
+    isRefreshing: isPublishRunCardRefreshing,
+    selectedRepo: params.selectedRepo,
+    activeProviderRequiresProjectBinding,
+    projectInfo: params.projectInfo,
+    publishPreviewCommand,
+    isPublishing: params.isPublishing,
+    isCancellingPublish: params.isCancellingPublish,
+    startPublish,
+    cancelPublish,
+  });
 
   // Memoized command import result card props
   const commandImportResultCardProps = useMemo<
@@ -340,69 +315,36 @@ export function usePublishBoot(params: UsePublishBootParams) {
     : null;
 
   // Memoized publish config panel props
-  const publishConfigPanelProps = useMemo<PublishConfigPanelProps>(
-    () => ({
-      selectedRepoId: params.selectedRepoId,
-      selectedPreset: params.selectedPreset,
-      isCustomMode: params.isCustomMode,
-      profiles,
-      isProfilesRefreshing: Boolean(params.selectedRepo) && isProfilesRefreshing,
-      activeProfileName,
-      onSelectProfile: handleSelectProfileFromPanel,
-      onCreateProfile: openQuickCreateProfileDialog,
-      onEditProfile: openQuickEditProfileDialog,
-      onRefreshProfiles: loadProfiles,
-      onOpenConfigDialog: () => params.handleConfigDialogOpenChange(true),
-      onDeleteProfile: handleDeleteProfileFromPanel,
-      projectPublishProfiles: params.orderedProjectPublishProfiles,
-      isProjectProfilesRefreshing,
-      projectFilePath: params.projectInfo?.project_file,
-      projectFrameworkOptions,
-      onSelectProjectProfile: handleSelectProjectProfile,
-      onCopyProjectProfileToCustom: handleCreateProfileFromProjectProfile,
-      recentConfigKeys,
-      favoriteConfigKeys,
-      onToggleFavoriteConfig: toggleFavoriteConfig,
-      onRemoveRecentConfig: removeRecentConfig,
-      onReorderRecentConfigs: reorderRecentConfig,
-      onReorderProjectProfiles: params.reorderProjectPublishProfiles,
-      onReorderProfiles: handleReorderProfiles,
-      onCollapse: () => params.setMiddlePanelCollapsed(true),
-      showExpandButton: params.leftPanelCollapsed,
-      onExpandRepo: () => params.setLeftPanelCollapsed(false),
-    }),
-    [
-      activeProfileName,
-      favoriteConfigKeys,
-      handleCreateProfileFromProjectProfile,
-      params.handleConfigDialogOpenChange,
-      handleDeleteProfileFromPanel,
-      handleReorderProfiles,
-      handleSelectProfileFromPanel,
-      handleSelectProjectProfile,
-      params.isCustomMode,
-      isProfilesRefreshing,
-      isProjectProfilesRefreshing,
-      params.leftPanelCollapsed,
-      loadProfiles,
-      openQuickCreateProfileDialog,
-      openQuickEditProfileDialog,
-      params.orderedProjectPublishProfiles,
-      profiles,
-      projectFrameworkOptions,
-      params.projectInfo?.project_file,
-      recentConfigKeys,
-      removeRecentConfig,
-      params.reorderProjectPublishProfiles,
-      reorderRecentConfig,
-      params.selectedPreset,
-      params.selectedRepo,
-      params.selectedRepoId,
-      params.setLeftPanelCollapsed,
-      params.setMiddlePanelCollapsed,
-      toggleFavoriteConfig,
-    ]
-  );
+  const publishConfigPanelProps = usePublishConfigPanelProps({
+    selectedRepoId: params.selectedRepoId,
+    selectedPreset: params.selectedPreset,
+    isCustomMode: params.isCustomMode,
+    profiles,
+    isProfilesRefreshing: Boolean(params.selectedRepo) && isProfilesRefreshing,
+    activeProfileName,
+    onSelectProfile: handleSelectProfileFromPanel,
+    onCreateProfile: openQuickCreateProfileDialog,
+    onEditProfile: openQuickEditProfileDialog,
+    onRefreshProfiles: loadProfiles,
+    onOpenConfigDialog: () => params.handleConfigDialogOpenChange(true),
+    onDeleteProfile: handleDeleteProfileFromPanel,
+    projectPublishProfiles: params.orderedProjectPublishProfiles,
+    isProjectProfilesRefreshing,
+    projectFilePath: params.projectInfo?.project_file,
+    projectFrameworkOptions,
+    onSelectProjectProfile: handleSelectProjectProfile,
+    onCopyProjectProfileToCustom: handleCreateProfileFromProjectProfile,
+    recentConfigKeys,
+    favoriteConfigKeys,
+    onToggleFavoriteConfig: toggleFavoriteConfig,
+    onRemoveRecentConfig: removeRecentConfig,
+    onReorderRecentConfigs: reorderRecentConfig,
+    onReorderProjectProfiles: params.reorderProjectPublishProfiles,
+    onReorderProfiles: handleReorderProfiles,
+    onCollapse: () => params.setMiddlePanelCollapsed(true),
+    showExpandButton: params.leftPanelCollapsed,
+    onExpandRepo: () => params.setLeftPanelCollapsed(false),
+  });
 
   return {
     // Publish config from useAppState

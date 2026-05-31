@@ -196,5 +196,6 @@ export function useProfileListState(params: {
     refreshProfilesAfterMutation,
     reorderVisibleProfiles,
     isCurrentRepo,
+    commitProfilesSnapshot,
   };
 }
