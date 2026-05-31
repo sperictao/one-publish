@@ -23,6 +23,8 @@
 - 不要绕过 `lib/store.ts` 在组件里直接 `invoke("save...")`。
 - 发布配置身份必须通过 `src/lib/publishConfigIdentity.ts` 编码/解码；调用方不得手写 `profile-`、`pubxml:`、`userprofile:` 或 `recent:` 的业务拼拆。DOM id、测试 fixture 和非业务 `profile-group` filter 除外。
 - Zustand 本地乐观更新必须通过 `src/stores/appStoreMutations.ts` 的领域 mutation helper 表达；不要在 `appStore.ts` 或组件里重复手写 AppState patch 结构。
+- 执行历史（execution history）由 Zustand `useAppStore` 统一管理，通过 `savePublishRecord`、`loadExecutionHistory`、`setExecutionSnapshotPath` 等语义化 action 操作；不要在 `usePublishHistoryState` 或 `useHistoryActions` 中用本地 React state + 直接 Tauri API 调用维护第二份执行历史。
+- 收藏配置（favorite configs）以 localStorage 作为持久化层，但只能通过 Zustand `useAppStore` 的 `toggleFavoriteConfig`、`replaceScopedConfigKey` action 读写；不要在组件或 hook（如 `useScopedConfigs`）中直接操作 `localStorage.getItem/setItem`。
 - 发布命令运行时通过 `src/lib/publishRuntime.ts` 集中调用 Tauri commands；`usePublishRunner` 只保留发布 UI 编排、反馈、日志和历史记录接线，不重新导出 `PublishSpec` / `PublishResult` 等契约类型。
 - 发布预览和输出目录预检继续走语义 helper（如 `src/lib/renderPublishCommand.ts`、`src/lib/publishOutputPreflight.ts`），这些 helper 再委托到 `publishRuntime`，避免 hook 直接绕过领域语义层。
 - 发布事务的 run options、失败 result 构造和最近配置写入判断属于 `src/lib/publishTransaction.ts`；执行 hook 只消费 transaction context，不重新展开同一批默认值。

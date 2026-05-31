@@ -164,8 +164,8 @@ vi.mock("@/features/history/usePublishHistoryState", () => ({
     isRerunChecklistEnabled: false,
     setIsRerunChecklistEnabled: mocks.noop,
     executionHistory: [],
-    setExecutionHistory: mocks.noop,
     savePublishRecord: mocks.noop,
+    loadExecutionHistory: mocks.noop,
   }),
 }));
 

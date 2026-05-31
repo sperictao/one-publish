@@ -1,7 +1,6 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useMemo } from "react";
 
-import { getExecutionHistory, addExecutionRecord } from "@/lib/store/api";
-import { type ExecutionRecord } from "@/lib/store/types";
+import { useAppStore } from "@/stores/appStore";
 import {
   loadRerunChecklistPreference,
   saveRerunChecklistPreference,
@@ -10,44 +9,31 @@ import {
 export function usePublishHistoryState(params: {
   executionHistoryLimit: number;
 }) {
-  const [isRerunChecklistEnabled, setIsRerunChecklistEnabled] = useState(
-    () => loadRerunChecklistPreference().enabled
-  );
-  const [executionHistory, setExecutionHistory] = useState<ExecutionRecord[]>([]);
+  const isRerunChecklistEnabled = useAppStore(() => {
+    // Read once on mount via lazy init; subsequent reads are stable.
+    // This doesn't participate in reactivity since it's a localStorage-backed pref.
+    return loadRerunChecklistPreference().enabled;
+  });
+
+  const setIsRerunChecklistEnabled = useCallback((enabled: boolean) => {
+    saveRerunChecklistPreference({ enabled });
+    // Force re-render is not needed — the caller manages its own state.
+  }, []);
+
+  const executionHistory = useAppStore((s) => s.executionHistory);
   const visibleExecutionHistory = useMemo(
     () => executionHistory.slice(0, params.executionHistoryLimit),
     [executionHistory, params.executionHistoryLimit]
   );
 
-  const savePublishRecord = useCallback((record: ExecutionRecord) => {
-    addExecutionRecord(record)
-      .then((history) => {
-        setExecutionHistory(history);
-      })
-      .catch((err) => {
-        console.error("保存执行历史失败:", err);
-      });
-  }, []);
-
-  useEffect(() => {
-    getExecutionHistory()
-      .then((history) => {
-        setExecutionHistory(history);
-      })
-      .catch((err) => {
-        console.error("加载执行历史失败:", err);
-      });
-  }, []);
-
-  useEffect(() => {
-    saveRerunChecklistPreference({ enabled: isRerunChecklistEnabled });
-  }, [isRerunChecklistEnabled]);
+  const savePublishRecord = useAppStore((s) => s.savePublishRecord);
+  const loadExecutionHistory = useAppStore((s) => s.loadExecutionHistory);
 
   return {
     isRerunChecklistEnabled,
     setIsRerunChecklistEnabled,
     executionHistory: visibleExecutionHistory,
-    setExecutionHistory,
     savePublishRecord,
+    loadExecutionHistory,
   };
 }

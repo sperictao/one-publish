@@ -19,7 +19,6 @@ export interface DiagnosticsSectionProps {
   selectedRepo: Repository;
   isPublishing: boolean;
   recentHistoryExports: string[];
-  setExecutionHistory: (history: ExecutionRecord[]) => void;
   trackHistoryExport: (outputPath: string) => void;
   extractSpecFromRecord: (record: ExecutionRecord) => ProviderPublishSpec | null;
   rerunFromHistory: (record: ExecutionRecord) => Promise<void>;
@@ -35,7 +34,6 @@ export function DiagnosticsSection({
   selectedRepo,
   isPublishing,
   recentHistoryExports,
-  setExecutionHistory,
   trackHistoryExport,
   extractSpecFromRecord,
   rerunFromHistory,
@@ -67,7 +65,6 @@ export function DiagnosticsSection({
     appT,
     historyT,
     extractSpecFromRecord,
-    setExecutionHistory,
   });
 
   const {

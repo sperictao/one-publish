@@ -3,9 +3,10 @@ import { toast } from "sonner";
 
 import { buildGitHubActionsSnippet, buildShellHandoffSnippet, type HandoffSnippetFormat } from "@/lib/handoffSnippet";
 import type { ProviderPublishSpec } from "@/features/publish/publishRuntime";
-import { openExecutionSnapshot, setExecutionRecordSnapshot } from "@/lib/store/api";
+import { openExecutionSnapshot } from "@/lib/store/api";
 import { type ExecutionRecord } from "@/lib/store/types";
 import { extractInvokeErrorMessage } from "@/lib/tauri/invokeErrors";
+import { useAppStore } from "@/stores/appStore";
 
 interface TranslationMap {
   [key: string]: string | undefined;
@@ -15,15 +16,15 @@ interface UseHistoryActionsParams {
   appT: TranslationMap;
   historyT: TranslationMap;
   extractSpecFromRecord: (record: ExecutionRecord) => ProviderPublishSpec | null;
-  setExecutionHistory: (history: ExecutionRecord[]) => void;
 }
 
 export function useHistoryActions({
   appT,
   historyT,
   extractSpecFromRecord,
-  setExecutionHistory,
 }: UseHistoryActionsParams) {
+  const setExecutionSnapshotPath = useAppStore((s) => s.setExecutionSnapshotPath);
+
   const copyText = useCallback(async (text: string, label: string) => {
     const normalized = text.trim();
     if (!normalized) {
@@ -92,8 +93,7 @@ export function useHistoryActions({
       });
 
       if (!record.snapshotPath || record.snapshotPath !== openedPath) {
-        const history = await setExecutionRecordSnapshot(record.id, openedPath);
-        setExecutionHistory(history);
+        await setExecutionSnapshotPath(record.id, openedPath);
       }
 
       toast.success(historyT.snapshotOpened || "已打开执行快照", { description: openedPath });
@@ -102,7 +102,7 @@ export function useHistoryActions({
         description: extractInvokeErrorMessage(err),
       });
     }
-  }, [historyT.openSnapshotFailed, historyT.snapshotOpened, setExecutionHistory]);
+  }, [historyT.openSnapshotFailed, historyT.snapshotOpened, setExecutionSnapshotPath]);
 
   return {
     copyHandoffSnippet,

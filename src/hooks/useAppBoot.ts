@@ -50,7 +50,6 @@ export function useAppBoot() {
     isRerunChecklistEnabled,
     setIsRerunChecklistEnabled,
     executionHistory,
-    setExecutionHistory,
     savePublishRecord,
   } = usePublishHistoryState({
     executionHistoryLimit: appState.executionHistoryLimit,
@@ -218,7 +217,6 @@ export function useAppBoot() {
     isRerunChecklistEnabled,
     setIsRerunChecklistEnabled,
     executionHistory,
-    setExecutionHistory,
     savePublishRecord,
     // Lifted publish store state
     isPublishing,

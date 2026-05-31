@@ -1,18 +1,22 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  createPresetConfigKey,
   createProjectProfileConfigKey,
   createProjectProfileSelectedPreset,
   createRecentConfigRenderId,
   createUserProfileConfigKey,
   getProjectProfileNameFromConfigKey,
+  getProjectProfileNameFromRenderId,
   getRecentConfigKeyFromRenderId,
   getSelectedProjectProfileName,
+  getUserProfileNameFromConfigKey,
+  getUserProfileNameFromRenderId,
   normalizeRenderableConfigId,
   parsePublishConfigKey,
   resolveDotnetRecentConfigKeyForSelection,
   resolveSelectedPublishConfigKey,
-} from "@/features/config/publishConfigIdentity";
+} from "@/lib/publishConfigIdentity";
 
 describe("publishConfigIdentity", () => {
   it("round-trips project profile selected presets", () => {
@@ -115,5 +119,83 @@ describe("publishConfigIdentity", () => {
     ).toBeNull();
 
     expect(getProjectProfileNameFromConfigKey("pubxml:Folder")).toBe("Folder");
+  });
+
+  it("extracts profile names from config keys via convenience helpers", () => {
+    expect(getProjectProfileNameFromConfigKey("pubxml:Release")).toBe("Release");
+    expect(getProjectProfileNameFromConfigKey("userprofile:alpha")).toBeNull();
+    expect(getProjectProfileNameFromConfigKey("preset:folder")).toBeNull();
+
+    expect(getUserProfileNameFromConfigKey("userprofile:Team")).toBe("Team");
+    expect(getUserProfileNameFromConfigKey("pubxml:Release")).toBeNull();
+    expect(getUserProfileNameFromConfigKey("")).toBeNull();
+  });
+
+  it("extracts profile names from render ids", () => {
+    expect(getProjectProfileNameFromRenderId("pubxml:Folder")).toBe("Folder");
+    expect(getProjectProfileNameFromRenderId("userprofile:alpha")).toBeNull();
+    expect(getProjectProfileNameFromRenderId(null)).toBeNull();
+    expect(getProjectProfileNameFromRenderId("")).toBeNull();
+
+    expect(getUserProfileNameFromRenderId("userprofile:Team")).toBe("Team");
+    expect(getUserProfileNameFromRenderId("pubxml:Foo")).toBeNull();
+    expect(getUserProfileNameFromRenderId(null)).toBeNull();
+  });
+
+  it("creates preset config keys explicitly", () => {
+    expect(createPresetConfigKey("release-fd")).toBe("preset:release-fd");
+    expect(createPresetConfigKey("  debug  ")).toBe("preset:debug");
+
+    const userKey = createUserProfileConfigKey(" My Team ");
+    expect(userKey).toBe("userprofile:My Team");
+    expect(parsePublishConfigKey(userKey)).toEqual({
+      kind: "user-profile",
+      profileName: "My Team",
+    });
+  });
+
+  it("handles identity value trimming consistently", () => {
+    expect(createProjectProfileConfigKey(" Folder ")).toBe("pubxml:Folder");
+    expect(createUserProfileConfigKey(" Alpha ")).toBe("userprofile:Alpha");
+    expect(getSelectedProjectProfileName("profile-   \t")).toBeNull();
+    expect(getSelectedProjectProfileName("profile- \t Name ")).toBe("Name");
+  });
+
+  it("resolves dotnet recent config key for preset-only selection", () => {
+    expect(
+      resolveDotnetRecentConfigKeyForSelection({
+        activeProviderId: "dotnet",
+        isCustomMode: false,
+        activeProfileName: null,
+        selectedPreset: "release-fd",
+      })
+    ).toBe("preset:release-fd");
+
+    expect(
+      resolveDotnetRecentConfigKeyForSelection({
+        activeProviderId: "dotnet",
+        isCustomMode: true,
+        activeProfileName: null,
+        selectedPreset: "folder",
+      })
+    ).toBeNull();
+  });
+
+  it("resolves selected config key with missing hasProjectProfile guard", () => {
+    expect(
+      resolveSelectedPublishConfigKey({
+        isCustomMode: false,
+        activeProfileName: null,
+        selectedPreset: "profile-Folder",
+      })
+    ).toBe("pubxml:Folder");
+
+    expect(
+      resolveSelectedPublishConfigKey({
+        isCustomMode: false,
+        activeProfileName: null,
+        selectedPreset: "release-fd",
+      })
+    ).toBeNull();
   });
 });

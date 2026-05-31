@@ -111,7 +111,12 @@ export function useProfileListState(params: {
   }, [commitProfilesSnapshot, selectedRepoId]);
 
   const refreshProfilesAfterMutation = useCallback(
-    async (repoId: string) => {
+    async (repoId: string, preFetchedProfiles?: ConfigProfile[]) => {
+      if (preFetchedProfiles) {
+        commitProfilesSnapshot(repoId, preFetchedProfiles);
+        return preFetchedProfiles;
+      }
+
       if (selectedRepoIdRef.current === repoId) {
         return await loadProfiles();
       }

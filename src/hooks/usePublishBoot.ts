@@ -93,7 +93,6 @@ interface UsePublishBootParams {
   isRerunChecklistEnabled: boolean;
   setIsRerunChecklistEnabled: (value: boolean) => void;
   executionHistory: ExecutionRecord[];
-  setExecutionHistory: React.Dispatch<React.SetStateAction<ExecutionRecord[]>>;
   savePublishRecord: (record: ExecutionRecord) => void;
 
   // Lifted publish store state
@@ -139,7 +138,6 @@ export function usePublishBoot(params: UsePublishBootParams) {
     pushRecentConfig: params.pushRecentPublishConfig,
     removeRecentConfig: params.removeRecentPublishConfig,
     reorderRecentConfig: params.reorderRecentPublishConfigs,
-    replaceRecentConfigKey: params.replaceRecentPublishConfigKey,
   });
 
   // Dotnet custom config
@@ -335,7 +333,6 @@ export function usePublishBoot(params: UsePublishBootParams) {
         selectedRepo: params.selectedRepo,
         isPublishing: params.isPublishing,
         recentHistoryExports: params.recentHistoryExports,
-        setExecutionHistory: params.setExecutionHistory,
         trackHistoryExport: params.trackHistoryExport,
         extractSpecFromRecord: params.extractSpecFromRecord,
         rerunFromHistory: params.extractSpecFromRecord as any, // overridden by useAppBoot
@@ -504,7 +501,6 @@ export function usePublishBoot(params: UsePublishBootParams) {
     isRerunChecklistEnabled: params.isRerunChecklistEnabled,
     setIsRerunChecklistEnabled: params.setIsRerunChecklistEnabled,
     executionHistory: params.executionHistory,
-    setExecutionHistory: params.setExecutionHistory,
     savePublishRecord: params.savePublishRecord,
 
     // Publish store

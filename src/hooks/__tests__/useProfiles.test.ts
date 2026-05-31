@@ -54,8 +54,8 @@ function createDeferred<T>() {
 describe("useProfiles", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mocks.saveProfile.mockResolvedValue({});
-    mocks.deleteProfile.mockResolvedValue({});
+    mocks.saveProfile.mockResolvedValue({ repositories: [] });
+    mocks.deleteProfile.mockResolvedValue({ repositories: [] });
     mocks.exportConfig.mockResolvedValue("/tmp/one-publish-config.json");
     mocks.applyImportedConfig.mockResolvedValue(undefined);
   });
@@ -320,9 +320,13 @@ describe("useProfiles", () => {
   });
 
   it("通过 profileManagement 保存配置后刷新同一个 owner snapshot", async () => {
-    mocks.getProfiles
-      .mockResolvedValueOnce([])
-      .mockResolvedValueOnce([createProfile("Release")]);
+    const releaseProfile = createProfile("Release");
+    mocks.saveProfile.mockResolvedValue({
+      repositories: [
+        { id: "repo-1", publishConfig: { profiles: [releaseProfile] } },
+      ],
+    });
+    mocks.getProfiles.mockResolvedValueOnce([]);
 
     const { result } = renderHook(() =>
       useProfiles({

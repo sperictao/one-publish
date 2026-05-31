@@ -15,9 +15,13 @@ import {
   removeRecentPublishConfig as apiRemoveRecentPublishConfig,
   replaceRecentPublishConfigKey as apiReplaceRecentPublishConfigKey,
   updatePreferences,
+  getExecutionHistory,
+  addExecutionRecord,
+  setExecutionRecordSnapshot,
 } from "@/lib/store/api";
 import {
   type AppState,
+  type ExecutionRecord,
   type PublishConfigStore,
   defaultAppState,
 } from "@/lib/store/types";
@@ -32,6 +36,11 @@ import {
   type UiStateMutation,
 } from "@/stores/appStoreMutations";
 import type { Repository } from "@/lib/store/types";
+import {
+  loadFavorites,
+  migrateLegacyFavorites,
+  persistFavorites,
+} from "@/stores/favoriteConfigs";
 
 // ── Store interface ──
 interface AppStore extends AppState {
@@ -40,6 +49,17 @@ interface AppStore extends AppState {
   error: string | null;
   loadState: () => Promise<void>;
   _restoreAuthoritativeState: () => Promise<AppState>;
+
+  // Execution history
+  executionHistory: ExecutionRecord[];
+  loadExecutionHistory: () => Promise<void>;
+  savePublishRecord: (record: ExecutionRecord) => Promise<void>;
+  setExecutionSnapshotPath: (recordId: string, snapshotPath: string) => Promise<void>;
+
+  // Favorites (localStorage-backed, managed through appStore)
+  favoriteConfigKeysByRepo: Record<string, string[]>;
+  toggleFavoriteConfig: (key: string, repoId?: string | null) => void;
+  replaceScopedConfigKey: (previousKey: string, nextKey: string, repoId?: string | null) => void;
 
   // UI state
   setUIState: (params: UiStateMutation) => void;
@@ -159,11 +179,24 @@ export const useAppStore = create<AppStore>((set, get) => {
     ...defaultAppState,
     isLoading: true,
     error: null,
+    executionHistory: [],
+    favoriteConfigKeysByRepo: loadFavorites(),
 
     // ── Lifecycle ──
     loadState: async () => {
       try {
         const appState = await getAppState();
+        // Migrate legacy favorites into the current repo scope
+        if (appState.selectedRepoId) {
+          const migrated = migrateLegacyFavorites(
+            get().favoriteConfigKeysByRepo,
+            appState.selectedRepoId
+          );
+          if (migrated) {
+            persistFavorites(migrated);
+            set({ favoriteConfigKeysByRepo: migrated });
+          }
+        }
         set({ ...appState, isLoading: false, error: null });
       } catch (err) {
         console.error("加载应用状态失败:", err);
@@ -175,6 +208,77 @@ export const useAppStore = create<AppStore>((set, get) => {
       const authoritativeState = await getAppState();
       set({ ...authoritativeState, error: null });
       return authoritativeState;
+    },
+
+    // ── Execution history ──
+    loadExecutionHistory: async () => {
+      try {
+        const history = await getExecutionHistory();
+        set({ executionHistory: history });
+      } catch (err) {
+        console.error("加载执行历史失败:", err);
+      }
+    },
+
+    savePublishRecord: async (record) => {
+      try {
+        const history = await addExecutionRecord(record);
+        set({ executionHistory: history });
+      } catch (err) {
+        console.error("保存执行历史失败:", err);
+      }
+    },
+
+    setExecutionSnapshotPath: async (recordId, snapshotPath) => {
+      try {
+        const history = await setExecutionRecordSnapshot(
+          recordId,
+          snapshotPath
+        );
+        set({ executionHistory: history });
+      } catch (err) {
+        console.error("设置执行快照路径失败:", err);
+      }
+    },
+
+    // ── Favorites (localStorage-backed) ──
+    toggleFavoriteConfig: (key, repoId) => {
+      const { selectedRepoId, favoriteConfigKeysByRepo } = get();
+      const id = resolveScopedMutationRepoId(selectedRepoId, repoId);
+      if (!id) return;
+
+      const scoped = favoriteConfigKeysByRepo[id] ?? [];
+      const isFavorite = scoped.includes(key);
+
+      const nextScoped = isFavorite
+        ? scoped.filter((item) => item !== key)
+        : [key, ...scoped.filter((item) => item !== key)];
+
+      const next = { ...favoriteConfigKeysByRepo, [id]: nextScoped };
+      persistFavorites(next);
+      set({ favoriteConfigKeysByRepo: next });
+
+      if (!isFavorite) {
+        get().pushRecentPublishConfig(key, id);
+      }
+    },
+
+    replaceScopedConfigKey: (previousKey, nextKey, repoId) => {
+      const { selectedRepoId, favoriteConfigKeysByRepo } = get();
+      const id = resolveScopedMutationRepoId(selectedRepoId, repoId);
+      if (!id || !previousKey || !nextKey) return;
+
+      get().replaceRecentPublishConfigKey(previousKey, nextKey, id);
+
+      const scoped = favoriteConfigKeysByRepo[id] ?? [];
+      if (!scoped.includes(previousKey)) return;
+
+      const nextScoped = Array.from(
+        new Set(scoped.map((item) => (item === previousKey ? nextKey : item)))
+      );
+      const next = { ...favoriteConfigKeysByRepo, [id]: nextScoped };
+      persistFavorites(next);
+      set({ favoriteConfigKeysByRepo: next });
     },
 
     // ── UI State ──

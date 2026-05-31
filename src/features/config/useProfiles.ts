@@ -388,8 +388,9 @@ export function useProfiles({
       const isEditing = Boolean(editingProfileOriginalName);
       const nextProfileKey = createUserProfileConfigKey(profileName);
 
+      let mutationState;
       if (editingProfileOriginalName) {
-        await updateProfile({
+        mutationState = await updateProfile({
           repoId: selectedRepoId,
           originalName: editingProfileOriginalName,
           name: profileName,
@@ -398,7 +399,7 @@ export function useProfiles({
           profileGroup: resolvedProfileGroup || undefined,
         });
       } else {
-        await saveProfileToStore({
+        mutationState = await saveProfileToStore({
           repoId: selectedRepoId,
           name: profileName,
           providerId: "dotnet",
@@ -407,7 +408,15 @@ export function useProfiles({
         });
       }
 
-      await refreshProfilesAfterMutation(selectedRepoId);
+      const mutationRepo = mutationState.repositories.find(
+        (r) => r.id === selectedRepoId
+      );
+      if (mutationRepo) {
+        await refreshProfilesAfterMutation(
+          selectedRepoId,
+          mutationRepo.publishConfig.profiles
+        );
+      }
 
       handleSelectProfileFromPanel({
         name: profileName,
@@ -464,9 +473,11 @@ export function useProfiles({
 
   const deleteProfileByName = useCallback(
     async (repoId: string, name: string) => {
-      await deleteProfileFromStore(repoId, name);
-      await refreshProfilesAfterMutation(repoId);
-
+      const state = await deleteProfileFromStore(repoId, name);
+      const repo = state.repositories.find((r) => r.id === repoId);
+      if (repo) {
+        await refreshProfilesAfterMutation(repoId, repo.publishConfig.profiles);
+      }
       if (isCurrentRepo(repoId)) {
         if (activeProfileName === name) {
           setActiveProfileName(null);
@@ -519,14 +530,17 @@ export function useProfiles({
 
       const repoId = selectedRepoId;
 
-      await saveProfileToStore({
+      const state = await saveProfileToStore({
         repoId,
         name,
         providerId,
         parameters,
         profileGroup,
       });
-      await refreshProfilesAfterMutation(repoId);
+      const repo = state.repositories.find((r) => r.id === repoId);
+      if (repo) {
+        await refreshProfilesAfterMutation(repoId, repo.publishConfig.profiles);
+      }
     },
     [profileT.saveFailed, refreshProfilesAfterMutation, selectedRepoId]
   );
@@ -583,14 +597,20 @@ export function useProfiles({
       const profileName = buildCopiedProfileName(sourceProfileName, existingNames);
       const parameters = buildProfileParameters(config);
 
-      await saveProfileToStore({
+      const state = await saveProfileToStore({
         repoId: selectedRepoId,
         name: profileName,
         providerId: "dotnet",
         parameters,
       });
 
-      await refreshProfilesAfterMutation(selectedRepoId);
+      const repo = state.repositories.find((r) => r.id === selectedRepoId);
+      if (repo) {
+        await refreshProfilesAfterMutation(
+          selectedRepoId,
+          repo.publishConfig.profiles
+        );
+      }
 
       setActiveProfileName(profileName);
       applyDotnetCustomConfig(config);
