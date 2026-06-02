@@ -47,6 +47,7 @@ import { useProfileCrud } from "./useProfileCrud";
 import { useQuickCreateProfile } from "./useQuickCreateProfile";
 import { useProfileOrdering } from "./useProfileOrdering";
 import { useProfileSelection } from "./useProfileSelection";
+import { getUserProfileNameFromConfigKey } from "./publishConfigIdentity";
 
 interface UseProfilesParams {
   appT: TranslationMap;
@@ -58,6 +59,7 @@ interface UseProfilesParams {
   applyProfileProvider: (providerId: string) => void;
   setIsCustomMode: (value: boolean) => void;
   isCustomMode: boolean;
+  selectedPreset: string;
   setSelectedPreset: (value: string) => void;
   setProviderParameters: Dispatch<
     SetStateAction<Record<string, Record<string, ParameterValue>>>
@@ -91,6 +93,7 @@ export function useProfiles({
   applyProfileProvider,
   setIsCustomMode,
   isCustomMode,
+  selectedPreset,
   setSelectedPreset,
   setProviderParameters,
   applyDotnetCustomConfig,
@@ -100,10 +103,18 @@ export function useProfiles({
   getPresetText,
   buildProfileParameters,
 }: UseProfilesParams) {
-  const [activeProfileName, setActiveProfileName] = useState<string | null>(null);
+  const [localActiveProfileName, setLocalActiveProfileName] =
+    useState<string | null>(null);
+  const persistedActiveProfileName = isCustomMode
+    ? getUserProfileNameFromConfigKey(selectedPreset)
+    : null;
+  const activeProfileName =
+    activeProviderId === "dotnet"
+      ? persistedActiveProfileName
+      : localActiveProfileName;
 
   const handleRepositoryScopeChange = useCallback(() => {
-    setActiveProfileName(null);
+    setLocalActiveProfileName(null);
   }, []);
 
   const {
@@ -135,7 +146,7 @@ export function useProfiles({
     setProviderParameters,
     setIsCustomMode,
     setSelectedPreset,
-    setActiveProfileName,
+    setActiveProfileName: setLocalActiveProfileName,
     buildProfileParameters,
     refreshProfilesAfterMutation,
     isCurrentRepo,
@@ -148,7 +159,7 @@ export function useProfiles({
   const selection = useProfileSelection({
     setIsCustomMode,
     setSelectedPreset,
-    setActiveProfileName,
+    setActiveProfileName: setLocalActiveProfileName,
     applyProfile: crud.applyProfile,
   });
 
@@ -241,7 +252,7 @@ export function useProfiles({
     quickCreateProfileSaving: quickCreate.quickCreateProfileSaving,
     isQuickCreateEditing: quickCreate.isQuickCreateEditing,
     loadProfiles,
-    setActiveProfileName,
+    setActiveProfileName: setLocalActiveProfileName,
     openQuickCreateProfileDialog: quickCreate.openQuickCreateProfileDialog,
     openQuickEditProfileDialog: quickCreate.openQuickEditProfileDialog,
     handleQuickCreateProfileOpenChange: quickCreate.handleQuickCreateProfileOpenChange,

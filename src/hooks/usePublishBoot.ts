@@ -146,8 +146,9 @@ export function usePublishBoot(params: UsePublishBootParams) {
     (config: PublishConfigStore) => {
       params.setCustomConfig(config);
       params.setIsCustomMode(true);
+      params.setSelectedPreset(DEFAULT_DOTNET_PRESET_ID);
     },
-    [params.setCustomConfig, params.setIsCustomMode]
+    [params.setCustomConfig, params.setIsCustomMode, params.setSelectedPreset]
   );
 
   // Command import
@@ -173,6 +174,7 @@ export function usePublishBoot(params: UsePublishBootParams) {
     applyProfileProvider: params.applyProfileProvider,
     setIsCustomMode: params.setIsCustomMode,
     isCustomMode: params.isCustomMode,
+    selectedPreset: params.selectedPreset,
     setSelectedPreset: params.setSelectedPreset,
     setProviderParameters: params.setProviderParameters,
     applyDotnetCustomConfig,

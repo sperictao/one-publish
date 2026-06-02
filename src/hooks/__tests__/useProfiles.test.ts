@@ -32,6 +32,18 @@ vi.mock("@/lib/store/api", async () => {
 import { useProfiles } from "@/features/config/useProfiles";
 import type { ConfigProfile } from "@/lib/store/types";
 
+interface UseProfilesTestProps {
+  selectedRepoId: string | null;
+  selectedPreset?: string;
+  isCustomMode?: boolean;
+}
+
+const defaultUseProfilesProps: UseProfilesTestProps = {
+  selectedRepoId: "repo-a",
+  selectedPreset: "release-fd",
+  isCustomMode: false,
+};
+
 function createProfile(name: string): ConfigProfile {
   return {
     name,
@@ -79,6 +91,7 @@ describe("useProfiles", () => {
           applyProfileProvider: vi.fn(),
           setIsCustomMode: vi.fn(),
           isCustomMode: false,
+          selectedPreset: "release-fd",
           setSelectedPreset: vi.fn(),
           setProviderParameters: vi.fn(),
           applyDotnetCustomConfig: vi.fn(),
@@ -134,6 +147,7 @@ describe("useProfiles", () => {
           applyProfileProvider: vi.fn(),
           setIsCustomMode: vi.fn(),
           isCustomMode: false,
+          selectedPreset: "release-fd",
           setSelectedPreset: vi.fn(),
           setProviderParameters: vi.fn(),
           applyDotnetCustomConfig: vi.fn(),
@@ -192,6 +206,7 @@ describe("useProfiles", () => {
           applyProfileProvider: vi.fn(),
           setIsCustomMode: vi.fn(),
           isCustomMode: false,
+          selectedPreset: "release-fd",
           setSelectedPreset: vi.fn(),
           setProviderParameters: vi.fn(),
           applyDotnetCustomConfig: vi.fn(),
@@ -263,6 +278,7 @@ describe("useProfiles", () => {
           applyProfileProvider: vi.fn(),
           setIsCustomMode: vi.fn(),
           isCustomMode: false,
+          selectedPreset: "release-fd",
           setSelectedPreset: vi.fn(),
           setProviderParameters: vi.fn(),
           applyDotnetCustomConfig: vi.fn(),
@@ -319,6 +335,144 @@ describe("useProfiles", () => {
     });
   });
 
+  it("切回仓库时会从持久化的 userprofile 选择恢复 activeProfileName", async () => {
+    const repoAInitial = createDeferred<ConfigProfile[]>();
+    const repoB = createDeferred<ConfigProfile[]>();
+    const repoARefresh = createDeferred<ConfigProfile[]>();
+    mocks.getProfiles
+      .mockImplementationOnce(() => repoAInitial.promise)
+      .mockImplementationOnce(() => repoB.promise)
+      .mockImplementationOnce(() => repoARefresh.promise);
+
+    const { result, rerender } = renderHook(
+      (props: UseProfilesTestProps) =>
+        useProfiles({
+          appT: {},
+          profileT: {},
+          language: "zh",
+          selectedRepoId: props.selectedRepoId,
+          selectedPreset: props.selectedPreset ?? "release-fd",
+          activeProviderId: "dotnet",
+          providerSchemas: {},
+          applyProfileProvider: vi.fn(),
+          setIsCustomMode: vi.fn(),
+          isCustomMode: props.isCustomMode ?? false,
+          setSelectedPreset: vi.fn(),
+          setProviderParameters: vi.fn(),
+          applyDotnetCustomConfig: vi.fn(),
+          replaceScopedConfigKey: vi.fn(),
+          presets: [],
+          defaultPresetId: "release-fd",
+          getPresetText: (_presetId, fallbackName, fallbackDescription) => ({
+            name: fallbackName,
+            description: fallbackDescription,
+          }),
+          buildProfileParameters: () => ({}),
+        }),
+      {
+        initialProps: {
+          selectedRepoId: "repo-a",
+          selectedPreset: "userprofile:alpha",
+          isCustomMode: true,
+        },
+      }
+    );
+
+    await act(async () => {
+      repoAInitial.resolve([createProfile("alpha")]);
+    });
+
+    await waitFor(() => {
+      expect(result.current.profiles.map((profile) => profile.name)).toEqual([
+        "alpha",
+      ]);
+      expect(result.current.activeProfileName).toBe("alpha");
+    });
+
+    rerender({
+      ...defaultUseProfilesProps,
+      selectedRepoId: "repo-b",
+      selectedPreset: "release-fd",
+      isCustomMode: false,
+    });
+
+    await act(async () => {
+      repoB.resolve([createProfile("beta")]);
+    });
+
+    await waitFor(() => {
+      expect(result.current.profiles.map((profile) => profile.name)).toEqual([
+        "beta",
+      ]);
+      expect(result.current.activeProfileName).toBeNull();
+    });
+
+    rerender({
+      selectedRepoId: "repo-a",
+      selectedPreset: "userprofile:alpha",
+      isCustomMode: true,
+    });
+
+    expect(result.current.profiles.map((profile) => profile.name)).toEqual([
+      "alpha",
+    ]);
+    expect(result.current.activeProfileName).toBe("alpha");
+
+    await act(async () => {
+      repoARefresh.resolve([createProfile("alpha")]);
+    });
+  });
+
+  it("普通 dotnet 自定义配置不会沿用之前的 userprofile 选中名", async () => {
+    mocks.getProfiles.mockResolvedValue([createProfile("alpha")]);
+
+    const { result, rerender } = renderHook(
+      (props: UseProfilesTestProps) =>
+        useProfiles({
+          appT: {},
+          profileT: {},
+          language: "zh",
+          selectedRepoId: props.selectedRepoId,
+          selectedPreset: props.selectedPreset ?? "release-fd",
+          activeProviderId: "dotnet",
+          providerSchemas: {},
+          applyProfileProvider: vi.fn(),
+          setIsCustomMode: vi.fn(),
+          isCustomMode: props.isCustomMode ?? false,
+          setSelectedPreset: vi.fn(),
+          setProviderParameters: vi.fn(),
+          applyDotnetCustomConfig: vi.fn(),
+          replaceScopedConfigKey: vi.fn(),
+          presets: [],
+          defaultPresetId: "release-fd",
+          getPresetText: (_presetId, fallbackName, fallbackDescription) => ({
+            name: fallbackName,
+            description: fallbackDescription,
+          }),
+          buildProfileParameters: () => ({}),
+        }),
+      {
+        initialProps: {
+          selectedRepoId: "repo-a",
+          selectedPreset: "userprofile:alpha",
+          isCustomMode: true,
+        },
+      }
+    );
+
+    await waitFor(() => {
+      expect(result.current.activeProfileName).toBe("alpha");
+    });
+
+    rerender({
+      selectedRepoId: "repo-a",
+      selectedPreset: "release-fd",
+      isCustomMode: true,
+    });
+
+    expect(result.current.activeProfileName).toBeNull();
+  });
+
   it("通过 profileManagement 保存配置后刷新同一个 owner snapshot", async () => {
     const releaseProfile = createProfile("Release");
     mocks.saveProfile.mockResolvedValue({
@@ -339,6 +493,7 @@ describe("useProfiles", () => {
         applyProfileProvider: vi.fn(),
         setIsCustomMode: vi.fn(),
         isCustomMode: false,
+        selectedPreset: "release-fd",
         setSelectedPreset: vi.fn(),
         setProviderParameters: vi.fn(),
         applyDotnetCustomConfig: vi.fn(),
@@ -400,6 +555,7 @@ describe("useProfiles", () => {
         applyProfileProvider: vi.fn(),
         setIsCustomMode: vi.fn(),
         isCustomMode: false,
+        selectedPreset: "release-fd",
         setSelectedPreset: vi.fn(),
         setProviderParameters: vi.fn(),
         applyDotnetCustomConfig: vi.fn(),

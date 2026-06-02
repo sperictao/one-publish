@@ -6,6 +6,7 @@ import { mapImportedSpecByProvider } from "@/features/provider/commandImportMapp
 import {
   createDotnetPublishConfigFromParameters,
 } from "@/features/config/dotnetPublishConfig";
+import { createUserProfileConfigKey } from "@/features/config/publishConfigIdentity";
 import type {
   ConfigParameters,
   ConfigProfile,
@@ -140,6 +141,8 @@ export function useProfileCrud({
             }
           )
         );
+        setSelectedPreset(createUserProfileConfigKey(profile.name));
+        setActiveProfileName(profile.name);
       } else {
         setProviderParameters((prev) => ({
           ...prev,
@@ -157,7 +160,9 @@ export function useProfileCrud({
       applyDotnetCustomConfig,
       appT,
       providerSchemas,
+      setActiveProfileName,
       setProviderParameters,
+      setSelectedPreset,
     ]
   );
 
@@ -288,6 +293,7 @@ export function useProfileCrud({
 
       setActiveProfileName(profileName);
       applyDotnetCustomConfig(config);
+      setSelectedPreset(createUserProfileConfigKey(profileName));
 
       return profileName;
     },
@@ -299,6 +305,7 @@ export function useProfileCrud({
       refreshProfilesAfterMutation,
       selectedRepoId,
       setActiveProfileName,
+      setSelectedPreset,
       saveProfileToStore,
     ]
   );

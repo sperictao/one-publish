@@ -22,6 +22,7 @@
 - 新增持久化字段时，要同时检查生成契约、默认值、迁移/兼容、前端 normalization 和测试。
 - 不要绕过 `lib/store.ts` 在组件里直接 `invoke("save...")`。
 - 发布配置身份必须通过 `src/lib/publishConfigIdentity.ts` 编码/解码；调用方不得手写 `profile-`、`pubxml:`、`userprofile:` 或 `recent:` 的业务拼拆。DOM id、测试 fixture 和非业务 `profile-group` filter 除外。
+- 自定义发布配置的选中身份必须持久化在仓库级 `selectedPreset` 的 `userprofile:*` key 中；`activeProfileName` 只能作为由该身份派生的 UI 状态，不能作为跨仓库切换后的事实源。
 - Zustand 本地乐观更新必须通过 `src/stores/appStoreMutations.ts` 的领域 mutation helper 表达；不要在 `appStore.ts` 或组件里重复手写 AppState patch 结构。
 - 执行历史（execution history）由 Zustand `useAppStore` 统一管理，通过 `savePublishRecord`、`loadExecutionHistory`、`setExecutionSnapshotPath` 等语义化 action 操作；不要在 `usePublishHistoryState` 或 `useHistoryActions` 中用本地 React state + 直接 Tauri API 调用维护第二份执行历史。
 - 收藏配置（favorite configs）以 localStorage 作为持久化层，但只能通过 Zustand `useAppStore` 的 `toggleFavoriteConfig`、`replaceScopedConfigKey` action 读写；不要在组件或 hook（如 `useScopedConfigs`）中直接操作 `localStorage.getItem/setItem`。
