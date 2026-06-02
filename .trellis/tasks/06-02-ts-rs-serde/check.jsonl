@@ -1,0 +1,3 @@
+{"file": ".trellis/spec/frontend/type-safety.md", "reason": "检查是否误改生成契约或绕过契约生成流程。"}
+{"file": ".trellis/spec/frontend/quality-guidelines.md", "reason": "按风险选择 cargo check 与 contract/typecheck 验证。"}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "复核 Rust JSON 语义和前端类型边界是否保持一致。"}

@@ -1,0 +1,3 @@
+{"file": ".trellis/spec/frontend/type-safety.md", "reason": "Rust TS 派生结构会生成前端 Tauri 契约，需保持契约来源和生成文件边界。"}
+{"file": ".trellis/spec/frontend/quality-guidelines.md", "reason": "选择本任务的最小验证命令并避免无关生成文件修改。"}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "确认 Rust 序列化属性与前端生成类型之间的边界语义不变。"}
