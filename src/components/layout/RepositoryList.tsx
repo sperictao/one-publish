@@ -62,27 +62,35 @@ function hasSameStringOrder(
 function CollapseIcon(): JSX.Element {
   return (
     <svg
-      width="16"
-      height="16"
+      width="14"
+      height="14"
       viewBox="0 0 16 16"
       fill="none"
       xmlns="http://www.w3.org/2000/svg"
     >
       <rect
-        x="2"
-        y="2"
-        width="12"
-        height="12"
-        rx="2"
+        x="1.5"
+        y="1.5"
+        width="13"
+        height="13"
+        rx="2.5"
         stroke="currentColor"
-        strokeWidth="1.5"
+        strokeWidth="1"
         fill="none"
       />
-      <line x1="6" y1="2" x2="6" y2="14" stroke="currentColor" strokeWidth="1.5" />
-      <path
-        d="M11 6L8 8L11 10"
+      <line
+        x1="5.5"
+        y1="1.5"
+        x2="5.5"
+        y2="14.5"
         stroke="currentColor"
-        strokeWidth="1.5"
+        strokeWidth="1"
+      />
+      <path
+        className="transition-transform duration-200 ease-[cubic-bezier(0.22,1,0.36,1)] group-hover:-translate-x-0.5"
+        d="M11.5 5.5L9 8L11.5 10.5"
+        stroke="currentColor"
+        strokeWidth="1"
         strokeLinecap="round"
         strokeLinejoin="round"
       />
@@ -541,7 +549,7 @@ export const RepositoryList = memo(function RepositoryList({
             <Button
               variant="ghost"
               size="icon"
-              className={topbarIconButtonClass}
+              className={cn(topbarIconButtonClass, "group [&_svg]:!stroke-[1]")}
               onClick={(event) => {
                 event.stopPropagation();
                 onCollapse();
@@ -605,8 +613,8 @@ export const RepositoryList = memo(function RepositoryList({
               className={cn(
                 "size-3.5 transition-[transform,color] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]",
                 showReorderControls
-                  ? "rotate-180 text-primary"
-                  : "rotate-0 text-muted-foreground"
+                  ? "rotate-180 hover:rotate-[360deg] text-primary"
+                  : "rotate-0 hover:rotate-180 text-muted-foreground"
               )}
             />
           </button>
