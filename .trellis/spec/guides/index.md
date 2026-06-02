@@ -1,79 +1,32 @@
-# Thinking Guides
+# Thinking Guides For One Publish
 
-> **Purpose**: Expand your thinking to catch things you might not have considered.
-
----
-
-## Why Thinking Guides?
-
-**Most bugs and tech debt come from "didn't think of that"**, not from lack of skill:
-
-- Didn't think about what happens at layer boundaries → cross-layer bugs
-- Didn't think about code patterns repeating → duplicated code everywhere
-- Didn't think about edge cases → runtime errors
-- Didn't think about future maintainers → unreadable code
-
-These guides help you **ask the right questions before coding**.
-
----
+These guides are for the current Tauri + React codebase.
 
 ## Available Guides
 
 | Guide | Purpose | When to Use |
-|-------|---------|-------------|
-| [Code Reuse Thinking Guide](./code-reuse-thinking-guide.md) | Identify patterns and reduce duplication | When you notice repeated patterns |
-| [Cross-Layer Thinking Guide](./cross-layer-thinking-guide.md) | Think through data flow across layers | Features spanning multiple layers |
+| --- | --- | --- |
+| [Pre-Implementation Checklist](./pre-implementation-checklist.md) | Search and boundary checks before coding | Before any feature or bug fix |
+| [Cross-Layer Thinking](./cross-layer-thinking-guide.md) | Data flow across React, wrappers, Rust commands, store, and contracts | Features touching multiple layers |
+| [Code Reuse Thinking](./code-reuse-thinking-guide.md) | Avoid duplicate wrappers, helpers, and UI patterns | When adding utilities or repeated logic |
+| [Semantic Change Checklist](./semantic-change-checklist.md) | Update every reader/writer when a field meaning changes | Provider/spec/store/publish semantics |
+| [Bug Root Cause Analysis](./bug-root-cause-thinking-guide.md) | Classify and prevent repeated bugs | After non-trivial fixes |
 
----
+## Quick Routing
 
-## Quick Reference: Thinking Triggers
+- Tauri command or payload change: read cross-layer and semantic-change.
+- New form/dialog/component: read pre-implementation and frontend/forms.
+- New wrapper/helper/hook: read code-reuse first.
+- Permission, filesystem, publish output, or process execution: read backend/security-permissions and big-question/publish-output-preflight.
+- Generated contract change: read backend/contracts and big-question/tauri-contract-drift.
 
-### When to Think About Cross-Layer Issues
+## Core Rule
 
-- [ ] Feature touches 3+ layers (API, Service, Component, Database)
-- [ ] Data format changes between layers
-- [ ] Multiple consumers need the same data
-- [ ] You're not sure where to put some logic
+Search before writing. For this repo, the likely source of truth is one of:
 
-→ Read [Cross-Layer Thinking Guide](./cross-layer-thinking-guide.md)
+- Rust command/store modules under `src-tauri/src/`
+- Generated contracts under `src/generated/tauri-contracts.ts`
+- Tauri wrappers under `src/lib/store/api.ts` and `src/features/publish/publishRuntime.ts`
+- Zustand slices under `src/stores/`
+- UI primitives under `src/components/ui/`
 
-### When to Think About Code Reuse
-
-- [ ] You're writing similar code to something that exists
-- [ ] You see the same pattern repeated 3+ times
-- [ ] You're adding a new field to multiple places
-- [ ] **You're modifying any constant or config**
-- [ ] **You're creating a new utility/helper function** ← Search first!
-
-→ Read [Code Reuse Thinking Guide](./code-reuse-thinking-guide.md)
-
----
-
-## Pre-Modification Rule (CRITICAL)
-
-> **Before changing ANY value, ALWAYS search first!**
-
-```bash
-# Search for the value you're about to change
-grep -r "value_to_change" .
-```
-
-This single habit prevents most "forgot to update X" bugs.
-
----
-
-## How to Use This Directory
-
-1. **Before coding**: Skim the relevant thinking guide
-2. **During coding**: If something feels repetitive or complex, check the guides
-3. **After bugs**: Add new insights to the relevant guide (learn from mistakes)
-
----
-
-## Contributing
-
-Found a new "didn't think of that" moment? Add it to the relevant guide.
-
----
-
-**Core Principle**: 30 minutes of thinking saves 3 hours of debugging.

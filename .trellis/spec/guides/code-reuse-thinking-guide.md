@@ -1,119 +1,46 @@
 # Code Reuse Thinking Guide
 
-> **Purpose**: Stop and think before creating new code - does it already exist?
+Use this before adding helpers, wrappers, hooks, or repeated UI patterns.
 
----
-
-## The Problem
-
-**Duplicated code is the #1 source of inconsistency bugs.**
-
-When you copy-paste or rewrite existing logic:
-- Bug fixes don't propagate
-- Behavior diverges over time
-- Codebase becomes harder to understand
-
----
-
-## Before Writing New Code
-
-### Step 1: Search First
+## Search Before Creating
 
 ```bash
-# Search for similar function names
-grep -r "functionName" .
-
-# Search for similar logic
-grep -r "keyword" .
+rg "helper_name|similar_keyword" src src-tauri
+rg "type SimilarType|interface SimilarType" src
+rg "fn similar_name|struct SimilarName" src-tauri/src
 ```
 
-### Step 2: Ask These Questions
+## Current Reuse Locations
 
-| Question | If Yes... |
-|----------|-----------|
-| Does a similar function exist? | Use or extend it |
-| Is this pattern used elsewhere? | Follow the existing pattern |
-| Could this be a shared utility? | Create it in the right place |
-| Am I copying code from another file? | **STOP** - extract to shared |
+| Need | Prefer |
+| --- | --- |
+| Tauri command wrapper | `src/lib/store/api.ts` or `src/features/<domain>/*Runtime.ts` |
+| Invoke error parsing | `src/lib/tauri/invokeErrors.ts` |
+| Frontend store type normalization | `src/lib/store/types.ts` |
+| Publish config transforms | `src/features/config/` and `src/features/publish/` |
+| UI primitives | `src/components/ui/` |
+| App dialogs/sections | `AppDialogShell`, `AppDialogInset`, `SectionShell` |
+| Rust command helper | Nearby `src-tauri/src/commands/<domain>/` module |
+| Rust security/export helper | `src-tauri/src/security.rs` |
+| Rust provider/spec logic | `src-tauri/src/provider/`, `src-tauri/src/spec.rs`, `src-tauri/src/parameter.rs` |
 
----
+## Extraction Threshold
 
-## Common Duplication Patterns
+- One use: keep local.
+- Two uses: consider whether the concept is stable.
+- Three or more uses: extract to the owning module.
 
-### Pattern 1: Copy-Paste Functions
+Prefer extracting to the feature that owns the concept, not to a generic utility folder.
 
-**Bad**: Copying a validation function to another file
+## Red Flags
 
-**Good**: Extract to shared utilities, import where needed
+- A component imports `invoke` directly for a command family that already has wrappers.
+- A frontend file hand-defines a payload already present in generated contracts.
+- A Rust command repeats path validation or sanitization logic already in `security.rs` or publish preflight.
+- A dialog copies shell/section markup instead of reusing local primitives.
+- A hook repeats store restore/error behavior already covered by store helpers.
 
-### Pattern 2: Similar Components
+## After A Batch Change
 
-**Bad**: Creating a new component that's 80% similar to existing
+Search again for the old pattern or value. If you intentionally leave another instance alone, mention why in the task notes or final summary.
 
-**Good**: Extend existing component with props/variants
-
-### Pattern 3: Repeated Constants
-
-**Bad**: Defining the same constant in multiple files
-
-**Good**: Single source of truth, import everywhere
-
----
-
-## When to Abstract
-
-**Abstract when**:
-- Same code appears 3+ times
-- Logic is complex enough to have bugs
-- Multiple people might need this
-
-**Don't abstract when**:
-- Only used once
-- Trivial one-liner
-- Abstraction would be more complex than duplication
-
----
-
-## After Batch Modifications
-
-When you've made similar changes to multiple files:
-
-1. **Review**: Did you catch all instances?
-2. **Search**: Run grep to find any missed
-3. **Consider**: Should this be abstracted?
-
----
-
-## Gotcha: Asymmetric Mechanisms Producing Same Output
-
-**Problem**: When two different mechanisms must produce the same file set (e.g., recursive directory copy for init vs. manual `files.set()` for update), structural changes (renaming, moving, adding subdirectories) only propagate through the automatic mechanism. The manual one silently drifts.
-
-**Symptom**: Init works perfectly, but update creates files at wrong paths or misses files entirely.
-
-**Prevention checklist**:
-- [ ] When migrating directory structures, search for ALL code paths that reference the old structure
-- [ ] If one path is auto-derived (glob/copy) and another is manually listed, the manual one needs updating
-- [ ] Add a regression test that compares outputs from both mechanisms
-
----
-
-## Gotcha: Ignore Rules Hiding Project Configuration
-
-**Problem**: Broad ignore rules for tool directories can hide project-scoped configuration files (for example platform agents, hooks, or environment templates) while still allowing local runtime state to stay out of Git.
-
-**Symptom**: A generated platform integration exists on disk, but `git status` never shows it, or tracked files appear in `git ls-files -ci --exclude-standard`.
-
-**Prevention checklist**:
-- [ ] Before adding or broadening ignore rules, search for project docs that name the affected directory
-- [ ] Verify project-owned files with `git check-ignore -vn -- <paths>`
-- [ ] Verify no tracked file is ignored with `git ls-files -ci --exclude-standard`
-- [ ] Prefer precise local-runtime rules over ignoring an entire platform/config directory
-
----
-
-## Checklist Before Commit
-
-- [ ] Searched for existing similar code
-- [ ] No copy-pasted logic that should be shared
-- [ ] Constants defined in one place
-- [ ] Similar patterns follow same structure

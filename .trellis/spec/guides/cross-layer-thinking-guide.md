@@ -1,94 +1,83 @@
 # Cross-Layer Thinking Guide
 
-> **Purpose**: Think through data flow across layers before implementing.
+Use this when a feature crosses React UI, frontend state, Tauri command wrappers, Rust backend code, generated contracts, filesystem/process behavior, or emitted events.
 
----
-
-## The Problem
-
-**Most bugs happen at layer boundaries**, not within layers.
-
-Common cross-layer bugs:
-- API returns format A, frontend expects format B
-- Database stores X, service transforms to Y, but loses data
-- Multiple layers implement the same logic differently
-
----
-
-## Before Implementing Cross-Layer Features
-
-### Step 1: Map the Data Flow
-
-Draw out how data moves:
+## Current Layer Model
 
 ```
-Source → Transform → Store → Retrieve → Transform → Display
+React component/dialog
+  -> hook or Zustand slice
+  -> TypeScript command wrapper
+  -> Tauri invoke/event boundary
+  -> Rust command/store module
+  -> filesystem, process, provider, updater, tray, or store runtime
 ```
 
-For each arrow, ask:
-- What format is the data in?
-- What could go wrong?
-- Who is responsible for validation?
+Generated contracts connect Rust payload types to TypeScript through:
 
-### Step 2: Identify Boundaries
+```
+Rust type -> src-tauri/src/contracts.rs -> src/generated/tauri-contracts.ts -> wrapper/component types
+```
 
-| Boundary | Common Issues |
-|----------|---------------|
-| API ↔ Service | Type mismatches, missing fields |
-| Service ↔ Database | Format conversions, null handling |
-| Backend ↔ Frontend | Serialization, date formats |
-| Component ↔ Component | Props shape changes |
+## Planning Questions
 
-### Step 3: Define Contracts
+Before implementation, answer:
 
-For each boundary:
-- What is the exact input format?
-- What is the exact output format?
-- What errors can occur?
+- Which React components or hooks consume the data?
+- Which wrapper owns the command call?
+- Is there already a Rust command for this behavior?
+- Does the payload type cross the generated contract boundary?
+- Does the Rust command need path validation, sanitization, capability changes, or publish preflight?
+- Does the frontend need only UX validation, or is backend validation missing?
+- Which tests prove the flow: Rust unit/integration, Vitest, typecheck/contracts, or Playwright?
 
----
+## Common Flows
 
-## Common Cross-Layer Mistakes
+### Read Flow
 
-### Mistake 1: Implicit Format Assumptions
+```
+Rust store/command -> generated payload -> TS wrapper normalization -> Zustand/hook -> component
+```
 
-**Bad**: Assuming date format without checking
+Examples:
 
-**Good**: Explicit format conversion at boundaries
+- `get_app_state` -> `getAppState()` -> `useAppStore.loadState()`
+- `list_providers` -> `listProviders()` -> provider hooks/UI
 
-### Mistake 2: Scattered Validation
+### Write Flow
 
-**Bad**: Validating the same thing in multiple layers
+```
+Component action -> hook/slice callback -> TS wrapper -> Rust command validation -> store/filesystem/process side effect -> authoritative result
+```
 
-**Good**: Validate once at the entry point
+Examples:
 
-### Mistake 3: Leaky Abstractions
+- Profile save/update/delete through `src/lib/store/api.ts` and store commands.
+- Publish execution through `src/features/publish/publishRuntime.ts` and `src-tauri/src/commands/publish/`.
 
-**Bad**: Component knows about database schema
+### Event Flow
 
-**Good**: Each layer only knows its neighbors
+```
+Rust emits event -> frontend listener/hook consumes event -> UI updates stream/status
+```
 
----
+Example:
 
-## Checklist for Cross-Layer Features
+- `provider-publish-log` event emitted by `src-tauri/src/commands/publish/logs.rs`.
 
-Before implementation:
-- [ ] Mapped the complete data flow
-- [ ] Identified all layer boundaries
-- [ ] Defined format at each boundary
-- [ ] Decided where validation happens
+## Boundary Rules
 
-After implementation:
-- [ ] Tested with edge cases (null, empty, invalid)
-- [ ] Verified error handling at each boundary
-- [ ] Checked data survives round-trip
+- Do not duplicate backend validation in React as a second source of truth.
+- Do not hand-write TypeScript copies of Rust payloads.
+- Do not add direct component-level `invoke` calls when a domain wrapper should own the command.
+- Do not update local optimistic state without a path back to backend authoritative state.
 
----
+## Verification
 
-## When to Create Flow Documentation
+Pick checks by boundary:
 
-Create detailed flow docs when:
-- Feature spans 3+ layers
-- Multiple teams are involved
-- Data format is complex
-- Feature has caused bugs before
+- Rust behavior: `cargo test --manifest-path src-tauri/Cargo.toml`
+- Contract boundary: `pnpm check:contracts` or `pnpm typecheck`
+- Wrapper/component behavior: `pnpm test`
+- Full UI workflow: `pnpm e2e`
+
