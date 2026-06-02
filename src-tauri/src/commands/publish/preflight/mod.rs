@@ -8,7 +8,7 @@ use path_validation::evaluate_publish_output_validation;
 use super::output::{configured_output_dir, infer_output_dir, should_delete_existing_files};
 use crate::output_target::{parse_output_target, MountKind, OutputTarget, RemoteUri};
 use crate::spec::PublishSpec;
-use serde::Serialize;
+use serde::{ser::SerializeStruct, Serialize, Serializer};
 use std::path::Path;
 use ts_rs::TS;
 
@@ -79,8 +79,7 @@ pub struct RemoteLocationSummary {
     pub fs_type: Option<String>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, TS)]
-#[serde(rename_all = "camelCase")]
+#[derive(Debug, Clone, PartialEq, Eq, TS)]
 #[ts(rename_all = "camelCase")]
 pub struct PublishOutputAccess {
     pub status: PublishOutputAccessStatus,
@@ -88,8 +87,29 @@ pub struct PublishOutputAccess {
     pub protected_root: Option<String>,
     pub probe_directory: Option<String>,
     pub detail: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
     pub remote_location: Option<RemoteLocationSummary>,
+}
+
+impl Serialize for PublishOutputAccess {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        let field_count = 5 + usize::from(self.remote_location.is_some());
+        let mut state = serializer.serialize_struct("PublishOutputAccess", field_count)?;
+        state.serialize_field("status", &self.status)?;
+        state.serialize_field("protectedLocation", &self.protected_location)?;
+        state.serialize_field("protectedRoot", &self.protected_root)?;
+        state.serialize_field("probeDirectory", &self.probe_directory)?;
+        state.serialize_field("detail", &self.detail)?;
+
+        if let Some(remote_location) = self.remote_location.as_ref() {
+            state.serialize_field("remoteLocation", remote_location)?;
+        }
+
+        state.end()
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, TS)]
@@ -1147,6 +1167,34 @@ mod tests {
             }
             other => panic!("expected Remote, got {:?}", other),
         }
+    }
+
+    #[test]
+    fn publish_output_access_serialization_omits_remote_location_when_none() {
+        let access = PublishOutputAccess::skipped();
+        let serialized = serde_json::to_value(&access).expect("serialize publish output access");
+
+        assert!(!serialized
+            .as_object()
+            .expect("expected object")
+            .contains_key("remoteLocation"));
+    }
+
+    #[test]
+    fn publish_output_access_serialization_includes_remote_location_when_some() {
+        let access = PublishOutputAccess::remote_skipped(RemoteLocationSummary {
+            kind: RemoteLocationKind::Remote,
+            display: "sftp://host/var/www".to_string(),
+            host: Some("host".to_string()),
+            scheme: Some("sftp".to_string()),
+            fs_type: None,
+        });
+        let serialized = serde_json::to_value(&access).expect("serialize publish output access");
+
+        assert!(serialized
+            .as_object()
+            .expect("expected object")
+            .contains_key("remoteLocation"));
     }
 
     #[test]

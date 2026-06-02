@@ -31,7 +31,7 @@ export type RemoteLocationKind = "unc" | "mounted" | "remote";
 
 export type RemoteLocationSummary = { kind: RemoteLocationKind, display: string, host: string | null, scheme: string | null, fsType: string | null, };
 
-export type PublishOutputAccess = { status: PublishOutputAccessStatus, protectedLocation: ProtectedDirectoryLocation | null, protectedRoot: string | null, probeDirectory: string | null, detail: string | null, remoteLocation: RemoteLocationSummary | null, };
+export type PublishOutputAccess = { status: PublishOutputAccessStatus, protectedLocation: ProtectedDirectoryLocation | null, protectedRoot: string | null, probeDirectory: string | null, detail: string | null, remoteLocation?: RemoteLocationSummary, };
 
 export type PublishOutputPreflightResult = { outputDir: string, configuredOutputDir: string | null, validation: PublishOutputValidation, access: PublishOutputAccess, };
 
