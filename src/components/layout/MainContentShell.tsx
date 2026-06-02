@@ -1,6 +1,11 @@
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { FileCog, Folder, History, LayoutDashboard } from "lucide-react";
+import {
+  topbarIconButtonClass,
+  topbarViewButtonActiveClass,
+  topbarViewButtonClass,
+} from "@/components/layout/topbarButtonStyles";
 
 interface TranslationMap {
   [key: string]: string | undefined;
@@ -31,11 +36,6 @@ export function MainContentShell({
   onSelectHistoryView,
   children,
 }: MainContentShellProps) {
-  const headerIconButtonClass =
-    "h-7 w-9 rounded-full p-0 text-muted-foreground/60 hover:bg-black/[0.045] hover:text-foreground hover:shadow-[inset_0_1px_0_rgba(255,255,255,0.72),0_1px_2px_rgba(15,23,42,0.06)] dark:hover:bg-white/[0.06] dark:hover:shadow-[inset_0_1px_0_rgba(255,255,255,0.08)]";
-  const viewButtonClass =
-    "flex h-7 w-9 items-center justify-center rounded-full p-0 transition-all duration-200 active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 focus-visible:ring-offset-2 focus-visible:ring-offset-background";
-
   return (
     <div className="flex min-w-0 flex-1 flex-col p-2">
       <div className="glass-card repo-sidebar-shell flex h-full min-w-0 flex-col overflow-hidden rounded-2xl">
@@ -55,7 +55,7 @@ export function MainContentShell({
                   <Button
                     variant="ghost"
                     size="icon"
-                    className={headerIconButtonClass}
+                    className={topbarIconButtonClass}
                     onClick={(e) => {
                       e.stopPropagation();
                       onExpandLeftPanel();
@@ -69,7 +69,7 @@ export function MainContentShell({
                 <Button
                   variant="ghost"
                   size="icon"
-                  className={headerIconButtonClass}
+                  className={topbarIconButtonClass}
                   onClick={(e) => {
                     e.stopPropagation();
                     onExpandMiddlePanel();
@@ -87,10 +87,10 @@ export function MainContentShell({
             <button
               type="button"
               className={cn(
-                viewButtonClass,
+                topbarViewButtonClass,
                 rightPanelView === "home"
-                  ? "bg-background/95 text-foreground shadow-[inset_0_1px_0_rgba(255,255,255,0.72),0_1px_2px_rgba(15,23,42,0.08)] dark:bg-white/90 dark:text-slate-900"
-                  : "text-muted-foreground/65 hover:bg-black/[0.045] hover:text-foreground hover:shadow-[inset_0_1px_0_rgba(255,255,255,0.72),0_1px_2px_rgba(15,23,42,0.06)] dark:hover:bg-white/[0.06] dark:hover:shadow-[inset_0_1px_0_rgba(255,255,255,0.08)]"
+                  ? topbarViewButtonActiveClass
+                  : null
               )}
               onClick={(e) => {
                 e.stopPropagation();
@@ -106,10 +106,10 @@ export function MainContentShell({
             <button
               type="button"
               className={cn(
-                viewButtonClass,
+                topbarViewButtonClass,
                 rightPanelView === "history"
-                  ? "bg-background/95 text-foreground shadow-[inset_0_1px_0_rgba(255,255,255,0.72),0_1px_2px_rgba(15,23,42,0.08)] dark:bg-white/90 dark:text-slate-900"
-                  : "text-muted-foreground/65 hover:bg-black/[0.045] hover:text-foreground hover:shadow-[inset_0_1px_0_rgba(255,255,255,0.72),0_1px_2px_rgba(15,23,42,0.06)] dark:hover:bg-white/[0.06] dark:hover:shadow-[inset_0_1px_0_rgba(255,255,255,0.08)]"
+                  ? topbarViewButtonActiveClass
+                  : null
               )}
               onClick={(e) => {
                 e.stopPropagation();

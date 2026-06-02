@@ -1,0 +1,5 @@
+{"file":".trellis/spec/frontend/index.md","reason":"Frontend project conventions and relevant spec checklist."}
+{"file":".trellis/spec/frontend/component-guidelines.md","reason":"Component, styling, accessibility, and Tauri drag/no-drag conventions."}
+{"file":".trellis/spec/frontend/quality-guidelines.md","reason":"Validation expectations for frontend UI changes."}
+{"file":".trellis/spec/guides/index.md","reason":"Shared thinking guide index for reuse and cross-layer checks."}
+{"file":".trellis/spec/guides/code-reuse-thinking-guide.md","reason":"Button style duplication should be checked before adding new patterns."}

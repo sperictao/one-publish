@@ -1,0 +1,4 @@
+{"file":".trellis/spec/frontend/index.md","reason":"Frontend quality gate reference."}
+{"file":".trellis/spec/frontend/component-guidelines.md","reason":"Review Tauri titlebar accessibility and style consistency requirements."}
+{"file":".trellis/spec/frontend/quality-guidelines.md","reason":"Run and assess the required validation checks."}
+{"file":".trellis/spec/guides/code-reuse-thinking-guide.md","reason":"Review for unnecessary duplication or missed mirrored button style paths."}

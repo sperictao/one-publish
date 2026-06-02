@@ -75,6 +75,7 @@ import {
 import {
   ListDragHandle,
 } from "@/components/layout/ListReorderControls";
+import { topbarIconButtonClass } from "@/components/layout/topbarButtonStyles";
 import {
   usePointerListReorder,
 } from "@/components/layout/usePointerListReorder";
@@ -511,8 +512,6 @@ export const PublishConfigPanel = memo(function PublishConfigPanel({
   const customProfilesRefreshingLabel =
     t.refreshingCustomProfiles || "正在刷新自定义配置...";
   const isAnyRefreshing = isProfilesRefreshing || isProjectProfilesRefreshing;
-  const headerButtonClass =
-    "h-7 w-9 rounded-full p-0 text-muted-foreground/60 hover:bg-black/[0.045] hover:text-foreground hover:shadow-[inset_0_1px_0_rgba(255,255,255,0.72),0_1px_2px_rgba(15,23,42,0.06)] dark:hover:bg-white/[0.06] dark:hover:shadow-[inset_0_1px_0_rgba(255,255,255,0.08)]";
   const listActionButtonClass =
     "glass-surface flex size-7 items-center justify-center rounded-full transition-all duration-300 hover:bg-[var(--glass-bg-hover)]";
   const reorderControlsLabel = showReorderControls
@@ -1524,7 +1523,7 @@ export const PublishConfigPanel = memo(function PublishConfigPanel({
             <Button
               variant="ghost"
               size="icon"
-              className={headerButtonClass}
+              className={topbarIconButtonClass}
               onClick={(e) => {
                 e.stopPropagation();
                 onExpandRepo();
@@ -1539,7 +1538,7 @@ export const PublishConfigPanel = memo(function PublishConfigPanel({
             <Button
               variant="ghost"
               size="icon"
-              className={headerButtonClass}
+              className={topbarIconButtonClass}
               onClick={(e) => {
                 e.stopPropagation();
                 onCollapse();
