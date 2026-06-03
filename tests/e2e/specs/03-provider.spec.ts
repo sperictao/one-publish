@@ -31,13 +31,36 @@ test.describe("Provider Catalog", () => {
     await expect(publishSection).toBeVisible({ timeout: 15000 });
   });
 
-  test("execution history is loaded on boot", async ({ page }) => {
-    await gotoApp(page);
+  test("execution history appears after switching to history view", async ({ page }) => {
+    await gotoApp(page, {
+      initialState: {
+        executionHistory: [
+          {
+            id: "history-boot-1",
+            repoId: "repo-a",
+            providerId: "dotnet",
+            projectPath: "/workspace/alpha-service/App.csproj",
+            startedAt: "2026-04-02T10:00:00.000Z",
+            finishedAt: "2026-04-02T10:00:03.000Z",
+            success: true,
+            cancelled: false,
+            outputDir: "/workspace/alpha-service/bin/Release",
+            error: null,
+            commandLine: "$ dotnet publish /workspace/alpha-service/App.csproj",
+            snapshotPath: null,
+            failureSignature: null,
+            outputExcerpt: null,
+            spec: null,
+            fileCount: 2,
+          },
+        ],
+      },
+    });
 
-    // History tab should be present — find by role or text
-    const historyTab = page.locator("button").filter({ hasText: /历史/ });
-    const count = await historyTab.count();
-    expect(count).toBeGreaterThanOrEqual(0); // History tab exists (may be 0 if UI differs)
+    await page.getByRole("button", { name: "历史记录" }).click();
+
+    await expect(page.getByText("最近执行历史")).toBeVisible();
+    await expect(page.getByText("/workspace/alpha-service/App.csproj")).toBeVisible();
   });
 });
 

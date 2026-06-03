@@ -1,4 +1,4 @@
-import { useCallback, useMemo } from "react";
+import { useCallback, useEffect, useMemo, useRef } from "react";
 
 import { useAppStore } from "@/stores/appStore";
 import {
@@ -8,6 +8,7 @@ import {
 
 export function usePublishHistoryState(params: {
   executionHistoryLimit: number;
+  isStateLoading: boolean;
 }) {
   const isRerunChecklistEnabled = useAppStore(() => {
     // Read once on mount via lazy init; subsequent reads are stable.
@@ -28,6 +29,16 @@ export function usePublishHistoryState(params: {
 
   const savePublishRecord = useAppStore((s) => s.savePublishRecord);
   const loadExecutionHistory = useAppStore((s) => s.loadExecutionHistory);
+  const hasLoadedExecutionHistoryRef = useRef(false);
+
+  useEffect(() => {
+    if (params.isStateLoading || hasLoadedExecutionHistoryRef.current) {
+      return;
+    }
+
+    hasLoadedExecutionHistoryRef.current = true;
+    void loadExecutionHistory();
+  }, [loadExecutionHistory, params.isStateLoading]);
 
   return {
     isRerunChecklistEnabled,

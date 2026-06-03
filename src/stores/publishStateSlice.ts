@@ -61,7 +61,8 @@ export const createPublishStateSlice: StateCreator<
   PublishStateSlice
 > = (set, get) => {
   const handlePersistenceFailure = makeHandlePersistenceFailure(
-    set as (partial: Record<string, unknown>) => void
+    set as (partial: Record<string, unknown>) => void,
+    get
   );
 
   function enqueueRecentMutation(

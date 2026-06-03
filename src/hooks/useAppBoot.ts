@@ -54,6 +54,7 @@ export function useAppBoot() {
     savePublishRecord,
   } = usePublishHistoryState({
     executionHistoryLimit: appState.executionHistoryLimit,
+    isStateLoading: appState.isLoading,
   });
 
   // Publish store (global Zustand selectors)

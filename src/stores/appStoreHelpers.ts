@@ -1,5 +1,7 @@
 import { extractInvokeErrorMessage } from "@/lib/tauri/invokeErrors";
 import { getAppState } from "@/lib/store/api";
+import type { AppState } from "@/lib/store/types";
+import { mergeBootstrapAppState } from "@/stores/appStoreMutations";
 import { toast } from "sonner";
 
 /**
@@ -7,14 +9,18 @@ import { toast } from "sonner";
  * Used by slices to reload authoritative state and show a toast on persistence errors.
  */
 export function makeHandlePersistenceFailure(
-  set: (partial: Record<string, unknown>) => void
+  set: (partial: Record<string, unknown>) => void,
+  getState: () => AppState
 ) {
   return async (title: string, err: unknown) => {
     console.error(title, err);
     let description = extractInvokeErrorMessage(err);
     try {
       const authoritativeState = await getAppState();
-      set({ ...authoritativeState, error: null });
+      set({
+        ...mergeBootstrapAppState(getState(), authoritativeState),
+        error: null,
+      });
     } catch (reloadError) {
       console.error("重新加载应用状态失败:", reloadError);
       description = `${description}；${extractInvokeErrorMessage(reloadError)}`;

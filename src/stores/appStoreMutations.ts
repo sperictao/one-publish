@@ -110,6 +110,16 @@ export function mergeRecentPublishState(
   };
 }
 
+export function mergeBootstrapAppState(
+  state: AppState,
+  nextState: AppState
+): AppState {
+  return {
+    ...nextState,
+    executionHistory: state.executionHistory,
+  };
+}
+
 export function resolveScopedMutationRepoId(
   selectedRepoId: string | null,
   repoId?: string | null

@@ -4,6 +4,7 @@ import {
   applyPreferenceStateMutation,
   applyPublishStateMutation,
   applyUiStateMutation,
+  mergeBootstrapAppState,
   mergeRecentPublishState,
   resolveScopedMutationRepoId,
 } from "@/stores/appStoreMutations";
@@ -99,6 +100,42 @@ describe("appStoreMutations", () => {
     expect(next.recentConfigKeysByRepo).toEqual({
       "repo-2": ["userprofile:alpha"],
     });
+  });
+
+  it("keeps loaded execution history when merging bootstrap app state", () => {
+    const state = {
+      ...createState(),
+      executionHistory: [
+        {
+          id: "history-1",
+          repoId: "repo-1",
+          providerId: "dotnet",
+          projectPath: "/repo/repo-1/App.csproj",
+          startedAt: "2026-04-02T10:00:00.000Z",
+          finishedAt: "2026-04-02T10:00:03.000Z",
+          success: true,
+          cancelled: false,
+          outputDir: "/repo/repo-1/out",
+          error: null,
+          commandLine: "$ dotnet publish /repo/repo-1/App.csproj",
+          snapshotPath: null,
+          failureSignature: null,
+          outputExcerpt: null,
+          spec: null,
+          fileCount: 2,
+        },
+      ],
+    };
+    const bootstrapState = {
+      ...state,
+      selectedRepoId: "repo-2",
+      executionHistory: [],
+    };
+
+    const next = mergeBootstrapAppState(state, bootstrapState);
+
+    expect(next.selectedRepoId).toBe("repo-2");
+    expect(next.executionHistory).toBe(state.executionHistory);
   });
 
   it("resolves explicit mutation repo id before selected repo id", () => {

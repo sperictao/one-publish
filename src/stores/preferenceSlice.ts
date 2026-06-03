@@ -50,7 +50,8 @@ export const createPreferenceSlice: StateCreator<
   PreferenceSlice
 > = (set, get) => {
   const handlePersistenceFailure = makeHandlePersistenceFailure(
-    set as (partial: Record<string, unknown>) => void
+    set as (partial: Record<string, unknown>) => void,
+    get
   );
 
   return {

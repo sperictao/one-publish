@@ -10,6 +10,7 @@ import { createUiStateSlice, type UiStateSlice } from "./uiStateSlice";
 import { createPreferenceSlice, type PreferenceSlice } from "./preferenceSlice";
 import { createPublishStateSlice, type PublishStateSlice } from "./publishStateSlice";
 import { createFavoritesSlice, type FavoritesSlice } from "./favoritesSlice";
+import { mergeBootstrapAppState } from "./appStoreMutations";
 
 // ── Lifecycle / Execution history interface (kept in root store) ──
 interface BaseSlice {
@@ -64,7 +65,11 @@ export const useAppStore = create<AppStore>()((...args) => {
             set({ favoriteConfigKeysByRepo: migrated });
           }
         }
-        set({ ...appState, isLoading: false, error: null } as Record<string, unknown>);
+        set((state) => ({
+          ...mergeBootstrapAppState(state, appState),
+          isLoading: false,
+          error: null,
+        }) as Record<string, unknown>);
       } catch (err) {
         console.error("加载应用状态失败:", err);
         set({ isLoading: false, error: String(err) });
@@ -73,7 +78,10 @@ export const useAppStore = create<AppStore>()((...args) => {
 
     _restoreAuthoritativeState: async () => {
       const authoritativeState = await getAppState();
-      set({ ...authoritativeState, error: null } as Record<string, unknown>);
+      set((state) => ({
+        ...mergeBootstrapAppState(state, authoritativeState),
+        error: null,
+      }) as Record<string, unknown>);
       return authoritativeState;
     },
 

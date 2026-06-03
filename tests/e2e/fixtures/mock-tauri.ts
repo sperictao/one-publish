@@ -323,7 +323,7 @@ export async function installMockTauri(page: Page, options: MockTauriOptions = {
         switch (cmd) {
           // Store
           case "get_app_state":
-            return clone(appState);
+            return clone({ ...appState, executionHistory: [] });
 
           case "update_publish_state": {
             const repo = appState.repositories?.find((r: Repository) => r.id === appState.selectedRepoId);
