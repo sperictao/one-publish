@@ -1,26 +1,17 @@
 import { useCallback, useState } from "react";
-import { invoke } from "@tauri-apps/api/core";
 import { save } from "@tauri-apps/plugin-dialog";
 import { toast } from "sonner";
 
+import {
+  createDiagnosticsIndexExportPlan,
+  createExecutionHistoryExportPlan,
+} from "@/features/history/diagnosticsExportPayload";
+import {
+  exportDiagnosticsIndexFile,
+  exportExecutionHistoryFile,
+} from "@/features/history/diagnosticsExportRuntime";
 import type { HistoryExportFormat } from "@/features/history/historyFilterPresets";
-import { joinPath } from "@/lib/paths";
 import { type ExecutionRecord } from "@/lib/store/types";
-
-interface DiagnosticsIndexPayload {
-  generatedAt: string;
-  summary: {
-    historyCount: number;
-    filteredHistoryCount: number;
-    failureGroupCount: number;
-    snapshotCount: number;
-    historyExportCount: number;
-  };
-  links: {
-    snapshots: string[];
-    historyExports: string[];
-  };
-}
 
 type TranslationMap = Record<string, string | undefined>;
 
@@ -65,56 +56,27 @@ export function useDiagnosticsExports({
         return;
       }
 
-      const format = options?.format;
-      const timestamp = new Date().toISOString().replace(/[:]/g, "-");
-      const extension = format ?? "csv";
-      const prefix = options?.filePrefix ?? "execution-history";
-      const defaultDir = selectedRepoPath || "";
-      const defaultPath = defaultDir
-        ? joinPath(defaultDir, `${prefix}-${timestamp}.${extension}`)
-        : `${prefix}-${timestamp}.${extension}`;
-
-      const filters =
-        format === "csv"
-          ? [{ name: "CSV", extensions: ["csv"] }]
-          : format === "json"
-            ? [{ name: "JSON", extensions: ["json"] }]
-            : [
-                { name: "CSV", extensions: ["csv"] },
-                { name: "JSON", extensions: ["json"] },
-              ];
+      const exportPlan = createExecutionHistoryExportPlan({
+        records,
+        format: options?.format,
+        filePrefix: options?.filePrefix,
+        selectedRepoPath,
+      });
 
       const selected = await save({
         title: options?.title ?? (historyT.exportHistoryTitle || "导出执行历史"),
-        defaultPath,
-        filters,
+        defaultPath: exportPlan.defaultPath,
+        filters: exportPlan.filters,
       });
 
       if (!selected) {
         return;
       }
 
-      const history = records.map((record) => ({
-        id: record.id,
-        repoId: record.repoId ?? null,
-        providerId: record.providerId,
-        projectPath: record.projectPath,
-        startedAt: record.startedAt,
-        finishedAt: record.finishedAt,
-        success: record.success,
-        cancelled: record.cancelled,
-        outputDir: record.outputDir ?? null,
-        error: record.error ?? null,
-        commandLine: record.commandLine ?? null,
-        snapshotPath: record.snapshotPath ?? null,
-        failureSignature: record.failureSignature ?? null,
-        fileCount: record.fileCount,
-      }));
-
       setIsExportingHistory(true);
       try {
-        const outputPath = await invoke<string>("export_execution_history", {
-          history,
+        const outputPath = await exportExecutionHistoryFile({
+          history: exportPlan.history,
           filePath: selected,
         });
 
@@ -147,15 +109,18 @@ export function useDiagnosticsExports({
       return;
     }
 
-    const timestamp = new Date().toISOString().replace(/[:]/g, "-");
-    const defaultDir = selectedRepoPath || "";
-    const defaultPath = defaultDir
-      ? joinPath(defaultDir, `diagnostics-index-${timestamp}.md`)
-      : `diagnostics-index-${timestamp}.md`;
+    const exportPlan = createDiagnosticsIndexExportPlan({
+      scopedExecutionHistory,
+      filteredExecutionHistory,
+      failureGroupCount,
+      snapshotPaths,
+      recentHistoryExports,
+      selectedRepoPath,
+    });
 
     const selected = await save({
       title: historyT.exportDiagnosticsIndexTitle || "导出诊断索引",
-      defaultPath,
+      defaultPath: exportPlan.defaultPath,
       filters: [
         { name: "Markdown", extensions: ["md"] },
         { name: "HTML", extensions: ["html"] },
@@ -166,25 +131,10 @@ export function useDiagnosticsExports({
       return;
     }
 
-    const indexPayload: DiagnosticsIndexPayload = {
-      generatedAt: new Date().toISOString(),
-      summary: {
-        historyCount: scopedExecutionHistory.length,
-        filteredHistoryCount: filteredExecutionHistory.length,
-        failureGroupCount,
-        snapshotCount: snapshotPaths.length,
-        historyExportCount: recentHistoryExports.length,
-      },
-      links: {
-        snapshots: snapshotPaths,
-        historyExports: recentHistoryExports,
-      },
-    };
-
     setIsExportingDiagnosticsIndex(true);
     try {
-      const outputPath = await invoke<string>("export_diagnostics_index", {
-        index: indexPayload,
+      const outputPath = await exportDiagnosticsIndexFile({
+        index: exportPlan.payload,
         filePath: selected,
       });
 
