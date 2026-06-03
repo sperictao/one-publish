@@ -91,11 +91,7 @@ async function resolveInitialRepositoryMetadata(
   ]);
 
   const branchState = normalizeInitialBranchState(path, branchResult);
-  const projectFile =
-    projectCandidates?.recommendedProjectFile ??
-    (projectCandidates?.projectFiles.length === 1
-      ? projectCandidates.projectFiles[0]
-      : undefined);
+  const projectFile = projectCandidates?.recommendedProjectFile ?? undefined;
 
   return {
     ...branchState,

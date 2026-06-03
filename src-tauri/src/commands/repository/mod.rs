@@ -187,6 +187,192 @@ mod tests {
         assert!(candidates.solution_files.is_empty());
     }
 
+    #[test]
+    fn scan_project_candidates_recommends_solution_named_project_when_tests_exist() {
+        let temp_dir = TempDir::new().expect("temp dir");
+        let solution = temp_dir.path().join("App.sln");
+        let app_project = temp_dir.path().join("src").join("App").join("App.csproj");
+        let test_project = temp_dir
+            .path()
+            .join("tests")
+            .join("App.Tests")
+            .join("App.Tests.csproj");
+        fs::create_dir_all(app_project.parent().expect("app project dir")).expect("create app dir");
+        fs::create_dir_all(test_project.parent().expect("test project dir"))
+            .expect("create test dir");
+        fs::write(&solution, "").expect("write solution");
+        fs::write(&app_project, "<Project />").expect("write app project");
+        fs::write(&test_project, "<Project />").expect("write test project");
+
+        let candidates = project_scan_candidates_from_root(temp_dir.path());
+
+        assert_eq!(
+            candidates.recommended_project_file.as_deref(),
+            Some(app_project.to_string_lossy().as_ref())
+        );
+    }
+
+    #[test]
+    fn scan_project_candidates_prefers_visual_studio_launch_start_project() {
+        let temp_dir = TempDir::new().expect("temp dir");
+        let solution = temp_dir.path().join("App.sln");
+        let app_project = temp_dir.path().join("src").join("App").join("App.csproj");
+        let worker_project = temp_dir
+            .path()
+            .join("src")
+            .join("Worker")
+            .join("Worker.csproj");
+        fs::create_dir_all(app_project.parent().expect("app project dir")).expect("create app dir");
+        fs::create_dir_all(worker_project.parent().expect("worker project dir"))
+            .expect("create worker dir");
+        fs::write(&app_project, "<Project />").expect("write app project");
+        fs::write(&worker_project, "<Project />").expect("write worker project");
+        fs::write(
+            &solution,
+            r#"
+Microsoft Visual Studio Solution File, Format Version 12.00
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "App", "src\App\App.csproj", "{11111111-1111-1111-1111-111111111111}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Worker", "src\Worker\Worker.csproj", "{22222222-2222-2222-2222-222222222222}"
+EndProject
+"#,
+        )
+        .expect("write solution");
+        fs::write(
+            temp_dir.path().join("App.slnLaunch"),
+            r#"
+{
+  "profiles": [
+    {
+      "name": "Worker",
+      "projects": [
+        { "Path": "src\\Worker\\Worker.csproj", "Action": "Start" },
+        { "Path": "src\\App\\App.csproj", "Action": "None" }
+      ]
+    }
+  ]
+}
+"#,
+        )
+        .expect("write slnLaunch");
+
+        let candidates = project_scan_candidates_from_root(temp_dir.path());
+
+        assert_eq!(
+            candidates.recommended_project_file.as_deref(),
+            Some(worker_project.to_string_lossy().as_ref())
+        );
+    }
+
+    #[test]
+    fn scan_project_candidates_uses_solution_membership_to_ignore_unlisted_projects() {
+        let temp_dir = TempDir::new().expect("temp dir");
+        let solution = temp_dir.path().join("App.sln");
+        let app_project = temp_dir.path().join("src").join("App").join("App.csproj");
+        let scratch_project = temp_dir
+            .path()
+            .join("scratch")
+            .join("Scratch")
+            .join("Scratch.csproj");
+        fs::create_dir_all(app_project.parent().expect("app project dir")).expect("create app dir");
+        fs::create_dir_all(scratch_project.parent().expect("scratch project dir"))
+            .expect("create scratch dir");
+        fs::write(&app_project, "<Project />").expect("write app project");
+        fs::write(&scratch_project, "<Project />").expect("write scratch project");
+        fs::write(
+            &solution,
+            r#"
+Microsoft Visual Studio Solution File, Format Version 12.00
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "App", "src\App\App.csproj", "{11111111-1111-1111-1111-111111111111}"
+EndProject
+"#,
+        )
+        .expect("write solution");
+
+        let candidates = project_scan_candidates_from_root(temp_dir.path());
+
+        assert_eq!(
+            candidates.recommended_project_file.as_deref(),
+            Some(app_project.to_string_lossy().as_ref())
+        );
+    }
+
+    #[test]
+    fn scan_project_candidates_recommends_repository_named_project_without_solution() {
+        let temp_dir = TempDir::new().expect("temp dir");
+        let repo_dir = temp_dir.path().join("BillingService");
+        let app_project = repo_dir
+            .join("src")
+            .join("BillingService")
+            .join("BillingService.csproj");
+        let test_project = repo_dir
+            .join("tests")
+            .join("BillingService.Tests")
+            .join("BillingService.Tests.csproj");
+        fs::create_dir_all(app_project.parent().expect("app project dir")).expect("create app dir");
+        fs::create_dir_all(test_project.parent().expect("test project dir"))
+            .expect("create test dir");
+        fs::write(&app_project, "<Project />").expect("write app project");
+        fs::write(&test_project, "<Project />").expect("write test project");
+
+        let candidates = project_scan_candidates_from_root(&repo_dir);
+
+        assert_eq!(
+            candidates.recommended_project_file.as_deref(),
+            Some(app_project.to_string_lossy().as_ref())
+        );
+    }
+
+    #[test]
+    fn scan_project_candidates_keeps_ambiguous_multiple_projects_unrecommended() {
+        let temp_dir = TempDir::new().expect("temp dir");
+        let project_a = temp_dir.path().join("AppA.csproj");
+        let project_b = temp_dir.path().join("AppB.csproj");
+        fs::write(&project_a, "<Project />").expect("write project a");
+        fs::write(&project_b, "<Project />").expect("write project b");
+
+        let candidates = project_scan_candidates_from_root(temp_dir.path());
+
+        assert!(candidates.recommended_project_file.is_none());
+    }
+
+    #[test]
+    fn scan_project_candidates_skips_nested_linked_worktree() {
+        let temp_dir = TempDir::new().expect("temp dir");
+        let app_project = temp_dir.path().join("src").join("App").join("App.csproj");
+        let worktree_project = temp_dir
+            .path()
+            .join("worktrees")
+            .join("feature")
+            .join("Other")
+            .join("Other.csproj");
+        fs::create_dir_all(app_project.parent().expect("app project dir")).expect("create app dir");
+        fs::create_dir_all(worktree_project.parent().expect("worktree project dir"))
+            .expect("create worktree dir");
+        fs::write(&app_project, "<Project />").expect("write app project");
+        fs::write(&worktree_project, "<Project />").expect("write worktree project");
+        fs::write(
+            temp_dir
+                .path()
+                .join("worktrees")
+                .join("feature")
+                .join(".git"),
+            "gitdir: ../../.git/worktrees/feature",
+        )
+        .expect("write linked worktree git file");
+
+        let candidates = project_scan_candidates_from_root(temp_dir.path());
+
+        assert_eq!(
+            candidates.project_files,
+            vec![app_project.to_string_lossy().to_string()]
+        );
+        assert_eq!(
+            candidates.recommended_project_file.as_deref(),
+            Some(app_project.to_string_lossy().as_ref())
+        );
+    }
+
     #[tokio::test]
     async fn scan_project_reports_multiple_candidates_when_more_than_one_project_exists() {
         let temp_dir = TempDir::new().expect("temp dir");
