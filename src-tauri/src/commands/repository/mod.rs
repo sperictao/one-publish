@@ -1,8 +1,10 @@
 mod connector;
+mod project;
 mod resolver;
 mod scanner;
 
 pub use connector::*;
+pub use project::*;
 pub use resolver::*;
 pub use scanner::*;
 
