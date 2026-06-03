@@ -264,7 +264,7 @@ const DEFAULT_ENV_CHECK: EnvironmentCheckResult = {
   is_ready: true,
   providers: [
     { provider_id: "dotnet", installed: true, version: "8.0.403", path: "/usr/local/share/dotnet/dotnet" },
-    { provider_id: "cargo", installed: true, version: "1.82.0", path: "/Users/erictao/.cargo/bin/cargo" },
+    { provider_id: "cargo", installed: true, version: "1.82.0", path: "/Users/test/.cargo/bin/cargo" },
     { provider_id: "go", installed: false, version: null, path: null },
   ],
   issues: [

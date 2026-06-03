@@ -4,8 +4,9 @@ import os
 # Steps order of modifications to SettingsDialog.tsx
 steps = [43, 45, 47, 49, 51, 53, 55, 95, 97, 99, 101, 103, 105]
 
-log_path = "/Users/erictao/.gemini/antigravity/brain/ba35f409-4ccc-4170-9ca7-ee8de2b09092/.system_generated/logs/transcript.jsonl"
-file_path = "/Users/erictao/source/repos/one-publish/src/components/layout/SettingsDialog.tsx"
+repo_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+log_path = os.environ["RESTORE_SETTINGS_LOG_PATH"]
+file_path = os.path.join(repo_root, "src/components/layout/SettingsDialog.tsx")
 
 def clean_str(s):
     if not s:
