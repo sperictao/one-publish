@@ -38,3 +38,37 @@
 ### Next Steps
 
 - None - task complete
+
+
+## Session 2: 实现仓库添加时 provider 列表为空仍自动绑定项目文件 + UI i18n 提取重构
+
+**Date**: 2026-06-03
+**Task**: 实现仓库添加时 provider 列表为空仍自动绑定项目文件 + UI i18n 提取重构
+**Branch**: `main`
+
+### Summary
+
+feat(repository): provider 列表为空时回退 API 查询以自动绑定项目文件。refactor(ui): 提取硬编码 i18n 字符串，EditRepositoryDialog 改用 key 驱动重挂载。
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `d3394df` | (see git log) |
+| `028dca2` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
