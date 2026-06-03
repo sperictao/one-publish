@@ -289,7 +289,7 @@ fn execute_path_preflight_rejects_windows_style_output_when_frontend_is_bypassed
         parameters,
     };
 
-    let error = super::execution::ensure_publish_output_preflight(&spec)
+    let error = super::output_policy::resolve_publish_output_policy(&spec)
         .expect_err("preflight should fail");
 
     assert_eq!(
@@ -313,7 +313,7 @@ fn remote_spec(output: &str) -> PublishSpec {
 fn execute_preflight_rejects_sftp_remote_output_until_upload_pipeline_lands() {
     let spec = remote_spec("sftp://deploy@nas01.example.com/var/www/publish-out");
 
-    let error = super::execution::ensure_publish_output_preflight(&spec)
+    let error = super::output_policy::resolve_publish_output_policy(&spec)
         .expect_err("sftp remote target must be rejected at execution");
 
     assert_eq!(
@@ -331,7 +331,7 @@ fn execute_preflight_rejects_sftp_remote_output_until_upload_pipeline_lands() {
 fn execute_preflight_rejects_s3_remote_output_until_upload_pipeline_lands() {
     let spec = remote_spec("s3://my-bucket/artifacts/release");
 
-    let error = super::execution::ensure_publish_output_preflight(&spec)
+    let error = super::output_policy::resolve_publish_output_policy(&spec)
         .expect_err("s3 remote target must be rejected at execution");
 
     assert_eq!(
@@ -349,7 +349,7 @@ fn execute_preflight_rejects_s3_remote_output_until_upload_pipeline_lands() {
 fn execute_preflight_rejects_webdav_remote_output_until_upload_pipeline_lands() {
     let spec = remote_spec("webdav://files.example.com/team/publish");
 
-    let error = super::execution::ensure_publish_output_preflight(&spec)
+    let error = super::output_policy::resolve_publish_output_policy(&spec)
         .expect_err("webdav remote target must be rejected at execution");
 
     assert_eq!(
@@ -362,7 +362,7 @@ fn execute_preflight_rejects_webdav_remote_output_until_upload_pipeline_lands() 
 fn execute_preflight_allows_local_output() {
     let spec = remote_spec("/tmp/op-publish-out-local");
 
-    super::execution::ensure_publish_output_preflight(&spec)
+    super::output_policy::resolve_publish_output_policy(&spec)
         .expect("local output should pass preflight");
 }
 
@@ -371,7 +371,7 @@ fn execute_preflight_allows_local_output() {
 fn execute_preflight_allows_mounted_remote_output_on_linux() {
     let spec = remote_spec("/mnt/fake-nas/publish-out");
 
-    super::execution::ensure_publish_output_preflight(&spec)
+    super::output_policy::resolve_publish_output_policy(&spec)
         .expect("mounted /mnt/ output should pass preflight (granted)");
 }
 

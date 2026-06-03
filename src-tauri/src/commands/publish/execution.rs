@@ -4,21 +4,14 @@ use super::errors::{
 };
 use super::logs::{collect_log_chunks, emit_publish_log, read_stream_chunks};
 use super::output::{
-    build_display_command, count_output_files, infer_output_dir, resolve_plan_command,
-    resolve_runtime_program, resolve_spawn_program, resolve_working_dir,
-    should_delete_existing_files,
+    build_display_command, count_output_files, resolve_plan_command, resolve_runtime_program,
+    resolve_spawn_program, resolve_working_dir,
 };
+use super::output_policy::{self, PublishOutputCleanupDecision, PublishOutputPolicy};
 use super::session::reserve_execution;
-use super::{
-    preflight::{
-        self, ProtectedDirectoryLocation, PublishOutputValidationIssue, RemoteLocationKind,
-        RemoteLocationSummary,
-    },
-    PublishResult, RenderedPublishCommand,
-};
+use super::{PublishResult, RenderedPublishCommand};
 use crate::provider::registry::provider_registry;
 use crate::spec::PublishSpec;
-use std::io::ErrorKind as IoErrorKind;
 use std::path::PathBuf;
 use std::process::Stdio;
 use std::sync::Arc;
@@ -36,117 +29,6 @@ fn build_publish_session_id(provider_id: &str) -> String {
 struct PreparedPublishCommand {
     command: RenderedPublishCommand,
     working_dir_path: Option<PathBuf>,
-}
-
-fn protected_location_label(location: ProtectedDirectoryLocation) -> &'static str {
-    match location {
-        ProtectedDirectoryLocation::Desktop => "Desktop",
-        ProtectedDirectoryLocation::Documents => "Documents",
-        ProtectedDirectoryLocation::Downloads => "Downloads",
-    }
-}
-
-fn selected_output_path(result: &preflight::PublishOutputPreflightResult) -> &str {
-    result
-        .configured_output_dir
-        .as_deref()
-        .filter(|path| !path.trim().is_empty())
-        .unwrap_or(result.output_dir.as_str())
-}
-
-fn build_preflight_validation_error(
-    result: &preflight::PublishOutputPreflightResult,
-) -> crate::errors::AppError {
-    let path = selected_output_path(result);
-    match result.validation.issue {
-        Some(PublishOutputValidationIssue::WindowsStylePathOnPosix) => publish_error(
-            format!(
-                "publish output path is incompatible with this system because it looks like a Windows path: {}",
-                path
-            ),
-            "publish_output_windows_style_path_on_posix",
-        ),
-        Some(PublishOutputValidationIssue::PosixAbsolutePathOnWindows) => publish_error(
-            format!(
-                "publish output path is incompatible with this system because it looks like a Unix absolute path: {}",
-                path
-            ),
-            "publish_output_posix_absolute_path_on_windows",
-        ),
-        Some(PublishOutputValidationIssue::WindowsDriveRootMissing) => publish_error(
-            format!(
-                "publish output path points to a missing Windows drive or share root: {}",
-                path
-            ),
-            "publish_output_windows_drive_root_missing",
-        ),
-        None => publish_error(
-            format!("publish output path is incompatible with this system: {}", path),
-            "publish_output_path_incompatible",
-        ),
-    }
-}
-
-fn build_preflight_access_error(
-    result: &preflight::PublishOutputPreflightResult,
-) -> crate::errors::AppError {
-    let Some(location) = result.access.protected_location else {
-        return publish_error(
-            format!(
-                "publish output directory requires macOS protected folder access: {}",
-                result.output_dir
-            ),
-            "publish_protected_directory_access_denied",
-        );
-    };
-    let path = result
-        .access
-        .probe_directory
-        .as_deref()
-        .filter(|value| !value.trim().is_empty())
-        .or(result.access.protected_root.as_deref())
-        .or(Some(result.output_dir.as_str()))
-        .unwrap_or("-");
-    let detail = result.access.detail.as_deref().unwrap_or("access denied");
-
-    build_protected_directory_access_error(location, path, detail)
-}
-
-fn build_remote_target_not_implemented_error(summary: &RemoteLocationSummary) -> crate::errors::AppError {
-    let scheme = summary
-        .scheme
-        .as_deref()
-        .filter(|s| !s.trim().is_empty())
-        .unwrap_or("remote");
-    publish_error(
-        format!(
-            "remote publish target is not implemented yet: scheme={} target={}",
-            scheme, summary.display
-        ),
-        "publish_remote_target_not_implemented",
-    )
-}
-
-pub(crate) fn ensure_publish_output_preflight(
-    spec: &PublishSpec,
-) -> Result<(), crate::errors::AppError> {
-    let result = preflight::preflight_publish_output(spec);
-
-    if result.validation.status == preflight::PublishOutputValidationStatus::Incompatible {
-        return Err(build_preflight_validation_error(&result));
-    }
-
-    if result.access.status == preflight::PublishOutputAccessStatus::Denied {
-        return Err(build_preflight_access_error(&result));
-    }
-
-    if let Some(summary) = result.access.remote_location.as_ref() {
-        if summary.kind == RemoteLocationKind::Remote {
-            return Err(build_remote_target_not_implemented_error(summary));
-        }
-    }
-
-    Ok(())
 }
 
 fn prepare_publish_command(
@@ -191,142 +73,32 @@ pub(crate) fn render_publish_command(
     Ok(prepare_publish_command(spec)?.command)
 }
 
-fn build_protected_directory_access_error(
-    location: ProtectedDirectoryLocation,
-    path: &str,
-    detail: &str,
-) -> crate::errors::AppError {
-    let location = protected_location_label(location);
-    publish_error(
-        format!(
-            "publish output directory requires macOS protected folder access ({location}): {path} | {detail}"
-        ),
-        "publish_protected_directory_access_denied",
-    )
-}
-
-fn build_cleanup_access_error(
-    output_dir: &str,
-    error: &std::io::Error,
-) -> Option<crate::errors::AppError> {
-    if error.kind() != IoErrorKind::PermissionDenied {
-        return None;
-    }
-
-    let location = preflight::protected_location_for_output_dir(output_dir)?;
-    Some(build_protected_directory_access_error(
-        location,
-        output_dir,
-        &error.to_string(),
-    ))
-}
-
-fn clean_output_directory(
-    output_dir: &str,
-    project_path: &str,
-) -> Result<bool, crate::errors::AppError> {
-    if output_dir.is_empty() {
-        return Ok(false);
-    }
-
+fn clean_output_directory(output_dir: &str) -> Result<(), crate::errors::AppError> {
     let output_path = PathBuf::from(output_dir);
-    if !output_path.is_dir() {
-        return Ok(false);
-    }
+    std::fs::remove_dir_all(&output_path)
+        .map_err(|error| output_policy::build_cleanup_remove_error(output_dir, &error))?;
+    std::fs::create_dir_all(&output_path)
+        .map_err(|error| output_policy::build_cleanup_recreate_error(output_dir, &error))?;
 
-    // Safety: never clean a directory that is (or contains) the project source
-    let canonical_output = output_path
-        .canonicalize()
-        .unwrap_or_else(|_| output_path.clone());
-    if !project_path.is_empty() {
-        let project_dir = std::path::Path::new(project_path)
-            .parent()
-            .map(|dir| dir.to_path_buf())
-            .unwrap_or_default();
-        if !project_dir.as_os_str().is_empty() {
-            let canonical_project_dir = project_dir
-                .canonicalize()
-                .unwrap_or_else(|_| project_dir.clone());
-            // Reject if the output directory is a parent of (or equal to) the project directory
-            if canonical_project_dir.starts_with(&canonical_output) {
-                return Err(publish_error(
-                    format!(
-                        "refusing to clean output directory because it contains the project source: {}",
-                        output_dir
-                    ),
-                    "delete_existing_files_safety_project_overlap",
-                ));
-            }
-            // Reject if the output directory is inside the project source tree
-            if canonical_output.starts_with(&canonical_project_dir) {
-                // Allow only well-known build output subdirectories
-                let relative = canonical_output
-                    .strip_prefix(&canonical_project_dir)
-                    .unwrap_or(std::path::Path::new(""));
-                let first_component = relative
-                    .components()
-                    .next()
-                    .map(|c| c.as_os_str().to_string_lossy().to_string())
-                    .unwrap_or_default();
-                if !matches!(
-                    first_component.as_str(),
-                    "bin" | "obj" | "publish" | "out" | "output" | "artifacts"
-                ) {
-                    return Err(publish_error(
-                        format!(
-                            "refusing to clean output directory inside the project source tree: {}",
-                            output_dir
-                        ),
-                        "delete_existing_files_safety_inside_project",
-                    ));
-                }
-            }
-        }
-    }
+    Ok(())
+}
 
-    // Safety: reject root-level directories (e.g. "/" or "C:\")
-    if canonical_output.parent().is_none() {
-        return Err(publish_error(
-            format!("refusing to clean a root-level directory: {}", output_dir),
-            "delete_existing_files_safety_root_directory",
-        ));
-    }
-
-    if preflight::is_protected_root_output_dir(output_dir) {
-        return Err(publish_error(
-            format!(
-                "refusing to clean a macOS protected root directory: {}",
+fn apply_cleanup_policy(policy: &PublishOutputPolicy) -> Result<(), crate::errors::AppError> {
+    match policy.cleanup() {
+        PublishOutputCleanupDecision::NotRequested => Ok(()),
+        PublishOutputCleanupDecision::SkippedMissingOutput { output_dir } => {
+            log::info!(
+                "[pre-publish] output directory does not exist or is empty, skipping cleanup: {}",
                 output_dir
-            ),
-            "delete_existing_files_safety_protected_root_directory",
-        ));
+            );
+            Ok(())
+        }
+        PublishOutputCleanupDecision::Clean { output_dir } => {
+            clean_output_directory(output_dir)?;
+            log::info!("[pre-publish] cleaned output directory: {}", output_dir);
+            Ok(())
+        }
     }
-
-    std::fs::remove_dir_all(&output_path).map_err(|error| {
-        if let Some(access_error) = build_cleanup_access_error(output_dir, &error) {
-            return access_error;
-        }
-
-        publish_error(
-            format!("failed to clean output directory {}: {}", output_dir, error),
-            "delete_existing_files_remove_failed",
-        )
-    })?;
-    std::fs::create_dir_all(&output_path).map_err(|error| {
-        if let Some(access_error) = build_cleanup_access_error(output_dir, &error) {
-            return access_error;
-        }
-
-        publish_error(
-            format!(
-                "failed to recreate output directory {}: {}",
-                output_dir, error
-            ),
-            "delete_existing_files_recreate_failed",
-        )
-    })?;
-
-    Ok(true)
 }
 
 pub(crate) async fn execute_publish_spec(
@@ -334,26 +106,8 @@ pub(crate) async fn execute_publish_spec(
     spec: PublishSpec,
 ) -> Result<PublishResult, crate::errors::AppError> {
     let prepared = prepare_publish_command(&spec)?;
-    ensure_publish_output_preflight(&spec)?;
-
-    // Pre-publish: clean output directory if delete_existing_files is set
-    if should_delete_existing_files(&spec) {
-        let output_dir = infer_output_dir(&spec);
-        match clean_output_directory(&output_dir, &spec.project_path) {
-            Ok(true) => {
-                log::info!("[pre-publish] cleaned output directory: {}", output_dir);
-            }
-            Ok(false) => {
-                log::info!(
-                    "[pre-publish] output directory does not exist or is empty, skipping cleanup: {}",
-                    output_dir
-                );
-            }
-            Err(error) => {
-                return Err(error);
-            }
-        }
-    }
+    let output_policy = output_policy::resolve_publish_output_policy(&spec)?;
+    apply_cleanup_policy(&output_policy)?;
 
     let session_id = build_publish_session_id(&spec.provider_id);
     let permit = reserve_execution(session_id.clone()).await?;
@@ -472,9 +226,9 @@ pub(crate) async fn execute_publish_spec(
             .await;
 
         let (success, cancelled, error, output_log) = run_result?;
-        let output_dir = infer_output_dir(&spec);
+        let output_dir = output_policy.output_dir().to_string();
         let file_count = if success {
-            count_output_files(&output_dir)
+            count_output_files(output_policy.output_dir())
         } else {
             0
         };

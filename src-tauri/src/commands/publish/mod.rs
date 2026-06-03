@@ -7,6 +7,7 @@ mod errors;
 mod execution;
 mod logs;
 mod output;
+mod output_policy;
 mod preflight;
 mod session;
 
