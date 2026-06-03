@@ -43,6 +43,11 @@ interface EditRepositoryDialogProps {
   ) => Promise<{ branches: Branch[]; currentBranch: string } | null>;
 }
 
+interface EditRepositoryDialogContentProps
+  extends Omit<EditRepositoryDialogProps, "repository"> {
+  repository: Repository;
+}
+
 const NO_PROVIDER_VALUE = "__none__";
 const MANUAL_INPUT_VALUE = "__manual__";
 const NO_PROJECT_FILE_VALUE = "__none__";
@@ -63,6 +68,32 @@ const resolveBranchSelection = (branches: Branch[], preferredBranch: string) => 
 
 export function EditRepositoryDialog({
   repository,
+  onOpenChange,
+  ...contentProps
+}: EditRepositoryDialogProps) {
+  return (
+    <Dialog
+      open={Boolean(repository)}
+      onOpenChange={(open) => {
+        if (!open) {
+          onOpenChange(false);
+        }
+      }}
+    >
+      {repository ? (
+        <EditRepositoryDialogContent
+          key={repository.id}
+          repository={repository}
+          onOpenChange={onOpenChange}
+          {...contentProps}
+        />
+      ) : null}
+    </Dialog>
+  );
+}
+
+function EditRepositoryDialogContent({
+  repository,
   providers,
   repoT,
   onOpenChange,
@@ -70,34 +101,36 @@ export function EditRepositoryDialog({
   onDetectProvider,
   onScanProjectCandidates,
   onRefreshBranches,
-}: EditRepositoryDialogProps) {
-  const [editingRepo, setEditingRepo] = useState<Repository | null>(null);
-  const [editName, setEditName] = useState("");
-  const [editPath, setEditPath] = useState("");
-  const [debouncedPath, setDebouncedPath] = useState("");
-  const [editProjectFile, setEditProjectFile] = useState("");
-  const [editCurrentBranch, setEditCurrentBranch] = useState("");
-  const [editProviderId, setEditProviderId] = useState("");
+}: EditRepositoryDialogContentProps) {
+  const initialBranch = repository.currentBranch?.trim() || DEFAULT_BRANCH_VALUE;
+  const initialProviderId = repository.providerId?.trim() || "";
+  const [editName, setEditName] = useState(() => repository.name);
+  const [editPath, setEditPath] = useState(() => repository.path);
+  const [editProjectFile, setEditProjectFile] = useState(
+    () => repository.projectFile || ""
+  );
+  const [editBranches, setEditBranches] = useState(() => repository.branches);
+  const [editCurrentBranch, setEditCurrentBranch] = useState(() => initialBranch);
+  const [editProviderId, setEditProviderId] = useState(
+    () => initialProviderId || NO_PROVIDER_VALUE
+  );
   const [isSavingRepo, setIsSavingRepo] = useState(false);
   const [isDetectingProvider, setIsDetectingProvider] = useState(false);
   const [isRefreshingBranches, setIsRefreshingBranches] = useState(false);
-  const [shouldAutoDetectProvider, setShouldAutoDetectProvider] = useState(false);
-  const [shouldAutoRefreshBranches, setShouldAutoRefreshBranches] = useState(false);
   const [projectScan, setProjectScan] = useState<ProjectScanCandidates | null>(null);
   const [projectScanResolvedPath, setProjectScanResolvedPath] = useState<string | null>(null);
   const [isScanningProjectFiles, setIsScanningProjectFiles] = useState(false);
   const [isProjectScanPending, setIsProjectScanPending] = useState(false);
-  const [isProjectFileManual, setIsProjectFileManual] = useState(false);
-  const editProjectFileRef = useRef("");
+  const [isProjectFileManual, setIsProjectFileManual] = useState(
+    Boolean(repository.projectFile?.trim())
+  );
+  const editProjectFileRef = useRef(repository.projectFile || "");
   const projectScanRequestIdRef = useRef(0);
-  const prevRepoIdRef = useRef<string | null>(null);
-
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      setDebouncedPath(editPath);
-    }, 250);
-    return () => clearTimeout(timer);
-  }, [editPath]);
+  const shouldAutoDetectProviderRef = useRef(!initialProviderId);
+  const shouldAutoRefreshBranchesRef = useRef(true);
+  const invalidateProjectScanRequest = useCallback(() => {
+    projectScanRequestIdRef.current += 1;
+  }, []);
 
   const providerOptions = useMemo(() => {
     const uniqueOptions = Array.from(
@@ -120,12 +153,8 @@ export function EditRepositoryDialog({
   }, [editProviderId, providers]);
 
   const branchOptions = useMemo(() => {
-    if (!editingRepo) {
-      return [] as string[];
-    }
-
     const branchNames = new Set<string>();
-    for (const branch of editingRepo.branches) {
+    for (const branch of editBranches) {
       const branchName = branch.name.trim();
       if (branchName) {
         branchNames.add(branchName);
@@ -139,7 +168,7 @@ export function EditRepositoryDialog({
     }
 
     return options;
-  }, [editCurrentBranch, editingRepo]);
+  }, [editBranches, editCurrentBranch]);
 
   const projectFileOptions = useMemo(
     () => projectScan?.projectFiles ?? [],
@@ -177,67 +206,9 @@ export function EditRepositoryDialog({
     ]
   );
 
-  const resetForm = useCallback(() => {
-    setEditingRepo(null);
-    setEditName("");
-    setEditPath("");
-    setDebouncedPath("");
-    setEditProjectFile("");
-    setEditCurrentBranch("");
-    setEditProviderId("");
-    setIsSavingRepo(false);
-    setIsDetectingProvider(false);
-    setIsRefreshingBranches(false);
-    setShouldAutoDetectProvider(false);
-    setShouldAutoRefreshBranches(false);
-    setProjectScan(null);
-    setProjectScanResolvedPath(null);
-    setIsScanningProjectFiles(false);
-    setIsProjectScanPending(false);
-    setIsProjectFileManual(false);
-    editProjectFileRef.current = "";
-    projectScanRequestIdRef.current = 0;
-  }, []);
-
   useEffect(() => {
     editProjectFileRef.current = editProjectFile;
   }, [editProjectFile]);
-
-  useEffect(() => {
-    if (!repository) {
-      resetForm();
-      prevRepoIdRef.current = null;
-      return;
-    }
-
-    if (prevRepoIdRef.current === repository.id) {
-      return;
-    }
-    prevRepoIdRef.current = repository.id;
-
-    const initialBranch = repository.currentBranch?.trim() || DEFAULT_BRANCH_VALUE;
-    const initialProviderId = repository.providerId?.trim() || "";
-
-    setEditingRepo(repository);
-    setEditName(repository.name);
-    setEditPath(repository.path);
-    setDebouncedPath(repository.path);
-    setEditProjectFile(repository.projectFile || "");
-    setEditCurrentBranch(initialBranch);
-    setEditProviderId(initialProviderId || NO_PROVIDER_VALUE);
-    setIsSavingRepo(false);
-    setIsDetectingProvider(false);
-    setIsRefreshingBranches(false);
-    setShouldAutoDetectProvider(!initialProviderId);
-    setShouldAutoRefreshBranches(true);
-    setProjectScan(null);
-    setProjectScanResolvedPath(null);
-    setIsScanningProjectFiles(false);
-    setIsProjectScanPending(false);
-    setIsProjectFileManual(Boolean(repository.projectFile?.trim()));
-    editProjectFileRef.current = repository.projectFile || "";
-    projectScanRequestIdRef.current = 0;
-  }, [repository, resetForm]);
 
   const runProjectCandidateScan = useCallback(
     async (path: string): Promise<ProjectScanCandidates | null> => {
@@ -287,41 +258,29 @@ export function EditRepositoryDialog({
   );
 
   useEffect(() => {
-    if (!editingRepo) {
-      return;
-    }
-
-    const nextPath = debouncedPath.trim();
-    if (!nextPath) {
-      projectScanRequestIdRef.current += 1;
-      setProjectScan(null);
-      setProjectScanResolvedPath(null);
-      setIsProjectFileManual(true);
-      setIsScanningProjectFiles(false);
-      setIsProjectScanPending(false);
-      return;
-    }
-
-    void runProjectCandidateScan(nextPath);
+    const timer = window.setTimeout(() => {
+      void runProjectCandidateScan(editPath);
+    }, 250);
 
     return () => {
-      projectScanRequestIdRef.current += 1;
+      window.clearTimeout(timer);
+      invalidateProjectScanRequest();
     };
-  }, [debouncedPath, editingRepo, runProjectCandidateScan]);
+  }, [editPath, invalidateProjectScanRequest, runProjectCandidateScan]);
 
   useEffect(() => {
-    if (!editingRepo || !shouldAutoDetectProvider) {
+    if (!shouldAutoDetectProviderRef.current) {
       return;
     }
 
     if (editProviderId !== NO_PROVIDER_VALUE) {
-      setShouldAutoDetectProvider(false);
+      shouldAutoDetectProviderRef.current = false;
       return;
     }
 
-    const detectPath = debouncedPath.trim();
+    const detectPath = editPath.trim();
     if (!detectPath) {
-      setShouldAutoDetectProvider(false);
+      shouldAutoDetectProviderRef.current = false;
       return;
     }
 
@@ -337,7 +296,7 @@ export function EditRepositoryDialog({
       } finally {
         if (!cancelled) {
           setIsDetectingProvider(false);
-          setShouldAutoDetectProvider(false);
+          shouldAutoDetectProviderRef.current = false;
         }
       }
     };
@@ -348,25 +307,23 @@ export function EditRepositoryDialog({
       cancelled = true;
     };
   }, [
-    debouncedPath,
+    editPath,
     editProviderId,
-    editingRepo,
     onDetectProvider,
-    shouldAutoDetectProvider,
   ]);
 
   useEffect(() => {
-    if (!editingRepo || !shouldAutoRefreshBranches) {
+    if (!shouldAutoRefreshBranchesRef.current) {
       return;
     }
 
-    const refreshPath = debouncedPath.trim();
+    const refreshPath = editPath.trim();
     if (!refreshPath) {
-      setShouldAutoRefreshBranches(false);
+      shouldAutoRefreshBranchesRef.current = false;
       return;
     }
 
-    const savedBranch = editingRepo.currentBranch?.trim() || "";
+    const savedBranch = repository.currentBranch?.trim() || "";
     let cancelled = false;
 
     const refresh = async () => {
@@ -380,23 +337,13 @@ export function EditRepositoryDialog({
             savedBranch
           );
 
-          setEditingRepo((prev) => {
-            if (!prev) {
-              return prev;
-            }
-
-            return {
-              ...prev,
-              branches: refreshed.branches,
-              currentBranch: nextCurrentBranch,
-            };
-          });
+          setEditBranches(refreshed.branches);
           setEditCurrentBranch(nextCurrentBranch);
         }
       } finally {
         if (!cancelled) {
           setIsRefreshingBranches(false);
-          setShouldAutoRefreshBranches(false);
+          shouldAutoRefreshBranchesRef.current = false;
         }
       }
     };
@@ -406,12 +353,16 @@ export function EditRepositoryDialog({
     return () => {
       cancelled = true;
     };
-  }, [debouncedPath, editingRepo, onRefreshBranches, shouldAutoRefreshBranches]);
+  }, [
+    editPath,
+    onRefreshBranches,
+    repository.currentBranch,
+  ]);
 
   const handleDetectProvider = useCallback(async () => {
     const detectPath = editPath.trim();
 
-    setShouldAutoDetectProvider(false);
+    shouldAutoDetectProviderRef.current = false;
     setIsDetectingProvider(true);
     try {
       const providerId = await onDetectProvider(detectPath);
@@ -433,13 +384,9 @@ export function EditRepositoryDialog({
   }, [editPath, runProjectCandidateScan]);
 
   const handleRefreshBranches = useCallback(async () => {
-    if (!editingRepo) {
-      return;
-    }
-
     const refreshPath = editPath.trim();
 
-    setShouldAutoRefreshBranches(false);
+    shouldAutoRefreshBranchesRef.current = false;
     setIsRefreshingBranches(true);
     try {
       const refreshed = await onRefreshBranches(refreshPath);
@@ -448,29 +395,19 @@ export function EditRepositoryDialog({
         return;
       }
 
-      const preferredBranch = editCurrentBranch.trim() || editingRepo.currentBranch;
+      const preferredBranch =
+        editCurrentBranch.trim() || repository.currentBranch;
       const nextCurrentBranch = resolveBranchSelection(
         refreshed.branches,
         preferredBranch
       );
 
-      setEditingRepo((prev) => {
-        if (!prev) {
-          return prev;
-        }
-
-        return {
-          ...prev,
-          branches: refreshed.branches,
-          currentBranch: nextCurrentBranch,
-        };
-      });
-
+      setEditBranches(refreshed.branches);
       setEditCurrentBranch(nextCurrentBranch);
     } finally {
       setIsRefreshingBranches(false);
     }
-  }, [editCurrentBranch, editPath, editingRepo, onRefreshBranches]);
+  }, [editCurrentBranch, editPath, onRefreshBranches, repository.currentBranch]);
 
   const handleBrowsePath = useCallback(async () => {
     try {
@@ -491,10 +428,6 @@ export function EditRepositoryDialog({
     async (event: FormEvent<HTMLFormElement>) => {
       event.preventDefault();
 
-      if (!editingRepo) {
-        return;
-      }
-
       const nextName = editName.trim();
       const nextPath = editPath.trim();
       const nextProjectFile = editProjectFile.trim();
@@ -503,7 +436,7 @@ export function EditRepositoryDialog({
       const normalizedProviderId =
         nextProviderId === NO_PROVIDER_VALUE ? "" : nextProviderId;
       const fallbackBranch =
-        editingRepo.currentBranch || editingRepo.branches[0]?.name || DEFAULT_BRANCH_VALUE;
+        repository.currentBranch || editBranches[0]?.name || DEFAULT_BRANCH_VALUE;
 
       if (!nextName || !nextPath) {
         return;
@@ -536,9 +469,10 @@ export function EditRepositoryDialog({
       setIsSavingRepo(true);
       try {
         const updated = await onEditRepo({
-          ...editingRepo,
+          ...repository,
           name: nextName,
           path: nextPath,
+          branches: editBranches,
           projectFile: resolvedProjectFile || undefined,
           currentBranch: nextCurrentBranch || fallbackBranch,
           providerId: normalizedProviderId || undefined,
@@ -557,13 +491,15 @@ export function EditRepositoryDialog({
       editPath,
       editProjectFile,
       editProviderId,
-      editingRepo,
+      editBranches,
       isProjectBindingPending,
       onEditRepo,
       onOpenChange,
       repoT,
       projectScan,
+      repository,
       runProjectCandidateScan,
+      selectedProviderRequiresProjectBinding,
     ]
   );
 
@@ -571,16 +507,8 @@ export function EditRepositoryDialog({
   const isEditPathEmpty = editPath.trim().length === 0;
 
   return (
-    <Dialog
-      open={Boolean(repository)}
-      onOpenChange={(open) => {
-        if (!open) {
-          onOpenChange(false);
-        }
-      }}
-    >
-      <AppDialogShell
-        size="responsive"
+    <AppDialogShell
+        size="workspace"
         bodyPadding="none"
         bodyScrollable={false}
         bodyInnerClassName="min-h-0 flex-1"
@@ -640,17 +568,19 @@ export function EditRepositoryDialog({
               </div>
               
               <h3 className="mt-4 text-base font-semibold tracking-tight truncate max-w-full text-foreground flex items-center justify-center gap-1.5 w-full">
-                <span className="truncate">{editName || "未命名仓库"}</span>
+                <span className="truncate">
+                  {editName || repoT.unnamedRepository || "未命名仓库"}
+                </span>
                 <div className="group relative inline-block shrink-0">
                   <HelpCircle className="size-3.5 text-muted-foreground/60 cursor-help hover:text-foreground transition-colors" />
                   <div className="absolute left-1/2 -translate-x-1/2 bottom-full mb-2 hidden group-hover:block w-48 p-2 bg-[var(--glass-panel-bg)] backdrop-blur-xl text-popover-foreground text-xs rounded-xl shadow-[var(--glass-shadow-lg)] border border-[var(--glass-border)] z-10 leading-4 font-normal text-left">
-                    请确保仓库路径和项目绑定正确，这会直接影响后续的自动化发布配置构建。
+                    {repoT.repositoryBindingHint || "请确保仓库路径和项目绑定正确，这会直接影响后续的自动化发布配置构建。"}
                   </div>
                 </div>
               </h3>
               
               <p className="mt-2 text-xs text-muted-foreground break-all px-2.5 py-1.5 rounded-xl bg-black/5 dark:bg-white/5 border border-[var(--glass-border-subtle)] font-mono max-w-full">
-                {editPath || "未选择路径"}
+                {editPath || repoT.unselectedPath || "未选择路径"}
               </p>
  
               {/* Status Stats List */}
@@ -658,7 +588,7 @@ export function EditRepositoryDialog({
                 <div className="flex items-center justify-between rounded-xl border border-[var(--glass-border-subtle)] bg-background/40 px-3.5 py-2.5">
                   <span className="text-xs text-muted-foreground flex items-center gap-1.5">
                     <GitBranch className="size-3.5 text-muted-foreground" />
-                    分支数量
+                    {repoT.branchCount || "分支数量"}
                   </span>
                   <span className="text-xs font-semibold font-mono text-foreground bg-primary/10 px-2 py-0.5 rounded-full">
                     {branchOptions.length}
@@ -668,7 +598,7 @@ export function EditRepositoryDialog({
                 <div className="flex items-center justify-between rounded-xl border border-[var(--glass-border-subtle)] bg-background/40 px-3.5 py-2.5">
                   <span className="text-xs text-muted-foreground flex items-center gap-1.5">
                     <Activity className="size-3.5 text-muted-foreground" />
-                    绑定状态
+                    {repoT.bindingStatus || "绑定状态"}
                   </span>
                   <span className={cn(
                     "text-xs font-semibold px-2 py-0.5 rounded-full",
@@ -676,7 +606,9 @@ export function EditRepositoryDialog({
                       ? "text-emerald-500 bg-emerald-500/10"
                       : "text-amber-500 bg-amber-500/10"
                   )}>
-                    {editProviderId && editProviderId !== NO_PROVIDER_VALUE ? "已绑定" : "未绑定"}
+                    {editProviderId && editProviderId !== NO_PROVIDER_VALUE
+                      ? repoT.bound || "已绑定"
+                      : repoT.unbound || "未绑定"}
                   </span>
                 </div>
  
@@ -684,7 +616,7 @@ export function EditRepositoryDialog({
                   <div className="flex items-center justify-between rounded-xl border border-[var(--glass-border-subtle)] bg-background/40 px-3.5 py-2.5">
                     <span className="text-xs text-muted-foreground flex items-center gap-1.5">
                       <Info className="size-3.5 text-muted-foreground" />
-                      当前服务
+                      {repoT.currentProvider || "当前服务"}
                     </span>
                     <span className="text-xs font-semibold text-foreground font-mono truncate max-w-[120px]">
                       {selectedProviderOption?.label || selectedProviderOption?.displayName || editProviderId}
@@ -701,7 +633,7 @@ export function EditRepositoryDialog({
             <AppDialogInset className="space-y-4 p-5 bg-gradient-to-br from-background/30 to-background/5 border border-[var(--glass-border-subtle)]">
               <h4 className="text-xs font-semibold uppercase tracking-[0.12em] text-primary flex items-center gap-1.5 mb-1">
                 <span className="size-1.5 rounded-full bg-primary" />
-                基础配置
+                {repoT.basicConfig || "基础配置"}
               </h4>
 
               <div className="space-y-4">
@@ -743,7 +675,7 @@ export function EditRepositoryDialog({
                       size="icon"
                       className="size-9 shrink-0 hover:bg-primary/5 hover:text-primary transition-colors duration-300"
                       onClick={handleBrowsePath}
-                      title="浏览文件夹"
+                      title={repoT.browseFolder || "浏览文件夹"}
                     >
                       <FolderGit2 className="size-4" />
                     </Button>
@@ -761,7 +693,7 @@ export function EditRepositoryDialog({
             <AppDialogInset className="space-y-4 p-5 bg-gradient-to-br from-background/30 to-background/5 border border-[var(--glass-border-subtle)]">
               <h4 className="text-xs font-semibold uppercase tracking-[0.12em] text-primary flex items-center gap-1.5 mb-1">
                 <span className="size-1.5 rounded-full bg-primary" />
-                项目定位与分支
+                {repoT.projectBranchSection || "项目定位与分支"}
               </h4>
 
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
@@ -856,7 +788,7 @@ export function EditRepositoryDialog({
                     <Select
                       value={editProviderId}
                       onValueChange={(value) => {
-                        setShouldAutoDetectProvider(false);
+                        shouldAutoDetectProviderRef.current = false;
                         setEditProviderId(value);
                       }}
                       disabled={isDetectingProvider}
@@ -932,7 +864,6 @@ export function EditRepositoryDialog({
             </AppDialogInset>
           </form>
         </div>
-      </AppDialogShell>
-    </Dialog>
+    </AppDialogShell>
   );
 }

@@ -17,6 +17,7 @@
     "test:workflow": "node scripts/test-build-release-workflow.mjs",
     "test:updater": "node scripts/test-updater-scripts.mjs",
     "test:release": "node scripts/test-release-script.mjs",
+    "check:i18n": "node scripts/check-i18n-coverage.mjs",
     "test": "vitest run",
     "test:ui": "vitest --ui",
     "test:watch": "vitest",

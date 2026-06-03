@@ -37,7 +37,6 @@ import {
   memo,
   startTransition,
   useCallback,
-  useEffect,
   useMemo,
   useState,
 } from "react";
@@ -46,7 +45,7 @@ import { isTauri } from "@tauri-apps/api/core";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import { relaunch } from "@tauri-apps/plugin-process";
 import type { AppUpdaterState } from "@/hooks/useAppUpdater";
-import { useI18n, t } from "@/hooks/useI18n";
+import { useI18n } from "@/hooks/useI18n";
 import type { Language } from "@/hooks/useI18n";
 import type { EnvironmentCheckSnapshot } from "@/features/environment/environment";
 import { cn } from "@/lib/utils";
@@ -350,17 +349,18 @@ export const AppearanceSettingsSection = memo(function AppearanceSettingsSection
   onThemeChange,
 }: AppearanceSettingsSectionProps) {
   const { accentColor, setAccentColor } = useAccentColor();
+  const appearanceT = translations.settings?.appearance || {};
 
   const accentList: Array<{ id: AccentColor; name: string; lightColor: string; darkColor: string }> = [
-    { id: "brand", name: "按钮蓝", lightColor: "#2462db", darkColor: "#4983de" },
-    { id: "blue", name: "系统蓝", lightColor: "#007aff", darkColor: "#2997ff" },
-    { id: "purple", name: "紫色", lightColor: "#af52de", darkColor: "#d946ef" },
-    { id: "pink", name: "粉色", lightColor: "#ff2d55", darkColor: "#f472b6" },
-    { id: "red", name: "红色", lightColor: "#ff3b30", darkColor: "#ff453a" },
-    { id: "orange", name: "橙色", lightColor: "#ff9500", darkColor: "#ff9f0a" },
-    { id: "yellow", name: "黄色", lightColor: "#ffcc00", darkColor: "#ffd60a" },
-    { id: "green", name: "绿色", lightColor: "#34c759", darkColor: "#30d158" },
-    { id: "gray", name: "石墨", lightColor: "#8e8e93", darkColor: "#98989d" },
+    { id: "brand", name: appearanceT.accentBrand || "按钮蓝", lightColor: "#2462db", darkColor: "#4983de" },
+    { id: "blue", name: appearanceT.accentBlue || "系统蓝", lightColor: "#007aff", darkColor: "#2997ff" },
+    { id: "purple", name: appearanceT.accentPurple || "紫色", lightColor: "#af52de", darkColor: "#d946ef" },
+    { id: "pink", name: appearanceT.accentPink || "粉色", lightColor: "#ff2d55", darkColor: "#f472b6" },
+    { id: "red", name: appearanceT.accentRed || "红色", lightColor: "#ff3b30", darkColor: "#ff453a" },
+    { id: "orange", name: appearanceT.accentOrange || "橙色", lightColor: "#ff9500", darkColor: "#ff9f0a" },
+    { id: "yellow", name: appearanceT.accentYellow || "黄色", lightColor: "#ffcc00", darkColor: "#ffd60a" },
+    { id: "green", name: appearanceT.accentGreen || "绿色", lightColor: "#34c759", darkColor: "#30d158" },
+    { id: "gray", name: appearanceT.accentGray || "石墨", lightColor: "#8e8e93", darkColor: "#98989d" },
   ];
 
   const activeColorToken = ACCENT_COLORS[accentColor] || ACCENT_COLORS.blue;
@@ -380,7 +380,6 @@ export const AppearanceSettingsSection = memo(function AppearanceSettingsSection
             value={theme}
             onChange={(e) => onThemeChange(e.target.value as "light" | "dark" | "auto")}
             className="sr-only"
-            aria-hidden="true"
           >
             <option value="auto">System</option>
             <option value="light">Light</option>
@@ -569,10 +568,10 @@ export const AppearanceSettingsSection = memo(function AppearanceSettingsSection
       <div className="rounded-xl border border-[var(--settings-hairline)] bg-[var(--settings-section-bg)] p-6 shadow-[0_1px_3px_rgba(0,0,0,0.02)] dark:shadow-none">
         <div className="space-y-0.5 mb-4">
           <Label className="text-[14px] font-semibold tracking-[-0.224px] text-[var(--settings-ink)]">
-            强调色 (Accent Color)
+            {appearanceT.accentColorTitle || "强调色 (Accent Color)"}
           </Label>
           <p className="text-[12px] leading-[1.4] tracking-[-0.12px] text-[var(--settings-ink-muted)]">
-            选择应用在按钮、聚焦框、激活项等交互元素下的系统主色调。
+            {appearanceT.accentColorDescription || "选择应用在按钮、聚焦框、激活项等交互元素下的系统主色调。"}
           </p>
         </div>
 
@@ -594,7 +593,7 @@ export const AppearanceSettingsSection = memo(function AppearanceSettingsSection
                 }}
                 onClick={() => setAccentColor(item.id)}
                 title={item.name}
-                aria-label={`强调色: ${item.name}`}
+                aria-label={(appearanceT.accentColorAriaLabel || "强调色: {{name}}").replace("{{name}}", item.name)}
               >
                 {isSelected && (
                   <Check className="size-3 text-white drop-shadow-[0_1px_1px_rgba(0,0,0,0.45)] stroke-[3.5]" />
@@ -858,23 +857,28 @@ export function SettingsDialog({
 
       void Promise.resolve(onLanguageChange(normalizedLanguage))
         .then(() => {
+          const languageT = translations.language || {};
           const languageLabel =
             normalizedLanguage === "en"
-              ? t("language.english")
-              : t("language.chinese");
+              ? languageT.english || "English"
+              : languageT.chinese || "简体中文";
 
           toast.success(
-            t("language.changed", {
-              language: languageLabel,
-            })
+            (languageT.changed || "界面语言已切换为 {{language}}").replace(
+              "{{language}}",
+              languageLabel
+            )
           );
         })
         .catch((error) => {
           console.error("\u5207\u6362\u8BED\u8A00\u5931\u8D25:", error);
-          toast.error(t("language.changeFailed"));
+          toast.error(
+            translations.language?.changeFailed ||
+              "界面语言切换失败，请重试"
+          );
         });
     },
-    [language, onLanguageChange]
+    [language, onLanguageChange, translations.language]
   );
 
   const handleCategoryChange = useCallback(
@@ -907,11 +911,15 @@ export function SettingsDialog({
     void onInstallAvailableUpdate();
   }, [onInstallAvailableUpdate]);
 
-  useEffect(() => {
-    if (!isOpen) {
-      setHasRequestedUpdateCheck(false);
-    }
-  }, [isOpen]);
+  const handleSettingsOpenChange = useCallback(
+    (open: boolean) => {
+      if (!open) {
+        setHasRequestedUpdateCheck(false);
+      }
+      onOpenChange(open);
+    },
+    [onOpenChange]
+  );
 
   const handleRestartApp = useCallback(() => {
     if (!isTauri()) {
@@ -944,7 +952,7 @@ export function SettingsDialog({
     }
   }, [onDefaultOutputDirChange, translations.outputDir?.label]);
 
-  const renderGeneralSettings = () => (
+  const generalSettingsContent = (
     <GeneralSettingsSection
       translations={translations}
       language={language}
@@ -961,7 +969,7 @@ export function SettingsDialog({
     />
   );
 
-  const renderAppearanceSettings = () => (
+  const appearanceSettingsContent = (
     <AppearanceSettingsSection
       translations={translations}
       theme={theme}
@@ -969,7 +977,7 @@ export function SettingsDialog({
     />
   );
 
-  const renderEnvironmentSettings = () => (
+  const environmentSettingsContent = (
     <Suspense
       fallback={
         <SettingsSectionFallback
@@ -988,7 +996,7 @@ export function SettingsDialog({
     </Suspense>
   );
 
-  const renderShortcutsSettings = () => (
+  const shortcutsSettingsContent = (
     <ShortcutsSettingsSection
       translations={translations}
       shortcutsItems={shortcutsItems}
@@ -996,8 +1004,10 @@ export function SettingsDialog({
     />
   );
 
-  const renderAboutSettings = () => {
+  const aboutSettingsContent = (() => {
     const isConfigUnhealthy = updaterConfigHealth && !updaterConfigHealth.configured;
+    const versionT = translations.version || {};
+    const lastCheckedAt = new Date().toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" });
 
     return (
       <div className="space-y-6">
@@ -1010,12 +1020,12 @@ export function SettingsDialog({
                 OnePublish
               </h4>
               <p className="text-[12px] leading-[1.4] tracking-[-0.12px] text-[var(--settings-ink-muted)]">
-                跨平台 .NET 自动化发布与签名客户端
+                {versionT.productDescription || "跨平台 .NET 自动化发布与签名客户端"}
               </p>
             </div>
             <span className="inline-flex items-center rounded-md border border-[var(--settings-hairline)] bg-black/[0.03] dark:bg-white/[0.03] px-2 py-0.5 text-[11px] font-semibold text-[var(--settings-ink-muted)] font-mono shrink-0">
               {formatMessage(
-                t("version.current"),
+                versionT.current || "当前版本: v{}",
                 updateInfo?.currentVersion || currentVersion || "—"
               )}
             </span>
@@ -1031,10 +1041,10 @@ export function SettingsDialog({
                   <AlertTriangle className="size-[18px] flex-shrink-0 text-amber-500" />
                   <div className="space-y-0.5 min-w-0">
                     <Label className="text-[14px] font-semibold tracking-[-0.224px] text-[var(--settings-ink)]">
-                      更新通道未配置
+                      {versionT.updateChannelNotConfiguredTitle || "更新通道未配置"}
                     </Label>
                     <p className="text-[12px] leading-[1.4] tracking-[-0.12px] text-[var(--settings-ink-muted)]">
-                      检测到本地更新配置未设置，无法建立版本检查。
+                      {versionT.updateChannelNotConfiguredDescription || "检测到本地更新配置未设置，无法建立版本检查。"}
                     </p>
                   </div>
                 </>
@@ -1043,10 +1053,10 @@ export function SettingsDialog({
                   <RefreshCw className="size-[18px] flex-shrink-0 text-emerald-500" />
                   <div className="space-y-0.5 min-w-0">
                     <Label className="text-[14px] font-semibold tracking-[-0.224px] text-[var(--settings-ink)]">
-                      新版本已准备就绪
+                      {versionT.updateReadyTitle || "新版本已准备就绪"}
                     </Label>
                     <p className="text-[12px] leading-[1.4] tracking-[-0.12px] text-[var(--settings-ink-muted)]">
-                      升级补丁已下载完成，请重启客户端应用更新。
+                      {versionT.updateReadyDescription || "升级补丁已下载完成，请重启客户端应用更新。"}
                     </p>
                   </div>
                 </>
@@ -1055,10 +1065,10 @@ export function SettingsDialog({
                   <ArrowUpCircle className="size-[18px] flex-shrink-0 text-blue-500" />
                   <div className="space-y-0.5 min-w-0">
                     <Label className="text-[14px] font-semibold tracking-[-0.224px] text-[var(--settings-ink)]">
-                      {formatMessage(t("version.new"), updateInfo.availableVersion || "")}
+                      {formatMessage(versionT.new || "有新版本: v{}", updateInfo.availableVersion || "")}
                     </Label>
                     <p className="text-[12px] leading-[1.4] tracking-[-0.12px] text-[var(--settings-ink-muted)]">
-                      发现可用新版本。
+                      {versionT.updateAvailableDescription || "发现可用新版本。"}
                     </p>
                   </div>
                 </>
@@ -1067,10 +1077,10 @@ export function SettingsDialog({
                   <CheckCircle2 className="size-[18px] flex-shrink-0 text-emerald-500" />
                   <div className="space-y-0.5 min-w-0">
                     <Label className="text-[14px] font-semibold tracking-[-0.224px] text-[var(--settings-ink)]">
-                      软件已是最新版本
+                      {versionT.upToDateTitle || "软件已是最新版本"}
                     </Label>
                     <p className="text-[12px] leading-[1.4] tracking-[-0.12px] text-[var(--settings-ink-muted)]">
-                      上次检查时间：{new Date().toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })}。
+                      {formatMessage(versionT.lastCheckedAt || "上次检查时间：{}。", lastCheckedAt)}
                     </p>
                   </div>
                 </>
@@ -1183,27 +1193,27 @@ export function SettingsDialog({
         )}
       </div>
     );
-  };
+  })();
 
-  const renderCategoryContent = () => {
+  const categoryContent = (() => {
     switch (activeCategory) {
       case "general":
-        return renderGeneralSettings();
+        return generalSettingsContent;
       case "appearance":
-        return renderAppearanceSettings();
+        return appearanceSettingsContent;
       case "environment":
-        return renderEnvironmentSettings();
+        return environmentSettingsContent;
       case "shortcuts":
-        return renderShortcutsSettings();
+        return shortcutsSettingsContent;
       case "about":
-        return renderAboutSettings();
+        return aboutSettingsContent;
       default:
-        return renderGeneralSettings();
+        return generalSettingsContent;
     }
-  };
+  })();
 
   return (
-    <Dialog open={isOpen} onOpenChange={onOpenChange}>
+    <Dialog open={isOpen} onOpenChange={handleSettingsOpenChange}>
       <AppDialogShell
         size="workspace"
         bodyPadding="none"
@@ -1271,7 +1281,7 @@ export function SettingsDialog({
               </p>
             </div>
             <div className="glass-scrollbar min-h-0 flex-1 overflow-y-auto px-6 py-4">
-              {renderCategoryContent()}
+              {categoryContent}
             </div>
           </section>
         </div>

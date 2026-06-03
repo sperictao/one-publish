@@ -1,5 +1,6 @@
 import * as React from "react";
 import { cn } from "@/lib/utils";
+import { useI18n } from "@/hooks/useI18n";
 
 interface CollapsiblePanelProps {
   children: React.ReactNode;
@@ -59,7 +60,11 @@ export function PanelToggleButton({
   iconType = "sidebar",
   tooltip,
 }: PanelToggleButtonProps) {
-  const defaultTooltip = collapsed ? "展开侧边栏" : "收起侧边栏";
+  const { translations } = useI18n();
+  const commonT = translations.common || {};
+  const defaultTooltip = collapsed
+    ? commonT.expandSidebar || "展开侧边栏"
+    : commonT.collapseSidebar || "收起侧边栏";
 
   return (
     <button

@@ -517,6 +517,7 @@ export const PublishConfigPanel = memo(function PublishConfigPanel({
   const t = translations.configPanel || {};
   const appT = translations.app || {};
   const profileT = translations.profiles || {};
+  const commonT = translations.common || {};
   const defaultGroupName = t.defaultProfileGroup || "默认分组";
   const configManagementLabel =
     translations.settings?.categories?.config ||
@@ -530,6 +531,15 @@ export const PublishConfigPanel = memo(function PublishConfigPanel({
   const unfavoriteConfigLabel = t.unfavoriteConfig || "取消收藏";
   const removeRecentLabel = t.removeRecent || "从最近使用移除";
   const deleteConfigLabel = t.deleteConfig || "删除配置";
+  const recentlyUsedLabel = t.recentlyUsed || "最近使用";
+  const dragToReorderLabel = t.dragToReorder || "拖动排序";
+  const dragDisabledWhileSearchingLabel =
+    t.dragDisabledWhileSearching || "搜索时无法排序";
+  const profileGroupLabel = t.profileGroup || "项目发布配置";
+  const copyConfigLabel = t.copyConfig || "复制为自定义配置";
+  const viewConfigLabel = t.viewConfig || "查看配置";
+  const editConfigLabel = t.editConfig || "编辑配置";
+  const noConfigsLabel = t.noConfigs || "暂无配置";
   const projectProfilesRefreshingLabel =
     t.refreshingProjectProfiles || "正在刷新项目发布配置...";
   const customProfilesRefreshingLabel =
@@ -1077,7 +1087,7 @@ export const PublishConfigPanel = memo(function PublishConfigPanel({
             <div className="space-y-1.5">
               <div className="flex items-center gap-1.5 px-3 py-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                 <Clock className="size-3.5" />
-                <span>{t.recentlyUsed || "最近使用"}</span>
+                <span>{recentlyUsedLabel}</span>
               </div>
               {previewRecentItems.map((item) => {
                 const renderId = createRecentConfigRenderId(item.key);
@@ -1132,10 +1142,8 @@ export const PublishConfigPanel = memo(function PublishConfigPanel({
                   <ListDragHandle
                     visible={recentDragEnabled}
                     enabled={recentDragEnabled}
-                    label={t.dragToReorder || "拖动排序"}
-                    disabledLabel={
-                      t.dragDisabledWhileSearching || "搜索时无法排序"
-                    }
+                    label={dragToReorderLabel}
+                    disabledLabel={dragDisabledWhileSearchingLabel}
                     onPointerDown={(event) => {
                       recentReorder.startDrag(item.key, event);
                     }}
@@ -1227,7 +1235,7 @@ export const PublishConfigPanel = memo(function PublishConfigPanel({
           )}
 
           <ConfigGroup
-            title={t.profileGroup || "项目发布配置"}
+            title={profileGroupLabel}
             count={previewVisibleProjectProfiles.length}
             defaultExpanded={true}
             visible={
@@ -1292,10 +1300,8 @@ export const PublishConfigPanel = memo(function PublishConfigPanel({
                   <ListDragHandle
                     visible={projectProfileDragEnabled}
                     enabled={projectProfileDragEnabled}
-                    label={t.dragToReorder || "拖动排序"}
-                    disabledLabel={
-                      t.dragDisabledWhileSearching || "搜索时无法排序"
-                    }
+                    label={dragToReorderLabel}
+                    disabledLabel={dragDisabledWhileSearchingLabel}
                     onPointerDown={(event) => {
                       projectProfileReorder.startDrag(name, event);
                     }}
@@ -1359,13 +1365,13 @@ export const PublishConfigPanel = memo(function PublishConfigPanel({
                         }),
                         {
                           key: "copy",
-                          label: t.copyConfig || "复制为自定义配置",
+                          label: copyConfigLabel,
                           icon: <Copy className="size-3.5 text-muted-foreground/70" />,
                           onSelect: () => handleCopyProjectProfileToCustom(name),
                         },
                         {
                           key: "view",
-                          label: t.viewConfig || "查看配置",
+                          label: viewConfigLabel,
                           icon: <Eye className="size-3.5 text-muted-foreground/70" />,
                           onSelect: () => handleViewProjectProfile(name),
                         },
@@ -1411,7 +1417,7 @@ export const PublishConfigPanel = memo(function PublishConfigPanel({
                   onToggleFavorite={onToggleFavoriteConfig}
                   onEdit={() => onEditProfile(profile)}
                   canEdit={!profile.isSystemDefault && profile.providerId === "dotnet"}
-                  editTitle={t.editConfig || "编辑配置"}
+                  editTitle={editConfigLabel}
                   deleteTitle={deleteConfigLabel}
                   favoriteLabel={favoriteConfigLabel}
                   unfavoriteLabel={unfavoriteConfigLabel}
@@ -1439,10 +1445,8 @@ export const PublishConfigPanel = memo(function PublishConfigPanel({
                   groupKey={group.groupKey}
                   dragEnabled={customProfileDragEnabled}
                   dragHandleVisible={customProfileDragEnabled}
-                  dragHandleLabel={t.dragToReorder || "拖动排序"}
-                  dragDisabledLabel={
-                    t.dragDisabledWhileSearching || "搜索时无法排序"
-                  }
+                  dragHandleLabel={dragToReorderLabel}
+                  dragDisabledLabel={dragDisabledWhileSearchingLabel}
                   isDragging={customProfileReorder.draggingItemId === profile.name}
                   dragPreviewStyle={customProfileReorder.dragPreviewStyle}
                   onHandlePointerDown={customProfileReorder.startDrag}
@@ -1461,7 +1465,7 @@ export const PublishConfigPanel = memo(function PublishConfigPanel({
           ) : null}
           {shouldShowEmptyState && (
             <div className="px-3 py-4 text-center text-xs text-muted-foreground">
-              {t.noConfigs || "暂无配置"}
+              {noConfigsLabel}
             </div>
           )}
           </div>
@@ -1473,7 +1477,6 @@ export const PublishConfigPanel = memo(function PublishConfigPanel({
       draggingFloatingConfig,
       favoriteSet,
       favoriteConfigLabel,
-      floatingTargetConfigId,
       handleConfigListPointerLeave,
       handleConfigListPointerReentry,
       handleSelectRecentItem,
@@ -1491,27 +1494,26 @@ export const PublishConfigPanel = memo(function PublishConfigPanel({
       projectProfilesRefreshingLabel,
       projectMotion,
       projectProfileReorder.draggingItemId,
-      projectProfileReorder.dropTarget,
+      projectProfileReorder.dragPreviewStyle,
       projectProfileReorder.setItemRef,
       projectProfileReorder.startDrag,
       previewRecentItems,
       previewVisibleGroupedFilteredProfiles,
       previewVisibleProjectProfiles,
       recentDragEnabled,
-      showReorderControls,
       recentMotion,
       recentReorder.draggingItemId,
-      recentReorder.dropTarget,
+      recentReorder.dragPreviewStyle,
       recentReorder.setItemRef,
       recentReorder.startDrag,
       removeRecentLabel,
       selectedConfigId,
+      selectedRepoScopeId,
       selectedRenderId,
       showRecentItems,
       shouldShowCustomProfilesLoadingState,
       shouldShowEmptyState,
       shouldShowProjectProfilesLoadingState,
-      t,
       moreActionsLabel,
       unfavoriteConfigLabel,
       handleCopyProjectProfileToCustom,
@@ -1522,14 +1524,23 @@ export const PublishConfigPanel = memo(function PublishConfigPanel({
       interaction.handleRowMouseEnter,
       interaction.isMenuOpenForItem,
       customProfileReorder.draggingItemId,
-      customProfileReorder.dropTarget,
+      customProfileReorder.dragPreviewStyle,
       customProfileReorder.setItemRef,
       customProfileReorder.startDrag,
-      settledConfigRenderId,
+      copyConfigLabel,
       clearSettledConfigRenderId,
+      dragDisabledWhileSearchingLabel,
+      dragToReorderLabel,
+      editConfigLabel,
+      noConfigsLabel,
+      profileGroupLabel,
+      recentlyUsedLabel,
       visualTargetConfigId,
+      viewConfigLabel,
     ]
   );
+
+  const fallbackConfigList = renderConfigList(fallbackFloatingBindings);
 
   return (
     <div className="flex h-full flex-col">
@@ -1727,9 +1738,9 @@ export const PublishConfigPanel = memo(function PublishConfigPanel({
         </div>
 
         {!floatingEnhancerEnabled ? (
-          renderConfigList(fallbackFloatingBindings)
+          fallbackConfigList
         ) : (
-          <Suspense fallback={renderConfigList(fallbackFloatingBindings)}>
+          <Suspense fallback={fallbackConfigList}>
             <PublishConfigPanelFloatingLayer
               filteredConfigIds={previewConfigIds}
               targetConfigId={floatingTargetConfigId}
@@ -1756,6 +1767,7 @@ export const PublishConfigPanel = memo(function PublishConfigPanel({
         projectFrameworkOptions={projectFrameworkOptions}
         profileT={profileT}
         appT={appT}
+        commonT={commonT}
         configPanelT={t}
       />
     </div>

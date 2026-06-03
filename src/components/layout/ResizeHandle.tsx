@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { cn } from "@/lib/utils";
+import { useI18n } from "@/hooks/useI18n";
 
 interface ResizeHandleProps {
   onResize: (delta: number) => void;
@@ -22,53 +23,69 @@ export function ResizeHandle({
 }: ResizeHandleProps) {
   const [isDragging, setIsDragging] = useState(false);
   const startPosRef = useRef(0);
+  const cleanupDragRef = useRef<(() => void) | null>(null);
+  const { translations } = useI18n();
+  const commonT = translations.common || {};
+
+  const cleanupDrag = useCallback(() => {
+    cleanupDragRef.current?.();
+    cleanupDragRef.current = null;
+  }, []);
 
   const handleMouseDown = useCallback(
     (e: React.MouseEvent) => {
       e.preventDefault();
+      cleanupDrag();
       setIsDragging(true);
       startPosRef.current = direction === "horizontal" ? e.clientX : e.clientY;
+
+      const handleMouseMove = (event: MouseEvent) => {
+        const currentPos =
+          direction === "horizontal" ? event.clientX : event.clientY;
+        const delta = currentPos - startPosRef.current;
+        if (delta !== 0) {
+          onResize(delta);
+          startPosRef.current = currentPos;
+        }
+      };
+
+      const handleMouseUp = () => {
+        cleanupDrag();
+        setIsDragging(false);
+        onResizeEnd?.();
+      };
+
+      const previousCursor = document.body.style.cursor;
+      const previousUserSelect = document.body.style.userSelect;
+
+      document.addEventListener("mousemove", handleMouseMove);
+      document.addEventListener("mouseup", handleMouseUp);
+      document.body.style.cursor =
+        direction === "horizontal" ? "col-resize" : "row-resize";
+      document.body.style.userSelect = "none";
+
+      cleanupDragRef.current = () => {
+        document.removeEventListener("mousemove", handleMouseMove);
+        document.removeEventListener("mouseup", handleMouseUp);
+        document.body.style.cursor = previousCursor;
+        document.body.style.userSelect = previousUserSelect;
+      };
     },
-    [direction]
+    [cleanupDrag, direction, onResize, onResizeEnd]
   );
 
   useEffect(() => {
-    if (!isDragging) return;
-
-    const handleMouseMove = (e: MouseEvent) => {
-      const currentPos = direction === "horizontal" ? e.clientX : e.clientY;
-      const delta = currentPos - startPosRef.current;
-      if (delta !== 0) {
-        onResize(delta);
-        startPosRef.current = currentPos;
-      }
-    };
-
-    const handleMouseUp = () => {
-      setIsDragging(false);
-      onResizeEnd?.();
-    };
-
-    document.addEventListener("mousemove", handleMouseMove);
-    document.addEventListener("mouseup", handleMouseUp);
-
-    // Change cursor globally while dragging
-    document.body.style.cursor =
-      direction === "horizontal" ? "col-resize" : "row-resize";
-    document.body.style.userSelect = "none";
-
-    return () => {
-      document.removeEventListener("mousemove", handleMouseMove);
-      document.removeEventListener("mouseup", handleMouseUp);
-      document.body.style.cursor = "";
-      document.body.style.userSelect = "";
-    };
-  }, [isDragging, direction, onResize, onResizeEnd]);
+    return cleanupDrag;
+  }, [cleanupDrag]);
 
   return (
     <button
       type="button"
-      aria-label={direction === "horizontal" ? "调整面板宽度" : "调整面板高度"}
+      aria-label={
+        direction === "horizontal"
+          ? commonT.resizePanelWidth || "调整面板宽度"
+          : commonT.resizePanelHeight || "调整面板高度"
+      }
       className={cn(
         "group relative flex flex-col flex-shrink-0 appearance-none border-0 bg-transparent p-0 glass-transition",
         direction === "horizontal"

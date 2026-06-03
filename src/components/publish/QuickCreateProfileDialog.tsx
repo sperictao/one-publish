@@ -328,7 +328,7 @@ export function QuickCreateProfileDialog({
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <AppDialogShell
-        size="responsive"
+        size="workspace"
         bodyPadding="none"
         bodyInnerClassName="space-y-4 p-5 sm:p-6"
         title={

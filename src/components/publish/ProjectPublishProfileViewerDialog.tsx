@@ -56,6 +56,7 @@ interface ProjectPublishProfileViewerDialogProps {
   projectFrameworkOptions?: string[];
   profileT: ViewerTranslations;
   appT: ViewerTranslations;
+  commonT: ViewerTranslations;
   configPanelT: ViewerTranslations;
 }
 
@@ -67,6 +68,7 @@ export function ProjectPublishProfileViewerDialog({
   projectFrameworkOptions = EMPTY_PROJECT_FRAMEWORK_OPTIONS,
   profileT,
   appT,
+  commonT,
   configPanelT,
 }: ProjectPublishProfileViewerDialogProps): JSX.Element {
   const t = configPanelT;
@@ -81,7 +83,7 @@ export function ProjectPublishProfileViewerDialog({
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <AppDialogShell
-        size="responsive"
+        size="workspace"
         bodyPadding="none"
         bodyInnerClassName="space-y-4 p-5 sm:p-6"
         title={
@@ -113,7 +115,7 @@ export function ProjectPublishProfileViewerDialog({
               variant="outline"
               onClick={() => onOpenChange(false)}
             >
-              {t.close || "关闭"}
+              {commonT.close || "关闭"}
             </Button>
           </div>
         }

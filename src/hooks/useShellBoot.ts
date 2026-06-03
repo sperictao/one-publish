@@ -95,10 +95,10 @@ export function useShellBoot(params: UseShellBootParams) {
       return;
     }
     shownNoticeRef.current = nextNotice;
-    toast.warning("已恢复安全配置", {
+    toast.warning(appT.recoveredSafeConfig || "已恢复安全配置", {
       description: nextNotice,
     });
-  }, [params.startupNotice]);
+  }, [appT.recoveredSafeConfig, params.startupNotice]);
 
   // Dialogs
   const {
