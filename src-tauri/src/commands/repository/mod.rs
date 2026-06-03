@@ -267,6 +267,44 @@ EndProject
     }
 
     #[test]
+    fn scan_project_candidates_prefers_first_solution_project_for_linked_worktree_root() {
+        let temp_dir = TempDir::new().expect("temp dir");
+        let repo_dir = temp_dir.path().join("feature-worktree");
+        let solution = repo_dir.join("Workspace.sln");
+        let web_project = repo_dir.join("src").join("Web").join("Web.csproj");
+        let worker_project = repo_dir.join("src").join("Worker").join("Worker.csproj");
+        fs::create_dir_all(web_project.parent().expect("web project dir")).expect("create web dir");
+        fs::create_dir_all(worker_project.parent().expect("worker project dir"))
+            .expect("create worker dir");
+        fs::write(
+            repo_dir.join(".git"),
+            "gitdir: ../.git/worktrees/feature-worktree",
+        )
+        .expect("write linked worktree git file");
+        fs::write(&web_project, "<Project />").expect("write web project");
+        fs::write(&worker_project, "<Project />").expect("write worker project");
+        fs::write(
+            &solution,
+            r#"
+Microsoft Visual Studio Solution File, Format Version 12.00
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Web", "src\Web\Web.csproj", "{11111111-1111-1111-1111-111111111111}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Worker", "src\Worker\Worker.csproj", "{22222222-2222-2222-2222-222222222222}"
+EndProject
+"#,
+        )
+        .expect("write solution");
+
+        let candidates =
+            scan_project_candidates_from_path(&repo_dir).expect("scan linked worktree root");
+
+        assert_eq!(
+            candidates.recommended_project_file.as_deref(),
+            Some(web_project.to_string_lossy().as_ref())
+        );
+    }
+
+    #[test]
     fn scan_project_candidates_uses_solution_membership_to_ignore_unlisted_projects() {
         let temp_dir = TempDir::new().expect("temp dir");
         let solution = temp_dir.path().join("App.sln");

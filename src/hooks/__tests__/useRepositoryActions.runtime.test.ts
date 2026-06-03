@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const mocks = vi.hoisted(() => ({
   openDialog: vi.fn(),
   detectRepositoryProvider: vi.fn(),
+  listProviders: vi.fn(),
   scanProjectCandidates: vi.fn(),
   scanRepositoryBranches: vi.fn(),
   addRepository: vi.fn(),
@@ -27,6 +28,7 @@ vi.mock("@/lib/store/api", async () => {
   return {
     ...actual,
     detectRepositoryProvider: mocks.detectRepositoryProvider,
+    listProviders: mocks.listProviders,
     scanProjectCandidates: mocks.scanProjectCandidates,
     scanRepositoryBranches: mocks.scanRepositoryBranches,
   };
@@ -54,6 +56,7 @@ describe("handleAddRepoRuntime", () => {
     vi.clearAllMocks();
     mocks.openDialog.mockResolvedValue("/tmp/demo-repo");
     mocks.detectRepositoryProvider.mockResolvedValue("dotnet");
+    mocks.listProviders.mockResolvedValue(providers);
     mocks.scanProjectCandidates.mockResolvedValue({
       rootPath: "/tmp/demo-repo",
       solutionFiles: [],
@@ -94,6 +97,7 @@ describe("handleAddRepoRuntime", () => {
     });
 
     expect(mocks.detectRepositoryProvider).toHaveBeenCalledWith("/tmp/demo-repo");
+    expect(mocks.listProviders).not.toHaveBeenCalled();
     expect(mocks.scanProjectCandidates).toHaveBeenCalledWith("/tmp/demo-repo");
     expect(mocks.scanRepositoryBranches).toHaveBeenCalledWith("/tmp/demo-repo", {
       refreshRemote: false,
@@ -113,6 +117,27 @@ describe("handleAddRepoRuntime", () => {
     expect(mocks.toastSuccess).toHaveBeenCalledWith("仓库已添加", {
       description: "demo-repo",
     });
+  });
+
+  it("provider 列表尚未加载但已检测到 dotnet 时仍会扫描并绑定推荐项目", async () => {
+    await handleAddRepoRuntime({
+      appT: {
+        selectRepositoryDirectory: "选择仓库目录",
+        repositoryAdded: "仓库已添加",
+      },
+      providers: [],
+      addRepository: mocks.addRepository,
+    });
+
+    expect(mocks.detectRepositoryProvider).toHaveBeenCalledWith("/tmp/demo-repo");
+    expect(mocks.listProviders).toHaveBeenCalledOnce();
+    expect(mocks.scanProjectCandidates).toHaveBeenCalledWith("/tmp/demo-repo");
+    expect(mocks.addRepository).toHaveBeenCalledWith(
+      expect.objectContaining({
+        providerId: "dotnet",
+        projectFile: "/tmp/demo-repo/src/App/App.csproj",
+      })
+    );
   });
 
   it("自动识别失败时会回退到默认分支并允许继续添加", async () => {

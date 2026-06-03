@@ -181,6 +181,18 @@ fn path_set_bonus(project_file: &Path, paths: &[PathBuf], score: i32) -> i32 {
     }
 }
 
+fn solution_project_bonus(
+    solution_files: &[PathBuf],
+    solution_project_paths: &[PathBuf],
+    project_file: &Path,
+) -> i32 {
+    if solution_files.len() == 1 {
+        return ordered_path_bonus(project_file, solution_project_paths, 20_000);
+    }
+
+    path_set_bonus(project_file, solution_project_paths, 20_000)
+}
+
 fn normalize_identifier_key(value: &str) -> String {
     value
         .chars()
@@ -285,7 +297,7 @@ fn project_file_recommendation_score(
     let mut score = 0;
 
     score += ordered_path_bonus(project_file, launch_start_project_paths, 30_000);
-    score += path_set_bonus(project_file, solution_project_paths, 20_000);
+    score += solution_project_bonus(solution_files, solution_project_paths, project_file);
 
     for preferred_key in &preferred_keys {
         if name_key_matches(preferred_key, &stem_key) {

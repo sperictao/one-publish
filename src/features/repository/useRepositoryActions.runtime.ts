@@ -6,6 +6,7 @@ import {
 } from "@/lib/store/types";
 import {
   detectRepositoryProvider,
+  listProviders,
   openDirectory,
   scanProjectCandidates,
   scanRepositoryBranches,
@@ -76,17 +77,44 @@ function normalizeInitialBranchState(
   };
 }
 
+async function resolveProviderManifest(
+  providerId: string,
+  providers: ProviderManifest[]
+): Promise<ProviderManifest | null> {
+  const matchedProvider =
+    providers.find((provider) => provider.id === providerId) ?? null;
+
+  if (matchedProvider) {
+    return matchedProvider;
+  }
+
+  const catalog = await listProviders().catch(() => []);
+  return catalog.find((provider) => provider.id === providerId) ?? null;
+}
+
+async function shouldScanProjectCandidates(
+  providerId: string,
+  providers: ProviderManifest[]
+): Promise<boolean> {
+  const provider = await resolveProviderManifest(providerId, providers);
+  return providerRequiresProjectBinding(provider);
+}
+
 async function resolveInitialRepositoryMetadata(
   path: string,
   providerId: string,
   providers: ProviderManifest[]
 ): Promise<Pick<Repository, "branches" | "currentBranch" | "projectFile">> {
-  const matchedProvider =
-    providers.find((provider) => provider.id === providerId) ?? null;
-  const [projectCandidates, branchResult] = await Promise.all([
-    providerRequiresProjectBinding(matchedProvider)
+  const projectCandidatesPromise = shouldScanProjectCandidates(
+    providerId,
+    providers
+  ).then((shouldScan) =>
+    shouldScan
       ? scanProjectCandidates(path).catch(() => null)
-      : Promise.resolve<ProjectScanCandidates | null>(null),
+      : Promise.resolve<ProjectScanCandidates | null>(null)
+  );
+  const [projectCandidates, branchResult] = await Promise.all([
+    projectCandidatesPromise,
     scanRepositoryBranches(path, { refreshRemote: false }).catch(() => null),
   ]);
 
