@@ -24,6 +24,7 @@ export function reconcileProjectBinding(
 ): ProjectBindingResolution {
   const nextProjectFile = currentProjectFile.trim();
   const projectFiles = candidates?.projectFiles ?? [];
+  const recommendedProjectFile = candidates?.recommendedProjectFile?.trim() ?? "";
 
   if (nextProjectFile && projectFiles.includes(nextProjectFile)) {
     return {
@@ -33,11 +34,11 @@ export function reconcileProjectBinding(
     };
   }
 
-  if (projectFiles.length === 1) {
+  if (recommendedProjectFile && projectFiles.includes(recommendedProjectFile)) {
     return {
-      nextProjectFile: projectFiles[0],
+      nextProjectFile: recommendedProjectFile,
       isManualInput: false,
-      requiresExplicitBinding: false,
+      requiresExplicitBinding: projectFiles.length > 1,
     };
   }
 

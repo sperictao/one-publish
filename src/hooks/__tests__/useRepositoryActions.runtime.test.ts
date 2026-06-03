@@ -57,7 +57,10 @@ describe("handleAddRepoRuntime", () => {
     mocks.scanProjectCandidates.mockResolvedValue({
       rootPath: "/tmp/demo-repo",
       solutionFiles: [],
-      projectFiles: ["/tmp/demo-repo/src/App/App.csproj"],
+      projectFiles: [
+        "/tmp/demo-repo/src/App/App.csproj",
+        "/tmp/demo-repo/tests/App.Tests.csproj",
+      ],
       recommendedProjectFile: "/tmp/demo-repo/src/App/App.csproj",
     });
     mocks.scanRepositoryBranches.mockResolvedValue({
@@ -140,6 +143,30 @@ describe("handleAddRepoRuntime", () => {
             path: "/tmp/demo-repo",
           },
         ],
+      })
+    );
+  });
+
+  it("没有后端推荐项目时不会从单个候选项目自行推断绑定", async () => {
+    mocks.scanProjectCandidates.mockResolvedValue({
+      rootPath: "/tmp/demo-repo",
+      solutionFiles: [],
+      projectFiles: ["/tmp/demo-repo/src/App/App.csproj"],
+      recommendedProjectFile: undefined,
+    });
+
+    await handleAddRepoRuntime({
+      appT: {
+        selectRepositoryDirectory: "选择仓库目录",
+        repositoryAdded: "仓库已添加",
+      },
+      providers,
+      addRepository: mocks.addRepository,
+    });
+
+    expect(mocks.addRepository).toHaveBeenCalledWith(
+      expect.objectContaining({
+        projectFile: undefined,
       })
     );
   });

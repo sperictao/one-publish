@@ -8,13 +8,15 @@ import {
 } from "@/components/layout/editRepositoryProjectBinding";
 import type { ProjectScanCandidates } from "@/lib/store/types";
 
-function createCandidates(projectFiles: string[]): ProjectScanCandidates {
+function createCandidates(
+  projectFiles: string[],
+  recommendedProjectFile?: string
+): ProjectScanCandidates {
   return {
     rootPath: "/repo",
     solutionFiles: [],
     projectFiles,
-    recommendedProjectFile:
-      projectFiles.length === 1 ? projectFiles[0] : undefined,
+    recommendedProjectFile,
   };
 }
 
@@ -30,15 +32,40 @@ describe("editRepositoryProjectBinding", () => {
     expect(resolution.requiresExplicitBinding).toBe(true);
   });
 
-  it("旧绑定失效且只剩唯一候选时自动切换", () => {
+  it("旧绑定失效且后端推荐唯一候选时自动切换", () => {
     const resolution = reconcileProjectBinding(
       "/old/Legacy.csproj",
-      createCandidates(["/repo/src/App.csproj"])
+      createCandidates(["/repo/src/App.csproj"], "/repo/src/App.csproj")
     );
 
     expect(resolution.nextProjectFile).toBe("/repo/src/App.csproj");
     expect(resolution.isManualInput).toBe(false);
     expect(resolution.requiresExplicitBinding).toBe(false);
+  });
+
+  it("旧绑定失效且没有后端推荐时不自行推断唯一候选", () => {
+    const resolution = reconcileProjectBinding(
+      "/old/Legacy.csproj",
+      createCandidates(["/repo/src/App.csproj"])
+    );
+
+    expect(resolution.nextProjectFile).toBe("");
+    expect(resolution.isManualInput).toBe(true);
+    expect(resolution.requiresExplicitBinding).toBe(false);
+  });
+
+  it("旧绑定失效且存在推荐候选时自动切换到推荐项目文件", () => {
+    const resolution = reconcileProjectBinding(
+      "/old/Legacy.csproj",
+      createCandidates(
+        ["/repo/src/App/App.csproj", "/repo/tests/App.Tests.csproj"],
+        "/repo/src/App/App.csproj"
+      )
+    );
+
+    expect(resolution.nextProjectFile).toBe("/repo/src/App/App.csproj");
+    expect(resolution.isManualInput).toBe(false);
+    expect(resolution.requiresExplicitBinding).toBe(true);
   });
 
   it("旧绑定失效且存在多个候选时清空绑定并要求显式选择", () => {
