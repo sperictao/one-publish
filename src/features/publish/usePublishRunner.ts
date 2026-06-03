@@ -22,7 +22,6 @@ interface UsePublishRunnerParams {
   activeProviderParameters: Record<string, ParameterValue>;
   selectedPreset: string;
   isCustomMode: boolean;
-  activeProfileName: string | null;
   customConfig: PublishConfigStore;
   defaultOutputDir?: string;
   projectInfo: ProjectInfo | null;
@@ -49,7 +48,6 @@ export function usePublishRunner({
   activeProviderParameters,
   selectedPreset,
   isCustomMode,
-  activeProfileName,
   customConfig,
   defaultOutputDir,
   projectInfo,
@@ -80,7 +78,6 @@ export function usePublishRunner({
     activeProviderParameters,
     selectedPreset,
     isCustomMode,
-    activeProfileName,
     customConfig,
     defaultOutputDir,
     projectInfo,

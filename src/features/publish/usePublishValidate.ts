@@ -7,9 +7,8 @@ import type { EnvironmentCheckSnapshot } from "@/features/environment/environmen
 import { renderPublishCommand } from "@/features/publish/renderPublishCommand";
 import { createPublishPreflightPipeline } from "@/features/publish/publishPreflight";
 import {
-  createPresetConfigKey,
-  createUserProfileConfigKey,
-  getSelectedProjectProfileName,
+  getProjectProfileNameFromSelection,
+  getRecentConfigKeyFromSelection,
 } from "@/features/config/publishConfigIdentity";
 import type { DotnetPreset } from "@/features/config/dotnetPresets";
 import type { ProviderPublishSpec } from "@/features/publish/publishRuntime";
@@ -40,7 +39,6 @@ export interface UsePublishValidateParams {
   activeProviderParameters: Record<string, ParameterValue>;
   selectedPreset: string;
   isCustomMode: boolean;
-  activeProfileName: string | null;
   customConfig: PublishConfigStore;
   defaultOutputDir?: string;
   projectInfo: ProjectInfo | null;
@@ -102,7 +100,6 @@ export function usePublishValidate({
   activeProviderParameters,
   selectedPreset,
   isCustomMode,
-  activeProfileName,
   customConfig,
   defaultOutputDir,
   projectInfo,
@@ -124,6 +121,7 @@ export function usePublishValidate({
 
   const {
     getCurrentConfig,
+    selectionIdentity,
     recentConfigKeyForCurrentSelection,
     resolvedProjectProfile,
     resolveSelectedProjectProfile,
@@ -132,7 +130,6 @@ export function usePublishValidate({
     activeProviderId,
     selectedPreset,
     isCustomMode,
-    activeProfileName,
     customConfig,
     defaultOutputDir,
     projectInfo,
@@ -149,37 +146,21 @@ export function usePublishValidate({
     getCurrentConfig,
   });
 
-  const selectedProjectProfileName = useMemo(() => {
-    if (activeProviderId !== "dotnet" || isCustomMode) {
-      return null;
-    }
-
-    return getSelectedProjectProfileName(selectedPreset);
-  }, [activeProviderId, isCustomMode, selectedPreset]);
+  const selectedProjectProfileName =
+    getProjectProfileNameFromSelection(selectionIdentity);
 
   const publishPresentationSelectionKey = useMemo(() => {
-    if (activeProviderId !== "dotnet") {
-      return `provider:${activeProviderId}`;
+    const recentConfigKey = getRecentConfigKeyFromSelection(selectionIdentity);
+    if (recentConfigKey) {
+      return recentConfigKey;
     }
 
-    if (recentConfigKeyForCurrentSelection) {
-      return recentConfigKeyForCurrentSelection;
+    if (selectionIdentity.kind === "provider") {
+      return `provider:${selectionIdentity.providerId}`;
     }
 
-    if (isCustomMode) {
-      return activeProfileName
-        ? createUserProfileConfigKey(activeProfileName)
-        : "custom";
-    }
-
-    return createPresetConfigKey(selectedPreset);
-  }, [
-    activeProfileName,
-    activeProviderId,
-    isCustomMode,
-    recentConfigKeyForCurrentSelection,
-    selectedPreset,
-  ]);
+    return "custom";
+  }, [selectionIdentity]);
 
   const buildCurrentPublishSpec = useCallback((): ProviderPublishSpec | null => {
     if (!selectedRepo) {

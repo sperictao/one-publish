@@ -10,7 +10,8 @@ import {
   createUserProfileConfigKey,
   normalizeRenderableConfigId,
   parsePublishConfigKey,
-  resolveSelectedPublishConfigKey,
+  resolvePublishSelectionIdentity,
+  resolveSelectedPublishConfigKeyFromIdentity,
 } from "@/features/config/publishConfigIdentity";
 import type { ConfigProfile } from "@/lib/store/types";
 
@@ -182,16 +183,19 @@ function countProfiles(profileGroups: readonly ProfileGroupBucket[]) {
 
 function resolveSelectedConfigId(params: {
   isCustomMode: boolean;
-  activeProfileName: string | null;
   selectedPreset: string;
   pubxmlSet: ReadonlySet<string>;
 }) {
-  return resolveSelectedPublishConfigKey({
-    isCustomMode: params.isCustomMode,
-    activeProfileName: params.activeProfileName,
-    selectedPreset: params.selectedPreset,
-    hasProjectProfile: (profileName) => params.pubxmlSet.has(profileName),
-  });
+  return resolveSelectedPublishConfigKeyFromIdentity(
+    resolvePublishSelectionIdentity({
+      activeProviderId: "dotnet",
+      isCustomMode: params.isCustomMode,
+      selectedPreset: params.selectedPreset,
+    }),
+    {
+      hasProjectProfile: (profileName) => params.pubxmlSet.has(profileName),
+    }
+  );
 }
 
 function buildConfigIds(params: {
@@ -389,16 +393,10 @@ export function usePublishConfigListModel(params: {
     () =>
       resolveSelectedConfigId({
         isCustomMode: params.isCustomMode,
-        activeProfileName: params.activeProfileName,
         selectedPreset: params.selectedPreset,
         pubxmlSet,
       }),
-    [
-      params.activeProfileName,
-      params.isCustomMode,
-      params.selectedPreset,
-      pubxmlSet,
-    ]
+    [params.isCustomMode, params.selectedPreset, pubxmlSet]
   );
   const allConfigIds = useMemo(
     () =>

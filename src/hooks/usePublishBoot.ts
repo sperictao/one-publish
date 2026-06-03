@@ -236,7 +236,6 @@ export function usePublishBoot(params: UsePublishBootParams) {
     activeProviderParameters: params.activeProviderParameters,
     selectedPreset: params.selectedPreset,
     isCustomMode: params.isCustomMode,
-    activeProfileName,
     customConfig: params.customConfig,
     defaultOutputDir: params.defaultOutputDir,
     projectInfo: params.projectInfo,

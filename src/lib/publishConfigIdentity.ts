@@ -21,6 +21,30 @@ export type PublishConfigIdentity =
       profileName: string;
     };
 
+export type PublishSelectionIdentity =
+  | {
+      kind: "provider";
+      providerId: string;
+    }
+  | {
+      kind: "custom";
+    }
+  | {
+      kind: "preset";
+      presetId: string;
+      configKey: PublishConfigKey;
+    }
+  | {
+      kind: "project-profile";
+      profileName: string;
+      configKey: PublishConfigKey;
+    }
+  | {
+      kind: "user-profile";
+      profileName: string;
+      configKey: PublishConfigKey;
+    };
+
 function normalizeIdentityValue(value: string) {
   return value.trim();
 }
@@ -148,30 +172,103 @@ export function getUserProfileNameFromRenderId(renderId: string | null) {
   return getUserProfileNameFromConfigKey(renderId);
 }
 
-export function resolveDotnetRecentConfigKeyForSelection(params: {
+export function resolvePublishSelectionIdentity(params: {
   activeProviderId: string;
   isCustomMode: boolean;
-  activeProfileName: string | null;
   selectedPreset: string;
-}) {
+}): PublishSelectionIdentity {
   if (params.activeProviderId !== "dotnet") {
-    return null;
+    return {
+      kind: "provider",
+      providerId: params.activeProviderId,
+    };
   }
 
   if (params.isCustomMode) {
-    return params.activeProfileName
-      ? createUserProfileConfigKey(params.activeProfileName)
-      : null;
+    const selectedConfig = parsePublishConfigKey(params.selectedPreset);
+    if (selectedConfig?.kind === "user-profile") {
+      return {
+        kind: "user-profile",
+        profileName: selectedConfig.profileName,
+        configKey: createUserProfileConfigKey(selectedConfig.profileName),
+      };
+    }
+
+    return {
+      kind: "custom",
+    };
   }
 
   const projectProfileName = getSelectedProjectProfileName(
     params.selectedPreset
   );
   if (projectProfileName) {
-    return createProjectProfileConfigKey(projectProfileName);
+    return {
+      kind: "project-profile",
+      profileName: projectProfileName,
+      configKey: createProjectProfileConfigKey(projectProfileName),
+    };
   }
 
-  return createPresetConfigKey(params.selectedPreset);
+  const presetId = normalizeIdentityValue(params.selectedPreset);
+  return {
+    kind: "preset",
+    presetId,
+    configKey: createPresetConfigKey(presetId),
+  };
+}
+
+export function getActiveProfileNameFromSelection(
+  identity: PublishSelectionIdentity
+) {
+  return identity.kind === "user-profile" ? identity.profileName : null;
+}
+
+export function getProjectProfileNameFromSelection(
+  identity: PublishSelectionIdentity
+) {
+  return identity.kind === "project-profile" ? identity.profileName : null;
+}
+
+export function getRecentConfigKeyFromSelection(
+  identity: PublishSelectionIdentity
+) {
+  return "configKey" in identity ? identity.configKey : null;
+}
+
+export function resolveSelectedPublishConfigKeyFromIdentity(
+  identity: PublishSelectionIdentity,
+  params: {
+    hasProjectProfile?: (profileName: string) => boolean;
+  } = {}
+) {
+  if (identity.kind === "user-profile") {
+    return identity.configKey;
+  }
+
+  if (
+    identity.kind === "project-profile" &&
+    (!params.hasProjectProfile || params.hasProjectProfile(identity.profileName))
+  ) {
+    return identity.configKey;
+  }
+
+  return null;
+}
+
+export function resolveDotnetRecentConfigKeyForSelection(params: {
+  activeProviderId: string;
+  isCustomMode: boolean;
+  activeProfileName: string | null;
+  selectedPreset: string;
+}) {
+  return getRecentConfigKeyFromSelection(
+    resolvePublishSelectionIdentity({
+      activeProviderId: params.activeProviderId,
+      isCustomMode: params.isCustomMode,
+      selectedPreset: params.selectedPreset,
+    })
+  );
 }
 
 export function resolveSelectedPublishConfigKey(params: {
@@ -180,21 +277,14 @@ export function resolveSelectedPublishConfigKey(params: {
   selectedPreset: string;
   hasProjectProfile?: (profileName: string) => boolean;
 }) {
-  if (params.isCustomMode && params.activeProfileName) {
-    return createUserProfileConfigKey(params.activeProfileName);
-  }
-
-  if (!params.isCustomMode) {
-    const projectProfileName = getSelectedProjectProfileName(
-      params.selectedPreset
-    );
-    if (
-      projectProfileName &&
-      (!params.hasProjectProfile || params.hasProjectProfile(projectProfileName))
-    ) {
-      return createProjectProfileConfigKey(projectProfileName);
+  return resolveSelectedPublishConfigKeyFromIdentity(
+    resolvePublishSelectionIdentity({
+      activeProviderId: "dotnet",
+      isCustomMode: params.isCustomMode,
+      selectedPreset: params.selectedPreset,
+    }),
+    {
+      hasProjectProfile: params.hasProjectProfile,
     }
-  }
-
-  return null;
+  );
 }

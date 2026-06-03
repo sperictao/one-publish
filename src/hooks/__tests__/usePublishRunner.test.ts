@@ -144,6 +144,22 @@ const defaultCustomConfig: PublishConfigStore = {
   profileName: "",
 };
 
+const projectProfileSelectionIdentity = {
+  kind: "project-profile",
+  profileName: "FolderProfile",
+  configKey: "pubxml:FolderProfile",
+} as const;
+
+const presetSelectionIdentity = {
+  kind: "preset",
+  presetId: "release-fd",
+  configKey: "preset:release-fd",
+} as const;
+
+const customSelectionIdentity = {
+  kind: "custom",
+} as const;
+
 function createRenderedCommand(
   displayCommand = 'dotnet publish "/repo/App.csproj"'
 ) {
@@ -261,6 +277,7 @@ describe("usePublishRunner", () => {
 
     mocks.useDotnetPublishSelection.mockReturnValue({
       getCurrentConfig: vi.fn(),
+      selectionIdentity: projectProfileSelectionIdentity,
       recentConfigKeyForCurrentSelection: "pubxml:FolderProfile",
       resolvedProjectProfile: {
         profileName: "FolderProfile",
@@ -773,6 +790,7 @@ describe("usePublishRunner", () => {
     });
     mocks.useDotnetPublishSelection.mockReturnValue({
       getCurrentConfig: vi.fn(),
+      selectionIdentity: presetSelectionIdentity,
       recentConfigKeyForCurrentSelection: "preset:release-fd",
       resolvedProjectProfile: null,
       resolveSelectedProjectProfile: vi.fn(),
@@ -1058,6 +1076,7 @@ describe("usePublishRunner", () => {
     props.selectedPreset = "release-fd";
     mocks.useDotnetPublishSelection.mockReturnValue({
       getCurrentConfig: vi.fn(),
+      selectionIdentity: customSelectionIdentity,
       recentConfigKeyForCurrentSelection: null,
       resolvedProjectProfile: null,
       resolveSelectedProjectProfile: vi.fn(),

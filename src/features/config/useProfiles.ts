@@ -47,7 +47,10 @@ import { useProfileCrud } from "./useProfileCrud";
 import { useQuickCreateProfile } from "./useQuickCreateProfile";
 import { useProfileOrdering } from "./useProfileOrdering";
 import { useProfileSelection } from "./useProfileSelection";
-import { getUserProfileNameFromConfigKey } from "./publishConfigIdentity";
+import {
+  getActiveProfileNameFromSelection,
+  resolvePublishSelectionIdentity,
+} from "./publishConfigIdentity";
 
 interface UseProfilesParams {
   appT: TranslationMap;
@@ -105,9 +108,17 @@ export function useProfiles({
 }: UseProfilesParams) {
   const [localActiveProfileName, setLocalActiveProfileName] =
     useState<string | null>(null);
-  const persistedActiveProfileName = isCustomMode
-    ? getUserProfileNameFromConfigKey(selectedPreset)
-    : null;
+  const selectionIdentity = useMemo(
+    () =>
+      resolvePublishSelectionIdentity({
+        activeProviderId,
+        isCustomMode,
+        selectedPreset,
+      }),
+    [activeProviderId, isCustomMode, selectedPreset]
+  );
+  const persistedActiveProfileName =
+    getActiveProfileNameFromSelection(selectionIdentity);
   const activeProfileName =
     activeProviderId === "dotnet"
       ? persistedActiveProfileName

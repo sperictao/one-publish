@@ -6,8 +6,9 @@ import {
   type ResolvedDotnetProjectProfile,
 } from "@/lib/dotnetProjectProfile";
 import {
-  getSelectedProjectProfileName,
-  resolveDotnetRecentConfigKeyForSelection,
+  getProjectProfileNameFromSelection,
+  getRecentConfigKeyFromSelection,
+  resolvePublishSelectionIdentity,
 } from "@/features/config/publishConfigIdentity";
 import type { DotnetPreset } from "@/features/config/dotnetPresets";
 import type { PublishConfigStore, ProjectInfo } from "@/lib/store/types";
@@ -56,7 +57,6 @@ export function useDotnetPublishSelection(params: {
   activeProviderId: string;
   selectedPreset: string;
   isCustomMode: boolean;
-  activeProfileName: string | null;
   customConfig: PublishConfigStore;
   defaultOutputDir?: string;
   projectInfo: ProjectInfo | null;
@@ -87,20 +87,17 @@ export function useDotnetPublishSelection(params: {
     [params.defaultOutputDir, params.projectInfo]
   );
 
-  const selectedProjectProfileName = useMemo(() => {
-    if (
-      params.activeProviderId !== "dotnet" ||
-      params.isCustomMode
-    ) {
-      return null;
-    }
-
-    return getSelectedProjectProfileName(params.selectedPreset);
-  }, [
-    params.activeProviderId,
-    params.isCustomMode,
-    params.selectedPreset,
-  ]);
+  const selectionIdentity = useMemo(
+    () =>
+      resolvePublishSelectionIdentity({
+        activeProviderId: params.activeProviderId,
+        isCustomMode: params.isCustomMode,
+        selectedPreset: params.selectedPreset,
+      }),
+    [params.activeProviderId, params.isCustomMode, params.selectedPreset]
+  );
+  const selectedProjectProfileName =
+    getProjectProfileNameFromSelection(selectionIdentity);
 
   const resolveSelectedProjectProfile = useCallback(async () => {
     if (!params.projectInfo || !selectedProjectProfileName) {
@@ -161,8 +158,7 @@ export function useDotnetPublishSelection(params: {
       return config;
     }
 
-    const profileName = getSelectedProjectProfileName(params.selectedPreset);
-    if (profileName) {
+    if (selectedProjectProfileName) {
       return {
         configuration: "Release",
         runtime: "",
@@ -177,7 +173,7 @@ export function useDotnetPublishSelection(params: {
         properties: {},
         define: [],
         use_profile: true,
-        profile_name: profileName,
+        profile_name: selectedProjectProfileName,
       };
     }
 
@@ -211,24 +207,15 @@ export function useDotnetPublishSelection(params: {
       use_profile: false,
       profile_name: "",
     };
-  }, [buildDefaultScopedOutputDir, params]);
+  }, [buildDefaultScopedOutputDir, params, selectedProjectProfileName]);
 
   const recentConfigKeyForCurrentSelection = useMemo(() => {
-    return resolveDotnetRecentConfigKeyForSelection({
-      activeProviderId: params.activeProviderId,
-      isCustomMode: params.isCustomMode,
-      activeProfileName: params.activeProfileName,
-      selectedPreset: params.selectedPreset,
-    });
-  }, [
-    params.activeProfileName,
-    params.activeProviderId,
-    params.isCustomMode,
-    params.selectedPreset,
-  ]);
+    return getRecentConfigKeyFromSelection(selectionIdentity);
+  }, [selectionIdentity]);
 
   return {
     getCurrentConfig,
+    selectionIdentity,
     recentConfigKeyForCurrentSelection,
     resolvedProjectProfile,
     resolveSelectedProjectProfile,

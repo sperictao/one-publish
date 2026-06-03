@@ -6,8 +6,11 @@ import {
   createProjectProfileSelectedPreset,
   createRecentConfigRenderId,
   createUserProfileConfigKey,
+  getActiveProfileNameFromSelection,
   getProjectProfileNameFromConfigKey,
+  getProjectProfileNameFromSelection,
   getProjectProfileNameFromRenderId,
+  getRecentConfigKeyFromSelection,
   getRecentConfigKeyFromRenderId,
   getSelectedProjectProfileName,
   getUserProfileNameFromConfigKey,
@@ -15,7 +18,9 @@ import {
   normalizeRenderableConfigId,
   parsePublishConfigKey,
   resolveDotnetRecentConfigKeyForSelection,
+  resolvePublishSelectionIdentity,
   resolveSelectedPublishConfigKey,
+  resolveSelectedPublishConfigKeyFromIdentity,
 } from "@/lib/publishConfigIdentity";
 
 describe("publishConfigIdentity", () => {
@@ -67,8 +72,8 @@ describe("publishConfigIdentity", () => {
       resolveDotnetRecentConfigKeyForSelection({
         activeProviderId: "dotnet",
         isCustomMode: true,
-        activeProfileName: "alpha",
-        selectedPreset: "folder",
+        activeProfileName: "stale-alpha",
+        selectedPreset: "userprofile:alpha",
       })
     ).toBe("userprofile:alpha");
 
@@ -91,12 +96,73 @@ describe("publishConfigIdentity", () => {
     ).toBeNull();
   });
 
+  it("resolves publish selection identity from selectedPreset", () => {
+    const userProfileIdentity = resolvePublishSelectionIdentity({
+      activeProviderId: "dotnet",
+      isCustomMode: true,
+      selectedPreset: "userprofile:alpha",
+    });
+    expect(userProfileIdentity).toEqual({
+      kind: "user-profile",
+      profileName: "alpha",
+      configKey: "userprofile:alpha",
+    });
+    expect(getActiveProfileNameFromSelection(userProfileIdentity)).toBe("alpha");
+    expect(getRecentConfigKeyFromSelection(userProfileIdentity)).toBe(
+      "userprofile:alpha"
+    );
+
+    const projectProfileIdentity = resolvePublishSelectionIdentity({
+      activeProviderId: "dotnet",
+      isCustomMode: false,
+      selectedPreset: "profile-Folder",
+    });
+    expect(projectProfileIdentity).toEqual({
+      kind: "project-profile",
+      profileName: "Folder",
+      configKey: "pubxml:Folder",
+    });
+    expect(getProjectProfileNameFromSelection(projectProfileIdentity)).toBe(
+      "Folder"
+    );
+
+    expect(
+      resolvePublishSelectionIdentity({
+        activeProviderId: "cargo",
+        isCustomMode: false,
+        selectedPreset: "release",
+      })
+    ).toEqual({
+      kind: "provider",
+      providerId: "cargo",
+    });
+  });
+
+  it("does not derive user profile identity from stale activeProfileName", () => {
+    expect(
+      resolveDotnetRecentConfigKeyForSelection({
+        activeProviderId: "dotnet",
+        isCustomMode: true,
+        activeProfileName: "stale-alpha",
+        selectedPreset: "folder",
+      })
+    ).toBeNull();
+
+    expect(
+      resolveSelectedPublishConfigKey({
+        isCustomMode: true,
+        activeProfileName: "stale-alpha",
+        selectedPreset: "folder",
+      })
+    ).toBeNull();
+  });
+
   it("resolves selected renderable config keys through one identity rule", () => {
     expect(
       resolveSelectedPublishConfigKey({
         isCustomMode: true,
-        activeProfileName: "alpha",
-        selectedPreset: "folder",
+        activeProfileName: "stale-alpha",
+        selectedPreset: "userprofile:alpha",
       })
     ).toBe("userprofile:alpha");
 
@@ -119,6 +185,42 @@ describe("publishConfigIdentity", () => {
     ).toBeNull();
 
     expect(getProjectProfileNameFromConfigKey("pubxml:Folder")).toBe("Folder");
+  });
+
+  it("resolves selected config keys from selection identity", () => {
+    expect(
+      resolveSelectedPublishConfigKeyFromIdentity({
+        kind: "user-profile",
+        profileName: "alpha",
+        configKey: "userprofile:alpha",
+      })
+    ).toBe("userprofile:alpha");
+
+    expect(
+      resolveSelectedPublishConfigKeyFromIdentity(
+        {
+          kind: "project-profile",
+          profileName: "Folder",
+          configKey: "pubxml:Folder",
+        },
+        {
+          hasProjectProfile: (name) => name === "Folder",
+        }
+      )
+    ).toBe("pubxml:Folder");
+
+    expect(
+      resolveSelectedPublishConfigKeyFromIdentity(
+        {
+          kind: "project-profile",
+          profileName: "Missing",
+          configKey: "pubxml:Missing",
+        },
+        {
+          hasProjectProfile: (name) => name === "Folder",
+        }
+      )
+    ).toBeNull();
   });
 
   it("extracts profile names from config keys via convenience helpers", () => {
