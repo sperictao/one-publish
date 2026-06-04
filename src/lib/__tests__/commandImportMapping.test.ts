@@ -20,8 +20,8 @@ describe("mapImportedSpecByProvider", () => {
           properties: {
             Version: "1.2.3",
             PublishTrimmed: true,
+            WebPublishMethod: "MSDeploy",
           },
-          define: ["A", "B"],
         },
       },
       "dotnet"
@@ -42,7 +42,6 @@ describe("mapImportedSpecByProvider", () => {
         Version: "1.2.3",
         PublishTrimmed: "true",
       },
-      define: ["A", "B"],
     });
     expect(result.mappedKeys).toEqual([
       "configuration",
@@ -55,7 +54,6 @@ describe("mapImportedSpecByProvider", () => {
       "verbosity",
       "no_logo",
       "properties",
-      "define",
     ]);
     expect(result.unmappedKeys).toEqual([]);
   });

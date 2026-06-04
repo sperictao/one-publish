@@ -14,7 +14,6 @@ const mocks = vi.hoisted(() => ({
   setTrayPublishStatus: vi.fn(),
   showMainWindow: vi.fn(),
   showSystemNotification: vi.fn(),
-  resolveDotnetProjectProfile: vi.fn(),
 }));
 
 vi.mock("@tauri-apps/api/core", () => ({
@@ -38,10 +37,6 @@ vi.mock("@/lib/store/api", async () => {
     showMainWindow: mocks.showMainWindow,
   };
 });
-
-vi.mock("@/lib/dotnetProjectProfile", () => ({
-  resolveDotnetProjectProfile: mocks.resolveDotnetProjectProfile,
-}));
 
 vi.mock("@/lib/systemNotification", () => ({
   showSystemNotification: mocks.showSystemNotification,
@@ -77,7 +72,6 @@ function createRepository(overrides?: Partial<Repository>): Repository {
         noLogo: false,
         deleteExistingFiles: false,
         properties: {},
-        define: [],
         useProfile: false,
         profileName: "",
       },
@@ -312,21 +306,6 @@ describe("useTrayRecentPublish", () => {
       handler = callback;
       return () => {};
     });
-    mocks.resolveDotnetProjectProfile.mockResolvedValue({
-      profileName: "FolderProfile",
-      filePath: "/repo/Properties/PublishProfiles/FolderProfile.pubxml",
-      parsedProfile: {
-        rootTagName: "Project",
-        rawXml: "<Project />",
-        sections: [],
-      },
-      parameters: {
-        configuration: "Release",
-        output: "/exports/Repo/Release",
-      },
-      editableConfig: null,
-    });
-
     renderHook(() =>
       useTrayRecentPublish({
         appT: {},
@@ -360,8 +339,9 @@ describe("useTrayRecentPublish", () => {
         provider_id: "dotnet",
         project_path: "/repo/App.csproj",
         parameters: {
-          configuration: "Release",
-          output: "/exports/Repo/Release",
+          properties: {
+            PublishProfile: "FolderProfile",
+          },
         },
       },
       expect.objectContaining({

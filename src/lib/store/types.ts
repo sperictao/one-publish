@@ -230,7 +230,6 @@ export const defaultPublishConfigStore: PublishConfigStore = {
   noLogo: false,
   deleteExistingFiles: false,
   properties: {},
-  define: [],
   useProfile: false,
   profileName: "",
 };

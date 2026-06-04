@@ -26,7 +26,6 @@ function createRepository(path: string): Repository {
         noLogo: false,
         deleteExistingFiles: false,
         properties: {},
-        define: [],
         useProfile: false,
         profileName: "",
       },

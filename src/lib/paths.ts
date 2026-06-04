@@ -35,6 +35,29 @@ export function getPathBasename(path: string): string {
   return segments[segments.length - 1] || stripTrailingPathSeparators(path) || path;
 }
 
+export function getPathRelativeToRoot(path: string, root: string): string {
+  if (!path || !root) {
+    return path;
+  }
+
+  const caseSensitive = preferCaseSensitivePathComparison([path, root]);
+  const pathSegments = splitPathSegments(path);
+  const rootSegments = splitPathSegments(root);
+
+  if (
+    pathSegments.length <= rootSegments.length ||
+    !rootSegments.every((segment, index) => {
+      return normalizeSegment(segment, caseSensitive) ===
+        normalizeSegment(pathSegments[index], caseSensitive);
+    })
+  ) {
+    return path;
+  }
+
+  const separator = isWindowsLikePath(path) || isWindowsLikePath(root) ? "\\" : "/";
+  return pathSegments.slice(rootSegments.length).join(separator) || getPathBasename(path);
+}
+
 export function joinPath(...parts: string[]): string {
   let result = "";
 

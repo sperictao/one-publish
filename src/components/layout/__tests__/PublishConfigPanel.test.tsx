@@ -93,11 +93,6 @@ const dotnetSchema: ParameterSchema = {
       prefix: "-p:",
       description: "MSBuild properties",
     },
-    define: {
-      type: "array",
-      flag: "--define",
-      description: "Conditional compilation symbols",
-    },
   },
 };
 
@@ -1028,7 +1023,6 @@ describe("PublishConfigPanel", () => {
           _TargetId: "Folder",
           PublishSingleFile: "true",
         },
-        define: [],
         useProfile: false,
         profileName: "",
       },
@@ -1124,10 +1118,8 @@ describe("PublishConfigPanel", () => {
     expect(screen.queryByRole("button", { name: /remove entry/i })).not.toBeInTheDocument();
     expect(screen.getByRole("textbox", { name: "目标框架" })).toHaveValue("net8.0");
     expect(screen.getByRole("switch", { name: "发布前清空目标目录" })).toBeChecked();
-    expect(
-      screen.getByRole("combobox", { name: "上次使用的构建配置" })
-    ).toBeDisabled();
-    expect(screen.getByRole("textbox", { name: "发布提供程序" })).toHaveValue("FileSystem");
+    expect(screen.queryByRole("combobox", { name: "上次使用的构建配置" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("textbox", { name: "发布提供程序" })).not.toBeInTheDocument();
     expect(
       screen.getAllByRole("switch", { name: "发布前清空目标目录" })
     ).toHaveLength(1);
@@ -1139,10 +1131,10 @@ describe("PublishConfigPanel", () => {
       })
     );
 
-    expect(screen.getByRole("textbox", { name: "目标 ID" })).toHaveValue("Folder");
+    expect(screen.queryByRole("textbox", { name: "目标 ID" })).not.toBeInTheDocument();
     expect(screen.getByRole("switch", { name: "单文件发布" })).toBeChecked();
     expect(screen.getByRole("combobox", { name: "日志详细级别" })).toBeDisabled();
-    expect(screen.getByText("当前未设置条件编译常量。")).toBeInTheDocument();
+    expect(screen.queryByText("当前未设置条件编译常量。")).not.toBeInTheDocument();
 
     const parsedFieldsToggle = screen.getByRole("button", {
       name: /完整解析参数/,
@@ -1222,7 +1214,6 @@ describe("PublishConfigPanel", () => {
         properties: {
           PublishSingleFile: "true",
         },
-        define: [],
         useProfile: false,
         profileName: "",
       },

@@ -1,6 +1,6 @@
 import {
   normalizeDotnetPropertyMap,
-  normalizeDotnetStringArray,
+  sanitizeDotnetPublishProperties,
 } from "@/features/config/dotnetPublishConfig";
 import type { PublishConfigStore } from "@/lib/store/types";
 import type {
@@ -14,12 +14,6 @@ const FALLBACK_PROPERTIES_DEFINITION: ParameterDefinition = {
   flag: "-p:",
   prefix: "-p:",
   description: "MSBuild properties",
-};
-
-const FALLBACK_DEFINE_DEFINITION: ParameterDefinition = {
-  type: "array",
-  flag: "--define",
-  description: "Conditional compilation symbols",
 };
 
 const FALLBACK_FRAMEWORK_DEFINITION: ParameterDefinition = {
@@ -40,11 +34,6 @@ const FALLBACK_BOOLEAN_DEFINITION: ParameterDefinition = {
   description: "",
 };
 
-const LAST_USED_BUILD_CONFIGURATION_OPTIONS = [
-  { value: "Release", label: "Release" },
-  { value: "Debug", label: "Debug" },
-] as const;
-
 export const DOTNET_VERBOSITY_OPTIONS = [
   { value: "quiet", label: "quiet" },
   { value: "minimal", label: "minimal" },
@@ -63,61 +52,6 @@ type FixedPropertyFieldConfig = {
 
 const FIXED_PROPERTY_FIELD_CONFIGS: ReadonlyArray<FixedPropertyFieldConfig> = [
   {
-    key: "ExcludeApp_Data",
-    group: "base",
-    control: "boolean",
-    description: "Exclude the App_Data folder from the publish output.",
-  },
-  {
-    key: "LaunchSiteAfterPublish",
-    group: "base",
-    control: "boolean",
-    description: "Launch the published site after deployment completes.",
-  },
-  {
-    key: "LastUsedBuildConfiguration",
-    group: "base",
-    control: "select",
-    description: "Remember the last build configuration used by this profile.",
-    options: LAST_USED_BUILD_CONFIGURATION_OPTIONS,
-  },
-  {
-    key: "LastUsedPlatform",
-    group: "base",
-    control: "string",
-    description: "Remember the last build platform used by this profile.",
-  },
-  {
-    key: "PublishProvider",
-    group: "base",
-    control: "string",
-    description: "Publish provider identifier stored in the profile.",
-  },
-  {
-    key: "WebPublishMethod",
-    group: "base",
-    control: "string",
-    description: "Web publish method stored in the profile.",
-  },
-  {
-    key: "SiteUrlToLaunchAfterPublish",
-    group: "base",
-    control: "string",
-    description: "Site URL to open after publish completes.",
-  },
-  {
-    key: "ProjectGuid",
-    group: "base",
-    control: "string",
-    description: "Associated project GUID stored in the publish profile.",
-  },
-  {
-    key: "_TargetId",
-    group: "collapsed",
-    control: "string",
-    description: "Target identifier used by MSBuild publish targets.",
-  },
-  {
     key: "PublishSingleFile",
     group: "collapsed",
     control: "boolean",
@@ -134,7 +68,6 @@ export type DotnetAdvancedFieldControl =
   | "select"
   | "boolean"
   | "string"
-  | "tags"
   | "property-map";
 
 export type DotnetAdvancedFieldSource =
@@ -146,8 +79,7 @@ export type DotnetAdvancedFieldSource =
         | "noRestore"
         | "verbosity"
         | "noLogo"
-        | "deleteExistingFiles"
-        | "define";
+        | "deleteExistingFiles";
       valueType: "string" | "boolean" | "stringArray";
     }
   | {
@@ -209,7 +141,9 @@ export function buildDotnetAdvancedFieldsModel(params: {
   projectFrameworkOptions?: string[];
 }): DotnetAdvancedFieldsModel {
   const { config, dotnetSchema, projectFrameworkOptions = [] } = params;
-  const properties = normalizeDotnetPropertyMap(config.properties);
+  const properties = sanitizeDotnetPublishProperties(
+    normalizeDotnetPropertyMap(config.properties)
+  );
   const baseFields: DotnetAdvancedFieldModel[] = [];
   const collapsedFields: DotnetAdvancedFieldModel[] = [];
 
@@ -261,10 +195,6 @@ export function buildDotnetAdvancedFieldsModel(params: {
   }
 
   collapsedFields.push(
-    createDefineField(
-      dotnetSchema?.parameters.define || FALLBACK_DEFINE_DEFINITION,
-      config.define
-    ),
     createPropertiesField(
       dotnetSchema?.parameters.properties || FALLBACK_PROPERTIES_DEFINITION,
       properties
@@ -365,26 +295,6 @@ function createBooleanDraftField(
     control: "boolean",
     value,
     source: draftKeyMap[key],
-  };
-}
-
-function createDefineField(
-  definition: ParameterDefinition,
-  value: string[]
-): DotnetAdvancedFieldModel {
-  return {
-    key: "define",
-    title: "define",
-    label: definition.flag || "--define",
-    description: definition.description ?? undefined,
-    definition,
-    control: "tags",
-    value: normalizeDotnetStringArray(value),
-    source: {
-      kind: "draft",
-      draftKey: "define",
-      valueType: "stringArray",
-    },
   };
 }
 

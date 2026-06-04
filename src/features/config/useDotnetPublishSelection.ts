@@ -1,10 +1,6 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useMemo } from "react";
 
 import { getPathBasename, joinPath } from "@/lib/paths";
-import {
-  resolveDotnetProjectProfile,
-  type ResolvedDotnetProjectProfile,
-} from "@/lib/dotnetProjectProfile";
 import {
   getProjectProfileNameFromSelection,
   getRecentConfigKeyFromSelection,
@@ -25,7 +21,6 @@ interface PublishConfig {
   no_logo: boolean;
   delete_existing_files: boolean;
   properties: Record<string, string>;
-  define: string[];
   use_profile: boolean;
   profile_name: string;
 }
@@ -44,7 +39,6 @@ const storeConfigToPublishConfig = (
   no_logo: config.noLogo,
   delete_existing_files: config.deleteExistingFiles,
   properties: { ...config.properties },
-  define: [...config.define],
   use_profile: config.useProfile,
   profile_name: config.profileName,
 });
@@ -62,11 +56,6 @@ export function useDotnetPublishSelection(params: {
   projectInfo: ProjectInfo | null;
   presets: DotnetPreset[];
 }) {
-  const [resolvedProjectProfile, setResolvedProjectProfile] =
-    useState<ResolvedDotnetProjectProfile | null>(null);
-  const [isResolvingSelectedProjectProfile, setIsResolvingSelectedProjectProfile] =
-    useState(false);
-
   const buildDefaultScopedOutputDir = useCallback(
     (configuration?: string) => {
       if (!params.defaultOutputDir) {
@@ -99,53 +88,6 @@ export function useDotnetPublishSelection(params: {
   const selectedProjectProfileName =
     getProjectProfileNameFromSelection(selectionIdentity);
 
-  const resolveSelectedProjectProfile = useCallback(async () => {
-    if (!params.projectInfo || !selectedProjectProfileName) {
-      return null;
-    }
-
-    return resolveDotnetProjectProfile({
-      projectInfo: params.projectInfo,
-      profileName: selectedProjectProfileName,
-      defaultOutputDir: params.defaultOutputDir,
-    });
-  }, [
-    params.defaultOutputDir,
-    params.projectInfo,
-    selectedProjectProfileName,
-  ]);
-
-  useEffect(() => {
-    let disposed = false;
-
-    if (!selectedProjectProfileName) {
-      setResolvedProjectProfile(null);
-      setIsResolvingSelectedProjectProfile(false);
-      return () => {
-        disposed = true;
-      };
-    }
-
-    setIsResolvingSelectedProjectProfile(true);
-    void resolveSelectedProjectProfile()
-      .then((profile) => {
-        if (!disposed) {
-          setResolvedProjectProfile(profile);
-          setIsResolvingSelectedProjectProfile(false);
-        }
-      })
-      .catch(() => {
-        if (!disposed) {
-          setResolvedProjectProfile(null);
-          setIsResolvingSelectedProjectProfile(false);
-        }
-      });
-
-    return () => {
-      disposed = true;
-    };
-  }, [resolveSelectedProjectProfile, selectedProjectProfileName]);
-
   const getCurrentConfig = useCallback((): PublishConfig => {
     if (params.isCustomMode) {
       const config = storeConfigToPublishConfig(params.customConfig);
@@ -164,14 +106,13 @@ export function useDotnetPublishSelection(params: {
         runtime: "",
         framework: "",
         self_contained: false,
-        output_dir: buildDefaultScopedOutputDir("Release"),
+        output_dir: "",
         no_build: false,
         no_restore: false,
         verbosity: "",
         no_logo: false,
         delete_existing_files: false,
         properties: {},
-        define: [],
         use_profile: true,
         profile_name: selectedProjectProfileName,
       };
@@ -203,7 +144,6 @@ export function useDotnetPublishSelection(params: {
       no_logo: false,
       delete_existing_files: false,
       properties: {},
-      define: [],
       use_profile: false,
       profile_name: "",
     };
@@ -217,8 +157,6 @@ export function useDotnetPublishSelection(params: {
     getCurrentConfig,
     selectionIdentity,
     recentConfigKeyForCurrentSelection,
-    resolvedProjectProfile,
-    resolveSelectedProjectProfile,
-    isResolvingSelectedProjectProfile,
+    isResolvingSelectedProjectProfile: false,
   };
 }

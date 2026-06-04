@@ -305,6 +305,64 @@ EndProject
     }
 
     #[test]
+    fn scan_project_candidates_prefers_solution_main_project_over_matching_test_project() {
+        let temp_dir = TempDir::new().expect("temp dir");
+        let repo_dir = temp_dir.path().join("eoffice");
+        let solution = repo_dir.join("HiP.Eoffice.sln");
+        let app_project = repo_dir.join("UI").join("HiP.Eoffice.csproj");
+        let test_project = repo_dir
+            .join("tests")
+            .join("HiP.Eoffice.Tests")
+            .join("HiP.Eoffice.Tests.csproj");
+        fs::create_dir_all(app_project.parent().expect("app project dir")).expect("create app dir");
+        fs::create_dir_all(test_project.parent().expect("test project dir"))
+            .expect("create test dir");
+        fs::write(&app_project, "<Project />").expect("write app project");
+        fs::write(&test_project, "<Project />").expect("write test project");
+        fs::write(
+            &solution,
+            r#"
+Microsoft Visual Studio Solution File, Format Version 12.00
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "HiP.Eoffice", "UI\HiP.Eoffice.csproj", "{B100593D-1F77-4A1B-929A-9CBAE696513C}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "HiP.Eoffice.Tests", "tests\HiP.Eoffice.Tests\HiP.Eoffice.Tests.csproj", "{D82715E4-77D8-4F90-AB04-293F4AA64912}"
+EndProject
+"#,
+        )
+        .expect("write solution");
+
+        let candidates = project_scan_candidates_from_root(&repo_dir);
+
+        assert_eq!(
+            candidates.recommended_project_file.as_deref(),
+            Some(app_project.to_string_lossy().as_ref())
+        );
+    }
+
+    #[test]
+    fn scan_project_candidates_score_fallback_deprioritizes_matching_test_project() {
+        let temp_dir = TempDir::new().expect("temp dir");
+        let repo_dir = temp_dir.path().join("eoffice");
+        let app_project = repo_dir.join("UI").join("HiP.Eoffice.csproj");
+        let test_project = repo_dir
+            .join("tests")
+            .join("HiP.Eoffice.Tests")
+            .join("HiP.Eoffice.Tests.csproj");
+        fs::create_dir_all(app_project.parent().expect("app project dir")).expect("create app dir");
+        fs::create_dir_all(test_project.parent().expect("test project dir"))
+            .expect("create test dir");
+        fs::write(&app_project, "<Project />").expect("write app project");
+        fs::write(&test_project, "<Project />").expect("write test project");
+
+        let candidates = project_scan_candidates_from_root(&repo_dir);
+
+        assert_eq!(
+            candidates.recommended_project_file.as_deref(),
+            Some(app_project.to_string_lossy().as_ref())
+        );
+    }
+
+    #[test]
     fn scan_project_candidates_uses_solution_membership_to_ignore_unlisted_projects() {
         let temp_dir = TempDir::new().expect("temp dir");
         let solution = temp_dir.path().join("App.sln");

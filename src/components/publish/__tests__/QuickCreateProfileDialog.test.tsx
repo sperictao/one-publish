@@ -54,11 +54,6 @@ const dotnetSchema: ParameterSchema = {
       prefix: "-p:",
       description: "MSBuild properties",
     },
-    define: {
-      type: "array",
-      flag: "--define",
-      description: "Conditional compilation symbols",
-    },
   },
 };
 
@@ -74,7 +69,6 @@ const baseDraft: PublishConfigStore = {
   noLogo: false,
   deleteExistingFiles: false,
   properties: {},
-  define: [],
   useProfile: false,
   profileName: "",
 };
@@ -188,9 +182,9 @@ describe("QuickCreateProfileDialog", () => {
     expect(frameworkInput).toHaveAttribute("list");
     expect(screen.getByRole("switch", { name: "发布前清空目标目录" })).toBeInTheDocument();
     expect(
-      screen.getByRole("combobox", { name: "上次使用的构建配置" })
-    ).toBeInTheDocument();
-    expect(screen.getByRole("textbox", { name: "发布提供程序" })).toBeInTheDocument();
+      screen.queryByRole("combobox", { name: "上次使用的构建配置" })
+    ).not.toBeInTheDocument();
+    expect(screen.queryByRole("textbox", { name: "发布提供程序" })).not.toBeInTheDocument();
     expect(
       screen.queryByRole("textbox", { name: "目标 ID" })
     ).not.toBeInTheDocument();
@@ -217,10 +211,11 @@ describe("QuickCreateProfileDialog", () => {
 
     fireEvent.click(screen.getByRole("button", { name: /其余参数/ }));
 
-    expect(screen.getByRole("textbox", { name: "目标 ID" })).toBeInTheDocument();
+    expect(screen.queryByRole("textbox", { name: "目标 ID" })).not.toBeInTheDocument();
     expect(screen.getByRole("switch", { name: "跳过构建" })).toBeInTheDocument();
     expect(screen.getByRole("combobox", { name: "日志详细级别" })).toBeInTheDocument();
-    expect(screen.getByRole("textbox", { name: "条件编译常量" })).toBeInTheDocument();
+    expect(screen.getByRole("switch", { name: "单文件发布" })).toBeInTheDocument();
+    expect(screen.queryByRole("textbox", { name: "条件编译常量" })).not.toBeInTheDocument();
     expect(screen.getByText("-p:")).toBeInTheDocument();
   });
 });

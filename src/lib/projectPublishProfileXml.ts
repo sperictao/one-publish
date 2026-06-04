@@ -1,3 +1,5 @@
+import { sanitizeDotnetPublishProperties } from "@/features/config/dotnetPublishConfig";
+
 export interface ProjectPublishProfileEntry {
   key: string;
   path: string;
@@ -174,13 +176,6 @@ function parseDotnetBooleanValue(value: string): boolean | null {
   return null;
 }
 
-function splitDotnetDefineConstants(value: string): string[] {
-  return value
-    .split(/[;,]/)
-    .map((item) => item.trim())
-    .filter((item) => item.length > 0);
-}
-
 export function extractDotnetPublishParametersFromProjectProfile(
   parsedProfile: ParsedProjectPublishProfile
 ): Record<string, DotnetProfileParameterValue> {
@@ -215,7 +210,6 @@ export function extractDotnetPublishParametersFromProjectProfile(
           parameters.framework = value;
           break;
         case "PublishDir":
-        case "PublishUrl":
           parameters.output = value;
           break;
         case "SelfContained": {
@@ -250,14 +244,6 @@ export function extractDotnetPublishParametersFromProjectProfile(
           }
           break;
         }
-        case "DefineConstants":
-        case "Define": {
-          const defines = splitDotnetDefineConstants(value);
-          if (defines.length > 0) {
-            parameters.define = defines;
-          }
-          break;
-        }
         default:
           properties[key] = value;
           break;
@@ -265,8 +251,9 @@ export function extractDotnetPublishParametersFromProjectProfile(
     }
   }
 
-  if (Object.keys(properties).length > 0) {
-    parameters.properties = properties;
+  const supportedProperties = sanitizeDotnetPublishProperties(properties);
+  if (Object.keys(supportedProperties).length > 0) {
+    parameters.properties = supportedProperties;
   }
 
   return parameters;

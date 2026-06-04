@@ -8,6 +8,7 @@ use super::*;
 const DOTNET_SOLUTION_EXTENSION: &str = "sln";
 const DOTNET_PROJECT_EXTENSIONS: &[&str] = &["csproj", "fsproj", "vbproj"];
 const VISUAL_STUDIO_LAUNCH_EXTENSION: &str = "slnLaunch";
+const TEST_LIKE_PROJECT_PENALTY: i32 = 1_000;
 
 pub fn is_dotnet_project_file(path: &Path) -> bool {
     path.extension()
@@ -186,11 +187,11 @@ fn solution_project_bonus(
     solution_project_paths: &[PathBuf],
     project_file: &Path,
 ) -> i32 {
-    if solution_files.len() == 1 {
-        return ordered_path_bonus(project_file, solution_project_paths, 20_000);
+    if solution_files.len() > 1 {
+        return path_set_bonus(project_file, solution_project_paths, 20_000);
     }
 
-    path_set_bonus(project_file, solution_project_paths, 20_000)
+    0
 }
 
 fn normalize_identifier_key(value: &str) -> String {
@@ -310,7 +311,7 @@ fn project_file_recommendation_score(
 
     if has_test_like_candidate {
         if is_test_like_project_file(project_file) {
-            score -= 60;
+            score -= TEST_LIKE_PROJECT_PENALTY;
         } else {
             score += 20;
         }
@@ -319,16 +320,71 @@ fn project_file_recommendation_score(
     score
 }
 
-fn recommend_project_file_from_launch_files(
+fn project_file_from_ordered_paths(
+    ordered_paths: &[PathBuf],
+    project_files: &[PathBuf],
+) -> Option<PathBuf> {
+    for ordered_path in ordered_paths {
+        let ordered_path_key = normalize_path_key(ordered_path);
+        if let Some(project_file) = project_files
+            .iter()
+            .find(|project_file| normalize_path_key(project_file) == ordered_path_key)
+        {
+            return Some(project_file.clone());
+        }
+    }
+
+    None
+}
+
+fn unique_project_file_from_paths(paths: &[PathBuf], project_files: &[PathBuf]) -> Option<PathBuf> {
+    let mut matched_project_files = Vec::new();
+
+    for path in paths {
+        let path_key = normalize_path_key(path);
+        if let Some(project_file) = project_files
+            .iter()
+            .find(|project_file| normalize_path_key(project_file) == path_key)
+        {
+            matched_project_files.push(project_file.clone());
+        }
+    }
+
+    if let [only] = matched_project_files.as_slice() {
+        return Some(only.clone());
+    }
+
+    None
+}
+
+fn recommend_project_file_from_visual_studio_signals(
+    solution_files: &[PathBuf],
+    launch_file_paths: &[PathBuf],
+    project_files: &[PathBuf],
+) -> Option<PathBuf> {
+    let launch_start_project_paths =
+        dedupe_paths_by_key(launch_start_project_paths(launch_file_paths));
+    if let Some(project_file) =
+        unique_project_file_from_paths(&launch_start_project_paths, project_files)
+    {
+        return Some(project_file);
+    }
+
+    if solution_files.len() == 1 {
+        let solution_declared_project_paths =
+            dedupe_paths_by_key(solution_project_paths(solution_files));
+        return project_file_from_ordered_paths(&solution_declared_project_paths, project_files);
+    }
+
+    None
+}
+
+fn recommend_project_file_by_score(
     root: &Path,
     solution_files: &[PathBuf],
     launch_file_paths: &[PathBuf],
     project_files: &[PathBuf],
 ) -> Option<PathBuf> {
-    if let [only] = project_files {
-        return Some(only.clone());
-    }
-
     let launch_start_project_paths =
         dedupe_paths_by_key(launch_start_project_paths(launch_file_paths));
     let solution_declared_project_paths =
@@ -361,6 +417,26 @@ fn recommend_project_file_from_launch_files(
     }
 
     best_project_file.cloned()
+}
+
+fn recommend_project_file(
+    root: &Path,
+    solution_files: &[PathBuf],
+    launch_file_paths: &[PathBuf],
+    project_files: &[PathBuf],
+) -> Option<PathBuf> {
+    if let [only] = project_files {
+        return Some(only.clone());
+    }
+
+    recommend_project_file_from_visual_studio_signals(
+        solution_files,
+        launch_file_paths,
+        project_files,
+    )
+    .or_else(|| {
+        recommend_project_file_by_score(root, solution_files, launch_file_paths, project_files)
+    })
 }
 
 pub fn resolve_project_root_for_file(project_file: &Path) -> PathBuf {
@@ -398,7 +474,7 @@ fn project_scan_candidates_from_context(context: &FileScanContext) -> ProjectSca
     let solution_file_paths = context.collect_files(is_dotnet_solution_file);
     let project_file_paths = context.collect_files(is_dotnet_project_file);
     let launch_file_paths = context.collect_files(is_visual_studio_launch_file);
-    let recommended_project_file = recommend_project_file_from_launch_files(
+    let recommended_project_file = recommend_project_file(
         context.root(),
         &solution_file_paths,
         &launch_file_paths,

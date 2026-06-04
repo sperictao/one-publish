@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   appendExtensionToPath,
   getPathBasename,
+  getPathRelativeToRoot,
   joinPath,
   remapPathPrefix,
 } from "@/lib/paths";
@@ -34,5 +35,32 @@ describe("paths", () => {
         "D:\\Repos\\OnePublish"
       )
     ).toBe("D:\\Repos\\OnePublish\\src\\App.csproj");
+  });
+
+  it("提取相对根目录的路径", () => {
+    expect(
+      getPathRelativeToRoot(
+        "/workspace/demo/src/App/App.csproj",
+        "/workspace/demo"
+      )
+    ).toBe("src/App/App.csproj");
+  });
+
+  it("提取相对根目录的路径时兼容 Windows 大小写和分隔符", () => {
+    expect(
+      getPathRelativeToRoot(
+        "C:/Workspace/Demo/src/App/App.csproj",
+        "c:\\workspace\\demo"
+      )
+    ).toBe("src\\App\\App.csproj");
+  });
+
+  it("无法映射为相对路径时保留原路径", () => {
+    expect(
+      getPathRelativeToRoot(
+        "/workspace/other/src/App/App.csproj",
+        "/workspace/demo"
+      )
+    ).toBe("/workspace/other/src/App/App.csproj");
   });
 });

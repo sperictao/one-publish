@@ -53,11 +53,6 @@ const dotnetSchema: ParameterSchema = {
       prefix: "-p:",
       description: "MSBuild properties",
     },
-    define: {
-      type: "array",
-      flag: "--define",
-      description: "Conditional compilation symbols",
-    },
   },
 };
 
@@ -78,7 +73,6 @@ const config: PublishConfigStore = {
     PublishSingleFile: "true",
     CustomProperty: "CustomValue",
   },
-  define: ["TRACE", "CI"],
   useProfile: false,
   profileName: "",
 };
@@ -97,15 +91,12 @@ describe("buildDotnetAdvancedFieldsModel", () => {
     const publishProvider = model.fieldMap.get("PublishProvider");
     const deleteExistingFiles = model.fieldMap.get("delete_existing_files");
     const publishSingleFile = model.fieldMap.get("PublishSingleFile");
-    const define = model.fieldMap.get("define");
     const properties = model.fieldMap.get("properties");
 
     expect(model.baseFields.map((field) => field.key)).toEqual(
       expect.arrayContaining([
         "framework",
         "delete_existing_files",
-        "LastUsedBuildConfiguration",
-        "PublishProvider",
       ])
     );
     expect(model.collapsedFields.map((field) => field.key)).toEqual(
@@ -113,7 +104,6 @@ describe("buildDotnetAdvancedFieldsModel", () => {
         "no_build",
         "verbosity",
         "PublishSingleFile",
-        "define",
         "properties",
       ])
     );
@@ -129,8 +119,7 @@ describe("buildDotnetAdvancedFieldsModel", () => {
     expect(noBuild?.control).toBe("boolean");
     expect(deleteExistingFiles?.control).toBe("boolean");
     expect(publishSingleFile?.control).toBe("boolean");
-    expect(publishProvider?.control).toBe("string");
-    expect(define?.control).toBe("tags");
+    expect(publishProvider).toBeUndefined();
     expect(properties?.control).toBe("property-map");
     expect(properties?.value).toEqual({
       CustomProperty: "CustomValue",

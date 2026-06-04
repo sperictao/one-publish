@@ -94,7 +94,6 @@ function isDirectlyMappedPropertyGroupEntry(params: {
     case "TargetFramework":
       return extractedParameters.framework === value;
     case "PublishDir":
-    case "PublishUrl":
       return extractedParameters.output === value;
     case "SelfContained":
       return matchesBooleanParameter(extractedParameters.self_contained, value);
@@ -107,9 +106,6 @@ function isDirectlyMappedPropertyGroupEntry(params: {
     case "Verbosity":
     case "MSBuildVerbosity":
       return extractedParameters.verbosity === value;
-    case "DefineConstants":
-    case "Define":
-      return matchesStringArrayParameter(extractedParameters.define, value);
     default:
       return false;
   }
@@ -121,27 +117,6 @@ function matchesBooleanParameter(
 ): boolean {
   const parsedValue = parseDotnetBooleanValue(rawValue);
   return parsedValue !== null && candidate === parsedValue;
-}
-
-function matchesStringArrayParameter(
-  candidate: unknown,
-  rawValue: string
-): boolean {
-  if (!Array.isArray(candidate)) {
-    return false;
-  }
-
-  const expected = splitDotnetDefineConstants(rawValue);
-  if (expected.length === 0) {
-    return false;
-  }
-
-  return (
-    candidate.length === expected.length &&
-    candidate.every(
-      (item, index) => typeof item === "string" && item === expected[index]
-    )
-  );
 }
 
 function normalizePropertyValueMap(value: unknown): Record<string, string> {
@@ -164,11 +139,4 @@ function normalizePropertyValueMap(value: unknown): Record<string, string> {
   }
 
   return Object.fromEntries(entries);
-}
-
-function splitDotnetDefineConstants(value: string): string[] {
-  return value
-    .split(/[;,]/)
-    .map((item) => item.trim())
-    .filter((item) => item.length > 0);
 }

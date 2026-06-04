@@ -4,7 +4,6 @@ import { listen } from "@tauri-apps/api/event";
 
 import { normalizeDotnetProjectBoundParameters } from "@/features/config/dotnetPublishConfig";
 import { resolvePreferredDotnetProjectInfo } from "@/lib/dotnetProjectInfo";
-import { resolveDotnetProjectProfile } from "@/lib/dotnetProjectProfile";
 import { parsePublishConfigKey } from "@/features/config/publishConfigIdentity";
 import { showSystemNotification } from "@/lib/systemNotification";
 import {
@@ -83,18 +82,18 @@ async function resolveUserProfileSpec(params: {
   if (providerId === "dotnet") {
     const projectInfo = await resolveDotnetProjectInfo(params.repo);
     return {
-        version: params.specVersion,
-        provider_id: "dotnet",
-        project_path: projectInfo.project_file,
-        parameters: toSpecParameters(
-          normalizeDotnetProjectBoundParameters({
-            parameters: (profile.parameters || {}) as Record<string, unknown>,
-            defaultOutputDir: params.defaultOutputDir,
-            projectFile: projectInfo.project_file,
-            projectRoot: projectInfo.root_path,
-          })
-        ),
-      };
+      version: params.specVersion,
+      provider_id: "dotnet",
+      project_path: projectInfo.project_file,
+      parameters: toSpecParameters(
+        normalizeDotnetProjectBoundParameters({
+          parameters: (profile.parameters || {}) as Record<string, unknown>,
+          defaultOutputDir: params.defaultOutputDir,
+          projectFile: projectInfo.project_file,
+          projectRoot: projectInfo.root_path,
+        })
+      ),
+    };
   }
 
   return {
@@ -111,20 +110,21 @@ async function resolvePubxmlSpec(params: {
   repo: Repository;
   profileName: string;
   specVersion: number;
-  defaultOutputDir: string;
 }): Promise<ProviderPublishSpec> {
   const projectInfo = await resolveDotnetProjectInfo(params.repo);
-  const resolvedProfile = await resolveDotnetProjectProfile({
-    projectInfo,
-    profileName: params.profileName,
-    defaultOutputDir: params.defaultOutputDir,
-  });
+  if (!projectInfo.publish_profiles.includes(params.profileName)) {
+    throw new Error(`missing project publish profile: ${params.profileName}`);
+  }
 
   return {
     version: params.specVersion,
     provider_id: "dotnet",
     project_path: projectInfo.project_file,
-    parameters: toSpecParameters(resolvedProfile.parameters),
+    parameters: toSpecParameters({
+      properties: {
+        PublishProfile: params.profileName,
+      },
+    }),
   };
 }
 
@@ -173,7 +173,6 @@ export async function resolveTrayPublishRequest(params: {
       repo,
       profileName: identity.profileName,
       specVersion: params.specVersion,
-      defaultOutputDir: params.defaultOutputDir,
     });
     return {
       spec,

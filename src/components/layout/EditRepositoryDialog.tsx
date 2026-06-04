@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { cn } from "@/lib/utils";
-import { getPathBasename } from "@/lib/paths";
+import { getPathRelativeToRoot } from "@/lib/paths";
 import { AppDialogInset } from "@/components/ui/app-dialog-inset";
 import { AppDialogShell } from "@/components/ui/app-dialog-shell";
 import { Button } from "@/components/ui/button";
@@ -174,6 +174,7 @@ function EditRepositoryDialogContent({
     () => projectScan?.projectFiles ?? [],
     [projectScan]
   );
+  const projectFileOptionRoot = projectScan?.rootPath || editPath;
   const selectedProviderOption = useMemo(
     () => providerOptions.find((provider) => provider.id === editProviderId) ?? null,
     [editProviderId, providerOptions]
@@ -738,7 +739,7 @@ function EditRepositoryDialogContent({
                           </SelectItem>
                           {projectFileOptions.map((filePath) => (
                             <SelectItem key={filePath} value={filePath}>
-                              {getPathBasename(filePath) || filePath}
+                              {getPathRelativeToRoot(filePath, projectFileOptionRoot)}
                             </SelectItem>
                           ))}
                           <SelectItem value={MANUAL_INPUT_VALUE}>

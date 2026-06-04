@@ -9,6 +9,8 @@ describe("buildProjectPublishProfileSupplementSections", () => {
       <Project>
         <PropertyGroup Condition="'$(Configuration)'=='Release'">
           <Configuration>Release</Configuration>
+          <PublishDir>/tmp/publish</PublishDir>
+          <PublishUrl>/tmp/publish</PublishUrl>
           <PublishSingleFile>true</PublishSingleFile>
           <PublishItems>
             <ResolvedFileToPublish Include="wwwroot/appsettings.json">
@@ -32,6 +34,11 @@ describe("buildProjectPublishProfileSupplementSections", () => {
       Condition: "'$(Configuration)'=='Release'",
     });
     expect(sections[0]?.entries).toEqual([
+      expect.objectContaining({
+        key: "PublishUrl",
+        path: "PublishUrl",
+        value: "/tmp/publish",
+      }),
       expect.objectContaining({
         key: "PublishItems › ResolvedFileToPublish",
         path: "PublishItems.ResolvedFileToPublish",

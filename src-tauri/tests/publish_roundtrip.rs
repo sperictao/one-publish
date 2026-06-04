@@ -174,3 +174,56 @@ fn spec_with_multiple_flags_renders_all() {
     assert!(args_str.contains("linux-x64"));
     assert!(args_str.contains("--self-contained"));
 }
+
+#[test]
+fn render_dotnet_publish_profile_as_msbuild_property() {
+    let (_dir, project_path) = setup_project();
+    let mut properties = BTreeMap::new();
+    properties.insert(
+        "PublishProfile".to_string(),
+        SpecValue::String("FolderProfile".to_string()),
+    );
+
+    let mut params = BTreeMap::new();
+    params.insert("properties".to_string(), SpecValue::Map(properties));
+
+    let spec = PublishSpec {
+        version: SPEC_VERSION,
+        provider_id: "dotnet".to_string(),
+        project_path,
+        parameters: params,
+    };
+
+    let cmd = render_provider_publish(spec).expect("render publish profile spec");
+    assert!(
+        cmd.args
+            .iter()
+            .any(|arg| arg == "-p:PublishProfile=FolderProfile"),
+        "expected PublishProfile property, got: {:?}",
+        cmd.args
+    );
+}
+
+#[test]
+fn render_rejects_unsupported_dotnet_define_parameter() {
+    let (_dir, project_path) = setup_project();
+    let mut params = BTreeMap::new();
+    params.insert(
+        "define".to_string(),
+        SpecValue::List(vec![SpecValue::String("TRACE".to_string())]),
+    );
+
+    let spec = PublishSpec {
+        version: SPEC_VERSION,
+        provider_id: "dotnet".to_string(),
+        project_path,
+        parameters: params,
+    };
+
+    let error = render_provider_publish(spec).expect_err("define is not supported");
+    assert!(
+        error.to_string().contains("unknown parameter: define"),
+        "expected unknown define parameter error, got: {}",
+        error
+    );
+}

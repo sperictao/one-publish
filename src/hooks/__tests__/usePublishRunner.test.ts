@@ -139,7 +139,6 @@ const defaultCustomConfig: PublishConfigStore = {
   noLogo: false,
   deleteExistingFiles: false,
   properties: {},
-  define: [],
   useProfile: false,
   profileName: "",
 };
@@ -271,7 +270,9 @@ describe("usePublishRunner", () => {
       provider_id: "dotnet",
       project_path: "/repo/App.csproj",
       parameters: {
-        configuration: "Debug",
+        properties: {
+          PublishProfile: "FolderProfile",
+        },
       },
     }));
 
@@ -279,21 +280,7 @@ describe("usePublishRunner", () => {
       getCurrentConfig: vi.fn(),
       selectionIdentity: projectProfileSelectionIdentity,
       recentConfigKeyForCurrentSelection: "pubxml:FolderProfile",
-      resolvedProjectProfile: {
-        profileName: "FolderProfile",
-        filePath: "/repo/Properties/PublishProfiles/FolderProfile.pubxml",
-        parsedProfile: {
-          rootTagName: "Project",
-          rawXml: "<Project />",
-          sections: [],
-        },
-        parameters: {
-          configuration: "Release",
-          output: "/exports/App/Release",
-        },
-        editableConfig: defaultCustomConfig,
-      },
-      resolveSelectedProjectProfile: vi.fn(),
+      isResolvingSelectedProjectProfile: false,
     });
 
     mocks.usePublishSpecBuilder.mockReturnValue({
@@ -301,7 +288,7 @@ describe("usePublishRunner", () => {
     });
   });
 
-  it("选中 pubxml 时直接使用解析后的参数执行发布", async () => {
+  it("选中 pubxml 时通过 PublishProfile 执行发布", async () => {
     mocks.runEnvironmentCheck.mockResolvedValue(readyEnvironment);
     mocks.invoke.mockResolvedValue(createPublishResult());
 
@@ -319,8 +306,9 @@ describe("usePublishRunner", () => {
           provider_id: "dotnet",
           project_path: "/repo/App.csproj",
           parameters: {
-            configuration: "Release",
-            output: "/exports/App/Release",
+            properties: {
+              PublishProfile: "FolderProfile",
+            },
           },
         },
       });
@@ -339,13 +327,14 @@ describe("usePublishRunner", () => {
         outputDir: "/exports/App/Release",
         spec: expect.objectContaining({
           parameters: {
-            configuration: "Release",
-            output: "/exports/App/Release",
+            properties: {
+              PublishProfile: "FolderProfile",
+            },
           },
         }),
       })
     );
-    expect(buildPublishSpecMock).not.toHaveBeenCalled();
+    expect(buildPublishSpecMock).toHaveBeenCalled();
   });
 
   it("执行结果优先使用后端返回的命令与最终日志写入历史", async () => {
@@ -546,8 +535,9 @@ describe("usePublishRunner", () => {
         provider_id: "dotnet",
         project_path: "/repo/App.csproj",
         parameters: {
-          configuration: "Release",
-          output: "/exports/App/Release",
+          properties: {
+            PublishProfile: "FolderProfile",
+          },
         },
       },
       deniedPreflight,
@@ -559,8 +549,9 @@ describe("usePublishRunner", () => {
         provider_id: "dotnet",
         project_path: "/repo/App.csproj",
         parameters: {
-          configuration: "Release",
-          output: "/exports/App/Release",
+          properties: {
+            PublishProfile: "FolderProfile",
+          },
         },
       },
     });
@@ -619,8 +610,9 @@ describe("usePublishRunner", () => {
         provider_id: "dotnet",
         project_path: "/repo/App.csproj",
         parameters: {
-          configuration: "Release",
-          output: "/exports/App/Release",
+          properties: {
+            PublishProfile: "FolderProfile",
+          },
         },
       },
       grantedPreflight,
@@ -688,8 +680,9 @@ describe("usePublishRunner", () => {
         provider_id: "dotnet",
         project_path: "/repo/App.csproj",
         parameters: {
-          configuration: "Release",
-          output: "/exports/App/Release",
+          properties: {
+            PublishProfile: "FolderProfile",
+          },
         },
       },
       grantedPreflight,
@@ -792,8 +785,7 @@ describe("usePublishRunner", () => {
       getCurrentConfig: vi.fn(),
       selectionIdentity: presetSelectionIdentity,
       recentConfigKeyForCurrentSelection: "preset:release-fd",
-      resolvedProjectProfile: null,
-      resolveSelectedProjectProfile: vi.fn(),
+      isResolvingSelectedProjectProfile: false,
     });
 
     const { result } = renderHook(() => usePublishRunner(props));
@@ -1078,8 +1070,7 @@ describe("usePublishRunner", () => {
       getCurrentConfig: vi.fn(),
       selectionIdentity: customSelectionIdentity,
       recentConfigKeyForCurrentSelection: null,
-      resolvedProjectProfile: null,
-      resolveSelectedProjectProfile: vi.fn(),
+      isResolvingSelectedProjectProfile: false,
     });
 
     const { result, rerender } = renderHook(

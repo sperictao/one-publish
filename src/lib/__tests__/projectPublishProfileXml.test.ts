@@ -114,8 +114,8 @@ describe("parseProjectPublishProfileXml", () => {
       no_restore: true,
       verbosity: "diagnostic",
       no_logo: true,
-      define: ["TRACE", "DEMO"],
       properties: {
+        DefineConstants: "TRACE;DEMO",
         PublishTrimmed: "true",
         DeleteExistingFiles: "false",
       },

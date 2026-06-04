@@ -15,7 +15,6 @@ export interface DotnetPublishIntentConfig {
   no_logo: boolean;
   delete_existing_files: boolean;
   properties: Record<string, string>;
-  define: string[];
   use_profile: boolean;
   profile_name: string;
 }
@@ -49,7 +48,6 @@ function buildDotnetProviderParameters(config: DotnetPublishIntentConfig) {
     noLogo: config.no_logo,
     deleteExistingFiles: config.delete_existing_files,
     properties: config.properties,
-    define: config.define,
     useProfile: config.use_profile,
     profileName: config.profile_name,
   });

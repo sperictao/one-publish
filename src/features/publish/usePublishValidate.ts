@@ -7,14 +7,13 @@ import type { EnvironmentCheckSnapshot } from "@/features/environment/environmen
 import { renderPublishCommand } from "@/features/publish/renderPublishCommand";
 import { createPublishPreflightPipeline } from "@/features/publish/publishPreflight";
 import {
-  getProjectProfileNameFromSelection,
   getRecentConfigKeyFromSelection,
 } from "@/features/config/publishConfigIdentity";
 import type { DotnetPreset } from "@/features/config/dotnetPresets";
 import type { ProviderPublishSpec } from "@/features/publish/publishRuntime";
 import type { ProjectInfo, PublishConfigStore } from "@/lib/store/types";
 import type { ParameterValue } from "@/types/parameters";
-import type { PublishResult, SpecValue } from "@/generated/tauri-contracts";
+import type { PublishResult } from "@/generated/tauri-contracts";
 
 export function buildPublishPresentationScopeKey(params: {
   selectedRepoId: string | null;
@@ -123,8 +122,6 @@ export function usePublishValidate({
     getCurrentConfig,
     selectionIdentity,
     recentConfigKeyForCurrentSelection,
-    resolvedProjectProfile,
-    resolveSelectedProjectProfile,
     isResolvingSelectedProjectProfile,
   } = useDotnetPublishSelection({
     activeProviderId,
@@ -145,9 +142,6 @@ export function usePublishValidate({
     specVersion,
     getCurrentConfig,
   });
-
-  const selectedProjectProfileName =
-    getProjectProfileNameFromSelection(selectionIdentity);
 
   const publishPresentationSelectionKey = useMemo(() => {
     const recentConfigKey = getRecentConfigKeyFromSelection(selectionIdentity);
@@ -171,33 +165,12 @@ export function usePublishValidate({
       return null;
     }
 
-    if (activeProviderId === "dotnet") {
-      const resolvedProjectInfo = projectInfo;
-      if (!resolvedProjectInfo) {
-        return null;
-      }
-      if (selectedProjectProfileName) {
-        if (resolvedProjectProfile) {
-          return {
-            version: specVersion,
-            provider_id: "dotnet",
-            project_path: resolvedProjectInfo.project_file,
-            parameters: resolvedProjectProfile.parameters,
-          };
-        }
-      }
-    }
-
     return buildPublishSpec();
   }, [
-    activeProviderId,
     activeProviderUsesProjectFile,
     buildPublishSpec,
     projectInfo,
-    resolvedProjectProfile,
-    selectedProjectProfileName,
     selectedRepo,
-    specVersion,
   ]);
 
   const getPublishStartBlocker = useCallback(() => {
@@ -217,27 +190,6 @@ export function usePublishValidate({
       return null;
     }
 
-    if (
-      activeProviderId === "dotnet" &&
-      projectInfo &&
-      selectedProjectProfileName
-    ) {
-      const projectProfile =
-        resolvedProjectProfile ?? (await resolveSelectedProjectProfile());
-
-      if (projectProfile) {
-        return {
-          spec: {
-            version: specVersion,
-            provider_id: "dotnet",
-            project_path: projectInfo.project_file,
-            parameters: projectProfile.parameters as Record<string, SpecValue>,
-          },
-          recentConfigKey: recentConfigKeyForCurrentSelection ?? undefined,
-        };
-      }
-    }
-
     const spec = buildPublishSpec();
     if (!spec) {
       return null;
@@ -248,15 +200,9 @@ export function usePublishValidate({
       recentConfigKey: recentConfigKeyForCurrentSelection ?? undefined,
     };
   }, [
-    activeProviderId,
     buildPublishSpec,
     getPublishStartBlocker,
-    projectInfo,
     recentConfigKeyForCurrentSelection,
-    resolveSelectedProjectProfile,
-    resolvedProjectProfile,
-    selectedProjectProfileName,
-    specVersion,
   ]);
 
   const publishPresentationScopeKey = useMemo(

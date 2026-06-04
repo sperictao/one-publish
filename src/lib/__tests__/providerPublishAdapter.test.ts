@@ -16,8 +16,11 @@ const dotnetConfig: DotnetPublishIntentConfig = {
   verbosity: "minimal",
   no_logo: true,
   delete_existing_files: true,
-  properties: { PublishProvider: "FileSystem" },
-  define: ["CI"],
+  properties: {
+    DefineConstants: "CI",
+    PublishProvider: "FileSystem",
+    PublishSingleFile: "true",
+  },
   use_profile: false,
   profile_name: "",
 };
@@ -52,8 +55,52 @@ describe("providerPublishAdapter", () => {
         no_restore: true,
         no_logo: true,
         delete_existing_files: true,
-        properties: { PublishProvider: "FileSystem" },
-        define: ["CI"],
+        properties: {
+          DefineConstants: "CI",
+          PublishSingleFile: "true",
+        },
+      },
+    });
+  });
+
+  it("builds project profile specs as PublishProfile properties", () => {
+    const spec = buildProviderPublishSpec({
+      providerId: "dotnet",
+      providerUsesProjectFile: true,
+      providerParameters: {},
+      projectInfo: {
+        root_path: "/repo",
+        project_file: "/repo/App.csproj",
+        publish_profiles: ["FolderProfile"],
+        target_frameworks: ["net8.0"],
+      },
+      repository: { path: "/repo" },
+      specVersion: 1,
+      dotnetConfig: {
+        configuration: "Release",
+        runtime: "",
+        framework: "",
+        self_contained: false,
+        output_dir: "",
+        no_build: false,
+        no_restore: false,
+        verbosity: "",
+        no_logo: false,
+        delete_existing_files: false,
+        properties: {},
+        use_profile: true,
+        profile_name: "FolderProfile",
+      },
+    });
+
+    expect(spec).toEqual({
+      version: 1,
+      provider_id: "dotnet",
+      project_path: "/repo/App.csproj",
+      parameters: {
+        properties: {
+          PublishProfile: "FolderProfile",
+        },
       },
     });
   });

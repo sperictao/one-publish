@@ -13,8 +13,31 @@ export const DOTNET_ADVANCED_PARAMETER_KEYS = [
   "no_logo",
   "delete_existing_files",
   "properties",
-  "define",
 ] as const;
+
+const DOTNET_UNSUPPORTED_PUBLISH_PROPERTY_KEYS = [
+  "Configuration",
+  "Define",
+  "ExcludeApp_Data",
+  "LastUsedBuildConfiguration",
+  "LastUsedPlatform",
+  "LaunchSiteAfterPublish",
+  "Platform",
+  "ProjectGuid",
+  "PublishProvider",
+  "PublishUrl",
+  "RuntimeIdentifier",
+  "RuntimeIdentifiers",
+  "SiteUrlToLaunchAfterPublish",
+  "TargetFramework",
+  "TargetFrameworks",
+  "WebPublishMethod",
+  "_TargetId",
+] as const;
+
+const DOTNET_UNSUPPORTED_PUBLISH_PROPERTY_KEY_SET = new Set(
+  DOTNET_UNSUPPORTED_PUBLISH_PROPERTY_KEYS.map((key) => key.toLowerCase())
+);
 
 function clonePublishConfigStore(
   config: PublishConfigStore
@@ -22,7 +45,6 @@ function clonePublishConfigStore(
   return {
     ...config,
     properties: { ...config.properties },
-    define: [...config.define],
   };
 }
 
@@ -84,22 +106,15 @@ export function normalizeDotnetPropertyMap(
   return Object.fromEntries(entries);
 }
 
-export function normalizeDotnetStringArray(value: unknown): string[] {
-  if (!Array.isArray(value)) {
-    return [];
-  }
-
-  return value.flatMap((item) => {
-    if (
-      typeof item === "string" ||
-      typeof item === "number" ||
-      typeof item === "boolean"
-    ) {
-      const normalizedItem = String(item).trim();
-      return normalizedItem ? [normalizedItem] : [];
-    }
-    return [];
-  });
+export function sanitizeDotnetPublishProperties(
+  properties: Record<string, string>
+): Record<string, string> {
+  return Object.fromEntries(
+    Object.entries(properties).filter(
+      ([key]) =>
+        !DOTNET_UNSUPPORTED_PUBLISH_PROPERTY_KEY_SET.has(key.toLowerCase())
+    )
+  );
 }
 
 function parseBooleanString(value: string | undefined): boolean | null {
@@ -154,71 +169,10 @@ export function buildDotnetAdvancedParameters(
     verbosity: config.verbosity,
     no_logo: config.noLogo,
     delete_existing_files: config.deleteExistingFiles,
-    properties: { ...config.properties },
-    define: [...config.define],
+    properties: sanitizeDotnetPublishProperties(
+      normalizeDotnetPropertyMap(config.properties)
+    ),
   };
-}
-
-export function buildDotnetPublishCommand(
-  projectFile: string,
-  parameters: Record<string, unknown>
-): string {
-  const parameterArgs: string[] = [];
-
-  if (typeof parameters.configuration === "string") {
-    parameterArgs.push(`-c ${parameters.configuration}`);
-  }
-  if (typeof parameters.runtime === "string") {
-    parameterArgs.push(`--runtime ${parameters.runtime}`);
-  }
-  if (typeof parameters.framework === "string") {
-    parameterArgs.push(`--framework ${parameters.framework}`);
-  }
-  if (parameters.self_contained === true) {
-    parameterArgs.push("--self-contained");
-  }
-  if (typeof parameters.output === "string") {
-    parameterArgs.push(`-o "${parameters.output}"`);
-  }
-  if (parameters.no_build === true) {
-    parameterArgs.push("--no-build");
-  }
-  if (parameters.no_restore === true) {
-    parameterArgs.push("--no-restore");
-  }
-  if (typeof parameters.verbosity === "string") {
-    parameterArgs.push(`--verbosity ${parameters.verbosity}`);
-  }
-  if (parameters.no_logo === true) {
-    parameterArgs.push("--no-logo");
-  }
-  if (Array.isArray(parameters.define)) {
-    for (const define of parameters.define) {
-      if (typeof define === "string" && define.trim().length > 0) {
-        parameterArgs.push(`--define ${define.trim()}`);
-      }
-    }
-  }
-  if (
-    parameters.properties &&
-    typeof parameters.properties === "object" &&
-    !Array.isArray(parameters.properties)
-  ) {
-    for (const [key, value] of Object.entries(
-      parameters.properties as Record<string, unknown>
-    )) {
-      if (
-        (typeof value === "string" ||
-          typeof value === "number" ||
-          typeof value === "boolean") &&
-        key.trim().length > 0
-      ) {
-        parameterArgs.push(`-p:${key}=${String(value)}`);
-      }
-    }
-  }
-
-  return [`dotnet publish "${projectFile}"`, ...parameterArgs].join(" ");
 }
 
 export function buildDotnetProfileParameters(
@@ -266,17 +220,14 @@ export function buildDotnetProfileParameters(
     parameters.delete_existing_files = true;
   }
 
-  const properties = normalizeDotnetPropertyMap(config.properties);
+  const properties = sanitizeDotnetPublishProperties(
+    normalizeDotnetPropertyMap(config.properties)
+  );
   if (config.useProfile && config.profileName.trim()) {
     properties.PublishProfile = config.profileName.trim();
   }
   if (Object.keys(properties).length > 0) {
     parameters.properties = properties;
-  }
-
-  const define = normalizeDotnetStringArray(config.define);
-  if (define.length > 0) {
-    parameters.define = define;
   }
 
   return parameters;
@@ -310,8 +261,11 @@ export function createDotnetPublishConfigFromParameters(
   const normalizedProperties = normalizeDotnetPropertyMap(parameters.properties);
   const {
     deleteExistingFiles,
-    properties,
+    properties: deleteExistingFilesNormalizedProperties,
   } = normalizeDeleteExistingFilesProperty(normalizedProperties);
+  const properties = sanitizeDotnetPublishProperties(
+    deleteExistingFilesNormalizedProperties
+  );
   const resolvedDeleteExistingFiles =
     typeof parameters.delete_existing_files === "boolean"
       ? parameters.delete_existing_files
@@ -343,7 +297,6 @@ export function createDotnetPublishConfigFromParameters(
     noLogo: parameters.no_logo === true,
     deleteExistingFiles: resolvedDeleteExistingFiles,
     properties,
-    define: normalizeDotnetStringArray(parameters.define),
     useProfile: options?.inferProfileSelection === true && publishProfile.length > 0,
     profileName:
       options?.inferProfileSelection === true ? publishProfile : defaults.profileName,

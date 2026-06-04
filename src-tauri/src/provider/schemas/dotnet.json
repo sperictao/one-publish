@@ -55,11 +55,6 @@
       "flag": "-p",
       "prefix": "-p:",
       "description": "MSBuild properties (e.g., -p:Version=1.2.3)"
-    },
-    "define": {
-      "type": "array",
-      "flag": "--define",
-      "description": "Defines conditional compilation symbols"
     }
   }
 }

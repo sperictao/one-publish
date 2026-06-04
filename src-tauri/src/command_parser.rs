@@ -271,8 +271,7 @@ fn map_dotnet_flag(flag: &str) -> Option<String> {
         "--no-build" => Some("no_build".to_string()),
         "--no-restore" => Some("no_restore".to_string()),
         "--verbosity" => Some("verbosity".to_string()),
-        "--no-logo" => Some("no_logo".to_string()),
-        "-d" | "--define" => Some("define".to_string()),
+        "-nologo" | "--no-logo" => Some("no_logo".to_string()),
         _ => None,
     }
 }

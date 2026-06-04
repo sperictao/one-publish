@@ -47,7 +47,6 @@ pub struct PublishConfigStore {
     pub no_logo: bool,
     pub delete_existing_files: bool,
     pub properties: BTreeMap<String, String>,
-    pub define: Vec<String>,
     pub use_profile: bool,
     pub profile_name: String,
 }
@@ -141,7 +140,6 @@ impl Default for PublishConfigStore {
             no_logo: false,
             delete_existing_files: false,
             properties: BTreeMap::new(),
-            define: Vec::new(),
             use_profile: false,
             profile_name: String::new(),
         }

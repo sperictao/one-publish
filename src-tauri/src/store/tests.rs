@@ -178,7 +178,6 @@ fn load_from_path_migrates_legacy_global_publish_fields() {
             "verbosity": "",
             "noLogo": false,
             "properties": {},
-            "define": [],
             "useProfile": false,
             "profileName": ""
         },

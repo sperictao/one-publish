@@ -2,7 +2,6 @@ import { describe, expect, it } from "vitest";
 
 import {
   buildDotnetAdvancedParameters,
-  buildDotnetPublishCommand,
   buildDotnetProfileParameters,
   createDefaultDotnetPublishConfig,
   createDotnetPublishConfigFromParameters,
@@ -23,8 +22,8 @@ describe("dotnetPublishConfig", () => {
       noLogo: true,
       properties: {
         Version: "1.2.3",
+        DefineConstants: "A;B",
       },
-      define: ["A", "B"],
     };
 
     expect(buildDotnetProfileParameters(config)).toEqual({
@@ -38,9 +37,9 @@ describe("dotnetPublishConfig", () => {
       verbosity: "diagnostic",
       no_logo: true,
       properties: {
+        DefineConstants: "A;B",
         Version: "1.2.3",
       },
-      define: ["A", "B"],
     });
   });
 
@@ -57,8 +56,8 @@ describe("dotnetPublishConfig", () => {
       properties: {
         Version: "2.0.0",
         PublishTrimmed: false,
+        PublishProvider: "FileSystem",
       },
-      define: ["TRACE"],
     });
 
     expect(restored).toMatchObject({
@@ -75,9 +74,29 @@ describe("dotnetPublishConfig", () => {
         Version: "2.0.0",
         PublishTrimmed: "false",
       },
-      define: ["TRACE"],
       useProfile: false,
       profileName: "",
+    });
+  });
+
+  it("剥离 dotnet publish 不支持的固定字段", () => {
+    const config = {
+      ...createDefaultDotnetPublishConfig(),
+      properties: {
+        DefineConstants: "TRACE;CI",
+        LaunchSiteAfterPublish: "true",
+        PublishProvider: "FileSystem",
+        PublishSingleFile: "true",
+        WebPublishMethod: "MSDeploy",
+      },
+    };
+
+    expect(buildDotnetProfileParameters(config)).toEqual({
+      configuration: "Release",
+      properties: {
+        DefineConstants: "TRACE;CI",
+        PublishSingleFile: "true",
+      },
     });
   });
 
@@ -125,7 +144,6 @@ describe("dotnetPublishConfig", () => {
       properties: {
         Version: "1.0.0",
       },
-      define: ["A"],
     };
 
     expect(buildDotnetAdvancedParameters(config)).toEqual({
@@ -138,7 +156,6 @@ describe("dotnetPublishConfig", () => {
       properties: {
         Version: "1.0.0",
       },
-      define: ["A"],
     });
   });
 
@@ -163,25 +180,18 @@ describe("dotnetPublishConfig", () => {
     });
   });
 
-  it("根据参数快照生成 dotnet publish 命令预览", () => {
-    expect(
-      buildDotnetPublishCommand("/tmp/app.csproj", {
-        configuration: "Release",
-        runtime: "linux-x64",
-        framework: "net8.0",
-        self_contained: true,
-        output: "./publish",
-        no_build: true,
-        no_restore: true,
-        verbosity: "minimal",
-        no_logo: true,
-        define: ["TRACE"],
-        properties: {
-          PublishTrimmed: "true",
-        },
-      })
-    ).toBe(
-      'dotnet publish "/tmp/app.csproj" -c Release --runtime linux-x64 --framework net8.0 --self-contained -o "./publish" --no-build --no-restore --verbosity minimal --no-logo --define TRACE -p:PublishTrimmed=true'
-    );
+  it("自定义配置引用 PublishProfile 时仍保持结构化参数", () => {
+    const config = {
+      ...createDefaultDotnetPublishConfig(),
+      outputDir: "",
+      useProfile: true,
+      profileName: "FolderProfile",
+    };
+
+    expect(buildDotnetProfileParameters(config)).toEqual({
+      properties: {
+        PublishProfile: "FolderProfile",
+      },
+    });
   });
 });

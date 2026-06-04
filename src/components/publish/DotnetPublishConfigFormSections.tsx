@@ -1,4 +1,4 @@
-import { memo, useCallback, useMemo, useState } from "react";
+import { memo, useCallback, useMemo } from "react";
 import {
   FileCog,
   FolderOutput,
@@ -25,10 +25,7 @@ import {
   buildDotnetAdvancedFieldsModel,
   type DotnetAdvancedFieldModel,
 } from "@/features/config/dotnetPublishAdvancedFields";
-import {
-  normalizeDotnetPropertyMap,
-  normalizeDotnetStringArray,
-} from "@/features/config/dotnetPublishConfig";
+import { normalizeDotnetPropertyMap } from "@/features/config/dotnetPublishConfig";
 import type { PublishConfigStore } from "@/lib/store/types";
 import { cn } from "@/lib/utils";
 import type { ParameterSchema, ParameterValue } from "@/types/parameters";
@@ -61,10 +58,6 @@ interface LocalizedAdvancedFieldText {
   emptyOptionLabel: string;
   inputPlaceholder: string;
   helperText?: string;
-  tagInputPlaceholder: string;
-  tagAddLabel: string;
-  tagEmptyText: string;
-  tagEmptyReadonlyText: string;
   propertiesHint: string;
   propertiesAddLabel: string;
   propertiesEmptyText: string;
@@ -72,7 +65,6 @@ interface LocalizedAdvancedFieldText {
   propertyValueColumnLabel: string;
   propertyKeyPlaceholder: string;
   propertyValuePlaceholder: string;
-  removeTagLabel: string;
   removePropertyLabel: string;
   technicalLabelPrefix: string;
 }
@@ -308,18 +300,6 @@ function getLocalizedAdvancedFieldText(
       translate(profileT, "advancedFieldStringPlaceholder", "输入 {{field}}"),
       { field: field.label }
     ),
-    tagInputPlaceholder: translate(
-      profileT,
-      "advancedFieldDefinePlaceholder",
-      "输入后按 Enter、逗号或分号新增"
-    ),
-    tagAddLabel: translate(profileT, "advancedFieldDefineAdd", "添加常量"),
-    tagEmptyText: translate(profileT, "advancedFieldDefineEmpty", "当前还没有条件编译常量。"),
-    tagEmptyReadonlyText: translate(
-      profileT,
-      "advancedFieldDefineEmptyReadonly",
-      "当前未设置条件编译常量。"
-    ),
     propertiesHint: translate(
       profileT,
       "advancedFieldPropertiesHint",
@@ -354,11 +334,6 @@ function getLocalizedAdvancedFieldText(
       profileT,
       "advancedFieldPropertiesValuePlaceholder",
       "MSBuild 属性值"
-    ),
-    removeTagLabel: translate(
-      profileT,
-      "advancedFieldRemoveTag",
-      "移除常量 {{value}}"
     ),
     removePropertyLabel: translate(
       profileT,
@@ -451,82 +426,12 @@ function getLocalizedAdvancedFieldText(
         "advancedFieldDeleteExistingFilesDescription",
         "发布前删除目标目录中的现有文件。"
       );
-    case "ExcludeApp_Data":
-      return localized(
-        "advancedFieldExcludeAppDataLabel",
-        "排除 App_Data 目录",
-        "advancedFieldExcludeAppDataDescription",
-        "对应 MSBuild 属性 ExcludeApp_Data。发布时排除 App_Data 目录。"
-      );
-    case "LaunchSiteAfterPublish":
-      return localized(
-        "advancedFieldLaunchSiteAfterPublishLabel",
-        "发布后打开站点",
-        "advancedFieldLaunchSiteAfterPublishDescription",
-        "对应 MSBuild 属性 LaunchSiteAfterPublish。发布完成后自动打开站点。"
-      );
-    case "LastUsedBuildConfiguration":
-      return localized(
-        "advancedFieldLastUsedBuildConfigurationLabel",
-        "上次使用的构建配置",
-        "advancedFieldLastUsedBuildConfigurationDescription",
-        "对应 MSBuild 属性 LastUsedBuildConfiguration。记录该配置最后一次使用的构建配置。"
-      );
-    case "LastUsedPlatform":
-      return localized(
-        "advancedFieldLastUsedPlatformLabel",
-        "上次使用的平台",
-        "advancedFieldLastUsedPlatformDescription",
-        "对应 MSBuild 属性 LastUsedPlatform。记录该配置最后一次使用的平台。"
-      );
-    case "PublishProvider":
-      return localized(
-        "advancedFieldPublishProviderLabel",
-        "发布提供程序",
-        "advancedFieldPublishProviderDescription",
-        "对应 MSBuild 属性 PublishProvider。用于指定发布配置使用的提供程序。"
-      );
-    case "WebPublishMethod":
-      return localized(
-        "advancedFieldWebPublishMethodLabel",
-        "Web 发布方式",
-        "advancedFieldWebPublishMethodDescription",
-        "对应 MSBuild 属性 WebPublishMethod。用于指定 Web 发布方式。"
-      );
-    case "SiteUrlToLaunchAfterPublish":
-      return localized(
-        "advancedFieldSiteUrlToLaunchAfterPublishLabel",
-        "发布后打开的站点地址",
-        "advancedFieldSiteUrlToLaunchAfterPublishDescription",
-        "对应 MSBuild 属性 SiteUrlToLaunchAfterPublish。用于指定发布后打开的站点地址。"
-      );
-    case "ProjectGuid":
-      return localized(
-        "advancedFieldProjectGuidLabel",
-        "项目 GUID",
-        "advancedFieldProjectGuidDescription",
-        "对应 MSBuild 属性 ProjectGuid。用于标识当前项目。"
-      );
-    case "_TargetId":
-      return localized(
-        "advancedFieldTargetIdLabel",
-        "目标 ID",
-        "advancedFieldTargetIdDescription",
-        "对应 MSBuild 属性 _TargetId。用于指定发布目标标识。"
-      );
     case "PublishSingleFile":
       return localized(
         "advancedFieldPublishSingleFileLabel",
         "单文件发布",
         "advancedFieldPublishSingleFileDescription",
         "对应 MSBuild 属性 PublishSingleFile。启用后会将产物打包为单文件。"
-      );
-    case "define":
-      return localized(
-        "advancedFieldDefineLabel",
-        "条件编译常量",
-        "advancedFieldDefineDescription",
-        "对应 --define。用于传递多个条件编译常量。"
       );
     case "properties":
       return localized(
@@ -622,7 +527,7 @@ const DotnetAdvancedFieldCards = memo(function DotnetAdvancedFieldCards({
     <div className="grid gap-3.5 md:grid-cols-2">
       {fields.map((field) => {
         const localizedFieldText = getLocalizedAdvancedFieldText(profileT, field);
-        const isFullWidth = field.control === "property-map" || field.control === "tags";
+        const isFullWidth = field.control === "property-map";
 
         return (
           <div
@@ -718,7 +623,7 @@ const DotnetPublishAdvancedParametersSection = memo(
               : profileT.quickCreateAdvancedFocusedDescription ||
                 "常用高级字段直接展示，其余参数默认折叠；展开后可继续补充剩余参数。"
             : profileT.quickCreateAdvancedSectionDescription ||
-              "补充框架、日志、MSBuild 属性和自定义 define，覆盖更多发布场景。"
+              "补充框架、日志和 MSBuild 属性，覆盖更多发布场景。"
         }
       >
         <div className="space-y-4">
@@ -782,16 +687,6 @@ function DotnetAdvancedFieldControl({
     case "boolean":
       return (
         <DotnetBooleanField
-          field={field}
-          fieldText={fieldText}
-          readOnly={readOnly}
-          align={align}
-          onChange={onChange}
-        />
-      );
-    case "tags":
-      return (
-        <DotnetTagListField
           field={field}
           fieldText={fieldText}
           readOnly={readOnly}
@@ -1054,127 +949,6 @@ function DotnetStringField({
   );
 }
 
-function DotnetTagListField({
-  field,
-  fieldText,
-  readOnly,
-  align = "left",
-  onChange,
-}: {
-  field: DotnetAdvancedFieldModel;
-  fieldText: LocalizedAdvancedFieldText;
-  readOnly: boolean;
-  align?: "left" | "right";
-  onChange: (value: ParameterValue) => void;
-}): JSX.Element {
-  const tags = normalizeDotnetStringArray(field.value);
-  const [draftValue, setDraftValue] = useState("");
-
-  const addTags = useCallback(() => {
-    if (readOnly) {
-      return;
-    }
-
-    const nextTags = dedupeStringArray([...tags, ...splitTagDraft(draftValue)]);
-    if (nextTags.length === tags.length) {
-      setDraftValue("");
-      return;
-    }
-
-    onChange(nextTags);
-    setDraftValue("");
-  }, [draftValue, onChange, readOnly, tags]);
-
-  const removeTag = useCallback(
-    (tagToRemove: string) => {
-      if (readOnly) {
-        return;
-      }
-
-      onChange(tags.filter((tag) => tag !== tagToRemove));
-    },
-    [onChange, readOnly, tags]
-  );
-
-  return (
-    <div className="space-y-2 w-full">
-      <div className="flex flex-wrap items-center gap-1.5">
-        <Label htmlFor={field.key} className="text-xs font-semibold text-foreground">
-          {fieldText.label}
-        </Label>
-        {fieldText.technicalLabel && (
-          <span className="font-mono text-[9px] text-muted-foreground/60 bg-black/5 dark:bg-white/5 border border-black/5 dark:border-white/10 px-1.5 py-0.5 rounded-md">
-            {fieldText.technicalLabel}
-          </span>
-        )}
-        <div className="group relative inline-block">
-          <HelpCircle className="size-3.5 text-muted-foreground/60 cursor-help hover:text-foreground transition-colors" />
-          <div
-            className={cn(
-              "absolute bottom-full mb-2 hidden group-hover:block w-64 p-2 bg-[var(--glass-panel-bg)] backdrop-blur-xl text-popover-foreground text-xs rounded-xl shadow-[var(--glass-shadow-lg)] border border-[var(--glass-border)] z-10 leading-4 font-normal",
-              align === "right" ? "right-0 translate-x-0 origin-bottom-right" : "left-0 translate-x-0 origin-bottom-left"
-            )}
-          >
-            {fieldText.description}
-          </div>
-        </div>
-      </div>
-
-      {!readOnly ? (
-        <div className="flex gap-2">
-          <Input
-            id={field.key}
-            aria-label={fieldText.label}
-            value={draftValue}
-            onChange={(event) => setDraftValue(event.target.value)}
-            onKeyDown={(event) => {
-              if (event.key === "Enter" || event.key === "," || event.key === ";") {
-                event.preventDefault();
-                addTags();
-              }
-            }}
-            placeholder={fieldText.tagInputPlaceholder}
-            className="h-9 text-xs"
-          />
-          <Button type="button" variant="outline" size="sm" onClick={addTags} className="h-9 text-xs">
-            <Plus className="mr-1.5 size-3.5" />
-            {fieldText.tagAddLabel}
-          </Button>
-        </div>
-      ) : null}
-
-      {tags.length > 0 ? (
-        <div className="flex flex-wrap gap-1.5">
-          {tags.map((tag) => (
-            <span
-              key={tag}
-              className="inline-flex items-center gap-1 rounded-full border border-[var(--glass-border-subtle)] bg-[var(--glass-input-bg)] px-2 py-0.5 text-xs font-medium text-foreground shadow-[var(--glass-inset-shadow)]"
-            >
-              {tag}
-              {!readOnly ? (
-                <button
-                  type="button"
-                  className="rounded-full text-muted-foreground transition-colors hover:text-foreground"
-                  aria-label={formatTemplate(fieldText.removeTagLabel, {
-                    value: tag,
-                  })}
-                  onClick={() => removeTag(tag)}
-                >
-                  <X className="size-3" />
-                </button>
-              ) : null}
-            </span>
-          ))}
-        </div>
-      ) : (
-        <div className="rounded-xl border border-dashed border-[var(--glass-border-subtle)] px-2.5 py-2 text-xs leading-4 text-muted-foreground">
-          {readOnly ? fieldText.tagEmptyReadonlyText : fieldText.tagEmptyText}
-        </div>
-      )}
-    </div>
-  );
-}
-
 function DotnetPropertyTableField({
   field,
   fieldText,
@@ -1285,7 +1059,7 @@ function DotnetPropertyTableField({
           </div>
           {entries.map(([key, value], index) => (
             <div
-              key={`${key}-${index}`}
+              key={key}
               className="grid grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)_auto] gap-1.5 items-center"
             >
               <Input
@@ -1426,9 +1200,6 @@ export function DotnetPublishConfigFormSections({
           case "deleteExistingFiles":
             updateDraft({ deleteExistingFiles: value === true });
             return;
-          case "define":
-            updateDraft({ define: normalizeDotnetStringArray(value) });
-            return;
         }
       }
 
@@ -1512,30 +1283,6 @@ export function DotnetPublishConfigFormSections({
       />
     </>
   );
-}
-
-function splitTagDraft(value: string): string[] {
-  return value
-    .split(/[;,]/)
-    .map((item) => item.trim())
-    .filter((item) => item.length > 0);
-}
-
-function dedupeStringArray(values: string[]): string[] {
-  const nextValues: string[] = [];
-  const seen = new Set<string>();
-
-  for (const rawValue of values) {
-    const value = rawValue.trim();
-    if (!value || seen.has(value)) {
-      continue;
-    }
-
-    seen.add(value);
-    nextValues.push(value);
-  }
-
-  return nextValues;
 }
 
 function createDraftPropertyKey(properties: Record<string, string>): string {
