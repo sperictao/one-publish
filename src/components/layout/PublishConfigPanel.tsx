@@ -97,7 +97,6 @@ const PublishConfigPanelFloatingLayer = lazy(async () => {
   return { default: mod.PublishConfigPanelFloatingLayer };
 });
 
-const EMPTY_FLOATING_STYLE: CSSProperties = {};
 const EMPTY_FRAMEWORK_OPTIONS: string[] = [];
 
 // Collapse toggle icon (reused from BranchPanel)

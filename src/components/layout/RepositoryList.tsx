@@ -8,7 +8,6 @@ import {
   useRef,
   useState,
   memo,
-  type CSSProperties,
   type MutableRefObject,
   type PointerEvent as ReactPointerEvent,
 } from "react";
@@ -46,8 +45,6 @@ const RepositoryListFloatingLayer = lazy(async () => {
   const mod = await import("@/components/layout/RepositoryListFloatingLayer");
   return { default: mod.RepositoryListFloatingLayer };
 });
-
-const EMPTY_FLOATING_STYLE: CSSProperties = {};
 
 function hasSameStringOrder(
   left: readonly string[],
@@ -212,6 +209,7 @@ export const RepositoryList = memo(function RepositoryList({
     ? repoT.hideReorderControls || "关闭排序"
     : repoT.showReorderControls || "开启排序";
   const fallbackListRef = useRef<HTMLDivElement | null>(null);
+  const fallbackFloatingCardMotionRef = useRef<HTMLDivElement | null>(null);
   const fallbackFloatingCardSurfaceRef = useRef<HTMLDivElement | null>(null);
 
   const filteredRepos = useMemo(
@@ -362,8 +360,8 @@ export const RepositoryList = memo(function RepositoryList({
         fallbackFloatingCardSurfaceRef as MutableRefObject<HTMLDivElement | null>,
       cardTargetRepoId: floatingTargetRepoId,
       floatingVisible: false,
-      floatingCardMotionStyle: EMPTY_FLOATING_STYLE,
-      floatingCardSurfaceStyle: EMPTY_FLOATING_STYLE,
+      floatingCardMotionRef:
+        fallbackFloatingCardMotionRef as MutableRefObject<HTMLDivElement | null>,
       setRepoRowRef: createFallbackRowRef,
       handleListPointerMove: noopPointerHandler,
       handleListPointerEnter: handleFallbackListPointerEnter,
@@ -422,13 +420,13 @@ export const RepositoryList = memo(function RepositoryList({
           onScroll={floating.handleListScroll}
         >
           <div
+            ref={floating.floatingCardMotionRef}
             aria-hidden
             className={cn(
-              "pointer-events-none !absolute origin-top-left transition-opacity duration-120 ease-linear",
+              "pointer-events-none !absolute left-0 top-0 origin-top-left transition-opacity duration-120 ease-linear",
               floatingDragPreviewStyle ? "z-30" : "z-0",
               floating.floatingVisible ? "opacity-100" : "opacity-0"
             )}
-            style={floating.floatingCardMotionStyle}
           >
             <div
               className={cn(
@@ -441,7 +439,6 @@ export const RepositoryList = memo(function RepositoryList({
                 ref={floating.floatingCardSurfaceRef}
                 data-selected={floating.cardTargetRepoId === selectedRepoId ? "true" : "false"}
                 className="floating-list-card h-full w-full transition-[box-shadow] duration-320 ease-[cubic-bezier(0.16,1,0.3,1)]"
-                style={floating.floatingCardSurfaceStyle}
               />
             </div>
           </div>
