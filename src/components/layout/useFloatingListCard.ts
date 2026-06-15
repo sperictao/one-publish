@@ -4,7 +4,6 @@ import {
   useLayoutEffect,
   useMemo,
   useRef,
-  type CSSProperties,
   type PointerEvent as ReactPointerEvent,
 } from "react";
 import { useReducedMotion } from "./useReducedMotion";
@@ -28,11 +27,10 @@ interface UseFloatingListCardOptions {
 
 export interface FloatingListCardResult {
   listRef: React.MutableRefObject<HTMLDivElement | null>;
+  floatingCardMotionRef: React.MutableRefObject<HTMLDivElement | null>;
   floatingCardSurfaceRef: React.MutableRefObject<HTMLDivElement | null>;
   cardTargetItemId: string | null;
   floatingVisible: boolean;
-  floatingCardMotionStyle: CSSProperties;
-  floatingCardSurfaceStyle: CSSProperties;
   setItemRowRef: (itemId: string) => (node: HTMLDivElement | null) => void;
   handleListPointerMove: (event: ReactPointerEvent<HTMLDivElement>) => void;
   handleListPointerEnter: (event: ReactPointerEvent<HTMLDivElement>) => void;
@@ -54,6 +52,7 @@ export function useFloatingListCard({
   preserveHoverOnGap = false,
 }: UseFloatingListCardOptions): FloatingListCardResult {
   const listRef = useRef<HTMLDivElement | null>(null);
+  const floatingCardMotionRef = useRef<HTMLDivElement | null>(null);
   const floatingCardSurfaceRef = useRef<HTMLDivElement | null>(null);
   const rowRefs = useRef<Record<string, HTMLDivElement | null>>({});
   const cardTargetItemIdRef = useRef<string | null>(null);
@@ -67,18 +66,19 @@ export function useFloatingListCard({
     usePointerItemId({ filteredItemIds, rowRefs });
 
   const {
-    floatingDynamics,
-    selectedGlowLevel,
     applyDynamics,
     startSelectedGlowDecay,
     triggerSelectedBounce,
     updateHighlight,
     cleanupDynamics,
-  } = useFloatingDynamics({ isReducedMotionRef, floatingCardSurfaceRef });
+  } = useFloatingDynamics({
+    isReducedMotionRef,
+    floatingCardSurfaceRef,
+    floatingCardMotionRef,
+  });
 
   const {
-    floatingRenderRect,
-    isFloatingAnimating,
+    floatingVisible,
     updateFloatingRect,
     commitPointerFollowY,
     isPointerFollowingRef,
@@ -89,6 +89,7 @@ export function useFloatingListCard({
     isReducedMotionRef,
     rowRefs,
     listRef,
+    floatingCardMotionRef,
     onRectCommitted: applyDynamics,
   });
 
@@ -258,69 +259,6 @@ export function useFloatingListCard({
     triggerSelectedBounce,
     updateTargetRect,
   ]);
-
-  const floatingCardMotionStyle = useMemo<CSSProperties>(() => {
-    const style: CSSProperties = {
-      position: "absolute",
-      top: 0,
-      left: 0,
-      width: floatingRenderRect.width,
-      height: floatingRenderRect.height,
-      transform:
-        `perspective(900px) translate3d(${floatingRenderRect.left}px, ${floatingRenderRect.top}px, 0) ` +
-        `rotateX(${floatingDynamics.tiltX.toFixed(2)}deg) rotateY(${floatingDynamics.tiltY.toFixed(2)}deg)`,
-    };
-
-    if (isFloatingAnimating) {
-      style.willChange = "transform,width,height,opacity";
-    }
-
-    return style;
-  }, [
-    floatingDynamics.tiltX,
-    floatingDynamics.tiltY,
-    floatingRenderRect.height,
-    floatingRenderRect.left,
-    floatingRenderRect.top,
-    floatingRenderRect.width,
-    isFloatingAnimating,
-  ]);
-
-  const floatingCardSurfaceStyle = useMemo<CSSProperties>(
-    () =>
-      ({
-        "--list-card-trail-opacity": floatingDynamics.trailOpacity.toFixed(3),
-        "--list-card-trail-x": `${floatingDynamics.trailOffsetX.toFixed(2)}px`,
-        "--list-card-trail-y": `${floatingDynamics.trailOffsetY.toFixed(2)}px`,
-        "--list-card-trail-scale": floatingDynamics.trailScale.toFixed(3),
-        "--list-card-selected-glow": selectedGlowLevel.toFixed(3),
-        "--list-card-highlight-x": floatingDynamics.highlightX.toFixed(3),
-        "--list-card-highlight-y": floatingDynamics.highlightY.toFixed(3),
-        "--list-card-morph-stretch": floatingDynamics.morphStretch.toFixed(3),
-        "--list-card-shadow-offset-x": `${floatingDynamics.shadowOffsetX.toFixed(2)}px`,
-        "--list-card-shadow-offset-y": `${floatingDynamics.shadowOffsetY.toFixed(2)}px`,
-        "--list-card-specular-sweep": floatingDynamics.specularSweep.toFixed(3),
-        "--list-card-specular-angle": `${floatingDynamics.specularAngle.toFixed(1)}deg`,
-        "--list-card-caustic-x": floatingDynamics.causticX.toFixed(3),
-        "--list-card-caustic-y": floatingDynamics.causticY.toFixed(3),
-      }) as CSSProperties,
-    [
-      floatingDynamics.causticX,
-      floatingDynamics.causticY,
-      floatingDynamics.highlightX,
-      floatingDynamics.highlightY,
-      floatingDynamics.morphStretch,
-      floatingDynamics.shadowOffsetX,
-      floatingDynamics.shadowOffsetY,
-      floatingDynamics.specularAngle,
-      floatingDynamics.specularSweep,
-      floatingDynamics.trailOffsetX,
-      floatingDynamics.trailOffsetY,
-      floatingDynamics.trailOpacity,
-      floatingDynamics.trailScale,
-      selectedGlowLevel,
-    ]
-  );
 
   const handleListScroll = useCallback(() => {
     updateTargetRect(cardTargetItemIdRef.current);
@@ -498,11 +436,10 @@ export function useFloatingListCard({
 
   return {
     listRef,
+    floatingCardMotionRef,
     floatingCardSurfaceRef,
     cardTargetItemId: targetItemId,
-    floatingVisible: floatingRenderRect.visible,
-    floatingCardMotionStyle,
-    floatingCardSurfaceStyle,
+    floatingVisible,
     setItemRowRef,
     handleListPointerMove,
     handleListPointerEnter,

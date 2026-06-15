@@ -18,7 +18,7 @@ export function SidebarPanelShell({
   return (
     <div
       className={cn(
-        "flex flex-col p-2 transition-all duration-300 ease-in-out",
+        "flex flex-col p-2 transition-[padding] duration-300 ease-in-out",
         collapsed && "p-0"
       )}
     >

@@ -207,7 +207,7 @@ export const RepositoryList = memo(function RepositoryList({
   const { translations } = useI18n();
   const repoT = translations.repositoryList || {};
   const listActionButtonClass =
-    "glass-surface flex size-7 items-center justify-center rounded-full transition-all duration-300 hover:bg-[var(--glass-bg-hover)]";
+    "glass-surface flex size-7 items-center justify-center rounded-full transition duration-300 hover:bg-[var(--glass-bg-hover)]";
   const reorderControlsLabel = showReorderControls
     ? repoT.hideReorderControls || "关闭排序"
     : repoT.showReorderControls || "开启排序";
@@ -566,7 +566,7 @@ export const RepositoryList = memo(function RepositoryList({
       <div className="flex items-center justify-between px-3 py-2">
         <button
           type="button"
-          className="glass-surface flex items-center gap-1.5 rounded-full px-3 py-1 text-sm font-medium transition-all duration-300 hover:bg-[var(--glass-bg-hover)]"
+          className="glass-surface flex items-center gap-1.5 rounded-full px-3 py-1 text-sm font-medium transition duration-300 hover:bg-[var(--glass-bg-hover)]"
           onClick={() => setFilterExpanded(!filterExpanded)}
         >
           <span className="text-foreground/80">{repoT.all || "全部"}</span>
@@ -674,7 +674,7 @@ export const RepositoryList = memo(function RepositoryList({
         <div className="pointer-events-none absolute -top-6 left-0 right-0 h-6 bg-gradient-to-t from-[var(--glass-panel-bg)] to-transparent" />
         <button
           type="button"
-          className="flex size-7 items-center justify-center rounded-xl text-muted-foreground/50 transition-all duration-300 hover:bg-[var(--glass-bg)] hover:text-foreground/70"
+          className="flex size-7 items-center justify-center rounded-xl text-muted-foreground/50 transition duration-300 hover:bg-[var(--glass-bg)] hover:text-foreground/70"
           onClick={onSettings}
         >
           <Settings className="size-3.5 transition-transform duration-500 hover:rotate-90" />

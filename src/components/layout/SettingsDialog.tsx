@@ -247,7 +247,7 @@ export const GeneralSettingsSection = memo(function GeneralSettingsSection({
             <Input
               id="settings-execution-history"
               type="number"
-              className="h-9 text-right rounded-lg border-[var(--settings-hairline)] bg-transparent focus-visible:border-[var(--settings-accent)] focus-visible:ring-2 focus-visible:ring-[var(--settings-accent)]/25 focus-visible:ring-offset-0 focus-visible:outline-none transition-all duration-200"
+              className="h-9 text-right rounded-lg border-[var(--settings-hairline)] bg-transparent focus-visible:border-[var(--settings-accent)] focus-visible:ring-2 focus-visible:ring-[var(--settings-accent)]/25 focus-visible:ring-offset-0 focus-visible:outline-none transition duration-200"
               min={5}
               max={200}
               value={executionHistoryLimit}
@@ -287,7 +287,7 @@ export const GeneralSettingsSection = memo(function GeneralSettingsSection({
               placeholder={
                 translations.outputDir?.placeholder || "留空使用项目默认目录"
               }
-              className="h-10 rounded-lg border-[var(--settings-hairline)] bg-transparent focus-visible:border-[var(--settings-accent)] focus-visible:ring-2 focus-visible:ring-[var(--settings-accent)]/25 focus-visible:ring-offset-0 focus-visible:outline-none transition-all duration-200"
+              className="h-10 rounded-lg border-[var(--settings-hairline)] bg-transparent focus-visible:border-[var(--settings-accent)] focus-visible:ring-2 focus-visible:ring-[var(--settings-accent)]/25 focus-visible:ring-offset-0 focus-visible:outline-none transition duration-200"
             />
             <Button
               variant="outline"
@@ -392,7 +392,7 @@ export const AppearanceSettingsSection = memo(function AppearanceSettingsSection
           <button
             type="button"
             className={cn(
-              "group relative flex flex-col items-center gap-2.5 rounded-xl border p-2.5 text-center transition-all duration-300 active:scale-[0.97] glass-interactive",
+              "group relative flex flex-col items-center gap-2.5 rounded-xl border p-2.5 text-center transition duration-300 active:scale-[0.97] glass-interactive",
               theme === "auto"
                 ? "border-[var(--settings-card-selected-border)] bg-[var(--settings-card-selected-bg)] shadow-[0_4px_20px_rgba(0,102,204,0.06),0_1px_3px_rgba(0,102,204,0.04)]"
                 : "border-[var(--settings-hairline)] bg-transparent hover:bg-black/[0.015] dark:hover:bg-white/[0.015] hover:border-black/20 dark:hover:border-white/20"
@@ -466,7 +466,7 @@ export const AppearanceSettingsSection = memo(function AppearanceSettingsSection
           <button
             type="button"
             className={cn(
-              "group relative flex flex-col items-center gap-2.5 rounded-xl border p-2.5 text-center transition-all duration-300 active:scale-[0.97] glass-interactive",
+              "group relative flex flex-col items-center gap-2.5 rounded-xl border p-2.5 text-center transition duration-300 active:scale-[0.97] glass-interactive",
               theme === "light"
                 ? "border-[var(--settings-card-selected-border)] bg-[var(--settings-card-selected-bg)] shadow-[0_4px_20px_rgba(0,102,204,0.06),0_1px_3px_rgba(0,102,204,0.04)]"
                 : "border-[var(--settings-hairline)] bg-transparent hover:bg-black/[0.015] dark:hover:bg-white/[0.015] hover:border-black/20 dark:hover:border-white/20"
@@ -516,7 +516,7 @@ export const AppearanceSettingsSection = memo(function AppearanceSettingsSection
           <button
             type="button"
             className={cn(
-              "group relative flex flex-col items-center gap-2.5 rounded-xl border p-2.5 text-center transition-all duration-300 active:scale-[0.97] glass-interactive",
+              "group relative flex flex-col items-center gap-2.5 rounded-xl border p-2.5 text-center transition duration-300 active:scale-[0.97] glass-interactive",
               theme === "dark"
                 ? "border-[var(--settings-card-selected-border)] bg-[var(--settings-card-selected-bg)] shadow-[0_4px_20px_rgba(0,102,204,0.06),0_1px_3px_rgba(0,102,204,0.04)]"
                 : "border-[var(--settings-hairline)] bg-transparent hover:bg-black/[0.015] dark:hover:bg-white/[0.015] hover:border-black/20 dark:hover:border-white/20"
@@ -583,7 +583,7 @@ export const AppearanceSettingsSection = memo(function AppearanceSettingsSection
                 key={item.id}
                 type="button"
                 className={cn(
-                  "relative flex size-7 shrink-0 items-center justify-center rounded-full shadow-[0_1px_3px_rgba(0,0,0,0.15)] transition-all duration-300 hover:scale-110 active:scale-95 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2",
+                  "relative flex size-7 shrink-0 items-center justify-center rounded-full shadow-[0_1px_3px_rgba(0,0,0,0.15)] transition duration-300 hover:scale-110 active:scale-95 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2",
                   isSelected 
                     ? "ring-2 ring-offset-2 ring-[var(--settings-accent)] scale-105" 
                     : "hover:shadow-[0_2px_6px_rgba(0,0,0,0.2)]"
@@ -671,7 +671,7 @@ export const UpdaterProgressBar = memo(function UpdaterProgressBar({
   downloadProgress,
 }: UpdaterProgressBarProps) {
   return (
-    <div className="space-y-3 rounded-xl border border-[var(--settings-hairline)] bg-black/[0.015] dark:bg-white/[0.015] p-4.5 transition-all duration-200">
+    <div className="space-y-3 rounded-xl border border-[var(--settings-hairline)] bg-black/[0.015] dark:bg-white/[0.015] p-4.5 transition duration-200">
       <div className="flex items-start justify-between gap-3">
         <div className="space-y-1">
           <div className="text-[13.5px] font-semibold tracking-[-0.2px] text-[var(--settings-ink)]">
@@ -1094,7 +1094,7 @@ export function SettingsDialog({
                   <Button
                     variant="outline"
                     size="sm"
-                    className="h-8 px-3 rounded-lg border border-[var(--settings-hairline)] bg-transparent hover:bg-black/[0.02] dark:hover:bg-white/[0.02] text-[12px] font-medium text-[var(--settings-ink)] active:scale-[0.97] transition-all shrink-0 flex items-center gap-1.5"
+                    className="h-8 px-3 rounded-lg border border-[var(--settings-hairline)] bg-transparent hover:bg-black/[0.02] dark:hover:bg-white/[0.02] text-[12px] font-medium text-[var(--settings-ink)] active:scale-[0.97] transition shrink-0 flex items-center gap-1.5"
                     onClick={() => _onOpenUpdaterHelpTarget("docs")}
                   >
                     <span>{translations.version?.openGuide || "打开配置指南"}</span>
@@ -1103,7 +1103,7 @@ export function SettingsDialog({
                   <Button
                     variant="outline"
                     size="sm"
-                    className="h-8 px-3 rounded-lg border border-[var(--settings-hairline)] bg-transparent hover:bg-black/[0.02] dark:hover:bg-white/[0.02] text-[12px] font-medium text-[var(--settings-ink)] active:scale-[0.97] transition-all shrink-0 flex items-center gap-1.5"
+                    className="h-8 px-3 rounded-lg border border-[var(--settings-hairline)] bg-transparent hover:bg-black/[0.02] dark:hover:bg-white/[0.02] text-[12px] font-medium text-[var(--settings-ink)] active:scale-[0.97] transition shrink-0 flex items-center gap-1.5"
                     onClick={() => _onOpenUpdaterHelpTarget("template")}
                   >
                     <span>{translations.version?.openTemplate || "下载模板文件"}</span>
@@ -1116,7 +1116,7 @@ export function SettingsDialog({
                     <Button
                       variant="default"
                       size="sm"
-                      className="h-8 px-3 rounded-lg bg-gradient-to-b from-[var(--settings-accent)] to-[var(--settings-accent)]/90 border-[var(--settings-accent)]/80 text-white shadow-[0_1px_2px_rgba(0,0,0,0.08),inset_0_1px_0_rgba(255,255,255,0.15)] hover:opacity-90 active:scale-[0.97] transition-all font-bold text-[12px] shrink-0 flex items-center gap-1.5"
+                      className="h-8 px-3 rounded-lg bg-gradient-to-b from-[var(--settings-accent)] to-[var(--settings-accent)]/90 border-[var(--settings-accent)]/80 text-white shadow-[0_1px_2px_rgba(0,0,0,0.08),inset_0_1px_0_rgba(255,255,255,0.15)] hover:opacity-90 active:scale-[0.97] transition font-bold text-[12px] shrink-0 flex items-center gap-1.5"
                       onClick={handleRestartApp}
                       disabled={isRestarting || isCheckingUpdate || isInstallingUpdate}
                     >
@@ -1132,7 +1132,7 @@ export function SettingsDialog({
                   <Button
                     variant="outline"
                     size="sm"
-                    className="h-8 px-3 rounded-lg border border-[var(--settings-hairline)] bg-transparent hover:bg-black/[0.02] dark:hover:bg-white/[0.02] text-[12px] font-medium text-[var(--settings-ink)] active:scale-[0.97] transition-all shrink-0 flex items-center gap-1.5"
+                    className="h-8 px-3 rounded-lg border border-[var(--settings-hairline)] bg-transparent hover:bg-black/[0.02] dark:hover:bg-white/[0.02] text-[12px] font-medium text-[var(--settings-ink)] active:scale-[0.97] transition shrink-0 flex items-center gap-1.5"
                     onClick={handleCheckUpdate}
                     disabled={isCheckingUpdate || isInstallingUpdate}
                   >
@@ -1144,7 +1144,7 @@ export function SettingsDialog({
                     <Button
                       variant="default"
                       size="sm"
-                      className="h-8 px-3 rounded-lg bg-gradient-to-b from-[var(--settings-accent)] to-[var(--settings-accent)]/90 border-[var(--settings-accent)]/80 text-white shadow-[0_1px_2px_rgba(0,0,0,0.08),inset_0_1px_0_rgba(255,255,255,0.15)] hover:opacity-90 active:scale-[0.97] transition-all font-bold text-[12px] shrink-0 flex items-center gap-1.5"
+                      className="h-8 px-3 rounded-lg bg-gradient-to-b from-[var(--settings-accent)] to-[var(--settings-accent)]/90 border-[var(--settings-accent)]/80 text-white shadow-[0_1px_2px_rgba(0,0,0,0.08),inset_0_1px_0_rgba(255,255,255,0.15)] hover:opacity-90 active:scale-[0.97] transition font-bold text-[12px] shrink-0 flex items-center gap-1.5"
                       onClick={handleInstallUpdate}
                       disabled={isInstallingUpdate}
                     >
@@ -1243,7 +1243,7 @@ export function SettingsDialog({
                     type="button"
                     aria-current={isActive ? "page" : undefined}
                     className={cn(
-                      "group relative flex w-full items-center gap-2.5 rounded-lg pl-4 pr-3 py-2 text-left transition-all duration-150 active:scale-[0.97]",
+                      "group relative flex w-full items-center gap-2.5 rounded-lg pl-4 pr-3 py-2 text-left transition duration-150 active:scale-[0.97]",
                       isActive
                         ? "bg-[var(--settings-sidebar-selected-bg)] text-[var(--settings-sidebar-selected-text)] shadow-sm font-semibold"
                         : "text-[var(--settings-ink)]/80 hover:bg-black/[0.04] dark:hover:bg-white/[0.04]"
@@ -1251,7 +1251,7 @@ export function SettingsDialog({
                     onClick={() => handleCategoryChange(item.id)}
                   >
                     {isActive && (
-                      <div className="absolute left-1.5 w-1 h-3.5 rounded-full bg-[var(--settings-accent)] transition-all duration-200" />
+                      <div className="absolute left-1.5 w-1 h-3.5 rounded-full bg-[var(--settings-accent)] transition duration-200" />
                     )}
                     <Icon
                       className={cn(

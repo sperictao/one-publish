@@ -648,7 +648,7 @@ function EditRepositoryDialogContent({
                     value={editName}
                     onChange={(event) => setEditName(event.target.value)}
                     placeholder={repoT.repositoryNamePlaceholder || "请输入仓库名称"}
-                    className="h-9 text-sm focus:border-primary/50 focus:ring-1 focus:ring-primary/20 transition-all duration-300"
+                    className="h-9 text-sm focus:border-primary/50 focus:ring-1 focus:ring-primary/20 transition duration-300"
                   />
                   {isEditNameEmpty ? (
                     <p className="text-[11px] text-destructive">
@@ -668,7 +668,7 @@ function EditRepositoryDialogContent({
                       value={editPath}
                       onChange={(event) => setEditPath(event.target.value)}
                       placeholder={repoT.repositoryPathPlaceholder || "请输入项目根目录路径"}
-                      className="h-9 flex-1 text-sm focus:border-primary/50 focus:ring-1 focus:ring-primary/20 transition-all duration-300"
+                      className="h-9 flex-1 text-sm focus:border-primary/50 focus:ring-1 focus:ring-primary/20 transition duration-300"
                     />
                     <Button
                       type="button"
@@ -707,7 +707,7 @@ function EditRepositoryDialogContent({
                     {isProjectFileManual ? (
                       <Input
                         id="repo-edit-project-file"
-                        className="h-9 flex-1 text-sm focus:border-primary/50 focus:ring-1 focus:ring-primary/20 transition-all"
+                        className="h-9 flex-1 text-sm focus:border-primary/50 focus:ring-1 focus:ring-primary/20 transition"
                         value={editProjectFile}
                         onChange={(event) => setEditProjectFile(event.target.value)}
                         placeholder={repoT.projectFilePlaceholder || "可选项目文件"}

@@ -11,6 +11,8 @@ One Publish is a cross-platform .NET publish tool with a desktop GUI. It helps d
 - **Frontend**: React 18 + TypeScript + Vite 7
 - **Backend**: Rust + Tauri 2
 - **Styling**: Tailwind CSS + shadcn/ui (Radix UI primitives)
+- **State Management**: Zustand 5
+- **Type Bridging**: ts-rs (Rust → TypeScript type generation)
 - **Package Manager**: pnpm
 
 ## Common Commands
@@ -24,106 +26,29 @@ pnpm dev:renderer     # Start Vite dev server only (frontend)
 pnpm build            # Build production app (Tauri bundle)
 pnpm build:renderer   # Build frontend only
 
-# Type checking
-pnpm typecheck        # Run TypeScript type check
+# Quality
+pnpm typecheck        # TS type-check + contract validation (ts-rs drift check)
+pnpm test             # Vitest unit tests
+pnpm test:ui          # Vitest UI mode
+pnpm test:watch       # Vitest watch mode
+pnpm e2e              # Playwright e2e tests (13+ specs)
+pnpm e2e:ui           # Playwright UI mode
+pnpm doctor           # Run react-doctor code health check
 
 # Rust backend
-cd src-tauri && cargo check   # Check Rust code
-cd src-tauri && cargo test    # Run Rust tests
-cd src-tauri && cargo clippy  # Lint Rust code
+cd src-tauri && cargo check    # Type-check Rust code
+cd src-tauri && cargo test     # Run Rust unit tests
+cd src-tauri && cargo clippy   # Lint Rust code
+
+# Contracts
+pnpm generate:contracts        # Regenerate src/generated/tauri-contracts.ts from Rust types
+pnpm check:contracts           # Verify generated contracts match Rust source
+
+# Release
+pnpm release -v 0.8.0          # Full release pipeline (version bump, changelog, tag, push)
+pnpm release -v 0.8.0 -d       # Dry-run (preview only)
+
+# Utilities
+pnpm check:i18n                # Check i18n key coverage across zh/en
+pnpm build:updater             # Generate updater production config
 ```
-
-## Architecture
-
-```
-one-publish/
-├── src/                      # React frontend
-│   ├── main.tsx              # App entry point
-│   ├── App.tsx               # Main app component (三列布局)
-│   ├── components/
-│   │   ├── ui/               # shadcn/ui components (Button, Card, Select, etc.)
-│   │   └── layout/           # Layout components (CollapsiblePanel, ResizeHandle, etc.)
-│   ├── hooks/
-│   │   └── useAppState.ts    # Persistent state management hook
-│   ├── lib/
-│   │   ├── utils.ts          # Utility functions (cn for className merging)
-│   │   └── store.ts          # Store API for persistence
-│   └── types/                # TypeScript type definitions
-│
-├── src-tauri/                # Rust backend (Tauri)
-│   ├── src/
-│   │   ├── main.rs           # Tauri entry point
-│   │   ├── lib.rs            # Library entry (plugin registration)
-│   │   ├── commands.rs       # Tauri IPC commands (scan_project, execute_publish)
-│   │   └── store.rs          # Persistence module (JSON file storage)
-│   ├── Cargo.toml            # Rust dependencies
-│   └── tauri.conf.json       # Tauri configuration
-```
-
-## Key Patterns
-
-### Tauri IPC Commands
-
-Frontend calls Rust backend via `invoke()`:
-```typescript
-import { invoke } from "@tauri-apps/api/core";
-const result = await invoke<ProjectInfo>("scan_project", { startPath: path });
-```
-
-Commands are defined in `src-tauri/src/commands.rs` and registered in `lib.rs`:
-- `scan_project`: Scans directory for .NET projects (.sln, .csproj)
-- `execute_publish`: Executes `dotnet publish` with given configuration
-
-### Data Persistence
-
-Application state is persisted to `~/.one-publish/config.json` using a simple JSON file storage pattern (inspired by cc-switch).
-
-**Persisted Data:**
-- `repositories`: List of added repositories
-- `selectedRepoId`: Currently selected repository
-- `leftPanelWidth` / `middlePanelWidth`: Panel widths
-- `selectedPreset`: Selected publish preset
-- `isCustomMode`: Whether using custom mode
-- `customConfig`: Custom publish configuration
-
-**Frontend Usage:**
-```typescript
-import { useAppState } from "@/hooks/useAppState";
-
-const { repositories, addRepository, selectRepository, ... } = useAppState();
-```
-
-**Backend Commands (store.rs):**
-- `get_app_state`: Load persisted state
-- `save_app_state`: Save complete state
-- `add_repository` / `remove_repository` / `update_repository`: Repository CRUD
-- `update_ui_state`: Update panel widths and selection
-- `update_publish_state`: Update publish configuration
-
-### UI Components
-
-Uses shadcn/ui pattern with `@/` path alias:
-```typescript
-import { Button } from "@/components/ui/button";
-import { cn } from "@/lib/utils";
-```
-
-### Window Drag Region
-
-Custom title bar with drag support using `data-tauri-drag-region` attribute.
-
-## Tauri Plugins in Use
-
-- `tauri-plugin-dialog`: Native file/folder dialogs
-- `tauri-plugin-shell`: Execute shell commands
-- `tauri-plugin-process`: Process management
-- `tauri-plugin-log`: Logging
-- `tauri-plugin-opener`: Open files/URLs
-
-## Notes
-
-- UI language is Chinese (中文)
-- **Always reply in Chinese (始终使用中文进行回复)**
-- Minimum Rust version: 1.77.0
-- Minimum macOS version: 10.15
-- Window uses overlay title bar style (titleBarStyle: "Overlay")

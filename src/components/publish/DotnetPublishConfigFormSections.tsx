@@ -239,7 +239,7 @@ const DotnetPublishOutputSection = memo(function DotnetPublishOutputSection({
             aria-label={appT.selfContained || "自包含部署"}
             disabled={readOnly || isRuntimeRequired}
             className={cn(
-              "glass-input flex h-9 w-full items-center justify-between rounded-xl px-3 text-left transition-all duration-300 disabled:pointer-events-none",
+              "glass-input flex h-9 w-full items-center justify-between rounded-xl px-3 text-left transition duration-300 disabled:pointer-events-none",
               !readOnly && !isRuntimeRequired && "hover:border-primary/30 cursor-pointer select-none",
               isRuntimeRequired && "opacity-50 cursor-not-allowed bg-black/5 dark:bg-white/5"
             )}

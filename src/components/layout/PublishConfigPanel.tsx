@@ -420,14 +420,14 @@ function ProfileItem({
         type="button"
         aria-pressed={isSelected}
         className={cn(
-          "flex w-full items-center gap-2.5 rounded-2xl border border-transparent bg-transparent py-2 pr-11 text-left shadow-none outline-none transition-all duration-300 hover:bg-[var(--glass-bg)]/20 focus-visible:ring-2 focus-visible:ring-primary/30 focus-visible:ring-offset-1 focus-visible:ring-offset-background",
+          "flex w-full items-center gap-2.5 rounded-2xl border border-transparent bg-transparent py-2 pr-11 text-left shadow-none outline-none transition duration-300 hover:bg-[var(--glass-bg)]/20 focus-visible:ring-2 focus-visible:ring-primary/30 focus-visible:ring-offset-1 focus-visible:ring-offset-background",
           dragHandleVisible ? "pl-10" : "pl-3"
         )}
         onClick={onClick}
       >
         <span
           className={cn(
-            "flex size-8 flex-shrink-0 items-center justify-center rounded-[14px] transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]",
+            "flex size-8 flex-shrink-0 items-center justify-center rounded-[14px] transition duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]",
             isSelected
               ? "scale-105 bg-primary/10 shadow-[0_0_18px_hsl(var(--primary)/0.24)]"
               : "bg-[var(--glass-icon-bg)] shadow-[var(--glass-icon-highlight)] group-hover:scale-105 group-hover:bg-primary/8"
@@ -435,7 +435,7 @@ function ProfileItem({
         >
           <FileText
             className={cn(
-              "size-4 transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]",
+              "size-4 transition duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]",
               isSelected
                 ? "scale-110 text-primary drop-shadow-[0_0_4px_hsl(var(--primary)/0.3)]"
                 : "text-muted-foreground/60 group-hover:text-primary group-hover:drop-shadow-[0_0_3px_hsl(var(--primary)/0.15)]"
@@ -546,11 +546,12 @@ export const PublishConfigPanel = memo(function PublishConfigPanel({
     t.refreshingCustomProfiles || "正在刷新自定义配置...";
   const isAnyRefreshing = isProfilesRefreshing || isProjectProfilesRefreshing;
   const listActionButtonClass =
-    "glass-surface flex size-7 items-center justify-center rounded-full transition-all duration-300 hover:bg-[var(--glass-bg-hover)]";
+    "glass-surface flex size-7 items-center justify-center rounded-full transition duration-300 hover:bg-[var(--glass-bg-hover)]";
   const reorderControlsLabel = showReorderControls
     ? t.hideReorderControls || "关闭排序"
     : t.showReorderControls || "开启排序";
   const fallbackListRef = useRef<HTMLDivElement | null>(null);
+  const fallbackFloatingCardMotionRef = useRef<HTMLDivElement | null>(null);
   const fallbackFloatingCardSurfaceRef = useRef<HTMLDivElement | null>(null);
   const latestProjectProfileRequestId = useRef(0);
 
@@ -1004,12 +1005,12 @@ export const PublishConfigPanel = memo(function PublishConfigPanel({
   const fallbackFloatingBindings = useMemo<PublishConfigFloatingBindings>(
     () => ({
       listRef: fallbackListRef as MutableRefObject<HTMLDivElement | null>,
+      floatingCardMotionRef:
+        fallbackFloatingCardMotionRef as MutableRefObject<HTMLDivElement | null>,
       floatingCardSurfaceRef:
         fallbackFloatingCardSurfaceRef as MutableRefObject<HTMLDivElement | null>,
       cardTargetConfigId: floatingTargetConfigId,
       floatingVisible: false,
-      floatingCardMotionStyle: EMPTY_FLOATING_STYLE,
-      floatingCardSurfaceStyle: EMPTY_FLOATING_STYLE,
       setConfigRowRef: createFallbackRowRef,
       handleListPointerMove: noopPointerHandler,
       handleListPointerEnter: interaction.handleListPointerEnter,
@@ -1059,13 +1060,13 @@ export const PublishConfigPanel = memo(function PublishConfigPanel({
           onScroll={floating.handleListScroll}
         >
           <div
+            ref={floating.floatingCardMotionRef}
             aria-hidden
             className={cn(
-              "pointer-events-none !absolute origin-top-left transition-opacity duration-120 ease-linear",
+              "pointer-events-none !absolute left-0 top-0 origin-top-left transition-opacity duration-120 ease-linear",
               floatingDragPreviewStyle ? "z-30" : "z-0",
               floating.floatingVisible ? "opacity-100" : "opacity-0"
             )}
-            style={floating.floatingCardMotionStyle}
           >
             <div
               className={cn(
@@ -1078,7 +1079,6 @@ export const PublishConfigPanel = memo(function PublishConfigPanel({
                 ref={floating.floatingCardSurfaceRef}
                 data-selected={floating.cardTargetConfigId === selectedRenderId ? "true" : "false"}
                 className="floating-list-card h-full w-full transition-[box-shadow] duration-320 ease-[cubic-bezier(0.16,1,0.3,1)]"
-                style={floating.floatingCardSurfaceStyle}
               />
             </div>
           </div>
@@ -1152,7 +1152,7 @@ export const PublishConfigPanel = memo(function PublishConfigPanel({
                     type="button"
                     aria-pressed={item.key === selectedConfigId}
                     className={cn(
-                      "flex w-full items-center gap-2.5 rounded-2xl border border-transparent bg-transparent py-2 pr-11 text-left shadow-none outline-none transition-all duration-300 hover:bg-[var(--glass-bg)]/20 focus-visible:ring-2 focus-visible:ring-primary/30 focus-visible:ring-offset-1 focus-visible:ring-offset-background",
+                      "flex w-full items-center gap-2.5 rounded-2xl border border-transparent bg-transparent py-2 pr-11 text-left shadow-none outline-none transition duration-300 hover:bg-[var(--glass-bg)]/20 focus-visible:ring-2 focus-visible:ring-primary/30 focus-visible:ring-offset-1 focus-visible:ring-offset-background",
                       recentDragEnabled ? "pl-10" : "pl-3"
                     )}
                     onClick={() => {
@@ -1165,7 +1165,7 @@ export const PublishConfigPanel = memo(function PublishConfigPanel({
                   >
                     <span
                       className={cn(
-                        "flex size-8 flex-shrink-0 items-center justify-center rounded-[14px] transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]",
+                        "flex size-8 flex-shrink-0 items-center justify-center rounded-[14px] transition duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]",
                         selectedRenderId === renderId
                           ? "scale-105 bg-primary/10 shadow-[0_0_18px_hsl(var(--primary)/0.24)]"
                           : "bg-[var(--glass-icon-bg)] shadow-[var(--glass-icon-highlight)] group-hover:scale-105 group-hover:bg-primary/8"
@@ -1173,7 +1173,7 @@ export const PublishConfigPanel = memo(function PublishConfigPanel({
                     >
                       <FileText
                         className={cn(
-                          "size-4 transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]",
+                          "size-4 transition duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]",
                           selectedRenderId === renderId
                             ? "scale-110 text-primary drop-shadow-[0_0_4px_hsl(var(--primary)/0.3)]"
                             : "text-muted-foreground/60 group-hover:text-primary group-hover:drop-shadow-[0_0_3px_hsl(var(--primary)/0.15)]"
@@ -1312,7 +1312,7 @@ export const PublishConfigPanel = memo(function PublishConfigPanel({
                     data-selected={isPubxmlSelected}
                     aria-pressed={isPubxmlSelected}
                     className={cn(
-                      "flex w-full items-center gap-2.5 rounded-2xl border border-transparent bg-transparent py-2 pr-11 text-left shadow-none outline-none transition-all duration-300 hover:bg-[var(--glass-bg)]/20 focus-visible:ring-2 focus-visible:ring-primary/30 focus-visible:ring-offset-1 focus-visible:ring-offset-background",
+                      "flex w-full items-center gap-2.5 rounded-2xl border border-transparent bg-transparent py-2 pr-11 text-left shadow-none outline-none transition duration-300 hover:bg-[var(--glass-bg)]/20 focus-visible:ring-2 focus-visible:ring-primary/30 focus-visible:ring-offset-1 focus-visible:ring-offset-background",
                       projectProfileDragEnabled ? "pl-10" : "pl-3"
                     )}
                     onClick={() => {
@@ -1325,7 +1325,7 @@ export const PublishConfigPanel = memo(function PublishConfigPanel({
                   >
                     <span
                       className={cn(
-                        "flex size-8 flex-shrink-0 items-center justify-center rounded-[14px] transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]",
+                        "flex size-8 flex-shrink-0 items-center justify-center rounded-[14px] transition duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]",
                         isPubxmlSelected
                           ? "scale-105 bg-primary/10 shadow-[0_0_18px_hsl(var(--primary)/0.24)]"
                           : "bg-[var(--glass-icon-bg)] shadow-[var(--glass-icon-highlight)] group-hover:scale-105 group-hover:bg-primary/8"
@@ -1333,7 +1333,7 @@ export const PublishConfigPanel = memo(function PublishConfigPanel({
                     >
                       <FileText
                         className={cn(
-                          "size-4 transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]",
+                          "size-4 transition duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]",
                           isPubxmlSelected
                             ? "scale-110 text-primary drop-shadow-[0_0_4px_hsl(var(--primary)/0.3)]"
                             : "text-muted-foreground/60 group-hover:text-primary group-hover:drop-shadow-[0_0_3px_hsl(var(--primary)/0.15)]"
@@ -1592,7 +1592,7 @@ export const PublishConfigPanel = memo(function PublishConfigPanel({
             <DropdownMenuTrigger asChild>
               <button
                 type="button"
-                className="glass-surface flex items-center gap-1.5 rounded-full px-3 py-1 text-sm font-medium transition-all duration-300 hover:bg-[var(--glass-bg-hover)]"
+                className="glass-surface flex items-center gap-1.5 rounded-full px-3 py-1 text-sm font-medium transition duration-300 hover:bg-[var(--glass-bg-hover)]"
                 aria-haspopup="menu"
                 aria-expanded={groupFilterOpen}
               >
@@ -1702,7 +1702,7 @@ export const PublishConfigPanel = memo(function PublishConfigPanel({
             >
               <RefreshCw
                 className={cn(
-                  "size-3.5 text-muted-foreground transition-all duration-300 hover:rotate-180",
+                  "size-3.5 text-muted-foreground transition duration-300 hover:rotate-180",
                   isAnyRefreshing && "animate-spin hover:rotate-0"
                 )}
               />
@@ -1719,7 +1719,7 @@ export const PublishConfigPanel = memo(function PublishConfigPanel({
               aria-label={configManagementLabel}
               data-tauri-no-drag
             >
-              <SlidersHorizontal className="size-3.5 text-muted-foreground transition-all duration-300 hover:rotate-180" />
+              <SlidersHorizontal className="size-3.5 text-muted-foreground transition duration-300 hover:rotate-180" />
             </button>
           </div>
         </div>

@@ -283,7 +283,7 @@ export function EnvironmentCheckContent({
         {/* 1. 环境健康状态 (Hero Section) */}
         <div
           className={cn(
-            "border rounded-xl p-4 flex items-center justify-between gap-4 shadow-[0_1px_3px_rgba(0,0,0,0.01)] transition-all duration-300",
+            "border rounded-xl p-4 flex items-center justify-between gap-4 shadow-[0_1px_3px_rgba(0,0,0,0.01)] transition duration-300",
             result
               ? grouped.critical.length > 0
                 ? "bg-red-500/[0.04] border-red-500/20 dark:bg-red-500/[0.06]"
@@ -328,7 +328,7 @@ export function EnvironmentCheckContent({
             variant="outline"
             onClick={handleCheck}
             disabled={checking || runningFix}
-            className="rounded-lg border border-[#d1d1d6] border-b-[#b5b5ba] bg-gradient-to-b from-white to-[#f5f5f7] text-[12px] font-bold text-black/80 shadow-[0_1px_1px_rgba(0,0,0,0.05)] hover:from-[#f5f5f7] hover:to-[#e9e9eb] dark:from-[#3a3a3c] dark:to-[#2c2c2e] dark:border-[#48484a] dark:border-b-[#1c1c1e] dark:hover:from-[#48484a] dark:hover:to-[#3a3a3c] dark:text-white/90 active:scale-[0.97] transition-all shrink-0 flex items-center gap-1.5 h-8 px-4"
+            className="rounded-lg border border-[#d1d1d6] border-b-[#b5b5ba] bg-gradient-to-b from-white to-[#f5f5f7] text-[12px] font-bold text-black/80 shadow-[0_1px_1px_rgba(0,0,0,0.05)] hover:from-[#f5f5f7] hover:to-[#e9e9eb] dark:from-[#3a3a3c] dark:to-[#2c2c2e] dark:border-[#48484a] dark:border-b-[#1c1c1e] dark:hover:from-[#48484a] dark:hover:to-[#3a3a3c] dark:text-white/90 active:scale-[0.97] transition shrink-0 flex items-center gap-1.5 h-8 px-4"
           >
             {checking ? (
               <>
@@ -356,7 +356,7 @@ export function EnvironmentCheckContent({
                   aria-pressed={checked}
                   onClick={() => toggleProvider(p.id, !checked)}
                   className={cn(
-                    "flex items-center justify-between rounded-xl border p-3.5 text-left transition-all duration-300 cursor-pointer select-none active:scale-[0.98] glass-interactive shadow-none",
+                    "flex items-center justify-between rounded-xl border p-3.5 text-left transition duration-300 cursor-pointer select-none active:scale-[0.98] glass-interactive shadow-none",
                     checked
                       ? "border-[var(--settings-card-selected-border)] bg-[var(--settings-card-selected-bg)]"
                       : "border-[var(--settings-hairline)] bg-transparent hover:bg-black/[0.015] dark:hover:bg-white/[0.015] hover:border-black/20 dark:hover:border-white/20"
@@ -404,7 +404,7 @@ export function EnvironmentCheckContent({
                     <div className="flex min-w-0 items-center gap-2.5">
                       <span
                         className={cn(
-                          "size-2 rounded-full shrink-0 transition-all duration-300",
+                          "size-2 rounded-full shrink-0 transition duration-300",
                           provider.installed
                             ? "bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.6)] subtle-pulse"
                             : "bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.6)]"
@@ -444,7 +444,7 @@ export function EnvironmentCheckContent({
                         <div
                           key={`${issue.provider_id}-${issue.issue_type}-${idx}`}
                           className={cn(
-                            "rounded-xl border p-4 transition-all duration-200 glass-hover-lift",
+                            "rounded-xl border p-4 transition duration-200 glass-hover-lift",
                             isCritical
                               ? "border-red-500/15 bg-red-500/[0.01] dark:bg-red-500/[0.03] text-red-600 dark:text-red-400"
                               : isWarning
@@ -521,7 +521,7 @@ export function EnvironmentCheckContent({
                                   onClick={() => handleApplyFix(fix)}
                                   disabled={checking || runningFix}
                                   className={cn(
-                                    "transition-all duration-200 active:scale-95 text-xs h-7.5 px-3.5 font-bold rounded-lg flex items-center gap-1.5 shrink-0 border",
+                                    "transition duration-200 active:scale-95 text-xs h-7.5 px-3.5 font-bold rounded-lg flex items-center gap-1.5 shrink-0 border",
                                     fix.action_type === "run_command"
                                       ? "bg-gradient-to-b from-[var(--settings-accent)] to-[var(--settings-accent)]/90 border-[var(--settings-accent)]/80 text-white shadow-[0_1px_2px_rgba(0,0,0,0.08),inset_0_1px_0_rgba(255,255,255,0.15)] hover:opacity-90"
                                       : "border-[var(--settings-hairline)] bg-transparent text-[var(--settings-ink)] hover:bg-black/[0.02] dark:hover:bg-white/[0.02]"
@@ -565,7 +565,7 @@ export function EnvironmentCheckContent({
                     size="sm"
                     variant="outline"
                     onClick={() => handleCopy(fixResultText)}
-                    className="rounded-lg border border-[var(--settings-hairline)] bg-transparent hover:bg-black/[0.02] dark:hover:bg-white/[0.02] text-[11px] font-medium text-[var(--settings-ink)] active:scale-[0.97] transition-all h-7 px-3.5 flex items-center gap-1 shrink-0"
+                    className="rounded-lg border border-[var(--settings-hairline)] bg-transparent hover:bg-black/[0.02] dark:hover:bg-white/[0.02] text-[11px] font-medium text-[var(--settings-ink)] active:scale-[0.97] transition h-7 px-3.5 flex items-center gap-1 shrink-0"
                   >
                     <Copy className="size-3 text-[var(--settings-ink-muted)]" />
                     <span>{translations.environment?.copied ? "复制" : "复制"}</span>
@@ -600,14 +600,14 @@ export function EnvironmentCheckContent({
                 variant="outline"
                 onClick={() => setPendingRun(null)}
                 disabled={runningFix}
-                className="rounded-lg border border-[var(--settings-hairline)] bg-transparent hover:bg-black/[0.02] dark:hover:bg-white/[0.02] text-[12px] font-medium text-[var(--settings-ink)] active:scale-[0.97] transition-all h-9 px-4 shrink-0"
+                className="rounded-lg border border-[var(--settings-hairline)] bg-transparent hover:bg-black/[0.02] dark:hover:bg-white/[0.02] text-[12px] font-medium text-[var(--settings-ink)] active:scale-[0.97] transition h-9 px-4 shrink-0"
               >
                 <span>{translations.environment?.cancel || "取消"}</span>
               </Button>
               <Button
                 onClick={confirmRun}
                 disabled={runningFix}
-                className="rounded-lg bg-gradient-to-b from-[var(--settings-accent)] to-[var(--settings-accent)]/90 border-[var(--settings-accent)]/80 text-white shadow-[0_1px_2px_rgba(0,0,0,0.08),inset_0_1px_0_rgba(255,255,255,0.15)] hover:opacity-90 active:scale-[0.97] transition-all text-[12px] font-bold h-9 px-4.5 shrink-0 flex items-center justify-center"
+                className="rounded-lg bg-gradient-to-b from-[var(--settings-accent)] to-[var(--settings-accent)]/90 border-[var(--settings-accent)]/80 text-white shadow-[0_1px_2px_rgba(0,0,0,0.08),inset_0_1px_0_rgba(255,255,255,0.15)] hover:opacity-90 active:scale-[0.97] transition text-[12px] font-bold h-9 px-4.5 shrink-0 flex items-center justify-center"
               >
                 {runningFix ? (
                   <>
@@ -660,7 +660,7 @@ export function EnvironmentCheckDialog({
             <Button 
               variant="outline" 
               onClick={() => onOpenChange(false)}
-              className="rounded-full border border-[#d1d1d6] border-b-[#b5b5ba] bg-gradient-to-b from-white to-[#f5f5f7] text-sm font-bold text-black/80 shadow-[0_1px_1px_rgba(0,0,0,0.05)] hover:from-[#f5f5f7] hover:to-[#e9e9eb] dark:from-[#3a3a3c] dark:to-[#2c2c2e] dark:border-[#48484a] dark:border-b-[#1c1c1e] dark:hover:from-[#48484a] dark:hover:to-[#3a3a3c] dark:text-white/90 active:scale-[0.97] transition-all h-9 px-5 shrink-0 flex items-center justify-center"
+              className="rounded-full border border-[#d1d1d6] border-b-[#b5b5ba] bg-gradient-to-b from-white to-[#f5f5f7] text-sm font-bold text-black/80 shadow-[0_1px_1px_rgba(0,0,0,0.05)] hover:from-[#f5f5f7] hover:to-[#e9e9eb] dark:from-[#3a3a3c] dark:to-[#2c2c2e] dark:border-[#48484a] dark:border-b-[#1c1c1e] dark:hover:from-[#48484a] dark:hover:to-[#3a3a3c] dark:text-white/90 active:scale-[0.97] transition h-9 px-5 shrink-0 flex items-center justify-center"
             >
               <span>{translations.environment?.close || "关闭"}</span>
             </Button>

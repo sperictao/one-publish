@@ -36,6 +36,7 @@ interface UseFloatingPositionOptions {
   isReducedMotionRef: React.MutableRefObject<boolean>;
   rowRefs: React.MutableRefObject<Record<string, HTMLDivElement | null>>;
   listRef: React.MutableRefObject<HTMLDivElement | null>;
+  floatingCardMotionRef: React.MutableRefObject<HTMLDivElement | null>;
   rectInsetX?: number;
   onRectCommitted: (nextRect: FloatingCardRectDraft | null, previousRect: FloatingCardRectDraft | null) => void;
 }
@@ -76,13 +77,12 @@ export function useFloatingPosition({
   isReducedMotionRef,
   rowRefs,
   listRef,
+  floatingCardMotionRef,
   rectInsetX = 0,
   onRectCommitted,
 }: UseFloatingPositionOptions) {
-  const [floatingRenderRect, setFloatingRenderRect] = useState<FloatingCardRect>(
-    createHiddenFloatingCardRect
-  );
-  const [isFloatingAnimating, setIsFloatingAnimating] = useState(false);
+  // 帧级 rect 跟随经 ref 直写 DOM；React state 仅承载低频的可见性切换
+  const [floatingVisible, setFloatingVisible] = useState(false);
 
   const previousFloatingRectRef = useRef<FloatingCardRectDraft | null>(null);
   const floatingTargetRectRef = useRef<FloatingCardRect>(createHiddenFloatingCardRect());
@@ -91,6 +91,45 @@ export function useFloatingPosition({
   const floatingFollowTimestampRef = useRef<number | null>(null);
   const floatingAnimatingRef = useRef(false);
   const isPointerFollowingRef = useRef(false);
+
+  const writeRectToDom = useCallback(
+    (rect: FloatingCardRect) => {
+      const element = floatingCardMotionRef.current;
+      if (!element) {
+        return;
+      }
+      element.style.width = `${rect.width}px`;
+      element.style.height = `${rect.height}px`;
+      // tilt 变量由 useFloatingDynamics 直写，transform 经 var() 组合两者
+      element.style.transform =
+        `perspective(900px) translate3d(${rect.left}px, ${rect.top}px, 0) ` +
+        "rotateX(var(--fc-tilt-x, 0deg)) rotateY(var(--fc-tilt-y, 0deg))";
+    },
+    [floatingCardMotionRef]
+  );
+
+  const commitRenderRect = useCallback(
+    (rect: FloatingCardRect) => {
+      floatingRenderRectRef.current = rect;
+      writeRectToDom(rect);
+      setFloatingVisible(rect.visible);
+    },
+    [writeRectToDom]
+  );
+
+  const setFloatingAnimating = useCallback(
+    (next: boolean) => {
+      if (floatingAnimatingRef.current === next) {
+        return;
+      }
+      floatingAnimatingRef.current = next;
+      const element = floatingCardMotionRef.current;
+      if (element) {
+        element.style.willChange = next ? "transform,width,height" : "";
+      }
+    },
+    [floatingCardMotionRef]
+  );
 
   const getRowRectDraft = useCallback(
     (
@@ -137,19 +176,9 @@ export function useFloatingPosition({
     [listRef, rectInsetX]
   );
 
-  const setFloatingAnimating = useCallback((next: boolean) => {
-    if (floatingAnimatingRef.current === next) {
-      return;
-    }
-    floatingAnimatingRef.current = next;
-    setIsFloatingAnimating(next);
-  }, []);
-
   const startFloatingCardFollow = useCallback(() => {
     if (typeof window === "undefined" || typeof window.requestAnimationFrame !== "function") {
-      const currentTarget = floatingTargetRectRef.current;
-      floatingRenderRectRef.current = currentTarget;
-      setFloatingRenderRect(currentTarget);
+      commitRenderRect(floatingTargetRectRef.current);
       floatingFollowTimestampRef.current = null;
       setFloatingAnimating(false);
       return;
@@ -165,9 +194,7 @@ export function useFloatingPosition({
 
       if (!target.visible) {
         if (current.visible) {
-          const hidden = createHiddenFloatingCardRect();
-          floatingRenderRectRef.current = hidden;
-          setFloatingRenderRect(hidden);
+          commitRenderRect(createHiddenFloatingCardRect());
         }
         floatingFollowRafRef.current = null;
         floatingFollowTimestampRef.current = null;
@@ -224,16 +251,7 @@ export function useFloatingPosition({
         ? { left: target.left, top: target.top, width: target.width, height: target.height, visible: true }
         : { left: nextLeft, top: nextTop, width: nextWidth, height: nextHeight, visible: true };
 
-      floatingRenderRectRef.current = nextRect;
-      setFloatingRenderRect((prev) => {
-        const same =
-          prev.visible === nextRect.visible &&
-          Math.abs(prev.left - nextRect.left) < 0.01 &&
-          Math.abs(prev.top - nextRect.top) < 0.01 &&
-          Math.abs(prev.width - nextRect.width) < 0.01 &&
-          Math.abs(prev.height - nextRect.height) < 0.01;
-        return same ? prev : nextRect;
-      });
+      commitRenderRect(nextRect);
 
       if (hasConverged) {
         floatingFollowRafRef.current = null;
@@ -248,7 +266,7 @@ export function useFloatingPosition({
 
     setFloatingAnimating(true);
     floatingFollowRafRef.current = window.requestAnimationFrame(step);
-  }, [isReducedMotionRef, setFloatingAnimating]);
+  }, [commitRenderRect, isReducedMotionRef, setFloatingAnimating]);
 
   const commitFloatingRect = useCallback(
     (
@@ -258,8 +276,7 @@ export function useFloatingPosition({
       if (!nextRect) {
         const prev = previousFloatingRectRef.current;
         previousFloatingRectRef.current = null;
-        const hiddenRect = createHiddenFloatingCardRect();
-        floatingTargetRectRef.current = hiddenRect;
+        floatingTargetRectRef.current = createHiddenFloatingCardRect();
         startFloatingCardFollow();
         onRectCommitted(null, prev);
         setFloatingAnimating(false);
@@ -286,16 +303,7 @@ export function useFloatingPosition({
       floatingTargetRectRef.current = nextFloatingRect;
 
       if (options?.immediate) {
-        floatingRenderRectRef.current = nextFloatingRect;
-        setFloatingRenderRect((prev) => {
-          const same =
-            prev.visible === nextFloatingRect.visible &&
-            Math.abs(prev.left - nextFloatingRect.left) < 0.01 &&
-            Math.abs(prev.top - nextFloatingRect.top) < 0.01 &&
-            Math.abs(prev.width - nextFloatingRect.width) < 0.01 &&
-            Math.abs(prev.height - nextFloatingRect.height) < 0.01;
-          return same ? prev : nextFloatingRect;
-        });
+        commitRenderRect(nextFloatingRect);
         floatingFollowTimestampRef.current = null;
         if (
           floatingFollowRafRef.current !== null &&
@@ -315,7 +323,7 @@ export function useFloatingPosition({
 
       startFloatingCardFollow();
     },
-    [floatingFollowRafRef, onRectCommitted, setFloatingAnimating, startFloatingCardFollow]
+    [commitRenderRect, floatingFollowRafRef, onRectCommitted, setFloatingAnimating, startFloatingCardFollow]
   );
 
   const updateFloatingRect = useCallback(
@@ -393,8 +401,7 @@ export function useFloatingPosition({
   }, [setFloatingAnimating]);
 
   return {
-    floatingRenderRect,
-    isFloatingAnimating,
+    floatingVisible,
     updateFloatingRect,
     commitPointerFollowY,
     isPointerFollowingRef,

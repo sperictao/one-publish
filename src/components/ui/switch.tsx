@@ -8,7 +8,7 @@ const Switch = React.forwardRef<
 >(({ className, ...props }, ref) => (
   <SwitchPrimitives.Root
     className={cn(
-      "glass-press peer inline-flex h-6 w-11 shrink-0 cursor-pointer items-center rounded-full border-2 border-transparent transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:cursor-not-allowed disabled:opacity-50 data-[state=checked]:bg-primary data-[state=unchecked]:bg-[var(--glass-input-bg)] data-[state=unchecked]:border-[var(--glass-border)] data-[state=unchecked]:shadow-[var(--glass-inset-shadow)]",
+      "glass-press peer inline-flex h-6 w-11 shrink-0 cursor-pointer items-center rounded-full border-2 border-transparent transition duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:cursor-not-allowed disabled:opacity-50 data-[state=checked]:bg-primary data-[state=unchecked]:bg-[var(--glass-input-bg)] data-[state=unchecked]:border-[var(--glass-border)] data-[state=unchecked]:shadow-[var(--glass-inset-shadow)]",
       className
     )}
     {...props}
@@ -34,7 +34,7 @@ const SwitchIndicator = React.forwardRef<HTMLSpanElement, SwitchIndicatorProps>(
       aria-hidden="true"
       data-state={checked ? "checked" : "unchecked"}
       className={cn(
-        "inline-flex h-6 w-11 shrink-0 items-center rounded-full border-2 border-transparent transition-all duration-200 data-[state=checked]:bg-primary data-[state=unchecked]:bg-[var(--glass-input-bg)] data-[state=unchecked]:border-[var(--glass-border)] data-[state=unchecked]:shadow-[var(--glass-inset-shadow)]",
+        "inline-flex h-6 w-11 shrink-0 items-center rounded-full border-2 border-transparent transition duration-200 data-[state=checked]:bg-primary data-[state=unchecked]:bg-[var(--glass-input-bg)] data-[state=unchecked]:border-[var(--glass-border)] data-[state=unchecked]:shadow-[var(--glass-inset-shadow)]",
         className
       )}
       {...props}

@@ -1,6 +1,5 @@
 import { useFloatingConfigCard } from "./useFloatingConfigCard";
 import type {
-  CSSProperties,
   MutableRefObject,
   PointerEvent as ReactPointerEvent,
   ReactNode,
@@ -8,11 +7,10 @@ import type {
 
 export interface PublishConfigFloatingBindings {
   listRef: MutableRefObject<HTMLDivElement | null>;
+  floatingCardMotionRef: MutableRefObject<HTMLDivElement | null>;
   floatingCardSurfaceRef: MutableRefObject<HTMLDivElement | null>;
   cardTargetConfigId: string | null;
   floatingVisible: boolean;
-  floatingCardMotionStyle: CSSProperties;
-  floatingCardSurfaceStyle: CSSProperties;
   setConfigRowRef: (configId: string) => (node: HTMLDivElement | null) => void;
   handleListPointerMove: (event: ReactPointerEvent<HTMLDivElement>) => void;
   handleListPointerEnter: (event: ReactPointerEvent<HTMLDivElement>) => void;
@@ -49,11 +47,10 @@ export function PublishConfigPanelFloatingLayer({
 }: PublishConfigPanelFloatingLayerProps) {
   const {
     listRef,
+    floatingCardMotionRef,
     floatingCardSurfaceRef,
     cardTargetConfigId,
     floatingVisible,
-    floatingCardMotionStyle,
-    floatingCardSurfaceStyle,
     setConfigRowRef,
     handleListPointerMove,
     handleListPointerEnter,
@@ -76,11 +73,10 @@ export function PublishConfigPanelFloatingLayer({
     <>
       {children({
         listRef,
+        floatingCardMotionRef,
         floatingCardSurfaceRef,
         cardTargetConfigId,
         floatingVisible,
-        floatingCardMotionStyle,
-        floatingCardSurfaceStyle,
         setConfigRowRef,
         handleListPointerMove,
         handleListPointerEnter,

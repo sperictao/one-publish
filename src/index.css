@@ -309,7 +309,10 @@ html.dark {
   -webkit-backdrop-filter: blur(8px);
   border: 1px solid var(--glass-border-subtle);
   box-shadow: var(--glass-inset-shadow);
-  transition: all 0.3s cubic-bezier(0.22, 1, 0.36, 1);
+  transition:
+    background 0.3s cubic-bezier(0.22, 1, 0.36, 1),
+    border-color 0.3s cubic-bezier(0.22, 1, 0.36, 1),
+    box-shadow 0.3s cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 .glass-input:focus-within {

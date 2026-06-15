@@ -1,5 +1,4 @@
 import type {
-  CSSProperties,
   PointerEvent as ReactPointerEvent,
 } from "react";
 import { useFloatingListCard } from "./useFloatingListCard";
@@ -19,11 +18,10 @@ interface UseFloatingConfigCardOptions {
 
 interface UseFloatingConfigCardResult {
   listRef: React.MutableRefObject<HTMLDivElement | null>;
+  floatingCardMotionRef: React.MutableRefObject<HTMLDivElement | null>;
   floatingCardSurfaceRef: React.MutableRefObject<HTMLDivElement | null>;
   cardTargetConfigId: string | null;
   floatingVisible: boolean;
-  floatingCardMotionStyle: CSSProperties;
-  floatingCardSurfaceStyle: CSSProperties;
   setConfigRowRef: (configId: string) => (node: HTMLDivElement | null) => void;
   handleListPointerMove: (event: ReactPointerEvent<HTMLDivElement>) => void;
   handleListPointerEnter: (event: ReactPointerEvent<HTMLDivElement>) => void;
@@ -59,11 +57,10 @@ export function useFloatingConfigCard({
 
   return {
     listRef: floatingBindings.listRef,
+    floatingCardMotionRef: floatingBindings.floatingCardMotionRef,
     floatingCardSurfaceRef: floatingBindings.floatingCardSurfaceRef,
     cardTargetConfigId: floatingBindings.cardTargetItemId,
     floatingVisible: floatingBindings.floatingVisible,
-    floatingCardMotionStyle: floatingBindings.floatingCardMotionStyle,
-    floatingCardSurfaceStyle: floatingBindings.floatingCardSurfaceStyle,
     setConfigRowRef: floatingBindings.setItemRowRef,
     handleListPointerMove: floatingBindings.handleListPointerMove,
     handleListPointerEnter: floatingBindings.handleListPointerEnter,

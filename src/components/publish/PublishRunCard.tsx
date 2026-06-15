@@ -349,7 +349,7 @@ export function PublishRunCard({
           {publishVisualState === "success" && publishResult?.output_dir && (
             <button
               type="button"
-              className="glass-surface group w-full rounded-2xl border border-[var(--glass-border-subtle)] p-3 text-left transition-all duration-300 hover:-translate-y-0.5 hover:bg-[var(--glass-bg-hover)] hover:shadow-[var(--glass-shadow-lg)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:cursor-not-allowed disabled:opacity-70"
+              className="glass-surface group w-full rounded-2xl border border-[var(--glass-border-subtle)] p-3 text-left transition duration-300 hover:-translate-y-0.5 hover:bg-[var(--glass-bg-hover)] hover:shadow-[var(--glass-shadow-lg)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:cursor-not-allowed disabled:opacity-70"
               onClick={handleOpenOutputDir}
               disabled={isOpeningOutputDir}
             >
@@ -367,11 +367,11 @@ export function PublishRunCard({
                   <span className="flex-shrink-0 text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground/70">
                     {appT.outputDirectoryLabel || "输出目录"}
                   </span>
-                  <span className="truncate font-mono text-xs text-muted-foreground/80 transition-all duration-300 group-hover:font-semibold group-hover:text-foreground">
+                  <span className="truncate font-mono text-xs text-muted-foreground/80 transition duration-300 group-hover:font-semibold group-hover:text-foreground">
                     {publishResult.output_dir}
                   </span>
                 </span>
-                <span className="flex size-8 flex-shrink-0 items-center justify-center rounded-xl text-muted-foreground/65 transition-all duration-300 group-hover:bg-primary/10 group-hover:text-primary">
+                <span className="flex size-8 flex-shrink-0 items-center justify-center rounded-xl text-muted-foreground/65 transition duration-300 group-hover:bg-primary/10 group-hover:text-primary">
                   <ArrowUpRight className="size-4" />
                 </span>
               </div>
