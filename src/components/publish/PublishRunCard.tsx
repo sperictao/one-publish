@@ -293,6 +293,8 @@ export function PublishRunCard({
         <div className="min-w-0 space-y-3">
           <div
             data-testid="publish-status-panel"
+            role="status"
+            aria-live="polite"
             className={cn(
               "glass-surface rounded-2xl border p-4",
               statusMeta.panelClassName

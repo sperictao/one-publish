@@ -77,10 +77,22 @@ export function BranchPanel({
                 <Folder className="size-4" />
               </Button>
             )}
-            <Button variant="ghost" size="icon" className="size-6" disabled>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="size-6"
+              disabled
+              aria-label={branchT.newWorktree || "新建 worktree"}
+            >
               <Plus className="size-4" />
             </Button>
-            <Button variant="ghost" size="icon" className="size-6" disabled>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="size-6"
+              disabled
+              aria-label={branchT.refresh || "刷新"}
+            >
               <RefreshCw className="size-4" />
             </Button>
             {onCollapse && (
