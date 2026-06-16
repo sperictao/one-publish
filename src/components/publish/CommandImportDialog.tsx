@@ -107,7 +107,7 @@ export function CommandImportDialog({
         <div className="space-y-4">
           <AppDialogInset className="space-y-3">
             <div className="space-y-1">
-              <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground/70">
+              <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[hsl(var(--text-fine))]">
                 {commandT.commandSectionTitle || "命令输入"}
               </div>
               <p className="text-xs leading-5 text-muted-foreground">

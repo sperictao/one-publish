@@ -31,7 +31,7 @@ export function SectionShell({
       </span>
       <div className="min-w-0 flex-1 text-left">
         <h3 className="text-sm font-semibold text-foreground">{title}</h3>
-        <CardDescription className="mt-0.5 text-[11px] leading-4 text-muted-foreground/80">
+        <CardDescription className="mt-0.5 text-[11px] leading-4 text-[hsl(var(--text-fine))]">
           {description}
         </CardDescription>
       </div>

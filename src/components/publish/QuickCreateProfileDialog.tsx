@@ -93,7 +93,7 @@ const QuickCreateTemplateCard = memo(function QuickCreateTemplateCard({
               </span>
               {profileT.quickCreateTemplateCompactTitle || "快速套用模板"}
             </div>
-            <CardDescription className="mt-1 text-[11px] leading-4 text-muted-foreground/80">
+            <CardDescription className="mt-1 text-[11px] leading-4 text-[hsl(var(--text-fine))]">
               {quickCreateEditing
                 ? profileT.quickEditTemplateHint ||
                   "可选模板只作为辅助入口，当前表单修改优先。"
@@ -201,7 +201,7 @@ const QuickCreateBasicInfoSection = memo(function QuickCreateBasicInfoSection({
             onKeyDown={onProfileNameKeyDown}
             className="h-9 text-xs"
           />
-          <p className="text-[11px] leading-4 text-muted-foreground/80 mt-1">
+          <p className="text-[11px] leading-4 text-[hsl(var(--text-fine))] mt-1">
             {profileT.quickCreateNameHint ||
               "配置名会直接显示在中栏列表里，建议简短清晰。"}
           </p>
@@ -236,7 +236,7 @@ const QuickCreateBasicInfoSection = memo(function QuickCreateBasicInfoSection({
               </SelectItem>
             </SelectContent>
           </Select>
-          <p className="text-[11px] leading-4 text-muted-foreground/80 mt-1">
+          <p className="text-[11px] leading-4 text-[hsl(var(--text-fine))] mt-1">
             {profileT.quickCreateGroupHint ||
               "用于在中栏按组归类，便于后续快速筛选和定位。"}
           </p>

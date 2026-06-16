@@ -276,8 +276,8 @@ function createFavoriteConfigAction({
         className={cn(
           "size-3.5",
           isFavorite
-            ? "fill-green-500 text-green-500"
-            : "text-muted-foreground/70"
+            ? "fill-success text-success"
+            : "text-muted-foreground"
         )}
       />
     ),
@@ -1193,7 +1193,7 @@ export const PublishConfigPanel = memo(function PublishConfigPanel({
                       {item.description ? (
                         <>
                           <span className="flex-shrink-0 text-muted-foreground/30">·</span>
-                          <span className="truncate text-[11px] text-muted-foreground/55">
+                          <span className="truncate text-[11px] text-[hsl(var(--text-fine))]">
                             {item.description}
                           </span>
                         </>

@@ -252,7 +252,7 @@ const DotnetPublishOutputSection = memo(function DotnetPublishOutputSection({
 
             <div className="flex items-center gap-2">
               {selfContained && !isRuntimeRequired && (
-                <span className="size-1.5 rounded-full bg-emerald-500 animate-pulse shrink-0" />
+                <span className="size-1.5 rounded-full bg-success animate-pulse shrink-0" />
               )}
               <SwitchIndicator checked={selfContained} />
             </div>
@@ -736,7 +736,7 @@ function DotnetFrameworkSuggestionsField({
           {fieldText.label}
         </Label>
         {fieldText.technicalLabel && (
-          <span className="font-mono text-[9px] text-muted-foreground/60 bg-black/5 dark:bg-white/5 border border-black/5 dark:border-white/10 px-1.5 py-0.5 rounded-md">
+          <span className="font-mono text-[9px] text-[hsl(var(--text-fine))] bg-black/5 dark:bg-white/5 border border-black/5 dark:border-white/10 px-1.5 py-0.5 rounded-md">
             {fieldText.technicalLabel}
           </span>
         )}
@@ -793,7 +793,7 @@ function DotnetSelectField({
           {fieldText.label}
         </Label>
         {fieldText.technicalLabel && (
-          <span className="font-mono text-[9px] text-muted-foreground/60 bg-black/5 dark:bg-white/5 border border-black/5 dark:border-white/10 px-1.5 py-0.5 rounded-md">
+          <span className="font-mono text-[9px] text-[hsl(var(--text-fine))] bg-black/5 dark:bg-white/5 border border-black/5 dark:border-white/10 px-1.5 py-0.5 rounded-md">
             {fieldText.technicalLabel}
           </span>
         )}
@@ -852,7 +852,7 @@ function DotnetBooleanField({
         <div className="flex flex-wrap items-center gap-1.5 text-xs font-semibold text-foreground">
           <span>{fieldText.label}</span>
           {fieldText.technicalLabel && (
-            <span className="font-mono text-[9px] text-muted-foreground/60 bg-black/5 dark:bg-white/5 border border-black/5 dark:border-white/10 px-1.5 py-0.5 rounded-md animate-fade-in">
+            <span className="font-mono text-[9px] text-[hsl(var(--text-fine))] bg-black/5 dark:bg-white/5 border border-black/5 dark:border-white/10 px-1.5 py-0.5 rounded-md animate-fade-in">
               {fieldText.technicalLabel}
             </span>
           )}
@@ -894,7 +894,7 @@ function DotnetStringField({
           {fieldText.label}
         </Label>
         {fieldText.technicalLabel && (
-          <span className="font-mono text-[9px] text-muted-foreground/60 bg-black/5 dark:bg-white/5 border border-black/5 dark:border-white/10 px-1.5 py-0.5 rounded-md">
+          <span className="font-mono text-[9px] text-[hsl(var(--text-fine))] bg-black/5 dark:bg-white/5 border border-black/5 dark:border-white/10 px-1.5 py-0.5 rounded-md">
             {fieldText.technicalLabel}
           </span>
         )}
@@ -992,7 +992,7 @@ function DotnetPropertyTableField({
           <div className="flex flex-wrap items-center gap-1.5">
             <Label className="text-xs font-semibold text-foreground">{fieldText.label}</Label>
             {fieldText.technicalLabel && (
-              <span className="font-mono text-[9px] text-muted-foreground/60 bg-black/5 dark:bg-white/5 border border-black/5 dark:border-white/10 px-1.5 py-0.5 rounded-md">
+              <span className="font-mono text-[9px] text-[hsl(var(--text-fine))] bg-black/5 dark:bg-white/5 border border-black/5 dark:border-white/10 px-1.5 py-0.5 rounded-md">
                 {fieldText.technicalLabel}
               </span>
             )}

@@ -106,7 +106,7 @@ function AppBrandIcon(): JSX.Element {
       aria-hidden="true"
     >
       <g transform="translate(64 64) scale(2.3) translate(-18 -18)">
-        <g fill="#3B82F6">
+        <g className="fill-primary">
           <rect x="0" y="12" width="36" height="12" rx="6" />
           <rect
             x="0"
@@ -149,7 +149,7 @@ function AppBrandIcon(): JSX.Element {
             transform="rotate(225 18 18)"
           />
         </g>
-        <circle cx="18" cy="18" r="5" fill="#FCD34D" />
+        <circle cx="18" cy="18" r="5" className="fill-warning" />
       </g>
     </svg>
   );
@@ -452,7 +452,7 @@ export const RepositoryList = memo(function RepositoryList({
                 <p className="text-sm font-medium text-foreground/60">
                   {repoT.noRepositories || "暂无仓库"}
                 </p>
-                <p className="mt-1 text-xs text-muted-foreground/50">
+                <p className="mt-1 text-xs text-[hsl(var(--text-fine))]">
                   {repoT.noRepositoriesHint || "点击下方添加仓库"}
                 </p>
               </div>
@@ -537,7 +537,7 @@ export const RepositoryList = memo(function RepositoryList({
           <div className="flex size-5 items-center justify-center">
             <AppBrandIcon />
           </div>
-          <span className="text-[10px] font-semibold uppercase tracking-[0.15em] text-muted-foreground/70">
+          <span className="text-[10px] font-semibold uppercase tracking-[0.15em] text-[hsl(var(--text-fine))]">
             One Publish
           </span>
         </div>

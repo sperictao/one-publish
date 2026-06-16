@@ -563,7 +563,7 @@ function EditRepositoryDialogContent({
           <aside className="glass-card flex flex-col items-center justify-between rounded-2xl p-5 text-center bg-gradient-to-b from-primary/[0.03] to-transparent border border-[var(--glass-border-subtle)] min-h-0 overflow-y-auto glass-scrollbar">
             <div className="flex flex-col items-center w-full">
               {/* Glowing Icon Wrapper */}
-              <div className="flex size-16 items-center justify-center rounded-2xl bg-gradient-to-tr from-primary/20 to-primary/5 text-primary shadow-[0_8px_30px_rgba(59,130,246,0.12)] ring-1 ring-primary/20">
+              <div className="flex size-16 items-center justify-center rounded-2xl bg-gradient-to-tr from-primary/20 to-primary/5 text-primary shadow-[0_8px_30px_hsl(var(--primary)/0.12)] ring-1 ring-primary/20">
                 <FolderGit2 className="size-8" />
               </div>
               
@@ -601,8 +601,8 @@ function EditRepositoryDialogContent({
                   <span className={cn(
                     "text-xs font-semibold px-2 py-0.5 rounded-full",
                     editProviderId && editProviderId !== NO_PROVIDER_VALUE
-                      ? "text-emerald-500 bg-emerald-500/10"
-                      : "text-amber-500 bg-amber-500/10"
+                      ? "status-success"
+                      : "status-cancelled"
                   )}>
                     {editProviderId && editProviderId !== NO_PROVIDER_VALUE
                       ? repoT.bound || "已绑定"
@@ -637,7 +637,7 @@ function EditRepositoryDialogContent({
               <div className="space-y-4">
                 {/* 仓库名称 */}
                 <div className="space-y-1.5">
-                  <Label htmlFor="repo-edit-name" className="text-xs font-medium text-foreground/80">
+                  <Label htmlFor="repo-edit-name" className="text-xs font-medium text-[hsl(var(--text-fine))]">
                     {repoT.repositoryName || "仓库名称"}
                   </Label>
                   <Input
@@ -656,7 +656,7 @@ function EditRepositoryDialogContent({
 
                 {/* Project Root */}
                 <div className="space-y-1.5">
-                  <Label htmlFor="repo-edit-path" className="text-xs font-medium text-foreground/80">
+                  <Label htmlFor="repo-edit-path" className="text-xs font-medium text-[hsl(var(--text-fine))]">
                     {repoT.repositoryPath || "Project Root"}
                   </Label>
                   <div className="flex items-center gap-2">
@@ -697,7 +697,7 @@ function EditRepositoryDialogContent({
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 {/* Project File */}
                 <div className="space-y-1.5">
-                  <Label htmlFor="repo-edit-project-file" className="text-xs font-medium text-foreground/80">
+                  <Label htmlFor="repo-edit-project-file" className="text-xs font-medium text-[hsl(var(--text-fine))]">
                     {repoT.projectFile || "Project File"}
                   </Label>
                   <div className="flex items-center gap-2">
@@ -779,7 +779,7 @@ function EditRepositoryDialogContent({
 
                 {/* Provider */}
                 <div className="space-y-1.5">
-                  <Label htmlFor="repo-edit-provider" className="text-xs font-medium text-foreground/80">
+                  <Label htmlFor="repo-edit-provider" className="text-xs font-medium text-[hsl(var(--text-fine))]">
                     {repoT.provider || "Provider"}
                   </Label>
                   <div className="flex items-center gap-2">
@@ -824,7 +824,7 @@ function EditRepositoryDialogContent({
 
               {/* 当前分支 */}
               <div className="space-y-1.5 pt-2 border-t border-[var(--glass-border-subtle)]">
-                <Label htmlFor="repo-edit-branch" className="text-xs font-medium text-foreground/80">
+                <Label htmlFor="repo-edit-branch" className="text-xs font-medium text-[hsl(var(--text-fine))]">
                   {repoT.currentBranch || "当前分支"}
                 </Label>
                 <div className="flex items-center gap-2">

@@ -147,7 +147,7 @@ export function RepositoryRow({
               ) : null}
             </div>
             <p
-              className="mt-0.5 truncate text-[11px] text-muted-foreground/55"
+              className="mt-0.5 truncate text-[11px] text-[hsl(var(--text-fine))]"
               title={repo.path}
             >
               {repo.path}
@@ -160,7 +160,7 @@ export function RepositoryRow({
                 "inline-flex max-w-full items-center gap-1.5 rounded-full px-2 py-0.5 text-[11px] leading-4 transition duration-300",
                 canConnectBranch
                   ? "capsule-breathe bg-[var(--glass-branch-connected-bg)] text-[var(--glass-branch-connected-text)]"
-                  : "border border-[var(--glass-branch-disconnected-border)] bg-[var(--glass-branch-disconnected-bg)] text-muted-foreground/64 shadow-[var(--glass-branch-disconnected-highlight)]"
+                  : "border border-[var(--glass-branch-disconnected-border)] bg-[var(--glass-branch-disconnected-bg)] text-[hsl(var(--text-fine))] shadow-[var(--glass-branch-disconnected-highlight)]"
               )}
               title={
                 canConnectBranch
