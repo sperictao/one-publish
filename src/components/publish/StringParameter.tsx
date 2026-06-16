@@ -1,6 +1,6 @@
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { HelpCircle } from "lucide-react";
+import { HelpTip } from "@/components/ui/help-tip";
 import { ParameterDefinition } from "@/types/parameters";
 
 interface StringParameterProps {
@@ -28,16 +28,7 @@ export function StringParameter({
       <div className="flex items-center gap-x-2">
         <Label htmlFor={resolvedInputId}>{resolvedLabel}</Label>
         {definition.description && (
-          <div className="group relative inline-block">
-            <HelpCircle
-              className="size-4 text-muted-foreground cursor-help"
-              aria-label="Help"
-              aria-hidden={false}
-            />
-            <div className="absolute left-0 bottom-full mb-2 hidden group-hover:block w-64 p-2 bg-[var(--glass-panel-bg)] backdrop-blur-xl text-popover-foreground text-sm rounded-xl shadow-[var(--glass-shadow-lg)] border border-[var(--glass-border)] z-10">
-              {definition.description}
-            </div>
-          </div>
+          <HelpTip text={definition.description} />
         )}
       </div>
       <Input

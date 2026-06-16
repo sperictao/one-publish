@@ -1,6 +1,7 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { MapParameter } from '../MapParameter';
+import { __setTranslationsCacheForTest } from '@/hooks/useI18n';
 
 describe('MapParameter', () => {
   const definition = {
@@ -9,6 +10,20 @@ describe('MapParameter', () => {
     prefix: '-p:',
     description: 'MSBuild properties',
   };
+
+  beforeEach(() => {
+    __setTranslationsCacheForTest({
+      zh: {
+        common: {
+          add: '添加',
+          mapKeyPlaceholder: '键',
+          mapValuePlaceholder: '值',
+          removeMapEntry: '移除条目 {{key}}',
+        },
+      },
+    });
+    localStorage.setItem('app-language', 'zh');
+  });
 
   it('renders empty message when no entries', () => {
     render(
@@ -45,7 +60,7 @@ describe('MapParameter', () => {
       />
     );
 
-    const addButton = screen.getByRole('button', { name: /add/i });
+    const addButton = screen.getByRole('button', { name: /添加/ });
     fireEvent.click(addButton);
 
     expect(handleChange).toHaveBeenCalledWith(expect.objectContaining({
@@ -63,7 +78,7 @@ describe('MapParameter', () => {
       />
     );
 
-    const removeButtons = screen.getAllByRole('button', { name: /remove entry/i });
+    const removeButtons = screen.getAllByRole('button', { name: /移除条目/ });
     fireEvent.click(removeButtons[0]);
 
     const updatedValue = handleChange.mock.calls[0][0];
@@ -121,7 +136,7 @@ describe('MapParameter', () => {
     expect(inputs).toHaveLength(2);
     expect(inputs[0]).toHaveAttribute('readonly');
     expect(inputs[1]).toHaveAttribute('readonly');
-    expect(screen.queryByRole('button', { name: /add/i })).not.toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: /remove entry/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /添加/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /移除条目/ })).not.toBeInTheDocument();
   });
 });

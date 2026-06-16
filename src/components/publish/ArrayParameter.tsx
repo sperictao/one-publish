@@ -1,7 +1,10 @@
+import { useId } from "react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
-import { X, Plus, HelpCircle } from "lucide-react";
+import { X, Plus } from "lucide-react";
+import { HelpTip } from "@/components/ui/help-tip";
+import { useI18n } from "@/hooks/useI18n";
 import { ParameterDefinition, ParameterValue } from "@/types/parameters";
 
 interface ArrayParameterProps {
@@ -20,6 +23,8 @@ export function ArrayParameter({
   label,
 }: ArrayParameterProps) {
   const resolvedLabel = label || definition.flag;
+  const fieldLabelId = useId();
+  const { t } = useI18n();
 
   const addItem = () => {
     onChange([...value, ""]);
@@ -39,18 +44,9 @@ export function ArrayParameter({
     <div className="space-y-2 py-2">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-x-2">
-          <Label>{resolvedLabel}</Label>
+          <Label id={fieldLabelId}>{resolvedLabel}</Label>
           {definition.description && (
-            <div className="group relative inline-block">
-              <HelpCircle
-                className="size-4 text-muted-foreground cursor-help"
-                aria-label="Help"
-                aria-hidden={false}
-              />
-              <div className="absolute left-0 bottom-full mb-2 hidden group-hover:block w-64 p-2 bg-[var(--glass-panel-bg)] backdrop-blur-xl text-popover-foreground text-sm rounded-xl shadow-[var(--glass-shadow-lg)] border border-[var(--glass-border)] z-10">
-                {definition.description}
-              </div>
-            </div>
+            <HelpTip text={definition.description} />
           )}
         </div>
         {!readOnly ? (
@@ -61,18 +57,18 @@ export function ArrayParameter({
             onClick={addItem}
           >
             <Plus className="size-4 mr-1" />
-            Add
+            {t("common.add")}
           </Button>
         ) : null}
       </div>
-      <div className="space-y-2">
+      <div className="space-y-2" role="group" aria-labelledby={fieldLabelId}>
         {value.map((item, index) => (
           <div key={index} className="flex items-center gap-x-2">
             <Input
               type="text"
               value={String(item)}
               onChange={(e) => updateItem(index, e.target.value)}
-              placeholder={`Item ${index + 1}`}
+              placeholder={t("common.arrayItemPlaceholder", { index: index + 1 })}
               readOnly={readOnly}
             />
             {!readOnly ? (
@@ -80,7 +76,7 @@ export function ArrayParameter({
                 type="button"
                 variant="ghost"
                 size="icon"
-                aria-label={`Remove item ${index + 1}`}
+                aria-label={t("common.removeArrayItem", { index: index + 1 })}
                 onClick={() => removeItem(index)}
               >
                 <X className="size-4" />

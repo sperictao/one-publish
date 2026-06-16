@@ -1,5 +1,6 @@
 import { useMemo } from "react";
-import { Eye, FileCode2, HelpCircle, RefreshCw } from "lucide-react";
+import { Eye, FileCode2, RefreshCw } from "lucide-react";
+import { HelpTip } from "@/components/ui/help-tip";
 
 import { DotnetPublishConfigFormSections } from "@/components/publish/DotnetPublishConfigFormSections";
 import { Button } from "@/components/ui/button";
@@ -89,13 +90,13 @@ export function ProjectPublishProfileViewerDialog({
         title={
           <div className="flex items-center gap-1.5">
             <span>{t.viewConfigTitle || "查看发布配置"}</span>
-            <div className="group relative inline-block">
-              <HelpCircle className="size-3.5 text-muted-foreground/60 cursor-help hover:text-foreground transition-colors" />
-              <div className="absolute left-1/2 -translate-x-1/2 bottom-full mb-2 hidden group-hover:block w-64 p-2 bg-[var(--glass-panel-bg)] backdrop-blur-xl text-popover-foreground text-xs rounded-xl shadow-[var(--glass-shadow-lg)] border border-[var(--glass-border)] z-10 leading-4 font-normal">
-                {t.viewConfigFocusedHint ||
-                  "主表单与新建、编辑配置保持一致；其余无法在表单里完整表达的 .pubxml 信息收起在下方补充区中。"}
-              </div>
-            </div>
+            <HelpTip
+              text={
+                t.viewConfigFocusedHint ||
+                "主表单与新建、编辑配置保持一致；其余无法在表单里完整表达的 .pubxml 信息收起在下方补充区中。"
+              }
+              label={t.viewConfigTitle || "查看发布配置"}
+            />
           </div>
         }
         description={

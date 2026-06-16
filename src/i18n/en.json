@@ -821,6 +821,12 @@
     "resizePanelWidth": "Resize panel width",
     "resizePanelHeight": "Resize panel height",
     "expandSidebar": "Expand sidebar",
-    "collapseSidebar": "Collapse sidebar"
+    "collapseSidebar": "Collapse sidebar",
+    "add": "Add",
+    "arrayItemPlaceholder": "Item {{index}}",
+    "removeArrayItem": "Remove item {{index}}",
+    "mapKeyPlaceholder": "Key",
+    "mapValuePlaceholder": "Value",
+    "removeMapEntry": "Remove entry {{key}}"
   }
 }

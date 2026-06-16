@@ -1094,10 +1094,10 @@ describe("PublishConfigPanel", () => {
     expect(screen.queryByText("PublishItems › ResolvedFileToPublish")).not.toBeInTheDocument();
     expect(screen.queryByText("原始配置文件")).not.toBeInTheDocument();
     expect(
-      screen.getByText(
+      screen.getAllByText(
         "主表单与新建、编辑配置保持一致；其余无法在表单里完整表达的 .pubxml 信息收起在下方补充区中。"
-      )
-    ).toBeInTheDocument();
+      ).length
+    ).toBeGreaterThan(0);
 
     expect(
       screen.getByRole("combobox", {

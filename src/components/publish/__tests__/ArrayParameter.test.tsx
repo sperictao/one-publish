@@ -1,6 +1,7 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { ArrayParameter } from '../ArrayParameter';
+import { __setTranslationsCacheForTest } from '@/hooks/useI18n';
 
 describe('ArrayParameter', () => {
   const definition = {
@@ -8,6 +9,19 @@ describe('ArrayParameter', () => {
     flag: '--features',
     description: 'List of features',
   };
+
+  beforeEach(() => {
+    __setTranslationsCacheForTest({
+      zh: {
+        common: {
+          add: '添加',
+          arrayItemPlaceholder: '第 {{index}} 项',
+          removeArrayItem: '移除第 {{index}} 项',
+        },
+      },
+    });
+    localStorage.setItem('app-language', 'zh');
+  });
 
   it('renders empty array message when no items', () => {
     render(
@@ -46,7 +60,7 @@ describe('ArrayParameter', () => {
       />
     );
 
-    const addButton = screen.getByRole('button', { name: /add/i });
+    const addButton = screen.getByRole('button', { name: /添加/ });
     fireEvent.click(addButton);
 
     expect(handleChange).toHaveBeenCalledWith(['']);
@@ -62,7 +76,7 @@ describe('ArrayParameter', () => {
       />
     );
 
-    const removeButtons = screen.getAllByRole('button', { name: /remove item/i });
+    const removeButtons = screen.getAllByRole('button', { name: /移除第/ });
     fireEvent.click(removeButtons[0]);
 
     expect(handleChange).toHaveBeenCalledWith(['item2']);
@@ -95,7 +109,7 @@ describe('ArrayParameter', () => {
     );
 
     expect(screen.getByRole('textbox')).toHaveAttribute('readonly');
-    expect(screen.queryByRole('button', { name: /add/i })).not.toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: /remove item/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /添加/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /移除第/ })).not.toBeInTheDocument();
   });
 });

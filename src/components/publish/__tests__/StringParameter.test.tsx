@@ -48,7 +48,7 @@ describe('StringParameter', () => {
       />
     );
 
-    const helpIcon = screen.getByLabelText('Help');
+    const helpIcon = screen.getByLabelText('查看说明');
     expect(helpIcon).toBeInTheDocument();
   });
 });

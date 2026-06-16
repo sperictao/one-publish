@@ -9,7 +9,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
-import { FileSearch, FolderGit2, RefreshCw, GitBranch, Activity, Info, HelpCircle } from "lucide-react";
+import { FileSearch, FolderGit2, RefreshCw, GitBranch, Activity, Info } from "lucide-react";
+import { HelpTip } from "@/components/ui/help-tip";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import type { ProjectScanCandidates } from "@/lib/store/types";
 import type { Branch, Repository } from "@/lib/store/types";
@@ -516,12 +517,10 @@ function EditRepositoryDialogContent({
         title={
           <div className="flex items-center gap-1.5">
             <span>{repoT.editRepository || "编辑项目信息"}</span>
-            <div className="group relative inline-block">
-              <HelpCircle className="size-3.5 text-muted-foreground/60 cursor-help hover:text-foreground transition-colors" />
-              <div className="absolute left-1/2 -translate-x-1/2 bottom-full mb-2 hidden group-hover:block w-64 p-2 bg-[var(--glass-panel-bg)] backdrop-blur-xl text-popover-foreground text-xs rounded-xl shadow-[var(--glass-shadow-lg)] border border-[var(--glass-border)] z-10 leading-4 font-normal">
-                {repoT.editRepositoryHint || "修改仓库基础信息后会立即刷新左栏展示与关联状态。"}
-              </div>
-            </div>
+            <HelpTip
+              text={repoT.editRepositoryHint || "修改仓库基础信息后会立即刷新左栏展示与关联状态。"}
+              label={repoT.editRepository || "编辑项目信息"}
+            />
           </div>
         }
         description={
@@ -572,12 +571,10 @@ function EditRepositoryDialogContent({
                 <span className="truncate">
                   {editName || repoT.unnamedRepository || "未命名仓库"}
                 </span>
-                <div className="group relative inline-block shrink-0">
-                  <HelpCircle className="size-3.5 text-muted-foreground/60 cursor-help hover:text-foreground transition-colors" />
-                  <div className="absolute left-1/2 -translate-x-1/2 bottom-full mb-2 hidden group-hover:block w-48 p-2 bg-[var(--glass-panel-bg)] backdrop-blur-xl text-popover-foreground text-xs rounded-xl shadow-[var(--glass-shadow-lg)] border border-[var(--glass-border)] z-10 leading-4 font-normal text-left">
-                    {repoT.repositoryBindingHint || "请确保仓库路径和项目绑定正确，这会直接影响后续的自动化发布配置构建。"}
-                  </div>
-                </div>
+                <HelpTip
+                  text={repoT.repositoryBindingHint || "请确保仓库路径和项目绑定正确，这会直接影响后续的自动化发布配置构建。"}
+                  className="shrink-0"
+                />
               </h3>
               
               <p className="mt-2 text-xs text-muted-foreground break-all px-2.5 py-1.5 rounded-xl bg-black/5 dark:bg-white/5 border border-[var(--glass-border-subtle)] font-mono max-w-full">

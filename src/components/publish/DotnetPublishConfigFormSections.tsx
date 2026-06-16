@@ -2,7 +2,6 @@ import { memo, useCallback, useMemo } from "react";
 import {
   FileCog,
   FolderOutput,
-  HelpCircle,
   Plus,
   SlidersHorizontal,
   X,
@@ -10,6 +9,7 @@ import {
 
 import { OutputTargetBadge } from "@/components/publish/OutputTargetBadge";
 import { Button } from "@/components/ui/button";
+import { HelpTip } from "@/components/ui/help-tip";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { SectionShell } from "@/components/ui/section-shell";
@@ -120,13 +120,10 @@ const DotnetPublishParametersSection = memo(function DotnetPublishParametersSect
             <Label htmlFor="quick-profile-runtime" className="text-xs">
               {appT.runtimeLabel || "运行时"}
             </Label>
-            <div className="group relative inline-block">
-              <HelpCircle className="size-3.5 text-muted-foreground/60 cursor-help hover:text-foreground transition-colors" />
-              <div className="absolute left-0 bottom-full mb-2 hidden group-hover:block w-64 p-2 bg-[var(--glass-panel-bg)] backdrop-blur-xl text-popover-foreground text-xs rounded-xl shadow-[var(--glass-shadow-lg)] border border-[var(--glass-border)] z-10 leading-4 font-normal">
-                {profileT.quickCreateRuntimeHint ||
-                  "未指定运行时时将保持框架依赖模式。"}
-              </div>
-            </div>
+            <HelpTip
+              text={profileT.quickCreateRuntimeHint || "未指定运行时时将保持框架依赖模式。"}
+              label={appT.runtimeLabel || "运行时"}
+            />
           </div>
           <Select value={runtime || "none"} onValueChange={onRuntimeChange}>
             <SelectTrigger id="quick-profile-runtime" disabled={readOnly} className="h-9 text-xs">
@@ -182,13 +179,10 @@ const DotnetPublishOutputSection = memo(function DotnetPublishOutputSection({
             <Label htmlFor="quick-profile-output" className="text-xs">
               {appT.outputDirLabel || "输出目录"}
             </Label>
-            <div className="group relative inline-block">
-              <HelpCircle className="size-3.5 text-muted-foreground/60 cursor-help hover:text-foreground transition-colors" />
-              <div className="absolute left-0 bottom-full mb-2 hidden group-hover:block w-64 p-2 bg-[var(--glass-panel-bg)] backdrop-blur-xl text-popover-foreground text-xs rounded-xl shadow-[var(--glass-shadow-lg)] border border-[var(--glass-border)] z-10 leading-4 font-normal">
-                {profileT.quickCreateOutputHint ||
-                  "留空时会回落到默认输出目录规则。"}
-              </div>
-            </div>
+            <HelpTip
+              text={profileT.quickCreateOutputHint || "留空时会回落到默认输出目录规则。"}
+              label={appT.outputDirLabel || "输出目录"}
+            />
             <OutputTargetBadge
               raw={outputDir}
               translations={{
@@ -220,16 +214,17 @@ const DotnetPublishOutputSection = memo(function DotnetPublishOutputSection({
             >
               {appT.selfContained || "自包含部署"}
             </Label>
-            <div className="group relative inline-block">
-              <HelpCircle className="size-3.5 text-muted-foreground/60 cursor-help hover:text-foreground transition-colors" />
-              <div className="absolute right-0 bottom-full mb-2 hidden group-hover:block w-56 p-2 bg-[var(--glass-panel-bg)] backdrop-blur-xl text-popover-foreground text-xs rounded-xl shadow-[var(--glass-shadow-lg)] border border-[var(--glass-border)] z-10 leading-4 font-normal">
-                {isRuntimeRequired
+            <HelpTip
+              align="end"
+              text={
+                isRuntimeRequired
                   ? profileT.quickCreateSelfContainedRuntimeRequired ||
                     "需先选运行时才可启用自包含。"
                   : profileT.quickCreateSelfContainedHint ||
-                    "包含运行时，体积大但更独立。"}
-              </div>
-            </div>
+                    "包含运行时，体积大但更独立。"
+              }
+              label={appT.selfContained || "自包含部署"}
+            />
           </div>
 
           <button
@@ -745,17 +740,10 @@ function DotnetFrameworkSuggestionsField({
             {fieldText.technicalLabel}
           </span>
         )}
-        <div className="group relative inline-block">
-          <HelpCircle className="size-3.5 text-muted-foreground/60 cursor-help hover:text-foreground transition-colors" />
-          <div
-            className={cn(
-              "absolute bottom-full mb-2 hidden group-hover:block w-64 p-2 bg-[var(--glass-panel-bg)] backdrop-blur-xl text-popover-foreground text-xs rounded-xl shadow-[var(--glass-shadow-lg)] border border-[var(--glass-border)] z-10 leading-4 font-normal",
-              align === "right" ? "right-0 translate-x-0 origin-bottom-right" : "left-0 translate-x-0 origin-bottom-left"
-            )}
-          >
-            {fieldText.description}
-          </div>
-        </div>
+        <HelpTip
+          align={align === "right" ? "end" : "start"}
+          text={fieldText.description}
+        />
       </div>
       <Input
         id={field.key}
@@ -809,17 +797,10 @@ function DotnetSelectField({
             {fieldText.technicalLabel}
           </span>
         )}
-        <div className="group relative inline-block">
-          <HelpCircle className="size-3.5 text-muted-foreground/60 cursor-help hover:text-foreground transition-colors" />
-          <div
-            className={cn(
-              "absolute bottom-full mb-2 hidden group-hover:block w-64 p-2 bg-[var(--glass-panel-bg)] backdrop-blur-xl text-popover-foreground text-xs rounded-xl shadow-[var(--glass-shadow-lg)] border border-[var(--glass-border)] z-10 leading-4 font-normal",
-              align === "right" ? "right-0 translate-x-0 origin-bottom-right" : "left-0 translate-x-0 origin-bottom-left"
-            )}
-          >
-            {fieldText.description}
-          </div>
-        </div>
+        <HelpTip
+          align={align === "right" ? "end" : "start"}
+          text={fieldText.description}
+        />
       </div>
       <Select
         value={value || EMPTY_SELECT_VALUE}
@@ -875,17 +856,10 @@ function DotnetBooleanField({
               {fieldText.technicalLabel}
             </span>
           )}
-          <div className="group relative inline-block">
-            <HelpCircle className="size-3.5 text-muted-foreground/60 cursor-help hover:text-foreground transition-colors" />
-            <div
-              className={cn(
-                "absolute bottom-full mb-2 hidden group-hover:block w-64 p-2 bg-[var(--glass-panel-bg)] backdrop-blur-xl text-popover-foreground text-xs rounded-xl shadow-[var(--glass-shadow-lg)] border border-[var(--glass-border)] z-10 leading-4 font-normal",
-                align === "right" ? "right-0 translate-x-0 origin-bottom-right" : "left-0 translate-x-0 origin-bottom-left"
-              )}
-            >
-              {fieldText.description}
-            </div>
-          </div>
+          <HelpTip
+            align={align === "right" ? "end" : "start"}
+            text={fieldText.description}
+          />
         </div>
       </div>
       <Switch
@@ -924,17 +898,10 @@ function DotnetStringField({
             {fieldText.technicalLabel}
           </span>
         )}
-        <div className="group relative inline-block">
-          <HelpCircle className="size-3.5 text-muted-foreground/60 cursor-help hover:text-foreground transition-colors" />
-          <div
-            className={cn(
-              "absolute bottom-full mb-2 hidden group-hover:block w-64 p-2 bg-[var(--glass-panel-bg)] backdrop-blur-xl text-popover-foreground text-xs rounded-xl shadow-[var(--glass-shadow-lg)] border border-[var(--glass-border)] z-10 leading-4 font-normal",
-              align === "right" ? "right-0 translate-x-0 origin-bottom-right" : "left-0 translate-x-0 origin-bottom-left"
-            )}
-          >
-            {fieldText.description}
-          </div>
-        </div>
+        <HelpTip
+          align={align === "right" ? "end" : "start"}
+          text={fieldText.description}
+        />
       </div>
       <Input
         id={field.key}
@@ -1029,17 +996,10 @@ function DotnetPropertyTableField({
                 {fieldText.technicalLabel}
               </span>
             )}
-            <div className="group relative inline-block">
-              <HelpCircle className="size-3.5 text-muted-foreground/60 cursor-help hover:text-foreground transition-colors" />
-              <div
-                className={cn(
-                  "absolute bottom-full mb-2 hidden group-hover:block w-64 p-2 bg-[var(--glass-panel-bg)] backdrop-blur-xl text-popover-foreground text-xs rounded-xl shadow-[var(--glass-shadow-lg)] border border-[var(--glass-border)] z-10 leading-4 font-normal",
-                  align === "right" ? "right-0 translate-x-0 origin-bottom-right" : "left-0 translate-x-0 origin-bottom-left"
-                )}
-              >
-                {fieldText.propertiesHint}
-              </div>
-            </div>
+            <HelpTip
+              align={align === "right" ? "end" : "start"}
+              text={fieldText.propertiesHint}
+            />
           </div>
         </div>
         {!readOnly ? (

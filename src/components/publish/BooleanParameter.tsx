@@ -1,6 +1,6 @@
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
-import { HelpCircle } from "lucide-react";
+import { HelpTip } from "@/components/ui/help-tip";
 import { ParameterDefinition } from "@/types/parameters";
 
 interface BooleanParameterProps {
@@ -30,16 +30,7 @@ export function BooleanParameter({
           {resolvedLabel}
         </Label>
         {definition.description && (
-          <div className="group relative inline-block">
-            <HelpCircle
-              className="size-4 text-muted-foreground cursor-help"
-              aria-label="Help"
-              aria-hidden={false}
-            />
-            <div className="absolute left-0 bottom-full mb-2 hidden group-hover:block w-64 p-2 bg-[var(--glass-panel-bg)] backdrop-blur-xl text-popover-foreground text-sm rounded-xl shadow-[var(--glass-shadow-lg)] border border-[var(--glass-border)] z-10">
-              {definition.description}
-            </div>
-          </div>
+          <HelpTip text={definition.description} />
         )}
       </div>
       <Switch

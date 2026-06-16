@@ -1,7 +1,10 @@
+import { useId } from "react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
-import { X, Plus, HelpCircle } from "lucide-react";
+import { X, Plus } from "lucide-react";
+import { HelpTip } from "@/components/ui/help-tip";
+import { useI18n } from "@/hooks/useI18n";
 import { ParameterDefinition, ParameterValue } from "@/types/parameters";
 
 interface MapParameterProps {
@@ -21,6 +24,8 @@ export function MapParameter({
 }: MapParameterProps) {
   const entries = Object.entries(value);
   const resolvedLabel = label || definition.flag || definition.prefix;
+  const fieldLabelId = useId();
+  const { t } = useI18n();
 
   const addEntry = () => {
     onChange({ ...value, [`key_${entries.length}`]: "" });
@@ -50,18 +55,9 @@ export function MapParameter({
     <div className="space-y-2 py-2">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-x-2">
-          <Label>{resolvedLabel}</Label>
+          <Label id={fieldLabelId}>{resolvedLabel}</Label>
           {definition.description && (
-            <div className="group relative inline-block">
-              <HelpCircle
-                className="size-4 text-muted-foreground cursor-help"
-                aria-label="Help"
-                aria-hidden={false}
-              />
-              <div className="absolute left-0 bottom-full mb-2 hidden group-hover:block w-64 p-2 bg-[var(--glass-panel-bg)] backdrop-blur-xl text-popover-foreground text-sm rounded-xl shadow-[var(--glass-shadow-lg)] border border-[var(--glass-border)] z-10">
-                {definition.description}
-              </div>
-            </div>
+            <HelpTip text={definition.description} />
           )}
         </div>
         {!readOnly ? (
@@ -72,18 +68,18 @@ export function MapParameter({
             onClick={addEntry}
           >
             <Plus className="size-4 mr-1" />
-            Add
+            {t("common.add")}
           </Button>
         ) : null}
       </div>
-      <div className="space-y-2">
+      <div className="space-y-2" role="group" aria-labelledby={fieldLabelId}>
         {entries.map(([key, val]) => (
           <div key={key} className="flex items-center gap-x-2">
             <Input
               type="text"
               value={key}
               onChange={(e) => updateKey(key, e.target.value)}
-              placeholder="Key"
+              placeholder={t("common.mapKeyPlaceholder")}
               className="w-1/3"
               readOnly={readOnly}
             />
@@ -91,7 +87,7 @@ export function MapParameter({
               type="text"
               value={String(val)}
               onChange={(e) => updateValue(key, e.target.value)}
-              placeholder="Value"
+              placeholder={t("common.mapValuePlaceholder")}
               className="flex-1"
               readOnly={readOnly}
             />
@@ -100,7 +96,7 @@ export function MapParameter({
                 type="button"
                 variant="ghost"
                 size="icon"
-                aria-label={`Remove entry ${key}`}
+                aria-label={t("common.removeMapEntry", { key })}
                 onClick={() => removeEntry(key)}
               >
                 <X className="size-4" />
