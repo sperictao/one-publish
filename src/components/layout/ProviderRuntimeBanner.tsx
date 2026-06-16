@@ -20,14 +20,14 @@ export function ProviderRuntimeBanner({
   const isLoading = status === "loading";
 
   return (
-    <div className="border-b border-border/60 bg-amber-50/70 px-4 py-3 text-foreground dark:bg-amber-500/8">
+    <div className="border-b border-border/60 bg-warning/[0.08] px-4 py-3 text-foreground dark:bg-warning/[0.08]">
       <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
         <div className="min-w-0 space-y-1">
           <div className="flex items-center gap-2 text-sm font-medium">
             {isLoading ? (
-              <Loader2 className="size-4 animate-spin text-amber-600" />
+              <Loader2 className="size-4 animate-spin text-warning" />
             ) : (
-              <AlertTriangle className="size-4 text-amber-600" />
+              <AlertTriangle className="size-4 text-warning" />
             )}
             <span>{title}</span>
           </div>

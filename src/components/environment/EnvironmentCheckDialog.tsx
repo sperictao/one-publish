@@ -328,7 +328,7 @@ export function EnvironmentCheckContent({
             variant="outline"
             onClick={handleCheck}
             disabled={checking || runningFix}
-            className="rounded-lg border border-[#d1d1d6] border-b-[#b5b5ba] bg-gradient-to-b from-white to-[#f5f5f7] text-[12px] font-bold text-black/80 shadow-[0_1px_1px_rgba(0,0,0,0.05)] hover:from-[#f5f5f7] hover:to-[#e9e9eb] dark:from-[#3a3a3c] dark:to-[#2c2c2e] dark:border-[#48484a] dark:border-b-[#1c1c1e] dark:hover:from-[#48484a] dark:hover:to-[#3a3a3c] dark:text-white/90 active:scale-[0.97] transition shrink-0 flex items-center gap-1.5 h-8 px-4"
+            className="rounded-lg border border-[var(--settings-hairline)] bg-[var(--settings-section-bg)] text-[12px] font-bold text-[var(--settings-ink)] shadow-sm hover:bg-[var(--settings-sidebar-item-hover)] active:scale-[0.97] transition shrink-0 flex items-center gap-1.5 h-8 px-4"
           >
             {checking ? (
               <>
@@ -380,7 +380,7 @@ export function EnvironmentCheckContent({
 
         {/* 错误提示 */}
         {error && (
-          <div className="border border-destructive/20 bg-destructive/5 text-sm text-destructive rounded-xl p-4 shadow-[0_4px_16px_rgba(239,68,68,0.06)]">
+          <div className="border border-destructive/20 bg-destructive/5 text-sm text-destructive rounded-xl p-4 shadow-[0_4px_16px_hsl(var(--destructive)/0.06)]">
             {error}
           </div>
         )}
@@ -406,8 +406,8 @@ export function EnvironmentCheckContent({
                         className={cn(
                           "size-2 rounded-full shrink-0 transition duration-300",
                           provider.installed
-                            ? "bg-success shadow-[0_0_8px_rgba(16,185,129,0.6)] subtle-pulse"
-                            : "bg-destructive shadow-[0_0_8px_rgba(239,68,68,0.6)]"
+                            ? "bg-success shadow-[0_0_8px_hsl(var(--success)/0.6)] subtle-pulse"
+                            : "bg-destructive shadow-[0_0_8px_hsl(var(--destructive)/0.6)]"
                         )}
                       />
                       <span className="font-semibold text-[13.5px] text-[var(--settings-ink)]">{provider.provider_id}</span>
@@ -553,9 +553,9 @@ export function EnvironmentCheckContent({
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     <div className="flex gap-1 shrink-0">
-                      <span className="size-2 rounded-full bg-red-500/60" />
-                      <span className="size-2 rounded-full bg-yellow-500/60" />
-                      <span className="size-2 rounded-full bg-green-500/60" />
+                      <span className="size-2 rounded-full bg-destructive/70" />
+                      <span className="size-2 rounded-full bg-warning/70" />
+                      <span className="size-2 rounded-full bg-success/70" />
                     </div>
                     <span className="text-xs font-semibold text-[var(--settings-ink-muted)] uppercase tracking-wider ml-1">
                       {translations.environment?.result || "执行结果"}
@@ -660,7 +660,7 @@ export function EnvironmentCheckDialog({
             <Button 
               variant="outline" 
               onClick={() => onOpenChange(false)}
-              className="rounded-full border border-[#d1d1d6] border-b-[#b5b5ba] bg-gradient-to-b from-white to-[#f5f5f7] text-sm font-bold text-black/80 shadow-[0_1px_1px_rgba(0,0,0,0.05)] hover:from-[#f5f5f7] hover:to-[#e9e9eb] dark:from-[#3a3a3c] dark:to-[#2c2c2e] dark:border-[#48484a] dark:border-b-[#1c1c1e] dark:hover:from-[#48484a] dark:hover:to-[#3a3a3c] dark:text-white/90 active:scale-[0.97] transition h-9 px-5 shrink-0 flex items-center justify-center"
+              className="rounded-full border border-[var(--settings-hairline)] bg-[var(--settings-section-bg)] text-sm font-bold text-[var(--settings-ink)] shadow-sm hover:bg-[var(--settings-sidebar-item-hover)] active:scale-[0.97] transition h-9 px-5 shrink-0 flex items-center justify-center"
             >
               <span>{translations.environment?.close || "关闭"}</span>
             </Button>

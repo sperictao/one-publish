@@ -66,7 +66,6 @@ export function BranchPanel({
               <Button
                 variant="ghost"
                 size="icon"
-                className="size-6"
                 onClick={(e) => {
                   e.stopPropagation();
                   onExpandRepo();
@@ -80,7 +79,6 @@ export function BranchPanel({
             <Button
               variant="ghost"
               size="icon"
-              className="size-6"
               disabled
               aria-label={branchT.newWorktree || "新建 worktree"}
             >
@@ -89,7 +87,6 @@ export function BranchPanel({
             <Button
               variant="ghost"
               size="icon"
-              className="size-6"
               disabled
               aria-label={branchT.refresh || "刷新"}
             >
@@ -99,7 +96,6 @@ export function BranchPanel({
               <Button
                 variant="ghost"
                 size="icon"
-                className="size-6"
                 onClick={(e) => {
                   e.stopPropagation();
                   onCollapse();
@@ -146,61 +142,57 @@ export function BranchPanel({
       >
         <div className="flex items-center gap-0.5" data-tauri-no-drag>
           {showExpandButton && onExpandRepo && (
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onExpandRepo();
+                }}
+                title={branchT.expandRepoList || "展开仓库列表"}
+                data-tauri-no-drag
+              >
+                <Folder className="size-4" />
+              </Button>
+            )}
             <Button
               variant="ghost"
               size="icon"
-              className="size-6"
               onClick={(e) => {
                 e.stopPropagation();
-                onExpandRepo();
+                onCreateBranch?.();
               }}
-              title={branchT.expandRepoList || "展开仓库列表"}
+              title={branchT.newWorktree || "新建 worktree"}
               data-tauri-no-drag
             >
-              <Folder className="size-4" />
+              <Plus className="size-4" />
             </Button>
-          )}
-          <Button
-            variant="ghost"
-            size="icon"
-            className="size-6"
-            onClick={(e) => {
-              e.stopPropagation();
-              onCreateBranch?.();
-            }}
-            title={branchT.newWorktree || "新建 worktree"}
-            data-tauri-no-drag
-          >
-            <Plus className="size-4" />
-          </Button>
-          <Button
-            variant="ghost"
-            size="icon"
-            className="size-6"
-            onClick={(e) => {
-              e.stopPropagation();
-              onRefresh?.();
-            }}
-            title={branchT.refresh || "刷新"}
-            data-tauri-no-drag
-          >
-            <RefreshCw className="size-4" />
-          </Button>
-          {onCollapse && (
             <Button
               variant="ghost"
               size="icon"
-              className="size-6"
               onClick={(e) => {
                 e.stopPropagation();
-                onCollapse();
+                onRefresh?.();
               }}
-              title={branchT.collapsePanel || "收起面板"}
+              title={branchT.refresh || "刷新"}
               data-tauri-no-drag
             >
-              <CollapseIcon />
+              <RefreshCw className="size-4" />
             </Button>
-          )}
+            {onCollapse && (
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onCollapse();
+                }}
+                title={branchT.collapsePanel || "收起面板"}
+                data-tauri-no-drag
+              >
+                <CollapseIcon />
+              </Button>
+            )}
         </div>
       </div>
 
@@ -240,7 +232,7 @@ export function BranchPanel({
                   {branch.name}
                 </span>
                 {branch.isMain && (
-                  <span className="rounded bg-green-500/20 px-1.5 py-0.5 text-[10px] font-medium text-green-600 dark:text-green-400">
+                  <span className="status-success rounded px-1.5 py-0.5 text-[10px] font-medium">
                     {branchT.mainBadge || "MAIN"}
                   </span>
                 )}
@@ -249,10 +241,10 @@ export function BranchPanel({
                 {branch.path}
               </span>
             </div>
-            {/* Green dot for current branch */}
+            {/* Current-branch indicator */}
             {branch.isCurrent && (
               <div className="flex-shrink-0 mt-1">
-                <div className="size-2.5 rounded-full bg-green-500" />
+                <div className="size-2.5 rounded-full bg-success" />
               </div>
             )}
           </div>

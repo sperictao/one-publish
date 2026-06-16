@@ -61,19 +61,19 @@ export interface ReleaseChecklistDialogProps {
 function statusStyles(status: ChecklistStatus) {
   if (status === "pass") {
     return {
-      icon: <CheckCircle2 className="size-4 text-green-600" />,
+      icon: <CheckCircle2 className="size-4 text-success" />,
       badgeVariant: "success" as const,
     };
   }
   if (status === "warning") {
     return {
-      icon: <AlertTriangle className="size-4 text-amber-600" />,
+      icon: <AlertTriangle className="size-4 text-warning" />,
       badgeVariant: "warning" as const,
     };
   }
   if (status === "fail") {
     return {
-      icon: <XCircle className="size-4 text-red-600" />,
+      icon: <XCircle className="size-4 text-destructive" />,
       badgeVariant: "danger" as const,
     };
   }

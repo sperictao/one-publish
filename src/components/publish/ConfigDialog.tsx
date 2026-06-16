@@ -448,7 +448,7 @@ export function ConfigManagementContent({
           >
             <AppDialogInset className="space-y-3">
               <div className="flex items-start gap-3">
-                <AlertCircle className="mt-0.5 size-4 text-amber-600" />
+                <AlertCircle className="mt-0.5 size-4 text-warning" />
                 <div className="space-y-1 text-sm">
                   <p className="font-medium">
                     {profileT.importConfirmListTitle || "待导入配置"}

@@ -198,7 +198,7 @@ export function PublishRunCard({
                   appT.publishStatusIdleDetail ||
                   "命令与参数已准备完成，可以开始本次发布。",
                 badgeClassName:
-                  "border-[var(--glass-border-subtle)] bg-[var(--glass-bg)] text-muted-foreground shadow-[0_10px_30px_rgba(15,23,42,0.06)]",
+                  "border-[var(--glass-border-subtle)] bg-[var(--glass-bg)] text-muted-foreground shadow-[0_10px_30px_rgba(0,0,0,0.06)]",
                 panelClassName:
                   "border-[var(--glass-border-subtle)] bg-[linear-gradient(145deg,rgba(255,255,255,0.32),transparent_78%)]",
                 iconWrapClassName:
@@ -313,7 +313,7 @@ export function PublishRunCard({
                   </span>
                 </span>
                 <div className="min-w-0">
-                  <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground/70">
+                  <div className="text-[12px] font-semibold uppercase tracking-[0.18em] text-[hsl(var(--text-fine))]">
                     {appT.publishStatusLabel || "发布状态"}
                   </div>
                   <div className="mt-2 flex flex-wrap items-center gap-2">
@@ -331,7 +331,7 @@ export function PublishRunCard({
                       </span>
                     ) : null}
                   </div>
-                  <p className="mt-3 text-sm leading-6 text-muted-foreground/85">
+                  <p className="mt-3 text-sm leading-6 text-muted-foreground">
                     {statusMeta.description}
                   </p>
                 </div>
@@ -341,7 +341,7 @@ export function PublishRunCard({
 
           {failureMessage ? (
             <div className="rounded-2xl border border-destructive/20 bg-destructive/5 px-4 py-3 text-sm text-destructive shadow-sm">
-              <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-destructive/70">
+              <div className="text-[12px] font-semibold uppercase tracking-[0.18em] text-destructive">
                 {appT.statusFailed || "失败"}
               </div>
               <p className="mt-1 break-words leading-6">{failureMessage}</p>
@@ -366,21 +366,21 @@ export function PublishRunCard({
                   )}
                 </span>
                 <span className="min-w-0 flex flex-1 items-center gap-3 overflow-hidden">
-                  <span className="flex-shrink-0 text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground/70">
+                  <span className="flex-shrink-0 text-[12px] font-semibold uppercase tracking-[0.18em] text-[hsl(var(--text-fine))]">
                     {appT.outputDirectoryLabel || "输出目录"}
                   </span>
-                  <span className="truncate font-mono text-xs text-muted-foreground/80 transition duration-300 group-hover:font-semibold group-hover:text-foreground">
+                  <span className="truncate font-mono text-xs text-muted-foreground transition duration-300 group-hover:font-semibold group-hover:text-foreground">
                     {publishResult.output_dir}
                   </span>
                 </span>
-                <span className="flex size-8 flex-shrink-0 items-center justify-center rounded-xl text-muted-foreground/65 transition duration-300 group-hover:bg-primary/10 group-hover:text-primary">
+                <span className="flex size-8 flex-shrink-0 items-center justify-center rounded-xl text-muted-foreground transition duration-300 group-hover:bg-primary/10 group-hover:text-primary">
                   <ArrowUpRight className="size-4" />
                 </span>
               </div>
             </button>
           )}
         </div>
-        <div className="min-h-[20rem] min-w-0 flex-1 overflow-auto rounded-lg bg-gray-950 p-4 font-mono text-xs text-gray-100">
+        <div className="min-h-[20rem] min-w-0 flex-1 overflow-auto rounded-lg bg-[hsl(var(--terminal-bg))] p-4 font-mono text-xs text-[hsl(var(--terminal-fg))]">
           <pre className="min-w-0 whitespace-pre-wrap break-all [overflow-wrap:anywhere]">
             {outputLog ||
               publishResult?.error ||
