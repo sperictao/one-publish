@@ -466,7 +466,6 @@ html.dark {
   backdrop-filter: blur(24px) saturate(180%);
   -webkit-backdrop-filter: blur(24px) saturate(180%);
   overflow: hidden;
-  filter: blur(calc(var(--list-card-morph-stretch) * 0.5px));
   transition: box-shadow 0.32s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
