@@ -52,6 +52,7 @@ import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { useAccentColor, ACCENT_COLORS } from "@/hooks/useTheme";
 import type { AccentColor } from "@/hooks/useTheme";
+import { ThemePreviewMock } from "./ThemePreviewMock";
 
 const EnvironmentCheckContent = lazy(async () => {
   const mod = await import("@/components/environment/EnvironmentCheckDialog");
@@ -394,7 +395,7 @@ export const AppearanceSettingsSection = memo(function AppearanceSettingsSection
             className={cn(
               "group relative flex flex-col items-center gap-2.5 rounded-xl border p-2.5 text-center transition duration-300 active:scale-[0.97] glass-interactive",
               theme === "auto"
-                ? "border-[var(--settings-card-selected-border)] bg-[var(--settings-card-selected-bg)] shadow-[0_4px_20px_rgba(0,102,204,0.06),0_1px_3px_rgba(0,102,204,0.04)]"
+                ? "border-[var(--settings-card-selected-border)] bg-[var(--settings-card-selected-bg)] shadow-[var(--settings-card-selected-shadow)]"
                 : "border-[var(--settings-hairline)] bg-transparent hover:bg-black/[0.015] dark:hover:bg-white/[0.015] hover:border-black/20 dark:hover:border-white/20"
             )}
             onClick={() => onThemeChange("auto")}
@@ -406,55 +407,24 @@ export const AppearanceSettingsSection = memo(function AppearanceSettingsSection
             )}
             
             {/* 自动主题微缩图 */}
-            <div className="relative h-20 w-full overflow-hidden rounded-lg border border-[var(--settings-hairline)] flex bg-transparent select-none pointer-events-none shadow-sm">
-              {/* Left half: Light theme */}
-              <div className="w-1/2 h-full relative bg-gradient-to-br from-[#c9d6ff] to-[#f5f7fa] border-r border-black/5 overflow-hidden flex flex-col justify-end">
-                {/* Mock macOS Window (Left part) */}
-                <div className="absolute left-3 right-0 bottom-0 top-3 rounded-tl-md border-t border-l border-black/10 bg-white shadow-[0_2px_10px_rgba(0,0,0,0.06)] flex flex-col overflow-hidden">
-                  {/* Title Bar with Traffic Lights */}
-                  <div className="h-3 border-b border-black/[0.04] bg-[#fafafc] flex items-center px-1 gap-[3px] shrink-0">
-                    <div className="size-1 rounded-full bg-[#ff5f56]" />
-                    <div className="size-1 rounded-full bg-[#ffbd2e]" />
-                    <div className="size-1 rounded-full bg-[#27c93f]" />
-                  </div>
-                  <div className="flex flex-1 min-h-0">
-                    {/* Sidebar */}
-                    <div className="w-[14px] border-r border-black/5 bg-[#f5f5f7] h-full p-0.5 space-y-0.5 shrink-0">
-                      <div 
-                        className="h-1.5 w-full rounded-[2px] transition-colors duration-300"
-                        style={{ backgroundColor: lightPreviewColor }}
-                      />
-                      <div className="h-1 w-2/3 rounded-[2px] bg-black/[0.06]" />
-                    </div>
-                    {/* Content Area (Left Part) */}
-                    <div className="flex-1 bg-white p-0.5 space-y-0.5">
-                      <div className="h-1.5 w-full rounded-[1px] bg-black/[0.04]" />
-                      <div className="h-1 w-1/2 rounded-[1px] bg-black/[0.03]" />
-                    </div>
-                  </div>
-                </div>
+            <div className="relative h-20 w-full overflow-hidden rounded-lg border border-[var(--settings-hairline)] flex select-none pointer-events-none shadow-sm">
+              <div className="w-1/2 border-r border-black/5 dark:border-white/5">
+                <ThemePreviewMock
+                  theme="light"
+                  previewColor={lightPreviewColor}
+                  sidebarWidth={14}
+                  showAllSidebarLines={false}
+                  className="rounded-none border-none shadow-none"
+                />
               </div>
-              {/* Right half: Dark theme */}
-              <div className="w-1/2 h-full relative bg-gradient-to-br from-[#1b1d2a] to-[#0f101b] overflow-hidden flex flex-col justify-end">
-                {/* Mock macOS Window (Right part) */}
-                <div className="absolute left-0 right-3 bottom-0 top-3 rounded-tr-md border-t border-r border-white/10 bg-[#1e1e1f] shadow-[0_2px_10px_rgba(0,0,0,0.3)] flex flex-col overflow-hidden">
-                  {/* Title Bar with Traffic Lights */}
-                  <div className="h-3 border-b border-white/[0.04] bg-[#252527] flex items-center px-1 gap-[3px] shrink-0">
-                    <div className="size-1 rounded-full bg-[#ff5f56]" />
-                    <div className="size-1 rounded-full bg-[#ffbd2e]" />
-                    <div className="size-1 rounded-full bg-[#27c93f]" />
-                  </div>
-                  <div className="flex flex-1 min-h-0">
-                    {/* Content Area (Right Part) */}
-                    <div className="flex-1 bg-[#1e1e1f] p-0.5 space-y-0.5">
-                      <div className="h-1.5 w-full rounded-[1px] bg-white/[0.06]" />
-                      <div 
-                        className="h-1 w-1/2 rounded-[1px] transition-colors duration-300" 
-                        style={{ backgroundColor: darkPreviewColor }}
-                      />
-                    </div>
-                  </div>
-                </div>
+              <div className="w-1/2">
+                <ThemePreviewMock
+                  theme="dark"
+                  previewColor={darkPreviewColor}
+                  hideSidebar
+                  showAllSidebarLines={false}
+                  className="rounded-none border-none shadow-none"
+                />
               </div>
             </div>
             <span className="text-[12px] font-medium text-[var(--settings-ink)]">
@@ -468,7 +438,7 @@ export const AppearanceSettingsSection = memo(function AppearanceSettingsSection
             className={cn(
               "group relative flex flex-col items-center gap-2.5 rounded-xl border p-2.5 text-center transition duration-300 active:scale-[0.97] glass-interactive",
               theme === "light"
-                ? "border-[var(--settings-card-selected-border)] bg-[var(--settings-card-selected-bg)] shadow-[0_4px_20px_rgba(0,102,204,0.06),0_1px_3px_rgba(0,102,204,0.04)]"
+                ? "border-[var(--settings-card-selected-border)] bg-[var(--settings-card-selected-bg)] shadow-[var(--settings-card-selected-shadow)]"
                 : "border-[var(--settings-hairline)] bg-transparent hover:bg-black/[0.015] dark:hover:bg-white/[0.015] hover:border-black/20 dark:hover:border-white/20"
             )}
             onClick={() => onThemeChange("light")}
@@ -479,34 +449,7 @@ export const AppearanceSettingsSection = memo(function AppearanceSettingsSection
               </div>
             )}
             {/* 亮色主题微缩图 */}
-            <div className="relative h-20 w-full overflow-hidden rounded-lg border border-[var(--settings-hairline)] bg-gradient-to-br from-[#c9d6ff] via-[#e2e2e2] to-[#f5f7fa] flex select-none pointer-events-none shadow-sm">
-              {/* Mock macOS Window */}
-              <div className="absolute inset-x-3 bottom-0 top-3 rounded-t-md border-t border-x border-black/10 bg-white shadow-[0_2px_12px_rgba(0,0,0,0.06)] flex flex-col overflow-hidden">
-                {/* Title Bar with Traffic Lights */}
-                <div className="h-3 border-b border-black/[0.04] bg-[#fafafc] flex items-center px-1.5 gap-[3px] shrink-0">
-                  <div className="size-1 rounded-full bg-[#ff5f56]" />
-                  <div className="size-1 rounded-full bg-[#ffbd2e]" />
-                  <div className="size-1 rounded-full bg-[#27c93f]" />
-                </div>
-                <div className="flex flex-1 min-h-0">
-                  {/* Sidebar */}
-                  <div className="w-[18px] border-r border-black/5 bg-[#fafafc] h-full p-0.5 space-y-0.5 shrink-0">
-                    <div 
-                      className="h-1.5 w-full rounded-[2px] transition-colors duration-300" 
-                      style={{ backgroundColor: lightPreviewColor }}
-                    />
-                    <div className="h-1 w-2/3 rounded-[2px] bg-black/[0.06]" />
-                    <div className="h-1 w-3/4 rounded-[2px] bg-black/[0.05]" />
-                  </div>
-                  {/* Content Area */}
-                  <div className="flex-1 bg-white p-0.5 space-y-0.5">
-                    <div className="h-1.5 w-2/3 rounded-[1px] bg-black/[0.04]" />
-                    <div className="h-1.5 w-full rounded-[1px] bg-black/[0.03]" />
-                    <div className="h-1.5 w-1/2 rounded-[1px] bg-black/[0.03]" />
-                  </div>
-                </div>
-              </div>
-            </div>
+            <ThemePreviewMock theme="light" previewColor={lightPreviewColor} />
             <span className="text-[12px] font-medium text-[var(--settings-ink)]">
               {translations.theme?.light || "亮色"}
             </span>
@@ -518,7 +461,7 @@ export const AppearanceSettingsSection = memo(function AppearanceSettingsSection
             className={cn(
               "group relative flex flex-col items-center gap-2.5 rounded-xl border p-2.5 text-center transition duration-300 active:scale-[0.97] glass-interactive",
               theme === "dark"
-                ? "border-[var(--settings-card-selected-border)] bg-[var(--settings-card-selected-bg)] shadow-[0_4px_20px_rgba(0,102,204,0.06),0_1px_3px_rgba(0,102,204,0.04)]"
+                ? "border-[var(--settings-card-selected-border)] bg-[var(--settings-card-selected-bg)] shadow-[var(--settings-card-selected-shadow)]"
                 : "border-[var(--settings-hairline)] bg-transparent hover:bg-black/[0.015] dark:hover:bg-white/[0.015] hover:border-black/20 dark:hover:border-white/20"
             )}
             onClick={() => onThemeChange("dark")}
@@ -529,34 +472,7 @@ export const AppearanceSettingsSection = memo(function AppearanceSettingsSection
               </div>
             )}
             {/* 暗色主题微缩图 */}
-            <div className="relative h-20 w-full overflow-hidden rounded-lg border border-[var(--settings-hairline)] bg-gradient-to-br from-[#1b1c29] via-[#23253f] to-[#13141f] flex select-none pointer-events-none shadow-sm">
-              {/* Mock macOS Window */}
-              <div className="absolute inset-x-3 bottom-0 top-3 rounded-t-md border-t border-x border-white/10 bg-[#1e1e1f] shadow-[0_2px_12px_rgba(0,0,0,0.35)] flex flex-col overflow-hidden">
-                {/* Title Bar with Traffic Lights */}
-                <div className="h-3 border-b border-white/[0.04] bg-[#252527] flex items-center px-1.5 gap-[3px] shrink-0">
-                  <div className="size-1 rounded-full bg-[#ff5f56]" />
-                  <div className="size-1 rounded-full bg-[#ffbd2e]" />
-                  <div className="size-1 rounded-full bg-[#27c93f]" />
-                </div>
-                <div className="flex flex-1 min-h-0">
-                  {/* Sidebar */}
-                  <div className="w-[18px] border-r border-white/5 bg-[#252527] h-full p-0.5 space-y-0.5 shrink-0">
-                    <div 
-                      className="h-1.5 w-full rounded-[2px] transition-colors duration-300" 
-                      style={{ backgroundColor: darkPreviewColor }}
-                    />
-                    <div className="h-1 w-2/3 rounded-[2px] bg-white/[0.08]" />
-                    <div className="h-1 w-3/4 rounded-[2px] bg-white/[0.08]" />
-                  </div>
-                  {/* Content Area */}
-                  <div className="flex-1 bg-[#1e1e1f] p-0.5 space-y-0.5">
-                    <div className="h-1.5 w-2/3 rounded-[1px] bg-white/[0.06]" />
-                    <div className="h-1.5 w-full rounded-[1px] bg-white/[0.04]" />
-                    <div className="h-1.5 w-1/2 rounded-[1px] bg-white/[0.04]" />
-                  </div>
-                </div>
-              </div>
-            </div>
+            <ThemePreviewMock theme="dark" previewColor={darkPreviewColor} />
             <span className="text-[12px] font-medium text-[var(--settings-ink)]">
               {translations.theme?.dark || "暗色"}
             </span>
@@ -633,7 +549,7 @@ export const ShortcutsSettingsSection = memo(function ShortcutsSettingsSection({
               <span className="text-[14px] font-medium tracking-[-0.224px] text-[var(--settings-ink)]">
                 {shortcut.description}
               </span>
-              <kbd className="rounded-md border border-[#d1d1d6] border-b-[#b5b5ba] bg-gradient-to-b from-white to-[#f5f5f7] px-2.5 py-0.5 text-[11px] font-bold tracking-tight text-black/80 shadow-[0_1.5px_0_rgba(0,0,0,0.06),0_1px_1.5px_rgba(0,0,0,0.04)] font-sans dark:from-[#3a3a3c] dark:to-[#2c2c2e] dark:border-[#48484a] dark:border-b-[#1c1c1e] dark:shadow-[0_1.5px_0_rgba(0,0,0,0.4),0_1px_1.5px_rgba(0,0,0,0.2)] dark:text-white/90 shrink-0">
+              <kbd className="rounded-md border border-[var(--settings-hairline)] bg-[var(--settings-section-bg)] px-2.5 py-0.5 text-[11px] font-bold tracking-tight text-[var(--settings-ink)] shadow-sm font-sans shrink-0">
                 {shortcut.key}
               </kbd>
             </div>
@@ -1038,7 +954,7 @@ export function SettingsDialog({
             <div className="flex items-center gap-3 min-w-0">
               {isConfigUnhealthy ? (
                 <>
-                  <AlertTriangle className="size-[18px] flex-shrink-0 text-amber-500" />
+                  <AlertTriangle className="size-[18px] flex-shrink-0 text-[hsl(var(--warning))]" />
                   <div className="space-y-0.5 min-w-0">
                     <Label className="text-[14px] font-semibold tracking-[-0.224px] text-[var(--settings-ink)]">
                       {versionT.updateChannelNotConfiguredTitle || "更新通道未配置"}
@@ -1050,7 +966,7 @@ export function SettingsDialog({
                 </>
               ) : isRestartRequired ? (
                 <>
-                  <RefreshCw className="size-[18px] flex-shrink-0 text-emerald-500" />
+                  <RefreshCw className="size-[18px] flex-shrink-0 text-[hsl(var(--success))]" />
                   <div className="space-y-0.5 min-w-0">
                     <Label className="text-[14px] font-semibold tracking-[-0.224px] text-[var(--settings-ink)]">
                       {versionT.updateReadyTitle || "新版本已准备就绪"}
@@ -1062,7 +978,7 @@ export function SettingsDialog({
                 </>
               ) : updateInfo?.hasUpdate ? (
                 <>
-                  <ArrowUpCircle className="size-[18px] flex-shrink-0 text-blue-500" />
+                  <ArrowUpCircle className="size-[18px] flex-shrink-0 text-[hsl(var(--primary))]" />
                   <div className="space-y-0.5 min-w-0">
                     <Label className="text-[14px] font-semibold tracking-[-0.224px] text-[var(--settings-ink)]">
                       {formatMessage(versionT.new || "有新版本: v{}", updateInfo.availableVersion || "")}
@@ -1074,7 +990,7 @@ export function SettingsDialog({
                 </>
               ) : (
                 <>
-                  <CheckCircle2 className="size-[18px] flex-shrink-0 text-emerald-500" />
+                  <CheckCircle2 className="size-[18px] flex-shrink-0 text-[hsl(var(--success))]" />
                   <div className="space-y-0.5 min-w-0">
                     <Label className="text-[14px] font-semibold tracking-[-0.224px] text-[var(--settings-ink)]">
                       {versionT.upToDateTitle || "软件已是最新版本"}
@@ -1158,8 +1074,8 @@ export function SettingsDialog({
           </div>
 
           {updateInfo?.message && !shouldHideDefaultUpdaterConfigMessage && (
-            <div className="p-4 border-t border-[var(--settings-hairline)] bg-red-500/[0.01] dark:bg-red-500/[0.02]">
-              <div className="rounded-lg border border-red-500/10 bg-red-500/[0.01] dark:bg-red-500/[0.03] p-3 text-[11.5px] leading-relaxed text-red-600 dark:text-red-400 font-medium">
+            <div className="p-4 border-t border-[var(--settings-hairline)] bg-destructive/[0.02] dark:bg-destructive/[0.03]">
+              <div className="rounded-lg border border-destructive/20 bg-destructive/[0.02] dark:bg-destructive/[0.04] p-3 text-[11.5px] leading-relaxed text-destructive font-medium">
                 {updateInfo.message}
               </div>
             </div>
@@ -1224,7 +1140,7 @@ export function SettingsDialog({
           translations.settings?.description || "配置语言、外观、输出目录等偏好设置"
         }
         icon={undefined}
-        surfaceClassName="bg-[#f5f5f7] dark:bg-[#1e1e20] border border-[var(--settings-hairline)] shadow-2xl"
+        surfaceClassName="bg-[var(--settings-section-bg)] dark:bg-[var(--settings-section-bg)] border border-[var(--settings-hairline)] shadow-2xl"
         headerClassName="border-b border-[var(--settings-hairline)] bg-transparent"
         titleClassName="text-[17px] font-semibold text-[var(--settings-ink)]"
         descriptionClassName="text-[13px] text-[var(--settings-ink-muted)]"

@@ -28,9 +28,18 @@
     --radius: 0.5rem;
     --success: 152 60% 40%;
     --success-foreground: 0 0% 100%;
-    --warning: 38 92% 50%;
-    --warning-foreground: 24 10% 10%;
+  --warning: 38 92% 50%;
+  --warning-foreground: 24 10% 10%;
+
+  /* Fine-print text: full-opacity muted tone verified ≥4.5:1 on the canvas.
+     Use for ≤12px secondary text instead of applying opacity to muted-foreground. */
+  --text-fine: 24 6% 40%;
+  /* Terminal surface for the publish log panel — intentionally dark for log legibility,
+     but exposed as tokens so dark mode and accent theming stay consistent. */
+  --terminal-bg: 222 47% 11%;
+  --terminal-fg: 213 31% 92%;
   }
+
 
   .dark {
     --background: 24 8% 10%;
@@ -56,6 +65,10 @@
     --success-foreground: 0 0% 100%;
     --warning: 38 80% 55%;
     --warning-foreground: 0 0% 100%;
+
+    --text-fine: 30 8% 70%;
+    --terminal-bg: 222 47% 9%;
+    --terminal-fg: 213 31% 92%;
   }
 }
 
@@ -167,6 +180,46 @@ html.dark {
   --settings-sidebar-selected-text: #0066cc;
   --settings-card-selected-border: rgba(0, 102, 204, 0.4);
   --settings-card-selected-bg: rgba(0, 102, 204, 0.02);
+  --settings-card-selected-shadow: 0 4px 20px rgba(0, 102, 204, 0.06), 0 1px 3px rgba(0, 102, 204, 0.04);
+
+  /* Theme preview mock — platform chrome palette.
+     Two complete palettes let the mock render light and dark variants
+     side-by-side regardless of the active document theme. */
+  --theme-preview-light-gradient-from: #c9d6ff;
+  --theme-preview-light-gradient-via: #e2e2e2;
+  --theme-preview-light-gradient-to: #f5f7fa;
+  --theme-preview-light-window-bg: #ffffff;
+  --theme-preview-light-titlebar-bg: #fafafc;
+  --theme-preview-light-sidebar-bg: #fafafc;
+  --theme-preview-light-border: rgba(0, 0, 0, 0.1);
+  --theme-preview-light-hairline: rgba(0, 0, 0, 0.04);
+  --theme-preview-light-shadow: rgba(0, 0, 0, 0.06);
+  --theme-preview-light-content-line: rgba(0, 0, 0, 0.04);
+  --theme-preview-light-content-line-secondary: rgba(0, 0, 0, 0.03);
+  --theme-preview-light-sidebar-line: rgba(0, 0, 0, 0.06);
+  --theme-preview-light-sidebar-line-secondary: rgba(0, 0, 0, 0.05);
+  --theme-preview-light-sidebar-divider: rgba(0, 0, 0, 0.05);
+  --theme-preview-light-traffic-red: #ff5f56;
+  --theme-preview-light-traffic-yellow: #ffbd2e;
+  --theme-preview-light-traffic-green: #27c93f;
+
+  --theme-preview-dark-gradient-from: #1b1c29;
+  --theme-preview-dark-gradient-via: #23253f;
+  --theme-preview-dark-gradient-to: #13141f;
+  --theme-preview-dark-window-bg: #1e1e1f;
+  --theme-preview-dark-titlebar-bg: #252527;
+  --theme-preview-dark-sidebar-bg: #252527;
+  --theme-preview-dark-border: rgba(255, 255, 255, 0.1);
+  --theme-preview-dark-hairline: rgba(255, 255, 255, 0.04);
+  --theme-preview-dark-shadow: rgba(0, 0, 0, 0.35);
+  --theme-preview-dark-content-line: rgba(255, 255, 255, 0.06);
+  --theme-preview-dark-content-line-secondary: rgba(255, 255, 255, 0.04);
+  --theme-preview-dark-sidebar-line: rgba(255, 255, 255, 0.08);
+  --theme-preview-dark-sidebar-line-secondary: rgba(255, 255, 255, 0.08);
+  --theme-preview-dark-sidebar-divider: rgba(255, 255, 255, 0.05);
+  --theme-preview-dark-traffic-red: #ff5f56;
+  --theme-preview-dark-traffic-yellow: #ffbd2e;
+  --theme-preview-dark-traffic-green: #27c93f;
 
   --repo-sidebar-shell-bg: linear-gradient(
     180deg,
@@ -228,6 +281,7 @@ html.dark {
   --settings-sidebar-selected-text: #2997ff;
   --settings-card-selected-border: rgba(41, 151, 255, 0.6);
   --settings-card-selected-bg: rgba(255, 255, 255, 0.02);
+  --settings-card-selected-shadow: 0 4px 20px rgba(41, 151, 255, 0.06), 0 1px 3px rgba(41, 151, 255, 0.04);
 
   --repo-sidebar-shell-bg: linear-gradient(
     180deg,
@@ -310,9 +364,8 @@ html.dark {
   border: 1px solid var(--glass-border-subtle);
   box-shadow: var(--glass-inset-shadow);
   transition:
-    background 0.3s cubic-bezier(0.22, 1, 0.36, 1),
-    border-color 0.3s cubic-bezier(0.22, 1, 0.36, 1),
-    box-shadow 0.3s cubic-bezier(0.22, 1, 0.36, 1);
+    border-color 0.2s cubic-bezier(0.2, 0.8, 0.2, 1),
+    box-shadow 0.2s cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 
 .glass-input:focus-within {
@@ -582,7 +635,6 @@ html.dark {
   transition: transform 0.2s cubic-bezier(0.2, 0.8, 0.2, 1),
               box-shadow 0.2s cubic-bezier(0.2, 0.8, 0.2, 1),
               background 0.2s cubic-bezier(0.2, 0.8, 0.2, 1);
-  will-change: transform;
 }
 
 .glass-press:active {
@@ -597,7 +649,6 @@ html.dark {
               box-shadow 0.42s cubic-bezier(0.2, 0.8, 0.2, 1),
               background 0.30s cubic-bezier(0.2, 0.8, 0.2, 1),
               border-color 0.30s cubic-bezier(0.2, 0.8, 0.2, 1);
-  will-change: transform, box-shadow;
 }
 
 .glass-hover-lift:hover {
@@ -619,7 +670,6 @@ html.dark {
               background 0.30s cubic-bezier(0.2, 0.8, 0.2, 1),
               border-color 0.30s cubic-bezier(0.2, 0.8, 0.2, 1),
               opacity 0.30s cubic-bezier(0.2, 0.8, 0.2, 1);
-  will-change: transform, box-shadow;
 }
 
 .glass-interactive:hover {
@@ -743,6 +793,17 @@ html.dark {
     scroll-behavior: auto !important;
   }
 
+  /* Fully suppress decorative motion — not just duration, but iteration and
+     visibility — so pulsing dots, breathing badges, specular sweeps and
+     spring entrances do not fire at all for users who request reduced motion. */
+  .subtle-pulse,
+  .capsule-breathe,
+  .glass-shimmer-hover::after,
+  .glass-stagger > *,
+  .glass-focus-ring:focus-visible {
+    animation: none !important;
+  }
+
   .glass-hover-lift:hover,
   .glass-interactive:hover {
     transform: none;
@@ -759,7 +820,6 @@ html.dark {
   }
 
   .glass-stagger > * {
-    animation: none;
     opacity: 1;
     transform: none;
   }
@@ -809,6 +869,12 @@ html.dark {
   color: hsl(var(--success));
   background: hsl(var(--success) / 0.1);
   border: 1px solid hsl(var(--success) / 0.2);
+}
+
+.status-info {
+  color: hsl(var(--primary));
+  background: hsl(var(--primary) / 0.1);
+  border: 1px solid hsl(var(--primary) / 0.2);
 }
 
 .status-failed {
