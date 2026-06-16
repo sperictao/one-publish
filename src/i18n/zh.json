@@ -823,6 +823,8 @@
     "expandSidebar": "展开侧边栏",
     "collapseSidebar": "收起侧边栏",
     "add": "添加",
+    "noItemsAdded": "暂无项目",
+    "noEntriesAdded": "暂无条目",
     "arrayItemPlaceholder": "第 {{index}} 项",
     "removeArrayItem": "移除第 {{index}} 项",
     "mapKeyPlaceholder": "键",

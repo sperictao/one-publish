@@ -15,6 +15,7 @@ describe('ArrayParameter', () => {
       zh: {
         common: {
           add: '添加',
+          noItemsAdded: '暂无项目',
           arrayItemPlaceholder: '第 {{index}} 项',
           removeArrayItem: '移除第 {{index}} 项',
         },
@@ -32,7 +33,7 @@ describe('ArrayParameter', () => {
       />
     );
 
-    expect(screen.getByText('No items added')).toBeInTheDocument();
+    expect(screen.getByText('暂无项目')).toBeInTheDocument();
   });
 
   it('renders input for each item', () => {

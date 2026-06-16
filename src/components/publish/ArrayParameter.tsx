@@ -1,4 +1,4 @@
-import { useId } from "react";
+import { useEffect, useId, useRef } from "react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -25,6 +25,21 @@ export function ArrayParameter({
   const resolvedLabel = label || definition.flag;
   const fieldLabelId = useId();
   const { t } = useI18n();
+
+  // Stable ids per array slot so add/remove/rename does not steal focus.
+  const nextIdRef = useRef(0);
+  const idPoolRef = useRef<string[]>([]);
+  // Eagerly fill the pool before the mapping render so every row has a key.
+  if (value.length > idPoolRef.current.length) {
+    while (value.length > idPoolRef.current.length) {
+      idPoolRef.current.push(`array-item-${++nextIdRef.current}`);
+    }
+  }
+  useEffect(() => {
+    if (value.length < idPoolRef.current.length) {
+      idPoolRef.current = idPoolRef.current.slice(0, value.length);
+    }
+  }, [value.length]);
 
   const addItem = () => {
     onChange([...value, ""]);
@@ -63,7 +78,7 @@ export function ArrayParameter({
       </div>
       <div className="space-y-2" role="group" aria-labelledby={fieldLabelId}>
         {value.map((item, index) => (
-          <div key={index} className="flex items-center gap-x-2">
+          <div key={idPoolRef.current[index]} className="flex items-center gap-x-2">
             <Input
               type="text"
               value={String(item)}
@@ -86,7 +101,7 @@ export function ArrayParameter({
         ))}
         {value.length === 0 && (
           <div className="text-sm text-muted-foreground italic">
-            No items added
+            {t("common.noItemsAdded")}
           </div>
         )}
       </div>

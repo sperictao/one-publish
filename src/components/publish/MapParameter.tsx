@@ -1,4 +1,4 @@
-import { useId } from "react";
+import { useEffect, useId, useRef } from "react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -27,8 +27,28 @@ export function MapParameter({
   const fieldLabelId = useId();
   const { t } = useI18n();
 
+  // Stable ids per map slot so key renames do not steal focus.
+  const nextIdRef = useRef(0);
+  const idPoolRef = useRef<string[]>([]);
+  // Eagerly fill the pool before the mapping render so every row has a key.
+  if (entries.length > idPoolRef.current.length) {
+    while (entries.length > idPoolRef.current.length) {
+      idPoolRef.current.push(`map-entry-${++nextIdRef.current}`);
+    }
+  }
+  useEffect(() => {
+    if (entries.length < idPoolRef.current.length) {
+      idPoolRef.current = idPoolRef.current.slice(0, entries.length);
+    }
+  }, [entries.length]);
+
   const addEntry = () => {
-    onChange({ ...value, [`key_${entries.length}`]: "" });
+    let i = entries.length;
+    let newKey = `key_${i}`;
+    while (newKey in value) {
+      newKey = `key_${++i}`;
+    }
+    onChange({ ...value, [newKey]: "" });
   };
 
   const removeEntry = (key: string) => {
@@ -73,8 +93,8 @@ export function MapParameter({
         ) : null}
       </div>
       <div className="space-y-2" role="group" aria-labelledby={fieldLabelId}>
-        {entries.map(([key, val]) => (
-          <div key={key} className="flex items-center gap-x-2">
+        {entries.map(([key, val], index) => (
+          <div key={idPoolRef.current[index]} className="flex items-center gap-x-2">
             <Input
               type="text"
               value={key}
@@ -106,7 +126,7 @@ export function MapParameter({
         ))}
         {entries.length === 0 && (
           <div className="text-sm text-muted-foreground italic">
-            No entries added
+            {t("common.noEntriesAdded")}
           </div>
         )}
       </div>

@@ -823,6 +823,8 @@
     "expandSidebar": "Expand sidebar",
     "collapseSidebar": "Collapse sidebar",
     "add": "Add",
+    "noItemsAdded": "No items added",
+    "noEntriesAdded": "No entries added",
     "arrayItemPlaceholder": "Item {{index}}",
     "removeArrayItem": "Remove item {{index}}",
     "mapKeyPlaceholder": "Key",

@@ -16,6 +16,7 @@ describe('MapParameter', () => {
       zh: {
         common: {
           add: '添加',
+          noEntriesAdded: '暂无条目',
           mapKeyPlaceholder: '键',
           mapValuePlaceholder: '值',
           removeMapEntry: '移除条目 {{key}}',
@@ -34,7 +35,7 @@ describe('MapParameter', () => {
       />
     );
 
-    expect(screen.getByText('No entries added')).toBeInTheDocument();
+    expect(screen.getByText('暂无条目')).toBeInTheDocument();
   });
 
   it('renders inputs for each entry', () => {
