@@ -3,6 +3,20 @@ import { isTauri } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import type { PublishLogChunkEvent } from "@/generated/tauri-contracts";
 
+// 可见日志层的最大保留字符数。完整日志仍存于 capturedOutputLogRef，
+// 此上限仅约束渲染到 DOM 的文本量，避免超长发布日志拖垮渲染性能。
+const MAX_VISIBLE_LOG_CHARS = 200_000;
+
+// 超限时保留尾部，并对齐到下一个换行，避免在行中间截断。
+function clampVisibleLog(log: string): string {
+  if (log.length <= MAX_VISIBLE_LOG_CHARS) {
+    return log;
+  }
+  const tail = log.slice(log.length - MAX_VISIBLE_LOG_CHARS);
+  const newlineIndex = tail.indexOf("\n");
+  return newlineIndex >= 0 ? tail.slice(newlineIndex + 1) : tail;
+}
+
 export function usePublishLogStream() {
   const [outputLog, setOutputLogState] = useState("");
   const capturedOutputLogRef = useRef("");
@@ -11,7 +25,7 @@ export function usePublishLogStream() {
   const isVisibleCaptureEnabledRef = useRef(false);
 
   const replaceVisibleOutputLog = useCallback((nextLog: string) => {
-    setOutputLogState(nextLog);
+    setOutputLogState(clampVisibleLog(nextLog));
   }, []);
 
   const appendOutputLog = useCallback((chunk: string) => {
@@ -19,9 +33,7 @@ export function usePublishLogStream() {
       return;
     }
 
-    setOutputLogState((prev) => {
-      return `${prev}${chunk}`;
-    });
+    setOutputLogState((prev) => clampVisibleLog(`${prev}${chunk}`));
   }, []);
 
   const getOutputLogSnapshot = useCallback(
