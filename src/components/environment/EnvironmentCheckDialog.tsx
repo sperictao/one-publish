@@ -152,20 +152,20 @@ export function EnvironmentCheckContent({
     if (!result) return null;
     if (grouped.critical.length > 0) {
       return {
-        icon: <XCircle className="size-4 text-red-600" />,
+        icon: <XCircle className="size-4 text-destructive" />,
         text: translations.environment?.blocked || "存在阻断问题",
         variant: "danger" as const,
       };
     }
     if (grouped.warning.length > 0) {
       return {
-        icon: <AlertTriangle className="size-4 text-yellow-600" />,
+        icon: <AlertTriangle className="size-4 text-warning" />,
         text: translations.environment?.warning || "存在警告",
         variant: "warning" as const,
       };
     }
     return {
-      icon: <CheckCircle2 className="size-4 text-green-600" />,
+      icon: <CheckCircle2 className="size-4 text-success" />,
       text: translations.environment?.ready || "已就绪",
       variant: "success" as const,
     };
@@ -286,10 +286,10 @@ export function EnvironmentCheckContent({
             "border rounded-xl p-4 flex items-center justify-between gap-4 shadow-[0_1px_3px_rgba(0,0,0,0.01)] transition duration-300",
             result
               ? grouped.critical.length > 0
-                ? "bg-red-500/[0.04] border-red-500/20 dark:bg-red-500/[0.06]"
+                ? "bg-destructive/5 border-destructive/20"
                 : grouped.warning.length > 0
-                  ? "bg-amber-500/[0.04] border-amber-500/20 dark:bg-amber-500/[0.06]"
-                  : "bg-emerald-500/[0.04] border-emerald-500/20 dark:bg-emerald-500/[0.06]"
+                  ? "bg-warning/5 border-warning/20"
+                  : "bg-success/5 border-success/20"
               : "border-[var(--settings-hairline)] bg-[var(--settings-section-bg)]"
           )}
         >
@@ -304,10 +304,10 @@ export function EnvironmentCheckContent({
                     className={cn(
                       "flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold border shadow-none",
                       grouped.critical.length > 0
-                        ? "bg-red-100 text-red-700 border-red-200 dark:bg-red-950/40 dark:text-red-400 dark:border-red-900/50"
+                        ? "bg-destructive/10 text-destructive border-destructive/20"
                         : grouped.warning.length > 0
-                          ? "bg-amber-100 text-amber-700 border-amber-200 dark:bg-amber-950/40 dark:text-amber-400 dark:border-amber-900/50"
-                          : "bg-emerald-100 text-emerald-700 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-400 dark:border-emerald-900/50"
+                          ? "bg-warning/10 text-warning border-warning/20"
+                          : "bg-success/10 text-success border-success/20"
                     )}
                   >
                     {statusBadge?.icon}
@@ -380,7 +380,7 @@ export function EnvironmentCheckContent({
 
         {/* 错误提示 */}
         {error && (
-          <div className="border border-red-500/20 bg-red-500/[0.04] text-sm text-red-950 dark:text-red-400 rounded-xl p-4 shadow-[0_4px_16px_rgba(239,68,68,0.06)]">
+          <div className="border border-destructive/20 bg-destructive/5 text-sm text-destructive rounded-xl p-4 shadow-[0_4px_16px_rgba(239,68,68,0.06)]">
             {error}
           </div>
         )}
@@ -406,8 +406,8 @@ export function EnvironmentCheckContent({
                         className={cn(
                           "size-2 rounded-full shrink-0 transition duration-300",
                           provider.installed
-                            ? "bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.6)] subtle-pulse"
-                            : "bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.6)]"
+                            ? "bg-success shadow-[0_0_8px_rgba(16,185,129,0.6)] subtle-pulse"
+                            : "bg-destructive shadow-[0_0_8px_rgba(239,68,68,0.6)]"
                         )}
                       />
                       <span className="font-semibold text-[13.5px] text-[var(--settings-ink)]">{provider.provider_id}</span>
@@ -446,18 +446,18 @@ export function EnvironmentCheckContent({
                           className={cn(
                             "rounded-xl border p-4 transition duration-200 glass-hover-lift",
                             isCritical
-                              ? "border-red-500/15 bg-red-500/[0.01] dark:bg-red-500/[0.03] text-red-600 dark:text-red-400"
+                              ? "border-destructive/15 bg-destructive/[0.03] text-destructive"
                               : isWarning
-                                ? "border-amber-500/15 bg-amber-500/[0.01] dark:bg-amber-500/[0.03] text-amber-600 dark:text-amber-400"
+                                ? "border-warning/15 bg-warning/[0.03] text-warning"
                                 : "border-[var(--settings-hairline)] bg-black/[0.01] dark:bg-white/[0.01] text-[var(--settings-ink)]"
                           )}
                         >
                           <div className="flex items-start gap-3">
                             <div className="mt-0.5 shrink-0">
                               {isCritical ? (
-                                <XCircle className="size-4.5 text-red-500" />
+                                <XCircle className="size-4.5 text-destructive" />
                               ) : isWarning ? (
-                                <AlertTriangle className="size-4.5 text-amber-500" />
+                                <AlertTriangle className="size-4.5 text-warning" />
                               ) : (
                                 <CheckCircle2 className="size-4.5 text-[var(--settings-accent)]" />
                               )}
@@ -472,10 +472,10 @@ export function EnvironmentCheckContent({
                                   className={cn(
                                     "text-[9px] font-bold px-1.5 py-0.5 rounded-full uppercase tracking-wider shrink-0",
                                     isCritical
-                                      ? "bg-red-100 text-red-700 dark:bg-red-950/50 dark:text-red-400"
+                                      ? "bg-destructive/10 text-destructive"
                                       : isWarning
-                                        ? "bg-amber-100 text-amber-700 dark:bg-amber-950/50 dark:text-amber-400"
-                                        : "bg-blue-100 text-blue-700 dark:bg-blue-950/50 dark:text-blue-400"
+                                        ? "bg-warning/10 text-warning"
+                                        : "bg-primary/10 text-primary"
                                   )}
                                 >
                                   {issue.severity}

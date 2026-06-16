@@ -711,7 +711,7 @@ export const UpdaterProgressBar = memo(function UpdaterProgressBar({
       <div className="h-2 overflow-hidden rounded-full bg-black/5 dark:bg-white/5 border border-black/[0.02] dark:border-white/[0.02]">
         <div
           className={cn(
-            "h-full rounded-full bg-gradient-to-r from-blue-500 to-indigo-500 shadow-[0_0_8px_rgba(59,130,246,0.35)] transition-[width] duration-200",
+            "h-full rounded-full bg-primary shadow-[0_0_8px_hsl(var(--primary)/0.35)] transition-[width] duration-200",
             downloadProgress.percent === null && "animate-pulse w-1/3"
           )}
           style={
