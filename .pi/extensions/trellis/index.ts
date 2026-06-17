@@ -748,8 +748,10 @@ function parseAgentFM(c: string): AgentConfig {
           .trim()
           .replace(/^\[|\]$/g, "")
           .split(",")
-          .map((s) => s.trim().replace(/^["']|["']$/g, ""))
-          .filter(Boolean);
+          .flatMap((s) => {
+            const trimmed = s.trim().replace(/^["']|["']$/g, "");
+            return trimmed ? [trimmed] : [];
+          });
       } else {
         i++;
         while (i < lines.length && /^\s+-\s/.test(lines[i] ?? "")) {
@@ -818,11 +820,12 @@ function adoptKey(root: string, key: string): string {
   if (sessionHasTask(root, key)) return key;
   try {
     const dir = join(root, ".trellis", ".runtime", "sessions");
-    const keys = readdirSync(dir)
-      .filter(
-        (f) => f.endsWith(".json") && sessionHasTask(root, f.slice(0, -5)),
-      )
-      .map((f) => f.slice(0, -5));
+    const keys = readdirSync(dir).flatMap((f) => {
+      if (f.endsWith(".json") && sessionHasTask(root, f.slice(0, -5))) {
+        return [f.slice(0, -5)];
+      }
+      return [];
+    });
     const proc = keys.filter((k) => k.startsWith("pi_process_"));
     const cands = proc.length ? proc : keys;
     return cands.length === 1 ? cands[0]! : key;
@@ -1461,7 +1464,10 @@ export default function trellisExtension(pi: {
       }
       const mode = input.mode ?? "single";
       const prompt = input.prompt?.trim();
-      const prompts = input.prompts?.map((p) => p.trim()).filter(Boolean);
+      const prompts = input.prompts?.flatMap((p) => {
+        const trimmed = p.trim();
+        return trimmed ? [trimmed] : [];
+      });
       if (mode === "single" && !prompt)
         throw new Error("subagent prompt is required for single mode");
       if (
