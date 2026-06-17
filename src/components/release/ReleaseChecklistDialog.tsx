@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { save } from "@tauri-apps/plugin-dialog";
 import { toast } from "sonner";
 import {
@@ -106,15 +106,21 @@ export function ReleaseChecklistDialog({
   const [updaterError, setUpdaterError] = useState<string | null>(null);
   const [activeStepIndex, setActiveStepIndex] = useState(0);
   const [exporting, setExporting] = useState(false);
+  const prevOpenRef = useRef(open);
 
   const checklistTranslations = translations.releaseChecklist || {};
 
+  if (prevOpenRef.current !== open) {
+    prevOpenRef.current = open;
+    if (open) {
+      setUpdaterLoading(true);
+      setUpdaterError(null);
+      setUpdaterHealth(null);
+    }
+  }
+
   useEffect(() => {
     if (!open) return;
-
-    setUpdaterLoading(true);
-    setUpdaterError(null);
-    setUpdaterHealth(null);
 
     getUpdaterConfigHealth()
       .then((health) => {
@@ -495,11 +501,11 @@ export function ReleaseChecklistDialog({
                   className={`glass-press w-full text-left rounded-xl border p-3 glass-transition ${
                     index === activeStepIndex
                       ? "border-primary bg-primary/5 glass-surface-selected"
-                      : "border-[var(--glass-border-subtle)] hover:bg-[var(--glass-bg)]"
+                      : "border-input hover:bg-muted"
                   }`}
                 >
                   <div className="flex items-center justify-between gap-2">
-                    <span className="text-sm font-medium">{item.title}</span>
+                    <span className="text-sm font-semibold">{item.title}</span>
                     {style.icon}
                   </div>
                   <div className="mt-2">
@@ -523,7 +529,7 @@ export function ReleaseChecklistDialog({
               <p className="text-sm text-muted-foreground">{activeStep.description}</p>
             </div>
 
-            <div className="rounded-xl border border-[var(--glass-border-subtle)] bg-[var(--glass-code-bg)] p-3 text-xs font-mono whitespace-pre-wrap break-all">
+            <div className="rounded-xl border border-input bg-muted p-3 text-xs font-mono whitespace-pre-wrap break-all">
               {activeStep.detail}
             </div>
 

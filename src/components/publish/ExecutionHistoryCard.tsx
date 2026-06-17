@@ -22,6 +22,19 @@ import type {
 } from "@/features/history/historyFilterPresets";
 import type { HandoffSnippetFormat } from "@/lib/handoffSnippet";
 
+function getExecutionFailureReason(record: ExecutionRecord): string | null {
+  if (record.success || record.cancelled) {
+    return null;
+  }
+
+  return (
+    record.error?.trim() ||
+    record.failureSignature?.trim() ||
+    record.outputExcerpt?.trim() ||
+    null
+  );
+}
+
 export interface ExecutionHistoryCardProps {
   scopedExecutionHistory: ExecutionRecord[];
   filteredExecutionHistory: ExecutionRecord[];
@@ -77,19 +90,6 @@ export function ExecutionHistoryCard({
   if (scopedExecutionHistory.length === 0) {
     return null;
   }
-
-  const getFailureReason = (record: ExecutionRecord) => {
-    if (record.success || record.cancelled) {
-      return null;
-    }
-
-    return (
-      record.error?.trim() ||
-      record.failureSignature?.trim() ||
-      record.outputExcerpt?.trim() ||
-      null
-    );
-  };
 
   return (
     <Card>
@@ -163,7 +163,7 @@ export function ExecutionHistoryCard({
           />
         </div>
 
-        <div className="flex items-center justify-between border-t border-[var(--glass-divider)] pt-3">
+        <div className="flex items-center justify-between border-t border-border pt-3">
           <div className="flex flex-wrap gap-2">
             <Button
               type="button"
@@ -200,20 +200,20 @@ export function ExecutionHistoryCard({
         </div>
 
         {filteredExecutionHistory.length === 0 ? (
-          <div className="rounded-xl border border-dashed border-[var(--glass-border-subtle)] px-3 py-4 text-sm text-muted-foreground">
+          <div className="rounded-xl border border-dashed border-input px-3 py-4 text-sm text-muted-foreground">
             {historyT.noRecords || "当前筛选条件下无执行记录"}
           </div>
         ) : (
           filteredExecutionHistory.slice(0, 6).map((record) => {
-            const failureReason = getFailureReason(record);
+            const failureReason = getExecutionFailureReason(record);
 
             return (
               <div
                 key={record.id}
-                className="rounded-xl border border-[var(--glass-border-subtle)] px-3 py-2 text-sm"
+                className="rounded-xl border border-input px-3 py-2 text-sm"
               >
                 <div className="flex items-center justify-between gap-2">
-                  <span className="font-medium">{record.providerId}</span>
+                  <span className="font-semibold">{record.providerId}</span>
                   <span
                     className={`text-xs rounded-md px-1.5 py-0.5 ${
                       record.success
@@ -236,7 +236,7 @@ export function ExecutionHistoryCard({
                 </div>
                 {failureReason && (
                   <div className="mt-2 rounded-lg border border-destructive/20 bg-destructive/5 px-2.5 py-2 text-xs text-destructive">
-                    <span className="font-medium">
+                    <span className="font-semibold">
                       {historyT.failureReason || "失败原因"}:
                     </span>{" "}
                     <span className="break-words">{failureReason}</span>

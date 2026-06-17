@@ -69,10 +69,10 @@ export function AppDialogShell({
   titleClassName,
   descriptionClassName,
   iconWrapperClassName,
-  overlayClassName = "bg-background backdrop-blur-0",
+  overlayClassName = "bg-background ",
   closeButtonClassName = "right-6 top-6",
   headerAside,
-}: AppDialogShellProps): JSX.Element {
+}: AppDialogShellProps): ReactNode {
   const isFixedSecondaryHeight = size === "workspace" || size === "responsive";
 
   return (
@@ -81,7 +81,7 @@ export function AppDialogShell({
       overlayClassName={overlayClassName}
       closeButtonClassName={closeButtonClassName}
       className={cn(
-        "overflow-visible border-none bg-transparent p-0 shadow-none backdrop-blur-none",
+        "overflow-visible border-none bg-transparent p-0 shadow-none ",
         contentSizeClassName[size],
         isFixedSecondaryHeight && "h-[82vh]",
         dialogClassName
@@ -97,7 +97,7 @@ export function AppDialogShell({
         >
           <DialogHeader
             className={cn(
-              "border-b border-[var(--glass-divider)] px-5 pb-4 pt-5 pr-14 sm:px-6 sm:pb-5 sm:pt-6 sm:pr-16",
+              "border-b border-border px-5 pb-4 pt-5 pr-14 sm:px-6 sm:pb-5 sm:pt-6 sm:pr-16",
               headerClassName
             )}
           >
@@ -105,7 +105,7 @@ export function AppDialogShell({
               {icon ? (
                 <span
                   className={cn(
-                    "mt-0.5 flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-2xl bg-primary/10 text-primary shadow-[0_8px_20px_hsl(var(--primary)/0.16)]",
+                    "mt-0.5 flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-2xl bg-primary/10 text-primary ",
                     iconWrapperClassName
                   )}
                 >
@@ -152,7 +152,7 @@ export function AppDialogShell({
           {footer ? (
             <DialogFooter
               className={cn(
-                "border-t border-[var(--glass-divider)] px-5 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-6 sm:py-5",
+                "border-t border-border px-5 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-6 sm:py-5",
                 footerClassName
               )}
             >

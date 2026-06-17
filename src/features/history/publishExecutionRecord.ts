@@ -20,23 +20,10 @@ function extractCommandLine(
     return null;
   }
 
-  let cursor = 0;
-  while (cursor < outputLog.length) {
-    const nextBreak = outputLog.indexOf("\n", cursor);
-    const line =
-      nextBreak === -1
-        ? outputLog.slice(cursor)
-        : outputLog.slice(cursor, nextBreak);
-
+  for (const line of outputLog.split("\n")) {
     if (line.startsWith("$ ")) {
       return line;
     }
-
-    if (nextBreak === -1) {
-      break;
-    }
-
-    cursor = nextBreak + 1;
   }
 
   return null;

@@ -216,24 +216,23 @@ export function reorderProfilesByDrop(params: {
     items: [...group.items],
   }));
 
-  let activeProfile: ConfigProfile | null = null;
-
+  const profileLocationByName = new Map<
+    string,
+    { group: (typeof groups)[number]; index: number }
+  >();
   for (const group of groups) {
-    const sourceIndex = group.items.findIndex(
-      (profile) => profile.name === activeProfileName
-    );
-
-    if (sourceIndex === -1) {
-      continue;
-    }
-
-    [activeProfile] = group.items.splice(sourceIndex, 1);
-    break;
+    group.items.forEach((profile, index) => {
+      profileLocationByName.set(profile.name, { group, index });
+    });
   }
 
-  if (!activeProfile) {
+  const activeLocation = profileLocationByName.get(activeProfileName);
+  if (!activeLocation) {
     return [...profiles];
   }
+
+  const { group: activeGroup, index: activeIndex } = activeLocation;
+  const [activeProfile] = activeGroup.items.splice(activeIndex, 1);
 
   const targetGroup = groups.find((group) => group.groupKey === targetGroupKey);
   if (!targetGroup) {

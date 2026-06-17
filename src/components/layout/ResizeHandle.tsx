@@ -89,9 +89,9 @@ export function ResizeHandle({
       className={cn(
         "group relative flex flex-col flex-shrink-0 appearance-none border-0 bg-transparent p-0 glass-transition",
         direction === "horizontal"
-          ? "w-1 cursor-col-resize hover:bg-[var(--glass-bg-hover)]"
-          : "h-1 cursor-row-resize hover:bg-[var(--glass-bg-hover)]",
-        isDragging && "bg-[var(--glass-bg-active)]",
+          ? "w-1 cursor-col-resize hover:bg-accent"
+          : "h-1 cursor-row-resize hover:bg-accent",
+        isDragging && "bg-accent/80",
         className
       )}
       onMouseDown={handleMouseDown}
@@ -103,7 +103,7 @@ export function ResizeHandle({
           className={cn(
             headerHeight,
             "flex-shrink-0",
-            showHeaderBorder && "border-b border-[var(--glass-divider)]"
+            showHeaderBorder && "border-b border-border"
           )}
         />
       )}

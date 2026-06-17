@@ -19,6 +19,26 @@ function normalizeSegment(segment: string, caseSensitive: boolean): string {
   return caseSensitive ? segment : segment.toLowerCase();
 }
 
+function pathSegmentsMatch(
+  left: string[],
+  right: string[],
+  length: number,
+  caseSensitive: boolean
+): boolean {
+  if (left.length < length || right.length < length) {
+    return false;
+  }
+  for (let i = 0; i < length; i++) {
+    if (
+      normalizeSegment(left[i], caseSensitive) !==
+      normalizeSegment(right[i], caseSensitive)
+    ) {
+      return false;
+    }
+  }
+  return true;
+}
+
 export function isWindowsLikePath(path: string): boolean {
   return WINDOWS_DRIVE_RE.test(path) || path.includes("\\") || path.startsWith("\\\\");
 }
@@ -46,10 +66,12 @@ export function getPathRelativeToRoot(path: string, root: string): string {
 
   if (
     pathSegments.length <= rootSegments.length ||
-    !rootSegments.every((segment, index) => {
-      return normalizeSegment(segment, caseSensitive) ===
-        normalizeSegment(pathSegments[index], caseSensitive);
-    })
+    !pathSegmentsMatch(
+      pathSegments,
+      rootSegments,
+      rootSegments.length,
+      caseSensitive
+    )
   ) {
     return path;
   }
@@ -115,14 +137,12 @@ export function isPathEqualOrInside(candidate: string, parent: string): boolean 
   const candidateSegments = splitPathSegments(candidate);
   const parentSegments = splitPathSegments(parent);
 
-  if (candidateSegments.length < parentSegments.length) {
-    return false;
-  }
-
-  return parentSegments.every((segment, index) => {
-    return normalizeSegment(segment, caseSensitive) ===
-      normalizeSegment(candidateSegments[index], caseSensitive);
-  });
+  return pathSegmentsMatch(
+    candidateSegments,
+    parentSegments,
+    parentSegments.length,
+    caseSensitive
+  );
 }
 
 export function remapPathPrefix(
@@ -139,11 +159,12 @@ export function remapPathPrefix(
   const oldPrefixSegments = splitPathSegments(oldPrefix);
 
   if (
-    pathSegments.length < oldPrefixSegments.length ||
-    !oldPrefixSegments.every((segment, index) => {
-      return normalizeSegment(segment, caseSensitive) ===
-        normalizeSegment(pathSegments[index], caseSensitive);
-    })
+    !pathSegmentsMatch(
+      pathSegments,
+      oldPrefixSegments,
+      oldPrefixSegments.length,
+      caseSensitive
+    )
   ) {
     return path;
   }

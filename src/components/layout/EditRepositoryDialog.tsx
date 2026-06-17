@@ -560,10 +560,10 @@ function EditRepositoryDialogContent({
       >
         <div className="grid flex-1 min-h-0 gap-5 p-5 sm:grid-cols-[240px_1fr] sm:p-6">
           {/* Left Panel: Repo Info Card */}
-          <aside className="glass-card flex flex-col items-center justify-between rounded-2xl p-5 text-center bg-gradient-to-b from-primary/[0.03] to-transparent border border-[var(--glass-border-subtle)] min-h-0 overflow-y-auto glass-scrollbar">
+          <aside className="glass-card flex flex-col items-center justify-between rounded-2xl p-5 text-center  border border-input min-h-0 overflow-y-auto glass-scrollbar">
             <div className="flex flex-col items-center w-full">
               {/* Glowing Icon Wrapper */}
-              <div className="flex size-16 items-center justify-center rounded-2xl bg-gradient-to-tr from-primary/20 to-primary/5 text-primary shadow-[0_8px_30px_hsl(var(--primary)/0.12)] ring-1 ring-primary/20">
+              <div className="flex size-16 items-center justify-center rounded-2xl bg-primary/10 text-primary  ring-1 ring-primary/20">
                 <FolderGit2 className="size-8" />
               </div>
               
@@ -577,13 +577,13 @@ function EditRepositoryDialogContent({
                 />
               </h3>
               
-              <p className="mt-2 text-xs text-muted-foreground break-all px-2.5 py-1.5 rounded-xl bg-black/5 dark:bg-white/5 border border-[var(--glass-border-subtle)] font-mono max-w-full">
+              <p className="mt-2 text-xs text-muted-foreground break-all px-2.5 py-1.5 rounded-xl bg-black/5 dark:bg-white/5 border border-input font-mono max-w-full">
                 {editPath || repoT.unselectedPath || "未选择路径"}
               </p>
  
               {/* Status Stats List */}
               <div className="w-full mt-6 space-y-2 text-left">
-                <div className="flex items-center justify-between rounded-xl border border-[var(--glass-border-subtle)] bg-background/40 px-3.5 py-2.5">
+                <div className="flex items-center justify-between rounded-xl border border-input bg-background/40 px-3.5 py-2.5">
                   <span className="text-xs text-muted-foreground flex items-center gap-1.5">
                     <GitBranch className="size-3.5 text-muted-foreground" />
                     {repoT.branchCount || "分支数量"}
@@ -593,7 +593,7 @@ function EditRepositoryDialogContent({
                   </span>
                 </div>
  
-                <div className="flex items-center justify-between rounded-xl border border-[var(--glass-border-subtle)] bg-background/40 px-3.5 py-2.5">
+                <div className="flex items-center justify-between rounded-xl border border-input bg-background/40 px-3.5 py-2.5">
                   <span className="text-xs text-muted-foreground flex items-center gap-1.5">
                     <Activity className="size-3.5 text-muted-foreground" />
                     {repoT.bindingStatus || "绑定状态"}
@@ -611,7 +611,7 @@ function EditRepositoryDialogContent({
                 </div>
  
                 {editProviderId && editProviderId !== NO_PROVIDER_VALUE ? (
-                  <div className="flex items-center justify-between rounded-xl border border-[var(--glass-border-subtle)] bg-background/40 px-3.5 py-2.5">
+                  <div className="flex items-center justify-between rounded-xl border border-input bg-background/40 px-3.5 py-2.5">
                     <span className="text-xs text-muted-foreground flex items-center gap-1.5">
                       <Info className="size-3.5 text-muted-foreground" />
                       {repoT.currentProvider || "当前服务"}
@@ -628,7 +628,7 @@ function EditRepositoryDialogContent({
           {/* Right Panel: Form Fields */}
           <form id="edit-repository-form" className="flex flex-col min-h-0 overflow-y-auto glass-scrollbar gap-y-4 pb-1 pr-1" onSubmit={handleSubmit}>
             {/* Card 1: Basic Config */}
-            <AppDialogInset className="space-y-4 p-5 bg-gradient-to-br from-background/30 to-background/5 border border-[var(--glass-border-subtle)]">
+            <AppDialogInset className="space-y-4 p-5  border border-input">
               <h4 className="text-xs font-semibold uppercase tracking-[0.12em] text-primary flex items-center gap-1.5 mb-1">
                 <span className="size-1.5 rounded-full bg-primary" />
                 {repoT.basicConfig || "基础配置"}
@@ -637,7 +637,7 @@ function EditRepositoryDialogContent({
               <div className="space-y-4">
                 {/* 仓库名称 */}
                 <div className="space-y-1.5">
-                  <Label htmlFor="repo-edit-name" className="text-xs font-medium text-[hsl(var(--text-fine))]">
+                  <Label htmlFor="repo-edit-name" className="text-xs font-semibold text-[hsl(var(--text-fine))]">
                     {repoT.repositoryName || "仓库名称"}
                   </Label>
                   <Input
@@ -656,7 +656,7 @@ function EditRepositoryDialogContent({
 
                 {/* Project Root */}
                 <div className="space-y-1.5">
-                  <Label htmlFor="repo-edit-path" className="text-xs font-medium text-[hsl(var(--text-fine))]">
+                  <Label htmlFor="repo-edit-path" className="text-xs font-semibold text-[hsl(var(--text-fine))]">
                     {repoT.repositoryPath || "Project Root"}
                   </Label>
                   <div className="flex items-center gap-2">
@@ -688,7 +688,7 @@ function EditRepositoryDialogContent({
             </AppDialogInset>
 
             {/* Card 2: Project File & Provider / Git */}
-            <AppDialogInset className="space-y-4 p-5 bg-gradient-to-br from-background/30 to-background/5 border border-[var(--glass-border-subtle)]">
+            <AppDialogInset className="space-y-4 p-5  border border-input">
               <h4 className="text-xs font-semibold uppercase tracking-[0.12em] text-primary flex items-center gap-1.5 mb-1">
                 <span className="size-1.5 rounded-full bg-primary" />
                 {repoT.projectBranchSection || "项目定位与分支"}
@@ -697,7 +697,7 @@ function EditRepositoryDialogContent({
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 {/* Project File */}
                 <div className="space-y-1.5">
-                  <Label htmlFor="repo-edit-project-file" className="text-xs font-medium text-[hsl(var(--text-fine))]">
+                  <Label htmlFor="repo-edit-project-file" className="text-xs font-semibold text-[hsl(var(--text-fine))]">
                     {repoT.projectFile || "Project File"}
                   </Label>
                   <div className="flex items-center gap-2">
@@ -779,7 +779,7 @@ function EditRepositoryDialogContent({
 
                 {/* Provider */}
                 <div className="space-y-1.5">
-                  <Label htmlFor="repo-edit-provider" className="text-xs font-medium text-[hsl(var(--text-fine))]">
+                  <Label htmlFor="repo-edit-provider" className="text-xs font-semibold text-[hsl(var(--text-fine))]">
                     {repoT.provider || "Provider"}
                   </Label>
                   <div className="flex items-center gap-2">
@@ -823,8 +823,8 @@ function EditRepositoryDialogContent({
               </div>
 
               {/* 当前分支 */}
-              <div className="space-y-1.5 pt-2 border-t border-[var(--glass-border-subtle)]">
-                <Label htmlFor="repo-edit-branch" className="text-xs font-medium text-[hsl(var(--text-fine))]">
+              <div className="space-y-1.5 pt-2 border-t border-input">
+                <Label htmlFor="repo-edit-branch" className="text-xs font-semibold text-[hsl(var(--text-fine))]">
                   {repoT.currentBranch || "当前分支"}
                 </Label>
                 <div className="flex items-center gap-2">

@@ -19,7 +19,7 @@ const DialogOverlay = React.forwardRef<
   <DialogPrimitive.Overlay
     ref={ref}
     className={cn(
-      "fixed inset-0 z-50 bg-[var(--glass-overlay)] backdrop-blur-md data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0",
+      "fixed inset-0 z-50 bg-background/80  data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0",
       className
     )}
     {...props}
@@ -57,7 +57,7 @@ const DialogContent = React.forwardRef<
     const closeButton = (
       <DialogPrimitive.Close
         className={cn(
-          "glass-press absolute right-5 top-5 z-10 rounded-xl opacity-70 ring-offset-background transition duration-200 hover:opacity-100 hover:bg-[var(--glass-bg)] focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:pointer-events-none data-[state=open]:bg-[var(--glass-bg)] data-[state=open]:text-muted-foreground",
+          "glass-press absolute right-5 top-5 z-10 rounded-xl opacity-70 ring-offset-background transition duration-200 hover:opacity-100 hover:bg-muted focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:pointer-events-none data-[state=open]:bg-muted data-[state=open]:text-muted-foreground",
           closeButtonClassName
         )}
       >
@@ -98,7 +98,7 @@ const DialogContent = React.forwardRef<
         >
           <div
             className={cn(
-              "glass-card repo-sidebar-shell relative grid gap-4 overflow-hidden rounded-2xl border border-[var(--glass-border)] bg-[var(--glass-panel-bg)] p-6 shadow-[var(--glass-shadow-lg)] backdrop-blur-xl",
+              "glass-card repo-sidebar-shell relative grid gap-4 overflow-hidden rounded-2xl border border-border bg-card p-6  ",
               surfaceClassName
             )}
           >

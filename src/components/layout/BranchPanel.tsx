@@ -57,7 +57,7 @@ export function BranchPanel({
         <div
           data-tauri-drag-region
           className={cn(
-            "flex h-10 items-center justify-end border-b border-[var(--glass-divider)] px-2",
+            "flex h-10 items-center justify-end border-b border-border px-2",
             showExpandButton && "pl-[100px]"
           )}
         >
@@ -109,7 +109,7 @@ export function BranchPanel({
           </div>
         </div>
         {/* Search (disabled) */}
-        <div className="border-b border-[var(--glass-divider)] px-3 py-2">
+        <div className="border-b border-border px-3 py-2">
           <div className="glass-input relative rounded-xl">
             <Search className="absolute left-2 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
             <Input
@@ -136,7 +136,7 @@ export function BranchPanel({
       <div
         data-tauri-drag-region
         className={cn(
-          "flex h-10 items-center justify-end border-b border-[var(--glass-divider)] px-2",
+          "flex h-10 items-center justify-end border-b border-border px-2",
           showExpandButton && "pl-[100px]"
         )}
       >
@@ -197,7 +197,7 @@ export function BranchPanel({
       </div>
 
       {/* Search */}
-      <div className="border-b border-[var(--glass-divider)] px-3 py-2">
+      <div className="border-b border-border px-3 py-2">
         <div className="glass-input relative rounded-xl">
           <Search className="absolute left-2 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
           <Input
@@ -216,7 +216,7 @@ export function BranchPanel({
           <div
             key={branch.name}
             className={cn(
-              "flex items-start gap-2 border-b border-[var(--glass-divider)] px-3 py-3 glass-transition hover:bg-[var(--glass-bg)] cursor-pointer",
+              "flex items-start gap-2 border-b border-border px-3 py-3 glass-transition hover:bg-muted cursor-pointer",
               branch.isCurrent && "glass-surface-selected rounded-lg mx-1 border-0"
             )}
           >
@@ -228,11 +228,11 @@ export function BranchPanel({
             />
             <div className="min-w-0 flex-1">
               <div className="flex items-center gap-2">
-                <span className="truncate text-sm font-medium">
+                <span className="truncate text-sm font-semibold">
                   {branch.name}
                 </span>
                 {branch.isMain && (
-                  <span className="status-success rounded px-1.5 py-0.5 text-[10px] font-medium">
+                  <span className="status-success rounded px-1.5 py-0.5 text-[10px] font-semibold">
                     {branchT.mainBadge || "MAIN"}
                   </span>
                 )}

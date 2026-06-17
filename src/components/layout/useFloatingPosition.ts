@@ -1,5 +1,7 @@
 import { useCallback, useRef, useState } from "react";
 
+import { useLazyRef } from "@/hooks/useLazyRef";
+
 export interface FloatingCardRect {
   top: number;
   left: number;
@@ -85,8 +87,8 @@ export function useFloatingPosition({
   const [floatingVisible, setFloatingVisible] = useState(false);
 
   const previousFloatingRectRef = useRef<FloatingCardRectDraft | null>(null);
-  const floatingTargetRectRef = useRef<FloatingCardRect>(createHiddenFloatingCardRect());
-  const floatingRenderRectRef = useRef<FloatingCardRect>(createHiddenFloatingCardRect());
+  const floatingTargetRectRef = useLazyRef<FloatingCardRect>(createHiddenFloatingCardRect);
+  const floatingRenderRectRef = useLazyRef<FloatingCardRect>(createHiddenFloatingCardRect);
   const floatingFollowRafRef = useRef<number | null>(null);
   const floatingFollowTimestampRef = useRef<number | null>(null);
   const floatingAnimatingRef = useRef(false);

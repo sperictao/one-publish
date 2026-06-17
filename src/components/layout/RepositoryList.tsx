@@ -10,6 +10,7 @@ import {
   memo,
   type MutableRefObject,
   type PointerEvent as ReactPointerEvent,
+  type ReactNode,
 } from "react";
 import { cn } from "@/lib/utils";
 import {
@@ -56,7 +57,7 @@ function hasSameStringOrder(
   );
 }
 
-function CollapseIcon(): JSX.Element {
+function CollapseIcon(): ReactNode {
   return (
     <svg
       width="14"
@@ -95,7 +96,7 @@ function CollapseIcon(): JSX.Element {
   );
 }
 
-function AppBrandIcon(): JSX.Element {
+function AppBrandIcon(): ReactNode {
   return (
     <svg
       width="20"
@@ -195,7 +196,7 @@ export const RepositoryList = memo(function RepositoryList({
   onSettings,
   onCollapse,
   onReorderRepositories,
-}: RepositoryListProps): JSX.Element {
+}: RepositoryListProps): ReactNode {
   const [searchQuery, setSearchQuery] = useState("");
   const [filterExpanded, setFilterExpanded] = useState(true);
   const [editingRepo, setEditingRepo] = useState<Repository | null>(null);
@@ -204,7 +205,7 @@ export const RepositoryList = memo(function RepositoryList({
   const { translations } = useI18n();
   const repoT = translations.repositoryList || {};
   const listActionButtonClass =
-    "glass-surface flex size-7 items-center justify-center rounded-full transition duration-300 hover:bg-[var(--glass-bg-hover)]";
+    "glass-surface flex size-7 items-center justify-center rounded-full transition duration-300 hover:bg-accent";
   const reorderControlsLabel = showReorderControls
     ? repoT.hideReorderControls || "关闭排序"
     : repoT.showReorderControls || "开启排序";
@@ -449,7 +450,7 @@ export const RepositoryList = memo(function RepositoryList({
                 <FolderGit2 className="size-7 text-muted-foreground/30" />
               </div>
               <div className="text-center">
-                <p className="text-sm font-medium text-foreground/60">
+                <p className="text-sm font-normal text-foreground/60">
                   {repoT.noRepositories || "暂无仓库"}
                 </p>
                 <p className="mt-1 text-xs text-[hsl(var(--text-fine))]">
@@ -563,7 +564,7 @@ export const RepositoryList = memo(function RepositoryList({
       <div className="flex items-center justify-between px-3 py-2">
         <button
           type="button"
-          className="glass-surface flex items-center gap-1.5 rounded-full px-3 py-1 text-sm font-medium transition duration-300 hover:bg-[var(--glass-bg-hover)]"
+          className="glass-surface flex items-center gap-1.5 rounded-full px-3 py-1 text-sm font-normal transition duration-300 hover:bg-accent"
           onClick={() => setFilterExpanded(!filterExpanded)}
         >
           <span className="text-foreground/80">{repoT.all || "全部"}</span>
@@ -595,7 +596,7 @@ export const RepositoryList = memo(function RepositoryList({
             className={cn(
               listActionButtonClass,
               showReorderControls &&
-                "bg-[var(--glass-bg-hover)] shadow-[inset_0_1px_0_rgba(255,255,255,0.72),0_1px_2px_rgba(15,23,42,0.06)] dark:bg-white/[0.06] dark:shadow-[inset_0_1px_0_rgba(255,255,255,0.08)]"
+                "bg-accent  dark:bg-white/[0.06] "
             )}
             onClick={(event) => {
               event.stopPropagation();
@@ -668,10 +669,10 @@ export const RepositoryList = memo(function RepositoryList({
       ) : null}
 
       <div className="relative flex items-center px-3 py-2">
-        <div className="pointer-events-none absolute -top-6 left-0 right-0 h-6 bg-gradient-to-t from-[var(--glass-panel-bg)] to-transparent" />
+        <div className="pointer-events-none absolute -top-6 left-0 right-0 h-6 " />
         <button
           type="button"
-          className="flex size-7 items-center justify-center rounded-xl text-muted-foreground/50 transition duration-300 hover:bg-[var(--glass-bg)] hover:text-foreground/70"
+          className="flex size-7 items-center justify-center rounded-xl text-muted-foreground/50 transition duration-300 hover:bg-muted hover:text-foreground/70"
           onClick={onSettings}
         >
           <Settings className="size-3.5 transition-transform duration-500 hover:rotate-90" />

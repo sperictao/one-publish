@@ -365,7 +365,7 @@ export function ConfigManagementContent({
                         {profile.name}
                       </h4>
                       {profile.isSystemDefault ? (
-                        <span className="inline-flex items-center rounded-full bg-primary/12 px-2 py-0.5 text-[11px] font-medium text-primary">
+                        <span className="inline-flex items-center rounded-full bg-primary/12 px-2 py-0.5 text-[11px] font-semibold text-primary">
                           {profileT.defaultTag || "默认"}
                         </span>
                       ) : null}
@@ -450,7 +450,7 @@ export function ConfigManagementContent({
               <div className="flex items-start gap-3">
                 <AlertCircle className="mt-0.5 size-4 text-warning" />
                 <div className="space-y-1 text-sm">
-                  <p className="font-medium">
+                  <p className="font-normal">
                     {profileT.importConfirmListTitle || "待导入配置"}
                   </p>
                   <p className="text-muted-foreground">
@@ -466,7 +466,7 @@ export function ConfigManagementContent({
                       key={`${profile.providerId}:${profile.name}`}
                       className="flex items-center justify-between gap-3 rounded-xl px-2 py-1.5"
                     >
-                      <span className="truncate font-medium text-foreground">
+                      <span className="truncate font-semibold text-foreground">
                         {profile.name}
                       </span>
                       <span className="flex-shrink-0 text-xs text-muted-foreground">

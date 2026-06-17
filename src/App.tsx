@@ -26,6 +26,8 @@ const PublishContentSection = lazy(async () => {
   const mod = await import("@/components/layout/PublishContentSection");
   return { default: mod.PublishContentSection };
 });
+const EMPTY_CONFIG_PANEL_TRANSLATIONS: Record<string, string> = {};
+
 const MainContentShell = lazy(async () => {
   const mod = await import("@/components/layout/MainContentShell");
   return { default: mod.MainContentShell };
@@ -118,7 +120,7 @@ function App() {
             leftPanelCollapsed={boot.shell.leftPanelCollapsed}
             middlePanelCollapsed={boot.shell.middlePanelCollapsed}
             appT={boot.shell.appT}
-            configPanelT={boot.shell.translations.configPanel || {}}
+            configPanelT={boot.shell.translations.configPanel || EMPTY_CONFIG_PANEL_TRANSLATIONS}
             rightPanelView={boot.shell.rightPanelView}
             onExpandLeftPanel={() => boot.shell.setLeftPanelCollapsed(false)}
             onExpandMiddlePanel={() => boot.shell.setMiddlePanelCollapsed(false)}

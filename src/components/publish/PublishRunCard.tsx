@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import {
@@ -59,41 +59,28 @@ export function PublishRunCard({
   isRefreshing = false,
 }: PublishRunCardProps) {
   const [isOpeningOutputDir, setIsOpeningOutputDir] = useState(false);
-  const [displaySnapshot, setDisplaySnapshot] = useState<{
-    outputLog: string;
-    publishResult: PublishResult | null;
-    publishActions: PublishRunCardActions | null;
-  }>({
+  const frozenDisplayRef = useRef({
     outputLog: currentOutputLog,
     publishResult: currentPublishResult,
     publishActions: currentPublishActions,
   });
 
-  useEffect(() => {
-    if (isRefreshing) {
-      return;
-    }
-
-    setDisplaySnapshot({
+  if (!isRefreshing) {
+    frozenDisplayRef.current = {
       outputLog: currentOutputLog,
       publishResult: currentPublishResult,
       publishActions: currentPublishActions,
-    });
-  }, [
-    currentOutputLog,
-    currentPublishActions,
-    currentPublishResult,
-    isRefreshing,
-  ]);
+    };
+  }
 
   const outputLog = isRefreshing
-    ? displaySnapshot.outputLog
+    ? frozenDisplayRef.current.outputLog
     : currentOutputLog;
   const publishResult = isRefreshing
-    ? displaySnapshot.publishResult
+    ? frozenDisplayRef.current.publishResult
     : currentPublishResult;
   const publishActions = isRefreshing
-    ? displaySnapshot.publishActions
+    ? frozenDisplayRef.current.publishActions
     : currentPublishActions;
 
   const handleOpenOutputDir = useCallback(async () => {
@@ -139,11 +126,11 @@ export function PublishRunCard({
             appT.publishStatusRunningDetail ||
             "发布命令正在执行，日志会持续追加到下方输出区域。",
           badgeClassName:
-            "border-primary/15 bg-primary/10 text-primary shadow-[0_10px_30px_hsl(var(--primary)/0.12)]",
+            "border-primary/15 bg-primary/10 text-primary ",
           panelClassName:
-            "border-primary/15 bg-[linear-gradient(145deg,hsl(var(--primary)/0.1),transparent_78%)]",
+            "border-primary/15 bg-primary/10",
           iconWrapClassName:
-            "bg-primary/12 text-primary shadow-[0_0_0_1px_hsl(var(--primary)/0.08)]",
+            "bg-primary/12 text-primary ",
           iconClassName: "animate-spin",
           icon: Loader2,
         }
@@ -154,11 +141,11 @@ export function PublishRunCard({
               appT.publishStatusSuccessDetail ||
               "发布已完成，可直接打开输出目录查看产物。",
             badgeClassName:
-              "status-success shadow-[0_10px_30px_hsl(var(--success)/0.12)]",
+              "status-success ",
             panelClassName:
-              "border-success/15 bg-[linear-gradient(145deg,hsl(var(--success)/0.11),transparent_78%)]",
+              "border-success/15 bg-success/10",
             iconWrapClassName:
-              "bg-success/12 text-success shadow-[0_0_0_1px_hsl(var(--success)/0.08)]",
+              "bg-success/12 text-success ",
             iconClassName: "",
             icon: CheckCircle2,
           }
@@ -169,11 +156,11 @@ export function PublishRunCard({
                 appT.publishStatusCancelledDetail ||
                 "当前执行已停止，可调整参数后重新发起发布。",
               badgeClassName:
-                "status-cancelled shadow-[0_10px_30px_hsl(var(--warning)/0.12)]",
+                "status-cancelled ",
               panelClassName:
-                "border-warning/15 bg-[linear-gradient(145deg,hsl(var(--warning)/0.13),transparent_78%)]",
+                "border-warning/15 bg-warning/10",
               iconWrapClassName:
-                "bg-warning/12 text-warning shadow-[0_0_0_1px_hsl(var(--warning)/0.08)]",
+                "bg-warning/12 text-warning ",
               iconClassName: "",
               icon: Square,
             }
@@ -184,11 +171,11 @@ export function PublishRunCard({
                   appT.publishStatusFailedDetail ||
                   "发布命令已退出，请结合下方日志定位失败原因。",
                 badgeClassName:
-                  "status-failed shadow-[0_10px_30px_hsl(var(--destructive)/0.12)]",
+                  "status-failed ",
                 panelClassName:
-                  "border-destructive/15 bg-[linear-gradient(145deg,hsl(var(--destructive)/0.1),transparent_78%)]",
+                  "border-destructive/15 bg-destructive/10",
                 iconWrapClassName:
-                  "bg-destructive/12 text-destructive shadow-[0_0_0_1px_hsl(var(--destructive)/0.08)]",
+                  "bg-destructive/12 text-destructive ",
                 iconClassName: "",
                 icon: XCircle,
               }
@@ -198,11 +185,11 @@ export function PublishRunCard({
                   appT.publishStatusIdleDetail ||
                   "命令与参数已准备完成，可以开始本次发布。",
                 badgeClassName:
-                  "border-[var(--glass-border-subtle)] bg-[var(--glass-bg)] text-muted-foreground shadow-[0_10px_30px_rgba(0,0,0,0.06)]",
+                  "border-input bg-muted text-muted-foreground ",
                 panelClassName:
-                  "border-[var(--glass-border-subtle)] bg-[linear-gradient(145deg,rgba(255,255,255,0.32),transparent_78%)]",
+                  "border-input bg-muted",
                 iconWrapClassName:
-                  "bg-[var(--glass-input-bg)] text-muted-foreground shadow-[0_0_0_1px_var(--glass-border-subtle)]",
+                  "bg-background text-muted-foreground ",
                 iconClassName: "",
                 icon: Clock3,
               };
@@ -231,7 +218,7 @@ export function PublishRunCard({
         {publishActions && (
           <div className="min-w-0 space-y-3">
             {publishActions.publishCommand && (
-              <div className="min-w-0 rounded-xl border border-[var(--glass-border-subtle)] bg-[var(--glass-input-bg)] p-3" data-testid="publish-command-preview">
+              <div className="min-w-0 rounded-xl border border-input bg-background p-3" data-testid="publish-command-preview">
                 <div className="mb-2 text-xs text-muted-foreground">
                   {publishActions.publishCommandLabel || "将执行的命令:"}
                 </div>
@@ -291,9 +278,8 @@ export function PublishRunCard({
           </div>
         )}
         <div className="min-w-0 space-y-3">
-          <div
+          <output
             data-testid="publish-status-panel"
-            role="status"
             aria-live="polite"
             className={cn(
               "glass-surface rounded-2xl border p-4",
@@ -319,14 +305,14 @@ export function PublishRunCard({
                   <div className="mt-2 flex flex-wrap items-center gap-2">
                     <span
                       className={cn(
-                        "inline-flex items-center gap-2 rounded-full border px-3 py-1 text-xs font-semibold backdrop-blur-md",
+                        "inline-flex items-center gap-2 rounded-full border px-3 py-1 text-xs font-semibold ",
                         statusMeta.badgeClassName
                       )}
                     >
                       {statusMeta.label}
                     </span>
                     {statusFact ? (
-                      <span className="inline-flex items-center rounded-full border border-[var(--glass-border-subtle)] bg-background/60 px-3 py-1 text-xs font-medium text-muted-foreground shadow-sm backdrop-blur-md">
+                      <span className="inline-flex items-center rounded-full border border-input bg-background/60 px-3 py-1 text-xs font-semibold text-muted-foreground  ">
                         {statusFact}
                       </span>
                     ) : null}
@@ -337,10 +323,10 @@ export function PublishRunCard({
                 </div>
               </div>
             </div>
-          </div>
+          </output>
 
           {failureMessage ? (
-            <div className="rounded-2xl border border-destructive/20 bg-destructive/5 px-4 py-3 text-sm text-destructive shadow-sm">
+            <div className="rounded-2xl border border-destructive/20 bg-destructive/5 px-4 py-3 text-sm text-destructive ">
               <div className="text-[12px] font-semibold uppercase tracking-[0.18em] text-destructive">
                 {appT.statusFailed || "失败"}
               </div>
@@ -351,12 +337,12 @@ export function PublishRunCard({
           {publishVisualState === "success" && publishResult?.output_dir && (
             <button
               type="button"
-              className="glass-surface group w-full rounded-2xl border border-[var(--glass-border-subtle)] p-3 text-left transition duration-300 hover:-translate-y-0.5 hover:bg-[var(--glass-bg-hover)] hover:shadow-[var(--glass-shadow-lg)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:cursor-not-allowed disabled:opacity-70"
+              className="glass-surface group w-full rounded-2xl border border-input p-3 text-left transition duration-300 hover:-translate-y-0.5 hover:bg-accent hover: focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:cursor-not-allowed disabled:opacity-70"
               onClick={handleOpenOutputDir}
               disabled={isOpeningOutputDir}
             >
               <div className="flex items-center gap-3">
-                <span className="flex size-10 flex-shrink-0 items-center justify-center rounded-2xl bg-primary/10 text-primary shadow-[0_0_0_1px_hsl(var(--primary)/0.08)]">
+                <span className="flex size-10 flex-shrink-0 items-center justify-center rounded-2xl bg-primary/10 text-primary ">
                   {isOpeningOutputDir ? (
                     <span className="inline-block animate-spin">
                       <Loader2 className="size-4" />
@@ -391,8 +377,8 @@ export function PublishRunCard({
         </div>
       </CardContent>
       {isRefreshing ? (
-        <div className="absolute inset-0 z-20 flex items-center justify-center bg-background/48 backdrop-blur-[2px]">
-          <div className="glass-surface flex items-center gap-2 rounded-full px-4 py-2 text-sm text-foreground shadow-[var(--glass-shadow)]">
+        <div className="absolute inset-0 z-20 flex items-center justify-center bg-background/48 ">
+          <div className="glass-surface flex items-center gap-2 rounded-full px-4 py-2 text-sm text-foreground ">
             <span className="inline-block animate-spin text-primary">
               <Loader2 className="size-4" />
             </span>

@@ -35,7 +35,7 @@ export function RowActionsMenu({
   actions,
   onOpenChange,
   stopPropagation = false,
-}: RowActionsMenuProps): JSX.Element {
+}: RowActionsMenuProps): ReactNode {
   const handleTriggerEvent = stopPropagation
     ? (event: { stopPropagation: () => void }) => {
         event.stopPropagation();
@@ -49,7 +49,7 @@ export function RowActionsMenu({
           type="button"
           variant="ghost"
           size="icon"
-          className="size-6 rounded-lg transition duration-300 opacity-0 group-hover:opacity-75 group-focus-within:opacity-75 data-[state=open]:bg-[var(--glass-bg-active)] data-[state=open]:opacity-100"
+          className="size-6 rounded-lg transition duration-300 opacity-0 group-hover:opacity-75 group-focus-within:opacity-75 data-[state=open]:bg-accent/80 data-[state=open]:opacity-100"
           title={moreActionsLabel}
           aria-haspopup="menu"
           aria-expanded={open}

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { save } from "@tauri-apps/plugin-dialog";
 import { toast } from "sonner";
 
@@ -54,10 +54,6 @@ function ArtifactActionsContent({
   const [packageResult, setPackageResult] = useState<PackageResult | null>(null);
   const [signResult, setSignResult] = useState<SignResult | null>(null);
 
-  useEffect(() => {
-    onStateChange?.({ packageResult, signResult });
-  }, [onStateChange, packageResult, signResult]);
-
   const defaultZipPath = useMemo(() => {
     return appendExtensionToPath(outputDir, ".zip");
   }, [outputDir]);
@@ -80,6 +76,7 @@ function ArtifactActionsContent({
       });
 
       setPackageResult(res);
+      onStateChange?.({ packageResult: res, signResult });
       toast.success(artifactT.packageDone || "打包完成", {
         description: res.artifactPath,
       });
@@ -99,6 +96,7 @@ function ArtifactActionsContent({
         method: "gpg_detached",
       });
       setSignResult(res);
+      onStateChange?.({ packageResult, signResult: res });
 
       if (res.success) {
         toast.success(artifactT.signDone || "签名完成", {

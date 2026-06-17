@@ -1,3 +1,5 @@
+import type { ReactNode } from "react";
+
 import { cn } from "@/lib/utils";
 
 /**
@@ -28,12 +30,12 @@ export function ThemePreviewMock({
   showAllSidebarLines = true,
   hideSidebar = false,
   className = "",
-}: ThemePreviewMockProps): JSX.Element {
+}: ThemePreviewMockProps): ReactNode {
 
   return (
     <div
       className={cn(
-        "relative h-20 w-full overflow-hidden rounded-lg border border-[var(--settings-hairline)] flex select-none pointer-events-none shadow-sm",
+        "relative h-20 w-full overflow-hidden rounded-lg border border-[var(--settings-hairline)] flex select-none pointer-events-none ",
         className
       )}
       style={{

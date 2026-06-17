@@ -1,4 +1,4 @@
-import type { PointerEvent as ReactPointerEvent } from "react";
+import type { PointerEvent as ReactPointerEvent, ReactNode } from "react";
 import { GripVertical } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -16,7 +16,7 @@ export function ListDragHandle({
   label,
   disabledLabel,
   onPointerDown,
-}: ListDragHandleProps): JSX.Element {
+}: ListDragHandleProps): ReactNode {
   if (!visible) {
     return <></>;
   }
@@ -30,7 +30,7 @@ export function ListDragHandle({
         className={cn(
           "flex size-7 touch-none items-center justify-center rounded-xl transition duration-200",
           enabled
-            ? "cursor-grab text-muted-foreground/35 hover:bg-[var(--glass-bg)] hover:text-foreground/65 active:cursor-grabbing"
+            ? "cursor-grab text-muted-foreground/35 hover:bg-muted hover:text-foreground/65 active:cursor-grabbing"
             : "cursor-not-allowed text-muted-foreground/20"
         )}
         onClick={(event) => {

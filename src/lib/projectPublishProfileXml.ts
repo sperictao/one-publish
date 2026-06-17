@@ -188,7 +188,7 @@ export function extractDotnetPublishParametersFromProjectProfile(
     }
 
     for (const entry of section.entries) {
-      if (entry.path.includes(".")) {
+      if (/\./.test(entry.path)) {
         continue;
       }
 

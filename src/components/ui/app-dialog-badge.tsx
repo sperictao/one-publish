@@ -11,7 +11,7 @@ type AppDialogBadgeVariant =
 
 const badgeVariantClassName: Record<AppDialogBadgeVariant, string> = {
   neutral:
-    "border-[var(--glass-border-subtle)] bg-background/70 text-muted-foreground",
+    "border-input bg-background/70 text-muted-foreground",
   info: "status-info",
   success: "status-success",
   warning: "status-cancelled",
@@ -30,11 +30,11 @@ export function AppDialogBadge({
   className,
   variant = "neutral",
   icon,
-}: AppDialogBadgeProps): JSX.Element {
+}: AppDialogBadgeProps): ReactNode {
   return (
     <span
       className={cn(
-        "inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-medium tracking-[0.01em]",
+        "inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-semibold tracking-[0.01em]",
         badgeVariantClassName[variant],
         className
       )}

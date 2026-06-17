@@ -295,7 +295,8 @@ export const GeneralSettingsSection = memo(function GeneralSettingsSection({
               size="icon"
               className="size-10 shrink-0 active:scale-[0.97] rounded-lg border-[var(--settings-hairline)] bg-transparent hover:bg-black/[0.02] dark:hover:bg-white/[0.02]"
               onClick={onSelectDirectory}
-              title={translations.outputDir?.label || "选择默认发布目录"}
+              title={translations.outputDir?.browse || "浏览目录"}
+              aria-label={translations.outputDir?.browse || "浏览目录"}
             >
               <FolderOpen className="size-4 text-[var(--settings-ink-muted)]" />
             </Button>
@@ -371,7 +372,7 @@ export const AppearanceSettingsSection = memo(function AppearanceSettingsSection
   return (
     <div className="space-y-6">
       {/* 主题选择卡片 */}
-      <div className="rounded-xl border border-[var(--settings-hairline)] bg-[var(--settings-section-bg)] p-6 shadow-[0_1px_3px_rgba(0,0,0,0.02)] dark:shadow-none">
+      <div className="rounded-xl border border-[var(--settings-hairline)] bg-[var(--settings-section-bg)] p-6  dark:shadow-none">
         <div className="flex items-center justify-between mb-4">
           <Label htmlFor="settings-theme" className="text-[14px] font-semibold tracking-[-0.224px] text-[var(--settings-ink)]">
             {translations.theme?.label || "外观主题"}
@@ -395,19 +396,19 @@ export const AppearanceSettingsSection = memo(function AppearanceSettingsSection
             className={cn(
               "group relative flex flex-col items-center gap-2.5 rounded-xl border p-2.5 text-center transition duration-300 active:scale-[0.97] glass-interactive",
               theme === "auto"
-                ? "border-[var(--settings-card-selected-border)] bg-[var(--settings-card-selected-bg)] shadow-[var(--settings-card-selected-shadow)]"
+                ? "border-[var(--settings-card-selected-border)] bg-[var(--settings-card-selected-bg)] "
                 : "border-[var(--settings-hairline)] bg-transparent hover:bg-black/[0.015] dark:hover:bg-white/[0.015] hover:border-black/20 dark:hover:border-white/20"
             )}
             onClick={() => onThemeChange("auto")}
           >
             {theme === "auto" && (
-              <div className="absolute top-1.5 right-1.5 flex size-4 items-center justify-center rounded-full bg-[var(--settings-accent)] text-white shadow-sm border border-white/10 animate-in zoom-in-50 duration-200 z-10">
+              <div className="absolute top-1.5 right-1.5 flex size-4 items-center justify-center rounded-full bg-[var(--settings-accent)] text-white  border border-white/10 animate-in zoom-in-50 duration-200 z-10">
                 <Check className="size-2.5 stroke-[3.5]" />
               </div>
             )}
             
             {/* 自动主题微缩图 */}
-            <div className="relative h-20 w-full overflow-hidden rounded-lg border border-[var(--settings-hairline)] flex select-none pointer-events-none shadow-sm">
+            <div className="relative h-20 w-full overflow-hidden rounded-lg border border-[var(--settings-hairline)] flex select-none pointer-events-none ">
               <div className="w-1/2 border-r border-black/5 dark:border-white/5">
                 <ThemePreviewMock
                   theme="light"
@@ -427,7 +428,7 @@ export const AppearanceSettingsSection = memo(function AppearanceSettingsSection
                 />
               </div>
             </div>
-            <span className="text-[12px] font-medium text-[var(--settings-ink)]">
+            <span className="text-[12px] font-semibold text-[var(--settings-ink)]">
               {translations.theme?.auto || "跟随系统"}
             </span>
           </button>
@@ -438,19 +439,19 @@ export const AppearanceSettingsSection = memo(function AppearanceSettingsSection
             className={cn(
               "group relative flex flex-col items-center gap-2.5 rounded-xl border p-2.5 text-center transition duration-300 active:scale-[0.97] glass-interactive",
               theme === "light"
-                ? "border-[var(--settings-card-selected-border)] bg-[var(--settings-card-selected-bg)] shadow-[var(--settings-card-selected-shadow)]"
+                ? "border-[var(--settings-card-selected-border)] bg-[var(--settings-card-selected-bg)] "
                 : "border-[var(--settings-hairline)] bg-transparent hover:bg-black/[0.015] dark:hover:bg-white/[0.015] hover:border-black/20 dark:hover:border-white/20"
             )}
             onClick={() => onThemeChange("light")}
           >
             {theme === "light" && (
-              <div className="absolute top-1.5 right-1.5 flex size-4 items-center justify-center rounded-full bg-[var(--settings-accent)] text-white shadow-sm border border-white/10 animate-in zoom-in-50 duration-200 z-10">
+              <div className="absolute top-1.5 right-1.5 flex size-4 items-center justify-center rounded-full bg-[var(--settings-accent)] text-white  border border-white/10 animate-in zoom-in-50 duration-200 z-10">
                 <Check className="size-2.5 stroke-[3.5]" />
               </div>
             )}
             {/* 亮色主题微缩图 */}
             <ThemePreviewMock theme="light" previewColor={lightPreviewColor} />
-            <span className="text-[12px] font-medium text-[var(--settings-ink)]">
+            <span className="text-[12px] font-semibold text-[var(--settings-ink)]">
               {translations.theme?.light || "亮色"}
             </span>
           </button>
@@ -461,19 +462,19 @@ export const AppearanceSettingsSection = memo(function AppearanceSettingsSection
             className={cn(
               "group relative flex flex-col items-center gap-2.5 rounded-xl border p-2.5 text-center transition duration-300 active:scale-[0.97] glass-interactive",
               theme === "dark"
-                ? "border-[var(--settings-card-selected-border)] bg-[var(--settings-card-selected-bg)] shadow-[var(--settings-card-selected-shadow)]"
+                ? "border-[var(--settings-card-selected-border)] bg-[var(--settings-card-selected-bg)] "
                 : "border-[var(--settings-hairline)] bg-transparent hover:bg-black/[0.015] dark:hover:bg-white/[0.015] hover:border-black/20 dark:hover:border-white/20"
             )}
             onClick={() => onThemeChange("dark")}
           >
             {theme === "dark" && (
-              <div className="absolute top-1.5 right-1.5 flex size-4 items-center justify-center rounded-full bg-[var(--settings-accent)] text-white shadow-sm border border-white/10 animate-in zoom-in-50 duration-200 z-10">
+              <div className="absolute top-1.5 right-1.5 flex size-4 items-center justify-center rounded-full bg-[var(--settings-accent)] text-white  border border-white/10 animate-in zoom-in-50 duration-200 z-10">
                 <Check className="size-2.5 stroke-[3.5]" />
               </div>
             )}
             {/* 暗色主题微缩图 */}
             <ThemePreviewMock theme="dark" previewColor={darkPreviewColor} />
-            <span className="text-[12px] font-medium text-[var(--settings-ink)]">
+            <span className="text-[12px] font-semibold text-[var(--settings-ink)]">
               {translations.theme?.dark || "暗色"}
             </span>
           </button>
@@ -481,7 +482,7 @@ export const AppearanceSettingsSection = memo(function AppearanceSettingsSection
       </div>
 
       {/* 强调色选择卡片 */}
-      <div className="rounded-xl border border-[var(--settings-hairline)] bg-[var(--settings-section-bg)] p-6 shadow-[0_1px_3px_rgba(0,0,0,0.02)] dark:shadow-none">
+      <div className="rounded-xl border border-[var(--settings-hairline)] bg-[var(--settings-section-bg)] p-6  dark:shadow-none">
         <div className="space-y-0.5 mb-4">
           <Label className="text-[14px] font-semibold tracking-[-0.224px] text-[var(--settings-ink)]">
             {appearanceT.accentColorTitle || "强调色 (Accent Color)"}
@@ -499,10 +500,10 @@ export const AppearanceSettingsSection = memo(function AppearanceSettingsSection
                 key={item.id}
                 type="button"
                 className={cn(
-                  "relative flex size-7 shrink-0 items-center justify-center rounded-full shadow-[0_1px_3px_rgba(0,0,0,0.15)] transition duration-300 hover:scale-110 active:scale-95 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2",
+                  "relative flex size-7 shrink-0 items-center justify-center rounded-full  transition duration-300 hover:scale-110 active:scale-95 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2",
                   isSelected 
                     ? "ring-2 ring-offset-2 ring-[var(--settings-accent)] scale-105" 
-                    : "hover:shadow-[0_2px_6px_rgba(0,0,0,0.2)]"
+                    : ""
                 )}
                 style={{
                   background: `linear-gradient(135deg, ${item.lightColor} 50%, ${item.darkColor} 50%)`,
@@ -512,7 +513,7 @@ export const AppearanceSettingsSection = memo(function AppearanceSettingsSection
                 aria-label={(appearanceT.accentColorAriaLabel || "强调色: {{name}}").replace("{{name}}", item.name)}
               >
                 {isSelected && (
-                  <Check className="size-3 text-white drop-shadow-[0_1px_1px_rgba(0,0,0,0.45)] stroke-[3.5]" />
+                  <Check className="size-3 text-white  stroke-[3.5]" />
                 )}
               </button>
             );
@@ -546,10 +547,10 @@ export const ShortcutsSettingsSection = memo(function ShortcutsSettingsSection({
           <div key={shortcut.key}>
             {index > 0 && <div className="h-px bg-[var(--settings-hairline)] mx-4" />}
             <div className="flex items-center justify-between gap-4 p-4 hover:bg-black/[0.005] dark:hover:bg-white/[0.005] transition-colors duration-150">
-              <span className="text-[14px] font-medium tracking-[-0.224px] text-[var(--settings-ink)]">
+              <span className="text-[14px] font-semibold tracking-[-0.224px] text-[var(--settings-ink)]">
                 {shortcut.description}
               </span>
-              <kbd className="rounded-md border border-[var(--settings-hairline)] bg-[var(--settings-section-bg)] px-2.5 py-0.5 text-[11px] font-bold tracking-tight text-[var(--settings-ink)] shadow-sm font-sans shrink-0">
+              <kbd className="rounded-md border border-[var(--settings-hairline)] bg-[var(--settings-section-bg)] px-2.5 py-0.5 text-[11px] font-bold tracking-tight text-[var(--settings-ink)]  font-sans shrink-0">
                 {shortcut.key}
               </kbd>
             </div>
@@ -595,7 +596,7 @@ export const UpdaterProgressBar = memo(function UpdaterProgressBar({
               ? translations.version?.installing || "正在安装更新..."
               : translations.version?.downloading || "正在下载更新..."}
           </div>
-          <div className="text-[12px] tracking-[-0.1px] font-medium text-[var(--settings-ink-muted)]">
+          <div className="text-[12px] tracking-[-0.1px] font-normal text-[var(--settings-ink-muted)]">
             {downloadProgress.stage === "retrying"
               ? formatMessage(
                   translations.version?.retrying ||
@@ -627,7 +628,7 @@ export const UpdaterProgressBar = memo(function UpdaterProgressBar({
       <div className="h-2 overflow-hidden rounded-full bg-black/5 dark:bg-white/5 border border-black/[0.02] dark:border-white/[0.02]">
         <div
           className={cn(
-            "h-full rounded-full bg-primary shadow-[0_0_8px_hsl(var(--primary)/0.35)] transition-[width] duration-200",
+            "h-full rounded-full bg-primary  transition-[width] duration-200",
             downloadProgress.percent === null && "animate-pulse w-1/3"
           )}
           style={
@@ -1010,7 +1011,7 @@ export function SettingsDialog({
                   <Button
                     variant="outline"
                     size="sm"
-                    className="h-8 px-3 rounded-lg border border-[var(--settings-hairline)] bg-transparent hover:bg-black/[0.02] dark:hover:bg-white/[0.02] text-[12px] font-medium text-[var(--settings-ink)] active:scale-[0.97] transition shrink-0 flex items-center gap-1.5"
+                    className="h-8 px-3 rounded-lg border border-[var(--settings-hairline)] bg-transparent hover:bg-black/[0.02] dark:hover:bg-white/[0.02] text-[12px] font-normal text-[var(--settings-ink)] active:scale-[0.97] transition shrink-0 flex items-center gap-1.5"
                     onClick={() => _onOpenUpdaterHelpTarget("docs")}
                   >
                     <span>{translations.version?.openGuide || "打开配置指南"}</span>
@@ -1019,7 +1020,7 @@ export function SettingsDialog({
                   <Button
                     variant="outline"
                     size="sm"
-                    className="h-8 px-3 rounded-lg border border-[var(--settings-hairline)] bg-transparent hover:bg-black/[0.02] dark:hover:bg-white/[0.02] text-[12px] font-medium text-[var(--settings-ink)] active:scale-[0.97] transition shrink-0 flex items-center gap-1.5"
+                    className="h-8 px-3 rounded-lg border border-[var(--settings-hairline)] bg-transparent hover:bg-black/[0.02] dark:hover:bg-white/[0.02] text-[12px] font-normal text-[var(--settings-ink)] active:scale-[0.97] transition shrink-0 flex items-center gap-1.5"
                     onClick={() => _onOpenUpdaterHelpTarget("template")}
                   >
                     <span>{translations.version?.openTemplate || "下载模板文件"}</span>
@@ -1032,7 +1033,7 @@ export function SettingsDialog({
                     <Button
                       variant="default"
                       size="sm"
-                      className="h-8 px-3 rounded-lg bg-gradient-to-b from-[var(--settings-accent)] to-[var(--settings-accent)]/90 border-[var(--settings-accent)]/80 text-white shadow-[0_1px_2px_rgba(0,0,0,0.08),inset_0_1px_0_rgba(255,255,255,0.15)] hover:opacity-90 active:scale-[0.97] transition font-bold text-[12px] shrink-0 flex items-center gap-1.5"
+                      className="h-8 px-3 rounded-lg bg-[var(--settings-accent)] border-[var(--settings-accent)]/80 text-white  hover:opacity-90 active:scale-[0.97] transition font-bold text-[12px] shrink-0 flex items-center gap-1.5"
                       onClick={handleRestartApp}
                       disabled={isRestarting || isCheckingUpdate || isInstallingUpdate}
                     >
@@ -1048,7 +1049,7 @@ export function SettingsDialog({
                   <Button
                     variant="outline"
                     size="sm"
-                    className="h-8 px-3 rounded-lg border border-[var(--settings-hairline)] bg-transparent hover:bg-black/[0.02] dark:hover:bg-white/[0.02] text-[12px] font-medium text-[var(--settings-ink)] active:scale-[0.97] transition shrink-0 flex items-center gap-1.5"
+                    className="h-8 px-3 rounded-lg border border-[var(--settings-hairline)] bg-transparent hover:bg-black/[0.02] dark:hover:bg-white/[0.02] text-[12px] font-normal text-[var(--settings-ink)] active:scale-[0.97] transition shrink-0 flex items-center gap-1.5"
                     onClick={handleCheckUpdate}
                     disabled={isCheckingUpdate || isInstallingUpdate}
                   >
@@ -1060,7 +1061,7 @@ export function SettingsDialog({
                     <Button
                       variant="default"
                       size="sm"
-                      className="h-8 px-3 rounded-lg bg-gradient-to-b from-[var(--settings-accent)] to-[var(--settings-accent)]/90 border-[var(--settings-accent)]/80 text-white shadow-[0_1px_2px_rgba(0,0,0,0.08),inset_0_1px_0_rgba(255,255,255,0.15)] hover:opacity-90 active:scale-[0.97] transition font-bold text-[12px] shrink-0 flex items-center gap-1.5"
+                      className="h-8 px-3 rounded-lg bg-[var(--settings-accent)] border-[var(--settings-accent)]/80 text-white  hover:opacity-90 active:scale-[0.97] transition font-bold text-[12px] shrink-0 flex items-center gap-1.5"
                       onClick={handleInstallUpdate}
                       disabled={isInstallingUpdate}
                     >
@@ -1075,7 +1076,7 @@ export function SettingsDialog({
 
           {updateInfo?.message && !shouldHideDefaultUpdaterConfigMessage && (
             <div className="p-4 border-t border-[var(--settings-hairline)] bg-destructive/[0.02] dark:bg-destructive/[0.03]">
-              <div className="rounded-lg border border-destructive/20 bg-destructive/[0.02] dark:bg-destructive/[0.04] p-3 text-[11.5px] leading-relaxed text-destructive font-medium">
+              <div className="rounded-lg border border-destructive/20 bg-destructive/[0.02] dark:bg-destructive/[0.04] p-3 text-[11.5px] leading-relaxed text-destructive font-normal">
                 {updateInfo.message}
               </div>
             </div>
@@ -1101,7 +1102,7 @@ export function SettingsDialog({
               </span>
             </div>
             <div className="p-4">
-              <div className="max-h-56 overflow-y-auto glass-scrollbar text-[12px] leading-relaxed tracking-[-0.1px] text-[var(--settings-ink-muted)] whitespace-pre-wrap font-medium bg-black/[0.005] dark:bg-white/[0.005] rounded-lg p-3 border border-[var(--settings-hairline)]">
+              <div className="max-h-56 overflow-y-auto glass-scrollbar text-[12px] leading-relaxed tracking-[-0.1px] text-[var(--settings-ink-muted)] whitespace-pre-wrap font-normal bg-black/[0.005] dark:bg-white/[0.005] rounded-lg p-3 border border-[var(--settings-hairline)]">
                 {updateInfo.releaseNotes}
               </div>
             </div>
@@ -1161,7 +1162,7 @@ export function SettingsDialog({
                     className={cn(
                       "group relative flex w-full items-center gap-2.5 rounded-lg pl-4 pr-3 py-2 text-left transition duration-150 active:scale-[0.97]",
                       isActive
-                        ? "bg-[var(--settings-sidebar-selected-bg)] text-[var(--settings-sidebar-selected-text)] shadow-sm font-semibold"
+                        ? "bg-[var(--settings-sidebar-selected-bg)] text-[var(--settings-sidebar-selected-text)]  font-semibold"
                         : "text-[var(--settings-ink)]/80 hover:bg-black/[0.04] dark:hover:bg-white/[0.04]"
                     )}
                     onClick={() => handleCategoryChange(item.id)}

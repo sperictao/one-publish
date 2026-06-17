@@ -1,6 +1,7 @@
 import type {
   CSSProperties,
   PointerEvent as ReactPointerEvent,
+  ReactNode,
 } from "react";
 import { cn } from "@/lib/utils";
 import { FolderGit2, GitBranch } from "lucide-react";
@@ -59,7 +60,7 @@ export function RepositoryRow({
   isDragging,
   dragPreviewStyle,
   onHandlePointerDown,
-}: RepositoryRowProps): JSX.Element {
+}: RepositoryRowProps): ReactNode {
   const currentBranchName =
     repo.currentBranch?.trim() || repoT.currentBranchUnknown || "未知分支";
 
@@ -104,7 +105,7 @@ export function RepositoryRow({
         aria-pressed={isSelected}
         aria-label={`${repoT.selectRepository || "选择仓库"}: ${repo.name}`}
         className={cn(
-          "flex w-full items-start gap-2.5 rounded-2xl border border-transparent bg-transparent py-2.5 pr-11 text-left shadow-none outline-none transition duration-300 hover:bg-[var(--glass-bg)]/20 focus-visible:ring-2 focus-visible:ring-primary/30 focus-visible:ring-offset-1 focus-visible:ring-offset-background",
+          "flex w-full items-start gap-2.5 rounded-2xl border border-transparent bg-transparent py-2.5 pr-11 text-left shadow-none outline-none transition duration-300 hover:bg-muted/20 focus-visible:ring-2 focus-visible:ring-primary/30 focus-visible:ring-offset-1 focus-visible:ring-offset-background",
           dragHandleVisible ? "pl-10" : "pl-3"
         )}
         onClick={() => {
@@ -115,16 +116,16 @@ export function RepositoryRow({
           className={cn(
             "mt-0.5 flex size-8 flex-shrink-0 items-center justify-center rounded-[14px] transition duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]",
             isSelected
-              ? "scale-105 bg-primary/10 shadow-[0_0_18px_hsl(var(--primary)/0.24)]"
-              : "bg-[var(--glass-icon-bg)] shadow-[var(--glass-icon-highlight)] group-hover:scale-105 group-hover:bg-primary/8"
+              ? "scale-105 bg-primary/10 "
+              : "bg-muted  group-hover:scale-105 group-hover:bg-primary/8"
           )}
         >
           <FolderGit2
             className={cn(
               "size-4 transition duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]",
               isSelected
-                ? "scale-110 text-primary drop-shadow-[0_0_4px_hsl(var(--primary)/0.3)]"
-                : "text-muted-foreground/60 group-hover:text-primary group-hover:drop-shadow-[0_0_3px_hsl(var(--primary)/0.15)]"
+                ? "scale-110 text-primary "
+                : "text-muted-foreground/60 group-hover:text-primary group-hover:"
             )}
           />
         </span>
@@ -134,7 +135,7 @@ export function RepositoryRow({
             <div className="flex items-center gap-1.5">
               <span
                 className={cn(
-                  "block min-w-0 truncate text-[13px] font-medium tracking-tight transition-colors duration-300",
+                  "block min-w-0 truncate text-[13px] font-semibold tracking-tight transition-colors duration-300",
                   isSelected ? "text-foreground" : "text-foreground/78"
                 )}
               >
@@ -159,8 +160,8 @@ export function RepositoryRow({
               className={cn(
                 "inline-flex max-w-full items-center gap-1.5 rounded-full px-2 py-0.5 text-[11px] leading-4 transition duration-300",
                 canConnectBranch
-                  ? "capsule-breathe bg-[var(--glass-branch-connected-bg)] text-[var(--glass-branch-connected-text)]"
-                  : "border border-[var(--glass-branch-disconnected-border)] bg-[var(--glass-branch-disconnected-bg)] text-[hsl(var(--text-fine))] shadow-[var(--glass-branch-disconnected-highlight)]"
+                  ? "capsule-breathe bg-muted text-success"
+                  : "border border-border bg-muted text-[hsl(var(--text-fine))]"
               )}
               title={
                 canConnectBranch

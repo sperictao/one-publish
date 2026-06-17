@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useMemo, type ReactNode } from "react";
 import { Eye, FileCode2, RefreshCw } from "lucide-react";
 import { HelpTip } from "@/components/ui/help-tip";
 
@@ -71,7 +71,7 @@ export function ProjectPublishProfileViewerDialog({
   appT,
   commonT,
   configPanelT,
-}: ProjectPublishProfileViewerDialogProps): JSX.Element {
+}: ProjectPublishProfileViewerDialogProps): ReactNode {
   const t = configPanelT;
   const supplementSections = useMemo(() => {
     if (viewerState.status !== "ready") {
@@ -174,7 +174,7 @@ function ProjectPublishProfileSupplementSectionList({
 }: {
   sections: ProjectPublishProfileSupplementSection[];
   translations: ViewerTranslations;
-}): JSX.Element {
+}): ReactNode {
   return (
     <SectionShell
       icon={FileCode2}
@@ -206,7 +206,7 @@ function ProjectPublishProfileSupplementSectionCard({
 }: {
   section: ProjectPublishProfileSupplementSection;
   translations: ViewerTranslations;
-}): JSX.Element {
+}): ReactNode {
   const sectionAttributes = Object.entries(section.attributes);
 
   return (
@@ -221,7 +221,7 @@ function ProjectPublishProfileSupplementSectionCard({
               {translations.fullParsedSectionTag || "标签"}: {section.tagName}
             </CardDescription>
           </div>
-          <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[11px] font-medium text-primary">
+          <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[11px] font-semibold text-primary">
             {section.entries.length}
           </span>
         </div>
@@ -240,9 +240,9 @@ function ProjectPublishProfileSupplementSectionCard({
         {section.entries.map((entry) => (
           <div
             key={`${section.id}:${entry.path}:${entry.key}`}
-            className="space-y-3 rounded-2xl border border-[var(--glass-border-subtle)] bg-[var(--glass-input-bg)] p-4 shadow-[var(--glass-inset-shadow)]"
+            className="space-y-3 rounded-2xl border border-input bg-background p-4 "
           >
-            <div className="text-sm font-medium text-foreground">{entry.key}</div>
+            <div className="text-sm font-semibold text-foreground">{entry.key}</div>
             <ProjectPublishProfileField
               label={translations.fullParsedEntryPath || "节点路径"}
               value={entry.path}
@@ -274,7 +274,7 @@ function ProjectPublishProfileMetadataBlock({
 }: {
   label: string;
   entries: Array<[string, string]>;
-}): JSX.Element {
+}): ReactNode {
   return (
     <div className="space-y-2">
       <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
@@ -286,7 +286,7 @@ function ProjectPublishProfileMetadataBlock({
             key={`${label}:${key}`}
             className="grid gap-2 rounded-xl border border-border/60 bg-muted/20 px-3 py-2 sm:grid-cols-[minmax(0,140px)_1fr]"
           >
-            <div className="text-xs font-medium text-[hsl(var(--text-fine))]">{key}</div>
+            <div className="text-xs font-semibold text-[hsl(var(--text-fine))]">{key}</div>
             <div className="break-all font-mono text-xs text-[hsl(var(--text-fine))]">
               {value}
             </div>
@@ -305,7 +305,7 @@ function ProjectPublishProfileField({
   label: string;
   value: string;
   emptyLabel: string;
-}): JSX.Element {
+}): ReactNode {
   const hasValue = value.trim().length > 0;
 
   return (

@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import type { Repository } from "@/lib/store/types";
 import { FolderOpen, Pencil, Trash2 } from "lucide-react";
 import { RowActionsMenu } from "./RowActionsMenu";
@@ -20,7 +21,7 @@ export function RepositoryRowActionsMenu({
   onOpenDirectory,
   onEdit,
   onRemove,
-}: RepositoryRowActionsMenuProps): JSX.Element {
+}: RepositoryRowActionsMenuProps): ReactNode {
   const moreActionsLabel = repoT.moreActions || "更多操作";
 
   return (

@@ -1,4 +1,4 @@
-import { memo, useCallback, useMemo } from "react";
+import { memo, useCallback, useMemo, type ReactNode } from "react";
 import {
   FileCog,
   FolderOutput,
@@ -85,7 +85,7 @@ const DotnetPublishParametersSection = memo(function DotnetPublishParametersSect
   readOnly: boolean;
   onConfigurationChange: (value: string) => void;
   onRuntimeChange: (value: string) => void;
-}): JSX.Element {
+}): ReactNode {
   return (
     <SectionShell
       icon={SlidersHorizontal}
@@ -163,7 +163,7 @@ const DotnetPublishOutputSection = memo(function DotnetPublishOutputSection({
   readOnly: boolean;
   onOutputDirChange: (value: string) => void;
   onSelfContainedChange: (checked: boolean) => void;
-}): JSX.Element {
+}): ReactNode {
   return (
     <SectionShell
       icon={FolderOutput}
@@ -517,7 +517,7 @@ const DotnetAdvancedFieldCards = memo(function DotnetAdvancedFieldCards({
   fields: DotnetAdvancedFieldModel[];
   readOnly: boolean;
   onParameterChange: (key: string, value: ParameterValue) => void;
-}): JSX.Element {
+}): ReactNode {
   return (
     <div className="grid gap-3.5 md:grid-cols-2">
       {fields.map((field) => {
@@ -528,7 +528,7 @@ const DotnetAdvancedFieldCards = memo(function DotnetAdvancedFieldCards({
           <div
             key={field.key}
             className={cn(
-              "rounded-xl border border-[var(--glass-border-subtle)] bg-background/20 p-3 shadow-[var(--glass-inset-shadow)] flex flex-col justify-between",
+              "rounded-xl border border-input bg-background/20 p-3  flex flex-col justify-between",
               isFullWidth && "md:col-span-2"
             )}
           >
@@ -557,7 +557,7 @@ const DotnetCollapsedReadonlyAdvancedFields = memo(
     fields: DotnetAdvancedFieldModel[];
     readOnly: boolean;
     onParameterChange: (key: string, value: ParameterValue) => void;
-  }): JSX.Element | null {
+  }): ReactNode | null {
     if (fields.length === 0) {
       return null;
     }
@@ -601,7 +601,7 @@ const DotnetPublishAdvancedParametersSection = memo(
     collapsedFields: DotnetAdvancedFieldModel[];
     readOnly: boolean;
     onParameterChange: (key: string, value: ParameterValue) => void;
-  }): JSX.Element | null {
+  }): ReactNode | null {
     if (fields.length === 0 && collapsedFields.length === 0) {
       return null;
     }
@@ -656,7 +656,7 @@ function DotnetAdvancedFieldControl({
   readOnly: boolean;
   align?: "left" | "right";
   onChange: (value: ParameterValue) => void;
-}): JSX.Element {
+}): ReactNode {
   switch (field.control) {
     case "framework-suggestions":
       return (
@@ -725,7 +725,7 @@ function DotnetFrameworkSuggestionsField({
   readOnly: boolean;
   align?: "left" | "right";
   onChange: (value: ParameterValue) => void;
-}): JSX.Element {
+}): ReactNode {
   const value = typeof field.value === "string" ? field.value : "";
   const datalistId = `framework-options-${field.key}`;
 
@@ -782,7 +782,7 @@ function DotnetSelectField({
   readOnly: boolean;
   align?: "left" | "right";
   onChange: (value: ParameterValue) => void;
-}): JSX.Element {
+}): ReactNode {
   const value = typeof field.value === "string" ? field.value : "";
   const options = getLocalizedSelectOptions(profileT, field);
 
@@ -843,7 +843,7 @@ function DotnetBooleanField({
   readOnly: boolean;
   align?: "left" | "right";
   onChange: (value: ParameterValue) => void;
-}): JSX.Element {
+}): ReactNode {
   const checked = field.value === true;
 
   return (
@@ -884,7 +884,7 @@ function DotnetStringField({
   readOnly: boolean;
   align?: "left" | "right";
   onChange: (value: ParameterValue) => void;
-}): JSX.Element {
+}): ReactNode {
   const value = typeof field.value === "string" ? field.value : "";
 
   return (
@@ -928,7 +928,7 @@ function DotnetPropertyTableField({
   readOnly: boolean;
   align?: "left" | "right";
   onChange: (value: ParameterValue) => void;
-}): JSX.Element {
+}): ReactNode {
   const properties = normalizeDotnetPropertyMap(field.value);
   const entries = Object.entries(properties);
 
@@ -1058,7 +1058,7 @@ function DotnetPropertyTableField({
           ))}
         </div>
       ) : (
-        <div className="rounded-xl border border-dashed border-[var(--glass-border-subtle)] px-2.5 py-2 text-xs leading-4 text-muted-foreground">
+        <div className="rounded-xl border border-dashed border-input px-2.5 py-2 text-xs leading-4 text-muted-foreground">
           {fieldText.propertiesEmptyText}
         </div>
       )}
@@ -1075,7 +1075,7 @@ export function DotnetPublishConfigFormSections({
   dotnetSchema,
   projectFrameworkOptions = EMPTY_PROJECT_FRAMEWORK_OPTIONS,
   onDraftChange,
-}: DotnetPublishConfigFormSectionsProps): JSX.Element {
+}: DotnetPublishConfigFormSectionsProps): ReactNode {
   const readOnly = mode === "readonly";
   const focusedPresentation = presentation === "focused";
   const isRuntimeRequired = !config.runtime;

@@ -76,7 +76,7 @@ export function ArrayParameter({
           </Button>
         ) : null}
       </div>
-      <div className="space-y-2" role="group" aria-labelledby={fieldLabelId}>
+      <fieldset className="space-y-2" aria-labelledby={fieldLabelId}>
         {value.map((item, index) => (
           <div key={idPoolRef.current[index]} className="flex items-center gap-x-2">
             <Input
@@ -104,7 +104,7 @@ export function ArrayParameter({
             {t("common.noItemsAdded")}
           </div>
         )}
-      </div>
+      </fieldset>
     </div>
   );
 }

@@ -12,11 +12,11 @@ export function AppDialogInset({
   children,
   className,
   as: Component = "div",
-}: AppDialogInsetProps): JSX.Element {
+}: AppDialogInsetProps): ReactNode {
   return (
     <Component
       className={cn(
-        "rounded-2xl border border-[var(--glass-border-subtle)] bg-[var(--glass-input-bg)] p-4 shadow-[var(--glass-inset-shadow)]",
+        "rounded-2xl border border-input bg-background p-4 ",
         className
       )}
     >

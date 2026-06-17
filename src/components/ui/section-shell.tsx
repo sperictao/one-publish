@@ -26,7 +26,7 @@ export function SectionShell({
 
   const headerContent = (
     <>
-      <span className="flex size-8 flex-shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary shadow-[0_4px_12px_hsl(var(--primary)/0.12)]">
+      <span className="flex size-8 flex-shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary ">
         <Icon className="size-3.5" />
       </span>
       <div className="min-w-0 flex-1 text-left">
@@ -36,7 +36,7 @@ export function SectionShell({
         </CardDescription>
       </div>
       {badge ? (
-        <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-medium text-primary">
+        <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-semibold text-primary">
           {badge}
         </span>
       ) : null}

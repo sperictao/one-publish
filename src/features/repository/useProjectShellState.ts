@@ -13,16 +13,16 @@ interface TranslationMap {
 interface ProjectInfoSnapshot {
   projectInfo: ProjectInfo | null;
   revision: number;
-  signature: string;
+  fingerprint: string;
 }
 
 const EMPTY_PROJECT_INFO_SNAPSHOT: ProjectInfoSnapshot = {
   projectInfo: null,
   revision: 0,
-  signature: "",
+  fingerprint: "",
 };
 
-function buildProjectInfoListSignature(projectInfo: ProjectInfo | null): string {
+function buildProjectInfoListFingerprint(projectInfo: ProjectInfo | null): string {
   if (!projectInfo) {
     return "";
   }
@@ -38,18 +38,18 @@ function createProjectInfoSnapshot(
   projectInfo: ProjectInfo | null,
   previousSnapshot: ProjectInfoSnapshot = EMPTY_PROJECT_INFO_SNAPSHOT
 ): ProjectInfoSnapshot {
-  const signature = buildProjectInfoListSignature(projectInfo);
-  const isSameSnapshot = previousSnapshot.signature === signature;
+  const fingerprint = buildProjectInfoListFingerprint(projectInfo);
+  const isSameSnapshot = previousSnapshot.fingerprint === fingerprint;
 
   return {
     projectInfo,
     revision:
       isSameSnapshot
         ? previousSnapshot.revision
-        : previousSnapshot.revision === 0 && signature === ""
+        : previousSnapshot.revision === 0 && fingerprint === ""
           ? 0
           : previousSnapshot.revision + 1,
-    signature,
+    fingerprint,
   };
 }
 

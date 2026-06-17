@@ -117,6 +117,16 @@ export function usePublishValidate({
 }: UsePublishValidateParams): UsePublishValidateResult {
   const presentationRevisionRef = useRef(0);
   const [publishPreviewCommand, setPublishPreviewCommand] = useState("");
+  const hasPublishSpec =
+    selectedRepo !== null && !(activeProviderUsesProjectFile && projectInfo === null);
+  const prevHasPublishSpecRef = useRef(hasPublishSpec);
+
+  if (prevHasPublishSpecRef.current !== hasPublishSpec) {
+    prevHasPublishSpecRef.current = hasPublishSpec;
+    if (!hasPublishSpec) {
+      setPublishPreviewCommand("");
+    }
+  }
 
   const {
     getCurrentConfig,
@@ -230,7 +240,6 @@ export function usePublishValidate({
     const spec = buildCurrentPublishSpec();
 
     if (!spec) {
-      setPublishPreviewCommand("");
       return () => {
         disposed = true;
       };

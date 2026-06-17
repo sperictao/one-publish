@@ -240,7 +240,7 @@ function ConfigGroup({
             <Loader2 className="size-3.5" />
           </span>
         ) : null}
-        <span className="rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-medium tabular-nums">
+        <span className="rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-semibold tabular-nums">
           {count}
         </span>
       </button>
@@ -419,7 +419,7 @@ function ProfileItem({
         type="button"
         aria-pressed={isSelected}
         className={cn(
-          "flex w-full items-center gap-2.5 rounded-2xl border border-transparent bg-transparent py-2 pr-11 text-left shadow-none outline-none transition duration-300 hover:bg-[var(--glass-bg)]/20 focus-visible:ring-2 focus-visible:ring-primary/30 focus-visible:ring-offset-1 focus-visible:ring-offset-background",
+          "flex w-full items-center gap-2.5 rounded-2xl border border-transparent bg-transparent py-2 pr-11 text-left shadow-none outline-none transition duration-300 hover:bg-muted/20 focus-visible:ring-2 focus-visible:ring-primary/30 focus-visible:ring-offset-1 focus-visible:ring-offset-background",
           dragHandleVisible ? "pl-10" : "pl-3"
         )}
         onClick={onClick}
@@ -428,23 +428,23 @@ function ProfileItem({
           className={cn(
             "flex size-8 flex-shrink-0 items-center justify-center rounded-[14px] transition duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]",
             isSelected
-              ? "scale-105 bg-primary/10 shadow-[0_0_18px_hsl(var(--primary)/0.24)]"
-              : "bg-[var(--glass-icon-bg)] shadow-[var(--glass-icon-highlight)] group-hover:scale-105 group-hover:bg-primary/8"
+              ? "scale-105 bg-primary/10 "
+              : "bg-muted  group-hover:scale-105 group-hover:bg-primary/8"
           )}
         >
           <FileText
             className={cn(
               "size-4 transition duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]",
               isSelected
-                ? "scale-110 text-primary drop-shadow-[0_0_4px_hsl(var(--primary)/0.3)]"
-                : "text-muted-foreground/60 group-hover:text-primary group-hover:drop-shadow-[0_0_3px_hsl(var(--primary)/0.15)]"
+                ? "scale-110 text-primary "
+                : "text-muted-foreground/60 group-hover:text-primary group-hover:"
             )}
           />
         </span>
         <div className="min-w-0 flex flex-1 items-center overflow-hidden">
           <span
             className={cn(
-              "truncate text-[13px] font-medium tracking-tight transition-colors duration-300",
+              "truncate text-[13px] font-semibold tracking-tight transition-colors duration-300",
               isSelected ? "text-foreground" : "text-foreground/78"
             )}
           >
@@ -545,7 +545,7 @@ export const PublishConfigPanel = memo(function PublishConfigPanel({
     t.refreshingCustomProfiles || "正在刷新自定义配置...";
   const isAnyRefreshing = isProfilesRefreshing || isProjectProfilesRefreshing;
   const listActionButtonClass =
-    "glass-surface flex size-7 items-center justify-center rounded-full transition duration-300 hover:bg-[var(--glass-bg-hover)]";
+    "glass-surface flex size-7 items-center justify-center rounded-full transition duration-300 hover:bg-accent";
   const reorderControlsLabel = showReorderControls
     ? t.hideReorderControls || "关闭排序"
     : t.showReorderControls || "开启排序";
@@ -884,46 +884,46 @@ export const PublishConfigPanel = memo(function PublishConfigPanel({
         profileName,
       });
 
-      try {
-        const resolvedProfile = await resolveDotnetProjectProfile({
-          projectInfo: {
-            root_path: "",
-            project_file: projectFilePath,
-            target_frameworks: projectFrameworkOptions,
-          },
-          profileName,
-        });
+      resolveDotnetProjectProfile({
+        projectInfo: {
+          root_path: "",
+          project_file: projectFilePath,
+          target_frameworks: projectFrameworkOptions,
+        },
+        profileName,
+      })
+        .then((resolvedProfile) => {
+          if (latestProjectProfileRequestId.current !== requestId) {
+            return;
+          }
 
-        if (latestProjectProfileRequestId.current !== requestId) {
-          return;
-        }
+          setProjectProfileViewerState({
+            status: "ready",
+            profileName: resolvedProfile.profileName,
+            filePath: resolvedProfile.filePath,
+            editableConfig: resolvedProfile.editableConfig,
+            parsedProfile: resolvedProfile.parsedProfile,
+          });
+        })
+        .catch((error) => {
+          if (latestProjectProfileRequestId.current !== requestId) {
+            return;
+          }
 
-        setProjectProfileViewerState({
-          status: "ready",
-          profileName: resolvedProfile.profileName,
-          filePath: resolvedProfile.filePath,
-          editableConfig: resolvedProfile.editableConfig,
-          parsedProfile: resolvedProfile.parsedProfile,
-        });
-      } catch (error) {
-        const errorMessage =
-          error instanceof Error
-            ? error.message
-            : extractInvokeErrorMessage(error);
+          const errorMessage =
+            error instanceof Error
+              ? error.message
+              : extractInvokeErrorMessage(error);
 
-        if (latestProjectProfileRequestId.current !== requestId) {
-          return;
-        }
-
-        setProjectProfileViewerState({
-          status: "error",
-          profileName,
-          errorMessage,
+          setProjectProfileViewerState({
+            status: "error",
+            profileName,
+            errorMessage,
+          });
+          toast.error(t.loadConfigFailed || "加载配置失败", {
+            description: errorMessage,
+          });
         });
-        toast.error(t.loadConfigFailed || "加载配置失败", {
-          description: errorMessage,
-        });
-      }
     },
     [projectFilePath, projectFrameworkOptions, t.loadConfigFailed]
   );
@@ -1151,7 +1151,7 @@ export const PublishConfigPanel = memo(function PublishConfigPanel({
                     type="button"
                     aria-pressed={item.key === selectedConfigId}
                     className={cn(
-                      "flex w-full items-center gap-2.5 rounded-2xl border border-transparent bg-transparent py-2 pr-11 text-left shadow-none outline-none transition duration-300 hover:bg-[var(--glass-bg)]/20 focus-visible:ring-2 focus-visible:ring-primary/30 focus-visible:ring-offset-1 focus-visible:ring-offset-background",
+                      "flex w-full items-center gap-2.5 rounded-2xl border border-transparent bg-transparent py-2 pr-11 text-left shadow-none outline-none transition duration-300 hover:bg-muted/20 focus-visible:ring-2 focus-visible:ring-primary/30 focus-visible:ring-offset-1 focus-visible:ring-offset-background",
                       recentDragEnabled ? "pl-10" : "pl-3"
                     )}
                     onClick={() => {
@@ -1166,23 +1166,23 @@ export const PublishConfigPanel = memo(function PublishConfigPanel({
                       className={cn(
                         "flex size-8 flex-shrink-0 items-center justify-center rounded-[14px] transition duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]",
                         selectedRenderId === renderId
-                          ? "scale-105 bg-primary/10 shadow-[0_0_18px_hsl(var(--primary)/0.24)]"
-                          : "bg-[var(--glass-icon-bg)] shadow-[var(--glass-icon-highlight)] group-hover:scale-105 group-hover:bg-primary/8"
+                          ? "scale-105 bg-primary/10 "
+                          : "bg-muted  group-hover:scale-105 group-hover:bg-primary/8"
                       )}
                     >
                       <FileText
                         className={cn(
                           "size-4 transition duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]",
                           selectedRenderId === renderId
-                            ? "scale-110 text-primary drop-shadow-[0_0_4px_hsl(var(--primary)/0.3)]"
-                            : "text-muted-foreground/60 group-hover:text-primary group-hover:drop-shadow-[0_0_3px_hsl(var(--primary)/0.15)]"
+                            ? "scale-110 text-primary "
+                            : "text-muted-foreground/60 group-hover:text-primary group-hover:"
                         )}
                       />
                     </span>
                     <div className="min-w-0 flex flex-1 items-center gap-2 overflow-hidden">
                       <span
                         className={cn(
-                          "truncate text-[13px] font-medium tracking-tight transition-colors duration-300",
+                          "truncate text-[13px] font-semibold tracking-tight transition-colors duration-300",
                           selectedRenderId === renderId
                             ? "text-foreground"
                             : "text-foreground/78"
@@ -1311,7 +1311,7 @@ export const PublishConfigPanel = memo(function PublishConfigPanel({
                     data-selected={isPubxmlSelected}
                     aria-pressed={isPubxmlSelected}
                     className={cn(
-                      "flex w-full items-center gap-2.5 rounded-2xl border border-transparent bg-transparent py-2 pr-11 text-left shadow-none outline-none transition duration-300 hover:bg-[var(--glass-bg)]/20 focus-visible:ring-2 focus-visible:ring-primary/30 focus-visible:ring-offset-1 focus-visible:ring-offset-background",
+                      "flex w-full items-center gap-2.5 rounded-2xl border border-transparent bg-transparent py-2 pr-11 text-left shadow-none outline-none transition duration-300 hover:bg-muted/20 focus-visible:ring-2 focus-visible:ring-primary/30 focus-visible:ring-offset-1 focus-visible:ring-offset-background",
                       projectProfileDragEnabled ? "pl-10" : "pl-3"
                     )}
                     onClick={() => {
@@ -1326,23 +1326,23 @@ export const PublishConfigPanel = memo(function PublishConfigPanel({
                       className={cn(
                         "flex size-8 flex-shrink-0 items-center justify-center rounded-[14px] transition duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]",
                         isPubxmlSelected
-                          ? "scale-105 bg-primary/10 shadow-[0_0_18px_hsl(var(--primary)/0.24)]"
-                          : "bg-[var(--glass-icon-bg)] shadow-[var(--glass-icon-highlight)] group-hover:scale-105 group-hover:bg-primary/8"
+                          ? "scale-105 bg-primary/10 "
+                          : "bg-muted  group-hover:scale-105 group-hover:bg-primary/8"
                       )}
                     >
                       <FileText
                         className={cn(
                           "size-4 transition duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]",
                           isPubxmlSelected
-                            ? "scale-110 text-primary drop-shadow-[0_0_4px_hsl(var(--primary)/0.3)]"
-                            : "text-muted-foreground/60 group-hover:text-primary group-hover:drop-shadow-[0_0_3px_hsl(var(--primary)/0.15)]"
+                            ? "scale-110 text-primary "
+                            : "text-muted-foreground/60 group-hover:text-primary group-hover:"
                         )}
                       />
                     </span>
                     <div className="min-w-0 flex flex-1 items-center gap-2 overflow-hidden">
                       <span
                         className={cn(
-                          "truncate text-[13px] font-medium tracking-tight transition-colors duration-300",
+                          "truncate text-[13px] font-semibold tracking-tight transition-colors duration-300",
                           isPubxmlSelected ? "text-foreground" : "text-foreground/78"
                         )}
                       >
@@ -1591,7 +1591,7 @@ export const PublishConfigPanel = memo(function PublishConfigPanel({
             <DropdownMenuTrigger asChild>
               <button
                 type="button"
-                className="glass-surface flex items-center gap-1.5 rounded-full px-3 py-1 text-sm font-medium transition duration-300 hover:bg-[var(--glass-bg-hover)]"
+                className="glass-surface flex items-center gap-1.5 rounded-full px-3 py-1 text-sm font-normal transition duration-300 hover:bg-accent"
                 aria-haspopup="menu"
                 aria-expanded={groupFilterOpen}
               >
@@ -1614,7 +1614,7 @@ export const PublishConfigPanel = memo(function PublishConfigPanel({
                 onSelect={() => setGroupFilterValue(ALL_GROUP_FILTER)}
                 className={cn(
                   "justify-between gap-3",
-                  groupFilterValue === ALL_GROUP_FILTER && "bg-[var(--glass-bg-hover)]"
+                  groupFilterValue === ALL_GROUP_FILTER && "bg-accent"
                 )}
               >
                 <div className="flex min-w-0 flex-1 items-center gap-2">
@@ -1634,7 +1634,7 @@ export const PublishConfigPanel = memo(function PublishConfigPanel({
                   onSelect={() => setGroupFilterValue(option.value)}
                   className={cn(
                     "justify-between gap-3",
-                    groupFilterValue === option.value && "bg-[var(--glass-bg-hover)]"
+                    groupFilterValue === option.value && "bg-accent"
                   )}
                 >
                   <div className="flex min-w-0 flex-1 items-center gap-2">
@@ -1669,7 +1669,7 @@ export const PublishConfigPanel = memo(function PublishConfigPanel({
               className={cn(
                 listActionButtonClass,
                 showReorderControls &&
-                  "bg-[var(--glass-bg-hover)] shadow-[inset_0_1px_0_rgba(255,255,255,0.72),0_1px_2px_rgba(15,23,42,0.06)] dark:bg-white/[0.06] dark:shadow-[inset_0_1px_0_rgba(255,255,255,0.08)]"
+                  "bg-accent  dark:bg-white/[0.06] "
               )}
               onClick={(e) => {
                 e.stopPropagation();

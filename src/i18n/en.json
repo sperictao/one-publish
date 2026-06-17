@@ -87,7 +87,8 @@
   "outputDir": {
     "label": "Default Output Directory",
     "placeholder": "Leave empty to use project default directory",
-    "support": "Supports relative paths (like ./publish) or absolute paths"
+    "support": "Supports relative paths (like ./publish) or absolute paths",
+    "browse": "Browse directory"
   },
   "tray": {
     "label": "Minimize to tray when closing window",

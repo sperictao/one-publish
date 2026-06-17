@@ -3,16 +3,16 @@ import type { ConfigProfile } from "@/lib/store/types";
 export interface ProfileListSnapshot {
   profiles: ConfigProfile[];
   revision: number;
-  signature: string;
+  fingerprint: string;
 }
 
 export const EMPTY_PROFILE_LIST_SNAPSHOT: ProfileListSnapshot = {
   profiles: [],
   revision: 0,
-  signature: "",
+  fingerprint: "",
 };
 
-export function buildProfileListSignature(
+export function buildProfileListFingerprint(
   profiles: readonly ConfigProfile[]
 ): string {
   return profiles
@@ -26,18 +26,18 @@ export function createProfileListSnapshot(
   profiles: ConfigProfile[],
   previousSnapshot: ProfileListSnapshot = EMPTY_PROFILE_LIST_SNAPSHOT
 ): ProfileListSnapshot {
-  const signature = buildProfileListSignature(profiles);
-  const isSameSnapshot = previousSnapshot.signature === signature;
+  const fingerprint = buildProfileListFingerprint(profiles);
+  const isSameSnapshot = previousSnapshot.fingerprint === fingerprint;
 
   return {
     profiles,
     revision:
       isSameSnapshot
         ? previousSnapshot.revision
-        : previousSnapshot.revision === 0 && signature === ""
+        : previousSnapshot.revision === 0 && fingerprint === ""
           ? 0
           : previousSnapshot.revision + 1,
-    signature,
+    fingerprint,
   };
 }
 

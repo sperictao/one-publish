@@ -41,7 +41,7 @@ export function MainContentShell({
       <div className="glass-card repo-sidebar-shell flex h-full min-w-0 flex-col overflow-hidden rounded-2xl">
         <div
           data-tauri-drag-region
-          className="flex h-10 flex-shrink-0 items-center bg-[var(--glass-panel-bg)]/30"
+          className="flex h-10 flex-shrink-0 items-center bg-background"
         >
           {middlePanelCollapsed && (
             <div

@@ -87,7 +87,8 @@
   "outputDir": {
     "label": "默认发布目录",
     "placeholder": "留空使用项目默认目录",
-    "support": "支持相对路径（如 ./publish）或绝对路径"
+    "support": "支持相对路径（如 ./publish）或绝对路径",
+    "browse": "浏览目录"
   },
   "tray": {
     "label": "关闭窗口时最小化到托盘",

@@ -2,10 +2,11 @@ import {
   useCallback,
   useEffect,
   useLayoutEffect,
-  useRef,
   useState,
 } from "react";
 import { toast } from "sonner";
+
+import { useLazyRef } from "@/hooks/useLazyRef";
 
 import {
   getProfiles,
@@ -36,10 +37,10 @@ export function useProfileListState(params: {
   const [visibleProfilesSnapshot, setVisibleProfilesSnapshot] =
     useState<ProfileListSnapshot>(EMPTY_PROFILE_LIST_SNAPSHOT);
   const [isProfilesRefreshing, setIsProfilesRefreshing] = useState(false);
-  const loadProfilesRequestIdRef = useRef(0);
-  const reorderProfilesQueueRef = useRef<Promise<void>>(Promise.resolve());
-  const profilesCacheRef = useRef<Record<string, ProfileListSnapshot>>({});
-  const selectedRepoIdRef = useRef(selectedRepoId);
+  const loadProfilesRequestIdRef = useLazyRef<number>(() => 0);
+  const reorderProfilesQueueRef = useLazyRef<Promise<void>>(() => Promise.resolve());
+  const profilesCacheRef = useLazyRef<Record<string, ProfileListSnapshot>>(() => ({}));
+  const selectedRepoIdRef = useLazyRef<string | null>(() => selectedRepoId);
   const profiles = visibleProfilesSnapshot.profiles;
   const profilesRevision = visibleProfilesSnapshot.revision;
   selectedRepoIdRef.current = selectedRepoId;

@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import type { LucideIcon } from "lucide-react";
 
 import { ArrayParameter } from "@/components/publish/ArrayParameter";
@@ -29,7 +30,7 @@ export function ReadonlyParameterFieldsSection({
   description,
   fields,
   emptyLabel,
-}: ReadonlyParameterFieldsSectionProps): JSX.Element {
+}: ReadonlyParameterFieldsSectionProps): ReactNode {
   return (
     <SectionShell icon={icon} title={title} description={description}>
       {fields.length === 0 ? (

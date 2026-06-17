@@ -113,13 +113,8 @@ export function useListReorderMotion(params: {
         }
       };
 
-      if (typeof animation.addEventListener === "function") {
-        animation.addEventListener("finish", clearAnimationRef, { once: true });
-        animation.addEventListener("cancel", clearAnimationRef, { once: true });
-      } else {
-        animation.onfinish = clearAnimationRef;
-        animation.oncancel = clearAnimationRef;
-      }
+      animation.onfinish = clearAnimationRef;
+      animation.oncancel = clearAnimationRef;
     }
 
     previousRectsRef.current = nextRects;

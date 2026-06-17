@@ -72,17 +72,14 @@ export const createPublishStateSlice: StateCreator<
   ) {
     recentMutationQueue = recentMutationQueue
       .catch(() => undefined)
-      .then(async () => {
-        try {
-          const nextState = await mutation();
-          if (options?.applyState === false) {
-            return;
-          }
-          set((prev) => mergeRecentPublishState(prev, nextState));
-        } catch (err) {
-          await handlePersistenceFailure(errorMessage, err);
+      .then(() => mutation())
+      .then((nextState) => {
+        if (options?.applyState === false) {
+          return;
         }
-      });
+        set((prev) => mergeRecentPublishState(prev, nextState));
+      })
+      .catch((err) => handlePersistenceFailure(errorMessage, err));
   }
 
   return {

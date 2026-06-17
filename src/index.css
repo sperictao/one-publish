@@ -145,7 +145,7 @@ html.dark {
   --glass-shadow: 0 2px 16px rgba(0, 0, 0, 0.08), 0 0 1px rgba(0, 0, 0, 0.12);
   --glass-shadow-lg: 0 8px 32px rgba(0, 0, 0, 0.12), 0 0 1px rgba(0, 0, 0, 0.15);
   --glass-shadow-selected: 0 4px 24px rgba(0, 0, 0, 0.1), 0 0 0 1px rgba(0, 0, 0, 0.08) inset;
-  --glass-specular: linear-gradient(135deg, rgba(255, 255, 255, 0.4) 0%, rgba(255, 255, 255, 0.05) 50%, transparent 100%);
+  --glass-specular: none;
   --glass-panel-bg: rgba(250, 249, 247, 0.78);
   --glass-divider: rgba(0, 0, 0, 0.1);
   --glass-input-bg: rgba(0, 0, 0, 0.05);
@@ -153,17 +153,17 @@ html.dark {
   --glass-code-bg: rgba(0, 0, 0, 0.06);
   --glass-kbd-bg: rgba(0, 0, 0, 0.06);
   --glass-kbd-border: rgba(0, 0, 0, 0.12);
-  --glass-inset-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.06);
+  --glass-inset-shadow: none;
   --glass-icon-bg: rgba(255, 255, 255, 0.4);
-  --glass-icon-highlight: inset 0 1px 0 rgba(255, 255, 255, 0.6);
+  --glass-icon-highlight: none;
   --glass-tag-bg: rgba(255, 255, 255, 0.36);
   --glass-tag-border: rgba(255, 255, 255, 0.55);
-  --glass-tag-highlight: inset 0 1px 0 rgba(255, 255, 255, 0.55);
+  --glass-tag-highlight: none;
   --glass-branch-connected-bg: rgba(5, 150, 105, 0.2);
   --glass-branch-connected-text: rgb(4, 120, 87);
   --glass-branch-disconnected-bg: rgba(255, 255, 255, 0.34);
   --glass-branch-disconnected-border: rgba(255, 255, 255, 0.55);
-  --glass-branch-disconnected-highlight: inset 0 1px 0 rgba(255, 255, 255, 0.5);
+  --glass-branch-disconnected-highlight: none;
 
   /* Settings page — Apple design tokens */
   --settings-sidebar-item-active: #f5f5f7;
@@ -180,7 +180,7 @@ html.dark {
   --settings-sidebar-selected-text: #0066cc;
   --settings-card-selected-border: rgba(0, 102, 204, 0.4);
   --settings-card-selected-bg: rgba(0, 102, 204, 0.02);
-  --settings-card-selected-shadow: 0 4px 20px rgba(0, 102, 204, 0.06), 0 1px 3px rgba(0, 102, 204, 0.04);
+  --settings-card-selected-shadow: none;
 
   /* Theme preview mock — platform chrome palette.
      Two complete palettes let the mock render light and dark variants
@@ -307,48 +307,30 @@ html.dark {
 
 /* Glass Panel - base container */
 .glass-panel {
-  background: var(--glass-panel-bg);
-  backdrop-filter: blur(40px) saturate(180%);
-  -webkit-backdrop-filter: blur(40px) saturate(180%);
+  background: hsl(var(--card));
 }
 
 /* Glass Surface - interactive elements */
 .glass-surface {
-  background: var(--glass-bg);
-  backdrop-filter: blur(20px) saturate(150%);
-  -webkit-backdrop-filter: blur(20px) saturate(150%);
-  border: 1px solid var(--glass-border);
-  box-shadow: var(--glass-shadow);
+  background: hsl(var(--muted));
+  border: 1px solid hsl(var(--border));
   position: relative;
   overflow: hidden;
 }
 
 .glass-surface::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  background: var(--glass-specular);
-  pointer-events: none;
-  border-radius: inherit;
+  content: none;
 }
 
 /* Glass Surface - selected state */
 .glass-surface-selected {
-  background: var(--glass-bg-active);
-  backdrop-filter: blur(24px) saturate(180%);
-  -webkit-backdrop-filter: blur(24px) saturate(180%);
-  border: 1px solid var(--glass-border);
-  box-shadow: var(--glass-shadow-selected);
+  background: hsl(var(--accent));
+  border: 1px solid hsl(var(--border));
   position: relative;
 }
 
 .glass-surface-selected::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  background: var(--glass-specular);
-  pointer-events: none;
-  border-radius: inherit;
+  content: none;
 }
 
 /* Glass Divider - replaces hard borders */
@@ -358,115 +340,64 @@ html.dark {
 
 /* Glass Input */
 .glass-input {
-  background: var(--glass-input-bg);
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
-  border: 1px solid var(--glass-border-subtle);
-  box-shadow: var(--glass-inset-shadow);
+  background: hsl(var(--background));
+  border: 1px solid hsl(var(--input));
   transition:
     border-color 0.2s cubic-bezier(0.2, 0.8, 0.2, 1),
     box-shadow 0.2s cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 
 .glass-input:focus-within {
-  background: var(--glass-bg);
-  border-color: var(--glass-border);
-  box-shadow: 0 0 0 3px hsl(var(--primary) / 0.12), var(--glass-shadow);
+  background: hsl(var(--muted));
+  border-color: hsl(var(--border));
+  box-shadow: 0 0 0 3px hsl(var(--primary) / 0.12);
 }
 
 /* Glass Card - card container with subtle specular */
 .glass-card {
-  background: var(--glass-panel-bg);
-  backdrop-filter: blur(24px) saturate(160%);
-  -webkit-backdrop-filter: blur(24px) saturate(160%);
-  border: 1px solid var(--glass-border);
-  box-shadow: var(--glass-shadow);
+  background: hsl(var(--card));
+  border: 1px solid hsl(var(--border));
   position: relative;
   overflow: hidden;
 }
 
 .repo-sidebar-shell {
-  background: var(--repo-sidebar-shell-bg);
-  border-color: var(--repo-sidebar-shell-border);
-  box-shadow: var(--repo-sidebar-shell-shadow);
+  background: hsl(var(--card));
+  border-color: hsl(var(--border));
 }
 
 .glass-card.repo-sidebar-shell::before {
-  background: linear-gradient(
-    160deg,
-    rgba(255, 255, 255, 0.14) 0%,
-    rgba(255, 255, 255, 0.012) 42%,
-    transparent 100%
-  );
+  content: none;
 }
 
 .glass-card.repo-sidebar-shell::after {
-  left: 14px;
-  right: 14px;
-  background: linear-gradient(
-    90deg,
-    transparent 0%,
-    rgba(255, 255, 255, 0.18) 20%,
-    rgba(255, 255, 255, 0.24) 50%,
-    rgba(255, 255, 255, 0.14) 80%,
-    transparent 100%
-  );
+  content: none;
 }
 
 .dark .glass-card.repo-sidebar-shell::after {
-  background: linear-gradient(
-    90deg,
-    transparent 0%,
-    rgba(255, 255, 255, 0.016) 20%,
-    rgba(255, 255, 255, 0.046) 50%,
-    rgba(255, 255, 255, 0.022) 80%,
-    transparent 100%
-  );
+  content: none;
 }
 
 .list-scroll-shell {
   border-radius: 1rem;
-  border: 1px solid var(--repo-sidebar-inner-border);
-  background: var(--repo-sidebar-inner-bg);
-  box-shadow: var(--repo-sidebar-inner-shadow);
-  backdrop-filter: blur(20px) saturate(145%);
-  -webkit-backdrop-filter: blur(20px) saturate(145%);
+  border: 1px solid hsl(var(--border));
+  background: hsl(var(--card));
 }
 
 .list-scroll-shell::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  border-radius: inherit;
-  pointer-events: none;
-  background: linear-gradient(
-    180deg,
-    rgba(255, 255, 255, 0.34) 0%,
-    rgba(255, 255, 255, 0.08) 36%,
-    rgba(255, 255, 255, 0) 100%
-  );
+  content: none;
 }
 
 .dark .list-scroll-shell::before {
-  background: linear-gradient(
-    180deg,
-    rgba(255, 255, 255, 0.08) 0%,
-    rgba(255, 255, 255, 0.03) 36%,
-    rgba(255, 255, 255, 0) 100%
-  );
+  content: none;
 }
 
 .glass-card::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(135deg, rgba(255, 255, 255, 0.15) 0%, rgba(255, 255, 255, 0.02) 50%, transparent 100%);
-  pointer-events: none;
-  border-radius: inherit;
+  content: none;
 }
 
 .dark .glass-card::before {
-  background: linear-gradient(135deg, rgba(255, 255, 255, 0.04) 0%, rgba(255, 255, 255, 0.01) 50%, transparent 100%);
+  content: none;
 }
 
 /* Subtle pulse animation for connectivity indicator */
@@ -490,124 +421,11 @@ html.dark {
 }
 
 .floating-list-card {
-  --list-card-trail-opacity: 0;
-  --list-card-trail-x: 0px;
-  --list-card-trail-y: 0px;
-  --list-card-trail-scale: 1;
-  --list-card-selected-glow: 0;
-  --list-card-highlight-x: 0.16;
-  --list-card-highlight-y: 0;
-  --list-card-morph-stretch: 0;
-  --list-card-shadow-offset-x: 0px;
-  --list-card-shadow-offset-y: 0px;
-  --list-card-specular-sweep: 0.5;
-  --list-card-specular-angle: 90deg;
-  --list-card-caustic-x: 0.16;
-  --list-card-caustic-y: 0;
   position: absolute;
   border-radius: 1.25rem;
-  border: 1px solid rgba(255, 255, 255, 0.45);
-  background: linear-gradient(145deg, rgba(255, 255, 255, 0.58) 0%, hsl(var(--background) / 0.18) 50%, rgba(246, 245, 255, 0.38) 100%);
-  box-shadow:
-    calc(0px + var(--list-card-shadow-offset-x)) calc(10px + var(--list-card-shadow-offset-y)) 24px rgba(98, 108, 145, 0.16),
-    0 4px 10px rgba(98, 108, 145, 0.08),
-    0 0 40px rgba(98, 108, 145, 0.06),
-    inset 0 1px 0 rgba(255, 255, 255, 0.7),
-    inset 0 0 12px rgba(255, 255, 255, 0.12),
-    calc(var(--list-card-shadow-offset-x) * 2.5) calc(var(--list-card-shadow-offset-y) * 2.5) 18px rgba(255, 186, 73, 0.12),
-    calc(var(--list-card-shadow-offset-x) * -2.5) calc(var(--list-card-shadow-offset-y) * -2.5) 18px rgba(120, 160, 255, 0.12);
-  backdrop-filter: blur(24px) saturate(180%);
-  -webkit-backdrop-filter: blur(24px) saturate(180%);
+  border: 1px solid hsl(var(--border));
+  background: hsl(var(--card));
   overflow: hidden;
-  transition: box-shadow 0.32s cubic-bezier(0.16, 1, 0.3, 1);
-}
-
-.floating-list-card::after {
-  content: "";
-  position: absolute;
-  inset: -2px;
-  border-radius: inherit;
-  pointer-events: none;
-  background: linear-gradient(
-    118deg,
-    rgba(146, 177, 255, 0.26) 0%,
-    rgba(176, 202, 255, 0.2) 36%,
-    rgba(200, 186, 255, 0.22) 72%,
-    rgba(220, 210, 255, 0.1) 100%
-  );
-  opacity: var(--list-card-trail-opacity);
-  transform: translate3d(var(--list-card-trail-x), var(--list-card-trail-y), 0) scale(var(--list-card-trail-scale));
-  filter: blur(13px);
-  transition:
-    opacity 0.36s cubic-bezier(0.16, 1, 0.3, 1),
-    transform 0.36s cubic-bezier(0.16, 1, 0.3, 1);
-}
-
-.floating-list-card[data-selected="true"] {
-  box-shadow:
-    calc(0px + var(--list-card-shadow-offset-x)) calc(12px + var(--list-card-shadow-offset-y)) 24px rgba(98, 108, 145, 0.18),
-    0 4px 12px rgba(98, 108, 145, 0.1),
-    0 0 40px rgba(98, 108, 145, 0.06),
-    inset 0 1px 0 rgba(255, 255, 255, 0.74),
-    inset 0 0 12px rgba(255, 255, 255, 0.12),
-    0 0 calc(16px + 12px * var(--list-card-selected-glow)) rgba(108, 140, 255, calc(0.08 + 0.12 * var(--list-card-selected-glow))),
-    calc(var(--list-card-shadow-offset-x) * 2.5) calc(var(--list-card-shadow-offset-y) * 2.5) 18px rgba(255, 186, 73, 0.12),
-    calc(var(--list-card-shadow-offset-x) * -2.5) calc(var(--list-card-shadow-offset-y) * -2.5) 18px rgba(120, 160, 255, 0.12);
-}
-
-.floating-list-card::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  background:
-    linear-gradient(var(--list-card-specular-angle), transparent calc(var(--list-card-specular-sweep) * 100% - 3%), rgba(255, 255, 255, 0.38) calc(var(--list-card-specular-sweep) * 100%), transparent calc(var(--list-card-specular-sweep) * 100% + 3%)),
-    radial-gradient(60% 40% at calc(var(--list-card-caustic-x) * 100%) calc(var(--list-card-caustic-y) * 100%), rgba(255, 255, 255, 0.18) 0%, rgba(255, 255, 255, 0) 70%),
-    radial-gradient(80% 50% at calc(var(--list-card-highlight-x) * 100%) calc(var(--list-card-highlight-y) * 100%), rgba(255, 255, 255, 0.35) 0%, rgba(255, 255, 255, 0) 75%),
-    linear-gradient(180deg, rgba(255, 255, 255, 0.18) 0%, rgba(255, 255, 255, 0) 68%);
-  pointer-events: none;
-}
-
-.dark .floating-list-card {
-  border-color: rgba(255, 255, 255, 0.12);
-  background: linear-gradient(145deg, rgba(52, 57, 76, 0.62) 0%, hsl(var(--background) / 0.22) 50%, rgba(35, 39, 54, 0.52) 100%);
-  box-shadow:
-    calc(0px + var(--list-card-shadow-offset-x)) calc(10px + var(--list-card-shadow-offset-y)) 24px rgba(0, 0, 0, 0.34),
-    0 4px 10px rgba(0, 0, 0, 0.2),
-    0 0 40px rgba(0, 0, 0, 0.1),
-    inset 0 1px 0 rgba(255, 255, 255, 0.08),
-    inset 0 0 12px rgba(255, 255, 255, 0.04),
-    calc(var(--list-card-shadow-offset-x) * 2.5) calc(var(--list-card-shadow-offset-y) * 2.5) 18px rgba(255, 186, 73, 0.09),
-    calc(var(--list-card-shadow-offset-x) * -2.5) calc(var(--list-card-shadow-offset-y) * -2.5) 18px rgba(120, 160, 255, 0.10);
-}
-
-.dark .floating-list-card::after {
-  background: linear-gradient(
-    118deg,
-    rgba(88, 126, 214, 0.34) 0%,
-    rgba(103, 143, 226, 0.26) 36%,
-    rgba(133, 120, 211, 0.24) 72%,
-    rgba(136, 131, 212, 0.14) 100%
-  );
-}
-
-.dark .floating-list-card[data-selected="true"] {
-  box-shadow:
-    calc(0px + var(--list-card-shadow-offset-x)) calc(10px + var(--list-card-shadow-offset-y)) 24px rgba(0, 0, 0, 0.4),
-    0 4px 12px rgba(0, 0, 0, 0.24),
-    0 0 40px rgba(0, 0, 0, 0.1),
-    inset 0 1px 0 rgba(255, 255, 255, 0.1),
-    inset 0 0 12px rgba(255, 255, 255, 0.04),
-    0 0 calc(14px + 12px * var(--list-card-selected-glow)) rgba(93, 126, 232, calc(0.12 + 0.18 * var(--list-card-selected-glow))),
-    calc(var(--list-card-shadow-offset-x) * 2.5) calc(var(--list-card-shadow-offset-y) * 2.5) 18px rgba(255, 186, 73, 0.09),
-    calc(var(--list-card-shadow-offset-x) * -2.5) calc(var(--list-card-shadow-offset-y) * -2.5) 18px rgba(120, 160, 255, 0.10);
-}
-
-.dark .floating-list-card::before {
-  background:
-    linear-gradient(var(--list-card-specular-angle), transparent calc(var(--list-card-specular-sweep) * 100% - 3%), rgba(255, 255, 255, 0.12) calc(var(--list-card-specular-sweep) * 100%), transparent calc(var(--list-card-specular-sweep) * 100% + 3%)),
-    radial-gradient(60% 40% at calc(var(--list-card-caustic-x) * 100%) calc(var(--list-card-caustic-y) * 100%), rgba(255, 255, 255, 0.06) 0%, rgba(255, 255, 255, 0) 70%),
-    radial-gradient(80% 50% at calc(var(--list-card-highlight-x) * 100%) calc(var(--list-card-highlight-y) * 100%), rgba(255, 255, 255, 0.1) 0%, rgba(255, 255, 255, 0) 72%),
-    linear-gradient(180deg, rgba(255, 255, 255, 0.06) 0%, rgba(255, 255, 255, 0) 68%);
 }
 
 /* Glass shimmer - specular light sweep */

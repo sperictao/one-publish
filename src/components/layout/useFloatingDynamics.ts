@@ -1,4 +1,6 @@
 import { useCallback, useRef } from "react";
+
+import { useLazyRef } from "@/hooks/useLazyRef";
 import type { FloatingCardRectDraft } from "./useFloatingPosition";
 
 export interface FloatingCardDynamics {
@@ -57,7 +59,7 @@ export function useFloatingDynamics({
   floatingCardMotionRef,
 }: UseFloatingDynamicsOptions) {
   // 动效值经 ref 直写 DOM CSS 变量，绕过 React 渲染管线（性能关键路径）
-  const dynamicsRef = useRef<FloatingCardDynamics>(createNeutralDynamics());
+  const dynamicsRef = useLazyRef<FloatingCardDynamics>(createNeutralDynamics);
 
   const floatingDynamicsResetTimeoutRef = useRef<number | null>(null);
   const lastDynamicsFrameTimeRef = useRef(0);

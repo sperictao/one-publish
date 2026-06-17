@@ -1,4 +1,6 @@
-import { useCallback, useRef } from "react";
+import { useCallback } from "react";
+
+import { useLazyRef } from "@/hooks/useLazyRef";
 import { toast } from "sonner";
 
 import type { ConfigProfile, ProfileOrderEntry } from "@/lib/store/types";
@@ -30,8 +32,8 @@ export function useProfileOrdering({
   reorderProfilesFn,
   profileT,
 }: UseProfileOrderingParams): UseProfileOrderingReturn {
-  const reorderProfilesQueueRef = useRef<Promise<void>>(Promise.resolve());
-  const selectedRepoIdRef = useRef(selectedRepoId);
+  const reorderProfilesQueueRef = useLazyRef<Promise<void>>(() => Promise.resolve());
+  const selectedRepoIdRef = useLazyRef<string | null>(() => selectedRepoId);
   selectedRepoIdRef.current = selectedRepoId;
 
   const reorderVisibleProfiles = useCallback(
