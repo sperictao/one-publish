@@ -156,7 +156,7 @@ one-publish/
 │   ├── roadmap/MASTER_PLAN.md    # Development roadmap (11 phases)
 │   ├── updater/SETUP.md          # Updater configuration guide
 │   └── release/GITHUB_RELEASE.md # Release pipeline docs
-├── DESIGN.md                     # Apple design analysis (reference)
+├── DESIGN.md                     # Liquid Glass design system (canonical tokens + spec)
 ├── package.json
 ├── vite.config.ts
 ├── tailwind.config.cjs

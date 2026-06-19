@@ -165,22 +165,27 @@ html.dark {
   --glass-branch-disconnected-border: rgba(255, 255, 255, 0.55);
   --glass-branch-disconnected-highlight: none;
 
-  /* Settings page — Apple design tokens */
-  --settings-sidebar-item-active: #f5f5f7;
-  --settings-sidebar-item-hover: rgba(0, 0, 0, 0.04);
-  --settings-hairline: rgba(0, 0, 0, 0.08);
-  --settings-ink: #1d1d1f;
-  --settings-ink-muted: #86868b;
-  --settings-accent: #0066cc;
-  --settings-accent-focus: #0071e3;
-  --settings-section-bg: #ffffff;
-  --settings-icon-muted: #86868b;
-  --settings-icon-active: #0066cc;
-  --settings-sidebar-selected-bg: rgba(0, 102, 204, 0.08);
-  --settings-sidebar-selected-text: #0066cc;
-  --settings-card-selected-border: rgba(0, 102, 204, 0.4);
-  --settings-card-selected-bg: rgba(0, 102, 204, 0.02);
-  --settings-card-selected-shadow: none;
+  /* Settings page — Liquid Glass design tokens.
+     Built on the glass material layer so the settings surface reads as
+     translucent composite glass over the warm canvas, per DESIGN.md. */
+  --settings-hairline: var(--glass-border-subtle);
+  --settings-divider: var(--glass-divider);
+  --settings-ink: hsl(var(--foreground));
+  --settings-ink-muted: hsl(var(--muted-foreground));
+  --settings-accent: hsl(var(--primary));
+  --settings-accent-focus: hsl(var(--primary));
+  --settings-section-bg: var(--glass-panel-bg);
+  --settings-section-blur: 24px;
+  --settings-section-saturate: 1.6;
+  --settings-icon-muted: hsl(var(--muted-foreground));
+  --settings-icon-active: hsl(var(--primary));
+  --settings-sidebar-item-active: var(--glass-bg-hover);
+  --settings-sidebar-item-hover: var(--glass-bg-hover);
+  --settings-sidebar-selected-bg: var(--glass-bg-active);
+  --settings-sidebar-selected-text: hsl(var(--primary));
+  --settings-card-selected-border: hsl(var(--primary) / 0.4);
+  --settings-card-selected-bg: var(--glass-bg-active);
+  --settings-card-selected-shadow: var(--glass-shadow-selected);
 
   /* Theme preview mock — platform chrome palette.
      Two complete palettes let the mock render light and dark variants
@@ -266,22 +271,27 @@ html.dark {
   --glass-branch-disconnected-border: rgba(255, 255, 255, 0.15);
   --glass-branch-disconnected-highlight: inset 0 1px 0 rgba(255, 255, 255, 0.06);
 
-  /* Settings page — Apple design tokens (dark) */
-  --settings-sidebar-item-active: rgba(255, 255, 255, 0.1);
-  --settings-sidebar-item-hover: rgba(255, 255, 255, 0.06);
-  --settings-hairline: rgba(255, 255, 255, 0.1);
-  --settings-ink: #f5f5f7;
-  --settings-ink-muted: #86868b;
-  --settings-accent: #2997ff;
-  --settings-accent-focus: #2997ff;
-  --settings-section-bg: rgba(255, 255, 255, 0.04);
-  --settings-icon-muted: #86868b;
-  --settings-icon-active: #2997ff;
-  --settings-sidebar-selected-bg: rgba(41, 151, 255, 0.16);
-  --settings-sidebar-selected-text: #2997ff;
-  --settings-card-selected-border: rgba(41, 151, 255, 0.6);
-  --settings-card-selected-bg: rgba(255, 255, 255, 0.02);
-  --settings-card-selected-shadow: 0 4px 20px rgba(41, 151, 255, 0.06), 0 1px 3px rgba(41, 151, 255, 0.04);
+  /* Settings page — Liquid Glass design tokens (dark).
+     Alphas invert to translucent whites over the near-black chassis so the
+     visual weight matches the light recipe, per DESIGN.md. */
+  --settings-hairline: var(--glass-border-subtle);
+  --settings-divider: var(--glass-divider);
+  --settings-ink: hsl(var(--foreground));
+  --settings-ink-muted: hsl(var(--muted-foreground));
+  --settings-accent: hsl(var(--primary));
+  --settings-accent-focus: hsl(var(--primary));
+  --settings-section-bg: var(--glass-panel-bg);
+  --settings-section-blur: 24px;
+  --settings-section-saturate: 1.6;
+  --settings-icon-muted: hsl(var(--muted-foreground));
+  --settings-icon-active: hsl(var(--primary));
+  --settings-sidebar-item-active: var(--glass-bg-hover);
+  --settings-sidebar-item-hover: var(--glass-bg-hover);
+  --settings-sidebar-selected-bg: var(--glass-bg-active);
+  --settings-sidebar-selected-text: hsl(var(--primary));
+  --settings-card-selected-border: hsl(var(--primary) / 0.6);
+  --settings-card-selected-bg: var(--glass-bg-active);
+  --settings-card-selected-shadow: var(--glass-shadow-selected);
 
   --repo-sidebar-shell-bg: linear-gradient(
     180deg,
