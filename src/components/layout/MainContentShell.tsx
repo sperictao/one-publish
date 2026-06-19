@@ -38,10 +38,11 @@ export function MainContentShell({
 }: MainContentShellProps) {
   return (
     <div className="flex min-w-0 flex-1 flex-col p-2">
-      <div className="glass-card repo-sidebar-shell flex h-full min-w-0 flex-col overflow-hidden rounded-2xl">
+      <div className="surface-raised flex h-full min-w-0 flex-col overflow-hidden rounded-lg">
+        <h1 className="sr-only">{appT.appTitle || "One Publish"}</h1>
         <div
           data-tauri-drag-region
-          className="flex h-10 flex-shrink-0 items-center bg-background"
+          className="flex h-10 flex-shrink-0 items-center bg-transparent"
         >
           {middlePanelCollapsed && (
             <div
@@ -124,7 +125,7 @@ export function MainContentShell({
             </button>
           </div>
         </div>
-        <div className="list-scroll-shell glass-scrollbar relative flex-1 min-w-0 overflow-auto">
+        <div className="list-scroll-shell geist-scrollbar relative flex-1 min-w-0 overflow-auto">
           {children}
         </div>
       </div>

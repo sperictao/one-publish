@@ -70,6 +70,7 @@ export function BranchPanel({
                   e.stopPropagation();
                   onExpandRepo();
                 }}
+                aria-label={branchT.expandRepoList || "展开仓库列表"}
                 title={branchT.expandRepoList || "展开仓库列表"}
                 data-tauri-no-drag
               >
@@ -100,6 +101,7 @@ export function BranchPanel({
                   e.stopPropagation();
                   onCollapse();
                 }}
+                aria-label={branchT.collapsePanel || "收起面板"}
                 title={branchT.collapsePanel || "收起面板"}
                 data-tauri-no-drag
               >
@@ -110,11 +112,12 @@ export function BranchPanel({
         </div>
         {/* Search (disabled) */}
         <div className="border-b border-border px-3 py-2">
-          <div className="glass-input relative rounded-xl">
+          <div className="surface-input relative rounded-md">
             <Search className="absolute left-2 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
             <Input
               placeholder={branchT.searchWorktree || "搜索 worktree"}
               disabled
+              aria-label={branchT.searchWorktree || "搜索 worktree"}
               className="h-8 pl-8 text-sm"
             />
           </div>
@@ -149,6 +152,7 @@ export function BranchPanel({
                   e.stopPropagation();
                   onExpandRepo();
                 }}
+                aria-label={branchT.expandRepoList || "展开仓库列表"}
                 title={branchT.expandRepoList || "展开仓库列表"}
                 data-tauri-no-drag
               >
@@ -162,6 +166,7 @@ export function BranchPanel({
                 e.stopPropagation();
                 onCreateBranch?.();
               }}
+              aria-label={branchT.newWorktree || "新建 worktree"}
               title={branchT.newWorktree || "新建 worktree"}
               data-tauri-no-drag
             >
@@ -174,6 +179,7 @@ export function BranchPanel({
                 e.stopPropagation();
                 onRefresh?.();
               }}
+              aria-label={branchT.refresh || "刷新"}
               title={branchT.refresh || "刷新"}
               data-tauri-no-drag
             >
@@ -187,6 +193,7 @@ export function BranchPanel({
                   e.stopPropagation();
                   onCollapse();
                 }}
+                aria-label={branchT.collapsePanel || "收起面板"}
                 title={branchT.collapsePanel || "收起面板"}
                 data-tauri-no-drag
               >
@@ -198,32 +205,33 @@ export function BranchPanel({
 
       {/* Search */}
       <div className="border-b border-border px-3 py-2">
-        <div className="glass-input relative rounded-xl">
+        <div className="surface-input relative rounded-md">
           <Search className="absolute left-2 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
           <Input
             placeholder={branchT.searchWorktree || "搜索 worktree"}
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
+            aria-label={branchT.searchWorktree || "搜索 worktree"}
             className="h-8 pl-8 text-sm"
           />
         </div>
       </div>
 
       {/* Branch List */}
-      <div className="flex-1 overflow-auto glass-scrollbar">
-        <div className="glass-stagger">
+      <div className="flex-1 overflow-auto geist-scrollbar">
+        <div>
         {filteredBranches.map((branch) => (
           <div
             key={branch.name}
             className={cn(
-              "flex items-start gap-2 border-b border-border px-3 py-3 glass-transition hover:bg-muted cursor-pointer",
-              branch.isCurrent && "glass-surface-selected rounded-lg mx-1 border-0"
+              "flex items-start gap-2 border-b border-border px-3 py-3 transition-colors duration-150 ease-geist hover:bg-accent cursor-pointer",
+              branch.isCurrent && "rounded-lg mx-1 border-0 bg-accent"
             )}
           >
             <GitBranch
               className={cn(
                 "mt-0.5 size-4 flex-shrink-0",
-                branch.isCurrent ? "text-primary" : "text-muted-foreground"
+                branch.isCurrent ? "text-interactive" : "text-muted-foreground"
               )}
             />
             <div className="min-w-0 flex-1">
@@ -244,7 +252,13 @@ export function BranchPanel({
             {/* Current-branch indicator */}
             {branch.isCurrent && (
               <div className="flex-shrink-0 mt-1">
-                <div className="size-2.5 rounded-full bg-success" />
+                <span className="sr-only">
+                  {branchT.currentBranch || "当前分支"}
+                </span>
+                <div
+                  aria-hidden="true"
+                  className="size-2.5 rounded-full bg-success"
+                />
               </div>
             )}
           </div>

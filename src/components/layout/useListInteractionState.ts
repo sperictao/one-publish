@@ -7,15 +7,10 @@ interface UseListInteractionStateOptions {
 }
 
 export interface ListInteractionState {
-  hoveredItemId: string | null;
-  focusedItemId: string | null;
-  activeMenuItemId: string | null;
   visualTargetItemId: string | null;
-  freezeFloating: boolean;
   handleRowMouseEnter: (itemId: string) => void;
   handleRowFocus: (itemId: string) => void;
   handleRowBlur: (itemId: string) => void;
-  handlePointerItemChange: (itemId: string | null) => void;
   handleListPointerEnter: () => void;
   handleListPointerLeave: () => void;
   handleMenuOpenChange: (itemId: string, open: boolean) => void;
@@ -100,14 +95,6 @@ export function useListInteractionState({
     setFocusedItemId((prev) => (prev === itemId ? null : prev));
   }, []);
 
-  const handlePointerItemChange = useCallback((itemId: string | null) => {
-    if (activeMenuItemIdRef.current) {
-      return;
-    }
-
-    setHoveredItemId((prev) => (prev === itemId ? prev : itemId));
-  }, []);
-
   const handleListPointerEnter = useCallback(() => {
     pointerInsideListRef.current = true;
     setPointerInsideList(true);
@@ -146,15 +133,10 @@ export function useListInteractionState({
   );
 
   return {
-    hoveredItemId,
-    focusedItemId,
-    activeMenuItemId,
     visualTargetItemId,
-    freezeFloating: activeMenuItemId !== null,
     handleRowMouseEnter,
     handleRowFocus,
     handleRowBlur,
-    handlePointerItemChange,
     handleListPointerEnter,
     handleListPointerLeave,
     handleMenuOpenChange,

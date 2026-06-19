@@ -208,6 +208,7 @@ describe("RepositoryList", () => {
     await waitFor(() => {
       expect(repoBRow).toHaveAttribute("data-list-visual-target", "true");
     });
+    expect(container.querySelector(".floating-list-card")).toBeNull();
 
     const trigger = screen.getByRole("button", {
       name: "更多操作: beta-worker",

@@ -1,14 +1,10 @@
 import {
-  startTransition,
   Suspense,
   lazy,
   useCallback,
-  useEffect,
   useMemo,
-  useRef,
   useState,
   memo,
-  type MutableRefObject,
   type PointerEvent as ReactPointerEvent,
   type ReactNode,
 } from "react";
@@ -29,7 +25,6 @@ import {
 import type { ProjectScanCandidates } from "@/lib/store/types";
 import type { Branch, Repository } from "@/lib/store/types";
 import { useI18n } from "@/hooks/useI18n";
-import type { RepositoryListFloatingBindings } from "@/components/layout/RepositoryListFloatingLayer";
 import { RepositoryRow } from "@/components/layout/RepositoryRow";
 import { topbarIconButtonClass } from "@/components/layout/topbarButtonStyles";
 import { useRepositoryListInteractionState } from "@/components/layout/useRepositoryListInteractionState";
@@ -41,10 +36,6 @@ import { useListDropSettledState } from "@/components/layout/useListDropSettledS
 const EditRepositoryDialog = lazy(async () => {
   const mod = await import("@/components/layout/EditRepositoryDialog");
   return { default: mod.EditRepositoryDialog };
-});
-const RepositoryListFloatingLayer = lazy(async () => {
-  const mod = await import("@/components/layout/RepositoryListFloatingLayer");
-  return { default: mod.RepositoryListFloatingLayer };
 });
 
 function hasSameStringOrder(
@@ -85,7 +76,7 @@ function CollapseIcon(): ReactNode {
         strokeWidth="1"
       />
       <path
-        className="transition-transform duration-200 ease-[cubic-bezier(0.22,1,0.36,1)] group-hover:-translate-x-0.5"
+        className="transition-transform duration-150 ease-geist group-hover:-translate-x-0.5"
         d="M11.5 5.5L9 8L11.5 10.5"
         stroke="currentColor"
         strokeWidth="1"
@@ -200,18 +191,17 @@ export const RepositoryList = memo(function RepositoryList({
   const [searchQuery, setSearchQuery] = useState("");
   const [filterExpanded, setFilterExpanded] = useState(true);
   const [editingRepo, setEditingRepo] = useState<Repository | null>(null);
-  const [floatingEnhancerEnabled, setFloatingEnhancerEnabled] = useState(false);
   const [showReorderControls, setShowReorderControls] = useState(false);
   const { translations } = useI18n();
-  const repoT = translations.repositoryList || {};
+  const repoT = useMemo(
+    () => translations.repositoryList || {},
+    [translations.repositoryList]
+  );
   const listActionButtonClass =
-    "glass-surface flex size-7 items-center justify-center rounded-full transition duration-300 hover:bg-accent";
+    "flex size-7 items-center justify-center rounded-full border border-border bg-background transition-colors duration-150 ease-geist hover:bg-accent";
   const reorderControlsLabel = showReorderControls
     ? repoT.hideReorderControls || "关闭排序"
     : repoT.showReorderControls || "开启排序";
-  const fallbackListRef = useRef<HTMLDivElement | null>(null);
-  const fallbackFloatingCardMotionRef = useRef<HTMLDivElement | null>(null);
-  const fallbackFloatingCardSurfaceRef = useRef<HTMLDivElement | null>(null);
 
   const filteredRepos = useMemo(
     () =>
@@ -310,74 +300,6 @@ export const RepositoryList = memo(function RepositoryList({
   });
   const visualTargetRepoId =
     draggingRepoId ?? settledRepoId ?? interaction.visualTargetRepoId;
-  const floatingTargetRepoId = visualTargetRepoId;
-  const restingTargetRepoId =
-    draggingRepoId ??
-    settledRepoId ??
-    interaction.activeMenuRepoId ??
-    interaction.focusedRepoId ??
-    selectedRepoId;
-  const freezeFloating = interaction.freezeFloating || draggingRepoId !== null;
-
-  useEffect(() => {
-    if (floatingEnhancerEnabled) {
-      return;
-    }
-
-    const timerId = window.setTimeout(() => {
-      startTransition(() => {
-        setFloatingEnhancerEnabled(true);
-      });
-    }, 0);
-
-    return () => {
-      window.clearTimeout(timerId);
-    };
-  }, [floatingEnhancerEnabled]);
-
-  const createFallbackRowRef = useCallback(
-    (_repoId: string) => (_node: HTMLDivElement | null) => {},
-    []
-  );
-  const noopPointerHandler = useCallback(
-    (_event: ReactPointerEvent<HTMLDivElement>) => {},
-    []
-  );
-  const noopVoidHandler = useCallback(() => {}, []);
-  const handleFallbackListPointerEnter = useCallback(
-    (_event: ReactPointerEvent<HTMLDivElement>) => {
-      interaction.handleListPointerEnter();
-    },
-    [interaction.handleListPointerEnter]
-  );
-  const handleFallbackListPointerLeave = useCallback(() => {
-    interaction.handleListPointerLeave();
-  }, [interaction.handleListPointerLeave]);
-
-  const fallbackFloatingBindings = useMemo<RepositoryListFloatingBindings>(
-    () => ({
-      listRef: fallbackListRef as MutableRefObject<HTMLDivElement | null>,
-      floatingCardSurfaceRef:
-        fallbackFloatingCardSurfaceRef as MutableRefObject<HTMLDivElement | null>,
-      cardTargetRepoId: floatingTargetRepoId,
-      floatingVisible: false,
-      floatingCardMotionRef:
-        fallbackFloatingCardMotionRef as MutableRefObject<HTMLDivElement | null>,
-      setRepoRowRef: createFallbackRowRef,
-      handleListPointerMove: noopPointerHandler,
-      handleListPointerEnter: handleFallbackListPointerEnter,
-      handleListMouseLeave: handleFallbackListPointerLeave,
-      handleListScroll: noopVoidHandler,
-    }),
-    [
-      createFallbackRowRef,
-      floatingTargetRepoId,
-      handleFallbackListPointerEnter,
-      handleFallbackListPointerLeave,
-      noopPointerHandler,
-      noopVoidHandler,
-    ]
-  );
 
   const openEditDialog = useCallback((repo: Repository) => {
     setEditingRepo(repo);
@@ -389,71 +311,41 @@ export const RepositoryList = memo(function RepositoryList({
     }
   }, []);
 
-  const renderRepoListContent = useCallback(
-    (floating: RepositoryListFloatingBindings) => {
-      const floatingDragPreviewStyle =
-        draggingRepoId && floating.cardTargetRepoId === draggingRepoId
-          ? repositoryReorder.dragPreviewStyle
-          : undefined;
+  const repoListContent = useMemo(
+    () => {
+      // Stable per-row ref composer: avoids allocating a fresh closure per row
+      // per render, which would bust RepositoryRow's React.memo.
+      const composeRowRef = (repoId: string) => (node: HTMLDivElement | null) =>
+        composeNodeRefs(
+          repositoryReorder.setItemRef(repoId, undefined),
+          repoMotion.setItemRef(repoId)
+        )(node);
 
       return (
         <div
-          ref={floating.listRef}
-          className="list-scroll-shell scrollbar-fade glass-scrollbar relative flex-1 overflow-auto px-2.5 py-2"
+          className="list-scroll-shell scrollbar-fade geist-scrollbar relative flex-1 overflow-auto px-2.5 py-2"
           onPointerEnter={(event) => {
             if (handleListPointerReentry(event)) {
               return;
             }
             clearSettledRepoId();
-            floating.handleListPointerEnter(event);
-          }}
-          onPointerMove={(event) => {
-            if (handleListPointerReentry(event)) {
-              return;
-            }
-            clearSettledRepoId();
-            floating.handleListPointerMove(event);
+            interaction.handleListPointerEnter();
           }}
           onPointerLeave={() => {
             handleListPointerLeave();
-            floating.handleListMouseLeave();
+            interaction.handleListPointerLeave();
           }}
-          onScroll={floating.handleListScroll}
         >
-          <div
-            ref={floating.floatingCardMotionRef}
-            aria-hidden
-            className={cn(
-              "pointer-events-none !absolute left-0 top-0 origin-top-left transition-opacity duration-120 ease-linear",
-              floatingDragPreviewStyle ? "z-30" : "z-0",
-              floating.floatingVisible ? "opacity-100" : "opacity-0"
-            )}
-          >
-            <div
-              className={cn(
-                "h-full w-full",
-                floatingDragPreviewStyle && "will-change-transform"
-              )}
-              style={floatingDragPreviewStyle}
-            >
-              <div
-                ref={floating.floatingCardSurfaceRef}
-                data-selected={floating.cardTargetRepoId === selectedRepoId ? "true" : "false"}
-                className="floating-list-card h-full w-full transition-[box-shadow] duration-320 ease-[cubic-bezier(0.16,1,0.3,1)]"
-              />
-            </div>
-          </div>
-
           {previewRepos.length === 0 ? (
             <div className="flex h-full flex-col items-center justify-center gap-3 px-4 py-8">
-              <div className="glass-surface flex size-16 items-center justify-center rounded-2xl">
+              <div className="surface-raised flex size-16 items-center justify-center rounded-lg">
                 <FolderGit2 className="size-7 text-muted-foreground/30" />
               </div>
               <div className="text-center">
                 <p className="text-sm font-normal text-foreground/60">
                   {repoT.noRepositories || "暂无仓库"}
                 </p>
-                <p className="mt-1 text-xs text-[hsl(var(--text-fine))]">
+                <p className="mt-1 text-xs text-muted-foreground">
                   {repoT.noRepositoriesHint || "点击下方添加仓库"}
                 </p>
               </div>
@@ -469,11 +361,7 @@ export const RepositoryList = memo(function RepositoryList({
                   isMenuOpen={interaction.isMenuOpenForRepo(repo.id)}
                   canConnectBranch={branchConnectivityByRepoId[repo.id] ?? false}
                   repoT={repoT}
-                  rowRef={composeNodeRefs(
-                    floating.setRepoRowRef(repo.id),
-                    repositoryReorder.setItemRef(repo.id, undefined),
-                    repoMotion.setItemRef(repo.id)
-                  )}
+                  rowRef={composeRowRef(repo.id)}
                   onSelect={onSelectRepo}
                   onOpenDirectory={onOpenRepoDirectory}
                   onEdit={openEditDialog}
@@ -500,28 +388,27 @@ export const RepositoryList = memo(function RepositoryList({
     },
     [
       branchConnectivityByRepoId,
-      draggingRepoId,
       handleListPointerLeave,
       handleListPointerReentry,
       previewRepos,
-      floatingTargetRepoId,
+      interaction.handleListPointerEnter,
+      interaction.handleListPointerLeave,
       interaction.handleMenuOpenChange,
       interaction.handleRowBlur,
       interaction.handleRowFocus,
       interaction.handleRowMouseEnter,
       interaction.isMenuOpenForRepo,
       onRemoveRepo,
-      onReorderRepositories,
+      onOpenRepoDirectory,
       onSelectRepo,
       openEditDialog,
       repoT,
       repoMotion,
       repoDragEnabled,
+      repositoryReorder.dragPreviewStyle,
       repositoryReorder.draggingItemId,
-      repositoryReorder.dropTarget,
       repositoryReorder.setItemRef,
       repositoryReorder.startDrag,
-      settledRepoId,
       clearSettledRepoId,
       selectedRepoId,
       visualTargetRepoId,
@@ -538,7 +425,7 @@ export const RepositoryList = memo(function RepositoryList({
           <div className="flex size-5 items-center justify-center">
             <AppBrandIcon />
           </div>
-          <span className="text-[10px] font-semibold uppercase tracking-[0.15em] text-[hsl(var(--text-fine))]">
+          <span className="text-[10px] font-semibold uppercase tracking-[0.15em] text-muted-foreground">
             One Publish
           </span>
         </div>
@@ -553,6 +440,7 @@ export const RepositoryList = memo(function RepositoryList({
                 onCollapse();
               }}
               title={repoT.collapsePanel || "收起面板"}
+              aria-label={repoT.collapsePanel || "收起面板"}
               data-tauri-no-drag
             >
               <CollapseIcon />
@@ -564,16 +452,16 @@ export const RepositoryList = memo(function RepositoryList({
       <div className="flex items-center justify-between px-3 py-2">
         <button
           type="button"
-          className="glass-surface flex items-center gap-1.5 rounded-full px-3 py-1 text-sm font-normal transition duration-300 hover:bg-accent"
+          className="flex items-center gap-1.5 rounded-full border border-border bg-background px-3 py-1 text-sm font-normal transition-colors duration-150 ease-geist hover:bg-accent"
           onClick={() => setFilterExpanded(!filterExpanded)}
         >
           <span className="text-foreground/80">{repoT.all || "全部"}</span>
-          <span className="flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-primary/12 px-1 text-[10px] font-bold leading-none text-primary">
+          <span className="flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-interactive/10 px-1 text-[10px] font-bold leading-none text-interactive">
             {repositories.length}
           </span>
           <ChevronDown
             className={cn(
-              "size-3 text-muted-foreground/60 transition-transform duration-300",
+              "size-3 text-muted-foreground/60 transition-transform duration-150 ease-geist",
               filterExpanded ? "" : "-rotate-90"
             )}
           />
@@ -589,14 +477,13 @@ export const RepositoryList = memo(function RepositoryList({
             title={repoT.addRepository || "添加仓库"}
             data-tauri-no-drag
           >
-            <Plus className="size-3.5 text-muted-foreground transition-transform duration-300 hover:rotate-90" />
+            <Plus className="size-3.5 text-muted-foreground transition-transform duration-150 ease-geist hover:rotate-90" />
           </button>
           <button
             type="button"
             className={cn(
               listActionButtonClass,
-              showReorderControls &&
-                "bg-accent  dark:bg-white/[0.06] "
+              showReorderControls && "bg-accent"
             )}
             onClick={(event) => {
               event.stopPropagation();
@@ -609,9 +496,9 @@ export const RepositoryList = memo(function RepositoryList({
           >
             <ArrowUpDown
               className={cn(
-                "size-3.5 transition-[transform,color] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]",
+                "size-3.5 transition-[transform,color] duration-150 ease-geist",
                 showReorderControls
-                  ? "rotate-180 hover:rotate-[360deg] text-primary"
+                  ? "rotate-180 hover:rotate-[360deg] text-interactive"
                   : "rotate-0 hover:rotate-180 text-muted-foreground"
               )}
             />
@@ -620,38 +507,20 @@ export const RepositoryList = memo(function RepositoryList({
       </div>
 
       <div className="px-3 py-1.5">
-        <div className="group/search glass-input relative rounded-xl">
-          <Search className="absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground/50 transition-colors duration-300 group-focus-within/search:text-primary" />
+        <div className="group/search surface-input relative rounded-md">
+          <Search className="absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground/50 transition-colors duration-150 ease-geist group-focus-within/search:text-interactive" />
           <Input
             data-testid="repo-search-input"
             placeholder={repoT.searchRepository || "搜索仓库"}
             value={searchQuery}
             onChange={(event) => setSearchQuery(event.target.value)}
+            aria-label={repoT.searchRepository || "搜索仓库"}
             className="h-8 border-none bg-transparent pl-8 text-sm shadow-none focus-visible:ring-0"
           />
         </div>
       </div>
 
-      {!floatingEnhancerEnabled ? (
-        renderRepoListContent(fallbackFloatingBindings)
-      ) : (
-        <Suspense fallback={renderRepoListContent(fallbackFloatingBindings)}>
-          <RepositoryListFloatingLayer
-            filteredRepoIds={previewRepoIds}
-            targetRepoId={floatingTargetRepoId}
-            restingTargetRepoId={restingTargetRepoId}
-            selectedRepoId={selectedRepoId}
-            snapTargetRepoId={settledRepoId}
-            draggingRepoId={draggingRepoId}
-            freezeFloating={freezeFloating}
-            onListPointerEnter={interaction.handleListPointerEnter}
-            onListPointerLeave={interaction.handleListPointerLeave}
-            onPointerRepoChange={interaction.handlePointerRepoChange}
-          >
-            {renderRepoListContent}
-          </RepositoryListFloatingLayer>
-        </Suspense>
-      )}
+      {repoListContent}
 
       {editingRepo ? (
         <Suspense fallback={null}>
@@ -672,10 +541,10 @@ export const RepositoryList = memo(function RepositoryList({
         <div className="pointer-events-none absolute -top-6 left-0 right-0 h-6 " />
         <button
           type="button"
-          className="flex size-7 items-center justify-center rounded-xl text-muted-foreground/50 transition duration-300 hover:bg-muted hover:text-foreground/70"
+          className="flex size-7 items-center justify-center rounded-md text-muted-foreground/50 transition-colors duration-150 ease-geist hover:bg-muted hover:text-foreground/70"
           onClick={onSettings}
         >
-          <Settings className="size-3.5 transition-transform duration-500 hover:rotate-90" />
+          <Settings className="size-3.5 transition-transform duration-150 ease-geist hover:rotate-90" />
         </button>
       </div>
     </div>

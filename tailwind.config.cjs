@@ -43,28 +43,36 @@ module.exports = {
           DEFAULT: "hsl(var(--warning))",
           foreground: "hsl(var(--warning-foreground))",
         },
+        interactive: {
+          DEFAULT: "hsl(var(--interactive))",
+          foreground: "hsl(var(--interactive-foreground))",
+          hover: "hsl(var(--interactive-hover))",
+        },
         border: "hsl(var(--border))",
         input: "hsl(var(--input))",
         ring: "hsl(var(--ring))",
       },
+      // Geist radii: 6px everyday, 12px menus/modals, 16px fullscreen.
       borderRadius: {
-        sm: "0.375rem",
-        md: "0.5rem",
-        lg: "0.75rem",
-        xl: "0.875rem",
+        none: "0px",
+        sm: "6px",
+        md: "12px",
+        lg: "16px",
+        full: "9999px",
+      },
+      // Geist elevation — tonal surfaces + borders first, shadows stay subtle.
+      boxShadow: {
+        raised:
+          "0 2px 2px rgba(0, 0, 0, 0.04)",
+        popover:
+          "0 1px 1px rgba(0, 0, 0, 0.02), 0 4px 8px -4px rgba(0, 0, 0, 0.04), 0 16px 24px -8px rgba(0, 0, 0, 0.06)",
+        modal:
+          "0 1px 1px rgba(0, 0, 0, 0.02), 0 8px 16px -4px rgba(0, 0, 0, 0.04), 0 24px 32px -8px rgba(0, 0, 0, 0.06)",
+        inset: "inset 0 1px 2px rgba(0, 0, 0, 0.04)",
       },
       fontFamily: {
         sans: [
-          "-apple-system",
-          "BlinkMacSystemFont",
-          '"Segoe UI"',
-          "Roboto",
-          '"Helvetica Neue"',
-          "Arial",
-          "sans-serif",
-        ],
-        display: [
-          "SF Pro Display",
+          "Geist-Variable",
           "-apple-system",
           "BlinkMacSystemFont",
           '"Segoe UI"',
@@ -74,6 +82,7 @@ module.exports = {
           "sans-serif",
         ],
         mono: [
+          "GeistMono-Variable",
           "ui-monospace",
           "SFMono-Regular",
           '"SF Mono"',
@@ -83,17 +92,10 @@ module.exports = {
           "monospace",
         ],
       },
+      // Geist motion: only when it clarifies a change. Short, physical easing.
       animation: {
-        "fade-in": "fadeIn 0.5s ease-out",
-        "slide-up": "slideUp 0.5s ease-out",
-        // Apple-style spring animations
-        "spring-in": "springIn 0.5s cubic-bezier(0.34, 1.56, 0.64, 1) both",
-        "spring-scale": "springScale 0.4s cubic-bezier(0.34, 1.56, 0.64, 1) both",
-        "glass-in": "glassIn 0.4s cubic-bezier(0.2, 0.8, 0.2, 1) both",
-        "glass-out": "glassOut 0.25s cubic-bezier(0.4, 0, 1, 1) both",
-        "stagger-in": "staggerIn 0.35s cubic-bezier(0.2, 0.8, 0.2, 1) both",
-        "shimmer": "shimmer 2s ease-in-out",
-        "focus-ring": "focusRing 0.3s cubic-bezier(0.34, 1.56, 0.64, 1) both",
+        "fade-in": "fadeIn 0.15s cubic-bezier(0.175, 0.885, 0.32, 1.1)",
+        "slide-up": "slideUp 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.1)",
       },
       keyframes: {
         fadeIn: {
@@ -101,42 +103,12 @@ module.exports = {
           "100%": { opacity: "1" },
         },
         slideUp: {
-          "0%": { transform: "translateY(20px)", opacity: "0" },
+          "0%": { transform: "translateY(8px)", opacity: "0" },
           "100%": { transform: "translateY(0)", opacity: "1" },
-        },
-        springIn: {
-          "0%": { transform: "scale(0.9) translateY(8px)", opacity: "0" },
-          "100%": { transform: "scale(1) translateY(0)", opacity: "1" },
-        },
-        springScale: {
-          "0%": { transform: "scale(0.95)", opacity: "0" },
-          "100%": { transform: "scale(1)", opacity: "1" },
-        },
-        glassIn: {
-          "0%": { transform: "scale(0.96)", opacity: "0", backdropFilter: "blur(0px)" },
-          "100%": { transform: "scale(1)", opacity: "1", backdropFilter: "blur(24px)" },
-        },
-        glassOut: {
-          "0%": { transform: "scale(1)", opacity: "1" },
-          "100%": { transform: "scale(0.96)", opacity: "0" },
-        },
-        staggerIn: {
-          "0%": { transform: "translateY(6px)", opacity: "0" },
-          "100%": { transform: "translateY(0)", opacity: "1" },
-        },
-        shimmer: {
-          "0%": { backgroundPosition: "-200% 0" },
-          "100%": { backgroundPosition: "200% 0" },
-        },
-        focusRing: {
-          "0%": { boxShadow: "0 0 0 0px hsl(var(--primary) / 0.4)" },
-          "100%": { boxShadow: "0 0 0 3px hsl(var(--primary) / 0.12)" },
         },
       },
       transitionTimingFunction: {
-        "apple-spring": "cubic-bezier(0.34, 1.56, 0.64, 1)",
-        "apple-ease": "cubic-bezier(0.2, 0.8, 0.2, 1)",
-        "apple-bounce": "cubic-bezier(0.175, 0.885, 0.32, 1.275)",
+        geist: "cubic-bezier(0.175, 0.885, 0.32, 1.1)",
       },
     },
   },

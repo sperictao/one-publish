@@ -64,6 +64,8 @@ export function useTheme(theme: Theme) {
 }
 
 // ── Accent Color (强调色) 支持 ──
+// Geist color scales per DESIGN.md / design.dark.md. Values are HSL triplets
+// (space-separated, no hsl() wrapper) so they compose with hsl(var(--settings-accent)).
 
 export type AccentColor =
   | "blue"
@@ -78,155 +80,176 @@ export type AccentColor =
 
 export interface AccentColorToken {
   accent: string;
+  accentHover: string;
   accentFocus: string;
   sidebarSelectedBg: string;
   sidebarSelectedText: string;
   cardSelectedBorder: string;
 }
 
+// Each entry uses Geist accent scales (700 solid fill, 800 hover).
+// Light uses the sRGB hex-derived HSL; dark uses the dark-theme equivalents.
 export const ACCENT_COLORS: Record<AccentColor, { light: AccentColorToken; dark: AccentColorToken }> = {
   blue: {
     light: {
-      accent: "#0066cc",
-      accentFocus: "#0071e3",
-      sidebarSelectedBg: "rgba(0, 102, 204, 0.08)",
-      sidebarSelectedText: "#0066cc",
-      cardSelectedBorder: "rgba(0, 102, 204, 0.4)",
+      accent: "215 100% 50%",       // blue-700 #006bff
+      accentHover: "217 100% 46%",  // blue-800 #0059ec
+      accentFocus: "215 100% 50%",  // blue-700 focus ring
+      sidebarSelectedBg: "215 100% 50%",
+      sidebarSelectedText: "215 100% 50%",
+      cardSelectedBorder: "215 100% 50%",
     },
     dark: {
-      accent: "#2997ff",
-      accentFocus: "#2997ff",
-      sidebarSelectedBg: "rgba(41, 151, 255, 0.16)",
-      sidebarSelectedText: "#2997ff",
-      cardSelectedBorder: "rgba(41, 151, 255, 0.6)",
+      accent: "214 100% 50%",       // blue-700 dark #006efe
+      accentHover: "216 100% 45%",  // blue-800 dark #005be7
+      accentFocus: "208 100% 64%",  // blue-900 dark #47a8ff
+      sidebarSelectedBg: "214 100% 50%",
+      sidebarSelectedText: "214 100% 50%",
+      cardSelectedBorder: "214 100% 50%",
     },
   },
   brand: {
     light: {
-      accent: "#2462db",
-      accentFocus: "#1f54bd",
-      sidebarSelectedBg: "rgba(36, 98, 219, 0.08)",
-      sidebarSelectedText: "#2462db",
-      cardSelectedBorder: "rgba(36, 98, 219, 0.4)",
+      accent: "215 100% 50%",       // brand = Geist blue-700
+      accentHover: "217 100% 46%",
+      accentFocus: "215 100% 50%",
+      sidebarSelectedBg: "215 100% 50%",
+      sidebarSelectedText: "215 100% 50%",
+      cardSelectedBorder: "215 100% 50%",
     },
     dark: {
-      accent: "#4983de",
-      accentFocus: "#5d93e6",
-      sidebarSelectedBg: "rgba(73, 131, 222, 0.16)",
-      sidebarSelectedText: "#4983de",
-      cardSelectedBorder: "rgba(73, 131, 222, 0.6)",
+      accent: "214 100% 50%",
+      accentHover: "216 100% 45%",
+      accentFocus: "208 100% 64%",
+      sidebarSelectedBg: "214 100% 50%",
+      sidebarSelectedText: "214 100% 50%",
+      cardSelectedBorder: "214 100% 50%",
     },
   },
   purple: {
     light: {
-      accent: "#862e9c",
-      accentFocus: "#9c36b5",
-      sidebarSelectedBg: "rgba(134, 46, 156, 0.08)",
-      sidebarSelectedText: "#862e9c",
-      cardSelectedBorder: "rgba(134, 46, 156, 0.4)",
+      accent: "279 100% 49%",       // purple-700 #a000f8
+      accentHover: "278 100% 41%",  // purple-800 #8500d1
+      accentFocus: "279 100% 49%",
+      sidebarSelectedBg: "279 100% 49%",
+      sidebarSelectedText: "279 100% 49%",
+      cardSelectedBorder: "279 100% 49%",
     },
     dark: {
-      accent: "#d946ef",
-      accentFocus: "#e879f9",
-      sidebarSelectedBg: "rgba(217, 70, 239, 0.16)",
-      sidebarSelectedText: "#d946ef",
-      cardSelectedBorder: "rgba(217, 70, 239, 0.6)",
+      accent: "274 64% 54%",        // purple-700 dark #9440d5
+      accentHover: "274 62% 45%",   // purple-800 dark #7d2bba
+      accentFocus: "274 64% 54%",
+      sidebarSelectedBg: "274 64% 54%",
+      sidebarSelectedText: "274 64% 54%",
+      cardSelectedBorder: "274 64% 54%",
     },
   },
   pink: {
     light: {
-      accent: "#d6336c",
-      accentFocus: "#e64980",
-      sidebarSelectedBg: "rgba(214, 51, 108, 0.08)",
-      sidebarSelectedText: "#d6336c",
-      cardSelectedBorder: "rgba(214, 51, 108, 0.4)",
+      accent: "333 89% 55%",        // pink-700 #f22782
+      accentHover: "333 87% 48%",   // pink-800 #e4106e
+      accentFocus: "333 89% 55%",
+      sidebarSelectedBg: "333 89% 55%",
+      sidebarSelectedText: "333 89% 55%",
+      cardSelectedBorder: "333 89% 55%",
     },
     dark: {
-      accent: "#f472b6",
-      accentFocus: "#f472b6",
-      sidebarSelectedBg: "rgba(244, 114, 182, 0.16)",
-      sidebarSelectedText: "#f472b6",
-      cardSelectedBorder: "rgba(244, 114, 182, 0.6)",
+      accent: "334 88% 56%",        // pink-700 dark #f12b82
+      accentHover: "332 100% 45%",  // pink-800 dark #e7006d
+      accentFocus: "334 88% 56%",
+      sidebarSelectedBg: "334 88% 56%",
+      sidebarSelectedText: "334 88% 56%",
+      cardSelectedBorder: "334 88% 56%",
     },
   },
   red: {
     light: {
-      accent: "#e03131",
-      accentFocus: "#f03e3e",
-      sidebarSelectedBg: "rgba(224, 49, 49, 0.08)",
-      sidebarSelectedText: "#e03131",
-      cardSelectedBorder: "rgba(224, 49, 49, 0.4)",
+      accent: "353 100% 46%",       // red-800 #ea001d
+      accentHover: "353 100% 46%",
+      accentFocus: "353 100% 46%",
+      sidebarSelectedBg: "353 100% 46%",
+      sidebarSelectedText: "353 100% 46%",
+      cardSelectedBorder: "353 100% 46%",
     },
     dark: {
-      accent: "#ff453a",
-      accentFocus: "#ff453a",
-      sidebarSelectedBg: "rgba(255, 69, 58, 0.16)",
-      sidebarSelectedText: "#ff453a",
-      cardSelectedBorder: "rgba(255, 69, 58, 0.6)",
+      accent: "355 89% 57%",        // red-600 dark #f32e40
+      accentHover: "354 82% 49%",   // red-800 dark #e2162a
+      accentFocus: "355 89% 57%",
+      sidebarSelectedBg: "355 89% 57%",
+      sidebarSelectedText: "355 89% 57%",
+      cardSelectedBorder: "355 89% 57%",
     },
   },
   orange: {
     light: {
-      accent: "#e8590c",
-      accentFocus: "#f76707",
-      sidebarSelectedBg: "rgba(232, 89, 12, 0.08)",
-      sidebarSelectedText: "#e8590c",
-      cardSelectedBorder: "rgba(232, 89, 12, 0.4)",
+      accent: "41 100% 50%",        // amber-700 #ffae00
+      accentHover: "35 100% 50%",   // amber-800 #ff9300
+      accentFocus: "41 100% 50%",
+      sidebarSelectedBg: "41 100% 50%",
+      sidebarSelectedText: "41 100% 50%",
+      cardSelectedBorder: "41 100% 50%",
     },
     dark: {
-      accent: "#ff9f0a",
-      accentFocus: "#ff9f0a",
-      sidebarSelectedBg: "rgba(255, 159, 10, 0.16)",
-      sidebarSelectedText: "#ff9f0a",
-      cardSelectedBorder: "rgba(255, 159, 10, 0.6)",
+      accent: "41 100% 50%",        // amber-700 dark #ffae00
+      accentHover: "35 100% 50%",
+      accentFocus: "41 100% 50%",
+      sidebarSelectedBg: "41 100% 50%",
+      sidebarSelectedText: "41 100% 50%",
+      cardSelectedBorder: "41 100% 50%",
     },
   },
   yellow: {
     light: {
-      accent: "#f59f00",
-      accentFocus: "#fab005",
-      sidebarSelectedBg: "rgba(245, 159, 0, 0.08)",
-      sidebarSelectedText: "#f59f00",
-      cardSelectedBorder: "rgba(245, 159, 0, 0.4)",
+      accent: "39 100% 50%",        // amber-600 #ffa600
+      accentHover: "41 100% 50%",
+      accentFocus: "39 100% 50%",
+      sidebarSelectedBg: "39 100% 50%",
+      sidebarSelectedText: "39 100% 50%",
+      cardSelectedBorder: "39 100% 50%",
     },
     dark: {
-      accent: "#ffd60a",
-      accentFocus: "#ffd60a",
-      sidebarSelectedBg: "rgba(255, 214, 10, 0.16)",
-      sidebarSelectedText: "#ffd60a",
-      cardSelectedBorder: "rgba(255, 214, 10, 0.6)",
+      accent: "39 100% 46%",        // amber-600 dark #ed9a00
+      accentHover: "35 100% 50%",
+      accentFocus: "39 100% 46%",
+      sidebarSelectedBg: "39 100% 46%",
+      sidebarSelectedText: "39 100% 46%",
+      cardSelectedBorder: "39 100% 46%",
     },
   },
   green: {
     light: {
-      accent: "#2f9e44",
-      accentFocus: "#37b24d",
-      sidebarSelectedBg: "rgba(47, 158, 68, 0.08)",
-      sidebarSelectedText: "#2f9e44",
-      cardSelectedBorder: "rgba(47, 158, 68, 0.4)",
+      accent: "135 62% 41%",        // green-700 #28a948
+      accentHover: "135 58% 36%",   // green-800 #279141
+      accentFocus: "135 62% 41%",
+      sidebarSelectedBg: "135 62% 41%",
+      sidebarSelectedText: "135 62% 41%",
+      cardSelectedBorder: "135 62% 41%",
     },
     dark: {
-      accent: "#30d158",
-      accentFocus: "#30d158",
-      sidebarSelectedBg: "rgba(48, 209, 88, 0.16)",
-      sidebarSelectedText: "#30d158",
-      cardSelectedBorder: "rgba(48, 209, 88, 0.6)",
+      accent: "140 100% 34%",       // green-700 dark #00ac3a
+      accentHover: "140 100% 29%",  // green-800 dark #009432
+      accentFocus: "140 100% 34%",
+      sidebarSelectedBg: "140 100% 34%",
+      sidebarSelectedText: "140 100% 34%",
+      cardSelectedBorder: "140 100% 34%",
     },
   },
   gray: {
     light: {
-      accent: "#495057",
-      accentFocus: "#343a40",
-      sidebarSelectedBg: "rgba(73, 80, 87, 0.08)",
-      sidebarSelectedText: "#495057",
-      cardSelectedBorder: "rgba(73, 80, 87, 0.4)",
+      accent: "0 0% 30%",           // gray-900 #4d4d4d
+      accentHover: "0 0% 9%",       // gray-1000 #171717
+      accentFocus: "0 0% 9%",       // gray-1000 #171717
+      sidebarSelectedBg: "0 0% 30%",
+      sidebarSelectedText: "0 0% 30%",
+      cardSelectedBorder: "0 0% 30%",
     },
     dark: {
-      accent: "#98989d",
-      accentFocus: "#98989d",
-      sidebarSelectedBg: "rgba(152, 152, 157, 0.16)",
-      sidebarSelectedText: "#98989d",
-      cardSelectedBorder: "rgba(152, 152, 157, 0.6)",
+      accent: "0 0% 63%",           // gray-900 dark #a0a0a0
+      accentHover: "0 0% 93%",      // gray-1000 dark #ededed
+      accentFocus: "0 0% 93%",
+      sidebarSelectedBg: "0 0% 63%",
+      sidebarSelectedText: "0 0% 63%",
+      cardSelectedBorder: "0 0% 63%",
     },
   },
 };
@@ -243,6 +266,9 @@ function applyAccentVariables(color: AccentColor, isDark: boolean) {
   root.style.setProperty("--settings-sidebar-selected-bg", val.sidebarSelectedBg);
   root.style.setProperty("--settings-sidebar-selected-text", val.sidebarSelectedText);
   root.style.setProperty("--settings-card-selected-border", val.cardSelectedBorder);
+  root.style.setProperty("--interactive", val.accent);
+  root.style.setProperty("--interactive-hover", val.accentHover);
+  root.style.setProperty("--ring", val.accentFocus);
 }
 
 export function useAccentColor() {

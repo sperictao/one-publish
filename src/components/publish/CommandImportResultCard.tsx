@@ -35,14 +35,14 @@ export function CommandImportResultCard({
         <CardDescription>Provider: {providerLabel}</CardDescription>
       </CardHeader>
       <CardContent className="space-y-2 text-sm">
-        <div className="rounded-xl border border-success/30 bg-success/10 px-3 py-2 text-success">
+        <div className="rounded-md border border-success/30 bg-success/10 px-3 py-2 text-success">
           {(appT.mappedFieldsLabel || "已映射字段") +
             ` (${activeImportFeedback.mappedKeys.length}):`}
           {activeImportFeedback.mappedKeys.length > 0
             ? activeImportFeedback.mappedKeys.join(", ")
             : appT.none || "无"}
         </div>
-        <div className="rounded-xl border border-warning/30 bg-warning/10 px-3 py-2 text-warning">
+        <div className="rounded-md border border-warning/30 bg-warning/10 px-3 py-2 text-warning">
           {(appT.unmappedFieldsLabel || "未映射字段") +
             ` (${activeImportFeedback.unmappedKeys.length}):`}
           {activeImportFeedback.unmappedKeys.length > 0

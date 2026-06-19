@@ -87,11 +87,11 @@ export function ResizeHandle({
           : commonT.resizePanelHeight || "调整面板高度"
       }
       className={cn(
-        "group relative flex flex-col flex-shrink-0 appearance-none border-0 bg-transparent p-0 glass-transition",
+        "group relative flex flex-col flex-shrink-0 appearance-none border-0 bg-transparent p-0 transition-colors duration-150 ease-geist",
         direction === "horizontal"
           ? "w-1 cursor-col-resize hover:bg-accent"
           : "h-1 cursor-row-resize hover:bg-accent",
-        isDragging && "bg-accent/80",
+        isDragging && "bg-accent",
         className
       )}
       onMouseDown={handleMouseDown}
@@ -112,7 +112,7 @@ export function ResizeHandle({
       {/* Visual indicator on hover */}
       <div
         className={cn(
-          "absolute opacity-0 group-hover:opacity-100 transition-opacity bg-primary/40",
+          "absolute opacity-0 group-hover:opacity-100 transition-opacity bg-interactive/40",
           direction === "horizontal"
             ? "top-0 bottom-0 left-0 w-0.5"
             : "left-0 right-0 top-0 h-0.5",

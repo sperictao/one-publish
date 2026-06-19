@@ -35,7 +35,7 @@ export function ThemePreviewMock({
   return (
     <div
       className={cn(
-        "relative h-20 w-full overflow-hidden rounded-lg border border-[var(--settings-hairline)] flex select-none pointer-events-none ",
+        "relative h-20 w-full overflow-hidden rounded-lg border border-border flex select-none pointer-events-none",
         className
       )}
       style={{
@@ -80,7 +80,7 @@ export function ThemePreviewMock({
             }}
           >
             <div
-              className="h-1.5 w-full rounded-[2px] transition-colors duration-300"
+              className="h-1.5 w-full rounded-[2px] transition-colors duration-150 ease-geist"
               style={{ backgroundColor: previewColor }}
             />
             <div

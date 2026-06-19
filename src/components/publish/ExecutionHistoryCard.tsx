@@ -160,6 +160,7 @@ export function ExecutionHistoryCard({
             value={historyFilterKeyword}
             onChange={(e) => onHistoryFilterKeywordChange(e.target.value)}
             placeholder={historyT.keywordPlaceholder || "关键词（签名/错误/命令）"}
+            aria-label={historyT.keywordPlaceholder || "关键词（签名/错误/命令）"}
           />
         </div>
 
@@ -200,7 +201,7 @@ export function ExecutionHistoryCard({
         </div>
 
         {filteredExecutionHistory.length === 0 ? (
-          <div className="rounded-xl border border-dashed border-input px-3 py-4 text-sm text-muted-foreground">
+          <div className="rounded-md border border-dashed border-border px-3 py-4 text-sm text-muted-foreground">
             {historyT.noRecords || "当前筛选条件下无执行记录"}
           </div>
         ) : (
@@ -210,7 +211,7 @@ export function ExecutionHistoryCard({
             return (
               <div
                 key={record.id}
-                className="rounded-xl border border-input px-3 py-2 text-sm"
+                className="rounded-md border border-border px-3 py-2 text-sm"
               >
                 <div className="flex items-center justify-between gap-2">
                   <span className="font-semibold">{record.providerId}</span>

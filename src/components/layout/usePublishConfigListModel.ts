@@ -490,21 +490,6 @@ export function usePublishConfigPreviewModel(params: {
       }),
     [params.groupFilterValue, previewGroupedFilteredProfiles]
   );
-  const previewConfigIds = useMemo(
-    () =>
-      buildConfigIds({
-        showRecentItems: params.showRecentItems,
-        recentItems: params.previewRecentItems,
-        visibleProjectProfiles: previewVisibleProjectProfiles,
-        visibleProfileGroups: previewVisibleGroupedFilteredProfiles,
-      }),
-    [
-      params.previewRecentItems,
-      params.showRecentItems,
-      previewVisibleGroupedFilteredProfiles,
-      previewVisibleProjectProfiles,
-    ]
-  );
   const hasVisiblePreviewConfigResults =
     previewVisibleProjectProfiles.length > 0 ||
     previewVisibleGroupedFilteredProfiles.length > 0;
@@ -517,7 +502,6 @@ export function usePublishConfigPreviewModel(params: {
   return {
     previewVisibleProjectProfiles,
     previewVisibleGroupedFilteredProfiles,
-    previewConfigIds,
     shouldShowEmptyState,
   };
 }

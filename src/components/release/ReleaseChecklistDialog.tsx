@@ -487,8 +487,8 @@ export function ReleaseChecklistDialog({
           </AppDialogBadge>
         </AppDialogInset>
 
-        <div className="grid gap-4 md:grid-cols-[240px_1fr] overflow-y-auto glass-scrollbar pr-1">
-          <div className="space-y-2 glass-stagger">
+        <div className="grid gap-4 md:grid-cols-[240px_1fr] overflow-y-auto geist-scrollbar pr-1">
+          <div className="space-y-2">
             {checklistItems.map((item, index) => {
               const style = statusStyles(item.status);
               const statusLabel =
@@ -498,10 +498,10 @@ export function ReleaseChecklistDialog({
                   type="button"
                   key={item.id}
                   onClick={() => setActiveStepIndex(index)}
-                  className={`glass-press w-full text-left rounded-xl border p-3 glass-transition ${
+                  className={`w-full text-left rounded-md border p-3 transition-colors duration-150 ease-geist ${
                     index === activeStepIndex
-                      ? "border-primary bg-primary/5 glass-surface-selected"
-                      : "border-input hover:bg-muted"
+                      ? "border-interactive bg-interactive/10"
+                      : "border-border hover:bg-accent"
                   }`}
                 >
                   <div className="flex items-center justify-between gap-2">
@@ -529,7 +529,7 @@ export function ReleaseChecklistDialog({
               <p className="text-sm text-muted-foreground">{activeStep.description}</p>
             </div>
 
-            <div className="rounded-xl border border-input bg-muted p-3 text-xs font-mono whitespace-pre-wrap break-all">
+            <div className="rounded-md border border-border bg-muted p-3 text-xs font-mono whitespace-pre-wrap break-all">
               {activeStep.detail}
             </div>
 

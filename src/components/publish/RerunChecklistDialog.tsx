@@ -139,7 +139,7 @@ export function RerunChecklistDialog({
                   className="flex items-center justify-between gap-4 px-4 py-3"
                 >
                   <div className="flex min-w-0 items-center gap-3">
-                    <span className="flex size-9 flex-shrink-0 items-center justify-center rounded-xl bg-background/60 text-foreground/75">
+                    <span className="flex size-9 flex-shrink-0 items-center justify-center rounded-md bg-muted text-foreground/75">
                       <Icon className="size-4" />
                     </span>
                     <Label htmlFor={item.id} className="text-sm leading-5">

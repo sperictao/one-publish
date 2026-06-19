@@ -16,7 +16,7 @@ export function AppDialogInset({
   return (
     <Component
       className={cn(
-        "rounded-2xl border border-input bg-background p-4 ",
+        "rounded-md border border-border bg-background p-4",
         className
       )}
     >

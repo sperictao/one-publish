@@ -69,7 +69,7 @@ export function AppDialogShell({
   titleClassName,
   descriptionClassName,
   iconWrapperClassName,
-  overlayClassName = "bg-background ",
+  overlayClassName = "bg-black/50",
   closeButtonClassName = "right-6 top-6",
   headerAside,
 }: AppDialogShellProps): ReactNode {
@@ -90,7 +90,7 @@ export function AppDialogShell({
       <div className={cn("p-1", isFixedSecondaryHeight && "h-full min-h-0 flex flex-col")}>
         <div
           className={cn(
-            "glass-card repo-sidebar-shell flex min-h-0 flex-col overflow-hidden rounded-2xl",
+            "surface-modal flex min-h-0 flex-col overflow-hidden rounded-md",
             isFixedSecondaryHeight ? "h-full" : surfaceSizeClassName[size],
             surfaceClassName
           )}
@@ -105,7 +105,7 @@ export function AppDialogShell({
               {icon ? (
                 <span
                   className={cn(
-                    "mt-0.5 flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-2xl bg-primary/10 text-primary ",
+                    "mt-0.5 flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-md bg-interactive/10 text-interactive",
                     iconWrapperClassName
                   )}
                 >
@@ -114,7 +114,7 @@ export function AppDialogShell({
               ) : null}
               <div className="min-w-0 flex-1">
                 <DialogTitle
-                  className={cn("text-[18px] font-semibold tracking-tight", titleClassName)}
+                  className={cn("text-[18px] font-semibold", titleClassName)}
                 >
                   {title}
                 </DialogTitle>
@@ -133,7 +133,7 @@ export function AppDialogShell({
           <div
             className={cn(
               "min-h-0 flex-1",
-              bodyScrollable ? "glass-scrollbar overflow-y-auto" : "relative overflow-hidden",
+              bodyScrollable ? "geist-scrollbar overflow-y-auto" : "relative overflow-hidden",
               bodyClassName
             )}
           >

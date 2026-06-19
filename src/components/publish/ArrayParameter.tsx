@@ -84,6 +84,7 @@ export function ArrayParameter({
               value={String(item)}
               onChange={(e) => updateItem(index, e.target.value)}
               placeholder={t("common.arrayItemPlaceholder", { index: index + 1 })}
+              aria-label={`${resolvedLabel} ${index + 1}`}
               readOnly={readOnly}
             />
             {!readOnly ? (

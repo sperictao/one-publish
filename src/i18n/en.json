@@ -26,9 +26,9 @@
     },
     "appearance": {
       "accentColorTitle": "Accent Color",
-      "accentColorDescription": "Choose the system color used for buttons, focus rings, active items, and other interactive elements.",
+      "accentColorDescription": "Choose the system color used for focus rings, active items, links, and highlighted states.",
       "accentColorAriaLabel": "Accent color: {{name}}",
-      "accentBrand": "Button Blue",
+      "accentBrand": "Geist Blue",
       "accentBlue": "System Blue",
       "accentPurple": "Purple",
       "accentPink": "Pink",
@@ -104,6 +104,8 @@
     "blocked": "Blocked by critical issues",
     "scope": "Scope",
     "providers": "Tool Status",
+    "installedLabel": "Installed",
+    "missingLabel": "Not installed",
     "issues": "Issues",
     "noIssues": "No issues found",
     "checking": "Checking...",
@@ -245,7 +247,8 @@
     "selectRepository": "Please select a repository",
     "newWorktree": "Create worktree",
     "refresh": "Refresh",
-    "mainBadge": "MAIN"
+    "mainBadge": "MAIN",
+    "currentBranch": "Current branch"
   },
   "repositoryList": {
     "collapsePanel": "Collapse panel",
@@ -351,6 +354,7 @@
     "cannotDeleteDefault": "System default profile cannot be deleted",
     "deleteSuccess": "Profile deleted",
     "deleteFailed": "Failed to delete profile",
+    "deleteProfileAction": "Delete profile",
     "export": "Export Profiles",
     "import": "Import Profiles",
     "exportSuccess": "Profiles exported",
@@ -465,6 +469,7 @@
     "advancedFieldRemoveProperty": "Remove property {{value}}"
   },
   "app": {
+    "appTitle": "One Publish",
     "loading": "Loading...",
     "refreshBranches": "Refresh branch list",
     "createBranchComingSoon": "Create branch is under development",

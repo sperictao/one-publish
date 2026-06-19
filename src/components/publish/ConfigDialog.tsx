@@ -357,7 +357,7 @@ export function ConfigManagementContent({
         ) : (
           <div className="space-y-3">
             {profiles.map((profile) => (
-              <Card key={profile.name} className="rounded-2xl">
+              <Card key={profile.name} className="rounded-lg">
                 <CardContent className="flex flex-col gap-4 p-4 sm:flex-row sm:items-center sm:justify-between">
                   <div className="min-w-0 flex-1">
                     <div className="mb-1 flex flex-wrap items-center gap-2">
@@ -365,7 +365,7 @@ export function ConfigManagementContent({
                         {profile.name}
                       </h4>
                       {profile.isSystemDefault ? (
-                        <span className="inline-flex items-center rounded-full bg-primary/12 px-2 py-0.5 text-[11px] font-semibold text-primary">
+                        <span className="inline-flex items-center rounded-full bg-interactive/10 px-2 py-0.5 text-[11px] font-semibold text-interactive">
                           {profileT.defaultTag || "默认"}
                         </span>
                       ) : null}
@@ -388,6 +388,7 @@ export function ConfigManagementContent({
                       <Button
                         variant="ghost"
                         onClick={() => void handleDeleteProfile(profile)}
+                        aria-label={`${profileT.deleteProfileAction || "删除配置"}${profile.name ? `: ${profile.name}` : ""}`}
                         className="h-10 px-3 text-destructive hover:text-destructive"
                       >
                         <Trash2 className="size-4" />
@@ -459,12 +460,12 @@ export function ConfigManagementContent({
                   </p>
                 </div>
               </div>
-              <div className="rounded-2xl border border-border/70 bg-background/50 p-3">
+              <div className="rounded-md border border-border bg-muted p-3">
                 <ul className="max-h-52 space-y-2 overflow-y-auto text-sm">
                   {pendingImport.profiles.map((profile) => (
                     <li
                       key={`${profile.providerId}:${profile.name}`}
-                      className="flex items-center justify-between gap-3 rounded-xl px-2 py-1.5"
+                      className="flex items-center justify-between gap-3 rounded-md px-2 py-1.5"
                     >
                       <span className="truncate font-semibold text-foreground">
                         {profile.name}

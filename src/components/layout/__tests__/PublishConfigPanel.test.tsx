@@ -31,13 +31,6 @@ function getRenderedConfigIds(container: HTMLElement, prefix: string): string[] 
     .filter((itemId) => itemId.startsWith(prefix));
 }
 
-function getFloatingCardMotionElement(container: HTMLElement): HTMLElement | null {
-  const selectedSurface = container.querySelector<HTMLElement>(
-    ".floating-list-card[data-selected='true']"
-  );
-  return selectedSurface?.parentElement?.parentElement ?? null;
-}
-
 let getBoundingClientRectSpy: ReturnType<typeof vi.spyOn> | null = null;
 
 const { resolveDotnetProjectProfileMock } = vi.hoisted(() => ({
@@ -397,11 +390,7 @@ describe("PublishConfigPanel", () => {
       expect(getRecentRow()).toHaveAttribute("data-list-visual-target", "true");
     });
     expect(getProjectRow()).toHaveAttribute("data-list-visual-target", "false");
-    await waitFor(() => {
-      expect(getFloatingCardMotionElement(container)?.style.transform).toContain(
-        "translate3d(0px, 0px, 0)"
-      );
-    });
+    expect(container.querySelector(".floating-list-card")).toBeNull();
 
     rerender(
       <PublishConfigPanel
@@ -434,14 +423,10 @@ describe("PublishConfigPanel", () => {
       expect(getProjectRow()).toHaveAttribute("data-list-visual-target", "true");
     });
     expect(getRecentRow()).toHaveAttribute("data-list-visual-target", "false");
-    await waitFor(() => {
-      expect(getFloatingCardMotionElement(container)?.style.transform).toContain(
-        `translate3d(0px, ${ROW_STRIDE}px, 0)`
-      );
-    });
+    expect(container.querySelector(".floating-list-card")).toBeNull();
   });
 
-  it("切换仓库时不会复用上一仓库的行重排动画，避免浮卡测量到过渡中的位置", async () => {
+  it("切换仓库时不会复用上一仓库的行重排动画", async () => {
     const animateSpy = vi.spyOn(HTMLElement.prototype, "animate");
 
     try {
@@ -546,7 +531,7 @@ describe("PublishConfigPanel", () => {
     }
   });
 
-  it("刷新期间项目配置列表在选中项上方增量补全时，浮卡会立即对齐新位置", async () => {
+  it("刷新期间项目配置列表在选中项上方增量补全时不渲染浮动卡片", async () => {
     const { container, rerender } = render(
       <PublishConfigPanel
         selectedRepoId="repo-b"
@@ -576,10 +561,11 @@ describe("PublishConfigPanel", () => {
     );
 
     await waitFor(() => {
-      expect(getFloatingCardMotionElement(container)?.style.transform).toContain(
-        "translate3d(0px, 0px, 0)"
-      );
+      expect(
+        container.querySelector('[data-list-item-id="pubxml:C PRD"]')
+      ).toHaveAttribute("data-list-visual-target", "true");
     });
+    expect(container.querySelector(".floating-list-card")).toBeNull();
 
     rerender(
       <PublishConfigPanel
@@ -617,10 +603,11 @@ describe("PublishConfigPanel", () => {
     );
 
     await waitFor(() => {
-      expect(getFloatingCardMotionElement(container)?.style.transform).toContain(
-        `translate3d(0px, ${ROW_STRIDE * 3}px, 0)`
-      );
+      expect(
+        container.querySelector('[data-list-item-id="pubxml:C PRD"]')
+      ).toHaveAttribute("data-list-visual-target", "true");
     });
+    expect(container.querySelector(".floating-list-card")).toBeNull();
   });
 
   it("点击排序按钮后会切换发布配置拖拽手柄的常驻显示", () => {

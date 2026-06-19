@@ -11,7 +11,7 @@ type AppDialogBadgeVariant =
 
 const badgeVariantClassName: Record<AppDialogBadgeVariant, string> = {
   neutral:
-    "border-input bg-background/70 text-muted-foreground",
+    "border-border bg-muted text-muted-foreground",
   info: "status-info",
   success: "status-success",
   warning: "status-cancelled",
@@ -34,7 +34,7 @@ export function AppDialogBadge({
   return (
     <span
       className={cn(
-        "inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-semibold tracking-[0.01em]",
+        "inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-semibold",
         badgeVariantClassName[variant],
         className
       )}

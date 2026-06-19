@@ -26,9 +26,9 @@
     },
     "appearance": {
       "accentColorTitle": "强调色 (Accent Color)",
-      "accentColorDescription": "选择应用在按钮、聚焦框、激活项等交互元素下的系统主色调。",
+      "accentColorDescription": "选择应用在聚焦框、激活项、链接和高亮状态下的系统强调色。",
       "accentColorAriaLabel": "强调色: {{name}}",
-      "accentBrand": "按钮蓝",
+      "accentBrand": "Geist 蓝",
       "accentBlue": "系统蓝",
       "accentPurple": "紫色",
       "accentPink": "粉色",
@@ -104,6 +104,8 @@
     "blocked": "存在阻断问题",
     "scope": "检查范围",
     "providers": "工具状态",
+    "installedLabel": "已安装",
+    "missingLabel": "未安装",
     "issues": "发现的问题",
     "noIssues": "未发现问题",
     "checking": "检查中...",
@@ -245,7 +247,8 @@
     "selectRepository": "请选择一个仓库",
     "newWorktree": "新建 worktree",
     "refresh": "刷新",
-    "mainBadge": "MAIN"
+    "mainBadge": "MAIN",
+    "currentBranch": "当前分支"
   },
   "repositoryList": {
     "collapsePanel": "收起面板",
@@ -351,6 +354,7 @@
     "cannotDeleteDefault": "不能删除系统默认配置文件",
     "deleteSuccess": "配置文件删除成功",
     "deleteFailed": "删除配置文件失败",
+    "deleteProfileAction": "删除配置",
     "export": "导出配置",
     "import": "导入配置",
     "exportSuccess": "配置导出成功",
@@ -465,6 +469,7 @@
     "advancedFieldRemoveProperty": "移除属性 {{value}}"
   },
   "app": {
+    "appTitle": "One Publish",
     "loading": "加载中...",
     "refreshBranches": "刷新分支列表",
     "createBranchComingSoon": "创建分支功能开发中",

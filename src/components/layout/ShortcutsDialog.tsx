@@ -34,16 +34,16 @@ export function ShortcutsDialog({
         title={shortcutT.title || "快捷键"}
         description={shortcutT.description || "可用的全局快捷键"}
         icon={<Keyboard className="size-4" />}
-        bodyInnerClassName="space-y-2 glass-stagger"
+        bodyInnerClassName="space-y-2"
       >
         <div className="space-y-2">
           {shortcuts.map((shortcut) => (
             <div
               key={`${shortcut.key}:${shortcut.description}`}
-              className="flex items-center justify-between p-3 bg-background rounded-xl glass-transition"
+              className="flex items-center justify-between p-3 surface-input rounded-md"
             >
               <span className="text-sm">{shortcut.description}</span>
-              <kbd className="px-2 py-1 text-xs font-semibold bg-muted border border-border rounded-lg">
+              <kbd className="px-2 py-1 text-xs font-semibold bg-muted border border-border rounded-sm">
                 {shortcut.key}
               </kbd>
             </div>

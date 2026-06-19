@@ -100,6 +100,7 @@ export function MapParameter({
               value={key}
               onChange={(e) => updateKey(key, e.target.value)}
               placeholder={t("common.mapKeyPlaceholder")}
+              aria-label={`${resolvedLabel} ${t("common.mapKeyPlaceholder")}`}
               className="w-1/3"
               readOnly={readOnly}
             />
@@ -108,6 +109,7 @@ export function MapParameter({
               value={String(val)}
               onChange={(e) => updateValue(key, e.target.value)}
               placeholder={t("common.mapValuePlaceholder")}
+              aria-label={`${resolvedLabel} ${t("common.mapValuePlaceholder")}`}
               className="flex-1"
               readOnly={readOnly}
             />

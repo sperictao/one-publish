@@ -85,21 +85,21 @@ function formatBytes(bytes: number) {
   return `${value.toFixed(digits)} ${units[unitIndex]}`;
 }
 
-// ── Liquid Glass material recipes (DESIGN.md) ──
-// Stacked translucent surfaces: panel (40px) → card (24px) → surface (20px) → input (8px).
-// Blur radius decreases as interaction proximity increases.
-const GLASS_CARD =
-  "rounded-2xl border border-[var(--glass-border)] bg-[var(--glass-panel-bg)] backdrop-blur-[24px] saturate-[1.6] shadow-[var(--glass-shadow)] overflow-hidden";
-const GLASS_CARD_PAD = "rounded-2xl border border-[var(--glass-border)] bg-[var(--glass-panel-bg)] backdrop-blur-[24px] saturate-[1.6] shadow-[var(--glass-shadow)]";
-const GLASS_ROW_HOVER =
-  "hover:bg-[var(--glass-bg-hover)] transition-colors duration-200 ease-[cubic-bezier(0.2,0.8,0.2,1)]";
-const GLASS_DIVIDER = "h-px bg-[var(--glass-divider)]";
-const GLASS_INPUT =
-  "bg-[var(--glass-input-bg)] backdrop-blur-[8px] border-[var(--glass-border-subtle)] shadow-[var(--glass-inset-shadow)] focus-visible:border-[var(--glass-border)]";
-const GLASS_KBD =
-  "rounded-md border border-[var(--glass-kbd-border)] bg-[var(--glass-kbd-bg)]";
-const GLASS_CODE_BG =
-  "bg-[var(--glass-code-bg)] border border-[var(--glass-border-subtle)]";
+// ── Geist surface recipes (DESIGN.md) ──
+// Section tiles live inside the dialog shell; opaque Geist surfaces with
+// borders first, subtle shadows. Depth reads from tonal surfaces, not blur.
+const GEIST_CARD =
+  "rounded-sm border border-border bg-card shadow-raised overflow-hidden";
+const GEIST_CARD_PAD = "rounded-sm border border-border bg-card shadow-raised";
+const GEIST_ROW_HOVER =
+  "hover:bg-accent transition-colors duration-150 ease-geist";
+const GEIST_DIVIDER = "h-px bg-border";
+const GEIST_INPUT =
+  "surface-input";
+const GEIST_KBD =
+  "rounded-sm border border-border bg-muted";
+const GEIST_CODE_BG =
+  "bg-muted border border-border";
 
 type SettingsCategoryId = "general" | "appearance" | "environment" | "shortcuts" | "about";
 
@@ -141,9 +141,9 @@ interface SettingsDialogProps {
 function SettingsSectionFallback({ label }: { label: string }) {
   return (
     <div className="space-y-3">
-      <div className={cn("h-10", GLASS_CARD)} />
-      <div className={cn("h-24", GLASS_CARD)} />
-      <p className="text-xs text-[var(--settings-ink-muted)]">{label}</p>
+      <div className={cn("h-10", GEIST_CARD)} />
+      <div className={cn("h-24", GEIST_CARD)} />
+      <p className="text-xs text-muted-foreground">{label}</p>
     </div>
   );
 }
@@ -164,15 +164,15 @@ function SettingsSwitchRow({
   onCheckedChange: (value: boolean) => void;
 }) {
   return (
-    <div className={cn("px-4 py-3.5", GLASS_ROW_HOVER)}>
+    <div className={cn("px-4 py-3.5", GEIST_ROW_HOVER)}>
       <div className="flex items-center justify-between gap-4">
         <div className="flex items-center gap-3 min-w-0">
-          <Icon className="size-[18px] flex-shrink-0 text-[var(--settings-icon-muted)]" />
+          <Icon className="size-[18px] flex-shrink-0 text-muted-foreground" />
           <div className="space-y-0.5">
-            <Label className="cursor-pointer text-[14px] font-semibold tracking-[-0.224px] text-[var(--settings-ink)]" htmlFor={id}>
+            <Label className="cursor-pointer text-[14px] font-semibold tracking-[-0.224px] text-foreground" htmlFor={id}>
               {label}
             </Label>
-            <p className="text-[12px] leading-[1.4] tracking-[-0.12px] text-[var(--settings-ink-muted)]">
+            <p className="text-[12px] leading-[1.4] tracking-[-0.12px] text-muted-foreground">
               {description}
             </p>
           </div>
@@ -218,22 +218,22 @@ export const GeneralSettingsSection = memo(function GeneralSettingsSection({
   onMinimizeToTrayOnCloseChange,
 }: GeneralSettingsSectionProps) {
   return (
-    <div className="space-y-6 glass-stagger">
+    <div className="space-y-6">
       {/* 区域与历史分组 */}
-      <div className={GLASS_CARD}>
+      <div className={GEIST_CARD}>
         {/* 界面语言 Row */}
-        <div className={cn("flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4", GLASS_ROW_HOVER)}>
+        <div className={cn("flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4", GEIST_ROW_HOVER)}>
           <div className="space-y-0.5">
-            <Label htmlFor="settings-language" className="text-[14px] font-semibold tracking-[-0.224px] text-[var(--settings-ink)]">
+            <Label htmlFor="settings-language" className="text-[14px] font-semibold tracking-[-0.224px] text-foreground">
               {translations.language?.label || "界面语言"}
             </Label>
-            <p className="text-[12px] leading-[1.4] tracking-[-0.12px] text-[var(--settings-ink-muted)]">
+            <p className="text-[12px] leading-[1.4] tracking-[-0.12px] text-muted-foreground">
               {translations.language?.placeholder || "选择应用界面的显示语言"}
             </p>
           </div>
           <div className="w-full sm:w-[180px] shrink-0">
             <Select value={language} onValueChange={onLanguageChange}>
-              <SelectTrigger id="settings-language" className={cn("h-9 rounded-xl", GLASS_INPUT, "hover:bg-[var(--glass-bg-hover)]")}>
+              <SelectTrigger id="settings-language" className={cn("h-9 rounded-md", GEIST_INPUT, "hover:bg-accent")}>
                 <SelectValue placeholder={translations.language?.placeholder || "选择语言"} />
               </SelectTrigger>
               <SelectContent>
@@ -248,15 +248,15 @@ export const GeneralSettingsSection = memo(function GeneralSettingsSection({
           </div>
         </div>
 
-        <div className={cn(GLASS_DIVIDER, "mx-4")} />
+        <div className={cn(GEIST_DIVIDER, "mx-4")} />
 
         {/* 执行历史保留上限 Row */}
-        <div className={cn("flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4", GLASS_ROW_HOVER)}>
+        <div className={cn("flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4", GEIST_ROW_HOVER)}>
           <div className="space-y-0.5">
-            <Label htmlFor="settings-execution-history" className="text-[14px] font-semibold tracking-[-0.224px] text-[var(--settings-ink)]">
+            <Label htmlFor="settings-execution-history" className="text-[14px] font-semibold tracking-[-0.224px] text-foreground">
               {translations.settings?.general?.executionHistoryLimitLabel || "执行历史保留上限"}
             </Label>
-            <p className="text-[12px] leading-[1.4] tracking-[-0.12px] text-[var(--settings-ink-muted)]">
+            <p className="text-[12px] leading-[1.4] tracking-[-0.12px] text-muted-foreground">
               {translations.settings?.general?.executionHistoryLimitDescription || "可设置 5~200 条，超出范围会自动修正。"}
             </p>
           </div>
@@ -264,7 +264,7 @@ export const GeneralSettingsSection = memo(function GeneralSettingsSection({
             <Input
               id="settings-execution-history"
               type="number"
-              className={cn("h-9 text-right rounded-xl", GLASS_INPUT)}
+              className={cn("h-9 text-right rounded-md", GEIST_INPUT)}
               min={5}
               max={200}
               value={executionHistoryLimit}
@@ -282,17 +282,17 @@ export const GeneralSettingsSection = memo(function GeneralSettingsSection({
       </div>
 
       {/* 路径偏好分组 */}
-      <div className={GLASS_CARD_PAD}>
+      <div className={GEIST_CARD_PAD}>
         <div className="p-4 space-y-3">
           <div className="space-y-0.5">
             <Label
               htmlFor="settings-default-output-dir"
-              className="flex items-center gap-1.5 text-[14px] font-semibold tracking-[-0.224px] text-[var(--settings-ink)]"
+              className="flex items-center gap-1.5 text-[14px] font-semibold tracking-[-0.224px] text-foreground"
             >
-              <FolderOpen className="size-4 text-[var(--settings-icon-muted)]" />
+              <FolderOpen className="size-4 text-muted-foreground" />
               {translations.outputDir?.label || "默认发布目录"}
             </Label>
-            <p className="text-[12px] leading-[1.4] tracking-[-0.12px] text-[var(--settings-ink-muted)]">
+            <p className="text-[12px] leading-[1.4] tracking-[-0.12px] text-muted-foreground">
               {translations.outputDir?.support || "支持相对路径（如 ./publish）或绝对路径"}
             </p>
           </div>
@@ -304,24 +304,24 @@ export const GeneralSettingsSection = memo(function GeneralSettingsSection({
               placeholder={
                 translations.outputDir?.placeholder || "留空使用项目默认目录"
               }
-              className={cn("h-10 rounded-xl", GLASS_INPUT)}
+              className={cn("h-10 rounded-md", GEIST_INPUT)}
             />
             <Button
               variant="outline"
               size="icon"
-              className={cn("size-10 shrink-0 active:scale-[0.97] rounded-xl glass-interactive", GLASS_INPUT)}
+              className={cn("size-10 shrink-0 rounded-md", GEIST_INPUT)}
               onClick={onSelectDirectory}
               title={translations.outputDir?.browse || "浏览目录"}
               aria-label={translations.outputDir?.browse || "浏览目录"}
             >
-              <FolderOpen className="size-4 text-[var(--settings-icon-muted)]" />
+              <FolderOpen className="size-4 text-muted-foreground" />
             </Button>
           </div>
         </div>
       </div>
 
       {/* 系统行为开关分组 */}
-      <div className={GLASS_CARD}>
+      <div className={GEIST_CARD}>
         <SettingsSwitchRow
           id="rerun-checklist-enabled"
           icon={ListChecks}
@@ -337,7 +337,7 @@ export const GeneralSettingsSection = memo(function GeneralSettingsSection({
           onCheckedChange={onPreRerunChecklistEnabledChange}
         />
 
-        <div className={cn(GLASS_DIVIDER, "mx-4")} />
+        <div className={cn(GEIST_DIVIDER, "mx-4")} />
 
         <SettingsSwitchRow
           id="minimize-to-tray"
@@ -370,27 +370,36 @@ export const AppearanceSettingsSection = memo(function AppearanceSettingsSection
   const appearanceT = translations.settings?.appearance || {};
 
   const accentList: Array<{ id: AccentColor; name: string; lightColor: string; darkColor: string }> = [
-    { id: "brand", name: appearanceT.accentBrand || "按钮蓝", lightColor: "#2462db", darkColor: "#4983de" },
-    { id: "blue", name: appearanceT.accentBlue || "系统蓝", lightColor: "#007aff", darkColor: "#2997ff" },
-    { id: "purple", name: appearanceT.accentPurple || "紫色", lightColor: "#af52de", darkColor: "#d946ef" },
-    { id: "pink", name: appearanceT.accentPink || "粉色", lightColor: "#ff2d55", darkColor: "#f472b6" },
-    { id: "red", name: appearanceT.accentRed || "红色", lightColor: "#ff3b30", darkColor: "#ff453a" },
-    { id: "orange", name: appearanceT.accentOrange || "橙色", lightColor: "#ff9500", darkColor: "#ff9f0a" },
-    { id: "yellow", name: appearanceT.accentYellow || "黄色", lightColor: "#ffcc00", darkColor: "#ffd60a" },
-    { id: "green", name: appearanceT.accentGreen || "绿色", lightColor: "#34c759", darkColor: "#30d158" },
-    { id: "gray", name: appearanceT.accentGray || "石墨", lightColor: "#8e8e93", darkColor: "#98989d" },
+    { id: "brand", name: appearanceT.accentBrand || "Geist 蓝", lightColor: "#006bff", darkColor: "#006efe" },
+    { id: "blue", name: appearanceT.accentBlue || "系统蓝", lightColor: "#006bff", darkColor: "#006efe" },
+    { id: "purple", name: appearanceT.accentPurple || "紫色", lightColor: "#a000f8", darkColor: "#9440d5" },
+    { id: "pink", name: appearanceT.accentPink || "粉色", lightColor: "#f22782", darkColor: "#f12b82" },
+    { id: "red", name: appearanceT.accentRed || "红色", lightColor: "#ea001d", darkColor: "#f32e40" },
+    { id: "orange", name: appearanceT.accentOrange || "橙色", lightColor: "#ffae00", darkColor: "#ffae00" },
+    { id: "yellow", name: appearanceT.accentYellow || "黄色", lightColor: "#ffa600", darkColor: "#ed9a00" },
+    { id: "green", name: appearanceT.accentGreen || "绿色", lightColor: "#28a948", darkColor: "#00ac3a" },
+    { id: "gray", name: appearanceT.accentGray || "石墨", lightColor: "#4d4d4d", darkColor: "#a0a0a0" },
   ];
 
   const activeColorToken = ACCENT_COLORS[accentColor] || ACCENT_COLORS.blue;
-  const lightPreviewColor = activeColorToken.light.accent;
-  const darkPreviewColor = activeColorToken.dark.accent;
+  const lightPreviewColor = `hsl(${activeColorToken.light.accent})`;
+  const darkPreviewColor = `hsl(${activeColorToken.dark.accent})`;
+
+  const themeCardBase =
+    "group relative flex flex-col items-center gap-2.5 rounded-md border p-2.5 text-center transition-colors duration-150 ease-geist";
+  const themeCardSelected =
+    "border-interactive bg-interactive/10 shadow-raised";
+  const themeCardUnselected =
+    "border-border bg-card hover:bg-accent";
+  const themeCheckBadge =
+    "absolute top-1.5 right-1.5 flex size-4 items-center justify-center rounded-full bg-interactive text-interactive-foreground border border-border animate-in zoom-in-50 duration-200 z-10";
 
   return (
-    <div className="space-y-6 glass-stagger">
+    <div className="space-y-6">
       {/* 主题选择卡片 */}
-      <div className={cn(GLASS_CARD_PAD, "p-6")}>
+      <div className={cn(GEIST_CARD_PAD, "p-6")}>
         <div className="flex items-center justify-between mb-4">
-          <Label htmlFor="settings-theme" className="text-[14px] font-semibold tracking-[-0.224px] text-[var(--settings-ink)]">
+          <Label htmlFor="settings-theme" className="text-[14px] font-semibold tracking-[-0.224px] text-foreground">
             {translations.theme?.label || "外观主题"}
           </Label>
           <select
@@ -404,28 +413,26 @@ export const AppearanceSettingsSection = memo(function AppearanceSettingsSection
             <option value="dark">Dark</option>
           </select>
         </div>
-        
+
         <div className="grid grid-cols-3 gap-4">
           {/* 跟随系统 */}
           <button
             type="button"
             className={cn(
-              "group relative flex flex-col items-center gap-2.5 rounded-xl border p-2.5 text-center glass-interactive",
-              theme === "auto"
-                ? "border-[var(--settings-card-selected-border)] bg-[var(--settings-card-selected-bg)] shadow-[var(--settings-card-selected-shadow)]"
-                : "border-[var(--glass-border)] bg-[var(--glass-bg)] hover:bg-[var(--glass-bg-hover)]"
+              themeCardBase,
+              theme === "auto" ? themeCardSelected : themeCardUnselected
             )}
             onClick={() => onThemeChange("auto")}
           >
             {theme === "auto" && (
-              <div className="absolute top-1.5 right-1.5 flex size-4 items-center justify-center rounded-full bg-primary text-primary-foreground border border-white/10 animate-in zoom-in-50 duration-200 z-10">
+              <div className={themeCheckBadge}>
                 <Check className="size-2.5 stroke-[3.5]" />
               </div>
             )}
-            
+
             {/* 自动主题微缩图 */}
-            <div className="relative h-20 w-full overflow-hidden rounded-lg border border-[var(--glass-border-subtle)] flex select-none pointer-events-none ">
-              <div className="w-1/2 border-r border-black/5 dark:border-white/5">
+            <div className="relative h-20 w-full overflow-hidden rounded-md border border-border flex select-none pointer-events-none">
+              <div className="w-1/2 border-r border-border">
                 <ThemePreviewMock
                   theme="light"
                   previewColor={lightPreviewColor}
@@ -444,7 +451,7 @@ export const AppearanceSettingsSection = memo(function AppearanceSettingsSection
                 />
               </div>
             </div>
-            <span className="text-[12px] font-semibold text-[var(--settings-ink)]">
+            <span className="text-[12px] font-semibold text-foreground">
               {translations.theme?.auto || "跟随系统"}
             </span>
           </button>
@@ -453,21 +460,19 @@ export const AppearanceSettingsSection = memo(function AppearanceSettingsSection
           <button
             type="button"
             className={cn(
-              "group relative flex flex-col items-center gap-2.5 rounded-xl border p-2.5 text-center glass-interactive",
-              theme === "light"
-                ? "border-[var(--settings-card-selected-border)] bg-[var(--settings-card-selected-bg)] shadow-[var(--settings-card-selected-shadow)]"
-                : "border-[var(--glass-border)] bg-[var(--glass-bg)] hover:bg-[var(--glass-bg-hover)]"
+              themeCardBase,
+              theme === "light" ? themeCardSelected : themeCardUnselected
             )}
             onClick={() => onThemeChange("light")}
           >
             {theme === "light" && (
-              <div className="absolute top-1.5 right-1.5 flex size-4 items-center justify-center rounded-full bg-primary text-primary-foreground border border-white/10 animate-in zoom-in-50 duration-200 z-10">
+              <div className={themeCheckBadge}>
                 <Check className="size-2.5 stroke-[3.5]" />
               </div>
             )}
             {/* 亮色主题微缩图 */}
             <ThemePreviewMock theme="light" previewColor={lightPreviewColor} />
-            <span className="text-[12px] font-semibold text-[var(--settings-ink)]">
+            <span className="text-[12px] font-semibold text-foreground">
               {translations.theme?.light || "亮色"}
             </span>
           </button>
@@ -476,21 +481,19 @@ export const AppearanceSettingsSection = memo(function AppearanceSettingsSection
           <button
             type="button"
             className={cn(
-              "group relative flex flex-col items-center gap-2.5 rounded-xl border p-2.5 text-center glass-interactive",
-              theme === "dark"
-                ? "border-[var(--settings-card-selected-border)] bg-[var(--settings-card-selected-bg)] shadow-[var(--settings-card-selected-shadow)]"
-                : "border-[var(--glass-border)] bg-[var(--glass-bg)] hover:bg-[var(--glass-bg-hover)]"
+              themeCardBase,
+              theme === "dark" ? themeCardSelected : themeCardUnselected
             )}
             onClick={() => onThemeChange("dark")}
           >
             {theme === "dark" && (
-              <div className="absolute top-1.5 right-1.5 flex size-4 items-center justify-center rounded-full bg-primary text-primary-foreground border border-white/10 animate-in zoom-in-50 duration-200 z-10">
+              <div className={themeCheckBadge}>
                 <Check className="size-2.5 stroke-[3.5]" />
               </div>
             )}
             {/* 暗色主题微缩图 */}
             <ThemePreviewMock theme="dark" previewColor={darkPreviewColor} />
-            <span className="text-[12px] font-semibold text-[var(--settings-ink)]">
+            <span className="text-[12px] font-semibold text-foreground">
               {translations.theme?.dark || "暗色"}
             </span>
           </button>
@@ -498,13 +501,13 @@ export const AppearanceSettingsSection = memo(function AppearanceSettingsSection
       </div>
 
       {/* 强调色选择卡片 */}
-      <div className={cn(GLASS_CARD_PAD, "p-6")}>
+      <div className={cn(GEIST_CARD_PAD, "p-6")}>
         <div className="space-y-0.5 mb-4">
-          <Label className="text-[14px] font-semibold tracking-[-0.224px] text-[var(--settings-ink)]">
+          <Label className="text-[14px] font-semibold tracking-[-0.224px] text-foreground">
             {appearanceT.accentColorTitle || "强调色 (Accent Color)"}
           </Label>
-          <p className="text-[12px] leading-[1.4] tracking-[-0.12px] text-[var(--settings-ink-muted)]">
-            {appearanceT.accentColorDescription || "选择应用在按钮、聚焦框、激活项等交互元素下的系统主色调。"}
+          <p className="text-[12px] leading-[1.4] tracking-[-0.12px] text-muted-foreground">
+            {appearanceT.accentColorDescription || "选择应用在聚焦框、激活项、链接和高亮状态下的系统强调色。"}
           </p>
         </div>
 
@@ -516,9 +519,9 @@ export const AppearanceSettingsSection = memo(function AppearanceSettingsSection
                 key={item.id}
                 type="button"
                 className={cn(
-                  "relative flex size-7 shrink-0 items-center justify-center rounded-full transition duration-300 ease-[cubic-bezier(0.34,1.56,0.64,1)] hover:scale-110 active:scale-95 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary",
+                  "relative flex size-7 shrink-0 items-center justify-center rounded-full transition-colors duration-150 ease-geist hover:opacity-80 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-interactive",
                   isSelected
-                    ? "ring-2 ring-offset-2 ring-primary scale-105"
+                    ? "ring-2 ring-offset-2 ring-interactive"
                     : ""
                 )}
                 style={{
@@ -537,7 +540,7 @@ export const AppearanceSettingsSection = memo(function AppearanceSettingsSection
         </div>
       </div>
 
-      <p className="text-[12px] leading-[1.4] tracking-[-0.12px] text-[var(--settings-ink-muted)] px-1">
+      <p className="text-[12px] leading-[1.4] tracking-[-0.12px] text-muted-foreground px-1">
         {translations.settings?.sections?.appearanceDescription ||
           "主题与强调色切换会立即作用到当前窗口与后续打开的设置面板。"}
       </p>
@@ -557,16 +560,16 @@ export const ShortcutsSettingsSection = memo(function ShortcutsSettingsSection({
   onOpenShortcuts,
 }: ShortcutsSettingsSectionProps) {
   return (
-    <div className="space-y-4 glass-stagger">
-      <div className={GLASS_CARD}>
+    <div className="space-y-4">
+      <div className={GEIST_CARD}>
         {shortcutsItems.map((shortcut, index) => (
           <div key={shortcut.key}>
-            {index > 0 && <div className={cn(GLASS_DIVIDER, "mx-4")} />}
-            <div className={cn("flex items-center justify-between gap-4 p-4", GLASS_ROW_HOVER)}>
-              <span className="text-[14px] font-semibold tracking-[-0.224px] text-[var(--settings-ink)]">
+            {index > 0 && <div className={cn(GEIST_DIVIDER, "mx-4")} />}
+            <div className={cn("flex items-center justify-between gap-4 p-4", GEIST_ROW_HOVER)}>
+              <span className="text-[14px] font-semibold tracking-[-0.224px] text-foreground">
                 {shortcut.description}
               </span>
-              <kbd className={cn(GLASS_KBD, "px-2.5 py-0.5 text-[11px] font-bold tracking-tight text-[var(--settings-ink)] font-sans shrink-0")}>
+              <kbd className={cn(GEIST_KBD, "px-2.5 py-0.5 text-[11px] font-bold tracking-tight text-foreground font-sans shrink-0")}>
                 {shortcut.key}
               </kbd>
             </div>
@@ -576,11 +579,11 @@ export const ShortcutsSettingsSection = memo(function ShortcutsSettingsSection({
 
       <Button
         variant="outline"
-        className={cn("h-11 w-full justify-start active:scale-[0.97] rounded-xl glass-interactive", GLASS_INPUT, "text-[var(--settings-ink)]")}
+        className={cn("h-11 w-full justify-start rounded-md", GEIST_INPUT, "text-foreground")}
         onClick={onOpenShortcuts}
         disabled={!onOpenShortcuts}
       >
-        <Keyboard className="mr-2 size-4 text-[var(--settings-icon-muted)]" />
+        <Keyboard className="mr-2 size-4 text-muted-foreground" />
         {translations.shortcuts?.button || "查看快捷键"}
       </Button>
     </div>
@@ -604,15 +607,15 @@ export const UpdaterProgressBar = memo(function UpdaterProgressBar({
   downloadProgress,
 }: UpdaterProgressBarProps) {
   return (
-    <div className={cn("space-y-3 p-4.5 transition duration-200", GLASS_CODE_BG, "rounded-xl")}>
+    <div className={cn("space-y-3 p-4 transition-colors duration-150 ease-geist", GEIST_CODE_BG, "rounded-md")}>
       <div className="flex items-start justify-between gap-3">
         <div className="space-y-1">
-          <div className="text-[13.5px] font-semibold tracking-[-0.2px] text-[var(--settings-ink)]">
+          <div className="text-[14px] font-semibold tracking-[-0.2px] text-foreground">
             {downloadProgress.stage === "installing"
               ? translations.version?.installing || "正在安装更新..."
               : translations.version?.downloading || "正在下载更新..."}
           </div>
-          <div className="text-[12px] tracking-[-0.1px] font-normal text-[var(--settings-ink-muted)]">
+          <div className="text-[12px] tracking-[-0.1px] font-normal text-muted-foreground">
             {downloadProgress.stage === "retrying"
               ? formatMessage(
                   translations.version?.retrying ||
@@ -635,21 +638,21 @@ export const UpdaterProgressBar = memo(function UpdaterProgressBar({
           </div>
         </div>
         {downloadProgress.percent !== null && (
-          <div className={cn("text-[13px] font-bold tabular-nums font-mono tracking-tight text-[var(--settings-ink)] px-2 py-0.5 rounded-md", GLASS_INPUT)}>
+          <div className={cn("text-[13px] font-bold tabular-nums font-mono tracking-tight text-foreground px-2 py-0.5 rounded-sm", GEIST_INPUT)}>
             {Math.round(downloadProgress.percent)}%
           </div>
         )}
       </div>
 
-      <div className="h-2 overflow-hidden rounded-full bg-black/5 dark:bg-white/5 border border-black/[0.02] dark:border-white/[0.02]">
+      <div className="h-2 overflow-hidden rounded-full bg-muted border border-border">
         <div
           className={cn(
-            "h-full rounded-full bg-primary  transition-[width] duration-200",
+            "h-full rounded-full bg-interactive origin-left transition-transform duration-150 ease-geist",
             downloadProgress.percent === null && "animate-pulse w-1/3"
           )}
           style={
             downloadProgress.percent !== null
-              ? { width: `${Math.max(0, Math.min(downloadProgress.percent, 100))}%` }
+              ? { transform: `scaleX(${Math.max(0, Math.min(downloadProgress.percent, 100)) / 100})` }
               : undefined
           }
         />
@@ -942,21 +945,24 @@ export function SettingsDialog({
     const versionT = translations.version || {};
     const lastCheckedAt = new Date().toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" });
 
+    const actionButtonBase =
+      "h-8 px-3 rounded-md text-[12px] font-normal text-foreground transition-colors duration-150 ease-geist shrink-0 flex items-center gap-1.5";
+
     return (
-      <div className="space-y-6 glass-stagger">
+      <div className="space-y-6">
         {/* Product Info & Update Status Group */}
-        <div className={cn(GLASS_CARD, "glass-hover-lift")}>
+        <div className={GEIST_CARD}>
           {/* Brand Row */}
-          <div className={cn("flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4", GLASS_ROW_HOVER)}>
+          <div className={cn("flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4", GEIST_ROW_HOVER)}>
             <div className="space-y-0.5 min-w-0">
-              <h4 className="text-[14px] font-semibold tracking-[-0.224px] text-[var(--settings-ink)]">
+              <p className="text-[14px] font-semibold tracking-[-0.224px] text-foreground">
                 OnePublish
-              </h4>
-              <p className="text-[12px] leading-[1.4] tracking-[-0.12px] text-[var(--settings-ink-muted)]">
+              </p>
+              <p className="text-[12px] leading-[1.4] tracking-[-0.12px] text-muted-foreground">
                 {versionT.productDescription || "跨平台 .NET 自动化发布与签名客户端"}
               </p>
             </div>
-            <span className={cn("inline-flex items-center rounded-md px-2 py-0.5 text-[11px] font-semibold text-[var(--settings-ink-muted)] font-mono shrink-0", GLASS_INPUT)}>
+            <span className={cn("inline-flex items-center rounded-sm px-2 py-0.5 text-[11px] font-semibold text-muted-foreground font-mono shrink-0", GEIST_INPUT)}>
               {formatMessage(
                 versionT.current || "当前版本: v{}",
                 updateInfo?.currentVersion || currentVersion || "—"
@@ -964,55 +970,55 @@ export function SettingsDialog({
             </span>
           </div>
 
-          <div className={cn(GLASS_DIVIDER, "mx-4")} />
+          <div className={cn(GEIST_DIVIDER, "mx-4")} />
 
           {/* Dynamic Update Row */}
-          <div className={cn("flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4", GLASS_ROW_HOVER)}>
+          <div className={cn("flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4", GEIST_ROW_HOVER)}>
             <div className="flex items-center gap-3 min-w-0">
               {isConfigUnhealthy ? (
                 <>
-                  <AlertTriangle className="size-[18px] flex-shrink-0 text-[hsl(var(--warning))]" />
+                  <AlertTriangle className="size-[18px] flex-shrink-0 text-warning" />
                   <div className="space-y-0.5 min-w-0">
-                    <Label className="text-[14px] font-semibold tracking-[-0.224px] text-[var(--settings-ink)]">
+                    <Label className="text-[14px] font-semibold tracking-[-0.224px] text-foreground">
                       {versionT.updateChannelNotConfiguredTitle || "更新通道未配置"}
                     </Label>
-                    <p className="text-[12px] leading-[1.4] tracking-[-0.12px] text-[var(--settings-ink-muted)]">
+                    <p className="text-[12px] leading-[1.4] tracking-[-0.12px] text-muted-foreground">
                       {versionT.updateChannelNotConfiguredDescription || "检测到本地更新配置未设置，无法建立版本检查。"}
                     </p>
                   </div>
                 </>
               ) : isRestartRequired ? (
                 <>
-                  <RefreshCw className="size-[18px] flex-shrink-0 text-[hsl(var(--success))]" />
+                  <RefreshCw className="size-[18px] flex-shrink-0 text-success" />
                   <div className="space-y-0.5 min-w-0">
-                    <Label className="text-[14px] font-semibold tracking-[-0.224px] text-[var(--settings-ink)]">
+                    <Label className="text-[14px] font-semibold tracking-[-0.224px] text-foreground">
                       {versionT.updateReadyTitle || "新版本已准备就绪"}
                     </Label>
-                    <p className="text-[12px] leading-[1.4] tracking-[-0.12px] text-[var(--settings-ink-muted)]">
+                    <p className="text-[12px] leading-[1.4] tracking-[-0.12px] text-muted-foreground">
                       {versionT.updateReadyDescription || "升级补丁已下载完成，请重启客户端应用更新。"}
                     </p>
                   </div>
                 </>
               ) : updateInfo?.hasUpdate ? (
                 <>
-                  <ArrowUpCircle className="size-[18px] flex-shrink-0 text-[hsl(var(--primary))]" />
+                  <ArrowUpCircle className="size-[18px] flex-shrink-0 text-interactive" />
                   <div className="space-y-0.5 min-w-0">
-                    <Label className="text-[14px] font-semibold tracking-[-0.224px] text-[var(--settings-ink)]">
+                    <Label className="text-[14px] font-semibold tracking-[-0.224px] text-foreground">
                       {formatMessage(versionT.new || "有新版本: v{}", updateInfo.availableVersion || "")}
                     </Label>
-                    <p className="text-[12px] leading-[1.4] tracking-[-0.12px] text-[var(--settings-ink-muted)]">
+                    <p className="text-[12px] leading-[1.4] tracking-[-0.12px] text-muted-foreground">
                       {versionT.updateAvailableDescription || "发现可用新版本。"}
                     </p>
                   </div>
                 </>
               ) : (
                 <>
-                  <CheckCircle2 className="size-[18px] flex-shrink-0 text-[hsl(var(--success))]" />
+                  <CheckCircle2 className="size-[18px] flex-shrink-0 text-success" />
                   <div className="space-y-0.5 min-w-0">
-                    <Label className="text-[14px] font-semibold tracking-[-0.224px] text-[var(--settings-ink)]">
+                    <Label className="text-[14px] font-semibold tracking-[-0.224px] text-foreground">
                       {versionT.upToDateTitle || "软件已是最新版本"}
                     </Label>
-                    <p className="text-[12px] leading-[1.4] tracking-[-0.12px] text-[var(--settings-ink-muted)]">
+                    <p className="text-[12px] leading-[1.4] tracking-[-0.12px] text-muted-foreground">
                       {formatMessage(versionT.lastCheckedAt || "上次检查时间：{}。", lastCheckedAt)}
                     </p>
                   </div>
@@ -1027,20 +1033,20 @@ export function SettingsDialog({
                   <Button
                     variant="outline"
                     size="sm"
-                    className={cn("h-8 px-3 rounded-xl glass-interactive text-[12px] font-normal text-[var(--settings-ink)] transition shrink-0 flex items-center gap-1.5", GLASS_INPUT)}
+                    className={cn(actionButtonBase, GEIST_INPUT)}
                     onClick={() => _onOpenUpdaterHelpTarget("docs")}
                   >
                     <span>{translations.version?.openGuide || "打开配置指南"}</span>
-                    <ExternalLink className="size-3 text-[var(--settings-icon-muted)]" />
+                    <ExternalLink className="size-3 text-muted-foreground" />
                   </Button>
                   <Button
                     variant="outline"
                     size="sm"
-                    className={cn("h-8 px-3 rounded-xl glass-interactive text-[12px] font-normal text-[var(--settings-ink)] transition shrink-0 flex items-center gap-1.5", GLASS_INPUT)}
+                    className={cn(actionButtonBase, GEIST_INPUT)}
                     onClick={() => _onOpenUpdaterHelpTarget("template")}
                   >
                     <span>{translations.version?.openTemplate || "下载模板文件"}</span>
-                    <Download className="size-3 text-[var(--settings-icon-muted)]" />
+                    <Download className="size-3 text-muted-foreground" />
                   </Button>
                 </div>
               ) : (
@@ -1049,7 +1055,7 @@ export function SettingsDialog({
                     <Button
                       variant="default"
                       size="sm"
-                      className="h-8 px-3 rounded-full bg-primary text-primary-foreground hover:opacity-90 active:scale-[0.97] transition font-bold text-[12px] shrink-0 flex items-center gap-1.5"
+                      className="h-8 px-3 rounded-md bg-primary text-primary-foreground hover:bg-primary/90 transition-colors duration-150 ease-geist font-bold text-[12px] shrink-0 flex items-center gap-1.5"
                       onClick={handleRestartApp}
                       disabled={isRestarting || isCheckingUpdate || isInstallingUpdate}
                     >
@@ -1061,15 +1067,15 @@ export function SettingsDialog({
                       </span>
                     </Button>
                   )}
-                  
+
                   <Button
                     variant="outline"
                     size="sm"
-                    className={cn("h-8 px-3 rounded-xl glass-interactive text-[12px] font-normal text-[var(--settings-ink)] active:scale-[0.97] transition shrink-0 flex items-center gap-1.5", GLASS_INPUT)}
+                    className={cn(actionButtonBase, GEIST_INPUT)}
                     onClick={handleCheckUpdate}
                     disabled={isCheckingUpdate || isInstallingUpdate}
                   >
-                    <RefreshCw className={cn("size-3 text-[var(--settings-icon-muted)]", isCheckingUpdate && "animate-spin")} />
+                    <RefreshCw className={cn("size-3 text-muted-foreground", isCheckingUpdate && "animate-spin")} />
                     <span>{translations.version?.check || "检查更新"}</span>
                   </Button>
 
@@ -1077,7 +1083,7 @@ export function SettingsDialog({
                     <Button
                       variant="default"
                       size="sm"
-                      className="h-8 px-3 rounded-full bg-primary text-primary-foreground hover:opacity-90 active:scale-[0.97] transition font-bold text-[12px] shrink-0 flex items-center gap-1.5"
+                      className="h-8 px-3 rounded-md bg-primary text-primary-foreground hover:bg-primary/90 transition-colors duration-150 ease-geist font-bold text-[12px] shrink-0 flex items-center gap-1.5"
                       onClick={handleInstallUpdate}
                       disabled={isInstallingUpdate}
                     >
@@ -1091,15 +1097,15 @@ export function SettingsDialog({
           </div>
 
           {updateInfo?.message && !shouldHideDefaultUpdaterConfigMessage && (
-            <div className="p-4 border-t border-[var(--glass-divider)] bg-destructive/[0.02] dark:bg-destructive/[0.03]">
-              <div className="rounded-lg border border-destructive/20 bg-destructive/[0.02] dark:bg-destructive/[0.04] p-3 text-[11.5px] leading-relaxed text-destructive font-normal">
+            <div className="p-4 border-t border-border bg-destructive/5">
+              <div className="rounded-md border border-destructive/20 bg-destructive/5 p-3 text-[12px] leading-relaxed text-destructive font-normal">
                 {updateInfo.message}
               </div>
             </div>
           )}
 
           {isInstallingUpdate && (
-            <div className="p-4 border-t border-[var(--glass-divider)]">
+            <div className="p-4 border-t border-border">
               <UpdaterProgressBar
                 translations={translations}
                 downloadProgress={downloadProgress}
@@ -1110,15 +1116,15 @@ export function SettingsDialog({
 
         {/* Release Notes */}
         {updateInfo?.releaseNotes && (
-          <div className={cn(GLASS_CARD, "glass-hover-lift")}>
-            <div className={cn("flex items-center gap-3 p-4 border-b border-[var(--glass-divider)]", GLASS_ROW_HOVER)}>
-              <Terminal className="size-[18px] text-[var(--settings-icon-muted)]" />
-              <span className="text-[14px] font-semibold tracking-[-0.224px] text-[var(--settings-ink)]">
+          <div className={GEIST_CARD}>
+            <div className={cn("flex items-center gap-3 p-4 border-b border-border", GEIST_ROW_HOVER)}>
+              <Terminal className="size-[18px] text-muted-foreground" />
+              <span className="text-[14px] font-semibold tracking-[-0.224px] text-foreground">
                 {translations.version?.notes || "发布日志"}
               </span>
             </div>
             <div className="p-4">
-              <div className={cn("max-h-56 overflow-y-auto glass-scrollbar text-[12px] leading-relaxed tracking-[-0.1px] text-[var(--settings-ink-muted)] whitespace-pre-wrap font-normal rounded-lg p-3", GLASS_CODE_BG)}>
+              <div className={cn("max-h-56 overflow-y-auto geist-scrollbar text-[12px] leading-relaxed tracking-[-0.1px] text-muted-foreground whitespace-pre-wrap font-normal rounded-md p-3", GEIST_CODE_BG)}>
                 {updateInfo.releaseNotes}
               </div>
             </div>
@@ -1157,15 +1163,14 @@ export function SettingsDialog({
           translations.settings?.description || "配置语言、外观、输出目录等偏好设置"
         }
         icon={undefined}
-        surfaceClassName="backdrop-blur-[40px] saturate-[1.8] border border-[var(--glass-border)] shadow-[var(--glass-shadow-lg)]"
-        headerClassName="border-b border-[var(--glass-divider)] bg-transparent"
-        titleClassName="text-[17px] font-semibold text-[var(--settings-ink)]"
-        descriptionClassName="text-[13px] text-[var(--settings-ink-muted)]"
+        headerClassName="border-b border-border bg-transparent"
+        titleClassName="text-[17px] font-semibold text-foreground"
+        descriptionClassName="text-[13px] text-muted-foreground"
       >
         <div className="grid h-full min-h-0 gap-0 sm:grid-cols-[200px_minmax(0,1fr)]">
           {/* Sidebar */}
-          <aside className="min-h-0 overflow-y-auto border-r border-[var(--glass-divider)] bg-transparent px-3 py-4 glass-scrollbar">
-            <nav className="flex gap-0.5 overflow-x-auto sm:flex-col sm:overflow-visible glass-stagger">
+          <aside className="min-h-0 overflow-y-auto border-r border-border bg-transparent px-3 py-4 geist-scrollbar">
+            <nav className="flex gap-0.5 overflow-x-auto sm:flex-col sm:overflow-visible">
               {categoryItems.map((item) => {
                 const Icon = item.icon;
                 const isActive = item.id === activeCategory;
@@ -1176,22 +1181,22 @@ export function SettingsDialog({
                     type="button"
                     aria-current={isActive ? "page" : undefined}
                     className={cn(
-                      "group relative flex w-full items-center gap-2.5 rounded-xl pl-4 pr-3 py-2 text-left glass-interactive",
+                      "group relative flex w-full items-center gap-2.5 rounded-md pl-4 pr-3 py-2 text-left transition-colors duration-150 ease-geist",
                       isActive
-                        ? "bg-[var(--settings-sidebar-selected-bg)] text-[var(--settings-sidebar-selected-text)] shadow-[var(--glass-shadow-selected)] font-semibold"
-                        : "text-[var(--settings-ink)]/80 hover:bg-[var(--settings-sidebar-item-hover)]"
+                        ? "bg-accent text-foreground font-semibold"
+                        : "text-foreground/80 hover:bg-accent"
                     )}
                     onClick={() => handleCategoryChange(item.id)}
                   >
                     {isActive && (
-                      <div className="absolute left-1.5 w-1 h-3.5 rounded-full bg-primary transition duration-200" />
+                      <div className="absolute left-1.5 w-1 h-3.5 rounded-full bg-interactive transition-colors duration-150 ease-geist" />
                     )}
                     <Icon
                       className={cn(
-                        "size-[18px] flex-shrink-0 transition-colors duration-150",
+                        "size-[18px] flex-shrink-0 transition-colors duration-150 ease-geist",
                         isActive
-                          ? "text-[var(--settings-icon-active)]"
-                          : "text-[var(--settings-icon-muted)]"
+                          ? "text-interactive"
+                          : "text-muted-foreground"
                       )}
                     />
                     <span className="truncate text-[13px] font-semibold tracking-[-0.12px]">
@@ -1206,14 +1211,14 @@ export function SettingsDialog({
           {/* Content */}
           <section className="min-h-0 flex flex-col overflow-hidden bg-transparent">
             <div className="px-6 pb-2 pt-4">
-              <h3 className="text-[15px] font-semibold tracking-[-0.3px] text-[var(--settings-ink)]">
+              <h2 className="text-[15px] font-semibold tracking-[-0.3px] text-foreground">
                 {activeCategoryItem.label}
-              </h3>
-              <p className="mt-0.5 text-[12px] leading-[1.4] tracking-[-0.1px] text-[var(--settings-ink-muted)]">
+              </h2>
+              <p className="mt-0.5 text-[12px] leading-[1.4] tracking-[-0.1px] text-muted-foreground">
                 {categoryDescriptions[activeCategory]}
               </p>
             </div>
-            <div className="glass-scrollbar min-h-0 flex-1 overflow-y-auto px-6 py-4">
+            <div className="geist-scrollbar min-h-0 flex-1 overflow-y-auto px-6 py-4">
               {categoryContent}
             </div>
           </section>

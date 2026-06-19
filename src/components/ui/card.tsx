@@ -8,7 +8,7 @@ const Card = React.forwardRef<
   <div
     ref={ref}
     className={cn(
-      "glass-card rounded-2xl text-card-foreground",
+      "surface-raised rounded-sm text-card-foreground",
       className
     )}
     {...props}
@@ -28,22 +28,29 @@ const CardHeader = React.forwardRef<
 ));
 CardHeader.displayName = "CardHeader";
 
-const CardTitle = React.forwardRef<
-  HTMLParagraphElement,
-  React.HTMLAttributes<HTMLHeadingElement>
->(({ className, children, ...props }, ref) =>
-  children ? (
-    <h3
-      ref={ref}
-      className={cn(
-        "font-display text-[18px] font-semibold leading-none tracking-tight",
-        className
-      )}
-      {...props}
-    >
-      {children}
-    </h3>
-  ) : null
+interface CardTitleProps
+  extends React.HTMLAttributes<HTMLHeadingElement> {
+  /** Heading level to render. Defaults to h3; use h2 for top-level cards
+   *  under a page/dialog h1 so the document outline stays hierarchical. */
+  headingLevel?: "h2" | "h3" | "h4";
+}
+
+const CardTitle = React.forwardRef<HTMLHeadingElement, CardTitleProps>(
+  ({ className, children, headingLevel = "h3", ...props }, ref) => {
+    const Heading = headingLevel;
+    return children ? (
+      <Heading
+        ref={ref}
+        className={cn(
+          "font-sans text-[18px] font-semibold leading-none",
+          className
+        )}
+        {...props}
+      >
+        {children}
+      </Heading>
+    ) : null;
+  }
 );
 CardTitle.displayName = "CardTitle";
 

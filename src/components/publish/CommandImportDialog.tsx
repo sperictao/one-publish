@@ -107,7 +107,7 @@ export function CommandImportDialog({
         <div className="space-y-4">
           <AppDialogInset className="space-y-3">
             <div className="space-y-1">
-              <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[hsl(var(--text-fine))]">
+              <div className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
                 {commandT.commandSectionTitle || "命令输入"}
               </div>
               <p className="text-xs leading-5 text-muted-foreground">
@@ -153,7 +153,7 @@ export function CommandImportDialog({
           </Button>
 
           {error && (
-            <AppDialogInset className="space-y-1 border-destructive/20 bg-destructive/8 text-destructive shadow-none">
+            <AppDialogInset className="space-y-1 border-destructive/20 bg-destructive/5 text-destructive">
               <p className="font-semibold">{commandT.parseFailed || "解析失败"}</p>
               <p className="text-xs">{error}</p>
             </AppDialogInset>
@@ -162,7 +162,7 @@ export function CommandImportDialog({
           {parsedSpec && (
             <AppDialogInset className="space-y-2">
               <Label>{commandT.extractedParameters || "提取的参数"}</Label>
-              <div className="rounded-xl bg-background/60 p-3">
+              <div className="rounded-md bg-muted p-3">
                 <pre className="text-xs font-mono overflow-auto max-h-40">
                   {JSON.stringify(parsedSpec.parameters, null, 2)}
                 </pre>

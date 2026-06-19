@@ -3,6 +3,7 @@ import type {
   PointerEvent as ReactPointerEvent,
   ReactNode,
 } from "react";
+import { memo } from "react";
 import { cn } from "@/lib/utils";
 import { FolderGit2, GitBranch } from "lucide-react";
 import type { Repository } from "@/lib/store/types";
@@ -37,7 +38,7 @@ interface RepositoryRowProps {
   ) => void;
 }
 
-export function RepositoryRow({
+export const RepositoryRow = memo(function RepositoryRow({
   repo,
   isSelected,
   isVisualTarget,
@@ -105,7 +106,8 @@ export function RepositoryRow({
         aria-pressed={isSelected}
         aria-label={`${repoT.selectRepository || "选择仓库"}: ${repo.name}`}
         className={cn(
-          "flex w-full items-start gap-2.5 rounded-2xl border border-transparent bg-transparent py-2.5 pr-11 text-left shadow-none outline-none transition duration-300 hover:bg-muted/20 focus-visible:ring-2 focus-visible:ring-primary/30 focus-visible:ring-offset-1 focus-visible:ring-offset-background",
+          "flex w-full items-start gap-2.5 rounded-lg border border-transparent bg-transparent py-2.5 pr-11 text-left shadow-none outline-none transition-colors duration-150 ease-geist hover:bg-accent focus-visible:ring-2 focus-visible:ring-interactive/30 focus-visible:ring-offset-1 focus-visible:ring-offset-background",
+          isSelected && "bg-accent",
           dragHandleVisible ? "pl-10" : "pl-3"
         )}
         onClick={() => {
@@ -114,18 +116,18 @@ export function RepositoryRow({
       >
         <span
           className={cn(
-            "mt-0.5 flex size-8 flex-shrink-0 items-center justify-center rounded-[14px] transition duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]",
+            "mt-0.5 flex size-8 flex-shrink-0 items-center justify-center rounded-md transition-colors duration-150 ease-geist",
             isSelected
-              ? "scale-105 bg-primary/10 "
-              : "bg-muted  group-hover:scale-105 group-hover:bg-primary/8"
+              ? "bg-interactive/10"
+              : "bg-muted group-hover:bg-interactive/10"
           )}
         >
           <FolderGit2
             className={cn(
-              "size-4 transition duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]",
+              "size-4 transition-colors duration-150 ease-geist",
               isSelected
-                ? "scale-110 text-primary "
-                : "text-muted-foreground/60 group-hover:text-primary group-hover:"
+                ? "text-interactive"
+                : "text-muted-foreground group-hover:text-interactive"
             )}
           />
         </span>
@@ -135,20 +137,20 @@ export function RepositoryRow({
             <div className="flex items-center gap-1.5">
               <span
                 className={cn(
-                  "block min-w-0 truncate text-[13px] font-semibold tracking-tight transition-colors duration-300",
+                  "block min-w-0 truncate text-[13px] font-semibold tracking-tight transition-colors duration-150 ease-geist",
                   isSelected ? "text-foreground" : "text-foreground/78"
                 )}
               >
                 {repo.name}
               </span>
               {repo.providerId ? (
-                <span className="flex-shrink-0 rounded-full bg-primary/12 px-1.5 py-0.5 text-[10px] font-bold text-primary">
+                <span className="flex-shrink-0 rounded-full bg-interactive/10 px-1.5 py-0.5 text-[10px] font-bold text-interactive">
                   {repo.providerId}
                 </span>
               ) : null}
             </div>
             <p
-              className="mt-0.5 truncate text-[11px] text-[hsl(var(--text-fine))]"
+              className="mt-0.5 truncate text-[11px] text-muted-foreground"
               title={repo.path}
             >
               {repo.path}
@@ -158,10 +160,10 @@ export function RepositoryRow({
           <div className="mt-1.5 min-w-0">
             <span
               className={cn(
-                "inline-flex max-w-full items-center gap-1.5 rounded-full px-2 py-0.5 text-[11px] leading-4 transition duration-300",
+                "inline-flex max-w-full items-center gap-1.5 rounded-full px-2 py-0.5 text-[11px] leading-4 transition-colors duration-150",
                 canConnectBranch
-                  ? "capsule-breathe bg-muted text-success"
-                  : "border border-border bg-muted text-[hsl(var(--text-fine))]"
+                  ? "border border-success/20 bg-success/10 text-success"
+                  : "border border-border bg-muted text-muted-foreground"
               )}
               title={
                 canConnectBranch
@@ -191,4 +193,4 @@ export function RepositoryRow({
       </div>
     </div>
   );
-}
+});

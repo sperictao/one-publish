@@ -18,15 +18,15 @@ export function SidebarPanelShell({
   return (
     <div
       className={cn(
-        "flex flex-col p-2 transition-[padding] duration-300 ease-in-out",
-        collapsed && "p-0"
+        "flex flex-col",
+        collapsed ? "p-0" : "p-2"
       )}
     >
       <CollapsiblePanel
         collapsed={collapsed}
         side="left"
         width={width}
-        className={cn("glass-card repo-sidebar-shell h-full rounded-2xl", className)}
+        className={cn("surface-raised h-full rounded-lg", className)}
       >
         {children}
       </CollapsiblePanel>

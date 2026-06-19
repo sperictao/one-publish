@@ -1,16 +1,11 @@
 import {
   Children,
-  startTransition,
-  Suspense,
-  lazy,
   useCallback,
-  useEffect,
   useRef,
   useState,
   useMemo,
   memo,
   type CSSProperties,
-  type MutableRefObject,
   type PointerEvent as ReactPointerEvent,
 } from "react";
 import { cn } from "@/lib/utils";
@@ -67,7 +62,6 @@ import {
   getUserProfileNameFromRenderId,
 } from "@/features/config/publishConfigIdentity";
 import { useI18n } from "@/hooks/useI18n";
-import type { PublishConfigFloatingBindings } from "@/components/layout/PublishConfigPanelFloatingLayer";
 import {
   RowActionsMenu,
   type RowActionsMenuAction,
@@ -91,11 +85,6 @@ import {
   usePublishConfigPreviewModel,
 } from "@/components/layout/usePublishConfigListModel";
 import type { ParameterSchema } from "@/types/parameters";
-
-const PublishConfigPanelFloatingLayer = lazy(async () => {
-  const mod = await import("@/components/layout/PublishConfigPanelFloatingLayer");
-  return { default: mod.PublishConfigPanelFloatingLayer };
-});
 
 const EMPTY_FRAMEWORK_OPTIONS: string[] = [];
 
@@ -128,7 +117,7 @@ function CollapseIcon() {
         strokeWidth="1"
       />
       <path
-        className="transition-transform duration-200 ease-[cubic-bezier(0.22,1,0.36,1)] group-hover:-translate-x-0.5"
+        className="transition-transform duration-150 ease-geist group-hover:-translate-x-0.5"
         d="M11.5 5.5L9 8L11.5 10.5"
         stroke="currentColor"
         strokeWidth="1"
@@ -226,7 +215,7 @@ function ConfigGroup({
     <div>
       <button
         type="button"
-        className="flex w-full items-center gap-1.5 px-3 py-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground hover:text-foreground glass-transition"
+        className="flex w-full items-center gap-1.5 px-3 py-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground hover:text-foreground transition-colors duration-150 ease-geist"
         onClick={() => setExpanded(!expanded)}
       >
         {expanded ? (
@@ -236,7 +225,7 @@ function ConfigGroup({
         )}
         <span className="flex-1 text-left">{title}</span>
         {isRefreshing ? (
-          <span className="inline-block animate-spin text-primary/80">
+          <span className="inline-block animate-spin text-interactive/80">
             <Loader2 className="size-3.5" />
           </span>
         ) : null}
@@ -419,32 +408,33 @@ function ProfileItem({
         type="button"
         aria-pressed={isSelected}
         className={cn(
-          "flex w-full items-center gap-2.5 rounded-2xl border border-transparent bg-transparent py-2 pr-11 text-left shadow-none outline-none transition duration-300 hover:bg-muted/20 focus-visible:ring-2 focus-visible:ring-primary/30 focus-visible:ring-offset-1 focus-visible:ring-offset-background",
+          "flex w-full items-center gap-2.5 rounded-lg border border-transparent bg-transparent py-2 pr-11 text-left shadow-none outline-none transition-colors duration-150 ease-geist hover:bg-accent focus-visible:ring-2 focus-visible:ring-interactive/30 focus-visible:ring-offset-1 focus-visible:ring-offset-background",
+          isSelected && "bg-accent",
           dragHandleVisible ? "pl-10" : "pl-3"
         )}
         onClick={onClick}
       >
         <span
           className={cn(
-            "flex size-8 flex-shrink-0 items-center justify-center rounded-[14px] transition duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]",
+            "flex size-8 flex-shrink-0 items-center justify-center rounded-md transition-colors duration-150 ease-geist",
             isSelected
-              ? "scale-105 bg-primary/10 "
-              : "bg-muted  group-hover:scale-105 group-hover:bg-primary/8"
+              ? "bg-interactive/10"
+              : "bg-muted group-hover:bg-interactive/10"
           )}
         >
           <FileText
             className={cn(
-              "size-4 transition duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]",
+              "size-4 transition-colors duration-150 ease-geist",
               isSelected
-                ? "scale-110 text-primary "
-                : "text-muted-foreground/60 group-hover:text-primary group-hover:"
+                ? "text-interactive"
+                : "text-muted-foreground group-hover:text-interactive"
             )}
           />
         </span>
         <div className="min-w-0 flex flex-1 items-center overflow-hidden">
           <span
             className={cn(
-              "truncate text-[13px] font-semibold tracking-tight transition-colors duration-300",
+              "truncate text-[13px] font-semibold tracking-tight transition-colors duration-150 ease-geist",
               isSelected ? "text-foreground" : "text-foreground/78"
             )}
           >
@@ -504,7 +494,6 @@ export const PublishConfigPanel = memo(function PublishConfigPanel({
   const [groupFilterOpen, setGroupFilterOpen] = useState(false);
   const [preferredSelectedRenderAnchor, setPreferredSelectedRenderAnchor] =
     useState<PreferredSelectedRenderAnchor | null>(null);
-  const [floatingEnhancerEnabled, setFloatingEnhancerEnabled] = useState(false);
   const [showReorderControls, setShowReorderControls] = useState(false);
   const [projectProfileViewerOpen, setProjectProfileViewerOpen] = useState(false);
   const [projectProfileViewerState, setProjectProfileViewerState] =
@@ -545,13 +534,10 @@ export const PublishConfigPanel = memo(function PublishConfigPanel({
     t.refreshingCustomProfiles || "正在刷新自定义配置...";
   const isAnyRefreshing = isProfilesRefreshing || isProjectProfilesRefreshing;
   const listActionButtonClass =
-    "glass-surface flex size-7 items-center justify-center rounded-full transition duration-300 hover:bg-accent";
+    "flex size-7 items-center justify-center rounded-full border border-border bg-background transition-colors duration-150 ease-geist hover:bg-accent";
   const reorderControlsLabel = showReorderControls
     ? t.hideReorderControls || "关闭排序"
     : t.showReorderControls || "开启排序";
-  const fallbackListRef = useRef<HTMLDivElement | null>(null);
-  const fallbackFloatingCardMotionRef = useRef<HTMLDivElement | null>(null);
-  const fallbackFloatingCardSurfaceRef = useRef<HTMLDivElement | null>(null);
   const latestProjectProfileRequestId = useRef(0);
 
   const {
@@ -756,7 +742,6 @@ export const PublishConfigPanel = memo(function PublishConfigPanel({
   const {
     previewVisibleProjectProfiles,
     previewVisibleGroupedFilteredProfiles,
-    previewConfigIds,
     shouldShowEmptyState,
   } = usePublishConfigPreviewModel({
     query,
@@ -787,78 +772,29 @@ export const PublishConfigPanel = memo(function PublishConfigPanel({
     settledItemId: getUserProfileNameFromRenderId(settledConfigRenderId),
     resetKey: selectedRepoScopeId,
   });
-  const draggingFloatingConfig = useMemo(() => {
+  const draggingConfigRenderId = useMemo(() => {
     if (recentReorder.draggingItemId) {
-      return {
-        renderId: createRecentConfigRenderId(recentReorder.draggingItemId),
-        style: recentReorder.dragPreviewStyle,
-      };
+      return createRecentConfigRenderId(recentReorder.draggingItemId);
     }
 
     if (projectProfileReorder.draggingItemId) {
-      return {
-        renderId: createProjectProfileConfigKey(
-          projectProfileReorder.draggingItemId
-        ),
-        style: projectProfileReorder.dragPreviewStyle,
-      };
+      return createProjectProfileConfigKey(projectProfileReorder.draggingItemId);
     }
 
     if (customProfileReorder.draggingItemId) {
-      return {
-        renderId: createUserProfileConfigKey(customProfileReorder.draggingItemId),
-        style: customProfileReorder.dragPreviewStyle,
-      };
+      return createUserProfileConfigKey(customProfileReorder.draggingItemId);
     }
 
     return null;
   }, [
-    customProfileReorder.dragPreviewStyle,
     customProfileReorder.draggingItemId,
-    projectProfileReorder.dragPreviewStyle,
     projectProfileReorder.draggingItemId,
-    recentReorder.dragPreviewStyle,
     recentReorder.draggingItemId,
   ]);
   const visualTargetConfigId =
-    draggingFloatingConfig?.renderId ??
+    draggingConfigRenderId ??
     settledConfigRenderId ??
     interaction.visualTargetItemId;
-  const floatingTargetConfigId = visualTargetConfigId;
-  const restingTargetConfigId =
-    draggingFloatingConfig?.renderId ??
-    settledConfigRenderId ??
-    interaction.activeMenuItemId ??
-    interaction.focusedItemId ??
-    selectedRenderId;
-  const freezeFloating =
-    interaction.freezeFloating || draggingFloatingConfig !== null;
-
-  useEffect(() => {
-    if (floatingEnhancerEnabled) {
-      return;
-    }
-
-    const timerId = window.setTimeout(() => {
-      startTransition(() => {
-        setFloatingEnhancerEnabled(true);
-      });
-    }, 0);
-
-    return () => {
-      window.clearTimeout(timerId);
-    };
-  }, [floatingEnhancerEnabled]);
-
-  const createFallbackRowRef = useCallback(
-    (_configId: string) => (_node: HTMLDivElement | null) => {},
-    []
-  );
-  const noopPointerHandler = useCallback(
-    (_event: ReactPointerEvent<HTMLDivElement>) => {},
-    []
-  );
-  const noopVoidHandler = useCallback(() => {}, []);
 
   const handleViewProjectProfile = useCallback(
     async (profileName: string) => {
@@ -1001,100 +937,36 @@ export const PublishConfigPanel = memo(function PublishConfigPanel({
     [onSelectProfile, onSelectProjectProfile]
   );
 
-  const fallbackFloatingBindings = useMemo<PublishConfigFloatingBindings>(
-    () => ({
-      listRef: fallbackListRef as MutableRefObject<HTMLDivElement | null>,
-      floatingCardMotionRef:
-        fallbackFloatingCardMotionRef as MutableRefObject<HTMLDivElement | null>,
-      floatingCardSurfaceRef:
-        fallbackFloatingCardSurfaceRef as MutableRefObject<HTMLDivElement | null>,
-      cardTargetConfigId: floatingTargetConfigId,
-      floatingVisible: false,
-      setConfigRowRef: createFallbackRowRef,
-      handleListPointerMove: noopPointerHandler,
-      handleListPointerEnter: interaction.handleListPointerEnter,
-      handleListMouseLeave: interaction.handleListPointerLeave,
-      handleListScroll: noopVoidHandler,
-    }),
-    [
-      createFallbackRowRef,
-      floatingTargetConfigId,
-      interaction.handleListPointerEnter,
-      interaction.handleListPointerLeave,
-      noopPointerHandler,
-      noopVoidHandler,
-    ]
-  );
-
-  const renderConfigList = useCallback(
-    (floating: PublishConfigFloatingBindings) => {
-      const floatingDragPreviewStyle =
-        draggingFloatingConfig &&
-        draggingFloatingConfig.renderId === floating.cardTargetConfigId
-          ? draggingFloatingConfig.style
-          : undefined;
-
+  const configListContent = useMemo(
+    () => {
       return (
         <div
-          ref={floating.listRef}
-          className="list-scroll-shell scrollbar-fade glass-scrollbar relative flex-1 overflow-auto px-2.5 py-2"
+          className="list-scroll-shell scrollbar-fade geist-scrollbar relative flex-1 overflow-auto px-2.5 py-2"
           onPointerEnter={(event) => {
             if (handleConfigListPointerReentry(event)) {
               return;
             }
             clearSettledConfigRenderId();
-            floating.handleListPointerEnter(event);
-          }}
-          onPointerMove={(event) => {
-            if (handleConfigListPointerReentry(event)) {
-              return;
-            }
-            clearSettledConfigRenderId();
-            floating.handleListPointerMove(event);
+            interaction.handleListPointerEnter();
           }}
           onPointerLeave={() => {
             handleConfigListPointerLeave();
-            floating.handleListMouseLeave();
+            interaction.handleListPointerLeave();
           }}
-          onScroll={floating.handleListScroll}
         >
-          <div
-            ref={floating.floatingCardMotionRef}
-            aria-hidden
-            className={cn(
-              "pointer-events-none !absolute left-0 top-0 origin-top-left transition-opacity duration-120 ease-linear",
-              floatingDragPreviewStyle ? "z-30" : "z-0",
-              floating.floatingVisible ? "opacity-100" : "opacity-0"
-            )}
-          >
-            <div
-              className={cn(
-                "h-full w-full",
-                floatingDragPreviewStyle && "will-change-transform"
-              )}
-              style={floatingDragPreviewStyle}
-            >
-              <div
-                ref={floating.floatingCardSurfaceRef}
-                data-selected={floating.cardTargetConfigId === selectedRenderId ? "true" : "false"}
-                className="floating-list-card h-full w-full transition-[box-shadow] duration-320 ease-[cubic-bezier(0.16,1,0.3,1)]"
-              />
-            </div>
-          </div>
-          <div className="glass-stagger">
-          {showRecentItems && (
-            <div className="space-y-1.5">
-              <div className="flex items-center gap-1.5 px-3 py-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                <Clock className="size-3.5" />
-                <span>{recentlyUsedLabel}</span>
-              </div>
-              {previewRecentItems.map((item) => {
-                const renderId = createRecentConfigRenderId(item.key);
-                return (
+          <div>
+            {showRecentItems && (
+              <div className="space-y-1.5">
+                <div className="flex items-center gap-1.5 px-3 py-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                  <Clock className="size-3.5" />
+                  <span>{recentlyUsedLabel}</span>
+                </div>
+                {previewRecentItems.map((item) => {
+                  const renderId = createRecentConfigRenderId(item.key);
+                  return (
                 <div
                   key={`recent-${item.key}`}
                   ref={composeNodeRefs(
-                    floating.setConfigRowRef(renderId),
                     recentReorder.setItemRef(item.key, undefined),
                     recentMotion.setItemRef(item.key)
                   )}
@@ -1151,7 +1023,8 @@ export const PublishConfigPanel = memo(function PublishConfigPanel({
                     type="button"
                     aria-pressed={item.key === selectedConfigId}
                     className={cn(
-                      "flex w-full items-center gap-2.5 rounded-2xl border border-transparent bg-transparent py-2 pr-11 text-left shadow-none outline-none transition duration-300 hover:bg-muted/20 focus-visible:ring-2 focus-visible:ring-primary/30 focus-visible:ring-offset-1 focus-visible:ring-offset-background",
+                      "flex w-full items-center gap-2.5 rounded-lg border border-transparent bg-transparent py-2 pr-11 text-left shadow-none outline-none transition-colors duration-150 ease-geist hover:bg-accent focus-visible:ring-2 focus-visible:ring-interactive/30 focus-visible:ring-offset-1 focus-visible:ring-offset-background",
+                      selectedRenderId === renderId && "bg-accent",
                       recentDragEnabled ? "pl-10" : "pl-3"
                     )}
                     onClick={() => {
@@ -1164,25 +1037,25 @@ export const PublishConfigPanel = memo(function PublishConfigPanel({
                   >
                     <span
                       className={cn(
-                        "flex size-8 flex-shrink-0 items-center justify-center rounded-[14px] transition duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]",
+                        "flex size-8 flex-shrink-0 items-center justify-center rounded-md transition-colors duration-150 ease-geist",
                         selectedRenderId === renderId
-                          ? "scale-105 bg-primary/10 "
-                          : "bg-muted  group-hover:scale-105 group-hover:bg-primary/8"
+                          ? "bg-interactive/10"
+                          : "bg-muted group-hover:bg-interactive/10"
                       )}
                     >
                       <FileText
                         className={cn(
-                          "size-4 transition duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]",
+                          "size-4 transition-colors duration-150 ease-geist",
                           selectedRenderId === renderId
-                            ? "scale-110 text-primary "
-                            : "text-muted-foreground/60 group-hover:text-primary group-hover:"
+                            ? "text-interactive"
+                            : "text-muted-foreground group-hover:text-interactive"
                         )}
                       />
                     </span>
                     <div className="min-w-0 flex flex-1 items-center gap-2 overflow-hidden">
                       <span
                         className={cn(
-                          "truncate text-[13px] font-semibold tracking-tight transition-colors duration-300",
+                          "truncate text-[13px] font-semibold tracking-tight transition-colors duration-150 ease-geist",
                           selectedRenderId === renderId
                             ? "text-foreground"
                             : "text-foreground/78"
@@ -1193,7 +1066,7 @@ export const PublishConfigPanel = memo(function PublishConfigPanel({
                       {item.description ? (
                         <>
                           <span className="flex-shrink-0 text-muted-foreground/30">·</span>
-                          <span className="truncate text-[11px] text-[hsl(var(--text-fine))]">
+                          <span className="truncate text-[11px] text-muted-foreground">
                             {item.description}
                           </span>
                         </>
@@ -1228,10 +1101,10 @@ export const PublishConfigPanel = memo(function PublishConfigPanel({
                     />
                   </div>
                 </div>
-                );
-              })}
-            </div>
-          )}
+                  );
+                })}
+              </div>
+            )}
 
           <ConfigGroup
             title={profileGroupLabel}
@@ -1245,7 +1118,7 @@ export const PublishConfigPanel = memo(function PublishConfigPanel({
             emptyState={
               shouldShowProjectProfilesLoadingState ? (
                 <span className="flex items-center gap-2">
-                  <span className="inline-block animate-spin text-primary/80">
+                  <span className="inline-block animate-spin text-interactive/80">
                     <Loader2 className="size-3.5" />
                   </span>
                   {projectProfilesRefreshingLabel}
@@ -1260,7 +1133,6 @@ export const PublishConfigPanel = memo(function PublishConfigPanel({
                 <div
                   key={`pubxml-${name}`}
                   ref={composeNodeRefs(
-                    floating.setConfigRowRef(configKey),
                     projectProfileReorder.setItemRef(name, undefined),
                     projectMotion.setItemRef(name)
                   )}
@@ -1311,7 +1183,7 @@ export const PublishConfigPanel = memo(function PublishConfigPanel({
                     data-selected={isPubxmlSelected}
                     aria-pressed={isPubxmlSelected}
                     className={cn(
-                      "flex w-full items-center gap-2.5 rounded-2xl border border-transparent bg-transparent py-2 pr-11 text-left shadow-none outline-none transition duration-300 hover:bg-muted/20 focus-visible:ring-2 focus-visible:ring-primary/30 focus-visible:ring-offset-1 focus-visible:ring-offset-background",
+                      "flex w-full items-center gap-2.5 rounded-lg border border-transparent bg-transparent py-2 pr-11 text-left shadow-none outline-none transition-colors duration-150 ease-geist hover:bg-accent focus-visible:ring-2 focus-visible:ring-interactive/30 focus-visible:ring-offset-1 focus-visible:ring-offset-background",
                       projectProfileDragEnabled ? "pl-10" : "pl-3"
                     )}
                     onClick={() => {
@@ -1324,25 +1196,25 @@ export const PublishConfigPanel = memo(function PublishConfigPanel({
                   >
                     <span
                       className={cn(
-                        "flex size-8 flex-shrink-0 items-center justify-center rounded-[14px] transition duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]",
+                        "flex size-8 flex-shrink-0 items-center justify-center rounded-md transition-colors duration-150 ease-geist",
                         isPubxmlSelected
-                          ? "scale-105 bg-primary/10 "
-                          : "bg-muted  group-hover:scale-105 group-hover:bg-primary/8"
+                          ? "bg-interactive/10"
+                          : "bg-muted group-hover:bg-interactive/10"
                       )}
                     >
                       <FileText
                         className={cn(
-                          "size-4 transition duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]",
+                          "size-4 transition-colors duration-150 ease-geist",
                           isPubxmlSelected
-                            ? "scale-110 text-primary "
-                            : "text-muted-foreground/60 group-hover:text-primary group-hover:"
+                            ? "text-interactive"
+                            : "text-muted-foreground group-hover:text-interactive"
                         )}
                       />
                     </span>
                     <div className="min-w-0 flex flex-1 items-center gap-2 overflow-hidden">
                       <span
                         className={cn(
-                          "truncate text-[13px] font-semibold tracking-tight transition-colors duration-300",
+                          "truncate text-[13px] font-semibold tracking-tight transition-colors duration-150 ease-geist",
                           isPubxmlSelected ? "text-foreground" : "text-foreground/78"
                         )}
                       >
@@ -1426,7 +1298,6 @@ export const PublishConfigPanel = memo(function PublishConfigPanel({
                     interaction.handleMenuOpenChange(configKey, open);
                   }}
                   rowRef={composeNodeRefs(
-                    floating.setConfigRowRef(configKey),
                     customProfileReorder.setItemRef(profile.name, {
                       groupKey: group.groupKey,
                     }),
@@ -1456,7 +1327,7 @@ export const PublishConfigPanel = memo(function PublishConfigPanel({
           ))}
           {shouldShowCustomProfilesLoadingState ? (
             <div className="flex items-center gap-2 px-3 py-4 text-xs text-muted-foreground">
-              <span className="inline-block animate-spin text-primary/80">
+              <span className="inline-block animate-spin text-interactive/80">
                 <Loader2 className="size-3.5" />
               </span>
               <span>{customProfilesRefreshingLabel}</span>
@@ -1473,7 +1344,6 @@ export const PublishConfigPanel = memo(function PublishConfigPanel({
     },
     [
       deleteConfigLabel,
-      draggingFloatingConfig,
       favoriteSet,
       favoriteConfigLabel,
       handleConfigListPointerLeave,
@@ -1517,6 +1387,8 @@ export const PublishConfigPanel = memo(function PublishConfigPanel({
       unfavoriteConfigLabel,
       handleCopyProjectProfileToCustom,
       handleViewProjectProfile,
+      interaction.handleListPointerEnter,
+      interaction.handleListPointerLeave,
       interaction.handleMenuOpenChange,
       interaction.handleRowBlur,
       interaction.handleRowFocus,
@@ -1539,8 +1411,6 @@ export const PublishConfigPanel = memo(function PublishConfigPanel({
     ]
   );
 
-  const fallbackConfigList = renderConfigList(fallbackFloatingBindings);
-
   return (
     <div className="flex h-full flex-col">
       {/* Header with action buttons */}
@@ -1562,6 +1432,7 @@ export const PublishConfigPanel = memo(function PublishConfigPanel({
                 onExpandRepo();
               }}
               title={t.expandRepoList || "展开仓库列表"}
+              aria-label={t.expandRepoList || "展开仓库列表"}
               data-tauri-no-drag
             >
               <Folder className="size-4" />
@@ -1577,6 +1448,7 @@ export const PublishConfigPanel = memo(function PublishConfigPanel({
                 onCollapse();
               }}
               title={t.collapsePanel || "收起面板"}
+              aria-label={t.collapsePanel || "收起面板"}
               data-tauri-no-drag
             >
               <CollapseIcon />
@@ -1591,19 +1463,19 @@ export const PublishConfigPanel = memo(function PublishConfigPanel({
             <DropdownMenuTrigger asChild>
               <button
                 type="button"
-                className="glass-surface flex items-center gap-1.5 rounded-full px-3 py-1 text-sm font-normal transition duration-300 hover:bg-accent"
+                className="flex items-center gap-1.5 rounded-full border border-border bg-background px-3 py-1 text-sm font-normal transition-colors duration-150 ease-geist hover:bg-accent"
                 aria-haspopup="menu"
                 aria-expanded={groupFilterOpen}
               >
                 <span className="text-foreground/80">
                   {selectedGroupFilterOption?.label || allConfigsLabel}
                 </span>
-                <span className="flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-primary/12 px-1 text-[10px] font-bold leading-none text-primary">
+                <span className="flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-interactive/10 px-1 text-[10px] font-bold leading-none text-interactive">
                   {visibleConfigCount}
                 </span>
                 <ChevronDown
                   className={cn(
-                    "size-3 text-muted-foreground/60 transition-transform duration-300",
+                    "size-3 text-muted-foreground/60 transition-transform duration-150 ease-geist",
                     groupFilterOpen ? "" : "-rotate-90"
                   )}
                 />
@@ -1619,12 +1491,12 @@ export const PublishConfigPanel = memo(function PublishConfigPanel({
               >
                 <div className="flex min-w-0 flex-1 items-center gap-2">
                   <span className="truncate">{allConfigsLabel}</span>
-                  <span className="flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-primary/12 px-1 text-[10px] font-bold leading-none text-primary">
+                  <span className="flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-interactive/10 px-1 text-[10px] font-bold leading-none text-interactive">
                     {groupFilterOptions[0]?.count ?? 0}
                   </span>
                 </div>
                 {groupFilterValue === ALL_GROUP_FILTER ? (
-                  <Check className="size-3.5 text-primary" />
+                  <Check className="size-3.5 text-interactive" />
                 ) : null}
               </DropdownMenuItem>
               {groupFilterOptions.length > 1 ? <DropdownMenuSeparator /> : null}
@@ -1639,12 +1511,12 @@ export const PublishConfigPanel = memo(function PublishConfigPanel({
                 >
                   <div className="flex min-w-0 flex-1 items-center gap-2">
                     <span className="truncate">{option.label}</span>
-                    <span className="flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-primary/12 px-1 text-[10px] font-bold leading-none text-primary">
+                    <span className="flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-interactive/10 px-1 text-[10px] font-bold leading-none text-interactive">
                       {option.count}
                     </span>
                   </div>
                   {groupFilterValue === option.value ? (
-                    <Check className="size-3.5 text-primary" />
+                    <Check className="size-3.5 text-interactive" />
                   ) : null}
                 </DropdownMenuItem>
               ))}
@@ -1662,14 +1534,13 @@ export const PublishConfigPanel = memo(function PublishConfigPanel({
               title={t.newConfig || "新建配置"}
               data-tauri-no-drag
             >
-              <Plus className="size-3.5 text-muted-foreground transition-transform duration-300 hover:rotate-90" />
+              <Plus className="size-3.5 text-muted-foreground transition-transform duration-150 ease-geist hover:rotate-90" />
             </button>
             <button
               type="button"
               className={cn(
                 listActionButtonClass,
-                showReorderControls &&
-                  "bg-accent  dark:bg-white/[0.06] "
+                showReorderControls && "bg-accent"
               )}
               onClick={(e) => {
                 e.stopPropagation();
@@ -1682,9 +1553,9 @@ export const PublishConfigPanel = memo(function PublishConfigPanel({
             >
               <ArrowUpDown
                 className={cn(
-                  "size-3.5 transition-[transform,color] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]",
+                  "size-3.5 transition-[transform,color] duration-150 ease-geist",
                   showReorderControls
-                    ? "rotate-180 hover:rotate-[360deg] text-primary"
+                    ? "rotate-180 hover:rotate-[360deg] text-interactive"
                     : "rotate-0 hover:rotate-180 text-muted-foreground"
                 )}
               />
@@ -1701,7 +1572,7 @@ export const PublishConfigPanel = memo(function PublishConfigPanel({
             >
               <RefreshCw
                 className={cn(
-                  "size-3.5 text-muted-foreground transition duration-300 hover:rotate-180",
+                  "size-3.5 text-muted-foreground transition-transform duration-150 ease-geist hover:rotate-180",
                   isAnyRefreshing && "animate-spin hover:rotate-0"
                 )}
               />
@@ -1718,44 +1589,26 @@ export const PublishConfigPanel = memo(function PublishConfigPanel({
               aria-label={configManagementLabel}
               data-tauri-no-drag
             >
-              <SlidersHorizontal className="size-3.5 text-muted-foreground transition duration-300 hover:rotate-180" />
+              <SlidersHorizontal className="size-3.5 text-muted-foreground transition-transform duration-150 ease-geist hover:rotate-180" />
             </button>
           </div>
         </div>
 
         {/* Search */}
         <div className="px-3 py-1.5">
-          <div className="group/search glass-input relative rounded-xl">
-            <Search className="absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground/50 transition-colors duration-300 group-focus-within/search:text-primary" />
+          <div className="group/search surface-input relative rounded-md">
+            <Search className="absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground/50 transition-colors duration-150 ease-geist group-focus-within/search:text-interactive" />
             <Input
               placeholder={t.searchConfig || "搜索配置"}
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
+              aria-label={t.searchConfig || "搜索配置"}
               className="h-8 border-none bg-transparent pl-8 text-sm shadow-none focus-visible:ring-0"
             />
           </div>
         </div>
 
-        {!floatingEnhancerEnabled ? (
-          fallbackConfigList
-        ) : (
-          <Suspense fallback={fallbackConfigList}>
-            <PublishConfigPanelFloatingLayer
-              filteredConfigIds={previewConfigIds}
-              targetConfigId={floatingTargetConfigId}
-              restingTargetConfigId={restingTargetConfigId}
-              selectedConfigId={selectedRenderId}
-              snapTargetConfigId={settledConfigRenderId}
-              draggingConfigId={draggingFloatingConfig?.renderId ?? null}
-              freezeFloating={freezeFloating}
-              onListPointerEnter={interaction.handleListPointerEnter}
-              onListPointerLeave={interaction.handleListPointerLeave}
-              onPointerConfigChange={interaction.handlePointerItemChange}
-            >
-              {renderConfigList}
-            </PublishConfigPanelFloatingLayer>
-          </Suspense>
-        )}
+        {configListContent}
       </div>
 
       <ProjectPublishProfileViewerDialog
