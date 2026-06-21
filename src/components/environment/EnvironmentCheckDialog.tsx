@@ -302,7 +302,7 @@ export function EnvironmentCheckContent({
           )}
         >
           <div className="space-y-1 flex-1 min-w-0">
-            <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider px-1">
+            <div className="text-label-12 font-semibold text-muted-foreground uppercase tracking-[0.15em] px-1">
               {translations.environment?.status || "环境状态"}
             </div>
             <div className="flex flex-wrap items-center gap-2">
@@ -310,7 +310,7 @@ export function EnvironmentCheckContent({
                 <>
                   <span
                     className={cn(
-                      "flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold border shadow-none",
+                      "flex items-center gap-1.5 px-2.5 py-1 rounded-full text-label-12 font-semibold border shadow-none",
                       grouped.critical.length > 0
                         ? "bg-destructive/10 text-destructive border-destructive/20"
                         : grouped.warning.length > 0
@@ -321,12 +321,12 @@ export function EnvironmentCheckContent({
                     {statusBadge?.icon}
                     {statusBadge?.text}
                   </span>
-                  <span className="text-xs text-muted-foreground self-center">
+                  <span className="text-label-12 text-muted-foreground self-center">
                     {result.checked_at}
                   </span>
                 </>
               ) : (
-                <span className="text-xs text-muted-foreground">
+                <span className="text-label-12 text-muted-foreground">
                   {translations.environment?.unknown || "未检查"}
                 </span>
               )}
@@ -336,7 +336,7 @@ export function EnvironmentCheckContent({
             variant="outline"
             onClick={handleCheck}
             disabled={checking || runningFix}
-            className={cn(outlineButtonBase, "text-[12px] font-bold shrink-0 flex items-center gap-1.5 h-8 px-4")}
+            className={cn(outlineButtonBase, "text-button-12 font-semibold shrink-0 flex items-center gap-1.5 h-8 px-4")}
           >
             {checking ? (
               <>
@@ -351,7 +351,7 @@ export function EnvironmentCheckContent({
 
         {/* 2. 检查范围 */}
         <div className={cn(sectionTile, "p-5 space-y-3")}>
-          <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider block mb-1">
+          <Label className="text-label-12 font-semibold text-muted-foreground uppercase tracking-[0.15em] block mb-1">
             {translations.environment?.scope || "检查范围"}
           </Label>
           <div className="grid grid-cols-2 gap-3">
@@ -371,8 +371,8 @@ export function EnvironmentCheckContent({
                   )}
                 >
                   <div className="space-y-0.5 pr-2">
-                    <div className="text-sm font-semibold tracking-[-0.224px] text-foreground">{p.label}</div>
-                    <div className="text-xs text-muted-foreground line-clamp-1">
+                    <div className="text-heading-14 font-semibold text-foreground">{p.label}</div>
+                    <div className="text-label-12 text-muted-foreground line-clamp-1">
                       {p.description}
                     </div>
                   </div>
@@ -388,7 +388,7 @@ export function EnvironmentCheckContent({
 
         {/* 错误提示 */}
         {error && (
-          <div className="border border-destructive/20 bg-destructive/5 text-sm text-destructive rounded-md p-4">
+          <div className="border border-destructive/20 bg-destructive/5 text-copy-14 text-destructive rounded-md p-4">
             {error}
           </div>
         )}
@@ -399,7 +399,7 @@ export function EnvironmentCheckContent({
             {/* 工具状态 */}
             <div className={cn(sectionTile, "overflow-hidden")}>
               <div className="px-5 py-4 border-b border-border">
-                <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider block">
+                <Label className="text-label-12 font-semibold text-muted-foreground uppercase tracking-[0.15em] block">
                   {translations.environment?.providers || "工具状态"}
                 </Label>
               </div>
@@ -407,7 +407,7 @@ export function EnvironmentCheckContent({
                 {result.providers.map((provider) => (
                   <div
                     key={provider.provider_id}
-                    className="flex items-center justify-between gap-4 p-4 hover:bg-accent transition-colors duration-150 ease-geist text-sm"
+                    className="flex items-center justify-between gap-4 p-4 hover:bg-accent transition-colors duration-150 ease-geist text-label-14"
                   >
                     <div className="flex min-w-0 items-center gap-2.5">
                       <span className="sr-only">
@@ -422,12 +422,12 @@ export function EnvironmentCheckContent({
                           provider.installed ? "bg-success" : "bg-destructive"
                         )}
                       />
-                      <span className="font-semibold text-[14px] text-foreground">{provider.provider_id}</span>
-                      <span className="text-[10px] text-muted-foreground px-1.5 py-0.5 rounded bg-muted font-mono font-semibold border border-border">
+                      <span className="font-semibold text-label-14 text-foreground">{provider.provider_id}</span>
+                      <span className="text-label-12 text-muted-foreground px-1.5 py-0.5 rounded bg-muted font-mono font-semibold border border-border">
                         {provider.version || "unknown"}
                       </span>
                     </div>
-                    <div className="text-[11px] text-muted-foreground font-mono truncate max-w-[280px] sm:max-w-[360px] bg-muted px-2 py-0.5 rounded border border-border font-semibold">
+                    <div className="text-label-12 text-muted-foreground font-mono truncate max-w-[280px] sm:max-w-[360px] bg-muted px-2 py-0.5 rounded border border-border font-semibold">
                       {provider.path || ""}
                     </div>
                   </div>
@@ -438,13 +438,13 @@ export function EnvironmentCheckContent({
             {/* 发现的问题 */}
             <div className={cn(sectionTile, "overflow-hidden")}>
               <div className="px-5 py-4 border-b border-border">
-                <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider block">
+                <Label className="text-label-12 font-semibold text-muted-foreground uppercase tracking-[0.15em] block">
                   {translations.environment?.issues || "发现的问题"}
                 </Label>
               </div>
               <div className="p-5">
                 {issues.length === 0 ? (
-                  <div className="border border-border bg-muted p-4 text-sm text-muted-foreground text-center rounded-md">
+                  <div className="border border-border bg-muted p-4 text-label-14 text-muted-foreground text-center rounded-md">
                     {translations.environment?.noIssues || "未发现问题"}
                   </div>
                 ) : (
@@ -477,12 +477,12 @@ export function EnvironmentCheckContent({
 
                             <div className="space-y-1.5 flex-1 min-w-0">
                               <div className="flex flex-wrap items-center gap-2">
-                                <span className="text-sm font-semibold tracking-tight text-foreground">
+                                <span className="text-label-14 font-semibold text-foreground">
                                   {issue.description}
                                 </span>
                                 <span
                                   className={cn(
-                                    "text-[10px] font-bold px-1.5 py-0.5 rounded-full uppercase tracking-wider shrink-0",
+                                    "text-label-12 font-semibold px-1.5 py-0.5 rounded-full uppercase tracking-[0.15em] shrink-0",
                                     isCritical
                                       ? "bg-destructive/10 text-destructive"
                                       : isWarning
@@ -494,7 +494,7 @@ export function EnvironmentCheckContent({
                                 </span>
                               </div>
 
-                              <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground font-mono">
+                              <div className="flex flex-wrap gap-x-4 gap-y-1 text-label-12 text-muted-foreground font-mono">
                                 <div>
                                   <span className="opacity-60">provider:</span>{" "}
                                   <span className="text-foreground font-semibold">
@@ -533,7 +533,7 @@ export function EnvironmentCheckContent({
                                   onClick={() => handleApplyFix(fix)}
                                   disabled={checking || runningFix}
                                   className={cn(
-                                    "transition-colors duration-150 ease-geist text-xs h-8 px-3.5 font-bold rounded-md flex items-center gap-1.5 shrink-0 border",
+                                    "transition-colors duration-150 ease-geist text-button-12 h-8 px-3.5 font-semibold rounded-md flex items-center gap-1.5 shrink-0 border",
                                     fix.action_type === "run_command"
                                       ? "bg-primary border-primary text-primary-foreground hover:bg-primary/90"
                                       : outlineButtonBase
@@ -569,7 +569,7 @@ export function EnvironmentCheckContent({
                       <span className="size-2 rounded-full bg-warning/70" />
                       <span className="size-2 rounded-full bg-success/70" />
                     </div>
-                    <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider ml-1">
+                    <span className="text-label-12 font-semibold text-muted-foreground uppercase tracking-[0.15em] ml-1">
                       {translations.environment?.result || "执行结果"}
                     </span>
                   </div>
@@ -577,13 +577,13 @@ export function EnvironmentCheckContent({
                     size="sm"
                     variant="outline"
                     onClick={() => handleCopy(fixResultText)}
-                    className={cn(outlineButtonBase, "text-[11px] font-normal h-7 px-3.5 flex items-center gap-1 shrink-0")}
+                    className={cn(outlineButtonBase, "text-button-12 font-normal h-7 px-3.5 flex items-center gap-1 shrink-0")}
                   >
                     <Copy className="size-3 text-muted-foreground" />
                     <span>{translations.environment?.copied ? "复制" : "复制"}</span>
                   </Button>
                 </div>
-                <pre className="rounded-md border border-border bg-muted p-3 text-xs font-mono text-foreground/90 whitespace-pre-wrap max-h-56 overflow-auto geist-scrollbar">
+                <pre className="rounded-md border border-border bg-muted p-3 text-label-12 font-mono text-foreground/90 whitespace-pre-wrap max-h-56 overflow-auto geist-scrollbar">
                   {fixResultText}
                 </pre>
               </div>
@@ -612,14 +612,14 @@ export function EnvironmentCheckContent({
                 variant="outline"
                 onClick={() => setPendingRun(null)}
                 disabled={runningFix}
-                className={cn(outlineButtonBase, "text-[12px] font-normal h-9 px-4 shrink-0")}
+                className={cn(outlineButtonBase, "text-button-12 font-normal h-9 px-4 shrink-0")}
               >
                 <span>{translations.environment?.cancel || "取消"}</span>
               </Button>
               <Button
                 onClick={confirmRun}
                 disabled={runningFix}
-                className="rounded-md bg-primary border border-primary text-primary-foreground hover:bg-primary/90 transition-colors duration-150 ease-geist text-[12px] font-bold h-9 px-4 shrink-0 flex items-center justify-center"
+                className="rounded-md bg-primary border border-primary text-primary-foreground hover:bg-primary/90 transition-colors duration-150 ease-geist text-button-12 font-semibold h-9 px-4 shrink-0 flex items-center justify-center"
               >
                 {runningFix ? (
                   <>
@@ -634,10 +634,10 @@ export function EnvironmentCheckContent({
           }
         >
           <div className={cn(sectionTile, "p-4 space-y-3 mt-2")}>
-            <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider block mb-1">
+            <Label className="text-label-12 font-semibold text-muted-foreground uppercase tracking-[0.15em] block mb-1">
               {translations.environment?.commandPreview || "命令预览"}
             </Label>
-            <pre className="rounded-md border border-border bg-muted p-3 text-xs font-mono whitespace-pre-wrap max-h-40 overflow-auto text-foreground/90">
+            <pre className="rounded-md border border-border bg-muted p-3 text-label-12 font-mono whitespace-pre-wrap max-h-40 overflow-auto text-foreground/90">
               {pendingRun?.command || ""}
             </pre>
           </div>
@@ -672,7 +672,7 @@ export function EnvironmentCheckDialog({
             <Button
               variant="outline"
               onClick={() => onOpenChange(false)}
-              className="rounded-md border border-border bg-card text-sm font-bold text-foreground hover:bg-accent transition-colors duration-150 ease-geist h-9 px-5 shrink-0 flex items-center justify-center"
+              className="rounded-md border border-border bg-card text-button-14 font-semibold text-foreground hover:bg-accent transition-colors duration-150 ease-geist h-9 px-5 shrink-0 flex items-center justify-center"
             >
               <span>{translations.environment?.close || "关闭"}</span>
             </Button>

@@ -34,13 +34,13 @@ export function SectionShell({
         <Icon className="size-3.5" />
       </span>
       <div className="min-w-0 flex-1 text-left">
-        <Heading className="text-sm font-semibold text-foreground">{title}</Heading>
-        <CardDescription className="mt-0.5 text-[11px] leading-4 text-[hsl(var(--text-fine))]">
+        <Heading className="text-heading-14 font-semibold text-foreground">{title}</Heading>
+        <CardDescription className="mt-0.5 text-label-12 text-[hsl(var(--text-fine))]">
           {description}
         </CardDescription>
       </div>
       {badge ? (
-        <span className="rounded-full bg-interactive/10 px-2 py-0.5 text-[10px] font-semibold text-interactive">
+        <span className="rounded-full bg-interactive/10 px-2 py-0.5 text-label-12 font-semibold text-interactive">
           {badge}
         </span>
       ) : null}

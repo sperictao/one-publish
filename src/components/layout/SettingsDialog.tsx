@@ -143,7 +143,7 @@ function SettingsSectionFallback({ label }: { label: string }) {
     <div className="space-y-3">
       <div className={cn("h-10", GEIST_CARD)} />
       <div className={cn("h-24", GEIST_CARD)} />
-      <p className="text-xs text-muted-foreground">{label}</p>
+      <p className="text-label-12 text-muted-foreground">{label}</p>
     </div>
   );
 }
@@ -169,10 +169,10 @@ function SettingsSwitchRow({
         <div className="flex items-center gap-3 min-w-0">
           <Icon className="size-[18px] flex-shrink-0 text-muted-foreground" />
           <div className="space-y-0.5">
-            <Label className="cursor-pointer text-[14px] font-semibold tracking-[-0.224px] text-foreground" htmlFor={id}>
+            <Label className="cursor-pointer text-heading-14 font-semibold text-foreground" htmlFor={id}>
               {label}
             </Label>
-            <p className="text-[12px] leading-[1.4] tracking-[-0.12px] text-muted-foreground">
+            <p className="text-label-12 text-muted-foreground">
               {description}
             </p>
           </div>
@@ -224,10 +224,10 @@ export const GeneralSettingsSection = memo(function GeneralSettingsSection({
         {/* 界面语言 Row */}
         <div className={cn("flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4", GEIST_ROW_HOVER)}>
           <div className="space-y-0.5">
-            <Label htmlFor="settings-language" className="text-[14px] font-semibold tracking-[-0.224px] text-foreground">
+            <Label htmlFor="settings-language" className="text-heading-14 font-semibold text-foreground">
               {translations.language?.label || "界面语言"}
             </Label>
-            <p className="text-[12px] leading-[1.4] tracking-[-0.12px] text-muted-foreground">
+            <p className="text-label-12 text-muted-foreground">
               {translations.language?.placeholder || "选择应用界面的显示语言"}
             </p>
           </div>
@@ -253,10 +253,10 @@ export const GeneralSettingsSection = memo(function GeneralSettingsSection({
         {/* 执行历史保留上限 Row */}
         <div className={cn("flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4", GEIST_ROW_HOVER)}>
           <div className="space-y-0.5">
-            <Label htmlFor="settings-execution-history" className="text-[14px] font-semibold tracking-[-0.224px] text-foreground">
+            <Label htmlFor="settings-execution-history" className="text-heading-14 font-semibold text-foreground">
               {translations.settings?.general?.executionHistoryLimitLabel || "执行历史保留上限"}
             </Label>
-            <p className="text-[12px] leading-[1.4] tracking-[-0.12px] text-muted-foreground">
+            <p className="text-label-12 text-muted-foreground">
               {translations.settings?.general?.executionHistoryLimitDescription || "可设置 5~200 条，超出范围会自动修正。"}
             </p>
           </div>
@@ -287,12 +287,12 @@ export const GeneralSettingsSection = memo(function GeneralSettingsSection({
           <div className="space-y-0.5">
             <Label
               htmlFor="settings-default-output-dir"
-              className="flex items-center gap-1.5 text-[14px] font-semibold tracking-[-0.224px] text-foreground"
+              className="flex items-center gap-1.5 text-heading-14 font-semibold text-foreground"
             >
               <FolderOpen className="size-4 text-muted-foreground" />
               {translations.outputDir?.label || "默认发布目录"}
             </Label>
-            <p className="text-[12px] leading-[1.4] tracking-[-0.12px] text-muted-foreground">
+            <p className="text-label-12 text-muted-foreground">
               {translations.outputDir?.support || "支持相对路径（如 ./publish）或绝对路径"}
             </p>
           </div>
@@ -399,7 +399,7 @@ export const AppearanceSettingsSection = memo(function AppearanceSettingsSection
       {/* 主题选择卡片 */}
       <div className={cn(GEIST_CARD_PAD, "p-6")}>
         <div className="flex items-center justify-between mb-4">
-          <Label htmlFor="settings-theme" className="text-[14px] font-semibold tracking-[-0.224px] text-foreground">
+          <Label htmlFor="settings-theme" className="text-heading-14 font-semibold text-foreground">
             {translations.theme?.label || "外观主题"}
           </Label>
           <select
@@ -451,7 +451,7 @@ export const AppearanceSettingsSection = memo(function AppearanceSettingsSection
                 />
               </div>
             </div>
-            <span className="text-[12px] font-semibold text-foreground">
+            <span className="text-label-12 font-semibold text-foreground">
               {translations.theme?.auto || "跟随系统"}
             </span>
           </button>
@@ -472,7 +472,7 @@ export const AppearanceSettingsSection = memo(function AppearanceSettingsSection
             )}
             {/* 亮色主题微缩图 */}
             <ThemePreviewMock theme="light" previewColor={lightPreviewColor} />
-            <span className="text-[12px] font-semibold text-foreground">
+            <span className="text-label-12 font-semibold text-foreground">
               {translations.theme?.light || "亮色"}
             </span>
           </button>
@@ -493,7 +493,7 @@ export const AppearanceSettingsSection = memo(function AppearanceSettingsSection
             )}
             {/* 暗色主题微缩图 */}
             <ThemePreviewMock theme="dark" previewColor={darkPreviewColor} />
-            <span className="text-[12px] font-semibold text-foreground">
+            <span className="text-label-12 font-semibold text-foreground">
               {translations.theme?.dark || "暗色"}
             </span>
           </button>
@@ -503,10 +503,10 @@ export const AppearanceSettingsSection = memo(function AppearanceSettingsSection
       {/* 强调色选择卡片 */}
       <div className={cn(GEIST_CARD_PAD, "p-6")}>
         <div className="space-y-0.5 mb-4">
-          <Label className="text-[14px] font-semibold tracking-[-0.224px] text-foreground">
+          <Label className="text-heading-14 font-semibold text-foreground">
             {appearanceT.accentColorTitle || "强调色 (Accent Color)"}
           </Label>
-          <p className="text-[12px] leading-[1.4] tracking-[-0.12px] text-muted-foreground">
+          <p className="text-label-12 text-muted-foreground">
             {appearanceT.accentColorDescription || "选择应用在聚焦框、激活项、链接和高亮状态下的系统强调色。"}
           </p>
         </div>
@@ -540,7 +540,7 @@ export const AppearanceSettingsSection = memo(function AppearanceSettingsSection
         </div>
       </div>
 
-      <p className="text-[12px] leading-[1.4] tracking-[-0.12px] text-muted-foreground px-1">
+      <p className="text-label-12 text-muted-foreground px-1">
         {translations.settings?.sections?.appearanceDescription ||
           "主题与强调色切换会立即作用到当前窗口与后续打开的设置面板。"}
       </p>
@@ -566,10 +566,10 @@ export const ShortcutsSettingsSection = memo(function ShortcutsSettingsSection({
           <div key={shortcut.key}>
             {index > 0 && <div className={cn(GEIST_DIVIDER, "mx-4")} />}
             <div className={cn("flex items-center justify-between gap-4 p-4", GEIST_ROW_HOVER)}>
-              <span className="text-[14px] font-semibold tracking-[-0.224px] text-foreground">
+              <span className="text-heading-14 font-semibold text-foreground">
                 {shortcut.description}
               </span>
-              <kbd className={cn(GEIST_KBD, "px-2.5 py-0.5 text-[11px] font-bold tracking-tight text-foreground font-sans shrink-0")}>
+              <kbd className={cn(GEIST_KBD, "px-2.5 py-0.5 text-label-12 font-semibold text-foreground font-sans shrink-0")}>
                 {shortcut.key}
               </kbd>
             </div>
@@ -610,12 +610,12 @@ export const UpdaterProgressBar = memo(function UpdaterProgressBar({
     <div className={cn("space-y-3 p-4 transition-colors duration-150 ease-geist", GEIST_CODE_BG, "rounded-md")}>
       <div className="flex items-start justify-between gap-3">
         <div className="space-y-1">
-          <div className="text-[14px] font-semibold tracking-[-0.2px] text-foreground">
+          <div className="text-heading-14 font-semibold text-foreground">
             {downloadProgress.stage === "installing"
               ? translations.version?.installing || "正在安装更新..."
               : translations.version?.downloading || "正在下载更新..."}
           </div>
-          <div className="text-[12px] tracking-[-0.1px] font-normal text-muted-foreground">
+          <div className="text-label-12 font-normal text-muted-foreground">
             {downloadProgress.stage === "retrying"
               ? formatMessage(
                   translations.version?.retrying ||
@@ -638,7 +638,7 @@ export const UpdaterProgressBar = memo(function UpdaterProgressBar({
           </div>
         </div>
         {downloadProgress.percent !== null && (
-          <div className={cn("text-[13px] font-bold tabular-nums font-mono tracking-tight text-foreground px-2 py-0.5 rounded-sm", GEIST_INPUT)}>
+          <div className={cn("text-label-13 font-semibold tabular-nums font-mono text-foreground px-2 py-0.5 rounded-sm", GEIST_INPUT)}>
             {Math.round(downloadProgress.percent)}%
           </div>
         )}
@@ -946,7 +946,7 @@ export function SettingsDialog({
     const lastCheckedAt = new Date().toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" });
 
     const actionButtonBase =
-      "h-8 px-3 rounded-md text-[12px] font-normal text-foreground transition-colors duration-150 ease-geist shrink-0 flex items-center gap-1.5";
+      "h-8 px-3 rounded-md text-button-12 font-normal text-foreground transition-colors duration-150 ease-geist shrink-0 flex items-center gap-1.5";
 
     return (
       <div className="space-y-6">
@@ -955,14 +955,14 @@ export function SettingsDialog({
           {/* Brand Row */}
           <div className={cn("flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4", GEIST_ROW_HOVER)}>
             <div className="space-y-0.5 min-w-0">
-              <p className="text-[14px] font-semibold tracking-[-0.224px] text-foreground">
+              <p className="text-heading-14 font-semibold text-foreground">
                 OnePublish
               </p>
-              <p className="text-[12px] leading-[1.4] tracking-[-0.12px] text-muted-foreground">
+              <p className="text-label-12 text-muted-foreground">
                 {versionT.productDescription || "跨平台 .NET 自动化发布与签名客户端"}
               </p>
             </div>
-            <span className={cn("inline-flex items-center rounded-sm px-2 py-0.5 text-[11px] font-semibold text-muted-foreground font-mono shrink-0", GEIST_INPUT)}>
+            <span className={cn("inline-flex items-center rounded-sm px-2 py-0.5 text-label-12 font-semibold text-muted-foreground font-mono shrink-0", GEIST_INPUT)}>
               {formatMessage(
                 versionT.current || "当前版本: v{}",
                 updateInfo?.currentVersion || currentVersion || "—"
@@ -979,10 +979,10 @@ export function SettingsDialog({
                 <>
                   <AlertTriangle className="size-[18px] flex-shrink-0 text-warning" />
                   <div className="space-y-0.5 min-w-0">
-                    <Label className="text-[14px] font-semibold tracking-[-0.224px] text-foreground">
+                    <Label className="text-heading-14 font-semibold text-foreground">
                       {versionT.updateChannelNotConfiguredTitle || "更新通道未配置"}
                     </Label>
-                    <p className="text-[12px] leading-[1.4] tracking-[-0.12px] text-muted-foreground">
+                    <p className="text-label-12 text-muted-foreground">
                       {versionT.updateChannelNotConfiguredDescription || "检测到本地更新配置未设置，无法建立版本检查。"}
                     </p>
                   </div>
@@ -991,10 +991,10 @@ export function SettingsDialog({
                 <>
                   <RefreshCw className="size-[18px] flex-shrink-0 text-success" />
                   <div className="space-y-0.5 min-w-0">
-                    <Label className="text-[14px] font-semibold tracking-[-0.224px] text-foreground">
+                    <Label className="text-heading-14 font-semibold text-foreground">
                       {versionT.updateReadyTitle || "新版本已准备就绪"}
                     </Label>
-                    <p className="text-[12px] leading-[1.4] tracking-[-0.12px] text-muted-foreground">
+                    <p className="text-label-12 text-muted-foreground">
                       {versionT.updateReadyDescription || "升级补丁已下载完成，请重启客户端应用更新。"}
                     </p>
                   </div>
@@ -1003,10 +1003,10 @@ export function SettingsDialog({
                 <>
                   <ArrowUpCircle className="size-[18px] flex-shrink-0 text-interactive" />
                   <div className="space-y-0.5 min-w-0">
-                    <Label className="text-[14px] font-semibold tracking-[-0.224px] text-foreground">
+                    <Label className="text-heading-14 font-semibold text-foreground">
                       {formatMessage(versionT.new || "有新版本: v{}", updateInfo.availableVersion || "")}
                     </Label>
-                    <p className="text-[12px] leading-[1.4] tracking-[-0.12px] text-muted-foreground">
+                    <p className="text-label-12 text-muted-foreground">
                       {versionT.updateAvailableDescription || "发现可用新版本。"}
                     </p>
                   </div>
@@ -1015,10 +1015,10 @@ export function SettingsDialog({
                 <>
                   <CheckCircle2 className="size-[18px] flex-shrink-0 text-success" />
                   <div className="space-y-0.5 min-w-0">
-                    <Label className="text-[14px] font-semibold tracking-[-0.224px] text-foreground">
+                    <Label className="text-heading-14 font-semibold text-foreground">
                       {versionT.upToDateTitle || "软件已是最新版本"}
                     </Label>
-                    <p className="text-[12px] leading-[1.4] tracking-[-0.12px] text-muted-foreground">
+                    <p className="text-label-12 text-muted-foreground">
                       {formatMessage(versionT.lastCheckedAt || "上次检查时间：{}。", lastCheckedAt)}
                     </p>
                   </div>
@@ -1055,7 +1055,7 @@ export function SettingsDialog({
                     <Button
                       variant="default"
                       size="sm"
-                      className="h-8 px-3 rounded-md bg-primary text-primary-foreground hover:bg-primary/90 transition-colors duration-150 ease-geist font-bold text-[12px] shrink-0 flex items-center gap-1.5"
+                      className="h-8 px-3 rounded-md bg-primary text-primary-foreground hover:bg-primary/90 transition-colors duration-150 ease-geist font-semibold text-button-12 shrink-0 flex items-center gap-1.5"
                       onClick={handleRestartApp}
                       disabled={isRestarting || isCheckingUpdate || isInstallingUpdate}
                     >
@@ -1083,7 +1083,7 @@ export function SettingsDialog({
                     <Button
                       variant="default"
                       size="sm"
-                      className="h-8 px-3 rounded-md bg-primary text-primary-foreground hover:bg-primary/90 transition-colors duration-150 ease-geist font-bold text-[12px] shrink-0 flex items-center gap-1.5"
+                      className="h-8 px-3 rounded-md bg-primary text-primary-foreground hover:bg-primary/90 transition-colors duration-150 ease-geist font-semibold text-button-12 shrink-0 flex items-center gap-1.5"
                       onClick={handleInstallUpdate}
                       disabled={isInstallingUpdate}
                     >
@@ -1098,7 +1098,7 @@ export function SettingsDialog({
 
           {updateInfo?.message && !shouldHideDefaultUpdaterConfigMessage && (
             <div className="p-4 border-t border-border bg-destructive/5">
-              <div className="rounded-md border border-destructive/20 bg-destructive/5 p-3 text-[12px] leading-relaxed text-destructive font-normal">
+              <div className="rounded-md border border-destructive/20 bg-destructive/5 p-3 text-label-12 text-destructive font-normal">
                 {updateInfo.message}
               </div>
             </div>
@@ -1119,12 +1119,12 @@ export function SettingsDialog({
           <div className={GEIST_CARD}>
             <div className={cn("flex items-center gap-3 p-4 border-b border-border", GEIST_ROW_HOVER)}>
               <Terminal className="size-[18px] text-muted-foreground" />
-              <span className="text-[14px] font-semibold tracking-[-0.224px] text-foreground">
+              <span className="text-heading-14 font-semibold text-foreground">
                 {translations.version?.notes || "发布日志"}
               </span>
             </div>
             <div className="p-4">
-              <div className={cn("max-h-56 overflow-y-auto geist-scrollbar text-[12px] leading-relaxed tracking-[-0.1px] text-muted-foreground whitespace-pre-wrap font-normal rounded-md p-3", GEIST_CODE_BG)}>
+              <div className={cn("max-h-56 overflow-y-auto geist-scrollbar text-label-12 text-muted-foreground whitespace-pre-wrap font-normal rounded-md p-3", GEIST_CODE_BG)}>
                 {updateInfo.releaseNotes}
               </div>
             </div>
@@ -1164,8 +1164,8 @@ export function SettingsDialog({
         }
         icon={undefined}
         headerClassName="border-b border-border bg-transparent"
-        titleClassName="text-[17px] font-semibold text-foreground"
-        descriptionClassName="text-[13px] text-muted-foreground"
+        titleClassName="text-heading-16 font-semibold text-foreground"
+        descriptionClassName="text-label-13 text-muted-foreground"
       >
         <div className="grid h-full min-h-0 gap-0 sm:grid-cols-[200px_minmax(0,1fr)]">
           {/* Sidebar */}
@@ -1199,7 +1199,7 @@ export function SettingsDialog({
                           : "text-muted-foreground"
                       )}
                     />
-                    <span className="truncate text-[13px] font-semibold tracking-[-0.12px]">
+                    <span className="truncate text-label-13 font-semibold">
                       {item.label}
                     </span>
                   </button>
@@ -1211,10 +1211,10 @@ export function SettingsDialog({
           {/* Content */}
           <section className="min-h-0 flex flex-col overflow-hidden bg-transparent">
             <div className="px-6 pb-2 pt-4">
-              <h2 className="text-[15px] font-semibold tracking-[-0.3px] text-foreground">
+              <h2 className="text-heading-16 font-semibold text-foreground">
                 {activeCategoryItem.label}
               </h2>
-              <p className="mt-0.5 text-[12px] leading-[1.4] tracking-[-0.1px] text-muted-foreground">
+              <p className="mt-0.5 text-label-12 text-muted-foreground">
                 {categoryDescriptions[activeCategory]}
               </p>
             </div>

@@ -104,7 +104,7 @@ export function RerunChecklistDialog({
         }
       >
         <div className="space-y-3">
-          <AppDialogInset className="space-y-2 text-sm">
+          <AppDialogInset className="space-y-2 text-copy-14">
             <div>
               <span className="text-muted-foreground">{rerunT.provider || "Provider:"}</span>{" "}
               {pendingRerunRecord?.providerId || rerunT.unknown || "(未知)"}
@@ -142,7 +142,7 @@ export function RerunChecklistDialog({
                     <span className="flex size-9 flex-shrink-0 items-center justify-center rounded-md bg-muted text-foreground/75">
                       <Icon className="size-4" />
                     </span>
-                    <Label htmlFor={item.id} className="text-sm leading-5">
+                    <Label htmlFor={item.id} className="text-label-14">
                       {item.label}
                     </Label>
                   </div>

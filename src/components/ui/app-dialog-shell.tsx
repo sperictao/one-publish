@@ -114,7 +114,7 @@ export function AppDialogShell({
               ) : null}
               <div className="min-w-0 flex-1">
                 <DialogTitle
-                  className={cn("text-[18px] font-semibold", titleClassName)}
+                  className={cn("text-heading-20 font-semibold", titleClassName)}
                 >
                   {title}
                 </DialogTitle>

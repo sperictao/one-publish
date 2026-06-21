@@ -38,7 +38,7 @@ export function ParameterEditor({ schema, parameters, onChange }: ParameterEdito
         return (
           <Card key={key}>
             <CardHeader className="pb-3">
-              <CardTitle className="text-base">{key}</CardTitle>
+              <CardTitle className="text-heading-16">{key}</CardTitle>
               <CardDescription>
                 Type: {definition.type}
               </CardDescription>

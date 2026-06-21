@@ -34,7 +34,7 @@ export function ReadonlyParameterFieldsSection({
   return (
     <SectionShell icon={icon} title={title} description={description}>
       {fields.length === 0 ? (
-        <div className="text-xs text-muted-foreground">{emptyLabel}</div>
+        <div className="text-label-12 text-muted-foreground">{emptyLabel}</div>
       ) : (
         <div className="space-y-3">
           {fields.map((field) => (

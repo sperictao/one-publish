@@ -126,11 +126,11 @@ export const PublishRunCard = memo(function PublishRunCard({
             appT.publishStatusRunningDetail ||
             "发布命令正在执行，日志会持续追加到下方输出区域。",
           badgeClassName:
-            "border-interactive/15 bg-interactive/10 text-interactive ",
+            "border-interactive/20 bg-interactive/10 text-interactive",
           panelClassName:
-            "border-interactive/15 bg-interactive/10",
+            "border-interactive/20 bg-card",
           iconWrapClassName:
-            "bg-interactive/10 text-interactive",
+            "bg-interactive/10 text-interactive ring-1 ring-interactive/15",
           iconClassName: "animate-spin",
           icon: Loader2,
         }
@@ -141,11 +141,11 @@ export const PublishRunCard = memo(function PublishRunCard({
               appT.publishStatusSuccessDetail ||
               "发布已完成，可直接打开输出目录查看产物。",
             badgeClassName:
-              "status-success ",
+              "status-success",
             panelClassName:
-              "border-success/15 bg-success/10",
+              "border-success/20 bg-card",
             iconWrapClassName:
-              "bg-success/10 text-success",
+              "bg-success/10 text-success ring-1 ring-success/15",
             iconClassName: "",
             icon: CheckCircle2,
           }
@@ -158,9 +158,9 @@ export const PublishRunCard = memo(function PublishRunCard({
               badgeClassName:
                 "status-cancelled",
               panelClassName:
-                "border-warning/20 bg-warning/10",
+                "border-warning/20 bg-card",
               iconWrapClassName:
-                "bg-warning/10 text-warning",
+                "bg-warning/10 text-warning ring-1 ring-warning/15",
               iconClassName: "",
               icon: Square,
             }
@@ -173,9 +173,9 @@ export const PublishRunCard = memo(function PublishRunCard({
                 badgeClassName:
                   "status-failed",
                 panelClassName:
-                  "border-destructive/20 bg-destructive/10",
+                  "border-destructive/20 bg-card",
                 iconWrapClassName:
-                  "bg-destructive/10 text-destructive",
+                  "bg-destructive/10 text-destructive ring-1 ring-destructive/15",
                 iconClassName: "",
                 icon: XCircle,
               }
@@ -184,12 +184,12 @@ export const PublishRunCard = memo(function PublishRunCard({
                 description:
                   appT.publishStatusIdleDetail ||
                   "命令与参数已准备完成，可以开始本次发布。",
-          badgeClassName:
-            "border-border bg-muted text-muted-foreground",
-          panelClassName:
-            "border-border bg-muted",
-          iconWrapClassName:
-            "bg-accent text-muted-foreground",
+                badgeClassName:
+                  "border-border bg-muted text-foreground",
+                panelClassName:
+                  "border-border bg-card",
+                iconWrapClassName:
+                  "bg-muted text-muted-foreground ring-1 ring-border",
                 iconClassName: "",
                 icon: Clock3,
               };
@@ -209,7 +209,7 @@ export const PublishRunCard = memo(function PublishRunCard({
       className="relative flex h-full min-h-[28rem] w-full min-w-0 max-w-full flex-col overflow-hidden lg:min-h-[calc(100vh-11rem)]"
     >
       <CardHeader className="pb-4">
-        <CardTitle headingLevel="h2" className="flex items-center gap-2 text-lg">
+        <CardTitle headingLevel="h2" className="flex items-center gap-2 text-heading-20">
           <Terminal className="size-5" />
           {appT.outputLogTitle || "执行发布"}
         </CardTitle>
@@ -219,10 +219,10 @@ export const PublishRunCard = memo(function PublishRunCard({
           <div className="min-w-0 space-y-3">
             {publishActions.publishCommand && (
               <div className="min-w-0 rounded-md border border-border bg-muted p-3" data-testid="publish-command-preview">
-                <div className="mb-2 text-xs text-muted-foreground">
+                <div className="mb-2 text-label-12 text-muted-foreground">
                   {publishActions.publishCommandLabel || "将执行的命令:"}
                 </div>
-                <code className="block text-xs font-mono break-all [overflow-wrap:anywhere]">
+                <code className="block text-label-12 font-mono break-all [overflow-wrap:anywhere]">
                   {publishActions.publishCommand}
                 </code>
               </div>
@@ -230,7 +230,11 @@ export const PublishRunCard = memo(function PublishRunCard({
             <div className="flex flex-col gap-2 sm:flex-row">
               <Button
                 data-testid="publish-execute-btn"
-                className="w-full sm:flex-1"
+                className={cn(
+                  "w-full text-primary-foreground sm:flex-1",
+                  publishActions.isPublishing &&
+                    "border border-interactive/20 bg-interactive/10 text-interactive shadow-none disabled:opacity-100"
+                )}
                 size="lg"
                 onClick={publishActions.onStartPublish}
                 disabled={
@@ -254,8 +258,9 @@ export const PublishRunCard = memo(function PublishRunCard({
               {publishActions.isPublishing && (
                 <Button
                   type="button"
-                  variant="destructive"
-                  className="w-full sm:w-auto"
+                  variant="outline"
+                  size="lg"
+                  className="w-full border-destructive/30 bg-destructive/5 text-destructive hover:bg-destructive/10 hover:text-destructive disabled:bg-destructive/5 disabled:text-destructive disabled:opacity-70 sm:w-auto sm:min-w-32"
                   onClick={publishActions.onCancelPublish}
                   disabled={publishActions.isCancellingPublish}
                 >
@@ -282,7 +287,7 @@ export const PublishRunCard = memo(function PublishRunCard({
             data-testid="publish-status-panel"
             aria-live="polite"
             className={cn(
-              "rounded-lg border bg-muted p-4",
+              "block w-full rounded-lg border p-4",
               statusMeta.panelClassName
             )}
           >
@@ -290,7 +295,7 @@ export const PublishRunCard = memo(function PublishRunCard({
               <div className="flex min-w-0 items-start gap-3">
                 <span
                   className={cn(
-                    "mt-0.5 flex size-10 flex-shrink-0 items-center justify-center rounded-lg",
+                    "flex size-10 flex-shrink-0 items-center justify-center rounded-md",
                     statusMeta.iconWrapClassName
                   )}
                 >
@@ -298,39 +303,39 @@ export const PublishRunCard = memo(function PublishRunCard({
                     <StatusIcon className="size-5" />
                   </span>
                 </span>
-                <div className="min-w-0">
-                  <div className="text-[12px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
-                    {appT.publishStatusLabel || "发布状态"}
-                  </div>
-                  <div className="mt-2 flex flex-wrap items-center gap-2">
+                <div className="min-w-0 flex-1 pt-0.5">
+                  <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                    <span className="text-heading-14 text-foreground">
+                      {appT.publishStatusLabel || "发布状态"}
+                    </span>
                     <span
                       className={cn(
-                        "inline-flex items-center gap-2 rounded-full border px-3 py-1 text-xs font-semibold ",
+                        "inline-flex min-h-6 items-center gap-2 rounded-full border px-2.5 py-0.5 text-label-12 font-semibold",
                         statusMeta.badgeClassName
                       )}
                     >
                       {statusMeta.label}
                     </span>
-                    {statusFact ? (
-                      <span className="inline-flex items-center rounded-full border border-border bg-muted px-3 py-1 text-xs font-semibold text-muted-foreground">
-                        {statusFact}
-                      </span>
-                    ) : null}
                   </div>
-                  <p className="mt-3 text-sm leading-6 text-muted-foreground">
+                  <p className="mt-1 text-copy-14 text-muted-foreground">
                     {statusMeta.description}
                   </p>
                 </div>
               </div>
+              {statusFact ? (
+                <span className="inline-flex min-h-8 flex-shrink-0 items-center rounded-md border border-border bg-muted px-3 text-label-13 font-semibold text-foreground">
+                  {statusFact}
+                </span>
+              ) : null}
             </div>
           </output>
 
           {failureMessage ? (
-            <div className="rounded-lg border border-destructive/20 bg-destructive/5 px-4 py-3 text-sm text-destructive">
-              <div className="text-[12px] font-semibold uppercase tracking-[0.18em] text-destructive">
+            <div className="rounded-lg border border-destructive/20 bg-destructive/5 px-4 py-3 text-copy-14 text-destructive">
+              <div className="text-label-12 font-semibold uppercase tracking-[0.15em] text-destructive">
                 {appT.statusFailed || "失败"}
               </div>
-              <p className="mt-1 break-words leading-6">{failureMessage}</p>
+              <p className="mt-1 break-words">{failureMessage}</p>
             </div>
           ) : null}
 
@@ -352,10 +357,10 @@ export const PublishRunCard = memo(function PublishRunCard({
                   )}
                 </span>
                 <span className="min-w-0 flex flex-1 items-center gap-3 overflow-hidden">
-                  <span className="flex-shrink-0 text-[12px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+                  <span className="flex-shrink-0 text-label-12 font-semibold uppercase tracking-[0.15em] text-muted-foreground">
                     {appT.outputDirectoryLabel || "输出目录"}
                   </span>
-                  <span className="truncate font-mono text-xs text-muted-foreground transition-colors duration-150 ease-geist group-hover:text-foreground">
+                  <span className="truncate font-mono text-label-12 text-muted-foreground transition-colors duration-150 ease-geist group-hover:text-foreground">
                     {publishResult.output_dir}
                   </span>
                 </span>
@@ -366,7 +371,7 @@ export const PublishRunCard = memo(function PublishRunCard({
             </button>
           )}
         </div>
-        <div className="min-h-[20rem] min-w-0 flex-1 overflow-auto rounded-lg bg-[hsl(var(--terminal-bg))] p-4 font-mono text-xs text-[hsl(var(--terminal-fg))]">
+        <div className="min-h-[20rem] min-w-0 flex-1 overflow-auto rounded-lg bg-[hsl(var(--terminal-bg))] p-4 font-mono text-label-12 text-[hsl(var(--terminal-fg))]">
           <pre className="min-w-0 whitespace-pre-wrap break-all [overflow-wrap:anywhere]">
             {outputLog ||
               publishResult?.error ||
@@ -378,7 +383,7 @@ export const PublishRunCard = memo(function PublishRunCard({
       </CardContent>
       {isRefreshing ? (
         <div className="absolute inset-0 z-20 flex items-center justify-center bg-background/80">
-          <div className="flex items-center gap-2 rounded-full bg-card border border-border px-4 py-2 text-sm text-foreground">
+          <div className="flex items-center gap-2 rounded-full bg-card border border-border px-4 py-2 text-label-14 text-foreground">
             <span className="inline-block animate-spin text-interactive">
               <Loader2 className="size-4" />
             </span>

@@ -323,7 +323,7 @@ export const RepositoryList = memo(function RepositoryList({
 
       return (
         <div
-          className="list-scroll-shell scrollbar-fade geist-scrollbar relative flex-1 overflow-auto px-2.5 py-2"
+          className="list-scroll-shell geist-scrollbar relative flex-1 overflow-auto px-2 py-2"
           onPointerEnter={(event) => {
             if (handleListPointerReentry(event)) {
               return;
@@ -342,10 +342,10 @@ export const RepositoryList = memo(function RepositoryList({
                 <FolderGit2 className="size-7 text-muted-foreground/30" />
               </div>
               <div className="text-center">
-                <p className="text-sm font-normal text-foreground/60">
+                <p className="text-label-14 font-normal text-foreground/60">
                   {repoT.noRepositories || "暂无仓库"}
                 </p>
-                <p className="mt-1 text-xs text-muted-foreground">
+                <p className="mt-1 text-label-12 text-muted-foreground">
                   {repoT.noRepositoriesHint || "点击下方添加仓库"}
                 </p>
               </div>
@@ -425,7 +425,7 @@ export const RepositoryList = memo(function RepositoryList({
           <div className="flex size-5 items-center justify-center">
             <AppBrandIcon />
           </div>
-          <span className="text-[10px] font-semibold uppercase tracking-[0.15em] text-muted-foreground">
+          <span className="text-label-12 font-semibold uppercase tracking-[0.15em] text-muted-foreground">
             One Publish
           </span>
         </div>
@@ -452,11 +452,11 @@ export const RepositoryList = memo(function RepositoryList({
       <div className="flex items-center justify-between px-3 py-2">
         <button
           type="button"
-          className="flex items-center gap-1.5 rounded-full border border-border bg-background px-3 py-1 text-sm font-normal transition-colors duration-150 ease-geist hover:bg-accent"
+          className="flex items-center gap-1.5 rounded-full border border-border bg-background px-3 py-1 text-button-14 font-normal transition-colors duration-150 ease-geist hover:bg-accent"
           onClick={() => setFilterExpanded(!filterExpanded)}
         >
           <span className="text-foreground/80">{repoT.all || "全部"}</span>
-          <span className="flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-interactive/10 px-1 text-[10px] font-bold leading-none text-interactive">
+          <span className="flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-interactive/10 px-1 text-label-12 font-semibold text-interactive">
             {repositories.length}
           </span>
           <ChevronDown
@@ -507,15 +507,16 @@ export const RepositoryList = memo(function RepositoryList({
       </div>
 
       <div className="px-3 py-1.5">
-        <div className="group/search surface-input relative rounded-md">
+        <div className="group/search search-input-shell surface-input relative rounded-md">
           <Search className="absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground/50 transition-colors duration-150 ease-geist group-focus-within/search:text-interactive" />
           <Input
+            bare
             data-testid="repo-search-input"
             placeholder={repoT.searchRepository || "搜索仓库"}
             value={searchQuery}
             onChange={(event) => setSearchQuery(event.target.value)}
             aria-label={repoT.searchRepository || "搜索仓库"}
-            className="h-8 border-none bg-transparent pl-8 text-sm shadow-none focus-visible:ring-0"
+            className="h-8 pl-8 text-label-14"
           />
         </div>
       </div>

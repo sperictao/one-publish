@@ -40,7 +40,7 @@ export function PublishContentSection({
     publishRunCardProps.publishActions !== null;
 
   return (
-    <div className="flex min-h-full min-w-0 flex-col gap-6 p-6">
+    <div className="flex min-h-full min-w-0 flex-col gap-4 p-4">
       {showCommandImportResultCard && commandImportResultCardProps && (
         <div className="mx-auto w-full max-w-3xl min-w-0">
           <Suspense fallback={null}>

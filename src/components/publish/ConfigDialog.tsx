@@ -308,7 +308,7 @@ export function ConfigManagementContent({
               disabled={!repoId}
               className="h-11"
             />
-            <p className="text-xs leading-5 text-muted-foreground">
+            <p className="text-label-12 text-muted-foreground">
               {profileT.quickCreateNameHint ||
                 "配置名会直接显示在中栏列表里，建议简短清晰。"}
             </p>
@@ -352,7 +352,7 @@ export function ConfigManagementContent({
         ) : profiles.length === 0 ? (
           <AppDialogInset className="px-5 py-10 text-center text-muted-foreground">
             <AlertCircle className="mx-auto mb-3 size-8" />
-            <p className="text-sm">{profileT.noProfiles || "暂无保存的配置文件"}</p>
+            <p className="text-label-14">{profileT.noProfiles || "暂无保存的配置文件"}</p>
           </AppDialogInset>
         ) : (
           <div className="space-y-3">
@@ -361,16 +361,16 @@ export function ConfigManagementContent({
                 <CardContent className="flex flex-col gap-4 p-4 sm:flex-row sm:items-center sm:justify-between">
                   <div className="min-w-0 flex-1">
                     <div className="mb-1 flex flex-wrap items-center gap-2">
-                      <h4 className="truncate text-sm font-semibold text-foreground">
+                      <h4 className="truncate text-label-14 font-semibold text-foreground">
                         {profile.name}
                       </h4>
                       {profile.isSystemDefault ? (
-                        <span className="inline-flex items-center rounded-full bg-interactive/10 px-2 py-0.5 text-[11px] font-semibold text-interactive">
+                        <span className="inline-flex items-center rounded-full bg-interactive/10 px-2 py-0.5 text-label-12 font-semibold text-interactive">
                           {profileT.defaultTag || "默认"}
                         </span>
                       ) : null}
                     </div>
-                    <p className="text-xs leading-5 text-muted-foreground">
+                    <p className="text-label-12 text-muted-foreground">
                       {profile.providerId} ·{" "}
                       {new Date(profile.createdAt).toLocaleDateString(dateLocale)}
                     </p>
@@ -450,7 +450,7 @@ export function ConfigManagementContent({
             <AppDialogInset className="space-y-3">
               <div className="flex items-start gap-3">
                 <AlertCircle className="mt-0.5 size-4 text-warning" />
-                <div className="space-y-1 text-sm">
+                <div className="space-y-1 text-copy-14">
                   <p className="font-normal">
                     {profileT.importConfirmListTitle || "待导入配置"}
                   </p>
@@ -461,7 +461,7 @@ export function ConfigManagementContent({
                 </div>
               </div>
               <div className="rounded-md border border-border bg-muted p-3">
-                <ul className="max-h-52 space-y-2 overflow-y-auto text-sm">
+                <ul className="max-h-52 space-y-2 overflow-y-auto text-copy-14">
                   {pendingImport.profiles.map((profile) => (
                     <li
                       key={`${profile.providerId}:${profile.name}`}
@@ -470,7 +470,7 @@ export function ConfigManagementContent({
                       <span className="truncate font-semibold text-foreground">
                         {profile.name}
                       </span>
-                      <span className="flex-shrink-0 text-xs text-muted-foreground">
+                      <span className="flex-shrink-0 text-label-12 text-muted-foreground">
                         {profile.providerId}
                       </span>
                     </li>
@@ -515,7 +515,7 @@ export function ConfigDialog({
         footerClassName="sm:space-x-0"
         footer={
           <>
-            <div className="text-xs leading-5 text-muted-foreground">
+            <div className="text-label-12 text-muted-foreground">
               {profileT.managementFooterHint ||
                 "在这里统一导入、导出、保存和加载当前仓库的发布配置。"}
             </div>

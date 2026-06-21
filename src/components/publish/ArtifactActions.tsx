@@ -139,7 +139,7 @@ function ArtifactActionsContent({
       </div>
 
       {packageResult && (
-        <div className="text-xs text-muted-foreground space-y-1">
+        <div className="text-label-12 text-muted-foreground space-y-1">
           <div className="font-mono break-all">{packageResult.artifactPath}</div>
           <div>
             {packageResult.fileCount} files, {formatBytes(packageResult.bytes)}
@@ -149,7 +149,7 @@ function ArtifactActionsContent({
       )}
 
       {signResult && (
-        <div className="text-xs text-muted-foreground space-y-1">
+        <div className="text-label-12 text-muted-foreground space-y-1">
           <div className="font-mono break-all">{signResult.signaturePath}</div>
           {signResult.stdout && (
             <div className="font-mono break-all whitespace-pre-wrap">

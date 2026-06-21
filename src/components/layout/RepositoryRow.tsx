@@ -106,7 +106,7 @@ export const RepositoryRow = memo(function RepositoryRow({
         aria-pressed={isSelected}
         aria-label={`${repoT.selectRepository || "选择仓库"}: ${repo.name}`}
         className={cn(
-          "flex w-full items-start gap-2.5 rounded-lg border border-transparent bg-transparent py-2.5 pr-11 text-left shadow-none outline-none transition-colors duration-150 ease-geist hover:bg-accent focus-visible:ring-2 focus-visible:ring-interactive/30 focus-visible:ring-offset-1 focus-visible:ring-offset-background",
+          "flex w-full items-start gap-2.5 rounded-md border border-transparent bg-transparent py-2.5 pr-11 text-left shadow-none outline-none transition-colors duration-150 ease-geist hover:bg-accent focus-visible:ring-2 focus-visible:ring-interactive/30 focus-visible:ring-offset-1 focus-visible:ring-offset-background",
           isSelected && "bg-accent",
           dragHandleVisible ? "pl-10" : "pl-3"
         )}
@@ -137,20 +137,20 @@ export const RepositoryRow = memo(function RepositoryRow({
             <div className="flex items-center gap-1.5">
               <span
                 className={cn(
-                  "block min-w-0 truncate text-[13px] font-semibold tracking-tight transition-colors duration-150 ease-geist",
+                  "block min-w-0 truncate text-label-13 font-semibold transition-colors duration-150 ease-geist",
                   isSelected ? "text-foreground" : "text-foreground/78"
                 )}
               >
                 {repo.name}
               </span>
               {repo.providerId ? (
-                <span className="flex-shrink-0 rounded-full bg-interactive/10 px-1.5 py-0.5 text-[10px] font-bold text-interactive">
+                <span className="flex-shrink-0 rounded-full bg-interactive/10 px-1.5 py-0.5 text-label-12 font-semibold text-interactive">
                   {repo.providerId}
                 </span>
               ) : null}
             </div>
             <p
-              className="mt-0.5 truncate text-[11px] text-muted-foreground"
+              className="mt-0.5 truncate text-label-12 text-muted-foreground"
               title={repo.path}
             >
               {repo.path}
@@ -160,7 +160,7 @@ export const RepositoryRow = memo(function RepositoryRow({
           <div className="mt-1.5 min-w-0">
             <span
               className={cn(
-                "inline-flex max-w-full items-center gap-1.5 rounded-full px-2 py-0.5 text-[11px] leading-4 transition-colors duration-150",
+                "inline-flex max-w-full items-center gap-1.5 rounded-full px-2 py-0.5 text-label-12 transition-colors duration-150",
                 canConnectBranch
                   ? "border border-success/20 bg-success/10 text-success"
                   : "border border-border bg-muted text-muted-foreground"

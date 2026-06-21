@@ -37,7 +37,7 @@ export function HelpTip({
             type="button"
             aria-label={label}
             className={cn(
-              "inline-flex size-4 items-center justify-center rounded-full text-muted-foreground outline-none transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 focus-visible:ring-offset-background",
+              "inline-flex size-4 items-center justify-center rounded-full text-muted-foreground outline-none transition-colors hover:text-foreground focus-ring",
               className
             )}
           >

@@ -112,17 +112,18 @@ export function BranchPanel({
         </div>
         {/* Search (disabled) */}
         <div className="border-b border-border px-3 py-2">
-          <div className="surface-input relative rounded-md">
+          <div className="search-input-shell surface-input relative rounded-md">
             <Search className="absolute left-2 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
             <Input
+              bare
               placeholder={branchT.searchWorktree || "搜索 worktree"}
               disabled
               aria-label={branchT.searchWorktree || "搜索 worktree"}
-              className="h-8 pl-8 text-sm"
+              className="h-8 pl-8 text-label-14"
             />
           </div>
         </div>
-        <div className="flex flex-1 items-center justify-center text-sm text-muted-foreground">
+        <div className="flex flex-1 items-center justify-center text-label-14 text-muted-foreground">
           {branchT.selectRepository || "请选择一个仓库"}
         </div>
       </div>
@@ -205,14 +206,15 @@ export function BranchPanel({
 
       {/* Search */}
       <div className="border-b border-border px-3 py-2">
-        <div className="surface-input relative rounded-md">
+        <div className="search-input-shell surface-input relative rounded-md">
           <Search className="absolute left-2 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
           <Input
+            bare
             placeholder={branchT.searchWorktree || "搜索 worktree"}
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             aria-label={branchT.searchWorktree || "搜索 worktree"}
-            className="h-8 pl-8 text-sm"
+            className="h-8 pl-8 text-label-14"
           />
         </div>
       </div>
@@ -236,16 +238,16 @@ export function BranchPanel({
             />
             <div className="min-w-0 flex-1">
               <div className="flex items-center gap-2">
-                <span className="truncate text-sm font-semibold">
+                <span className="truncate text-label-14 font-semibold">
                   {branch.name}
                 </span>
                 {branch.isMain && (
-                  <span className="status-success rounded px-1.5 py-0.5 text-[10px] font-semibold">
+                  <span className="status-success rounded px-1.5 py-0.5 text-label-12 font-semibold">
                     {branchT.mainBadge || "MAIN"}
                   </span>
                 )}
               </div>
-              <span className="block truncate text-xs text-muted-foreground mt-0.5">
+              <span className="block truncate text-label-12 text-muted-foreground mt-0.5">
                 {branch.path}
               </span>
             </div>

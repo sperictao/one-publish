@@ -454,7 +454,7 @@ export function ReleaseChecklistDialog({
           </>
         }
       >
-        <AppDialogInset className="flex flex-wrap gap-2 p-3 text-xs sm:text-sm">
+        <AppDialogInset className="flex flex-wrap gap-2 p-3 text-label-12 sm:text-label-14">
           <AppDialogBadge
             variant="success"
             icon={<CheckCircle2 className="size-3.5" />}
@@ -505,7 +505,7 @@ export function ReleaseChecklistDialog({
                   }`}
                 >
                   <div className="flex items-center justify-between gap-2">
-                    <span className="text-sm font-semibold">{item.title}</span>
+                    <span className="text-label-14 font-semibold">{item.title}</span>
                     {style.icon}
                   </div>
                   <div className="mt-2">
@@ -521,15 +521,15 @@ export function ReleaseChecklistDialog({
           <AppDialogInset className="space-y-4">
             <div className="space-y-1">
               <div className="flex items-center justify-between gap-2">
-                <h3 className="text-base font-semibold">{activeStep.title}</h3>
-                <span className="text-xs text-muted-foreground">
+                <h3 className="text-heading-16 font-semibold">{activeStep.title}</h3>
+                <span className="text-label-12 text-muted-foreground">
                   {`${activeStepIndex + 1}/${checklistItems.length}`}
                 </span>
               </div>
-              <p className="text-sm text-muted-foreground">{activeStep.description}</p>
+              <p className="text-copy-14 text-muted-foreground">{activeStep.description}</p>
             </div>
 
-            <div className="rounded-md border border-border bg-muted p-3 text-xs font-mono whitespace-pre-wrap break-all">
+            <div className="rounded-md border border-border bg-muted p-3 text-label-12 font-mono whitespace-pre-wrap break-all">
               {activeStep.detail}
             </div>
 

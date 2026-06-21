@@ -97,27 +97,27 @@ const DotnetPublishParametersSection = memo(function DotnetPublishParametersSect
     >
       <div className="grid gap-3 md:grid-cols-2">
         <div className="space-y-1">
-          <Label htmlFor="quick-profile-configuration" className="text-xs">
+          <Label htmlFor="quick-profile-configuration" className="text-label-12">
             {appT.configurationType || "配置类型"}
           </Label>
           <Select value={configuration} onValueChange={onConfigurationChange}>
             <SelectTrigger
               id="quick-profile-configuration"
               disabled={readOnly}
-              className="h-9 text-xs"
+              className="h-9 text-label-12"
             >
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="Release" className="text-xs">Release</SelectItem>
-              <SelectItem value="Debug" className="text-xs">Debug</SelectItem>
+              <SelectItem value="Release" className="text-label-12">Release</SelectItem>
+              <SelectItem value="Debug" className="text-label-12">Debug</SelectItem>
             </SelectContent>
           </Select>
         </div>
 
         <div className="space-y-1">
           <div className="flex items-center gap-1.5">
-            <Label htmlFor="quick-profile-runtime" className="text-xs">
+            <Label htmlFor="quick-profile-runtime" className="text-label-12">
               {appT.runtimeLabel || "运行时"}
             </Label>
             <HelpTip
@@ -126,17 +126,17 @@ const DotnetPublishParametersSection = memo(function DotnetPublishParametersSect
             />
           </div>
           <Select value={runtime || "none"} onValueChange={onRuntimeChange}>
-            <SelectTrigger id="quick-profile-runtime" disabled={readOnly} className="h-9 text-xs">
+            <SelectTrigger id="quick-profile-runtime" disabled={readOnly} className="h-9 text-label-12">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="none" className="text-xs">
+              <SelectItem value="none" className="text-label-12">
                 {appT.frameworkDependent || "框架依赖"}
               </SelectItem>
-              <SelectItem value="win-x64" className="text-xs">Windows x64</SelectItem>
-              <SelectItem value="osx-arm64" className="text-xs">macOS ARM64</SelectItem>
-              <SelectItem value="osx-x64" className="text-xs">macOS x64</SelectItem>
-              <SelectItem value="linux-x64" className="text-xs">Linux x64</SelectItem>
+              <SelectItem value="win-x64" className="text-label-12">Windows x64</SelectItem>
+              <SelectItem value="osx-arm64" className="text-label-12">macOS ARM64</SelectItem>
+              <SelectItem value="osx-x64" className="text-label-12">macOS x64</SelectItem>
+              <SelectItem value="linux-x64" className="text-label-12">Linux x64</SelectItem>
             </SelectContent>
           </Select>
         </div>
@@ -176,7 +176,7 @@ const DotnetPublishOutputSection = memo(function DotnetPublishOutputSection({
       <div className="grid gap-3 md:grid-cols-2">
         <div className="space-y-1">
           <div className="flex flex-wrap items-center gap-2">
-            <Label htmlFor="quick-profile-output" className="text-xs">
+            <Label htmlFor="quick-profile-output" className="text-label-12">
               {appT.outputDirLabel || "输出目录"}
             </Label>
             <HelpTip
@@ -202,7 +202,7 @@ const DotnetPublishOutputSection = memo(function DotnetPublishOutputSection({
             onChange={(event) => onOutputDirChange(event.target.value)}
             placeholder={appT.outputDirPlaceholder || "留空使用默认目录"}
             readOnly={readOnly}
-            className="h-9 text-xs"
+            className="h-9 text-label-12"
           />
         </div>
 
@@ -210,7 +210,7 @@ const DotnetPublishOutputSection = memo(function DotnetPublishOutputSection({
           <div className="flex items-center gap-1.5 h-5">
             <Label
               htmlFor="quick-profile-self-contained"
-              className="text-xs"
+              className="text-label-12"
             >
               {appT.selfContained || "自包含部署"}
             </Label>
@@ -242,7 +242,7 @@ const DotnetPublishOutputSection = memo(function DotnetPublishOutputSection({
               onSelfContainedChange(!selfContained);
             }}
           >
-            <span className="text-xs text-muted-foreground select-none truncate">
+            <span className="text-label-12 text-muted-foreground select-none truncate">
               {isRuntimeRequired
                 ? "未指定运行时 (不可用)"
                 : selfContained
@@ -732,11 +732,11 @@ function DotnetFrameworkSuggestionsField({
   return (
     <div className="space-y-1.5 w-full">
       <div className="flex flex-wrap items-center gap-1.5">
-        <Label htmlFor={field.key} className="text-xs font-semibold text-foreground">
+        <Label htmlFor={field.key} className="text-label-12 font-semibold text-foreground">
           {fieldText.label}
         </Label>
         {fieldText.technicalLabel && (
-          <span className="font-mono text-[10px] text-muted-foreground bg-muted border border-border px-1.5 py-0.5 rounded-sm">
+          <span className="font-mono text-label-12 text-muted-foreground bg-muted border border-border px-1.5 py-0.5 rounded-sm">
             {fieldText.technicalLabel}
           </span>
         )}
@@ -753,7 +753,7 @@ function DotnetFrameworkSuggestionsField({
         onChange={(event) => onChange(event.target.value)}
         placeholder={fieldText.inputPlaceholder}
         readOnly={readOnly}
-        className="h-9 text-xs"
+        className="h-9 text-label-12"
       />
       {!readOnly && field.options && field.options.length > 0 ? (
         <datalist id={datalistId}>
@@ -789,11 +789,11 @@ function DotnetSelectField({
   return (
     <div className="space-y-1.5 w-full">
       <div className="flex flex-wrap items-center gap-1.5">
-        <Label htmlFor={field.key} className="text-xs font-semibold text-foreground">
+        <Label htmlFor={field.key} className="text-label-12 font-semibold text-foreground">
           {fieldText.label}
         </Label>
         {fieldText.technicalLabel && (
-          <span className="font-mono text-[10px] text-muted-foreground bg-muted border border-border px-1.5 py-0.5 rounded-sm">
+          <span className="font-mono text-label-12 text-muted-foreground bg-muted border border-border px-1.5 py-0.5 rounded-sm">
             {fieldText.technicalLabel}
           </span>
         )}
@@ -812,16 +812,16 @@ function DotnetSelectField({
           id={field.key}
           aria-label={fieldText.label}
           disabled={readOnly}
-          className="h-9 text-xs"
+          className="h-9 text-label-12"
         >
           <SelectValue placeholder={fieldText.emptyOptionLabel} />
         </SelectTrigger>
         <SelectContent>
-          <SelectItem value={EMPTY_SELECT_VALUE} className="text-xs">
+          <SelectItem value={EMPTY_SELECT_VALUE} className="text-label-12">
             {fieldText.emptyOptionLabel}
           </SelectItem>
           {options.map((option) => (
-            <SelectItem key={option.value} value={option.value} className="text-xs">
+            <SelectItem key={option.value} value={option.value} className="text-label-12">
               {option.label}
             </SelectItem>
           ))}
@@ -849,10 +849,10 @@ function DotnetBooleanField({
   return (
     <div className="flex items-center justify-between gap-4 h-full w-full py-0.5">
       <div className="min-w-0 flex-1">
-        <div className="flex flex-wrap items-center gap-1.5 text-xs font-semibold text-foreground">
+        <div className="flex flex-wrap items-center gap-1.5 text-label-12 font-semibold text-foreground">
           <span>{fieldText.label}</span>
           {fieldText.technicalLabel && (
-            <span className="font-mono text-[10px] text-muted-foreground bg-muted border border-border px-1.5 py-0.5 rounded-sm animate-fade-in">
+            <span className="font-mono text-label-12 text-muted-foreground bg-muted border border-border px-1.5 py-0.5 rounded-sm animate-fade-in">
               {fieldText.technicalLabel}
             </span>
           )}
@@ -890,11 +890,11 @@ function DotnetStringField({
   return (
     <div className="space-y-1.5 w-full">
       <div className="flex flex-wrap items-center gap-1.5">
-        <Label htmlFor={field.key} className="text-xs font-semibold text-foreground">
+        <Label htmlFor={field.key} className="text-label-12 font-semibold text-foreground">
           {fieldText.label}
         </Label>
         {fieldText.technicalLabel && (
-          <span className="font-mono text-[10px] text-muted-foreground bg-muted border border-border px-1.5 py-0.5 rounded-sm">
+          <span className="font-mono text-label-12 text-muted-foreground bg-muted border border-border px-1.5 py-0.5 rounded-sm">
             {fieldText.technicalLabel}
           </span>
         )}
@@ -910,7 +910,7 @@ function DotnetStringField({
         onChange={(event) => onChange(event.target.value)}
         readOnly={readOnly}
         placeholder={fieldText.inputPlaceholder}
-        className="h-9 text-xs"
+        className="h-9 text-label-12"
       />
     </div>
   );
@@ -990,9 +990,9 @@ function DotnetPropertyTableField({
       <div className="flex items-center justify-between gap-3">
         <div>
           <div className="flex flex-wrap items-center gap-1.5">
-            <Label className="text-xs font-semibold text-foreground">{fieldText.label}</Label>
+            <Label className="text-label-12 font-semibold text-foreground">{fieldText.label}</Label>
             {fieldText.technicalLabel && (
-              <span className="font-mono text-[10px] text-muted-foreground bg-muted border border-border px-1.5 py-0.5 rounded-sm">
+              <span className="font-mono text-label-12 text-muted-foreground bg-muted border border-border px-1.5 py-0.5 rounded-sm">
                 {fieldText.technicalLabel}
               </span>
             )}
@@ -1003,7 +1003,7 @@ function DotnetPropertyTableField({
           </div>
         </div>
         {!readOnly ? (
-          <Button type="button" variant="outline" size="sm" onClick={addEntry} className="h-8 text-xs">
+          <Button type="button" variant="outline" size="sm" onClick={addEntry} className="h-8 text-button-12">
             <Plus className="mr-1.5 size-3.5" />
             {fieldText.propertiesAddLabel}
           </Button>
@@ -1012,7 +1012,7 @@ function DotnetPropertyTableField({
 
       {entries.length > 0 ? (
         <div className="space-y-1.5">
-          <div className="grid grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)_auto] gap-1.5 px-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+          <div className="grid grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)_auto] gap-1.5 px-1 text-label-12 font-semibold uppercase tracking-[0.15em] text-muted-foreground">
             <span>{fieldText.propertyKeyColumnLabel}</span>
             <span>{fieldText.propertyValueColumnLabel}</span>
             <span className="sr-only">Actions</span>
@@ -1028,7 +1028,7 @@ function DotnetPropertyTableField({
                 onChange={(event) => updateKey(key, event.target.value)}
                 readOnly={readOnly}
                 placeholder={fieldText.propertyKeyPlaceholder}
-                className="h-8 text-xs"
+                className="h-8 text-label-12"
               />
               <Input
                 aria-label={`${fieldText.label}-${fieldText.propertyValueColumnLabel}-${index + 1}`}
@@ -1036,7 +1036,7 @@ function DotnetPropertyTableField({
                 onChange={(event) => updateValue(key, event.target.value)}
                 readOnly={readOnly}
                 placeholder={fieldText.propertyValuePlaceholder}
-                className="h-8 text-xs"
+                className="h-8 text-label-12"
               />
               {!readOnly ? (
                 <Button
@@ -1058,7 +1058,7 @@ function DotnetPropertyTableField({
           ))}
         </div>
       ) : (
-        <div className="rounded-md border border-dashed border-border px-2.5 py-2 text-xs leading-4 text-muted-foreground">
+        <div className="rounded-md border border-dashed border-border px-2.5 py-2 text-label-12 text-muted-foreground">
           {fieldText.propertiesEmptyText}
         </div>
       )}

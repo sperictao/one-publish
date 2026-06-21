@@ -107,10 +107,10 @@ export function CommandImportDialog({
         <div className="space-y-4">
           <AppDialogInset className="space-y-3">
             <div className="space-y-1">
-              <div className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+              <div className="text-label-12 font-semibold uppercase tracking-[0.15em] text-muted-foreground">
                 {commandT.commandSectionTitle || "命令输入"}
               </div>
-              <p className="text-xs leading-5 text-muted-foreground">
+              <p className="text-label-12 text-muted-foreground">
                 {(commandT.currentProvider ||
                   "当前 Provider: {{provider}}（支持: dotnet, cargo, go, gradle）").replace(
                   "{{provider}}",
@@ -130,7 +130,7 @@ export function CommandImportDialog({
                 value={command}
                 onChange={(e) => setCommand(e.target.value)}
                 rows={4}
-                className="font-mono text-sm"
+                className="font-mono text-label-14"
               />
             </div>
           </AppDialogInset>
@@ -155,7 +155,7 @@ export function CommandImportDialog({
           {error && (
             <AppDialogInset className="space-y-1 border-destructive/20 bg-destructive/5 text-destructive">
               <p className="font-semibold">{commandT.parseFailed || "解析失败"}</p>
-              <p className="text-xs">{error}</p>
+              <p className="text-label-12">{error}</p>
             </AppDialogInset>
           )}
 
@@ -163,7 +163,7 @@ export function CommandImportDialog({
             <AppDialogInset className="space-y-2">
               <Label>{commandT.extractedParameters || "提取的参数"}</Label>
               <div className="rounded-md bg-muted p-3">
-                <pre className="text-xs font-mono overflow-auto max-h-40">
+                <pre className="text-label-12 font-mono overflow-auto max-h-40">
                   {JSON.stringify(parsedSpec.parameters, null, 2)}
                 </pre>
               </div>

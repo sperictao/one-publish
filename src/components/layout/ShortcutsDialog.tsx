@@ -42,14 +42,14 @@ export function ShortcutsDialog({
               key={`${shortcut.key}:${shortcut.description}`}
               className="flex items-center justify-between p-3 surface-input rounded-md"
             >
-              <span className="text-sm">{shortcut.description}</span>
-              <kbd className="px-2 py-1 text-xs font-semibold bg-muted border border-border rounded-sm">
+              <span className="text-label-14">{shortcut.description}</span>
+              <kbd className="px-2 py-1 text-label-12 font-semibold bg-muted border border-border rounded-sm">
                 {shortcut.key}
               </kbd>
             </div>
           ))}
           {shortcuts.length === 0 && (
-            <p className="text-sm text-muted-foreground text-center py-4">
+            <p className="text-label-14 text-muted-foreground text-center py-4">
               {shortcutT.empty || "暂无快捷键"}
             </p>
           )}

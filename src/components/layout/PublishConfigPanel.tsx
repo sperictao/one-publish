@@ -215,7 +215,7 @@ function ConfigGroup({
     <div>
       <button
         type="button"
-        className="flex w-full items-center gap-1.5 px-3 py-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground hover:text-foreground transition-colors duration-150 ease-geist"
+        className="flex w-full items-center gap-1.5 px-3 py-2 text-label-12 font-semibold uppercase tracking-[0.15em] text-muted-foreground hover:text-foreground transition-colors duration-150 ease-geist"
         onClick={() => setExpanded(!expanded)}
       >
         {expanded ? (
@@ -229,7 +229,7 @@ function ConfigGroup({
             <Loader2 className="size-3.5" />
           </span>
         ) : null}
-        <span className="rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-semibold tabular-nums">
+        <span className="rounded-full bg-muted px-1.5 py-0.5 text-label-12 font-semibold tabular-nums">
           {count}
         </span>
       </button>
@@ -237,7 +237,7 @@ function ConfigGroup({
         hasChildren ? (
           <div className="space-y-1.5">{children}</div>
         ) : emptyState ? (
-          <div className="px-3 py-4 text-xs text-muted-foreground">
+          <div className="px-3 py-4 text-label-12 text-muted-foreground">
             {emptyState}
           </div>
         ) : null
@@ -408,7 +408,7 @@ function ProfileItem({
         type="button"
         aria-pressed={isSelected}
         className={cn(
-          "flex w-full items-center gap-2.5 rounded-lg border border-transparent bg-transparent py-2 pr-11 text-left shadow-none outline-none transition-colors duration-150 ease-geist hover:bg-accent focus-visible:ring-2 focus-visible:ring-interactive/30 focus-visible:ring-offset-1 focus-visible:ring-offset-background",
+          "flex w-full items-center gap-2.5 rounded-md border border-transparent bg-transparent py-2 pr-11 text-left shadow-none outline-none transition-colors duration-150 ease-geist hover:bg-accent focus-visible:ring-2 focus-visible:ring-interactive/30 focus-visible:ring-offset-1 focus-visible:ring-offset-background",
           isSelected && "bg-accent",
           dragHandleVisible ? "pl-10" : "pl-3"
         )}
@@ -434,7 +434,7 @@ function ProfileItem({
         <div className="min-w-0 flex flex-1 items-center overflow-hidden">
           <span
             className={cn(
-              "truncate text-[13px] font-semibold tracking-tight transition-colors duration-150 ease-geist",
+              "truncate text-label-13 font-semibold transition-colors duration-150 ease-geist",
               isSelected ? "text-foreground" : "text-foreground/78"
             )}
           >
@@ -941,7 +941,7 @@ export const PublishConfigPanel = memo(function PublishConfigPanel({
     () => {
       return (
         <div
-          className="list-scroll-shell scrollbar-fade geist-scrollbar relative flex-1 overflow-auto px-2.5 py-2"
+          className="list-scroll-shell geist-scrollbar relative flex-1 overflow-auto px-2 py-2"
           onPointerEnter={(event) => {
             if (handleConfigListPointerReentry(event)) {
               return;
@@ -957,7 +957,7 @@ export const PublishConfigPanel = memo(function PublishConfigPanel({
           <div>
             {showRecentItems && (
               <div className="space-y-1.5">
-                <div className="flex items-center gap-1.5 px-3 py-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                <div className="flex items-center gap-1.5 px-3 py-2 text-label-12 font-semibold uppercase tracking-[0.15em] text-muted-foreground">
                   <Clock className="size-3.5" />
                   <span>{recentlyUsedLabel}</span>
                 </div>
@@ -1023,7 +1023,7 @@ export const PublishConfigPanel = memo(function PublishConfigPanel({
                     type="button"
                     aria-pressed={item.key === selectedConfigId}
                     className={cn(
-                      "flex w-full items-center gap-2.5 rounded-lg border border-transparent bg-transparent py-2 pr-11 text-left shadow-none outline-none transition-colors duration-150 ease-geist hover:bg-accent focus-visible:ring-2 focus-visible:ring-interactive/30 focus-visible:ring-offset-1 focus-visible:ring-offset-background",
+                      "flex w-full items-center gap-2.5 rounded-md border border-transparent bg-transparent py-2 pr-11 text-left shadow-none outline-none transition-colors duration-150 ease-geist hover:bg-accent focus-visible:ring-2 focus-visible:ring-interactive/30 focus-visible:ring-offset-1 focus-visible:ring-offset-background",
                       selectedRenderId === renderId && "bg-accent",
                       recentDragEnabled ? "pl-10" : "pl-3"
                     )}
@@ -1055,7 +1055,7 @@ export const PublishConfigPanel = memo(function PublishConfigPanel({
                     <div className="min-w-0 flex flex-1 items-center gap-2 overflow-hidden">
                       <span
                         className={cn(
-                          "truncate text-[13px] font-semibold tracking-tight transition-colors duration-150 ease-geist",
+                          "truncate text-label-13 font-semibold transition-colors duration-150 ease-geist",
                           selectedRenderId === renderId
                             ? "text-foreground"
                             : "text-foreground/78"
@@ -1066,7 +1066,7 @@ export const PublishConfigPanel = memo(function PublishConfigPanel({
                       {item.description ? (
                         <>
                           <span className="flex-shrink-0 text-muted-foreground/30">·</span>
-                          <span className="truncate text-[11px] text-muted-foreground">
+                          <span className="truncate text-label-12 text-muted-foreground">
                             {item.description}
                           </span>
                         </>
@@ -1183,7 +1183,7 @@ export const PublishConfigPanel = memo(function PublishConfigPanel({
                     data-selected={isPubxmlSelected}
                     aria-pressed={isPubxmlSelected}
                     className={cn(
-                      "flex w-full items-center gap-2.5 rounded-lg border border-transparent bg-transparent py-2 pr-11 text-left shadow-none outline-none transition-colors duration-150 ease-geist hover:bg-accent focus-visible:ring-2 focus-visible:ring-interactive/30 focus-visible:ring-offset-1 focus-visible:ring-offset-background",
+                      "flex w-full items-center gap-2.5 rounded-md border border-transparent bg-transparent py-2 pr-11 text-left shadow-none outline-none transition-colors duration-150 ease-geist hover:bg-accent focus-visible:ring-2 focus-visible:ring-interactive/30 focus-visible:ring-offset-1 focus-visible:ring-offset-background",
                       projectProfileDragEnabled ? "pl-10" : "pl-3"
                     )}
                     onClick={() => {
@@ -1214,7 +1214,7 @@ export const PublishConfigPanel = memo(function PublishConfigPanel({
                     <div className="min-w-0 flex flex-1 items-center gap-2 overflow-hidden">
                       <span
                         className={cn(
-                          "truncate text-[13px] font-semibold tracking-tight transition-colors duration-150 ease-geist",
+                          "truncate text-label-13 font-semibold transition-colors duration-150 ease-geist",
                           isPubxmlSelected ? "text-foreground" : "text-foreground/78"
                         )}
                       >
@@ -1326,7 +1326,7 @@ export const PublishConfigPanel = memo(function PublishConfigPanel({
             </ConfigGroup>
           ))}
           {shouldShowCustomProfilesLoadingState ? (
-            <div className="flex items-center gap-2 px-3 py-4 text-xs text-muted-foreground">
+            <div className="flex items-center gap-2 px-3 py-4 text-label-12 text-muted-foreground">
               <span className="inline-block animate-spin text-interactive/80">
                 <Loader2 className="size-3.5" />
               </span>
@@ -1334,7 +1334,7 @@ export const PublishConfigPanel = memo(function PublishConfigPanel({
             </div>
           ) : null}
           {shouldShowEmptyState && (
-            <div className="px-3 py-4 text-center text-xs text-muted-foreground">
+            <div className="px-3 py-4 text-center text-label-12 text-muted-foreground">
               {noConfigsLabel}
             </div>
           )}
@@ -1463,14 +1463,14 @@ export const PublishConfigPanel = memo(function PublishConfigPanel({
             <DropdownMenuTrigger asChild>
               <button
                 type="button"
-                className="flex items-center gap-1.5 rounded-full border border-border bg-background px-3 py-1 text-sm font-normal transition-colors duration-150 ease-geist hover:bg-accent"
+                className="flex items-center gap-1.5 rounded-full border border-border bg-background px-3 py-1 text-button-14 font-normal transition-colors duration-150 ease-geist hover:bg-accent"
                 aria-haspopup="menu"
                 aria-expanded={groupFilterOpen}
               >
                 <span className="text-foreground/80">
                   {selectedGroupFilterOption?.label || allConfigsLabel}
                 </span>
-                <span className="flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-interactive/10 px-1 text-[10px] font-bold leading-none text-interactive">
+                <span className="flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-interactive/10 px-1 text-label-12 font-semibold text-interactive">
                   {visibleConfigCount}
                 </span>
                 <ChevronDown
@@ -1491,7 +1491,7 @@ export const PublishConfigPanel = memo(function PublishConfigPanel({
               >
                 <div className="flex min-w-0 flex-1 items-center gap-2">
                   <span className="truncate">{allConfigsLabel}</span>
-                  <span className="flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-interactive/10 px-1 text-[10px] font-bold leading-none text-interactive">
+                  <span className="flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-interactive/10 px-1 text-label-12 font-semibold text-interactive">
                     {groupFilterOptions[0]?.count ?? 0}
                   </span>
                 </div>
@@ -1511,7 +1511,7 @@ export const PublishConfigPanel = memo(function PublishConfigPanel({
                 >
                   <div className="flex min-w-0 flex-1 items-center gap-2">
                     <span className="truncate">{option.label}</span>
-                    <span className="flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-interactive/10 px-1 text-[10px] font-bold leading-none text-interactive">
+                    <span className="flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-interactive/10 px-1 text-label-12 font-semibold text-interactive">
                       {option.count}
                     </span>
                   </div>
@@ -1596,14 +1596,15 @@ export const PublishConfigPanel = memo(function PublishConfigPanel({
 
         {/* Search */}
         <div className="px-3 py-1.5">
-          <div className="group/search surface-input relative rounded-md">
+          <div className="group/search search-input-shell surface-input relative rounded-md">
             <Search className="absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground/50 transition-colors duration-150 ease-geist group-focus-within/search:text-interactive" />
             <Input
+              bare
               placeholder={t.searchConfig || "搜索配置"}
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               aria-label={t.searchConfig || "搜索配置"}
-              className="h-8 border-none bg-transparent pl-8 text-sm shadow-none focus-visible:ring-0"
+              className="h-8 pl-8 text-label-14"
             />
           </div>
         </div>

@@ -87,13 +87,13 @@ const QuickCreateTemplateCard = memo(function QuickCreateTemplateCard({
       <CardHeader className="p-4 pb-3">
         <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
           <div className="min-w-0">
-            <div className="flex items-center gap-2 text-sm font-semibold text-foreground">
+            <div className="flex items-center gap-2 text-label-14 font-semibold text-foreground">
               <span className="flex size-7 items-center justify-center rounded-lg bg-interactive/10 text-interactive ">
                 <Sparkles className="size-3.5" />
               </span>
               {profileT.quickCreateTemplateCompactTitle || "快速套用模板"}
             </div>
-            <CardDescription className="mt-1 text-[11px] leading-4 text-muted-foreground">
+            <CardDescription className="mt-1 text-label-12 text-muted-foreground">
               {quickCreateEditing
                 ? profileT.quickEditTemplateHint ||
                   "可选模板只作为辅助入口，当前表单修改优先。"
@@ -105,7 +105,7 @@ const QuickCreateTemplateCard = memo(function QuickCreateTemplateCard({
           <div className="w-full md:w-[220px]">
             <Label
               htmlFor="quick-profile-template"
-              className="mb-1 inline-block text-[11px] font-semibold text-muted-foreground"
+              className="mb-1 inline-block text-label-12 font-semibold text-muted-foreground"
             >
               {profileT.quickCreateTemplate || "预置模板"}
             </Label>
@@ -115,7 +115,7 @@ const QuickCreateTemplateCard = memo(function QuickCreateTemplateCard({
             >
               <SelectTrigger
                 id="quick-profile-template"
-                className="h-9 text-xs"
+                className="h-9 text-label-12"
               >
                 <SelectValue />
               </SelectTrigger>
@@ -124,12 +124,12 @@ const QuickCreateTemplateCard = memo(function QuickCreateTemplateCard({
                   <SelectItem
                     key={`quick-template-option-${option.id}`}
                     value={option.id}
-                    className="text-xs"
+                    className="text-label-12"
                   >
                     <div className="flex min-w-0 flex-col">
                       <span className="truncate">{option.name}</span>
                       {option.description ? (
-                        <span className="truncate text-[10px] text-muted-foreground">
+                        <span className="truncate text-label-12 text-muted-foreground">
                           {option.description}
                         </span>
                       ) : null}
@@ -143,7 +143,7 @@ const QuickCreateTemplateCard = memo(function QuickCreateTemplateCard({
       </CardHeader>
       {selectedTemplateDescription ? (
         <CardContent className="p-4 pt-0">
-          <div className="rounded-md border border-border bg-muted px-3 py-2 text-[11px] leading-4 text-muted-foreground">
+          <div className="rounded-md border border-border bg-muted px-3 py-2 text-label-12 text-muted-foreground">
             {selectedTemplateDescription}
           </div>
         </CardContent>
@@ -188,7 +188,7 @@ const QuickCreateBasicInfoSection = memo(function QuickCreateBasicInfoSection({
     >
       <div className="grid gap-3 md:grid-cols-2">
         <div className="space-y-1">
-          <Label htmlFor="quick-profile-name" className="text-xs">
+          <Label htmlFor="quick-profile-name" className="text-label-12">
             {profileT.quickCreateName || "配置名称"}
           </Label>
           <Input
@@ -199,44 +199,44 @@ const QuickCreateBasicInfoSection = memo(function QuickCreateBasicInfoSection({
             value={quickCreateProfileName}
             onChange={(event) => onProfileNameChange(event.target.value)}
             onKeyDown={onProfileNameKeyDown}
-            className="h-9 text-xs"
+            className="h-9 text-label-12"
           />
-          <p className="text-[11px] leading-4 text-muted-foreground mt-1">
+          <p className="text-label-12 text-muted-foreground mt-1">
             {profileT.quickCreateNameHint ||
               "配置名会直接显示在中栏列表里，建议简短清晰。"}
           </p>
         </div>
 
         <div className="space-y-1">
-          <Label htmlFor="quick-profile-group" className="text-xs">
+          <Label htmlFor="quick-profile-group" className="text-label-12">
             {profileT.quickCreateGroup || "发布配置组"}
           </Label>
           <Select
             value={quickCreateProfileGroup}
             onValueChange={onProfileGroupChange}
           >
-            <SelectTrigger id="quick-profile-group" className="h-9 text-xs">
+            <SelectTrigger id="quick-profile-group" className="h-9 text-label-12">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value={quickCreateGroupDefaultValue} className="text-xs">
+              <SelectItem value={quickCreateGroupDefaultValue} className="text-label-12">
                 {profileT.quickCreateGroupDefault || "默认分组"}
               </SelectItem>
               {quickCreateProfileGroupOptions.map((group) => (
                 <SelectItem
                   key={`quick-profile-group-${group}`}
                   value={group}
-                  className="text-xs"
+                  className="text-label-12"
                 >
                   {group}
                 </SelectItem>
               ))}
-              <SelectItem value={quickCreateGroupCustomValue} className="text-xs">
+              <SelectItem value={quickCreateGroupCustomValue} className="text-label-12">
                 {profileT.quickCreateGroupCustom || "自定义分组"}
               </SelectItem>
             </SelectContent>
           </Select>
-          <p className="text-[11px] leading-4 text-muted-foreground mt-1">
+          <p className="text-label-12 text-muted-foreground mt-1">
             {profileT.quickCreateGroupHint ||
               "用于在中栏按组归类，便于后续快速筛选和定位。"}
           </p>
@@ -244,7 +244,7 @@ const QuickCreateBasicInfoSection = memo(function QuickCreateBasicInfoSection({
 
         {quickCreateProfileGroup === quickCreateGroupCustomValue ? (
           <div className="space-y-1 md:col-span-2">
-            <Label htmlFor="quick-profile-group-custom" className="text-xs">
+            <Label htmlFor="quick-profile-group-custom" className="text-label-12">
               {profileT.quickCreateGroupCustom || "自定义分组"}
             </Label>
             <Input
@@ -257,7 +257,7 @@ const QuickCreateBasicInfoSection = memo(function QuickCreateBasicInfoSection({
                 profileT.quickCreateGroupCustomPlaceholder ||
                 "输入自定义发布配置组名称"
               }
-              className="h-9 text-xs"
+              className="h-9 text-label-12"
             />
           </div>
         ) : null}
@@ -358,7 +358,7 @@ export function QuickCreateProfileDialog({
         footerClassName="sm:space-x-0"
         footer={
           <>
-            <div className="text-xs leading-5 text-muted-foreground">
+            <div className="text-label-12 text-muted-foreground">
               {quickCreateEditing
                 ? profileT.quickEditFooterHint ||
                   "保存后会立即更新并应用当前发布配置。"

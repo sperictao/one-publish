@@ -50,6 +50,82 @@ describe("PublishRunCard", () => {
     expect(screen.getByText("成功")).toBeInTheDocument();
   });
 
+  it("执行按钮显示文字且保留主操作样式", () => {
+    render(
+      <PublishRunCard
+        outputLog=""
+        publishResult={null}
+        appT={{
+          outputLogTitle: "执行发布",
+          publishStatusLabel: "发布状态",
+          publishStatusIdle: "待执行",
+          publishStatusIdleDetail: "命令与参数已准备完成，可以开始本次发布。",
+          noOutput: "无输出",
+        }}
+        publishActions={{
+          publishCommand: 'dotnet publish "/repo/App.csproj"',
+          publishCommandLabel: "将执行的命令:",
+          startLabel: "执行发布",
+          isPublishing: false,
+          isCancellingPublish: false,
+          startDisabled: false,
+          onStartPublish: vi.fn(),
+          onCancelPublish: vi.fn(),
+        }}
+      />
+    );
+
+    const publishButton = screen.getByRole("button", { name: "执行发布" });
+    const statusPanel = screen.getByTestId("publish-status-panel");
+
+    expect(publishButton).toHaveClass("text-primary-foreground");
+    expect(publishButton).toHaveClass("w-full");
+    expect(publishButton).toHaveClass("sm:flex-1");
+    expect(statusPanel).toHaveClass("block");
+    expect(statusPanel).toHaveClass("w-full");
+    expect(statusPanel).toHaveClass("rounded-lg");
+    expect(statusPanel).toHaveClass("p-4");
+    expect(statusPanel).toHaveTextContent("发布状态");
+    expect(statusPanel).toHaveTextContent("待执行");
+  });
+
+  it("发布中按钮和取消发布按钮使用明确的操作状态样式", () => {
+    render(
+      <PublishRunCard
+        outputLog=""
+        publishResult={null}
+        appT={{
+          outputLogTitle: "执行发布",
+          publishStatusLabel: "发布状态",
+          publishStatusRunning: "发布中",
+          publishStatusRunningDetail: "发布命令正在执行，日志会持续追加到下方输出区域。",
+          noOutput: "无输出",
+        }}
+        publishActions={{
+          publishingLabel: "发布中...",
+          cancelLabel: "取消发布",
+          isPublishing: true,
+          isCancellingPublish: false,
+          startDisabled: false,
+          onStartPublish: vi.fn(),
+          onCancelPublish: vi.fn(),
+        }}
+      />
+    );
+
+    const publishingButton = screen.getByRole("button", { name: "发布中..." });
+    const cancelButton = screen.getByRole("button", { name: "取消发布" });
+
+    expect(publishingButton).toBeDisabled();
+    expect(publishingButton).toHaveClass("bg-interactive/10");
+    expect(publishingButton).toHaveClass("text-interactive");
+    expect(publishingButton).toHaveClass("disabled:opacity-100");
+    expect(cancelButton).toHaveClass("h-12");
+    expect(cancelButton).toHaveClass("border-destructive/30");
+    expect(cancelButton).toHaveClass("bg-destructive/5");
+    expect(cancelButton).toHaveClass("text-destructive");
+  });
+
   it("长单行日志会被限制在卡片内部换行", () => {
     const longLogLine = `${"C:/very-long-output-path".repeat(24)}/publish-output`;
 

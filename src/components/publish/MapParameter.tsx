@@ -127,7 +127,7 @@ export function MapParameter({
           </div>
         ))}
         {entries.length === 0 && (
-          <div className="text-sm text-muted-foreground italic">
+          <div className="text-label-14 text-muted-foreground italic">
             {t("common.noEntriesAdded")}
           </div>
         )}

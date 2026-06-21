@@ -150,7 +150,7 @@ export function OutputTargetBadge({
       <AppDialogBadge variant={badge.variant} icon={badge.icon}>
         {badge.label}
         {badge.detail ? (
-          <span className="ml-1 text-[10px] font-normal opacity-75">
+          <span className="ml-1 text-label-12 font-normal opacity-75">
             {badge.detail}
           </span>
         ) : null}

@@ -28,13 +28,13 @@ export function CommandImportResultCard({
   return (
     <Card>
       <CardHeader className="pb-3">
-        <CardTitle className="text-lg flex items-center gap-2">
+        <CardTitle className="text-heading-20 flex items-center gap-2">
           <Import className="size-5" />
           {appT.commandImportResult || "命令导入映射结果"}
         </CardTitle>
         <CardDescription>Provider: {providerLabel}</CardDescription>
       </CardHeader>
-      <CardContent className="space-y-2 text-sm">
+      <CardContent className="space-y-2 text-copy-14">
         <div className="rounded-md border border-success/30 bg-success/10 px-3 py-2 text-success">
           {(appT.mappedFieldsLabel || "已映射字段") +
             ` (${activeImportFeedback.mappedKeys.length}):`}

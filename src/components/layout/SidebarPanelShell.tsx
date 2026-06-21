@@ -26,7 +26,7 @@ export function SidebarPanelShell({
         collapsed={collapsed}
         side="left"
         width={width}
-        className={cn("surface-raised h-full rounded-lg", className)}
+        className={cn("surface-raised h-full rounded-md", className)}
       >
         {children}
       </CollapsiblePanel>
