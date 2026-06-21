@@ -1,0 +1,31 @@
+{
+  "id": "geist-design-refactor",
+  "name": "geist-design-refactor",
+  "title": "使用 Geist design.md/design.dark.md 重构所有页面与组件",
+  "description": "落地完整 Geist token 体系（色阶/typography/spacing/components）并据此重构全部组件与布局，达到 design.md / design.dark.md 全面对齐",
+  "status": "completed",
+  "dev_type": null,
+  "scope": null,
+  "package": null,
+  "priority": "P2",
+  "creator": "--help",
+  "assignee": "--help",
+  "createdAt": "2026-06-20",
+  "completedAt": "2026-06-21",
+  "branch": null,
+  "base_branch": "main",
+  "worktree_path": null,
+  "commit": null,
+  "pr_url": null,
+  "subtasks": [],
+  "children": [
+    "06-20-geist-token-system",
+    "06-20-geist-ui-primitives",
+    "06-20-geist-business-components",
+    "06-20-geist-verify"
+  ],
+  "parent": null,
+  "relatedFiles": [],
+  "notes": "",
+  "meta": {}
+}

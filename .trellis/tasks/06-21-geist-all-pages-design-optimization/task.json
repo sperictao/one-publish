@@ -1,0 +1,29 @@
+{
+  "id": "geist-all-pages-design-optimization",
+  "name": "geist-all-pages-design-optimization",
+  "title": "使用 Geist 设计系统优化全页面",
+  "description": "",
+  "status": "planning",
+  "dev_type": null,
+  "scope": null,
+  "package": null,
+  "priority": "P2",
+  "creator": "--help",
+  "assignee": "--help",
+  "createdAt": "2026-06-21",
+  "completedAt": null,
+  "branch": null,
+  "base_branch": "main",
+  "worktree_path": null,
+  "commit": null,
+  "pr_url": null,
+  "subtasks": [],
+  "children": [
+    "06-21-geist-ui-prototype",
+    "06-21-geist-workbench-normal-absorption"
+  ],
+  "parent": null,
+  "relatedFiles": [],
+  "notes": "",
+  "meta": {}
+}
