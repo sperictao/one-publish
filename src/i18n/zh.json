@@ -252,6 +252,7 @@
   },
   "repositoryList": {
     "collapsePanel": "收起面板",
+    "repositories": "仓库",
     "all": "全部",
     "addRepository": "添加仓库",
     "noRepositories": "暂无仓库",

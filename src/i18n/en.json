@@ -252,6 +252,7 @@
   },
   "repositoryList": {
     "collapsePanel": "Collapse panel",
+    "repositories": "Repositories",
     "all": "All",
     "addRepository": "Add repository",
     "noRepositories": "No repositories yet",
