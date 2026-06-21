@@ -64,8 +64,9 @@ export function useTheme(theme: Theme) {
 }
 
 // ── Accent Color (强调色) 支持 ──
-// Geist color scales per DESIGN.md / design.dark.md. Values are HSL triplets
-// (space-separated, no hsl() wrapper) so they compose with hsl(var(--settings-accent)).
+// Geist accent scales per DESIGN.md / design.dark.md. Values are HSL triplets
+// (space-separated, no hsl() wrapper) so they compose with Tailwind v3.4 alpha
+// modifiers (bg-interactive/NN → hsl(var(--interactive) / 0.NN)).
 
 export type AccentColor =
   | "blue"
@@ -261,11 +262,10 @@ function applyAccentVariables(color: AccentColor, isDark: boolean) {
   const token = ACCENT_COLORS[color] || ACCENT_COLORS.blue;
   const val = isDark ? token.dark : token.light;
 
-  root.style.setProperty("--settings-accent", val.accent);
-  root.style.setProperty("--settings-accent-focus", val.accentFocus);
-  root.style.setProperty("--settings-sidebar-selected-bg", val.sidebarSelectedBg);
-  root.style.setProperty("--settings-sidebar-selected-text", val.sidebarSelectedText);
-  root.style.setProperty("--settings-card-selected-border", val.cardSelectedBorder);
+  // Runtime accent is written directly to the semantic interactive/ring
+  // variables (raw HSL triplets, consumed via hsl(var(--*)) + alpha modifiers
+  // in Tailwind v3.4). Step variables (e.g. --blue-700) are not rewritten —
+  // the semantic aliases carry the user's selection.
   root.style.setProperty("--interactive", val.accent);
   root.style.setProperty("--interactive-hover", val.accentHover);
   root.style.setProperty("--ring", val.accentFocus);

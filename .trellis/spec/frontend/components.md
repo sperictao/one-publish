@@ -19,6 +19,11 @@ Import shared primitives from `src/components/ui/`:
 
 Use `lucide-react` icons for action buttons and section headers when an icon exists.
 
+## Class Merging
+
+- `cn` in `src/lib/utils.ts` wraps `tailwind-merge`; keep project typography tokens such as `text-button-*`, `text-label-*`, `text-copy-*`, and `text-heading-*` registered as `font-size` class group entries there.
+- When adding new `text-*` typography tokens in `tailwind.config.cjs`, update `geistTextSizeTokens` and its regression tests. Otherwise `tailwind-merge` can treat the typography token as a text color and remove color utilities like `text-primary-foreground`, which makes black primary buttons lose their visible text.
+
 ## Accessibility
 
 - Prefer native interactive elements.
@@ -50,4 +55,3 @@ Use `@testing-library/react` patterns:
 - `screen.getByRole(...)` for buttons, switches, comboboxes, and textboxes.
 - `screen.getByLabelText(...)` for fields.
 - Assert visible behavior and callback payloads, not private component state.
-

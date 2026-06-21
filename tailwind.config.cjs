@@ -5,52 +5,168 @@ module.exports = {
   theme: {
     extend: {
       colors: {
+        // Semantic colors. Two forms coexist by necessity in Tailwind v3.4:
+        //  - `hsl(var(--*))` for colors that take Tailwind alpha modifiers
+        //    (bg-foo/NN). The variable holds a raw HSL triplet.
+        //  - `var(--*)` for step tokens and aliases whose variable carries
+        //    the full color function (hsl/oklch), enabling P3 wide-gamut.
         background: "hsl(var(--background))",
         foreground: "hsl(var(--foreground))",
         card: {
-          DEFAULT: "hsl(var(--card))",
-          foreground: "hsl(var(--card-foreground))",
+          DEFAULT: "var(--card)",
+          foreground: "var(--card-foreground)",
         },
         popover: {
-          DEFAULT: "hsl(var(--popover))",
-          foreground: "hsl(var(--popover-foreground))",
+          DEFAULT: "var(--popover)",
+          foreground: "var(--popover-foreground)",
         },
         primary: {
           DEFAULT: "hsl(var(--primary))",
-          foreground: "hsl(var(--primary-foreground))",
+          foreground: "var(--primary-foreground)",
         },
         secondary: {
           DEFAULT: "hsl(var(--secondary))",
-          foreground: "hsl(var(--secondary-foreground))",
+          foreground: "var(--secondary-foreground)",
         },
         muted: {
-          DEFAULT: "hsl(var(--muted))",
+          DEFAULT: "var(--muted)",
           foreground: "hsl(var(--muted-foreground))",
         },
         accent: {
           DEFAULT: "hsl(var(--accent))",
-          foreground: "hsl(var(--accent-foreground))",
+          foreground: "var(--accent-foreground)",
         },
         destructive: {
           DEFAULT: "hsl(var(--destructive))",
-          foreground: "hsl(var(--destructive-foreground))",
+          foreground: "var(--destructive-foreground)",
         },
         success: {
           DEFAULT: "hsl(var(--success))",
-          foreground: "hsl(var(--success-foreground))",
+          foreground: "var(--success-foreground)",
         },
         warning: {
           DEFAULT: "hsl(var(--warning))",
-          foreground: "hsl(var(--warning-foreground))",
+          foreground: "var(--warning-foreground)",
         },
         interactive: {
           DEFAULT: "hsl(var(--interactive))",
-          foreground: "hsl(var(--interactive-foreground))",
+          foreground: "var(--interactive-foreground)",
           hover: "hsl(var(--interactive-hover))",
         },
-        border: "hsl(var(--border))",
-        input: "hsl(var(--input))",
+        border: "var(--border)",
+        input: "var(--input)",
         ring: "hsl(var(--ring))",
+        "background-200": "var(--background-200)",
+        // Geist step tokens — var(--*) form (variables carry hsl()/oklch(),
+        // the latter applied via @media (color-gamut: p3) in index.css).
+        gray: {
+          100: "var(--gray-100)",
+          200: "var(--gray-200)",
+          300: "var(--gray-300)",
+          400: "var(--gray-400)",
+          500: "var(--gray-500)",
+          600: "var(--gray-600)",
+          700: "var(--gray-700)",
+          800: "var(--gray-800)",
+          900: "var(--gray-900)",
+          1000: "var(--gray-1000)",
+        },
+        "gray-alpha": {
+          100: "var(--gray-alpha-100)",
+          200: "var(--gray-alpha-200)",
+          300: "var(--gray-alpha-300)",
+          400: "var(--gray-alpha-400)",
+          500: "var(--gray-alpha-500)",
+          600: "var(--gray-alpha-600)",
+          700: "var(--gray-alpha-700)",
+          800: "var(--gray-alpha-800)",
+          900: "var(--gray-alpha-900)",
+          1000: "var(--gray-alpha-1000)",
+        },
+        blue: {
+          100: "var(--blue-100)",
+          200: "var(--blue-200)",
+          300: "var(--blue-300)",
+          400: "var(--blue-400)",
+          500: "var(--blue-500)",
+          600: "var(--blue-600)",
+          700: "var(--blue-700)",
+          800: "var(--blue-800)",
+          900: "var(--blue-900)",
+          1000: "var(--blue-1000)",
+        },
+        red: {
+          100: "var(--red-100)",
+          200: "var(--red-200)",
+          300: "var(--red-300)",
+          400: "var(--red-400)",
+          500: "var(--red-500)",
+          600: "var(--red-600)",
+          700: "var(--red-700)",
+          800: "var(--red-800)",
+          900: "var(--red-900)",
+          1000: "var(--red-1000)",
+        },
+        amber: {
+          100: "var(--amber-100)",
+          200: "var(--amber-200)",
+          300: "var(--amber-300)",
+          400: "var(--amber-400)",
+          500: "var(--amber-500)",
+          600: "var(--amber-600)",
+          700: "var(--amber-700)",
+          800: "var(--amber-800)",
+          900: "var(--amber-900)",
+          1000: "var(--amber-1000)",
+        },
+        green: {
+          100: "var(--green-100)",
+          200: "var(--green-200)",
+          300: "var(--green-300)",
+          400: "var(--green-400)",
+          500: "var(--green-500)",
+          600: "var(--green-600)",
+          700: "var(--green-700)",
+          800: "var(--green-800)",
+          900: "var(--green-900)",
+          1000: "var(--green-1000)",
+        },
+        teal: {
+          100: "var(--teal-100)",
+          200: "var(--teal-200)",
+          300: "var(--teal-300)",
+          400: "var(--teal-400)",
+          500: "var(--teal-500)",
+          600: "var(--teal-600)",
+          700: "var(--teal-700)",
+          800: "var(--teal-800)",
+          900: "var(--teal-900)",
+          1000: "var(--teal-1000)",
+        },
+        purple: {
+          100: "var(--purple-100)",
+          200: "var(--purple-200)",
+          300: "var(--purple-300)",
+          400: "var(--purple-400)",
+          500: "var(--purple-500)",
+          600: "var(--purple-600)",
+          700: "var(--purple-700)",
+          800: "var(--purple-800)",
+          900: "var(--purple-900)",
+          1000: "var(--purple-1000)",
+        },
+        pink: {
+          100: "var(--pink-100)",
+          200: "var(--pink-200)",
+          300: "var(--pink-300)",
+          400: "var(--pink-400)",
+          500: "var(--pink-500)",
+          600: "var(--pink-600)",
+          700: "var(--pink-700)",
+          800: "var(--pink-800)",
+          900: "var(--pink-900)",
+          1000: "var(--pink-1000)",
+        },
       },
       // Geist radii: 6px everyday, 12px menus/modals, 16px fullscreen.
       borderRadius: {
@@ -61,14 +177,10 @@ module.exports = {
         full: "9999px",
       },
       // Geist elevation — tonal surfaces + borders first, shadows stay subtle.
+      // Only `raised` is exposed as a Tailwind utility; popover/modal shadows
+      // are applied via the `.surface-popover`/`.surface-modal` CSS classes.
       boxShadow: {
-        raised:
-          "0 2px 2px rgba(0, 0, 0, 0.04)",
-        popover:
-          "0 1px 1px rgba(0, 0, 0, 0.02), 0 4px 8px -4px rgba(0, 0, 0, 0.04), 0 16px 24px -8px rgba(0, 0, 0, 0.06)",
-        modal:
-          "0 1px 1px rgba(0, 0, 0, 0.02), 0 8px 16px -4px rgba(0, 0, 0, 0.04), 0 24px 32px -8px rgba(0, 0, 0, 0.06)",
-        inset: "inset 0 1px 2px rgba(0, 0, 0, 0.04)",
+        raised: "0 2px 2px rgba(0, 0, 0, 0.04)",
       },
       fontFamily: {
         sans: [
@@ -92,19 +204,51 @@ module.exports = {
           "monospace",
         ],
       },
+      // Geist typography tokens — design.md typography section. Each entry is
+      // [size, { lineHeight, letterSpacing? }]. Font weight is not bound here
+      // (Tailwind fontSize object syntax doesn't accept fontWeight); pair with
+      // `font-medium`/`font-semibold`/`font-normal` at the call site. Mono
+      // variants are kept distinct where their metrics differ from sans.
+      fontSize: {
+        "heading-72": ["72px", { lineHeight: "72px", letterSpacing: "-4.32px" }],
+        "heading-64": ["64px", { lineHeight: "64px", letterSpacing: "-3.84px" }],
+        "heading-56": ["56px", { lineHeight: "56px", letterSpacing: "-3.36px" }],
+        "heading-48": ["48px", { lineHeight: "56px", letterSpacing: "-2.88px" }],
+        "heading-40": ["40px", { lineHeight: "48px", letterSpacing: "-2.4px" }],
+        "heading-32": ["32px", { lineHeight: "40px", letterSpacing: "-1.28px" }],
+        "heading-24": ["24px", { lineHeight: "32px", letterSpacing: "-0.96px" }],
+        "heading-20": ["20px", { lineHeight: "26px", letterSpacing: "-0.4px" }],
+        "heading-16": ["16px", { lineHeight: "24px", letterSpacing: "-0.32px" }],
+        "heading-14": ["14px", { lineHeight: "20px", letterSpacing: "-0.28px" }],
+        "button-16": ["16px", { lineHeight: "20px" }],
+        "button-14": ["14px", { lineHeight: "20px" }],
+        "button-12": ["12px", { lineHeight: "16px" }],
+        "label-20": ["20px", { lineHeight: "32px" }],
+        "label-18": ["18px", { lineHeight: "20px" }],
+        "label-16": ["16px", { lineHeight: "20px" }],
+        "label-14": ["14px", { lineHeight: "20px" }],
+        "label-14-mono": ["14px", { lineHeight: "20px" }],
+        "label-13": ["13px", { lineHeight: "16px" }],
+        "label-13-mono": ["13px", { lineHeight: "20px" }],
+        "label-12": ["12px", { lineHeight: "16px" }],
+        "label-12-mono": ["12px", { lineHeight: "16px" }],
+        "copy-24": ["24px", { lineHeight: "36px" }],
+        "copy-20": ["20px", { lineHeight: "36px" }],
+        "copy-18": ["18px", { lineHeight: "28px" }],
+        "copy-16": ["16px", { lineHeight: "24px" }],
+        "copy-14": ["14px", { lineHeight: "20px" }],
+        "copy-14-mono": ["14px", { lineHeight: "20px" }],
+        "copy-13": ["13px", { lineHeight: "18px" }],
+        "copy-13-mono": ["13px", { lineHeight: "18px" }],
+      },
       // Geist motion: only when it clarifies a change. Short, physical easing.
       animation: {
         "fade-in": "fadeIn 0.15s cubic-bezier(0.175, 0.885, 0.32, 1.1)",
-        "slide-up": "slideUp 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.1)",
       },
       keyframes: {
         fadeIn: {
           "0%": { opacity: "0" },
           "100%": { opacity: "1" },
-        },
-        slideUp: {
-          "0%": { transform: "translateY(8px)", opacity: "0" },
-          "100%": { transform: "translateY(0)", opacity: "1" },
         },
       },
       transitionTimingFunction: {
