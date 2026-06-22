@@ -1597,7 +1597,7 @@ export const PublishConfigPanel = memo(function PublishConfigPanel({
         {/* Search */}
         <div className="px-3 py-1.5">
           <div className="group/search search-input-shell surface-input relative rounded-md">
-            <Search className="absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground/50 transition-colors duration-150 ease-geist group-focus-within/search:text-interactive" />
+            <Search className="absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground/50 transition-colors duration-150 ease-geist group-focus-within/search:text-muted-foreground" />
             <Input
               bare
               placeholder={t.searchConfig || "搜索配置"}

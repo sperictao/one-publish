@@ -576,32 +576,35 @@ html.dark {
   position: relative;
 }
 
-/* Recessed input well — flat translucent fill + inset shadow implies depth.
+/* Recessed input well — flat translucent fill.
    `--input` is `var(--gray-alpha-400)` (translucent), so no extra alpha. */
 .surface-input {
   background: var(--input);
   border: 1px solid var(--border);
-  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.04);
   transition: border-color 0.15s cubic-bezier(0.175, 0.885, 0.32, 1.1),
-              box-shadow 0.15s cubic-bezier(0.175, 0.885, 0.32, 1.1),
               background-color 0.15s cubic-bezier(0.175, 0.885, 0.32, 1.1);
 }
 
 .surface-input:focus-within {
   border-color: hsl(var(--ring));
-  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.04), 0 0 0 2px hsl(var(--background)), 0 0 0 4px hsl(var(--ring));
+  box-shadow: 0 0 0 2px hsl(var(--background)), 0 0 0 4px hsl(var(--ring));
+}
+
+.search-input-shell {
+  border-color: transparent;
 }
 
 .search-input-shell:focus-within {
   border-color: transparent;
-  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.04), 0 0 0 2px hsl(var(--ring));
+  box-shadow: 0 0 0 2px var(--border);
 }
 
 /* List scroll shell — content scroll region. Kept as a semantic class hook:
-   tests (PublishConfigPanel.test, RepositoryList.test) query it by name. */
+   tests (PublishConfigPanel.test, RepositoryList.test) query it by name.
+   No border: the outer SidebarPanelShell/surface-raised already provides the
+   panel border; a second inner border would create a double-outline. */
 .list-scroll-shell {
   border-radius: 6px;
-  border: 1px solid var(--border);
   background: var(--card);
 }
 
