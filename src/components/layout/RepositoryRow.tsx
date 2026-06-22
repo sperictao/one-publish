@@ -106,7 +106,7 @@ export const RepositoryRow = memo(function RepositoryRow({
         aria-pressed={isSelected}
         aria-label={`${repoT.selectRepository || "选择仓库"}: ${repo.name}`}
         className={cn(
-          "flex w-full items-start gap-2.5 rounded-md border border-transparent bg-transparent py-2.5 pr-11 text-left shadow-none outline-none transition-colors duration-150 ease-geist hover:bg-accent focus-visible:ring-2 focus-visible:ring-interactive/30 focus-visible:ring-offset-1 focus-visible:ring-offset-background",
+          "flex w-full items-start gap-2.5 rounded-md border border-transparent bg-transparent py-2 pr-11 text-left shadow-none outline-none transition-colors duration-150 ease-geist hover:bg-accent focus-visible:ring-2 focus-visible:ring-interactive/30 focus-visible:ring-offset-1 focus-visible:ring-offset-background",
           isSelected && "bg-accent",
           dragHandleVisible ? "pl-10" : "pl-3"
         )}

@@ -38,7 +38,7 @@ export function MainContentShell({
 }: MainContentShellProps) {
   return (
     <div className="flex min-w-0 flex-1 flex-col p-2">
-      <div className="surface-raised flex h-full min-w-0 flex-col overflow-hidden rounded-lg">
+      <div className="surface-raised flex h-full min-w-0 flex-col overflow-hidden rounded-md">
         <h1 className="sr-only">{appT.appTitle || "One Publish"}</h1>
         <div
           data-tauri-drag-region
