@@ -92,5 +92,6 @@ export function createPublishExecutionRecord(params: {
     outputExcerpt,
     spec: toStoredSpecValue(params.spec),
     fileCount: params.result.file_count,
+    warnings: params.result.warnings ?? null,
   };
 }

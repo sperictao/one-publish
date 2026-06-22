@@ -88,6 +88,8 @@ pub struct ExecutionRecord {
     pub spec: Option<serde_json::Value>,
     #[serde(default)]
     pub file_count: usize,
+    #[serde(default)]
+    pub warnings: Option<Vec<String>>,
 }
 
 pub(crate) const DEFAULT_EXECUTION_HISTORY_LIMIT: usize = 20;

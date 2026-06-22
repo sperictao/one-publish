@@ -71,6 +71,7 @@ export function createFailedPublishTransactionResult(params: {
       output_log: "",
       output_dir: "",
       file_count: 0,
+      warnings: null,
     },
     outputLog: params.outputLog,
   });

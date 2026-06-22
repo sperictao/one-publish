@@ -122,6 +122,7 @@ pub(crate) async fn execute_publish_spec(
                 output_log: String::new(),
                 output_dir: String::new(),
                 file_count: 0,
+                warnings: None,
             });
         }
 
@@ -157,7 +158,7 @@ pub(crate) async fn execute_publish_spec(
         let cancel_requested = Arc::clone(&permit.cancel_requested);
         permit.mark_running(Arc::clone(&child)).await;
 
-        let run_result: Result<(bool, bool, Option<String>, String), crate::errors::AppError> =
+        let run_result: Result<(bool, bool, Option<String>, String, Vec<String>), crate::errors::AppError> =
             async {
                 let (sender, receiver) = mpsc::unbounded_channel::<(String, String)>();
                 let collector = tokio::spawn(collect_log_chunks(
@@ -221,11 +222,11 @@ pub(crate) async fn execute_publish_spec(
                 } else {
                     Some(format!("发布失败，退出代码: {:?}", status.code()))
                 };
-                Ok((success, cancelled, error, log_summary.output))
+                Ok((success, cancelled, error, log_summary.output, log_summary.warnings))
             }
             .await;
 
-        let (success, cancelled, error, output_log) = run_result?;
+        let (success, cancelled, error, output_log, warnings) = run_result?;
         let output_dir = output_policy.output_dir().to_string();
         let file_count = if success {
             count_output_files(output_policy.output_dir())
@@ -242,6 +243,11 @@ pub(crate) async fn execute_publish_spec(
             output_log,
             output_dir,
             file_count,
+            warnings: if warnings.is_empty() {
+                None
+            } else {
+                Some(warnings)
+            },
         })
     }
     .await;

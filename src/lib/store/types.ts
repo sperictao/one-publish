@@ -49,6 +49,7 @@ export interface ExecutionRecord
     | "failureSignature"
     | "outputExcerpt"
     | "spec"
+    | "warnings"
   > {
   repoId?: string | null;
   outputDir?: string | null;
@@ -58,6 +59,7 @@ export interface ExecutionRecord
   failureSignature?: string | null;
   outputExcerpt?: string | null;
   spec?: JsonValue | null;
+  warnings?: string[] | null;
 }
 
 export interface ProjectScanCandidates

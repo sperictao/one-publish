@@ -21,6 +21,7 @@ function createRecord(overrides?: Partial<ExecutionRecord>): ExecutionRecord {
     failureSignature: "msbuild failed: missing sdk",
     spec: null,
     fileCount: 0,
+    warnings: null,
     ...overrides,
   };
 }
@@ -120,5 +121,104 @@ describe("ExecutionHistoryCard", () => {
     expect(screen.getByRole("button", { name: "复制 Shell 片段" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "复制 GHA 片段" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "导出诊断索引" })).not.toBeInTheDocument();
+  });
+
+  it("带 warnings 的记录展示警告摘要", () => {
+    const record = createRecord({
+      success: true,
+      error: null,
+      failureSignature: null,
+      warnings: [
+        "warning CS0168: The variable 'x' is declared but never used",
+        "warning NU1903: Package 'Foo' has a known vulnerability",
+      ],
+    });
+
+    render(
+      <ExecutionHistoryCard
+        scopedExecutionHistory={[record]}
+        filteredExecutionHistory={[record]}
+        executionHistoryLimit={20}
+        historyProviderOptions={["dotnet"]}
+        historyFilterProvider="all"
+        historyFilterStatus="all"
+        historyFilterWindow="all"
+        historyFilterKeyword=""
+        isExportingHistory={false}
+        isPublishing={false}
+        appT={{
+          statusSuccess: "成功",
+          statusFailed: "失败",
+          statusCancelled: "已取消",
+        }}
+        historyT={{
+          title: "最近执行历史",
+          rerun: "重新执行",
+          warningsLabel: "警告",
+        }}
+        failureT={{
+          openSnapshot: "打开快照",
+        }}
+        onHistoryFilterProviderChange={vi.fn()}
+        onHistoryFilterStatusChange={vi.fn()}
+        onHistoryFilterWindowChange={vi.fn()}
+        onHistoryFilterKeywordChange={vi.fn()}
+        onExportExecutionHistory={vi.fn(async () => undefined)}
+        onClearFilters={vi.fn()}
+        onOpenSnapshotFromRecord={vi.fn(async () => undefined)}
+        onRerunFromHistory={vi.fn(async () => undefined)}
+        onCopyHandoffSnippet={vi.fn(async () => undefined)}
+      />
+    );
+
+    expect(screen.getByText("警告: 2")).toBeInTheDocument();
+  });
+
+  it("warnings 为 null 的记录不展示警告摘要", () => {
+    const record = createRecord({
+      success: true,
+      error: null,
+      failureSignature: null,
+      warnings: null,
+    });
+
+    render(
+      <ExecutionHistoryCard
+        scopedExecutionHistory={[record]}
+        filteredExecutionHistory={[record]}
+        executionHistoryLimit={20}
+        historyProviderOptions={["dotnet"]}
+        historyFilterProvider="all"
+        historyFilterStatus="all"
+        historyFilterWindow="all"
+        historyFilterKeyword=""
+        isExportingHistory={false}
+        isPublishing={false}
+        appT={{
+          statusSuccess: "成功",
+          statusFailed: "失败",
+          statusCancelled: "已取消",
+        }}
+        historyT={{
+          title: "最近执行历史",
+          rerun: "重新执行",
+          warningsLabel: "警告",
+        }}
+        failureT={{
+          openSnapshot: "打开快照",
+        }}
+        onHistoryFilterProviderChange={vi.fn()}
+        onHistoryFilterStatusChange={vi.fn()}
+        onHistoryFilterWindowChange={vi.fn()}
+        onHistoryFilterKeywordChange={vi.fn()}
+        onExportExecutionHistory={vi.fn(async () => undefined)}
+        onClearFilters={vi.fn()}
+        onOpenSnapshotFromRecord={vi.fn(async () => undefined)}
+        onRerunFromHistory={vi.fn(async () => undefined)}
+        onCopyHandoffSnippet={vi.fn(async () => undefined)}
+      />
+    );
+
+    expect(screen.queryByText(/警告/)).not.toBeInTheDocument();
   });
 });

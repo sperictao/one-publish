@@ -58,6 +58,7 @@ fn bootstrap_state_serialization_excludes_execution_history() {
             output_excerpt: None,
             spec: None,
             file_count: 2,
+            warnings: None,
         }],
         ..AppState::default()
     };

@@ -43,6 +43,7 @@ describe("publishFailure", () => {
           output_log: "$ dotnet publish /repo/App.csproj\nerror CS0246: Foo missing",
           output_dir: "",
           file_count: 0,
+          warnings: null,
         },
         outputLog:
           "$ dotnet publish /repo/App.csproj\nerror CS0246: Foo missing",
@@ -60,6 +61,7 @@ describe("publishFailure", () => {
           output_log: "$ dotnet publish /repo/App.csproj\nerror CS0246: Foo missing",
           output_dir: "",
           file_count: 0,
+          warnings: null,
         },
         outputLog:
           "$ dotnet publish /repo/App.csproj\nerror CS0246: Foo missing",

@@ -43,7 +43,7 @@ export type OutputTargetDescriptor = { kind: OutputTargetKind, raw: string, path
 
 export type RenderedPublishCommand = { program: string, args: Array<string>, working_dir: string | null, display_command: string, };
 
-export type PublishResult = { provider_id: string, success: boolean, cancelled: boolean, error: string | null, command: RenderedPublishCommand, output_log: string, output_dir: string, file_count: number, };
+export type PublishResult = { provider_id: string, success: boolean, cancelled: boolean, error: string | null, command: RenderedPublishCommand, output_log: string, output_dir: string, file_count: number, warnings: Array<string> | null, };
 
 export type ProjectScanCandidates = { rootPath: string, solutionFiles: Array<string>, projectFiles: Array<string>, recommendedProjectFile: string | null, };
 
@@ -101,7 +101,7 @@ export type Branch = { name: string, isMain: boolean, isCurrent: boolean, path: 
 
 export type ConfigProfile = { name: string, providerId: string, parameters: JsonValue, profileGroup: string | null, createdAt: string, isSystemDefault: boolean, };
 
-export type ExecutionRecord = { id: string, repoId: string | null, providerId: string, projectPath: string, startedAt: string, finishedAt: string, success: boolean, cancelled: boolean, outputDir: string | null, error: string | null, commandLine: string | null, snapshotPath: string | null, failureSignature: string | null, outputExcerpt: string | null, spec: JsonValue | null, fileCount: number, };
+export type ExecutionRecord = { id: string, repoId: string | null, providerId: string, projectPath: string, startedAt: string, finishedAt: string, success: boolean, cancelled: boolean, outputDir: string | null, error: string | null, commandLine: string | null, snapshotPath: string | null, failureSignature: string | null, outputExcerpt: string | null, spec: JsonValue | null, fileCount: number, warnings: Array<string> | null, };
 
 export type PublishConfigStore = { configuration: string, runtime: string, framework: string, selfContained: boolean, outputDir: string, noBuild: boolean, noRestore: boolean, verbosity: string, noLogo: boolean, deleteExistingFiles: boolean, properties: { [key: string]: string }, useProfile: boolean, profileName: string, };
 

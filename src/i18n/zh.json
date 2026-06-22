@@ -528,6 +528,13 @@
     "openOutputDirectory": "点击打开目录",
     "outputDirectoryOpened": "已打开输出目录",
     "openOutputDirectoryFailed": "打开输出目录失败",
+    "openOutputDirLabel": "打开输出目录",
+    "republishLabel": "重新发布",
+    "publishLogTitle": "发布日志",
+    "publishLogExpand": "展开日志",
+    "publishLogCollapse": "收起日志",
+    "publishLogEmpty": "暂无日志",
+    "publishWarningsLabel": "个警告",
     "outputTargetBadgeLocal": "本地",
     "outputTargetBadgeUnc": "UNC 共享",
     "outputTargetBadgeMounted": "挂载远程卷",
@@ -743,7 +750,10 @@
     "noDiagnosticsToIndexHint": "请先导出诊断包、历史或执行快照",
     "exportDiagnosticsIndexTitle": "导出诊断索引",
     "diagnosticsIndexExported": "诊断索引已导出",
-    "exportDiagnosticsIndexFailed": "导出诊断索引失败"
+    "exportDiagnosticsIndexFailed": "导出诊断索引失败",
+    "warningsLabel": "警告",
+    "warningsExpand": "展开警告",
+    "warningsCollapse": "收起警告"
   },
   "rerun": {
     "title": "重跑前确认清单",

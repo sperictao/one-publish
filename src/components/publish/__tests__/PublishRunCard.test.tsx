@@ -30,6 +30,7 @@ describe("PublishRunCard", () => {
           output_log: "",
           output_dir: "/tmp/output",
           file_count: 3,
+          warnings: null,
         }}
         appT={{
           outputLogTitle: "执行发布",
@@ -212,5 +213,80 @@ describe("PublishRunCard", () => {
     );
 
     expect(screen.getByText('dotnet publish "/repo-b/App.csproj"')).toBeInTheDocument();
+  });
+
+  it("成功且带 warnings 时展示警告摘要", () => {
+    render(
+      <PublishRunCard
+        outputLog=""
+        publishResult={{
+          provider_id: "dotnet",
+          success: true,
+          cancelled: false,
+          error: null,
+          command: {
+            program: "dotnet",
+            args: ["publish", "/tmp/output/App.csproj"],
+            working_dir: "/tmp/output",
+            display_command: 'dotnet publish "/tmp/output/App.csproj"',
+          },
+          output_log: "",
+          output_dir: "/tmp/output",
+          file_count: 3,
+          warnings: [
+            "warning CS0168: The variable 'x' is declared but never used",
+            "warning NU1903: Package 'Foo' has a known vulnerability",
+          ],
+        }}
+        appT={{
+          outputLogTitle: "执行发布",
+          publishStatusLabel: "发布状态",
+          statusSuccess: "成功",
+          publishStatusSuccessDetail: "发布已完成",
+          publishWarningsLabel: "个警告",
+          openOutputDirLabel: "打开输出目录",
+          outputDirectoryLabel: "输出目录",
+        }}
+        publishActions={null}
+      />
+    );
+
+    expect(screen.getByText("2 个警告")).toBeInTheDocument();
+  });
+
+  it("warnings 为 null 时不展示警告摘要", () => {
+    render(
+      <PublishRunCard
+        outputLog=""
+        publishResult={{
+          provider_id: "dotnet",
+          success: true,
+          cancelled: false,
+          error: null,
+          command: {
+            program: "dotnet",
+            args: ["publish", "/tmp/output/App.csproj"],
+            working_dir: "/tmp/output",
+            display_command: 'dotnet publish "/tmp/output/App.csproj"',
+          },
+          output_log: "",
+          output_dir: "/tmp/output",
+          file_count: 3,
+          warnings: null,
+        }}
+        appT={{
+          outputLogTitle: "执行发布",
+          publishStatusLabel: "发布状态",
+          statusSuccess: "成功",
+          publishStatusSuccessDetail: "发布已完成",
+          publishWarningsLabel: "个警告",
+          openOutputDirLabel: "打开输出目录",
+          outputDirectoryLabel: "输出目录",
+        }}
+        publishActions={null}
+      />
+    );
+
+    expect(screen.queryByText(/个警告/)).not.toBeInTheDocument();
   });
 });

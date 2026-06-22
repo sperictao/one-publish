@@ -19,6 +19,7 @@ pub struct PublishResult {
     pub output_log: String,
     pub output_dir: String,
     pub file_count: usize,
+    pub warnings: Option<Vec<String>>,
 }
 
 #[derive(Debug, Clone, Serialize, TS)]
@@ -33,4 +34,5 @@ pub struct PublishLogChunkEvent {
 pub(crate) struct PublishLogSummary {
     pub(crate) ends_with_newline: bool,
     pub(crate) output: String,
+    pub(crate) warnings: Vec<String>,
 }

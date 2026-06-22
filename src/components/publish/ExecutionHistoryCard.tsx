@@ -14,7 +14,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Loader2 } from "lucide-react";
+import { AlertTriangle, ChevronDown, Loader2 } from "lucide-react";
 import type { ExecutionRecord } from "@/lib/store/types";
 import type {
   HistoryFilterStatus,
@@ -242,6 +242,27 @@ export function ExecutionHistoryCard({
                     </span>{" "}
                     <span className="break-words">{failureReason}</span>
                   </div>
+                )}
+                {record.warnings && record.warnings.length > 0 && (
+                  <details className="mt-2 rounded-lg border border-warning/20 bg-warning/5">
+                    <summary className="flex cursor-pointer list-none items-center gap-1.5 px-2.5 py-2 text-label-12 text-warning transition-colors duration-150 ease-geist hover:bg-warning/5 [&::-webkit-details-marker]:hidden">
+                      <AlertTriangle className="size-3.5 flex-shrink-0" />
+                      <span className="font-semibold">
+                        {historyT.warningsLabel || "警告"}: {record.warnings.length}
+                      </span>
+                      <ChevronDown className="ml-auto size-3.5 text-warning/70 transition-transform duration-150 ease-geist group-open:rotate-180" />
+                    </summary>
+                    <ul className="max-h-32 overflow-auto border-t border-warning/15 px-2.5 py-1.5 text-label-12 text-warning/90">
+                      {record.warnings.map((warning, idx) => (
+                        <li
+                          key={idx}
+                          className="break-all border-b border-warning/10 py-1 last:border-b-0"
+                        >
+                          {warning}
+                        </li>
+                      ))}
+                    </ul>
+                  </details>
                 )}
                 <div className="mt-2 flex flex-wrap gap-2">
                   <Button

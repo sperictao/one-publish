@@ -195,6 +195,7 @@ fn publish_result_serialization_excludes_output_payload() {
         output_log: "$ dotnet publish \"/tmp/app.csproj\"\n".to_string(),
         output_dir: "/tmp/out".to_string(),
         file_count: 3,
+        warnings: None,
     })
     .expect("serialize publish result");
 

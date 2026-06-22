@@ -32,6 +32,7 @@ describe("createPublishExecutionRecord", () => {
         output_log: '$ dotnet publish "/repo/App.csproj" -c Release\nbuild ok',
         output_dir: "/repo/out",
         file_count: 2,
+        warnings: null,
       },
       outputLog: "$ dotnet publish /repo/App.csproj\nbuild ok",
     });
@@ -61,6 +62,7 @@ describe("createPublishExecutionRecord", () => {
           "$ dotnet publish /repo/App.csproj\n[stderr] Build failed: boom",
         output_dir: "",
         file_count: 0,
+        warnings: null,
       },
       outputLog: "$ dotnet publish /repo/App.csproj\n[stderr] Build failed: boom",
     });
@@ -97,6 +99,7 @@ describe("createPublishExecutionRecord", () => {
         ].join("\n"),
         output_dir: "",
         file_count: 0,
+        warnings: null,
       },
       outputLog: [
         "$ dotnet publish /repo/App.csproj",

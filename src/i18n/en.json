@@ -528,6 +528,13 @@
     "openOutputDirectory": "Click to open",
     "outputDirectoryOpened": "Output directory opened",
     "openOutputDirectoryFailed": "Failed to open output directory",
+    "openOutputDirLabel": "Open output directory",
+    "republishLabel": "Republish",
+    "publishLogTitle": "Publish log",
+    "publishLogExpand": "Expand log",
+    "publishLogCollapse": "Collapse log",
+    "publishLogEmpty": "No log output",
+    "publishWarningsLabel": "warnings",
     "outputTargetBadgeLocal": "Local",
     "outputTargetBadgeUnc": "UNC share",
     "outputTargetBadgeMounted": "Mounted remote volume",
@@ -743,7 +750,10 @@
     "noDiagnosticsToIndexHint": "Export bundle/history/snapshot first",
     "exportDiagnosticsIndexTitle": "Export diagnostics index",
     "diagnosticsIndexExported": "Diagnostics index exported",
-    "exportDiagnosticsIndexFailed": "Failed to export diagnostics index"
+    "exportDiagnosticsIndexFailed": "Failed to export diagnostics index",
+    "warningsLabel": "Warnings",
+    "warningsExpand": "Expand warnings",
+    "warningsCollapse": "Collapse warnings"
   },
   "rerun": {
     "title": "Pre-rerun Checklist",
