@@ -23,20 +23,6 @@
       "executionHistoryLimitDescription": "可设置 5~200 条，超出范围会自动修正并即时生效。",
       "preRerunChecklistLabel": "重跑前确认清单",
       "preRerunChecklistDescription": "启用后，点击“重跑记录”会先检查分支、环境和输出目标确认项。"
-    },
-    "appearance": {
-      "accentColorTitle": "强调色 (Accent Color)",
-      "accentColorDescription": "选择应用在聚焦框、激活项、链接和高亮状态下的系统强调色。",
-      "accentColorAriaLabel": "强调色: {{name}}",
-      "accentBrand": "Geist 蓝",
-      "accentBlue": "系统蓝",
-      "accentPurple": "紫色",
-      "accentPink": "粉色",
-      "accentRed": "红色",
-      "accentOrange": "橙色",
-      "accentYellow": "黄色",
-      "accentGreen": "绿色",
-      "accentGray": "石墨"
     }
   },
   "version": {

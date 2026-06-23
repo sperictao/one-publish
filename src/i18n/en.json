@@ -23,20 +23,6 @@
       "executionHistoryLimitDescription": "Set between 5 and 200 records. Values outside the range are corrected automatically and take effect immediately.",
       "preRerunChecklistLabel": "Pre-rerun Checklist",
       "preRerunChecklistDescription": "When enabled, clicking \"Rerun Record\" checks branch, environment, and output target confirmations first."
-    },
-    "appearance": {
-      "accentColorTitle": "Accent Color",
-      "accentColorDescription": "Choose the system color used for focus rings, active items, links, and highlighted states.",
-      "accentColorAriaLabel": "Accent color: {{name}}",
-      "accentBrand": "Geist Blue",
-      "accentBlue": "System Blue",
-      "accentPurple": "Purple",
-      "accentPink": "Pink",
-      "accentRed": "Red",
-      "accentOrange": "Orange",
-      "accentYellow": "Yellow",
-      "accentGreen": "Green",
-      "accentGray": "Graphite"
     }
   },
   "version": {

@@ -50,8 +50,6 @@ import type { Language } from "@/hooks/useI18n";
 import type { EnvironmentCheckSnapshot } from "@/features/environment/environment";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
-import { useAccentColor, ACCENT_COLORS } from "@/hooks/useTheme";
-import type { AccentColor } from "@/hooks/useTheme";
 import { ThemePreviewMock } from "./ThemePreviewMock";
 
 const EnvironmentCheckContent = lazy(async () => {
@@ -366,25 +364,6 @@ export const AppearanceSettingsSection = memo(function AppearanceSettingsSection
   theme,
   onThemeChange,
 }: AppearanceSettingsSectionProps) {
-  const { accentColor, setAccentColor } = useAccentColor();
-  const appearanceT = translations.settings?.appearance || {};
-
-  const accentList: Array<{ id: AccentColor; name: string; lightColor: string; darkColor: string }> = [
-    { id: "brand", name: appearanceT.accentBrand || "Geist 蓝", lightColor: "#006bff", darkColor: "#006efe" },
-    { id: "blue", name: appearanceT.accentBlue || "系统蓝", lightColor: "#006bff", darkColor: "#006efe" },
-    { id: "purple", name: appearanceT.accentPurple || "紫色", lightColor: "#a000f8", darkColor: "#9440d5" },
-    { id: "pink", name: appearanceT.accentPink || "粉色", lightColor: "#f22782", darkColor: "#f12b82" },
-    { id: "red", name: appearanceT.accentRed || "红色", lightColor: "#ea001d", darkColor: "#f32e40" },
-    { id: "orange", name: appearanceT.accentOrange || "橙色", lightColor: "#ffae00", darkColor: "#ffae00" },
-    { id: "yellow", name: appearanceT.accentYellow || "黄色", lightColor: "#ffa600", darkColor: "#ed9a00" },
-    { id: "green", name: appearanceT.accentGreen || "绿色", lightColor: "#28a948", darkColor: "#00ac3a" },
-    { id: "gray", name: appearanceT.accentGray || "石墨", lightColor: "#4d4d4d", darkColor: "#a0a0a0" },
-  ];
-
-  const activeColorToken = ACCENT_COLORS[accentColor] || ACCENT_COLORS.blue;
-  const lightPreviewColor = `hsl(${activeColorToken.light.accent})`;
-  const darkPreviewColor = `hsl(${activeColorToken.dark.accent})`;
-
   const themeCardBase =
     "group relative flex flex-col items-center gap-2.5 rounded-md border p-2.5 text-center transition-colors duration-150 ease-geist";
   const themeCardSelected =
@@ -435,7 +414,6 @@ export const AppearanceSettingsSection = memo(function AppearanceSettingsSection
               <div className="w-1/2 border-r border-border">
                 <ThemePreviewMock
                   theme="light"
-                  previewColor={lightPreviewColor}
                   sidebarWidth={14}
                   showAllSidebarLines={false}
                   className="rounded-none border-none shadow-none"
@@ -444,7 +422,6 @@ export const AppearanceSettingsSection = memo(function AppearanceSettingsSection
               <div className="w-1/2">
                 <ThemePreviewMock
                   theme="dark"
-                  previewColor={darkPreviewColor}
                   hideSidebar
                   showAllSidebarLines={false}
                   className="rounded-none border-none shadow-none"
@@ -471,7 +448,7 @@ export const AppearanceSettingsSection = memo(function AppearanceSettingsSection
               </div>
             )}
             {/* 亮色主题微缩图 */}
-            <ThemePreviewMock theme="light" previewColor={lightPreviewColor} />
+            <ThemePreviewMock theme="light" />
             <span className="text-label-12 font-semibold text-foreground">
               {translations.theme?.light || "亮色"}
             </span>
@@ -492,7 +469,7 @@ export const AppearanceSettingsSection = memo(function AppearanceSettingsSection
               </div>
             )}
             {/* 暗色主题微缩图 */}
-            <ThemePreviewMock theme="dark" previewColor={darkPreviewColor} />
+            <ThemePreviewMock theme="dark" />
             <span className="text-label-12 font-semibold text-foreground">
               {translations.theme?.dark || "暗色"}
             </span>
@@ -500,49 +477,9 @@ export const AppearanceSettingsSection = memo(function AppearanceSettingsSection
         </div>
       </div>
 
-      {/* 强调色选择卡片 */}
-      <div className={cn(GEIST_CARD_PAD, "p-6")}>
-        <div className="space-y-0.5 mb-4">
-          <Label className="text-heading-14 font-semibold text-foreground">
-            {appearanceT.accentColorTitle || "强调色 (Accent Color)"}
-          </Label>
-          <p className="text-label-12 text-muted-foreground">
-            {appearanceT.accentColorDescription || "选择应用在聚焦框、激活项、链接和高亮状态下的系统强调色。"}
-          </p>
-        </div>
-
-        <div className="flex flex-wrap items-center gap-3">
-          {accentList.map((item) => {
-            const isSelected = item.id === accentColor;
-            return (
-              <button
-                key={item.id}
-                type="button"
-                className={cn(
-                  "relative flex size-7 shrink-0 items-center justify-center rounded-full transition-colors duration-150 ease-geist hover:opacity-80 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-interactive",
-                  isSelected
-                    ? "ring-2 ring-offset-2 ring-interactive"
-                    : ""
-                )}
-                style={{
-                  background: `linear-gradient(135deg, ${item.lightColor} 50%, ${item.darkColor} 50%)`,
-                }}
-                onClick={() => setAccentColor(item.id)}
-                title={item.name}
-                aria-label={(appearanceT.accentColorAriaLabel || "强调色: {{name}}").replace("{{name}}", item.name)}
-              >
-                {isSelected && (
-                  <Check className="size-3 text-white stroke-[3.5]" />
-                )}
-              </button>
-            );
-          })}
-        </div>
-      </div>
-
       <p className="text-label-12 text-muted-foreground px-1">
         {translations.settings?.sections?.appearanceDescription ||
-          "主题与强调色切换会立即作用到当前窗口与后续打开的设置面板。"}
+          "主题切换会立即作用到当前窗口与后续打开的设置面板。"}
       </p>
     </div>
   );

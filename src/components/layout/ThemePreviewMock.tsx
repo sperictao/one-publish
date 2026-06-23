@@ -12,7 +12,6 @@ import { cn } from "@/lib/utils";
 
 interface ThemePreviewMockProps {
   theme: "light" | "dark";
-  previewColor: string;
   sidebarWidth?: 14 | 18;
   showAllSidebarLines?: boolean;
   hideSidebar?: boolean;
@@ -25,7 +24,6 @@ function token(name: string, theme: "light" | "dark"): string {
 
 export function ThemePreviewMock({
   theme,
-  previewColor,
   sidebarWidth = 18,
   showAllSidebarLines = true,
   hideSidebar = false,
@@ -81,7 +79,7 @@ export function ThemePreviewMock({
           >
             <div
               className="h-1.5 w-full rounded-[2px] transition-colors duration-150 ease-geist"
-              style={{ backgroundColor: previewColor }}
+              style={{ backgroundColor: "hsl(var(--interactive))" }}
             />
             <div
               className="h-1 w-2/3 rounded-[2px]"

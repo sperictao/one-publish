@@ -3,7 +3,7 @@ import { render, screen, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
 
 // ── Mocks ───────────────────────────────────────────────────────
-// App.tsx only directly imports useAppBoot, useAccentColor and a few
+// App.tsx only directly imports useAppBoot and a few
 // layout components. Mock useAppBoot as the single seam and keep
 // component mocks as lightweight testid wrappers.
 
@@ -12,7 +12,6 @@ const { mockUseAppBoot } = vi.hoisted(() => ({
 }));
 
 vi.mock("@/hooks/useTheme", () => ({
-  useAccentColor: vi.fn(),
   useTheme: () => undefined,
 }));
 

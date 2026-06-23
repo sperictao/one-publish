@@ -1,6 +1,5 @@
 import { Suspense, lazy, useEffect, useState } from "react";
 import { useAppBoot } from "@/hooks/useAppBoot";
-import { useAccentColor } from "@/hooks/useTheme";
 import { isGeistPrototypeVariant } from "@/components/prototype/geistPrototypeVariant";
 
 import { ResizeHandle } from "@/components/layout/ResizeHandle";
@@ -39,7 +38,6 @@ const MainContentShell = lazy(async () => {
 });
 
 function App() {
-  useAccentColor();
   const boot = useAppBoot();
   const [showGeistPrototype, setShowGeistPrototype] =
     useState(() => {

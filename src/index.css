@@ -15,8 +15,7 @@
      `--interactive`, `--interactive-hover`, `--destructive`, `--success`,
      `--warning`, `--ring`) keep raw HSL triplets so Tailwind v3.4 can compose
      alpha modifiers (`bg-foo/NN` → `hsl(var(--foo) / 0.NN)`). These mirror the
-     corresponding Geist step values; runtime accent (`--interactive`,
-     `--interactive-hover`, `--ring`) is written by useTheme.ts.
+     corresponding Geist step values.
    - `--text-fine` / `--terminal-bg` / `--terminal-fg` are raw triplets because
      component code consumes them via `hsl(var(--*))` arbitrary values. */
 @layer base {
@@ -146,20 +145,19 @@
     --warning-foreground: var(--gray-1000);
 
     /* Semantic colors — raw HSL triplets (alpha modifier compat).
-       Values mirror Geist steps; runtime accent (interactive/ring) is
-       written by useTheme.ts useAccentColor(). */
+       Values mirror Geist steps. */
     --background: 0 0% 100%;            /* background-100 */
     --foreground: 0 0% 9%;              /* gray-1000 */
     --primary: 0 0% 9%;                 /* gray-1000 */
     --secondary: 0 0% 30%;              /* gray-900 (FIXED: was gray-100) */
     --accent: 0 0% 95%;                 /* gray-100 */
     --muted-foreground: 0 0% 30%;       /* gray-900 */
-    --interactive: 215 100% 50%;        /* blue-700 (runtime-overridable) */
-    --interactive-hover: 217 100% 46%;  /* blue-800 (runtime-overridable) */
+    --interactive: 215 100% 50%;        /* blue-700 */
+    --interactive-hover: 217 100% 46%;  /* blue-800 */
     --destructive: 347 100% 49%;        /* red-700 */
     --success: 135 62% 41%;             /* green-700 */
     --warning: 39 100% 50%;             /* amber-600 */
-    --ring: 215 100% 50%;               /* blue-700 (runtime-overridable) */
+    --ring: 215 100% 50%;               /* blue-700 */
 
     /* Fine-print secondary text + terminal surface — raw HSL triplets
        (consumed via hsl(var(--*)) in component code; no P3 variant). */
@@ -298,12 +296,12 @@
     --secondary: 0 0% 63%;              /* gray-900 (FIXED: was gray-200) */
     --accent: 0 0% 16%;                 /* gray-300 */
     --muted-foreground: 0 0% 63%;       /* gray-900 */
-    --interactive: 214 100% 50%;        /* blue-700 dark (runtime) */
-    --interactive-hover: 216 100% 45%;  /* blue-800 dark (runtime) */
+    --interactive: 214 100% 50%;        /* blue-700 dark */
+    --interactive-hover: 216 100% 45%;  /* blue-800 dark */
     --destructive: 355 89% 57%;         /* red-600 dark */
     --success: 138 100% 29%;            /* green-600 dark */
     --warning: 39 100% 46%;             /* amber-600 dark */
-    --ring: 208 100% 64%;               /* blue-900 dark (runtime) */
+    --ring: 208 100% 64%;               /* blue-900 dark */
 
     /* Fine-print + terminal (dark) */
     --text-fine: 0 0% 63%;              /* gray-900 dark */
