@@ -89,9 +89,9 @@ export function ResizeHandle({
       className={cn(
         "group relative flex flex-col flex-shrink-0 appearance-none border-0 bg-transparent p-0 transition-colors duration-150 ease-geist",
         direction === "horizontal"
-          ? "w-1 cursor-col-resize hover:bg-accent"
-          : "h-1 cursor-row-resize hover:bg-accent",
-        isDragging && "bg-accent",
+          ? "w-1 cursor-col-resize hover:bg-gray-alpha-200"
+          : "h-1 cursor-row-resize hover:bg-gray-alpha-200",
+        isDragging && "bg-gray-alpha-300",
         className
       )}
       onMouseDown={handleMouseDown}
