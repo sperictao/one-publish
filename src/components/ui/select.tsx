@@ -11,12 +11,15 @@ const SelectValue = SelectPrimitive.Value;
 
 const SelectTrigger = React.forwardRef<
   React.ElementRef<typeof SelectPrimitive.Trigger>,
-  React.ComponentPropsWithoutRef<typeof SelectPrimitive.Trigger>
->(({ className, children, ...props }, ref) => (
+  React.ComponentPropsWithoutRef<typeof SelectPrimitive.Trigger> & {
+    size?: "default" | "sm";
+  }
+>(({ className, children, size = "default", ...props }, ref) => (
   <SelectPrimitive.Trigger
     ref={ref}
     className={cn(
-      "surface-input flex h-10 w-full items-center justify-between rounded-sm px-3 py-2 text-label-14 ring-offset-background placeholder:text-muted-foreground focus:outline-none disabled:cursor-not-allowed disabled:bg-gray-100 disabled:text-gray-700 [&>span]:line-clamp-1",
+      "surface-input flex w-full items-center justify-between rounded-sm px-3 py-2 text-label-14 ring-offset-background placeholder:text-muted-foreground focus:outline-none disabled:cursor-not-allowed disabled:bg-gray-100 disabled:text-gray-700 [&>span]:line-clamp-1",
+      size === "sm" ? "h-8" : "h-10",
       className
     )}
     {...props}
