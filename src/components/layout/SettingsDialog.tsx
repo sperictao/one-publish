@@ -90,7 +90,7 @@ const GEIST_CARD =
   "rounded-sm border border-border bg-card shadow-raised overflow-hidden";
 const GEIST_CARD_PAD = "rounded-sm border border-border bg-card shadow-raised";
 const GEIST_ROW_HOVER =
-  "hover:bg-accent transition-colors duration-150 ease-geist";
+  "hover:bg-gray-alpha-100 transition-colors duration-150 ease-geist";
 const GEIST_DIVIDER = "h-px bg-border";
 const GEIST_INPUT =
   "surface-input";
@@ -162,10 +162,10 @@ function SettingsSwitchRow({
   onCheckedChange: (value: boolean) => void;
 }) {
   return (
-    <div className={cn("px-4 py-3.5", GEIST_ROW_HOVER)}>
+    <div className={cn("px-4 py-3", GEIST_ROW_HOVER)}>
       <div className="flex items-center justify-between gap-4">
         <div className="flex items-center gap-3 min-w-0">
-          <Icon className="size-[18px] flex-shrink-0 text-muted-foreground" />
+          <Icon className="size-4 flex-shrink-0 text-muted-foreground" />
           <div className="space-y-0.5">
             <Label className="cursor-pointer text-heading-14 font-semibold text-foreground" htmlFor={id}>
               {label}
@@ -231,7 +231,7 @@ export const GeneralSettingsSection = memo(function GeneralSettingsSection({
           </div>
           <div className="w-full sm:w-[180px] shrink-0">
             <Select value={language} onValueChange={onLanguageChange}>
-              <SelectTrigger id="settings-language" className={cn("h-9 rounded-md", GEIST_INPUT, "hover:bg-accent")}>
+              <SelectTrigger id="settings-language" className={cn("h-8", GEIST_INPUT, "hover:border-gray-alpha-500")}>
                 <SelectValue placeholder={translations.language?.placeholder || "选择语言"} />
               </SelectTrigger>
               <SelectContent>
@@ -262,7 +262,7 @@ export const GeneralSettingsSection = memo(function GeneralSettingsSection({
             <Input
               id="settings-execution-history"
               type="number"
-              className={cn("h-9 text-right rounded-md", GEIST_INPUT)}
+              className={cn("h-8 text-right", GEIST_INPUT)}
               min={5}
               max={200}
               value={executionHistoryLimit}
@@ -302,12 +302,12 @@ export const GeneralSettingsSection = memo(function GeneralSettingsSection({
               placeholder={
                 translations.outputDir?.placeholder || "留空使用项目默认目录"
               }
-              className={cn("h-10 rounded-md", GEIST_INPUT)}
+              className={cn("h-10", GEIST_INPUT)}
             />
             <Button
               variant="outline"
               size="icon"
-              className={cn("size-10 shrink-0 rounded-md", GEIST_INPUT)}
+              className={cn("size-10 shrink-0", GEIST_INPUT)}
               onClick={onSelectDirectory}
               title={translations.outputDir?.browse || "浏览目录"}
               aria-label={translations.outputDir?.browse || "浏览目录"}
@@ -365,13 +365,13 @@ export const AppearanceSettingsSection = memo(function AppearanceSettingsSection
   onThemeChange,
 }: AppearanceSettingsSectionProps) {
   const themeCardBase =
-    "group relative flex flex-col items-center gap-2.5 rounded-md border p-2.5 text-center transition-colors duration-150 ease-geist";
+    "group relative flex flex-col items-center gap-2.5 rounded-sm border p-2.5 text-center transition-colors duration-150 ease-geist focus-ring";
   const themeCardSelected =
     "border-interactive bg-interactive/10 shadow-raised";
   const themeCardUnselected =
-    "border-border bg-card hover:bg-accent";
+    "border-border bg-card hover:bg-gray-alpha-100 active:bg-gray-alpha-200";
   const themeCheckBadge =
-    "absolute top-1.5 right-1.5 flex size-4 items-center justify-center rounded-full bg-interactive text-interactive-foreground border border-border animate-in zoom-in-50 duration-200 z-10";
+    "absolute top-1.5 right-1.5 flex size-4 items-center justify-center rounded-full bg-interactive text-interactive-foreground border border-border animate-fade-in z-10";
 
   return (
     <div className="space-y-6">
@@ -410,7 +410,7 @@ export const AppearanceSettingsSection = memo(function AppearanceSettingsSection
             )}
 
             {/* 自动主题微缩图 */}
-            <div className="relative h-20 w-full overflow-hidden rounded-md border border-border flex select-none pointer-events-none">
+            <div className="relative h-20 w-full overflow-hidden rounded-sm border border-border flex select-none pointer-events-none">
               <div className="w-1/2 border-r border-border">
                 <ThemePreviewMock
                   theme="light"
@@ -516,7 +516,7 @@ export const ShortcutsSettingsSection = memo(function ShortcutsSettingsSection({
 
       <Button
         variant="outline"
-        className={cn("h-11 w-full justify-start rounded-md", GEIST_INPUT, "text-foreground")}
+        className={cn("h-10 w-full justify-start", GEIST_INPUT, "text-foreground")}
         onClick={onOpenShortcuts}
         disabled={!onOpenShortcuts}
       >
@@ -544,13 +544,13 @@ export const UpdaterProgressBar = memo(function UpdaterProgressBar({
   downloadProgress,
 }: UpdaterProgressBarProps) {
   return (
-    <div className={cn("space-y-3 p-4 transition-colors duration-150 ease-geist", GEIST_CODE_BG, "rounded-md")}>
+    <div className={cn("space-y-3 p-4 transition-colors duration-150 ease-geist", GEIST_CODE_BG, "rounded-sm")}>
       <div className="flex items-start justify-between gap-3">
         <div className="space-y-1">
           <div className="text-heading-14 font-semibold text-foreground">
             {downloadProgress.stage === "installing"
-              ? translations.version?.installing || "正在安装更新..."
-              : translations.version?.downloading || "正在下载更新..."}
+              ? translations.version?.installing || "正在安装更新…"
+              : translations.version?.downloading || "正在下载更新…"}
           </div>
           <div className="text-label-12 font-normal text-muted-foreground">
             {downloadProgress.stage === "retrying"
@@ -575,7 +575,7 @@ export const UpdaterProgressBar = memo(function UpdaterProgressBar({
           </div>
         </div>
         {downloadProgress.percent !== null && (
-          <div className={cn("text-label-13 font-semibold tabular-nums font-mono text-foreground px-2 py-0.5 rounded-sm", GEIST_INPUT)}>
+          <div className={cn("text-label-13-mono font-semibold tabular-nums font-mono text-foreground px-2 py-0.5 rounded-sm", GEIST_INPUT)}>
             {Math.round(downloadProgress.percent)}%
           </div>
         )}
@@ -747,7 +747,7 @@ export function SettingsDialog({
           console.error("\u5207\u6362\u8BED\u8A00\u5931\u8D25:", error);
           toast.error(
             translations.language?.changeFailed ||
-              "界面语言切换失败，请重试"
+              "界面语言切换失败，重试"
           );
         });
     },
@@ -854,7 +854,7 @@ export function SettingsDialog({
     <Suspense
       fallback={
         <SettingsSectionFallback
-          label={translations.app?.loading || "加载中..."}
+          label={translations.app?.loading || "加载中…"}
         />
       }
     >
@@ -883,7 +883,7 @@ export function SettingsDialog({
     const lastCheckedAt = new Date().toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" });
 
     const actionButtonBase =
-      "h-8 px-3 rounded-md text-button-12 font-normal text-foreground transition-colors duration-150 ease-geist shrink-0 flex items-center gap-1.5";
+      "h-8 px-3 text-button-12 font-normal text-foreground transition-colors duration-150 ease-geist shrink-0 flex items-center gap-1.5";
 
     return (
       <div className="space-y-6">
@@ -899,7 +899,7 @@ export function SettingsDialog({
                 {versionT.productDescription || "跨平台 .NET 自动化发布与签名客户端"}
               </p>
             </div>
-            <span className={cn("inline-flex items-center rounded-sm px-2 py-0.5 text-label-12 font-semibold text-muted-foreground font-mono shrink-0", GEIST_INPUT)}>
+            <span className={cn("inline-flex items-center rounded-sm px-2 py-0.5 text-label-12-mono font-semibold text-muted-foreground font-mono shrink-0", GEIST_INPUT)}>
               {formatMessage(
                 versionT.current || "当前版本: v{}",
                 updateInfo?.currentVersion || currentVersion || "—"
@@ -914,7 +914,7 @@ export function SettingsDialog({
             <div className="flex items-center gap-3 min-w-0">
               {isConfigUnhealthy ? (
                 <>
-                  <AlertTriangle className="size-[18px] flex-shrink-0 text-warning" />
+                  <AlertTriangle className="size-4 flex-shrink-0 text-warning" />
                   <div className="space-y-0.5 min-w-0">
                     <Label className="text-heading-14 font-semibold text-foreground">
                       {versionT.updateChannelNotConfiguredTitle || "更新通道未配置"}
@@ -926,19 +926,19 @@ export function SettingsDialog({
                 </>
               ) : isRestartRequired ? (
                 <>
-                  <RefreshCw className="size-[18px] flex-shrink-0 text-success" />
+                  <RefreshCw className="size-4 flex-shrink-0 text-success" />
                   <div className="space-y-0.5 min-w-0">
                     <Label className="text-heading-14 font-semibold text-foreground">
                       {versionT.updateReadyTitle || "新版本已准备就绪"}
                     </Label>
                     <p className="text-label-12 text-muted-foreground">
-                      {versionT.updateReadyDescription || "升级补丁已下载完成，请重启客户端应用更新。"}
+                      {versionT.updateReadyDescription || "升级补丁已下载完成，重启客户端应用更新。"}
                     </p>
                   </div>
                 </>
               ) : updateInfo?.hasUpdate ? (
                 <>
-                  <ArrowUpCircle className="size-[18px] flex-shrink-0 text-interactive" />
+                  <ArrowUpCircle className="size-4 flex-shrink-0 text-interactive" />
                   <div className="space-y-0.5 min-w-0">
                     <Label className="text-heading-14 font-semibold text-foreground">
                       {formatMessage(versionT.new || "有新版本: v{}", updateInfo.availableVersion || "")}
@@ -950,7 +950,7 @@ export function SettingsDialog({
                 </>
               ) : (
                 <>
-                  <CheckCircle2 className="size-[18px] flex-shrink-0 text-success" />
+                  <CheckCircle2 className="size-4 flex-shrink-0 text-success" />
                   <div className="space-y-0.5 min-w-0">
                     <Label className="text-heading-14 font-semibold text-foreground">
                       {versionT.upToDateTitle || "软件已是最新版本"}
@@ -992,14 +992,14 @@ export function SettingsDialog({
                     <Button
                       variant="default"
                       size="sm"
-                      className="h-8 px-3 rounded-md bg-primary text-primary-foreground hover:bg-primary/90 transition-colors duration-150 ease-geist font-semibold text-button-12 shrink-0 flex items-center gap-1.5"
+                      className="h-8 px-3 bg-primary text-primary-foreground hover:bg-gray-900 transition-colors duration-150 ease-geist font-semibold text-button-12 shrink-0 flex items-center gap-1.5"
                       onClick={handleRestartApp}
                       disabled={isRestarting || isCheckingUpdate || isInstallingUpdate}
                     >
                       <RefreshCw className={cn("size-3", isRestarting && "animate-spin")} />
                       <span>
                         {isRestarting
-                          ? translations.version?.restarting || "重启中..."
+                          ? translations.version?.restarting || "重启中…"
                           : translations.version?.restart || "重启应用"}
                       </span>
                     </Button>
@@ -1020,7 +1020,7 @@ export function SettingsDialog({
                     <Button
                       variant="default"
                       size="sm"
-                      className="h-8 px-3 rounded-md bg-primary text-primary-foreground hover:bg-primary/90 transition-colors duration-150 ease-geist font-semibold text-button-12 shrink-0 flex items-center gap-1.5"
+                      className="h-8 px-3 bg-primary text-primary-foreground hover:bg-gray-900 transition-colors duration-150 ease-geist font-semibold text-button-12 shrink-0 flex items-center gap-1.5"
                       onClick={handleInstallUpdate}
                       disabled={isInstallingUpdate}
                     >
@@ -1035,7 +1035,7 @@ export function SettingsDialog({
 
           {updateInfo?.message && !shouldHideDefaultUpdaterConfigMessage && (
             <div className="p-4 border-t border-border bg-destructive/5">
-              <div className="rounded-md border border-destructive/20 bg-destructive/5 p-3 text-label-12 text-destructive font-normal">
+              <div className="rounded-sm border border-destructive/20 bg-destructive/5 p-3 text-label-12 text-destructive font-normal">
                 {updateInfo.message}
               </div>
             </div>
@@ -1055,13 +1055,13 @@ export function SettingsDialog({
         {updateInfo?.releaseNotes && (
           <div className={GEIST_CARD}>
             <div className={cn("flex items-center gap-3 p-4 border-b border-border", GEIST_ROW_HOVER)}>
-              <Terminal className="size-[18px] text-muted-foreground" />
+              <Terminal className="size-4 text-muted-foreground" />
               <span className="text-heading-14 font-semibold text-foreground">
                 {translations.version?.notes || "发布日志"}
               </span>
             </div>
             <div className="p-4">
-              <div className={cn("max-h-56 overflow-y-auto geist-scrollbar text-label-12 text-muted-foreground whitespace-pre-wrap font-normal rounded-md p-3", GEIST_CODE_BG)}>
+              <div className={cn("max-h-56 overflow-y-auto geist-scrollbar text-label-12 text-muted-foreground whitespace-pre-wrap font-normal rounded-sm p-3", GEIST_CODE_BG)}>
                 {updateInfo.releaseNotes}
               </div>
             </div>
@@ -1118,10 +1118,10 @@ export function SettingsDialog({
                     type="button"
                     aria-current={isActive ? "page" : undefined}
                     className={cn(
-                      "group relative flex w-full items-center gap-2.5 rounded-md pl-4 pr-3 py-2 text-left transition-colors duration-150 ease-geist",
+                      "group relative flex w-full items-center gap-2.5 rounded-sm pl-4 pr-3 py-2 text-left transition-colors duration-150 ease-geist focus-ring",
                       isActive
                         ? "bg-accent text-foreground font-semibold"
-                        : "text-foreground/80 hover:bg-accent"
+                        : "text-muted-foreground hover:bg-gray-alpha-100"
                     )}
                     onClick={() => handleCategoryChange(item.id)}
                   >
@@ -1130,7 +1130,7 @@ export function SettingsDialog({
                     )}
                     <Icon
                       className={cn(
-                        "size-[18px] flex-shrink-0 transition-colors duration-150 ease-geist",
+                        "size-4 flex-shrink-0 transition-colors duration-150 ease-geist",
                         isActive
                           ? "text-interactive"
                           : "text-muted-foreground"

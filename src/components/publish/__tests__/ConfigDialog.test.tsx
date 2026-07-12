@@ -167,7 +167,7 @@ describe("ConfigManagementContent", () => {
         },
       });
     });
-    expect(mocks.toastSuccess).toHaveBeenCalledWith("配置文件保存成功");
+    expect(mocks.toastSuccess).toHaveBeenCalledWith("配置已保存");
   });
 
   it("导入配置时先显示应用内确认对话框，再执行真正导入", async () => {
@@ -210,7 +210,7 @@ describe("ConfigManagementContent", () => {
     expect(screen.getByText("Release")).toBeInTheDocument();
     expect(screen.getByText("Nightly")).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: "确认导入" }));
+    fireEvent.click(screen.getByRole("button", { name: "导入配置" }));
 
     await waitFor(() => {
       expect(mocks.applyImportedProfiles).toHaveBeenCalledWith(importedProfiles);

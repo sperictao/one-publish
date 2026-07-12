@@ -529,9 +529,9 @@ export const PublishConfigPanel = memo(function PublishConfigPanel({
   const editConfigLabel = t.editConfig || "编辑配置";
   const noConfigsLabel = t.noConfigs || "暂无配置";
   const projectProfilesRefreshingLabel =
-    t.refreshingProjectProfiles || "正在刷新项目发布配置...";
+    t.refreshingProjectProfiles || "正在刷新项目发布配置…";
   const customProfilesRefreshingLabel =
-    t.refreshingCustomProfiles || "正在刷新自定义配置...";
+    t.refreshingCustomProfiles || "正在刷新自定义配置…";
   const isAnyRefreshing = isProfilesRefreshing || isProjectProfilesRefreshing;
   const listActionButtonClass =
     "flex size-7 items-center justify-center rounded-full border border-border bg-background transition-colors duration-150 ease-geist hover:bg-accent";

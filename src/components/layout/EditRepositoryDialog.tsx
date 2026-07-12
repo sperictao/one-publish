@@ -460,7 +460,7 @@ function EditRepositoryDialogContent({
       });
 
       if (bindingRequired) {
-        toast.error(repoT.projectFileBindingRequired || "请先绑定 Project File", {
+        toast.error(repoT.projectFileBindingRequired || "先绑定 Project File", {
           description:
             repoT.projectFileBindingRequiredDesc ||
             "当前仓库包含多个项目文件，必须显式选择一个 Project File 才能继续。",
@@ -552,18 +552,18 @@ function EditRepositoryDialogContent({
                   isEditPathEmpty
                 }
               >
-                {isSavingRepo ? repoT.saving || "保存中..." : repoT.save || "保存"}
+                {isSavingRepo ? repoT.saving || "保存中…" : repoT.save || "保存"}
               </Button>
             </div>
           </>
         }
       >
-        <div className="grid flex-1 min-h-0 gap-5 p-5 sm:grid-cols-[240px_1fr] sm:p-6">
+        <div className="grid flex-1 min-h-0 gap-4 p-4 sm:grid-cols-[240px_1fr] sm:p-6">
           {/* Left Panel: Repo Info Card */}
-          <aside className="flex flex-col items-center justify-between rounded-lg p-5 text-center border border-border bg-card min-h-0 overflow-y-auto geist-scrollbar">
+          <aside className="flex flex-col items-center justify-between rounded-md p-4 text-center border border-border bg-card min-h-0 overflow-y-auto geist-scrollbar">
             <div className="flex flex-col items-center w-full">
               {/* Icon Wrapper */}
-              <div className="flex size-16 items-center justify-center rounded-lg bg-interactive/10 text-interactive">
+              <div className="flex size-16 items-center justify-center rounded-sm bg-interactive/10 text-interactive">
                 <FolderGit2 className="size-8" />
               </div>
 
@@ -572,28 +572,28 @@ function EditRepositoryDialogContent({
                   {editName || repoT.unnamedRepository || "未命名仓库"}
                 </span>
                 <HelpTip
-                  text={repoT.repositoryBindingHint || "请确保仓库路径和项目绑定正确，这会直接影响后续的自动化发布配置构建。"}
+                  text={repoT.repositoryBindingHint || "确保仓库路径和项目绑定正确，这会直接影响后续的自动化发布配置构建。"}
                   className="shrink-0"
                 />
               </h3>
 
-              <p className="mt-2 text-label-12 text-muted-foreground break-all px-2.5 py-1.5 rounded-md bg-muted border border-border font-mono max-w-full">
+              <p className="mt-2 text-label-12-mono text-muted-foreground break-all px-2.5 py-1.5 rounded-sm bg-muted border border-border font-mono max-w-full">
                 {editPath || repoT.unselectedPath || "未选择路径"}
               </p>
 
               {/* Status Stats List */}
               <div className="w-full mt-6 space-y-2 text-left">
-                <div className="flex items-center justify-between rounded-md border border-border bg-muted px-3.5 py-2.5">
+                <div className="flex items-center justify-between rounded-sm border border-border bg-muted px-3 py-2">
                   <span className="text-label-12 text-muted-foreground flex items-center gap-1.5">
                     <GitBranch className="size-3.5 text-muted-foreground" />
                     {repoT.branchCount || "分支数量"}
                   </span>
-                  <span className="text-label-12 font-semibold font-mono text-foreground bg-interactive/10 px-2 py-0.5 rounded-full">
+                  <span className="text-label-12-mono font-semibold font-mono text-foreground bg-interactive/10 px-2 py-0.5 rounded-full">
                     {branchOptions.length}
                   </span>
                 </div>
 
-                <div className="flex items-center justify-between rounded-md border border-border bg-muted px-3.5 py-2.5">
+                <div className="flex items-center justify-between rounded-sm border border-border bg-muted px-3 py-2">
                   <span className="text-label-12 text-muted-foreground flex items-center gap-1.5">
                     <Activity className="size-3.5 text-muted-foreground" />
                     {repoT.bindingStatus || "绑定状态"}
@@ -611,12 +611,12 @@ function EditRepositoryDialogContent({
                 </div>
 
                 {editProviderId && editProviderId !== NO_PROVIDER_VALUE ? (
-                  <div className="flex items-center justify-between rounded-md border border-border bg-muted px-3.5 py-2.5">
+                  <div className="flex items-center justify-between rounded-sm border border-border bg-muted px-3 py-2">
                     <span className="text-label-12 text-muted-foreground flex items-center gap-1.5">
                       <Info className="size-3.5 text-muted-foreground" />
                       {repoT.currentProvider || "当前服务"}
                     </span>
-                    <span className="text-label-12 font-semibold text-foreground font-mono truncate max-w-[120px]">
+                    <span className="text-label-12-mono font-semibold text-foreground font-mono truncate max-w-[120px]">
                       {selectedProviderOption?.label || selectedProviderOption?.displayName || editProviderId}
                     </span>
                   </div>
@@ -628,8 +628,8 @@ function EditRepositoryDialogContent({
           {/* Right Panel: Form Fields */}
           <form id="edit-repository-form" className="flex flex-col min-h-0 overflow-y-auto geist-scrollbar gap-y-4 pb-1 pr-1" onSubmit={handleSubmit}>
             {/* Card 1: Basic Config */}
-            <AppDialogInset className="space-y-4 p-5">
-              <p className="text-label-12 font-semibold uppercase tracking-[0.15em] text-interactive flex items-center gap-1.5 mb-1">
+            <AppDialogInset className="space-y-4">
+              <p className="text-label-12 font-semibold uppercase text-interactive flex items-center gap-1.5 mb-1">
                 <span className="size-1.5 rounded-full bg-interactive" />
                 {repoT.basicConfig || "基础配置"}
               </p>
@@ -644,12 +644,12 @@ function EditRepositoryDialogContent({
                     id="repo-edit-name"
                     value={editName}
                     onChange={(event) => setEditName(event.target.value)}
-                    placeholder={repoT.repositoryNamePlaceholder || "请输入仓库名称"}
-                    className="h-9 text-label-14 focus:border-interactive/50 focus:ring-1 focus:ring-interactive/20 transition-colors duration-150 ease-geist"
+                    placeholder={repoT.repositoryNamePlaceholder || "输入仓库名称"}
+                    className="h-8 text-label-14"
                   />
                   {isEditNameEmpty ? (
                     <p className="text-label-12 text-destructive">
-                      {repoT.repositoryNameRequired || "请输入仓库名称"}
+                      {repoT.repositoryNameRequired || "输入仓库名称"}
                     </p>
                   ) : null}
                 </div>
@@ -664,14 +664,14 @@ function EditRepositoryDialogContent({
                       id="repo-edit-path"
                       value={editPath}
                       onChange={(event) => setEditPath(event.target.value)}
-                      placeholder={repoT.repositoryPathPlaceholder || "请输入项目根目录路径"}
-                      className="h-9 flex-1 text-label-14 focus:border-interactive/50 focus:ring-1 focus:ring-interactive/20 transition-colors duration-150 ease-geist"
+                      placeholder={repoT.repositoryPathPlaceholder || "输入项目根目录路径"}
+                      className="h-8 flex-1 text-label-14"
                     />
                     <Button
                       type="button"
                       variant="outline"
                       size="icon"
-                      className="size-9 shrink-0 hover:bg-interactive/5 hover:text-interactive transition-colors duration-150 ease-geist"
+                      className="size-8 shrink-0"
                       onClick={handleBrowsePath}
                       aria-label={repoT.browseFolder || "浏览文件夹"}
                       title={repoT.browseFolder || "浏览文件夹"}
@@ -681,7 +681,7 @@ function EditRepositoryDialogContent({
                   </div>
                   {isEditPathEmpty ? (
                     <p className="text-label-12 text-destructive">
-                      {repoT.repositoryPathRequired || "请输入项目根目录路径"}
+                      {repoT.repositoryPathRequired || "输入项目根目录路径"}
                     </p>
                   ) : null}
                 </div>
@@ -689,8 +689,8 @@ function EditRepositoryDialogContent({
             </AppDialogInset>
 
             {/* Card 2: Project File & Provider / Git */}
-            <AppDialogInset className="space-y-4 p-5">
-              <p className="text-label-12 font-semibold uppercase tracking-[0.15em] text-interactive flex items-center gap-1.5 mb-1">
+            <AppDialogInset className="space-y-4">
+              <p className="text-label-12 font-semibold uppercase text-interactive flex items-center gap-1.5 mb-1">
                 <span className="size-1.5 rounded-full bg-interactive" />
                 {repoT.projectBranchSection || "项目定位与分支"}
               </p>
@@ -705,7 +705,7 @@ function EditRepositoryDialogContent({
                     {isProjectFileManual ? (
                       <Input
                         id="repo-edit-project-file"
-                        className="h-9 flex-1 text-label-14 focus:border-interactive/50 focus:ring-1 focus:ring-interactive/20 transition"
+                        className="h-8 flex-1 text-label-14"
                         value={editProjectFile}
                         onChange={(event) => setEditProjectFile(event.target.value)}
                         placeholder={repoT.projectFilePlaceholder || "可选项目文件"}
@@ -722,11 +722,11 @@ function EditRepositoryDialogContent({
                         }}
                         disabled={isScanningProjectFiles}
                       >
-                        <SelectTrigger id="repo-edit-project-file" className="h-9 flex-1 text-label-14">
+                <SelectTrigger id="repo-edit-project-file" className="h-8 flex-1 text-label-14">
                           <SelectValue
                             placeholder={
                               isScanningProjectFiles
-                                ? repoT.scanningProjectFiles || "扫描中..."
+                                ? repoT.scanningProjectFiles || "扫描中…"
                                 : repoT.projectFilePlaceholder || "可选项目文件"
                             }
                           />
@@ -741,7 +741,7 @@ function EditRepositoryDialogContent({
                             </SelectItem>
                           ))}
                           <SelectItem value={MANUAL_INPUT_VALUE}>
-                            {repoT.projectFileManualInput || "手动输入..."}
+                            {repoT.projectFileManualInput || "手动输入…"}
                           </SelectItem>
                         </SelectContent>
                       </Select>
@@ -750,7 +750,7 @@ function EditRepositoryDialogContent({
                       type="button"
                       variant="outline"
                       size="icon"
-                      className="size-9 shrink-0 hover:bg-interactive/5 hover:text-interactive transition-colors"
+                      className="size-8 shrink-0"
                       onClick={() => {
                         if (isProjectFileManual && projectFileOptions.length > 0) {
                           setIsProjectFileManual(false);
@@ -767,13 +767,13 @@ function EditRepositoryDialogContent({
                     </Button>
                   </div>
                   {isProjectBindingPending ? (
-                    <p className="text-label-12 text-muted-foreground animate-pulse">
-                      {repoT.projectFileScanningPending || "正在扫描项目文件..."}
+                    <p className="text-label-12 text-muted-foreground">
+                      {repoT.projectFileScanningPending || "正在扫描项目文件…"}
                     </p>
                   ) : null}
                   {requiresProjectBinding ? (
                     <p className="text-label-12 text-destructive">
-                      {repoT.projectFileBindingRequiredInline || "请先选择一个 Project File。"}
+                      {repoT.projectFileBindingRequiredInline || "先选择一个 Project File。"}
                     </p>
                   ) : null}
                 </div>
@@ -792,7 +792,7 @@ function EditRepositoryDialogContent({
                       }}
                       disabled={isDetectingProvider}
                     >
-                      <SelectTrigger id="repo-edit-provider" className="h-9 flex-1 text-label-14">
+                      <SelectTrigger id="repo-edit-provider" className="h-8 flex-1 text-label-14">
                         <SelectValue placeholder={repoT.providerPlaceholder || "选择 Provider"} />
                       </SelectTrigger>
                       <SelectContent>
@@ -810,7 +810,7 @@ function EditRepositoryDialogContent({
                       type="button"
                       variant="outline"
                       size="icon"
-                      className="size-9 shrink-0 hover:bg-interactive/5 hover:text-interactive transition-colors"
+                      className="size-8 shrink-0"
                       onClick={() => {
                         void handleDetectProvider();
                       }}
@@ -834,8 +834,8 @@ function EditRepositoryDialogContent({
                     onValueChange={setEditCurrentBranch}
                     disabled={branchOptions.length === 0 || isRefreshingBranches}
                   >
-                    <SelectTrigger id="repo-edit-branch" className="h-9 flex-1 text-label-14">
-                      <SelectValue placeholder={repoT.currentBranchPlaceholder || "请选择分支"} />
+                    <SelectTrigger id="repo-edit-branch" className="h-8 flex-1 text-label-14">
+                      <SelectValue placeholder={repoT.currentBranchPlaceholder || "选择分支"} />
                     </SelectTrigger>
                     <SelectContent>
                       {branchOptions.map((branchName) => (
@@ -849,7 +849,7 @@ function EditRepositoryDialogContent({
                     type="button"
                     variant="outline"
                     size="icon"
-                    className="size-9 shrink-0 hover:bg-interactive/5 hover:text-interactive transition-colors"
+                    className="size-8 shrink-0"
                     onClick={() => {
                       void handleRefreshBranches();
                     }}

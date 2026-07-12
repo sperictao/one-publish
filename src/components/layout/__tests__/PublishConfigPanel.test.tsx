@@ -1128,8 +1128,13 @@ describe("PublishConfigPanel", () => {
     });
     fireEvent.click(parsedFieldsToggle);
 
-    expect(screen.getByText("PropertyGroup")).toBeInTheDocument();
-    expect(screen.getByText("标签: PropertyGroup")).toBeInTheDocument();
+    expect(screen.getAllByText("PropertyGroup").length).toBeGreaterThan(0);
+    expect(
+      screen.getByText(
+        (_, element) =>
+          element?.tagName === "P" && element.textContent === "标签: PropertyGroup"
+      )
+    ).toBeInTheDocument();
     expect(screen.getByText("Condition")).toBeInTheDocument();
     expect(screen.getByText("'$(Configuration)'=='Release'")).toBeInTheDocument();
     expect(

@@ -38,7 +38,7 @@ export function ReadonlyParameterFieldsSection({
       ) : (
         <div className="space-y-3">
           {fields.map((field) => (
-            <Card key={field.id} className="rounded-lg">
+            <Card key={field.id}>
               <CardContent className="pt-2">
                 {field.definition.type === "boolean" ? (
                   <BooleanParameter

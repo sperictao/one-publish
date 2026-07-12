@@ -30,7 +30,7 @@ export function SectionShell({
   const Heading = headingLevel;
   const headerContent = (
     <>
-      <span className="flex size-8 flex-shrink-0 items-center justify-center rounded-md bg-interactive/10 text-interactive">
+      <span className="flex size-8 flex-shrink-0 items-center justify-center rounded-sm bg-interactive/10 text-interactive">
         <Icon className="size-3.5" />
       </span>
       <div className="min-w-0 flex-1 text-left">
@@ -53,7 +53,7 @@ export function SectionShell({
         {collapsible ? (
           <button
             type="button"
-            className="flex w-full items-start gap-2.5 text-left"
+            className="flex w-full items-start gap-2.5 rounded-sm text-left focus-ring"
             aria-expanded={expanded}
             onClick={() => setExpanded((previous) => !previous)}
           >

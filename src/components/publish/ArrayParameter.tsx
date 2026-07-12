@@ -101,7 +101,7 @@ export function ArrayParameter({
           </div>
         ))}
         {value.length === 0 && (
-          <div className="text-label-14 text-muted-foreground italic">
+          <div className="text-label-14 text-muted-foreground">
             {t("common.noItemsAdded")}
           </div>
         )}

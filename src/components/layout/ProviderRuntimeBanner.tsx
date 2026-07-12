@@ -39,7 +39,7 @@ export function ProviderRuntimeBanner({
           size="sm"
           onClick={onRetry}
           disabled={isLoading}
-          className="min-w-[112px]"
+          className="min-w-28"
         >
           <RefreshCw className="mr-2 size-4" />
           {retryLabel}

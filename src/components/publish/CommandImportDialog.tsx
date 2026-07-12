@@ -45,7 +45,7 @@ export function CommandImportDialog({
 
   const handleParse = async () => {
     if (!command.trim()) {
-      toast.error(commandT.enterCommand || "请输入命令");
+      toast.error(commandT.enterCommand || "输入命令");
       return;
     }
 
@@ -60,7 +60,7 @@ export function CommandImportDialog({
         projectPath,
       });
       setParsedSpec(spec);
-      toast.success(commandT.parseSuccess || "命令解析成功");
+      toast.success(commandT.parseSuccess || "参数已导入");
     } catch (err) {
       const errorMsg = String(err);
       setError(errorMsg);
@@ -107,7 +107,7 @@ export function CommandImportDialog({
         <div className="space-y-4">
           <AppDialogInset className="space-y-3">
             <div className="space-y-1">
-              <div className="text-label-12 font-semibold uppercase tracking-[0.15em] text-muted-foreground">
+              <div className="text-label-12 font-semibold uppercase text-muted-foreground">
                 {commandT.commandSectionTitle || "命令输入"}
               </div>
               <p className="text-label-12 text-muted-foreground">
@@ -130,7 +130,7 @@ export function CommandImportDialog({
                 value={command}
                 onChange={(e) => setCommand(e.target.value)}
                 rows={4}
-                className="font-mono text-label-14"
+                className="font-mono text-copy-13-mono"
               />
             </div>
           </AppDialogInset>
@@ -145,7 +145,7 @@ export function CommandImportDialog({
                 <span className="inline-block animate-spin mr-2">
                   <Loader2 className="size-4" />
                 </span>
-                {commandT.parsing || "解析中..."}
+                {commandT.parsing || "解析中…"}
               </>
             ) : (
               commandT.parseCommand || "解析命令"
@@ -154,7 +154,7 @@ export function CommandImportDialog({
 
           {error && (
             <AppDialogInset className="space-y-1 border-destructive/20 bg-destructive/5 text-destructive">
-              <p className="font-semibold">{commandT.parseFailed || "解析失败"}</p>
+              <p className="text-label-14 font-semibold">{commandT.parseFailed || "解析失败"}</p>
               <p className="text-label-12">{error}</p>
             </AppDialogInset>
           )}
@@ -162,8 +162,8 @@ export function CommandImportDialog({
           {parsedSpec && (
             <AppDialogInset className="space-y-2">
               <Label>{commandT.extractedParameters || "提取的参数"}</Label>
-              <div className="rounded-md bg-muted p-3">
-                <pre className="text-label-12 font-mono overflow-auto max-h-40">
+              <div className="rounded-sm bg-muted p-3">
+                <pre className="font-mono text-copy-13-mono overflow-auto max-h-40">
                   {JSON.stringify(parsedSpec.parameters, null, 2)}
                 </pre>
               </div>

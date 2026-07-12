@@ -40,7 +40,7 @@ export function ShortcutsDialog({
           {shortcuts.map((shortcut) => (
             <div
               key={`${shortcut.key}:${shortcut.description}`}
-              className="flex items-center justify-between p-3 surface-input rounded-md"
+              className="flex items-center justify-between p-3 surface-input rounded-sm"
             >
               <span className="text-label-14">{shortcut.description}</span>
               <kbd className="px-2 py-1 text-label-12 font-semibold bg-muted border border-border rounded-sm">

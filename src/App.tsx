@@ -71,7 +71,7 @@ function App() {
           <span className="inline-block animate-spin text-interactive">
             <Loader2 className="size-8" />
           </span>
-          <span className="text-muted-foreground">{boot.shell.appT.loading || "加载中..."}</span>
+          <span className="text-label-14 text-muted-foreground">{boot.shell.appT.loading || "加载中…"}</span>
         </div>
       </div>
     );
