@@ -116,7 +116,7 @@ export function ConfigManagementContent({
   const handleSaveProfile = async () => {
     if (!repoId) return;
     if (!newProfileName.trim()) {
-      toast.error(profileT.enterProfileName || "请输入配置文件名称");
+      toast.error(profileT.enterProfileName || "输入配置文件名称");
       return;
     }
 
@@ -127,7 +127,7 @@ export function ConfigManagementContent({
         providerId: currentProviderId,
         parameters: currentParameters,
       });
-      toast.success(profileT.saveSuccess || "配置文件保存成功");
+      toast.success(profileT.saveSuccess || "配置已保存");
       setNewProfileName("");
     } catch (err) {
       toast.error(profileT.saveFailed || "保存配置文件失败", {
@@ -147,7 +147,7 @@ export function ConfigManagementContent({
 
     try {
       await onDeleteProfile(profile);
-      toast.success(profileT.deleteSuccess || "配置文件删除成功");
+      toast.success(profileT.deleteSuccess || "配置已删除");
     } catch (err) {
       toast.error(profileT.deleteFailed || "删除配置文件失败", {
         description: err instanceof Error ? err.message : String(err),
@@ -176,7 +176,7 @@ export function ConfigManagementContent({
 
       if (filePath) {
         await onExportProfiles(filePath as string);
-        toast.success(profileT.exportSuccess || "配置导出成功");
+        toast.success(profileT.exportSuccess || "配置已导出");
       }
     } catch (err) {
       toast.error(profileT.exportFailed || "导出配置失败", {
@@ -200,7 +200,7 @@ export function ConfigManagementContent({
     setIsApplyingImport(true);
     try {
       await onApplyImportedProfiles(pendingImport.profiles);
-      toast.success(profileT.importSuccess || "配置导入成功");
+      toast.success(profileT.importSuccess || "配置已导入");
       setPendingImport(null);
     } catch (err) {
       toast.error(profileT.importFailed || "导入配置失败", {
@@ -252,7 +252,7 @@ export function ConfigManagementContent({
   };
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-4">
       <SectionShell
         icon={Sparkles}
         title={profileT.managementActionsTitle || "配置文件操作"}
@@ -265,7 +265,7 @@ export function ConfigManagementContent({
           <Button
             variant="outline"
             onClick={handleExportConfig}
-            className="h-11 justify-start"
+            className="justify-start"
           >
             <Download className="mr-2 size-4" />
             {profileT.export || "导出配置"}
@@ -273,7 +273,7 @@ export function ConfigManagementContent({
           <Button
             variant="outline"
             onClick={handleImportConfig}
-            className="h-11 justify-start"
+            className="justify-start"
             disabled={!repoId}
           >
             <Upload className="mr-2 size-4" />
@@ -306,7 +306,6 @@ export function ConfigManagementContent({
                 }
               }}
               disabled={!repoId}
-              className="h-11"
             />
             <p className="text-label-12 text-muted-foreground">
               {profileT.quickCreateNameHint ||
@@ -316,14 +315,14 @@ export function ConfigManagementContent({
           <Button
             onClick={() => void handleSaveProfile()}
             disabled={isSaving || !newProfileName.trim() || !repoId}
-            className="h-11 min-w-[148px]"
+            className="min-w-[148px]"
           >
             {isSaving ? (
               <>
                 <span className="inline-block animate-spin mr-2">
                   <Loader2 className="size-4" />
                 </span>
-                {profileT.quickCreateSaving || "保存中..."}
+                {profileT.quickCreateSaving || "保存中…"}
               </>
             ) : (
               <>
@@ -350,18 +349,18 @@ export function ConfigManagementContent({
             </span>
           </AppDialogInset>
         ) : profiles.length === 0 ? (
-          <AppDialogInset className="px-5 py-10 text-center text-muted-foreground">
+          <AppDialogInset className="px-4 py-10 text-center text-muted-foreground">
             <AlertCircle className="mx-auto mb-3 size-8" />
             <p className="text-label-14">{profileT.noProfiles || "暂无保存的配置文件"}</p>
           </AppDialogInset>
         ) : (
           <div className="space-y-3">
             {profiles.map((profile) => (
-              <Card key={profile.name} className="rounded-lg">
+              <Card key={profile.name}>
                 <CardContent className="flex flex-col gap-4 p-4 sm:flex-row sm:items-center sm:justify-between">
                   <div className="min-w-0 flex-1">
                     <div className="mb-1 flex flex-wrap items-center gap-2">
-                      <h4 className="truncate text-label-14 font-semibold text-foreground">
+                      <h4 className="truncate text-heading-14 font-semibold text-foreground">
                         {profile.name}
                       </h4>
                       {profile.isSystemDefault ? (
@@ -438,10 +437,10 @@ export function ConfigManagementContent({
                       <span className="inline-block animate-spin mr-2">
                         <Loader2 className="size-4" />
                       </span>
-                      {profileT.importing || "导入中..."}
+                      {profileT.importing || "导入中…"}
                     </>
                   ) : (
-                    profileT.confirmImportAction || "确认导入"
+                    profileT.confirmImportAction || "导入配置"
                   )}
                 </Button>
               </div>
@@ -460,12 +459,12 @@ export function ConfigManagementContent({
                   </p>
                 </div>
               </div>
-              <div className="rounded-md border border-border bg-muted p-3">
+              <div className="rounded-sm border border-border bg-muted p-3">
                 <ul className="max-h-52 space-y-2 overflow-y-auto text-copy-14">
                   {pendingImport.profiles.map((profile) => (
                     <li
                       key={`${profile.providerId}:${profile.name}`}
-                      className="flex items-center justify-between gap-3 rounded-md px-2 py-1.5"
+                      className="flex items-center justify-between gap-3 rounded-sm px-2 py-1.5"
                     >
                       <span className="truncate font-semibold text-foreground">
                         {profile.name}
@@ -511,7 +510,7 @@ export function ConfigDialog({
         title={profileT.title || "配置管理"}
         description={profileT.description || "管理、导入、导出发布配置文件"}
         icon={<FileCog className="size-4" />}
-        bodyInnerClassName="space-y-5"
+        bodyInnerClassName="space-y-4"
         footerClassName="sm:space-x-0"
         footer={
           <>

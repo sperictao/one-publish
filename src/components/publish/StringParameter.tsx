@@ -1,6 +1,7 @@
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { HelpTip } from "@/components/ui/help-tip";
+import { useI18n } from "@/hooks/useI18n";
 import { ParameterDefinition } from "@/types/parameters";
 
 interface StringParameterProps {
@@ -20,6 +21,7 @@ export function StringParameter({
   label,
   inputId,
 }: StringParameterProps) {
+  const { t } = useI18n();
   const resolvedLabel = label || definition.flag;
   const resolvedInputId = inputId || definition.flag;
 
@@ -36,7 +38,7 @@ export function StringParameter({
         type="text"
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        placeholder={`Enter ${definition.flag}...`}
+        placeholder={t("common.stringParamPlaceholder", { flag: definition.flag })}
         readOnly={readOnly}
       />
     </div>

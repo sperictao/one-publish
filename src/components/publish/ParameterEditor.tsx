@@ -1,4 +1,5 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { useI18n } from "@/hooks/useI18n";
 import { ParameterSchema, ParameterValue } from "@/types/parameters";
 import { BooleanParameter } from "./BooleanParameter";
 import { StringParameter } from "./StringParameter";
@@ -12,6 +13,7 @@ interface ParameterEditorProps {
 }
 
 export function ParameterEditor({ schema, parameters, onChange }: ParameterEditorProps) {
+  const { t } = useI18n();
   const updateParameter = (key: string, value: ParameterValue) => {
     onChange({ ...parameters, [key]: value });
   };
@@ -22,8 +24,8 @@ export function ParameterEditor({ schema, parameters, onChange }: ParameterEdito
     return (
       <Card>
         <CardContent className="pt-6">
-          <div className="text-center text-muted-foreground">
-            No parameters defined for this provider
+          <div className="text-center text-copy-14 text-muted-foreground">
+            {t("common.paramEditorEmpty")}
           </div>
         </CardContent>
       </Card>
@@ -40,7 +42,7 @@ export function ParameterEditor({ schema, parameters, onChange }: ParameterEdito
             <CardHeader className="pb-3">
               <CardTitle className="text-heading-16">{key}</CardTitle>
               <CardDescription>
-                Type: {definition.type}
+                {t("common.paramEditorType", { type: definition.type })}
               </CardDescription>
             </CardHeader>
             <CardContent>

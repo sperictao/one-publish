@@ -104,7 +104,7 @@ const DotnetPublishParametersSection = memo(function DotnetPublishParametersSect
             <SelectTrigger
               id="quick-profile-configuration"
               disabled={readOnly}
-              className="h-9 text-label-12"
+              className="h-8 text-label-12"
             >
               <SelectValue />
             </SelectTrigger>
@@ -126,7 +126,7 @@ const DotnetPublishParametersSection = memo(function DotnetPublishParametersSect
             />
           </div>
           <Select value={runtime || "none"} onValueChange={onRuntimeChange}>
-            <SelectTrigger id="quick-profile-runtime" disabled={readOnly} className="h-9 text-label-12">
+            <SelectTrigger id="quick-profile-runtime" disabled={readOnly} className="h-8 text-label-12">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -202,7 +202,7 @@ const DotnetPublishOutputSection = memo(function DotnetPublishOutputSection({
             onChange={(event) => onOutputDirChange(event.target.value)}
             placeholder={appT.outputDirPlaceholder || "留空使用默认目录"}
             readOnly={readOnly}
-            className="h-9 text-label-12"
+            className="h-8 text-label-12"
           />
         </div>
 
@@ -234,25 +234,25 @@ const DotnetPublishOutputSection = memo(function DotnetPublishOutputSection({
             aria-label={appT.selfContained || "自包含部署"}
             disabled={readOnly || isRuntimeRequired}
             className={cn(
-              "surface-input flex h-9 w-full items-center justify-between rounded-md px-3 text-left transition-colors duration-150 ease-geist disabled:pointer-events-none",
-              !readOnly && !isRuntimeRequired && "hover:border-interactive/30 cursor-pointer select-none",
-              isRuntimeRequired && "opacity-50 cursor-not-allowed bg-muted"
+              "surface-input flex h-8 w-full items-center justify-between rounded-sm px-3 text-left text-muted-foreground transition-colors duration-150 ease-geist disabled:pointer-events-none",
+              !readOnly && !isRuntimeRequired && "hover:border-gray-alpha-500 cursor-pointer select-none",
+              isRuntimeRequired && "bg-gray-100 text-gray-700 cursor-not-allowed"
             )}
             onClick={() => {
               onSelfContainedChange(!selfContained);
             }}
           >
-            <span className="text-label-12 text-muted-foreground select-none truncate">
+            <span className="text-label-12 select-none truncate">
               {isRuntimeRequired
-                ? "未指定运行时 (不可用)"
+                ? profileT.selfContainedUnavailable || "未指定运行时 (不可用)"
                 : selfContained
-                ? "Self-Contained (独立运行)"
-                : "Framework-Dependent (依赖框架)"}
+                ? profileT.selfContainedOn || "Self-Contained (独立运行)"
+                : profileT.selfContainedOff || "Framework-Dependent (依赖框架)"}
             </span>
 
             <div className="flex items-center gap-2">
               {selfContained && !isRuntimeRequired && (
-                <span aria-hidden="true" className="size-1.5 rounded-full bg-success animate-pulse shrink-0" />
+                <span aria-hidden="true" className="size-1.5 rounded-full bg-success shrink-0" />
               )}
               <SwitchIndicator checked={selfContained} />
             </div>
@@ -519,7 +519,7 @@ const DotnetAdvancedFieldCards = memo(function DotnetAdvancedFieldCards({
   onParameterChange: (key: string, value: ParameterValue) => void;
 }): ReactNode {
   return (
-    <div className="grid gap-3.5 md:grid-cols-2">
+    <div className="grid gap-3 md:grid-cols-2">
       {fields.map((field) => {
         const localizedFieldText = getLocalizedAdvancedFieldText(profileT, field);
         const isFullWidth = field.control === "property-map";
@@ -528,7 +528,7 @@ const DotnetAdvancedFieldCards = memo(function DotnetAdvancedFieldCards({
           <div
             key={field.key}
             className={cn(
-              "rounded-md border border-border bg-muted p-3 flex flex-col justify-between",
+              "rounded-sm border border-border bg-muted p-3 flex flex-col justify-between",
               isFullWidth && "md:col-span-2"
             )}
           >
@@ -736,7 +736,7 @@ function DotnetFrameworkSuggestionsField({
           {fieldText.label}
         </Label>
         {fieldText.technicalLabel && (
-          <span className="font-mono text-label-12 text-muted-foreground bg-muted border border-border px-1.5 py-0.5 rounded-sm">
+          <span className="font-mono text-label-12-mono text-muted-foreground bg-muted border border-border px-1.5 py-0.5 rounded-sm">
             {fieldText.technicalLabel}
           </span>
         )}
@@ -753,7 +753,7 @@ function DotnetFrameworkSuggestionsField({
         onChange={(event) => onChange(event.target.value)}
         placeholder={fieldText.inputPlaceholder}
         readOnly={readOnly}
-        className="h-9 text-label-12"
+        className="h-8 text-label-12"
       />
       {!readOnly && field.options && field.options.length > 0 ? (
         <datalist id={datalistId}>
@@ -793,7 +793,7 @@ function DotnetSelectField({
           {fieldText.label}
         </Label>
         {fieldText.technicalLabel && (
-          <span className="font-mono text-label-12 text-muted-foreground bg-muted border border-border px-1.5 py-0.5 rounded-sm">
+          <span className="font-mono text-label-12-mono text-muted-foreground bg-muted border border-border px-1.5 py-0.5 rounded-sm">
             {fieldText.technicalLabel}
           </span>
         )}
@@ -812,7 +812,7 @@ function DotnetSelectField({
           id={field.key}
           aria-label={fieldText.label}
           disabled={readOnly}
-          className="h-9 text-label-12"
+          className="h-8 text-label-12"
         >
           <SelectValue placeholder={fieldText.emptyOptionLabel} />
         </SelectTrigger>
@@ -852,7 +852,7 @@ function DotnetBooleanField({
         <div className="flex flex-wrap items-center gap-1.5 text-label-12 font-semibold text-foreground">
           <span>{fieldText.label}</span>
           {fieldText.technicalLabel && (
-            <span className="font-mono text-label-12 text-muted-foreground bg-muted border border-border px-1.5 py-0.5 rounded-sm animate-fade-in">
+            <span className="font-mono text-label-12-mono text-muted-foreground bg-muted border border-border px-1.5 py-0.5 rounded-sm">
               {fieldText.technicalLabel}
             </span>
           )}
@@ -894,7 +894,7 @@ function DotnetStringField({
           {fieldText.label}
         </Label>
         {fieldText.technicalLabel && (
-          <span className="font-mono text-label-12 text-muted-foreground bg-muted border border-border px-1.5 py-0.5 rounded-sm">
+          <span className="font-mono text-label-12-mono text-muted-foreground bg-muted border border-border px-1.5 py-0.5 rounded-sm">
             {fieldText.technicalLabel}
           </span>
         )}
@@ -910,7 +910,7 @@ function DotnetStringField({
         onChange={(event) => onChange(event.target.value)}
         readOnly={readOnly}
         placeholder={fieldText.inputPlaceholder}
-        className="h-9 text-label-12"
+        className="h-8 text-label-12"
       />
     </div>
   );
@@ -992,7 +992,7 @@ function DotnetPropertyTableField({
           <div className="flex flex-wrap items-center gap-1.5">
             <Label className="text-label-12 font-semibold text-foreground">{fieldText.label}</Label>
             {fieldText.technicalLabel && (
-              <span className="font-mono text-label-12 text-muted-foreground bg-muted border border-border px-1.5 py-0.5 rounded-sm">
+              <span className="font-mono text-label-12-mono text-muted-foreground bg-muted border border-border px-1.5 py-0.5 rounded-sm">
                 {fieldText.technicalLabel}
               </span>
             )}
@@ -1012,7 +1012,7 @@ function DotnetPropertyTableField({
 
       {entries.length > 0 ? (
         <div className="space-y-1.5">
-          <div className="grid grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)_auto] gap-1.5 px-1 text-label-12 font-semibold uppercase tracking-[0.15em] text-muted-foreground">
+          <div className="grid grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)_auto] gap-1.5 px-1 text-label-12 font-semibold text-muted-foreground">
             <span>{fieldText.propertyKeyColumnLabel}</span>
             <span>{fieldText.propertyValueColumnLabel}</span>
             <span className="sr-only">Actions</span>
@@ -1058,7 +1058,7 @@ function DotnetPropertyTableField({
           ))}
         </div>
       ) : (
-        <div className="rounded-md border border-dashed border-border px-2.5 py-2 text-label-12 text-muted-foreground">
+        <div className="rounded-sm border border-dashed border-border px-2.5 py-2 text-label-12 text-muted-foreground">
           {fieldText.propertiesEmptyText}
         </div>
       )}

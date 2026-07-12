@@ -206,7 +206,7 @@ export function ReleaseChecklistDialog({
             ? `${publishResult.output_dir} (${publishResult.file_count} files)`
             : publishResult.error ||
               checklistTranslations.steps?.publish?.failedDetail ||
-              "发布失败，请先修复后重试。",
+              "发布失败，先修复后重试。",
       },
       {
         id: "package",
@@ -219,7 +219,7 @@ export function ReleaseChecklistDialog({
           ? `${packageResult.artifactPath}\nsha256: ${packageResult.sha256}`
           : publishResult?.success
             ? checklistTranslations.steps?.package?.pendingDetail ||
-              "请在输出日志卡片点击“打包 ZIP”。"
+              "在输出日志卡片点击“打包 ZIP”。"
             : checklistTranslations.steps?.package?.blockedDetail ||
               "需先完成发布。",
       },
@@ -237,7 +237,7 @@ export function ReleaseChecklistDialog({
               `exitCode: ${signResult.exitCode}`
           : packageResult
             ? checklistTranslations.steps?.sign?.pendingDetail ||
-              "请在输出日志卡片点击“签名 (GPG)”。"
+              "在输出日志卡片点击“签名 (GPG)”。"
             : checklistTranslations.steps?.sign?.blockedDetail ||
               "需先完成打包。",
       },
@@ -250,7 +250,7 @@ export function ReleaseChecklistDialog({
         status: updaterStatus,
         detail: updaterLoading
           ? checklistTranslations.steps?.updater?.loadingDetail ||
-            "正在检测 updater 配置..."
+            "正在检测 updater 配置…"
           : updaterError
             ? updaterError
             : updaterHealth?.message ||
@@ -420,7 +420,7 @@ export function ReleaseChecklistDialog({
               {exporting ? (
                 <>
                   <Loader2 className="mr-2 size-4 animate-spin" />
-                  {checklistTranslations.exporting || "导出中..."}
+                  {checklistTranslations.exporting || "导出中…"}
                 </>
               ) : (
                 checklistTranslations.export || "导出预检报告"
@@ -498,10 +498,10 @@ export function ReleaseChecklistDialog({
                   type="button"
                   key={item.id}
                   onClick={() => setActiveStepIndex(index)}
-                  className={`w-full text-left rounded-md border p-3 transition-colors duration-150 ease-geist ${
+                  className={`w-full text-left rounded-sm border p-3 transition-colors duration-150 ease-geist focus-ring ${
                     index === activeStepIndex
                       ? "border-interactive bg-interactive/10"
-                      : "border-border hover:bg-accent"
+                      : "border-border hover:bg-gray-alpha-100"
                   }`}
                 >
                   <div className="flex items-center justify-between gap-2">
@@ -529,7 +529,7 @@ export function ReleaseChecklistDialog({
               <p className="text-copy-14 text-muted-foreground">{activeStep.description}</p>
             </div>
 
-            <div className="rounded-md border border-border bg-muted p-3 text-label-12 font-mono whitespace-pre-wrap break-all">
+            <div className="rounded-sm border border-border bg-muted p-3 text-label-12-mono font-mono whitespace-pre-wrap break-all">
               {activeStep.detail}
             </div>
 

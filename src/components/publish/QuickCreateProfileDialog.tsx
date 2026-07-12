@@ -83,12 +83,12 @@ const QuickCreateTemplateCard = memo(function QuickCreateTemplateCard({
   onApplyTemplate: (id: string) => void;
 }) {
   return (
-    <Card className="rounded-lg">
+    <Card>
       <CardHeader className="p-4 pb-3">
         <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
           <div className="min-w-0">
             <div className="flex items-center gap-2 text-label-14 font-semibold text-foreground">
-              <span className="flex size-7 items-center justify-center rounded-lg bg-interactive/10 text-interactive ">
+              <span className="flex size-7 items-center justify-center rounded-sm bg-interactive/10 text-interactive">
                 <Sparkles className="size-3.5" />
               </span>
               {profileT.quickCreateTemplateCompactTitle || "快速套用模板"}
@@ -115,7 +115,7 @@ const QuickCreateTemplateCard = memo(function QuickCreateTemplateCard({
             >
               <SelectTrigger
                 id="quick-profile-template"
-                className="h-9 text-label-12"
+                className="h-8 text-label-12"
               >
                 <SelectValue />
               </SelectTrigger>
@@ -143,7 +143,7 @@ const QuickCreateTemplateCard = memo(function QuickCreateTemplateCard({
       </CardHeader>
       {selectedTemplateDescription ? (
         <CardContent className="p-4 pt-0">
-          <div className="rounded-md border border-border bg-muted px-3 py-2 text-label-12 text-muted-foreground">
+          <div className="rounded-sm border border-border bg-muted px-3 py-2 text-label-12 text-muted-foreground">
             {selectedTemplateDescription}
           </div>
         </CardContent>
@@ -199,7 +199,7 @@ const QuickCreateBasicInfoSection = memo(function QuickCreateBasicInfoSection({
             value={quickCreateProfileName}
             onChange={(event) => onProfileNameChange(event.target.value)}
             onKeyDown={onProfileNameKeyDown}
-            className="h-9 text-label-12"
+            className="h-8 text-label-12"
           />
           <p className="text-label-12 text-muted-foreground mt-1">
             {profileT.quickCreateNameHint ||
@@ -215,7 +215,7 @@ const QuickCreateBasicInfoSection = memo(function QuickCreateBasicInfoSection({
             value={quickCreateProfileGroup}
             onValueChange={onProfileGroupChange}
           >
-            <SelectTrigger id="quick-profile-group" className="h-9 text-label-12">
+            <SelectTrigger id="quick-profile-group" className="h-8 text-label-12">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -257,7 +257,7 @@ const QuickCreateBasicInfoSection = memo(function QuickCreateBasicInfoSection({
                 profileT.quickCreateGroupCustomPlaceholder ||
                 "输入自定义发布配置组名称"
               }
-              className="h-9 text-label-12"
+              className="h-8 text-label-12"
             />
           </div>
         ) : null}
@@ -350,9 +350,8 @@ export function QuickCreateProfileDialog({
           )
         }
         iconWrapperClassName={cn(
-          "",
           quickCreateEditing
-            ? "bg-accent text-foreground/75"
+            ? "bg-accent text-muted-foreground"
             : "bg-interactive/10 text-interactive"
         )}
         footerClassName="sm:space-x-0"
@@ -384,8 +383,8 @@ export function QuickCreateProfileDialog({
                   <>
                     <Loader2 className="mr-2 size-4 animate-spin" />
                     {quickCreateEditing
-                      ? profileT.quickEditSaving || "更新中..."
-                      : profileT.quickCreateSaving || "保存中..."}
+                      ? profileT.quickEditSaving || "更新中…"
+                      : profileT.quickCreateSaving || "保存中…"}
                   </>
                 ) : (
                   <>

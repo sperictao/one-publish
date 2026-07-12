@@ -542,10 +542,12 @@ export const RepositoryList = memo(function RepositoryList({
         <div className="pointer-events-none absolute -top-6 left-0 right-0 h-6 " />
         <button
           type="button"
-          className="flex size-7 items-center justify-center rounded-md text-muted-foreground/50 transition-colors duration-150 ease-geist hover:bg-muted hover:text-foreground/70"
+          aria-label={repoT.openSettings || "打开设置"}
+          title={repoT.openSettings || "打开设置"}
+          className="flex size-7 items-center justify-center rounded-sm text-muted-foreground transition-colors duration-150 ease-geist hover:bg-gray-alpha-100 hover:text-foreground focus-ring"
           onClick={onSettings}
         >
-          <Settings className="size-3.5 transition-transform duration-150 ease-geist hover:rotate-90" />
+          <Settings className="size-3.5" />
         </button>
       </div>
     </div>

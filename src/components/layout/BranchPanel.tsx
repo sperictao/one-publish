@@ -124,7 +124,7 @@ export function BranchPanel({
           </div>
         </div>
         <div className="flex flex-1 items-center justify-center text-label-14 text-muted-foreground">
-          {branchT.selectRepository || "请选择一个仓库"}
+          {branchT.selectRepository || "选择一个仓库"}
         </div>
       </div>
     );

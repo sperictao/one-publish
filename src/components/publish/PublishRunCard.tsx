@@ -125,7 +125,7 @@ export const PublishRunCard = memo(function PublishRunCard({
   const statusMeta =
     publishVisualState === "running"
       ? {
-          label: publishActions?.publishingLabel || "发布中...",
+          label: publishActions?.publishingLabel || "发布中…",
           description:
             appT.publishStatusRunningDetail ||
             "发布命令正在执行，日志会持续追加到下方输出区域。",
@@ -173,7 +173,7 @@ export const PublishRunCard = memo(function PublishRunCard({
                 label: appT.statusFailed || "失败",
                 description:
                   appT.publishStatusFailedDetail ||
-                  "发布命令已退出，请结合下方日志定位失败原因。",
+                  "发布命令已退出，结合下方日志定位失败原因。",
                 badgeClassName:
                   "status-failed",
                 panelClassName:
@@ -213,7 +213,7 @@ export const PublishRunCard = memo(function PublishRunCard({
   const logEffectiveExpanded = logExpanded || !logCollapsible;
   const logLineCount = outputLog ? outputLog.split("\n").length : 0;
   const logFallbackText = isRefreshing
-    ? appT.refreshingPublishCard || "正在刷新发布信息..."
+    ? appT.refreshingPublishCard || "正在刷新发布信息…"
     : appT.noOutput || "无输出";
   const logDisplayText = outputLog || publishResult?.error || logFallbackText;
 
@@ -302,7 +302,7 @@ export const PublishRunCard = memo(function PublishRunCard({
                       <span className="inline-block animate-spin mr-2">
                         <Loader2 className="size-5" />
                       </span>
-                      {publishActions.publishingLabel || "发布中..."}
+                      {publishActions.publishingLabel || "发布中…"}
                     </>
                   ) : (
                     <>
@@ -325,7 +325,7 @@ export const PublishRunCard = memo(function PublishRunCard({
                         <span className="inline-block animate-spin mr-2">
                           <Loader2 className="size-4" />
                         </span>
-                        {publishActions.cancellingLabel || "取消中..."}
+                        {publishActions.cancellingLabel || "取消中…"}
                       </>
                     ) : (
                       <>
@@ -388,7 +388,7 @@ export const PublishRunCard = memo(function PublishRunCard({
           </output>
 
           {/* 成功态：输出目录作为摘要块下方的次要信息行（可点击），不再独立成卡。
-              置于 <output> 之外，确保 publish-status-panel 内仅含状态图标。 */}
+              置于 output 元素之外，确保 publish-status-panel 内仅含状态图标。 */}
           {canOpenOutputDir && (
             <button
               type="button"
@@ -504,7 +504,7 @@ export const PublishRunCard = memo(function PublishRunCard({
             <span className="inline-block animate-spin text-interactive">
               <Loader2 className="size-4" />
             </span>
-            <span>{appT.refreshingPublishCard || "正在刷新发布信息..."}</span>
+            <span>{appT.refreshingPublishCard || "正在刷新发布信息…"}</span>
           </div>
         </div>
       ) : null}

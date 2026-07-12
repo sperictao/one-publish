@@ -81,7 +81,7 @@ export function RerunChecklistDialog({
         dialogClassName="sm:max-w-[580px]"
         title={rerunT.title || "重跑前确认清单"}
         description={
-          rerunT.description || "请确认以下检查项，避免在敏感分支或错误目标上触发重跑。"
+          rerunT.description || "确认以下检查项，避免在敏感分支或错误目标上触发重跑。"
         }
         icon={<ListChecks className="size-4" />}
         bodyInnerClassName="space-y-3"
@@ -107,11 +107,15 @@ export function RerunChecklistDialog({
           <AppDialogInset className="space-y-2 text-copy-14">
             <div>
               <span className="text-muted-foreground">{rerunT.provider || "Provider:"}</span>{" "}
-              {pendingRerunRecord?.providerId || rerunT.unknown || "(未知)"}
+              <span className="font-mono text-label-13-mono">
+                {pendingRerunRecord?.providerId || rerunT.unknown || "(未知)"}
+              </span>
             </div>
             <div>
               <span className="text-muted-foreground">{rerunT.currentBranch || "当前分支:"}</span>{" "}
-              {selectedRepoCurrentBranch || rerunT.unknown || "(未知)"}
+              <span className="font-mono text-label-13-mono">
+                {selectedRepoCurrentBranch || rerunT.unknown || "(未知)"}
+              </span>
             </div>
             <div>
               <span className="text-muted-foreground">{rerunT.environmentStatus || "环境状态:"}</span>{" "}
@@ -125,7 +129,9 @@ export function RerunChecklistDialog({
             </div>
             <div>
               <span className="text-muted-foreground">{rerunT.outputTarget || "输出目标:"}</span>{" "}
-              {pendingRerunRecord?.outputDir || rerunT.unrecorded || "(未记录)"}
+              <span className="break-all font-mono text-label-13-mono">
+                {pendingRerunRecord?.outputDir || rerunT.unrecorded || "(未记录)"}
+              </span>
             </div>
           </AppDialogInset>
 
@@ -139,7 +145,7 @@ export function RerunChecklistDialog({
                   className="flex items-center justify-between gap-4 px-4 py-3"
                 >
                   <div className="flex min-w-0 items-center gap-3">
-                    <span className="flex size-9 flex-shrink-0 items-center justify-center rounded-md bg-muted text-foreground/75">
+                    <span className="flex size-9 flex-shrink-0 items-center justify-center rounded-md bg-muted text-muted-foreground">
                       <Icon className="size-4" />
                     </span>
                     <Label htmlFor={item.id} className="text-label-14">

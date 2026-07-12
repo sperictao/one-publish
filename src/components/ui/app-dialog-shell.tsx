@@ -105,7 +105,7 @@ export function AppDialogShell({
               {icon ? (
                 <span
                   className={cn(
-                    "mt-0.5 flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-md bg-interactive/10 text-interactive",
+                    "mt-0.5 flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-sm bg-interactive/10 text-interactive",
                     iconWrapperClassName
                   )}
                 >
@@ -120,7 +120,7 @@ export function AppDialogShell({
                 </DialogTitle>
                 {description ? (
                   <DialogDescription
-                    className={cn("mt-1 pr-2 leading-6", descriptionClassName)}
+                    className={cn("mt-1 pr-2", descriptionClassName)}
                   >
                     {description}
                   </DialogDescription>

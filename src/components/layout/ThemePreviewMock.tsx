@@ -33,7 +33,7 @@ export function ThemePreviewMock({
   return (
     <div
       className={cn(
-        "relative h-20 w-full overflow-hidden rounded-lg border border-border flex select-none pointer-events-none",
+        "relative h-20 w-full overflow-hidden rounded-sm border border-border flex select-none pointer-events-none",
         className
       )}
       style={{
@@ -41,7 +41,7 @@ export function ThemePreviewMock({
       }}
     >
       <div
-        className="absolute inset-x-3 bottom-0 top-3 flex flex-col overflow-hidden rounded-t-md border-t border-x"
+        className="absolute inset-x-3 bottom-0 top-3 flex flex-col overflow-hidden rounded-t-sm border-t border-x"
         style={{
           backgroundColor: token("window-bg", theme),
           borderColor: token("border", theme),
@@ -50,7 +50,7 @@ export function ThemePreviewMock({
       >
         {/* Title Bar with Traffic Lights */}
         <div
-          className="flex h-3 shrink-0 items-center gap-[3px] px-1.5"
+          className="flex h-3 shrink-0 items-center gap-1 px-1.5"
           style={{ borderBottom: `1px solid ${token("hairline", theme)}`, backgroundColor: token("titlebar-bg", theme) }}
         >
           <div
@@ -78,16 +78,16 @@ export function ThemePreviewMock({
             }}
           >
             <div
-              className="h-1.5 w-full rounded-[2px] transition-colors duration-150 ease-geist"
+              className="h-1.5 w-full rounded-full transition-colors duration-150 ease-geist"
               style={{ backgroundColor: "hsl(var(--interactive))" }}
             />
             <div
-              className="h-1 w-2/3 rounded-[2px]"
+              className="h-1 w-2/3 rounded-full"
               style={{ backgroundColor: token("sidebar-line", theme) }}
             />
             {showAllSidebarLines && (
               <div
-                className="h-1 w-3/4 rounded-[2px]"
+                className="h-1 w-3/4 rounded-full"
                 style={{ backgroundColor: token("sidebar-line-secondary", theme) }}
               />
             )}
@@ -96,16 +96,16 @@ export function ThemePreviewMock({
           {/* Content Area */}
           <div className="flex-1 space-y-0.5 p-0.5" style={{ backgroundColor: token("window-bg", theme) }}>
             <div
-              className="h-1.5 w-2/3 rounded-[1px]"
+              className="h-1.5 w-2/3 rounded-full"
               style={{ backgroundColor: token("content-line", theme) }}
             />
             <div
-              className="h-1.5 w-full rounded-[1px]"
+              className="h-1.5 w-full rounded-full"
               style={{ backgroundColor: token("content-line-secondary", theme) }}
             />
             {showAllSidebarLines && (
               <div
-                className="h-1.5 w-1/2 rounded-[1px]"
+                className="h-1.5 w-1/2 rounded-full"
                 style={{ backgroundColor: token("content-line-secondary", theme) }}
               />
             )}

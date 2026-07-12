@@ -124,7 +124,7 @@ function ArtifactActionsContent({
           onClick={handlePackage}
           disabled={!outputDir || packaging}
         >
-          {packaging ? artifactT.packaging || "打包中..." : artifactT.packageZip || "打包 ZIP"}
+          {packaging ? artifactT.packaging || "打包中…" : artifactT.packageZip || "打包 ZIP"}
         </Button>
 
         <Button
@@ -134,7 +134,7 @@ function ArtifactActionsContent({
           onClick={handleSign}
           disabled={!packageResult || signing}
         >
-          {signing ? artifactT.signing || "签名中..." : artifactT.signGpg || "签名 (GPG)"}
+          {signing ? artifactT.signing || "签名中…" : artifactT.signGpg || "签名 (GPG)"}
         </Button>
       </div>
 

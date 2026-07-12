@@ -88,7 +88,7 @@ export function ProjectPublishProfileViewerDialog({
         bodyPadding="none"
         bodyInnerClassName="space-y-4 p-5 sm:p-6"
         title={
-          <div className="flex items-center gap-1.5">
+          <div className="flex items-center gap-2">
             <span>{t.viewConfigTitle || "查看发布配置"}</span>
             <HelpTip
               text={
@@ -122,14 +122,14 @@ export function ProjectPublishProfileViewerDialog({
         }
       >
         {viewerState.status === "loading" ? (
-          <div className="flex min-h-40 items-center justify-center rounded-md border border-dashed border-border bg-muted text-label-14 text-muted-foreground">
+          <div className="flex min-h-40 items-center justify-center rounded-sm border border-dashed border-border bg-muted text-label-14 text-muted-foreground">
             <RefreshCw className="mr-2 size-4 animate-spin" />
-            {t.loadingConfig || "正在加载配置..."}
+            {t.loadingConfig || "正在加载配置…"}
           </div>
         ) : null}
 
         {viewerState.status === "error" ? (
-          <AppDialogInset className="border-destructive/30 bg-destructive/5 text-label-14 text-destructive shadow-none">
+          <AppDialogInset className="border-destructive/20 bg-destructive/5 text-label-14 text-destructive shadow-none">
             {viewerState.errorMessage}
           </AppDialogInset>
         ) : null}
@@ -137,10 +137,10 @@ export function ProjectPublishProfileViewerDialog({
         {viewerState.status === "ready" ? (
           <>
             <AppDialogInset>
-              <div className="text-label-12 font-semibold uppercase tracking-[0.15em] text-muted-foreground">
+              <div className="text-label-12 font-semibold uppercase text-muted-foreground">
                 {t.configFilePath || "配置文件路径"}
               </div>
-              <div className="mt-2 break-all font-mono text-label-12 text-muted-foreground">
+              <div className="mt-2 break-all font-mono text-label-13-mono text-muted-foreground">
                 {viewerState.filePath}
               </div>
             </AppDialogInset>
@@ -210,7 +210,7 @@ function ProjectPublishProfileSupplementSectionCard({
   const sectionAttributes = Object.entries(section.attributes);
 
   return (
-    <Card className="rounded-lg">
+    <Card>
       <CardHeader className="pb-3">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div className="min-w-0">
@@ -218,7 +218,8 @@ function ProjectPublishProfileSupplementSectionCard({
               {section.title}
             </div>
             <CardDescription className="mt-1 text-label-12">
-              {translations.fullParsedSectionTag || "标签"}: {section.tagName}
+              {translations.fullParsedSectionTag || "标签"}:{" "}
+              <span className="font-mono text-label-13-mono">{section.tagName}</span>
             </CardDescription>
           </div>
           <span className="rounded-full bg-interactive/10 px-2 py-0.5 text-label-12 font-semibold text-interactive">
@@ -240,9 +241,9 @@ function ProjectPublishProfileSupplementSectionCard({
         {section.entries.map((entry) => (
           <div
             key={`${section.id}:${entry.path}:${entry.key}`}
-            className="space-y-3 rounded-md border border-border bg-muted p-4"
+            className="space-y-3 rounded-sm border border-border bg-muted p-4"
           >
-            <div className="text-label-14 font-semibold text-foreground">{entry.key}</div>
+            <div className="font-mono text-label-13-mono font-semibold text-foreground">{entry.key}</div>
             <ProjectPublishProfileField
               label={translations.fullParsedEntryPath || "节点路径"}
               value={entry.path}
@@ -277,17 +278,17 @@ function ProjectPublishProfileMetadataBlock({
 }): ReactNode {
   return (
     <div className="space-y-2">
-      <div className="text-label-12 font-semibold uppercase tracking-[0.15em] text-muted-foreground">
+      <div className="text-label-12 font-semibold uppercase text-muted-foreground">
         {label}
       </div>
       <div className="space-y-2">
         {entries.map(([key, value]) => (
           <div
             key={`${label}:${key}`}
-            className="grid gap-2 rounded-md border border-border bg-muted px-3 py-2 sm:grid-cols-[minmax(0,140px)_1fr]"
+            className="grid gap-2 rounded-sm border border-border bg-muted px-3 py-2 sm:grid-cols-[minmax(0,140px)_1fr]"
           >
-            <div className="text-label-12 font-semibold text-muted-foreground">{key}</div>
-            <div className="break-all font-mono text-label-12 text-muted-foreground">
+            <div className="break-all font-mono text-label-13-mono font-semibold text-muted-foreground">{key}</div>
+            <div className="break-all font-mono text-label-13-mono text-muted-foreground">
               {value}
             </div>
           </div>
@@ -310,12 +311,12 @@ function ProjectPublishProfileField({
 
   return (
     <div className="space-y-2">
-      <div className="text-label-12 font-semibold uppercase tracking-[0.15em] text-muted-foreground">
+      <div className="text-label-12 font-semibold uppercase text-muted-foreground">
         {label}
       </div>
       <div
         className={cn(
-          "break-all rounded-md border border-border bg-muted px-3 py-2 font-mono text-label-12 text-muted-foreground",
+          "break-all rounded-sm border border-border bg-muted px-3 py-2 font-mono text-label-13-mono text-muted-foreground",
           !hasValue && "italic text-muted-foreground"
         )}
       >
