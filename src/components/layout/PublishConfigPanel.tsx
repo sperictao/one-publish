@@ -70,6 +70,7 @@ import {
   ListDragHandle,
 } from "@/components/layout/ListReorderControls";
 import { topbarIconButtonClass } from "@/components/layout/topbarButtonStyles";
+import { SectionLabel } from "@/components/ui/section-label";
 import {
   usePointerListReorder,
 } from "@/components/layout/usePointerListReorder";
@@ -87,6 +88,9 @@ import {
 import type { ParameterSchema } from "@/types/parameters";
 
 const EMPTY_FRAMEWORK_OPTIONS: string[] = [];
+
+const configRowClass =
+  "flex w-full items-center gap-2.5 rounded-sm border border-transparent bg-transparent py-2 pr-11 text-left shadow-none outline-none transition-colors duration-150 ease-geist hover:bg-gray-alpha-100 focus-ring";
 
 // Collapse toggle icon (reused from BranchPanel)
 function CollapseIcon() {
@@ -215,7 +219,7 @@ function ConfigGroup({
     <div>
       <button
         type="button"
-        className="flex w-full items-center gap-1.5 px-3 py-2 text-label-12 font-semibold uppercase tracking-[0.15em] text-muted-foreground hover:text-foreground transition-colors duration-150 ease-geist"
+        className="flex w-full items-center gap-1.5 px-3 py-2 text-muted-foreground hover:text-foreground transition-colors duration-150 ease-geist"
         onClick={() => setExpanded(!expanded)}
       >
         {expanded ? (
@@ -223,9 +227,11 @@ function ConfigGroup({
         ) : (
           <ChevronRight className="size-3.5" />
         )}
-        <span className="flex-1 text-left">{title}</span>
+        <SectionLabel as="span" className="flex-1 text-left hover:text-foreground">
+          {title}
+        </SectionLabel>
         {isRefreshing ? (
-          <span className="inline-block animate-spin text-interactive/80">
+          <span className="inline-block animate-spin text-interactive">
             <Loader2 className="size-3.5" />
           </span>
         ) : null}
@@ -353,7 +359,7 @@ function ProfileItem({
     actions.push({
       key: "edit",
       label: editTitle,
-      icon: <Pencil className="size-3.5 text-muted-foreground/70" />,
+      icon: <Pencil className="size-3.5 text-muted-foreground" />,
       onSelect: onEdit,
     });
   }
@@ -408,7 +414,7 @@ function ProfileItem({
         type="button"
         aria-pressed={isSelected}
         className={cn(
-          "flex w-full items-center gap-2.5 rounded-md border border-transparent bg-transparent py-2 pr-11 text-left shadow-none outline-none transition-colors duration-150 ease-geist hover:bg-accent focus-visible:ring-2 focus-visible:ring-interactive/30 focus-visible:ring-offset-1 focus-visible:ring-offset-background",
+          configRowClass,
           isSelected && "bg-accent",
           dragHandleVisible ? "pl-10" : "pl-3"
         )}
@@ -416,7 +422,7 @@ function ProfileItem({
       >
         <span
           className={cn(
-            "flex size-8 flex-shrink-0 items-center justify-center rounded-md transition-colors duration-150 ease-geist",
+            "flex size-8 flex-shrink-0 items-center justify-center rounded-sm transition-colors duration-150 ease-geist",
             isSelected
               ? "bg-interactive/10"
               : "bg-muted group-hover:bg-interactive/10"
@@ -534,7 +540,7 @@ export const PublishConfigPanel = memo(function PublishConfigPanel({
     t.refreshingCustomProfiles || "正在刷新自定义配置…";
   const isAnyRefreshing = isProfilesRefreshing || isProjectProfilesRefreshing;
   const listActionButtonClass =
-    "flex size-7 items-center justify-center rounded-full border border-border bg-background transition-colors duration-150 ease-geist hover:bg-accent";
+    "flex size-7 items-center justify-center rounded-full border border-border bg-background transition-colors duration-150 ease-geist hover:bg-gray-alpha-100 focus-ring";
   const reorderControlsLabel = showReorderControls
     ? t.hideReorderControls || "关闭排序"
     : t.showReorderControls || "开启排序";
@@ -957,10 +963,10 @@ export const PublishConfigPanel = memo(function PublishConfigPanel({
           <div>
             {showRecentItems && (
               <div className="space-y-1.5">
-                <div className="flex items-center gap-1.5 px-3 py-2 text-label-12 font-semibold uppercase tracking-[0.15em] text-muted-foreground">
+                <SectionLabel className="flex items-center gap-1.5 px-3 py-2">
                   <Clock className="size-3.5" />
                   <span>{recentlyUsedLabel}</span>
-                </div>
+                </SectionLabel>
                 {previewRecentItems.map((item) => {
                   const renderId = createRecentConfigRenderId(item.key);
                   return (
@@ -1023,7 +1029,7 @@ export const PublishConfigPanel = memo(function PublishConfigPanel({
                     type="button"
                     aria-pressed={item.key === selectedConfigId}
                     className={cn(
-                      "flex w-full items-center gap-2.5 rounded-md border border-transparent bg-transparent py-2 pr-11 text-left shadow-none outline-none transition-colors duration-150 ease-geist hover:bg-accent focus-visible:ring-2 focus-visible:ring-interactive/30 focus-visible:ring-offset-1 focus-visible:ring-offset-background",
+                      configRowClass,
                       selectedRenderId === renderId && "bg-accent",
                       recentDragEnabled ? "pl-10" : "pl-3"
                     )}
@@ -1037,7 +1043,7 @@ export const PublishConfigPanel = memo(function PublishConfigPanel({
                   >
                     <span
                       className={cn(
-                        "flex size-8 flex-shrink-0 items-center justify-center rounded-md transition-colors duration-150 ease-geist",
+                        "flex size-8 flex-shrink-0 items-center justify-center rounded-sm transition-colors duration-150 ease-geist",
                         selectedRenderId === renderId
                           ? "bg-interactive/10"
                           : "bg-muted group-hover:bg-interactive/10"
@@ -1118,7 +1124,7 @@ export const PublishConfigPanel = memo(function PublishConfigPanel({
             emptyState={
               shouldShowProjectProfilesLoadingState ? (
                 <span className="flex items-center gap-2">
-                  <span className="inline-block animate-spin text-interactive/80">
+                  <span className="inline-block animate-spin text-interactive">
                     <Loader2 className="size-3.5" />
                   </span>
                   {projectProfilesRefreshingLabel}
@@ -1183,7 +1189,7 @@ export const PublishConfigPanel = memo(function PublishConfigPanel({
                     data-selected={isPubxmlSelected}
                     aria-pressed={isPubxmlSelected}
                     className={cn(
-                      "flex w-full items-center gap-2.5 rounded-md border border-transparent bg-transparent py-2 pr-11 text-left shadow-none outline-none transition-colors duration-150 ease-geist hover:bg-accent focus-visible:ring-2 focus-visible:ring-interactive/30 focus-visible:ring-offset-1 focus-visible:ring-offset-background",
+                      configRowClass,
                       projectProfileDragEnabled ? "pl-10" : "pl-3"
                     )}
                     onClick={() => {
@@ -1196,7 +1202,7 @@ export const PublishConfigPanel = memo(function PublishConfigPanel({
                   >
                     <span
                       className={cn(
-                        "flex size-8 flex-shrink-0 items-center justify-center rounded-md transition-colors duration-150 ease-geist",
+                        "flex size-8 flex-shrink-0 items-center justify-center rounded-sm transition-colors duration-150 ease-geist",
                         isPubxmlSelected
                           ? "bg-interactive/10"
                           : "bg-muted group-hover:bg-interactive/10"
@@ -1237,13 +1243,13 @@ export const PublishConfigPanel = memo(function PublishConfigPanel({
                         {
                           key: "copy",
                           label: copyConfigLabel,
-                          icon: <Copy className="size-3.5 text-muted-foreground/70" />,
+                          icon: <Copy className="size-3.5 text-muted-foreground" />,
                           onSelect: () => handleCopyProjectProfileToCustom(name),
                         },
                         {
                           key: "view",
                           label: viewConfigLabel,
-                          icon: <Eye className="size-3.5 text-muted-foreground/70" />,
+                          icon: <Eye className="size-3.5 text-muted-foreground" />,
                           onSelect: () => handleViewProjectProfile(name),
                         },
                       ]}
@@ -1327,7 +1333,7 @@ export const PublishConfigPanel = memo(function PublishConfigPanel({
           ))}
           {shouldShowCustomProfilesLoadingState ? (
             <div className="flex items-center gap-2 px-3 py-4 text-label-12 text-muted-foreground">
-              <span className="inline-block animate-spin text-interactive/80">
+              <span className="inline-block animate-spin text-interactive">
                 <Loader2 className="size-3.5" />
               </span>
               <span>{customProfilesRefreshingLabel}</span>
@@ -1463,11 +1469,11 @@ export const PublishConfigPanel = memo(function PublishConfigPanel({
             <DropdownMenuTrigger asChild>
               <button
                 type="button"
-                className="flex items-center gap-1.5 rounded-full border border-border bg-background px-3 py-1 text-button-14 font-normal transition-colors duration-150 ease-geist hover:bg-accent"
+                className="flex items-center gap-1.5 rounded-full border border-border bg-background px-3 py-1 text-button-14 font-normal transition-colors duration-150 ease-geist hover:bg-gray-alpha-100 focus-ring"
                 aria-haspopup="menu"
                 aria-expanded={groupFilterOpen}
               >
-                <span className="text-foreground/80">
+                <span className="text-foreground">
                   {selectedGroupFilterOption?.label || allConfigsLabel}
                 </span>
                 <span className="flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-interactive/10 px-1 text-label-12 font-semibold text-interactive">

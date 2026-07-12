@@ -71,7 +71,7 @@ export function PanelToggleButton({
       type="button"
       onClick={onToggle}
       className={cn(
-        "flex h-7 w-7 items-center justify-center rounded hover:bg-accent transition-colors",
+        "flex size-8 items-center justify-center rounded-sm hover:bg-gray-alpha-100 focus-ring transition-colors",
         collapsed ? "text-muted-foreground hover:text-foreground" : "text-foreground"
       )}
       title={tooltip || defaultTooltip}

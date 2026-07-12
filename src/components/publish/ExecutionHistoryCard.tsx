@@ -201,7 +201,7 @@ export function ExecutionHistoryCard({
         </div>
 
         {filteredExecutionHistory.length === 0 ? (
-          <div className="rounded-md border border-dashed border-border px-3 py-4 text-label-14 text-muted-foreground">
+          <div className="rounded-sm border border-dashed border-border px-3 py-4 text-label-14 text-muted-foreground">
             {historyT.noRecords || "当前筛选条件下无执行记录"}
           </div>
         ) : (
@@ -211,12 +211,12 @@ export function ExecutionHistoryCard({
             return (
               <div
                 key={record.id}
-                className="rounded-md border border-border px-3 py-2 text-copy-14"
+                className="rounded-sm border border-border px-3 py-2 text-copy-14"
               >
                 <div className="flex items-center justify-between gap-2">
                   <span className="font-semibold">{record.providerId}</span>
                   <span
-                    className={`text-label-12 rounded-md px-1.5 py-0.5 ${
+                    className={`text-label-12 rounded-full px-1.5 py-0.5 ${
                       record.success
                         ? "status-success"
                         : record.cancelled
@@ -236,7 +236,7 @@ export function ExecutionHistoryCard({
                   {(historyT.completedAt || "完成时间")}: {new Date(record.finishedAt).toLocaleString()}
                 </div>
                 {failureReason && (
-                  <div className="mt-2 rounded-lg border border-destructive/20 bg-destructive/5 px-2.5 py-2 text-label-12 text-destructive">
+                  <div className="mt-2 rounded-sm border border-destructive/20 bg-destructive/5 px-2.5 py-2 text-label-12 text-destructive">
                     <span className="font-semibold">
                       {historyT.failureReason || "失败原因"}:
                     </span>{" "}
@@ -244,15 +244,15 @@ export function ExecutionHistoryCard({
                   </div>
                 )}
                 {record.warnings && record.warnings.length > 0 && (
-                  <details className="mt-2 rounded-lg border border-warning/20 bg-warning/5">
+                  <details className="mt-2 rounded-sm border border-warning/20 bg-warning/5">
                     <summary className="flex cursor-pointer list-none items-center gap-1.5 px-2.5 py-2 text-label-12 text-warning transition-colors duration-150 ease-geist hover:bg-warning/5 [&::-webkit-details-marker]:hidden">
                       <AlertTriangle className="size-3.5 flex-shrink-0" />
                       <span className="font-semibold">
                         {historyT.warningsLabel || "警告"}: {record.warnings.length}
                       </span>
-                      <ChevronDown className="ml-auto size-3.5 text-warning/70 transition-transform duration-150 ease-geist group-open:rotate-180" />
+                      <ChevronDown className="ml-auto size-3.5 text-warning transition-transform duration-150 ease-geist group-open:rotate-180" />
                     </summary>
-                    <ul className="max-h-32 overflow-auto border-t border-warning/15 px-2.5 py-1.5 text-label-12 text-warning/90">
+                    <ul className="max-h-32 overflow-auto border-t border-warning/20 px-2.5 py-1.5 text-label-12 text-warning">
                       {record.warnings.map((warning, idx) => (
                         <li
                           key={idx}

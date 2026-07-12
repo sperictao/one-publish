@@ -84,7 +84,7 @@ describe("PublishRunCard", () => {
     expect(publishButton).toHaveClass("sm:flex-1");
     expect(statusPanel).toHaveClass("block");
     expect(statusPanel).toHaveClass("w-full");
-    expect(statusPanel).toHaveClass("rounded-lg");
+    expect(statusPanel).toHaveClass("rounded-sm");
     expect(statusPanel).toHaveClass("p-4");
     expect(statusPanel).toHaveTextContent("发布状态");
     expect(statusPanel).toHaveTextContent("待执行");

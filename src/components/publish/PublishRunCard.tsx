@@ -22,6 +22,7 @@ import {
 } from "lucide-react";
 import type { PublishResult } from "@/features/publish/publishRuntime";
 import { openOutputDirectory } from "@/lib/store/api";
+import { SectionLabel } from "@/components/ui/section-label";
 import { cn } from "@/lib/utils";
 
 export interface PublishRunCardActions {
@@ -346,14 +347,14 @@ export const PublishRunCard = memo(function PublishRunCard({
             data-testid="publish-status-panel"
             aria-live="polite"
             className={cn(
-              "block w-full rounded-lg border p-4",
+              "block w-full rounded-sm border p-4",
               statusMeta.panelClassName
             )}
           >
             <div className="flex min-w-0 items-start gap-3">
               <span
                 className={cn(
-                  "flex size-10 flex-shrink-0 items-center justify-center rounded-md",
+                  "flex size-10 flex-shrink-0 items-center justify-center rounded-sm",
                   statusMeta.iconWrapClassName
                 )}
               >
@@ -392,7 +393,7 @@ export const PublishRunCard = memo(function PublishRunCard({
           {canOpenOutputDir && (
             <button
               type="button"
-              className="group flex w-full items-center gap-2 rounded-md px-3 py-2 text-left transition-colors duration-150 ease-geist hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-interactive/30 focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:cursor-not-allowed disabled:opacity-70"
+              className="group flex w-full items-center gap-2 rounded-sm px-3 py-2 text-left transition-colors duration-150 ease-geist hover:bg-gray-alpha-100 focus-ring disabled:cursor-not-allowed disabled:text-gray-700"
               onClick={handleOpenOutputDir}
               disabled={isOpeningOutputDir}
             >
@@ -406,9 +407,9 @@ export const PublishRunCard = memo(function PublishRunCard({
                 )}
               </span>
               <span className="min-w-0 flex flex-1 flex-col overflow-hidden">
-                <span className="text-label-12 font-semibold uppercase tracking-[0.15em] text-muted-foreground">
+                <SectionLabel as="span">
                   {appT.outputDirectoryLabel || "输出目录"}
-                </span>
+                </SectionLabel>
                 <span className="truncate font-mono text-label-12 text-muted-foreground transition-colors duration-150 ease-geist group-hover:text-foreground">
                   {publishResult?.output_dir}
                 </span>
@@ -418,17 +419,17 @@ export const PublishRunCard = memo(function PublishRunCard({
           )}
 
           {failureMessage ? (
-            <div className="rounded-lg border border-destructive/20 bg-destructive/5 px-4 py-3 text-copy-14 text-destructive">
-              <div className="text-label-12 font-semibold uppercase tracking-[0.15em] text-destructive">
+            <div className="rounded-sm border border-destructive/20 bg-destructive/5 px-4 py-3 text-copy-14 text-destructive">
+              <SectionLabel className="text-destructive">
                 {appT.statusFailed || "失败"}
-              </div>
+              </SectionLabel>
               <p className="mt-1 break-words">{failureMessage}</p>
             </div>
           ) : null}
 
           {/* 发布结果警告摘要：成功但有 warning 时显示，可折叠展开列表 */}
           {publishWarnings.length > 0 && (
-            <div className="rounded-lg border border-warning/20 bg-warning/5">
+            <div className="rounded-sm border border-warning/20 bg-warning/5">
               <button
                 type="button"
                 onClick={() => setWarningExpanded((v) => !v)}
@@ -441,13 +442,13 @@ export const PublishRunCard = memo(function PublishRunCard({
                 </span>
                 <ChevronDown
                   className={cn(
-                    "ml-auto size-3.5 text-warning/70 transition-transform duration-150 ease-geist",
+                    "ml-auto size-3.5 text-warning transition-transform duration-150 ease-geist",
                     warningExpanded && "rotate-180"
                   )}
                 />
               </button>
               {warningExpanded && (
-                <ul className="max-h-48 overflow-auto border-t border-warning/15 px-4 py-2 text-label-12 text-warning/90">
+                <ul className="max-h-48 overflow-auto border-t border-warning/20 px-4 py-2 text-label-12 text-warning">
                   {publishWarnings.map((warning, idx) => (
                     <li
                       key={idx}
@@ -469,11 +470,11 @@ export const PublishRunCard = memo(function PublishRunCard({
               type="button"
               onClick={() => setLogExpanded((v) => !v)}
               aria-expanded={logEffectiveExpanded}
-              className="flex items-center gap-2 rounded-sm px-2 py-1.5 text-left text-label-12 font-medium text-muted-foreground transition-colors duration-150 ease-geist hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-interactive/30 focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+              className="flex items-center gap-2 rounded-sm px-2 py-1.5 text-left text-label-12 font-medium text-muted-foreground transition-colors duration-150 ease-geist hover:bg-gray-alpha-100 hover:text-foreground focus-ring"
             >
               <Terminal className="size-3.5" />
               <span>{appT.publishLogTitle || "发布日志"}</span>
-              <span className="text-muted-foreground/70">
+              <span className="text-muted-foreground">
                 · {logLineCount > 0 ? `${logLineCount} 行` : (appT.publishLogEmpty || "暂无日志")}
               </span>
               <ChevronDown
@@ -486,7 +487,7 @@ export const PublishRunCard = memo(function PublishRunCard({
           )}
           <div
             className={cn(
-              "min-w-0 flex-1 overflow-auto rounded-lg bg-[hsl(var(--terminal-bg))] p-4 font-mono text-label-12 text-[hsl(var(--terminal-fg))]",
+              "min-w-0 flex-1 overflow-auto rounded-sm bg-[hsl(var(--terminal-bg))] p-4 font-mono text-label-12-mono text-[hsl(var(--terminal-fg))]",
               // 无结果时（idle/running）无折叠头，直接撑开；有结果时按折叠态控制
               logCollapsible && !logEffectiveExpanded && "hidden flex-1",
               !logCollapsible && "min-h-[16rem]"
