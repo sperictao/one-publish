@@ -13,6 +13,8 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
+import { CodeWell } from "@/components/ui/code-well";
 import {
   Languages,
   Minimize2,
@@ -86,18 +88,9 @@ function formatBytes(bytes: number) {
 // ── Geist surface recipes (DESIGN.md) ──
 // Section tiles live inside the dialog shell; opaque Geist surfaces with
 // borders first, subtle shadows. Depth reads from tonal surfaces, not blur.
-const GEIST_CARD =
-  "rounded-sm border border-border bg-card shadow-raised overflow-hidden";
-const GEIST_CARD_PAD = "rounded-sm border border-border bg-card shadow-raised";
 const GEIST_ROW_HOVER =
   "hover:bg-gray-alpha-100 transition-colors duration-150 ease-geist";
 const GEIST_DIVIDER = "h-px bg-border";
-const GEIST_INPUT =
-  "surface-input";
-const GEIST_KBD =
-  "rounded-sm border border-border bg-muted";
-const GEIST_CODE_BG =
-  "bg-muted border border-border";
 
 type SettingsCategoryId = "general" | "appearance" | "environment" | "shortcuts" | "about";
 
@@ -139,8 +132,8 @@ interface SettingsDialogProps {
 function SettingsSectionFallback({ label }: { label: string }) {
   return (
     <div className="space-y-3">
-      <div className={cn("h-10", GEIST_CARD)} />
-      <div className={cn("h-24", GEIST_CARD)} />
+      <Card className="h-10 overflow-hidden" />
+      <Card className="h-24 overflow-hidden" />
       <p className="text-label-12 text-muted-foreground">{label}</p>
     </div>
   );
@@ -218,7 +211,7 @@ export const GeneralSettingsSection = memo(function GeneralSettingsSection({
   return (
     <div className="space-y-6">
       {/* 区域与历史分组 */}
-      <div className={GEIST_CARD}>
+      <Card className="overflow-hidden">
         {/* 界面语言 Row */}
         <div className={cn("flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4", GEIST_ROW_HOVER)}>
           <div className="space-y-0.5">
@@ -231,7 +224,7 @@ export const GeneralSettingsSection = memo(function GeneralSettingsSection({
           </div>
           <div className="w-full sm:w-[180px] shrink-0">
             <Select value={language} onValueChange={onLanguageChange}>
-              <SelectTrigger id="settings-language" className={cn("h-8", GEIST_INPUT, "hover:border-gray-alpha-500")}>
+              <SelectTrigger id="settings-language" className="h-8 surface-input hover:border-gray-alpha-500">
                 <SelectValue placeholder={translations.language?.placeholder || "选择语言"} />
               </SelectTrigger>
               <SelectContent>
@@ -262,7 +255,7 @@ export const GeneralSettingsSection = memo(function GeneralSettingsSection({
             <Input
               id="settings-execution-history"
               type="number"
-              className={cn("h-8 text-right", GEIST_INPUT)}
+              className="h-8 text-right surface-input"
               min={5}
               max={200}
               value={executionHistoryLimit}
@@ -277,10 +270,10 @@ export const GeneralSettingsSection = memo(function GeneralSettingsSection({
             />
           </div>
         </div>
-      </div>
+      </Card>
 
       {/* 路径偏好分组 */}
-      <div className={GEIST_CARD_PAD}>
+      <Card>
         <div className="p-4 space-y-3">
           <div className="space-y-0.5">
             <Label
@@ -302,12 +295,12 @@ export const GeneralSettingsSection = memo(function GeneralSettingsSection({
               placeholder={
                 translations.outputDir?.placeholder || "留空使用项目默认目录"
               }
-              className={cn("h-10", GEIST_INPUT)}
+              className="h-10 surface-input"
             />
             <Button
               variant="outline"
               size="icon"
-              className={cn("size-10 shrink-0", GEIST_INPUT)}
+              className="size-10 shrink-0 surface-input"
               onClick={onSelectDirectory}
               title={translations.outputDir?.browse || "浏览目录"}
               aria-label={translations.outputDir?.browse || "浏览目录"}
@@ -316,10 +309,10 @@ export const GeneralSettingsSection = memo(function GeneralSettingsSection({
             </Button>
           </div>
         </div>
-      </div>
+      </Card>
 
       {/* 系统行为开关分组 */}
-      <div className={GEIST_CARD}>
+      <Card className="overflow-hidden">
         <SettingsSwitchRow
           id="rerun-checklist-enabled"
           icon={ListChecks}
@@ -348,7 +341,7 @@ export const GeneralSettingsSection = memo(function GeneralSettingsSection({
           checked={minimizeToTrayOnClose}
           onCheckedChange={onMinimizeToTrayOnCloseChange}
         />
-      </div>
+      </Card>
     </div>
   );
 });
@@ -376,7 +369,7 @@ export const AppearanceSettingsSection = memo(function AppearanceSettingsSection
   return (
     <div className="space-y-6">
       {/* 主题选择卡片 */}
-      <div className={cn(GEIST_CARD_PAD, "p-6")}>
+      <Card className="p-6">
         <div className="flex items-center justify-between mb-4">
           <Label htmlFor="settings-theme" className="text-heading-14 font-semibold text-foreground">
             {translations.theme?.label || "外观主题"}
@@ -475,7 +468,7 @@ export const AppearanceSettingsSection = memo(function AppearanceSettingsSection
             </span>
           </button>
         </div>
-      </div>
+      </Card>
 
       <p className="text-label-12 text-muted-foreground px-1">
         {translations.settings?.sections?.appearanceDescription ||
@@ -498,7 +491,7 @@ export const ShortcutsSettingsSection = memo(function ShortcutsSettingsSection({
 }: ShortcutsSettingsSectionProps) {
   return (
     <div className="space-y-4">
-      <div className={GEIST_CARD}>
+      <Card className="overflow-hidden">
         {shortcutsItems.map((shortcut, index) => (
           <div key={shortcut.key}>
             {index > 0 && <div className={cn(GEIST_DIVIDER, "mx-4")} />}
@@ -506,17 +499,17 @@ export const ShortcutsSettingsSection = memo(function ShortcutsSettingsSection({
               <span className="text-heading-14 font-semibold text-foreground">
                 {shortcut.description}
               </span>
-              <kbd className={cn(GEIST_KBD, "px-2.5 py-0.5 text-label-12 font-semibold text-foreground font-sans shrink-0")}>
+              <kbd className="rounded-sm border border-border bg-muted px-2.5 py-0.5 text-label-12 font-semibold text-foreground font-sans shrink-0">
                 {shortcut.key}
               </kbd>
             </div>
           </div>
         ))}
-      </div>
+      </Card>
 
       <Button
         variant="outline"
-        className={cn("h-10 w-full justify-start", GEIST_INPUT, "text-foreground")}
+        className="h-10 w-full justify-start surface-input text-foreground"
         onClick={onOpenShortcuts}
         disabled={!onOpenShortcuts}
       >
@@ -544,7 +537,7 @@ export const UpdaterProgressBar = memo(function UpdaterProgressBar({
   downloadProgress,
 }: UpdaterProgressBarProps) {
   return (
-    <div className={cn("space-y-3 p-4 transition-colors duration-150 ease-geist", GEIST_CODE_BG, "rounded-sm")}>
+    <div className={cn("space-y-3 p-4 transition-colors duration-150 ease-geist", "bg-muted border border-border", "rounded-sm")}>
       <div className="flex items-start justify-between gap-3">
         <div className="space-y-1">
           <div className="text-heading-14 font-semibold text-foreground">
@@ -575,7 +568,7 @@ export const UpdaterProgressBar = memo(function UpdaterProgressBar({
           </div>
         </div>
         {downloadProgress.percent !== null && (
-          <div className={cn("text-label-13-mono font-semibold tabular-nums font-mono text-foreground px-2 py-0.5 rounded-sm", GEIST_INPUT)}>
+          <div className="text-label-13-mono font-semibold tabular-nums font-mono text-foreground px-2 py-0.5 rounded-sm surface-input">
             {Math.round(downloadProgress.percent)}%
           </div>
         )}
@@ -882,13 +875,10 @@ export function SettingsDialog({
     const versionT = translations.version || {};
     const lastCheckedAt = new Date().toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" });
 
-    const actionButtonBase =
-      "h-8 px-3 text-button-12 font-normal text-foreground transition-colors duration-150 ease-geist shrink-0 flex items-center gap-1.5";
-
     return (
       <div className="space-y-6">
         {/* Product Info & Update Status Group */}
-        <div className={GEIST_CARD}>
+        <Card className="overflow-hidden">
           {/* Brand Row */}
           <div className={cn("flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4", GEIST_ROW_HOVER)}>
             <div className="space-y-0.5 min-w-0">
@@ -899,7 +889,7 @@ export function SettingsDialog({
                 {versionT.productDescription || "跨平台 .NET 自动化发布与签名客户端"}
               </p>
             </div>
-            <span className={cn("inline-flex items-center rounded-sm px-2 py-0.5 text-label-12-mono font-semibold text-muted-foreground font-mono shrink-0", GEIST_INPUT)}>
+            <span className="inline-flex items-center rounded-sm px-2 py-0.5 text-label-12-mono font-semibold text-muted-foreground font-mono shrink-0 surface-input">
               {formatMessage(
                 versionT.current || "当前版本: v{}",
                 updateInfo?.currentVersion || currentVersion || "—"
@@ -970,7 +960,7 @@ export function SettingsDialog({
                   <Button
                     variant="outline"
                     size="sm"
-                    className={cn(actionButtonBase, GEIST_INPUT)}
+                    className="text-button-12 font-normal gap-1.5 shrink-0"
                     onClick={() => _onOpenUpdaterHelpTarget("docs")}
                   >
                     <span>{translations.version?.openGuide || "打开配置指南"}</span>
@@ -979,7 +969,7 @@ export function SettingsDialog({
                   <Button
                     variant="outline"
                     size="sm"
-                    className={cn(actionButtonBase, GEIST_INPUT)}
+                    className="text-button-12 font-normal gap-1.5 shrink-0"
                     onClick={() => _onOpenUpdaterHelpTarget("template")}
                   >
                     <span>{translations.version?.openTemplate || "下载模板文件"}</span>
@@ -992,7 +982,7 @@ export function SettingsDialog({
                     <Button
                       variant="default"
                       size="sm"
-                      className="h-8 px-3 bg-primary text-primary-foreground hover:bg-gray-900 transition-colors duration-150 ease-geist font-semibold text-button-12 shrink-0 flex items-center gap-1.5"
+                      className="text-button-12 font-semibold gap-1.5 shrink-0"
                       onClick={handleRestartApp}
                       disabled={isRestarting || isCheckingUpdate || isInstallingUpdate}
                     >
@@ -1008,7 +998,7 @@ export function SettingsDialog({
                   <Button
                     variant="outline"
                     size="sm"
-                    className={cn(actionButtonBase, GEIST_INPUT)}
+                    className="text-button-12 font-normal gap-1.5 shrink-0"
                     onClick={handleCheckUpdate}
                     disabled={isCheckingUpdate || isInstallingUpdate}
                   >
@@ -1020,7 +1010,7 @@ export function SettingsDialog({
                     <Button
                       variant="default"
                       size="sm"
-                      className="h-8 px-3 bg-primary text-primary-foreground hover:bg-gray-900 transition-colors duration-150 ease-geist font-semibold text-button-12 shrink-0 flex items-center gap-1.5"
+                      className="text-button-12 font-semibold gap-1.5 shrink-0"
                       onClick={handleInstallUpdate}
                       disabled={isInstallingUpdate}
                     >
@@ -1049,11 +1039,11 @@ export function SettingsDialog({
               />
             </div>
           )}
-        </div>
+        </Card>
 
         {/* Release Notes */}
         {updateInfo?.releaseNotes && (
-          <div className={GEIST_CARD}>
+          <Card className="overflow-hidden">
             <div className={cn("flex items-center gap-3 p-4 border-b border-border", GEIST_ROW_HOVER)}>
               <Terminal className="size-4 text-muted-foreground" />
               <span className="text-heading-14 font-semibold text-foreground">
@@ -1061,11 +1051,11 @@ export function SettingsDialog({
               </span>
             </div>
             <div className="p-4">
-              <div className={cn("max-h-56 overflow-y-auto geist-scrollbar text-label-12 text-muted-foreground whitespace-pre-wrap font-normal rounded-sm p-3", GEIST_CODE_BG)}>
+              <CodeWell className="max-h-56 overflow-y-auto geist-scrollbar">
                 {updateInfo.releaseNotes}
-              </div>
+              </CodeWell>
             </div>
-          </div>
+          </Card>
         )}
       </div>
     );
