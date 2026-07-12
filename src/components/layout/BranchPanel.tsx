@@ -242,7 +242,7 @@ export function BranchPanel({
                   {branch.name}
                 </span>
                 {branch.isMain && (
-                  <span className="status-success rounded px-1.5 py-0.5 text-label-12 font-semibold">
+                  <span className="status-success rounded-full px-1.5 py-0.5 text-label-12 font-semibold">
                     {branchT.mainBadge || "MAIN"}
                   </span>
                 )}
