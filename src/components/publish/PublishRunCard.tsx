@@ -317,7 +317,7 @@ export const PublishRunCard = memo(function PublishRunCard({
                     type="button"
                     variant="outline"
                     size="lg"
-                    className="w-full border-destructive/30 bg-destructive/5 text-destructive hover:bg-destructive/10 hover:text-destructive disabled:bg-destructive/5 disabled:text-destructive disabled:opacity-70 sm:w-auto sm:min-w-32"
+                    className="w-full border-destructive/30 bg-destructive/5 text-destructive hover:bg-destructive/10 hover:text-destructive disabled:bg-gray-100 disabled:text-gray-700 sm:w-auto sm:min-w-32"
                     onClick={publishActions.onCancelPublish}
                     disabled={publishActions.isCancellingPublish}
                   >
