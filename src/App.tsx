@@ -1,6 +1,5 @@
-import { Suspense, lazy, useEffect, useState } from "react";
+import { Suspense, lazy } from "react";
 import { useAppBoot } from "@/hooks/useAppBoot";
-import { isGeistPrototypeVariant } from "@/components/prototype/geistPrototypeVariant";
 
 import { ResizeHandle } from "@/components/layout/ResizeHandle";
 import { SidebarPanelShell } from "@/components/layout/SidebarPanelShell";
@@ -26,10 +25,6 @@ const PublishContentSection = lazy(async () => {
   const mod = await import("@/components/layout/PublishContentSection");
   return { default: mod.PublishContentSection };
 });
-const GeistWorkbenchPrototype = lazy(async () => {
-  const mod = await import("@/components/prototype/GeistWorkbenchPrototype");
-  return { default: mod.GeistWorkbenchPrototype };
-});
 const EMPTY_CONFIG_PANEL_TRANSLATIONS: Record<string, string> = {};
 
 const MainContentShell = lazy(async () => {
@@ -39,29 +34,6 @@ const MainContentShell = lazy(async () => {
 
 function App() {
   const boot = useAppBoot();
-  const [showGeistPrototype, setShowGeistPrototype] =
-    useState(() => {
-      if (import.meta.env.PROD || typeof window === "undefined") {
-        return false;
-      }
-
-      const variant = new URLSearchParams(window.location.search).get("variant");
-      return isGeistPrototypeVariant(variant);
-    });
-
-  useEffect(() => {
-    if (import.meta.env.PROD) {
-      return;
-    }
-
-    const handleLocationChange = () => {
-      const variant = new URLSearchParams(window.location.search).get("variant");
-      setShowGeistPrototype(isGeistPrototypeVariant(variant));
-    };
-
-    window.addEventListener("popstate", handleLocationChange);
-    return () => window.removeEventListener("popstate", handleLocationChange);
-  }, []);
 
   // Show loading state
   if (boot.shell.isStateLoading) {
@@ -73,16 +45,6 @@ function App() {
           </span>
           <span className="text-label-14 text-muted-foreground">{boot.shell.appT.loading || "加载中…"}</span>
         </div>
-      </div>
-    );
-  }
-
-  if (showGeistPrototype && !import.meta.env.PROD) {
-    return (
-      <div className="flex h-screen flex-col bg-background">
-        <Suspense fallback={<div className="flex h-full flex-col" />}>
-          <GeistWorkbenchPrototype boot={boot} />
-        </Suspense>
       </div>
     );
   }

@@ -28,10 +28,10 @@ export function ListDragHandle({
         aria-label={enabled ? label : disabledLabel || label}
         title={enabled ? label : disabledLabel || label}
         className={cn(
-          "flex size-7 touch-none items-center justify-center rounded-md transition-colors duration-150 ease-geist",
+          "flex size-7 touch-none items-center justify-center rounded-sm transition-colors duration-150 ease-geist",
           enabled
-            ? "cursor-grab text-muted-foreground/35 hover:bg-muted hover:text-foreground/65 active:cursor-grabbing"
-            : "cursor-not-allowed text-muted-foreground/20"
+            ? "cursor-grab text-gray-600 hover:bg-gray-alpha-100 hover:text-foreground active:cursor-grabbing"
+            : "cursor-not-allowed text-gray-500"
         )}
         onClick={(event) => {
           event.preventDefault();

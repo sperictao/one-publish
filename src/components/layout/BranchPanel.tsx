@@ -112,7 +112,7 @@ export function BranchPanel({
         </div>
         {/* Search (disabled) */}
         <div className="border-b border-border px-3 py-2">
-          <div className="search-input-shell surface-input relative rounded-md">
+          <div className="search-input-shell surface-input relative rounded-sm">
             <Search className="absolute left-2 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
             <Input
               bare
@@ -226,8 +226,8 @@ export function BranchPanel({
           <div
             key={branch.name}
             className={cn(
-              "flex items-start gap-2 border-b border-border px-3 py-3 transition-colors duration-150 ease-geist hover:bg-accent cursor-pointer",
-              branch.isCurrent && "rounded-lg mx-1 border-0 bg-accent"
+              "flex items-start gap-2 border-b border-border px-3 py-3 transition-colors duration-150 ease-geist hover:bg-gray-alpha-100 cursor-pointer",
+              branch.isCurrent && "rounded-sm mx-1 border-0 bg-accent"
             )}
           >
             <GitBranch
@@ -242,7 +242,7 @@ export function BranchPanel({
                   {branch.name}
                 </span>
                 {branch.isMain && (
-                  <span className="status-success rounded px-1.5 py-0.5 text-label-12 font-semibold">
+                  <span className="status-success rounded-full px-1.5 py-0.5 text-label-12 font-semibold">
                     {branchT.mainBadge || "MAIN"}
                   </span>
                 )}

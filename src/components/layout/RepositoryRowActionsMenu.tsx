@@ -33,13 +33,13 @@ export function RepositoryRowActionsMenu({
         {
           key: "open-directory",
           label: repoT.openRepositoryDirectory || "打开目录",
-          icon: <FolderOpen className="size-3.5 text-muted-foreground/70" />,
+          icon: <FolderOpen className="size-3.5 text-muted-foreground" />,
           onSelect: () => onOpenDirectory(repo),
         },
         {
           key: "edit",
           label: repoT.editRepositoryAction || "编辑仓库",
-          icon: <Pencil className="size-3.5 text-muted-foreground/70" />,
+          icon: <Pencil className="size-3.5 text-muted-foreground" />,
           onSelect: () => onEdit(repo),
         },
         {

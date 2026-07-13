@@ -9,17 +9,20 @@ export interface InputProps
    * 避免 surface-input 嵌套导致聚焦时出现双重外框。
    */
   bare?: boolean;
+  /** 尺寸变体：`sm` 用 h-8，默认 h-10。命名避开原生 `size` 属性。 */
+  inputSize?: "default" | "sm";
 }
 
 const Input = React.forwardRef<HTMLInputElement, InputProps>(
-  ({ className, type, bare, ...props }, ref) => {
+  ({ className, type, bare, inputSize = "default", ...props }, ref) => {
+    const inputHeight = inputSize === "sm" ? "h-8" : "h-10";
     return (
       <input
         type={type}
         className={cn(
           bare
-            ? "flex h-10 w-full rounded-sm px-3 py-2 text-label-14 bg-transparent border-none outline-none placeholder:text-muted-foreground focus-visible:outline-none disabled:cursor-not-allowed disabled:text-gray-700"
-            : "surface-input flex h-10 w-full rounded-sm px-3 py-2 text-label-14 ring-offset-background file:border-0 file:bg-transparent file:text-button-14 file:font-medium placeholder:text-muted-foreground focus-visible:outline-none disabled:cursor-not-allowed disabled:bg-gray-100 disabled:text-gray-700",
+            ? `flex ${inputHeight} w-full rounded-sm px-3 py-2 text-label-14 bg-transparent border-none outline-none placeholder:text-muted-foreground focus-visible:outline-none disabled:cursor-not-allowed disabled:text-gray-700`
+            : `surface-input flex ${inputHeight} w-full rounded-sm px-3 py-2 text-label-14 ring-offset-background file:border-0 file:bg-transparent file:text-button-14 file:font-medium placeholder:text-muted-foreground focus-visible:outline-none disabled:cursor-not-allowed disabled:bg-gray-100 disabled:text-gray-700`,
           className
         )}
         ref={ref}

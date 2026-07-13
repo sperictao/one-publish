@@ -14,6 +14,7 @@ import {
 } from "@/lib/listOrdering";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
+import { SectionLabel } from "@/components/ui/section-label";
 import {
   Search,
   Plus,
@@ -198,7 +199,7 @@ export const RepositoryList = memo(function RepositoryList({
     [translations.repositoryList]
   );
   const listActionButtonClass =
-    "flex size-7 items-center justify-center rounded-full border border-border bg-background transition-colors duration-150 ease-geist hover:bg-accent";
+    "flex size-7 items-center justify-center rounded-full border border-border bg-background transition-colors duration-150 ease-geist hover:bg-gray-alpha-100 focus-ring";
   const reorderControlsLabel = showReorderControls
     ? repoT.hideReorderControls || "关闭排序"
     : repoT.showReorderControls || "开启排序";
@@ -338,8 +339,8 @@ export const RepositoryList = memo(function RepositoryList({
         >
           {previewRepos.length === 0 ? (
             <div className="flex h-full flex-col items-center justify-center gap-3 px-4 py-8">
-              <div className="surface-raised flex size-16 items-center justify-center rounded-lg">
-                <FolderGit2 className="size-7 text-muted-foreground/30" />
+              <div className="surface-raised flex size-16 items-center justify-center rounded-sm">
+                <FolderGit2 className="size-7 text-gray-500" />
               </div>
               <div className="text-center">
                 <p className="text-label-14 font-normal text-foreground/60">
@@ -425,9 +426,7 @@ export const RepositoryList = memo(function RepositoryList({
           <div className="flex size-5 items-center justify-center">
             <AppBrandIcon />
           </div>
-          <span className="text-label-12 font-semibold uppercase tracking-[0.15em] text-muted-foreground">
-            One Publish
-          </span>
+          <SectionLabel as="span">One Publish</SectionLabel>
         </div>
         <div className="flex items-center gap-0.5" data-tauri-no-drag>
           {onCollapse && (
@@ -452,11 +451,11 @@ export const RepositoryList = memo(function RepositoryList({
       <div className="flex items-center justify-between px-3 py-2">
         <button
           type="button"
-          className="flex items-center gap-1.5 rounded-full border border-border bg-background px-3 py-1 text-button-14 font-normal transition-colors duration-150 ease-geist hover:bg-accent"
+          className="flex items-center gap-1.5 rounded-full border border-border bg-background px-3 py-1 text-button-14 font-normal transition-colors duration-150 ease-geist hover:bg-gray-alpha-100 focus-ring"
           onClick={() => setFilterExpanded(!filterExpanded)}
         >
-          <span className="text-foreground/80">{repoT.all || "全部"}</span>
-          <span className="flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-interactive/10 px-1 text-label-12 font-semibold text-interactive">
+          <span className="text-foreground">{repoT.all || "全部"}</span>
+          <span className="flex h-4 min-w-4 items-center justify-center rounded-full bg-interactive/10 px-1 text-label-12 font-semibold text-interactive">
             {repositories.length}
           </span>
           <ChevronDown
@@ -507,8 +506,8 @@ export const RepositoryList = memo(function RepositoryList({
       </div>
 
       <div className="px-3 py-1.5">
-        <div className="group/search search-input-shell surface-input relative rounded-md">
-          <Search className="absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground/50 transition-colors duration-150 ease-geist group-focus-within/search:text-muted-foreground" />
+        <div className="group/search search-input-shell surface-input relative rounded-sm">
+          <Search className="absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-gray-600 transition-colors duration-150 ease-geist group-focus-within/search:text-muted-foreground" />
           <Input
             bare
             data-testid="repo-search-input"

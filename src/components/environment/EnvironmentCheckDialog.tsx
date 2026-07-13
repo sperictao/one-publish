@@ -13,9 +13,11 @@ import {
 
 import { cn } from "@/lib/utils";
 import { AppDialogShell } from "@/components/ui/app-dialog-shell";
+import { AppDialogBadge } from "@/components/ui/app-dialog-badge";
+import { Card } from "@/components/ui/card";
 import { Dialog } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { Label } from "@/components/ui/label";
+import { SectionLabel } from "@/components/ui/section-label";
 import { SwitchIndicator } from "@/components/ui/switch";
 
 import {
@@ -280,11 +282,6 @@ export function EnvironmentCheckContent({
 
   const fixResultText = useMemo(() => formatFixResult(lastFixResult), [lastFixResult]);
 
-  // Geist surface recipe — section tile inside the dialog shell.
-  const sectionTile = "rounded-sm border border-border bg-card";
-  const outlineButtonBase =
-    "rounded-sm border border-border bg-transparent text-foreground hover:bg-gray-alpha-100 transition-colors duration-150 ease-geist";
-
   return (
     <>
       <div className="space-y-4 py-2">
@@ -302,25 +299,15 @@ export function EnvironmentCheckContent({
           )}
         >
           <div className="space-y-1 flex-1 min-w-0">
-            <div className="text-label-12 font-semibold text-muted-foreground uppercase px-1">
+            <SectionLabel className="px-1">
               {translations.environment?.status || "环境状态"}
-            </div>
+            </SectionLabel>
             <div className="flex flex-wrap items-center gap-2">
               {result ? (
                 <>
-                  <span
-                    className={cn(
-                      "flex items-center gap-1.5 px-2.5 py-1 rounded-full text-label-12 font-semibold border shadow-none",
-                      grouped.critical.length > 0
-                        ? "bg-destructive/10 text-destructive border-destructive/20"
-                        : grouped.warning.length > 0
-                          ? "bg-warning/10 text-warning border-warning/20"
-                          : "bg-success/10 text-success border-success/20"
-                    )}
-                  >
-                    {statusBadge?.icon}
+                  <AppDialogBadge variant={statusBadge?.variant} icon={statusBadge?.icon}>
                     {statusBadge?.text}
-                  </span>
+                  </AppDialogBadge>
                   <span className="text-label-12 text-muted-foreground self-center">
                     {result.checked_at}
                   </span>
@@ -336,7 +323,7 @@ export function EnvironmentCheckContent({
             variant="outline"
             onClick={handleCheck}
             disabled={checking || runningFix}
-            className={cn(outlineButtonBase, "text-button-12 font-semibold shrink-0 flex items-center gap-1.5 h-8 px-4")}
+            className="text-button-12 font-semibold shrink-0 gap-1.5 h-8 px-4"
           >
             {checking ? (
               <>
@@ -350,10 +337,10 @@ export function EnvironmentCheckContent({
         </div>
 
         {/* 2. 检查范围 */}
-        <div className={cn(sectionTile, "p-4 space-y-3")}>
-          <Label className="text-label-12 font-semibold text-muted-foreground uppercase block mb-1">
+        <Card className="p-4 space-y-3">
+          <SectionLabel className="block mb-1">
             {translations.environment?.scope || "检查范围"}
-          </Label>
+          </SectionLabel>
           <div className="grid grid-cols-2 gap-3">
             {providerOptions.map((p) => {
               const checked = selectedProviderIds.includes(p.id);
@@ -384,7 +371,7 @@ export function EnvironmentCheckContent({
               );
             })}
           </div>
-        </div>
+        </Card>
 
         {/* 错误提示 */}
         {error && (
@@ -397,11 +384,11 @@ export function EnvironmentCheckContent({
         {result && (
           <div className="space-y-4">
             {/* 工具状态 */}
-            <div className={cn(sectionTile, "overflow-hidden")}>
+            <Card className="overflow-hidden">
               <div className="px-4 py-3 border-b border-border">
-                <Label className="text-label-12 font-semibold text-muted-foreground uppercase block">
+                <SectionLabel className="block">
                   {translations.environment?.providers || "工具状态"}
-                </Label>
+                </SectionLabel>
               </div>
               <div className="divide-y divide-border">
                 {result.providers.map((provider) => (
@@ -433,14 +420,14 @@ export function EnvironmentCheckContent({
                   </div>
                 ))}
               </div>
-            </div>
+            </Card>
 
             {/* 发现的问题 */}
-            <div className={cn(sectionTile, "overflow-hidden")}>
+            <Card className="overflow-hidden">
               <div className="px-4 py-3 border-b border-border">
-                <Label className="text-label-12 font-semibold text-muted-foreground uppercase block">
+                <SectionLabel className="block">
                   {translations.environment?.issues || "发现的问题"}
-                </Label>
+                </SectionLabel>
               </div>
               <div className="p-4">
                 {issues.length === 0 ? (
@@ -533,10 +520,8 @@ export function EnvironmentCheckContent({
                                   onClick={() => handleApplyFix(fix)}
                                   disabled={checking || runningFix}
                                   className={cn(
-                                    "transition-colors duration-150 ease-geist text-button-12 h-8 px-3 font-semibold rounded-sm flex items-center gap-1.5 shrink-0 border",
-                                    fix.action_type === "run_command"
-                                      ? "bg-primary border-primary text-primary-foreground hover:bg-gray-900"
-                                      : outlineButtonBase
+                                    "text-button-12 h-8 px-3 font-semibold gap-1.5 shrink-0",
+                                    fix.action_type === "run_command" && "border border-primary"
                                   )}
                                 >
                                   {fix.action_type === "open_url" ? (
@@ -557,22 +542,22 @@ export function EnvironmentCheckContent({
                   </div>
                 )}
               </div>
-            </div>
+            </Card>
 
             {/* 执行结果 */}
             {fixResultText && (
-              <div className={cn(sectionTile, "p-4 space-y-3")}>
+              <Card className="p-4 space-y-3">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
-                    <span className="text-label-12 font-semibold text-muted-foreground uppercase">
+                    <SectionLabel as="span">
                       {translations.environment?.result || "执行结果"}
-                    </span>
+                    </SectionLabel>
                   </div>
                   <Button
                     size="sm"
                     variant="outline"
                     onClick={() => handleCopy(fixResultText)}
-                    className={cn(outlineButtonBase, "text-button-12 font-normal h-8 px-3 flex items-center gap-1 shrink-0")}
+                    className="text-button-12 font-normal px-3 gap-1 shrink-0"
                   >
                     <Copy className="size-3 text-muted-foreground" />
                     <span>{translations.environment?.copied ? "复制" : "复制"}</span>
@@ -581,7 +566,7 @@ export function EnvironmentCheckContent({
                 <pre className="rounded-sm border border-border bg-muted p-3 text-label-12-mono font-mono text-foreground whitespace-pre-wrap max-h-56 overflow-auto geist-scrollbar">
                   {fixResultText}
                 </pre>
-              </div>
+              </Card>
             )}
           </div>
         )}
@@ -607,7 +592,7 @@ export function EnvironmentCheckContent({
                 variant="outline"
                 onClick={() => setPendingRun(null)}
                 disabled={runningFix}
-                className={cn(outlineButtonBase, "text-button-12 font-normal h-10 px-4 shrink-0")}
+                className="text-button-12 font-normal h-10 px-4 shrink-0"
               >
                 <span>{translations.environment?.cancel || "取消"}</span>
               </Button>
@@ -628,14 +613,14 @@ export function EnvironmentCheckContent({
             </div>
           }
         >
-          <div className={cn(sectionTile, "p-4 space-y-3 mt-2")}>
-            <Label className="text-label-12 font-semibold text-muted-foreground uppercase block mb-1">
+          <Card className="p-4 space-y-3 mt-2">
+            <SectionLabel className="block mb-1">
               {translations.environment?.commandPreview || "命令预览"}
-            </Label>
+            </SectionLabel>
             <pre className="rounded-sm border border-border bg-muted p-3 text-label-12-mono font-mono whitespace-pre-wrap max-h-40 overflow-auto text-foreground">
               {pendingRun?.command || ""}
             </pre>
-          </div>
+          </Card>
         </AppDialogShell>
       </Dialog>
     </>
