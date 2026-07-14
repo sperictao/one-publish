@@ -1,6 +1,7 @@
 import { useCallback, memo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
+import { Collapse } from "@/components/ui/collapse";
 import {
   Card,
   CardContent,
@@ -346,18 +347,21 @@ export const PublishRunCard = memo(function PublishRunCard({
             data-testid="publish-status-panel"
             aria-live="polite"
             className={cn(
-              "block w-full rounded-lg border p-4",
+              "block w-full rounded-lg border p-4 transition-colors duration-150 ease-geist",
               statusMeta.panelClassName
             )}
           >
             <div className="flex min-w-0 items-start gap-3">
               <span
                 className={cn(
-                  "flex size-10 flex-shrink-0 items-center justify-center rounded-md",
+                  "flex size-10 flex-shrink-0 items-center justify-center rounded-md transition-colors duration-150 ease-geist",
                   statusMeta.iconWrapClassName
                 )}
               >
-                <span className={cn("inline-block", statusMeta.iconClassName)}>
+                <span
+                  key={publishVisualState}
+                  className={cn("inline-block animate-fade-in", statusMeta.iconClassName)}
+                >
                   <StatusIcon className="size-5" />
                 </span>
               </span>
@@ -368,7 +372,7 @@ export const PublishRunCard = memo(function PublishRunCard({
                   </span>
                   <span
                     className={cn(
-                      "inline-flex min-h-6 items-center gap-2 rounded-full border px-2.5 py-0.5 text-label-12 font-semibold",
+                      "inline-flex min-h-6 items-center gap-2 rounded-full border px-2.5 py-0.5 text-label-12 font-semibold transition-colors duration-150 ease-geist",
                       statusMeta.badgeClassName
                     )}
                   >
@@ -446,7 +450,7 @@ export const PublishRunCard = memo(function PublishRunCard({
                   )}
                 />
               </button>
-              {warningExpanded && (
+              <Collapse open={warningExpanded}>
                 <ul className="max-h-48 overflow-auto border-t border-warning/15 px-4 py-2 text-label-12 text-warning/90">
                   {publishWarnings.map((warning, idx) => (
                     <li
@@ -457,7 +461,7 @@ export const PublishRunCard = memo(function PublishRunCard({
                     </li>
                   ))}
                 </ul>
-              )}
+              </Collapse>
             </div>
           )}
         </div>

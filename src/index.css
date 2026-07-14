@@ -579,8 +579,7 @@ html.dark {
 .surface-input {
   background: var(--input);
   border: 1px solid var(--border);
-  transition: border-color 0.15s cubic-bezier(0.175, 0.885, 0.32, 1.1),
-              background-color 0.15s cubic-bezier(0.175, 0.885, 0.32, 1.1);
+  @apply transition-[border-color,background-color] duration-150 ease-geist;
 }
 
 .surface-input:focus-within {
@@ -761,4 +760,20 @@ html.dark {
   --theme-preview-dark-traffic-red: #f32e40;
   --theme-preview-dark-traffic-yellow: #ffae00;
   --theme-preview-dark-traffic-green: #00ac3a;
+}
+
+/* ============================================
+   Reduced motion — 全局降级。
+   CSS 过渡/动画（含 tailwindcss-animate 出入场、animate-spin）在系统
+   开启"减弱动态效果"时全部瞬时化。WAAPI 动画不受此规则影响，
+   由 useReducedMotion 在 JS 层短路（见 useListReorderMotion）。
+   ============================================ */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
 }

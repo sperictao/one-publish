@@ -1,16 +1,15 @@
 import { useCallback, useEffect, useLayoutEffect, useRef } from "react";
+import motionTokens from "../../../motion-tokens.json";
 import { useReducedMotion } from "./useReducedMotion";
 
-const MIN_MOTION_DURATION_MS = 150;
-const MAX_MOTION_DURATION_MS = 230;
-const MOTION_EASING = "cubic-bezier(0.22,1,0.36,1)";
+const MOTION_EASING = motionTokens.easing.move;
 
 function resolveReorderDuration(distance: number) {
   const clampedDistance = Math.max(0, Math.min(140, distance));
   const normalizedDistance = clampedDistance / 140;
   return Math.round(
-    MIN_MOTION_DURATION_MS +
-      (MAX_MOTION_DURATION_MS - MIN_MOTION_DURATION_MS) *
+    motionTokens.duration.moveMin +
+      (motionTokens.duration.moveMax - motionTokens.duration.moveMin) *
         Math.sqrt(normalizedDistance)
   );
 }
