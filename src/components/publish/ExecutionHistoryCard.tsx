@@ -244,7 +244,7 @@ export function ExecutionHistoryCard({
                   </div>
                 )}
                 {record.warnings && record.warnings.length > 0 && (
-                  <details className="mt-2 rounded-sm border border-warning/20 bg-warning/5">
+                  <details className="group mt-2 rounded-sm border border-warning/20 bg-warning/5">
                     <summary className="flex cursor-pointer list-none items-center gap-1.5 px-2.5 py-2 text-label-12 text-warning transition-colors duration-150 ease-geist hover:bg-warning/5 [&::-webkit-details-marker]:hidden">
                       <AlertTriangle className="size-3.5 flex-shrink-0" />
                       <span className="font-semibold">

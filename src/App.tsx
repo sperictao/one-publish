@@ -3,6 +3,7 @@ import { useAppBoot } from "@/hooks/useAppBoot";
 
 import { ResizeHandle } from "@/components/layout/ResizeHandle";
 import { SidebarPanelShell } from "@/components/layout/SidebarPanelShell";
+import { PanelSkeleton } from "@/components/layout/PanelSkeleton";
 import { ProviderRuntimeBanner } from "@/components/layout/ProviderRuntimeBanner";
 
 import {
@@ -69,7 +70,7 @@ function App() {
           collapsed={boot.shell.leftPanelCollapsed}
           width={`${boot.shell.effectiveLeftPanelWidth}px`}
         >
-          <Suspense fallback={<div className="flex h-full flex-col" />}>
+          <Suspense fallback={<PanelSkeleton />}>
             <RepositoryList
               repositories={boot.repo.repositories}
               selectedRepoId={boot.repo.selectedRepoId}
@@ -100,7 +101,7 @@ function App() {
           collapsed={boot.shell.middlePanelCollapsed}
           width={`${boot.shell.effectiveMiddlePanelWidth}px`}
         >
-          <Suspense fallback={<div className="flex h-full flex-col" />}>
+          <Suspense fallback={<PanelSkeleton />}>
             <PublishConfigPanel
               {...boot.publish.publishConfigPanelProps}
             />

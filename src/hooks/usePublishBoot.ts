@@ -221,6 +221,7 @@ export function usePublishBoot(params: UsePublishBootParams) {
   // Publish runner
   const {
     outputLog,
+    getOutputLogSnapshot,
     isResolvingSelectedProjectProfile,
     publishPreviewCommand,
     runPublishSpec,
@@ -262,6 +263,7 @@ export function usePublishBoot(params: UsePublishBootParams) {
   // Memoized publish run card props
   const publishRunCardProps = usePublishRunCardProps({
     outputLog,
+    getOutputLogSnapshot,
     publishResult: params.publishResult,
     appT: params.appT,
     publishT: params.publishT,

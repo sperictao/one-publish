@@ -6,6 +6,7 @@ type TranslationMap = Record<string, string | undefined>;
 
 interface UsePublishRunCardPropsParams {
   outputLog: string;
+  getOutputLogSnapshot: () => string;
   publishResult: any;
   appT: TranslationMap;
   publishT: TranslationMap;
@@ -27,6 +28,7 @@ export function usePublishRunCardProps(
   return useMemo(
     () => ({
       outputLog: params.outputLog,
+      getOutputLogSnapshot: params.getOutputLogSnapshot,
       publishResult: params.publishResult,
       appT: params.appT,
       isRefreshing: params.isRefreshing,
@@ -56,6 +58,7 @@ export function usePublishRunCardProps(
       params.cancelPublish,
       params.configT.execute,
       params.configT.publishing,
+      params.getOutputLogSnapshot,
       params.isCancellingPublish,
       params.isRefreshing,
       params.isPublishing,
