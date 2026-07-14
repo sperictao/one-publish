@@ -98,6 +98,9 @@ export function PublishLogView({
       <div
         ref={scrollRef}
         onScroll={handleScroll}
+        role="log"
+        aria-live={active ? "polite" : "off"}
+        aria-relevant="additions"
         className="h-full min-w-0 overflow-auto rounded-lg bg-[hsl(var(--terminal-bg))] p-4 font-mono text-label-12 text-[hsl(var(--terminal-fg))]"
       >
         <pre className="min-w-0 whitespace-pre-wrap break-all [overflow-wrap:anywhere]">

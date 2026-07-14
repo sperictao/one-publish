@@ -22,7 +22,7 @@
       "executionHistoryLimitLabel": "执行历史保留上限",
       "executionHistoryLimitDescription": "可设置 5~200 条，超出范围会自动修正并即时生效。",
       "preRerunChecklistLabel": "重跑前确认清单",
-      "preRerunChecklistDescription": "启用后，点击“重跑记录”会先检查分支、环境和输出目标确认项。"
+      "preRerunChecklistDescription": "启用后，点击「重跑记录」会先检查分支、环境和输出目标确认项。"
     }
   },
   "version": {
@@ -204,13 +204,13 @@
       "package": {
         "title": "产物打包",
         "description": "将发布目录打包为可分发的 ZIP 产物",
-        "pendingDetail": "在输出日志卡片点击“打包 ZIP”。",
+        "pendingDetail": "在输出日志卡片点击「打包 ZIP」。",
         "blockedDetail": "需先完成发布。"
       },
       "sign": {
         "title": "签名校验",
         "description": "为产物生成 detached signature",
-        "pendingDetail": "在输出日志卡片点击“签名 (GPG)”。",
+        "pendingDetail": "在输出日志卡片点击「签名 (GPG)」。",
         "blockedDetail": "需先完成打包。"
       },
       "updater": {
@@ -628,7 +628,7 @@
     "publishProtectedDirectoryAccessDenied": "缺少 macOS 受保护目录访问权限",
     "publishProtectedDirectoryAccessRequestTitle": "选择目录以授权 OnePublish 访问",
     "publishProtectedDirectoryAccessRequestFailed": "申请目录访问权限失败",
-    "publishProtectedDirectoryAccessDeniedDesc": "当前输出目录位于 macOS 受保护位置「{{location}}」下。OnePublish 已尝试向系统申请写入权限，但仍无法访问：{{path}}。在“系统设置 > 隐私与安全性 > 文件与文件夹”中允许 OnePublish 访问「{{location}}」后重试；如果没有出现授权弹窗，改用非受保护目录。",
+    "publishProtectedDirectoryAccessDeniedDesc": "当前输出目录位于 macOS 受保护位置「{{location}}」下。OnePublish 已尝试向系统申请写入权限，但仍无法访问：{{path}}。在「系统设置 > 隐私与安全性 > 文件与文件夹」中允许 OnePublish 访问「{{location}}」后重试；如果没有出现授权弹窗，改用非受保护目录。",
     "publishRemoteTargetNotImplemented": "远程发布通道尚未启用",
     "publishRemoteTargetNotImplementedDesc": "当前版本仅支持本地或已挂载远程卷作为输出目录；改用本地路径或 UNC/挂载点。远端协议（sftp / s3 / webdav）将在后续版本启用。",
     "publishPlanInvalid": "发布计划无效",
