@@ -18,6 +18,10 @@ use std::sync::Arc;
 use tauri::AppHandle;
 use tokio::sync::{mpsc, Mutex};
 
+/// (success, cancelled, error, output_log, warnings)
+type PublishRunResult =
+    Result<(bool, bool, Option<String>, String, Vec<String>), crate::errors::AppError>;
+
 fn build_publish_session_id(provider_id: &str) -> String {
     let nanos = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
@@ -158,7 +162,7 @@ pub(crate) async fn execute_publish_spec(
         let cancel_requested = Arc::clone(&permit.cancel_requested);
         permit.mark_running(Arc::clone(&child)).await;
 
-        let run_result: Result<(bool, bool, Option<String>, String, Vec<String>), crate::errors::AppError> =
+        let run_result: PublishRunResult =
             async {
                 let (sender, receiver) = mpsc::unbounded_channel::<(String, String)>();
                 let collector = tokio::spawn(collect_log_chunks(
