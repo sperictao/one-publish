@@ -1,0 +1,31 @@
+{
+  "id": "uiux-comprehensive-upgrade",
+  "name": "uiux-comprehensive-upgrade",
+  "title": "UI/UX 全面优化升级：动效层、发布流程、状态完整性与细节收口",
+  "description": "",
+  "status": "planning",
+  "dev_type": null,
+  "scope": null,
+  "package": null,
+  "priority": "P2",
+  "creator": "--help",
+  "assignee": "--help",
+  "createdAt": "2026-07-13",
+  "completedAt": null,
+  "branch": null,
+  "base_branch": "main",
+  "worktree_path": null,
+  "commit": null,
+  "pr_url": null,
+  "subtasks": [],
+  "children": [
+    "07-13-uiux-motion-layer",
+    "07-13-uiux-publish-flow",
+    "07-13-uiux-state-completeness",
+    "07-13-uiux-detail-polish"
+  ],
+  "parent": null,
+  "relatedFiles": [],
+  "notes": "",
+  "meta": {}
+}

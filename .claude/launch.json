@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "renderer",
+      "runtimeExecutable": "./node_modules/.bin/vite",
+      "runtimeArgs": ["--port", "5183", "--strictPort"],
+      "port": 5183
+    }
+  ]
+}

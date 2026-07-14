@@ -21,6 +21,8 @@ const BANNED = [
 
 const ALLOWLIST = [
   { file: "src/components/layout/SettingsDialog.tsx", rule: "decorative-anim", reason: "下载进度条不确定态" },
+  { file: "src/components/ui/skeleton.tsx", rule: "decorative-anim", reason: "骨架屏加载中指示" },
+  { file: "src/components/layout/PublishContentSection.tsx", rule: "decorative-anim", reason: "懒加载占位加载中指示" },
   { file: "src/components/ui/switch.tsx", rule: "opacity-disabled", reason: "Radix Switch 整体禁用惯例" },
   { file: "src/components/publish/PublishRunCard.tsx", rule: "opacity-disabled", reason: "取消钮 disabled:opacity-100 保持不透明非降调" },
 ];

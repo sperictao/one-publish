@@ -1108,25 +1108,25 @@ export function SettingsDialog({
                     type="button"
                     aria-current={isActive ? "page" : undefined}
                     className={cn(
-                      "group relative flex w-full items-center gap-2.5 rounded-sm pl-4 pr-3 py-2 text-left transition-colors duration-150 ease-geist focus-ring",
-                      isActive
-                        ? "bg-accent text-foreground font-semibold"
-                        : "text-muted-foreground hover:bg-gray-alpha-100"
+                      "group flex w-full items-center gap-2.5 rounded-sm border border-transparent bg-transparent px-3 py-2 text-left shadow-none outline-none transition-colors duration-150 ease-geist hover:bg-gray-alpha-100 focus-ring",
+                      isActive && "bg-accent"
                     )}
                     onClick={() => handleCategoryChange(item.id)}
                   >
-                    {isActive && (
-                      <div className="absolute left-1.5 w-1 h-3.5 rounded-full bg-interactive transition-colors duration-150 ease-geist" />
-                    )}
                     <Icon
                       className={cn(
                         "size-4 flex-shrink-0 transition-colors duration-150 ease-geist",
                         isActive
                           ? "text-interactive"
-                          : "text-muted-foreground"
+                          : "text-muted-foreground group-hover:text-interactive"
                       )}
                     />
-                    <span className="truncate text-label-13 font-semibold">
+                    <span
+                      className={cn(
+                        "truncate text-label-13 font-semibold transition-colors duration-150 ease-geist",
+                        isActive ? "text-foreground" : "text-foreground/78"
+                      )}
+                    >
                       {item.label}
                     </span>
                   </button>

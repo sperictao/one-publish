@@ -16,6 +16,11 @@ const DiagnosticsSection = lazy(async () => {
   return { default: mod.DiagnosticsSection };
 });
 
+// 懒加载占位：撑起最小高度，避免模块首次加载时的白屏塌陷。
+const LazyBlockFallback = (
+  <div className="min-h-24 w-full animate-pulse rounded-sm bg-gray-alpha-100" />
+);
+
 export interface PublishContentSectionProps {
   showCommandImportResultCard: boolean;
   commandImportResultCardProps: CommandImportResultCardProps | null;
@@ -43,7 +48,7 @@ export function PublishContentSection({
     <div className="flex min-h-full min-w-0 flex-col gap-4 p-4">
       {showCommandImportResultCard && commandImportResultCardProps && (
         <div className="mx-auto w-full max-w-3xl min-w-0">
-          <Suspense fallback={null}>
+          <Suspense fallback={LazyBlockFallback}>
             <CommandImportResultCard {...commandImportResultCardProps} />
           </Suspense>
         </div>
@@ -58,7 +63,7 @@ export function PublishContentSection({
         </>
       ) : null}
       {shouldLoadDiagnosticsSection && diagnosticsSectionProps && (
-        <Suspense fallback={null}>
+        <Suspense fallback={LazyBlockFallback}>
           <DiagnosticsSection {...diagnosticsSectionProps} />
         </Suspense>
       )}

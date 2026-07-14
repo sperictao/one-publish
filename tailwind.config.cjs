@@ -1,4 +1,6 @@
 /** @type {import('tailwindcss').Config} */
+const motionTokens = require("./motion-tokens.json");
+
 module.exports = {
   content: ["./src/index.html", "./src/**/*.{js,ts,jsx,tsx}"],
   darkMode: "class",
@@ -242,8 +244,9 @@ module.exports = {
         "copy-13-mono": ["13px", { lineHeight: "18px" }],
       },
       // Geist motion: only when it clarifies a change. Short, physical easing.
+      // 时长/缓动单一来源见 motion-tokens.cjs。
       animation: {
-        "fade-in": "fadeIn 0.15s cubic-bezier(0.175, 0.885, 0.32, 1.1)",
+        "fade-in": `fadeIn ${motionTokens.duration.fast}ms ${motionTokens.easing.geist}`,
       },
       keyframes: {
         fadeIn: {
@@ -252,7 +255,8 @@ module.exports = {
         },
       },
       transitionTimingFunction: {
-        geist: "cubic-bezier(0.175, 0.885, 0.32, 1.1)",
+        geist: motionTokens.easing.geist,
+        move: motionTokens.easing.move,
       },
     },
   },

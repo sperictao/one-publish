@@ -1,0 +1,13 @@
+{
+  "_comment": "动效 token 单一来源：Tailwind 配置与运行时 JS 动画（WAAPI）共同消费，缓动/时长禁止在别处硬编码。easing.geist=微过渡（轻微回弹）；easing.move=空间移动（FLIP/折叠，纯 ease-out）。",
+  "easing": {
+    "geist": "cubic-bezier(0.175, 0.885, 0.32, 1.1)",
+    "move": "cubic-bezier(0.22, 1, 0.36, 1)"
+  },
+  "duration": {
+    "fast": 150,
+    "normal": 200,
+    "moveMin": 150,
+    "moveMax": 230
+  }
+}
