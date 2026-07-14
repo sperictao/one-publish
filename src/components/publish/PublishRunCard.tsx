@@ -22,6 +22,8 @@ import {
   XCircle,
 } from "lucide-react";
 import type { PublishResult } from "@/features/publish/publishRuntime";
+import { useElapsedTimer, formatElapsed } from "@/features/publish/useElapsedTimer";
+import { PublishLogView } from "@/components/publish/PublishLogView";
 import { openOutputDirectory } from "@/lib/store/api";
 import { cn } from "@/lib/utils";
 
@@ -41,6 +43,7 @@ export interface PublishRunCardActions {
 
 export interface PublishRunCardProps {
   outputLog: string;
+  getOutputLogSnapshot?: () => string;
   publishResult: PublishResult | null;
   appT: Record<string, string | undefined>;
   publishActions: PublishRunCardActions | null;
@@ -56,6 +59,7 @@ type PublishVisualState =
 
 export const PublishRunCard = memo(function PublishRunCard({
   outputLog: currentOutputLog,
+  getOutputLogSnapshot,
   publishResult: currentPublishResult,
   appT,
   publishActions: currentPublishActions,
@@ -108,6 +112,11 @@ export const PublishRunCard = memo(function PublishRunCard({
       setIsOpeningOutputDir(false);
     }
   }, [appT, publishResult?.output_dir]);
+
+  // 运行耗时：必须在任何早退之前调用（hooks 规则）。running 时实时累加，
+  // 完成后组件不卸载故 elapsedMs 保留最后值。
+  const isRunning = Boolean(publishActions?.isPublishing);
+  const elapsedMs = useElapsedTimer(isRunning);
 
   if (!outputLog && !publishResult && !publishActions && !isRefreshing) {
     return null;
@@ -201,10 +210,20 @@ export const PublishRunCard = memo(function PublishRunCard({
 
   const StatusIcon = statusMeta.icon;
   const successFileCount = publishResult?.file_count ?? 0;
-  const statusFact =
-    publishVisualState === "success" && successFileCount > 0
-      ? `${successFileCount} ${appT.fileCountUnit || "个文件"}`
+
+  const elapsedText =
+    elapsedMs > 0 && (isRunning || publishResult != null)
+      ? formatElapsed(elapsedMs)
       : null;
+
+  const statusFacts: string[] = [];
+  if (publishVisualState === "success" && successFileCount > 0) {
+    statusFacts.push(`${successFileCount} ${appT.fileCountUnit || "个文件"}`);
+  }
+  if (elapsedText) {
+    statusFacts.push(`${appT.publishElapsedLabel || "用时"} ${elapsedText}`);
+  }
+  const statusFact = statusFacts.length > 0 ? statusFacts.join(" · ") : null;
   const failureMessage =
     publishVisualState === "failed" ? publishResult?.error?.trim() : null;
 
@@ -490,15 +509,19 @@ export const PublishRunCard = memo(function PublishRunCard({
           )}
           <div
             className={cn(
-              "min-w-0 flex-1 overflow-auto rounded-lg bg-[hsl(var(--terminal-bg))] p-4 font-mono text-label-12 text-[hsl(var(--terminal-fg))]",
-              // 无结果时（idle/running）无折叠头，直接撑开；有结果时按折叠态控制
-              logCollapsible && !logEffectiveExpanded && "hidden flex-1",
+              "flex min-h-0 min-w-0 flex-1 flex-col",
+              logCollapsible && !logEffectiveExpanded && "hidden",
               !logCollapsible && "min-h-[16rem]"
             )}
           >
-            <pre className="min-w-0 whitespace-pre-wrap break-all [overflow-wrap:anywhere]">
-              {logDisplayText}
-            </pre>
+            <PublishLogView
+              text={logDisplayText}
+              getSnapshot={getOutputLogSnapshot ?? (() => logDisplayText)}
+              active={isRunning}
+              copyLabel={appT.copyLogLabel || "复制日志"}
+              copiedLabel={appT.copyLogSuccess || "已复制日志"}
+              jumpLabel={appT.publishLogJumpToBottom || "回到底部"}
+            />
           </div>
         </div>
       </CardContent>

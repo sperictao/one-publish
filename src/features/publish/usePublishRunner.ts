@@ -111,6 +111,7 @@ export function usePublishRunner({
   // --- Public API (unchanged) ---
   return {
     outputLog,
+    getOutputLogSnapshot,
     isResolvingSelectedProjectProfile:
       validate.isResolvingSelectedProjectProfile,
     publishPreviewCommand: validate.publishPreviewCommand,
