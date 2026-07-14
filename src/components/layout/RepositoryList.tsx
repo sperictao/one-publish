@@ -14,6 +14,7 @@ import {
 } from "@/lib/listOrdering";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
+import { EmptyState } from "@/components/ui/empty-state";
 import {
   Search,
   Plus,
@@ -337,19 +338,12 @@ export const RepositoryList = memo(function RepositoryList({
           }}
         >
           {previewRepos.length === 0 ? (
-            <div className="flex h-full flex-col items-center justify-center gap-3 px-4 py-8">
-              <div className="surface-raised flex size-16 items-center justify-center rounded-lg">
-                <FolderGit2 className="size-7 text-muted-foreground/30" />
-              </div>
-              <div className="text-center">
-                <p className="text-label-14 font-normal text-foreground/60">
-                  {repoT.noRepositories || "暂无仓库"}
-                </p>
-                <p className="mt-1 text-label-12 text-muted-foreground">
-                  {repoT.noRepositoriesHint || "点击下方添加仓库"}
-                </p>
-              </div>
-            </div>
+            <EmptyState
+              className="h-full"
+              icon={FolderGit2}
+              title={repoT.noRepositories || "暂无仓库"}
+              hint={repoT.noRepositoriesHint || "点击下方添加仓库"}
+            />
           ) : (
             <div className="repo-list-grid space-y-1.5">
               {previewRepos.map((repo) => (

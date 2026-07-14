@@ -15,6 +15,7 @@ import {
 } from "@/lib/listOrdering";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
+import { EmptyState } from "@/components/ui/empty-state";
 import {
   DropdownMenu,
   DropdownMenuTrigger,
@@ -1334,9 +1335,7 @@ export const PublishConfigPanel = memo(function PublishConfigPanel({
             </div>
           ) : null}
           {shouldShowEmptyState && (
-            <div className="px-3 py-4 text-center text-label-12 text-muted-foreground">
-              {noConfigsLabel}
-            </div>
+            <EmptyState icon={FileText} title={noConfigsLabel} className="py-10" />
           )}
           </div>
         </div>

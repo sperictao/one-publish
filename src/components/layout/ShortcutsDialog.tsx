@@ -1,5 +1,6 @@
 import { AppDialogShell } from "@/components/ui/app-dialog-shell";
 import { Dialog } from "@/components/ui/dialog";
+import { EmptyState } from "@/components/ui/empty-state";
 import { Keyboard } from "lucide-react";
 import { useEffect, useState } from "react";
 import { getShortcutsHelp } from "@/lib/store/api";
@@ -49,9 +50,10 @@ export function ShortcutsDialog({
             </div>
           ))}
           {shortcuts.length === 0 && (
-            <p className="text-label-14 text-muted-foreground text-center py-4">
-              {shortcutT.empty || "暂无快捷键"}
-            </p>
+            <EmptyState
+              icon={Keyboard}
+              title={shortcutT.empty || "暂无快捷键"}
+            />
           )}
         </div>
       </AppDialogShell>
