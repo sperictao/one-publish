@@ -43,7 +43,7 @@ export function parseReleaseArgs(argv) {
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    throw new Error(`参数解析失败：${message}`);
+    throw new Error(`参数解析失败：${message}`, { cause: error });
   }
 
   if (parsed.values.help) {

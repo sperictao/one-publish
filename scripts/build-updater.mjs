@@ -36,7 +36,7 @@ function buildTauriBuildArgs(args = []) {
   return ["tauri", "build", "--config", updaterConfigPath, ...normalizeForwardedArgs(args)];
 }
 
-function getPnpmCommand(platform = process.platform) {
+function getPnpmCommand(_platform = process.platform) {
   return "pnpm";
 }
 

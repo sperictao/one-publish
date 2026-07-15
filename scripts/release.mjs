@@ -7,7 +7,6 @@ import { parseGitHubRepo, normalizeGitHubUrl } from "./release/github.mjs";
 import { parseReleaseArgs, printReleaseUsage } from "./release/cli.mjs";
 import {
   getCurrentJsonVersion,
-  readText,
   updateCargoLockVersion,
   updateCargoTomlVersion,
   updateJsonVersion,
@@ -327,7 +326,9 @@ function formatGitHubError(status, bodyText) {
     if (message) {
       return `HTTP ${status}，${message}`;
     }
-  } catch {}
+  } catch {
+    // 响应体不是 JSON 时忽略，走下方兜底文案
+  }
 
   return `HTTP ${status}，${compactText.slice(0, 300)}`;
 }
@@ -374,7 +375,7 @@ function logGitHubFallback(label, fetchErrorMessage) {
 }
 
 async function requestGitHubViaGh(url, token, accept = "application/vnd.github+json") {
-  let apiPath = "";
+  let apiPath;
 
   try {
     const parsedUrl = new URL(url);
@@ -720,7 +721,6 @@ async function waitForWorkflowCompletion(options) {
   const deadline = Date.now() + workflowCompletionTimeoutMs;
   let lastSnapshot = "";
   let latestRun = null;
-  let latestJobs = [];
 
   console.log("⏳ 等待 workflow jobs 完成...");
 
@@ -731,7 +731,6 @@ async function waitForWorkflowCompletion(options) {
     ]);
 
     latestRun = workflowRun;
-    latestJobs = jobs;
 
     const snapshot = buildJobSnapshot(workflowRun, jobs);
     if (snapshot !== lastSnapshot) {
@@ -820,6 +819,8 @@ async function fetchJobAnnotations(repo, job, token) {
 }
 
 function stripAnsi(text) {
+  // 有意匹配 ANSI 转义序列（\u001B 控制字符）用于清理终端日志
+  // eslint-disable-next-line no-control-regex
   return text.replace(/\u001B\[[0-?]*[ -/]*[@-~]/g, "");
 }
 

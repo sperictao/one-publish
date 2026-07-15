@@ -1,0 +1,9 @@
+# cargo-audit 忽略清单 — 每条 ignore 必须带：advisory ID、原因、复查日期
+[advisories]
+ignore = [
+    # RUSTSEC-2026-0194 / RUSTSEC-2026-0195: quick-xml < 0.41（0.37.5 与 0.38.4 双版本在树）
+    # 传递依赖，父级（plist <- tauri 等）声明 0.37/0.38，修复版 0.41 跨 semver，无法本地 cargo update。
+    # 等待 Tauri 上游升级 plist/quick-xml。复查：2026-10 或 Tauri 下一次 minor 升级时。
+    "RUSTSEC-2026-0194",
+    "RUSTSEC-2026-0195",
+]

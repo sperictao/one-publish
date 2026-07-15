@@ -25,7 +25,7 @@ export interface ParameterValueObject {
   [key: string]: ParameterValue;
 }
 
-export interface ParameterValueArray extends Array<ParameterValue> {}
+export type ParameterValueArray = Array<ParameterValue>;
 
 export type ParameterValue =
   | JsonValue

@@ -87,4 +87,24 @@ describe("usePublishLogStream", () => {
 
     expect(result.current.outputLog).toBe("fresh line\n");
   });
+
+  it("卸载发生在 listen Promise 解析之前时，仍会释放监听器", async () => {
+    const dispose = vi.fn();
+    let resolveListen: ((d: () => void) => void) | null = null;
+    mocks.listen.mockImplementation(
+      () =>
+        new Promise<() => void>((resolve) => {
+          resolveListen = resolve;
+        })
+    );
+
+    const { unmount } = renderHook(() => usePublishLogStream());
+    unmount();
+
+    await act(async () => {
+      resolveListen?.(dispose);
+    });
+
+    expect(dispose).toHaveBeenCalledTimes(1);
+  });
 });

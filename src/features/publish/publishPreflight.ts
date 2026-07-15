@@ -270,7 +270,7 @@ export function createPublishPreflightPipeline(deps: PublishPreflightDeps) {
         throw err;
       }
 
-      let shouldRetry = false;
+      let shouldRetry: boolean;
       try {
         shouldRetry = await requestProtectedOutputAccessForRetry(spec);
       } catch {
@@ -293,7 +293,7 @@ export function createPublishPreflightPipeline(deps: PublishPreflightDeps) {
       return result;
     }
 
-    let shouldRetry = false;
+    let shouldRetry: boolean;
     try {
       shouldRetry = await requestProtectedOutputAccessForRetry(spec);
     } catch {

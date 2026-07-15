@@ -77,6 +77,7 @@ export function usePublishLogStream() {
       return;
     }
 
+    let disposed = false;
     let unlisten: (() => void) | null = null;
 
     listen<PublishLogChunkEvent>("provider-publish-log", (event) => {
@@ -102,6 +103,10 @@ export function usePublishLogStream() {
       }
     })
       .then((dispose) => {
+        if (disposed) {
+          dispose();
+          return;
+        }
         unlisten = dispose;
       })
       .catch((err) => {
@@ -109,9 +114,8 @@ export function usePublishLogStream() {
       });
 
     return () => {
-      if (unlisten) {
-        unlisten();
-      }
+      disposed = true;
+      unlisten?.();
     };
   }, [appendOutputLog]);
 

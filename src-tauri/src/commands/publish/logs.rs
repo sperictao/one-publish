@@ -60,10 +60,11 @@ impl WarningCollector {
                 continue;
             }
             let lower = trimmed.to_lowercase();
-            if lower.contains("warning") && lower.contains(':') {
-                if self.seen.insert(trimmed.to_string()) {
-                    self.warnings.push(trimmed.to_string());
-                }
+            if lower.contains("warning")
+                && lower.contains(':')
+                && self.seen.insert(trimmed.to_string())
+            {
+                self.warnings.push(trimmed.to_string());
             }
         }
     }

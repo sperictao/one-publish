@@ -46,7 +46,7 @@ export function normalizeFailureSignature(raw: string): string {
     .trim()
     .toLowerCase()
     .replace(/[a-z]:[\\/][^\s"'`]+/gi, "<path>")
-    .replace(/(?:\/[^\/\s"'`]+){2,}/g, "<path>")
+    .replace(/(?:\/[^/\s"'`]+){2,}/g, "<path>")
     .replace(/0x[0-9a-f]+/gi, "<hex>")
     .replace(/\b\d+\b/g, "<num>")
     .replace(/["'`][^"'`]+["'`]/g, "<value>")

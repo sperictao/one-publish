@@ -124,6 +124,7 @@ export function useAppUpdater() {
       return;
     }
 
+    let disposed = false;
     let unlisten: (() => void) | null = null;
 
     listen<UpdateDownloadProgressEventPayload>(
@@ -150,6 +151,10 @@ export function useAppUpdater() {
       }
     )
       .then((dispose) => {
+        if (disposed) {
+          dispose();
+          return;
+        }
         unlisten = dispose;
       })
       .catch((error) => {
@@ -157,9 +162,8 @@ export function useAppUpdater() {
       });
 
     return () => {
-      if (unlisten) {
-        unlisten();
-      }
+      disposed = true;
+      unlisten?.();
     };
   }, []);
 
