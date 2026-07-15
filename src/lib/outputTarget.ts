@@ -9,7 +9,7 @@ export interface OutputTargetHint {
   scheme?: string;
 }
 
-const SCHEME_PATTERN = /^([a-zA-Z][a-zA-Z0-9+.\-]*):\/\//;
+const SCHEME_PATTERN = /^([a-zA-Z][a-zA-Z0-9+.-]*):\/\//;
 
 export function parseOutputTargetLocal(raw: string): OutputTargetHint {
   const trimmed = raw.trim();

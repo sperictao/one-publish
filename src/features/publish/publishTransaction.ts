@@ -17,7 +17,7 @@ export interface PublishTransactionRunOptions {
   trayStatusEffect?: boolean;
 }
 
-export interface RunPublishOptions extends PublishTransactionRunOptions {}
+export type RunPublishOptions = PublishTransactionRunOptions;
 
 export interface PublishTransactionContext {
   repoId: string | null;

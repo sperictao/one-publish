@@ -9,8 +9,6 @@ test.describe("Preflight Output Checks", () => {
     await gotoApp(page);
 
     // The publish section should show preflight/validation information
-    // Look for output directory or preflight result indicators
-    const outputSection = page.getByText(/输出|output/i);
     // At minimum, the publish status area should exist
     await expect(page.getByText("发布状态")).toBeVisible({ timeout: 10000 });
   });

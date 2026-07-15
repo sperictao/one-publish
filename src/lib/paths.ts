@@ -1,5 +1,5 @@
 const WINDOWS_DRIVE_RE = /^[a-zA-Z]:([\\/]|$)/;
-const UNC_ROOT_RE = /^\\\\[^\\\/]+[\\\/][^\\\/]+[\\\/]?$/;
+const UNC_ROOT_RE = /^\\\\[^\\/]+[\\/][^\\/]+[\\/]?$/;
 
 function isRootPath(path: string): boolean {
   return /^[\\/]+$/.test(path) || /^[a-zA-Z]:[\\/]?$/.test(path) || UNC_ROOT_RE.test(path);

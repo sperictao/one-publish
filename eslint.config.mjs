@@ -9,6 +9,15 @@ export default tseslint.config(
   js.configs.recommended,
   ...tseslint.configs.recommended,
   {
+    // 下划线前缀 = 有意丢弃（解构占位、接口占位参数）
+    rules: {
+      "@typescript-eslint/no-unused-vars": [
+        "error",
+        { argsIgnorePattern: "^_", varsIgnorePattern: "^_" },
+      ],
+    },
+  },
+  {
     files: ["src/**/*.{ts,tsx}"],
     languageOptions: {
       ecmaVersion: 2020,
@@ -26,7 +35,6 @@ export default tseslint.config(
       "react-hooks/set-state-in-effect": "warn",
       "react-hooks/preserve-manual-memoization": "warn",
       "@typescript-eslint/no-explicit-any": "warn",
-      "@typescript-eslint/no-unused-vars": "warn",
     },
   },
   {
@@ -43,7 +51,6 @@ export default tseslint.config(
     },
     rules: {
       "@typescript-eslint/no-require-imports": "off",
-      "@typescript-eslint/no-unused-vars": "warn",
     },
   },
   {
@@ -54,16 +61,10 @@ export default tseslint.config(
     },
   },
   {
-    // 存量降噪：无法安全自动修复的规则降为 warning，逐类清理留给后续任务
+    // 残留 1 处（useTrayRecentPublish.ts）：标准修法 Error cause 需要 tsconfig lib >= ES2022，
+    // 超出 lint 清理范围。tsconfig 升级后修复该处并删除本条降级。
     rules: {
-      "no-empty": "warn",
-      "no-useless-assignment": "warn",
-      "no-useless-escape": "warn",
-      "no-control-regex": "warn",
-      "no-self-assign": "warn",
       "preserve-caught-error": "warn",
-      "@typescript-eslint/no-empty-object-type": "warn",
-      "@typescript-eslint/no-unused-vars": "warn",
     },
   },
 );
