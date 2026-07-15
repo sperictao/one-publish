@@ -6,9 +6,4 @@ ignore = [
     # 等待 Tauri 上游升级 plist/quick-xml。复查：2026-10 或 Tauri 下一次 minor 升级时。
     "RUSTSEC-2026-0194",
     "RUSTSEC-2026-0195",
-    # RUSTSEC-2026-0009: time 0.3.45，修复版 >=0.3.47
-    # 被直接依赖 zip = "^7.3" 锁死：zip 7.3.0 对 time 的版本要求排除 0.3.47+，
-    # 且 ^7.3 范围内所有版本（7.3.0、7.4.0）均已被 yank，无法经 Cargo.lock 重解析。
-    # 需升级 Cargo.toml 的 zip 至 8.x（独立任务）。复查：2026-10 或 zip 升级时。
-    "RUSTSEC-2026-0009",
 ]
