@@ -5,7 +5,7 @@ import type {
   RunPublishOptions,
   TranslationMap,
 } from "@/features/publish/publishTransaction";
-import { usePublishStore } from "@/store/publishStore";
+import { usePublishStore } from "@/stores/publishStore";
 import {
   createPublishExecutionRecord,
 } from "@/features/history/publishExecutionRecord";

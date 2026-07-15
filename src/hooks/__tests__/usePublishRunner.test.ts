@@ -118,7 +118,7 @@ vi.mock("@/features/publish/usePublishFailureFeedback", () => ({
 }));
 
 import { usePublishRunner } from "@/features/publish/usePublishRunner";
-import { usePublishStore } from "@/store/publishStore";
+import { usePublishStore } from "@/stores/publishStore";
 
 const readyEnvironment: EnvironmentCheckResult = {
   is_ready: true,

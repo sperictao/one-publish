@@ -10,7 +10,7 @@ import { useEditorProviderState } from "@/features/provider/useEditorProviderSta
 import { useProviderPresentationState } from "@/features/provider/useProviderPresentationState";
 import { useRerunFlow } from "@/hooks/useRerunFlow";
 import { useTrayRecentPublish } from "@/hooks/useTrayRecentPublish";
-import { usePublishStore } from "@/store/publishStore";
+import { usePublishStore } from "@/stores/publishStore";
 import { useAppShortcutsProps } from "@/hooks/useAppShortcutsProps";
 
 const SPEC_VERSION = 1;
