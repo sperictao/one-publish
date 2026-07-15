@@ -47,10 +47,16 @@ export default tseslint.config(
     },
   },
   {
+    // TS 文件的未定义标识符由 TypeScript 编译器负责（typescript-eslint 官方建议）
+    files: ["**/*.{ts,tsx}"],
+    rules: {
+      "no-undef": "off",
+    },
+  },
+  {
     // 存量降噪：无法安全自动修复的规则降为 warning，逐类清理留给后续任务
     rules: {
       "no-empty": "warn",
-      "no-undef": "warn",
       "no-useless-assignment": "warn",
       "no-useless-escape": "warn",
       "no-control-regex": "warn",
