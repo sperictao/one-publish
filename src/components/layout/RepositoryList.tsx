@@ -100,7 +100,7 @@ function AppBrandIcon(): ReactNode {
       aria-hidden="true"
     >
       <g transform="translate(64 64) scale(2.3) translate(-18 -18)">
-        <g className="fill-primary">
+        <g fill="#3B82F6">
           <rect x="0" y="12" width="36" height="12" rx="6" />
           <rect
             x="0"
@@ -143,7 +143,7 @@ function AppBrandIcon(): ReactNode {
             transform="rotate(225 18 18)"
           />
         </g>
-        <circle cx="18" cy="18" r="5" className="fill-warning" />
+        <circle cx="18" cy="18" r="5" fill="#FCD34D" />
       </g>
     </svg>
   );
