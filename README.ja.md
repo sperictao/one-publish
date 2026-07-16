@@ -29,9 +29,9 @@ OnePublish は、ソフトウェアプロジェクトをパブリッシュする
 - 🎯 **マルチ言語サポート** — .NET (`dotnet publish`)、Rust (`cargo build --release`)、Go (`go build`)、Java/Gradle — さらに追加予定
 - 🧠 **スキーマ駆動パラメータ** — 100% のパラメータ表現力：すべての CLI フラグ、環境変数、引数が表現・検証され、ハードコードされていません
 - 📋 **コマンドインポート** — 任意の CLI コマンドを貼り付けると、OnePublish が構造化されたパラメータに逆解析します
-- 📊 **実行履歴** — 過去 20 回以上のローカルタイムライン、ワンクリックで再実行
+- 📊 **実行履歴** — 直近の実行をローカルタイムラインで保持（デフォルト 20 件、変更可能）、ワンクリックで再実行
 - 🔍 **環境診断** — 不足しているツールチェーン（SDK、ランタイム）の自動検出とガイド付き修正
-- 🎨 **Apple Liquid Glass デザイン** — macOS にインスパイアされた UI、backdrop-blur グラス素材、スプリングアニメーション、スペキュラーハイライト
+- 🎨 **Geist デザインシステム** — Vercel Geist ベースのトークン駆動 UI：P3 広色域カラー、精密なタイポグラフィ、shadcn/ui コンポーネント
 - 🌐 **国際化対応** — 中国語（簡体字）と英語を完全サポート
 - 🌓 **ダーク & ライトテーマ** — システム設定に追従
 - 🔄 **自動アップデート** — GitHub Releases と統合された Tauri アップデーターパイプライン
@@ -43,7 +43,7 @@ OnePublish は、ソフトウェアプロジェクトをパブリッシュする
 ## 📸 スクリーンショット
 
 <!-- TODO: add actual screenshots -->
-> *スクリーンショットは近日公開予定です。それまでの間、[設計哲学](docs/design-philosophy.md) と [Liquid Glass デザインシステム](docs/liquid-glass-design-system.md) をご覧ください。*
+> *スクリーンショットは近日公開予定です。それまでの間、[設計哲学](docs/design-philosophy.md) と [Geist デザイン仕様](DESIGN.md) をご覧ください。*
 
 ---
 
@@ -127,7 +127,7 @@ one-publish/
 │   ├── stores/                   # Zustand ステートスライス
 │   ├── lib/                      # ユーティリティ: store API, paths, preflight, artifacts
 │   ├── i18n/                     # 翻訳: zh.json, en.json
-│   └── index.css                 # Liquid Glass デザイントークン + ユーティリティ
+│   └── index.css                 # Geist デザイントークン + ユーティリティ
 │
 ├── src-tauri/                    # Rust バックエンド (Tauri)
 │   ├── src/
@@ -152,10 +152,10 @@ one-publish/
 ├── scripts/                      # ビルド/リリース自動化スクリプト
 ├── docs/                         # ドキュメント
 │   ├── design-philosophy.md      # 製品およびエンジニアリング哲学
-│   ├── liquid-glass-design-system.md
 │   ├── updater/SETUP.md          # アップデータ設定ガイド
 │   └── release/GITHUB_RELEASE.md # リリースパイプラインドキュメント
-├── DESIGN.md                     # Apple デザイン分析（参考）
+├── DESIGN.md                     # Geist デザインシステム — Light テーマ（正規トークン + 仕様）
+├── design.dark.md                # Geist デザインシステム — Dark テーマ
 ├── package.json
 ├── vite.config.ts
 ├── tailwind.config.cjs
@@ -183,7 +183,7 @@ one-publish/
 | **フロントエンドフレームワーク** | React 18 + TypeScript |
 | **ビルドツール** | Vite 7 |
 | **スタイリング** | Tailwind CSS 3 + shadcn/ui (Radix UI) |
-| **デザインシステム** | Apple Liquid Glass (backdrop-blur, spring physics, specular highlights) |
+| **デザインシステム** | Vercel Geist（デザイントークン、P3 広色域カラー、ダーク & ライトテーマ） |
 | **状態管理** | Zustand 5 |
 | **アイコン** | Lucide React |
 | **通知** | Sonner |
@@ -209,11 +209,14 @@ pnpm build:renderer      # フロントエンドビルドのみ
 
 # 品質
 pnpm typecheck           # TypeScript 型チェック + コントラクト検証
+pnpm lint                # ESLint チェック
 pnpm test                # Vitest ユニットテスト
 pnpm test:ui             # Vitest UI
 pnpm test:watch          # Vitest ウォッチモード
 pnpm e2e                 # Playwright e2e テスト
 pnpm e2e:ui              # Playwright UI モード
+pnpm check:i18n          # i18n キーカバレッジ（zh/en）
+pnpm check:design        # Geist デザイン準拠チェック
 
 # リリース
 pnpm release -v 0.8.0     # フルリリースパイプライン
@@ -235,7 +238,7 @@ OnePublish は **簡体字中国語** と **英語** を標準でサポートし
 // 値: 'zh'（デフォルト）または 'en'
 ```
 
-翻訳ファイル: `src/i18n/zh.json` | `src/i18n/en.json`（各約 790 キー、機能ドメインごとに整理）。
+翻訳ファイル: `src/i18n/zh.json` | `src/i18n/en.json`（各約 776 キー、機能ドメインごとに整理）。
 
 ---
 
@@ -245,7 +248,7 @@ OnePublish は **簡体字中国語** と **英語** を標準でサポートし
 |-------|------|----------|
 | フロントエンドユニット | Vitest + Testing Library | コンポーネント、フック、ストア、lib |
 | バックエンドユニット | Rust `#[cfg(test)]` | プロバイダコンパイル、ストアマイグレーション、プラン生成 |
-| E2E | Playwright（13+ スペック） | アプリ起動、リポジトリパネル、プロバイダ選択、パブリッシュプリセット、カスタム設定、プリフライト、コントラクトスモーク |
+| E2E | Playwright（12 スペック） | アプリ起動、リポジトリパネル、プロバイダ選択、パブリッシュプリセット、カスタム設定、プリフライト、パブリッシュフロー、コントラクトスモーク |
 | 品質ゲート | TypeScript strict + `ts-rs` コントラクト | ビルド & CI で強制 |
 
 ---

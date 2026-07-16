@@ -29,9 +29,9 @@ OnePublish 是一个**跨平台桌面应用**，为软件项目发布提供美�
 - 🎯 **多语言发布** — 支持 .NET（`dotnet publish`）、Rust（`cargo build --release`）、Go（`go build`）、Java/Gradle，更多语言持续接入
 - 🧠 **Schema 驱动参数** — 100% 参数表达能力：所有 CLI 标志、环境变量、参数均可表示与校验，非硬编码
 - 📋 **命令导入** — 粘贴任意 CLI 命令，OnePublish 自动逆向解析为结构化参数
-- 📊 **执行历史** — 本地保留最近 20+ 次运行记录，一键重跑
+- 📊 **执行历史** — 本地保留最近运行记录（默认 20 条，可配置），一键重跑
 - 🔍 **环境诊断** — 自动检测缺失的工具链（SDK、运行时），提供引导式修复
-- 🎨 **Apple Liquid Glass 设计** — macOS 风格界面：毛玻璃材质、弹簧动画、镜面高光
+- 🎨 **Geist 设计系统** — 基于 Vercel Geist 的令牌驱动界面：P3 广色域色彩、精确排版、shadcn/ui 组件
 - 🌐 **国际化** — 完整支持简体中文和 English
 - 🌓 **深色/浅色主题** — 跟随系统偏好自动切换
 - 🔄 **自动更新** — Tauri 内置更新管线，集成 GitHub Releases
@@ -43,7 +43,7 @@ OnePublish 是一个**跨平台桌面应用**，为软件项目发布提供美�
 ## 📸 界面预览
 
 <!-- TODO: 添加实际截图 -->
-> *截图即将补充。在此期间，可查阅[设计理念](docs/design-philosophy.md)与 [Liquid Glass 设计系统](docs/liquid-glass-design-system.md)。*
+> *截图即将补充。在此期间，可查阅[设计理念](docs/design-philosophy.md)与 [Geist 设计规范](DESIGN.md)。*
 
 ---
 
@@ -127,7 +127,7 @@ one-publish/
 │   ├── stores/                   # Zustand 状态切片
 │   ├── lib/                      # 工具函数：store API、路径、预检、产物
 │   ├── i18n/                     # 翻译文件：zh.json、en.json
-│   └── index.css                 # Liquid Glass 设计令牌 + 工具类
+│   └── index.css                 # Geist 设计令牌 + 工具类
 │
 ├── src-tauri/                    # Rust 后端（Tauri）
 │   ├── src/
@@ -152,10 +152,10 @@ one-publish/
 ├── scripts/                      # 构建/发布自动化脚本
 ├── docs/                         # 文档
 │   ├── design-philosophy.md      # 产品与工程理念
-│   ├── liquid-glass-design-system.md
 │   ├── updater/SETUP.md          # 更新配置指南
 │   └── release/GITHUB_RELEASE.md # 发布管线文档
-├── DESIGN.md                     # Apple 设计分析（参考）
+├── DESIGN.md                     # Geist 设计系统 — Light 主题（规范令牌 + 说明）
+├── design.dark.md                # Geist 设计系统 — Dark 主题
 ├── package.json
 ├── vite.config.ts
 ├── tailwind.config.cjs
@@ -183,7 +183,7 @@ one-publish/
 | **前端框架** | React 18 + TypeScript |
 | **构建工具** | Vite 7 |
 | **样式** | Tailwind CSS 3 + shadcn/ui（Radix UI） |
-| **设计系统** | Apple Liquid Glass（毛玻璃模糊、弹簧物理、镜面高光） |
+| **设计系统** | Vercel Geist（设计令牌、P3 广色域色彩、深浅双主题） |
 | **状态管理** | Zustand 5 |
 | **图标** | Lucide React |
 | **通知** | Sonner |
@@ -209,11 +209,14 @@ pnpm build:renderer      # 仅前端构建
 
 # 质量
 pnpm typecheck           # TypeScript 类型检查 + 合约校验
+pnpm lint                # ESLint 检查
 pnpm test                # Vitest 单元测试
 pnpm test:ui             # Vitest 可视化界面
 pnpm test:watch          # Vitest 监听模式
 pnpm e2e                 # Playwright e2e 测试
 pnpm e2e:ui              # Playwright 可视化界面
+pnpm check:i18n          # i18n 键覆盖检查（zh/en）
+pnpm check:design        # Geist 设计合规检查
 
 # 发布
 pnpm release -v 0.8.0     # 完整发布管线
@@ -235,7 +238,7 @@ OnePublish 开箱即支持**简体中文**和 **English**。可通过应用设�
 // 可选值：'zh'（默认）或 'en'
 ```
 
-翻译文件：`src/i18n/zh.json` | `src/i18n/en.json`（各约 790 个条目，按功能域组织）。
+翻译文件：`src/i18n/zh.json` | `src/i18n/en.json`（各约 776 个条目，按功能域组织）。
 
 ---
 
@@ -245,7 +248,7 @@ OnePublish 开箱即支持**简体中文**和 **English**。可通过应用设�
 |------|------|----------|
 | 前端单元 | Vitest + Testing Library | 组件、hooks、stores、lib |
 | 后端单元 | Rust `#[cfg(test)]` | Provider 编译、store 迁移、plan 生成 |
-| E2E | Playwright（13+ 用例） | 应用启动、仓库面板、provider 选择、发布预设、自定义配置、预检、合约冒烟 |
+| E2E | Playwright（12 用例） | 应用启动、仓库面板、provider 选择、发布预设、自定义配置、预检、发布流程、合约冒烟 |
 | 质量门 | TypeScript strict + `ts-rs` 合约 | 构建与 CI 强制校验 |
 
 ---

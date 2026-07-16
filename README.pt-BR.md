@@ -29,9 +29,9 @@ OnePublish é um **aplicativo de desktop multiplataforma** que oferece uma GUI b
 - 🎯 **Suporte Multi-Linguagem** — .NET (`dotnet publish`), Rust (`cargo build --release`), Go (`go build`), Java/Gradle — com mais por vir
 - 🧠 **Parâmetros Baseados em Esquema** — 100% de expressividade de parâmetros: cada flag CLI, variável de ambiente e argumento é representado e validado, sem hardcode
 - 📋 **Importação de Comandos** — cole qualquer comando CLI e o OnePublish faz engenharia reversa transformando-o em parâmetros estruturados
-- 📊 **Histórico de Execução** — linha do tempo local das últimas mais de 20 execuções com re-execução em um clique
+- 📊 **Histórico de Execução** — linha do tempo local das execuções recentes (20 por padrão, configurável) com re-execução em um clique
 - 🔍 **Diagnóstico de Ambiente** — detecção automática de toolchains ausentes (SDKs, runtimes) com correções guiadas
-- 🎨 **Design Apple Liquid Glass** — UI inspirada no macOS com materiais de vidro backdrop-blur, animações com física de mola e destaques especulares
+- 🎨 **Sistema de Design Geist** — UI orientada a tokens no estilo Vercel Geist: cores P3 de gama ampla, tipografia precisa, componentes shadcn/ui
 - 🌐 **Internacionalizado** — suporte completo a Chinês (简体中文) e Inglês
 - 🌓 **Temas Claro e Escuro** — segue a preferência do seu sistema
 - 🔄 **Atualização Automática** — pipeline de atualização do Tauri com integração ao GitHub Releases
@@ -43,7 +43,7 @@ OnePublish é um **aplicativo de desktop multiplataforma** que oferece uma GUI b
 ## 📸 Capturas de Tela
 
 <!-- TODO: adicionar capturas de tela reais -->
-> *Capturas de tela em breve. Enquanto isso, confira a [filosofia de design](docs/design-philosophy.md) e o [sistema de design Liquid Glass](docs/liquid-glass-design-system.md).*
+> *Capturas de tela em breve. Enquanto isso, confira a [filosofia de design](docs/design-philosophy.md) e a [especificação de design Geist](DESIGN.md).*
 
 ---
 
@@ -127,7 +127,7 @@ one-publish/
 │   ├── stores/                   # Slices de estado Zustand
 │   ├── lib/                      # Utilitários: store API, paths, preflight, artifacts
 │   ├── i18n/                     # Traduções: zh.json, en.json
-│   └── index.css                 # Design tokens Liquid Glass + utilitários
+│   └── index.css                 # Design tokens Geist + utilitários
 │
 ├── src-tauri/                    # Backend Rust (Tauri)
 │   ├── src/
@@ -152,10 +152,10 @@ one-publish/
 ├── scripts/                      # Scripts de automação de build/release
 ├── docs/                         # Documentação
 │   ├── design-philosophy.md      # Filosofia de produto e engenharia
-│   ├── liquid-glass-design-system.md
 │   ├── updater/SETUP.md          # Guia de configuração do atualizador
 │   └── release/GITHUB_RELEASE.md # Documentação do pipeline de lançamento
-├── DESIGN.md                     # Análise de design da Apple (referência)
+├── DESIGN.md                     # Sistema de design Geist — tema Light (tokens canônicos + especificação)
+├── design.dark.md                # Sistema de design Geist — tema Dark
 ├── package.json
 ├── vite.config.ts
 ├── tailwind.config.cjs
@@ -183,7 +183,7 @@ one-publish/
 | **Framework Frontend** | React 18 + TypeScript |
 | **Ferramenta de Build** | Vite 7 |
 | **Estilização** | Tailwind CSS 3 + shadcn/ui (Radix UI) |
-| **Sistema de Design** | Apple Liquid Glass (backdrop-blur, física de molas, destaques especulares) |
+| **Sistema de Design** | Vercel Geist (tokens de design, cores P3 de gama ampla, temas claro e escuro) |
 | **Gerenciamento de Estado** | Zustand 5 |
 | **Ícones** | Lucide React |
 | **Notificações** | Sonner |
@@ -209,11 +209,14 @@ pnpm build:renderer      # Apenas build do frontend
 
 # Qualidade
 pnpm typecheck           # Verificação de tipos TypeScript + validação de contratos
+pnpm lint                # Verificação ESLint
 pnpm test                # Testes unitários Vitest
 pnpm test:ui             # Vitest UI
 pnpm test:watch          # Modo watch do Vitest
 pnpm e2e                 # Testes e2e com Playwright
 pnpm e2e:ui              # Modo UI do Playwright
+pnpm check:i18n          # Cobertura de chaves i18n (zh/en)
+pnpm check:design        # Verificação de conformidade com o design Geist
 
 # Release
 pnpm release -v 0.8.0     # Pipeline completo de lançamento
@@ -235,7 +238,7 @@ OnePublish suporta **简体中文** e **English** pronto para uso. Alterne no ap
 // Valores: 'zh' (padrão) ou 'en'
 ```
 
-Arquivos de tradução: `src/i18n/zh.json` | `src/i18n/en.json` (~790 chaves cada, organizadas por domínio de funcionalidade).
+Arquivos de tradução: `src/i18n/zh.json` | `src/i18n/en.json` (~776 chaves cada, organizadas por domínio de funcionalidade).
 
 ---
 
@@ -245,7 +248,7 @@ Arquivos de tradução: `src/i18n/zh.json` | `src/i18n/en.json` (~790 chaves cad
 |-------|------|----------|
 | Unitário frontend | Vitest + Testing Library | Componentes, hooks, stores, lib |
 | Unitário backend | Rust `#[cfg(test)]` | Compilação de providers, migrações de store, geração de planos |
-| E2E | Playwright (13+ specs) | Inicialização do app, painel de repositório, seleção de provider, presets de publicação, configuração personalizada, preflight, smoke de contratos |
+| E2E | Playwright (12 specs) | Inicialização do app, painel de repositório, seleção de provider, presets de publicação, configuração personalizada, preflight, fluxo de publicação, smoke de contratos |
 | Barreiras de qualidade | TypeScript strict + contratos `ts-rs` | Aplicadas no build e CI |
 
 ---

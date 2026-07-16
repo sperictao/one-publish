@@ -29,9 +29,9 @@ OnePublish is a **cross-platform desktop application** that gives you a beautifu
 - 🎯 **Multi-Language Support** — .NET (`dotnet publish`), Rust (`cargo build --release`), Go (`go build`), Java/Gradle — with more coming
 - 🧠 **Schema-Driven Parameters** — 100% parameter expressiveness: every CLI flag, env var, and argument is represented and validated, not hardcoded
 - 📋 **Command Import** — paste any CLI command and OnePublish reverse-engineers it into structured parameters
-- 📊 **Execution History** — local timeline of your last 20+ runs with one-click re-run
+- 📊 **Execution History** — local timeline of your recent runs (20 by default, configurable) with one-click re-run
 - 🔍 **Environment Diagnostics** — automatic detection of missing toolchains (SDKs, runtimes) with guided fixes
-- 🎨 **Apple Liquid Glass Design** — macOS-inspired UI with backdrop-blur glass materials, spring animations, and specular highlights
+- 🎨 **Geist Design System** — Vercel-inspired token-driven UI with wide-gamut P3 colors, precise typography, and shadcn/ui components
 - 🌐 **Internationalized** — full Chinese (简体中文) and English support
 - 🌓 **Dark & Light Themes** — follows your system preference
 - 🔄 **Auto-Update** — Tauri updater pipeline with GitHub Releases integration
@@ -43,7 +43,7 @@ OnePublish is a **cross-platform desktop application** that gives you a beautifu
 ## 📸 Screenshots
 
 <!-- TODO: add actual screenshots -->
-> *Screenshots coming soon. In the meantime, check the [design philosophy](docs/design-philosophy.md) and [Liquid Glass design system](docs/liquid-glass-design-system.md).*
+> *Screenshots coming soon. In the meantime, check the [design philosophy](docs/design-philosophy.md) and the [Geist design spec](DESIGN.md).*
 
 ---
 
@@ -127,7 +127,7 @@ one-publish/
 │   ├── stores/                   # Zustand state slices
 │   ├── lib/                      # Utilities: store API, paths, preflight, artifacts
 │   ├── i18n/                     # Translations: zh.json, en.json
-│   └── index.css                 # Liquid Glass design tokens + utilities
+│   └── index.css                 # Geist design tokens + utilities
 │
 ├── src-tauri/                    # Rust Backend (Tauri)
 │   ├── src/
@@ -152,10 +152,10 @@ one-publish/
 ├── scripts/                      # Build/Release automation scripts
 ├── docs/                         # Documentation
 │   ├── design-philosophy.md      # Product & engineering philosophy
-│   ├── liquid-glass-design-system.md
 │   ├── updater/SETUP.md          # Updater configuration guide
 │   └── release/GITHUB_RELEASE.md # Release pipeline docs
-├── DESIGN.md                     # Liquid Glass design system (canonical tokens + spec)
+├── DESIGN.md                     # Geist design system — Light theme (canonical tokens + spec)
+├── design.dark.md                # Geist design system — Dark theme
 ├── package.json
 ├── vite.config.ts
 ├── tailwind.config.cjs
@@ -183,7 +183,7 @@ one-publish/
 | **Frontend Framework** | React 18 + TypeScript |
 | **Build Tool** | Vite 7 |
 | **Styling** | Tailwind CSS 3 + shadcn/ui (Radix UI) |
-| **Design System** | Apple Liquid Glass (backdrop-blur, spring physics, specular highlights) |
+| **Design System** | Vercel Geist (design tokens, P3 wide-gamut colors, dark & light themes) |
 | **State Management** | Zustand 5 |
 | **Icons** | Lucide React |
 | **Notifications** | Sonner |
@@ -209,11 +209,14 @@ pnpm build:renderer      # Frontend build only
 
 # Quality
 pnpm typecheck           # TypeScript type check + contract validation
+pnpm lint                # ESLint
 pnpm test                # Vitest unit tests
 pnpm test:ui             # Vitest UI
 pnpm test:watch          # Vitest watch mode
 pnpm e2e                 # Playwright e2e tests
 pnpm e2e:ui              # Playwright UI mode
+pnpm check:i18n          # i18n key coverage (zh/en)
+pnpm check:design        # Geist design compliance check
 
 # Release
 pnpm release -v 0.8.0     # Full release pipeline
@@ -235,7 +238,7 @@ OnePublish supports **简体中文** and **English** out of the box. Switch in-a
 // Values: 'zh' (default) or 'en'
 ```
 
-Translation files: `src/i18n/zh.json` | `src/i18n/en.json` (~790 keys each, organized by feature domain).
+Translation files: `src/i18n/zh.json` | `src/i18n/en.json` (~776 keys each, organized by feature domain).
 
 ---
 
@@ -245,7 +248,7 @@ Translation files: `src/i18n/zh.json` | `src/i18n/en.json` (~790 keys each, orga
 |-------|------|----------|
 | Frontend unit | Vitest + Testing Library | Components, hooks, stores, lib |
 | Backend unit | Rust `#[cfg(test)]` | Provider compilation, store migrations, plan generation |
-| E2E | Playwright (13+ specs) | App boot, repo panel, provider selection, publish presets, custom config, preflight, contracts smoke |
+| E2E | Playwright (12 specs) | App boot, repo panel, provider selection, publish presets, custom config, preflight, publish flow, contracts smoke |
 | Quality gates | TypeScript strict + `ts-rs` contracts | Enforced at build & CI |
 
 ---
