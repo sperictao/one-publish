@@ -167,6 +167,7 @@ impl PublishOutputAccess {
         }
     }
 
+    #[cfg(any(target_os = "macos", test))]
     fn granted(location: ProtectedDirectoryLocation, root: &Path, probe_directory: &Path) -> Self {
         Self {
             status: PublishOutputAccessStatus::Granted,
@@ -178,6 +179,7 @@ impl PublishOutputAccess {
         }
     }
 
+    #[cfg(any(target_os = "macos", test))]
     fn denied(
         location: ProtectedDirectoryLocation,
         root: &Path,
