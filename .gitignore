@@ -60,16 +60,24 @@ src-tauri/tauri.conf.updater.prod.json
 /views.json
 /repo-list-empty.png
 
-# Claude local state
-.claude/logs/
-.claude/cache/
-.claude/settings.local.json
-.claude/plan/
-.ace-tool/
-
-# Codex/Trellis local state
-.workflow/
-.sc/
+# AI agent / tool workspaces
+/.agents/
+/.claude/
+/.claude-plugin/
+/.codex/
+/.cursor/
+/.opencode/
+/.pi/
+/.trellis/
+/.workflow/
+/.sc/
+/.ace-tool/
+/.pnpm-store/
+/plans/
+/scratch/
+/AGENTS.md
+/CLAUDE.md
+/branch-title.json
 
 # Autoresearch local state
 /autoresearch-*.json
