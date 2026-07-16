@@ -153,7 +153,6 @@ one-publish/
 ├── docs/                         # Documentation
 │   ├── design-philosophy.md      # Product & engineering philosophy
 │   ├── liquid-glass-design-system.md
-│   ├── roadmap/MASTER_PLAN.md    # Development roadmap (11 phases)
 │   ├── updater/SETUP.md          # Updater configuration guide
 │   └── release/GITHUB_RELEASE.md # Release pipeline docs
 ├── DESIGN.md                     # Liquid Glass design system (canonical tokens + spec)
@@ -253,7 +252,7 @@ Translation files: `src/i18n/zh.json` | `src/i18n/en.json` (~790 keys each, orga
 
 ## 🗺️ Roadmap
 
-OnePublish is evolving from a .NET publish GUI into a **commercial-grade, multi-language publishing product**. The [master plan](docs/roadmap/MASTER_PLAN.md) spans 11 phases:
+OnePublish is evolving from a .NET publish GUI into a **commercial-grade, multi-language publishing product**. The master plan spans 11 phases:
 
 | Phase | Theme | Status |
 |-------|-------|--------|
@@ -279,8 +278,6 @@ OnePublish is evolving from a .NET publish GUI into a **commercial-grade, multi-
 3. Run tests (`pnpm test && pnpm e2e`)
 4. Commit with descriptive messages
 5. Push and open a Pull Request
-
-See [CLAUDE.md](CLAUDE.md) for detailed development instructions (AI assistant-friendly).
 
 ---
 

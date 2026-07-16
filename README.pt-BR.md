@@ -153,7 +153,6 @@ one-publish/
 ├── docs/                         # Documentação
 │   ├── design-philosophy.md      # Filosofia de produto e engenharia
 │   ├── liquid-glass-design-system.md
-│   ├── roadmap/MASTER_PLAN.md    # Roteiro de desenvolvimento (11 fases)
 │   ├── updater/SETUP.md          # Guia de configuração do atualizador
 │   └── release/GITHUB_RELEASE.md # Documentação do pipeline de lançamento
 ├── DESIGN.md                     # Análise de design da Apple (referência)
@@ -253,7 +252,7 @@ Arquivos de tradução: `src/i18n/zh.json` | `src/i18n/en.json` (~790 chaves cad
 
 ## 🗺️ Roteiro
 
-O OnePublish está evoluindo de uma GUI de publicação .NET para um **produto de publicação multi-linguagem de nível comercial**. O [plano mestre](docs/roadmap/MASTER_PLAN.md) abrange 11 fases:
+O OnePublish está evoluindo de uma GUI de publicação .NET para um **produto de publicação multi-linguagem de nível comercial**. O plano mestre abrange 11 fases:
 
 | Fase | Tema | Status |
 |-------|-------|--------|
@@ -279,8 +278,6 @@ O OnePublish está evoluindo de uma GUI de publicação .NET para um **produto d
 3. Execute os testes (`pnpm test && pnpm e2e`)
 4. Faça commit com mensagens descritivas
 5. Envie e abra um Pull Request
-
-Veja [CLAUDE.md](CLAUDE.md) para instruções detalhadas de desenvolvimento (amigável para assistentes de IA).
 
 ---
 

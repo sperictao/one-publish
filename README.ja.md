@@ -153,7 +153,6 @@ one-publish/
 ├── docs/                         # ドキュメント
 │   ├── design-philosophy.md      # 製品およびエンジニアリング哲学
 │   ├── liquid-glass-design-system.md
-│   ├── roadmap/MASTER_PLAN.md    # 開発ロードマップ（11 フェーズ）
 │   ├── updater/SETUP.md          # アップデータ設定ガイド
 │   └── release/GITHUB_RELEASE.md # リリースパイプラインドキュメント
 ├── DESIGN.md                     # Apple デザイン分析（参考）
@@ -253,7 +252,7 @@ OnePublish は **簡体字中国語** と **英語** を標準でサポートし
 
 ## 🗺️ ロードマップ
 
-OnePublish は .NET パブリッシュ GUI から **商用グレードのマルチ言語パブリッシング製品** へと進化しています。[マスタープラン](docs/roadmap/MASTER_PLAN.md) は 11 のフェーズにわたります：
+OnePublish は .NET パブリッシュ GUI から **商用グレードのマルチ言語パブリッシング製品** へと進化しています。マスタープラン は 11 のフェーズにわたります：
 
 | フェーズ | テーマ | ステータス |
 |-------|-------|--------|
@@ -279,8 +278,6 @@ OnePublish は .NET パブリッシュ GUI から **商用グレードのマル�
 3. テストを実行（`pnpm test && pnpm e2e`）
 4. 説明的なメッセージでコミット
 5. プッシュしてプルリクエストを作成
-
-詳細な開発手順については [CLAUDE.md](CLAUDE.md) をご覧ください（AI アシスタント対応）。
 
 ---
 

@@ -153,7 +153,6 @@ one-publish/
 ├── docs/                         # 문서
 │   ├── design-philosophy.md      # 제품 및 엔지니어링 철학
 │   ├── liquid-glass-design-system.md
-│   ├── roadmap/MASTER_PLAN.md    # 개발 로드맵 (11단계)
 │   ├── updater/SETUP.md          # 업데이터 설정 가이드
 │   └── release/GITHUB_RELEASE.md # 릴리스 파이프라인 문서
 ├── DESIGN.md                     # Apple 디자인 분석 (참고용)
@@ -253,7 +252,7 @@ OnePublish는 **简体中文** 및 **English**를 기본 지원합니다. 설정
 
 ## 🗺️ 로드맵
 
-OnePublish는 .NET 배포 GUI에서 출발하여 **상업용 등급의 멀티 언어 배포 제품**으로 진화하고 있습니다. [마스터 플랜](docs/roadmap/MASTER_PLAN.md)은 11단계로 구성됩니다:
+OnePublish는 .NET 배포 GUI에서 출발하여 **상업용 등급의 멀티 언어 배포 제품**으로 진화하고 있습니다. 마스터 플랜은 11단계로 구성됩니다:
 
 | 단계 | 주제 | 상태 |
 |-------|-------|--------|
@@ -279,8 +278,6 @@ OnePublish는 .NET 배포 GUI에서 출발하여 **상업용 등급의 멀티 �
 3. 테스트를 실행합니다 (`pnpm test && pnpm e2e`)
 4. 설명적인 커밋 메시지로 커밋합니다
 5. 푸시하고 Pull Request를 엽니다
-
-자세한 개발 지침은 [CLAUDE.md](CLAUDE.md)를 참조하세요 (AI 어시스턴트 친화적).
 
 ---
 

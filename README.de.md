@@ -153,7 +153,6 @@ one-publish/
 ├── docs/                         # Dokumentation
 │   ├── design-philosophy.md      # Produkt- & Engineering-Philosophie
 │   ├── liquid-glass-design-system.md
-│   ├── roadmap/MASTER_PLAN.md    # Entwicklungs-Roadmap (11 Phasen)
 │   ├── updater/SETUP.md          # Updater-Konfigurationsanleitung
 │   └── release/GITHUB_RELEASE.md # Release-Pipeline-Dokumentation
 ├── DESIGN.md                     # Apple Design-Analyse (Referenz)
@@ -253,7 +252,7 @@ OnePublish unterstützt **简体中文** und **Englisch** standardmäßig. Wechs
 
 ## 🗺️ Roadmap
 
-OnePublish entwickelt sich von einer .NET-Publish-GUI zu einem **kommerziellen, mehrsprachigen Publishing-Produkt**. Der [Master-Plan](docs/roadmap/MASTER_PLAN.md) umfasst 11 Phasen:
+OnePublish entwickelt sich von einer .NET-Publish-GUI zu einem **kommerziellen, mehrsprachigen Publishing-Produkt**. Der Master-Plan umfasst 11 Phasen:
 
 | Phase | Thema | Status |
 |-------|-------|--------|
@@ -279,8 +278,6 @@ OnePublish entwickelt sich von einer .NET-Publish-GUI zu einem **kommerziellen, 
 3. Führe die Tests aus (`pnpm test && pnpm e2e`)
 4. Committe mit aussagekräftigen Nachrichten
 5. Pushe und öffne einen Pull Request
-
-Siehe [CLAUDE.md](CLAUDE.md) für detaillierte Entwicklungshinweise (KI-Assistent-freundlich).
 
 ---
 

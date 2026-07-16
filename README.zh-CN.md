@@ -153,7 +153,6 @@ one-publish/
 ├── docs/                         # 文档
 │   ├── design-philosophy.md      # 产品与工程理念
 │   ├── liquid-glass-design-system.md
-│   ├── roadmap/MASTER_PLAN.md    # 开发路线图（11 阶段）
 │   ├── updater/SETUP.md          # 更新配置指南
 │   └── release/GITHUB_RELEASE.md # 发布管线文档
 ├── DESIGN.md                     # Apple 设计分析（参考）
@@ -253,7 +252,7 @@ OnePublish 开箱即支持**简体中文**和 **English**。可通过应用设�
 
 ## 🗺️ 路线图
 
-OnePublish 正从 .NET 发布 GUI 进化为**商业级多语言发布产品**。[总体规划](docs/roadmap/MASTER_PLAN.md)涵盖 11 个阶段：
+OnePublish 正从 .NET 发布 GUI 进化为**商业级多语言发布产品**。总体规划涵盖 11 个阶段：
 
 | 阶段 | 主题 | 状态 |
 |------|------|------|
@@ -279,8 +278,6 @@ OnePublish 正从 .NET 发布 GUI 进化为**商业级多语言发布产品**。
 3. 运行测试（`pnpm test && pnpm e2e`）
 4. 提交描述清晰的 commit
 5. 推送并打开 Pull Request
-
-详见 [CLAUDE.md](CLAUDE.md) 获取面向 AI 助手的详细开发指引。
 
 ---
 
