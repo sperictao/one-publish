@@ -29,9 +29,9 @@ OnePublish ist eine **plattformübergreifende Desktop-Anwendung**, die eine eleg
 - 🎯 **Multi-Language-Unterstützung** — .NET (`dotnet publish`), Rust (`cargo build --release`), Go (`go build`), Java/Gradle — mit weiteren in Planung
 - 🧠 **Schema-gesteuerte Parameter** — 100 % Parameter-Ausdruckskraft: jedes CLI-Flag, jede Umgebungsvariable und jedes Argument wird repräsentiert und validiert, nicht hartcodiert
 - 📋 **Befehlsimport** — füge einen beliebigen CLI-Befehl ein und OnePublish wandelt ihn in strukturierte Parameter um
-- 📊 **Ausführungshistorie** — lokale Zeitleiste der letzten 20+ Läufe mit einem Klick erneut ausführen
+- 📊 **Ausführungshistorie** — lokale Zeitleiste der letzten Läufe (standardmäßig 20, konfigurierbar) mit einem Klick erneut ausführen
 - 🔍 **Umgebungsdiagnose** — automatische Erkennung fehlender Toolchains (SDKs, Laufzeiten) mit geführten Lösungen
-- 🎨 **Apple Liquid Glass Design** — macOS-inspirierte Benutzeroberfläche mit Backdrop-Blur-Glasmaterialien, Federanimationen und Spiegelglanzlichtern
+- 🎨 **Geist-Designsystem** — Token-basierte Benutzeroberfläche nach Vercel Geist: P3-Weitfarbraum, präzise Typografie, shadcn/ui-Komponenten
 - 🌐 **Internationalisiert** — vollständige Unterstützung für Chinesisch (简体中文) und Englisch
 - 🌓 **Dunkles & helles Theme** — folgt deiner Systemeinstellung
 - 🔄 **Auto-Update** — Tauri-Updater-Pipeline mit GitHub-Releases-Integration
@@ -43,7 +43,7 @@ OnePublish ist eine **plattformübergreifende Desktop-Anwendung**, die eine eleg
 ## 📸 Screenshots
 
 <!-- TODO: add actual screenshots -->
-> *Screenshots folgen in Kürze. In der Zwischenzeit sieh dir die [Design-Philosophie](docs/design-philosophy.md) und das [Liquid Glass Design System](docs/liquid-glass-design-system.md) an.*
+> *Screenshots folgen in Kürze. In der Zwischenzeit sieh dir die [Design-Philosophie](docs/design-philosophy.md) und die [Geist-Designspezifikation](DESIGN.md) an.*
 
 ---
 
@@ -127,7 +127,7 @@ one-publish/
 │   ├── stores/                   # Zustand State Slices
 │   ├── lib/                      # Hilfsfunktionen: store API, paths, preflight, artifacts
 │   ├── i18n/                     # Übersetzungen: zh.json, en.json
-│   └── index.css                 # Liquid Glass Design Tokens + Utilities
+│   └── index.css                 # Geist Design Tokens + Utilities
 │
 ├── src-tauri/                    # Rust Backend (Tauri)
 │   ├── src/
@@ -152,11 +152,10 @@ one-publish/
 ├── scripts/                      # Build/Release-Automatisierungsskripte
 ├── docs/                         # Dokumentation
 │   ├── design-philosophy.md      # Produkt- & Engineering-Philosophie
-│   ├── liquid-glass-design-system.md
-│   ├── roadmap/MASTER_PLAN.md    # Entwicklungs-Roadmap (11 Phasen)
 │   ├── updater/SETUP.md          # Updater-Konfigurationsanleitung
 │   └── release/GITHUB_RELEASE.md # Release-Pipeline-Dokumentation
-├── DESIGN.md                     # Apple Design-Analyse (Referenz)
+├── DESIGN.md                     # Geist-Designsystem — Light-Theme (kanonische Tokens + Spezifikation)
+├── design.dark.md                # Geist-Designsystem — Dark-Theme
 ├── package.json
 ├── vite.config.ts
 ├── tailwind.config.cjs
@@ -184,7 +183,7 @@ one-publish/
 | **Frontend-Framework** | React 18 + TypeScript |
 | **Build-Tool** | Vite 7 |
 | **Styling** | Tailwind CSS 3 + shadcn/ui (Radix UI) |
-| **Design System** | Apple Liquid Glass (Backdrop-Blur, Federphysik, Spiegelglanzlichter) |
+| **Design System** | Vercel Geist (Design-Tokens, P3-Weitfarbraum, Dark & Light Themes) |
 | **State Management** | Zustand 5 |
 | **Icons** | Lucide React |
 | **Benachrichtigungen** | Sonner |
@@ -210,11 +209,14 @@ pnpm build:renderer      # Nur Frontend-Build
 
 # Qualität
 pnpm typecheck           # TypeScript-Typprüfung + Vertragsvalidierung
+pnpm lint                # ESLint-Prüfung
 pnpm test                # Vitest Unit-Tests
 pnpm test:ui             # Vitest UI
 pnpm test:watch          # Vitest Watch-Modus
 pnpm e2e                 # Playwright E2E-Tests
 pnpm e2e:ui              # Playwright UI-Modus
+pnpm check:i18n          # i18n-Schlüsselabdeckung (zh/en)
+pnpm check:design        # Geist-Design-Konformitätsprüfung
 
 # Release
 pnpm release -v 0.8.0     # Vollständige Release-Pipeline
@@ -236,7 +238,7 @@ OnePublish unterstützt **简体中文** und **Englisch** standardmäßig. Wechs
 // Werte: 'zh' (Standard) oder 'en'
 ```
 
-Übersetzungsdateien: `src/i18n/zh.json` | `src/i18n/en.json` (~790 Schlüssel jeweils, nach Feature-Domäne organisiert).
+Übersetzungsdateien: `src/i18n/zh.json` | `src/i18n/en.json` (~776 Schlüssel jeweils, nach Feature-Domäne organisiert).
 
 ---
 
@@ -246,14 +248,14 @@ OnePublish unterstützt **简体中文** und **Englisch** standardmäßig. Wechs
 |-------|------|----------|
 | Frontend Unit | Vitest + Testing Library | Komponenten, Hooks, Stores, lib |
 | Backend Unit | Rust `#[cfg(test)]` | Provider-Kompilierung, Store-Migrationen, Plan-Generierung |
-| E2E | Playwright (13+ Specs) | App-Start, Repository-Panel, Provider-Auswahl, Publish-Voreinstellungen, benutzerdefinierte Konfiguration, Preflight, Vertrags-Smoke-Tests |
+| E2E | Playwright (12 Specs) | App-Start, Repository-Panel, Provider-Auswahl, Publish-Voreinstellungen, benutzerdefinierte Konfiguration, Preflight, Publish-Flow, Vertrags-Smoke-Tests |
 | Qualitäts-Gates | TypeScript strict + `ts-rs`-Verträge | Erzwungen bei Build & CI |
 
 ---
 
 ## 🗺️ Roadmap
 
-OnePublish entwickelt sich von einer .NET-Publish-GUI zu einem **kommerziellen, mehrsprachigen Publishing-Produkt**. Der [Master-Plan](docs/roadmap/MASTER_PLAN.md) umfasst 11 Phasen:
+OnePublish entwickelt sich von einer .NET-Publish-GUI zu einem **kommerziellen, mehrsprachigen Publishing-Produkt**. Der Master-Plan umfasst 11 Phasen:
 
 | Phase | Thema | Status |
 |-------|-------|--------|
@@ -279,8 +281,6 @@ OnePublish entwickelt sich von einer .NET-Publish-GUI zu einem **kommerziellen, 
 3. Führe die Tests aus (`pnpm test && pnpm e2e`)
 4. Committe mit aussagekräftigen Nachrichten
 5. Pushe und öffne einen Pull Request
-
-Siehe [CLAUDE.md](CLAUDE.md) für detaillierte Entwicklungshinweise (KI-Assistent-freundlich).
 
 ---
 

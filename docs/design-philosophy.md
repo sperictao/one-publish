@@ -1,6 +1,6 @@
 # OnePublish Design Philosophy
 
-OnePublish is a cross-platform desktop GUI for `dotnet publish`.
+OnePublish is a cross-platform desktop GUI for publishing multi-language projects (.NET, Rust, Go, Java/Gradle).
 
 This document explains the current design philosophy from two perspectives:
 - Product-facing: how the tool should feel and why it exists
@@ -10,7 +10,7 @@ This document explains the current design philosophy from two perspectives:
 
 ### Positioning
 
-OnePublish is an engineering tool designed to make publishing .NET apps:
+OnePublish is an engineering tool designed to make publishing software projects:
 - Repeatable (same inputs -> same outputs)
 - Visible (you can see what is happening and why)
 - Fast for daily use (keyboard-first, minimal friction)
@@ -19,7 +19,7 @@ It aims to remove common failure modes of copy-pasting commands, forgetting flag
 
 ### Publish Is A Workflow, Not A Command
 
-`dotnet publish` is treated as a workflow users run repeatedly.
+Publish commands (`dotnet publish`, `cargo build --release`, `go build`, Gradle tasks) are treated as workflows users run repeatedly.
 
 Design consequences:
 - Key actions are always close: select project, refresh, publish.
@@ -120,10 +120,10 @@ Process execution should be observable:
 
 ### Testability Strategy (Pragmatic)
 
-Recommended layers:
-- Typecheck (TS) and build checks are mandatory.
-- Unit tests for pure logic (parsing, mapping configs) when the code stabilizes.
-- Minimal e2e smoke checks for the desktop app (launch, open settings, trigger publish dry-run) when CI is introduced.
+Current layers, enforced in CI (`.github/workflows/quality.yml`):
+- Typecheck (TS strict) plus `ts-rs` contract validation are mandatory.
+- Unit tests for pure logic: Vitest on the frontend, `#[cfg(test)]` on the Rust backend.
+- Playwright e2e specs cover the core desktop flows (boot, repo panel, providers, presets, preflight, publish flow).
 
 ## Non-Goals (For Now)
 

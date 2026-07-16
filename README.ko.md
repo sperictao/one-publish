@@ -29,9 +29,9 @@ OnePublish는 소프트웨어 프로젝트를 배포하기 위한 아름답고 �
 - 🎯 **멀티 언어 지원** — .NET (`dotnet publish`), Rust (`cargo build --release`), Go (`go build`), Java/Gradle — 더 많은 언어 지원 예정
 - 🧠 **스키마 기반 매개변수** — 100% 매개변수 표현력: 모든 CLI 플래그, 환경 변수, 인수가 표현되고 검증되며, 하드코딩되지 않음
 - 📋 **명령어 가져오기** — CLI 명령어를 붙여넣으면 OnePublish가 이를 구조화된 매개변수로 역공학(reverse-engineer)합니다
-- 📊 **실행 이력** — 최근 20회 이상의 실행을 로컬 타임라인으로 확인하고 한 번의 클릭으로 재실행
+- 📊 **실행 이력** — 최근 실행을 로컬 타임라인으로 보관(기본 20개, 설정 가능)하고 한 번의 클릭으로 재실행
 - 🔍 **환경 진단** — 누락된 툴체인(SDK, 런타임)을 자동 감지하고 해결 방법 안내
-- 🎨 **Apple Liquid Glass 디자인** — macOS에서 영감을 받은 배경 블러 글래스 머티리얼, 스프링 애니메이션, 스펙큘러 하이라이트를 적용한 UI
+- 🎨 **Geist 디자인 시스템** — Vercel Geist 기반 토큰 주도 UI: P3 광색역 컬러, 정밀한 타이포그래피, shadcn/ui 컴포넌트
 - 🌐 **국제화** — 중국어(简体中文) 및 영어 완벽 지원
 - 🌓 **다크 & 라이트 테마** — 시스템 환경 설정을 자동으로 따름
 - 🔄 **자동 업데이트** — GitHub Releases와 통합된 Tauri 업데이터 파이프라인
@@ -43,7 +43,7 @@ OnePublish는 소프트웨어 프로젝트를 배포하기 위한 아름답고 �
 ## 📸 스크린샷
 
 <!-- TODO: add actual screenshots -->
-> *곧 스크린샷이 추가됩니다. 그동안 [디자인 철학](docs/design-philosophy.md)과 [Liquid Glass 디자인 시스템](docs/liquid-glass-design-system.md)을 확인해 보세요.*
+> *곧 스크린샷이 추가됩니다. 그동안 [디자인 철학](docs/design-philosophy.md)과 [Geist 디자인 사양](DESIGN.md)을 확인해 보세요.*
 
 ---
 
@@ -127,7 +127,7 @@ one-publish/
 │   ├── stores/                   # Zustand 상태 슬라이스
 │   ├── lib/                      # 유틸리티: store API, paths, preflight, artifacts
 │   ├── i18n/                     # 번역: zh.json, en.json
-│   └── index.css                 # Liquid Glass 디자인 토큰 + 유틸리티
+│   └── index.css                 # Geist 디자인 토큰 + 유틸리티
 │
 ├── src-tauri/                    # Rust 백엔드 (Tauri)
 │   ├── src/
@@ -152,11 +152,10 @@ one-publish/
 ├── scripts/                      # 빌드/릴리스 자동화 스크립트
 ├── docs/                         # 문서
 │   ├── design-philosophy.md      # 제품 및 엔지니어링 철학
-│   ├── liquid-glass-design-system.md
-│   ├── roadmap/MASTER_PLAN.md    # 개발 로드맵 (11단계)
 │   ├── updater/SETUP.md          # 업데이터 설정 가이드
 │   └── release/GITHUB_RELEASE.md # 릴리스 파이프라인 문서
-├── DESIGN.md                     # Apple 디자인 분석 (참고용)
+├── DESIGN.md                     # Geist 디자인 시스템 — Light 테마 (정식 토큰 + 사양)
+├── design.dark.md                # Geist 디자인 시스템 — Dark 테마
 ├── package.json
 ├── vite.config.ts
 ├── tailwind.config.cjs
@@ -184,7 +183,7 @@ one-publish/
 | **프론트엔드 프레임워크** | React 18 + TypeScript |
 | **빌드 도구** | Vite 7 |
 | **스타일링** | Tailwind CSS 3 + shadcn/ui (Radix UI) |
-| **디자인 시스템** | Apple Liquid Glass (backdrop-blur, spring physics, specular highlights) |
+| **디자인 시스템** | Vercel Geist (디자인 토큰, P3 광색역 컬러, 다크 & 라이트 테마) |
 | **상태 관리** | Zustand 5 |
 | **아이콘** | Lucide React |
 | **알림** | Sonner |
@@ -210,11 +209,14 @@ pnpm build:renderer      # 프론트엔드 빌드만
 
 # 품질
 pnpm typecheck           # TypeScript 타입 검사 + 계약 검증
+pnpm lint                # ESLint 검사
 pnpm test                # Vitest 유닛 테스트
 pnpm test:ui             # Vitest UI
 pnpm test:watch          # Vitest 감시 모드
 pnpm e2e                 # Playwright e2e 테스트
 pnpm e2e:ui              # Playwright UI 모드
+pnpm check:i18n          # i18n 키 커버리지 (zh/en)
+pnpm check:design        # Geist 디자인 준수 검사
 
 # 릴리스
 pnpm release -v 0.8.0     # 전체 릴리스 파이프라인
@@ -236,7 +238,7 @@ OnePublish는 **简体中文** 및 **English**를 기본 지원합니다. 설정
 // 값: 'zh' (기본값) 또는 'en'
 ```
 
-번역 파일: `src/i18n/zh.json` | `src/i18n/en.json` (각 약 790개 키, 기능 도메인별로 구성).
+번역 파일: `src/i18n/zh.json` | `src/i18n/en.json` (각 약 776개 키, 기능 도메인별로 구성).
 
 ---
 
@@ -246,14 +248,14 @@ OnePublish는 **简体中文** 및 **English**를 기본 지원합니다. 설정
 |-------|------|----------|
 | 프론트엔드 유닛 | Vitest + Testing Library | 컴포넌트, 훅, 스토어, 라이브러리 |
 | 백엔드 유닛 | Rust `#[cfg(test)]` | 프로바이더 컴파일, 스토어 마이그레이션, 플랜 생성 |
-| E2E | Playwright (13+ 스펙) | 앱 부팅, 저장소 패널, 프로바이더 선택, 배포 프리셋, 사용자 정의 설정, 사전 점검, 계약 스모크 |
+| E2E | Playwright (12 스펙) | 앱 부팅, 저장소 패널, 프로바이더 선택, 배포 프리셋, 사용자 정의 설정, 사전 점검, 배포 플로우, 계약 스모크 |
 | 품질 게이트 | TypeScript strict + `ts-rs` 계약 | 빌드 및 CI에서 강제 적용 |
 
 ---
 
 ## 🗺️ 로드맵
 
-OnePublish는 .NET 배포 GUI에서 출발하여 **상업용 등급의 멀티 언어 배포 제품**으로 진화하고 있습니다. [마스터 플랜](docs/roadmap/MASTER_PLAN.md)은 11단계로 구성됩니다:
+OnePublish는 .NET 배포 GUI에서 출발하여 **상업용 등급의 멀티 언어 배포 제품**으로 진화하고 있습니다. 마스터 플랜은 11단계로 구성됩니다:
 
 | 단계 | 주제 | 상태 |
 |-------|-------|--------|
@@ -279,8 +281,6 @@ OnePublish는 .NET 배포 GUI에서 출발하여 **상업용 등급의 멀티 �
 3. 테스트를 실행합니다 (`pnpm test && pnpm e2e`)
 4. 설명적인 커밋 메시지로 커밋합니다
 5. 푸시하고 Pull Request를 엽니다
-
-자세한 개발 지침은 [CLAUDE.md](CLAUDE.md)를 참조하세요 (AI 어시스턴트 친화적).
 
 ---
 
