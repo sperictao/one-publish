@@ -4,6 +4,27 @@ Execute in the order below unless dependencies say otherwise. Each executor:
 read the plan fully before starting, honor its STOP conditions, and update
 your row when done.
 
+## Round 3 (2026-07-15, commit `dd4ad2f`) — 用户指令单项计划
+
+用户报告：主窗口左栏第一行的软件图标与其它图标不一致。经确认，维护者选定
+方向为"对齐真实应用图标配色"（品牌蓝星芒 + 琥珀圆心，暗色主题提亮一档）。
+本轮为 `plan <description>` 单项，未做全量审计。
+
+| Plan | Title | Priority | Effort | Depends on | Status |
+|------|-------|----------|--------|------------|--------|
+| 016  | 左栏品牌图标对齐真实应用图标配色，并适配浅色/暗色主题 | P2 | S | — | TODO |
+
+### Round 3 方向决策记录（避免重审）
+
+- **改为单色线条风格（同托盘模板）**：已提议，维护者未选。
+- **完全单色无品牌点缀**：已提议，维护者未选。
+- **暗色提亮实现**：采用 `fill-blue-700 dark:fill-blue-900`，沿用 `--ring`
+  浅 700/暗 900 的既有先例；不新增语义 token。
+- `src-tauri/icons/icon.svg` 中同样存在的冗余 rotate(180)/rotate(225) rect
+  清理被有意推迟（涉及图标资产重新生成），见 016 Maintenance notes。
+
+---
+
 ## Round 2 (2026-07-14, commit `97d3d0c`) — correctness / security / DX / debt
 
 本轮审计上一轮未覆盖的类别（correctness、security、performance、测试、依赖、
