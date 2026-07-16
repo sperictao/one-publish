@@ -1,5 +1,4 @@
-import { readFileSync } from "node:fs";
-import { spawnSync } from "node:child_process";
+import { readdirSync, readFileSync } from "node:fs";
 import ts from "typescript";
 
 const LOCALE_FILES = ["src/i18n/zh.json", "src/i18n/en.json"];
@@ -59,28 +58,24 @@ function flattenLocaleKeys(value, prefix = "") {
 }
 
 function getSourceFiles() {
-  const result = spawnSync(
-    "rg",
-    [
-      "--files",
-      "src",
-      "--glob",
-      "*.ts",
-      "--glob",
-      "*.tsx",
-      "--glob",
-      "!**/__tests__/**",
-      "--glob",
-      "!src/generated/**",
-    ],
-    { encoding: "utf8" }
-  );
+  const files = [];
 
-  if (result.status !== 0) {
-    throw new Error(result.stderr || "Failed to list source files with rg.");
-  }
+  const walk = (dir) => {
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+      const path = `${dir}/${entry.name}`;
+      if (entry.isDirectory()) {
+        if (entry.name === "__tests__" || path === "src/generated") {
+          continue;
+        }
+        walk(path);
+      } else if (entry.isFile() && /\.tsx?$/.test(entry.name)) {
+        files.push(path);
+      }
+    }
+  };
 
-  return result.stdout.trim().split("\n").filter(Boolean);
+  walk("src");
+  return files;
 }
 
 function lineNumberAt(source, index) {
