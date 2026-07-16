@@ -1,5 +1,7 @@
+#[cfg(target_os = "macos")]
 use std::fs::{self, OpenOptions};
 use std::path::{Path, PathBuf};
+#[cfg(target_os = "macos")]
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use super::path_validation::normalize_lexical_path;
@@ -58,6 +60,7 @@ pub(super) fn evaluate_publish_output_access(
     PublishOutputAccess::not_applicable()
 }
 
+#[cfg(any(target_os = "macos", test))]
 pub(super) fn evaluate_publish_output_access_for_roots<F>(
     output_dir: &str,
     access_intent: PublishOutputAccessIntent,
@@ -155,6 +158,7 @@ pub(super) fn resolve_existing_probe_directory(path: &Path, fallback_root: &Path
     resolve_probe_directory(path, fallback_root, PublishOutputAccessIntent::WriteOutput)
 }
 
+#[cfg(any(target_os = "macos", test))]
 pub(super) fn resolve_probe_directory(
     path: &Path,
     fallback_root: &Path,
@@ -191,6 +195,7 @@ pub(super) fn resolve_probe_directory(
     normalize_lexical_path(fallback_root)
 }
 
+#[cfg(any(target_os = "macos", test))]
 pub(super) fn resolve_parent_probe_directory(path: &Path, fallback_root: &Path) -> PathBuf {
     let normalized_fallback_root = normalize_lexical_path(fallback_root);
     path.parent()
