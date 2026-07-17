@@ -337,6 +337,76 @@ describe("usePublishRunner", () => {
     expect(buildPublishSpecMock).toHaveBeenCalled();
   });
 
+  it("发布成功后自动导出执行快照并写入记录 snapshotPath", async () => {
+    mocks.runEnvironmentCheck.mockResolvedValue(readyEnvironment);
+    mocks.invoke.mockImplementation(
+      async (command: string, args: { filePath?: string }) => {
+        if (command === "execute_provider_publish") {
+          return createPublishResult();
+        }
+        if (command === "export_execution_snapshot") {
+          return args.filePath;
+        }
+        throw new Error(`unexpected invoke: ${command}`);
+      }
+    );
+
+    const props = createRunnerProps();
+    const { result } = renderHook(() => usePublishRunner(props));
+
+    await act(async () => {
+      await result.current.startPublish();
+    });
+
+    expect(mocks.invoke).toHaveBeenCalledWith(
+      "export_execution_snapshot",
+      expect.objectContaining({
+        filePath: expect.stringMatching(
+          /^\/exports\/App\/Release\/execution-snapshot-.+\.md$/
+        ),
+        snapshot: expect.objectContaining({
+          providerId: "dotnet",
+          output: expect.objectContaining({
+            log: expect.stringContaining("Build succeeded."),
+          }),
+        }),
+      })
+    );
+    expect(props.savePublishRecord).toHaveBeenCalledWith(
+      expect.objectContaining({
+        success: true,
+        snapshotPath: expect.stringMatching(/execution-snapshot-.+\.md$/),
+      })
+    );
+  });
+
+  it("快照导出失败时记录仍保存且 snapshotPath 为 null", async () => {
+    mocks.runEnvironmentCheck.mockResolvedValue(readyEnvironment);
+    mocks.invoke.mockImplementation(async (command: string) => {
+      if (command === "execute_provider_publish") {
+        return createPublishResult();
+      }
+      throw new Error("disk full");
+    });
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+    const props = createRunnerProps();
+    const { result } = renderHook(() => usePublishRunner(props));
+
+    await act(async () => {
+      await result.current.startPublish();
+    });
+
+    expect(props.savePublishRecord).toHaveBeenCalledWith(
+      expect.objectContaining({
+        success: true,
+        snapshotPath: null,
+      })
+    );
+    expect(mocks.toast.success).toHaveBeenCalled();
+    warnSpy.mockRestore();
+  });
+
   it("执行结果优先使用后端返回的命令与最终日志写入历史", async () => {
     mocks.runEnvironmentCheck.mockResolvedValue(readyEnvironment);
     mocks.invoke.mockResolvedValue(
@@ -603,7 +673,11 @@ describe("usePublishRunner", () => {
       await result.current.startPublish();
     });
 
-    expect(mocks.invoke).toHaveBeenCalledTimes(2);
+    expect(
+      mocks.invoke.mock.calls.filter(
+        ([command]) => command === "execute_provider_publish"
+      )
+    ).toHaveLength(2);
     expect(mocks.requestProtectedOutputAccess).toHaveBeenCalledWith(
       {
         version: 1,
@@ -673,7 +747,11 @@ describe("usePublishRunner", () => {
       await result.current.startPublish();
     });
 
-    expect(mocks.invoke).toHaveBeenCalledTimes(2);
+    expect(
+      mocks.invoke.mock.calls.filter(
+        ([command]) => command === "execute_provider_publish"
+      )
+    ).toHaveLength(2);
     expect(mocks.requestProtectedOutputAccess).toHaveBeenCalledWith(
       {
         version: 1,

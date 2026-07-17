@@ -9,6 +9,7 @@ import { usePublishStore } from "@/stores/publishStore";
 import {
   createPublishExecutionRecord,
 } from "@/features/history/publishExecutionRecord";
+import { exportExecutionSnapshot } from "@/features/history/executionSnapshot";
 import { normalizePublishResult } from "@/features/history/publishFailure";
 import {
   cancelProviderPublish,
@@ -189,6 +190,10 @@ export function usePublishExecute({
           result: resolvedResult,
           outputLog: outputLogSnapshot,
         });
+        record.snapshotPath = await exportExecutionSnapshot(
+          record,
+          outputLogSnapshot
+        );
         if (isCurrentPresentationRevision(runRevision)) {
           setCurrentPublishRecordId(record.id);
         }
@@ -264,6 +269,10 @@ export function usePublishExecute({
           result: failedResult,
           outputLog: outputLogSnapshot,
         });
+        record.snapshotPath = await exportExecutionSnapshot(
+          record,
+          outputLogSnapshot
+        );
         if (isCurrentPresentationRevision(runRevision)) {
           setCurrentPublishRecordId(record.id);
         }

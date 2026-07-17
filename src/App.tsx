@@ -163,8 +163,6 @@ function App() {
             setExecutionHistoryLimit={boot.shell.setExecutionHistoryLimit}
             environmentProviderIds={boot.shell.environmentProviderIds}
             setEnvironmentProviderIds={boot.shell.setEnvironmentProviderIds}
-            isRerunChecklistEnabled={boot.publish.isRerunChecklistEnabled}
-            setIsRerunChecklistEnabled={boot.publish.setIsRerunChecklistEnabled}
             theme={boot.shell.theme}
             setTheme={boot.shell.setTheme}
             handleConfigDialogOpenChange={boot.shell.handleConfigDialogOpenChange}
@@ -180,15 +178,6 @@ function App() {
             }}
             installAvailableUpdate={boot.shell.installAvailableUpdate}
             openUpdaterHelpTarget={boot.shell.openUpdaterHelpTarget}
-            rerunChecklistOpen={boot.publish.rerunChecklistOpen}
-            pendingRerunRecord={boot.publish.pendingRerunRecord}
-            selectedRepoCurrentBranch={boot.repo.selectedRepo?.currentBranch}
-            rerunChecklistState={boot.publish.rerunChecklistState}
-            rerunT={boot.shell.rerunT}
-            setRerunChecklistOpen={boot.publish.setRerunChecklistOpen}
-            setRerunChecklistState={boot.publish.setRerunChecklistState}
-            closeRerunChecklistDialog={boot.publish.closeRerunChecklistDialog}
-            confirmRerunWithChecklist={boot.publish.confirmRerunWithChecklist}
             releaseChecklistOpen={boot.publish.releaseChecklistOpen}
             setReleaseChecklistOpen={boot.publish.setReleaseChecklistOpen}
             publishResult={boot.publish.publishResult}
@@ -215,7 +204,7 @@ function App() {
             quickCreateGroupCustomValue={boot.publish.QUICK_CREATE_PROFILE_GROUP_CUSTOM}
             profileT={boot.shell.profileT}
             appT={boot.shell.appT}
-            cancelLabel={boot.shell.rerunT.cancel || "取消"}
+            cancelLabel={boot.shell.translations.common?.cancel || "取消"}
             handleQuickCreateProfileOpenChange={boot.publish.handleQuickCreateProfileOpenChange}
             applyQuickCreateTemplate={boot.publish.applyQuickCreateTemplate}
             setQuickCreateProfileName={boot.publish.setQuickCreateProfileName}

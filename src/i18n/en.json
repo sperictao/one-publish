@@ -20,9 +20,7 @@
     },
     "general": {
       "executionHistoryLimitLabel": "Execution History Retention Limit",
-      "executionHistoryLimitDescription": "Set between 5 and 200 records. Values outside the range are corrected automatically and take effect immediately.",
-      "preRerunChecklistLabel": "Pre-rerun Checklist",
-      "preRerunChecklistDescription": "When enabled, clicking \"Rerun Record\" checks branch, environment, and output target confirmations first."
+      "executionHistoryLimitDescription": "Set between 5 and 200 records. Values outside the range are corrected automatically and take effect immediately."
     }
   },
   "version": {
@@ -748,26 +746,6 @@
     "warningsLabel": "Warnings",
     "warningsExpand": "Expand warnings",
     "warningsCollapse": "Collapse warnings"
-  },
-  "rerun": {
-    "title": "Pre-rerun Checklist",
-    "description": "Confirm the checks below to avoid rerunning on sensitive branches or wrong targets.",
-    "provider": "Provider:",
-    "currentBranch": "Current branch:",
-    "environmentStatus": "Environment status:",
-    "ready": "Ready",
-    "warning": "Warnings found",
-    "blocked": "Blocked by critical issues",
-    "notChecked": "Not checked",
-    "outputTarget": "Output target:",
-    "unknown": "(Unknown)",
-    "unrecorded": "(Not recorded)",
-    "branchCheck": "I confirm the current branch is safe for rerun",
-    "environmentCheck": "I confirm environment status is acceptable",
-    "outputCheck": "I confirm output target and log panel",
-    "cancel": "Cancel",
-    "confirm": "Confirm and rerun",
-    "requireChecklist": "Complete the pre-rerun checklist first"
   },
   "configPanel": {
     "allConfigs": "All",

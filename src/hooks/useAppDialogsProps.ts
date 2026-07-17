@@ -10,7 +10,6 @@ import type { PackageResult, SignResult } from "@/lib/artifact";
 import type {
   ConfigParameters,
   ConfigProfile,
-  ExecutionRecord,
   ProviderManifest,
   PublishConfigStore,
 } from "@/lib/store/types";
@@ -25,12 +24,6 @@ interface QuickCreateTemplateOption {
   id: string;
   name: string;
   description?: string;
-}
-
-interface RerunChecklistState {
-  branch: boolean;
-  environment: boolean;
-  output: boolean;
 }
 
 export interface UseAppDialogsPropsParams {
@@ -53,8 +46,6 @@ export interface UseAppDialogsPropsParams {
   setExecutionHistoryLimit: (limit: number) => void;
   environmentProviderIds: string[];
   setEnvironmentProviderIds: (providerIds: string[]) => void;
-  isRerunChecklistEnabled: boolean;
-  setIsRerunChecklistEnabled: (value: boolean) => void;
   theme: "light" | "dark" | "auto";
   setTheme: (theme: "light" | "dark" | "auto") => void;
   handleConfigDialogOpenChange: (open: boolean, onClose?: () => void) => void;
@@ -73,15 +64,6 @@ export interface UseAppDialogsPropsParams {
   checkForUpdates: () => Promise<void>;
   installAvailableUpdate: () => Promise<void>;
   openUpdaterHelpTarget: (target: "docs" | "template") => Promise<void>;
-  rerunChecklistOpen: boolean;
-  pendingRerunRecord: ExecutionRecord | null;
-  selectedRepoCurrentBranch?: string | null;
-  rerunChecklistState: RerunChecklistState;
-  rerunT: Record<string, string | undefined>;
-  setRerunChecklistOpen: (open: boolean) => void;
-  setRerunChecklistState: (state: RerunChecklistState) => void;
-  closeRerunChecklistDialog: () => void;
-  confirmRerunWithChecklist: () => Promise<void>;
   releaseChecklistOpen: boolean;
   setReleaseChecklistOpen: (open: boolean) => void;
   publishResult: PublishResult | null;
@@ -150,8 +132,6 @@ export function useAppDialogsProps(params: UseAppDialogsPropsParams): AppDialogs
       onDefaultOutputDirChange: params.setDefaultOutputDir,
       executionHistoryLimit: params.executionHistoryLimit,
       onExecutionHistoryLimitChange: params.setExecutionHistoryLimit,
-      preRerunChecklistEnabled: params.isRerunChecklistEnabled,
-      onPreRerunChecklistEnabledChange: params.setIsRerunChecklistEnabled,
       theme: params.theme,
       onThemeChange: params.setTheme,
       onOpenShortcuts: () => params.setShortcutsOpen(true),
@@ -166,18 +146,6 @@ export function useAppDialogsProps(params: UseAppDialogsPropsParams): AppDialogs
       onCheckForUpdates: params.checkForUpdates,
       onInstallAvailableUpdate: params.installAvailableUpdate,
       onOpenUpdaterHelpTarget: params.openUpdaterHelpTarget,
-    },
-    rerun: {
-      open: params.rerunChecklistOpen,
-      pendingRecord: params.pendingRerunRecord,
-      selectedRepoCurrentBranch: params.selectedRepoCurrentBranch,
-      environmentStatus: params.environmentStatus,
-      checklistState: params.rerunChecklistState,
-      translations: params.rerunT,
-      onOpenChange: params.setRerunChecklistOpen,
-      onChecklistStateChange: params.setRerunChecklistState,
-      onClose: params.closeRerunChecklistDialog,
-      onConfirm: () => void params.confirmRerunWithChecklist(),
     },
     release: {
       open: params.releaseChecklistOpen,

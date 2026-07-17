@@ -111,8 +111,6 @@ interface SettingsDialogProps {
   onDefaultOutputDirChange: (dir: string) => void;
   executionHistoryLimit: number;
   onExecutionHistoryLimitChange: (limit: number) => void;
-  preRerunChecklistEnabled: boolean;
-  onPreRerunChecklistEnabledChange: (value: boolean) => void;
   theme: "light" | "dark" | "auto";
   onThemeChange: (theme: "light" | "dark" | "auto") => void;
   onOpenShortcuts?: () => void;
@@ -188,8 +186,6 @@ export interface GeneralSettingsSectionProps {
   defaultOutputDir: string;
   onDefaultOutputDirChange: (dir: string) => void;
   onSelectDirectory: () => void | Promise<void>;
-  preRerunChecklistEnabled: boolean;
-  onPreRerunChecklistEnabledChange: (value: boolean) => void;
   minimizeToTrayOnClose: boolean;
   onMinimizeToTrayOnCloseChange: (value: boolean) => void;
 }
@@ -203,8 +199,6 @@ export const GeneralSettingsSection = memo(function GeneralSettingsSection({
   defaultOutputDir,
   onDefaultOutputDirChange,
   onSelectDirectory,
-  preRerunChecklistEnabled,
-  onPreRerunChecklistEnabledChange,
   minimizeToTrayOnClose,
   onMinimizeToTrayOnCloseChange,
 }: GeneralSettingsSectionProps) {
@@ -313,23 +307,6 @@ export const GeneralSettingsSection = memo(function GeneralSettingsSection({
 
       {/* 系统行为开关分组 */}
       <Card className="overflow-hidden">
-        <SettingsSwitchRow
-          id="rerun-checklist-enabled"
-          icon={ListChecks}
-          label={
-            translations.settings?.general?.preRerunChecklistLabel ||
-            "重跑前确认清单"
-          }
-          description={
-            translations.settings?.general?.preRerunChecklistDescription ||
-            "启用后，点击“重跑记录”会先检查分支、环境和输出目标确认项。"
-          }
-          checked={preRerunChecklistEnabled}
-          onCheckedChange={onPreRerunChecklistEnabledChange}
-        />
-
-        <div className={cn(GEIST_DIVIDER, "mx-4")} />
-
         <SettingsSwitchRow
           id="minimize-to-tray"
           icon={Minimize2}
@@ -602,8 +579,6 @@ export function SettingsDialog({
   onDefaultOutputDirChange,
   executionHistoryLimit,
   onExecutionHistoryLimitChange,
-  preRerunChecklistEnabled,
-  onPreRerunChecklistEnabledChange,
   theme,
   onThemeChange,
   onOpenShortcuts,
@@ -828,8 +803,6 @@ export function SettingsDialog({
       defaultOutputDir={defaultOutputDir}
       onDefaultOutputDirChange={onDefaultOutputDirChange}
       onSelectDirectory={handleSelectDirectory}
-      preRerunChecklistEnabled={preRerunChecklistEnabled}
-      onPreRerunChecklistEnabledChange={onPreRerunChecklistEnabledChange}
       minimizeToTrayOnClose={minimizeToTrayOnClose}
       onMinimizeToTrayOnCloseChange={onMinimizeToTrayOnCloseChange}
     />
