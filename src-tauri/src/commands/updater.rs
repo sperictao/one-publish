@@ -467,7 +467,7 @@ pub async fn check_update(
     let _timer = crate::commands::middleware::CommandTimer::new("commands::updater::check_update");
     match fetch_remote_update(&app, pending_update_state.inner()).await {
         Ok(Some(update)) => Ok(available_update_info(&update)),
-        Ok(None) => Ok(no_update_info(Some("当前已是最新版本".to_string()))),
+        Ok(None) => Ok(no_update_info(None)),
         Err(err) => {
             set_pending_update(pending_update_state.inner(), None);
             Ok(no_update_info(Some(err.message)))
