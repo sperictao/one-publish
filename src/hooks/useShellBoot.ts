@@ -50,7 +50,6 @@ export function useShellBoot(params: UseShellBootParams) {
   const appT = translations.app || {};
   const historyT = translations.history || {};
   const failureT = translations.failure || {};
-  const rerunT = translations.rerun || {};
   const profileT = translations.profiles || {};
 
   // Preset text
@@ -183,7 +182,6 @@ export function useShellBoot(params: UseShellBootParams) {
     appT,
     historyT,
     failureT,
-    rerunT,
     profileT,
     getPresetText,
     updaterState,

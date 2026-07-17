@@ -20,9 +20,7 @@
     },
     "general": {
       "executionHistoryLimitLabel": "执行历史保留上限",
-      "executionHistoryLimitDescription": "可设置 5~200 条，超出范围会自动修正并即时生效。",
-      "preRerunChecklistLabel": "重跑前确认清单",
-      "preRerunChecklistDescription": "启用后，点击「重跑记录」会先检查分支、环境和输出目标确认项。"
+      "executionHistoryLimitDescription": "可设置 5~200 条，超出范围会自动修正并即时生效。"
     }
   },
   "version": {
@@ -748,26 +746,6 @@
     "warningsLabel": "警告",
     "warningsExpand": "展开警告",
     "warningsCollapse": "收起警告"
-  },
-  "rerun": {
-    "title": "重跑前确认清单",
-    "description": "确认以下检查项，避免在敏感分支或错误目标上触发重跑。",
-    "provider": "Provider:",
-    "currentBranch": "当前分支:",
-    "environmentStatus": "环境状态:",
-    "ready": "已就绪",
-    "warning": "存在警告",
-    "blocked": "存在阻断问题",
-    "notChecked": "未检查",
-    "outputTarget": "输出目标:",
-    "unknown": "(未知)",
-    "unrecorded": "(未记录)",
-    "branchCheck": "我已确认当前分支允许重跑",
-    "environmentCheck": "我已确认环境状态满足预期",
-    "outputCheck": "我已确认输出目标目录与日志窗口",
-    "cancel": "取消",
-    "confirm": "确认并重跑",
-    "requireChecklist": "先完成重跑前确认清单"
   },
   "configPanel": {
     "allConfigs": "全部",

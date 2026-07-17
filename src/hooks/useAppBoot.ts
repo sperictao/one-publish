@@ -48,8 +48,6 @@ export function useAppBoot() {
 
   // Publish history state
   const {
-    isRerunChecklistEnabled,
-    setIsRerunChecklistEnabled,
     executionHistory,
     savePublishRecord,
   } = usePublishHistoryState({
@@ -176,7 +174,6 @@ export function useAppBoot() {
     appT: shell.appT,
     historyT: shell.historyT,
     failureT: shell.failureT,
-    rerunT: shell.rerunT,
     profileT: shell.profileT,
     language: shell.language,
     openEnvironmentDialog: shell.openEnvironmentDialog,
@@ -216,8 +213,6 @@ export function useAppBoot() {
     applyRecoveredSpecProvider,
     applySelectedRepositoryProvider,
     // Lifted publish history state
-    isRerunChecklistEnabled,
-    setIsRerunChecklistEnabled,
     executionHistory,
     savePublishRecord,
     // Lifted publish store state
@@ -234,19 +229,8 @@ export function useAppBoot() {
   // ============================================================
 
   // Rerun flow
-  const {
-    rerunChecklistOpen,
-    setRerunChecklistOpen,
-    pendingRerunRecord,
-    rerunChecklistState,
-    setRerunChecklistState,
-    rerunFromHistory,
-    closeRerunChecklistDialog,
-    confirmRerunWithChecklist,
-  } = useRerunFlow({
-    isRerunChecklistEnabled,
+  const { rerunFromHistory } = useRerunFlow({
     historyT: shell.historyT,
-    rerunT: shell.rerunT,
     extractSpecFromRecord: repo.extractSpecFromRecord,
     restoreSpecToEditor: repo.restoreSpecToEditor,
     getRecentConfigKeyFromSpec: repo.getRecentConfigKeyFromSpec,
@@ -293,7 +277,6 @@ export function useAppBoot() {
   // ============================================================
   const shouldLoadAppDialogsHost =
     shell.shouldLoadAppDialogsHost ||
-    rerunChecklistOpen ||
     releaseChecklistOpen ||
     publish.quickCreateProfileOpen;
 
@@ -335,14 +318,7 @@ export function useAppBoot() {
     publish: {
       ...publish,
       diagnosticsSectionProps,
-      rerunChecklistOpen,
-      setRerunChecklistOpen,
-      pendingRerunRecord,
-      rerunChecklistState,
-      setRerunChecklistState,
       rerunFromHistory,
-      closeRerunChecklistDialog,
-      confirmRerunWithChecklist,
     },
   };
 }

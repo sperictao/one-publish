@@ -43,8 +43,6 @@ vi.mock("@/hooks/useI18n", () => {
       general: {
         executionHistoryLimitLabel: "执行历史保留上限",
         executionHistoryLimitDescription: "可设置 5~200 条，超出范围会自动修正并即时生效。",
-        preRerunChecklistLabel: "重跑前确认清单",
-        preRerunChecklistDescription: "启用后，点击“重跑记录”会先检查分支、环境和输出目标确认项。",
       },
     },
     language: {
@@ -142,8 +140,6 @@ describe("SettingsDialog", () => {
     onDefaultOutputDirChange: vi.fn(),
     executionHistoryLimit: 10,
     onExecutionHistoryLimitChange: vi.fn(),
-    preRerunChecklistEnabled: true,
-    onPreRerunChecklistEnabledChange: vi.fn(),
     theme: "dark" as const,
     onThemeChange: vi.fn(),
     onOpenShortcuts: vi.fn(),
@@ -262,7 +258,6 @@ describe("SettingsDialog", () => {
     const onExecutionHistoryLimitChange = vi.fn();
     const onDefaultOutputDirChange = vi.fn();
     const onSelectDirectory = vi.fn();
-    const onPreRerunChecklistEnabledChange = vi.fn();
     const onMinimizeToTrayOnCloseChange = vi.fn();
 
     render(
@@ -273,7 +268,6 @@ describe("SettingsDialog", () => {
           settings: {
             general: {
               executionHistoryLimitLabel: "限制",
-              preRerunChecklistLabel: "重跑确认",
             },
           },
           tray: { label: "最小化托盘" },
@@ -285,8 +279,6 @@ describe("SettingsDialog", () => {
         defaultOutputDir="/old"
         onDefaultOutputDirChange={onDefaultOutputDirChange}
         onSelectDirectory={onSelectDirectory}
-        preRerunChecklistEnabled={true}
-        onPreRerunChecklistEnabledChange={onPreRerunChecklistEnabledChange}
         minimizeToTrayOnClose={true}
         onMinimizeToTrayOnCloseChange={onMinimizeToTrayOnCloseChange}
       />

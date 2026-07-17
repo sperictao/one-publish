@@ -6,7 +6,6 @@ import type {
 import type {
   ConfigParameters,
   ConfigProfile,
-  ExecutionRecord,
   ProviderManifest,
   PublishConfigStore,
 } from "@/lib/store/types";
@@ -35,11 +34,6 @@ const SettingsDialog = lazy(async () => {
   return { default: mod.SettingsDialog };
 });
 
-const RerunChecklistDialog = lazy(async () => {
-  const mod = await import("@/components/publish/RerunChecklistDialog");
-  return { default: mod.RerunChecklistDialog };
-});
-
 const ReleaseChecklistDialog = lazy(async () => {
   const mod = await import("@/components/release/ReleaseChecklistDialog");
   return { default: mod.ReleaseChecklistDialog };
@@ -64,12 +58,6 @@ interface QuickCreateTemplateOption {
   id: string;
   name: string;
   description?: string;
-}
-
-interface RerunChecklistState {
-  branch: boolean;
-  environment: boolean;
-  output: boolean;
 }
 
 export interface AppDialogsProps {
@@ -97,8 +85,6 @@ export interface AppDialogsProps {
     onDefaultOutputDirChange: (dir: string) => void;
     executionHistoryLimit: number;
     onExecutionHistoryLimitChange: (limit: number) => void;
-    preRerunChecklistEnabled: boolean;
-    onPreRerunChecklistEnabledChange: (value: boolean) => void;
     theme: "light" | "dark" | "auto";
     onThemeChange: (theme: "light" | "dark" | "auto") => void;
     onOpenShortcuts: () => void;
@@ -113,18 +99,6 @@ export interface AppDialogsProps {
     onCheckForUpdates: () => Promise<void>;
     onInstallAvailableUpdate: () => Promise<void>;
     onOpenUpdaterHelpTarget: (target: "docs" | "template") => Promise<void>;
-  };
-  rerun: {
-    open: boolean;
-    pendingRecord: ExecutionRecord | null;
-    selectedRepoCurrentBranch?: string | null;
-    environmentStatus: "unknown" | "ready" | "warning" | "blocked";
-    checklistState: RerunChecklistState;
-    translations: Record<string, string | undefined>;
-    onOpenChange: (open: boolean) => void;
-    onChecklistStateChange: (state: RerunChecklistState) => void;
-    onClose: () => void;
-    onConfirm: () => void;
   };
   release: {
     open: boolean;
@@ -223,8 +197,6 @@ export function AppDialogs(props: AppDialogsProps) {
             onDefaultOutputDirChange={props.settings.onDefaultOutputDirChange}
             executionHistoryLimit={props.settings.executionHistoryLimit}
             onExecutionHistoryLimitChange={props.settings.onExecutionHistoryLimitChange}
-            preRerunChecklistEnabled={props.settings.preRerunChecklistEnabled}
-            onPreRerunChecklistEnabledChange={props.settings.onPreRerunChecklistEnabledChange}
             theme={props.settings.theme}
             onThemeChange={props.settings.onThemeChange}
             onOpenShortcuts={props.settings.onOpenShortcuts}
@@ -239,29 +211,6 @@ export function AppDialogs(props: AppDialogsProps) {
             onCheckForUpdates={props.settings.onCheckForUpdates}
             onInstallAvailableUpdate={props.settings.onInstallAvailableUpdate}
             onOpenUpdaterHelpTarget={props.settings.onOpenUpdaterHelpTarget}
-          />
-        </Suspense>
-      ) : null}
-
-      {props.rerun.open ? (
-        <Suspense fallback={null}>
-          <RerunChecklistDialog
-            open={props.rerun.open}
-            pendingRerunRecord={props.rerun.pendingRecord}
-            selectedRepoCurrentBranch={props.rerun.selectedRepoCurrentBranch}
-            environmentStatus={props.rerun.environmentStatus}
-            rerunChecklistState={props.rerun.checklistState}
-            rerunT={props.rerun.translations}
-            onOpenChange={(open) => {
-              if (open) {
-                props.rerun.onOpenChange(true);
-                return;
-              }
-              props.rerun.onClose();
-            }}
-            onChecklistStateChange={props.rerun.onChecklistStateChange}
-            onClose={props.rerun.onClose}
-            onConfirm={props.rerun.onConfirm}
           />
         </Suspense>
       ) : null}

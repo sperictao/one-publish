@@ -48,7 +48,6 @@ interface UsePublishBootParams {
   appT: TranslationMap;
   historyT: TranslationMap;
   failureT: TranslationMap;
-  rerunT: TranslationMap;
   profileT: TranslationMap;
   language: "zh" | "en";
   openEnvironmentDialog: (initialCheck?: EnvironmentCheckSnapshot | null, providerIds?: string[]) => void;
@@ -91,8 +90,6 @@ interface UsePublishBootParams {
   applySelectedRepositoryProvider: (providerId?: string | null) => void;
 
   // Lifted publish history state
-  isRerunChecklistEnabled: boolean;
-  setIsRerunChecklistEnabled: (value: boolean) => void;
   executionHistory: ExecutionRecord[];
   savePublishRecord: (record: ExecutionRecord) => void;
 
@@ -443,8 +440,6 @@ export function usePublishBoot(params: UsePublishBootParams) {
     profileManagement,
 
     // Publish history
-    isRerunChecklistEnabled: params.isRerunChecklistEnabled,
-    setIsRerunChecklistEnabled: params.setIsRerunChecklistEnabled,
     executionHistory: params.executionHistory,
     savePublishRecord: params.savePublishRecord,
 
