@@ -57,6 +57,7 @@ export function useRepoBoot(params: UseRepoBootParams) {
   const {
     selectedRepo,
     branchConnectivityByRepoId,
+    actualBranchByRepoId,
   } = useRepositoryViewState({
     repositories: params.repositories,
     selectedRepoId: params.selectedRepoId,
@@ -126,6 +127,7 @@ export function useRepoBoot(params: UseRepoBootParams) {
     selectRepository: params.selectRepository,
     selectedRepo,
     branchConnectivityByRepoId,
+    actualBranchByRepoId,
     handleAddRepo,
     handleRemoveRepo,
     handleOpenRepoDirectory,

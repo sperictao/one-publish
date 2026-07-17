@@ -1,6 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 
-import { checkRepositoryBranchConnectivity } from "@/lib/store/api";
+import {
+  checkRepositoryBranchConnectivity,
+  scanRepositoryBranches,
+} from "@/lib/store/api";
 import type { Repository } from "@/lib/store/types";
 
 type BranchConnectivityTarget = {
@@ -10,10 +13,19 @@ type BranchConnectivityTarget = {
   cacheKey: string;
 };
 
+// 窗口频繁切换焦点时限制实际分支重扫的最小间隔
+const ACTUAL_BRANCH_RESCAN_MIN_INTERVAL_MS = 5000;
+
 function buildBranchConnectivityTarget(
-  repo: Repository
-): BranchConnectivityTarget {
-  const currentBranch = repo.currentBranch ?? "";
+  repo: Repository,
+  actualBranch: string | undefined
+): BranchConnectivityTarget | null {
+  // 实际分支尚未扫描完成时暂不检查连通性，避免用过期的存量分支多查一轮
+  if (actualBranch === undefined) {
+    return null;
+  }
+
+  const currentBranch = actualBranch || repo.currentBranch || "";
   return {
     id: repo.id,
     path: repo.path,
@@ -29,15 +41,86 @@ export function useRepositoryViewState(params: {
   const [branchConnectivityByRepoId, setBranchConnectivityByRepoId] = useState<
     Record<string, boolean>
   >({});
+  const [actualBranchByRepoId, setActualBranchByRepoId] = useState<
+    Record<string, string>
+  >({});
 
   const selectedRepo = useMemo(
     () => params.repositories.find((repo) => repo.id === params.selectedRepoId) || null,
     [params.repositories, params.selectedRepoId]
   );
 
-  const branchConnectivityTargets = useMemo<BranchConnectivityTarget[]>(
-    () => params.repositories.map(buildBranchConnectivityTarget),
+  const repositoriesRef = useRef(params.repositories);
+  repositoriesRef.current = params.repositories;
+
+  // 仅当仓库集合（id + 路径）变化时重新扫描实际分支
+  const actualBranchScanKey = useMemo(
+    () =>
+      params.repositories
+        .map((repo) => `${repo.id}\u0000${repo.path}`)
+        .join("\u0001"),
     [params.repositories]
+  );
+  const lastActualBranchScanAtRef = useRef(0);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const scanActualBranches = async () => {
+      lastActualBranchScanAtRef.current = Date.now();
+      const entries = await Promise.all(
+        repositoriesRef.current.map(async (repo) => {
+          try {
+            const result = await scanRepositoryBranches(repo.path, {
+              refreshRemote: false,
+            });
+            return [repo.id, result.current_branch.trim()] as const;
+          } catch {
+            return [repo.id, ""] as const;
+          }
+        })
+      );
+
+      if (cancelled) {
+        return;
+      }
+
+      setActualBranchByRepoId((prev) => {
+        const unchanged =
+          Object.keys(prev).length === entries.length &&
+          entries.every(([repoId, branch]) => prev[repoId] === branch);
+        return unchanged ? prev : Object.fromEntries(entries);
+      });
+    };
+
+    void scanActualBranches();
+
+    // 窗口重新获得焦点时刷新，捕捉用户在外部切换分支的变化
+    const handleWindowFocus = () => {
+      if (
+        Date.now() - lastActualBranchScanAtRef.current <
+        ACTUAL_BRANCH_RESCAN_MIN_INTERVAL_MS
+      ) {
+        return;
+      }
+      void scanActualBranches();
+    };
+
+    window.addEventListener("focus", handleWindowFocus);
+    return () => {
+      cancelled = true;
+      window.removeEventListener("focus", handleWindowFocus);
+    };
+  }, [actualBranchScanKey]);
+
+  const branchConnectivityTargets = useMemo<BranchConnectivityTarget[]>(
+    () =>
+      params.repositories
+        .map((repo) =>
+          buildBranchConnectivityTarget(repo, actualBranchByRepoId[repo.id])
+        )
+        .filter((target): target is BranchConnectivityTarget => target !== null),
+    [params.repositories, actualBranchByRepoId]
   );
 
   const branchConnectivityCacheKey = useMemo(() => {
@@ -143,5 +226,6 @@ export function useRepositoryViewState(params: {
   return {
     selectedRepo,
     branchConnectivityByRepoId,
+    actualBranchByRepoId,
   };
 }

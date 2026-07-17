@@ -156,6 +156,7 @@ describe("RepositoryList", () => {
         onScanProjectCandidates={async () => null}
         onRefreshBranches={async () => null}
         branchConnectivityByRepoId={{}}
+        actualBranchByRepoId={{}}
         onSettings={() => {}}
         onReorderRepositories={() => {}}
       />
@@ -166,6 +167,41 @@ describe("RepositoryList", () => {
     );
 
     expect(onSelectRepo).toHaveBeenCalledWith("repo-b");
+  });
+
+  it("仓库项分支优先展示实际扫描分支，未扫描到时回退存储分支", () => {
+    render(
+      <RepositoryList
+        repositories={[
+          createRepository("repo-a", "alpha-service"),
+          createRepository("repo-b", "beta-worker"),
+        ]}
+        selectedRepoId="repo-a"
+        providers={[]}
+        onSelectRepo={() => {}}
+        onAddRepo={() => {}}
+        onOpenRepoDirectory={() => {}}
+        onEditRepo={() => true}
+        onRemoveRepo={() => {}}
+        onDetectProvider={async () => null}
+        onScanProjectCandidates={async () => null}
+        onRefreshBranches={async () => null}
+        branchConnectivityByRepoId={{}}
+        actualBranchByRepoId={{ "repo-a": "feature/login" }}
+        onSettings={() => {}}
+        onReorderRepositories={() => {}}
+      />
+    );
+
+    const repoAButton = screen.getByRole("button", {
+      name: "选择仓库: alpha-service",
+    });
+    const repoBButton = screen.getByRole("button", {
+      name: "选择仓库: beta-worker",
+    });
+
+    expect(within(repoAButton).getByText("feature/login")).toBeInTheDocument();
+    expect(within(repoBButton).getByText("main")).toBeInTheDocument();
   });
 
   it("打开未选中仓库菜单时不会误选中，并在离开列表后仍锁定菜单上下文", async () => {
@@ -190,6 +226,7 @@ describe("RepositoryList", () => {
         onScanProjectCandidates={async () => null}
         onRefreshBranches={async () => null}
         branchConnectivityByRepoId={{ "repo-a": true, "repo-b": false }}
+        actualBranchByRepoId={{}}
         onSettings={() => {}}
         onReorderRepositories={() => {}}
       />
@@ -273,6 +310,7 @@ describe("RepositoryList", () => {
         onScanProjectCandidates={async () => null}
         onRefreshBranches={async () => null}
         branchConnectivityByRepoId={{}}
+        actualBranchByRepoId={{}}
         onSettings={() => {}}
         onReorderRepositories={() => {}}
       />
@@ -332,6 +370,7 @@ describe("RepositoryList", () => {
         onScanProjectCandidates={async () => null}
         onRefreshBranches={async () => null}
         branchConnectivityByRepoId={{}}
+        actualBranchByRepoId={{}}
         onSettings={() => {}}
         onReorderRepositories={onReorderRepositories}
       />

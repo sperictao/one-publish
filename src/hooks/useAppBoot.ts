@@ -318,6 +318,7 @@ export function useAppBoot() {
       selectRepository: repo.selectRepository,
       selectedRepo: repo.selectedRepo,
       branchConnectivityByRepoId: repo.branchConnectivityByRepoId,
+      actualBranchByRepoId: repo.actualBranchByRepoId,
       handleAddRepo: repo.handleAddRepo,
       handleRemoveRepo: repo.handleRemoveRepo,
       handleOpenRepoDirectory: repo.handleOpenRepoDirectory,

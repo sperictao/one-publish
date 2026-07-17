@@ -84,6 +84,7 @@ function App() {
               onScanProjectCandidates={boot.repo.handleScanProjectCandidates}
               onRefreshBranches={boot.repo.handleRefreshRepoBranches}
               branchConnectivityByRepoId={boot.repo.branchConnectivityByRepoId}
+              actualBranchByRepoId={boot.repo.actualBranchByRepoId}
               onSettings={boot.shell.handleOpenSettings}
               onCollapse={() => boot.shell.setLeftPanelCollapsed(true)}
               onReorderRepositories={boot.repo.reorderRepositories}

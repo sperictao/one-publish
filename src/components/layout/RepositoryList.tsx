@@ -168,6 +168,7 @@ interface RepositoryListProps {
     options?: { silentSuccess?: boolean }
   ) => Promise<{ branches: Branch[]; currentBranch: string } | null>;
   branchConnectivityByRepoId: Record<string, boolean>;
+  actualBranchByRepoId: Record<string, string>;
   onSettings: () => void;
   onCollapse?: () => void;
   onReorderRepositories: (repoIds: string[]) => void;
@@ -186,6 +187,7 @@ export const RepositoryList = memo(function RepositoryList({
   onScanProjectCandidates,
   onRefreshBranches,
   branchConnectivityByRepoId,
+  actualBranchByRepoId,
   onSettings,
   onCollapse,
   onReorderRepositories,
@@ -355,6 +357,7 @@ export const RepositoryList = memo(function RepositoryList({
                   isVisualTarget={visualTargetRepoId === repo.id}
                   isMenuOpen={interaction.isMenuOpenForRepo(repo.id)}
                   canConnectBranch={branchConnectivityByRepoId[repo.id] ?? false}
+                  actualBranch={actualBranchByRepoId[repo.id]}
                   repoT={repoT}
                   rowRef={composeRowRef(repo.id)}
                   onSelect={onSelectRepo}
@@ -383,6 +386,7 @@ export const RepositoryList = memo(function RepositoryList({
     },
     [
       branchConnectivityByRepoId,
+      actualBranchByRepoId,
       handleListPointerLeave,
       handleListPointerReentry,
       previewRepos,

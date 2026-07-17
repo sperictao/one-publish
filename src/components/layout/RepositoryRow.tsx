@@ -16,6 +16,7 @@ interface RepositoryRowProps {
   isVisualTarget: boolean;
   isMenuOpen: boolean;
   canConnectBranch: boolean;
+  actualBranch?: string;
   repoT: Record<string, string | undefined>;
   rowRef: (node: HTMLDivElement | null) => void;
   onSelect: (repoId: string) => void;
@@ -44,6 +45,7 @@ export const RepositoryRow = memo(function RepositoryRow({
   isVisualTarget,
   isMenuOpen,
   canConnectBranch,
+  actualBranch,
   repoT,
   rowRef,
   onSelect,
@@ -62,8 +64,12 @@ export const RepositoryRow = memo(function RepositoryRow({
   dragPreviewStyle,
   onHandlePointerDown,
 }: RepositoryRowProps): ReactNode {
+  // 优先展示实际扫描到的当前分支，未扫描到时回退存储的配置分支
   const currentBranchName =
-    repo.currentBranch?.trim() || repoT.currentBranchUnknown || "未知分支";
+    actualBranch?.trim() ||
+    repo.currentBranch?.trim() ||
+    repoT.currentBranchUnknown ||
+    "未知分支";
 
   return (
     <div
