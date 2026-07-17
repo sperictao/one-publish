@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
   checkRepositoryBranchConnectivity: vi.fn(),
+  scanRepositoryBranches: vi.fn(),
 }));
 
 vi.mock("@/lib/store/api", async () => {
@@ -10,6 +11,7 @@ vi.mock("@/lib/store/api", async () => {
   return {
     ...actual,
     checkRepositoryBranchConnectivity: mocks.checkRepositoryBranchConnectivity,
+    scanRepositoryBranches: mocks.scanRepositoryBranches,
   };
 });
 
@@ -47,15 +49,48 @@ function createRepositoryWithId(id: string, overrides?: Partial<Repository>): Re
   };
 }
 
+function mockActualBranch(branchByPath: Record<string, string>): void {
+  mocks.scanRepositoryBranches.mockImplementation(async (path: string) => ({
+    branches: [],
+    current_branch: branchByPath[path] ?? "main",
+  }));
+}
+
 describe("useRepositoryViewState", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.checkRepositoryBranchConnectivity.mockResolvedValue({
       canConnect: true,
     });
+    mockActualBranch({});
   });
 
-  it("仅在仓库路径或分支变化时重跑连通性检查", async () => {
+  it("扫描出的实际分支会暴露给消费者并用于连通性检查", async () => {
+    const repository = createRepository();
+    mockActualBranch({ [repository.path]: "feature/login" });
+
+    const { result } = renderHook(() =>
+      useRepositoryViewState({
+        repositories: [repository],
+        selectedRepoId: repository.id,
+      })
+    );
+
+    await waitFor(() => {
+      expect(result.current.actualBranchByRepoId[repository.id]).toBe(
+        "feature/login"
+      );
+    });
+
+    await waitFor(() => {
+      expect(mocks.checkRepositoryBranchConnectivity).toHaveBeenCalledWith(
+        repository.path,
+        "feature/login"
+      );
+    });
+  });
+
+  it("仓库集合不变时不因外部 rerender 重复扫描实际分支", async () => {
     const repository = createRepository();
     const { rerender } = renderHook(
       ({ repositories, selectedRepoId }) =>
@@ -72,7 +107,7 @@ describe("useRepositoryViewState", () => {
     );
 
     await waitFor(() => {
-      expect(mocks.checkRepositoryBranchConnectivity).toHaveBeenCalledTimes(1);
+      expect(mocks.scanRepositoryBranches).toHaveBeenCalledTimes(1);
     });
 
     rerender({
@@ -91,25 +126,17 @@ describe("useRepositoryViewState", () => {
     await waitFor(() => {
       expect(mocks.checkRepositoryBranchConnectivity).toHaveBeenCalledTimes(1);
     });
-
-    rerender({
-      repositories: [
-        {
-          ...repository,
-          currentBranch: "develop",
-        },
-      ],
-      selectedRepoId: repository.id,
-    });
-
-    await waitFor(() => {
-      expect(mocks.checkRepositoryBranchConnectivity).toHaveBeenCalledTimes(2);
-    });
+    expect(mocks.scanRepositoryBranches).toHaveBeenCalledTimes(1);
   });
 
   it("新增仓库时只检查新增项，不重查已缓存仓库", async () => {
     const repoA = createRepositoryWithId("repo-a");
     const repoB = createRepositoryWithId("repo-b");
+    mockActualBranch({
+      [repoA.path]: repoA.currentBranch,
+      [repoB.path]: repoB.currentBranch,
+    });
+
     const { rerender } = renderHook(
       ({ repositories, selectedRepoId }) =>
         useRepositoryViewState({
