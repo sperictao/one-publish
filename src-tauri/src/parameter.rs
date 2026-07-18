@@ -16,6 +16,8 @@ pub struct ParameterDefinition {
     pub multiple: Option<bool>,
     pub prefix: Option<String>,
     pub description: Option<String>,
+    #[serde(default)]
+    pub env: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
@@ -53,7 +55,7 @@ impl ParameterRenderer {
         params: &BTreeMap<String, crate::spec::SpecValue>,
     ) -> Result<RenderedCommand, RenderError> {
         let mut args = Vec::new();
-        let env = Vec::new();
+        let mut env = Vec::new();
 
         for (key, value) in params {
             let def = self
@@ -64,8 +66,10 @@ impl ParameterRenderer {
 
             match def.param_type {
                 ParameterType::Boolean => self.render_boolean(def, key, value, &mut args)?,
-                ParameterType::String => self.render_string(def, key, value, &mut args)?,
-                ParameterType::Array => self.render_array(def, key, value, &mut args)?,
+                ParameterType::String => {
+                    self.render_string(def, key, value, &mut args, &mut env)?
+                }
+                ParameterType::Array => self.render_array(def, key, value, &mut args, &mut env)?,
                 ParameterType::Map => self.render_map(def, key, value, &mut args)?,
             }
         }
@@ -108,15 +112,14 @@ impl ParameterRenderer {
         key: &str,
         value: &crate::spec::SpecValue,
         args: &mut Vec<String>,
+        env: &mut Vec<(String, String)>,
     ) -> Result<(), RenderError> {
         match value {
             crate::spec::SpecValue::String(s) => {
-                args.push(def.flag.clone());
-                args.push(s.clone());
+                self.push_string_value(def, s.clone(), args, env);
             }
             crate::spec::SpecValue::Number(n) => {
-                args.push(def.flag.clone());
-                args.push(n.to_string());
+                self.push_string_value(def, n.to_string(), args, env);
             }
             crate::spec::SpecValue::Null => {
                 // Omit when null
@@ -131,24 +134,44 @@ impl ParameterRenderer {
         Ok(())
     }
 
+    fn push_string_value(
+        &self,
+        def: &ParameterDefinition,
+        value: String,
+        args: &mut Vec<String>,
+        env: &mut Vec<(String, String)>,
+    ) {
+        if let Some(var) = &def.env {
+            env.push((var.clone(), value));
+            return;
+        }
+        let rendered = match &def.prefix {
+            Some(prefix) => format!("{}{}", prefix, value),
+            None => value,
+        };
+        if !def.flag.is_empty() {
+            args.push(def.flag.clone());
+        }
+        args.push(rendered);
+    }
+
     fn render_array(
         &self,
         def: &ParameterDefinition,
         key: &str,
         value: &crate::spec::SpecValue,
         args: &mut Vec<String>,
+        env: &mut Vec<(String, String)>,
     ) -> Result<(), RenderError> {
         match value {
             crate::spec::SpecValue::List(items) => {
                 for item in items {
                     match item {
                         crate::spec::SpecValue::String(s) => {
-                            args.push(def.flag.clone());
-                            args.push(s.clone());
+                            self.push_string_value(def, s.clone(), args, env);
                         }
                         crate::spec::SpecValue::Number(n) => {
-                            args.push(def.flag.clone());
-                            args.push(n.to_string());
+                            self.push_string_value(def, n.to_string(), args, env);
                         }
                         _ => {
                             return Err(RenderError::InvalidArrayTypeItem {
@@ -267,6 +290,7 @@ mod tests {
                 multiple: None,
                 prefix: None,
                 description: Some("Build in release mode".to_string()),
+                env: None,
             },
         );
 
@@ -278,6 +302,7 @@ mod tests {
                 multiple: None,
                 prefix: None,
                 description: Some("Target triple".to_string()),
+                env: None,
             },
         );
 
@@ -289,6 +314,7 @@ mod tests {
                 multiple: None,
                 prefix: None,
                 description: Some("List of features".to_string()),
+                env: None,
             },
         );
 
@@ -300,6 +326,7 @@ mod tests {
                 multiple: None,
                 prefix: Some("--define=".to_string()),
                 description: Some("Preprocessor defines".to_string()),
+                env: None,
             },
         );
 
@@ -463,5 +490,122 @@ mod tests {
         assert!(result.args.contains(&"--target".to_string()));
         assert!(result.args.contains(&"x86_64".to_string()));
         assert!(result.args.contains(&"--define=FOO=bar".to_string()));
+    }
+
+    fn string_definition(flag: &str, prefix: Option<&str>, env: Option<&str>) -> ParameterDefinition {
+        ParameterDefinition {
+            param_type: ParameterType::String,
+            flag: flag.to_string(),
+            multiple: None,
+            prefix: prefix.map(|value| value.to_string()),
+            description: None,
+            env: env.map(|value| value.to_string()),
+        }
+    }
+
+    fn single_string_schema(name: &str, definition: ParameterDefinition) -> ParameterSchema {
+        let mut parameters = BTreeMap::new();
+        parameters.insert(name.to_string(), definition);
+        ParameterSchema { parameters }
+    }
+
+    #[test]
+    fn string_with_empty_flag_and_prefix_renders_single_prefixed_arg() {
+        let renderer = ParameterRenderer::new(single_string_schema(
+            "configuration",
+            string_definition("", Some("-D"), None),
+        ));
+
+        let mut params = BTreeMap::new();
+        params.insert(
+            "configuration".to_string(),
+            SpecValue::String("release".to_string()),
+        );
+
+        let result = renderer.render(&params).expect("render");
+        assert_eq!(result.args, vec!["-Drelease"]);
+        assert!(!result.args.iter().any(|arg| arg.is_empty()));
+        assert!(result.env.is_empty());
+    }
+
+    #[test]
+    fn string_with_empty_flag_no_prefix_renders_bare_positional() {
+        let renderer = ParameterRenderer::new(single_string_schema(
+            "task",
+            string_definition("", None, None),
+        ));
+
+        let mut params = BTreeMap::new();
+        params.insert("task".to_string(), SpecValue::String("build".to_string()));
+
+        let result = renderer.render(&params).expect("render");
+        assert_eq!(result.args, vec!["build"]);
+        assert!(result.env.is_empty());
+    }
+
+    #[test]
+    fn string_with_env_renders_env_not_args() {
+        let renderer = ParameterRenderer::new(single_string_schema(
+            "target",
+            string_definition("", None, Some("GOOS")),
+        ));
+
+        let mut params = BTreeMap::new();
+        params.insert("target".to_string(), SpecValue::String("linux".to_string()));
+
+        let result = renderer.render(&params).expect("render");
+        assert!(result.args.is_empty());
+        assert_eq!(
+            result.env,
+            vec![("GOOS".to_string(), "linux".to_string())]
+        );
+    }
+
+    #[test]
+    fn array_with_prefix_renders_each_item() {
+        let mut parameters = BTreeMap::new();
+        parameters.insert(
+            "defines".to_string(),
+            ParameterDefinition {
+                param_type: ParameterType::Array,
+                flag: "".to_string(),
+                multiple: None,
+                prefix: Some("-D".to_string()),
+                description: None,
+                env: None,
+            },
+        );
+        let renderer = ParameterRenderer::new(ParameterSchema { parameters });
+
+        let mut params = BTreeMap::new();
+        params.insert(
+            "defines".to_string(),
+            SpecValue::List(vec![
+                SpecValue::String("a".to_string()),
+                SpecValue::String("b".to_string()),
+            ]),
+        );
+
+        let result = renderer.render(&params).expect("render");
+        assert_eq!(result.args, vec!["-Da", "-Db"]);
+        assert!(result.env.is_empty());
+    }
+
+    #[test]
+    fn non_empty_flag_without_prefix_unchanged() {
+        let renderer = ParameterRenderer::new(single_string_schema(
+            "configuration",
+            string_definition("--configuration", None, None),
+        ));
+
+        let mut params = BTreeMap::new();
+        params.insert(
+            "configuration".to_string(),
+            SpecValue::String("Release".to_string()),
+        );
+
+        let result = renderer.render(&params).expect("render");
+        assert_eq!(result.args, vec!["--configuration", "Release"]);
+        assert!(result.env.is_empty());
     }
 }
