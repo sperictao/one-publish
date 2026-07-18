@@ -16,7 +16,7 @@ use std::path::PathBuf;
 use std::process::Stdio;
 use std::sync::Arc;
 use tauri::AppHandle;
-use tokio::sync::{mpsc, Mutex};
+use tokio::sync::mpsc;
 
 /// (success, cancelled, error, output_log, warnings)
 type PublishRunResult =
@@ -158,9 +158,8 @@ pub(crate) async fn execute_publish_spec(
 
         let stdout = child.stdout.take();
         let stderr = child.stderr.take();
-        let child = Arc::new(Mutex::new(child));
         let cancel_requested = Arc::clone(&permit.cancel_requested);
-        permit.mark_running(Arc::clone(&child)).await;
+        permit.mark_running().await;
 
         let run_result: PublishRunResult =
             async {
@@ -187,15 +186,28 @@ pub(crate) async fn execute_publish_spec(
                 }
                 drop(sender);
 
-                let status = {
-                    let mut running_child = child.lock().await;
-                    running_child.wait().await.map_err(|error| {
-                        publish_error(
-                            format!("failed to wait publish process: {}", error),
-                            classify_process_wait_error(error.kind()),
-                        )
-                    })?
-                };
+                // A cancel that landed while the execution was still starting
+                // is serviced immediately instead of entering the select.
+                let cancelled_before_wait =
+                    cancel_requested.load(std::sync::atomic::Ordering::SeqCst);
+                let status = if cancelled_before_wait {
+                    let _ = child.start_kill();
+                    child.wait().await
+                } else {
+                    tokio::select! {
+                        status = child.wait() => status,
+                        _ = permit.cancel_notify.notified() => {
+                            let _ = child.start_kill();
+                            child.wait().await
+                        }
+                    }
+                }
+                .map_err(|error| {
+                    publish_error(
+                        format!("failed to wait publish process: {}", error),
+                        classify_process_wait_error(error.kind()),
+                    )
+                })?;
 
                 for reader in readers {
                     let _ = reader.await;

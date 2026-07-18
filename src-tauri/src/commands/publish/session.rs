@@ -3,20 +3,20 @@ use std::sync::{
     atomic::{AtomicBool, Ordering},
     Arc, OnceLock,
 };
-use tokio::process::Child;
-use tokio::sync::Mutex;
+use tokio::sync::{Mutex, Notify};
 
 #[derive(Clone)]
 struct StartingExecution {
     session_id: String,
     cancel_requested: Arc<AtomicBool>,
+    cancel_notify: Arc<Notify>,
 }
 
 #[derive(Clone)]
 struct ActiveExecution {
     session_id: String,
-    child: Arc<Mutex<Child>>,
     cancel_requested: Arc<AtomicBool>,
+    cancel_notify: Arc<Notify>,
 }
 
 #[derive(Clone)]
@@ -32,12 +32,26 @@ impl RunningExecution {
             Self::Running(execution) => &execution.session_id,
         }
     }
+
+    fn cancel_handles(&self) -> (Arc<AtomicBool>, Arc<Notify>) {
+        match self {
+            Self::Starting(execution) => (
+                Arc::clone(&execution.cancel_requested),
+                Arc::clone(&execution.cancel_notify),
+            ),
+            Self::Running(execution) => (
+                Arc::clone(&execution.cancel_requested),
+                Arc::clone(&execution.cancel_notify),
+            ),
+        }
+    }
 }
 
 #[derive(Debug)]
 pub(crate) struct ExecutionPermit {
     pub(crate) session_id: String,
     pub(crate) cancel_requested: Arc<AtomicBool>,
+    pub(crate) cancel_notify: Arc<Notify>,
 }
 
 impl ExecutionPermit {
@@ -45,7 +59,7 @@ impl ExecutionPermit {
         self.cancel_requested.load(Ordering::SeqCst)
     }
 
-    pub(crate) async fn mark_running(&self, child: Arc<Mutex<Child>>) {
+    pub(crate) async fn mark_running(&self) {
         let mut slot = running_execution_slot().lock().await;
         if matches!(
             slot.as_ref(),
@@ -53,8 +67,8 @@ impl ExecutionPermit {
         ) {
             *slot = Some(RunningExecution::Running(ActiveExecution {
                 session_id: self.session_id.clone(),
-                child,
                 cancel_requested: Arc::clone(&self.cancel_requested),
+                cancel_notify: Arc::clone(&self.cancel_notify),
             }));
         }
     }
@@ -84,14 +98,17 @@ pub(crate) async fn reserve_execution(
     }
 
     let cancel_requested = Arc::new(AtomicBool::new(false));
+    let cancel_notify = Arc::new(Notify::new());
     *slot = Some(RunningExecution::Starting(StartingExecution {
         session_id: session_id.clone(),
         cancel_requested: Arc::clone(&cancel_requested),
+        cancel_notify: Arc::clone(&cancel_notify),
     }));
 
     Ok(ExecutionPermit {
         session_id,
         cancel_requested,
+        cancel_notify,
     })
 }
 
@@ -105,23 +122,10 @@ pub(crate) async fn cancel_running_execution() -> Result<bool, crate::errors::Ap
         return Ok(false);
     };
 
-    match running {
-        RunningExecution::Starting(execution) => {
-            execution.cancel_requested.store(true, Ordering::SeqCst);
-            Ok(true)
-        }
-        RunningExecution::Running(execution) => {
-            execution.cancel_requested.store(true, Ordering::SeqCst);
-            let mut child = execution.child.lock().await;
-            child.start_kill().map_err(|error| {
-                publish_error(
-                    format!("failed to cancel publish: {}", error),
-                    "publish_cancel_failed",
-                )
-            })?;
-            Ok(true)
-        }
-    }
+    let (cancel_requested, cancel_notify) = running.cancel_handles();
+    cancel_requested.store(true, Ordering::SeqCst);
+    cancel_notify.notify_one();
+    Ok(true)
 }
 
 pub(crate) async fn clear_running_execution(session_id: &str) {

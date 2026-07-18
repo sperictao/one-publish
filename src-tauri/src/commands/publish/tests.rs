@@ -34,7 +34,7 @@ fn execution_test_lock() -> &'static AsyncMutex<()> {
 #[cfg(target_os = "windows")]
 async fn spawn_test_sleep_child() -> Child {
     Command::new("cmd")
-        .args(["/C", "ping", "127.0.0.1", "-n", "6"])
+        .args(["/C", "ping", "127.0.0.1", "-n", "60"])
         .spawn()
         .expect("spawn windows sleep child")
 }
@@ -42,7 +42,7 @@ async fn spawn_test_sleep_child() -> Child {
 #[cfg(not(target_os = "windows"))]
 async fn spawn_test_sleep_child() -> Child {
     Command::new("sleep")
-        .arg("5")
+        .arg("60")
         .spawn()
         .expect("spawn sleep child")
 }
@@ -416,18 +416,44 @@ async fn cancel_provider_publish_kills_running_execution() {
     let permit = reserve_execution("running-cancel".to_string())
         .await
         .expect("reserve execution");
-    let child = Arc::new(tokio::sync::Mutex::new(spawn_test_sleep_child().await));
-    permit.mark_running(Arc::clone(&child)).await;
+    let mut child = spawn_test_sleep_child().await;
+    permit.mark_running().await;
 
-    assert!(cancel_provider_publish().await.expect("cancel running"));
+    // Mirror the executor in execution.rs: the task owns the child and waits
+    // for either process exit or the cancel notification. Reproduces the
+    // production arrangement where cancellation arrives mid-wait.
+    let cancel_requested = Arc::clone(&permit.cancel_requested);
+    let cancel_notify = Arc::clone(&permit.cancel_notify);
+    let executor = tokio::spawn(async move {
+        let status = tokio::select! {
+            status = child.wait() => status.expect("wait child"),
+            _ = cancel_notify.notified() => {
+                let _ = child.start_kill();
+                child.wait().await.expect("wait child after kill")
+            }
+        };
+        let cancelled = cancel_requested.load(std::sync::atomic::Ordering::SeqCst);
+        (status, cancelled)
+    });
+
+    // Let the executor task enter the wait before cancelling.
+    tokio::time::sleep(Duration::from_millis(100)).await;
+
+    // Regression assertion: the cancel call must return promptly instead of
+    // blocking until the child exits on its own (the old deadlock).
+    let cancelled = tokio::time::timeout(Duration::from_secs(5), cancel_provider_publish())
+        .await
+        .expect("cancel should return promptly, not block on the running child")
+        .expect("cancel running execution");
+    assert!(cancelled);
     assert!(permit.is_cancel_requested());
 
-    tokio::time::timeout(Duration::from_secs(2), async {
-        let mut running_child = child.lock().await;
-        running_child.wait().await.expect("wait child after cancel");
-    })
-    .await
-    .expect("child should exit after cancellation");
+    let (status, executor_cancelled) = tokio::time::timeout(Duration::from_secs(5), executor)
+        .await
+        .expect("executor should finish promptly after cancel")
+        .expect("join executor task");
+    assert!(executor_cancelled);
+    assert!(!status.success());
 
-    clear_running_execution(&permit.session_id).await;
+    force_clear_running_execution().await;
 }
