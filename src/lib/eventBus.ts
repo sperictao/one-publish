@@ -17,7 +17,15 @@ export function emit<T = unknown>(event: string, payload: T): void {
   if (!handlers) return;
   for (const handler of handlers) {
     try {
-      handler(payload);
+      const result = handler(payload) as unknown;
+      if (result instanceof Promise) {
+        result.catch((err) =>
+          console.error(
+            `[eventBus] async handler for "${event}" rejected:`,
+            err,
+          ),
+        );
+      }
     } catch (err) {
       console.error(`[eventBus] handler for "${event}" threw:`, err);
     }
