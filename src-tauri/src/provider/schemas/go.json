@@ -8,13 +8,13 @@
     "target": {
       "type": "string",
       "flag": "",
-      "prefix": "GOOS=",
+      "env": "GOOS",
       "description": "Target operating system (e.g., linux, darwin, windows)"
     },
     "arch": {
       "type": "string",
       "flag": "",
-      "prefix": "GOARCH=",
+      "env": "GOARCH",
       "description": "Target architecture (e.g., amd64, arm64, 386)"
     },
     "tags": {
@@ -38,7 +38,7 @@
       "description": "Print the names of packages as they are compiled"
     },
     "work": {
-      "type": "string",
+      "type": "boolean",
       "flag": "-work",
       "description": "Print the name of the temporary work directory and do not delete it"
     },

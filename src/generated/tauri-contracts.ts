@@ -41,7 +41,7 @@ export type MountKindDescriptor = "unc" | "mounted";
 
 export type OutputTargetDescriptor = { kind: OutputTargetKind, raw: string, path: string | null, mountKind: MountKindDescriptor | null, fsType: string | null, scheme: string | null, host: string | null, port: number | null, user: string | null, query: { [key: string]: string } | null, };
 
-export type RenderedPublishCommand = { program: string, args: Array<string>, working_dir: string | null, display_command: string, };
+export type RenderedPublishCommand = { program: string, args: Array<string>, working_dir: string | null, display_command: string, env: Array<[string, string]>, };
 
 export type PublishResult = { provider_id: string, success: boolean, cancelled: boolean, error: string | null, command: RenderedPublishCommand, output_log: string, output_dir: string, file_count: number, warnings: Array<string> | null, };
 
@@ -79,7 +79,7 @@ export type IssueType = "missing_tool" | "outdated_version" | "missing_dependenc
 
 export type ProviderStatus = { provider_id: string, installed: boolean, version: string | null, path: string | null, };
 
-export type ParameterDefinition = { type: ParameterType, flag: string, multiple: boolean | null, prefix: string | null, description: string | null, };
+export type ParameterDefinition = { type: ParameterType, flag: string, multiple: boolean | null, prefix: string | null, description: string | null, env?: string | null, };
 
 export type ParameterSchema = { parameters: { [key: string]: ParameterDefinition }, };
 

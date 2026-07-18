@@ -23,6 +23,7 @@ fn sample_rendered_command() -> RenderedPublishCommand {
         args: vec!["publish".to_string(), "/tmp/app.csproj".to_string()],
         working_dir: Some("/tmp".to_string()),
         display_command: "dotnet publish \"/tmp/app.csproj\"".to_string(),
+        env: Vec::new(),
     }
 }
 
@@ -273,6 +274,95 @@ fn render_publish_command_uses_backend_display_command() {
         rendered.display_command,
         "dotnet publish \"/tmp/demo-project/src/App.csproj\" --configuration Release --output \"./publish/osx-arm64\""
     );
+}
+
+fn render_with_provider_schema(
+    provider_id: &str,
+    parameters: BTreeMap<String, SpecValue>,
+) -> crate::parameter::RenderedCommand {
+    let provider = crate::provider::registry::provider_registry()
+        .get(provider_id)
+        .expect("provider");
+    let schema = provider.get_schema().expect("schema");
+    crate::parameter::ParameterRenderer::new(schema)
+        .render(&parameters)
+        .expect("render")
+}
+
+#[test]
+fn go_schema_renders_target_arch_as_env_and_work_as_boolean_flag() {
+    let mut parameters = BTreeMap::new();
+    parameters.insert(
+        "target".to_string(),
+        SpecValue::String("linux".to_string()),
+    );
+    parameters.insert("arch".to_string(), SpecValue::String("amd64".to_string()));
+    parameters.insert("work".to_string(), SpecValue::Bool(true));
+
+    let rendered = render_with_provider_schema("go", parameters);
+
+    assert_eq!(rendered.args, vec!["-work".to_string()]);
+    assert!(!rendered.args.iter().any(|arg| arg.is_empty()));
+    assert!(!rendered.args.iter().any(|arg| arg.contains("GOOS")));
+    assert_eq!(
+        rendered.env,
+        vec![
+            ("GOARCH".to_string(), "amd64".to_string()),
+            ("GOOS".to_string(), "linux".to_string()),
+        ]
+    );
+}
+
+#[test]
+fn java_schema_renders_task_configuration_and_rerun_tasks_without_empty_args() {
+    let mut parameters = BTreeMap::new();
+    parameters.insert("task".to_string(), SpecValue::String("build".to_string()));
+    parameters.insert(
+        "configuration".to_string(),
+        SpecValue::String("release".to_string()),
+    );
+    parameters.insert("rerun_tasks".to_string(), SpecValue::Bool(true));
+
+    let rendered = render_with_provider_schema("java", parameters);
+
+    assert_eq!(
+        rendered.args,
+        vec![
+            "-Drelease".to_string(),
+            "--rerun-tasks".to_string(),
+            "build".to_string(),
+        ]
+    );
+    assert!(!rendered.args.iter().any(|arg| arg.is_empty()));
+    assert!(rendered.env.is_empty());
+}
+
+#[test]
+fn dotnet_schema_rendering_remains_byte_for_byte_unchanged() {
+    let mut properties = BTreeMap::new();
+    properties.insert(
+        "Version".to_string(),
+        SpecValue::String("1.2.3".to_string()),
+    );
+
+    let mut parameters = BTreeMap::new();
+    parameters.insert(
+        "configuration".to_string(),
+        SpecValue::String("Release".to_string()),
+    );
+    parameters.insert("properties".to_string(), SpecValue::Map(properties));
+
+    let rendered = render_with_provider_schema("dotnet", parameters);
+
+    assert_eq!(
+        rendered.args,
+        vec![
+            "--configuration".to_string(),
+            "Release".to_string(),
+            "-p:Version=1.2.3".to_string(),
+        ]
+    );
+    assert!(rendered.env.is_empty());
 }
 
 #[cfg(not(target_os = "windows"))]

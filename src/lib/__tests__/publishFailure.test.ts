@@ -13,6 +13,7 @@ describe("publishFailure", () => {
     args: ["publish", "/repo/App.csproj"],
     working_dir: "/repo",
     display_command: "dotnet publish /repo/App.csproj",
+    env: [],
   };
 
   it("generic 退出码错误会回退到输出中的真实失败行", () => {

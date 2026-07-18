@@ -8,6 +8,7 @@ function createCommand(displayCommand = "dotnet publish /repo/App.csproj") {
     args: ["publish", "/repo/App.csproj"],
     working_dir: "/repo",
     display_command: displayCommand,
+    env: [],
   };
 }
 

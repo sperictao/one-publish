@@ -17,6 +17,7 @@ pub struct ParameterDefinition {
     pub prefix: Option<String>,
     pub description: Option<String>,
     #[serde(default)]
+    #[ts(optional = nullable)]
     pub env: Option<String>,
 }
 

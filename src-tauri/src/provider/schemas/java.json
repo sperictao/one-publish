@@ -43,7 +43,7 @@
       "description": "Print out the stacktrace for exceptions"
     },
     "rerun_tasks": {
-      "type": "string",
+      "type": "boolean",
       "flag": "--rerun-tasks",
       "description": "Specify the tasks to be re-executed"
     },
