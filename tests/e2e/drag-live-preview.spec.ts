@@ -4,7 +4,7 @@ type MockProfile = {
   name: string;
   providerId: string;
   parameters: Record<string, unknown>;
-  profileGroup?: string | null;
+  profileGroup: string | null;
   createdAt: string;
   isSystemDefault: boolean;
 };
@@ -118,7 +118,7 @@ async function installMockTauri(page: Page) {
       recentRepoIds: ["repo-a"],
       recentConfigKeysByRepo: {
         "repo-a": ["userprofile:alpha-profile", "userprofile:beta-profile"],
-      },
+      } as Record<string, string[]>,
       startupNotice: null,
       executionHistory: [],
     };
@@ -210,8 +210,8 @@ async function installMockTauri(page: Page) {
         .filter((profile): profile is MockProfile => profile !== null);
     }
 
-    globalThis.isTauri = false;
-    (globalThis as typeof globalThis & {
+    const mockGlobal = globalThis as typeof globalThis & {
+      isTauri: boolean;
       __TAURI_INTERNALS__: {
         invoke: (cmd: string, args?: Record<string, unknown>) => Promise<unknown>;
       };
@@ -220,13 +220,15 @@ async function installMockTauri(page: Page) {
         profilesByRepo: typeof profilesByRepo;
         commandLog: typeof commandLog;
       };
-    }).__ONE_PUBLISH_E2E_MOCK__ = {
+    };
+    mockGlobal.isTauri = false;
+    mockGlobal.__ONE_PUBLISH_E2E_MOCK__ = {
       appState,
       profilesByRepo,
       commandLog,
     };
 
-    globalThis.__TAURI_INTERNALS__ = {
+    mockGlobal.__TAURI_INTERNALS__ = {
       invoke: async (cmd: string, args?: Record<string, unknown>) => {
         commandLog.push({ cmd, args: clone(args ?? {}) });
 

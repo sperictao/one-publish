@@ -52,6 +52,7 @@ test.describe("Provider Catalog", () => {
             outputExcerpt: null,
             spec: null,
             fileCount: 2,
+            warnings: null,
           },
         ],
       },
