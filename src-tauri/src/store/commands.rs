@@ -613,12 +613,54 @@ pub async fn get_execution_history() -> Result<Vec<ExecutionRecord>, AppError> {
     Ok(get_execution_history_snapshot())
 }
 
+/// 持久化脱敏：只遮蔽密钥类值，路径/自由文本一律不动（重跑依赖原值）。
+fn redact_sensitive_spec_values(value: &mut serde_json::Value) {
+    match value {
+        serde_json::Value::Object(map) => {
+            for (key, item) in map.iter_mut() {
+                if crate::security::is_sensitive_key(key) {
+                    *item =
+                        serde_json::Value::String(crate::security::REDACTED_VALUE.to_string());
+                    continue;
+                }
+                redact_sensitive_spec_values(item);
+            }
+        }
+        serde_json::Value::Array(items) => {
+            for item in items.iter_mut() {
+                redact_sensitive_spec_values(item);
+            }
+        }
+        _ => {}
+    }
+}
+
+fn sanitize_record_for_storage(record: &mut ExecutionRecord) {
+    if let Some(command_line) = record.command_line.as_mut() {
+        *command_line = crate::security::sanitize_secrets_in_text(command_line);
+    }
+
+    if let Some(output_excerpt) = record.output_excerpt.as_mut() {
+        *output_excerpt = crate::security::sanitize_secrets_in_text(output_excerpt);
+    }
+
+    if let Some(parameters) = record
+        .spec
+        .as_mut()
+        .and_then(|spec| spec.get_mut("parameters"))
+    {
+        redact_sensitive_spec_values(parameters);
+    }
+}
+
 #[tauri::command]
 pub async fn add_execution_record(
     record: ExecutionRecord,
 ) -> Result<Vec<ExecutionRecord>, AppError> {
     let _timer =
         crate::commands::middleware::CommandTimer::new("store::commands::add_execution_record");
+    let mut record = record;
+    sanitize_record_for_storage(&mut record);
     let mut state = get_state();
     let history_limit = state.execution_history_limit;
     append_execution_history(&mut state.execution_history, record, history_limit);
@@ -656,4 +698,142 @@ pub async fn set_execution_record_snapshot(
     let history = state.execution_history.clone();
     update_state(state)?;
     Ok(history)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{sanitize_record_for_storage, ExecutionRecord};
+    use serde_json::json;
+
+    fn test_record() -> ExecutionRecord {
+        ExecutionRecord {
+            id: "rec-1".to_string(),
+            repo_id: Some("repo-1".to_string()),
+            provider_id: "dotnet".to_string(),
+            project_path: "/repo/App.csproj".to_string(),
+            started_at: "2026-07-18T10:00:00.000Z".to_string(),
+            finished_at: "2026-07-18T10:00:03.000Z".to_string(),
+            success: true,
+            cancelled: false,
+            output_dir: Some("/repo/out".to_string()),
+            error: None,
+            command_line: None,
+            snapshot_path: None,
+            failure_signature: None,
+            output_excerpt: None,
+            spec: None,
+            file_count: 2,
+            warnings: None,
+        }
+    }
+
+    #[test]
+    fn sanitize_record_for_storage_redacts_spec_secrets_and_preserves_paths() {
+        let mut record = test_record();
+        record.spec = Some(json!({
+            "provider_id": "dotnet",
+            "project_path": "/repo/App.csproj",
+            "parameters": {
+                "ClientSecret": "x",
+                "output": "/tmp/o",
+                "properties": {
+                    "PublishProfile": "FolderProfile",
+                    "ClientSecret": "nested-secret"
+                }
+            }
+        }));
+
+        sanitize_record_for_storage(&mut record);
+
+        let spec = record.spec.expect("spec");
+        assert_eq!(spec["parameters"]["ClientSecret"], "<redacted>");
+        assert_eq!(
+            spec["parameters"]["properties"]["ClientSecret"],
+            "<redacted>",
+            "嵌套 properties 内的密钥也必须被遮蔽"
+        );
+        assert_eq!(spec["parameters"]["output"], "/tmp/o");
+        assert_eq!(
+            spec["parameters"]["properties"]["PublishProfile"],
+            "FolderProfile"
+        );
+        assert_eq!(spec["project_path"], "/repo/App.csproj");
+    }
+
+    #[test]
+    fn sanitize_record_for_storage_redacts_command_line_and_excerpt_secrets() {
+        let mut record = test_record();
+        record.command_line = Some(
+            "$ dotnet publish /repo/App.csproj -p:Password=hunter2 --output /tmp/out".to_string(),
+        );
+        record.output_excerpt = Some("error: token=abc123 rejected".to_string());
+
+        sanitize_record_for_storage(&mut record);
+
+        let command_line = record.command_line.expect("command line");
+        assert!(command_line.contains("-p:Password=<redacted>"));
+        assert!(!command_line.contains("hunter2"));
+        assert!(command_line.contains("/tmp/out"));
+        assert!(command_line.contains("/repo/App.csproj"));
+
+        let excerpt = record.output_excerpt.expect("output excerpt");
+        assert!(excerpt.contains("token=<redacted>"));
+        assert!(!excerpt.contains("abc123"));
+    }
+
+    #[test]
+    fn sanitize_record_for_storage_preserves_rerun_fields() {
+        let mut record = test_record();
+        record.spec = Some(json!({
+            "project_path": "/repo/App.csproj",
+            "parameters": {
+                "ApiKey": "secret",
+                "output": "/tmp/o"
+            }
+        }));
+
+        sanitize_record_for_storage(&mut record);
+
+        assert_eq!(record.project_path, "/repo/App.csproj");
+        assert_eq!(record.output_dir.as_deref(), Some("/repo/out"));
+        let spec = record.spec.expect("spec");
+        assert_eq!(spec["project_path"], "/repo/App.csproj");
+        assert_eq!(spec["parameters"]["ApiKey"], "<redacted>");
+        assert_eq!(spec["parameters"]["output"], "/tmp/o");
+    }
+
+    #[test]
+    fn sanitize_record_for_storage_leaves_non_sensitive_record_untouched() {
+        let mut record = test_record();
+        record.command_line =
+            Some("$ dotnet publish /repo/App.csproj --output /tmp/out".to_string());
+        record.output_excerpt = Some("Build succeeded in 1.2s".to_string());
+        record.spec = Some(json!({
+            "parameters": {
+                "configuration": "Release",
+                "output": "/tmp/o"
+            }
+        }));
+        let original = record.clone();
+
+        sanitize_record_for_storage(&mut record);
+
+        assert_eq!(record.id, original.id);
+        assert_eq!(record.repo_id, original.repo_id);
+        assert_eq!(record.provider_id, original.provider_id);
+        assert_eq!(record.project_path, original.project_path);
+        assert_eq!(record.started_at, original.started_at);
+        assert_eq!(record.finished_at, original.finished_at);
+        assert_eq!(record.success, original.success);
+        assert_eq!(record.cancelled, original.cancelled);
+        assert_eq!(record.output_dir, original.output_dir);
+        assert_eq!(record.error, original.error);
+        assert_eq!(record.command_line, original.command_line);
+        assert_eq!(record.snapshot_path, original.snapshot_path);
+        assert_eq!(record.failure_signature, original.failure_signature);
+        assert_eq!(record.output_excerpt, original.output_excerpt);
+        assert_eq!(record.spec, original.spec);
+        assert_eq!(record.file_count, original.file_count);
+        assert_eq!(record.warnings, original.warnings);
+    }
 }
