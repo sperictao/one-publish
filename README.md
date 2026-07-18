@@ -276,7 +276,7 @@ OnePublish is evolving from a .NET publish GUI into a **commercial-grade, multi-
 | 8 | Run intelligence & recovery (history, re-run, failure grouping) | ✅ Done |
 | 9 | Diagnostics deepening & team handoff | ✅ Done |
 | 10 | Collaboration signal & timeline intelligence | ✅ Done |
-| 11 | Team workflow integration | 🚧 In Progress |
+| 11 | [Team workflow integration](docs/roadmap/phase-11-team-workflow.md) | 🚧 In Progress |
 
 ---
 
