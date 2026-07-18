@@ -53,7 +53,7 @@ OnePublish é um **aplicativo de desktop multiplataforma** que oferece uma GUI b
 
 | Necessário | Versão | Finalidade |
 |----------|---------|---------|
-| **Node.js** | ≥ 18 | Runtime do frontend |
+| **Node.js** | ≥ 20.19 | Runtime do frontend |
 | **pnpm** | mais recente | Gerenciador de pacotes |
 | **Rust** | ≥ 1.77 | Compilação do backend Tauri |
 | **SDK Alvo** | varia | Pelo menos um dos: .NET SDK / Rust / Go / Java (Gradle) |
@@ -127,6 +127,10 @@ one-publish/
 │   ├── stores/                   # Slices de estado Zustand
 │   ├── lib/                      # Utilitários: store API, paths, preflight, artifacts
 │   ├── i18n/                     # Traduções: zh.json, en.json
+│   ├── generated/                # Contratos gerados pelo ts-rs (verificação de deriva no CI)
+│   ├── types/                    # Tipos TypeScript compartilhados
+│   ├── test/                     # Configuração do Vitest
+│   ├── __tests__/                # Testes unitários do frontend
 │   └── index.css                 # Design tokens Geist + utilitários
 │
 ├── src-tauri/                    # Backend Rust (Tauri)
@@ -217,6 +221,8 @@ pnpm e2e                 # Testes e2e com Playwright
 pnpm e2e:ui              # Modo UI do Playwright
 pnpm check:i18n          # Cobertura de chaves i18n (zh/en)
 pnpm check:design        # Verificação de conformidade com o design Geist
+pnpm generate:contracts  # Regenerar contratos ts-rs após mudanças em tipos Rust
+pnpm check:contracts     # Verificação de deriva de contratos
 
 # Release
 pnpm release -v 0.8.0     # Pipeline completo de lançamento
@@ -278,7 +284,7 @@ O OnePublish está evoluindo de uma GUI de publicação .NET para um **produto d
 
 1. Faça um fork do repositório
 2. Crie um branch de funcionalidade (`git checkout -b feat/recurso-incrivel`)
-3. Execute os testes (`pnpm test && pnpm e2e`)
+3. Execute as barreiras de qualidade locais: `pnpm typecheck && pnpm lint && pnpm test && pnpm check:i18n && pnpm check:design`. Se você alterar código Rust, execute também `cargo clippy --manifest-path src-tauri/Cargo.toml -- -D warnings && cargo test --manifest-path src-tauri/Cargo.toml`. (O CI executa adicionalmente a verificação de deriva de contratos `pnpm check:contracts` e o `cargo audit`.)
 4. Faça commit com mensagens descritivas
 5. Envie e abra um Pull Request
 

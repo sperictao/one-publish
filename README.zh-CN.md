@@ -53,7 +53,7 @@ OnePublish 是一个**跨平台桌面应用**，为软件项目发布提供美�
 
 | 依赖 | 版本 | 用途 |
 |------|------|------|
-| **Node.js** | ≥ 18 | 前端运行时 |
+| **Node.js** | ≥ 20.19 | 前端运行时 |
 | **pnpm** | 最新版 | 包管理器 |
 | **Rust** | ≥ 1.77 | Tauri 后端编译 |
 | **目标 SDK** | 按需 | 至少安装一种：.NET SDK / Rust / Go / Java (Gradle) |
@@ -127,6 +127,10 @@ one-publish/
 │   ├── stores/                   # Zustand 状态切片
 │   ├── lib/                      # 工具函数：store API、路径、预检、产物
 │   ├── i18n/                     # 翻译文件：zh.json、en.json
+│   ├── generated/                # ts-rs 生成的合约（CI 漂移检查）
+│   ├── types/                    # 共享 TypeScript 类型
+│   ├── test/                     # Vitest 初始化
+│   ├── __tests__/                # 前端单元测试
 │   └── index.css                 # Geist 设计令牌 + 工具类
 │
 ├── src-tauri/                    # Rust 后端（Tauri）
@@ -217,6 +221,8 @@ pnpm e2e                 # Playwright e2e 测试
 pnpm e2e:ui              # Playwright 可视化界面
 pnpm check:i18n          # i18n 键覆盖检查（zh/en）
 pnpm check:design        # Geist 设计合规检查
+pnpm generate:contracts  # Rust 类型变更后重新生成合约
+pnpm check:contracts     # 合约漂移检查
 
 # 发布
 pnpm release -v 0.8.0     # 完整发布管线
@@ -278,7 +284,7 @@ OnePublish 正从 .NET 发布 GUI 进化为**商业级多语言发布产品**。
 
 1. Fork 本仓库
 2. 创建特性分支（`git checkout -b feat/amazing-feature`）
-3. 运行测试（`pnpm test && pnpm e2e`）
+3. 运行本地质量门禁：`pnpm typecheck && pnpm lint && pnpm test && pnpm check:i18n && pnpm check:design`；若改动 Rust 代码，还需运行 `cargo clippy --manifest-path src-tauri/Cargo.toml -- -D warnings && cargo test --manifest-path src-tauri/Cargo.toml`。（CI 额外执行合约漂移检查 `pnpm check:contracts` 与 `cargo audit`。）
 4. 提交描述清晰的 commit
 5. 推送并打开 Pull Request
 

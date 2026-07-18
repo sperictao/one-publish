@@ -53,7 +53,7 @@ OnePublish는 소프트웨어 프로젝트를 배포하기 위한 아름답고 �
 
 | 필수 항목 | 버전 | 용도 |
 |----------|---------|---------|
-| **Node.js** | ≥ 18 | 프론트엔드 런타임 |
+| **Node.js** | ≥ 20.19 | 프론트엔드 런타임 |
 | **pnpm** | 최신 | 패키지 매니저 |
 | **Rust** | ≥ 1.77 | Tauri 백엔드 컴파일 |
 | **대상 SDK** | 다양함 | .NET SDK / Rust / Go / Java (Gradle) 중 최소 하나 |
@@ -127,6 +127,10 @@ one-publish/
 │   ├── stores/                   # Zustand 상태 슬라이스
 │   ├── lib/                      # 유틸리티: store API, paths, preflight, artifacts
 │   ├── i18n/                     # 번역: zh.json, en.json
+│   ├── generated/                # ts-rs 생성 계약 (CI 드리프트 검사)
+│   ├── types/                    # 공유 TypeScript 타입
+│   ├── test/                     # Vitest 설정
+│   ├── __tests__/                # 프론트엔드 단위 테스트
 │   └── index.css                 # Geist 디자인 토큰 + 유틸리티
 │
 ├── src-tauri/                    # Rust 백엔드 (Tauri)
@@ -217,6 +221,8 @@ pnpm e2e                 # Playwright e2e 테스트
 pnpm e2e:ui              # Playwright UI 모드
 pnpm check:i18n          # i18n 키 커버리지 (zh/en)
 pnpm check:design        # Geist 디자인 준수 검사
+pnpm generate:contracts  # Rust 타입 변경 후 계약 재생성
+pnpm check:contracts     # 계약 드리프트 검사
 
 # 릴리스
 pnpm release -v 0.8.0     # 전체 릴리스 파이프라인
@@ -278,7 +284,7 @@ OnePublish는 .NET 배포 GUI에서 출발하여 **상업용 등급의 멀티 �
 
 1. 저장소를 포크합니다
 2. 기능 브랜치를 생성합니다 (`git checkout -b feat/amazing-feature`)
-3. 테스트를 실행합니다 (`pnpm test && pnpm e2e`)
+3. 로컬 품질 게이트를 실행합니다 (`pnpm typecheck && pnpm lint && pnpm test && pnpm check:i18n && pnpm check:design`). Rust 코드를 변경한 경우 `cargo clippy --manifest-path src-tauri/Cargo.toml -- -D warnings && cargo test --manifest-path src-tauri/Cargo.toml`도 실행하세요. (CI는 추가로 계약 드리프트 검사 `pnpm check:contracts`와 `cargo audit`을 실행합니다.)
 4. 설명적인 커밋 메시지로 커밋합니다
 5. 푸시하고 Pull Request를 엽니다
 
