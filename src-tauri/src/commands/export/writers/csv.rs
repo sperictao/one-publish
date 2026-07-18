@@ -3,10 +3,20 @@ use serde_json::Value;
 use super::super::export_error;
 
 fn csv_escape(value: &str) -> String {
-    if value.contains(',') || value.contains('"') || value.contains('\n') || value.contains('\r') {
-        format!("\"{}\"", value.replace('"', "\"\""))
+    let needs_formula_guard = value
+        .chars()
+        .next()
+        .map(|ch| matches!(ch, '=' | '+' | '-' | '@' | '\t' | '\r'))
+        .unwrap_or(false);
+    let guarded = if needs_formula_guard {
+        format!("'{}", value)
     } else {
         value.to_string()
+    };
+    if guarded.contains(',') || guarded.contains('"') || guarded.contains('\n') || guarded.contains('\r') {
+        format!("\"{}\"", guarded.replace('"', "\"\""))
+    } else {
+        guarded
     }
 }
 
@@ -89,4 +99,38 @@ pub fn render_execution_history_csv(history: &[Value]) -> Result<String, crate::
     }
 
     Ok(lines.join("\n"))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::csv_escape;
+
+    #[test]
+    fn neutralizes_formula_prefix_characters() {
+        assert_eq!(csv_escape("=1+1"), "'=1+1");
+        assert_eq!(csv_escape("+cmd"), "'+cmd");
+        assert_eq!(csv_escape("@SUM(1)"), "'@SUM(1)");
+        assert_eq!(csv_escape("-2+3"), "'-2+3");
+        assert_eq!(csv_escape("\t1"), "'\t1");
+        // '\r' 既是公式前导字符又触发引用：先加 ' 前缀再整体加引号
+        assert_eq!(csv_escape("\r1"), "\"'\r1\"");
+        let guarded = csv_escape("=1+1");
+        assert!(guarded.starts_with('\''));
+        assert!(!guarded.starts_with('='));
+    }
+
+    #[test]
+    fn leaves_leading_space_untouched_known_boundary() {
+        // 首字符是空格时不中和（OWASP 已知边界，记录为已知取舍）
+        assert_eq!(csv_escape("  =x"), "  =x");
+    }
+
+    #[test]
+    fn preserves_existing_escaping_behavior() {
+        assert_eq!(csv_escape("abc"), "abc");
+        assert_eq!(csv_escape("a,b"), "\"a,b\"");
+        assert_eq!(csv_escape("say \"hi\""), "\"say \"\"hi\"\"\"");
+        assert_eq!(csv_escape("line1\nline2"), "\"line1\nline2\"");
+        assert_eq!(csv_escape(""), "");
+    }
 }
