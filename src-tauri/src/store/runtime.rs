@@ -144,16 +144,15 @@ pub(crate) fn build_frontend_state(state: &AppState) -> AppState {
 }
 
 pub fn update_state(new_state: AppState) -> Result<(), crate::errors::AppError> {
-    let mut normalized = sanitize_state(new_state);
-    save_to_file(&normalized)?;
-    normalized.startup_notice = None;
-
     let mut guard = state_store().write().map_err(|error| {
         crate::errors::AppError::store_with_code(
             format!("写入状态锁失败: {}", error),
             "store_lock_write_failed",
         )
     })?;
+    let mut normalized = sanitize_state(new_state);
+    save_to_file(&normalized)?;
+    normalized.startup_notice = None;
     *guard = normalized;
     Ok(())
 }
