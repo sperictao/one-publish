@@ -282,13 +282,24 @@ export function usePublishValidate({
       ]
     );
 
-  return {
-    getPublishStartBlocker,
-    resolvePublishRequest,
-    runPublishPreflight,
-    executePublishWithProtectedAccessRecovery,
-    publishPreviewCommand,
-    isResolvingSelectedProjectProfile,
-    publishPresentationScopeKey,
-  };
+  return useMemo(
+    () => ({
+      getPublishStartBlocker,
+      resolvePublishRequest,
+      runPublishPreflight,
+      executePublishWithProtectedAccessRecovery,
+      publishPreviewCommand,
+      isResolvingSelectedProjectProfile,
+      publishPresentationScopeKey,
+    }),
+    [
+      getPublishStartBlocker,
+      resolvePublishRequest,
+      runPublishPreflight,
+      executePublishWithProtectedAccessRecovery,
+      publishPreviewCommand,
+      isResolvingSelectedProjectProfile,
+      publishPresentationScopeKey,
+    ]
+  );
 }

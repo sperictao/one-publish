@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { isTauri } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 
@@ -192,6 +192,13 @@ export function useTrayRecentPublish(params: {
     options?: RunPublishOptions
   ) => Promise<void>;
 }) {
+  // 经 ref 同步最新 params，effect 仅在挂载时注册一次监听器，
+  // 避免发布流式期间 state 更新触发重渲染 -> 退订/重订（窗口期丢事件）。
+  const paramsRef = useRef(params);
+  useEffect(() => {
+    paramsRef.current = params;
+  });
+
   useEffect(() => {
     if (!isTauri()) {
       return;
@@ -201,21 +208,22 @@ export function useTrayRecentPublish(params: {
     let unlisten: (() => void) | null = null;
 
     void listen<TrayPublishRequestPayload>("tray-publish-request", async (event) => {
+      const currentParams = paramsRef.current;
       try {
         const resolved = await resolveTrayPublishRequest({
           payload: event.payload,
-          specVersion: params.specVersion,
-          defaultOutputDir: params.defaultOutputDir,
+          specVersion: currentParams.specVersion,
+          defaultOutputDir: currentParams.defaultOutputDir,
         });
         if (!disposed) {
-          await params.runPublishSpec(resolved.spec, resolved.options);
+          await currentParams.runPublishSpec(resolved.spec, resolved.options);
         }
       } catch (error) {
         await setTrayPublishStatus("failure").catch(() => {});
         const description =
           error instanceof Error ? error.message : String(error);
         const notified = await showSystemNotification({
-          title: params.appT.trayPublishFailed || "状态栏发布启动失败",
+          title: currentParams.appT.trayPublishFailed || "状态栏发布启动失败",
           body: description,
         });
         if (!notified) {
@@ -224,6 +232,10 @@ export function useTrayRecentPublish(params: {
       }
     })
       .then((handler) => {
+        if (disposed) {
+          handler();
+          return;
+        }
         unlisten = handler;
       })
       .catch((error) => {
@@ -234,10 +246,5 @@ export function useTrayRecentPublish(params: {
       disposed = true;
       unlisten?.();
     };
-  }, [
-    params.appT,
-    params.defaultOutputDir,
-    params.runPublishSpec,
-    params.specVersion,
-  ]);
+  }, []);
 }
