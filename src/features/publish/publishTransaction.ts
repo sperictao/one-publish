@@ -67,6 +67,7 @@ export function createFailedPublishTransactionResult(params: {
         args: [],
         working_dir: null,
         display_command: "",
+        env: [],
       },
       output_log: "",
       output_dir: "",

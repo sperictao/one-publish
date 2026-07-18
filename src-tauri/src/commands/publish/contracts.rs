@@ -7,6 +7,8 @@ pub struct RenderedPublishCommand {
     pub args: Vec<String>,
     pub working_dir: Option<String>,
     pub display_command: String,
+    #[serde(default)]
+    pub env: Vec<(String, String)>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]

@@ -559,6 +559,7 @@ mod tests {
             multiple: None,
             prefix: prefix.map(ToString::to_string),
             description: None,
+            env: None,
         }
     }
 }

@@ -52,10 +52,22 @@ fn prepare_publish_command(
     if spec.provider_id == "dotnet" {
         args.push(spec.project_path.clone());
     }
-    args.extend(rendered.args);
+    let crate::parameter::RenderedCommand {
+        args: rendered_args,
+        env,
+    } = rendered;
+    args.extend(rendered_args);
 
     let working_dir_path = resolve_working_dir(spec);
-    let display_command = build_display_command(&base_program, &args);
+    let env_prefix = env
+        .iter()
+        .map(|(key, value)| format!("{key}={value} "))
+        .collect::<String>();
+    let display_command = format!(
+        "{}{}",
+        env_prefix,
+        build_display_command(&base_program, &args)
+    );
     let spawn_program = resolve_runtime_program(spec, &base_program, working_dir_path.as_ref())?;
 
     Ok(PreparedPublishCommand {
@@ -66,6 +78,7 @@ fn prepare_publish_command(
                 .as_ref()
                 .map(|dir| dir.to_string_lossy().to_string()),
             display_command,
+            env,
         },
         working_dir_path,
     })
@@ -140,6 +153,7 @@ pub(crate) async fn execute_publish_spec(
         let mut command = crate::process_utils::new_tokio_command(&prepared.command.program);
         command
             .args(&prepared.command.args)
+            .envs(prepared.command.env.iter().cloned())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped());
         if let Some(dir) = &prepared.working_dir_path {
