@@ -111,10 +111,10 @@ pub(crate) async fn execute_publish_spec(
 ) -> Result<PublishResult, crate::errors::AppError> {
     let prepared = prepare_publish_command(&spec)?;
     let output_policy = output_policy::resolve_publish_output_policy(&spec)?;
-    apply_cleanup_policy(&output_policy)?;
 
     let session_id = build_publish_session_id(&spec.provider_id);
     let permit = reserve_execution(session_id.clone()).await?;
+    apply_cleanup_policy(&output_policy)?;
     let execution_result: Result<PublishResult, crate::errors::AppError> = async {
         if permit.is_cancel_requested() {
             return Ok(PublishResult {

@@ -12,18 +12,6 @@ pub(super) struct ProtectedRoot {
     pub(super) path: PathBuf,
 }
 
-#[cfg(target_os = "macos")]
-pub(super) fn macos_protected_roots() -> Vec<ProtectedRoot> {
-    [
-        (ProtectedDirectoryLocation::Desktop, dirs::desktop_dir()),
-        (ProtectedDirectoryLocation::Documents, dirs::document_dir()),
-        (ProtectedDirectoryLocation::Downloads, dirs::download_dir()),
-    ]
-    .into_iter()
-    .filter_map(|(location, path)| path.map(|path| ProtectedRoot { location, path }))
-    .collect()
-}
-
 pub(super) fn find_protected_root_for_path<'a>(
     path: &Path,
     roots: &'a [ProtectedRoot],
@@ -41,7 +29,7 @@ pub(super) fn evaluate_publish_output_access(
     output_dir: &str,
     access_intent: PublishOutputAccessIntent,
 ) -> PublishOutputAccess {
-    let protected_roots = macos_protected_roots();
+    let protected_roots = platform_protected_roots();
     let probe_access =
         |probe_directory: &Path| probe_publish_output_access(probe_directory, access_intent);
     evaluate_publish_output_access_for_roots(
@@ -143,14 +131,15 @@ pub(super) fn is_protected_root_path(path: &Path, roots: &[ProtectedRoot]) -> bo
         .any(|root| normalize_lexical_path(&root.path) == normalize_lexical_path(path))
 }
 
-#[cfg(target_os = "macos")]
 pub(super) fn platform_protected_roots() -> Vec<ProtectedRoot> {
-    macos_protected_roots()
-}
-
-#[cfg(not(target_os = "macos"))]
-pub(super) fn platform_protected_roots() -> Vec<ProtectedRoot> {
-    Vec::new()
+    [
+        (ProtectedDirectoryLocation::Desktop, dirs::desktop_dir()),
+        (ProtectedDirectoryLocation::Documents, dirs::document_dir()),
+        (ProtectedDirectoryLocation::Downloads, dirs::download_dir()),
+    ]
+    .into_iter()
+    .filter_map(|(location, path)| path.map(|path| ProtectedRoot { location, path }))
+    .collect()
 }
 
 #[cfg(test)]

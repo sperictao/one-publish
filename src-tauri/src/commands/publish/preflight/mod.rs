@@ -484,6 +484,23 @@ mod tests {
     }
 
     #[test]
+    fn platform_protected_roots_include_desktop_when_desktop_is_resolvable() {
+        use super::access::platform_protected_roots;
+
+        if dirs::desktop_dir().is_none() {
+            eprintln!("skipping assertion: desktop directory is not resolvable in this environment");
+            return;
+        }
+
+        let roots = platform_protected_roots();
+
+        assert!(!roots.is_empty());
+        assert!(roots
+            .iter()
+            .any(|root| root.location == ProtectedDirectoryLocation::Desktop));
+    }
+
+    #[test]
     fn finds_nested_protected_root() {
         let roots = vec![ProtectedRoot {
             location: ProtectedDirectoryLocation::Downloads,
