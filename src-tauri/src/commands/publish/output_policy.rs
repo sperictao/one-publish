@@ -228,10 +228,7 @@ fn validate_cleanup_target(
 
     if preflight::is_protected_root_output_dir(output_dir) {
         return Err(publish_error(
-            format!(
-                "refusing to clean a macOS protected root directory: {}",
-                output_dir
-            ),
+            format!("refusing to clean a protected root directory: {}", output_dir),
             "delete_existing_files_safety_protected_root_directory",
         ));
     }
