@@ -1,4 +1,4 @@
-import { renderHook, waitFor } from "@testing-library/react";
+import { act, renderHook, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { Repository } from "@/lib/store/types";
@@ -612,5 +612,71 @@ describe("useTrayRecentPublish", () => {
     });
 
     expect(mocks.showMainWindow).toHaveBeenCalled();
+  });
+
+  it("流式期间重渲染不会重注册监听器", async () => {
+    mocks.listen.mockResolvedValue(() => {});
+
+    // 每次 render 都传入全新的 params 字面量（身份不稳定），
+    // 验证 effect 仍只挂载注册一次（ref 方案）。
+    const { rerender } = renderHook(() =>
+      useTrayRecentPublish({
+        appT: {},
+        defaultOutputDir: "/exports",
+        specVersion: 1,
+        runPublishSpec: async () => {
+          /* no-op */
+        },
+      })
+    );
+
+    await waitFor(() => {
+      expect(mocks.listen).toHaveBeenCalledTimes(1);
+    });
+
+    // 模拟发布流式期间多次状态更新触发的重渲染
+    act(() => {
+      rerender();
+    });
+    act(() => {
+      rerender();
+    });
+    act(() => {
+      rerender();
+    });
+
+    expect(mocks.listen).toHaveBeenCalledTimes(1);
+  });
+
+  it("在 listen Promise resolve 前卸载会释放监听器（无泄漏）", async () => {
+    const dispose = vi.fn();
+    let resolveListen: ((d: () => void) => void) | null = null;
+    mocks.listen.mockImplementation(
+      () =>
+        new Promise<() => void>((resolve) => {
+          resolveListen = resolve;
+        })
+    );
+
+    const { unmount } = renderHook(() =>
+      useTrayRecentPublish({
+        appT: {},
+        defaultOutputDir: "/exports",
+        specVersion: 1,
+        runPublishSpec: async () => {
+          /* no-op */
+        },
+      })
+    );
+
+    // cleanup 先于 listen resolve 执行：模拟竞态
+    unmount();
+
+    await act(async () => {
+      resolveListen?.(dispose);
+    });
+
+    // resolve 出的 unlisten 应被立即调用，监听器不泄漏
+    expect(dispose).toHaveBeenCalledTimes(1);
   });
 });
