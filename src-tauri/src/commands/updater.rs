@@ -1,5 +1,6 @@
 use serde::{Deserialize, Serialize};
 use std::{
+    future::Future,
     path::PathBuf,
     sync::{Mutex, MutexGuard},
     time::Duration,
@@ -19,6 +20,7 @@ pub struct PendingUpdateState {
     pending_update: Mutex<Option<Update>>,
 }
 
+#[derive(Debug)]
 struct DownloadFailure {
     error: UpdaterError,
     attempts: usize,
@@ -246,21 +248,49 @@ fn retry_delay(attempt: usize) -> Duration {
     }
 }
 
+async fn download_with_retry<F, Fut>(
+    mut attempt_download: F,
+    retry_delay_fn: impl Fn(u32) -> Duration,
+) -> Result<(Vec<u8>, usize), DownloadFailure>
+where
+    F: FnMut(u32) -> Fut,
+    Fut: Future<Output = Result<Vec<u8>, UpdaterError>>,
+{
+    for attempt in 1..=UPDATE_DOWNLOAD_MAX_ATTEMPTS {
+        match attempt_download(attempt as u32).await {
+            Ok(bytes) => return Ok((bytes, attempt.saturating_sub(1))),
+            Err(error) => {
+                let can_retry =
+                    attempt < UPDATE_DOWNLOAD_MAX_ATTEMPTS && is_retryable_download_error(&error);
+
+                if can_retry {
+                    sleep(retry_delay_fn(attempt as u32)).await;
+                    continue;
+                }
+
+                return Err(DownloadFailure { error, attempts: attempt });
+            }
+        }
+    }
+
+    unreachable!("下载重试循环必须在成功或失败时返回");
+}
+
 async fn download_update_with_retry(
     app: &AppHandle,
     update: &Update,
 ) -> Result<(Vec<u8>, usize), DownloadFailure> {
-    for attempt in 1..=UPDATE_DOWNLOAD_MAX_ATTEMPTS {
+    let attempt_download = |attempt: u32| async move {
         emit_update_download_progress(
             app,
-            build_progress_payload("downloading", &update.version, 0, None, attempt, None),
+            build_progress_payload("downloading", &update.version, 0, None, attempt as usize, None),
         );
 
         let app_handle = app.clone();
         let version = update.version.clone();
         let mut downloaded_bytes = 0_u64;
 
-        match update
+        let result = update
             .download(
                 move |chunk_len, total_bytes| {
                     downloaded_bytes += chunk_len as u64;
@@ -271,20 +301,18 @@ async fn download_update_with_retry(
                             &version,
                             downloaded_bytes,
                             total_bytes,
-                            attempt,
+                            attempt as usize,
                             None,
                         ),
                     );
                 },
                 || {},
             )
-            .await
-        {
-            Ok(bytes) => return Ok((bytes, attempt.saturating_sub(1))),
-            Err(error) => {
-                let can_retry =
-                    attempt < UPDATE_DOWNLOAD_MAX_ATTEMPTS && is_retryable_download_error(&error);
+            .await;
 
+        match result {
+            Ok(bytes) => Ok(bytes),
+            Err(error) => {
                 log::warn!(
                     "下载更新包失败（第 {}/{} 次，版本 {}）: {}",
                     attempt,
@@ -292,32 +320,27 @@ async fn download_update_with_retry(
                     update.version,
                     error
                 );
-
-                if can_retry {
-                    emit_update_download_progress(
-                        app,
-                        build_progress_payload(
-                            "retrying",
-                            &update.version,
-                            0,
-                            None,
-                            attempt + 1,
-                            None,
-                        ),
-                    );
-                    sleep(retry_delay(attempt)).await;
-                    continue;
-                }
-
-                return Err(DownloadFailure {
-                    error,
-                    attempts: attempt,
-                });
+                Err(error)
             }
         }
-    }
+    };
 
-    unreachable!("下载重试循环必须在成功或失败时返回");
+    let retry_delay_fn = |attempt: u32| {
+        emit_update_download_progress(
+            app,
+            build_progress_payload(
+                "retrying",
+                &update.version,
+                0,
+                None,
+                attempt as usize + 1,
+                None,
+            ),
+        );
+        retry_delay(attempt as usize)
+    };
+
+    download_with_retry(attempt_download, retry_delay_fn).await
 }
 
 fn download_failure_to_app_error(failure: DownloadFailure) -> crate::errors::AppError {
@@ -576,9 +599,12 @@ pub fn get_shortcuts_help() -> Vec<crate::shortcuts::ShortcutHelp> {
 #[cfg(test)]
 mod tests {
     use super::{
-        extract_http_status_code, is_retryable_download_error, is_retryable_status_code,
-        map_updater_error,
+        download_failure_to_app_error, download_with_retry, extract_http_status_code,
+        is_retryable_download_error, is_retryable_status_code, map_updater_error,
+        normalize_expected_version, DownloadFailure, UPDATE_DOWNLOAD_MAX_ATTEMPTS,
     };
+    use crate::errors::{AppError, ErrorKind};
+    use std::time::Duration;
     use tauri_plugin_updater::Error as UpdaterError;
 
     #[test]
@@ -624,5 +650,141 @@ mod tests {
             "Download request failed with status: 503 Service Unavailable".into(),
         );
         assert!(is_retryable_download_error(&error));
+    }
+
+    #[test]
+    fn normalize_expected_version_none_for_absent_input() {
+        assert_eq!(normalize_expected_version(None), None);
+    }
+
+    #[test]
+    fn normalize_expected_version_none_for_empty_string() {
+        assert_eq!(normalize_expected_version(Some(String::new())), None);
+    }
+
+    #[test]
+    fn normalize_expected_version_none_for_whitespace_only() {
+        assert_eq!(normalize_expected_version(Some("   \t  ".to_string())), None);
+    }
+
+    #[test]
+    fn normalize_expected_version_trims_surrounding_whitespace() {
+        assert_eq!(
+            normalize_expected_version(Some("  1.2.3  ".to_string())),
+            Some("1.2.3".to_string())
+        );
+    }
+
+    fn network_failure(attempts: usize, status: u16) -> DownloadFailure {
+        DownloadFailure {
+            error: UpdaterError::Network(format!(
+                "Download request failed with status: {status}"
+            )),
+            attempts,
+        }
+    }
+
+    #[test]
+    fn download_failure_with_single_attempt_has_no_retry_note() {
+        let err: AppError = download_failure_to_app_error(network_failure(1, 500));
+        assert_eq!(err.kind, ErrorKind::Updater);
+        assert_eq!(err.code.as_deref(), Some("download_update_failed"));
+        assert!(!err.message.contains("已自动重试"));
+        assert!(err.message.contains("500"));
+    }
+
+    #[test]
+    fn download_failure_with_multiple_attempts_notes_retry_count() {
+        // attempts=3 -> "已自动重试 2 次"（attempts - 1）
+        let err: AppError = download_failure_to_app_error(network_failure(3, 503));
+        assert_eq!(err.kind, ErrorKind::Updater);
+        assert_eq!(err.code.as_deref(), Some("download_update_failed"));
+        assert!(err.message.contains("已自动重试 2 次"));
+        assert!(err.message.contains("503"));
+    }
+
+    fn retryable_network_error() -> UpdaterError {
+        UpdaterError::Network("Download request failed with status: 503".into())
+    }
+
+    fn fatal_network_error() -> UpdaterError {
+        UpdaterError::Network("Download request failed with status: 404".into())
+    }
+
+    /// 单次下载尝试的结果（测试 fake 闭包序列元素）。
+    type AttemptOutcome = Result<Vec<u8>, UpdaterError>;
+    /// fake 闭包返回的 boxed future，避免 async closure 的生命周期问题。
+    type AttemptFuture = std::pin::Pin<Box<dyn std::future::Future<Output = AttemptOutcome> + Send>>;
+
+    fn sequence_attempt_download(sequence: Vec<AttemptOutcome>) -> impl FnMut(u32) -> AttemptFuture {
+        use std::collections::VecDeque;
+        use std::sync::{Arc, Mutex};
+        let queue: Arc<Mutex<VecDeque<AttemptOutcome>>> =
+            Arc::new(Mutex::new(sequence.into_iter().collect()));
+        move |attempt: u32| {
+            let queue = queue.clone();
+            Box::pin(async move {
+                match queue.lock().expect("sequence queue poisoned").pop_front() {
+                    Some(result) => result,
+                    None => panic!("attempt_download 被调用次数超过序列长度（attempt {}）", attempt),
+                }
+            })
+        }
+    }
+
+    #[tokio::test]
+    async fn retry_loop_succeeds_after_retries() {
+        // [Err(retryable), Err(retryable), Ok] -> 成功且 retries=2
+        let sequence = vec![
+            Err(retryable_network_error()),
+            Err(retryable_network_error()),
+            Ok(vec![1, 2, 3]),
+        ];
+
+        let result = download_with_retry(sequence_attempt_download(sequence), |_| Duration::ZERO).await;
+
+        let (bytes, retries) = result.expect("应在两次重试后成功");
+        assert_eq!(retries, 2);
+        assert_eq!(bytes, vec![1, 2, 3]);
+    }
+
+    #[tokio::test]
+    async fn retry_loop_exhausts_attempts_on_persistent_retryable_error() {
+        // [Err(retryable) × MAX] -> Err 且 attempts=MAX
+        let sequence = vec![
+            Err(retryable_network_error()),
+            Err(retryable_network_error()),
+            Err(retryable_network_error()),
+        ];
+
+        let result = download_with_retry(sequence_attempt_download(sequence), |_| Duration::ZERO).await;
+
+        let failure = result.expect_err("持续可重试错误应耗尽重试后失败");
+        assert_eq!(failure.attempts, UPDATE_DOWNLOAD_MAX_ATTEMPTS);
+        assert!(failure.error.to_string().contains("503"));
+    }
+
+    #[tokio::test]
+    async fn retry_loop_fails_immediately_on_fatal_error() {
+        // [Err(fatal)] -> 立即 Err，attempts=1
+        let sequence = vec![Err(fatal_network_error())];
+
+        let result = download_with_retry(sequence_attempt_download(sequence), |_| Duration::ZERO).await;
+
+        let failure = result.expect_err("致命错误应立即失败");
+        assert_eq!(failure.attempts, 1);
+        assert!(failure.error.to_string().contains("404"));
+    }
+
+    #[tokio::test]
+    async fn retry_loop_stops_on_fatal_after_retryable() {
+        // [Err(retryable), Err(fatal)] -> 第二次即停（attempts=2）
+        let sequence = vec![Err(retryable_network_error()), Err(fatal_network_error())];
+
+        let result = download_with_retry(sequence_attempt_download(sequence), |_| Duration::ZERO).await;
+
+        let failure = result.expect_err("重试后遇到致命错误应停止");
+        assert_eq!(failure.attempts, 2);
+        assert!(failure.error.to_string().contains("404"));
     }
 }
