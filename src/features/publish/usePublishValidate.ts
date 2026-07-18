@@ -5,7 +5,10 @@ import { usePublishSpecBuilder } from "@/features/publish/usePublishSpecBuilder"
 import type { TranslationMap } from "@/features/publish/publishTransaction";
 import type { EnvironmentCheckSnapshot } from "@/features/environment/environment";
 import { renderPublishCommand } from "@/features/publish/renderPublishCommand";
-import { createPublishPreflightPipeline } from "@/features/publish/publishPreflight";
+import {
+  createPublishPreflightPipeline,
+  type PublishPreflightRunOptions,
+} from "@/features/publish/publishPreflight";
 import {
   getRecentConfigKeyFromSelection,
 } from "@/features/config/publishConfigIdentity";
@@ -78,12 +81,7 @@ export interface UsePublishValidateResult {
   } | null>;
   runPublishPreflight: (
     spec: ProviderPublishSpec,
-    options: {
-      runRevision: number;
-      feedbackMode: "toast" | "system";
-      restoreWindowOnFailure: boolean;
-      trayStatusEffect: boolean;
-    }
+    options: PublishPreflightRunOptions
   ) => Promise<boolean>;
   executePublishWithProtectedAccessRecovery: (
     spec: ProviderPublishSpec
@@ -115,7 +113,6 @@ export function usePublishValidate({
   openEnvironmentDialog,
   setEnvironmentLastCheck,
 }: UsePublishValidateParams): UsePublishValidateResult {
-  const presentationRevisionRef = useRef(0);
   const [publishPreviewCommand, setPublishPreviewCommand] = useState("");
   const hasPublishSpec =
     selectedRepo !== null && !(activeProviderUsesProjectFile && projectInfo === null);
@@ -262,13 +259,6 @@ export function usePublishValidate({
     };
   }, [buildCurrentPublishSpec]);
 
-  const isCurrentPresentationRevision = useCallback(
-    (runRevision: number) => {
-      return presentationRevisionRef.current === runRevision;
-    },
-    []
-  );
-
   const { runPublishPreflight, executePublishWithProtectedAccessRecovery } =
     useMemo(
       () =>
@@ -278,7 +268,6 @@ export function usePublishValidate({
           syncTrayPublishStatus,
           restoreMainWindowIfNeeded,
           resetLogCapture,
-          isCurrentPresentationRevision,
           openEnvironmentDialog,
           setEnvironmentLastCheck,
         }),
@@ -288,7 +277,6 @@ export function usePublishValidate({
         syncTrayPublishStatus,
         restoreMainWindowIfNeeded,
         resetLogCapture,
-        isCurrentPresentationRevision,
         openEnvironmentDialog,
         setEnvironmentLastCheck,
       ]
