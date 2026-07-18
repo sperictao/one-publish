@@ -23,6 +23,7 @@ pub fn generate_tauri_contracts() -> String {
     push_contract::<crate::commands::ProjectInfo>(&mut declarations);
     push_contract::<crate::commands::ProjectPublishProfileFile>(&mut declarations);
     push_contract::<crate::commands::PublishLogChunkEvent>(&mut declarations);
+    push_contract::<crate::commands::PublishSessionStartedEvent>(&mut declarations);
     push_contract::<crate::commands::ProtectedDirectoryLocation>(&mut declarations);
     push_contract::<crate::commands::PublishOutputValidationStatus>(&mut declarations);
     push_contract::<crate::commands::PublishOutputValidationIssue>(&mut declarations);

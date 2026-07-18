@@ -42,8 +42,8 @@ pub use publish::{
     preflight_publish_output, render_provider_publish, ProtectedDirectoryLocation,
     PublishLogChunkEvent, PublishOutputAccess, PublishOutputAccessStatus,
     PublishOutputPreflightResult, PublishOutputValidation, PublishOutputValidationIssue,
-    PublishOutputValidationStatus, PublishResult, RemoteLocationKind, RemoteLocationSummary,
-    RenderedPublishCommand,
+    PublishOutputValidationStatus, PublishResult, PublishSessionStartedEvent, RemoteLocationKind,
+    RemoteLocationSummary, RenderedPublishCommand,
 };
 pub(crate) use repository::{
     __cmd__check_repository_branch_connectivity, __cmd__detect_repository_provider,

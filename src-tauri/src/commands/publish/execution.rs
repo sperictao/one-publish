@@ -2,7 +2,9 @@ use super::errors::{
     classify_process_spawn_error, classify_process_wait_error, publish_error, publish_render_error,
     publish_schema_error,
 };
-use super::logs::{collect_log_chunks, emit_publish_log, read_stream_chunks};
+use super::logs::{
+    collect_log_chunks, emit_publish_log, emit_publish_session_started, read_stream_chunks,
+};
 use super::output::{
     build_display_command, count_output_files, resolve_plan_command, resolve_runtime_program,
     resolve_spawn_program, resolve_working_dir,
@@ -128,6 +130,9 @@ pub(crate) async fn execute_publish_spec(
 
     let session_id = build_publish_session_id(&spec.provider_id);
     let permit = reserve_execution(session_id.clone()).await?;
+    // 在 spawn 前通知前端锁定本会话，替代旧的"首 chunk 锁存"策略，
+    // 避免上一运行迟到的尾部 chunk 锁存成错误会话导致新运行日志被静默丢弃。
+    emit_publish_session_started(app, &session_id);
     let execution_result: Result<PublishResult, crate::errors::AppError> = async {
         if permit.is_cancel_requested() {
             return Ok(PublishResult {

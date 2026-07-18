@@ -32,6 +32,17 @@ pub struct PublishLogChunkEvent {
     pub(crate) line: String,
 }
 
+/// 发布会话开始事件。
+///
+/// 后端在 spawn 子进程前 emit，前端据此显式锁定当前捕获会话，
+/// 替代旧的"首 chunk 锁存"策略，避免上一运行迟到 chunk 抢占新会话。
+#[derive(Debug, Clone, Serialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(rename_all = "camelCase")]
+pub struct PublishSessionStartedEvent {
+    pub(crate) session_id: String,
+}
+
 #[derive(Debug, Clone)]
 pub(crate) struct PublishLogSummary {
     pub(crate) ends_with_newline: bool,
