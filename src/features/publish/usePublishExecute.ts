@@ -155,6 +155,7 @@ export function usePublishExecute({
 
       const preflightPassed = await validate.runPublishPreflight(spec, {
         runRevision,
+        isCurrentPresentationRevision,
         feedbackMode: transaction.feedbackMode,
         restoreWindowOnFailure: transaction.restoreWindowOnFailure,
         trayStatusEffect: transaction.trayStatusEffect,
