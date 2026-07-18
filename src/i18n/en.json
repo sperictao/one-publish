@@ -15,7 +15,6 @@
       "appearanceDescription": "Tune the visual theme to match your system and workflow.",
       "environmentDescription": "Review diagnostics and quickly jump to environment checks.",
       "shortcutsDescription": "Review global shortcuts and improve frequent action efficiency.",
-      "configDescription": "Manage publish templates and parameter presets.",
       "aboutDescription": "Check version details, update status, and release notes."
     },
     "general": {
@@ -63,7 +62,6 @@
   },
   "theme": {
     "label": "Appearance Theme",
-    "placeholder": "Select theme",
     "auto": "Follow System",
     "light": "Light",
     "dark": "Dark"
@@ -118,15 +116,6 @@
     "publish": "Execute Publish",
     "settings": "Open Settings",
     "empty": "No shortcuts"
-  },
-  "project": {
-    "title": "Project Info",
-    "description": "{{name}}",
-    "root": "Project root: {{path}}",
-    "file": "Project file: {{path}}",
-    "profiles": "Publish Profiles:",
-    "not": "Current repo is not a .NET project",
-    "notSelected": "Select a repo from the left"
   },
   "config": {
     "title": "Publish Configuration",

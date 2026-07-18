@@ -15,7 +15,6 @@
       "appearanceDescription": "调整主题显示风格，匹配你的系统与使用习惯。",
       "environmentDescription": "查看环境诊断结果并快速进入检查页。",
       "shortcutsDescription": "查看全局快捷键，提高常用操作效率。",
-      "configDescription": "管理发布配置模板与参数预设。",
       "aboutDescription": "查看版本信息、更新状态与更新日志。"
     },
     "general": {
@@ -63,7 +62,6 @@
   },
   "theme": {
     "label": "外观主题",
-    "placeholder": "选择主题",
     "auto": "跟随系统",
     "light": "亮色",
     "dark": "暗色"
@@ -118,15 +116,6 @@
     "publish": "执行发布",
     "settings": "打开设置",
     "empty": "暂无快捷键"
-  },
-  "project": {
-    "title": "项目信息",
-    "description": "{{name}}",
-    "root": "项目根目录: {{path}}",
-    "file": "项目文件: {{path}}",
-    "profiles": "发布配置:",
-    "not": "当前仓库不是 .NET 项目",
-    "notSelected": "从左侧选择一个仓库"
   },
   "config": {
     "title": "发布配置",
