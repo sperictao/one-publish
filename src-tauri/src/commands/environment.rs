@@ -132,6 +132,22 @@ fn validate_and_parse_fix_command(
                     "unsupported_brew_fix_command",
                 ));
             }
+            for arg in &args[1..] {
+                let looks_like_formula_path = arg.contains('/')
+                    || arg.contains('\\')
+                    || arg.ends_with(".rb");
+                let valid_formula_name = !arg.is_empty()
+                    && !arg.starts_with('-')
+                    && arg
+                        .chars()
+                        .all(|ch| ch.is_ascii_alphanumeric() || matches!(ch, '@' | '.' | '_' | '+' | '-'));
+                if looks_like_formula_path || !valid_formula_name {
+                    return Err(crate::errors::AppError::validation_with_code(
+                        format!("unsupported brew formula argument: {}", arg),
+                        "unsafe_brew_formula_argument",
+                    ));
+                }
+            }
         }
         "winget" => {
             if args.first() != Some(&"install") {
@@ -179,5 +195,46 @@ mod tests {
         let err = validate_and_parse_fix_command("brew install rust; rm -rf /")
             .expect_err("unsafe command should fail");
         assert!(err.message.contains("unsafe shell characters"));
+    }
+
+    #[test]
+    fn fix_command_parsing_allows_brew_install_multiple_packages() {
+        let (program, args) =
+            validate_and_parse_fix_command("brew install rustup cairo").expect("brew install");
+        assert_eq!(program, "brew");
+        assert_eq!(
+            args,
+            vec![
+                "install".to_string(),
+                "rustup".to_string(),
+                "cairo".to_string()
+            ]
+        );
+    }
+
+    fn assert_unsafe_brew_formula_argument(command: &str) {
+        let err = validate_and_parse_fix_command(command)
+            .expect_err("formula path/option argument should fail");
+        assert_eq!(err.code.as_deref(), Some("unsafe_brew_formula_argument"));
+    }
+
+    #[test]
+    fn fix_command_parsing_rejects_brew_local_formula_path() {
+        assert_unsafe_brew_formula_argument("brew install ./evil.rb");
+        assert_unsafe_brew_formula_argument("brew install /tmp/x.rb");
+        assert_unsafe_brew_formula_argument("brew install ../x");
+        assert_unsafe_brew_formula_argument("brew install C:\\x");
+    }
+
+    #[test]
+    fn fix_command_parsing_rejects_brew_tap_qualified_name() {
+        // Intentional tightening: tap-qualified names are not used by generated fix commands.
+        assert_unsafe_brew_formula_argument("brew install homebrew/cask/foo");
+    }
+
+    #[test]
+    fn fix_command_parsing_rejects_brew_install_options() {
+        // Intentional tightening: --cask/--formula style options are not in the allowlist.
+        assert_unsafe_brew_formula_argument("brew install --cask firefox");
     }
 }
