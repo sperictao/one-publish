@@ -43,6 +43,12 @@ const TRANSLATION_ALIAS_PATTERN = new RegExp(
   ].join("|")
 );
 
+// Locale keys that are intentionally kept despite having no static source
+// reference (e.g. dynamically constructed keys). Entries are exact keys or
+// dot-prefixes; every entry must carry a comment citing the construction
+// site. Warn-only stage 3 reports everything else unused.
+const UNUSED_KEYS_ALLOWLIST = [];
+
 function readLocale(file) {
   return JSON.parse(readFileSync(file, "utf8"));
 }
@@ -184,6 +190,30 @@ function hasLocaleKeyOrSubtree(localeKeys, key) {
   return false;
 }
 
+function hasUsedKeyCovering(usedKeys, key) {
+  if (usedKeys.has(key)) {
+    return true;
+  }
+
+  // A used key that is an ancestor subtree root covers every locale leaf
+  // beneath it (used `history` covers `history.item.title`). The reverse is
+  // intentionally not tolerated: an ancestor may be a standalone string, so
+  // a deeper used key must not keep it alive.
+  for (const usedKey of usedKeys) {
+    if (key.startsWith(`${usedKey}.`)) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+function isAllowlistedUnusedKey(key) {
+  return UNUSED_KEYS_ALLOWLIST.some(
+    (entry) => key === entry || key.startsWith(`${entry}.`)
+  );
+}
+
 function collectJsxTextCjk(file, source) {
   if (!file.endsWith(".tsx")) {
     return [];
@@ -305,10 +335,12 @@ for (const locale of localeKeySets) {
 const allKeys = new Set([...canonicalKeys]);
 const missingUsedKeys = [];
 const hardcodedCjkUi = [];
+const usedKeys = new Set();
 
 for (const file of getSourceFiles()) {
   const source = readFileSync(file, "utf8");
   for (const used of collectUsedTranslationKeys(file, source)) {
+    usedKeys.add(used.key);
     if (!hasLocaleKeyOrSubtree(allKeys, used.key)) {
       missingUsedKeys.push(used);
     }
@@ -348,6 +380,23 @@ if (uniqueHardcodedCjkUi.length > 0) {
       .map(formatLocation)
       .join("\n")}`
   );
+}
+
+// Stage 3 (warn-only): locale keys with no static source reference — the
+// reverse direction of the missing-used-keys check. Prints the orphan list
+// without affecting the exit code; promote to a hard failure (push into
+// `problems`) only after it runs clean for a few release cycles.
+for (const locale of localeKeySets) {
+  const orphans = [...locale.keys]
+    .filter(
+      (key) => !hasUsedKeyCovering(usedKeys, key) && !isAllowlistedUnusedKey(key)
+    )
+    .sort();
+  if (orphans.length > 0) {
+    console.warn(
+      `⚠ unused i18n keys in ${locale.file} (${orphans.length}):\n${orphans.join("\n")}`
+    );
+  }
 }
 
 if (problems.length > 0) {
