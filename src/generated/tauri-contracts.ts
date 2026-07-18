@@ -17,6 +17,8 @@ export type ProjectPublishProfileFile = { profileName: string, filePath: string,
 
 export type PublishLogChunkEvent = { sessionId: string, line: string, };
 
+export type PublishSessionStartedEvent = { sessionId: string, };
+
 export type ProtectedDirectoryLocation = "desktop" | "documents" | "downloads";
 
 export type PublishOutputValidationStatus = "not_applicable" | "compatible" | "incompatible";

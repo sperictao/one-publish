@@ -11,7 +11,9 @@ mod output_policy;
 mod preflight;
 mod session;
 
-pub use contracts::{PublishLogChunkEvent, PublishResult, RenderedPublishCommand};
+pub use contracts::{
+    PublishLogChunkEvent, PublishResult, RenderedPublishCommand, PublishSessionStartedEvent,
+};
 pub use preflight::{
     ProtectedDirectoryLocation, PublishOutputAccess, PublishOutputAccessStatus,
     PublishOutputPreflightResult, PublishOutputValidation, PublishOutputValidationIssue,

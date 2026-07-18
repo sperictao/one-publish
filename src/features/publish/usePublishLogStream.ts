@@ -1,7 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { isTauri } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
-import type { PublishLogChunkEvent } from "@/generated/tauri-contracts";
+import type {
+  PublishLogChunkEvent,
+  PublishSessionStartedEvent,
+} from "@/generated/tauri-contracts";
 
 // 可见日志层的最大保留字符数。完整日志仍存于 capturedOutputLogRef，
 // 此上限仅约束渲染到 DOM 的文本量，避免超长发布日志拖垮渲染性能。
@@ -78,8 +81,35 @@ export function usePublishLogStream() {
     }
 
     let disposed = false;
-    let unlisten: (() => void) | null = null;
+    let unlistenStarted: (() => void) | null = null;
+    let unlistenChunk: (() => void) | null = null;
 
+    // 后端在 spawn 前 emit 本事件，显式指定本次发布的会话 ID。
+    // 收到时先重置捕获（清空缓冲 + null ref），再锁存为活动会话，
+    // 替代旧的"首 chunk 锁存"，避免上一运行迟到 chunk 抢占新会话。
+    listen<PublishSessionStartedEvent>(
+      "provider-publish-session-started",
+      (event) => {
+        const sessionId = event.payload?.sessionId?.trim();
+        if (!sessionId) {
+          return;
+        }
+        beginLogCapture();
+        activeSessionIdRef.current = sessionId;
+      }
+    )
+      .then((dispose) => {
+        if (disposed) {
+          dispose();
+          return;
+        }
+        unlistenStarted = dispose;
+      })
+      .catch((err) => {
+        console.error("监听发布会话开始事件失败:", err);
+      });
+
+    // chunk 监听：未显式指定会话时一律丢弃（不再首 chunk 锁存）。
     listen<PublishLogChunkEvent>("provider-publish-log", (event) => {
       const sessionId = event.payload?.sessionId?.trim();
       const line = event.payload?.line;
@@ -88,12 +118,8 @@ export function usePublishLogStream() {
       }
 
       const activeSessionId = activeSessionIdRef.current;
-      if (activeSessionId && activeSessionId !== sessionId) {
+      if (activeSessionId !== sessionId) {
         return;
-      }
-
-      if (!activeSessionId) {
-        activeSessionIdRef.current = sessionId;
       }
 
       capturedOutputLogRef.current = `${capturedOutputLogRef.current}${line}`;
@@ -107,7 +133,7 @@ export function usePublishLogStream() {
           dispose();
           return;
         }
-        unlisten = dispose;
+        unlistenChunk = dispose;
       })
       .catch((err) => {
         console.error("监听发布日志失败:", err);
@@ -115,9 +141,10 @@ export function usePublishLogStream() {
 
     return () => {
       disposed = true;
-      unlisten?.();
+      unlistenStarted?.();
+      unlistenChunk?.();
     };
-  }, [appendOutputLog]);
+  }, [appendOutputLog, beginLogCapture]);
 
   return {
     outputLog,

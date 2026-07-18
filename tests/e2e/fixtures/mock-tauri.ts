@@ -384,10 +384,15 @@ export async function installMockTauri(page: Page, options: MockTauriOptions = {
 
           case "execute_provider_publish": {
             const execId = `exec-${Date.now()}`;
-            // Emit log chunks via event if the app listens
+            // 先 emit 会话开始事件（与真实后端 spawn 前的 emit 对齐），
+            // 再 emit 日志 chunk，保证日志捕获会话归属正确。
+            const sessionStarted = new CustomEvent("provider-publish-session-started", {
+              detail: { sessionId: execId },
+            });
             const publishEvent = new CustomEvent("publish-log-chunk", {
               detail: { sessionId: execId, line: "[mock] Publishing..." },
             });
+            setTimeout(() => window.dispatchEvent(sessionStarted), 50);
             setTimeout(() => window.dispatchEvent(publishEvent), 100);
             setTimeout(() => {
               window.dispatchEvent(new CustomEvent("publish-log-chunk", {

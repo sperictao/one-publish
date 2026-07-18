@@ -1,4 +1,4 @@
-use super::contracts::{PublishLogChunkEvent, PublishLogSummary};
+use super::contracts::{PublishLogChunkEvent, PublishLogSummary, PublishSessionStartedEvent};
 use std::collections::HashSet;
 use tauri::{AppHandle, Emitter};
 use tokio::io::{AsyncRead, AsyncReadExt};
@@ -11,6 +11,22 @@ pub(crate) fn emit_publish_log(app: &AppHandle, session_id: &str, line: &str) {
     };
     if let Err(error) = app.emit("provider-publish-log", payload) {
         log::warn!("failed to emit provider-publish-log: {}", error);
+    }
+}
+
+/// 在 spawn 子进程前 emit 发布会话开始事件。
+///
+/// 前端据此显式锁定活动会话，替代旧的"首 chunk 锁存"策略。
+/// emit 失败只 log 不中断——日志会话归属是观测性问题，不影响发布本身。
+pub(crate) fn emit_publish_session_started(app: &AppHandle, session_id: &str) {
+    let payload = PublishSessionStartedEvent {
+        session_id: session_id.to_string(),
+    };
+    if let Err(error) = app.emit("provider-publish-session-started", payload) {
+        log::warn!(
+            "failed to emit provider-publish-session-started: {}",
+            error
+        );
     }
 }
 
