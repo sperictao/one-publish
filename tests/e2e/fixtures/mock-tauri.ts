@@ -14,112 +14,14 @@
  */
 import { expect, type Page } from "@playwright/test";
 
-// ─── Types (mirror src/generated/tauri-contracts.ts) ───
-
-interface Branch {
-  name: string;
-  isMain: boolean;
-  isCurrent: boolean;
-  path: string;
-  commitCount: number | null;
-}
-
-interface Repository {
-  id: string;
-  name: string;
-  path: string;
-  projectFile: string | null;
-  currentBranch: string;
-  branches: Branch[];
-  isMain: boolean;
-  providerId: string | null;
-  publishConfig: RepoPublishConfig;
-}
-
-interface RepoPublishConfig {
-  selectedPreset: string;
-  isCustomMode: boolean;
-  customConfig: Record<string, unknown>;
-  profiles: ConfigProfile[];
-}
-
-interface ConfigProfile {
-  name: string;
-  providerId: string;
-  parameters: unknown;
-  profileGroup: string | null;
-  createdAt: string;
-  isSystemDefault: boolean;
-}
-
-interface AppState {
-  repositories: Repository[];
-  selectedRepoId: string | null;
-  leftPanelWidth: number;
-  middlePanelWidth: number;
-  panelWidthsCustomized: boolean;
-  minimizeToTrayOnClose: boolean;
-  language: string;
-  defaultOutputDir: string;
-  theme: string;
-  executionHistoryLimit: number;
-  environmentProviderIds: string[];
-  recentRepoIds: string[];
-  recentConfigKeysByRepo: Record<string, string[]>;
-  executionHistory: ExecutionRecord[];
-  startupNotice: string | null;
-}
-
-interface ExecutionRecord {
-  id: string;
-  repoId: string | null;
-  providerId: string;
-  projectPath: string;
-  startedAt: string;
-  finishedAt: string;
-  success: boolean;
-  cancelled: boolean;
-  outputDir: string | null;
-  error: string | null;
-  commandLine: string | null;
-  snapshotPath: string | null;
-  failureSignature: string | null;
-  outputExcerpt: string | null;
-  spec: unknown;
-  fileCount: number;
-}
-
-interface ProviderCatalogEntry {
-  id: string;
-  display_name: string;
-  version: string;
-  label: string;
-  command_example: string;
-  environment_label: string;
-  environment_description: string;
-  requires_project_binding: boolean;
-  project_path_kind: string;
-  supports_command_import: boolean;
-}
-
-interface ParameterSchema {
-  parameters: Record<string, { type: string; flag: string; multiple?: boolean; prefix?: string; description?: string }>;
-}
-
-interface EnvironmentCheckResult {
-  is_ready: boolean;
-  providers: Array<{ provider_id: string; installed: boolean; version: string | null; path: string | null }>;
-  issues: Array<{
-    severity: string;
-    provider_id: string;
-    issue_type: string;
-    description: string;
-    current_value: string | null;
-    expected_value: string | null;
-    fixes: Array<{ action_type: string; label: string; command: string | null; url: string | null }>;
-  }>;
-  checked_at: string;
-}
+import type {
+  AppState,
+  Branch,
+  EnvironmentCheckResult,
+  ParameterSchema,
+  ProviderCatalogEntry,
+  Repository,
+} from "@/generated/tauri-contracts";
 
 // ─── Default test data ───
 
@@ -152,8 +54,8 @@ const DEFAULT_REPOSITORIES: Repository[] = [
         noRestore: false,
         verbosity: "",
         noLogo: false,
+        deleteExistingFiles: false,
         properties: {},
-        define: [],
         useProfile: false,
         profileName: "",
       },
@@ -178,7 +80,7 @@ const DEFAULT_REPOSITORIES: Repository[] = [
       customConfig: {
         configuration: "Release", runtime: "", framework: "", selfContained: false,
         outputDir: "", noBuild: false, noRestore: false, verbosity: "", noLogo: false,
-        properties: {}, define: [], useProfile: false, profileName: "",
+        deleteExistingFiles: false, properties: {}, useProfile: false, profileName: "",
       },
       profiles: [{ name: "FolderProfile", providerId: "dotnet", parameters: {}, profileGroup: null, createdAt: "2025-01-01T00:00:00Z", isSystemDefault: false }],
     },
@@ -244,19 +146,19 @@ const DEFAULT_PROVIDERS: ProviderCatalogEntry[] = [
 
 const DOTNET_SCHEMA: ParameterSchema = {
   parameters: {
-    configuration: { type: "string", flag: "--configuration" },
-    runtime: { type: "string", flag: "--runtime" },
-    framework: { type: "string", flag: "--framework" },
-    selfContained: { type: "boolean", flag: "--self-contained" },
-    outputDir: { type: "string", flag: "--output" },
-    noBuild: { type: "boolean", flag: "--no-build" },
-    noRestore: { type: "boolean", flag: "--no-restore" },
-    verbosity: { type: "string", flag: "--verbosity" },
-    noLogo: { type: "boolean", flag: "--nologo" },
-    properties: { type: "map", flag: "--property" },
-    define: { type: "array", flag: "--define" },
-    useProfile: { type: "boolean", flag: "" },
-    profileName: { type: "string", flag: "" },
+    configuration: { type: "string", flag: "--configuration", multiple: null, prefix: null, description: null },
+    runtime: { type: "string", flag: "--runtime", multiple: null, prefix: null, description: null },
+    framework: { type: "string", flag: "--framework", multiple: null, prefix: null, description: null },
+    selfContained: { type: "boolean", flag: "--self-contained", multiple: null, prefix: null, description: null },
+    outputDir: { type: "string", flag: "--output", multiple: null, prefix: null, description: null },
+    noBuild: { type: "boolean", flag: "--no-build", multiple: null, prefix: null, description: null },
+    noRestore: { type: "boolean", flag: "--no-restore", multiple: null, prefix: null, description: null },
+    verbosity: { type: "string", flag: "--verbosity", multiple: null, prefix: null, description: null },
+    noLogo: { type: "boolean", flag: "--nologo", multiple: null, prefix: null, description: null },
+    properties: { type: "map", flag: "--property", multiple: null, prefix: null, description: null },
+    define: { type: "array", flag: "--define", multiple: null, prefix: null, description: null },
+    useProfile: { type: "boolean", flag: "", multiple: null, prefix: null, description: null },
+    profileName: { type: "string", flag: "", multiple: null, prefix: null, description: null },
   },
 };
 
