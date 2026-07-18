@@ -88,116 +88,143 @@ export function extractInvokeErrorCode(error: unknown): string | null {
   return extractCodeFromObject(error);
 }
 
-export function analyzeBranchRefreshFailure(
-  error: unknown
-): BranchRefreshFailureReason {
+interface MessageRule<Reason extends string> {
+  reason: Reason;
+  /** Every listed substring must appear in the normalized message. */
+  all?: string[];
+  /** At least one listed substring must appear in the normalized message. */
+  any?: string[];
+}
+
+const SHARED_REPOSITORY_PATH_NOT_FOUND_RULE: MessageRule<"path_not_found"> = {
+  reason: "path_not_found",
+  any: ["repository path does not exist"],
+};
+
+const SHARED_REPOSITORY_PATH_NOT_DIRECTORY_RULE: MessageRule<"not_directory"> = {
+  reason: "not_directory",
+  any: ["repository path is not a directory"],
+};
+
+const SHARED_PERMISSION_DENIED_RULE: MessageRule<"permission_denied"> = {
+  reason: "permission_denied",
+  any: [
+    "permission denied",
+    "operation not permitted",
+    "访问被拒绝",
+    "权限",
+  ],
+};
+
+function matchesMessageRule<Reason extends string>(
+  normalized: string,
+  rule: MessageRule<Reason>
+): boolean {
+  if (rule.all && !rule.all.every((pattern) => normalized.includes(pattern))) {
+    return false;
+  }
+
+  if (rule.any && !rule.any.some((pattern) => normalized.includes(pattern))) {
+    return false;
+  }
+
+  return true;
+}
+
+function classifyInvokeFailure<Reason extends string>(
+  error: unknown,
+  codeReasons: Record<string, Reason>,
+  messageRules: ReadonlyArray<MessageRule<Reason>>,
+  fallback: Reason
+): Reason {
   const errorCode = extractInvokeErrorCode(error);
-  if (errorCode) {
-    if (errorCode === "path_not_found") {
-      return "path_not_found";
-    }
-
-    if (errorCode === "not_directory") {
-      return "not_directory";
-    }
-
-    if (errorCode === "git_missing") {
-      return "git_missing";
-    }
-
-    if (errorCode === "cannot_connect_repo") {
-      return "cannot_connect_repo";
-    }
-
-    if (errorCode === "not_git_repo") {
-      return "not_git_repo";
-    }
-
-    if (errorCode === "permission_denied") {
-      return "permission_denied";
-    }
-
-    if (errorCode === "dubious_ownership") {
-      return "dubious_ownership";
-    }
-
-    if (errorCode === "no_branches") {
-      return "no_branches";
-    }
+  if (
+    errorCode &&
+    Object.prototype.hasOwnProperty.call(codeReasons, errorCode)
+  ) {
+    return codeReasons[errorCode];
   }
 
   const normalized = extractInvokeErrorMessage(error).toLowerCase();
-
-  if (normalized.includes("repository path does not exist")) {
-    return "path_not_found";
+  for (const rule of messageRules) {
+    if (matchesMessageRule(normalized, rule)) {
+      return rule.reason;
+    }
   }
 
-  if (normalized.includes("repository path is not a directory")) {
-    return "not_directory";
-  }
+  return fallback;
+}
 
-  if (
-    normalized.includes("failed to execute git") &&
-    (normalized.includes("no such file or directory") ||
-      normalized.includes("os error 2") ||
-      normalized.includes("系统找不到指定的文件"))
-  ) {
-    return "git_missing";
-  }
+const BRANCH_REFRESH_CODE_REASONS: Record<string, BranchRefreshFailureReason> = {
+  path_not_found: "path_not_found",
+  not_directory: "not_directory",
+  git_missing: "git_missing",
+  cannot_connect_repo: "cannot_connect_repo",
+  not_git_repo: "not_git_repo",
+  permission_denied: "permission_denied",
+  dubious_ownership: "dubious_ownership",
+  no_branches: "no_branches",
+};
 
-  if (
-    normalized.includes("unable to access") ||
-    normalized.includes("failed to connect") ||
-    normalized.includes("could not resolve host") ||
-    normalized.includes("connection timed out") ||
-    normalized.includes("connection refused") ||
-    normalized.includes("unable to connect") ||
-    normalized.includes("unable to look up") ||
-    normalized.includes("couldn't connect to server") ||
-    normalized.includes("network is unreachable") ||
-    normalized.includes("could not read from remote repository") ||
-    normalized.includes("could not read username") ||
-    normalized.includes("authentication failed") ||
-    normalized.includes("publickey") ||
-    normalized.includes("repository not found") ||
-    normalized.includes("proxy connect aborted") ||
-    normalized.includes("无法连接") ||
-    normalized.includes("连接超时") ||
-    normalized.includes("连接被拒绝") ||
-    normalized.includes("无法访问远程仓库") ||
-    normalized.includes("无法从远程仓库读取") ||
-    normalized.includes("无法解析主机") ||
-    normalized.includes("网络不可达")
-  ) {
-    return "cannot_connect_repo";
-  }
+const BRANCH_REFRESH_MESSAGE_RULES: ReadonlyArray<
+  MessageRule<BranchRefreshFailureReason>
+> = [
+  SHARED_REPOSITORY_PATH_NOT_FOUND_RULE,
+  SHARED_REPOSITORY_PATH_NOT_DIRECTORY_RULE,
+  {
+    reason: "git_missing",
+    all: ["failed to execute git"],
+    any: [
+      "no such file or directory",
+      "os error 2",
+      "系统找不到指定的文件",
+    ],
+  },
+  {
+    reason: "cannot_connect_repo",
+    any: [
+      "unable to access",
+      "failed to connect",
+      "could not resolve host",
+      "connection timed out",
+      "connection refused",
+      "unable to connect",
+      "unable to look up",
+      "couldn't connect to server",
+      "network is unreachable",
+      "could not read from remote repository",
+      "could not read username",
+      "authentication failed",
+      "publickey",
+      "repository not found",
+      "proxy connect aborted",
+      "无法连接",
+      "连接超时",
+      "连接被拒绝",
+      "无法访问远程仓库",
+      "无法从远程仓库读取",
+      "无法解析主机",
+      "网络不可达",
+    ],
+  },
+  {
+    reason: "not_git_repo",
+    any: ["not a git repository", "不是 git 仓库", "不是一个git仓库"],
+  },
+  { reason: "dubious_ownership", any: ["detected dubious ownership"] },
+  SHARED_PERMISSION_DENIED_RULE,
+  { reason: "no_branches", any: ["no git branches found"] },
+];
 
-  if (
-    normalized.includes("not a git repository") ||
-    normalized.includes("不是 git 仓库") ||
-    normalized.includes("不是一个git仓库")
-  ) {
-    return "not_git_repo";
-  }
-
-  if (normalized.includes("detected dubious ownership")) {
-    return "dubious_ownership";
-  }
-
-  if (
-    normalized.includes("permission denied") ||
-    normalized.includes("operation not permitted") ||
-    normalized.includes("访问被拒绝") ||
-    normalized.includes("权限")
-  ) {
-    return "permission_denied";
-  }
-
-  if (normalized.includes("no git branches found")) {
-    return "no_branches";
-  }
-
-  return "unknown";
+export function analyzeBranchRefreshFailure(
+  error: unknown
+): BranchRefreshFailureReason {
+  return classifyInvokeFailure(
+    error,
+    BRANCH_REFRESH_CODE_REASONS,
+    BRANCH_REFRESH_MESSAGE_RULES,
+    "unknown"
+  );
 }
 
 export type ProviderDetectFailureReason =
@@ -208,66 +235,45 @@ export type ProviderDetectFailureReason =
   | "read_failed"
   | "unknown";
 
+const PROVIDER_DETECT_CODE_REASONS: Record<string, ProviderDetectFailureReason> = {
+  path_not_found: "path_not_found",
+  not_directory: "not_directory",
+  permission_denied: "permission_denied",
+  unsupported_provider: "unsupported_provider",
+  read_failed: "read_failed",
+};
+
+const PROVIDER_DETECT_MESSAGE_RULES: ReadonlyArray<
+  MessageRule<ProviderDetectFailureReason>
+> = [
+  SHARED_REPOSITORY_PATH_NOT_FOUND_RULE,
+  SHARED_REPOSITORY_PATH_NOT_DIRECTORY_RULE,
+  SHARED_PERMISSION_DENIED_RULE,
+  { reason: "permission_denied", any: ["无权限"] },
+  {
+    reason: "unsupported_provider",
+    any: ["cannot detect provider from repository path"],
+  },
+  {
+    reason: "read_failed",
+    any: [
+      "failed to read repository directory",
+      "input/output error",
+      "i/o error",
+      "设备未就绪",
+    ],
+  },
+];
+
 export function analyzeProviderDetectFailure(
   error: unknown
 ): ProviderDetectFailureReason {
-  const errorCode = extractInvokeErrorCode(error);
-  if (errorCode) {
-    if (errorCode === "path_not_found") {
-      return "path_not_found";
-    }
-
-    if (errorCode === "not_directory") {
-      return "not_directory";
-    }
-
-    if (errorCode === "permission_denied") {
-      return "permission_denied";
-    }
-
-    if (errorCode === "unsupported_provider") {
-      return "unsupported_provider";
-    }
-
-    if (errorCode === "read_failed") {
-      return "read_failed";
-    }
-  }
-
-  const normalized = extractInvokeErrorMessage(error).toLowerCase();
-
-  if (normalized.includes("repository path does not exist")) {
-    return "path_not_found";
-  }
-
-  if (normalized.includes("repository path is not a directory")) {
-    return "not_directory";
-  }
-
-  if (
-    normalized.includes("permission denied") ||
-    normalized.includes("operation not permitted") ||
-    normalized.includes("访问被拒绝") ||
-    normalized.includes("无权限") ||
-    normalized.includes("权限")
-  ) {
-    return "permission_denied";
-  }
-
-  if (normalized.includes("cannot detect provider from repository path")) {
-    return "unsupported_provider";
-  }
-
-  if (
-    normalized.includes("failed to read repository directory") ||
-    normalized.includes("input/output error") ||
-    normalized.includes("i/o error") ||
-    normalized.includes("设备未就绪")
-  ) {
-    return "read_failed";
-  }
-
-  return "unknown";
+  return classifyInvokeFailure(
+    error,
+    PROVIDER_DETECT_CODE_REASONS,
+    PROVIDER_DETECT_MESSAGE_RULES,
+    "unknown"
+  );
 }
 
 export type ProjectScanFailureReason =
@@ -279,68 +285,38 @@ export type ProjectScanFailureReason =
   | "current_dir_failed"
   | "unknown";
 
+const PROJECT_SCAN_CODE_REASONS: Record<string, ProjectScanFailureReason> = {
+  path_not_found: "path_not_found",
+  project_root_not_found: "project_root_not_found",
+  project_file_not_found: "project_file_not_found",
+  multiple_project_files_found: "multiple_project_files_found",
+  permission_denied: "permission_denied",
+  current_dir_failed: "current_dir_failed",
+};
+
+const PROJECT_SCAN_MESSAGE_RULES: ReadonlyArray<
+  MessageRule<ProjectScanFailureReason>
+> = [
+  { reason: "path_not_found", any: ["scan start path does not exist"] },
+  { reason: "project_root_not_found", any: ["cannot find project root"] },
+  { reason: "project_file_not_found", any: ["cannot find project file"] },
+  {
+    reason: "multiple_project_files_found",
+    any: ["multiple project files found"],
+  },
+  SHARED_PERMISSION_DENIED_RULE,
+  { reason: "current_dir_failed", any: ["failed to resolve current directory"] },
+];
+
 export function analyzeProjectScanFailure(
   error: unknown
 ): ProjectScanFailureReason {
-  const errorCode = extractInvokeErrorCode(error);
-  if (errorCode) {
-    if (errorCode === "path_not_found") {
-      return "path_not_found";
-    }
-
-    if (errorCode === "project_root_not_found") {
-      return "project_root_not_found";
-    }
-
-    if (errorCode === "project_file_not_found") {
-      return "project_file_not_found";
-    }
-
-    if (errorCode === "multiple_project_files_found") {
-      return "multiple_project_files_found";
-    }
-
-    if (errorCode === "permission_denied") {
-      return "permission_denied";
-    }
-
-    if (errorCode === "current_dir_failed") {
-      return "current_dir_failed";
-    }
-  }
-
-  const normalized = extractInvokeErrorMessage(error).toLowerCase();
-
-  if (normalized.includes("scan start path does not exist")) {
-    return "path_not_found";
-  }
-
-  if (normalized.includes("cannot find project root")) {
-    return "project_root_not_found";
-  }
-
-  if (normalized.includes("cannot find project file")) {
-    return "project_file_not_found";
-  }
-
-  if (normalized.includes("multiple project files found")) {
-    return "multiple_project_files_found";
-  }
-
-  if (
-    normalized.includes("permission denied") ||
-    normalized.includes("operation not permitted") ||
-    normalized.includes("访问被拒绝") ||
-    normalized.includes("权限")
-  ) {
-    return "permission_denied";
-  }
-
-  if (normalized.includes("failed to resolve current directory")) {
-    return "current_dir_failed";
-  }
-
-  return "unknown";
+  return classifyInvokeFailure(
+    error,
+    PROJECT_SCAN_CODE_REASONS,
+    PROJECT_SCAN_MESSAGE_RULES,
+    "unknown"
+  );
 }
 
 export type PublishExecutionFailureReason =
@@ -359,151 +335,89 @@ export type PublishExecutionFailureReason =
   | "process_failed"
   | "unknown";
 
+const PUBLISH_EXECUTION_CODE_REASONS: Record<
+  string,
+  PublishExecutionFailureReason
+> = {
+  publish_already_running: "already_running",
+  project_path_not_found: "project_path_not_found",
+  publish_output_windows_drive_root_missing: "output_path_invalid",
+  publish_output_windows_style_path_on_posix: "output_path_incompatible",
+  publish_output_posix_absolute_path_on_windows: "output_path_incompatible",
+  publish_output_path_incompatible: "output_path_incompatible",
+  publish_protected_directory_access_denied:
+    "protected_directory_access_denied",
+  publish_remote_target_not_implemented: "remote_target_not_implemented",
+  unsupported_provider: "unsupported_provider",
+  render_error: "render_error",
+  tool_missing: "tool_missing",
+  permission_denied: "permission_denied",
+  plan_missing_step: "plan_invalid",
+  plan_invalid_step_title: "plan_invalid",
+  java_project_dir_required: "plan_invalid",
+  java_gradle_not_found: "java_gradle_missing",
+  publish_spawn_failed: "process_failed",
+  publish_wait_failed: "process_failed",
+  publish_log_collect_failed: "process_failed",
+};
+
+const PUBLISH_EXECUTION_MESSAGE_RULES: ReadonlyArray<
+  MessageRule<PublishExecutionFailureReason>
+> = [
+  {
+    reason: "already_running",
+    any: ["another publish execution is already running"],
+  },
+  { reason: "project_path_not_found", any: ["project path does not exist"] },
+  {
+    reason: "output_path_invalid",
+    any: ["missing windows drive or share root"],
+  },
+  {
+    reason: "output_path_incompatible",
+    any: ["publish output path is incompatible with this system"],
+  },
+  {
+    reason: "protected_directory_access_denied",
+    any: ["publish output directory requires macos protected folder access"],
+  },
+  {
+    reason: "remote_target_not_implemented",
+    any: ["remote publish target is not implemented yet"],
+  },
+  { reason: "unsupported_provider", any: ["unsupported provider"] },
+  { reason: "render_error", any: ["parameter render error"] },
+  {
+    reason: "tool_missing",
+    all: ["failed to spawn"],
+    any: ["no such file or directory", "os error 2"],
+  },
+  SHARED_PERMISSION_DENIED_RULE,
+  {
+    reason: "plan_invalid",
+    any: ["execution plan has no step", "execution step title is empty"],
+  },
+  {
+    reason: "java_gradle_missing",
+    any: ["gradle wrapper not found", "java provider requires a project directory"],
+  },
+  {
+    reason: "process_failed",
+    any: [
+      "failed to spawn",
+      "failed to wait publish process",
+      "failed to collect publish logs",
+    ],
+  },
+];
+
 export function analyzePublishExecutionFailure(
   error: unknown
 ): PublishExecutionFailureReason {
-  const errorCode = extractInvokeErrorCode(error);
-  if (errorCode) {
-    if (errorCode === "publish_already_running") {
-      return "already_running";
-    }
-
-    if (errorCode === "project_path_not_found") {
-      return "project_path_not_found";
-    }
-
-    if (errorCode === "publish_output_windows_drive_root_missing") {
-      return "output_path_invalid";
-    }
-
-    if (
-      errorCode === "publish_output_windows_style_path_on_posix" ||
-      errorCode === "publish_output_posix_absolute_path_on_windows" ||
-      errorCode === "publish_output_path_incompatible"
-    ) {
-      return "output_path_incompatible";
-    }
-
-    if (errorCode === "publish_protected_directory_access_denied") {
-      return "protected_directory_access_denied";
-    }
-
-    if (errorCode === "publish_remote_target_not_implemented") {
-      return "remote_target_not_implemented";
-    }
-
-    if (errorCode === "unsupported_provider") {
-      return "unsupported_provider";
-    }
-
-    if (errorCode === "render_error") {
-      return "render_error";
-    }
-
-    if (errorCode === "tool_missing") {
-      return "tool_missing";
-    }
-
-    if (errorCode === "permission_denied") {
-      return "permission_denied";
-    }
-
-    if (
-      errorCode === "plan_missing_step" ||
-      errorCode === "plan_invalid_step_title" ||
-      errorCode === "java_project_dir_required"
-    ) {
-      return "plan_invalid";
-    }
-
-    if (errorCode === "java_gradle_not_found") {
-      return "java_gradle_missing";
-    }
-
-    if (
-      errorCode === "publish_spawn_failed" ||
-      errorCode === "publish_wait_failed" ||
-      errorCode === "publish_log_collect_failed"
-    ) {
-      return "process_failed";
-    }
-  }
-
-  const normalized = extractInvokeErrorMessage(error).toLowerCase();
-
-  if (normalized.includes("another publish execution is already running")) {
-    return "already_running";
-  }
-
-  if (normalized.includes("project path does not exist")) {
-    return "project_path_not_found";
-  }
-
-  if (normalized.includes("missing windows drive or share root")) {
-    return "output_path_invalid";
-  }
-
-  if (
-    normalized.includes("publish output path is incompatible with this system")
-  ) {
-    return "output_path_incompatible";
-  }
-
-  if (
-    normalized.includes("publish output directory requires macos protected folder access")
-  ) {
-    return "protected_directory_access_denied";
-  }
-
-  if (normalized.includes("remote publish target is not implemented yet")) {
-    return "remote_target_not_implemented";
-  }
-
-  if (normalized.includes("unsupported provider")) {
-    return "unsupported_provider";
-  }
-
-  if (normalized.includes("parameter render error")) {
-    return "render_error";
-  }
-
-  if (
-    normalized.includes("failed to spawn") &&
-    (normalized.includes("no such file or directory") || normalized.includes("os error 2"))
-  ) {
-    return "tool_missing";
-  }
-
-  if (
-    normalized.includes("permission denied") ||
-    normalized.includes("operation not permitted") ||
-    normalized.includes("访问被拒绝") ||
-    normalized.includes("权限")
-  ) {
-    return "permission_denied";
-  }
-
-  if (
-    normalized.includes("execution plan has no step") ||
-    normalized.includes("execution step title is empty")
-  ) {
-    return "plan_invalid";
-  }
-
-  if (
-    normalized.includes("gradle wrapper not found") ||
-    normalized.includes("java provider requires a project directory")
-  ) {
-    return "java_gradle_missing";
-  }
-
-  if (
-    normalized.includes("failed to spawn") ||
-    normalized.includes("failed to wait publish process") ||
-    normalized.includes("failed to collect publish logs")
-  ) {
-    return "process_failed";
-  }
-
-  return "unknown";
+  return classifyInvokeFailure(
+    error,
+    PUBLISH_EXECUTION_CODE_REASONS,
+    PUBLISH_EXECUTION_MESSAGE_RULES,
+    "unknown"
+  );
 }
