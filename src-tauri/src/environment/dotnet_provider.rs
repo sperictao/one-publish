@@ -1,59 +1,45 @@
 // .NET provider environment detection
 
+use crate::environment::probe::{check_tool, detect_tool_issues, ToolProbe, VersionSource};
 use crate::environment::types::*;
 /// Minimum required .NET SDK version
 const MIN_DOTNET_VERSION: &str = "6.0.0";
 const PROVIDER_ID: &str = "dotnet";
 
+const DOTNET_PROBE: ToolProbe = ToolProbe {
+    provider_id: PROVIDER_ID,
+    command: "dotnet",
+    version_arg: "--version",
+    version_source: VersionSource::Stdout,
+    min_version: MIN_DOTNET_VERSION,
+};
+
+/// Parse dotnet `--version` stdout into a version string.
+///
+/// Returns `Some("unknown")` rather than `None` when the prefix doesn't
+/// match, preserving the prior fallback that reported `installed: true`
+/// with `version: "unknown"` on a successful-but-unparseable run. The
+/// empty prefix matches any first whitespace-delimited token, matching
+/// the prior `parse_version(&output.stdout, "")` call.
+fn parse_dotnet_version(output: &[u8]) -> Option<String> {
+    Some(
+        parse_version(output, "").unwrap_or_else(|| "unknown".to_string()),
+    )
+}
+
 /// Check .NET SDK installation
 pub async fn check_dotnet() -> ProviderStatus {
-    let path = super::types::command_path("dotnet");
-    let program = path.clone().unwrap_or_else(|| "dotnet".to_string());
-
-    match crate::process_utils::new_std_command(&program)
-        .arg("--version")
-        .output()
-    {
-        Ok(output) => {
-            let version_str = super::types::parse_version(&output.stdout, "")
-                .unwrap_or_else(|| "unknown".to_string());
-
-            ProviderStatus {
-                provider_id: PROVIDER_ID.to_string(),
-                installed: true,
-                version: Some(version_str),
-                path,
-            }
-        }
-        Err(_) => ProviderStatus {
-            provider_id: PROVIDER_ID.to_string(),
-            installed: false,
-            version: None,
-            path,
-        },
-    }
+    check_tool(&DOTNET_PROBE, parse_dotnet_version).await
 }
 
 /// Detect .NET-specific issues
 pub fn detect_dotnet_issues(status: &ProviderStatus) -> Vec<EnvironmentIssue> {
-    let mut issues = Vec::new();
-
-    if !status.installed {
-        issues.push(create_missing_dotnet_issue());
-        return issues;
-    }
-
-    let Some(version) = status.version.as_deref() else {
-        return issues;
-    };
-
-    if super::types::parse_semver(version).is_some()
-        && super::types::compare_versions(version, MIN_DOTNET_VERSION) < 0
-    {
-        issues.push(create_outdated_dotnet_issue(version, MIN_DOTNET_VERSION));
-    }
-
-    issues
+    detect_tool_issues(
+        &DOTNET_PROBE,
+        status,
+        create_missing_dotnet_issue,
+        create_outdated_dotnet_issue,
+    )
 }
 
 /// Create issue for missing .NET SDK

@@ -2,6 +2,7 @@ pub mod cargo_provider;
 pub mod dotnet_provider;
 pub mod go_provider;
 pub mod java_provider;
+pub mod probe;
 pub mod types;
 
 pub use cargo_provider::check_cargo;
