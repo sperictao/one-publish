@@ -7,8 +7,10 @@ import {
   scanProjectCandidates as scanProjectCandidatesRequest,
 } from "@/lib/store/api";
 import type { ProjectInfo, ProjectScanCandidates } from "@/lib/store/types";
-
-const loadInvokeErrors = () => import("@/lib/tauri/invokeErrors");
+import {
+  analyzeProjectScanFailure,
+  extractInvokeErrorMessage,
+} from "@/lib/tauri/invokeErrors";
 
 interface TranslationMap {
   [key: string]: string | undefined;
@@ -25,8 +27,6 @@ export function useProjectScanner(params: {
         return;
       }
 
-      const { analyzeProjectScanFailure, extractInvokeErrorMessage } =
-        await loadInvokeErrors();
       const rawErrorMessage = extractInvokeErrorMessage(err);
       const failureReason = analyzeProjectScanFailure(err);
 

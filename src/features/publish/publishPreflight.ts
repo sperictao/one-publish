@@ -18,8 +18,10 @@ import {
   type PublishResult,
 } from "@/features/publish/publishRuntime";
 import { isProtectedOutputAccessFailure } from "@/features/history/publishFailure";
-
-const loadInvokeErrors = () => import("@/lib/tauri/invokeErrors");
+import {
+  analyzePublishExecutionFailure,
+  extractInvokeErrorMessage,
+} from "@/lib/tauri/invokeErrors";
 
 // ── Types ──────────────────────────────────────────────────────────
 
@@ -153,7 +155,6 @@ export function createPublishPreflightPipeline(deps: PublishPreflightDeps) {
         );
       }
     } catch (err) {
-      const { extractInvokeErrorMessage } = await loadInvokeErrors();
       await abortPublishPreparation({
         ...options,
         level: "error",
@@ -168,7 +169,6 @@ export function createPublishPreflightPipeline(deps: PublishPreflightDeps) {
     try {
       outputPreflight = await preflightPublishOutput(spec);
     } catch (err) {
-      const { extractInvokeErrorMessage } = await loadInvokeErrors();
       await abortPublishPreparation({
         ...options,
         level: "error",
@@ -199,7 +199,6 @@ export function createPublishPreflightPipeline(deps: PublishPreflightDeps) {
         );
         outputPreflight = accessRequest.preflight;
       } catch (err) {
-        const { extractInvokeErrorMessage } = await loadInvokeErrors();
         await abortPublishPreparation({
           ...options,
           level: "error",
@@ -262,7 +261,6 @@ export function createPublishPreflightPipeline(deps: PublishPreflightDeps) {
     try {
       result = await executeProviderPublish(spec);
     } catch (err) {
-      const { analyzePublishExecutionFailure } = await loadInvokeErrors();
       if (
         analyzePublishExecutionFailure(err) !==
         "protected_directory_access_denied"
