@@ -142,11 +142,16 @@ export function usePublishExecute({
 
   const runPublishSpec = useCallback(
     async (spec: ProviderPublishSpec, options?: RunPublishOptions) => {
+      if (usePublishStore.getState().isPublishing) {
+        return;
+      }
+
       const transaction = createPublishTransactionContext({
         selectedRepoId,
         options,
       });
       const runRevision = startPublishPresentationRun();
+      setIsPublishing(true);
 
       const preflightPassed = await validate.runPublishPreflight(spec, {
         runRevision,
@@ -155,13 +160,13 @@ export function usePublishExecute({
         trayStatusEffect: transaction.trayStatusEffect,
       });
       if (!preflightPassed) {
+        setIsPublishing(false);
         return;
       }
 
       if (isCurrentPresentationRevision(runRevision)) {
         setLastPublishSpec(spec);
       }
-      setIsPublishing(true);
 
       try {
         if (shouldRecordRecentConfig(transaction)) {

@@ -1207,4 +1207,98 @@ describe("usePublishRunner", () => {
       expect(result.current.outputLog).toContain("Build succeeded.");
     });
   });
+
+  it("concurrent_runPublishSpec_is_rejected_before_any_side_effect", async () => {
+    mocks.runEnvironmentCheck.mockResolvedValue(readyEnvironment);
+    mocks.invoke.mockResolvedValue(createPublishResult());
+
+    const props = createRunnerProps();
+    const { result } = renderHook(() => usePublishRunner(props));
+
+    usePublishStore.getState().setIsPublishing(true);
+
+    await act(async () => {
+      await result.current.runPublishSpec(
+        {
+          version: 1,
+          provider_id: "dotnet",
+          project_path: "/repo/App.csproj",
+          parameters: {
+            configuration: "Release",
+          },
+        },
+        {
+          repoId: "repo-1",
+          recentConfigKey: "pubxml:FolderProfile",
+        }
+      );
+    });
+
+    expect(mocks.runEnvironmentCheck).not.toHaveBeenCalled();
+    expect(mocks.preflightPublishOutput).not.toHaveBeenCalled();
+    expect(mocks.invoke).not.toHaveBeenCalled();
+    expect(props.pushRecentConfig).not.toHaveBeenCalled();
+    expect(props.savePublishRecord).not.toHaveBeenCalled();
+    // 守卫在任何副作用之前 return，finally 未执行，不消费调用方的 isPublishing 状态
+    expect(usePublishStore.getState().isPublishing).toBe(true);
+
+    usePublishStore.getState().setIsPublishing(false);
+  });
+
+  it("isPublishing_set_during_preflight", async () => {
+    let resolveEnvironmentCheck: (value: EnvironmentCheckResult) => void =
+      () => {};
+    mocks.runEnvironmentCheck.mockImplementation(
+      () =>
+        new Promise<EnvironmentCheckResult>((resolve) => {
+          resolveEnvironmentCheck = resolve;
+        })
+    );
+
+    const props = createRunnerProps();
+    const { result } = renderHook(() => usePublishRunner(props));
+
+    let publishPromise: Promise<void> | undefined;
+    act(() => {
+      publishPromise = result.current.runPublishSpec(
+        {
+          version: 1,
+          provider_id: "dotnet",
+          project_path: "/repo/App.csproj",
+          parameters: {
+            configuration: "Release",
+          },
+        },
+        {
+          repoId: "repo-1",
+          recentConfigKey: "pubxml:FolderProfile",
+        }
+      );
+    });
+
+    // preflight 仍 pending，isPublishing 已在第一个 await 之前置位
+    expect(usePublishStore.getState().isPublishing).toBe(true);
+
+    await act(async () => {
+      resolveEnvironmentCheck({
+        ...readyEnvironment,
+        is_ready: false,
+        issues: [
+          {
+            severity: "critical",
+            provider_id: "dotnet",
+            issue_type: "missing_tool",
+            description: ".NET SDK missing",
+            fixes: [],
+          },
+        ],
+      });
+      await publishPromise;
+    });
+
+    // preflight 拒绝（环境阻断）后早退路径复位
+    expect(usePublishStore.getState().isPublishing).toBe(false);
+    expect(mocks.invoke).not.toHaveBeenCalled();
+    expect(props.savePublishRecord).not.toHaveBeenCalled();
+  });
 });
