@@ -14,7 +14,7 @@ fn normalize_key(key: &str) -> String {
         .collect()
 }
 
-fn is_sensitive_key(key: &str) -> bool {
+pub(crate) fn is_sensitive_key(key: &str) -> bool {
     let normalized = normalize_key(key);
     [
         "password",
@@ -107,14 +107,26 @@ fn is_path_switch(token: &str) -> bool {
     )
 }
 
-fn sanitize_assignment_token(token: &str) -> Option<String> {
+fn sanitize_secret_assignment_token(token: &str) -> Option<String> {
     let stripped = trim_token_wrappers(token);
-    let (left, value) = stripped.split_once('=')?;
+    let (left, _) = stripped.split_once('=')?;
     let assignment_key = left.rsplit_once(':').map(|(_, tail)| tail).unwrap_or(left);
 
     if is_sensitive_key(assignment_key) {
         return Some(format!("{left}={REDACTED_VALUE}"));
     }
+
+    None
+}
+
+pub(crate) fn sanitize_assignment_token(token: &str) -> Option<String> {
+    if let Some(redacted) = sanitize_secret_assignment_token(token) {
+        return Some(redacted);
+    }
+
+    let stripped = trim_token_wrappers(token);
+    let (left, value) = stripped.split_once('=')?;
+    let assignment_key = left.rsplit_once(':').map(|(_, tail)| tail).unwrap_or(left);
 
     if (is_path_like_key(assignment_key) || is_path_switch(left)) && looks_like_absolute_path(value)
     {
@@ -172,6 +184,36 @@ pub(crate) fn sanitize_freeform_text(text: &str) -> String {
 
     if !token.is_empty() {
         output.push_str(&sanitize_text_token(&token, &mut pending_path_value));
+    }
+
+    output
+}
+
+/// 持久化路径专用：只遮蔽密钥类赋值（`-p:ApiToken=x`、`token=x`），
+/// 不做任何路径替换（历史记录重跑依赖路径原值）。
+pub(crate) fn sanitize_secrets_in_text(text: &str) -> String {
+    let mut output = String::with_capacity(text.len());
+    let mut token = String::new();
+
+    for ch in text.chars() {
+        if ch.is_whitespace() {
+            if !token.is_empty() {
+                output.push_str(
+                    &sanitize_secret_assignment_token(&token)
+                        .unwrap_or_else(|| token.clone()),
+                );
+                token.clear();
+            }
+            output.push(ch);
+        } else {
+            token.push(ch);
+        }
+    }
+
+    if !token.is_empty() {
+        output.push_str(
+            &sanitize_secret_assignment_token(&token).unwrap_or_else(|| token.clone()),
+        );
     }
 
     output
@@ -307,8 +349,29 @@ pub(crate) fn write_private_text_file(path: &Path, content: &str) -> io::Result<
 
 #[cfg(test)]
 mod tests {
-    use super::{sanitize_export_value, sanitize_freeform_text};
+    use super::{sanitize_export_value, sanitize_freeform_text, sanitize_secrets_in_text};
     use serde_json::json;
+
+    #[test]
+    fn secrets_in_text_redacts_assignments_but_preserves_paths() {
+        let text = "$ dotnet publish -p:ApiToken=abc123 --output /tmp/out";
+        let sanitized = sanitize_secrets_in_text(text);
+        assert!(sanitized.contains("-p:ApiToken=<redacted>"));
+        assert!(!sanitized.contains("abc123"));
+        assert!(sanitized.contains("--output"));
+        assert!(sanitized.contains("/tmp/out"));
+        assert!(!sanitized.contains("<local-path>"));
+        assert_eq!(sanitize_secrets_in_text(&sanitized), sanitized);
+    }
+
+    #[test]
+    fn secrets_in_text_redacts_plain_assignment_and_keeps_path_assignments() {
+        let text = "dotnet publish --output=/tmp/out token=hunter2";
+        let sanitized = sanitize_secrets_in_text(text);
+        assert!(sanitized.contains("token=<redacted>"));
+        assert!(!sanitized.contains("hunter2"));
+        assert!(sanitized.contains("--output=/tmp/out"));
+    }
 
     #[test]
     fn freeform_text_redacts_paths_and_sensitive_assignments() {
