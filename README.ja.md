@@ -53,7 +53,7 @@ OnePublish は、ソフトウェアプロジェクトをパブリッシュする
 
 | 必須 | バージョン | 用途 |
 |----------|---------|---------|
-| **Node.js** | ≥ 18 | フロントエンドランタイム |
+| **Node.js** | ≥ 20.19 | フロントエンドランタイム |
 | **pnpm** | latest | パッケージマネージャ |
 | **Rust** | ≥ 1.77 | Tauri バックエンドコンパイル |
 | **対象 SDK** | 異なる | 以下のうち少なくとも 1 つ: .NET SDK / Rust / Go / Java (Gradle) |
@@ -127,6 +127,10 @@ one-publish/
 │   ├── stores/                   # Zustand ステートスライス
 │   ├── lib/                      # ユーティリティ: store API, paths, preflight, artifacts
 │   ├── i18n/                     # 翻訳: zh.json, en.json
+│   ├── generated/                # ts-rs 生成コントラクト（CI ドリフトチェック）
+│   ├── types/                    # 共有 TypeScript 型
+│   ├── test/                     # Vitest セットアップ
+│   ├── __tests__/                # フロントエンドユニットテスト
 │   └── index.css                 # Geist デザイントークン + ユーティリティ
 │
 ├── src-tauri/                    # Rust バックエンド (Tauri)
@@ -217,6 +221,8 @@ pnpm e2e                 # Playwright e2e テスト
 pnpm e2e:ui              # Playwright UI モード
 pnpm check:i18n          # i18n キーカバレッジ（zh/en）
 pnpm check:design        # Geist デザイン準拠チェック
+pnpm generate:contracts  # Rust 型変更後にコントラクトを再生成
+pnpm check:contracts     # コントラクトドリフトチェック
 
 # リリース
 pnpm release -v 0.8.0     # フルリリースパイプライン
@@ -278,7 +284,7 @@ OnePublish は .NET パブリッシュ GUI から **商用グレードのマル�
 
 1. リポジトリをフォーク
 2. 機能ブランチを作成（`git checkout -b feat/amazing-feature`）
-3. テストを実行（`pnpm test && pnpm e2e`）
+3. ローカル品質ゲートを実行（`pnpm typecheck && pnpm lint && pnpm test && pnpm check:i18n && pnpm check:design`）。Rust コードを変更した場合は、`cargo clippy --manifest-path src-tauri/Cargo.toml -- -D warnings && cargo test --manifest-path src-tauri/Cargo.toml` も実行。（CI ではさらにコントラクトドリフトチェック `pnpm check:contracts` と `cargo audit` が実行されます。）
 4. 説明的なメッセージでコミット
 5. プッシュしてプルリクエストを作成
 

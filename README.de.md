@@ -53,7 +53,7 @@ OnePublish ist eine **plattformübergreifende Desktop-Anwendung**, die eine eleg
 
 | Erforderlich | Version | Zweck |
 |----------|---------|---------|
-| **Node.js** | ≥ 18 | Frontend-Laufzeit |
+| **Node.js** | ≥ 20.19 | Frontend-Laufzeit |
 | **pnpm** | neueste | Paketmanager |
 | **Rust** | ≥ 1.77 | Tauri-Backend-Kompilierung |
 | **Ziel-SDK** | variiert | Mindestens eines von: .NET SDK / Rust / Go / Java (Gradle) |
@@ -127,6 +127,10 @@ one-publish/
 │   ├── stores/                   # Zustand State Slices
 │   ├── lib/                      # Hilfsfunktionen: store API, paths, preflight, artifacts
 │   ├── i18n/                     # Übersetzungen: zh.json, en.json
+│   ├── generated/                # Von ts-rs generierte Verträge (CI-Drift-Prüfung)
+│   ├── types/                    # Gemeinsame TypeScript-Typen
+│   ├── test/                     # Vitest-Setup
+│   ├── __tests__/                # Frontend-Unit-Tests
 │   └── index.css                 # Geist Design Tokens + Utilities
 │
 ├── src-tauri/                    # Rust Backend (Tauri)
@@ -217,6 +221,8 @@ pnpm e2e                 # Playwright E2E-Tests
 pnpm e2e:ui              # Playwright UI-Modus
 pnpm check:i18n          # i18n-Schlüsselabdeckung (zh/en)
 pnpm check:design        # Geist-Design-Konformitätsprüfung
+pnpm generate:contracts  # ts-rs-Verträge nach Änderungen an Rust-Typen neu generieren
+pnpm check:contracts     # Vertrags-Drift-Prüfung
 
 # Release
 pnpm release -v 0.8.0     # Vollständige Release-Pipeline
@@ -278,7 +284,7 @@ OnePublish entwickelt sich von einer .NET-Publish-GUI zu einem **kommerziellen, 
 
 1. Forke das Repository
 2. Erstelle einen Feature-Branch (`git checkout -b feat/amazing-feature`)
-3. Führe die Tests aus (`pnpm test && pnpm e2e`)
+3. Führe die lokalen Qualitäts-Gates aus: `pnpm typecheck && pnpm lint && pnpm test && pnpm check:i18n && pnpm check:design`. Wenn du Rust-Code änderst, führe zusätzlich `cargo clippy --manifest-path src-tauri/Cargo.toml -- -D warnings && cargo test --manifest-path src-tauri/Cargo.toml` aus. (CI führt zusätzlich die Vertrags-Drift-Prüfung `pnpm check:contracts` und `cargo audit` aus.)
 4. Committe mit aussagekräftigen Nachrichten
 5. Pushe und öffne einen Pull Request
 

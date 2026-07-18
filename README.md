@@ -53,7 +53,7 @@ OnePublish is a **cross-platform desktop application** that gives you a beautifu
 
 | Required | Version | Purpose |
 |----------|---------|---------|
-| **Node.js** | ≥ 18 | Frontend runtime |
+| **Node.js** | ≥ 20.19 | Frontend runtime |
 | **pnpm** | latest | Package manager |
 | **Rust** | ≥ 1.77 | Tauri backend compilation |
 | **Target SDK** | varies | At least one of: .NET SDK / Rust / Go / Java (Gradle) |
@@ -127,6 +127,10 @@ one-publish/
 │   ├── stores/                   # Zustand state slices
 │   ├── lib/                      # Utilities: store API, paths, preflight, artifacts
 │   ├── i18n/                     # Translations: zh.json, en.json
+│   ├── generated/                # ts-rs generated contracts (CI drift check)
+│   ├── types/                    # Shared TypeScript types
+│   ├── test/                     # Vitest setup
+│   ├── __tests__/                # Frontend unit tests
 │   └── index.css                 # Geist design tokens + utilities
 │
 ├── src-tauri/                    # Rust Backend (Tauri)
@@ -217,6 +221,8 @@ pnpm e2e                 # Playwright e2e tests
 pnpm e2e:ui              # Playwright UI mode
 pnpm check:i18n          # i18n key coverage (zh/en)
 pnpm check:design        # Geist design compliance check
+pnpm generate:contracts  # Regenerate ts-rs contracts after Rust type changes
+pnpm check:contracts     # Contracts drift check
 
 # Release
 pnpm release -v 0.8.0     # Full release pipeline
@@ -278,7 +284,7 @@ OnePublish is evolving from a .NET publish GUI into a **commercial-grade, multi-
 
 1. Fork the repository
 2. Create a feature branch (`git checkout -b feat/amazing-feature`)
-3. Run tests (`pnpm test && pnpm e2e`)
+3. Run the local quality gates: `pnpm typecheck && pnpm lint && pnpm test && pnpm check:i18n && pnpm check:design`. If you change Rust code, also run `cargo clippy --manifest-path src-tauri/Cargo.toml -- -D warnings && cargo test --manifest-path src-tauri/Cargo.toml`. (CI additionally runs the contracts drift check `pnpm check:contracts` and `cargo audit`.)
 4. Commit with descriptive messages
 5. Push and open a Pull Request
 

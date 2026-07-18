@@ -53,7 +53,7 @@ OnePublish es una **aplicación de escritorio multiplataforma** que te ofrece un
 
 | Requerido | Versión | Propósito |
 |-----------|---------|-----------|
-| **Node.js** | ≥ 18 | Tiempo de ejecución del frontend |
+| **Node.js** | ≥ 20.19 | Tiempo de ejecución del frontend |
 | **pnpm** | más reciente | Gestor de paquetes |
 | **Rust** | ≥ 1.77 | Compilación del backend Tauri |
 | **SDK Objetivo** | varía | Al menos uno de: .NET SDK / Rust / Go / Java (Gradle) |
@@ -127,6 +127,10 @@ one-publish/
 │   ├── stores/                   # Slices de estado Zustand
 │   ├── lib/                      # Utilidades: API de almacenamiento, rutas, preflight, artefactos
 │   ├── i18n/                     # Traducciones: zh.json, en.json
+│   ├── generated/                # Contratos generados por ts-rs (verificación de deriva en CI)
+│   ├── types/                    # Tipos TypeScript compartidos
+│   ├── test/                     # Configuración de Vitest
+│   ├── __tests__/                # Pruebas unitarias del frontend
 │   └── index.css                 # Tokens de diseño Geist + utilidades
 │
 ├── src-tauri/                    # Backend Rust (Tauri)
@@ -217,6 +221,8 @@ pnpm e2e                 # Pruebas e2e con Playwright
 pnpm e2e:ui              # Modo interfaz de Playwright
 pnpm check:i18n          # Cobertura de claves i18n (zh/en)
 pnpm check:design        # Verificación de conformidad con el diseño Geist
+pnpm generate:contracts  # Regenerar contratos ts-rs tras cambios en tipos Rust
+pnpm check:contracts     # Verificación de deriva de contratos
 
 # Lanzamiento
 pnpm release -v 0.8.0     # Pipeline completo de lanzamiento
@@ -278,7 +284,7 @@ OnePublish está evolucionando de una GUI de publicación .NET a un **producto d
 
 1. Haz un fork del repositorio
 2. Crea una rama de funcionalidad (`git checkout -b feat/funcionalidad-increible`)
-3. Ejecuta las pruebas (`pnpm test && pnpm e2e`)
+3. Ejecuta las puertas de calidad locales: `pnpm typecheck && pnpm lint && pnpm test && pnpm check:i18n && pnpm check:design`. Si modificas código Rust, ejecuta también `cargo clippy --manifest-path src-tauri/Cargo.toml -- -D warnings && cargo test --manifest-path src-tauri/Cargo.toml`. (CI además ejecuta la verificación de deriva de contratos `pnpm check:contracts` y `cargo audit`.)
 4. Haz commit con mensajes descriptivos
 5. Empuja y abre un Pull Request
 
