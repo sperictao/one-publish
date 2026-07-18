@@ -228,15 +228,70 @@ fn validate_cleanup_target(
 
     if preflight::is_protected_root_output_dir(output_dir) {
         return Err(publish_error(
-            format!(
-                "refusing to clean a macOS protected root directory: {}",
-                output_dir
-            ),
+            format!("refusing to clean a protected root directory: {}", output_dir),
             "delete_existing_files_safety_protected_root_directory",
         ));
     }
 
+    if let Some(home_dir) = dirs::home_dir() {
+        let canonical_home = home_dir.canonicalize().unwrap_or_else(|_| home_dir.clone());
+        if canonical_output == home_dir || canonical_output == canonical_home {
+            return Err(publish_error(
+                format!("refusing to clean the user home directory: {}", output_dir),
+                "delete_existing_files_safety_home_directory",
+            ));
+        }
+    }
+
+    if is_unc_share_root(&canonical_output) {
+        return Err(publish_error(
+            format!(
+                "refusing to clean a network share root directory: {}",
+                output_dir
+            ),
+            "delete_existing_files_safety_share_root",
+        ));
+    }
+
+    #[cfg(unix)]
+    if is_mount_point(&canonical_output) {
+        return Err(publish_error(
+            format!(
+                "refusing to clean a filesystem mount root directory: {}",
+                output_dir
+            ),
+            "delete_existing_files_safety_mount_root",
+        ));
+    }
+
     Ok(())
+}
+
+fn is_unc_share_root(path: &Path) -> bool {
+    let value = path.to_string_lossy();
+    let Some(remainder) = value.strip_prefix(r"\\") else {
+        return false;
+    };
+    let mut segments = remainder.split('\\').filter(|segment| !segment.is_empty());
+
+    segments.next().is_some() && segments.next().is_some() && segments.next().is_none()
+}
+
+#[cfg(unix)]
+fn is_mount_point(path: &Path) -> bool {
+    use std::os::unix::fs::MetadataExt;
+
+    let Ok(metadata) = path.metadata() else {
+        return false;
+    };
+    let Some(parent) = path.parent() else {
+        return false;
+    };
+    let Ok(parent_metadata) = parent.metadata() else {
+        return false;
+    };
+
+    metadata.dev() != parent_metadata.dev()
 }
 
 fn validate_cleanup_target_against_project(
@@ -417,5 +472,184 @@ mod tests {
                 output_dir: output_dir_string
             }
         );
+    }
+
+    #[test]
+    fn cleanup_policy_allows_temp_output_outside_project() {
+        let project_root = tempfile::tempdir().expect("create project root");
+        let project_dir = project_root.path().join("src");
+        std::fs::create_dir_all(&project_dir).expect("create project dir");
+        let output_root = tempfile::tempdir().expect("create output root");
+        let output_dir = output_root.path().join("publish-output");
+        std::fs::create_dir_all(&output_dir).expect("create output dir");
+        let spec = cleanup_spec(&project_dir.join("App.csproj").to_string_lossy());
+        let output_dir_string = output_dir.to_string_lossy().to_string();
+
+        let decision =
+            resolve_cleanup_decision(&spec, &output_dir_string).expect("cleanup decision");
+
+        assert_eq!(
+            decision,
+            PublishOutputCleanupDecision::Clean {
+                output_dir: output_dir_string
+            }
+        );
+    }
+
+    #[test]
+    fn cleanup_policy_allows_approved_project_out_subdirectory() {
+        let root = tempfile::tempdir().expect("create temp root");
+        let project_dir = root.path().join("project");
+        let output_dir = project_dir.join("out");
+        std::fs::create_dir_all(&output_dir).expect("create output dir");
+        let spec = cleanup_spec(&project_dir.join("App.csproj").to_string_lossy());
+        let output_dir_string = output_dir.to_string_lossy().to_string();
+
+        let decision =
+            resolve_cleanup_decision(&spec, &output_dir_string).expect("cleanup decision");
+
+        assert_eq!(
+            decision,
+            PublishOutputCleanupDecision::Clean {
+                output_dir: output_dir_string
+            }
+        );
+    }
+
+    #[test]
+    fn cleanup_policy_rejects_unapproved_project_src_subdirectory() {
+        let root = tempfile::tempdir().expect("create temp root");
+        let project_dir = root.path().join("project");
+        let output_dir = project_dir.join("src");
+        std::fs::create_dir_all(&output_dir).expect("create output dir");
+        let spec = cleanup_spec(&project_dir.join("App.csproj").to_string_lossy());
+        let output_dir_string = output_dir.to_string_lossy().to_string();
+
+        let error = resolve_cleanup_decision(&spec, &output_dir_string)
+            .expect_err("src subdirectory should be rejected");
+
+        assert_eq!(
+            error.code.as_deref(),
+            Some("delete_existing_files_safety_inside_project")
+        );
+    }
+
+    #[test]
+    fn cleanup_policy_rejects_home_directory() {
+        let Some(home_dir) = dirs::home_dir() else {
+            eprintln!("skipping: home directory is not resolvable in this environment");
+            return;
+        };
+        let spec = cleanup_spec("");
+        let output_dir = home_dir.to_string_lossy().to_string();
+
+        let error = resolve_cleanup_decision(&spec, &output_dir)
+            .expect_err("home directory should be rejected");
+
+        assert_eq!(
+            error.code.as_deref(),
+            Some("delete_existing_files_safety_home_directory")
+        );
+    }
+
+    #[test]
+    fn cleanup_policy_rejects_documents_root() {
+        let Some(documents_dir) = dirs::document_dir() else {
+            eprintln!("skipping: documents directory is not resolvable in this environment");
+            return;
+        };
+        if !documents_dir.is_dir() {
+            eprintln!("skipping: documents directory does not exist in this environment");
+            return;
+        }
+        let spec = cleanup_spec("");
+        let output_dir = documents_dir.to_string_lossy().to_string();
+
+        let error = resolve_cleanup_decision(&spec, &output_dir)
+            .expect_err("documents root should be rejected");
+
+        assert_eq!(
+            error.code.as_deref(),
+            Some("delete_existing_files_safety_protected_root_directory")
+        );
+    }
+
+    #[test]
+    fn cleanup_policy_allows_documents_subdirectory() {
+        let Some(documents_dir) = dirs::document_dir() else {
+            eprintln!("skipping: documents directory is not resolvable in this environment");
+            return;
+        };
+        if !documents_dir.is_dir() {
+            eprintln!("skipping: documents directory does not exist in this environment");
+            return;
+        }
+        let output_root = match tempfile::tempdir_in(&documents_dir) {
+            Ok(output_root) => output_root,
+            Err(error) => {
+                eprintln!(
+                    "skipping: cannot create a temp directory under documents ({}); \
+                     the host likely requires protected-folder permission",
+                    error
+                );
+                return;
+            }
+        };
+        let spec = cleanup_spec("");
+        let output_dir_string = output_root.path().to_string_lossy().to_string();
+
+        let decision =
+            resolve_cleanup_decision(&spec, &output_dir_string).expect("cleanup decision");
+
+        assert_eq!(
+            decision,
+            PublishOutputCleanupDecision::Clean {
+                output_dir: output_dir_string
+            }
+        );
+    }
+
+    #[test]
+    fn unc_share_root_detection_matches_exactly_two_segments() {
+        assert!(is_unc_share_root(Path::new(r"\\nas01\share")));
+        assert!(!is_unc_share_root(Path::new(r"\\nas01\share\sub")));
+        assert!(!is_unc_share_root(Path::new("/tmp/x")));
+        assert!(!is_unc_share_root(Path::new(r"C:\")));
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn cleanup_policy_rejects_proc_mount_root() {
+        let spec = cleanup_spec("");
+
+        let error = resolve_cleanup_decision(&spec, "/proc")
+            .expect_err("proc mount root should be rejected");
+
+        assert_eq!(
+            error.code.as_deref(),
+            Some("delete_existing_files_safety_mount_root")
+        );
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn cleanup_policy_rejects_dev_mount_root() {
+        let spec = cleanup_spec("");
+
+        let error = resolve_cleanup_decision(&spec, "/dev")
+            .expect_err("dev mount root should be rejected");
+
+        assert_eq!(
+            error.code.as_deref(),
+            Some("delete_existing_files_safety_mount_root")
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn mount_point_detection_allows_tempdir() {
+        let root = tempfile::tempdir().expect("create temp root");
+
+        assert!(!is_mount_point(root.path()));
     }
 }
