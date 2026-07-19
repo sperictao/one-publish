@@ -3,6 +3,7 @@ import { toast } from "sonner";
 
 import {
   buildGitHubActionsSnippet,
+  buildGitLabCISnippet,
   buildShellHandoffSnippet,
   type HandoffSnippetFormat,
 } from "@/lib/handoffSnippet";
@@ -22,6 +23,35 @@ interface UseHistoryActionsParams {
   extractSpecFromRecord: (
     record: ExecutionRecord
   ) => ProviderPublishSpec | null;
+}
+
+function buildHandoffSnippet(
+  format: HandoffSnippetFormat,
+  spec: ProviderPublishSpec,
+  commandLine: string | null | undefined
+): string {
+  switch (format) {
+    case "shell":
+      return buildShellHandoffSnippet({ spec, commandLine });
+    case "github-actions":
+      return buildGitHubActionsSnippet({ spec, commandLine });
+    case "gitlab-ci":
+      return buildGitLabCISnippet({ spec, commandLine });
+  }
+}
+
+function resolveHandoffSnippetLabel(
+  format: HandoffSnippetFormat,
+  historyT: TranslationMap
+): string {
+  switch (format) {
+    case "shell":
+      return historyT.shellSnippetLabel || "Shell 交接片段";
+    case "github-actions":
+      return historyT.ghaSnippetLabel || "GitHub Actions 交接片段";
+    case "gitlab-ci":
+      return historyT.gitlabSnippetLabel || "GitLab CI 交接片段";
+  }
 }
 
 export function useHistoryActions({
@@ -104,20 +134,10 @@ export function useHistoryActions({
         return;
       }
 
-      const snippet =
-        format === "shell"
-          ? buildShellHandoffSnippet({ spec, commandLine: record.commandLine })
-          : buildGitHubActionsSnippet({
-              spec,
-              commandLine: record.commandLine,
-            });
+      const snippet = buildHandoffSnippet(format, spec, record.commandLine);
+      const label = resolveHandoffSnippetLabel(format, historyT);
 
-      await copyText(
-        snippet,
-        format === "shell"
-          ? historyT.shellSnippetLabel || "Shell 交接片段"
-          : historyT.ghaSnippetLabel || "GitHub Actions 交接片段"
-      );
+      await copyText(snippet, label);
     },
     [copyText, extractSpecFromRecord, historyT]
   );

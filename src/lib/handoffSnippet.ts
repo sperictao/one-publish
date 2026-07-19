@@ -5,7 +5,7 @@ export type HandoffSpec = Pick<
   "provider_id" | "project_path" | "parameters"
 >;
 
-export type HandoffSnippetFormat = "shell" | "github-actions";
+export type HandoffSnippetFormat = "shell" | "github-actions" | "gitlab-ci";
 
 function normalizeCommandLine(commandLine?: string | null): string | null {
   if (!commandLine) {
@@ -94,5 +94,21 @@ export function buildGitHubActionsSnippet(params: {
     `  working-directory: ${workingDir}`,
     "  run: |",
     `    ${command}`,
+  ].join("\n");
+}
+
+export function buildGitLabCISnippet(params: {
+  spec: HandoffSpec;
+  commandLine?: string | null;
+}): string {
+  const command = resolveCommand(params.spec, params.commandLine);
+  const workingDir = inferWorkingDirectory(params.spec.project_path);
+
+  return [
+    "publish:",
+    "  stage: deploy",
+    "  script:",
+    `    - cd "${workingDir}"`,
+    `    - ${command}`,
   ].join("\n");
 }

@@ -72,7 +72,7 @@ describe("ExecutionHistoryCard", () => {
     expect(screen.getByText("MSBuild failed: missing SDK")).toBeInTheDocument();
   });
 
-  it("成功记录只保留 Shell 交接片段入口", () => {
+  it("成功记录展示 Shell 与 GitLab CI 交接片段入口", () => {
     const record = createRecord({
       success: true,
       error: null,
@@ -100,6 +100,7 @@ describe("ExecutionHistoryCard", () => {
           title: "最近执行历史",
           rerun: "重新执行",
           copyShellSnippet: "复制 Shell 片段",
+          copyGitlabSnippet: "复制 GitLab CI 片段",
           copyGhaSnippet: "复制 GHA 片段",
           exportHistory: "导出历史",
         }}
@@ -120,6 +121,9 @@ describe("ExecutionHistoryCard", () => {
 
     expect(
       screen.getByRole("button", { name: "复制 Shell 片段" })
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "复制 GitLab CI 片段" })
     ).toBeInTheDocument();
     expect(
       screen.queryByRole("button", { name: "复制 GHA 片段" })
