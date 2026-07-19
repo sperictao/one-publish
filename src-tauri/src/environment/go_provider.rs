@@ -1,58 +1,32 @@
 // Go provider environment detection
 
+use crate::environment::probe::{check_tool, detect_tool_issues, ToolProbe, VersionSource};
 use crate::environment::types::*;
 /// Minimum required Go version
 const MIN_GO_VERSION: &str = "1.20";
 const PROVIDER_ID: &str = "go";
 
+const GO_PROBE: ToolProbe = ToolProbe {
+    provider_id: PROVIDER_ID,
+    command: "go",
+    version_arg: "version",
+    version_source: VersionSource::Stdout,
+    min_version: MIN_GO_VERSION,
+};
+
 /// Check Go installation
 pub async fn check_go() -> ProviderStatus {
-    let path = super::types::command_path("go");
-    let program = path.clone().unwrap_or_else(|| "go".to_string());
-
-    match crate::process_utils::new_std_command(&program)
-        .arg("version")
-        .output()
-    {
-        Ok(output) => {
-            let version_str = parse_go_version(&output.stdout);
-
-            ProviderStatus {
-                provider_id: PROVIDER_ID.to_string(),
-                installed: true,
-                version: Some(version_str),
-                path,
-            }
-        }
-        Err(_) => ProviderStatus {
-            provider_id: PROVIDER_ID.to_string(),
-            installed: false,
-            version: None,
-            path,
-        },
-    }
+    check_tool(&GO_PROBE, parse_go_version_for_probe).await
 }
 
 /// Detect Go-specific issues
 pub fn detect_go_issues(status: &ProviderStatus) -> Vec<EnvironmentIssue> {
-    let mut issues = Vec::new();
-
-    if !status.installed {
-        issues.push(create_missing_go_issue());
-        return issues;
-    }
-
-    let Some(version) = status.version.as_deref() else {
-        return issues;
-    };
-
-    if super::types::parse_semver(version).is_some()
-        && super::types::compare_versions(version, MIN_GO_VERSION) < 0
-    {
-        issues.push(create_outdated_go_issue(version, MIN_GO_VERSION));
-    }
-
-    issues
+    detect_tool_issues(
+        &GO_PROBE,
+        status,
+        create_missing_go_issue,
+        create_outdated_go_issue,
+    )
 }
 
 /// Parse Go version from command output
@@ -76,6 +50,15 @@ fn parse_go_version(output: &[u8]) -> String {
             }
         })
         .unwrap_or_else(|| "unknown".to_string())
+}
+
+/// Probe adapter for `parse_go_version`.
+///
+/// Returns `Some("unknown")` rather than `None` when the output doesn't
+/// match the expected `go version` shape, preserving the prior fallback
+/// that reported `installed: true, version: "unknown"`.
+fn parse_go_version_for_probe(output: &[u8]) -> Option<String> {
+    Some(parse_go_version(output))
 }
 
 /// Create issue for missing Go

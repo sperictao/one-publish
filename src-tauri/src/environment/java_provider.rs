@@ -1,45 +1,22 @@
 // Java provider environment detection
 
+use crate::environment::probe::{check_tool, ToolProbe, VersionSource};
 use crate::environment::types::*;
 /// Minimum required Java version
 const MIN_JAVA_VERSION: &str = "11";
 const PROVIDER_ID: &str = "java";
 
+const JAVA_PROBE: ToolProbe = ToolProbe {
+    provider_id: PROVIDER_ID,
+    command: "java",
+    version_arg: "-version",
+    version_source: VersionSource::Stderr,
+    min_version: MIN_JAVA_VERSION,
+};
+
 /// Check Java installation
 pub async fn check_java() -> ProviderStatus {
-    let path = super::types::command_path("java");
-    let program = path.clone().unwrap_or_else(|| "java".to_string());
-
-    match crate::process_utils::new_std_command(&program)
-        .arg("-version")
-        .output()
-    {
-        Ok(output) => {
-            let version = parse_java_version(&output.stderr);
-
-            if output.status.success() && version.is_some() {
-                ProviderStatus {
-                    provider_id: PROVIDER_ID.to_string(),
-                    installed: true,
-                    version,
-                    path,
-                }
-            } else {
-                ProviderStatus {
-                    provider_id: PROVIDER_ID.to_string(),
-                    installed: false,
-                    version: None,
-                    path: None,
-                }
-            }
-        }
-        Err(_) => ProviderStatus {
-            provider_id: PROVIDER_ID.to_string(),
-            installed: false,
-            version: None,
-            path: None,
-        },
-    }
+    check_tool(&JAVA_PROBE, parse_java_version).await
 }
 
 /// Detect Java-specific issues
