@@ -258,7 +258,9 @@ export function createDotnetPublishConfigFromParameters(
   options?: { inferProfileSelection?: boolean }
 ): PublishConfigStore {
   const defaults = createDefaultDotnetPublishConfig();
-  const normalizedProperties = normalizeDotnetPropertyMap(parameters.properties);
+  const normalizedProperties = normalizeDotnetPropertyMap(
+    parameters.properties
+  );
   const {
     deleteExistingFiles,
     properties: deleteExistingFilesNormalizedProperties,
@@ -280,14 +282,18 @@ export function createDotnetPublishConfigFromParameters(
         ? parameters.configuration
         : defaults.configuration,
     runtime:
-      typeof parameters.runtime === "string" ? parameters.runtime : defaults.runtime,
+      typeof parameters.runtime === "string"
+        ? parameters.runtime
+        : defaults.runtime,
     framework:
       typeof parameters.framework === "string"
         ? parameters.framework
         : defaults.framework,
     selfContained: parameters.self_contained === true,
     outputDir:
-      typeof parameters.output === "string" ? parameters.output : defaults.outputDir,
+      typeof parameters.output === "string"
+        ? parameters.output
+        : defaults.outputDir,
     noBuild: parameters.no_build === true,
     noRestore: parameters.no_restore === true,
     verbosity:
@@ -297,8 +303,11 @@ export function createDotnetPublishConfigFromParameters(
     noLogo: parameters.no_logo === true,
     deleteExistingFiles: resolvedDeleteExistingFiles,
     properties,
-    useProfile: options?.inferProfileSelection === true && publishProfile.length > 0,
+    useProfile:
+      options?.inferProfileSelection === true && publishProfile.length > 0,
     profileName:
-      options?.inferProfileSelection === true ? publishProfile : defaults.profileName,
+      options?.inferProfileSelection === true
+        ? publishProfile
+        : defaults.profileName,
   };
 }

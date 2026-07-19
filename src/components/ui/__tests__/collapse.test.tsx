@@ -12,7 +12,9 @@ describe("Collapse", () => {
     );
 
     expect(container.firstElementChild).toHaveClass("grid-rows-[1fr]");
-    expect(screen.getByRole("button", { name: "内部按钮" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "内部按钮" })
+    ).toBeInTheDocument();
     expect(container.querySelector("[inert]")).toBeNull();
   });
 

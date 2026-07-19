@@ -1,15 +1,10 @@
-import {
-  Dialog,
-} from "@/components/ui/dialog";
+import { Dialog } from "@/components/ui/dialog";
 import { AppDialogInset } from "@/components/ui/app-dialog-inset";
 import { AppDialogShell } from "@/components/ui/app-dialog-shell";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import {
-  Card,
-  CardContent,
-} from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { SectionShell } from "@/components/ui/section-shell";
 import {
   Download,
@@ -26,13 +21,8 @@ import {
 import { useCallback, useEffect, useState } from "react";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import { toast } from "sonner";
-import {
-  importConfig,
-} from "@/lib/store/api";
-import {
-  type ConfigParameters,
-  type ConfigProfile,
-} from "@/lib/store/types";
+import { importConfig } from "@/lib/store/api";
+import { type ConfigParameters, type ConfigProfile } from "@/lib/store/types";
 import { useI18n } from "@/hooks/useI18n";
 
 interface ConfigManagementContentProps {
@@ -101,7 +91,9 @@ export function ConfigManagementContent({
   const dateLocale = language === "en" ? "en-US" : "zh-CN";
   const [newProfileName, setNewProfileName] = useState("");
   const [isSaving, setIsSaving] = useState(false);
-  const [pendingImport, setPendingImport] = useState<PendingImportState | null>(null);
+  const [pendingImport, setPendingImport] = useState<PendingImportState | null>(
+    null
+  );
   const [isImportLoading, setIsImportLoading] = useState(false);
   const [isApplyingImport, setIsApplyingImport] = useState(false);
   const isLoading = isProfilesRefreshing || isImportLoading;
@@ -297,7 +289,9 @@ export function ConfigManagementContent({
             </Label>
             <Input
               id="config-profile-name"
-              placeholder={profileT.profileNamePlaceholder || "输入配置文件名称"}
+              placeholder={
+                profileT.profileNamePlaceholder || "输入配置文件名称"
+              }
               value={newProfileName}
               onChange={(e) => setNewProfileName(e.target.value)}
               onKeyDown={(e) => {
@@ -351,7 +345,9 @@ export function ConfigManagementContent({
         ) : profiles.length === 0 ? (
           <AppDialogInset className="px-4 py-10 text-center text-muted-foreground">
             <AlertCircle className="mx-auto mb-3 size-8" />
-            <p className="text-label-14">{profileT.noProfiles || "暂无保存的配置文件"}</p>
+            <p className="text-label-14">
+              {profileT.noProfiles || "暂无保存的配置文件"}
+            </p>
           </AppDialogInset>
         ) : (
           <div className="space-y-3">
@@ -371,7 +367,9 @@ export function ConfigManagementContent({
                     </div>
                     <p className="text-label-12 text-muted-foreground">
                       {profile.providerId} ·{" "}
-                      {new Date(profile.createdAt).toLocaleDateString(dateLocale)}
+                      {new Date(profile.createdAt).toLocaleDateString(
+                        dateLocale
+                      )}
                     </p>
                   </div>
                   <div className="flex flex-col gap-2 sm:flex-row">
@@ -401,20 +399,22 @@ export function ConfigManagementContent({
         )}
       </SectionShell>
 
-      <Dialog open={Boolean(pendingImport)} onOpenChange={(open) => {
-        if (!open) {
-          closeImportPreview();
-        }
-      }}>
+      <Dialog
+        open={Boolean(pendingImport)}
+        onOpenChange={(open) => {
+          if (!open) {
+            closeImportPreview();
+          }
+        }}
+      >
         {pendingImport ? (
           <AppDialogShell
             size="compact"
             title={profileT.importConfirmTitle || "确认导入配置"}
-            description={
-              (profileT.importConfirmDescription ||
-                "将把以下 {{count}} 个配置导入当前仓库，并按现有规则进行合并或覆盖。")
-                .replace("{{count}}", String(pendingImport.profiles.length))
-            }
+            description={(
+              profileT.importConfirmDescription ||
+              "将把以下 {{count}} 个配置导入当前仓库，并按现有规则进行合并或覆盖。"
+            ).replace("{{count}}", String(pendingImport.profiles.length))}
             icon={<Upload className="size-4" />}
             bodyInnerClassName="space-y-4"
             footer={

@@ -16,7 +16,9 @@ function applyTheme(theme: Theme) {
 
   if (theme === "auto") {
     // 跟随系统设置
-    const systemDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+    const systemDark = window.matchMedia(
+      "(prefers-color-scheme: dark)"
+    ).matches;
     root.classList.add(systemDark ? "dark" : "light");
   } else {
     // 强制使用指定主题

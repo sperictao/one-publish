@@ -69,81 +69,105 @@ interface LocalizedAdvancedFieldText {
   technicalLabelPrefix: string;
 }
 
-const DotnetPublishParametersSection = memo(function DotnetPublishParametersSection({
-  profileT,
-  appT,
-  configuration,
-  runtime,
-  readOnly,
-  onConfigurationChange,
-  onRuntimeChange,
-}: {
-  profileT: FormTranslations;
-  appT: FormTranslations;
-  configuration: string;
-  runtime: string;
-  readOnly: boolean;
-  onConfigurationChange: (value: string) => void;
-  onRuntimeChange: (value: string) => void;
-}): ReactNode {
-  return (
-    <SectionShell
-      icon={SlidersHorizontal}
-      title={profileT.quickCreateParametersSection || "发布参数"}
-      description={
-        profileT.quickCreateParametersSectionDescription ||
-        "先确定构建配置和运行时，再决定输出部署方式。"
-      }
-    >
-      <div className="grid gap-3 md:grid-cols-2">
-        <div className="space-y-1">
-          <Label htmlFor="quick-profile-configuration" className="text-label-12">
-            {appT.configurationType || "配置类型"}
-          </Label>
-          <Select value={configuration} onValueChange={onConfigurationChange}>
-            <SelectTrigger
-              id="quick-profile-configuration"
-              disabled={readOnly}
-              className="h-8 text-label-12"
+const DotnetPublishParametersSection = memo(
+  function DotnetPublishParametersSection({
+    profileT,
+    appT,
+    configuration,
+    runtime,
+    readOnly,
+    onConfigurationChange,
+    onRuntimeChange,
+  }: {
+    profileT: FormTranslations;
+    appT: FormTranslations;
+    configuration: string;
+    runtime: string;
+    readOnly: boolean;
+    onConfigurationChange: (value: string) => void;
+    onRuntimeChange: (value: string) => void;
+  }): ReactNode {
+    return (
+      <SectionShell
+        icon={SlidersHorizontal}
+        title={profileT.quickCreateParametersSection || "发布参数"}
+        description={
+          profileT.quickCreateParametersSectionDescription ||
+          "先确定构建配置和运行时，再决定输出部署方式。"
+        }
+      >
+        <div className="grid gap-3 md:grid-cols-2">
+          <div className="space-y-1">
+            <Label
+              htmlFor="quick-profile-configuration"
+              className="text-label-12"
             >
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="Release" className="text-label-12">Release</SelectItem>
-              <SelectItem value="Debug" className="text-label-12">Debug</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
-
-        <div className="space-y-1">
-          <div className="flex items-center gap-1.5">
-            <Label htmlFor="quick-profile-runtime" className="text-label-12">
-              {appT.runtimeLabel || "运行时"}
+              {appT.configurationType || "配置类型"}
             </Label>
-            <HelpTip
-              text={profileT.quickCreateRuntimeHint || "未指定运行时时将保持框架依赖模式。"}
-              label={appT.runtimeLabel || "运行时"}
-            />
+            <Select value={configuration} onValueChange={onConfigurationChange}>
+              <SelectTrigger
+                id="quick-profile-configuration"
+                disabled={readOnly}
+                className="h-8 text-label-12"
+              >
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="Release" className="text-label-12">
+                  Release
+                </SelectItem>
+                <SelectItem value="Debug" className="text-label-12">
+                  Debug
+                </SelectItem>
+              </SelectContent>
+            </Select>
           </div>
-          <Select value={runtime || "none"} onValueChange={onRuntimeChange}>
-            <SelectTrigger id="quick-profile-runtime" disabled={readOnly} className="h-8 text-label-12">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="none" className="text-label-12">
-                {appT.frameworkDependent || "框架依赖"}
-              </SelectItem>
-              <SelectItem value="win-x64" className="text-label-12">Windows x64</SelectItem>
-              <SelectItem value="osx-arm64" className="text-label-12">macOS ARM64</SelectItem>
-              <SelectItem value="osx-x64" className="text-label-12">macOS x64</SelectItem>
-              <SelectItem value="linux-x64" className="text-label-12">Linux x64</SelectItem>
-            </SelectContent>
-          </Select>
+
+          <div className="space-y-1">
+            <div className="flex items-center gap-1.5">
+              <Label htmlFor="quick-profile-runtime" className="text-label-12">
+                {appT.runtimeLabel || "运行时"}
+              </Label>
+              <HelpTip
+                text={
+                  profileT.quickCreateRuntimeHint ||
+                  "未指定运行时时将保持框架依赖模式。"
+                }
+                label={appT.runtimeLabel || "运行时"}
+              />
+            </div>
+            <Select value={runtime || "none"} onValueChange={onRuntimeChange}>
+              <SelectTrigger
+                id="quick-profile-runtime"
+                disabled={readOnly}
+                className="h-8 text-label-12"
+              >
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none" className="text-label-12">
+                  {appT.frameworkDependent || "框架依赖"}
+                </SelectItem>
+                <SelectItem value="win-x64" className="text-label-12">
+                  Windows x64
+                </SelectItem>
+                <SelectItem value="osx-arm64" className="text-label-12">
+                  macOS ARM64
+                </SelectItem>
+                <SelectItem value="osx-x64" className="text-label-12">
+                  macOS x64
+                </SelectItem>
+                <SelectItem value="linux-x64" className="text-label-12">
+                  Linux x64
+                </SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
         </div>
-      </div>
-    </SectionShell>
-  );
-});
+      </SectionShell>
+    );
+  }
+);
 
 const DotnetPublishOutputSection = memo(function DotnetPublishOutputSection({
   profileT,
@@ -180,7 +204,10 @@ const DotnetPublishOutputSection = memo(function DotnetPublishOutputSection({
               {appT.outputDirLabel || "输出目录"}
             </Label>
             <HelpTip
-              text={profileT.quickCreateOutputHint || "留空时会回落到默认输出目录规则。"}
+              text={
+                profileT.quickCreateOutputHint ||
+                "留空时会回落到默认输出目录规则。"
+              }
               label={appT.outputDirLabel || "输出目录"}
             />
             <OutputTargetBadge
@@ -235,8 +262,11 @@ const DotnetPublishOutputSection = memo(function DotnetPublishOutputSection({
             disabled={readOnly || isRuntimeRequired}
             className={cn(
               "surface-input flex h-8 w-full items-center justify-between rounded-sm px-3 text-left text-muted-foreground transition-colors duration-150 ease-geist disabled:pointer-events-none",
-              !readOnly && !isRuntimeRequired && "hover:border-gray-alpha-500 cursor-pointer select-none",
-              isRuntimeRequired && "bg-gray-100 text-gray-700 cursor-not-allowed"
+              !readOnly &&
+                !isRuntimeRequired &&
+                "hover:border-gray-alpha-500 cursor-pointer select-none",
+              isRuntimeRequired &&
+                "bg-gray-100 text-gray-700 cursor-not-allowed"
             )}
             onClick={() => {
               onSelfContainedChange(!selfContained);
@@ -246,13 +276,17 @@ const DotnetPublishOutputSection = memo(function DotnetPublishOutputSection({
               {isRuntimeRequired
                 ? profileT.selfContainedUnavailable || "未指定运行时 (不可用)"
                 : selfContained
-                ? profileT.selfContainedOn || "Self-Contained (独立运行)"
-                : profileT.selfContainedOff || "Framework-Dependent (依赖框架)"}
+                  ? profileT.selfContainedOn || "Self-Contained (独立运行)"
+                  : profileT.selfContainedOff ||
+                    "Framework-Dependent (依赖框架)"}
             </span>
 
             <div className="flex items-center gap-2">
               {selfContained && !isRuntimeRequired && (
-                <span aria-hidden="true" className="size-1.5 rounded-full bg-success shrink-0" />
+                <span
+                  aria-hidden="true"
+                  className="size-1.5 rounded-full bg-success shrink-0"
+                />
               )}
               <SwitchIndicator checked={selfContained} />
             </div>
@@ -437,9 +471,18 @@ function getLocalizedAdvancedFieldText(
       );
     default:
       return {
-        ...localized(field.key, field.label, field.key, field.description || field.label),
+        ...localized(
+          field.key,
+          field.label,
+          field.key,
+          field.description || field.label
+        ),
         inputPlaceholder: formatTemplate(
-          translate(profileT, "advancedFieldStringPlaceholder", "输入 {{field}}"),
+          translate(
+            profileT,
+            "advancedFieldStringPlaceholder",
+            "输入 {{field}}"
+          ),
           { field: field.label }
         ),
       };
@@ -521,7 +564,10 @@ const DotnetAdvancedFieldCards = memo(function DotnetAdvancedFieldCards({
   return (
     <div className="grid gap-3 md:grid-cols-2">
       {fields.map((field) => {
-        const localizedFieldText = getLocalizedAdvancedFieldText(profileT, field);
+        const localizedFieldText = getLocalizedAdvancedFieldText(
+          profileT,
+          field
+        );
         const isFullWidth = field.control === "property-map";
 
         return (
@@ -732,7 +778,10 @@ function DotnetFrameworkSuggestionsField({
   return (
     <div className="space-y-1.5 w-full">
       <div className="flex flex-wrap items-center gap-1.5">
-        <Label htmlFor={field.key} className="text-label-12 font-semibold text-foreground">
+        <Label
+          htmlFor={field.key}
+          className="text-label-12 font-semibold text-foreground"
+        >
           {fieldText.label}
         </Label>
         {fieldText.technicalLabel && (
@@ -789,7 +838,10 @@ function DotnetSelectField({
   return (
     <div className="space-y-1.5 w-full">
       <div className="flex flex-wrap items-center gap-1.5">
-        <Label htmlFor={field.key} className="text-label-12 font-semibold text-foreground">
+        <Label
+          htmlFor={field.key}
+          className="text-label-12 font-semibold text-foreground"
+        >
           {fieldText.label}
         </Label>
         {fieldText.technicalLabel && (
@@ -821,7 +873,11 @@ function DotnetSelectField({
             {fieldText.emptyOptionLabel}
           </SelectItem>
           {options.map((option) => (
-            <SelectItem key={option.value} value={option.value} className="text-label-12">
+            <SelectItem
+              key={option.value}
+              value={option.value}
+              className="text-label-12"
+            >
               {option.label}
             </SelectItem>
           ))}
@@ -890,7 +946,10 @@ function DotnetStringField({
   return (
     <div className="space-y-1.5 w-full">
       <div className="flex flex-wrap items-center gap-1.5">
-        <Label htmlFor={field.key} className="text-label-12 font-semibold text-foreground">
+        <Label
+          htmlFor={field.key}
+          className="text-label-12 font-semibold text-foreground"
+        >
           {fieldText.label}
         </Label>
         {fieldText.technicalLabel && (
@@ -990,7 +1049,9 @@ function DotnetPropertyTableField({
       <div className="flex items-center justify-between gap-3">
         <div>
           <div className="flex flex-wrap items-center gap-1.5">
-            <Label className="text-label-12 font-semibold text-foreground">{fieldText.label}</Label>
+            <Label className="text-label-12 font-semibold text-foreground">
+              {fieldText.label}
+            </Label>
             {fieldText.technicalLabel && (
               <span className="font-mono text-label-12-mono text-muted-foreground bg-muted border border-border px-1.5 py-0.5 rounded-sm">
                 {fieldText.technicalLabel}
@@ -1003,7 +1064,13 @@ function DotnetPropertyTableField({
           </div>
         </div>
         {!readOnly ? (
-          <Button type="button" variant="outline" size="sm" onClick={addEntry} className="h-8 text-button-12">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={addEntry}
+            className="h-8 text-button-12"
+          >
             <Plus className="mr-1.5 size-3.5" />
             {fieldText.propertiesAddLabel}
           </Button>

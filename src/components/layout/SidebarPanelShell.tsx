@@ -16,12 +16,7 @@ export function SidebarPanelShell({
   children,
 }: SidebarPanelShellProps) {
   return (
-    <div
-      className={cn(
-        "flex flex-col",
-        collapsed ? "p-0" : "p-2"
-      )}
-    >
+    <div className={cn("flex flex-col", collapsed ? "p-0" : "p-2")}>
       <CollapsiblePanel
         collapsed={collapsed}
         side="left"

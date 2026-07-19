@@ -17,7 +17,9 @@ test.describe("Preflight Output Checks", () => {
     await gotoApp(page);
 
     // The rendered command should show dotnet publish with args
-    await expect(page.getByText(/dotnet publish/)).toBeVisible({ timeout: 10000 });
+    await expect(page.getByText(/dotnet publish/)).toBeVisible({
+      timeout: 10000,
+    });
   });
 
   test("output directory is displayed or inferred", async ({ page }) => {
@@ -34,14 +36,18 @@ test.describe("Publish Execution Readiness", () => {
     await gotoApp(page);
 
     // The status should indicate readiness
-    await expect(page.getByText(/命令与参数已准备完成/)).toBeVisible({ timeout: 10000 });
+    await expect(page.getByText(/命令与参数已准备完成/)).toBeVisible({
+      timeout: 10000,
+    });
   });
 
   test("command and parameters are prepared", async ({ page }) => {
     await gotoApp(page);
 
     // "命令与参数已准备完成，可以开始本次发布" should be displayed
-    await expect(page.getByText(/可以开始本次发布/)).toBeVisible({ timeout: 10000 });
+    await expect(page.getByText(/可以开始本次发布/)).toBeVisible({
+      timeout: 10000,
+    });
   });
 });
 
@@ -50,7 +56,9 @@ test.describe("Provider-Specific Parameters", () => {
     await gotoApp(page);
 
     // The command preview should include --configuration Release
-    await expect(page.getByText(/--configuration Release/)).toBeVisible({ timeout: 10000 });
+    await expect(page.getByText(/--configuration Release/)).toBeVisible({
+      timeout: 10000,
+    });
   });
 
   test("provider schema defines available parameters", async ({ page }) => {
@@ -58,6 +66,8 @@ test.describe("Provider-Specific Parameters", () => {
 
     // Parameter definitions should be loaded from schema
     // In preset mode, we can verify the command preview includes schema-driven flags
-    await expect(page.getByText("dotnet publish")).toBeVisible({ timeout: 10000 });
+    await expect(page.getByText("dotnet publish")).toBeVisible({
+      timeout: 10000,
+    });
   });
 });

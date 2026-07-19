@@ -22,8 +22,8 @@ export function emit<T = unknown>(event: string, payload: T): void {
         result.catch((err) =>
           console.error(
             `[eventBus] async handler for "${event}" rejected:`,
-            err,
-          ),
+            err
+          )
         );
       }
     } catch (err) {
@@ -35,7 +35,7 @@ export function emit<T = unknown>(event: string, payload: T): void {
 /** 订阅事件，返回取消订阅函数。 */
 export function on<T = unknown>(
   event: string,
-  handler: EventHandler<T>,
+  handler: EventHandler<T>
 ): () => void {
   let handlers = listeners.get(event);
   if (!handlers) {
@@ -54,7 +54,7 @@ export function on<T = unknown>(
 /** 取消订阅。 */
 export function off<T = unknown>(
   event: string,
-  handler: EventHandler<T>,
+  handler: EventHandler<T>
 ): void {
   listeners.get(event)?.delete(handler as EventHandler);
 }

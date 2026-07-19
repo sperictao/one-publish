@@ -24,7 +24,9 @@ export function useScopedConfigs(params: {
     reorderRecentConfig,
   } = params;
 
-  const favoriteConfigKeysByRepo = useAppStore((s) => s.favoriteConfigKeysByRepo);
+  const favoriteConfigKeysByRepo = useAppStore(
+    (s) => s.favoriteConfigKeysByRepo
+  );
   const toggleFavoriteConfig = useAppStore((s) => s.toggleFavoriteConfig);
   const replaceScopedConfigKey = useAppStore((s) => s.replaceScopedConfigKey);
 

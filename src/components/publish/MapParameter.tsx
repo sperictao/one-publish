@@ -76,17 +76,10 @@ export function MapParameter({
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-x-2">
           <Label id={fieldLabelId}>{resolvedLabel}</Label>
-          {definition.description && (
-            <HelpTip text={definition.description} />
-          )}
+          {definition.description && <HelpTip text={definition.description} />}
         </div>
         {!readOnly ? (
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={addEntry}
-          >
+          <Button type="button" variant="outline" size="sm" onClick={addEntry}>
             <Plus className="size-4 mr-1" />
             {t("common.add")}
           </Button>
@@ -94,7 +87,10 @@ export function MapParameter({
       </div>
       <fieldset className="space-y-2" aria-labelledby={fieldLabelId}>
         {entries.map(([key, val], index) => (
-          <div key={idPoolRef.current[index]} className="flex items-center gap-x-2">
+          <div
+            key={idPoolRef.current[index]}
+            className="flex items-center gap-x-2"
+          >
             <Input
               type="text"
               value={key}

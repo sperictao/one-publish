@@ -43,7 +43,8 @@ OnePublish est une **application de bureau multiplateforme** qui offre une inter
 ## 📸 Captures d'Écran
 
 <!-- TODO: add actual screenshots -->
-> *Captures d'écran à venir. En attendant, consultez la [philosophie de design](docs/design-philosophy.md) et la [spécification de design Geist](DESIGN.md).*
+
+> _Captures d'écran à venir. En attendant, consultez la [philosophie de design](docs/design-philosophy.md) et la [spécification de design Geist](DESIGN.md)._
 
 ---
 
@@ -51,11 +52,11 @@ OnePublish est une **application de bureau multiplateforme** qui offre une inter
 
 ### Prérequis
 
-| Requis | Version | Objectif |
-|----------|---------|---------|
-| **Node.js** | ≥ 20.19 | Environnement d'exécution frontend |
-| **pnpm** | latest | Gestionnaire de paquets |
-| **Rust** | ≥ 1.77 | Compilation du backend Tauri |
+| Requis        | Version  | Objectif                                                 |
+| ------------- | -------- | -------------------------------------------------------- |
+| **Node.js**   | ≥ 20.19  | Environnement d'exécution frontend                       |
+| **pnpm**      | latest   | Gestionnaire de paquets                                  |
+| **Rust**      | ≥ 1.77   | Compilation du backend Tauri                             |
 | **SDK Cible** | variable | Au moins un parmi : .NET SDK / Rust / Go / Java (Gradle) |
 
 ### macOS — Installer les Dépendances de Développement
@@ -182,21 +183,21 @@ one-publish/
 
 ## 🛠️ Stack Technique
 
-| Couche | Technologie |
-|-------|-----------|
-| **Framework Frontend** | React 18 + TypeScript |
-| **Outil de Build** | Vite 7 |
-| **Styling** | Tailwind CSS 3 + shadcn/ui (Radix UI) |
-| **Système de Design** | Vercel Geist (design tokens, couleurs P3 large gamut, thèmes clair et sombre) |
-| **Gestion d'État** | Zustand 5 |
-| **Icônes** | Lucide React |
-| **Notifications** | Sonner |
-| **Framework Desktop** | Tauri 2.x (Rust) |
-| **Persistance** | Stockage en fichiers JSON (`~/.one-publish/config.json`) |
-| **Pont de Types** | `ts-rs` (génération de contrats Rust ↔ TypeScript) |
-| **Tests Unitaires** | Vitest (frontend) + Rust `#[cfg(test)]` (backend) |
-| **Tests E2E** | Playwright |
-| **Gestionnaire de Paquets** | pnpm |
+| Couche                      | Technologie                                                                   |
+| --------------------------- | ----------------------------------------------------------------------------- |
+| **Framework Frontend**      | React 18 + TypeScript                                                         |
+| **Outil de Build**          | Vite 7                                                                        |
+| **Styling**                 | Tailwind CSS 3 + shadcn/ui (Radix UI)                                         |
+| **Système de Design**       | Vercel Geist (design tokens, couleurs P3 large gamut, thèmes clair et sombre) |
+| **Gestion d'État**          | Zustand 5                                                                     |
+| **Icônes**                  | Lucide React                                                                  |
+| **Notifications**           | Sonner                                                                        |
+| **Framework Desktop**       | Tauri 2.x (Rust)                                                              |
+| **Persistance**             | Stockage en fichiers JSON (`~/.one-publish/config.json`)                      |
+| **Pont de Types**           | `ts-rs` (génération de contrats Rust ↔ TypeScript)                            |
+| **Tests Unitaires**         | Vitest (frontend) + Rust `#[cfg(test)]` (backend)                             |
+| **Tests E2E**               | Playwright                                                                    |
+| **Gestionnaire de Paquets** | pnpm                                                                          |
 
 ---
 
@@ -250,12 +251,12 @@ Fichiers de traduction : `src/i18n/zh.json` | `src/i18n/en.json` (~776 clés cha
 
 ## 🧪 Tests
 
-| Couche | Outil | Couverture |
-|-------|------|----------|
-| Tests unitaires frontend | Vitest + Testing Library | Composants, hooks, stores, lib |
-| Tests unitaires backend | Rust `#[cfg(test)]` | Compilation des fournisseurs, migrations du store, génération de plans |
-| E2E | Playwright (12 specs) | Démarrage de l'application, panneau de dépôt, sélection de fournisseur, préréglages de publication, configuration personnalisée, preflight, flux de publication, smoke tests des contrats |
-| Portes de qualité | TypeScript strict + contrats `ts-rs` | Appliquées au build et à la CI |
+| Couche                   | Outil                                | Couverture                                                                                                                                                                                |
+| ------------------------ | ------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Tests unitaires frontend | Vitest + Testing Library             | Composants, hooks, stores, lib                                                                                                                                                            |
+| Tests unitaires backend  | Rust `#[cfg(test)]`                  | Compilation des fournisseurs, migrations du store, génération de plans                                                                                                                    |
+| E2E                      | Playwright (12 specs)                | Démarrage de l'application, panneau de dépôt, sélection de fournisseur, préréglages de publication, configuration personnalisée, preflight, flux de publication, smoke tests des contrats |
+| Portes de qualité        | TypeScript strict + contrats `ts-rs` | Appliquées au build et à la CI                                                                                                                                                            |
 
 ---
 
@@ -263,20 +264,20 @@ Fichiers de traduction : `src/i18n/zh.json` | `src/i18n/en.json` (~776 clés cha
 
 OnePublish évolue d'une interface graphique de publication .NET vers un **produit de publication multi-langages de qualité commerciale**. Le plan directeur couvre 11 phases :
 
-| Phase | Thème | Statut |
-|-------|-------|--------|
-| 0 | Fondations d'ingénierie (tests, CI) | ✅ Terminé |
-| 1 | Abstraction du cœur de publication (Spec, Plan, Logging) | ✅ Terminé |
-| 2 | Fournisseurs de langage (Rust/Go/Java) | ✅ Terminé |
-| 3 | Expressivité des paramètres à 100% (éditeur de schéma) | ✅ Terminé |
-| 4 | Fonctionnalités commerciales (import/export, vérifications d'env, signature) | ✅ Terminé |
-| 5 | UX des opérations de release (assistant checklist, preflight) | ✅ Terminé |
-| 6 | Pont UX multi-fournisseurs | ✅ Terminé |
-| 7 | Fiabilité d'exécution & DevEx (streaming, annulation, snapshots) | ✅ Terminé |
-| 8 | Intelligence d'exécution & récupération (historique, ré-exécution, regroupement d'échecs) | ✅ Terminé |
-| 9 | Approfondissement des diagnostics & transfert d'équipe | ✅ Terminé |
-| 10 | Signal de collaboration & intelligence de chronologie | ✅ Terminé |
-| 11 | Intégration du flux de travail d'équipe | 🚧 En Cours |
+| Phase | Thème                                                                                     | Statut      |
+| ----- | ----------------------------------------------------------------------------------------- | ----------- |
+| 0     | Fondations d'ingénierie (tests, CI)                                                       | ✅ Terminé  |
+| 1     | Abstraction du cœur de publication (Spec, Plan, Logging)                                  | ✅ Terminé  |
+| 2     | Fournisseurs de langage (Rust/Go/Java)                                                    | ✅ Terminé  |
+| 3     | Expressivité des paramètres à 100% (éditeur de schéma)                                    | ✅ Terminé  |
+| 4     | Fonctionnalités commerciales (import/export, vérifications d'env, signature)              | ✅ Terminé  |
+| 5     | UX des opérations de release (assistant checklist, preflight)                             | ✅ Terminé  |
+| 6     | Pont UX multi-fournisseurs                                                                | ✅ Terminé  |
+| 7     | Fiabilité d'exécution & DevEx (streaming, annulation, snapshots)                          | ✅ Terminé  |
+| 8     | Intelligence d'exécution & récupération (historique, ré-exécution, regroupement d'échecs) | ✅ Terminé  |
+| 9     | Approfondissement des diagnostics & transfert d'équipe                                    | ✅ Terminé  |
+| 10    | Signal de collaboration & intelligence de chronologie                                     | ✅ Terminé  |
+| 11    | Intégration du flux de travail d'équipe                                                   | 🚧 En Cours |
 
 ---
 

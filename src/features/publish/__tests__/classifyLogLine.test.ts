@@ -4,9 +4,9 @@ import { classifyLogLine } from "@/features/publish/classifyLogLine";
 
 describe("classifyLogLine", () => {
   it("识别 .NET 编译器错误诊断码", () => {
-    expect(
-      classifyLogLine("Program.cs(10,5): error CS1002: ; expected")
-    ).toBe("error");
+    expect(classifyLogLine("Program.cs(10,5): error CS1002: ; expected")).toBe(
+      "error"
+    );
   });
 
   it("识别 MSBuild 警告诊断码", () => {

@@ -168,12 +168,12 @@ describe("useDialogsCompositionState", () => {
       })
     );
 
-    expect(result.current.appDialogsProps.settings.environmentInitialCheck).toEqual(
-      snapshot
-    );
-    expect(result.current.appDialogsProps.release.environmentResult?.checked_at).toBe(
-      "2026-04-02T10:00:00Z"
-    );
+    expect(
+      result.current.appDialogsProps.settings.environmentInitialCheck
+    ).toEqual(snapshot);
+    expect(
+      result.current.appDialogsProps.release.environmentResult?.checked_at
+    ).toBe("2026-04-02T10:00:00Z");
     expect(result.current.appDialogsProps.commandImport.projectPath).toBe(
       "/repo/App.csproj"
     );

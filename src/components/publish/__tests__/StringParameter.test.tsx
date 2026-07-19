@@ -1,15 +1,15 @@
-import { describe, it, expect, vi } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/react';
-import { StringParameter } from '../StringParameter';
+import { describe, it, expect, vi } from "vitest";
+import { render, screen, fireEvent } from "@testing-library/react";
+import { StringParameter } from "../StringParameter";
 
-describe('StringParameter', () => {
+describe("StringParameter", () => {
   const definition = {
-    type: 'string' as const,
-    flag: '--target',
-    description: 'Target triple',
+    type: "string" as const,
+    flag: "--target",
+    description: "Target triple",
   };
 
-  it('renders input with correct value', () => {
+  it("renders input with correct value", () => {
     render(
       <StringParameter
         definition={definition}
@@ -18,12 +18,12 @@ describe('StringParameter', () => {
       />
     );
 
-    const input = screen.getByRole('textbox');
+    const input = screen.getByRole("textbox");
     expect(input).toBeInTheDocument();
-    expect(input).toHaveValue('x86_64-apple-darwin');
+    expect(input).toHaveValue("x86_64-apple-darwin");
   });
 
-  it('calls onChange when input changes', () => {
+  it("calls onChange when input changes", () => {
     const handleChange = vi.fn();
     render(
       <StringParameter
@@ -33,22 +33,18 @@ describe('StringParameter', () => {
       />
     );
 
-    const input = screen.getByRole('textbox');
-    fireEvent.change(input, { target: { value: 'test-value' } });
+    const input = screen.getByRole("textbox");
+    fireEvent.change(input, { target: { value: "test-value" } });
 
-    expect(handleChange).toHaveBeenCalledWith('test-value');
+    expect(handleChange).toHaveBeenCalledWith("test-value");
   });
 
-  it('displays description as tooltip', () => {
+  it("displays description as tooltip", () => {
     render(
-      <StringParameter
-        definition={definition}
-        value=""
-        onChange={vi.fn()}
-      />
+      <StringParameter definition={definition} value="" onChange={vi.fn()} />
     );
 
-    const helpIcon = screen.getByLabelText('查看说明');
+    const helpIcon = screen.getByLabelText("查看说明");
     expect(helpIcon).toBeInTheDocument();
   });
 });

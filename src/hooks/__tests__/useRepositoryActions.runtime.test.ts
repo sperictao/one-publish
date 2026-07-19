@@ -24,7 +24,8 @@ vi.mock("sonner", () => ({
 }));
 
 vi.mock("@/lib/store/api", async () => {
-  const actual = await vi.importActual<typeof import("@/lib/store/api")>("@/lib/store/api");
+  const actual =
+    await vi.importActual<typeof import("@/lib/store/api")>("@/lib/store/api");
   return {
     ...actual,
     detectRepositoryProvider: mocks.detectRepositoryProvider,
@@ -96,12 +97,17 @@ describe("handleAddRepoRuntime", () => {
       addRepository: mocks.addRepository,
     });
 
-    expect(mocks.detectRepositoryProvider).toHaveBeenCalledWith("/tmp/demo-repo");
+    expect(mocks.detectRepositoryProvider).toHaveBeenCalledWith(
+      "/tmp/demo-repo"
+    );
     expect(mocks.listProviders).not.toHaveBeenCalled();
     expect(mocks.scanProjectCandidates).toHaveBeenCalledWith("/tmp/demo-repo");
-    expect(mocks.scanRepositoryBranches).toHaveBeenCalledWith("/tmp/demo-repo", {
-      refreshRemote: false,
-    });
+    expect(mocks.scanRepositoryBranches).toHaveBeenCalledWith(
+      "/tmp/demo-repo",
+      {
+        refreshRemote: false,
+      }
+    );
     expect(mocks.addRepository).toHaveBeenCalledWith(
       expect.objectContaining({
         name: "demo-repo",
@@ -110,7 +116,10 @@ describe("handleAddRepoRuntime", () => {
         projectFile: "/tmp/demo-repo/src/App/App.csproj",
         currentBranch: "feature/auto-detect",
         branches: expect.arrayContaining([
-          expect.objectContaining({ name: "feature/auto-detect", isCurrent: true }),
+          expect.objectContaining({
+            name: "feature/auto-detect",
+            isCurrent: true,
+          }),
         ]),
       })
     );
@@ -129,7 +138,9 @@ describe("handleAddRepoRuntime", () => {
       addRepository: mocks.addRepository,
     });
 
-    expect(mocks.detectRepositoryProvider).toHaveBeenCalledWith("/tmp/demo-repo");
+    expect(mocks.detectRepositoryProvider).toHaveBeenCalledWith(
+      "/tmp/demo-repo"
+    );
     expect(mocks.listProviders).toHaveBeenCalledOnce();
     expect(mocks.scanProjectCandidates).toHaveBeenCalledWith("/tmp/demo-repo");
     expect(mocks.addRepository).toHaveBeenCalledWith(

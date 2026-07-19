@@ -25,7 +25,8 @@ import {
 
 describe("publishConfigIdentity", () => {
   it("round-trips project profile selected presets", () => {
-    const selectedPreset = createProjectProfileSelectedPreset(" FolderProfile ");
+    const selectedPreset =
+      createProjectProfileSelectedPreset(" FolderProfile ");
 
     expect(selectedPreset).toBe("profile-FolderProfile");
     expect(getSelectedProjectProfileName(selectedPreset)).toBe("FolderProfile");
@@ -62,9 +63,9 @@ describe("publishConfigIdentity", () => {
     expect(renderId).toBe("recent:userprofile:alpha");
     expect(getRecentConfigKeyFromRenderId(renderId)).toBe(configKey);
     expect(normalizeRenderableConfigId(renderId)).toBe(configKey);
-    expect(normalizeRenderableConfigId(createProjectProfileConfigKey("Folder"))).toBe(
-      "pubxml:Folder"
-    );
+    expect(
+      normalizeRenderableConfigId(createProjectProfileConfigKey("Folder"))
+    ).toBe("pubxml:Folder");
   });
 
   it("resolves current dotnet selection into recent config keys", () => {
@@ -107,7 +108,9 @@ describe("publishConfigIdentity", () => {
       profileName: "alpha",
       configKey: "userprofile:alpha",
     });
-    expect(getActiveProfileNameFromSelection(userProfileIdentity)).toBe("alpha");
+    expect(getActiveProfileNameFromSelection(userProfileIdentity)).toBe(
+      "alpha"
+    );
     expect(getRecentConfigKeyFromSelection(userProfileIdentity)).toBe(
       "userprofile:alpha"
     );
@@ -224,7 +227,9 @@ describe("publishConfigIdentity", () => {
   });
 
   it("extracts profile names from config keys via convenience helpers", () => {
-    expect(getProjectProfileNameFromConfigKey("pubxml:Release")).toBe("Release");
+    expect(getProjectProfileNameFromConfigKey("pubxml:Release")).toBe(
+      "Release"
+    );
     expect(getProjectProfileNameFromConfigKey("userprofile:alpha")).toBeNull();
     expect(getProjectProfileNameFromConfigKey("preset:folder")).toBeNull();
 

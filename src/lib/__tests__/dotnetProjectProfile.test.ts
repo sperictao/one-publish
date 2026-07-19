@@ -5,7 +5,8 @@ const mocks = vi.hoisted(() => ({
 }));
 
 vi.mock("@/lib/store/api", async () => {
-  const actual = await vi.importActual<typeof import("@/lib/store/api")>("@/lib/store/api");
+  const actual =
+    await vi.importActual<typeof import("@/lib/store/api")>("@/lib/store/api");
   return {
     ...actual,
     readProjectPublishProfile: mocks.readProjectPublishProfile,
@@ -113,7 +114,9 @@ describe("resolveDotnetProjectProfile", () => {
       delete_existing_files: true,
     });
     expect(resolved.editableConfig.deleteExistingFiles).toBe(true);
-    expect(resolved.editableConfig.properties.DeleteExistingFiles).toBeUndefined();
+    expect(
+      resolved.editableConfig.properties.DeleteExistingFiles
+    ).toBeUndefined();
   });
 
   it("将 pubxml 中的 DeleteExistingFiles=false 视为显式关闭并清理属性集", async () => {
@@ -143,7 +146,9 @@ describe("resolveDotnetProjectProfile", () => {
       output: "./publish",
     });
     expect(resolved.editableConfig.deleteExistingFiles).toBe(false);
-    expect(resolved.editableConfig.properties.DeleteExistingFiles).toBeUndefined();
+    expect(
+      resolved.editableConfig.properties.DeleteExistingFiles
+    ).toBeUndefined();
   });
 
   it("根据共享参数结果生成可编辑的自定义配置", async () => {

@@ -92,7 +92,7 @@ export function buildProtectedOutputAccessDescription(
   );
   const template =
     appT.publishProtectedDirectoryAccessDeniedDesc ||
-    '当前输出目录位于 macOS 受保护位置「{{location}}」下。OnePublish 已尝试向系统申请写入权限，但仍无法访问：{{path}}。请在“系统设置 > 隐私与安全性 > 文件与文件夹”中允许 OnePublish 访问「{{location}}」后重试；如果没有出现授权弹窗，请改用非受保护目录。';
+    "当前输出目录位于 macOS 受保护位置「{{location}}」下。OnePublish 已尝试向系统申请写入权限，但仍无法访问：{{path}}。请在“系统设置 > 隐私与安全性 > 文件与文件夹”中允许 OnePublish 访问「{{location}}」后重试；如果没有出现授权弹窗，请改用非受保护目录。";
 
   return template
     .replace(/\{\{location\}\}/g, location)
@@ -113,16 +113,15 @@ export function buildPublishOutputValidationTitle(
     return appT.publishOutputPathInvalid || "发布目录无效";
   }
 
-  return (
-    appT.publishOutputPathIncompatible || "发布目录路径与当前系统不兼容"
-  );
+  return appT.publishOutputPathIncompatible || "发布目录路径与当前系统不兼容";
 }
 
 export function buildPublishOutputValidationDescription(
   result: PublishOutputPreflightResult,
   appT: TranslationMap
 ): string {
-  const path = result.configuredOutputDir?.trim() || result.outputDir?.trim() || "-";
+  const path =
+    result.configuredOutputDir?.trim() || result.outputDir?.trim() || "-";
 
   if (result.validation.issue === "windows_style_path_on_posix") {
     return (

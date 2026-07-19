@@ -18,7 +18,8 @@ vi.mock("sonner", () => ({
 }));
 
 vi.mock("@/lib/store/api", async () => {
-  const actual = await vi.importActual<typeof import("@/lib/store/api")>("@/lib/store/api");
+  const actual =
+    await vi.importActual<typeof import("@/lib/store/api")>("@/lib/store/api");
   return {
     ...actual,
     getAppState: mocks.getAppState,
@@ -137,7 +138,8 @@ describe("useAppState", () => {
   it("发布配置持久化失败时会回滚并提示", async () => {
     const initialState = createAppState();
     const authoritativeState = createAppState();
-    authoritativeState.repositories[0].publishConfig.selectedPreset = "release-fd";
+    authoritativeState.repositories[0].publishConfig.selectedPreset =
+      "release-fd";
     authoritativeState.repositories[0].publishConfig.isCustomMode = true;
     mocks.getAppState
       .mockResolvedValueOnce(initialState)
@@ -198,7 +200,9 @@ describe("useAppState", () => {
     mocks.getAppState
       .mockResolvedValueOnce(initialState)
       .mockResolvedValueOnce(authoritativeState);
-    mocks.updatePreferences.mockRejectedValueOnce(new Error("preferences failed"));
+    mocks.updatePreferences.mockRejectedValueOnce(
+      new Error("preferences failed")
+    );
 
     const { result } = renderHook(() => useAppState());
 
@@ -226,7 +230,9 @@ describe("useAppState", () => {
       await Promise.resolve();
     });
 
-    expect(result.current.repositories.map((repo) => repo.id)).toEqual(["repo-1"]);
+    expect(result.current.repositories.map((repo) => repo.id)).toEqual([
+      "repo-1",
+    ]);
     expect(mocks.reorderRepositories).toHaveBeenCalledWith(["repo-1"]);
   });
 

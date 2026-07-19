@@ -192,11 +192,15 @@ export function AppDialogs(props: AppDialogsProps) {
             language={props.settings.language}
             onLanguageChange={props.settings.onLanguageChange}
             minimizeToTrayOnClose={props.settings.minimizeToTrayOnClose}
-            onMinimizeToTrayOnCloseChange={props.settings.onMinimizeToTrayOnCloseChange}
+            onMinimizeToTrayOnCloseChange={
+              props.settings.onMinimizeToTrayOnCloseChange
+            }
             defaultOutputDir={props.settings.defaultOutputDir}
             onDefaultOutputDirChange={props.settings.onDefaultOutputDirChange}
             executionHistoryLimit={props.settings.executionHistoryLimit}
-            onExecutionHistoryLimitChange={props.settings.onExecutionHistoryLimitChange}
+            onExecutionHistoryLimitChange={
+              props.settings.onExecutionHistoryLimitChange
+            }
             theme={props.settings.theme}
             onThemeChange={props.settings.onThemeChange}
             onOpenShortcuts={props.settings.onOpenShortcuts}
@@ -205,7 +209,9 @@ export function AppDialogs(props: AppDialogsProps) {
             providers={props.settings.providers}
             environmentProviderIds={props.settings.environmentProviderIds}
             environmentInitialCheck={props.settings.environmentInitialCheck}
-            onEnvironmentProviderIdsChange={props.settings.onEnvironmentProviderIdsChange}
+            onEnvironmentProviderIdsChange={
+              props.settings.onEnvironmentProviderIdsChange
+            }
             onEnvironmentChecked={props.settings.onEnvironmentChecked}
             updaterState={props.settings.updaterState}
             onCheckForUpdates={props.settings.onCheckForUpdates}
@@ -254,7 +260,9 @@ export function AppDialogs(props: AppDialogsProps) {
             quickCreateTemplateOptions={props.quickCreate.templateOptions}
             quickCreateProfileName={props.quickCreate.profileName}
             quickCreateProfileGroup={props.quickCreate.profileGroup}
-            quickCreateProfileGroupOptions={props.quickCreate.profileGroupOptions}
+            quickCreateProfileGroupOptions={
+              props.quickCreate.profileGroupOptions
+            }
             quickCreateProfileCustomGroup={props.quickCreate.profileCustomGroup}
             quickCreateProfileDraft={props.quickCreate.profileDraft}
             projectFrameworkOptions={props.quickCreate.projectFrameworkOptions}
@@ -270,7 +278,9 @@ export function AppDialogs(props: AppDialogsProps) {
             onApplyTemplate={props.quickCreate.onApplyTemplate}
             onProfileNameChange={props.quickCreate.onProfileNameChange}
             onProfileGroupChange={props.quickCreate.onProfileGroupChange}
-            onProfileCustomGroupChange={props.quickCreate.onProfileCustomGroupChange}
+            onProfileCustomGroupChange={
+              props.quickCreate.onProfileCustomGroupChange
+            }
             onDraftChange={props.quickCreate.onDraftChange}
             onSave={props.quickCreate.onSave}
           />
@@ -288,7 +298,9 @@ export function AppDialogs(props: AppDialogsProps) {
             onSaveProfile={props.config.profileManagement.saveProfile}
             onDeleteProfile={props.config.profileManagement.deleteProfile}
             onExportProfiles={props.config.profileManagement.exportProfiles}
-            onApplyImportedProfiles={props.config.profileManagement.applyImportedProfiles}
+            onApplyImportedProfiles={
+              props.config.profileManagement.applyImportedProfiles
+            }
             onLoadProfile={props.config.onLoadProfile}
             currentProviderId={props.config.currentProviderId}
             repoId={props.config.repoId}

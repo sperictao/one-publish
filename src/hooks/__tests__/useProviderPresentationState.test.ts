@@ -65,10 +65,9 @@ describe("useProviderPresentationState", () => {
     expect(result.current.activeProviderLabel).toBe("Rust (cargo)");
     expect(result.current.activeProviderUsesProjectFile).toBe(false);
     expect(result.current.activeProviderRequiresProjectBinding).toBe(false);
-    expect(result.current.repositoryProviders.map((provider) => provider.label)).toEqual([
-      ".NET (dotnet)",
-      "Rust (cargo)",
-    ]);
+    expect(
+      result.current.repositoryProviders.map((provider) => provider.label)
+    ).toEqual([".NET (dotnet)", "Rust (cargo)"]);
     expect(result.current.providerRuntimeBanner).toBeNull();
   });
 

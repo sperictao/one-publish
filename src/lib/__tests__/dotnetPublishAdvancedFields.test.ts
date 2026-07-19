@@ -94,10 +94,7 @@ describe("buildDotnetAdvancedFieldsModel", () => {
     const properties = model.fieldMap.get("properties");
 
     expect(model.baseFields.map((field) => field.key)).toEqual(
-      expect.arrayContaining([
-        "framework",
-        "delete_existing_files",
-      ])
+      expect.arrayContaining(["framework", "delete_existing_files"])
     );
     expect(model.collapsedFields.map((field) => field.key)).toEqual(
       expect.arrayContaining([

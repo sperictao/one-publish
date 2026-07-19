@@ -94,14 +94,15 @@ export function ExecutionHistoryCard({
   return (
     <Card>
       <CardHeader className="pb-3">
-        <CardTitle className="text-heading-20">{historyT.title || "最近执行历史"}</CardTitle>
+        <CardTitle className="text-heading-20">
+          {historyT.title || "最近执行历史"}
+        </CardTitle>
         <CardDescription>
-          {(historyT.description || "本地保留最近 {{count}} 条发布记录").replace(
-            "{{count}}",
-            String(executionHistoryLimit)
-          )}
+          {(
+            historyT.description || "本地保留最近 {{count}} 条发布记录"
+          ).replace("{{count}}", String(executionHistoryLimit))}
           {filteredExecutionHistory.length !== scopedExecutionHistory.length
-            ? ` · ${(historyT.currentFilter || "当前筛选")} ${filteredExecutionHistory.length}/${scopedExecutionHistory.length}`
+            ? ` · ${historyT.currentFilter || "当前筛选"} ${filteredExecutionHistory.length}/${scopedExecutionHistory.length}`
             : ""}
         </CardDescription>
       </CardHeader>
@@ -112,10 +113,14 @@ export function ExecutionHistoryCard({
             onValueChange={onHistoryFilterProviderChange}
           >
             <SelectTrigger className="h-8">
-              <SelectValue placeholder={historyT.filterProvider || "筛选 Provider"} />
+              <SelectValue
+                placeholder={historyT.filterProvider || "筛选 Provider"}
+              />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">{historyT.allProviders || "全部 Provider"}</SelectItem>
+              <SelectItem value="all">
+                {historyT.allProviders || "全部 Provider"}
+              </SelectItem>
               {historyProviderOptions.map((providerId) => (
                 <SelectItem key={providerId} value={providerId}>
                   {providerId}
@@ -133,10 +138,18 @@ export function ExecutionHistoryCard({
               <SelectValue placeholder={historyT.filterStatus || "筛选状态"} />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">{historyT.allStatuses || "全部状态"}</SelectItem>
-              <SelectItem value="success">{appT.statusSuccess || "成功"}</SelectItem>
-              <SelectItem value="failed">{appT.statusFailed || "失败"}</SelectItem>
-              <SelectItem value="cancelled">{appT.statusCancelled || "已取消"}</SelectItem>
+              <SelectItem value="all">
+                {historyT.allStatuses || "全部状态"}
+              </SelectItem>
+              <SelectItem value="success">
+                {appT.statusSuccess || "成功"}
+              </SelectItem>
+              <SelectItem value="failed">
+                {appT.statusFailed || "失败"}
+              </SelectItem>
+              <SelectItem value="cancelled">
+                {appT.statusCancelled || "已取消"}
+              </SelectItem>
             </SelectContent>
           </Select>
           <Select
@@ -149,18 +162,30 @@ export function ExecutionHistoryCard({
               <SelectValue placeholder={historyT.timeWindow || "时间窗口"} />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">{historyT.allTime || "全部时间"}</SelectItem>
-              <SelectItem value="24h">{historyT.last24Hours || "最近 24 小时"}</SelectItem>
-              <SelectItem value="7d">{historyT.last7Days || "最近 7 天"}</SelectItem>
-              <SelectItem value="30d">{historyT.last30Days || "最近 30 天"}</SelectItem>
+              <SelectItem value="all">
+                {historyT.allTime || "全部时间"}
+              </SelectItem>
+              <SelectItem value="24h">
+                {historyT.last24Hours || "最近 24 小时"}
+              </SelectItem>
+              <SelectItem value="7d">
+                {historyT.last7Days || "最近 7 天"}
+              </SelectItem>
+              <SelectItem value="30d">
+                {historyT.last30Days || "最近 30 天"}
+              </SelectItem>
             </SelectContent>
           </Select>
           <Input
             className="h-8"
             value={historyFilterKeyword}
             onChange={(e) => onHistoryFilterKeywordChange(e.target.value)}
-            placeholder={historyT.keywordPlaceholder || "关键词（签名/错误/命令）"}
-            aria-label={historyT.keywordPlaceholder || "关键词（签名/错误/命令）"}
+            placeholder={
+              historyT.keywordPlaceholder || "关键词（签名/错误/命令）"
+            }
+            aria-label={
+              historyT.keywordPlaceholder || "关键词（签名/错误/命令）"
+            }
           />
         </div>
 
@@ -172,7 +197,9 @@ export function ExecutionHistoryCard({
               size="sm"
               className="w-fit"
               onClick={() => void onExportExecutionHistory()}
-              disabled={isExportingHistory || filteredExecutionHistory.length === 0}
+              disabled={
+                isExportingHistory || filteredExecutionHistory.length === 0
+              }
             >
               {isExportingHistory ? (
                 <>
@@ -231,9 +258,12 @@ export function ExecutionHistoryCard({
                         : appT.statusFailed || "失败"}
                   </span>
                 </div>
-                <div className="text-label-12 text-muted-foreground truncate">{record.projectPath}</div>
+                <div className="text-label-12 text-muted-foreground truncate">
+                  {record.projectPath}
+                </div>
                 <div className="text-label-12 text-muted-foreground">
-                  {(historyT.completedAt || "完成时间")}: {new Date(record.finishedAt).toLocaleString()}
+                  {historyT.completedAt || "完成时间"}:{" "}
+                  {new Date(record.finishedAt).toLocaleString()}
                 </div>
                 {failureReason && (
                   <div className="mt-2 rounded-sm border border-destructive/20 bg-destructive/5 px-2.5 py-2 text-label-12 text-destructive">
@@ -248,7 +278,8 @@ export function ExecutionHistoryCard({
                     <summary className="flex cursor-pointer list-none items-center gap-1.5 px-2.5 py-2 text-label-12 text-warning transition-colors duration-150 ease-geist hover:bg-warning/5 [&::-webkit-details-marker]:hidden">
                       <AlertTriangle className="size-3.5 flex-shrink-0" />
                       <span className="font-semibold">
-                        {historyT.warningsLabel || "警告"}: {record.warnings.length}
+                        {historyT.warningsLabel || "警告"}:{" "}
+                        {record.warnings.length}
                       </span>
                       <ChevronDown className="ml-auto size-3.5 text-warning transition-transform duration-150 ease-geist group-open:rotate-180" />
                     </summary>
@@ -289,7 +320,9 @@ export function ExecutionHistoryCard({
                         type="button"
                         size="sm"
                         variant="outline"
-                        onClick={() => void onCopyHandoffSnippet(record, "shell")}
+                        onClick={() =>
+                          void onCopyHandoffSnippet(record, "shell")
+                        }
                       >
                         {historyT.copyShellSnippet || "复制 Shell 片段"}
                       </Button>

@@ -1,7 +1,11 @@
 import { useCallback } from "react";
 import { toast } from "sonner";
 
-import { buildGitHubActionsSnippet, buildShellHandoffSnippet, type HandoffSnippetFormat } from "@/lib/handoffSnippet";
+import {
+  buildGitHubActionsSnippet,
+  buildShellHandoffSnippet,
+  type HandoffSnippetFormat,
+} from "@/lib/handoffSnippet";
 import type { ProviderPublishSpec } from "@/features/publish/publishRuntime";
 import { openExecutionSnapshot } from "@/lib/store/api";
 import { type ExecutionRecord } from "@/lib/store/types";
@@ -15,7 +19,9 @@ interface TranslationMap {
 interface UseHistoryActionsParams {
   appT: TranslationMap;
   historyT: TranslationMap;
-  extractSpecFromRecord: (record: ExecutionRecord) => ProviderPublishSpec | null;
+  extractSpecFromRecord: (
+    record: ExecutionRecord
+  ) => ProviderPublishSpec | null;
 }
 
 export function useHistoryActions({
@@ -23,86 +29,126 @@ export function useHistoryActions({
   historyT,
   extractSpecFromRecord,
 }: UseHistoryActionsParams) {
-  const setExecutionSnapshotPath = useAppStore((s) => s.setExecutionSnapshotPath);
+  const setExecutionSnapshotPath = useAppStore(
+    (s) => s.setExecutionSnapshotPath
+  );
 
-  const copyText = useCallback(async (text: string, label: string) => {
-    const normalized = text.trim();
-    if (!normalized) {
-      toast.error((appT.missingCopyTarget || "缺少可复制的{{label}}")
-        .replace("{{label}}", label));
-      return;
-    }
+  const copyText = useCallback(
+    async (text: string, label: string) => {
+      const normalized = text.trim();
+      if (!normalized) {
+        toast.error(
+          (appT.missingCopyTarget || "缺少可复制的{{label}}").replace(
+            "{{label}}",
+            label
+          )
+        );
+        return;
+      }
 
-    try {
-      if (typeof navigator !== "undefined" && navigator.clipboard?.writeText) {
-        await navigator.clipboard.writeText(normalized);
-      } else {
-        const input = document.createElement("textarea");
-        input.value = normalized;
-        input.style.position = "fixed";
-        input.style.opacity = "0";
-        document.body.appendChild(input);
-        input.focus();
-        input.select();
+      try {
+        if (
+          typeof navigator !== "undefined" &&
+          navigator.clipboard?.writeText
+        ) {
+          await navigator.clipboard.writeText(normalized);
+        } else {
+          const input = document.createElement("textarea");
+          input.value = normalized;
+          input.style.position = "fixed";
+          input.style.opacity = "0";
+          document.body.appendChild(input);
+          input.focus();
+          input.select();
 
-        const copied = document.execCommand("copy");
-        document.body.removeChild(input);
+          const copied = document.execCommand("copy");
+          document.body.removeChild(input);
 
-        if (!copied) {
-          throw new Error(appT.copyFailed || "复制失败");
+          if (!copied) {
+            throw new Error(appT.copyFailed || "复制失败");
+          }
         }
+
+        toast.success(
+          (appT.copySuccess || "{{label}}已复制").replace("{{label}}", label)
+        );
+      } catch (err) {
+        toast.error(
+          (appT.copyFailedWithLabel || "复制{{label}}失败").replace(
+            "{{label}}",
+            label
+          ),
+          {
+            description: String(err),
+          }
+        );
+      }
+    },
+    [appT]
+  );
+
+  const copyHandoffSnippet = useCallback(
+    async (record: ExecutionRecord, format: HandoffSnippetFormat) => {
+      if (!record.success) {
+        toast.error(
+          historyT.handoffOnlySuccess || "仅成功记录支持生成交接片段"
+        );
+        return;
       }
 
-      toast.success((appT.copySuccess || "{{label}}已复制").replace("{{label}}", label));
-    } catch (err) {
-      toast.error((appT.copyFailedWithLabel || "复制{{label}}失败").replace("{{label}}", label), {
-        description: String(err),
-      });
-    }
-  }, [appT]);
-
-  const copyHandoffSnippet = useCallback(async (record: ExecutionRecord, format: HandoffSnippetFormat) => {
-    if (!record.success) {
-      toast.error(historyT.handoffOnlySuccess || "仅成功记录支持生成交接片段");
-      return;
-    }
-
-    const spec = extractSpecFromRecord(record);
-    if (!spec) {
-      toast.error(historyT.missingRecoverableSpec || "该记录缺少可恢复的发布参数");
-      return;
-    }
-
-    const snippet = format === "shell"
-      ? buildShellHandoffSnippet({ spec, commandLine: record.commandLine })
-      : buildGitHubActionsSnippet({ spec, commandLine: record.commandLine });
-
-    await copyText(
-      snippet,
-      format === "shell"
-        ? historyT.shellSnippetLabel || "Shell 交接片段"
-        : historyT.ghaSnippetLabel || "GitHub Actions 交接片段"
-    );
-  }, [copyText, extractSpecFromRecord, historyT]);
-
-  const openSnapshotFromRecord = useCallback(async (record: ExecutionRecord) => {
-    try {
-      const openedPath = await openExecutionSnapshot({
-        snapshotPath: record.snapshotPath ?? null,
-        outputDir: record.outputDir ?? null,
-      });
-
-      if (!record.snapshotPath || record.snapshotPath !== openedPath) {
-        await setExecutionSnapshotPath(record.id, openedPath);
+      const spec = extractSpecFromRecord(record);
+      if (!spec) {
+        toast.error(
+          historyT.missingRecoverableSpec || "该记录缺少可恢复的发布参数"
+        );
+        return;
       }
 
-      toast.success(historyT.snapshotOpened || "已打开执行快照", { description: openedPath });
-    } catch (err) {
-      toast.error(historyT.openSnapshotFailed || "打开执行快照失败", {
-        description: extractInvokeErrorMessage(err),
-      });
-    }
-  }, [historyT.openSnapshotFailed, historyT.snapshotOpened, setExecutionSnapshotPath]);
+      const snippet =
+        format === "shell"
+          ? buildShellHandoffSnippet({ spec, commandLine: record.commandLine })
+          : buildGitHubActionsSnippet({
+              spec,
+              commandLine: record.commandLine,
+            });
+
+      await copyText(
+        snippet,
+        format === "shell"
+          ? historyT.shellSnippetLabel || "Shell 交接片段"
+          : historyT.ghaSnippetLabel || "GitHub Actions 交接片段"
+      );
+    },
+    [copyText, extractSpecFromRecord, historyT]
+  );
+
+  const openSnapshotFromRecord = useCallback(
+    async (record: ExecutionRecord) => {
+      try {
+        const openedPath = await openExecutionSnapshot({
+          snapshotPath: record.snapshotPath ?? null,
+          outputDir: record.outputDir ?? null,
+        });
+
+        if (!record.snapshotPath || record.snapshotPath !== openedPath) {
+          await setExecutionSnapshotPath(record.id, openedPath);
+        }
+
+        toast.success(historyT.snapshotOpened || "已打开执行快照", {
+          description: openedPath,
+        });
+      } catch (err) {
+        toast.error(historyT.openSnapshotFailed || "打开执行快照失败", {
+          description: extractInvokeErrorMessage(err),
+        });
+      }
+    },
+    [
+      historyT.openSnapshotFailed,
+      historyT.snapshotOpened,
+      setExecutionSnapshotPath,
+    ]
+  );
 
   return {
     copyHandoffSnippet,

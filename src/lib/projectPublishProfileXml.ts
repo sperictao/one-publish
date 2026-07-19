@@ -23,10 +23,7 @@ export interface ParsedProjectPublishProfile {
 }
 
 type DotnetProfileParameterValue =
-  | string
-  | boolean
-  | string[]
-  | Record<string, string>;
+  string | boolean | string[] | Record<string, string>;
 
 const TEXT_NODE = 3;
 const CDATA_SECTION_NODE = 4;
@@ -157,19 +154,11 @@ function parseDotnetBooleanValue(value: string): boolean | null {
     return null;
   }
 
-  if (
-    normalized === "true" ||
-    normalized === "1" ||
-    normalized === "yes"
-  ) {
+  if (normalized === "true" || normalized === "1" || normalized === "yes") {
     return true;
   }
 
-  if (
-    normalized === "false" ||
-    normalized === "0" ||
-    normalized === "no"
-  ) {
+  if (normalized === "false" || normalized === "0" || normalized === "no") {
     return false;
   }
 

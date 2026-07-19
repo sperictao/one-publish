@@ -13,7 +13,9 @@ export function useAppDialogs(environmentProviderIds: string[]) {
   const [configDialogOpen, setConfigDialogOpen] = useState(false);
   const [environmentDialogOpen, setEnvironmentDialogOpen] = useState(false);
   const [environmentDefaultProviderIds, setEnvironmentDefaultProviderIds] =
-    useState<string[]>(() => normalizeEnvironmentProviderIds(environmentProviderIds));
+    useState<string[]>(() =>
+      normalizeEnvironmentProviderIds(environmentProviderIds)
+    );
   const [environmentInitialCheck, setEnvironmentInitialCheck] =
     useState<EnvironmentCheckSnapshot | null>(null);
 
@@ -26,7 +28,8 @@ export function useAppDialogs(environmentProviderIds: string[]) {
       initialCheck: EnvironmentCheckSnapshot | null = null,
       providerIds: string[] = environmentProviderIds
     ) => {
-      const normalizedProviderIds = normalizeEnvironmentProviderIds(providerIds);
+      const normalizedProviderIds =
+        normalizeEnvironmentProviderIds(providerIds);
       setEnvironmentDefaultProviderIds(normalizedProviderIds);
       setEnvironmentInitialCheck(
         scopeEnvironmentCheckSnapshot(initialCheck, normalizedProviderIds)

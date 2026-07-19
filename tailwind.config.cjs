@@ -212,16 +212,40 @@ module.exports = {
       // `font-medium`/`font-semibold`/`font-normal` at the call site. Mono
       // variants are kept distinct where their metrics differ from sans.
       fontSize: {
-        "heading-72": ["72px", { lineHeight: "72px", letterSpacing: "-4.32px" }],
-        "heading-64": ["64px", { lineHeight: "64px", letterSpacing: "-3.84px" }],
-        "heading-56": ["56px", { lineHeight: "56px", letterSpacing: "-3.36px" }],
-        "heading-48": ["48px", { lineHeight: "56px", letterSpacing: "-2.88px" }],
+        "heading-72": [
+          "72px",
+          { lineHeight: "72px", letterSpacing: "-4.32px" },
+        ],
+        "heading-64": [
+          "64px",
+          { lineHeight: "64px", letterSpacing: "-3.84px" },
+        ],
+        "heading-56": [
+          "56px",
+          { lineHeight: "56px", letterSpacing: "-3.36px" },
+        ],
+        "heading-48": [
+          "48px",
+          { lineHeight: "56px", letterSpacing: "-2.88px" },
+        ],
         "heading-40": ["40px", { lineHeight: "48px", letterSpacing: "-2.4px" }],
-        "heading-32": ["32px", { lineHeight: "40px", letterSpacing: "-1.28px" }],
-        "heading-24": ["24px", { lineHeight: "32px", letterSpacing: "-0.96px" }],
+        "heading-32": [
+          "32px",
+          { lineHeight: "40px", letterSpacing: "-1.28px" },
+        ],
+        "heading-24": [
+          "24px",
+          { lineHeight: "32px", letterSpacing: "-0.96px" },
+        ],
         "heading-20": ["20px", { lineHeight: "26px", letterSpacing: "-0.4px" }],
-        "heading-16": ["16px", { lineHeight: "24px", letterSpacing: "-0.32px" }],
-        "heading-14": ["14px", { lineHeight: "20px", letterSpacing: "-0.28px" }],
+        "heading-16": [
+          "16px",
+          { lineHeight: "24px", letterSpacing: "-0.32px" },
+        ],
+        "heading-14": [
+          "14px",
+          { lineHeight: "20px", letterSpacing: "-0.28px" },
+        ],
         "button-16": ["16px", { lineHeight: "20px" }],
         "button-14": ["14px", { lineHeight: "20px" }],
         "button-12": ["12px", { lineHeight: "16px" }],

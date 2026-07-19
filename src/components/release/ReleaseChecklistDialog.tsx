@@ -101,7 +101,8 @@ export function ReleaseChecklistDialog({
   onOpenSettings,
 }: ReleaseChecklistDialogProps) {
   const { translations } = useI18n();
-  const [updaterHealth, setUpdaterHealth] = useState<UpdaterConfigHealth | null>(null);
+  const [updaterHealth, setUpdaterHealth] =
+    useState<UpdaterConfigHealth | null>(null);
   const [updaterLoading, setUpdaterLoading] = useState(false);
   const [updaterError, setUpdaterError] = useState<string | null>(null);
   const [activeStepIndex, setActiveStepIndex] = useState(0);
@@ -156,9 +157,7 @@ export function ReleaseChecklistDialog({
         ? "pass"
         : "fail";
 
-    const packageStatus: ChecklistStatus = packageResult
-      ? "pass"
-      : "pending";
+    const packageStatus: ChecklistStatus = packageResult ? "pass" : "pending";
 
     const signStatus: ChecklistStatus = signResult
       ? signResult.success
@@ -178,8 +177,7 @@ export function ReleaseChecklistDialog({
     return [
       {
         id: "environment",
-        title:
-          checklistTranslations.steps?.environment?.title || "环境检查",
+        title: checklistTranslations.steps?.environment?.title || "环境检查",
         description:
           checklistTranslations.steps?.environment?.description ||
           "确认发布机器不存在阻断问题",
@@ -233,8 +231,7 @@ export function ReleaseChecklistDialog({
         detail: signResult
           ? signResult.success
             ? signResult.signaturePath
-            : signResult.stderr ||
-              `exitCode: ${signResult.exitCode}`
+            : signResult.stderr || `exitCode: ${signResult.exitCode}`
           : packageResult
             ? checklistTranslations.steps?.sign?.pendingDetail ||
               "在输出日志卡片点击“签名 (GPG)”。"
@@ -256,8 +253,7 @@ export function ReleaseChecklistDialog({
             : updaterHealth?.message ||
               checklistTranslations.steps?.updater?.pendingDetail ||
               "尚未获取 updater 状态。",
-        actionLabel:
-          checklistTranslations.actions?.openSettings || "打开设置",
+        actionLabel: checklistTranslations.actions?.openSettings || "打开设置",
         onAction: onOpenSettings,
       },
     ];
@@ -305,12 +301,19 @@ export function ReleaseChecklistDialog({
   }, [firstIncompleteStep, open]);
 
   const activeStep = checklistItems[activeStepIndex] || checklistItems[0];
-  const passedCount = checklistItems.filter((item) => item.status === "pass").length;
-  const warningCount = checklistItems.filter((item) => item.status === "warning").length;
-  const failedCount = checklistItems.filter((item) => item.status === "fail").length;
+  const passedCount = checklistItems.filter(
+    (item) => item.status === "pass"
+  ).length;
+  const warningCount = checklistItems.filter(
+    (item) => item.status === "warning"
+  ).length;
+  const failedCount = checklistItems.filter(
+    (item) => item.status === "fail"
+  ).length;
 
   const blockingReady =
-    checklistItems.find((item) => item.id === "environment")?.status === "pass" &&
+    checklistItems.find((item) => item.id === "environment")?.status ===
+      "pass" &&
     checklistItems.find((item) => item.id === "publish")?.status === "pass" &&
     checklistItems.find((item) => item.id === "package")?.status === "pass" &&
     checklistItems.find((item) => item.id === "sign")?.status === "pass";
@@ -333,9 +336,7 @@ export function ReleaseChecklistDialog({
 
   const handleExportReport = async () => {
     const selected = await save({
-      title:
-        checklistTranslations.exportDialogTitle ||
-        "导出预检报告",
+      title: checklistTranslations.exportDialogTitle || "导出预检报告",
       defaultPath: buildDefaultReportPath(publishResult?.output_dir),
       filters: [
         { name: "Markdown", extensions: ["md"] },
@@ -379,15 +380,13 @@ export function ReleaseChecklistDialog({
         filePath: selected,
         report,
       });
-      toast.success(
-        checklistTranslations.exportSuccess || "预检报告已导出",
-        { description: outputPath }
-      );
+      toast.success(checklistTranslations.exportSuccess || "预检报告已导出", {
+        description: outputPath,
+      });
     } catch (err) {
-      toast.error(
-        checklistTranslations.exportFailed || "导出预检报告失败",
-        { description: String(err) }
-      );
+      toast.error(checklistTranslations.exportFailed || "导出预检报告失败", {
+        description: String(err),
+      });
     } finally {
       setExporting(false);
     }
@@ -430,7 +429,9 @@ export function ReleaseChecklistDialog({
               <Button
                 type="button"
                 variant="outline"
-                onClick={() => setActiveStepIndex((prev) => Math.max(prev - 1, 0))}
+                onClick={() =>
+                  setActiveStepIndex((prev) => Math.max(prev - 1, 0))
+                }
                 disabled={activeStepIndex === 0 || exporting}
               >
                 {checklistTranslations.prev || "上一步"}
@@ -443,11 +444,17 @@ export function ReleaseChecklistDialog({
                     Math.min(prev + 1, checklistItems.length - 1)
                   )
                 }
-                disabled={activeStepIndex >= checklistItems.length - 1 || exporting}
+                disabled={
+                  activeStepIndex >= checklistItems.length - 1 || exporting
+                }
               >
                 {checklistTranslations.next || "下一步"}
               </Button>
-              <Button type="button" onClick={() => onOpenChange(false)} disabled={exporting}>
+              <Button
+                type="button"
+                onClick={() => onOpenChange(false)}
+                disabled={exporting}
+              >
                 {checklistTranslations.close || "完成"}
               </Button>
             </div>
@@ -459,19 +466,22 @@ export function ReleaseChecklistDialog({
             variant="success"
             icon={<CheckCircle2 className="size-3.5" />}
           >
-            {(checklistTranslations.summary?.passed || "已通过") + `: ${passedCount}`}
+            {(checklistTranslations.summary?.passed || "已通过") +
+              `: ${passedCount}`}
           </AppDialogBadge>
           <AppDialogBadge
             variant="warning"
             icon={<AlertTriangle className="size-3.5" />}
           >
-            {(checklistTranslations.summary?.warning || "警告") + `: ${warningCount}`}
+            {(checklistTranslations.summary?.warning || "警告") +
+              `: ${warningCount}`}
           </AppDialogBadge>
           <AppDialogBadge
             variant="danger"
             icon={<XCircle className="size-3.5" />}
           >
-            {(checklistTranslations.summary?.failed || "失败") + `: ${failedCount}`}
+            {(checklistTranslations.summary?.failed || "失败") +
+              `: ${failedCount}`}
           </AppDialogBadge>
           <AppDialogBadge
             variant={blockingReady ? "success" : "warning"}
@@ -505,7 +515,9 @@ export function ReleaseChecklistDialog({
                   }`}
                 >
                   <div className="flex items-center justify-between gap-2">
-                    <span className="text-label-14 font-semibold">{item.title}</span>
+                    <span className="text-label-14 font-semibold">
+                      {item.title}
+                    </span>
                     {style.icon}
                   </div>
                   <div className="mt-2">
@@ -521,12 +533,16 @@ export function ReleaseChecklistDialog({
           <AppDialogInset className="space-y-4">
             <div className="space-y-1">
               <div className="flex items-center justify-between gap-2">
-                <h3 className="text-heading-16 font-semibold">{activeStep.title}</h3>
+                <h3 className="text-heading-16 font-semibold">
+                  {activeStep.title}
+                </h3>
                 <span className="text-label-12 text-muted-foreground">
                   {`${activeStepIndex + 1}/${checklistItems.length}`}
                 </span>
               </div>
-              <p className="text-copy-14 text-muted-foreground">{activeStep.description}</p>
+              <p className="text-copy-14 text-muted-foreground">
+                {activeStep.description}
+              </p>
             </div>
 
             <div className="rounded-sm border border-border bg-muted p-3 text-label-12-mono font-mono whitespace-pre-wrap break-all">

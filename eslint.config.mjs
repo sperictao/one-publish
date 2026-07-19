@@ -3,9 +3,20 @@ import tseslint from "typescript-eslint";
 import reactHooks from "eslint-plugin-react-hooks";
 import reactRefresh from "eslint-plugin-react-refresh";
 import globals from "globals";
+import eslintConfigPrettier from "eslint-config-prettier";
 
 export default tseslint.config(
-  { ignores: ["dist", "src/generated", "src-tauri", "playwright-report", "test-results", "node_modules", ".pi"] },
+  {
+    ignores: [
+      "dist",
+      "src/generated",
+      "src-tauri",
+      "playwright-report",
+      "test-results",
+      "node_modules",
+      ".pi",
+    ],
+  },
   js.configs.recommended,
   ...tseslint.configs.recommended,
   {
@@ -45,7 +56,13 @@ export default tseslint.config(
   },
   {
     // Node 环境文件：脚本、配置、e2e 测试
-    files: ["scripts/**", "tests/**", "*.config.{js,cjs,mjs,ts}", "*.cjs", "*.mjs"],
+    files: [
+      "scripts/**",
+      "tests/**",
+      "*.config.{js,cjs,mjs,ts}",
+      "*.cjs",
+      "*.mjs",
+    ],
     languageOptions: {
       globals: { ...globals.node },
     },
@@ -67,4 +84,6 @@ export default tseslint.config(
       "preserve-caught-error": "warn",
     },
   },
+  // 关闭与 prettier 冲突的纯风格规则（必须放最后）
+  eslintConfigPrettier
 );

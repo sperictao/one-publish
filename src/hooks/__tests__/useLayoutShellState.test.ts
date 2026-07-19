@@ -23,9 +23,12 @@ describe("useLayoutShellState", () => {
 
   it("同一次拖拽中连续增量 delta 应累加（复现 document 监听持有冻结回调）", () => {
     const setLeftPanelWidth = vi.fn();
-    const { result } = renderHook((props: HookProps) => useLayoutShellState(props), {
-      initialProps: createProps({ setLeftPanelWidth }),
-    });
+    const { result } = renderHook(
+      (props: HookProps) => useLayoutShellState(props),
+      {
+        initialProps: createProps({ setLeftPanelWidth }),
+      }
+    );
 
     // ResizeHandle 在 mousedown 时将 handleMouseMove 注册到 document，
     // 整个拖拽序列复用同一个 onResize 引用——这里捕获一次以模拟该行为
@@ -40,9 +43,12 @@ describe("useLayoutShellState", () => {
 
   it("中栏拖拽同样累加增量 delta", () => {
     const setMiddlePanelWidth = vi.fn();
-    const { result } = renderHook((props: HookProps) => useLayoutShellState(props), {
-      initialProps: createProps({ setMiddlePanelWidth }),
-    });
+    const { result } = renderHook(
+      (props: HookProps) => useLayoutShellState(props),
+      {
+        initialProps: createProps({ setMiddlePanelWidth }),
+      }
+    );
 
     const frozenResize = result.current.handleMiddlePanelResize;
 
@@ -54,9 +60,12 @@ describe("useLayoutShellState", () => {
 
   it("累加结果被钳制在 [150, 400] 区间", () => {
     const setLeftPanelWidth = vi.fn();
-    const { result } = renderHook((props: HookProps) => useLayoutShellState(props), {
-      initialProps: createProps({ setLeftPanelWidth }),
-    });
+    const { result } = renderHook(
+      (props: HookProps) => useLayoutShellState(props),
+      {
+        initialProps: createProps({ setLeftPanelWidth }),
+      }
+    );
 
     const frozenResize = result.current.handleLeftPanelResize;
 
@@ -69,10 +78,19 @@ describe("useLayoutShellState", () => {
 
   it("未自定义宽度时首次拖拽以自动宽度为基准，不跳变到 store 默认值", () => {
     const setLeftPanelWidth = vi.fn();
-    const autoWidth = Math.max(150, Math.min(400, Math.round(window.innerWidth * 0.2)));
-    const { result } = renderHook((props: HookProps) => useLayoutShellState(props), {
-      initialProps: createProps({ panelWidthsCustomized: false, setLeftPanelWidth }),
-    });
+    const autoWidth = Math.max(
+      150,
+      Math.min(400, Math.round(window.innerWidth * 0.2))
+    );
+    const { result } = renderHook(
+      (props: HookProps) => useLayoutShellState(props),
+      {
+        initialProps: createProps({
+          panelWidthsCustomized: false,
+          setLeftPanelWidth,
+        }),
+      }
+    );
 
     expect(result.current.effectiveLeftPanelWidth).toBe(autoWidth);
 

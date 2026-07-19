@@ -34,7 +34,10 @@ interface PointerListItemEntry<TMeta> {
 
 export function usePointerListReorder<TMeta>(params: {
   enabled: boolean;
-  onCommit: (activeItemId: string, target: PointerListDropTarget<TMeta>) => void;
+  onCommit: (
+    activeItemId: string,
+    target: PointerListDropTarget<TMeta>
+  ) => void;
   onEnd?: (result: {
     activeItemId: string | null;
     target: PointerListDropTarget<TMeta> | null;
@@ -50,7 +53,9 @@ export function usePointerListReorder<TMeta>(params: {
     x: 0,
     y: 0,
   });
-  const [dragPointer, setDragPointer] = useState<PointerListPointer | null>(null);
+  const [dragPointer, setDragPointer] = useState<PointerListPointer | null>(
+    null
+  );
   const [dragAnchor, setDragAnchor] = useState<PointerListPointer | null>(null);
   const [draggedItemSize, setDraggedItemSize] =
     useState<PointerListSize | null>(null);
@@ -59,7 +64,9 @@ export function usePointerListReorder<TMeta>(params: {
   const draggingItemIdRef = useRef<string | null>(null);
   const dropTargetRef = useRef<PointerListDropTarget<TMeta> | null>(null);
   const dragCleanupRef = useRef<(() => void) | null>(null);
-  const itemEntriesRef = useRef<Record<string, PointerListItemEntry<TMeta>>>({});
+  const itemEntriesRef = useRef<Record<string, PointerListItemEntry<TMeta>>>(
+    {}
+  );
   const dragPointerRef = useRef<PointerListPointer | null>(null);
   const dragAnchorRef = useRef<PointerListPointer | null>(null);
   const draggedItemSizeRef = useRef<PointerListSize | null>(null);
@@ -126,7 +133,8 @@ export function usePointerListReorder<TMeta>(params: {
 
       const referenceRect =
         (() => {
-          const rowRect = itemEntriesRef.current[activeItemId]?.node?.getBoundingClientRect();
+          const rowRect =
+            itemEntriesRef.current[activeItemId]?.node?.getBoundingClientRect();
           if (!rowRect) {
             return initialRowRectRef.current;
           }
@@ -306,7 +314,8 @@ export function usePointerListReorder<TMeta>(params: {
         }
 
         const nextDirection =
-          lastPointerYRef.current === null || pointerEvent.clientY === lastPointerYRef.current
+          lastPointerYRef.current === null ||
+          pointerEvent.clientY === lastPointerYRef.current
             ? dragDirectionRef.current
             : pointerEvent.clientY > lastPointerYRef.current
               ? "down"
@@ -400,7 +409,13 @@ export function usePointerListReorder<TMeta>(params: {
     }
 
     syncDragPreviewOffset();
-  }, [dragPointer?.x, dragPointer?.y, draggingItemId, dropTarget, syncDragPreviewOffset]);
+  }, [
+    dragPointer?.x,
+    dragPointer?.y,
+    draggingItemId,
+    dropTarget,
+    syncDragPreviewOffset,
+  ]);
 
   const dragPreviewStyle = useMemo<CSSProperties | undefined>(() => {
     if (!draggingItemId) {

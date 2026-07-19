@@ -6,9 +6,8 @@ const mocks = vi.hoisted(() => ({
 }));
 
 vi.mock("@/lib/store/api", async () => {
-  const actual = await vi.importActual<typeof import("@/lib/store/api")>(
-    "@/lib/store/api"
-  );
+  const actual =
+    await vi.importActual<typeof import("@/lib/store/api")>("@/lib/store/api");
   return {
     ...actual,
     getExecutionHistory: mocks.getExecutionHistory,
@@ -16,10 +15,7 @@ vi.mock("@/lib/store/api", async () => {
 });
 
 import { usePublishHistoryState } from "@/features/history/usePublishHistoryState";
-import {
-  defaultAppState,
-  type ExecutionRecord,
-} from "@/lib/store/types";
+import { defaultAppState, type ExecutionRecord } from "@/lib/store/types";
 import { useAppStore } from "@/stores/appStore";
 
 function createRecord(): ExecutionRecord {

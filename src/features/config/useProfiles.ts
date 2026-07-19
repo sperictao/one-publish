@@ -23,10 +23,7 @@ import type {
 import type { DotnetPreset } from "@/features/config/dotnetPresets";
 import type { Language } from "@/hooks/useI18n";
 import type { ParameterSchema, ParameterValue } from "@/types/parameters";
-import type {
-  TranslationMap,
-  ProfileManagementActions,
-} from "./types";
+import type { TranslationMap, ProfileManagementActions } from "./types";
 
 // Re-export types and constants for backward compatibility
 export type {
@@ -106,8 +103,9 @@ export function useProfiles({
   getPresetText,
   buildProfileParameters,
 }: UseProfilesParams) {
-  const [localActiveProfileName, setLocalActiveProfileName] =
-    useState<string | null>(null);
+  const [localActiveProfileName, setLocalActiveProfileName] = useState<
+    string | null
+  >(null);
   const selectionIdentity = useMemo(
     () =>
       resolvePublishSelectionIdentity({
@@ -259,14 +257,16 @@ export function useProfiles({
     quickCreateProfileGroup: quickCreate.quickCreateProfileGroup,
     setQuickCreateProfileGroup: quickCreate.setQuickCreateProfileGroup,
     quickCreateProfileCustomGroup: quickCreate.quickCreateProfileCustomGroup,
-    setQuickCreateProfileCustomGroup: quickCreate.setQuickCreateProfileCustomGroup,
+    setQuickCreateProfileCustomGroup:
+      quickCreate.setQuickCreateProfileCustomGroup,
     quickCreateProfileSaving: quickCreate.quickCreateProfileSaving,
     isQuickCreateEditing: quickCreate.isQuickCreateEditing,
     loadProfiles,
     setActiveProfileName: setLocalActiveProfileName,
     openQuickCreateProfileDialog: quickCreate.openQuickCreateProfileDialog,
     openQuickEditProfileDialog: quickCreate.openQuickEditProfileDialog,
-    handleQuickCreateProfileOpenChange: quickCreate.handleQuickCreateProfileOpenChange,
+    handleQuickCreateProfileOpenChange:
+      quickCreate.handleQuickCreateProfileOpenChange,
     quickCreateTemplateOptions: quickCreate.quickCreateTemplateOptions,
     quickCreateProfileGroupOptions: quickCreate.quickCreateProfileGroupOptions,
     applyQuickCreateTemplate: quickCreate.applyQuickCreateTemplate,

@@ -4,7 +4,12 @@ import process from "node:process";
 import { spawnSync } from "node:child_process";
 
 const rootDir = process.cwd();
-const contractPath = path.join(rootDir, "src", "generated", "tauri-contracts.ts");
+const contractPath = path.join(
+  rootDir,
+  "src",
+  "generated",
+  "tauri-contracts.ts"
+);
 const manifestPath = path.join(rootDir, "src-tauri", "Cargo.toml");
 
 function readContractFile() {
@@ -26,7 +31,13 @@ function fail(message, details = "") {
 const before = readContractFile();
 const result = spawnSync(
   "cargo",
-  ["run", "--manifest-path", manifestPath, "--example", "generate_tauri_contracts"],
+  [
+    "run",
+    "--manifest-path",
+    manifestPath,
+    "--example",
+    "generate_tauri_contracts",
+  ],
   {
     cwd: rootDir,
     encoding: "utf8",

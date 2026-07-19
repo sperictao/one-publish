@@ -7,7 +7,8 @@ import {
 } from "@/features/history/failureGroups";
 
 function createRecord(
-  overrides: Partial<ExecutionRecord> & Pick<ExecutionRecord, "id" | "finishedAt">
+  overrides: Partial<ExecutionRecord> &
+    Pick<ExecutionRecord, "id" | "finishedAt">
 ): ExecutionRecord {
   const { id, finishedAt, ...rest } = overrides;
 

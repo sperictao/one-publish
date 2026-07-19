@@ -1,6 +1,4 @@
-import {
-  Dialog,
-} from "@/components/ui/dialog";
+import { Dialog } from "@/components/ui/dialog";
 import { AppDialogShell } from "@/components/ui/app-dialog-shell";
 import {
   Select,
@@ -92,7 +90,8 @@ const GEIST_ROW_HOVER =
   "hover:bg-gray-alpha-100 transition-colors duration-150 ease-geist";
 const GEIST_DIVIDER = "h-px bg-border";
 
-type SettingsCategoryId = "general" | "appearance" | "environment" | "shortcuts" | "about";
+type SettingsCategoryId =
+  "general" | "appearance" | "environment" | "shortcuts" | "about";
 
 interface SettingsCategoryItem {
   id: SettingsCategoryId;
@@ -158,12 +157,13 @@ function SettingsSwitchRow({
         <div className="flex items-center gap-3 min-w-0">
           <Icon className="size-4 flex-shrink-0 text-muted-foreground" />
           <div className="space-y-0.5">
-            <Label className="cursor-pointer text-heading-14 font-semibold text-foreground" htmlFor={id}>
+            <Label
+              className="cursor-pointer text-heading-14 font-semibold text-foreground"
+              htmlFor={id}
+            >
               {label}
             </Label>
-            <p className="text-label-12 text-muted-foreground">
-              {description}
-            </p>
+            <p className="text-label-12 text-muted-foreground">{description}</p>
           </div>
         </div>
         <Switch
@@ -207,9 +207,17 @@ export const GeneralSettingsSection = memo(function GeneralSettingsSection({
       {/* 区域与历史分组 */}
       <Card className="overflow-hidden">
         {/* 界面语言 Row */}
-        <div className={cn("flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4", GEIST_ROW_HOVER)}>
+        <div
+          className={cn(
+            "flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4",
+            GEIST_ROW_HOVER
+          )}
+        >
           <div className="space-y-0.5">
-            <Label htmlFor="settings-language" className="text-heading-14 font-semibold text-foreground">
+            <Label
+              htmlFor="settings-language"
+              className="text-heading-14 font-semibold text-foreground"
+            >
               {translations.language?.label || "界面语言"}
             </Label>
             <p className="text-label-12 text-muted-foreground">
@@ -218,8 +226,13 @@ export const GeneralSettingsSection = memo(function GeneralSettingsSection({
           </div>
           <div className="w-full sm:w-[180px] shrink-0">
             <Select value={language} onValueChange={onLanguageChange}>
-              <SelectTrigger id="settings-language" className="h-8 surface-input hover:border-gray-alpha-500">
-                <SelectValue placeholder={translations.language?.placeholder || "选择语言"} />
+              <SelectTrigger
+                id="settings-language"
+                className="h-8 surface-input hover:border-gray-alpha-500"
+              >
+                <SelectValue
+                  placeholder={translations.language?.placeholder || "选择语言"}
+                />
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="zh">
@@ -236,13 +249,24 @@ export const GeneralSettingsSection = memo(function GeneralSettingsSection({
         <div className={cn(GEIST_DIVIDER, "mx-4")} />
 
         {/* 执行历史保留上限 Row */}
-        <div className={cn("flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4", GEIST_ROW_HOVER)}>
+        <div
+          className={cn(
+            "flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4",
+            GEIST_ROW_HOVER
+          )}
+        >
           <div className="space-y-0.5">
-            <Label htmlFor="settings-execution-history" className="text-heading-14 font-semibold text-foreground">
-              {translations.settings?.general?.executionHistoryLimitLabel || "执行历史保留上限"}
+            <Label
+              htmlFor="settings-execution-history"
+              className="text-heading-14 font-semibold text-foreground"
+            >
+              {translations.settings?.general?.executionHistoryLimitLabel ||
+                "执行历史保留上限"}
             </Label>
             <p className="text-label-12 text-muted-foreground">
-              {translations.settings?.general?.executionHistoryLimitDescription || "可设置 5~200 条，超出范围会自动修正。"}
+              {translations.settings?.general
+                ?.executionHistoryLimitDescription ||
+                "可设置 5~200 条，超出范围会自动修正。"}
             </p>
           </div>
           <div className="w-full sm:w-[100px] shrink-0">
@@ -278,7 +302,8 @@ export const GeneralSettingsSection = memo(function GeneralSettingsSection({
               {translations.outputDir?.label || "默认发布目录"}
             </Label>
             <p className="text-label-12 text-muted-foreground">
-              {translations.outputDir?.support || "支持相对路径（如 ./publish）或绝对路径"}
+              {translations.outputDir?.support ||
+                "支持相对路径（如 ./publish）或绝对路径"}
             </p>
           </div>
           <div className="flex gap-2">
@@ -329,131 +354,138 @@ export interface AppearanceSettingsSectionProps {
   onThemeChange: (theme: "light" | "dark" | "auto") => void;
 }
 
-export const AppearanceSettingsSection = memo(function AppearanceSettingsSection({
-  translations,
-  theme,
-  onThemeChange,
-}: AppearanceSettingsSectionProps) {
-  const themeCardBase =
-    "group relative flex flex-col items-center gap-2.5 rounded-sm border p-2.5 text-center transition-colors duration-150 ease-geist focus-ring";
-  const themeCardSelected =
-    "border-interactive bg-interactive/10 shadow-raised";
-  const themeCardUnselected =
-    "border-border bg-card hover:bg-gray-alpha-100 active:bg-gray-alpha-200";
-  const themeCheckBadge =
-    "absolute top-1.5 right-1.5 flex size-4 items-center justify-center rounded-full bg-interactive text-interactive-foreground border border-border animate-fade-in z-10";
+export const AppearanceSettingsSection = memo(
+  function AppearanceSettingsSection({
+    translations,
+    theme,
+    onThemeChange,
+  }: AppearanceSettingsSectionProps) {
+    const themeCardBase =
+      "group relative flex flex-col items-center gap-2.5 rounded-sm border p-2.5 text-center transition-colors duration-150 ease-geist focus-ring";
+    const themeCardSelected =
+      "border-interactive bg-interactive/10 shadow-raised";
+    const themeCardUnselected =
+      "border-border bg-card hover:bg-gray-alpha-100 active:bg-gray-alpha-200";
+    const themeCheckBadge =
+      "absolute top-1.5 right-1.5 flex size-4 items-center justify-center rounded-full bg-interactive text-interactive-foreground border border-border animate-fade-in z-10";
 
-  return (
-    <div className="space-y-6">
-      {/* 主题选择卡片 */}
-      <Card className="p-6">
-        <div className="flex items-center justify-between mb-4">
-          <Label htmlFor="settings-theme" className="text-heading-14 font-semibold text-foreground">
-            {translations.theme?.label || "外观主题"}
-          </Label>
-          <select
-            id="settings-theme"
-            value={theme}
-            onChange={(e) => onThemeChange(e.target.value as "light" | "dark" | "auto")}
-            className="sr-only"
-          >
-            <option value="auto">System</option>
-            <option value="light">Light</option>
-            <option value="dark">Dark</option>
-          </select>
-        </div>
+    return (
+      <div className="space-y-6">
+        {/* 主题选择卡片 */}
+        <Card className="p-6">
+          <div className="flex items-center justify-between mb-4">
+            <Label
+              htmlFor="settings-theme"
+              className="text-heading-14 font-semibold text-foreground"
+            >
+              {translations.theme?.label || "外观主题"}
+            </Label>
+            <select
+              id="settings-theme"
+              value={theme}
+              onChange={(e) =>
+                onThemeChange(e.target.value as "light" | "dark" | "auto")
+              }
+              className="sr-only"
+            >
+              <option value="auto">System</option>
+              <option value="light">Light</option>
+              <option value="dark">Dark</option>
+            </select>
+          </div>
 
-        <div className="grid grid-cols-3 gap-4">
-          {/* 跟随系统 */}
-          <button
-            type="button"
-            className={cn(
-              themeCardBase,
-              theme === "auto" ? themeCardSelected : themeCardUnselected
-            )}
-            onClick={() => onThemeChange("auto")}
-          >
-            {theme === "auto" && (
-              <div className={themeCheckBadge}>
-                <Check className="size-2.5 stroke-[3.5]" />
+          <div className="grid grid-cols-3 gap-4">
+            {/* 跟随系统 */}
+            <button
+              type="button"
+              className={cn(
+                themeCardBase,
+                theme === "auto" ? themeCardSelected : themeCardUnselected
+              )}
+              onClick={() => onThemeChange("auto")}
+            >
+              {theme === "auto" && (
+                <div className={themeCheckBadge}>
+                  <Check className="size-2.5 stroke-[3.5]" />
+                </div>
+              )}
+
+              {/* 自动主题微缩图 */}
+              <div className="relative h-20 w-full overflow-hidden rounded-sm border border-border flex select-none pointer-events-none">
+                <div className="w-1/2 border-r border-border">
+                  <ThemePreviewMock
+                    theme="light"
+                    sidebarWidth={14}
+                    showAllSidebarLines={false}
+                    className="rounded-none border-none shadow-none"
+                  />
+                </div>
+                <div className="w-1/2">
+                  <ThemePreviewMock
+                    theme="dark"
+                    hideSidebar
+                    showAllSidebarLines={false}
+                    className="rounded-none border-none shadow-none"
+                  />
+                </div>
               </div>
-            )}
+              <span className="text-label-12 font-semibold text-foreground">
+                {translations.theme?.auto || "跟随系统"}
+              </span>
+            </button>
 
-            {/* 自动主题微缩图 */}
-            <div className="relative h-20 w-full overflow-hidden rounded-sm border border-border flex select-none pointer-events-none">
-              <div className="w-1/2 border-r border-border">
-                <ThemePreviewMock
-                  theme="light"
-                  sidebarWidth={14}
-                  showAllSidebarLines={false}
-                  className="rounded-none border-none shadow-none"
-                />
-              </div>
-              <div className="w-1/2">
-                <ThemePreviewMock
-                  theme="dark"
-                  hideSidebar
-                  showAllSidebarLines={false}
-                  className="rounded-none border-none shadow-none"
-                />
-              </div>
-            </div>
-            <span className="text-label-12 font-semibold text-foreground">
-              {translations.theme?.auto || "跟随系统"}
-            </span>
-          </button>
+            {/* 亮色 */}
+            <button
+              type="button"
+              className={cn(
+                themeCardBase,
+                theme === "light" ? themeCardSelected : themeCardUnselected
+              )}
+              onClick={() => onThemeChange("light")}
+            >
+              {theme === "light" && (
+                <div className={themeCheckBadge}>
+                  <Check className="size-2.5 stroke-[3.5]" />
+                </div>
+              )}
+              {/* 亮色主题微缩图 */}
+              <ThemePreviewMock theme="light" />
+              <span className="text-label-12 font-semibold text-foreground">
+                {translations.theme?.light || "亮色"}
+              </span>
+            </button>
 
-          {/* 亮色 */}
-          <button
-            type="button"
-            className={cn(
-              themeCardBase,
-              theme === "light" ? themeCardSelected : themeCardUnselected
-            )}
-            onClick={() => onThemeChange("light")}
-          >
-            {theme === "light" && (
-              <div className={themeCheckBadge}>
-                <Check className="size-2.5 stroke-[3.5]" />
-              </div>
-            )}
-            {/* 亮色主题微缩图 */}
-            <ThemePreviewMock theme="light" />
-            <span className="text-label-12 font-semibold text-foreground">
-              {translations.theme?.light || "亮色"}
-            </span>
-          </button>
+            {/* 暗色 */}
+            <button
+              type="button"
+              className={cn(
+                themeCardBase,
+                theme === "dark" ? themeCardSelected : themeCardUnselected
+              )}
+              onClick={() => onThemeChange("dark")}
+            >
+              {theme === "dark" && (
+                <div className={themeCheckBadge}>
+                  <Check className="size-2.5 stroke-[3.5]" />
+                </div>
+              )}
+              {/* 暗色主题微缩图 */}
+              <ThemePreviewMock theme="dark" />
+              <span className="text-label-12 font-semibold text-foreground">
+                {translations.theme?.dark || "暗色"}
+              </span>
+            </button>
+          </div>
+        </Card>
 
-          {/* 暗色 */}
-          <button
-            type="button"
-            className={cn(
-              themeCardBase,
-              theme === "dark" ? themeCardSelected : themeCardUnselected
-            )}
-            onClick={() => onThemeChange("dark")}
-          >
-            {theme === "dark" && (
-              <div className={themeCheckBadge}>
-                <Check className="size-2.5 stroke-[3.5]" />
-              </div>
-            )}
-            {/* 暗色主题微缩图 */}
-            <ThemePreviewMock theme="dark" />
-            <span className="text-label-12 font-semibold text-foreground">
-              {translations.theme?.dark || "暗色"}
-            </span>
-          </button>
-        </div>
-      </Card>
-
-      <p className="text-label-12 text-muted-foreground px-1">
-        {translations.settings?.sections?.appearanceDescription ||
-          "主题切换会立即作用到当前窗口与后续打开的设置面板。"}
-      </p>
-    </div>
-  );
-});
+        <p className="text-label-12 text-muted-foreground px-1">
+          {translations.settings?.sections?.appearanceDescription ||
+            "主题切换会立即作用到当前窗口与后续打开的设置面板。"}
+        </p>
+      </div>
+    );
+  }
+);
 
 export interface ShortcutsSettingsSectionProps {
   translations: any;
@@ -472,7 +504,12 @@ export const ShortcutsSettingsSection = memo(function ShortcutsSettingsSection({
         {shortcutsItems.map((shortcut, index) => (
           <div key={shortcut.key}>
             {index > 0 && <div className={cn(GEIST_DIVIDER, "mx-4")} />}
-            <div className={cn("flex items-center justify-between gap-4 p-4", GEIST_ROW_HOVER)}>
+            <div
+              className={cn(
+                "flex items-center justify-between gap-4 p-4",
+                GEIST_ROW_HOVER
+              )}
+            >
               <span className="text-heading-14 font-semibold text-foreground">
                 {shortcut.description}
               </span>
@@ -514,7 +551,13 @@ export const UpdaterProgressBar = memo(function UpdaterProgressBar({
   downloadProgress,
 }: UpdaterProgressBarProps) {
   return (
-    <div className={cn("space-y-3 p-4 transition-colors duration-150 ease-geist", "bg-muted border border-border", "rounded-sm")}>
+    <div
+      className={cn(
+        "space-y-3 p-4 transition-colors duration-150 ease-geist",
+        "bg-muted border border-border",
+        "rounded-sm"
+      )}
+    >
       <div className="flex items-start justify-between gap-3">
         <div className="space-y-1">
           <div className="text-heading-14 font-semibold text-foreground">
@@ -532,8 +575,7 @@ export const UpdaterProgressBar = memo(function UpdaterProgressBar({
                 )
               : downloadProgress.totalBytes && downloadProgress.totalBytes > 0
                 ? formatMessage(
-                    translations.version?.downloadProgress ||
-                      "已下载 {} / {}",
+                    translations.version?.downloadProgress || "已下载 {} / {}",
                     formatBytes(downloadProgress.downloadedBytes),
                     formatBytes(downloadProgress.totalBytes)
                   )
@@ -559,7 +601,9 @@ export const UpdaterProgressBar = memo(function UpdaterProgressBar({
           )}
           style={
             downloadProgress.percent !== null
-              ? { transform: `scaleX(${Math.max(0, Math.min(downloadProgress.percent, 100)) / 100})` }
+              ? {
+                  transform: `scaleX(${Math.max(0, Math.min(downloadProgress.percent, 100)) / 100})`,
+                }
               : undefined
           }
         />
@@ -592,7 +636,8 @@ export function SettingsDialog({
   onInstallAvailableUpdate,
   onOpenUpdaterHelpTarget: _onOpenUpdaterHelpTarget,
 }: SettingsDialogProps) {
-  const [activeCategory, setActiveCategory] = useState<SettingsCategoryId>("general");
+  const [activeCategory, setActiveCategory] =
+    useState<SettingsCategoryId>("general");
   const [isRestarting, setIsRestarting] = useState(false);
   const [hasRequestedUpdateCheck, setHasRequestedUpdateCheck] = useState(false);
   const { translations } = useI18n();
@@ -621,12 +666,15 @@ export function SettingsDialog({
       {
         id: "environment",
         icon: ListChecks,
-        label: translations.settings?.categories?.environment || "\u73AF\u5883\u68C0\u67E5",
+        label:
+          translations.settings?.categories?.environment ||
+          "\u73AF\u5883\u68C0\u67E5",
       },
       {
         id: "shortcuts",
         icon: Keyboard,
-        label: translations.settings?.categories?.shortcuts || "\u5FEB\u6377\u952E",
+        label:
+          translations.settings?.categories?.shortcuts || "\u5FEB\u6377\u952E",
       },
       {
         id: "about",
@@ -670,15 +718,18 @@ export function SettingsDialog({
     () => [
       {
         key: "Cmd/Ctrl + R",
-        description: translations.shortcuts?.refresh || "\u5237\u65B0\u9879\u76EE",
+        description:
+          translations.shortcuts?.refresh || "\u5237\u65B0\u9879\u76EE",
       },
       {
         key: "Cmd/Ctrl + P",
-        description: translations.shortcuts?.publish || "\u6267\u884C\u53D1\u5E03",
+        description:
+          translations.shortcuts?.publish || "\u6267\u884C\u53D1\u5E03",
       },
       {
         key: "Cmd/Ctrl + ,",
-        description: translations.shortcuts?.settings || "\u6253\u5F00\u8BBE\u7F6E",
+        description:
+          translations.shortcuts?.settings || "\u6253\u5F00\u8BBE\u7F6E",
       },
     ],
     [
@@ -690,7 +741,10 @@ export function SettingsDialog({
 
   const handleLanguageChange = useCallback(
     (nextLanguage: string) => {
-      if ((nextLanguage !== "zh" && nextLanguage !== "en") || nextLanguage === language) {
+      if (
+        (nextLanguage !== "zh" && nextLanguage !== "en") ||
+        nextLanguage === language
+      ) {
         return;
       }
 
@@ -714,8 +768,7 @@ export function SettingsDialog({
         .catch((error) => {
           console.error("\u5207\u6362\u8BED\u8A00\u5931\u8D25:", error);
           toast.error(
-            translations.language?.changeFailed ||
-              "界面语言切换失败，重试"
+            translations.language?.changeFailed || "界面语言切换失败，重试"
           );
         });
     },
@@ -743,9 +796,11 @@ export function SettingsDialog({
   const shouldHideDefaultUpdaterConfigMessage =
     !hasRequestedUpdateCheck &&
     Boolean(
-      updateInfo?.message?.includes("\u66F4\u65B0\u6E90\u672A\u914D\u7F6E\u6216\u4E0D\u53EF\u7528:") &&
-        updateInfo.message.includes("endpoints") &&
-        updateInfo.message.includes("pubkey")
+      updateInfo?.message?.includes(
+        "\u66F4\u65B0\u6E90\u672A\u914D\u7F6E\u6216\u4E0D\u53EF\u7528:"
+      ) &&
+      updateInfo.message.includes("endpoints") &&
+      updateInfo.message.includes("pubkey")
     );
 
   const handleInstallUpdate = useCallback(() => {
@@ -773,7 +828,8 @@ export function SettingsDialog({
       console.error("\u91CD\u542F\u5E94\u7528\u5931\u8D25:", error);
       setIsRestarting(false);
       toast.error(
-        translations.version?.restartFailed || "\u91CD\u542F\u5E94\u7528\u5931\u8D25\uFF0C\u8BF7\u7A0D\u540E\u91CD\u8BD5"
+        translations.version?.restartFailed ||
+          "\u91CD\u542F\u5E94\u7528\u5931\u8D25\uFF0C\u8BF7\u7A0D\u540E\u91CD\u8BD5"
       );
     });
   }, [translations.version?.restartFailed]);
@@ -783,7 +839,9 @@ export function SettingsDialog({
       const selected = await openDialog({
         directory: true,
         multiple: false,
-        title: translations.outputDir?.label || "\u9009\u62E9\u9ED8\u8BA4\u53D1\u5E03\u76EE\u5F55",
+        title:
+          translations.outputDir?.label ||
+          "\u9009\u62E9\u9ED8\u8BA4\u53D1\u5E03\u76EE\u5F55",
       });
       if (selected) {
         onDefaultOutputDirChange(selected as string);
@@ -844,22 +902,32 @@ export function SettingsDialog({
   );
 
   const aboutSettingsContent = (() => {
-    const isConfigUnhealthy = updaterConfigHealth && !updaterConfigHealth.configured;
+    const isConfigUnhealthy =
+      updaterConfigHealth && !updaterConfigHealth.configured;
     const versionT = translations.version || {};
-    const lastCheckedAt = new Date().toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" });
+    const lastCheckedAt = new Date().toLocaleTimeString(undefined, {
+      hour: "2-digit",
+      minute: "2-digit",
+    });
 
     return (
       <div className="space-y-6">
         {/* Product Info & Update Status Group */}
         <Card className="overflow-hidden">
           {/* Brand Row */}
-          <div className={cn("flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4", GEIST_ROW_HOVER)}>
+          <div
+            className={cn(
+              "flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4",
+              GEIST_ROW_HOVER
+            )}
+          >
             <div className="space-y-0.5 min-w-0">
               <p className="text-heading-14 font-semibold text-foreground">
                 OnePublish
               </p>
               <p className="text-label-12 text-muted-foreground">
-                {versionT.productDescription || "跨平台 .NET 自动化发布与签名客户端"}
+                {versionT.productDescription ||
+                  "跨平台 .NET 自动化发布与签名客户端"}
               </p>
             </div>
             <span className="inline-flex items-center rounded-sm px-2 py-0.5 text-label-12-mono font-semibold text-muted-foreground font-mono shrink-0 surface-input">
@@ -873,17 +941,24 @@ export function SettingsDialog({
           <div className={cn(GEIST_DIVIDER, "mx-4")} />
 
           {/* Dynamic Update Row */}
-          <div className={cn("flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4", GEIST_ROW_HOVER)}>
+          <div
+            className={cn(
+              "flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4",
+              GEIST_ROW_HOVER
+            )}
+          >
             <div className="flex items-center gap-3 min-w-0">
               {isConfigUnhealthy ? (
                 <>
                   <AlertTriangle className="size-4 flex-shrink-0 text-warning" />
                   <div className="space-y-0.5 min-w-0">
                     <Label className="text-heading-14 font-semibold text-foreground">
-                      {versionT.updateChannelNotConfiguredTitle || "更新通道未配置"}
+                      {versionT.updateChannelNotConfiguredTitle ||
+                        "更新通道未配置"}
                     </Label>
                     <p className="text-label-12 text-muted-foreground">
-                      {versionT.updateChannelNotConfiguredDescription || "检测到本地更新配置未设置，无法建立版本检查。"}
+                      {versionT.updateChannelNotConfiguredDescription ||
+                        "检测到本地更新配置未设置，无法建立版本检查。"}
                     </p>
                   </div>
                 </>
@@ -895,7 +970,8 @@ export function SettingsDialog({
                       {versionT.updateReadyTitle || "新版本已准备就绪"}
                     </Label>
                     <p className="text-label-12 text-muted-foreground">
-                      {versionT.updateReadyDescription || "升级补丁已下载完成，重启客户端应用更新。"}
+                      {versionT.updateReadyDescription ||
+                        "升级补丁已下载完成，重启客户端应用更新。"}
                     </p>
                   </div>
                 </>
@@ -904,10 +980,14 @@ export function SettingsDialog({
                   <ArrowUpCircle className="size-4 flex-shrink-0 text-interactive" />
                   <div className="space-y-0.5 min-w-0">
                     <Label className="text-heading-14 font-semibold text-foreground">
-                      {formatMessage(versionT.new || "有新版本: v{}", updateInfo.availableVersion || "")}
+                      {formatMessage(
+                        versionT.new || "有新版本: v{}",
+                        updateInfo.availableVersion || ""
+                      )}
                     </Label>
                     <p className="text-label-12 text-muted-foreground">
-                      {versionT.updateAvailableDescription || "发现可用新版本。"}
+                      {versionT.updateAvailableDescription ||
+                        "发现可用新版本。"}
                     </p>
                   </div>
                 </>
@@ -919,7 +999,10 @@ export function SettingsDialog({
                       {versionT.upToDateTitle || "软件已是最新版本"}
                     </Label>
                     <p className="text-label-12 text-muted-foreground">
-                      {formatMessage(versionT.lastCheckedAt || "上次检查时间：{}。", lastCheckedAt)}
+                      {formatMessage(
+                        versionT.lastCheckedAt || "上次检查时间：{}。",
+                        lastCheckedAt
+                      )}
                     </p>
                   </div>
                 </>
@@ -936,7 +1019,9 @@ export function SettingsDialog({
                     className="text-button-12 font-normal gap-1.5 shrink-0"
                     onClick={() => _onOpenUpdaterHelpTarget("docs")}
                   >
-                    <span>{translations.version?.openGuide || "打开配置指南"}</span>
+                    <span>
+                      {translations.version?.openGuide || "打开配置指南"}
+                    </span>
                     <ExternalLink className="size-3 text-muted-foreground" />
                   </Button>
                   <Button
@@ -945,7 +1030,9 @@ export function SettingsDialog({
                     className="text-button-12 font-normal gap-1.5 shrink-0"
                     onClick={() => _onOpenUpdaterHelpTarget("template")}
                   >
-                    <span>{translations.version?.openTemplate || "下载模板文件"}</span>
+                    <span>
+                      {translations.version?.openTemplate || "下载模板文件"}
+                    </span>
                     <Download className="size-3 text-muted-foreground" />
                   </Button>
                 </div>
@@ -957,9 +1044,13 @@ export function SettingsDialog({
                       size="sm"
                       className="text-button-12 font-semibold gap-1.5 shrink-0"
                       onClick={handleRestartApp}
-                      disabled={isRestarting || isCheckingUpdate || isInstallingUpdate}
+                      disabled={
+                        isRestarting || isCheckingUpdate || isInstallingUpdate
+                      }
                     >
-                      <RefreshCw className={cn("size-3", isRestarting && "animate-spin")} />
+                      <RefreshCw
+                        className={cn("size-3", isRestarting && "animate-spin")}
+                      />
                       <span>
                         {isRestarting
                           ? translations.version?.restarting || "重启中…"
@@ -975,7 +1066,12 @@ export function SettingsDialog({
                     onClick={handleCheckUpdate}
                     disabled={isCheckingUpdate || isInstallingUpdate}
                   >
-                    <RefreshCw className={cn("size-3 text-muted-foreground", isCheckingUpdate && "animate-spin")} />
+                    <RefreshCw
+                      className={cn(
+                        "size-3 text-muted-foreground",
+                        isCheckingUpdate && "animate-spin"
+                      )}
+                    />
                     <span>{translations.version?.check || "检查更新"}</span>
                   </Button>
 
@@ -1017,7 +1113,12 @@ export function SettingsDialog({
         {/* Release Notes */}
         {updateInfo?.releaseNotes && (
           <Card className="overflow-hidden">
-            <div className={cn("flex items-center gap-3 p-4 border-b border-border", GEIST_ROW_HOVER)}>
+            <div
+              className={cn(
+                "flex items-center gap-3 p-4 border-b border-border",
+                GEIST_ROW_HOVER
+              )}
+            >
               <Terminal className="size-4 text-muted-foreground" />
               <span className="text-heading-14 font-semibold text-foreground">
                 {translations.version?.notes || "发布日志"}
@@ -1060,7 +1161,8 @@ export function SettingsDialog({
         bodyInnerClassName="min-h-0 h-full"
         title={translations.settings?.title || "应用设置"}
         description={
-          translations.settings?.description || "配置语言、外观、输出目录等偏好设置"
+          translations.settings?.description ||
+          "配置语言、外观、输出目录等偏好设置"
         }
         icon={undefined}
         headerClassName="border-b border-border bg-transparent"

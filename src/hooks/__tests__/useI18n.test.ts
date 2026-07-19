@@ -48,7 +48,9 @@ describe("useI18n.t", () => {
 
   it("resolves deeper nested translation keys", () => {
     localStorage.setItem("app-language", "zh");
-    expect(t("settings.general.executionHistoryLimitLabel")).toBe("执行历史保留上限");
+    expect(t("settings.general.executionHistoryLimitLabel")).toBe(
+      "执行历史保留上限"
+    );
   });
 
   it("falls back to default language when storage value is invalid", () => {

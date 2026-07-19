@@ -64,9 +64,9 @@ export function useProjectPublishProfileOrder(params: {
   projectPublishProfiles: string[];
 }) {
   const { repoId, projectFilePath, projectPublishProfiles } = params;
-  const [storedOrderMap, setStoredOrderMap] = useState<Record<string, string[]>>(
-    () => parseStoredOrderMap()
-  );
+  const [storedOrderMap, setStoredOrderMap] = useState<
+    Record<string, string[]>
+  >(() => parseStoredOrderMap());
 
   const scopeKey = useMemo(
     () => buildProjectProfileScopeKey(repoId, projectFilePath),
@@ -78,7 +78,10 @@ export function useProjectPublishProfileOrder(params: {
       return projectPublishProfiles;
     }
 
-    return applyStoredOrder(projectPublishProfiles, storedOrderMap[scopeKey] ?? []);
+    return applyStoredOrder(
+      projectPublishProfiles,
+      storedOrderMap[scopeKey] ?? []
+    );
   }, [projectPublishProfiles, scopeKey, storedOrderMap]);
 
   const reorderProjectPublishProfiles = useCallback(
@@ -87,7 +90,10 @@ export function useProjectPublishProfileOrder(params: {
         return;
       }
 
-      const normalizedOrder = applyStoredOrder(projectPublishProfiles, orderedNames);
+      const normalizedOrder = applyStoredOrder(
+        projectPublishProfiles,
+        orderedNames
+      );
 
       setStoredOrderMap((prev) => {
         const next = {

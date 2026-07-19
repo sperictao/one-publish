@@ -1,21 +1,10 @@
-import {
-  useCallback,
-  useEffect,
-  useLayoutEffect,
-  useState,
-} from "react";
+import { useCallback, useEffect, useLayoutEffect, useState } from "react";
 import { toast } from "sonner";
 
 import { useLazyRef } from "@/hooks/useLazyRef";
 
-import {
-  getProfiles,
-  reorderProfiles,
-} from "@/lib/store/api";
-import {
-  type ConfigProfile,
-  type ProfileOrderEntry,
-} from "@/lib/store/types";
+import { getProfiles, reorderProfiles } from "@/lib/store/api";
+import { type ConfigProfile, type ProfileOrderEntry } from "@/lib/store/types";
 import {
   createProfileListSnapshot,
   EMPTY_PROFILE_LIST_SNAPSHOT,
@@ -38,8 +27,12 @@ export function useProfileListState(params: {
     useState<ProfileListSnapshot>(EMPTY_PROFILE_LIST_SNAPSHOT);
   const [isProfilesRefreshing, setIsProfilesRefreshing] = useState(false);
   const loadProfilesRequestIdRef = useLazyRef<number>(() => 0);
-  const reorderProfilesQueueRef = useLazyRef<Promise<void>>(() => Promise.resolve());
-  const profilesCacheRef = useLazyRef<Record<string, ProfileListSnapshot>>(() => ({}));
+  const reorderProfilesQueueRef = useLazyRef<Promise<void>>(() =>
+    Promise.resolve()
+  );
+  const profilesCacheRef = useLazyRef<Record<string, ProfileListSnapshot>>(
+    () => ({})
+  );
   const selectedRepoIdRef = useLazyRef<string | null>(() => selectedRepoId);
   const profiles = visibleProfilesSnapshot.profiles;
   const profilesRevision = visibleProfilesSnapshot.revision;
@@ -135,7 +128,8 @@ export function useProfileListState(params: {
 
   useLayoutEffect(() => {
     const cachedSnapshot = selectedRepoId
-      ? profilesCacheRef.current[selectedRepoId] ?? EMPTY_PROFILE_LIST_SNAPSHOT
+      ? (profilesCacheRef.current[selectedRepoId] ??
+        EMPTY_PROFILE_LIST_SNAPSHOT)
       : EMPTY_PROFILE_LIST_SNAPSHOT;
 
     setVisibleProfilesSnapshot(cachedSnapshot);

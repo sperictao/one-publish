@@ -13,7 +13,10 @@ import {
   importProviderPublishSpecFromCommand,
   type ProviderPublishSpec,
 } from "@/features/publish/publishRuntime";
-import { resolveProviderCommandExample, resolveProviderLabel } from "@/features/provider/providers";
+import {
+  resolveProviderCommandExample,
+  resolveProviderLabel,
+} from "@/features/provider/providers";
 import type { ProviderManifest } from "@/lib/store/types";
 
 interface CommandImportDialogProps {
@@ -35,7 +38,9 @@ export function CommandImportDialog({
 }: CommandImportDialogProps) {
   const [command, setCommand] = useState("");
   const [isParsing, setIsParsing] = useState(false);
-  const [parsedSpec, setParsedSpec] = useState<ProviderPublishSpec | null>(null);
+  const [parsedSpec, setParsedSpec] = useState<ProviderPublishSpec | null>(
+    null
+  );
   const [error, setError] = useState<string | null>(null);
   const { translations } = useI18n();
   const commandT = translations.commandImport || {};
@@ -64,7 +69,9 @@ export function CommandImportDialog({
     } catch (err) {
       const errorMsg = String(err);
       setError(errorMsg);
-      toast.error(commandT.parseFailed || "解析失败", { description: errorMsg });
+      toast.error(commandT.parseFailed || "解析失败", {
+        description: errorMsg,
+      });
     } finally {
       setIsParsing(false);
     }
@@ -111,15 +118,16 @@ export function CommandImportDialog({
                 {commandT.commandSectionTitle || "命令输入"}
               </div>
               <p className="text-label-12 text-muted-foreground">
-                {(commandT.currentProvider ||
-                  "当前 Provider: {{provider}}（支持: dotnet, cargo, go, gradle）").replace(
-                  "{{provider}}",
-                  providerLabel
-                )}
+                {(
+                  commandT.currentProvider ||
+                  "当前 Provider: {{provider}}（支持: dotnet, cargo, go, gradle）"
+                ).replace("{{provider}}", providerLabel)}
               </p>
             </div>
             <div className="space-y-2">
-              <Label htmlFor="command-input">{commandT.commandLabel || "构建命令"}</Label>
+              <Label htmlFor="command-input">
+                {commandT.commandLabel || "构建命令"}
+              </Label>
               <Textarea
                 id="command-input"
                 placeholder={
@@ -154,7 +162,9 @@ export function CommandImportDialog({
 
           {error && (
             <AppDialogInset className="space-y-1 border-destructive/20 bg-destructive/5 text-destructive">
-              <p className="text-label-14 font-semibold">{commandT.parseFailed || "解析失败"}</p>
+              <p className="text-label-14 font-semibold">
+                {commandT.parseFailed || "解析失败"}
+              </p>
               <p className="text-label-12">{error}</p>
             </AppDialogInset>
           )}

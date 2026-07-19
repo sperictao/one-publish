@@ -1,6 +1,7 @@
 # tauri-plugin-decorum
 
 Being a designer, I'm _very_ particular about window decorations. This Tauri (v2) plugin is an opinionated take on titlebars that my gripes with the default ones. Features:
+
 1. retain native features, like Windows Snap Layout.
 2. blend into your app's UI better with transparency and overlay controls.
 3. inset macOS traffic lights that are often misaligned with other window contents.
@@ -37,7 +38,6 @@ You'll need to set these for your window in `src-tauri/capabilities/default.json
 And ensure the `withGlobalTauri` in your `tauri.conf.json` is set to `true`.
 
 \*there's probably a better way to handle plugin permissions that I haven't found yet. if you have, pls lmk!
-
 
 ### usage in tauri:
 
@@ -85,7 +85,8 @@ button.decorum-tb-btn,
 button#decorum-tb-minimize,
 button#decorum-tb-maximize,
 button#decorum-tb-close,
-div[data-tauri-decorum-tb], {}
+div[data-tauri-decorum-tb] {
+}
 ```
 
 ## Development Guide

@@ -22,7 +22,10 @@ export function extractInvokeErrorMessage(error: unknown): string {
     };
 
     const parts = [payload.message, payload.details, payload.error]
-      .filter((part): part is string => typeof part === "string" && part.trim().length > 0)
+      .filter(
+        (part): part is string =>
+          typeof part === "string" && part.trim().length > 0
+      )
       .map((part) => part.trim());
 
     if (parts.length > 0) {
@@ -450,7 +453,9 @@ export function analyzePublishExecutionFailure(
   }
 
   if (
-    normalized.includes("publish output directory requires macos protected folder access")
+    normalized.includes(
+      "publish output directory requires macos protected folder access"
+    )
   ) {
     return "protected_directory_access_denied";
   }
@@ -469,7 +474,8 @@ export function analyzePublishExecutionFailure(
 
   if (
     normalized.includes("failed to spawn") &&
-    (normalized.includes("no such file or directory") || normalized.includes("os error 2"))
+    (normalized.includes("no such file or directory") ||
+      normalized.includes("os error 2"))
   ) {
     return "tool_missing";
   }

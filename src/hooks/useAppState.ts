@@ -12,7 +12,8 @@ export function useAppState() {
   const store = useAppStore();
   const currentPublishConfig = useMemo(() => {
     const repo =
-      store.repositories.find((item) => item.id === store.selectedRepoId) ?? null;
+      store.repositories.find((item) => item.id === store.selectedRepoId) ??
+      null;
 
     return (
       repo?.publishConfig ?? {

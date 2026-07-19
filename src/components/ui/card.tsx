@@ -7,10 +7,7 @@ const Card = React.forwardRef<
 >(({ className, ...props }, ref) => (
   <div
     ref={ref}
-    className={cn(
-      "surface-raised rounded-sm text-card-foreground",
-      className
-    )}
+    className={cn("surface-raised rounded-sm text-card-foreground", className)}
     {...props}
   />
 ));
@@ -28,8 +25,7 @@ const CardHeader = React.forwardRef<
 ));
 CardHeader.displayName = "CardHeader";
 
-interface CardTitleProps
-  extends React.HTMLAttributes<HTMLHeadingElement> {
+interface CardTitleProps extends React.HTMLAttributes<HTMLHeadingElement> {
   /** Heading level to render. Defaults to h3; use h2 for top-level cards
    *  under a page/dialog h1 so the document outline stays hierarchical. */
   headingLevel?: "h2" | "h3" | "h4";
@@ -41,10 +37,7 @@ const CardTitle = React.forwardRef<HTMLHeadingElement, CardTitleProps>(
     return children ? (
       <Heading
         ref={ref}
-        className={cn(
-          "font-sans text-heading-20 font-semibold",
-          className
-        )}
+        className={cn("font-sans text-heading-20 font-semibold", className)}
         {...props}
       >
         {children}
@@ -86,4 +79,11 @@ const CardFooter = React.forwardRef<
 ));
 CardFooter.displayName = "CardFooter";
 
-export { Card, CardHeader, CardFooter, CardTitle, CardDescription, CardContent };
+export {
+  Card,
+  CardHeader,
+  CardFooter,
+  CardTitle,
+  CardDescription,
+  CardContent,
+};

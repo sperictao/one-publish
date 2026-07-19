@@ -82,7 +82,11 @@ function getCargoMetadata() {
 const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "one-publish-updater-"));
 
 try {
-  const windowsConfigPath = path.join(rootDir, "src-tauri", "tauri.windows.conf.json");
+  const windowsConfigPath = path.join(
+    rootDir,
+    "src-tauri",
+    "tauri.windows.conf.json"
+  );
   const windowsConfig = JSON.parse(fs.readFileSync(windowsConfigPath, "utf8"));
   ensure(
     JSON.stringify(windowsConfig.bundle?.targets) === JSON.stringify(["nsis"]),
@@ -91,25 +95,37 @@ try {
 
   const cargoMetadata = getCargoMetadata();
   const packageMetadata = cargoMetadata.packages.find(
-    (entry) => entry.manifest_path === path.join(rootDir, "src-tauri", "Cargo.toml")
+    (entry) =>
+      entry.manifest_path === path.join(rootDir, "src-tauri", "Cargo.toml")
   );
   ensure(packageMetadata, "未找到 src-tauri Cargo package 元数据。");
 
   const binTargets = packageMetadata.targets
-    .filter((target) => Array.isArray(target.kind) && target.kind.includes("bin"))
+    .filter(
+      (target) => Array.isArray(target.kind) && target.kind.includes("bin")
+    )
     .map((target) => target.name);
   ensure(
     JSON.stringify(binTargets) === JSON.stringify(["one-publish"]),
     `src-tauri app package 不应暴露额外 bin target，当前为：${binTargets.join(", ") || "(none)"}。`
   );
 
-  const forwardedArgs = normalizeForwardedArgs(["--", "--target", "universal-apple-darwin"]);
+  const forwardedArgs = normalizeForwardedArgs([
+    "--",
+    "--target",
+    "universal-apple-darwin",
+  ]);
   ensure(
-    JSON.stringify(forwardedArgs) === JSON.stringify(["--target", "universal-apple-darwin"]),
+    JSON.stringify(forwardedArgs) ===
+      JSON.stringify(["--target", "universal-apple-darwin"]),
     "build-updater 未正确清理 pnpm 透传参数里的独立分隔符。"
   );
 
-  const tauriBuildArgs = buildTauriBuildArgs(["--", "--target", "universal-apple-darwin"]);
+  const tauriBuildArgs = buildTauriBuildArgs([
+    "--",
+    "--target",
+    "universal-apple-darwin",
+  ]);
   ensure(
     JSON.stringify(tauriBuildArgs) ===
       JSON.stringify([
@@ -127,9 +143,18 @@ try {
     "build-updater 错误地把参数留在 Cargo runner 分隔符之后。"
   );
 
-  ensure(getPnpmCommand("win32") === "pnpm", "Windows 下应通过 shell 调用 pnpm。");
-  ensure(getPnpmRunOptions("win32").shell === true, "Windows 下应开启 shell 运行 pnpm。");
-  ensure(getPnpmRunOptions("darwin").shell === false, "非 Windows 下不应开启 shell。");
+  ensure(
+    getPnpmCommand("win32") === "pnpm",
+    "Windows 下应通过 shell 调用 pnpm。"
+  );
+  ensure(
+    getPnpmRunOptions("win32").shell === true,
+    "Windows 下应开启 shell 运行 pnpm。"
+  );
+  ensure(
+    getPnpmRunOptions("darwin").shell === false,
+    "非 Windows 下不应开启 shell。"
+  );
 
   const configPath = path.join(tempDir, "tauri.conf.updater.prod.json");
   const releaseAssetsDir = path.join(tempDir, "release-assets");
@@ -196,7 +221,11 @@ try {
   ];
 
   for (const asset of updaterAssets) {
-    fs.writeFileSync(path.join(releaseAssetsDir, asset.assetName), "placeholder", "utf8");
+    fs.writeFileSync(
+      path.join(releaseAssetsDir, asset.assetName),
+      "placeholder",
+      "utf8"
+    );
     fs.writeFileSync(
       path.join(releaseAssetsDir, `${asset.assetName}.sig`),
       `${asset.signature}\n`,
@@ -229,11 +258,13 @@ try {
   );
 
   ensure(
-    manifest.platforms?.["darwin-aarch64"]?.signature === macAarch64UpdaterAsset.signature,
+    manifest.platforms?.["darwin-aarch64"]?.signature ===
+      macAarch64UpdaterAsset.signature,
     "latest.json 缺少 darwin-aarch64 签名。"
   );
   ensure(
-    manifest.platforms?.["darwin-x86_64"]?.signature === macX64UpdaterAsset.signature,
+    manifest.platforms?.["darwin-x86_64"]?.signature ===
+      macX64UpdaterAsset.signature,
     "latest.json 缺少 darwin-x86_64 签名。"
   );
   ensure(
@@ -247,7 +278,8 @@ try {
     "latest.json 缺少 darwin-x86_64 资产 URL。"
   );
   ensure(
-    manifest.platforms?.["windows-x86_64"]?.signature === windowsUpdaterAsset.signature,
+    manifest.platforms?.["windows-x86_64"]?.signature ===
+      windowsUpdaterAsset.signature,
     "latest.json 缺少 windows-x86_64 签名。"
   );
   ensure(
@@ -256,7 +288,8 @@ try {
     "latest.json 缺少 windows-x86_64 资产 URL。"
   );
   ensure(
-    manifest.platforms?.["linux-x86_64"]?.signature === linuxUpdaterAsset.signature,
+    manifest.platforms?.["linux-x86_64"]?.signature ===
+      linuxUpdaterAsset.signature,
     "latest.json 缺少 linux-x86_64 签名。"
   );
   ensure(
@@ -268,7 +301,11 @@ try {
   const missingMacSigDir = path.join(tempDir, "missing-mac-sig");
   fs.mkdirSync(missingMacSigDir, { recursive: true });
   for (const asset of updaterAssets) {
-    fs.writeFileSync(path.join(missingMacSigDir, asset.assetName), "placeholder", "utf8");
+    fs.writeFileSync(
+      path.join(missingMacSigDir, asset.assetName),
+      "placeholder",
+      "utf8"
+    );
     if (asset !== macAarch64UpdaterAsset) {
       fs.writeFileSync(
         path.join(missingMacSigDir, `${asset.assetName}.sig`),
@@ -298,8 +335,16 @@ try {
 
   const missingMacX64Dir = path.join(tempDir, "missing-mac-x64");
   fs.mkdirSync(missingMacX64Dir, { recursive: true });
-  for (const asset of [macAarch64UpdaterAsset, windowsUpdaterAsset, linuxUpdaterAsset]) {
-    fs.writeFileSync(path.join(missingMacX64Dir, asset.assetName), "placeholder", "utf8");
+  for (const asset of [
+    macAarch64UpdaterAsset,
+    windowsUpdaterAsset,
+    linuxUpdaterAsset,
+  ]) {
+    fs.writeFileSync(
+      path.join(missingMacX64Dir, asset.assetName),
+      "placeholder",
+      "utf8"
+    );
     fs.writeFileSync(
       path.join(missingMacX64Dir, `${asset.assetName}.sig`),
       `${asset.signature}\n`,
@@ -327,8 +372,16 @@ try {
 
   const missingWindowsDir = path.join(tempDir, "missing-windows-setup-exe");
   fs.mkdirSync(missingWindowsDir, { recursive: true });
-  for (const asset of [macAarch64UpdaterAsset, macX64UpdaterAsset, linuxUpdaterAsset]) {
-    fs.writeFileSync(path.join(missingWindowsDir, asset.assetName), "placeholder", "utf8");
+  for (const asset of [
+    macAarch64UpdaterAsset,
+    macX64UpdaterAsset,
+    linuxUpdaterAsset,
+  ]) {
+    fs.writeFileSync(
+      path.join(missingWindowsDir, asset.assetName),
+      "placeholder",
+      "utf8"
+    );
     fs.writeFileSync(
       path.join(missingWindowsDir, `${asset.assetName}.sig`),
       `${asset.signature}\n`,
@@ -356,8 +409,16 @@ try {
 
   const missingLinuxDir = path.join(tempDir, "missing-linux-appimage");
   fs.mkdirSync(missingLinuxDir, { recursive: true });
-  for (const asset of [macAarch64UpdaterAsset, macX64UpdaterAsset, windowsUpdaterAsset]) {
-    fs.writeFileSync(path.join(missingLinuxDir, asset.assetName), "placeholder", "utf8");
+  for (const asset of [
+    macAarch64UpdaterAsset,
+    macX64UpdaterAsset,
+    windowsUpdaterAsset,
+  ]) {
+    fs.writeFileSync(
+      path.join(missingLinuxDir, asset.assetName),
+      "placeholder",
+      "utf8"
+    );
     fs.writeFileSync(
       path.join(missingLinuxDir, `${asset.assetName}.sig`),
       `${asset.signature}\n`,

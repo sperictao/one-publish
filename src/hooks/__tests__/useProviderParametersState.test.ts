@@ -6,7 +6,8 @@ import { useProviderParametersState } from "@/features/provider/useProviderParam
 describe("useProviderParametersState", () => {
   it("keeps provider parameters scoped by active provider id", () => {
     const { result, rerender } = renderHook(
-      ({ activeProviderId }) => useProviderParametersState({ activeProviderId }),
+      ({ activeProviderId }) =>
+        useProviderParametersState({ activeProviderId }),
       { initialProps: { activeProviderId: "cargo" } }
     );
 

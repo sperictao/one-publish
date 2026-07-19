@@ -106,7 +106,9 @@ export interface UseAppDialogsPropsParams {
   currentConfigParameters: ConfigParameters;
 }
 
-export function useAppDialogsProps(params: UseAppDialogsPropsParams): AppDialogsProps {
+export function useAppDialogsProps(
+  params: UseAppDialogsPropsParams
+): AppDialogsProps {
   return {
     shortcuts: {
       open: params.shortcutsOpen,

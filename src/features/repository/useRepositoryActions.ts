@@ -1,5 +1,8 @@
 import { useCallback } from "react";
-import type { ProjectScanCandidates, ProviderManifest } from "@/lib/store/types";
+import type {
+  ProjectScanCandidates,
+  ProviderManifest,
+} from "@/lib/store/types";
 import type { Branch, Repository } from "@/lib/store/types";
 
 const loadRepositoryActionsRuntime = () =>
@@ -90,7 +93,7 @@ export function useRepositoryActions({
   const handleScanProjectCandidates = useCallback(
     async (path: string): Promise<ProjectScanCandidates | null> => {
       const { handleScanProjectCandidatesRuntime } =
-      await loadRepositoryActionsRuntime();
+        await loadRepositoryActionsRuntime();
       return await handleScanProjectCandidatesRuntime(path);
     },
     []

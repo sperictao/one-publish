@@ -17,7 +17,9 @@ describe("publishFailure", () => {
   };
 
   it("generic 退出码错误会回退到输出中的真实失败行", () => {
-    expect(isGenericPublishFailureMessage("发布失败，退出代码: Some(1)")).toBe(true);
+    expect(isGenericPublishFailureMessage("发布失败，退出代码: Some(1)")).toBe(
+      true
+    );
     expect(
       resolvePublishFailureMessage({
         error: "发布失败，退出代码: Some(1)",
@@ -27,9 +29,7 @@ describe("publishFailure", () => {
           "Build FAILED.",
         ].join("\n"),
       })
-    ).toBe(
-      "error CS0246: The type or namespace name Foo could not be found"
-    );
+    ).toBe("error CS0246: The type or namespace name Foo could not be found");
   });
 
   it("失败结果归一化时只替换 generic 错误摘要", () => {
@@ -41,7 +41,8 @@ describe("publishFailure", () => {
           cancelled: false,
           error: "发布失败，退出代码: Some(1)",
           command,
-          output_log: "$ dotnet publish /repo/App.csproj\nerror CS0246: Foo missing",
+          output_log:
+            "$ dotnet publish /repo/App.csproj\nerror CS0246: Foo missing",
           output_dir: "",
           file_count: 0,
           warnings: null,
@@ -59,7 +60,8 @@ describe("publishFailure", () => {
           cancelled: false,
           error: "MSBuild failed: missing SDK",
           command,
-          output_log: "$ dotnet publish /repo/App.csproj\nerror CS0246: Foo missing",
+          output_log:
+            "$ dotnet publish /repo/App.csproj\nerror CS0246: Foo missing",
           output_dir: "",
           file_count: 0,
           warnings: null,
@@ -75,7 +77,7 @@ describe("publishFailure", () => {
       isProtectedOutputAccessFailure({
         error: "发布失败，退出代码: Some(1)",
         outputLog: [
-          "/Users/test/source/App.csproj(79,3): error MSB3021: Unable to copy file \"/Users/test/.nuget/packages/hip.core/2.7.2.1/lib/net8.0/HiP.Core.xml\" to \"/Users/test/Downloads/publish/App/Debug/../HiP.Core.xml\".",
+          '/Users/test/source/App.csproj(79,3): error MSB3021: Unable to copy file "/Users/test/.nuget/packages/hip.core/2.7.2.1/lib/net8.0/HiP.Core.xml" to "/Users/test/Downloads/publish/App/Debug/../HiP.Core.xml".',
           "Access to the path '/Users/test/Downloads/publish/App/HiP.Core.xml' is denied.",
         ].join("\n"),
       })

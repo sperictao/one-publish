@@ -118,20 +118,27 @@ export function useDotnetPublishSelection(params: {
       };
     }
 
-    const preset = params.presets.find((item) => item.id === params.selectedPreset);
+    const preset = params.presets.find(
+      (item) => item.id === params.selectedPreset
+    );
     if (!preset) {
       const config = storeConfigToPublishConfig(params.customConfig);
       return {
         ...config,
         output_dir:
-          config.output_dir || buildDefaultScopedOutputDir(config.configuration),
+          config.output_dir ||
+          buildDefaultScopedOutputDir(config.configuration),
       };
     }
 
     const outputDir = params.defaultOutputDir
       ? buildDefaultScopedOutputDir(preset.config.configuration)
       : params.projectInfo
-        ? joinPath(params.projectInfo.root_path, "publish", params.selectedPreset)
+        ? joinPath(
+            params.projectInfo.root_path,
+            "publish",
+            params.selectedPreset
+          )
         : "";
 
     return {

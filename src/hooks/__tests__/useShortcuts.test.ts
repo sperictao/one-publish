@@ -30,10 +30,12 @@ describe("useShortcuts", () => {
       "shortcut-settings": vi.fn(),
     };
 
-    mocks.listen.mockImplementation(async (event: string, handler: () => void) => {
-      eventCallbacks[event] = handler;
-      return unlisteners[event as keyof typeof unlisteners];
-    });
+    mocks.listen.mockImplementation(
+      async (event: string, handler: () => void) => {
+        eventCallbacks[event] = handler;
+        return unlisteners[event as keyof typeof unlisteners];
+      }
+    );
 
     const firstRefresh = vi.fn();
     const latestRefresh = vi.fn();

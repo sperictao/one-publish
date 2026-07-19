@@ -10,7 +10,6 @@ import {
   XCircle,
 } from "lucide-react";
 
-
 import { cn } from "@/lib/utils";
 import { AppDialogShell } from "@/components/ui/app-dialog-shell";
 import { AppDialogBadge } from "@/components/ui/app-dialog-badge";
@@ -116,8 +115,8 @@ export function EnvironmentCheckContent({
     return visibleIds.length > 0 ? visibleIds : [availableProviderIds[0]];
   };
 
-  const [selectedProviderIds, setSelectedProviderIds] = useState<string[]>(
-    () => normalizeVisibleProviderIds(defaultProviderIds)
+  const [selectedProviderIds, setSelectedProviderIds] = useState<string[]>(() =>
+    normalizeVisibleProviderIds(defaultProviderIds)
   );
   const [checking, setChecking] = useState(false);
   const [result, setResult] = useState<EnvironmentCheckResult | null>(
@@ -174,7 +173,12 @@ export function EnvironmentCheckContent({
       text: translations.environment?.ready || "已就绪",
       variant: "success" as const,
     };
-  }, [grouped.critical.length, grouped.warning.length, result, translations.environment]);
+  }, [
+    grouped.critical.length,
+    grouped.warning.length,
+    result,
+    translations.environment,
+  ]);
 
   const handleCheck = async () => {
     setChecking(true);
@@ -207,7 +211,9 @@ export function EnvironmentCheckContent({
     if (enabled) nextSet.add(id);
     else nextSet.delete(id);
 
-    const nextSelectedProviderIds = normalizeEnvironmentProviderIds(Array.from(nextSet));
+    const nextSelectedProviderIds = normalizeEnvironmentProviderIds(
+      Array.from(nextSet)
+    );
     setSelectedProviderIds(nextSelectedProviderIds);
     onProviderIdsChange?.(nextSelectedProviderIds);
     setResult(null);
@@ -220,7 +226,10 @@ export function EnvironmentCheckContent({
       await navigator.clipboard.writeText(command);
       toast.success(translations.environment?.copied || "已复制命令");
     } catch {
-      window.prompt(translations.environment?.copyFallback || "复制命令：", command);
+      window.prompt(
+        translations.environment?.copyFallback || "复制命令：",
+        command
+      );
     }
   };
 
@@ -280,7 +289,10 @@ export function EnvironmentCheckContent({
     }
   };
 
-  const fixResultText = useMemo(() => formatFixResult(lastFixResult), [lastFixResult]);
+  const fixResultText = useMemo(
+    () => formatFixResult(lastFixResult),
+    [lastFixResult]
+  );
 
   return (
     <>
@@ -305,7 +317,10 @@ export function EnvironmentCheckContent({
             <div className="flex flex-wrap items-center gap-2">
               {result ? (
                 <>
-                  <AppDialogBadge variant={statusBadge?.variant} icon={statusBadge?.icon}>
+                  <AppDialogBadge
+                    variant={statusBadge?.variant}
+                    icon={statusBadge?.icon}
+                  >
                     {statusBadge?.text}
                   </AppDialogBadge>
                   <span className="text-label-12 text-muted-foreground self-center">
@@ -358,7 +373,9 @@ export function EnvironmentCheckContent({
                   )}
                 >
                   <div className="space-y-0.5 pr-2">
-                    <div className="text-heading-14 font-semibold text-foreground">{p.label}</div>
+                    <div className="text-heading-14 font-semibold text-foreground">
+                      {p.label}
+                    </div>
                     <div className="text-label-12 text-muted-foreground line-clamp-1">
                       {p.description}
                     </div>
@@ -409,7 +426,9 @@ export function EnvironmentCheckContent({
                           provider.installed ? "bg-success" : "bg-destructive"
                         )}
                       />
-                      <span className="font-semibold text-label-14 text-foreground">{provider.provider_id}</span>
+                      <span className="font-semibold text-label-14 text-foreground">
+                        {provider.provider_id}
+                      </span>
                       <span className="text-label-12-mono text-muted-foreground px-1.5 py-0.5 rounded-sm bg-muted font-mono font-semibold border border-border">
                         {provider.version || "unknown"}
                       </span>
@@ -515,13 +534,16 @@ export function EnvironmentCheckContent({
                                   key={`${fix.label}-${fixIdx}`}
                                   size="sm"
                                   variant={
-                                    fix.action_type === "run_command" ? "default" : "outline"
+                                    fix.action_type === "run_command"
+                                      ? "default"
+                                      : "outline"
                                   }
                                   onClick={() => handleApplyFix(fix)}
                                   disabled={checking || runningFix}
                                   className={cn(
                                     "text-button-12 h-8 px-3 font-semibold gap-1.5 shrink-0",
-                                    fix.action_type === "run_command" && "border border-primary"
+                                    fix.action_type === "run_command" &&
+                                      "border border-primary"
                                   )}
                                 >
                                   {fix.action_type === "open_url" ? (
@@ -560,7 +582,9 @@ export function EnvironmentCheckContent({
                     className="text-button-12 font-normal px-3 gap-1 shrink-0"
                   >
                     <Copy className="size-3 text-muted-foreground" />
-                    <span>{translations.environment?.copied ? "复制" : "复制"}</span>
+                    <span>
+                      {translations.environment?.copied ? "复制" : "复制"}
+                    </span>
                   </Button>
                 </div>
                 <pre className="rounded-sm border border-border bg-muted p-3 text-label-12-mono font-mono text-foreground whitespace-pre-wrap max-h-56 overflow-auto geist-scrollbar">
@@ -604,7 +628,9 @@ export function EnvironmentCheckContent({
                 {runningFix ? (
                   <>
                     <Loader2 className="mr-1.5 size-4 animate-spin" />
-                    <span>{translations.environment?.running || "执行中…"}</span>
+                    <span>
+                      {translations.environment?.running || "执行中…"}
+                    </span>
                   </>
                 ) : (
                   <span>{translations.environment?.run || "执行"}</span>
@@ -644,7 +670,10 @@ export function EnvironmentCheckDialog({
         size="default"
         surfaceClassName="max-h-[80vh]"
         title={translations.environment?.title || "环境检查"}
-        description={translations.environment?.description || "检测本机工具链并提供修复建议"}
+        description={
+          translations.environment?.description ||
+          "检测本机工具链并提供修复建议"
+        }
         icon={<Terminal className="size-4" />}
         bodyInnerClassName="pr-1"
         footer={

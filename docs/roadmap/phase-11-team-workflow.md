@@ -8,6 +8,7 @@
 OnePublish 当前是一个**个人本地发布工具**（见 `docs/design-philosophy.md` 的 "Local-First By Default"）。Phase 11 是从「单人在本机用得好」到「团队场景下不打架」之间的一座桥。
 
 边界纪律：
+
 - **只吸收用户已经在工具外手工做的事**（团队共享配置、把命令贴进 CI、交接时导出历史）。
 - **不做协作平台**：无账号、无服务端、无实时协作（见下方「明确不做」）。
 
@@ -69,22 +70,26 @@ OnePublish 当前是一个**个人本地发布工具**（见 `docs/design-philos
 每个候选能力独立的「什么证据算 Done」：
 
 ### 候选 A 的 Done
+
 - 导出文件能在另一台机器一键导入，不报错。
 - 同名 profile 冲突时，UI 给出明确的三选一（覆盖/跳过/重命名）而非静默失败或抛 raw error。
 - 导入产物可立即用于一次 dry-run 发布（参数完整、无残留本地路径）。
 - 至少一条 e2e 覆盖「导出 -> 在新环境导入 -> 跑通 preflight」。
 
 ### 候选 B 的 Done
+
 - `HandoffSnippetFormat` 至少新增 `gitlab-ci`，且产出的 `.gitlab-ci.yml` 片段可直接粘贴运行。
 - handoff snippet 的 e2e 覆盖至少 2 个 provider × 2 个格式。
 - 命令行解析保持与现有 `resolveCommand()` 一致，无回归。
 
 ### 候选 C 的 Done
+
 - 一次本地运行后，能产出「单一交接包」产物（包含命令、snapshot、失败分组），可被另一人离线查看。
 - 交接包不包含未脱敏的本地绝对路径（复核 `sanitize_export_value` 与 `sanitize_for_export` 覆盖一致）。
 - 至少一条 e2e 覆盖「失败运行 -> 导出交接包 -> 内容包含失败分组」。
 
 ### 整个 Phase 11 的 Done
+
 - 本文档落地（已完成）。
 - README Phase 11 行链接到本文档（已完成）。
 - 至少一个候选能力达到上述 Done 判定，且不引入任何「明确不做」项。
@@ -93,6 +98,7 @@ OnePublish 当前是一个**个人本地发布工具**（见 `docs/design-philos
 ## 状态建议
 
 本文档落地后：
+
 - README `#roadmap` 表格 Phase 11 行链接到本文档。
 - Phase 11 维持 🚧 In Progress，直至候选 A/B/C 中**至少一个**达到其 Done 判定。
 - 若 maintainer 决定本 Phase 不再推进，则降级为 Planned（删除 🚧，改为 ⏳ Planned）。

@@ -43,7 +43,8 @@ OnePublish is a **cross-platform desktop application** that gives you a beautifu
 ## 📸 Screenshots
 
 <!-- TODO: add actual screenshots -->
-> *Screenshots coming soon. In the meantime, check the [design philosophy](docs/design-philosophy.md) and the [Geist design spec](DESIGN.md).*
+
+> _Screenshots coming soon. In the meantime, check the [design philosophy](docs/design-philosophy.md) and the [Geist design spec](DESIGN.md)._
 
 ---
 
@@ -51,12 +52,12 @@ OnePublish is a **cross-platform desktop application** that gives you a beautifu
 
 ### Prerequisites
 
-| Required | Version | Purpose |
-|----------|---------|---------|
-| **Node.js** | ≥ 20.19 | Frontend runtime |
-| **pnpm** | latest | Package manager |
-| **Rust** | ≥ 1.77 | Tauri backend compilation |
-| **Target SDK** | varies | At least one of: .NET SDK / Rust / Go / Java (Gradle) |
+| Required       | Version | Purpose                                               |
+| -------------- | ------- | ----------------------------------------------------- |
+| **Node.js**    | ≥ 20.19 | Frontend runtime                                      |
+| **pnpm**       | latest  | Package manager                                       |
+| **Rust**       | ≥ 1.77  | Tauri backend compilation                             |
+| **Target SDK** | varies  | At least one of: .NET SDK / Rust / Go / Java (Gradle) |
 
 ### macOS — Install Dev Dependencies
 
@@ -182,21 +183,21 @@ one-publish/
 
 ## 🛠️ Tech Stack
 
-| Layer | Technology |
-|-------|-----------|
-| **Frontend Framework** | React 18 + TypeScript |
-| **Build Tool** | Vite 7 |
-| **Styling** | Tailwind CSS 3 + shadcn/ui (Radix UI) |
-| **Design System** | Vercel Geist (design tokens, P3 wide-gamut colors, dark & light themes) |
-| **State Management** | Zustand 5 |
-| **Icons** | Lucide React |
-| **Notifications** | Sonner |
-| **Desktop Framework** | Tauri 2.x (Rust) |
-| **Persistence** | JSON file storage (`~/.one-publish/config.json`) |
-| **Type Bridging** | `ts-rs` (Rust ↔ TypeScript contract generation) |
-| **Unit Testing** | Vitest (frontend) + Rust `#[cfg(test)]` (backend) |
-| **E2E Testing** | Playwright |
-| **Package Manager** | pnpm |
+| Layer                  | Technology                                                              |
+| ---------------------- | ----------------------------------------------------------------------- |
+| **Frontend Framework** | React 18 + TypeScript                                                   |
+| **Build Tool**         | Vite 7                                                                  |
+| **Styling**            | Tailwind CSS 3 + shadcn/ui (Radix UI)                                   |
+| **Design System**      | Vercel Geist (design tokens, P3 wide-gamut colors, dark & light themes) |
+| **State Management**   | Zustand 5                                                               |
+| **Icons**              | Lucide React                                                            |
+| **Notifications**      | Sonner                                                                  |
+| **Desktop Framework**  | Tauri 2.x (Rust)                                                        |
+| **Persistence**        | JSON file storage (`~/.one-publish/config.json`)                        |
+| **Type Bridging**      | `ts-rs` (Rust ↔ TypeScript contract generation)                         |
+| **Unit Testing**       | Vitest (frontend) + Rust `#[cfg(test)]` (backend)                       |
+| **E2E Testing**        | Playwright                                                              |
+| **Package Manager**    | pnpm                                                                    |
 
 ---
 
@@ -214,6 +215,8 @@ pnpm build:renderer      # Frontend build only
 # Quality
 pnpm typecheck           # TypeScript type check + contract validation
 pnpm lint                # ESLint
+pnpm format              # Prettier code formatting (write)
+pnpm format:check        # Prettier formatting check (CI gate)
 pnpm test                # Vitest unit tests
 pnpm test:ui             # Vitest UI
 pnpm test:watch          # Vitest watch mode
@@ -250,12 +253,12 @@ Translation files: `src/i18n/zh.json` | `src/i18n/en.json` (~776 keys each, orga
 
 ## 🧪 Testing
 
-| Layer | Tool | Coverage |
-|-------|------|----------|
-| Frontend unit | Vitest + Testing Library | Components, hooks, stores, lib |
-| Backend unit | Rust `#[cfg(test)]` | Provider compilation, store migrations, plan generation |
-| E2E | Playwright (12 specs) | App boot, repo panel, provider selection, publish presets, custom config, preflight, publish flow, contracts smoke |
-| Quality gates | TypeScript strict + `ts-rs` contracts | Enforced at build & CI |
+| Layer         | Tool                                  | Coverage                                                                                                           |
+| ------------- | ------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
+| Frontend unit | Vitest + Testing Library              | Components, hooks, stores, lib                                                                                     |
+| Backend unit  | Rust `#[cfg(test)]`                   | Provider compilation, store migrations, plan generation                                                            |
+| E2E           | Playwright (12 specs)                 | App boot, repo panel, provider selection, publish presets, custom config, preflight, publish flow, contracts smoke |
+| Quality gates | TypeScript strict + `ts-rs` contracts | Enforced at build & CI                                                                                             |
 
 ---
 
@@ -263,20 +266,20 @@ Translation files: `src/i18n/zh.json` | `src/i18n/en.json` (~776 keys each, orga
 
 OnePublish is evolving from a .NET publish GUI into a **commercial-grade, multi-language publishing product**. The master plan spans 11 phases:
 
-| Phase | Theme | Status |
-|-------|-------|--------|
-| 0 | Engineering foundation (testing, CI) | ✅ Done |
-| 1 | Publish core abstraction (Spec, Plan, Logging) | ✅ Done |
-| 2 | Language providers (Rust/Go/Java) | ✅ Done |
-| 3 | 100% parameter expressiveness (schema editor) | ✅ Done |
-| 4 | Commercial features (import/export, env checks, signing) | ✅ Done |
-| 5 | Release operations UX (checklist wizard, preflight) | ✅ Done |
-| 6 | Multi-provider UX bridge | ✅ Done |
-| 7 | Execution reliability & DevEx (streaming, cancel, snapshots) | ✅ Done |
-| 8 | Run intelligence & recovery (history, re-run, failure grouping) | ✅ Done |
-| 9 | Diagnostics deepening & team handoff | ✅ Done |
-| 10 | Collaboration signal & timeline intelligence | ✅ Done |
-| 11 | [Team workflow integration](docs/roadmap/phase-11-team-workflow.md) | 🚧 In Progress |
+| Phase | Theme                                                               | Status         |
+| ----- | ------------------------------------------------------------------- | -------------- |
+| 0     | Engineering foundation (testing, CI)                                | ✅ Done        |
+| 1     | Publish core abstraction (Spec, Plan, Logging)                      | ✅ Done        |
+| 2     | Language providers (Rust/Go/Java)                                   | ✅ Done        |
+| 3     | 100% parameter expressiveness (schema editor)                       | ✅ Done        |
+| 4     | Commercial features (import/export, env checks, signing)            | ✅ Done        |
+| 5     | Release operations UX (checklist wizard, preflight)                 | ✅ Done        |
+| 6     | Multi-provider UX bridge                                            | ✅ Done        |
+| 7     | Execution reliability & DevEx (streaming, cancel, snapshots)        | ✅ Done        |
+| 8     | Run intelligence & recovery (history, re-run, failure grouping)     | ✅ Done        |
+| 9     | Diagnostics deepening & team handoff                                | ✅ Done        |
+| 10    | Collaboration signal & timeline intelligence                        | ✅ Done        |
+| 11    | [Team workflow integration](docs/roadmap/phase-11-team-workflow.md) | 🚧 In Progress |
 
 ---
 
@@ -284,7 +287,7 @@ OnePublish is evolving from a .NET publish GUI into a **commercial-grade, multi-
 
 1. Fork the repository
 2. Create a feature branch (`git checkout -b feat/amazing-feature`)
-3. Run the local quality gates: `pnpm typecheck && pnpm lint && pnpm test && pnpm check:i18n && pnpm check:design`. If you change Rust code, also run `cargo clippy --manifest-path src-tauri/Cargo.toml -- -D warnings && cargo test --manifest-path src-tauri/Cargo.toml`. (CI additionally runs the contracts drift check `pnpm check:contracts` and `cargo audit`.)
+3. Run the local quality gates: `pnpm typecheck && pnpm lint && pnpm test && pnpm check:i18n && pnpm check:design`. If you change Rust code, also run `cargo clippy --manifest-path src-tauri/Cargo.toml -- -D warnings && cargo test --manifest-path src-tauri/Cargo.toml`. (CI additionally runs the contracts drift check `pnpm check:contracts` and `cargo audit`.) A pre-commit hook (installed via `pnpm install`) auto-formats staged TS/TSX/JS/JSON files with Prettier and `eslint --fix`; run `pnpm format` to format the whole tree manually.
 4. Commit with descriptive messages
 5. Push and open a Pull Request
 

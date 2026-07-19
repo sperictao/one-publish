@@ -43,7 +43,8 @@ OnePublish ist eine **plattformübergreifende Desktop-Anwendung**, die eine eleg
 ## 📸 Screenshots
 
 <!-- TODO: add actual screenshots -->
-> *Screenshots folgen in Kürze. In der Zwischenzeit sieh dir die [Design-Philosophie](docs/design-philosophy.md) und die [Geist-Designspezifikation](DESIGN.md) an.*
+
+> _Screenshots folgen in Kürze. In der Zwischenzeit sieh dir die [Design-Philosophie](docs/design-philosophy.md) und die [Geist-Designspezifikation](DESIGN.md) an._
 
 ---
 
@@ -51,11 +52,11 @@ OnePublish ist eine **plattformübergreifende Desktop-Anwendung**, die eine eleg
 
 ### Voraussetzungen
 
-| Erforderlich | Version | Zweck |
-|----------|---------|---------|
-| **Node.js** | ≥ 20.19 | Frontend-Laufzeit |
-| **pnpm** | neueste | Paketmanager |
-| **Rust** | ≥ 1.77 | Tauri-Backend-Kompilierung |
+| Erforderlich | Version  | Zweck                                                      |
+| ------------ | -------- | ---------------------------------------------------------- |
+| **Node.js**  | ≥ 20.19  | Frontend-Laufzeit                                          |
+| **pnpm**     | neueste  | Paketmanager                                               |
+| **Rust**     | ≥ 1.77   | Tauri-Backend-Kompilierung                                 |
 | **Ziel-SDK** | variiert | Mindestens eines von: .NET SDK / Rust / Go / Java (Gradle) |
 
 ### macOS — Dev-Abhängigkeiten installieren
@@ -182,21 +183,21 @@ one-publish/
 
 ## 🛠️ Technologie-Stack
 
-| Ebene | Technologie |
-|-------|-----------|
-| **Frontend-Framework** | React 18 + TypeScript |
-| **Build-Tool** | Vite 7 |
-| **Styling** | Tailwind CSS 3 + shadcn/ui (Radix UI) |
-| **Design System** | Vercel Geist (Design-Tokens, P3-Weitfarbraum, Dark & Light Themes) |
-| **State Management** | Zustand 5 |
-| **Icons** | Lucide React |
-| **Benachrichtigungen** | Sonner |
-| **Desktop-Framework** | Tauri 2.x (Rust) |
-| **Persistenz** | JSON-Dateispeicher (`~/.one-publish/config.json`) |
-| **Typ-Bridging** | `ts-rs` (Rust ↔ TypeScript Vertragsgenerierung) |
-| **Unit-Tests** | Vitest (Frontend) + Rust `#[cfg(test)]` (Backend) |
-| **E2E-Tests** | Playwright |
-| **Paketmanager** | pnpm |
+| Ebene                  | Technologie                                                        |
+| ---------------------- | ------------------------------------------------------------------ |
+| **Frontend-Framework** | React 18 + TypeScript                                              |
+| **Build-Tool**         | Vite 7                                                             |
+| **Styling**            | Tailwind CSS 3 + shadcn/ui (Radix UI)                              |
+| **Design System**      | Vercel Geist (Design-Tokens, P3-Weitfarbraum, Dark & Light Themes) |
+| **State Management**   | Zustand 5                                                          |
+| **Icons**              | Lucide React                                                       |
+| **Benachrichtigungen** | Sonner                                                             |
+| **Desktop-Framework**  | Tauri 2.x (Rust)                                                   |
+| **Persistenz**         | JSON-Dateispeicher (`~/.one-publish/config.json`)                  |
+| **Typ-Bridging**       | `ts-rs` (Rust ↔ TypeScript Vertragsgenerierung)                    |
+| **Unit-Tests**         | Vitest (Frontend) + Rust `#[cfg(test)]` (Backend)                  |
+| **E2E-Tests**          | Playwright                                                         |
+| **Paketmanager**       | pnpm                                                               |
 
 ---
 
@@ -250,12 +251,12 @@ OnePublish unterstützt **简体中文** und **Englisch** standardmäßig. Wechs
 
 ## 🧪 Tests
 
-| Ebene | Werkzeug | Abdeckung |
-|-------|------|----------|
-| Frontend Unit | Vitest + Testing Library | Komponenten, Hooks, Stores, lib |
-| Backend Unit | Rust `#[cfg(test)]` | Provider-Kompilierung, Store-Migrationen, Plan-Generierung |
-| E2E | Playwright (12 Specs) | App-Start, Repository-Panel, Provider-Auswahl, Publish-Voreinstellungen, benutzerdefinierte Konfiguration, Preflight, Publish-Flow, Vertrags-Smoke-Tests |
-| Qualitäts-Gates | TypeScript strict + `ts-rs`-Verträge | Erzwungen bei Build & CI |
+| Ebene           | Werkzeug                             | Abdeckung                                                                                                                                                |
+| --------------- | ------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Frontend Unit   | Vitest + Testing Library             | Komponenten, Hooks, Stores, lib                                                                                                                          |
+| Backend Unit    | Rust `#[cfg(test)]`                  | Provider-Kompilierung, Store-Migrationen, Plan-Generierung                                                                                               |
+| E2E             | Playwright (12 Specs)                | App-Start, Repository-Panel, Provider-Auswahl, Publish-Voreinstellungen, benutzerdefinierte Konfiguration, Preflight, Publish-Flow, Vertrags-Smoke-Tests |
+| Qualitäts-Gates | TypeScript strict + `ts-rs`-Verträge | Erzwungen bei Build & CI                                                                                                                                 |
 
 ---
 
@@ -263,20 +264,20 @@ OnePublish unterstützt **简体中文** und **Englisch** standardmäßig. Wechs
 
 OnePublish entwickelt sich von einer .NET-Publish-GUI zu einem **kommerziellen, mehrsprachigen Publishing-Produkt**. Der Master-Plan umfasst 11 Phasen:
 
-| Phase | Thema | Status |
-|-------|-------|--------|
-| 0 | Engineering-Grundlagen (Tests, CI) | ✅ Erledigt |
-| 1 | Publish-Kernabstraktion (Spec, Plan, Logging) | ✅ Erledigt |
-| 2 | Sprach-Provider (Rust/Go/Java) | ✅ Erledigt |
-| 3 | 100 % Parameter-Ausdruckskraft (Schema-Editor) | ✅ Erledigt |
-| 4 | Kommerzielle Features (Import/Export, Umgebungsprüfungen, Signierung) | ✅ Erledigt |
-| 5 | Release-Operations-UX (Checklist-Assistent, Preflight) | ✅ Erledigt |
-| 6 | Multi-Provider-UX-Brücke | ✅ Erledigt |
-| 7 | Ausführungszuverlässigkeit & DevEx (Streaming, Abbruch, Snapshots) | ✅ Erledigt |
-| 8 | Lauf-Intelligenz & Wiederherstellung (Historie, erneutes Ausführen, Fehlergruppierung) | ✅ Erledigt |
-| 9 | Vertiefte Diagnose & Team-Übergabe | ✅ Erledigt |
-| 10 | Kollaborationssignale & Zeitleisten-Intelligenz | ✅ Erledigt |
-| 11 | Team-Workflow-Integration | 🚧 In Arbeit |
+| Phase | Thema                                                                                  | Status       |
+| ----- | -------------------------------------------------------------------------------------- | ------------ |
+| 0     | Engineering-Grundlagen (Tests, CI)                                                     | ✅ Erledigt  |
+| 1     | Publish-Kernabstraktion (Spec, Plan, Logging)                                          | ✅ Erledigt  |
+| 2     | Sprach-Provider (Rust/Go/Java)                                                         | ✅ Erledigt  |
+| 3     | 100 % Parameter-Ausdruckskraft (Schema-Editor)                                         | ✅ Erledigt  |
+| 4     | Kommerzielle Features (Import/Export, Umgebungsprüfungen, Signierung)                  | ✅ Erledigt  |
+| 5     | Release-Operations-UX (Checklist-Assistent, Preflight)                                 | ✅ Erledigt  |
+| 6     | Multi-Provider-UX-Brücke                                                               | ✅ Erledigt  |
+| 7     | Ausführungszuverlässigkeit & DevEx (Streaming, Abbruch, Snapshots)                     | ✅ Erledigt  |
+| 8     | Lauf-Intelligenz & Wiederherstellung (Historie, erneutes Ausführen, Fehlergruppierung) | ✅ Erledigt  |
+| 9     | Vertiefte Diagnose & Team-Übergabe                                                     | ✅ Erledigt  |
+| 10    | Kollaborationssignale & Zeitleisten-Intelligenz                                        | ✅ Erledigt  |
+| 11    | Team-Workflow-Integration                                                              | 🚧 In Arbeit |
 
 ---
 

@@ -148,9 +148,7 @@ export function reorderItemsByDrop<T>(
   return nextItems;
 }
 
-export function normalizeProfileGroupKey(
-  value?: string | null
-): string {
+export function normalizeProfileGroupKey(value?: string | null): string {
   return value?.trim() || "";
 }
 
@@ -211,10 +209,12 @@ export function reorderProfilesByDrop(params: {
     return [...profiles];
   }
 
-  const groups = buildProfileGroups(profiles, defaultGroupName).map((group) => ({
-    ...group,
-    items: [...group.items],
-  }));
+  const groups = buildProfileGroups(profiles, defaultGroupName).map(
+    (group) => ({
+      ...group,
+      items: [...group.items],
+    })
+  );
 
   const profileLocationByName = new Map<
     string,

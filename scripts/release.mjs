@@ -79,7 +79,8 @@ function getCurrentHeadSha() {
 }
 
 function getOriginUrl() {
-  return run("git", ["remote", "get-url", "origin"], { allowFailure: true }).stdout;
+  return run("git", ["remote", "get-url", "origin"], { allowFailure: true })
+    .stdout;
 }
 
 function ensureReleaseReady(tag, dryRun) {
@@ -101,13 +102,19 @@ function ensureReleaseReady(tag, dryRun) {
 }
 
 function getPreviousTag() {
-  const result = run("git", ["describe", "--tags", "--abbrev=0"], { allowFailure: true });
+  const result = run("git", ["describe", "--tags", "--abbrev=0"], {
+    allowFailure: true,
+  });
   return result.status === 0 ? result.stdout : "";
 }
 
 function getCommitsSince(previousTag) {
   const rangeArgs = previousTag ? [`${previousTag}..HEAD`] : [];
-  const result = run("git", ["log", ...rangeArgs, "--pretty=format:%H%x09%h%x09%s"]);
+  const result = run("git", [
+    "log",
+    ...rangeArgs,
+    "--pretty=format:%H%x09%h%x09%s",
+  ]);
 
   if (!result.stdout) {
     return [];
@@ -230,7 +237,14 @@ function stageReleaseFiles(tag) {
   );
 }
 
-function printSummary(tag, version, notesPath, repoUrl, dryRun, workflowUrl = "") {
+function printSummary(
+  tag,
+  version,
+  notesPath,
+  repoUrl,
+  dryRun,
+  workflowUrl = ""
+) {
   console.log("");
   console.log(dryRun ? "🧪 Dry run 完成" : "✅ 发布命令已完成");
   console.log(`- 版本：${version}`);
@@ -322,7 +336,8 @@ function formatGitHubError(status, bodyText) {
 
   try {
     const payload = JSON.parse(bodyText);
-    const message = typeof payload.message === "string" ? payload.message.trim() : "";
+    const message =
+      typeof payload.message === "string" ? payload.message.trim() : "";
     if (message) {
       return `HTTP ${status}，${message}`;
     }
@@ -344,7 +359,8 @@ function formatGitHubFetchError(error) {
       typeof cause.errno === "string" || typeof cause.errno === "number"
         ? String(cause.errno).trim()
         : "";
-    const causeMessage = typeof cause.message === "string" ? cause.message.trim() : "";
+    const causeMessage =
+      typeof cause.message === "string" ? cause.message.trim() : "";
 
     if (code) {
       details.push(code);
@@ -359,11 +375,16 @@ function formatGitHubFetchError(error) {
     details.push(cause.trim());
   }
 
-  return details.length > 0 ? `${rawMessage} (${details.join(", ")})` : rawMessage;
+  return details.length > 0
+    ? `${rawMessage} (${details.join(", ")})`
+    : rawMessage;
 }
 
 function getGitHubRetryDelayMs(attemptIndex) {
-  return Math.min(workflowPollIntervalMs, gitHubRequestRetryBaseDelayMs * (attemptIndex + 1));
+  return Math.min(
+    workflowPollIntervalMs,
+    gitHubRequestRetryBaseDelayMs * (attemptIndex + 1)
+  );
 }
 
 function isRetryableGitHubStatus(status) {
@@ -371,10 +392,16 @@ function isRetryableGitHubStatus(status) {
 }
 
 function logGitHubFallback(label, fetchErrorMessage) {
-  console.log(`ℹ️ 请求 GitHub ${label} 时 Node fetch 异常，已自动切换 gh api 并继续：${fetchErrorMessage}`);
+  console.log(
+    `ℹ️ 请求 GitHub ${label} 时 Node fetch 异常，已自动切换 gh api 并继续：${fetchErrorMessage}`
+  );
 }
 
-async function requestGitHubViaGh(url, token, accept = "application/vnd.github+json") {
+async function requestGitHubViaGh(
+  url,
+  token,
+  accept = "application/vnd.github+json"
+) {
   let apiPath;
 
   try {
@@ -392,7 +419,14 @@ async function requestGitHubViaGh(url, token, accept = "application/vnd.github+j
   const env = token ? { ...process.env, GH_TOKEN: token } : process.env;
   const result = runOptional(
     "gh",
-    ["api", apiPath, "-H", `Accept: ${accept}`, "-H", "X-GitHub-Api-Version: 2022-11-28"],
+    [
+      "api",
+      apiPath,
+      "-H",
+      `Accept: ${accept}`,
+      "-H",
+      "X-GitHub-Api-Version: 2022-11-28",
+    ],
     { env }
   );
 
@@ -424,7 +458,11 @@ async function requestGitHub(url, token, label, options = {}) {
   } = options;
   const requestAccept = accept || "application/vnd.github+json";
 
-  for (let attemptIndex = 0; attemptIndex < gitHubRequestMaxAttempts; attemptIndex += 1) {
+  for (
+    let attemptIndex = 0;
+    attemptIndex < gitHubRequestMaxAttempts;
+    attemptIndex += 1
+  ) {
     let response;
 
     try {
@@ -442,7 +480,9 @@ async function requestGitHub(url, token, label, options = {}) {
           return ghResult.response;
         }
 
-        const ghError = ghResult?.error ? `；gh api 也失败：${ghResult.error}` : "";
+        const ghError = ghResult?.error
+          ? `；gh api 也失败：${ghResult.error}`
+          : "";
         const reason = `${fetchErrorMessage}${ghError}`;
 
         if (attemptIndex < gitHubRequestMaxAttempts - 1) {
@@ -485,7 +525,10 @@ async function requestGitHub(url, token, label, options = {}) {
           ? " 如遇到权限或限流，请配置 GH_TOKEN / GITHUB_TOKEN，或重新执行 gh auth login。"
           : "";
 
-      if (isRetryableGitHubStatus(response.status) && attemptIndex < gitHubRequestMaxAttempts - 1) {
+      if (
+        isRetryableGitHubStatus(response.status) &&
+        attemptIndex < gitHubRequestMaxAttempts - 1
+      ) {
         const delayMs = getGitHubRetryDelayMs(attemptIndex);
         console.warn(
           `⚠️ 请求 GitHub ${label} 返回 ${response.status}（第 ${attemptIndex + 1}/${gitHubRequestMaxAttempts} 次）；${Math.ceil(delayMs / 1000)} 秒后重试。`
@@ -569,24 +612,29 @@ function scoreWorkflowRun(run, tag) {
 function selectWorkflowRun(workflowRuns, options) {
   const { headSha, tag, notBeforeMs = 0 } = options;
 
-  return [...workflowRuns]
-    .filter((run) => run?.event === "push")
-    .filter((run) => !headSha || run.head_sha === headSha)
-    .filter((run) => {
-      const createdAt = Date.parse(run.created_at || "");
-      if (!Number.isFinite(createdAt)) {
-        return true;
-      }
-      return createdAt >= notBeforeMs - workflowCreatedAtGraceMs;
-    })
-    .sort((left, right) => {
-      const scoreDiff = scoreWorkflowRun(right, tag) - scoreWorkflowRun(left, tag);
-      if (scoreDiff !== 0) {
-        return scoreDiff;
-      }
+  return (
+    [...workflowRuns]
+      .filter((run) => run?.event === "push")
+      .filter((run) => !headSha || run.head_sha === headSha)
+      .filter((run) => {
+        const createdAt = Date.parse(run.created_at || "");
+        if (!Number.isFinite(createdAt)) {
+          return true;
+        }
+        return createdAt >= notBeforeMs - workflowCreatedAtGraceMs;
+      })
+      .sort((left, right) => {
+        const scoreDiff =
+          scoreWorkflowRun(right, tag) - scoreWorkflowRun(left, tag);
+        if (scoreDiff !== 0) {
+          return scoreDiff;
+        }
 
-      return Date.parse(right.created_at || "") - Date.parse(left.created_at || "");
-    })[0] ?? null;
+        return (
+          Date.parse(right.created_at || "") - Date.parse(left.created_at || "")
+        );
+      })[0] ?? null
+  );
 }
 
 async function waitForWorkflowRun(options) {
@@ -599,8 +647,14 @@ async function waitForWorkflowRun(options) {
   console.log(`⏳ 等待 GitHub Actions 创建 ${workflowName} workflow run...`);
 
   while (Date.now() <= deadline) {
-    const payload = await fetchGitHubJson(workflowRunsUrl, token, `${workflowName} 列表`);
-    const workflowRuns = Array.isArray(payload?.workflow_runs) ? payload.workflow_runs : [];
+    const payload = await fetchGitHubJson(
+      workflowRunsUrl,
+      token,
+      `${workflowName} 列表`
+    );
+    const workflowRuns = Array.isArray(payload?.workflow_runs)
+      ? payload.workflow_runs
+      : [];
     const workflowRun = selectWorkflowRun(workflowRuns, {
       headSha,
       tag,
@@ -631,7 +685,11 @@ async function getWorkflowJobs(repo, runId, token) {
 
   while (page <= 10) {
     const url = `${getGitHubApiBase(repo)}/actions/runs/${runId}/jobs?per_page=100&page=${page}`;
-    const payload = await fetchGitHubJson(url, token, `workflow run ${runId} jobs 第 ${page} 页`);
+    const payload = await fetchGitHubJson(
+      url,
+      token,
+      `workflow run ${runId} jobs 第 ${page} 页`
+    );
     const pageJobs = Array.isArray(payload?.jobs) ? payload.jobs : [];
 
     jobs.push(...pageJobs);
@@ -708,8 +766,13 @@ function getJobStateLabel(job) {
 
 function buildJobSnapshot(run, jobs) {
   const parts = [...jobs]
-    .sort((left, right) => String(left.name || "").localeCompare(String(right.name || "")))
-    .map((job) => `${job.name}=${job.status === "completed" ? job.conclusion || "completed" : job.status || "unknown"}`);
+    .sort((left, right) =>
+      String(left.name || "").localeCompare(String(right.name || ""))
+    )
+    .map(
+      (job) =>
+        `${job.name}=${job.status === "completed" ? job.conclusion || "completed" : job.status || "unknown"}`
+    );
 
   return `run=${run.status === "completed" ? run.conclusion || "completed" : run.status || "unknown"}${
     parts.length > 0 ? ` | ${parts.join(", ")}` : ""
@@ -761,7 +824,11 @@ function sortJobsForReport(jobs) {
     const leftStartedAt = Date.parse(left.started_at || "");
     const rightStartedAt = Date.parse(right.started_at || "");
 
-    if (Number.isFinite(leftStartedAt) && Number.isFinite(rightStartedAt) && leftStartedAt !== rightStartedAt) {
+    if (
+      Number.isFinite(leftStartedAt) &&
+      Number.isFinite(rightStartedAt) &&
+      leftStartedAt !== rightStartedAt
+    ) {
       return leftStartedAt - rightStartedAt;
     }
 
@@ -779,16 +846,26 @@ function printWorkflowResult(workflowRun, jobs) {
 }
 
 function isFailingConclusion(conclusion) {
-  return Boolean(conclusion) && !["success", "neutral", "skipped"].includes(conclusion);
+  return (
+    Boolean(conclusion) &&
+    !["success", "neutral", "skipped"].includes(conclusion)
+  );
 }
 
 function getFailedJobs(jobs) {
-  return jobs.filter((job) => job.status === "completed" && isFailingConclusion(job.conclusion));
+  return jobs.filter(
+    (job) => job.status === "completed" && isFailingConclusion(job.conclusion)
+  );
 }
 
 function getFailedSteps(job) {
   return (job.steps ?? [])
-    .filter((step) => step.conclusion && step.conclusion !== "success" && step.conclusion !== "skipped")
+    .filter(
+      (step) =>
+        step.conclusion &&
+        step.conclusion !== "success" &&
+        step.conclusion !== "skipped"
+    )
     .map((step) => ({
       name: step.name || `步骤 #${step.number ?? "?"}`,
       conclusion: step.conclusion || "unknown",
@@ -851,7 +928,13 @@ async function fetchJobLog(repo, job, token) {
     return logText;
   }
 
-  const ghLog = runOptional("gh", ["run", "view", "--job", String(job.id), "--log-failed"]);
+  const ghLog = runOptional("gh", [
+    "run",
+    "view",
+    "--job",
+    String(job.id),
+    "--log-failed",
+  ]);
   if (ghLog.status === 0 && ghLog.stdout) {
     return ghLog.stdout;
   }
@@ -861,11 +944,15 @@ async function fetchJobLog(repo, job, token) {
 
 function formatAnnotation(annotation) {
   const title = annotation.title ? `${annotation.title}: ` : "";
-  const level = annotation.annotation_level ? `[${annotation.annotation_level}] ` : "";
+  const level = annotation.annotation_level
+    ? `[${annotation.annotation_level}] `
+    : "";
   const location = annotation.path
     ? `${annotation.path}${annotation.start_line ? `:${annotation.start_line}` : ""}`
     : "";
-  const message = String(annotation.message || "").replace(/\s+/g, " ").trim();
+  const message = String(annotation.message || "")
+    .replace(/\s+/g, " ")
+    .trim();
 
   if (!message) {
     return "";
@@ -887,7 +974,10 @@ async function collectFailedJobDetails(repo, jobs, token) {
       return {
         job,
         failedSteps: getFailedSteps(job),
-        annotations: annotations.map(formatAnnotation).filter(Boolean).slice(0, maxFailureAnnotations),
+        annotations: annotations
+          .map(formatAnnotation)
+          .filter(Boolean)
+          .slice(0, maxFailureAnnotations),
         logExcerpt: trimLogForDisplay(logText),
       };
     })
@@ -911,7 +1001,9 @@ function printFailureDetails(failedJobDetails) {
     }
 
     if (detail.failedSteps.length > 0) {
-      console.log(`  失败步骤：${detail.failedSteps.map(formatFailedStep).join("、")}`);
+      console.log(
+        `  失败步骤：${detail.failedSteps.map(formatFailedStep).join("、")}`
+      );
     }
 
     if (detail.annotations.length > 0) {
@@ -928,7 +1020,11 @@ function printFailureDetails(failedJobDetails) {
       }
     }
 
-    if (!detail.failedSteps.length && !detail.annotations.length && !detail.logExcerpt) {
+    if (
+      !detail.failedSteps.length &&
+      !detail.annotations.length &&
+      !detail.logExcerpt
+    ) {
       console.log("  未获取到更多失败详情，请打开 job 链接查看完整日志。");
     }
   }
@@ -1027,7 +1123,11 @@ async function main() {
 
   printWorkflowResult(workflowRun, jobs);
 
-  const failedJobDetails = await collectFailedJobDetails(repo, jobs, gitHubToken);
+  const failedJobDetails = await collectFailedJobDetails(
+    repo,
+    jobs,
+    gitHubToken
+  );
   if (failedJobDetails.length > 0 || workflowRun.conclusion !== "success") {
     printFailureDetails(failedJobDetails);
     fail(
@@ -1035,7 +1135,14 @@ async function main() {
     );
   }
 
-  printSummary(tag, version, notesPath, repoUrl, false, workflowRun.html_url || "");
+  printSummary(
+    tag,
+    version,
+    notesPath,
+    repoUrl,
+    false,
+    workflowRun.html_url || ""
+  );
 }
 
 const isDirectExecution =

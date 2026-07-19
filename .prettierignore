@@ -1,0 +1,30 @@
+# Lockfile - machine-generated, do not format
+pnpm-lock.yaml
+
+# Generated code
+src/generated/
+
+# Build outputs
+dist/
+release-assets/
+
+# Release notes (historical, frozen)
+release-notes/
+
+# Tauri Rust / generated artifacts (out of scope: rustfmt owns .rs)
+src-tauri/target/
+src-tauri/gen/
+
+# Tool caches
+.cache/
+.eslintcache
+.prettiercache
+.vite/
+
+# Test outputs
+coverage/
+playwright-report/
+test-results/
+
+# Local agent workspace metadata
+.pi/

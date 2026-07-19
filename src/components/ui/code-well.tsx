@@ -8,7 +8,11 @@ interface CodeWellProps {
 }
 
 /** Geist mono 代码井：muted 底、border、6px 圆角、mono 排版 token。 */
-export function CodeWell({ children, className, as: Component = "pre" }: CodeWellProps): ReactNode {
+export function CodeWell({
+  children,
+  className,
+  as: Component = "pre",
+}: CodeWellProps): ReactNode {
   return (
     <Component
       className={cn(

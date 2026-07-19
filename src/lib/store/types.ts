@@ -1,6 +1,4 @@
-import {
-  type EnvironmentCheckResult,
-} from "@/features/environment/environment";
+import { type EnvironmentCheckResult } from "@/features/environment/environment";
 import type {
   AppState as TauriAppState,
   Branch as TauriBranch,
@@ -38,19 +36,18 @@ export interface Branch extends Omit<TauriBranch, "commitCount"> {
   commitCount?: number | null;
 }
 
-export interface ExecutionRecord
-  extends Omit<
-    TauriExecutionRecord,
-    | "repoId"
-    | "outputDir"
-    | "error"
-    | "commandLine"
-    | "snapshotPath"
-    | "failureSignature"
-    | "outputExcerpt"
-    | "spec"
-    | "warnings"
-  > {
+export interface ExecutionRecord extends Omit<
+  TauriExecutionRecord,
+  | "repoId"
+  | "outputDir"
+  | "error"
+  | "commandLine"
+  | "snapshotPath"
+  | "failureSignature"
+  | "outputExcerpt"
+  | "spec"
+  | "warnings"
+> {
   repoId?: string | null;
   outputDir?: string | null;
   error?: string | null;
@@ -62,15 +59,19 @@ export interface ExecutionRecord
   warnings?: string[] | null;
 }
 
-export interface ProjectScanCandidates
-  extends Omit<TauriProjectScanCandidates, "recommendedProjectFile"> {
+export interface ProjectScanCandidates extends Omit<
+  TauriProjectScanCandidates,
+  "recommendedProjectFile"
+> {
   recommendedProjectFile?: string | null;
 }
 
 export type ConfigParameters = Record<string, JsonValue>;
 
-export interface ConfigProfile
-  extends Omit<TauriConfigProfile, "parameters" | "profileGroup"> {
+export interface ConfigProfile extends Omit<
+  TauriConfigProfile,
+  "parameters" | "profileGroup"
+> {
   parameters: ConfigParameters;
   profileGroup?: string | null;
 }
@@ -80,13 +81,17 @@ export interface ProfileOrderEntry {
   profileGroup?: string | null;
 }
 
-export interface RepoPublishConfig
-  extends Omit<TauriRepoPublishConfig, "profiles"> {
+export interface RepoPublishConfig extends Omit<
+  TauriRepoPublishConfig,
+  "profiles"
+> {
   profiles: ConfigProfile[];
 }
 
-export interface Repository
-  extends Omit<TauriRepository, "publishConfig" | "projectFile" | "providerId" | "isMain" | "branches"> {
+export interface Repository extends Omit<
+  TauriRepository,
+  "publishConfig" | "projectFile" | "providerId" | "isMain" | "branches"
+> {
   projectFile?: string | null;
   providerId?: string | null;
   isMain?: boolean;
@@ -96,8 +101,10 @@ export interface Repository
 
 export type BootstrapState = Omit<AppState, "executionHistory">;
 
-export interface AppState
-  extends Omit<TauriAppState, "repositories" | "theme" | "startupNotice" | "executionHistory"> {
+export interface AppState extends Omit<
+  TauriAppState,
+  "repositories" | "theme" | "startupNotice" | "executionHistory"
+> {
   repositories: Repository[];
   theme: "light" | "dark" | "auto";
   startupNotice?: string | null;
@@ -133,7 +140,9 @@ export interface ConfigExport {
   profiles: ConfigProfile[];
 }
 
-function isJsonRecord(value: JsonValue | null | undefined): value is ConfigParameters {
+function isJsonRecord(
+  value: JsonValue | null | undefined
+): value is ConfigParameters {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
@@ -143,14 +152,18 @@ function normalizeConfigParameters(
   return isJsonRecord(value) ? value : {};
 }
 
-export function normalizeConfigProfile(profile: TauriConfigProfile): ConfigProfile {
+export function normalizeConfigProfile(
+  profile: TauriConfigProfile
+): ConfigProfile {
   return {
     ...profile,
     parameters: normalizeConfigParameters(profile.parameters),
   };
 }
 
-export function normalizeImportedConfigProfile(profile: ConfigExportProfile): ConfigProfile {
+export function normalizeImportedConfigProfile(
+  profile: ConfigExportProfile
+): ConfigProfile {
   return {
     name: profile.name,
     providerId: profile.provider_id,
@@ -161,7 +174,9 @@ export function normalizeImportedConfigProfile(profile: ConfigExportProfile): Co
   };
 }
 
-export function toExportConfigProfile(profile: ConfigProfile): ConfigExportProfile {
+export function toExportConfigProfile(
+  profile: ConfigProfile
+): ConfigExportProfile {
   return {
     name: profile.name,
     provider_id: profile.providerId,
@@ -172,7 +187,9 @@ export function toExportConfigProfile(profile: ConfigProfile): ConfigExportProfi
   };
 }
 
-function normalizeRepoPublishConfig(config: TauriRepoPublishConfig): RepoPublishConfig {
+function normalizeRepoPublishConfig(
+  config: TauriRepoPublishConfig
+): RepoPublishConfig {
   return {
     ...config,
     profiles: config.profiles.map(normalizeConfigProfile),
@@ -195,7 +212,9 @@ export function normalizeAppState(state: TauriAppState): AppState {
     ...state,
     repositories: state.repositories.map(normalizeRepository),
     theme:
-      state.theme === "light" || state.theme === "dark" || state.theme === "auto"
+      state.theme === "light" ||
+      state.theme === "dark" ||
+      state.theme === "auto"
         ? state.theme
         : "auto",
     startupNotice: state.startupNotice ?? undefined,
@@ -248,6 +267,4 @@ export const defaultRepoPublishConfig: RepoPublishConfig = {
   profiles: [],
 };
 
-export type {
-  EnvironmentCheckResult,
-};
+export type { EnvironmentCheckResult };

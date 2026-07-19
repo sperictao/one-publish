@@ -3,15 +3,10 @@ import type { ReactNode } from "react";
 import { cn } from "@/lib/utils";
 
 type AppDialogBadgeVariant =
-  | "neutral"
-  | "info"
-  | "success"
-  | "warning"
-  | "danger";
+  "neutral" | "info" | "success" | "warning" | "danger";
 
 const badgeVariantClassName: Record<AppDialogBadgeVariant, string> = {
-  neutral:
-    "border-border bg-muted text-muted-foreground",
+  neutral: "border-border bg-muted text-muted-foreground",
   info: "status-info",
   success: "status-success",
   warning: "status-cancelled",

@@ -1,9 +1,6 @@
 import type { StateCreator } from "zustand";
 import type { AppStore } from "./appStore";
-import {
-  loadFavorites,
-  persistFavorites,
-} from "./favoriteConfigs";
+import { loadFavorites, persistFavorites } from "./favoriteConfigs";
 import { resolveScopedMutationRepoId } from "./appStoreMutations";
 
 export interface FavoritesSlice {

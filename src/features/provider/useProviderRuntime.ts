@@ -1,12 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 
-import {
-  getProviderSchema,
-  listProviders,
-} from "@/lib/store/api";
-import {
-  type ProviderManifest,
-} from "@/lib/store/types";
+import { getProviderSchema, listProviders } from "@/lib/store/api";
+import { type ProviderManifest } from "@/lib/store/types";
 import type { ParameterSchema } from "@/types/parameters";
 
 export type ResourceStatus = "idle" | "loading" | "ready" | "error";
@@ -108,7 +103,8 @@ export function useProviderRuntime() {
 
   useEffect(() => {
     const schemaState =
-      providerSchemaStates[activeProviderId] ?? createIdleState<ParameterSchema>();
+      providerSchemaStates[activeProviderId] ??
+      createIdleState<ParameterSchema>();
     if (!activeProviderId || schemaState.status !== "idle") {
       return;
     }
@@ -118,25 +114,25 @@ export function useProviderRuntime() {
 
   const availableProviders = providerListState.data ?? [];
   const activeProvider = useMemo(
-    () => availableProviders.find((provider) => provider.id === activeProviderId) || null,
+    () =>
+      availableProviders.find((provider) => provider.id === activeProviderId) ||
+      null,
     [availableProviders, activeProviderId]
   );
   const activeProviderSchemaState =
-    providerSchemaStates[activeProviderId] ?? createIdleState<ParameterSchema>();
-  const providerSchemas = useMemo(
-    () => {
-      const entries: [string, ParameterSchema][] = [];
+    providerSchemaStates[activeProviderId] ??
+    createIdleState<ParameterSchema>();
+  const providerSchemas = useMemo(() => {
+    const entries: [string, ParameterSchema][] = [];
 
-      for (const [providerId, state] of Object.entries(providerSchemaStates)) {
-        if (state.status === "ready" && state.data) {
-          entries.push([providerId, state.data]);
-        }
+    for (const [providerId, state] of Object.entries(providerSchemaStates)) {
+      if (state.status === "ready" && state.data) {
+        entries.push([providerId, state.data]);
       }
+    }
 
-      return Object.fromEntries(entries);
-    },
-    [providerSchemaStates]
-  );
+    return Object.fromEntries(entries);
+  }, [providerSchemaStates]);
   const activeProviderSchema = activeProviderSchemaState.data ?? undefined;
 
   const retryProviderList = useCallback(() => {

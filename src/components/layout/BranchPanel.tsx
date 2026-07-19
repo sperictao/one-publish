@@ -2,13 +2,7 @@ import { useState } from "react";
 import { cn } from "@/lib/utils";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import {
-  Search,
-  Plus,
-  RefreshCw,
-  GitBranch,
-  Folder,
-} from "lucide-react";
+import { Search, Plus, RefreshCw, GitBranch, Folder } from "lucide-react";
 import type { Repository } from "@/lib/store/types";
 import { useI18n } from "@/hooks/useI18n";
 
@@ -22,9 +16,31 @@ function CollapseIcon() {
       fill="none"
       xmlns="http://www.w3.org/2000/svg"
     >
-      <rect x="2" y="2" width="12" height="12" rx="2" stroke="currentColor" strokeWidth="1.5" fill="none" />
-      <line x1="6" y1="2" x2="6" y2="14" stroke="currentColor" strokeWidth="1.5" />
-      <path d="M11 6L8 8L11 10" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+      <rect
+        x="2"
+        y="2"
+        width="12"
+        height="12"
+        rx="2"
+        stroke="currentColor"
+        strokeWidth="1.5"
+        fill="none"
+      />
+      <line
+        x1="6"
+        y1="2"
+        x2="6"
+        y2="14"
+        stroke="currentColor"
+        strokeWidth="1.5"
+      />
+      <path
+        d="M11 6L8 8L11 10"
+        stroke="currentColor"
+        strokeWidth="1.5"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
     </svg>
   );
 }
@@ -146,61 +162,61 @@ export function BranchPanel({
       >
         <div className="flex items-center gap-0.5" data-tauri-no-drag>
           {showExpandButton && onExpandRepo && (
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onExpandRepo();
-                }}
-                aria-label={branchT.expandRepoList || "展开仓库列表"}
-                title={branchT.expandRepoList || "展开仓库列表"}
-                data-tauri-no-drag
-              >
-                <Folder className="size-4" />
-              </Button>
-            )}
             <Button
               variant="ghost"
               size="icon"
               onClick={(e) => {
                 e.stopPropagation();
-                onCreateBranch?.();
+                onExpandRepo();
               }}
-              aria-label={branchT.newWorktree || "新建 worktree"}
-              title={branchT.newWorktree || "新建 worktree"}
+              aria-label={branchT.expandRepoList || "展开仓库列表"}
+              title={branchT.expandRepoList || "展开仓库列表"}
               data-tauri-no-drag
             >
-              <Plus className="size-4" />
+              <Folder className="size-4" />
             </Button>
+          )}
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={(e) => {
+              e.stopPropagation();
+              onCreateBranch?.();
+            }}
+            aria-label={branchT.newWorktree || "新建 worktree"}
+            title={branchT.newWorktree || "新建 worktree"}
+            data-tauri-no-drag
+          >
+            <Plus className="size-4" />
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={(e) => {
+              e.stopPropagation();
+              onRefresh?.();
+            }}
+            aria-label={branchT.refresh || "刷新"}
+            title={branchT.refresh || "刷新"}
+            data-tauri-no-drag
+          >
+            <RefreshCw className="size-4" />
+          </Button>
+          {onCollapse && (
             <Button
               variant="ghost"
               size="icon"
               onClick={(e) => {
                 e.stopPropagation();
-                onRefresh?.();
+                onCollapse();
               }}
-              aria-label={branchT.refresh || "刷新"}
-              title={branchT.refresh || "刷新"}
+              aria-label={branchT.collapsePanel || "收起面板"}
+              title={branchT.collapsePanel || "收起面板"}
               data-tauri-no-drag
             >
-              <RefreshCw className="size-4" />
+              <CollapseIcon />
             </Button>
-            {onCollapse && (
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onCollapse();
-                }}
-                aria-label={branchT.collapsePanel || "收起面板"}
-                title={branchT.collapsePanel || "收起面板"}
-                data-tauri-no-drag
-              >
-                <CollapseIcon />
-              </Button>
-            )}
+          )}
         </div>
       </div>
 
@@ -222,49 +238,51 @@ export function BranchPanel({
       {/* Branch List */}
       <div className="flex-1 overflow-auto geist-scrollbar">
         <div>
-        {filteredBranches.map((branch) => (
-          <div
-            key={branch.name}
-            className={cn(
-              "flex items-start gap-2 border-b border-border px-3 py-3 transition-colors duration-150 ease-geist hover:bg-gray-alpha-100 cursor-pointer",
-              branch.isCurrent && "rounded-sm mx-1 border-0 bg-accent"
-            )}
-          >
-            <GitBranch
+          {filteredBranches.map((branch) => (
+            <div
+              key={branch.name}
               className={cn(
-                "mt-0.5 size-4 flex-shrink-0",
-                branch.isCurrent ? "text-interactive" : "text-muted-foreground"
+                "flex items-start gap-2 border-b border-border px-3 py-3 transition-colors duration-150 ease-geist hover:bg-gray-alpha-100 cursor-pointer",
+                branch.isCurrent && "rounded-sm mx-1 border-0 bg-accent"
               )}
-            />
-            <div className="min-w-0 flex-1">
-              <div className="flex items-center gap-2">
-                <span className="truncate text-label-14 font-semibold">
-                  {branch.name}
-                </span>
-                {branch.isMain && (
-                  <span className="status-success rounded-full px-1.5 py-0.5 text-label-12 font-semibold">
-                    {branchT.mainBadge || "MAIN"}
-                  </span>
+            >
+              <GitBranch
+                className={cn(
+                  "mt-0.5 size-4 flex-shrink-0",
+                  branch.isCurrent
+                    ? "text-interactive"
+                    : "text-muted-foreground"
                 )}
-              </div>
-              <span className="block truncate text-label-12 text-muted-foreground mt-0.5">
-                {branch.path}
-              </span>
-            </div>
-            {/* Current-branch indicator */}
-            {branch.isCurrent && (
-              <div className="flex-shrink-0 mt-1">
-                <span className="sr-only">
-                  {branchT.currentBranch || "当前分支"}
+              />
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-2">
+                  <span className="truncate text-label-14 font-semibold">
+                    {branch.name}
+                  </span>
+                  {branch.isMain && (
+                    <span className="status-success rounded-full px-1.5 py-0.5 text-label-12 font-semibold">
+                      {branchT.mainBadge || "MAIN"}
+                    </span>
+                  )}
+                </div>
+                <span className="block truncate text-label-12 text-muted-foreground mt-0.5">
+                  {branch.path}
                 </span>
-                <div
-                  aria-hidden="true"
-                  className="size-2.5 rounded-full bg-success"
-                />
               </div>
-            )}
-          </div>
-        ))}
+              {/* Current-branch indicator */}
+              {branch.isCurrent && (
+                <div className="flex-shrink-0 mt-1">
+                  <span className="sr-only">
+                    {branchT.currentBranch || "当前分支"}
+                  </span>
+                  <div
+                    aria-hidden="true"
+                    className="size-2.5 rounded-full bg-success"
+                  />
+                </div>
+              )}
+            </div>
+          ))}
         </div>
       </div>
     </div>

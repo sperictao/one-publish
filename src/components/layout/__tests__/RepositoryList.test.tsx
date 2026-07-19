@@ -1,5 +1,20 @@
-import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
-import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import {
+  afterAll,
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+} from "vitest";
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import { RepositoryList } from "@/components/layout/RepositoryList";
 import { __setTranslationsCacheForTest } from "@/hooks/useI18n";
 import type { Repository } from "@/lib/store/types";
@@ -25,7 +40,9 @@ function createDomRect(top: number, height = ROW_HEIGHT): DOMRect {
 
 function getRenderedRepoIds(container: HTMLElement): string[] {
   return Array.from(
-    container.querySelectorAll<HTMLElement>(".repo-list-grid [data-list-item-id]")
+    container.querySelectorAll<HTMLElement>(
+      ".repo-list-grid [data-list-item-id]"
+    )
   ).map((row) => row.dataset.listItemId ?? "");
 }
 
@@ -88,10 +105,9 @@ beforeAll(() => {
   getBoundingClientRectSpy = vi
     .spyOn(HTMLElement.prototype, "getBoundingClientRect")
     .mockImplementation(function mockRect(this: HTMLElement) {
-      const rowElement =
-        this.matches("[data-list-row='true']")
-          ? this
-          : this.closest<HTMLElement>("[data-list-row='true']");
+      const rowElement = this.matches("[data-list-row='true']")
+        ? this
+        : this.closest<HTMLElement>("[data-list-row='true']");
 
       if (rowElement) {
         const rows = Array.from(
@@ -264,7 +280,10 @@ describe("RepositoryList", () => {
     fireEvent.pointerLeave(list!);
 
     expect(repoBRowAfterOpen).toHaveAttribute("data-list-menu-open", "true");
-    expect(repoBRowAfterOpen).toHaveAttribute("data-list-visual-target", "true");
+    expect(repoBRowAfterOpen).toHaveAttribute(
+      "data-list-visual-target",
+      "true"
+    );
 
     fireEvent.click(openRepositoryDirectoryItem);
 
@@ -277,7 +296,10 @@ describe("RepositoryList", () => {
     const triggerAfterDirectoryAction = screen.getByRole("button", {
       name: "更多操作: beta-worker",
     });
-    fireEvent.pointerDown(triggerAfterDirectoryAction, { button: 0, ctrlKey: false });
+    fireEvent.pointerDown(triggerAfterDirectoryAction, {
+      button: 0,
+      ctrlKey: false,
+    });
     fireEvent.click(triggerAfterDirectoryAction);
 
     const removeItemAfterReopen = await screen.findByRole("menuitem", {

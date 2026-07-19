@@ -33,7 +33,10 @@ export interface ArtifactActionsProps {
   onStateChange?: (state: ArtifactActionState) => void;
 }
 
-export function ArtifactActions({ outputDir, onStateChange }: ArtifactActionsProps) {
+export function ArtifactActions({
+  outputDir,
+  onStateChange,
+}: ArtifactActionsProps) {
   return (
     <ArtifactActionsContent
       key={outputDir}
@@ -51,7 +54,9 @@ function ArtifactActionsContent({
   const { translations } = useI18n();
   const artifactT = translations.artifact || {};
   const [signing, setSigning] = useState(false);
-  const [packageResult, setPackageResult] = useState<PackageResult | null>(null);
+  const [packageResult, setPackageResult] = useState<PackageResult | null>(
+    null
+  );
   const [signResult, setSignResult] = useState<SignResult | null>(null);
 
   const defaultZipPath = useMemo(() => {
@@ -81,7 +86,9 @@ function ArtifactActionsContent({
         description: res.artifactPath,
       });
     } catch (err) {
-      toast.error(artifactT.packageFailed || "打包失败", { description: String(err) });
+      toast.error(artifactT.packageFailed || "打包失败", {
+        description: String(err),
+      });
     } finally {
       setPackaging(false);
     }
@@ -108,7 +115,9 @@ function ArtifactActionsContent({
         });
       }
     } catch (err) {
-      toast.error(artifactT.signFailed || "签名失败", { description: String(err) });
+      toast.error(artifactT.signFailed || "签名失败", {
+        description: String(err),
+      });
     } finally {
       setSigning(false);
     }
@@ -124,7 +133,9 @@ function ArtifactActionsContent({
           onClick={handlePackage}
           disabled={!outputDir || packaging}
         >
-          {packaging ? artifactT.packaging || "打包中…" : artifactT.packageZip || "打包 ZIP"}
+          {packaging
+            ? artifactT.packaging || "打包中…"
+            : artifactT.packageZip || "打包 ZIP"}
         </Button>
 
         <Button
@@ -134,17 +145,23 @@ function ArtifactActionsContent({
           onClick={handleSign}
           disabled={!packageResult || signing}
         >
-          {signing ? artifactT.signing || "签名中…" : artifactT.signGpg || "签名 (GPG)"}
+          {signing
+            ? artifactT.signing || "签名中…"
+            : artifactT.signGpg || "签名 (GPG)"}
         </Button>
       </div>
 
       {packageResult && (
         <div className="text-label-12 text-muted-foreground space-y-1">
-          <div className="font-mono break-all">{packageResult.artifactPath}</div>
+          <div className="font-mono break-all">
+            {packageResult.artifactPath}
+          </div>
           <div>
             {packageResult.fileCount} files, {formatBytes(packageResult.bytes)}
           </div>
-          <div className="font-mono break-all">sha256: {packageResult.sha256}</div>
+          <div className="font-mono break-all">
+            sha256: {packageResult.sha256}
+          </div>
         </div>
       )}
 

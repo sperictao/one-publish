@@ -1,6 +1,4 @@
-import type {
-  TranslationMap,
-} from "@/features/publish/publishTransaction";
+import type { TranslationMap } from "@/features/publish/publishTransaction";
 import type { EnvironmentCheckSnapshot } from "@/features/environment/environment";
 import type { DotnetPreset } from "@/features/config/dotnetPresets";
 import { type ExecutionRecord } from "@/lib/store/types";
@@ -32,9 +30,7 @@ interface UsePublishRunnerParams {
     initialCheck?: EnvironmentCheckSnapshot | null,
     providerIds?: string[]
   ) => void;
-  setEnvironmentLastCheck: (
-    snapshot: EnvironmentCheckSnapshot | null
-  ) => void;
+  setEnvironmentLastCheck: (snapshot: EnvironmentCheckSnapshot | null) => void;
   savePublishRecord: (record: ExecutionRecord) => void;
 }
 

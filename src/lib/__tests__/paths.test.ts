@@ -21,7 +21,9 @@ describe("paths", () => {
   });
 
   it("追加扩展名时会去掉末尾分隔符", () => {
-    expect(appendExtensionToPath("/tmp/output/", ".zip")).toBe("/tmp/output.zip");
+    expect(appendExtensionToPath("/tmp/output/", ".zip")).toBe(
+      "/tmp/output.zip"
+    );
     expect(appendExtensionToPath("C:\\workspace\\output\\", ".zip")).toBe(
       "C:\\workspace\\output.zip"
     );

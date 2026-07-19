@@ -1,8 +1,17 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from "react";
 import { toast } from "sonner";
 import { ArrowDown, Copy } from "lucide-react";
 
-import { classifyLogLine, type LogLineLevel } from "@/features/publish/classifyLogLine";
+import {
+  classifyLogLine,
+  type LogLineLevel,
+} from "@/features/publish/classifyLogLine";
 import { cn } from "@/lib/utils";
 
 // 贴底容差（px）：滚动位置距底部小于此值即视为"跟随中"。

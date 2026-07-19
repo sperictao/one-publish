@@ -146,24 +146,24 @@
 
     /* Semantic colors — raw HSL triplets (alpha modifier compat).
        Values mirror Geist steps. */
-    --background: 0 0% 100%;            /* background-100 */
-    --foreground: 0 0% 9%;              /* gray-1000 */
-    --primary: 0 0% 9%;                 /* gray-1000 */
-    --secondary: 0 0% 30%;              /* gray-900 (FIXED: was gray-100) */
-    --accent: 0 0% 95%;                 /* gray-100 */
-    --muted-foreground: 0 0% 30%;       /* gray-900 */
-    --interactive: 215 100% 50%;        /* blue-700 */
-    --interactive-hover: 217 100% 46%;  /* blue-800 */
-    --destructive: 347 100% 49%;        /* red-700 */
-    --success: 135 62% 41%;             /* green-700 */
-    --warning: 39 100% 50%;             /* amber-600 */
-    --ring: 215 100% 50%;               /* blue-700 */
+    --background: 0 0% 100%; /* background-100 */
+    --foreground: 0 0% 9%; /* gray-1000 */
+    --primary: 0 0% 9%; /* gray-1000 */
+    --secondary: 0 0% 30%; /* gray-900 (FIXED: was gray-100) */
+    --accent: 0 0% 95%; /* gray-100 */
+    --muted-foreground: 0 0% 30%; /* gray-900 */
+    --interactive: 215 100% 50%; /* blue-700 */
+    --interactive-hover: 217 100% 46%; /* blue-800 */
+    --destructive: 347 100% 49%; /* red-700 */
+    --success: 135 62% 41%; /* green-700 */
+    --warning: 39 100% 50%; /* amber-600 */
+    --ring: 215 100% 50%; /* blue-700 */
 
     /* Fine-print secondary text + terminal surface — raw HSL triplets
        (consumed via hsl(var(--*)) in component code; no P3 variant). */
-    --text-fine: 0 0% 30%;              /* gray-900 */
-    --terminal-bg: 0 0% 9%;             /* gray-1000 */
-    --terminal-fg: 0 0% 93%;            /* gray-1000 dark */
+    --text-fine: 0 0% 30%; /* gray-900 */
+    --terminal-bg: 0 0% 9%; /* gray-1000 */
+    --terminal-fg: 0 0% 93%; /* gray-1000 dark */
   }
 
   .dark {
@@ -274,7 +274,7 @@
     --pink-1000: hsl(330 100% 96%);
 
     /* Semantic layer — Geist step aliases (dark) */
-    --card: var(--gray-100);            /* dark gray-100 #1a1a1a */
+    --card: var(--gray-100); /* dark gray-100 #1a1a1a */
     --card-foreground: var(--gray-1000);
     --popover: var(--gray-100);
     --popover-foreground: var(--gray-1000);
@@ -290,21 +290,21 @@
     --warning-foreground: var(--background-100);
 
     /* Semantic colors — raw HSL triplets (dark) */
-    --background: 0 0% 0%;              /* background-100 */
-    --foreground: 0 0% 93%;             /* gray-1000 */
-    --primary: 0 0% 93%;                /* gray-1000 */
-    --secondary: 0 0% 63%;              /* gray-900 (FIXED: was gray-200) */
-    --accent: 0 0% 16%;                 /* gray-300 */
-    --muted-foreground: 0 0% 63%;       /* gray-900 */
-    --interactive: 214 100% 50%;        /* blue-700 dark */
-    --interactive-hover: 216 100% 45%;  /* blue-800 dark */
-    --destructive: 355 89% 57%;         /* red-600 dark */
-    --success: 138 100% 29%;            /* green-600 dark */
-    --warning: 39 100% 46%;             /* amber-600 dark */
-    --ring: 208 100% 64%;               /* blue-900 dark */
+    --background: 0 0% 0%; /* background-100 */
+    --foreground: 0 0% 93%; /* gray-1000 */
+    --primary: 0 0% 93%; /* gray-1000 */
+    --secondary: 0 0% 63%; /* gray-900 (FIXED: was gray-200) */
+    --accent: 0 0% 16%; /* gray-300 */
+    --muted-foreground: 0 0% 63%; /* gray-900 */
+    --interactive: 214 100% 50%; /* blue-700 dark */
+    --interactive-hover: 216 100% 45%; /* blue-800 dark */
+    --destructive: 355 89% 57%; /* red-600 dark */
+    --success: 138 100% 29%; /* green-600 dark */
+    --warning: 39 100% 46%; /* amber-600 dark */
+    --ring: 208 100% 64%; /* blue-900 dark */
 
     /* Fine-print + terminal (dark) */
-    --text-fine: 0 0% 63%;              /* gray-900 dark */
+    --text-fine: 0 0% 63%; /* gray-900 dark */
     --terminal-bg: 0 0% 5%;
     --terminal-fg: 0 0% 93%;
   }
@@ -584,7 +584,9 @@ html.dark {
 
 .surface-input:focus-within {
   border-color: hsl(var(--ring));
-  box-shadow: 0 0 0 2px hsl(var(--background)), 0 0 0 4px hsl(var(--ring));
+  box-shadow:
+    0 0 0 2px hsl(var(--background)),
+    0 0 0 4px hsl(var(--ring));
 }
 
 .search-input-shell {

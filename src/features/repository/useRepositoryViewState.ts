@@ -46,7 +46,9 @@ export function useRepositoryViewState(params: {
   >({});
 
   const selectedRepo = useMemo(
-    () => params.repositories.find((repo) => repo.id === params.selectedRepoId) || null,
+    () =>
+      params.repositories.find((repo) => repo.id === params.selectedRepoId) ||
+      null,
     [params.repositories, params.selectedRepoId]
   );
 
@@ -119,7 +121,9 @@ export function useRepositoryViewState(params: {
         .map((repo) =>
           buildBranchConnectivityTarget(repo, actualBranchByRepoId[repo.id])
         )
-        .filter((target): target is BranchConnectivityTarget => target !== null),
+        .filter(
+          (target): target is BranchConnectivityTarget => target !== null
+        ),
     [params.repositories, actualBranchByRepoId]
   );
 
@@ -131,10 +135,14 @@ export function useRepositoryViewState(params: {
   const branchConnectivityTargetsRef = useRef(branchConnectivityTargets);
   branchConnectivityTargetsRef.current = branchConnectivityTargets;
   const cachedBranchCacheKeyByRepoIdRef = useRef<Record<string, string>>({});
-  const cachedBranchConnectivityByRepoIdRef = useRef<Record<string, boolean>>({});
+  const cachedBranchConnectivityByRepoIdRef = useRef<Record<string, boolean>>(
+    {}
+  );
 
   const prevBranchConnectivityCacheKeyRef = useRef(branchConnectivityCacheKey);
-  if (prevBranchConnectivityCacheKeyRef.current !== branchConnectivityCacheKey) {
+  if (
+    prevBranchConnectivityCacheKeyRef.current !== branchConnectivityCacheKey
+  ) {
     prevBranchConnectivityCacheKeyRef.current = branchConnectivityCacheKey;
 
     const connectivityTargets = branchConnectivityTargetsRef.current;
@@ -212,7 +220,8 @@ export function useRepositoryViewState(params: {
       }
 
       cachedBranchCacheKeyByRepoIdRef.current = refreshedCacheKeyByRepoId;
-      cachedBranchConnectivityByRepoIdRef.current = refreshedConnectivityByRepoId;
+      cachedBranchConnectivityByRepoIdRef.current =
+        refreshedConnectivityByRepoId;
       setBranchConnectivityByRepoId(refreshedConnectivityByRepoId);
     };
 

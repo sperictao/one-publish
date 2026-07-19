@@ -1,4 +1,11 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type FormEvent,
+} from "react";
 import { cn } from "@/lib/utils";
 import { getPathRelativeToRoot } from "@/lib/paths";
 import { AppDialogInset } from "@/components/ui/app-dialog-inset";
@@ -7,9 +14,22 @@ import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { toast } from "sonner";
-import { FileSearch, FolderGit2, RefreshCw, GitBranch, Activity, Info } from "lucide-react";
+import {
+  FileSearch,
+  FolderGit2,
+  RefreshCw,
+  GitBranch,
+  Activity,
+  Info,
+} from "lucide-react";
 import { HelpTip } from "@/components/ui/help-tip";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import type { ProjectScanCandidates } from "@/lib/store/types";
@@ -37,15 +57,19 @@ interface EditRepositoryDialogProps {
     path: string,
     options?: { silentSuccess?: boolean }
   ) => Promise<string | null>;
-  onScanProjectCandidates: (path: string) => Promise<ProjectScanCandidates | null>;
+  onScanProjectCandidates: (
+    path: string
+  ) => Promise<ProjectScanCandidates | null>;
   onRefreshBranches: (
     path: string,
     options?: { silentSuccess?: boolean }
   ) => Promise<{ branches: Branch[]; currentBranch: string } | null>;
 }
 
-interface EditRepositoryDialogContentProps
-  extends Omit<EditRepositoryDialogProps, "repository"> {
+interface EditRepositoryDialogContentProps extends Omit<
+  EditRepositoryDialogProps,
+  "repository"
+> {
   repository: Repository;
 }
 
@@ -54,7 +78,10 @@ const MANUAL_INPUT_VALUE = "__manual__";
 const NO_PROJECT_FILE_VALUE = "__none__";
 const DEFAULT_BRANCH_VALUE = "master";
 
-const resolveBranchSelection = (branches: Branch[], preferredBranch: string) => {
+const resolveBranchSelection = (
+  branches: Branch[],
+  preferredBranch: string
+) => {
   const normalizedPreferred = preferredBranch.trim();
 
   if (
@@ -103,7 +130,8 @@ function EditRepositoryDialogContent({
   onScanProjectCandidates,
   onRefreshBranches,
 }: EditRepositoryDialogContentProps) {
-  const initialBranch = repository.currentBranch?.trim() || DEFAULT_BRANCH_VALUE;
+  const initialBranch =
+    repository.currentBranch?.trim() || DEFAULT_BRANCH_VALUE;
   const initialProviderId = repository.providerId?.trim() || "";
   const [editName, setEditName] = useState(() => repository.name);
   const [editPath, setEditPath] = useState(() => repository.path);
@@ -111,15 +139,21 @@ function EditRepositoryDialogContent({
     () => repository.projectFile || ""
   );
   const [editBranches, setEditBranches] = useState(() => repository.branches);
-  const [editCurrentBranch, setEditCurrentBranch] = useState(() => initialBranch);
+  const [editCurrentBranch, setEditCurrentBranch] = useState(
+    () => initialBranch
+  );
   const [editProviderId, setEditProviderId] = useState(
     () => initialProviderId || NO_PROVIDER_VALUE
   );
   const [isSavingRepo, setIsSavingRepo] = useState(false);
   const [isDetectingProvider, setIsDetectingProvider] = useState(false);
   const [isRefreshingBranches, setIsRefreshingBranches] = useState(false);
-  const [projectScan, setProjectScan] = useState<ProjectScanCandidates | null>(null);
-  const [projectScanResolvedPath, setProjectScanResolvedPath] = useState<string | null>(null);
+  const [projectScan, setProjectScan] = useState<ProjectScanCandidates | null>(
+    null
+  );
+  const [projectScanResolvedPath, setProjectScanResolvedPath] = useState<
+    string | null
+  >(null);
   const [isScanningProjectFiles, setIsScanningProjectFiles] = useState(false);
   const [isProjectScanPending, setIsProjectScanPending] = useState(false);
   const [isProjectFileManual, setIsProjectFileManual] = useState(
@@ -135,7 +169,9 @@ function EditRepositoryDialogContent({
 
   const providerOptions = useMemo(() => {
     const uniqueOptions = Array.from(
-      new Map(providers.map((provider) => [provider.id, provider] as const)).values()
+      new Map(
+        providers.map((provider) => [provider.id, provider] as const)
+      ).values()
     );
 
     if (
@@ -177,7 +213,9 @@ function EditRepositoryDialogContent({
   );
   const projectFileOptionRoot = projectScan?.rootPath || editPath;
   const selectedProviderOption = useMemo(
-    () => providerOptions.find((provider) => provider.id === editProviderId) ?? null,
+    () =>
+      providerOptions.find((provider) => provider.id === editProviderId) ??
+      null,
     [editProviderId, providerOptions]
   );
   const selectedProviderRequiresProjectBinding =
@@ -291,7 +329,9 @@ function EditRepositoryDialogContent({
     const detect = async () => {
       setIsDetectingProvider(true);
       try {
-        const providerId = await onDetectProvider(detectPath, { silentSuccess: true });
+        const providerId = await onDetectProvider(detectPath, {
+          silentSuccess: true,
+        });
         if (!cancelled && providerId) {
           setEditProviderId(providerId);
         }
@@ -308,11 +348,7 @@ function EditRepositoryDialogContent({
     return () => {
       cancelled = true;
     };
-  }, [
-    editPath,
-    editProviderId,
-    onDetectProvider,
-  ]);
+  }, [editPath, editProviderId, onDetectProvider]);
 
   useEffect(() => {
     if (!shouldAutoRefreshBranchesRef.current) {
@@ -331,7 +367,9 @@ function EditRepositoryDialogContent({
     const refresh = async () => {
       setIsRefreshingBranches(true);
       try {
-        const refreshed = await onRefreshBranches(refreshPath, { silentSuccess: true });
+        const refreshed = await onRefreshBranches(refreshPath, {
+          silentSuccess: true,
+        });
 
         if (!cancelled && refreshed) {
           const nextCurrentBranch = resolveBranchSelection(
@@ -355,11 +393,7 @@ function EditRepositoryDialogContent({
     return () => {
       cancelled = true;
     };
-  }, [
-    editPath,
-    onRefreshBranches,
-    repository.currentBranch,
-  ]);
+  }, [editPath, onRefreshBranches, repository.currentBranch]);
 
   const handleDetectProvider = useCallback(async () => {
     const detectPath = editPath.trim();
@@ -409,7 +443,12 @@ function EditRepositoryDialogContent({
     } finally {
       setIsRefreshingBranches(false);
     }
-  }, [editCurrentBranch, editPath, onRefreshBranches, repository.currentBranch]);
+  }, [
+    editCurrentBranch,
+    editPath,
+    onRefreshBranches,
+    repository.currentBranch,
+  ]);
 
   const handleBrowsePath = useCallback(async () => {
     try {
@@ -438,7 +477,9 @@ function EditRepositoryDialogContent({
       const normalizedProviderId =
         nextProviderId === NO_PROVIDER_VALUE ? "" : nextProviderId;
       const fallbackBranch =
-        repository.currentBranch || editBranches[0]?.name || DEFAULT_BRANCH_VALUE;
+        repository.currentBranch ||
+        editBranches[0]?.name ||
+        DEFAULT_BRANCH_VALUE;
 
       if (!nextName || !nextPath) {
         return;
@@ -510,337 +551,360 @@ function EditRepositoryDialogContent({
 
   return (
     <AppDialogShell
-        size="workspace"
-        bodyPadding="none"
-        bodyScrollable={false}
-        bodyInnerClassName="min-h-0 flex-1"
-        title={
-          <div className="flex items-center gap-1.5">
-            <span>{repoT.editRepository || "编辑项目信息"}</span>
-            <HelpTip
-              text={repoT.editRepositoryHint || "修改仓库基础信息后会立即刷新左栏展示与关联状态。"}
-              label={repoT.editRepository || "编辑项目信息"}
-            />
+      size="workspace"
+      bodyPadding="none"
+      bodyScrollable={false}
+      bodyInnerClassName="min-h-0 flex-1"
+      title={
+        <div className="flex items-center gap-1.5">
+          <span>{repoT.editRepository || "编辑项目信息"}</span>
+          <HelpTip
+            text={
+              repoT.editRepositoryHint ||
+              "修改仓库基础信息后会立即刷新左栏展示与关联状态。"
+            }
+            label={repoT.editRepository || "编辑项目信息"}
+          />
+        </div>
+      }
+      description={
+        repoT.editRepositoryDescription ||
+        "可编辑仓库名称、Project Root、Project File 与当前分支信息。"
+      }
+      icon={<FolderGit2 className="size-4" />}
+      footer={
+        <>
+          <div className="flex flex-col-reverse gap-2 sm:flex-row sm:items-center sm:ml-auto">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => onOpenChange(false)}
+              disabled={
+                isSavingRepo || isDetectingProvider || isRefreshingBranches
+              }
+            >
+              {repoT.cancel || "取消"}
+            </Button>
+            <Button
+              type="submit"
+              form="edit-repository-form"
+              disabled={
+                isSavingRepo ||
+                isDetectingProvider ||
+                isRefreshingBranches ||
+                isProjectBindingPending ||
+                requiresProjectBinding ||
+                isEditNameEmpty ||
+                isEditPathEmpty
+              }
+            >
+              {isSavingRepo ? repoT.saving || "保存中…" : repoT.save || "保存"}
+            </Button>
           </div>
-        }
-        description={
-          repoT.editRepositoryDescription ||
-          "可编辑仓库名称、Project Root、Project File 与当前分支信息。"
-        }
-        icon={<FolderGit2 className="size-4" />}
-        footer={
-          <>
-            <div className="flex flex-col-reverse gap-2 sm:flex-row sm:items-center sm:ml-auto">
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => onOpenChange(false)}
-                disabled={isSavingRepo || isDetectingProvider || isRefreshingBranches}
-              >
-                {repoT.cancel || "取消"}
-              </Button>
-              <Button
-                type="submit"
-                form="edit-repository-form"
-                disabled={
-                  isSavingRepo ||
-                  isDetectingProvider ||
-                  isRefreshingBranches ||
-                  isProjectBindingPending ||
-                  requiresProjectBinding ||
-                  isEditNameEmpty ||
-                  isEditPathEmpty
-                }
-              >
-                {isSavingRepo ? repoT.saving || "保存中…" : repoT.save || "保存"}
-              </Button>
+        </>
+      }
+    >
+      <div className="grid flex-1 min-h-0 gap-4 p-4 sm:grid-cols-[240px_1fr] sm:p-6">
+        {/* Left Panel: Repo Info Card */}
+        <aside className="flex flex-col items-center justify-between rounded-md p-4 text-center border border-border bg-card min-h-0 overflow-y-auto geist-scrollbar">
+          <div className="flex flex-col items-center w-full">
+            {/* Icon Wrapper */}
+            <div className="flex size-16 items-center justify-center rounded-sm bg-interactive/10 text-interactive">
+              <FolderGit2 className="size-8" />
             </div>
-          </>
-        }
-      >
-        <div className="grid flex-1 min-h-0 gap-4 p-4 sm:grid-cols-[240px_1fr] sm:p-6">
-          {/* Left Panel: Repo Info Card */}
-          <aside className="flex flex-col items-center justify-between rounded-md p-4 text-center border border-border bg-card min-h-0 overflow-y-auto geist-scrollbar">
-            <div className="flex flex-col items-center w-full">
-              {/* Icon Wrapper */}
-              <div className="flex size-16 items-center justify-center rounded-sm bg-interactive/10 text-interactive">
-                <FolderGit2 className="size-8" />
+
+            <h3 className="mt-4 text-heading-16 font-semibold truncate max-w-full text-foreground flex items-center justify-center gap-1.5 w-full">
+              <span className="truncate">
+                {editName || repoT.unnamedRepository || "未命名仓库"}
+              </span>
+              <HelpTip
+                text={
+                  repoT.repositoryBindingHint ||
+                  "确保仓库路径和项目绑定正确，这会直接影响后续的自动化发布配置构建。"
+                }
+                className="shrink-0"
+              />
+            </h3>
+
+            <p className="mt-2 text-label-12-mono text-muted-foreground break-all px-2.5 py-1.5 rounded-sm bg-muted border border-border font-mono max-w-full">
+              {editPath || repoT.unselectedPath || "未选择路径"}
+            </p>
+
+            {/* Status Stats List */}
+            <div className="w-full mt-6 space-y-2 text-left">
+              <div className="flex items-center justify-between rounded-sm border border-border bg-muted px-3 py-2">
+                <span className="text-label-12 text-muted-foreground flex items-center gap-1.5">
+                  <GitBranch className="size-3.5 text-muted-foreground" />
+                  {repoT.branchCount || "分支数量"}
+                </span>
+                <span className="text-label-12-mono font-semibold font-mono text-foreground bg-interactive/10 px-2 py-0.5 rounded-full">
+                  {branchOptions.length}
+                </span>
               </div>
 
-              <h3 className="mt-4 text-heading-16 font-semibold truncate max-w-full text-foreground flex items-center justify-center gap-1.5 w-full">
-                <span className="truncate">
-                  {editName || repoT.unnamedRepository || "未命名仓库"}
+              <div className="flex items-center justify-between rounded-sm border border-border bg-muted px-3 py-2">
+                <span className="text-label-12 text-muted-foreground flex items-center gap-1.5">
+                  <Activity className="size-3.5 text-muted-foreground" />
+                  {repoT.bindingStatus || "绑定状态"}
                 </span>
-                <HelpTip
-                  text={repoT.repositoryBindingHint || "确保仓库路径和项目绑定正确，这会直接影响后续的自动化发布配置构建。"}
-                  className="shrink-0"
-                />
-              </h3>
-
-              <p className="mt-2 text-label-12-mono text-muted-foreground break-all px-2.5 py-1.5 rounded-sm bg-muted border border-border font-mono max-w-full">
-                {editPath || repoT.unselectedPath || "未选择路径"}
-              </p>
-
-              {/* Status Stats List */}
-              <div className="w-full mt-6 space-y-2 text-left">
-                <div className="flex items-center justify-between rounded-sm border border-border bg-muted px-3 py-2">
-                  <span className="text-label-12 text-muted-foreground flex items-center gap-1.5">
-                    <GitBranch className="size-3.5 text-muted-foreground" />
-                    {repoT.branchCount || "分支数量"}
-                  </span>
-                  <span className="text-label-12-mono font-semibold font-mono text-foreground bg-interactive/10 px-2 py-0.5 rounded-full">
-                    {branchOptions.length}
-                  </span>
-                </div>
-
-                <div className="flex items-center justify-between rounded-sm border border-border bg-muted px-3 py-2">
-                  <span className="text-label-12 text-muted-foreground flex items-center gap-1.5">
-                    <Activity className="size-3.5 text-muted-foreground" />
-                    {repoT.bindingStatus || "绑定状态"}
-                  </span>
-                  <span className={cn(
+                <span
+                  className={cn(
                     "text-label-12 font-semibold px-2 py-0.5 rounded-full",
                     editProviderId && editProviderId !== NO_PROVIDER_VALUE
                       ? "status-success"
                       : "status-cancelled"
-                  )}>
-                    {editProviderId && editProviderId !== NO_PROVIDER_VALUE
-                      ? repoT.bound || "已绑定"
-                      : repoT.unbound || "未绑定"}
+                  )}
+                >
+                  {editProviderId && editProviderId !== NO_PROVIDER_VALUE
+                    ? repoT.bound || "已绑定"
+                    : repoT.unbound || "未绑定"}
+                </span>
+              </div>
+
+              {editProviderId && editProviderId !== NO_PROVIDER_VALUE ? (
+                <div className="flex items-center justify-between rounded-sm border border-border bg-muted px-3 py-2">
+                  <span className="text-label-12 text-muted-foreground flex items-center gap-1.5">
+                    <Info className="size-3.5 text-muted-foreground" />
+                    {repoT.currentProvider || "当前服务"}
+                  </span>
+                  <span className="text-label-12-mono font-semibold text-foreground font-mono truncate max-w-[120px]">
+                    {selectedProviderOption?.label ||
+                      selectedProviderOption?.displayName ||
+                      editProviderId}
                   </span>
                 </div>
+              ) : null}
+            </div>
+          </div>
+        </aside>
 
-                {editProviderId && editProviderId !== NO_PROVIDER_VALUE ? (
-                  <div className="flex items-center justify-between rounded-sm border border-border bg-muted px-3 py-2">
-                    <span className="text-label-12 text-muted-foreground flex items-center gap-1.5">
-                      <Info className="size-3.5 text-muted-foreground" />
-                      {repoT.currentProvider || "当前服务"}
-                    </span>
-                    <span className="text-label-12-mono font-semibold text-foreground font-mono truncate max-w-[120px]">
-                      {selectedProviderOption?.label || selectedProviderOption?.displayName || editProviderId}
-                    </span>
-                  </div>
+        {/* Right Panel: Form Fields */}
+        <form
+          id="edit-repository-form"
+          className="flex flex-col min-h-0 overflow-y-auto geist-scrollbar gap-y-4 pb-1 pr-1"
+          onSubmit={handleSubmit}
+        >
+          {/* Card 1: Basic Config */}
+          <AppDialogInset className="space-y-4">
+            <p className="text-label-12 font-semibold uppercase text-interactive flex items-center gap-1.5 mb-1">
+              <span className="size-1.5 rounded-full bg-interactive" />
+              {repoT.basicConfig || "基础配置"}
+            </p>
+
+            <div className="space-y-4">
+              {/* 仓库名称 */}
+              <div className="space-y-1.5">
+                <Label
+                  htmlFor="repo-edit-name"
+                  className="text-label-12 font-semibold text-muted-foreground"
+                >
+                  {repoT.repositoryName || "仓库名称"}
+                </Label>
+                <Input
+                  id="repo-edit-name"
+                  value={editName}
+                  onChange={(event) => setEditName(event.target.value)}
+                  placeholder={
+                    repoT.repositoryNamePlaceholder || "输入仓库名称"
+                  }
+                  className="h-8 text-label-14"
+                />
+                {isEditNameEmpty ? (
+                  <p className="text-label-12 text-destructive">
+                    {repoT.repositoryNameRequired || "输入仓库名称"}
+                  </p>
+                ) : null}
+              </div>
+
+              {/* Project Root */}
+              <div className="space-y-1.5">
+                <Label
+                  htmlFor="repo-edit-path"
+                  className="text-label-12 font-semibold text-muted-foreground"
+                >
+                  {repoT.repositoryPath || "Project Root"}
+                </Label>
+                <div className="flex items-center gap-2">
+                  <Input
+                    id="repo-edit-path"
+                    value={editPath}
+                    onChange={(event) => setEditPath(event.target.value)}
+                    placeholder={
+                      repoT.repositoryPathPlaceholder || "输入项目根目录路径"
+                    }
+                    className="h-8 flex-1 text-label-14"
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="icon"
+                    className="size-8 shrink-0"
+                    onClick={handleBrowsePath}
+                    aria-label={repoT.browseFolder || "浏览文件夹"}
+                    title={repoT.browseFolder || "浏览文件夹"}
+                  >
+                    <FolderGit2 className="size-4" />
+                  </Button>
+                </div>
+                {isEditPathEmpty ? (
+                  <p className="text-label-12 text-destructive">
+                    {repoT.repositoryPathRequired || "输入项目根目录路径"}
+                  </p>
                 ) : null}
               </div>
             </div>
-          </aside>
- 
-          {/* Right Panel: Form Fields */}
-          <form id="edit-repository-form" className="flex flex-col min-h-0 overflow-y-auto geist-scrollbar gap-y-4 pb-1 pr-1" onSubmit={handleSubmit}>
-            {/* Card 1: Basic Config */}
-            <AppDialogInset className="space-y-4">
-              <p className="text-label-12 font-semibold uppercase text-interactive flex items-center gap-1.5 mb-1">
-                <span className="size-1.5 rounded-full bg-interactive" />
-                {repoT.basicConfig || "基础配置"}
-              </p>
+          </AppDialogInset>
 
-              <div className="space-y-4">
-                {/* 仓库名称 */}
-                <div className="space-y-1.5">
-                  <Label htmlFor="repo-edit-name" className="text-label-12 font-semibold text-muted-foreground">
-                    {repoT.repositoryName || "仓库名称"}
-                  </Label>
-                  <Input
-                    id="repo-edit-name"
-                    value={editName}
-                    onChange={(event) => setEditName(event.target.value)}
-                    placeholder={repoT.repositoryNamePlaceholder || "输入仓库名称"}
-                    className="h-8 text-label-14"
-                  />
-                  {isEditNameEmpty ? (
-                    <p className="text-label-12 text-destructive">
-                      {repoT.repositoryNameRequired || "输入仓库名称"}
-                    </p>
-                  ) : null}
-                </div>
+          {/* Card 2: Project File & Provider / Git */}
+          <AppDialogInset className="space-y-4">
+            <p className="text-label-12 font-semibold uppercase text-interactive flex items-center gap-1.5 mb-1">
+              <span className="size-1.5 rounded-full bg-interactive" />
+              {repoT.projectBranchSection || "项目定位与分支"}
+            </p>
 
-                {/* Project Root */}
-                <div className="space-y-1.5">
-                  <Label htmlFor="repo-edit-path" className="text-label-12 font-semibold text-muted-foreground">
-                    {repoT.repositoryPath || "Project Root"}
-                  </Label>
-                  <div className="flex items-center gap-2">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              {/* Project File */}
+              <div className="space-y-1.5">
+                <Label
+                  htmlFor="repo-edit-project-file"
+                  className="text-label-12 font-semibold text-muted-foreground"
+                >
+                  {repoT.projectFile || "Project File"}
+                </Label>
+                <div className="flex items-center gap-2">
+                  {isProjectFileManual ? (
                     <Input
-                      id="repo-edit-path"
-                      value={editPath}
-                      onChange={(event) => setEditPath(event.target.value)}
-                      placeholder={repoT.repositoryPathPlaceholder || "输入项目根目录路径"}
+                      id="repo-edit-project-file"
                       className="h-8 flex-1 text-label-14"
+                      value={editProjectFile}
+                      onChange={(event) =>
+                        setEditProjectFile(event.target.value)
+                      }
+                      placeholder={
+                        repoT.projectFilePlaceholder || "可选项目文件"
+                      }
                     />
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="icon"
-                      className="size-8 shrink-0"
-                      onClick={handleBrowsePath}
-                      aria-label={repoT.browseFolder || "浏览文件夹"}
-                      title={repoT.browseFolder || "浏览文件夹"}
+                  ) : (
+                    <Select
+                      value={editProjectFile || NO_PROJECT_FILE_VALUE}
+                      onValueChange={(value) => {
+                        if (value === MANUAL_INPUT_VALUE) {
+                          setIsProjectFileManual(true);
+                          return;
+                        }
+                        setEditProjectFile(
+                          value === NO_PROJECT_FILE_VALUE ? "" : value
+                        );
+                      }}
+                      disabled={isScanningProjectFiles}
                     >
-                      <FolderGit2 className="size-4" />
-                    </Button>
-                  </div>
-                  {isEditPathEmpty ? (
-                    <p className="text-label-12 text-destructive">
-                      {repoT.repositoryPathRequired || "输入项目根目录路径"}
-                    </p>
-                  ) : null}
-                </div>
-              </div>
-            </AppDialogInset>
-
-            {/* Card 2: Project File & Provider / Git */}
-            <AppDialogInset className="space-y-4">
-              <p className="text-label-12 font-semibold uppercase text-interactive flex items-center gap-1.5 mb-1">
-                <span className="size-1.5 rounded-full bg-interactive" />
-                {repoT.projectBranchSection || "项目定位与分支"}
-              </p>
-
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                {/* Project File */}
-                <div className="space-y-1.5">
-                  <Label htmlFor="repo-edit-project-file" className="text-label-12 font-semibold text-muted-foreground">
-                    {repoT.projectFile || "Project File"}
-                  </Label>
-                  <div className="flex items-center gap-2">
-                    {isProjectFileManual ? (
-                      <Input
+                      <SelectTrigger
                         id="repo-edit-project-file"
                         className="h-8 flex-1 text-label-14"
-                        value={editProjectFile}
-                        onChange={(event) => setEditProjectFile(event.target.value)}
-                        placeholder={repoT.projectFilePlaceholder || "可选项目文件"}
-                      />
-                    ) : (
-                      <Select
-                        value={editProjectFile || NO_PROJECT_FILE_VALUE}
-                        onValueChange={(value) => {
-                          if (value === MANUAL_INPUT_VALUE) {
-                            setIsProjectFileManual(true);
-                            return;
-                          }
-                          setEditProjectFile(value === NO_PROJECT_FILE_VALUE ? "" : value);
-                        }}
-                        disabled={isScanningProjectFiles}
                       >
-                <SelectTrigger id="repo-edit-project-file" className="h-8 flex-1 text-label-14">
-                          <SelectValue
-                            placeholder={
-                              isScanningProjectFiles
-                                ? repoT.scanningProjectFiles || "扫描中…"
-                                : repoT.projectFilePlaceholder || "可选项目文件"
-                            }
-                          />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value={NO_PROJECT_FILE_VALUE}>
-                            {repoT.projectFileNone || "未设置"}
-                          </SelectItem>
-                          {projectFileOptions.map((filePath) => (
-                            <SelectItem key={filePath} value={filePath}>
-                              {getPathRelativeToRoot(filePath, projectFileOptionRoot)}
-                            </SelectItem>
-                          ))}
-                          <SelectItem value={MANUAL_INPUT_VALUE}>
-                            {repoT.projectFileManualInput || "手动输入…"}
-                          </SelectItem>
-                        </SelectContent>
-                      </Select>
-                    )}
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="icon"
-                      className="size-8 shrink-0"
-                      onClick={() => {
-                        if (isProjectFileManual && projectFileOptions.length > 0) {
-                          setIsProjectFileManual(false);
-                        } else {
-                          void handleScanProjectFiles();
-                        }
-                      }}
-                      title={repoT.scanProjectFiles || "扫描项目文件"}
-                      disabled={isSavingRepo || isScanningProjectFiles || !editPath.trim()}
-                    >
-                      <FileSearch
-                        className={cn("size-4", isScanningProjectFiles && "animate-spin")}
-                      />
-                    </Button>
-                  </div>
-                  {isProjectBindingPending ? (
-                    <p className="text-label-12 text-muted-foreground">
-                      {repoT.projectFileScanningPending || "正在扫描项目文件…"}
-                    </p>
-                  ) : null}
-                  {requiresProjectBinding ? (
-                    <p className="text-label-12 text-destructive">
-                      {repoT.projectFileBindingRequiredInline || "先选择一个 Project File。"}
-                    </p>
-                  ) : null}
-                </div>
-
-                {/* Provider */}
-                <div className="space-y-1.5">
-                  <Label htmlFor="repo-edit-provider" className="text-label-12 font-semibold text-muted-foreground">
-                    {repoT.provider || "Provider"}
-                  </Label>
-                  <div className="flex items-center gap-2">
-                    <Select
-                      value={editProviderId}
-                      onValueChange={(value) => {
-                        shouldAutoDetectProviderRef.current = false;
-                        setEditProviderId(value);
-                      }}
-                      disabled={isDetectingProvider}
-                    >
-                      <SelectTrigger id="repo-edit-provider" className="h-8 flex-1 text-label-14">
-                        <SelectValue placeholder={repoT.providerPlaceholder || "选择 Provider"} />
+                        <SelectValue
+                          placeholder={
+                            isScanningProjectFiles
+                              ? repoT.scanningProjectFiles || "扫描中…"
+                              : repoT.projectFilePlaceholder || "可选项目文件"
+                          }
+                        />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value={NO_PROVIDER_VALUE}>
-                          {repoT.providerUnspecified || "未设置"}
+                        <SelectItem value={NO_PROJECT_FILE_VALUE}>
+                          {repoT.projectFileNone || "未设置"}
                         </SelectItem>
-                        {providerOptions.map((provider) => (
-                          <SelectItem key={provider.id} value={provider.id}>
-                            {provider.label || provider.displayName || provider.id}
+                        {projectFileOptions.map((filePath) => (
+                          <SelectItem key={filePath} value={filePath}>
+                            {getPathRelativeToRoot(
+                              filePath,
+                              projectFileOptionRoot
+                            )}
                           </SelectItem>
                         ))}
+                        <SelectItem value={MANUAL_INPUT_VALUE}>
+                          {repoT.projectFileManualInput || "手动输入…"}
+                        </SelectItem>
                       </SelectContent>
                     </Select>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="icon"
-                      className="size-8 shrink-0"
-                      onClick={() => {
-                        void handleDetectProvider();
-                      }}
-                      title={repoT.detectProvider || "自动检测 Provider"}
-                      disabled={isSavingRepo || isDetectingProvider || isRefreshingBranches}
-                    >
-                      <RefreshCw className={cn("size-4", isDetectingProvider && "animate-spin")} />
-                    </Button>
-                  </div>
+                  )}
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="icon"
+                    className="size-8 shrink-0"
+                    onClick={() => {
+                      if (
+                        isProjectFileManual &&
+                        projectFileOptions.length > 0
+                      ) {
+                        setIsProjectFileManual(false);
+                      } else {
+                        void handleScanProjectFiles();
+                      }
+                    }}
+                    title={repoT.scanProjectFiles || "扫描项目文件"}
+                    disabled={
+                      isSavingRepo || isScanningProjectFiles || !editPath.trim()
+                    }
+                  >
+                    <FileSearch
+                      className={cn(
+                        "size-4",
+                        isScanningProjectFiles && "animate-spin"
+                      )}
+                    />
+                  </Button>
                 </div>
+                {isProjectBindingPending ? (
+                  <p className="text-label-12 text-muted-foreground">
+                    {repoT.projectFileScanningPending || "正在扫描项目文件…"}
+                  </p>
+                ) : null}
+                {requiresProjectBinding ? (
+                  <p className="text-label-12 text-destructive">
+                    {repoT.projectFileBindingRequiredInline ||
+                      "先选择一个 Project File。"}
+                  </p>
+                ) : null}
               </div>
 
-              {/* 当前分支 */}
-              <div className="space-y-1.5 pt-2 border-t border-border">
-                <Label htmlFor="repo-edit-branch" className="text-label-12 font-semibold text-muted-foreground">
-                  {repoT.currentBranch || "当前分支"}
+              {/* Provider */}
+              <div className="space-y-1.5">
+                <Label
+                  htmlFor="repo-edit-provider"
+                  className="text-label-12 font-semibold text-muted-foreground"
+                >
+                  {repoT.provider || "Provider"}
                 </Label>
                 <div className="flex items-center gap-2">
                   <Select
-                    value={editCurrentBranch}
-                    onValueChange={setEditCurrentBranch}
-                    disabled={branchOptions.length === 0 || isRefreshingBranches}
+                    value={editProviderId}
+                    onValueChange={(value) => {
+                      shouldAutoDetectProviderRef.current = false;
+                      setEditProviderId(value);
+                    }}
+                    disabled={isDetectingProvider}
                   >
-                    <SelectTrigger id="repo-edit-branch" className="h-8 flex-1 text-label-14">
-                      <SelectValue placeholder={repoT.currentBranchPlaceholder || "选择分支"} />
+                    <SelectTrigger
+                      id="repo-edit-provider"
+                      className="h-8 flex-1 text-label-14"
+                    >
+                      <SelectValue
+                        placeholder={
+                          repoT.providerPlaceholder || "选择 Provider"
+                        }
+                      />
                     </SelectTrigger>
                     <SelectContent>
-                      {branchOptions.map((branchName) => (
-                        <SelectItem key={branchName} value={branchName}>
-                          {branchName}
+                      <SelectItem value={NO_PROVIDER_VALUE}>
+                        {repoT.providerUnspecified || "未设置"}
+                      </SelectItem>
+                      {providerOptions.map((provider) => (
+                        <SelectItem key={provider.id} value={provider.id}>
+                          {provider.label ||
+                            provider.displayName ||
+                            provider.id}
                         </SelectItem>
                       ))}
                     </SelectContent>
@@ -851,18 +915,81 @@ function EditRepositoryDialogContent({
                     size="icon"
                     className="size-8 shrink-0"
                     onClick={() => {
-                      void handleRefreshBranches();
+                      void handleDetectProvider();
                     }}
-                    title={repoT.refreshBranches || "刷新分支"}
-                    disabled={isSavingRepo || isDetectingProvider || isRefreshingBranches}
+                    title={repoT.detectProvider || "自动检测 Provider"}
+                    disabled={
+                      isSavingRepo ||
+                      isDetectingProvider ||
+                      isRefreshingBranches
+                    }
                   >
-                    <RefreshCw className={cn("size-4", isRefreshingBranches && "animate-spin")} />
+                    <RefreshCw
+                      className={cn(
+                        "size-4",
+                        isDetectingProvider && "animate-spin"
+                      )}
+                    />
                   </Button>
                 </div>
               </div>
-            </AppDialogInset>
-          </form>
-        </div>
+            </div>
+
+            {/* 当前分支 */}
+            <div className="space-y-1.5 pt-2 border-t border-border">
+              <Label
+                htmlFor="repo-edit-branch"
+                className="text-label-12 font-semibold text-muted-foreground"
+              >
+                {repoT.currentBranch || "当前分支"}
+              </Label>
+              <div className="flex items-center gap-2">
+                <Select
+                  value={editCurrentBranch}
+                  onValueChange={setEditCurrentBranch}
+                  disabled={branchOptions.length === 0 || isRefreshingBranches}
+                >
+                  <SelectTrigger
+                    id="repo-edit-branch"
+                    className="h-8 flex-1 text-label-14"
+                  >
+                    <SelectValue
+                      placeholder={repoT.currentBranchPlaceholder || "选择分支"}
+                    />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {branchOptions.map((branchName) => (
+                      <SelectItem key={branchName} value={branchName}>
+                        {branchName}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="icon"
+                  className="size-8 shrink-0"
+                  onClick={() => {
+                    void handleRefreshBranches();
+                  }}
+                  title={repoT.refreshBranches || "刷新分支"}
+                  disabled={
+                    isSavingRepo || isDetectingProvider || isRefreshingBranches
+                  }
+                >
+                  <RefreshCw
+                    className={cn(
+                      "size-4",
+                      isRefreshingBranches && "animate-spin"
+                    )}
+                  />
+                </Button>
+              </div>
+            </div>
+          </AppDialogInset>
+        </form>
+      </div>
     </AppDialogShell>
   );
 }

@@ -1,4 +1,11 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 
 interface UseListInteractionStateOptions {
   filteredItemIds: string[];
@@ -58,7 +65,13 @@ export function useListInteractionState({
       focusedItemId ??
       selectedItemId ??
       null,
-    [activeMenuItemId, focusedItemId, hoveredItemId, pointerInsideList, selectedItemId]
+    [
+      activeMenuItemId,
+      focusedItemId,
+      hoveredItemId,
+      pointerInsideList,
+      selectedItemId,
+    ]
   );
 
   useEffect(() => {

@@ -26,9 +26,27 @@ import type {
 // ─── Default test data ───
 
 const DEFAULT_BRANCHES: Branch[] = [
-  { name: "main", isMain: true, isCurrent: true, path: "/workspace/alpha-service", commitCount: 42 },
-  { name: "develop", isMain: false, isCurrent: false, path: "/workspace/alpha-service", commitCount: 18 },
-  { name: "feature/test-ci", isMain: false, isCurrent: false, path: "/workspace/alpha-service", commitCount: 5 },
+  {
+    name: "main",
+    isMain: true,
+    isCurrent: true,
+    path: "/workspace/alpha-service",
+    commitCount: 42,
+  },
+  {
+    name: "develop",
+    isMain: false,
+    isCurrent: false,
+    path: "/workspace/alpha-service",
+    commitCount: 18,
+  },
+  {
+    name: "feature/test-ci",
+    isMain: false,
+    isCurrent: false,
+    path: "/workspace/alpha-service",
+    commitCount: 5,
+  },
 ];
 
 const DEFAULT_REPOSITORIES: Repository[] = [
@@ -60,8 +78,22 @@ const DEFAULT_REPOSITORIES: Repository[] = [
         profileName: "",
       },
       profiles: [
-        { name: "FolderProfile", providerId: "dotnet", parameters: {}, profileGroup: null, createdAt: "2025-01-01T00:00:00Z", isSystemDefault: false },
-        { name: "ZipProfile", providerId: "dotnet", parameters: {}, profileGroup: null, createdAt: "2025-01-02T00:00:00Z", isSystemDefault: false },
+        {
+          name: "FolderProfile",
+          providerId: "dotnet",
+          parameters: {},
+          profileGroup: null,
+          createdAt: "2025-01-01T00:00:00Z",
+          isSystemDefault: false,
+        },
+        {
+          name: "ZipProfile",
+          providerId: "dotnet",
+          parameters: {},
+          profileGroup: null,
+          createdAt: "2025-01-02T00:00:00Z",
+          isSystemDefault: false,
+        },
       ],
     },
   },
@@ -70,7 +102,15 @@ const DEFAULT_REPOSITORIES: Repository[] = [
     name: "beta-worker",
     path: "/workspace/beta-worker",
     currentBranch: "release",
-    branches: [{ name: "release", isMain: true, isCurrent: true, path: "/workspace/beta-worker", commitCount: 12 }],
+    branches: [
+      {
+        name: "release",
+        isMain: true,
+        isCurrent: true,
+        path: "/workspace/beta-worker",
+        commitCount: 12,
+      },
+    ],
     isMain: false,
     providerId: "dotnet",
     projectFile: "/workspace/beta-worker/Worker.csproj",
@@ -78,11 +118,30 @@ const DEFAULT_REPOSITORIES: Repository[] = [
       selectedPreset: "profile-FolderProfile",
       isCustomMode: false,
       customConfig: {
-        configuration: "Release", runtime: "", framework: "", selfContained: false,
-        outputDir: "", noBuild: false, noRestore: false, verbosity: "", noLogo: false,
-        deleteExistingFiles: false, properties: {}, useProfile: false, profileName: "",
+        configuration: "Release",
+        runtime: "",
+        framework: "",
+        selfContained: false,
+        outputDir: "",
+        noBuild: false,
+        noRestore: false,
+        verbosity: "",
+        noLogo: false,
+        deleteExistingFiles: false,
+        properties: {},
+        useProfile: false,
+        profileName: "",
       },
-      profiles: [{ name: "FolderProfile", providerId: "dotnet", parameters: {}, profileGroup: null, createdAt: "2025-01-01T00:00:00Z", isSystemDefault: false }],
+      profiles: [
+        {
+          name: "FolderProfile",
+          providerId: "dotnet",
+          parameters: {},
+          profileGroup: null,
+          createdAt: "2025-01-01T00:00:00Z",
+          isSystemDefault: false,
+        },
+      ],
     },
   },
 ];
@@ -146,31 +205,134 @@ const DEFAULT_PROVIDERS: ProviderCatalogEntry[] = [
 
 const DOTNET_SCHEMA: ParameterSchema = {
   parameters: {
-    configuration: { type: "string", flag: "--configuration", multiple: null, prefix: null, description: null },
-    runtime: { type: "string", flag: "--runtime", multiple: null, prefix: null, description: null },
-    framework: { type: "string", flag: "--framework", multiple: null, prefix: null, description: null },
-    selfContained: { type: "boolean", flag: "--self-contained", multiple: null, prefix: null, description: null },
-    outputDir: { type: "string", flag: "--output", multiple: null, prefix: null, description: null },
-    noBuild: { type: "boolean", flag: "--no-build", multiple: null, prefix: null, description: null },
-    noRestore: { type: "boolean", flag: "--no-restore", multiple: null, prefix: null, description: null },
-    verbosity: { type: "string", flag: "--verbosity", multiple: null, prefix: null, description: null },
-    noLogo: { type: "boolean", flag: "--nologo", multiple: null, prefix: null, description: null },
-    properties: { type: "map", flag: "--property", multiple: null, prefix: null, description: null },
-    define: { type: "array", flag: "--define", multiple: null, prefix: null, description: null },
-    useProfile: { type: "boolean", flag: "", multiple: null, prefix: null, description: null },
-    profileName: { type: "string", flag: "", multiple: null, prefix: null, description: null },
+    configuration: {
+      type: "string",
+      flag: "--configuration",
+      multiple: null,
+      prefix: null,
+      description: null,
+    },
+    runtime: {
+      type: "string",
+      flag: "--runtime",
+      multiple: null,
+      prefix: null,
+      description: null,
+    },
+    framework: {
+      type: "string",
+      flag: "--framework",
+      multiple: null,
+      prefix: null,
+      description: null,
+    },
+    selfContained: {
+      type: "boolean",
+      flag: "--self-contained",
+      multiple: null,
+      prefix: null,
+      description: null,
+    },
+    outputDir: {
+      type: "string",
+      flag: "--output",
+      multiple: null,
+      prefix: null,
+      description: null,
+    },
+    noBuild: {
+      type: "boolean",
+      flag: "--no-build",
+      multiple: null,
+      prefix: null,
+      description: null,
+    },
+    noRestore: {
+      type: "boolean",
+      flag: "--no-restore",
+      multiple: null,
+      prefix: null,
+      description: null,
+    },
+    verbosity: {
+      type: "string",
+      flag: "--verbosity",
+      multiple: null,
+      prefix: null,
+      description: null,
+    },
+    noLogo: {
+      type: "boolean",
+      flag: "--nologo",
+      multiple: null,
+      prefix: null,
+      description: null,
+    },
+    properties: {
+      type: "map",
+      flag: "--property",
+      multiple: null,
+      prefix: null,
+      description: null,
+    },
+    define: {
+      type: "array",
+      flag: "--define",
+      multiple: null,
+      prefix: null,
+      description: null,
+    },
+    useProfile: {
+      type: "boolean",
+      flag: "",
+      multiple: null,
+      prefix: null,
+      description: null,
+    },
+    profileName: {
+      type: "string",
+      flag: "",
+      multiple: null,
+      prefix: null,
+      description: null,
+    },
   },
 };
 
 const DEFAULT_ENV_CHECK: EnvironmentCheckResult = {
   is_ready: true,
   providers: [
-    { provider_id: "dotnet", installed: true, version: "8.0.403", path: "/usr/local/share/dotnet/dotnet" },
-    { provider_id: "cargo", installed: true, version: "1.82.0", path: "/Users/test/.cargo/bin/cargo" },
+    {
+      provider_id: "dotnet",
+      installed: true,
+      version: "8.0.403",
+      path: "/usr/local/share/dotnet/dotnet",
+    },
+    {
+      provider_id: "cargo",
+      installed: true,
+      version: "1.82.0",
+      path: "/Users/test/.cargo/bin/cargo",
+    },
     { provider_id: "go", installed: false, version: null, path: null },
   ],
   issues: [
-    { severity: "info", provider_id: "go", issue_type: "missing_tool", description: "Go is not installed", current_value: null, expected_value: ">=1.21", fixes: [{ action_type: "open_url", label: "Install Go", command: null, url: "https://go.dev/dl/" }] },
+    {
+      severity: "info",
+      provider_id: "go",
+      issue_type: "missing_tool",
+      description: "Go is not installed",
+      current_value: null,
+      expected_value: ">=1.21",
+      fixes: [
+        {
+          action_type: "open_url",
+          label: "Install Go",
+          command: null,
+          url: "https://go.dev/dl/",
+        },
+      ],
+    },
   ],
   checked_at: new Date().toISOString(),
 };
@@ -190,334 +352,437 @@ export interface MockTauriOptions {
   debug?: boolean;
 }
 
-export async function installMockTauri(page: Page, options: MockTauriOptions = {}) {
+export async function installMockTauri(
+  page: Page,
+  options: MockTauriOptions = {}
+) {
   const { initialState, repositories, providers, errors, debug } = options;
 
-  const clone = <T>(v: T): T => (v === undefined ? undefined : JSON.parse(JSON.stringify(v))) as T;
+  const clone = <T>(v: T): T =>
+    (v === undefined ? undefined : JSON.parse(JSON.stringify(v))) as T;
 
   // Merge user overrides with defaults
-  const effectiveState = { ...DEFAULT_APP_STATE, ...(initialState ?? {}), repositories: repositories ?? DEFAULT_REPOSITORIES };
+  const effectiveState = {
+    ...DEFAULT_APP_STATE,
+    ...(initialState ?? {}),
+    repositories: repositories ?? DEFAULT_REPOSITORIES,
+  };
   const effectiveProviders = providers ?? DEFAULT_PROVIDERS;
 
-  await page.addInitScript((opts: Record<string, unknown>) => {
-    const clone = (v: unknown) => JSON.parse(JSON.stringify(v));
+  await page.addInitScript(
+    (opts: Record<string, unknown>) => {
+      const clone = (v: unknown) => JSON.parse(JSON.stringify(v));
 
-    const appState = clone(opts.appState) as AppState;
-    const providerList = clone(opts.providers) as ProviderCatalogEntry[];
-    const dotnetSchema = clone(opts.dotnetSchema) as ParameterSchema;
-    const envCheck = clone(opts.envCheck) as EnvironmentCheckResult;
-    const errMap = (opts.errors ?? {}) as Record<string, string>;
-    const d = (opts.debug ?? false) as boolean;
+      const appState = clone(opts.appState) as AppState;
+      const providerList = clone(opts.providers) as ProviderCatalogEntry[];
+      const dotnetSchema = clone(opts.dotnetSchema) as ParameterSchema;
+      const envCheck = clone(opts.envCheck) as EnvironmentCheckResult;
+      const errMap = (opts.errors ?? {}) as Record<string, string>;
+      const d = (opts.debug ?? false) as boolean;
 
-    const log = (...args: unknown[]) => { if (d) console.log("[mock-tauri]", ...args); };
+      const log = (...args: unknown[]) => {
+        if (d) console.log("[mock-tauri]", ...args);
+      };
 
-    const win = window as unknown as Record<string, unknown>;
+      const win = window as unknown as Record<string, unknown>;
 
-    win.__TAURI_INTERNALS__ = {
-      invoke: async (cmd: string, args?: Record<string, unknown>) => {
-        log("invoke:", cmd, args);
+      win.__TAURI_INTERNALS__ = {
+        invoke: async (cmd: string, args?: Record<string, unknown>) => {
+          log("invoke:", cmd, args);
 
-        // Error injection: throw if this command is in the errors map
-        if (errMap[cmd]) {
-          throw new Error(errMap[cmd]);
-        }
+          // Error injection: throw if this command is in the errors map
+          if (errMap[cmd]) {
+            throw new Error(errMap[cmd]);
+          }
 
-        switch (cmd) {
-          // Store
-          case "get_app_state":
-            return clone({ ...appState, executionHistory: [] });
+          switch (cmd) {
+            // Store
+            case "get_app_state":
+              return clone({ ...appState, executionHistory: [] });
 
-          case "update_publish_state": {
-            const repo = appState.repositories?.find((r: Repository) => r.id === appState.selectedRepoId);
-            if (repo && typeof args?.selectedPreset === "string") {
-              repo.publishConfig.selectedPreset = args.selectedPreset;
+            case "update_publish_state": {
+              const repo = appState.repositories?.find(
+                (r: Repository) => r.id === appState.selectedRepoId
+              );
+              if (repo && typeof args?.selectedPreset === "string") {
+                repo.publishConfig.selectedPreset = args.selectedPreset;
+              }
+              if (repo && typeof args?.isCustomMode === "boolean") {
+                repo.publishConfig.isCustomMode = args.isCustomMode;
+              }
+              return null;
             }
-            if (repo && typeof args?.isCustomMode === "boolean") {
-              repo.publishConfig.isCustomMode = args.isCustomMode;
+
+            case "update_ui_state":
+              return null;
+
+            case "update_preferences": {
+              if (args?.language) appState.language = args.language as string;
+              if (args?.theme) appState.theme = args.theme as string;
+              if (typeof args?.minimizeToTrayOnClose === "boolean")
+                appState.minimizeToTrayOnClose =
+                  args.minimizeToTrayOnClose as boolean;
+              if (typeof args?.executionHistoryLimit === "number")
+                appState.executionHistoryLimit =
+                  args.executionHistoryLimit as number;
+              return null;
             }
-            return null;
+
+            // ── Provider ──
+            case "list_providers":
+              return clone(providerList);
+
+            case "get_provider_schema": {
+              const pid = args?.providerId as string;
+              if (pid === "dotnet") return clone(dotnetSchema);
+              return { parameters: {} };
+            }
+
+            case "import_from_command":
+              return null;
+
+            case "get_profiles": {
+              // Return profiles from the selected repo's publishConfig
+              const repoId = (args?.repoId || args?.repo_id) as string;
+              const repo = appState.repositories?.find(
+                (r: Repository) => r.id === repoId
+              );
+              return clone(repo?.publishConfig?.profiles ?? []);
+            }
+
+            case "get_execution_history":
+              return clone(appState.executionHistory ?? []);
+
+            case "get_repository": {
+              const repoId = (args?.repoId || args?.repo_id) as string;
+              return clone(
+                appState.repositories?.find(
+                  (r: Repository) => r.id === repoId
+                ) ?? null
+              );
+            }
+
+            case "save_app_state":
+            case "add_repository":
+            case "remove_repository":
+            case "update_repository":
+            case "reorder_repositories":
+            case "save_profile":
+            case "update_profile":
+            case "delete_profile":
+            case "push_recent_publish_config":
+            case "remove_recent_publish_config":
+            case "reorder_recent_publish_configs":
+            case "reorder_profiles":
+            case "replace_recent_publish_config_key":
+            case "add_execution_record":
+            case "set_execution_record_snapshot":
+            case "update_tray_menu":
+              return null;
+
+            // ── Repository ──
+            case "scan_repository_branches": {
+              const repoId = args?.repoId as string;
+              const repo = appState.repositories?.find(
+                (r: Repository) => r.id === repoId
+              );
+              return repo
+                ? {
+                    branches: clone(repo.branches),
+                    current_branch: repo.currentBranch,
+                  }
+                : { branches: [], current_branch: "" };
+            }
+
+            case "check_repository_branch_connectivity":
+              return { canConnect: true };
+
+            case "detect_repository_provider": {
+              const providerId = args?.repoPath ? "dotnet" : null;
+              return {
+                provider_id: providerId,
+                project_file: providerId
+                  ? `${args?.repoPath}/App.csproj`
+                  : null,
+              };
+            }
+
+            case "scan_project": {
+              const pf =
+                (args?.projectFile as string) ||
+                "/workspace/alpha-service/App.csproj";
+              const rootPath = pf.replace(/\/[^/]+\.csproj$/, "");
+              return {
+                root_path: rootPath,
+                project_file: pf,
+                publish_profiles: ["FolderProfile", "ZipProfile", "WebDeploy"],
+                target_frameworks: ["net8.0"],
+              };
+            }
+
+            case "resolve_project_info": {
+              const pf =
+                (args?.projectFile as string) ||
+                "/workspace/alpha-service/App.csproj";
+              const rootPath = pf.replace(/\/[^/]+\.csproj$/, "");
+              return {
+                root_path: rootPath,
+                project_file: pf,
+                publish_profiles: ["FolderProfile", "ZipProfile", "WebDeploy"],
+                target_frameworks: ["net8.0"],
+              };
+            }
+
+            case "scan_project_candidates": {
+              const rootPath =
+                (args?.path as string) || "/workspace/alpha-service";
+              return {
+                rootPath: rootPath,
+                solutionFiles: [`${rootPath}/Solution.sln`],
+                projectFiles: [
+                  `${rootPath}/App.csproj`,
+                  `${rootPath}/Tests.csproj`,
+                ],
+                recommendedProjectFile: `${rootPath}/App.csproj`,
+              };
+            }
+
+            case "scan_project_files":
+              return [];
+
+            case "read_project_publish_profile": {
+              const profileName =
+                (args?.profileName as string) || "FolderProfile";
+              return {
+                profileName,
+                filePath: `/workspace/alpha-service/Properties/PublishProfiles/${profileName}.pubxml`,
+                content: `<Project><PropertyGroup><PublishDir>bin/Release/net8.0/${profileName}/</PublishDir></PropertyGroup></Project>`,
+              };
+            }
+
+            // ── Publish ──
+            case "preflight_publish_output": {
+              const outputDir =
+                (args?.spec &&
+                typeof args.spec === "object" &&
+                "parameters" in args.spec
+                  ? (
+                      args.spec as Record<string, Record<string, string>>
+                    ).parameters?.outputDir?.toString()
+                  : "") || "/tmp/publish-output";
+              return {
+                output_dir: outputDir,
+                configured_output_dir: outputDir || null,
+                validation: { status: "not_applicable", issue: null },
+                access: {
+                  status: "granted",
+                  protectedLocation: null,
+                  protectedRoot: null,
+                  probeDirectory: outputDir,
+                  detail: null,
+                },
+              };
+            }
+
+            case "render_provider_publish": {
+              const providerId = (args?.providerId as string) || "dotnet";
+              const spec = args?.spec as Record<string, unknown> | undefined;
+              const parameters = (spec?.parameters ?? {}) as Record<
+                string,
+                unknown
+              >;
+              const output =
+                typeof parameters.output === "string" ? parameters.output : "";
+              const outputArgs = output ? ["--output", output] : [];
+              const displayOutput = output ? ` --output ${output}` : "";
+              return {
+                program: providerId,
+                args: ["publish", "--configuration", "Release", ...outputArgs],
+                working_dir: "/workspace/alpha-service",
+                display_command: `${providerId} publish --configuration Release${displayOutput}`,
+              };
+            }
+
+            case "execute_provider_publish": {
+              const execId = `exec-${Date.now()}`;
+              // 先 emit 会话开始事件（与真实后端 spawn 前的 emit 对齐），
+              // 再 emit 日志 chunk，保证日志捕获会话归属正确。
+              const sessionStarted = new CustomEvent(
+                "provider-publish-session-started",
+                {
+                  detail: { sessionId: execId },
+                }
+              );
+              const publishEvent = new CustomEvent("publish-log-chunk", {
+                detail: { sessionId: execId, line: "[mock] Publishing..." },
+              });
+              setTimeout(() => window.dispatchEvent(sessionStarted), 50);
+              setTimeout(() => window.dispatchEvent(publishEvent), 100);
+              setTimeout(() => {
+                window.dispatchEvent(
+                  new CustomEvent("publish-log-chunk", {
+                    detail: {
+                      sessionId: execId,
+                      line: "[mock] Publish succeeded.",
+                    },
+                  })
+                );
+              }, 200);
+              return {
+                provider_id: (args?.providerId as string) || "dotnet",
+                success: true,
+                cancelled: false,
+                error: null,
+                command: {
+                  program: "dotnet",
+                  args: ["publish"],
+                  working_dir: "/workspace/alpha-service",
+                  display_command: "dotnet publish",
+                },
+                output_log: "[mock] Publishing...\n[mock] Publish succeeded.\n",
+                output_dir: "/tmp/publish-output",
+                file_count: 12,
+              };
+            }
+
+            case "cancel_provider_publish":
+              return true;
+
+            // ── Environment ──
+            case "run_environment_check":
+              return clone(envCheck);
+
+            case "apply_fix": {
+              const actionType = (args?.action as Record<string, string>)
+                ?.action_type;
+              if (actionType === "open_url")
+                return { result: "OpenedUrl", data: "https://example.com" };
+              if (actionType === "run_command")
+                return {
+                  result: "CommandExecuted",
+                  data: { stdout: "", stderr: "", exit_code: 0 },
+                };
+              return { result: "Manual", data: "" };
+            }
+
+            // ── Export ──
+            case "export_preflight_report":
+              return "/tmp/report.md";
+
+            case "export_execution_snapshot":
+              return "/tmp/snapshot.json";
+
+            case "export_failure_group_bundle":
+              return "/tmp/failure-bundle.zip";
+
+            case "export_execution_history":
+              return "/tmp/history.csv";
+
+            case "export_diagnostics_index":
+              return "/tmp/diagnostics-index.html";
+
+            case "open_execution_snapshot":
+              return "ok";
+
+            case "open_directory":
+              return "ok";
+
+            case "open_output_directory":
+              return "ok";
+
+            // ── Config ──
+            case "export_config":
+              return {
+                version: 1,
+                exported_at: new Date().toISOString(),
+                profiles: [],
+              };
+
+            case "import_config":
+              return { imported: 0, skipped: 0, errors: [] };
+
+            case "apply_imported_config":
+              return null;
+
+            // ── Artifact ──
+            case "package_artifact":
+              return {
+                artifactPath: "/tmp/artifact.zip",
+                format: "zip",
+                fileCount: 1,
+                bytes: 1024,
+                sha256: "abc123",
+              };
+
+            case "sign_artifact":
+              return {
+                signaturePath: "/tmp/artifact.zip.sig",
+                method: "gpg_detached",
+                stdout: "",
+                stderr: "",
+                exitCode: 0,
+                success: true,
+              };
+
+            // ── Updater ──
+            case "check_update":
+              return {
+                current_version: "0.6.3",
+                available_version: null,
+                has_update: false,
+                release_notes: null,
+                message: null,
+              };
+
+            case "get_current_version":
+              return "0.6.3";
+
+            case "get_shortcuts_help":
+              return [{ key: "Ctrl+P", description: "Publish" }];
+
+            case "get_updater_config_health":
+              return { configured: false, message: "No updater configured" };
+
+            case "get_updater_help_paths":
+              return { docsPath: "/docs", templatePath: "/template" };
+
+            case "install_update":
+              return null;
+
+            case "open_updater_help":
+              return "ok";
+
+            // ── Notification ──
+            case "show_system_notification":
+              return null;
+
+            // ── Listeners (events) ──
+            case "plugin:event|listen":
+              return null;
+
+            case "plugin:event|emit":
+              return null;
+
+            default:
+              log("UNHANDLED COMMAND:", cmd);
+              // Return null for unknown commands rather than throwing
+              return null;
           }
+        },
+      };
 
-          case "update_ui_state":
-            return null;
-
-          case "update_preferences": {
-            if (args?.language) appState.language = args.language as string;
-            if (args?.theme) appState.theme = args.theme as string;
-            if (typeof args?.minimizeToTrayOnClose === "boolean") appState.minimizeToTrayOnClose = args.minimizeToTrayOnClose as boolean;
-            if (typeof args?.executionHistoryLimit === "number") appState.executionHistoryLimit = args.executionHistoryLimit as number;
-            return null;
-          }
-
-          // ── Provider ──
-          case "list_providers":
-            return clone(providerList);
-
-          case "get_provider_schema": {
-            const pid = args?.providerId as string;
-            if (pid === "dotnet") return clone(dotnetSchema);
-            return { parameters: {} };
-          }
-
-          case "import_from_command":
-            return null;
-
-          case "get_profiles": {
-            // Return profiles from the selected repo's publishConfig
-            const repoId = (args?.repoId || args?.repo_id) as string;
-            const repo = appState.repositories?.find((r: Repository) => r.id === repoId);
-            return clone(repo?.publishConfig?.profiles ?? []);
-          }
-
-          case "get_execution_history":
-            return clone(appState.executionHistory ?? []);
-
-          case "get_repository": {
-            const repoId = (args?.repoId || args?.repo_id) as string;
-            return clone(appState.repositories?.find((r: Repository) => r.id === repoId) ?? null);
-          }
-
-          case "save_app_state":
-          case "add_repository":
-          case "remove_repository":
-          case "update_repository":
-          case "reorder_repositories":
-          case "save_profile":
-          case "update_profile":
-          case "delete_profile":
-          case "push_recent_publish_config":
-          case "remove_recent_publish_config":
-          case "reorder_recent_publish_configs":
-          case "reorder_profiles":
-          case "replace_recent_publish_config_key":
-          case "add_execution_record":
-          case "set_execution_record_snapshot":
-          case "update_tray_menu":
-            return null;
-
-          // ── Repository ──
-          case "scan_repository_branches": {
-            const repoId = args?.repoId as string;
-            const repo = appState.repositories?.find((r: Repository) => r.id === repoId);
-            return repo ? { branches: clone(repo.branches), current_branch: repo.currentBranch } : { branches: [], current_branch: "" };
-          }
-
-          case "check_repository_branch_connectivity":
-            return { canConnect: true };
-
-          case "detect_repository_provider": {
-            const providerId = args?.repoPath ? "dotnet" : null;
-            return { provider_id: providerId, project_file: providerId ? `${args?.repoPath}/App.csproj` : null };
-          }
-
-          case "scan_project": {
-            const pf = (args?.projectFile as string) || "/workspace/alpha-service/App.csproj";
-            const rootPath = pf.replace(/\/[^/]+\.csproj$/, "");
-            return {
-              root_path: rootPath,
-              project_file: pf,
-              publish_profiles: ["FolderProfile", "ZipProfile", "WebDeploy"],
-              target_frameworks: ["net8.0"],
-            };
-          }
-
-          case "resolve_project_info": {
-            const pf = (args?.projectFile as string) || "/workspace/alpha-service/App.csproj";
-            const rootPath = pf.replace(/\/[^/]+\.csproj$/, "");
-            return {
-              root_path: rootPath,
-              project_file: pf,
-              publish_profiles: ["FolderProfile", "ZipProfile", "WebDeploy"],
-              target_frameworks: ["net8.0"],
-            };
-          }
-
-          case "scan_project_candidates": {
-            const rootPath = (args?.path as string) || "/workspace/alpha-service";
-            return {
-              rootPath: rootPath,
-              solutionFiles: [`${rootPath}/Solution.sln`],
-              projectFiles: [`${rootPath}/App.csproj`, `${rootPath}/Tests.csproj`],
-              recommendedProjectFile: `${rootPath}/App.csproj`,
-            };
-          }
-
-          case "scan_project_files":
-            return [];
-
-          case "read_project_publish_profile": {
-            const profileName = (args?.profileName as string) || "FolderProfile";
-            return {
-              profileName,
-              filePath: `/workspace/alpha-service/Properties/PublishProfiles/${profileName}.pubxml`,
-              content: `<Project><PropertyGroup><PublishDir>bin/Release/net8.0/${profileName}/</PublishDir></PropertyGroup></Project>`,
-            };
-          }
-
-          // ── Publish ──
-          case "preflight_publish_output": {
-            const outputDir = (args?.spec && typeof args.spec === "object" && "parameters" in args.spec
-              ? (args.spec as Record<string, Record<string, string>>).parameters?.outputDir?.toString()
-              : "") || "/tmp/publish-output";
-            return {
-              output_dir: outputDir,
-              configured_output_dir: outputDir || null,
-              validation: { status: "not_applicable", issue: null },
-              access: { status: "granted", protectedLocation: null, protectedRoot: null, probeDirectory: outputDir, detail: null },
-            };
-          }
-
-          case "render_provider_publish": {
-            const providerId = (args?.providerId as string) || "dotnet";
-            const spec = args?.spec as Record<string, unknown> | undefined;
-            const parameters = (spec?.parameters ?? {}) as Record<string, unknown>;
-            const output = typeof parameters.output === "string" ? parameters.output : "";
-            const outputArgs = output ? ["--output", output] : [];
-            const displayOutput = output ? ` --output ${output}` : "";
-            return {
-              program: providerId,
-              args: ["publish", "--configuration", "Release", ...outputArgs],
-              working_dir: "/workspace/alpha-service",
-              display_command: `${providerId} publish --configuration Release${displayOutput}`,
-            };
-          }
-
-          case "execute_provider_publish": {
-            const execId = `exec-${Date.now()}`;
-            // 先 emit 会话开始事件（与真实后端 spawn 前的 emit 对齐），
-            // 再 emit 日志 chunk，保证日志捕获会话归属正确。
-            const sessionStarted = new CustomEvent("provider-publish-session-started", {
-              detail: { sessionId: execId },
-            });
-            const publishEvent = new CustomEvent("publish-log-chunk", {
-              detail: { sessionId: execId, line: "[mock] Publishing..." },
-            });
-            setTimeout(() => window.dispatchEvent(sessionStarted), 50);
-            setTimeout(() => window.dispatchEvent(publishEvent), 100);
-            setTimeout(() => {
-              window.dispatchEvent(new CustomEvent("publish-log-chunk", {
-                detail: { sessionId: execId, line: "[mock] Publish succeeded." },
-              }));
-            }, 200);
-            return {
-              provider_id: (args?.providerId as string) || "dotnet",
-              success: true,
-              cancelled: false,
-              error: null,
-              command: { program: "dotnet", args: ["publish"], working_dir: "/workspace/alpha-service", display_command: "dotnet publish" },
-              output_log: "[mock] Publishing...\n[mock] Publish succeeded.\n",
-              output_dir: "/tmp/publish-output",
-              file_count: 12,
-            };
-          }
-
-          case "cancel_provider_publish":
-            return true;
-
-          // ── Environment ──
-          case "run_environment_check":
-            return clone(envCheck);
-
-          case "apply_fix": {
-            const actionType = (args?.action as Record<string, string>)?.action_type;
-            if (actionType === "open_url") return { result: "OpenedUrl", data: "https://example.com" };
-            if (actionType === "run_command") return { result: "CommandExecuted", data: { stdout: "", stderr: "", exit_code: 0 } };
-            return { result: "Manual", data: "" };
-          }
-
-          // ── Export ──
-          case "export_preflight_report":
-            return "/tmp/report.md";
-
-          case "export_execution_snapshot":
-            return "/tmp/snapshot.json";
-
-          case "export_failure_group_bundle":
-            return "/tmp/failure-bundle.zip";
-
-          case "export_execution_history":
-            return "/tmp/history.csv";
-
-          case "export_diagnostics_index":
-            return "/tmp/diagnostics-index.html";
-
-          case "open_execution_snapshot":
-            return "ok";
-
-          case "open_directory":
-            return "ok";
-
-          case "open_output_directory":
-            return "ok";
-
-          // ── Config ──
-          case "export_config":
-            return { version: 1, exported_at: new Date().toISOString(), profiles: [] };
-
-          case "import_config":
-            return { imported: 0, skipped: 0, errors: [] };
-
-          case "apply_imported_config":
-            return null;
-
-          // ── Artifact ──
-          case "package_artifact":
-            return { artifactPath: "/tmp/artifact.zip", format: "zip", fileCount: 1, bytes: 1024, sha256: "abc123" };
-
-          case "sign_artifact":
-            return { signaturePath: "/tmp/artifact.zip.sig", method: "gpg_detached", stdout: "", stderr: "", exitCode: 0, success: true };
-
-          // ── Updater ──
-          case "check_update":
-            return { current_version: "0.6.3", available_version: null, has_update: false, release_notes: null, message: null };
-
-          case "get_current_version":
-            return "0.6.3";
-
-          case "get_shortcuts_help":
-            return [{ key: "Ctrl+P", description: "Publish" }];
-
-          case "get_updater_config_health":
-            return { configured: false, message: "No updater configured" };
-
-          case "get_updater_help_paths":
-            return { docsPath: "/docs", templatePath: "/template" };
-
-          case "install_update":
-            return null;
-
-          case "open_updater_help":
-            return "ok";
-
-          // ── Notification ──
-          case "show_system_notification":
-            return null;
-
-          // ── Listeners (events) ──
-          case "plugin:event|listen":
-            return null;
-
-          case "plugin:event|emit":
-            return null;
-
-          default:
-            log("UNHANDLED COMMAND:", cmd);
-            // Return null for unknown commands rather than throwing
-            return null;
-        }
-      },
-    };
-
-    // indicate mocked environment
-    win.isTauri = false;
-  }, {
-    appState: clone(effectiveState),
-    providers: clone(effectiveProviders),
-    dotnetSchema: clone(DOTNET_SCHEMA),
-    envCheck: clone(DEFAULT_ENV_CHECK),
-    errors: clone(errors ?? {}),
-    debug,
-  } as unknown as Record<string, unknown>);
+      // indicate mocked environment
+      win.isTauri = false;
+    },
+    {
+      appState: clone(effectiveState),
+      providers: clone(effectiveProviders),
+      dotnetSchema: clone(DOTNET_SCHEMA),
+      envCheck: clone(DEFAULT_ENV_CHECK),
+      errors: clone(errors ?? {}),
+      debug,
+    } as unknown as Record<string, unknown>
+  );
 }
 
 // ─── Navigation helpers ───
@@ -527,14 +792,21 @@ export async function gotoApp(page: Page, options: MockTauriOptions = {}) {
   await page.goto("/", { waitUntil: "domcontentloaded" });
   await page.waitForLoadState("networkidle");
   // Wait for the app to render — the repo list is the most reliable signal
-  await expect(page.locator("[data-list-item-id='repo-a']")).toBeVisible({ timeout: 15000 });
+  await expect(page.locator("[data-list-item-id='repo-a']")).toBeVisible({
+    timeout: 15000,
+  });
 }
 
 /**
  * Navigate to app and wait for the publish config panel to appear.
  */
-export async function gotoAppWithPublishConfig(page: Page, options: MockTauriOptions = {}) {
+export async function gotoAppWithPublishConfig(
+  page: Page,
+  options: MockTauriOptions = {}
+) {
   await gotoApp(page, options);
   // The publish config panel should show preset items
-  await expect(page.locator("[data-list-item-id='pubxml:FolderProfile']")).toBeVisible({ timeout: 10000 });
+  await expect(
+    page.locator("[data-list-item-id='pubxml:FolderProfile']")
+  ).toBeVisible({ timeout: 10000 });
 }

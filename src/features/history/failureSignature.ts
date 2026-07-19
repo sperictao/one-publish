@@ -7,19 +7,14 @@ export interface FailureSignatureRecord {
 const SIGNATURE_MAX_LENGTH = 160;
 
 export function extractFailureContext(output: string): string | null {
-  const lines = output
-    .split("\n")
-    .flatMap((line) => {
-      const normalizedLine = line.trim();
-      return normalizedLine ? [normalizedLine] : [];
-    });
+  const lines = output.split("\n").flatMap((line) => {
+    const normalizedLine = line.trim();
+    return normalizedLine ? [normalizedLine] : [];
+  });
 
   const strongKeywordCandidate = lines.find((line) => {
     const normalized = line.toLowerCase();
-    return (
-      normalized.includes("error") ||
-      normalized.includes("panic")
-    );
+    return normalized.includes("error") || normalized.includes("panic");
   });
 
   if (strongKeywordCandidate) {
@@ -28,10 +23,7 @@ export function extractFailureContext(output: string): string | null {
 
   const fallbackKeywordCandidate = lines.find((line) => {
     const normalized = line.toLowerCase();
-    return (
-      normalized.includes("exception") ||
-      normalized.includes("failed")
-    );
+    return normalized.includes("exception") || normalized.includes("failed");
   });
 
   if (fallbackKeywordCandidate) {

@@ -14,7 +14,12 @@ export async function packageArtifact(params: {
   format?: PackageFormat;
   includeRootDir?: boolean;
 }): Promise<PackageResult> {
-  const { inputDir, outputPath, format = "zip", includeRootDir = true } = params;
+  const {
+    inputDir,
+    outputPath,
+    format = "zip",
+    includeRootDir = true,
+  } = params;
 
   return await invoke<PackageResult>("package_artifact", {
     inputDir,

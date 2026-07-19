@@ -50,7 +50,12 @@ describe("PublishLogView", () => {
 
   it("默认跟随态不显示回到底部按钮", () => {
     render(
-      <PublishLogView text="line" getSnapshot={() => "line"} active jumpLabel="回到底部" />
+      <PublishLogView
+        text="line"
+        getSnapshot={() => "line"}
+        active
+        jumpLabel="回到底部"
+      />
     );
     expect(screen.queryByRole("button", { name: "回到底部" })).toBeNull();
   });

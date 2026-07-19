@@ -26,9 +26,9 @@ export function loadFavorites(): FavoriteConfigsByRepo {
 
     if (!parsed || typeof parsed !== "object") return {};
 
-    return Object.entries(parsed as Record<string, unknown>).reduce<
-      FavoriteConfigsByRepo
-    >((acc, [repoId, keys]) => {
+    return Object.entries(
+      parsed as Record<string, unknown>
+    ).reduce<FavoriteConfigsByRepo>((acc, [repoId, keys]) => {
       if (!Array.isArray(keys)) return acc;
       const normalized = keys.filter(
         (item): item is string => typeof item === "string"

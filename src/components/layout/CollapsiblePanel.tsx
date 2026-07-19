@@ -72,7 +72,9 @@ export function PanelToggleButton({
       onClick={onToggle}
       className={cn(
         "flex size-8 items-center justify-center rounded-sm hover:bg-gray-alpha-100 focus-ring transition-colors",
-        collapsed ? "text-muted-foreground hover:text-foreground" : "text-foreground"
+        collapsed
+          ? "text-muted-foreground hover:text-foreground"
+          : "text-foreground"
       )}
       title={tooltip || defaultTooltip}
     >
@@ -112,11 +114,7 @@ function FolderIcon() {
         fill="none"
       />
       {/* Folder tab */}
-      <path
-        d="M2 8H22"
-        stroke="currentColor"
-        strokeWidth="1.5"
-      />
+      <path d="M2 8H22" stroke="currentColor" strokeWidth="1.5" />
     </svg>
   );
 }
@@ -132,7 +130,14 @@ function BranchIcon() {
       xmlns="http://www.w3.org/2000/svg"
     >
       {/* Main vertical line */}
-      <line x1="6" y1="6" x2="6" y2="18" stroke="currentColor" strokeWidth="1.5" />
+      <line
+        x1="6"
+        y1="6"
+        x2="6"
+        y2="18"
+        stroke="currentColor"
+        strokeWidth="1.5"
+      />
       {/* Branch line */}
       <path
         d="M6 12C6 12 6 9 12 9C18 9 18 6 18 6"
@@ -142,11 +147,32 @@ function BranchIcon() {
         fill="none"
       />
       {/* Top node */}
-      <circle cx="6" cy="6" r="2.5" stroke="currentColor" strokeWidth="1.5" fill="none" />
+      <circle
+        cx="6"
+        cy="6"
+        r="2.5"
+        stroke="currentColor"
+        strokeWidth="1.5"
+        fill="none"
+      />
       {/* Bottom node */}
-      <circle cx="6" cy="18" r="2.5" stroke="currentColor" strokeWidth="1.5" fill="none" />
+      <circle
+        cx="6"
+        cy="18"
+        r="2.5"
+        stroke="currentColor"
+        strokeWidth="1.5"
+        fill="none"
+      />
       {/* Branch node */}
-      <circle cx="18" cy="6" r="2.5" stroke="currentColor" strokeWidth="1.5" fill="none" />
+      <circle
+        cx="18"
+        cy="6"
+        r="2.5"
+        stroke="currentColor"
+        strokeWidth="1.5"
+        fill="none"
+      />
     </svg>
   );
 }
@@ -162,11 +188,33 @@ function SidebarIcon() {
       xmlns="http://www.w3.org/2000/svg"
     >
       {/* Sidebar frame */}
-      <rect x="2" y="2" width="12" height="12" rx="2" stroke="currentColor" strokeWidth="1.5" fill="none" />
+      <rect
+        x="2"
+        y="2"
+        width="12"
+        height="12"
+        rx="2"
+        stroke="currentColor"
+        strokeWidth="1.5"
+        fill="none"
+      />
       {/* Sidebar divider */}
-      <line x1="6" y1="2" x2="6" y2="14" stroke="currentColor" strokeWidth="1.5" />
+      <line
+        x1="6"
+        y1="2"
+        x2="6"
+        y2="14"
+        stroke="currentColor"
+        strokeWidth="1.5"
+      />
       {/* Arrow pointing left */}
-      <path d="M11 6L8 8L11 10" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+      <path
+        d="M11 6L8 8L11 10"
+        stroke="currentColor"
+        strokeWidth="1.5"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
     </svg>
   );
 }

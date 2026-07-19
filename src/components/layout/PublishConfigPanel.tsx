@@ -9,10 +9,7 @@ import {
   type PointerEvent as ReactPointerEvent,
 } from "react";
 import { cn } from "@/lib/utils";
-import {
-  reorderItemsByDrop,
-  reorderProfilesByDrop,
-} from "@/lib/listOrdering";
+import { reorderItemsByDrop, reorderProfilesByDrop } from "@/lib/listOrdering";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -44,10 +41,7 @@ import {
   ArrowUpDown,
 } from "lucide-react";
 import { toast } from "sonner";
-import {
-  type ConfigProfile,
-  type PublishConfigStore,
-} from "@/lib/store/types";
+import { type ConfigProfile, type PublishConfigStore } from "@/lib/store/types";
 import {
   ProjectPublishProfileViewerDialog,
   type ProjectProfileViewerState,
@@ -67,14 +61,10 @@ import {
   RowActionsMenu,
   type RowActionsMenuAction,
 } from "@/components/layout/RowActionsMenu";
-import {
-  ListDragHandle,
-} from "@/components/layout/ListReorderControls";
+import { ListDragHandle } from "@/components/layout/ListReorderControls";
 import { topbarIconButtonClass } from "@/components/layout/topbarButtonStyles";
 import { SectionLabel } from "@/components/ui/section-label";
-import {
-  usePointerListReorder,
-} from "@/components/layout/usePointerListReorder";
+import { usePointerListReorder } from "@/components/layout/usePointerListReorder";
 import { useListInteractionState } from "@/components/layout/useListInteractionState";
 import { composeNodeRefs } from "@/components/layout/composeNodeRefs";
 import { useListReorderMotion } from "@/components/layout/useListReorderMotion";
@@ -228,7 +218,10 @@ function ConfigGroup({
         ) : (
           <ChevronRight className="size-3.5" />
         )}
-        <SectionLabel as="span" className="flex-1 text-left hover:text-foreground">
+        <SectionLabel
+          as="span"
+          className="flex-1 text-left hover:text-foreground"
+        >
           {title}
         </SectionLabel>
         {isRefreshing ? (
@@ -271,9 +264,7 @@ function createFavoriteConfigAction({
       <Star
         className={cn(
           "size-3.5",
-          isFavorite
-            ? "fill-success text-success"
-            : "text-muted-foreground"
+          isFavorite ? "fill-success text-success" : "text-muted-foreground"
         )}
       />
     ),
@@ -502,7 +493,8 @@ export const PublishConfigPanel = memo(function PublishConfigPanel({
   const [preferredSelectedRenderAnchor, setPreferredSelectedRenderAnchor] =
     useState<PreferredSelectedRenderAnchor | null>(null);
   const [showReorderControls, setShowReorderControls] = useState(false);
-  const [projectProfileViewerOpen, setProjectProfileViewerOpen] = useState(false);
+  const [projectProfileViewerOpen, setProjectProfileViewerOpen] =
+    useState(false);
   const [projectProfileViewerState, setProjectProfileViewerState] =
     useState<ProjectProfileViewerState>({
       status: "idle",
@@ -617,9 +609,8 @@ export const PublishConfigPanel = memo(function PublishConfigPanel({
       interaction.handleListPointerLeave();
     },
     onEnd: (result) => {
-      settleConfigFromDragEnd(
-        result,
-        (itemId) => createRecentConfigRenderId(itemId)
+      settleConfigFromDragEnd(result, (itemId) =>
+        createRecentConfigRenderId(itemId)
       );
     },
     onCommit: (activeConfigKey, target) => {
@@ -646,9 +637,8 @@ export const PublishConfigPanel = memo(function PublishConfigPanel({
       interaction.handleListPointerLeave();
     },
     onEnd: (result) => {
-      settleConfigFromDragEnd(
-        result,
-        (itemId) => createProjectProfileConfigKey(itemId)
+      settleConfigFromDragEnd(result, (itemId) =>
+        createProjectProfileConfigKey(itemId)
       );
     },
     onCommit: (activeProfileName, target) => {
@@ -675,9 +665,8 @@ export const PublishConfigPanel = memo(function PublishConfigPanel({
       interaction.handleListPointerLeave();
     },
     onEnd: (result) => {
-      settleConfigFromDragEnd(
-        result,
-        (itemId) => createUserProfileConfigKey(itemId)
+      settleConfigFromDragEnd(result, (itemId) =>
+        createUserProfileConfigKey(itemId)
       );
     },
     onCommit: (activeProfileName, target) => {
@@ -785,7 +774,9 @@ export const PublishConfigPanel = memo(function PublishConfigPanel({
     }
 
     if (projectProfileReorder.draggingItemId) {
-      return createProjectProfileConfigKey(projectProfileReorder.draggingItemId);
+      return createProjectProfileConfigKey(
+        projectProfileReorder.draggingItemId
+      );
     }
 
     if (customProfileReorder.draggingItemId) {
@@ -898,12 +889,10 @@ export const PublishConfigPanel = memo(function PublishConfigPanel({
           resolvedProfile.editableConfig
         );
         toast.success(t.copyConfigSuccess || "已复制为自定义配置", {
-          description:
-            (t.copyConfigSuccessDescription ||
-              "已根据项目发布配置生成可编辑的自定义配置：{{name}}").replace(
-              "{{name}}",
-              createdProfileName
-            ),
+          description: (
+            t.copyConfigSuccessDescription ||
+            "已根据项目发布配置生成可编辑的自定义配置：{{name}}"
+          ).replace("{{name}}", createdProfileName),
         });
       } catch (error) {
         const errorMessage =
@@ -944,174 +933,169 @@ export const PublishConfigPanel = memo(function PublishConfigPanel({
     [onSelectProfile, onSelectProjectProfile]
   );
 
-  const configListContent = useMemo(
-    () => {
-      return (
-        <div
-          className="list-scroll-shell geist-scrollbar relative flex-1 overflow-auto px-2 py-2"
-          onPointerEnter={(event) => {
-            if (handleConfigListPointerReentry(event)) {
-              return;
-            }
-            clearSettledConfigRenderId();
-            interaction.handleListPointerEnter();
-          }}
-          onPointerLeave={() => {
-            handleConfigListPointerLeave();
-            interaction.handleListPointerLeave();
-          }}
-        >
-          <div>
-            {showRecentItems && (
-              <div className="space-y-1.5">
-                <SectionLabel className="flex items-center gap-1.5 px-3 py-2">
-                  <Clock className="size-3.5" />
-                  <span>{recentlyUsedLabel}</span>
-                </SectionLabel>
-                {previewRecentItems.map((item) => {
-                  const renderId = createRecentConfigRenderId(item.key);
-                  return (
-                <div
-                  key={`recent-${item.key}`}
-                  ref={composeNodeRefs(
-                    recentReorder.setItemRef(item.key, undefined),
-                    recentMotion.setItemRef(item.key)
-                  )}
-                  data-list-row="true"
-                  data-list-item-id={renderId}
-                  data-list-visual-target={
-                    visualTargetConfigId === renderId
-                      ? "true"
-                      : "false"
-                  }
-                  data-list-menu-open={
-                    interaction.isMenuOpenForItem(renderId)
-                      ? "true"
-                      : "false"
-                  }
-                  className={cn(
-                    "group relative z-10",
-                    recentReorder.draggingItemId === item.key &&
-                      "pointer-events-none z-40"
-                  )}
-                  style={
-                    recentReorder.draggingItemId === item.key
-                      ? recentReorder.dragPreviewStyle
-                      : undefined
-                  }
-                  onMouseEnter={() =>
-                    interaction.handleRowMouseEnter(renderId)
-                  }
-                  onFocusCapture={() =>
-                    interaction.handleRowFocus(renderId)
-                  }
-                  onBlurCapture={(event) => {
-                    const nextFocusTarget = event.relatedTarget;
-                    if (
-                      nextFocusTarget instanceof Node &&
-                      event.currentTarget.contains(nextFocusTarget)
-                    ) {
-                      return;
-                    }
-
-                    interaction.handleRowBlur(renderId);
-                  }}
-                >
-                  <ListDragHandle
-                    visible={recentDragEnabled}
-                    enabled={recentDragEnabled}
-                    label={dragToReorderLabel}
-                    disabledLabel={dragDisabledWhileSearchingLabel}
-                    onPointerDown={(event) => {
-                      recentReorder.startDrag(item.key, event);
-                    }}
-                  />
-                  <button
-                    type="button"
-                    aria-pressed={item.key === selectedConfigId}
-                    className={cn(
-                      configRowClass,
-                      selectedRenderId === renderId && "bg-accent",
-                      recentDragEnabled ? "pl-10" : "pl-3"
+  const configListContent = useMemo(() => {
+    return (
+      <div
+        className="list-scroll-shell geist-scrollbar relative flex-1 overflow-auto px-2 py-2"
+        onPointerEnter={(event) => {
+          if (handleConfigListPointerReentry(event)) {
+            return;
+          }
+          clearSettledConfigRenderId();
+          interaction.handleListPointerEnter();
+        }}
+        onPointerLeave={() => {
+          handleConfigListPointerLeave();
+          interaction.handleListPointerLeave();
+        }}
+      >
+        <div>
+          {showRecentItems && (
+            <div className="space-y-1.5">
+              <SectionLabel className="flex items-center gap-1.5 px-3 py-2">
+                <Clock className="size-3.5" />
+                <span>{recentlyUsedLabel}</span>
+              </SectionLabel>
+              {previewRecentItems.map((item) => {
+                const renderId = createRecentConfigRenderId(item.key);
+                return (
+                  <div
+                    key={`recent-${item.key}`}
+                    ref={composeNodeRefs(
+                      recentReorder.setItemRef(item.key, undefined),
+                      recentMotion.setItemRef(item.key)
                     )}
-                    onClick={() => {
-                      setPreferredSelectedRenderAnchor({
-                        repoId: selectedRepoScopeId,
-                        renderId,
-                      });
-                      handleSelectRecentItem(item);
+                    data-list-row="true"
+                    data-list-item-id={renderId}
+                    data-list-visual-target={
+                      visualTargetConfigId === renderId ? "true" : "false"
+                    }
+                    data-list-menu-open={
+                      interaction.isMenuOpenForItem(renderId) ? "true" : "false"
+                    }
+                    className={cn(
+                      "group relative z-10",
+                      recentReorder.draggingItemId === item.key &&
+                        "pointer-events-none z-40"
+                    )}
+                    style={
+                      recentReorder.draggingItemId === item.key
+                        ? recentReorder.dragPreviewStyle
+                        : undefined
+                    }
+                    onMouseEnter={() =>
+                      interaction.handleRowMouseEnter(renderId)
+                    }
+                    onFocusCapture={() => interaction.handleRowFocus(renderId)}
+                    onBlurCapture={(event) => {
+                      const nextFocusTarget = event.relatedTarget;
+                      if (
+                        nextFocusTarget instanceof Node &&
+                        event.currentTarget.contains(nextFocusTarget)
+                      ) {
+                        return;
+                      }
+
+                      interaction.handleRowBlur(renderId);
                     }}
                   >
-                    <span
+                    <ListDragHandle
+                      visible={recentDragEnabled}
+                      enabled={recentDragEnabled}
+                      label={dragToReorderLabel}
+                      disabledLabel={dragDisabledWhileSearchingLabel}
+                      onPointerDown={(event) => {
+                        recentReorder.startDrag(item.key, event);
+                      }}
+                    />
+                    <button
+                      type="button"
+                      aria-pressed={item.key === selectedConfigId}
                       className={cn(
-                        "flex size-8 flex-shrink-0 items-center justify-center rounded-sm transition-colors duration-150 ease-geist",
-                        selectedRenderId === renderId
-                          ? "bg-interactive/10"
-                          : "bg-muted group-hover:bg-interactive/10"
+                        configRowClass,
+                        selectedRenderId === renderId && "bg-accent",
+                        recentDragEnabled ? "pl-10" : "pl-3"
                       )}
+                      onClick={() => {
+                        setPreferredSelectedRenderAnchor({
+                          repoId: selectedRepoScopeId,
+                          renderId,
+                        });
+                        handleSelectRecentItem(item);
+                      }}
                     >
-                      <FileText
-                        className={cn(
-                          "size-4 transition-colors duration-150 ease-geist",
-                          selectedRenderId === renderId
-                            ? "text-interactive"
-                            : "text-muted-foreground group-hover:text-interactive"
-                        )}
-                      />
-                    </span>
-                    <div className="min-w-0 flex flex-1 items-center gap-2 overflow-hidden">
                       <span
                         className={cn(
-                          "truncate text-label-13 font-semibold transition-colors duration-150 ease-geist",
+                          "flex size-8 flex-shrink-0 items-center justify-center rounded-sm transition-colors duration-150 ease-geist",
                           selectedRenderId === renderId
-                            ? "text-foreground"
-                            : "text-foreground/78"
+                            ? "bg-interactive/10"
+                            : "bg-muted group-hover:bg-interactive/10"
                         )}
                       >
-                        {item.name}
+                        <FileText
+                          className={cn(
+                            "size-4 transition-colors duration-150 ease-geist",
+                            selectedRenderId === renderId
+                              ? "text-interactive"
+                              : "text-muted-foreground group-hover:text-interactive"
+                          )}
+                        />
                       </span>
-                      {item.description ? (
-                        <>
-                          <span className="flex-shrink-0 text-muted-foreground/30">·</span>
-                          <span className="truncate text-label-12 text-muted-foreground">
-                            {item.description}
-                          </span>
-                        </>
-                      ) : null}
+                      <div className="min-w-0 flex flex-1 items-center gap-2 overflow-hidden">
+                        <span
+                          className={cn(
+                            "truncate text-label-13 font-semibold transition-colors duration-150 ease-geist",
+                            selectedRenderId === renderId
+                              ? "text-foreground"
+                              : "text-foreground/78"
+                          )}
+                        >
+                          {item.name}
+                        </span>
+                        {item.description ? (
+                          <>
+                            <span className="flex-shrink-0 text-muted-foreground/30">
+                              ·
+                            </span>
+                            <span className="truncate text-label-12 text-muted-foreground">
+                              {item.description}
+                            </span>
+                          </>
+                        ) : null}
+                      </div>
+                    </button>
+                    <div className="absolute inset-y-0 right-3 flex items-center">
+                      <RowActionsMenu
+                        open={interaction.isMenuOpenForItem(renderId)}
+                        moreActionsLabel={moreActionsLabel}
+                        itemLabel={item.name}
+                        actions={[
+                          createFavoriteConfigAction({
+                            isFavorite: favoriteSet.has(item.key),
+                            favoriteLabel: favoriteConfigLabel,
+                            unfavoriteLabel: unfavoriteConfigLabel,
+                            onSelect: () => onToggleFavoriteConfig(item.key),
+                          }),
+                          {
+                            key: "removeRecent",
+                            label: removeRecentLabel,
+                            icon: <X className="size-3.5" />,
+                            onSelect: () => onRemoveRecentConfig(item.key),
+                            destructive: true,
+                            separatorBefore: true,
+                          },
+                        ]}
+                        onOpenChange={(open) => {
+                          interaction.handleMenuOpenChange(renderId, open);
+                        }}
+                        stopPropagation
+                      />
                     </div>
-                  </button>
-                  <div className="absolute inset-y-0 right-3 flex items-center">
-                    <RowActionsMenu
-                      open={interaction.isMenuOpenForItem(renderId)}
-                      moreActionsLabel={moreActionsLabel}
-                      itemLabel={item.name}
-                      actions={[
-                        createFavoriteConfigAction({
-                          isFavorite: favoriteSet.has(item.key),
-                          favoriteLabel: favoriteConfigLabel,
-                          unfavoriteLabel: unfavoriteConfigLabel,
-                          onSelect: () => onToggleFavoriteConfig(item.key),
-                        }),
-                        {
-                          key: "removeRecent",
-                          label: removeRecentLabel,
-                          icon: <X className="size-3.5" />,
-                          onSelect: () => onRemoveRecentConfig(item.key),
-                          destructive: true,
-                          separatorBefore: true,
-                        },
-                      ]}
-                      onOpenChange={(open) => {
-                        interaction.handleMenuOpenChange(renderId, open);
-                      }}
-                      stopPropagation
-                    />
                   </div>
-                </div>
-                  );
-                })}
-              </div>
-            )}
+                );
+              })}
+            </div>
+          )}
 
           <ConfigGroup
             title={profileGroupLabel}
@@ -1161,7 +1145,9 @@ export const PublishConfigPanel = memo(function PublishConfigPanel({
                       ? projectProfileReorder.dragPreviewStyle
                       : undefined
                   }
-                  onMouseEnter={() => interaction.handleRowMouseEnter(configKey)}
+                  onMouseEnter={() =>
+                    interaction.handleRowMouseEnter(configKey)
+                  }
                   onFocusCapture={() => interaction.handleRowFocus(configKey)}
                   onBlurCapture={(event) => {
                     const nextFocusTarget = event.relatedTarget;
@@ -1222,7 +1208,9 @@ export const PublishConfigPanel = memo(function PublishConfigPanel({
                       <span
                         className={cn(
                           "truncate text-label-13 font-semibold transition-colors duration-150 ease-geist",
-                          isPubxmlSelected ? "text-foreground" : "text-foreground/78"
+                          isPubxmlSelected
+                            ? "text-foreground"
+                            : "text-foreground/78"
                         )}
                       >
                         {name}
@@ -1244,13 +1232,18 @@ export const PublishConfigPanel = memo(function PublishConfigPanel({
                         {
                           key: "copy",
                           label: copyConfigLabel,
-                          icon: <Copy className="size-3.5 text-muted-foreground" />,
-                          onSelect: () => handleCopyProjectProfileToCustom(name),
+                          icon: (
+                            <Copy className="size-3.5 text-muted-foreground" />
+                          ),
+                          onSelect: () =>
+                            handleCopyProjectProfileToCustom(name),
                         },
                         {
                           key: "view",
                           label: viewConfigLabel,
-                          icon: <Eye className="size-3.5 text-muted-foreground" />,
+                          icon: (
+                            <Eye className="size-3.5 text-muted-foreground" />
+                          ),
                           onSelect: () => handleViewProjectProfile(name),
                         },
                       ]}
@@ -1276,58 +1269,59 @@ export const PublishConfigPanel = memo(function PublishConfigPanel({
               {group.items.map((profile) => {
                 const configKey = createUserProfileConfigKey(profile.name);
                 return (
-                <ProfileItem
-                  key={profile.name}
-                  profile={profile}
-                  configKey={configKey}
-                  configId={configKey}
-                  isSelected={selectedRenderId === configKey}
-                  isVisualTarget={visualTargetConfigId === configKey}
-                  isFavorite={favoriteSet.has(configKey)}
-                  isMenuOpen={interaction.isMenuOpenForItem(configKey)}
-                  onClick={() => {
-                    setPreferredSelectedRenderAnchor({
-                      repoId: selectedRepoScopeId,
-                      renderId: configKey,
-                    });
-                    onSelectProfile(profile);
-                  }}
-                  onToggleFavorite={onToggleFavoriteConfig}
-                  onEdit={() => onEditProfile(profile)}
-                  canEdit={!profile.isSystemDefault && profile.providerId === "dotnet"}
-                  editTitle={editConfigLabel}
-                  deleteTitle={deleteConfigLabel}
-                  favoriteLabel={favoriteConfigLabel}
-                  unfavoriteLabel={unfavoriteConfigLabel}
-                  moreActionsLabel={moreActionsLabel}
-                  onDelete={() => onDeleteProfile(profile.name)}
-                  onMenuOpenChange={(open) => {
-                    interaction.handleMenuOpenChange(configKey, open);
-                  }}
-                  rowRef={composeNodeRefs(
-                    customProfileReorder.setItemRef(profile.name, {
-                      groupKey: group.groupKey,
-                    }),
-                    customMotion.setItemRef(profile.name)
-                  )}
-                  onItemMouseEnter={() =>
-                    interaction.handleRowMouseEnter(configKey)
-                  }
-                  onItemFocus={() =>
-                    interaction.handleRowFocus(configKey)
-                  }
-                  onItemBlur={() =>
-                    interaction.handleRowBlur(configKey)
-                  }
-                  groupKey={group.groupKey}
-                  dragEnabled={customProfileDragEnabled}
-                  dragHandleVisible={customProfileDragEnabled}
-                  dragHandleLabel={dragToReorderLabel}
-                  dragDisabledLabel={dragDisabledWhileSearchingLabel}
-                  isDragging={customProfileReorder.draggingItemId === profile.name}
-                  dragPreviewStyle={customProfileReorder.dragPreviewStyle}
-                  onHandlePointerDown={customProfileReorder.startDrag}
-                />
+                  <ProfileItem
+                    key={profile.name}
+                    profile={profile}
+                    configKey={configKey}
+                    configId={configKey}
+                    isSelected={selectedRenderId === configKey}
+                    isVisualTarget={visualTargetConfigId === configKey}
+                    isFavorite={favoriteSet.has(configKey)}
+                    isMenuOpen={interaction.isMenuOpenForItem(configKey)}
+                    onClick={() => {
+                      setPreferredSelectedRenderAnchor({
+                        repoId: selectedRepoScopeId,
+                        renderId: configKey,
+                      });
+                      onSelectProfile(profile);
+                    }}
+                    onToggleFavorite={onToggleFavoriteConfig}
+                    onEdit={() => onEditProfile(profile)}
+                    canEdit={
+                      !profile.isSystemDefault &&
+                      profile.providerId === "dotnet"
+                    }
+                    editTitle={editConfigLabel}
+                    deleteTitle={deleteConfigLabel}
+                    favoriteLabel={favoriteConfigLabel}
+                    unfavoriteLabel={unfavoriteConfigLabel}
+                    moreActionsLabel={moreActionsLabel}
+                    onDelete={() => onDeleteProfile(profile.name)}
+                    onMenuOpenChange={(open) => {
+                      interaction.handleMenuOpenChange(configKey, open);
+                    }}
+                    rowRef={composeNodeRefs(
+                      customProfileReorder.setItemRef(profile.name, {
+                        groupKey: group.groupKey,
+                      }),
+                      customMotion.setItemRef(profile.name)
+                    )}
+                    onItemMouseEnter={() =>
+                      interaction.handleRowMouseEnter(configKey)
+                    }
+                    onItemFocus={() => interaction.handleRowFocus(configKey)}
+                    onItemBlur={() => interaction.handleRowBlur(configKey)}
+                    groupKey={group.groupKey}
+                    dragEnabled={customProfileDragEnabled}
+                    dragHandleVisible={customProfileDragEnabled}
+                    dragHandleLabel={dragToReorderLabel}
+                    dragDisabledLabel={dragDisabledWhileSearchingLabel}
+                    isDragging={
+                      customProfileReorder.draggingItemId === profile.name
+                    }
+                    dragPreviewStyle={customProfileReorder.dragPreviewStyle}
+                    onHandlePointerDown={customProfileReorder.startDrag}
+                  />
                 );
               })}
             </ConfigGroup>
@@ -1341,80 +1335,82 @@ export const PublishConfigPanel = memo(function PublishConfigPanel({
             </div>
           ) : null}
           {shouldShowEmptyState && (
-            <EmptyState icon={FileText} title={noConfigsLabel} className="py-10" />
+            <EmptyState
+              icon={FileText}
+              title={noConfigsLabel}
+              className="py-10"
+            />
           )}
-          </div>
         </div>
-      );
-    },
-    [
-      deleteConfigLabel,
-      favoriteSet,
-      favoriteConfigLabel,
-      handleConfigListPointerLeave,
-      handleConfigListPointerReentry,
-      handleSelectRecentItem,
-      customProfileDragEnabled,
-      customProfilesRefreshingLabel,
-      customMotion,
-      onDeleteProfile,
-      onEditProfile,
-      onRemoveRecentConfig,
-      onSelectProfile,
-      onSelectProjectProfile,
-      onToggleFavoriteConfig,
-      isProjectProfilesRefreshing,
-      projectProfileDragEnabled,
-      projectProfilesRefreshingLabel,
-      projectMotion,
-      projectProfileReorder.draggingItemId,
-      projectProfileReorder.dragPreviewStyle,
-      projectProfileReorder.setItemRef,
-      projectProfileReorder.startDrag,
-      previewRecentItems,
-      previewVisibleGroupedFilteredProfiles,
-      previewVisibleProjectProfiles,
-      recentDragEnabled,
-      recentMotion,
-      recentReorder.draggingItemId,
-      recentReorder.dragPreviewStyle,
-      recentReorder.setItemRef,
-      recentReorder.startDrag,
-      removeRecentLabel,
-      selectedConfigId,
-      selectedRepoScopeId,
-      selectedRenderId,
-      showRecentItems,
-      shouldShowCustomProfilesLoadingState,
-      shouldShowEmptyState,
-      shouldShowProjectProfilesLoadingState,
-      moreActionsLabel,
-      unfavoriteConfigLabel,
-      handleCopyProjectProfileToCustom,
-      handleViewProjectProfile,
-      interaction.handleListPointerEnter,
-      interaction.handleListPointerLeave,
-      interaction.handleMenuOpenChange,
-      interaction.handleRowBlur,
-      interaction.handleRowFocus,
-      interaction.handleRowMouseEnter,
-      interaction.isMenuOpenForItem,
-      customProfileReorder.draggingItemId,
-      customProfileReorder.dragPreviewStyle,
-      customProfileReorder.setItemRef,
-      customProfileReorder.startDrag,
-      copyConfigLabel,
-      clearSettledConfigRenderId,
-      dragDisabledWhileSearchingLabel,
-      dragToReorderLabel,
-      editConfigLabel,
-      noConfigsLabel,
-      profileGroupLabel,
-      recentlyUsedLabel,
-      visualTargetConfigId,
-      viewConfigLabel,
-    ]
-  );
+      </div>
+    );
+  }, [
+    deleteConfigLabel,
+    favoriteSet,
+    favoriteConfigLabel,
+    handleConfigListPointerLeave,
+    handleConfigListPointerReentry,
+    handleSelectRecentItem,
+    customProfileDragEnabled,
+    customProfilesRefreshingLabel,
+    customMotion,
+    onDeleteProfile,
+    onEditProfile,
+    onRemoveRecentConfig,
+    onSelectProfile,
+    onSelectProjectProfile,
+    onToggleFavoriteConfig,
+    isProjectProfilesRefreshing,
+    projectProfileDragEnabled,
+    projectProfilesRefreshingLabel,
+    projectMotion,
+    projectProfileReorder.draggingItemId,
+    projectProfileReorder.dragPreviewStyle,
+    projectProfileReorder.setItemRef,
+    projectProfileReorder.startDrag,
+    previewRecentItems,
+    previewVisibleGroupedFilteredProfiles,
+    previewVisibleProjectProfiles,
+    recentDragEnabled,
+    recentMotion,
+    recentReorder.draggingItemId,
+    recentReorder.dragPreviewStyle,
+    recentReorder.setItemRef,
+    recentReorder.startDrag,
+    removeRecentLabel,
+    selectedConfigId,
+    selectedRepoScopeId,
+    selectedRenderId,
+    showRecentItems,
+    shouldShowCustomProfilesLoadingState,
+    shouldShowEmptyState,
+    shouldShowProjectProfilesLoadingState,
+    moreActionsLabel,
+    unfavoriteConfigLabel,
+    handleCopyProjectProfileToCustom,
+    handleViewProjectProfile,
+    interaction.handleListPointerEnter,
+    interaction.handleListPointerLeave,
+    interaction.handleMenuOpenChange,
+    interaction.handleRowBlur,
+    interaction.handleRowFocus,
+    interaction.handleRowMouseEnter,
+    interaction.isMenuOpenForItem,
+    customProfileReorder.draggingItemId,
+    customProfileReorder.dragPreviewStyle,
+    customProfileReorder.setItemRef,
+    customProfileReorder.startDrag,
+    copyConfigLabel,
+    clearSettledConfigRenderId,
+    dragDisabledWhileSearchingLabel,
+    dragToReorderLabel,
+    editConfigLabel,
+    noConfigsLabel,
+    profileGroupLabel,
+    recentlyUsedLabel,
+    visualTargetConfigId,
+    viewConfigLabel,
+  ]);
 
   return (
     <div className="flex h-full flex-col">
@@ -1427,7 +1423,7 @@ export const PublishConfigPanel = memo(function PublishConfigPanel({
         )}
       >
         <div className="flex items-center gap-0.5" data-tauri-no-drag>
-      {showExpandButton && onExpandRepo && (
+          {showExpandButton && onExpandRepo && (
             <Button
               variant="ghost"
               size="icon"
@@ -1464,7 +1460,10 @@ export const PublishConfigPanel = memo(function PublishConfigPanel({
 
       <div className="relative flex min-h-0 flex-1 flex-col">
         <div className="flex items-center justify-between px-3 py-2">
-          <DropdownMenu open={groupFilterOpen} onOpenChange={setGroupFilterOpen}>
+          <DropdownMenu
+            open={groupFilterOpen}
+            onOpenChange={setGroupFilterOpen}
+          >
             <DropdownMenuTrigger asChild>
               <button
                 type="button"
@@ -1486,7 +1485,11 @@ export const PublishConfigPanel = memo(function PublishConfigPanel({
                 />
               </button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="start" sideOffset={8} className="min-w-[13rem]">
+            <DropdownMenuContent
+              align="start"
+              sideOffset={8}
+              className="min-w-[13rem]"
+            >
               <DropdownMenuItem
                 onSelect={() => setGroupFilterValue(ALL_GROUP_FILTER)}
                 className={cn(

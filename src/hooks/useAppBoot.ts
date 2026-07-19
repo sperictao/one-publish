@@ -2,7 +2,10 @@ import { useMemo } from "react";
 import { useAppState } from "@/hooks/useAppState";
 import { useShellBoot, type UseShellBootReturn } from "@/hooks/useShellBoot";
 import { useRepoBoot, type UseRepoBootReturn } from "@/hooks/useRepoBoot";
-import { usePublishBoot, type UsePublishBootReturn } from "@/hooks/usePublishBoot";
+import {
+  usePublishBoot,
+  type UsePublishBootReturn,
+} from "@/hooks/usePublishBoot";
 import { useProviderRuntime } from "@/features/provider/useProviderRuntime";
 import { useProviderParametersState } from "@/features/provider/useProviderParametersState";
 import { usePublishHistoryState } from "@/features/history/usePublishHistoryState";
@@ -47,10 +50,7 @@ export function useAppBoot() {
     useProviderParametersState({ activeProviderId });
 
   // Publish history state
-  const {
-    executionHistory,
-    savePublishRecord,
-  } = usePublishHistoryState({
+  const { executionHistory, savePublishRecord } = usePublishHistoryState({
     executionHistoryLimit: appState.executionHistoryLimit,
     isStateLoading: appState.isLoading,
   });
@@ -60,7 +60,9 @@ export function useAppBoot() {
   const isCancellingPublish = usePublishStore((s) => s.isCancellingPublish);
   const publishResult = usePublishStore((s) => s.publishResult);
   const releaseChecklistOpen = usePublishStore((s) => s.releaseChecklistOpen);
-  const setReleaseChecklistOpen = usePublishStore((s) => s.setReleaseChecklistOpen);
+  const setReleaseChecklistOpen = usePublishStore(
+    (s) => s.setReleaseChecklistOpen
+  );
   const artifactActionState = usePublishStore((s) => s.artifactActionState);
 
   // ============================================================

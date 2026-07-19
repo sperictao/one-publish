@@ -9,11 +9,14 @@ import type {
 export function usePublishUiState() {
   const [isPublishing, setIsPublishing] = useState(false);
   const [isCancellingPublish, setIsCancellingPublish] = useState(false);
-  const [publishResult, setPublishResult] = useState<PublishResult | null>(null);
+  const [publishResult, setPublishResult] = useState<PublishResult | null>(
+    null
+  );
   const [lastPublishSpec, setLastPublishSpec] =
     useState<ProviderPublishSpec | null>(null);
-  const [currentPublishRecordId, setCurrentPublishRecordId] =
-    useState<string | null>(null);
+  const [currentPublishRecordId, setCurrentPublishRecordId] = useState<
+    string | null
+  >(null);
   const [releaseChecklistOpen, setReleaseChecklistOpen] = useState(false);
   const [artifactActionState, setArtifactActionState] =
     useState<ArtifactActionState>({

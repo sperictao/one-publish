@@ -2,12 +2,7 @@ import { useCallback, memo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Collapse } from "@/components/ui/collapse";
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   AlertTriangle,
   ArrowUpRight,
@@ -22,7 +17,10 @@ import {
   XCircle,
 } from "lucide-react";
 import type { PublishResult } from "@/features/publish/publishRuntime";
-import { useElapsedTimer, formatElapsed } from "@/features/publish/useElapsedTimer";
+import {
+  useElapsedTimer,
+  formatElapsed,
+} from "@/features/publish/useElapsedTimer";
 import { PublishLogView } from "@/components/publish/PublishLogView";
 import { openOutputDirectory } from "@/lib/store/api";
 import { SectionLabel } from "@/components/ui/section-label";
@@ -52,11 +50,7 @@ export interface PublishRunCardProps {
 }
 
 type PublishVisualState =
-  | "idle"
-  | "running"
-  | "success"
-  | "cancelled"
-  | "failed";
+  "idle" | "running" | "success" | "cancelled" | "failed";
 
 export const PublishRunCard = memo(function PublishRunCard({
   outputLog: currentOutputLog,
@@ -142,8 +136,7 @@ export const PublishRunCard = memo(function PublishRunCard({
             "发布命令正在执行，日志会持续追加到下方输出区域。",
           badgeClassName:
             "border-interactive/20 bg-interactive/10 text-interactive",
-          panelClassName:
-            "border-interactive/20 bg-card",
+          panelClassName: "border-interactive/20 bg-card",
           iconWrapClassName:
             "bg-interactive/10 text-interactive ring-1 ring-interactive/15",
           iconClassName: "animate-spin",
@@ -155,10 +148,8 @@ export const PublishRunCard = memo(function PublishRunCard({
             description:
               appT.publishStatusSuccessDetail ||
               "发布已完成，可直接打开输出目录查看产物。",
-            badgeClassName:
-              "status-success",
-            panelClassName:
-              "border-success/20 bg-card",
+            badgeClassName: "status-success",
+            panelClassName: "border-success/20 bg-card",
             iconWrapClassName:
               "bg-success/10 text-success ring-1 ring-success/15",
             iconClassName: "",
@@ -170,10 +161,8 @@ export const PublishRunCard = memo(function PublishRunCard({
               description:
                 appT.publishStatusCancelledDetail ||
                 "当前执行已停止，可调整参数后重新发起发布。",
-              badgeClassName:
-                "status-cancelled",
-              panelClassName:
-                "border-warning/20 bg-card",
+              badgeClassName: "status-cancelled",
+              panelClassName: "border-warning/20 bg-card",
               iconWrapClassName:
                 "bg-warning/10 text-warning ring-1 ring-warning/15",
               iconClassName: "",
@@ -185,10 +174,8 @@ export const PublishRunCard = memo(function PublishRunCard({
                 description:
                   appT.publishStatusFailedDetail ||
                   "发布命令已退出，结合下方日志定位失败原因。",
-                badgeClassName:
-                  "status-failed",
-                panelClassName:
-                  "border-destructive/20 bg-card",
+                badgeClassName: "status-failed",
+                panelClassName: "border-destructive/20 bg-card",
                 iconWrapClassName:
                   "bg-destructive/10 text-destructive ring-1 ring-destructive/15",
                 iconClassName: "",
@@ -199,10 +186,8 @@ export const PublishRunCard = memo(function PublishRunCard({
                 description:
                   appT.publishStatusIdleDetail ||
                   "命令与参数准备完成，可以开始本次发布。",
-                badgeClassName:
-                  "border-border bg-muted text-foreground",
-                panelClassName:
-                  "border-border bg-card",
+                badgeClassName: "border-border bg-muted text-foreground",
+                panelClassName: "border-border bg-card",
                 iconWrapClassName:
                   "bg-muted text-muted-foreground ring-1 ring-border",
                 iconClassName: "",
@@ -252,7 +237,10 @@ export const PublishRunCard = memo(function PublishRunCard({
       className="relative flex h-full min-h-[24rem] w-full min-w-0 max-w-full flex-col overflow-hidden"
     >
       <CardHeader className="pb-3">
-        <CardTitle headingLevel="h2" className="flex items-center gap-2 text-heading-20">
+        <CardTitle
+          headingLevel="h2"
+          className="flex items-center gap-2 text-heading-20"
+        >
           <Terminal className="size-5" />
           {appT.outputLogTitle || "执行发布"}
         </CardTitle>
@@ -380,7 +368,10 @@ export const PublishRunCard = memo(function PublishRunCard({
               >
                 <span
                   key={publishVisualState}
-                  className={cn("inline-block animate-fade-in", statusMeta.iconClassName)}
+                  className={cn(
+                    "inline-block animate-fade-in",
+                    statusMeta.iconClassName
+                  )}
                 >
                   <StatusIcon className="size-5" />
                 </span>
@@ -461,7 +452,8 @@ export const PublishRunCard = memo(function PublishRunCard({
               >
                 <AlertTriangle className="size-4 flex-shrink-0 text-warning" />
                 <span className="text-label-12 font-semibold text-warning">
-                  {publishWarnings.length} {appT.publishWarningsLabel || "个警告"}
+                  {publishWarnings.length}{" "}
+                  {appT.publishWarningsLabel || "个警告"}
                 </span>
                 <ChevronDown
                   className={cn(
@@ -498,7 +490,10 @@ export const PublishRunCard = memo(function PublishRunCard({
               <Terminal className="size-3.5" />
               <span>{appT.publishLogTitle || "发布日志"}</span>
               <span className="text-muted-foreground">
-                · {logLineCount > 0 ? `${logLineCount} 行` : (appT.publishLogEmpty || "暂无日志")}
+                ·{" "}
+                {logLineCount > 0
+                  ? `${logLineCount} 行`
+                  : appT.publishLogEmpty || "暂无日志"}
               </span>
               <ChevronDown
                 className={cn(
