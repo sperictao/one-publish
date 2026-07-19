@@ -117,7 +117,7 @@ interface UsePublishBootParams {
 
   // Lifted publish history state
   executionHistory: ExecutionRecord[];
-  savePublishRecord: (record: ExecutionRecord) => void;
+  savePublishRecord: (record: ExecutionRecord) => Promise<void>;
 
   // Lifted publish store state
   isPublishing: boolean;

@@ -105,6 +105,14 @@ export function ExecutionHistoryCard({
             ? ` · ${historyT.currentFilter || "当前筛选"} ${filteredExecutionHistory.length}/${scopedExecutionHistory.length}`
             : ""}
         </CardDescription>
+        {/* 009 落地前的历史记录可能含明文密钥，提示用户清理 */}
+        <div className="mt-1 flex items-start gap-1.5 rounded-sm border border-warning/20 bg-warning/5 px-2.5 py-1.5 text-label-12 text-warning">
+          <AlertTriangle className="mt-0.5 size-3.5 flex-shrink-0" />
+          <span className="break-words">
+            {historyT.legacyPlaintextHint ||
+              "较早的记录在密钥脱敏功能上线前保存，命令行可能含明文密钥。如担心泄露，可在设置中将保留上限调到 5 触发裁剪，或重新执行覆盖历史。"}
+          </span>
+        </div>
       </CardHeader>
       <CardContent className="space-y-4">
         <div className="grid gap-2 md:grid-cols-4">

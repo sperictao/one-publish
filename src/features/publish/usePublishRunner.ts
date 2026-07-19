@@ -31,7 +31,7 @@ interface UsePublishRunnerParams {
     providerIds?: string[]
   ) => void;
   setEnvironmentLastCheck: (snapshot: EnvironmentCheckSnapshot | null) => void;
-  savePublishRecord: (record: ExecutionRecord) => void;
+  savePublishRecord: (record: ExecutionRecord) => Promise<void>;
 }
 
 export function usePublishRunner({

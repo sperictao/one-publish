@@ -28,6 +28,7 @@
 use crate::environment::types::{
     compare_versions, command_path, parse_semver, EnvironmentIssue, ProviderStatus,
 };
+use std::time::Duration;
 
 /// Which command output stream carries the version string.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -58,14 +59,34 @@ pub type VersionParser = fn(&[u8]) -> Option<String>;
 ///
 /// See the module docs for the unified failure semantics (non-zero exit,
 /// parse failure, and spawn failure all yield `installed: false` with
-/// `path: None`).
+/// `path: None`). A hung toolchain (e.g. a prompt for input, a stalled
+/// shell alias) is bounded by a 10s timeout, after which the probe reports
+/// `installed: false` rather than blocking the environment check forever.
+/// The timeout uses the async `tokio::process::Command::output`, so the
+/// elapsed future is genuinely cancellable instead of stranding a blocked
+/// executor thread.
 pub async fn check_tool(probe: &ToolProbe, parse_version: VersionParser) -> ProviderStatus {
     let path = command_path(probe.command);
     let program = path.clone().unwrap_or_else(|| probe.command.to_string());
 
-    let output = crate::process_utils::new_std_command(&program)
+    let command = crate::process_utils::new_tokio_command(&program)
         .arg(probe.version_arg)
         .output();
+
+    // Bound the probe so a hung toolchain cannot wedge the environment
+    // check. `output()` here is the async tokio variant, so the timeout
+    // resolves even when the child never exits.
+    let output = match tokio::time::timeout(Duration::from_secs(10), command).await {
+        Ok(inner) => inner,
+        Err(_elapsed) => {
+            return ProviderStatus {
+                provider_id: probe.provider_id.to_string(),
+                installed: false,
+                version: None,
+                path: None,
+            };
+        }
+    };
 
     let Some(version) = parse_output(output, probe.version_source, parse_version) else {
         return ProviderStatus {
@@ -339,5 +360,54 @@ mod tests {
         };
         let issues = detect_tool_issues(&p, &status, make_missing, make_outdated);
         assert!(issues.is_empty());
+    }
+
+    /// A hung toolchain must be bounded by the 10s probe timeout rather
+    /// than blocking the environment check forever. We point the probe at
+    /// `sleep 30` (exits 0 after 30s, longer than the 10s budget) with a
+    /// parser that would happily report "installed" if output ever landed.
+    /// The only way the result is `installed: false` is the timeout firing.
+    ///
+    /// Skipped on platforms without `sleep` in PATH (none of our CI
+    /// targets), and asserts the wall clock stayed well under the 30s the
+    /// child would otherwise run.
+    #[tokio::test]
+    async fn check_tool_times_out_on_hung_command() {
+        // `sleep` exists on unix; on Windows `timeout /t` writes to a
+        // console that CI shells may not have. Skip there rather than carry
+        // a platform-specific hang.
+        if cfg!(not(unix)) {
+            return;
+        }
+
+        let probe = ToolProbe {
+            provider_id: "hang-sim",
+            command: "sleep",
+            version_arg: "30",
+            version_source: VersionSource::Stdout,
+            min_version: "0.0.0",
+        };
+        // A parser that always succeeds - so `installed: false` can only
+        // come from the timeout path, not a parse failure.
+        fn always_installed(_output: &[u8]) -> Option<String> {
+            Some("0.0.0".to_string())
+        }
+
+        let start = std::time::Instant::now();
+        let status = check_tool(&probe, always_installed).await;
+        let elapsed = start.elapsed();
+
+        assert!(
+            !status.installed,
+            "hung command must report not installed, got {status:?}"
+        );
+        assert!(status.version.is_none());
+        assert!(status.path.is_none());
+        // The timeout is 10s; the child would run 30s. We must return near
+        // the 10s mark, not the 30s one. Allow slack for scheduling.
+        assert!(
+            elapsed.as_secs() < 30,
+            "probe took {elapsed:?}, timeout did not fire"
+        );
     }
 }

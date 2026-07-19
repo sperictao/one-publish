@@ -20,7 +20,7 @@ export interface UsePublishNotifyParams {
   appT: TranslationMap;
   publishT: TranslationMap;
   /** 外部提供的历史记录保存回调。 */
-  savePublishRecord: (record: ExecutionRecord) => void;
+  savePublishRecord: (record: ExecutionRecord) => Promise<void>;
 }
 
 export interface UsePublishNotifyResult {
@@ -149,7 +149,7 @@ export function usePublishNotify({
           event.feedbackMode
         );
         // History
-        savePublishRecord(event.record);
+        await savePublishRecord(event.record);
       }
     );
 
@@ -168,7 +168,7 @@ export function usePublishNotify({
         await restoreMainWindowIfNeeded(
           event.restoreWindowOnFailure || !notified
         );
-        savePublishRecord(event.record);
+        await savePublishRecord(event.record);
       }
     );
 
@@ -187,7 +187,7 @@ export function usePublishNotify({
         await restoreMainWindowIfNeeded(
           event.restoreWindowOnFailure || !notified
         );
-        savePublishRecord(event.record);
+        await savePublishRecord(event.record);
       }
     );
 
