@@ -8,7 +8,7 @@
 
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Tauri 2](https://img.shields.io/badge/Tauri-2.x-FFC131?logo=tauri&logoColor=white)](https://tauri.app)
-[![React 18](https://img.shields.io/badge/React-18-61DAFB?logo=react&logoColor=white)](https://react.dev)
+[![React 19](https://img.shields.io/badge/React-19-61DAFB?logo=react&logoColor=white)](https://react.dev)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.x-3178C6?logo=typescript&logoColor=white)](https://www.typescriptlang.org)
 [![Rust](https://img.shields.io/badge/Rust-1.77+-DEA584?logo=rust&logoColor=white)](https://www.rust-lang.org)
 
@@ -185,7 +185,7 @@ one-publish/
 
 | Capa                           | Tecnología                                                                       |
 | ------------------------------ | -------------------------------------------------------------------------------- |
-| **Framework Frontend**         | React 18 + TypeScript                                                            |
+| **Framework Frontend**         | React 19 + TypeScript                                                            |
 | **Herramienta de Compilación** | Vite 7                                                                           |
 | **Estilos**                    | Tailwind CSS 3 + shadcn/ui (Radix UI)                                            |
 | **Sistema de Diseño**          | Vercel Geist (tokens de diseño, colores P3 de gama amplia, temas claro y oscuro) |

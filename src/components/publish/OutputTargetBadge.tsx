@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type JSX } from "react";
 import { CloudUpload, FolderClosed, HardDrive, Server } from "lucide-react";
 
 import { AppDialogBadge } from "@/components/ui/app-dialog-badge";

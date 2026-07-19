@@ -8,7 +8,7 @@
 
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Tauri 2](https://img.shields.io/badge/Tauri-2.x-FFC131?logo=tauri&logoColor=white)](https://tauri.app)
-[![React 18](https://img.shields.io/badge/React-18-61DAFB?logo=react&logoColor=white)](https://react.dev)
+[![React 19](https://img.shields.io/badge/React-19-61DAFB?logo=react&logoColor=white)](https://react.dev)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.x-3178C6?logo=typescript&logoColor=white)](https://www.typescriptlang.org)
 [![Rust](https://img.shields.io/badge/Rust-1.77+-DEA584?logo=rust&logoColor=white)](https://www.rust-lang.org)
 
@@ -185,7 +185,7 @@ one-publish/
 
 | 层级         | 技术                                                |
 | ------------ | --------------------------------------------------- |
-| **前端框架** | React 18 + TypeScript                               |
+| **前端框架** | React 19 + TypeScript                               |
 | **构建工具** | Vite 7                                              |
 | **样式**     | Tailwind CSS 3 + shadcn/ui（Radix UI）              |
 | **设计系统** | Vercel Geist（设计令牌、P3 广色域色彩、深浅双主题） |
