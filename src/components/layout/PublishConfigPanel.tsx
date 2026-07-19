@@ -36,7 +36,6 @@ import {
   Trash2,
   Pencil,
   Clock,
-  Star,
   X,
   ArrowUpDown,
 } from "lucide-react";
@@ -77,77 +76,17 @@ import {
   usePublishConfigPreviewModel,
 } from "@/components/layout/usePublishConfigListModel";
 import type { ParameterSchema } from "@/types/parameters";
+import { CollapseIcon } from "@/components/layout/publishConfigPanel/CollapseIcon";
+import {
+  hasSameProfileOrder,
+  hasSameStringOrder,
+} from "@/components/layout/publishConfigPanel/listOrderComparisons";
+import { createFavoriteConfigAction } from "@/components/layout/publishConfigPanel/favoriteConfigAction";
 
 const EMPTY_FRAMEWORK_OPTIONS: string[] = [];
 
 const configRowClass =
   "flex w-full items-center gap-2.5 rounded-sm border border-transparent bg-transparent py-2 pr-11 text-left shadow-none outline-none transition-colors duration-150 ease-geist hover:bg-gray-alpha-100 focus-ring";
-
-// Collapse toggle icon (reused from BranchPanel)
-function CollapseIcon() {
-  return (
-    <svg
-      width="14"
-      height="14"
-      viewBox="0 0 16 16"
-      fill="none"
-      xmlns="http://www.w3.org/2000/svg"
-    >
-      <rect
-        x="1.5"
-        y="1.5"
-        width="13"
-        height="13"
-        rx="2.5"
-        stroke="currentColor"
-        strokeWidth="1"
-        fill="none"
-      />
-      <line
-        x1="5.5"
-        y1="1.5"
-        x2="5.5"
-        y2="14.5"
-        stroke="currentColor"
-        strokeWidth="1"
-      />
-      <path
-        className="transition-transform duration-150 ease-geist group-hover:-translate-x-0.5"
-        d="M11.5 5.5L9 8L11.5 10.5"
-        stroke="currentColor"
-        strokeWidth="1"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </svg>
-  );
-}
-
-function hasSameStringOrder(
-  left: readonly string[],
-  right: readonly string[]
-): boolean {
-  return (
-    left.length === right.length &&
-    left.every((value, index) => value === right[index])
-  );
-}
-
-function hasSameProfileOrder(
-  left: readonly ConfigProfile[],
-  right: readonly ConfigProfile[]
-): boolean {
-  return (
-    left.length === right.length &&
-    left.every((profile, index) => {
-      const nextProfile = right[index];
-      return (
-        profile.name === nextProfile.name &&
-        (profile.profileGroup || "") === (nextProfile.profileGroup || "")
-      );
-    })
-  );
-}
 
 export interface PublishConfigPanelProps {
   selectedRepoId?: string | null;
@@ -244,32 +183,6 @@ function ConfigGroup({
       ) : null}
     </div>
   );
-}
-
-function createFavoriteConfigAction({
-  isFavorite,
-  favoriteLabel,
-  unfavoriteLabel,
-  onSelect,
-}: {
-  isFavorite: boolean;
-  favoriteLabel: string;
-  unfavoriteLabel: string;
-  onSelect: () => void | Promise<unknown>;
-}): RowActionsMenuAction {
-  return {
-    key: "favorite",
-    label: isFavorite ? unfavoriteLabel : favoriteLabel,
-    icon: (
-      <Star
-        className={cn(
-          "size-3.5",
-          isFavorite ? "fill-success text-success" : "text-muted-foreground"
-        )}
-      />
-    ),
-    onSelect,
-  };
 }
 
 // User profile item with delete button on hover
