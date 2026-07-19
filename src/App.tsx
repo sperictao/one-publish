@@ -1,5 +1,6 @@
 import { Suspense, lazy } from "react";
 import { useAppBoot } from "@/hooks/useAppBoot";
+import { usePublishStore } from "@/stores/publishStore";
 
 import { ResizeHandle } from "@/components/layout/ResizeHandle";
 import { SidebarPanelShell } from "@/components/layout/SidebarPanelShell";
@@ -24,6 +25,10 @@ const PublishContentSection = lazy(async () => {
   const mod = await import("@/components/layout/PublishContentSection");
   return { default: mod.PublishContentSection };
 });
+const TauriReleaseDialog = lazy(async () => {
+  const mod = await import("@/components/release/TauriReleaseDialog");
+  return { default: mod.TauriReleaseDialog };
+});
 const EMPTY_CONFIG_PANEL_TRANSLATIONS: Record<string, string> = {};
 
 const MainContentShell = lazy(async () => {
@@ -33,6 +38,10 @@ const MainContentShell = lazy(async () => {
 
 function App() {
   const boot = useAppBoot();
+  const tauriReleaseOpen = usePublishStore((state) => state.tauriReleaseOpen);
+  const setTauriReleaseOpen = usePublishStore(
+    (state) => state.setTauriReleaseOpen
+  );
 
   // Show loading state
   if (boot.shell.isStateLoading) {
@@ -256,6 +265,15 @@ function App() {
             activeProviderParameters={boot.publish.activeProviderParameters}
             projectFile={boot.publish.projectInfo?.project_file}
             selectedRepoPath={boot.repo.selectedRepo?.path}
+          />
+        </Suspense>
+      ) : null}
+      {tauriReleaseOpen && boot.repo.selectedRepo ? (
+        <Suspense fallback={null}>
+          <TauriReleaseDialog
+            open={tauriReleaseOpen}
+            onOpenChange={setTauriReleaseOpen}
+            repository={boot.repo.selectedRepo}
           />
         </Suspense>
       ) : null}

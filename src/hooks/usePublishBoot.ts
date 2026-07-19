@@ -293,6 +293,7 @@ export function usePublishBoot(params: UsePublishBootParams) {
     configT: params.configT,
     isRefreshing: isPublishRunCardRefreshing,
     selectedRepo: params.selectedRepo,
+    activeProviderId: params.activeProviderId,
     activeProviderRequiresProjectBinding,
     projectInfo: params.projectInfo,
     publishPreviewCommand,

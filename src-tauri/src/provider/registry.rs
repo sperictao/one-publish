@@ -74,6 +74,7 @@ impl ProviderRegistry {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum BuiltInProviderKind {
+    Tauri,
     Dotnet,
     Cargo,
     Go,
@@ -145,9 +146,22 @@ impl Provider for BuiltInProvider {
         compile_single_step(spec, self.compile_step_id, self.compile_title)
     }
 
+    fn command_prefix(
+        &self,
+        spec: &PublishSpec,
+    ) -> Result<Option<(String, Vec<String>)>, crate::errors::AppError> {
+        match self.kind {
+            BuiltInProviderKind::Tauri => {
+                super::providers::tauri::resolve_build_command(spec).map(Some)
+            }
+            _ => Ok(None),
+        }
+    }
+
     fn resolve_working_dir(&self, spec: &PublishSpec) -> Option<PathBuf> {
         let path = PathBuf::from(&spec.project_path);
         match self.kind {
+            BuiltInProviderKind::Tauri => super::providers::tauri::resolve_app_root(&path),
             BuiltInProviderKind::Dotnet => path.parent().map(Path::to_path_buf),
             BuiltInProviderKind::Cargo => resolve_provider_project_dir(path, &["Cargo.toml"]),
             BuiltInProviderKind::Go => resolve_provider_project_dir(path, &["go.mod"]),
@@ -159,6 +173,7 @@ impl Provider for BuiltInProvider {
 
     fn infer_output_dir(&self, spec: &PublishSpec) -> String {
         match self.kind {
+            BuiltInProviderKind::Tauri => super::providers::tauri::infer_bundle_dir(spec),
             BuiltInProviderKind::Dotnet => {
                 if let Some(output) = read_parameter_string(&spec.parameters, "output") {
                     return resolve_output_path(output, self.resolve_working_dir(spec));
@@ -209,6 +224,7 @@ impl Provider for BuiltInProvider {
 
     fn configured_output_dir(&self, spec: &PublishSpec) -> Option<String> {
         match self.kind {
+            BuiltInProviderKind::Tauri => None,
             BuiltInProviderKind::Dotnet => read_parameter_string(&spec.parameters, "output"),
             BuiltInProviderKind::Cargo => read_parameter_string(&spec.parameters, "target_dir"),
             BuiltInProviderKind::Go => read_parameter_string(&spec.parameters, "output"),
@@ -389,6 +405,18 @@ mod tests {
         assert_eq!(
             provider.catalog().project_path_kind,
             ProviderProjectPathKind::RepositoryRoot
+        );
+    }
+
+    #[test]
+    fn registry_resolves_tauri_provider() {
+        let registry = ProviderRegistry::new();
+        let provider = registry.get("tauri").expect("provider");
+        assert_eq!(provider.manifest().id, "tauri");
+        assert_eq!(provider.catalog().label, "Tauri 2 (desktop)");
+        assert_eq!(
+            provider.catalog().project_path_kind,
+            ProviderProjectPathKind::ProjectFile
         );
     }
 

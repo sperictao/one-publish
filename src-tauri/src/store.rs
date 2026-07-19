@@ -5,6 +5,7 @@
 mod commands;
 mod migration;
 mod persistence;
+pub(crate) use persistence::write_json_atomically;
 mod recent;
 mod runtime;
 mod types;

@@ -2,7 +2,10 @@ use serde_json::Value;
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 
-use super::scanner::{normalize_path_key, normalize_scan_root, FileScanContext};
+use super::scanner::{
+    detect_provider_discovery_from_path, matches_project_file, normalize_path_key,
+    normalize_scan_root, FileScanContext,
+};
 use super::*;
 
 const DOTNET_SOLUTION_EXTENSION: &str = "sln";
@@ -509,6 +512,29 @@ pub fn scan_project_candidates_from_path(
     }
 
     let root_path = normalize_scan_root(start_path)?;
+    if let Some(discovery) = detect_provider_discovery_from_path(&root_path) {
+        if discovery.provider_id != "dotnet" {
+            let project_files = FileScanContext::new(&root_path)
+                .collect_files(|path| {
+                    discovery
+                        .project_file_matchers
+                        .iter()
+                        .any(|matcher| matches_project_file(path, matcher))
+                })
+                .into_iter()
+                .map(|path| path.to_string_lossy().to_string())
+                .collect::<Vec<_>>();
+            let recommended_project_file =
+                (project_files.len() == 1).then(|| project_files[0].clone());
+
+            return Ok(ProjectScanCandidates {
+                root_path: root_path.to_string_lossy().to_string(),
+                solution_files: Vec::new(),
+                project_files,
+                recommended_project_file,
+            });
+        }
+    }
     Ok(project_scan_candidates_from_root(&root_path))
 }
 

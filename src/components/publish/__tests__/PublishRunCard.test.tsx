@@ -13,6 +13,30 @@ vi.mock("@/lib/store/api", async () => {
 });
 
 describe("PublishRunCard", () => {
+  it("renders the dedicated Tauri release management action", () => {
+    const onOpenManagement = vi.fn();
+    render(
+      <PublishRunCard
+        outputLog=""
+        publishResult={null}
+        appT={{ outputLogTitle: "执行发布", noOutput: "无输出" }}
+        publishActions={{
+          isPublishing: false,
+          isCancellingPublish: false,
+          startDisabled: false,
+          onStartPublish: vi.fn(),
+          onCancelPublish: vi.fn(),
+          managementLabel: "Tauri 发布中心",
+          onOpenManagement,
+        }}
+      />
+    );
+
+    screen.getByRole("button", { name: "Tauri 发布中心" }).click();
+
+    expect(onOpenManagement).toHaveBeenCalledOnce();
+  });
+
   it("发布状态区只渲染一个状态图标", () => {
     render(
       <PublishRunCard

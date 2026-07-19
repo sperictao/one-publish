@@ -537,6 +537,49 @@ EndProject
         );
     }
 
+    #[test]
+    fn detect_provider_from_path_prefers_tauri_over_cargo() {
+        let temp_dir = TempDir::new().expect("temp dir");
+        let tauri_dir = temp_dir.path().join("src-tauri");
+        fs::create_dir_all(&tauri_dir).expect("create tauri dir");
+        fs::write(temp_dir.path().join("Cargo.toml"), "[workspace]").expect("write cargo manifest");
+        fs::write(
+            tauri_dir.join("tauri.conf.json"),
+            r#"{"productName":"Demo"}"#,
+        )
+        .expect("write tauri config");
+
+        assert_eq!(
+            detect_provider_from_path(temp_dir.path()),
+            Some("tauri".to_string())
+        );
+    }
+
+    #[test]
+    fn scan_project_candidates_returns_tauri_config_bindings() {
+        let temp_dir = TempDir::new().expect("temp dir");
+        let first = temp_dir
+            .path()
+            .join("apps/desktop/src-tauri/tauri.conf.json");
+        let second = temp_dir.path().join("apps/admin/src-tauri/Tauri.toml");
+        fs::create_dir_all(first.parent().expect("first parent")).expect("create first app");
+        fs::create_dir_all(second.parent().expect("second parent")).expect("create second app");
+        fs::write(&first, "{}").expect("write first config");
+        fs::write(&second, "[package]").expect("write second config");
+
+        let candidates = scan_project_candidates_from_path(temp_dir.path()).expect("scan tauri");
+
+        assert_eq!(candidates.project_files.len(), 2);
+        assert!(candidates
+            .project_files
+            .contains(&first.to_string_lossy().to_string()));
+        assert!(candidates
+            .project_files
+            .contains(&second.to_string_lossy().to_string()));
+        assert_eq!(candidates.recommended_project_file, None);
+        assert!(candidates.solution_files.is_empty());
+    }
+
     #[tokio::test]
     async fn detect_repository_provider_returns_unsupported_for_maven_only_repository() {
         let temp_dir = TempDir::new().expect("temp dir");

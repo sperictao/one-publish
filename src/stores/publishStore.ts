@@ -14,6 +14,7 @@ interface PublishStore {
   lastPublishSpec: ProviderPublishSpec | null;
   currentPublishRecordId: string | null;
   releaseChecklistOpen: boolean;
+  tauriReleaseOpen: boolean;
   artifactActionState: ArtifactActionState;
 
   // ── Setters ──
@@ -23,6 +24,7 @@ interface PublishStore {
   setLastPublishSpec: (value: ProviderPublishSpec | null) => void;
   setCurrentPublishRecordId: (value: string | null) => void;
   setReleaseChecklistOpen: (value: boolean) => void;
+  setTauriReleaseOpen: (value: boolean) => void;
   setArtifactActionState: (value: ArtifactActionState) => void;
 }
 
@@ -33,6 +35,7 @@ export const usePublishStore = create<PublishStore>((set) => ({
   lastPublishSpec: null,
   currentPublishRecordId: null,
   releaseChecklistOpen: false,
+  tauriReleaseOpen: false,
   artifactActionState: { packageResult: null, signResult: null },
 
   setIsPublishing: (value) => set({ isPublishing: value }),
@@ -41,5 +44,6 @@ export const usePublishStore = create<PublishStore>((set) => ({
   setLastPublishSpec: (value) => set({ lastPublishSpec: value }),
   setCurrentPublishRecordId: (value) => set({ currentPublishRecordId: value }),
   setReleaseChecklistOpen: (value) => set({ releaseChecklistOpen: value }),
+  setTauriReleaseOpen: (value) => set({ tauriReleaseOpen: value }),
   setArtifactActionState: (value) => set({ artifactActionState: value }),
 }));

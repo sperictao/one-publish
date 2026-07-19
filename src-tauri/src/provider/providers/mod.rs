@@ -2,6 +2,7 @@ mod cargo;
 mod dotnet;
 mod go;
 mod java_gradle;
+pub(crate) mod tauri;
 
 use super::registry::BuiltInProvider;
 
@@ -12,6 +13,7 @@ use super::registry::BuiltInProvider;
 pub(crate) fn all() -> Vec<BuiltInProvider> {
     vec![
         dotnet::create(),
+        tauri::create(),
         cargo::create(),
         go::create(),
         java_gradle::create(),

@@ -261,6 +261,16 @@ pub fn has_file(path: &Path, file_name: &str) -> bool {
 pub fn matches_repository_marker(path: &Path, marker: &ProviderRepositoryMarker) -> bool {
     match marker {
         ProviderRepositoryMarker::FileName(file_name) => has_file(path, file_name.as_str()),
+        ProviderRepositoryMarker::RecursiveFileName(file_name) => {
+            !collect_files_recursively(path, |entry_path| {
+                entry_path
+                    .file_name()
+                    .and_then(|name| name.to_str())
+                    .map(|name| name.eq_ignore_ascii_case(file_name))
+                    .unwrap_or(false)
+            })
+            .is_empty()
+        }
         ProviderRepositoryMarker::Extension(extension) => {
             has_extension_file(path, extension.as_str())
         }

@@ -80,6 +80,20 @@ mod tests {
     }
 
     #[test]
+    fn tauri_spec_compiles_as_independent_build_step() {
+        let spec = PublishSpec {
+            version: SPEC_VERSION,
+            provider_id: "tauri".to_string(),
+            project_path: "/tmp/src-tauri/tauri.conf.json".to_string(),
+            parameters: BTreeMap::new(),
+        };
+
+        let plan = compile(&spec).expect("compile");
+        assert_eq!(plan.steps.len(), 1);
+        assert_eq!(plan.steps[0].id, "tauri.build");
+    }
+
+    #[test]
     fn go_spec_compiles() {
         let spec = PublishSpec {
             version: SPEC_VERSION,

@@ -163,7 +163,10 @@ fn replace_file_atomically(source: &Path, target: &Path) -> std::io::Result<()> 
     fs::rename(source, target)
 }
 
-fn write_json_atomically(path: &Path, json: &[u8]) -> Result<(), crate::errors::AppError> {
+pub(crate) fn write_json_atomically(
+    path: &Path,
+    json: &[u8],
+) -> Result<(), crate::errors::AppError> {
     crate::security::ensure_private_parent_dir(path).map_err(|error| {
         crate::errors::AppError::store_with_code(
             format!("创建目录失败: {}", error),

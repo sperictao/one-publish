@@ -49,7 +49,10 @@ fn prepare_publish_command(
     let rendered = renderer
         .render(&spec.parameters)
         .map_err(publish_render_error)?;
-    let (base_program, mut args) = resolve_plan_command(&plan)?;
+    let (base_program, mut args) = match provider.command_prefix(spec)? {
+        Some(command) => command,
+        None => resolve_plan_command(&plan)?,
+    };
 
     if spec.provider_id == "dotnet" {
         args.push(spec.project_path.clone());

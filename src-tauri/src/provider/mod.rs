@@ -48,6 +48,7 @@ pub struct ProviderCatalogEntry {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ProviderRepositoryMarker {
     FileName(String),
+    RecursiveFileName(String),
     Extension(String),
     NestedExtension {
         directory: String,
@@ -80,6 +81,13 @@ pub trait Provider: Send + Sync {
     fn get_schema(&self) -> Result<ParameterSchema, RenderError>;
 
     fn compile(&self, spec: &PublishSpec) -> Result<ExecutionPlan, CompileError>;
+
+    fn command_prefix(
+        &self,
+        _spec: &PublishSpec,
+    ) -> Result<Option<(String, Vec<String>)>, crate::errors::AppError> {
+        Ok(None)
+    }
 
     fn resolve_working_dir(&self, spec: &PublishSpec) -> Option<PathBuf>;
 

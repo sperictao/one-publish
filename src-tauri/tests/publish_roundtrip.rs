@@ -65,6 +65,49 @@ fn render_dotnet_release_publish() {
 }
 
 #[test]
+fn render_tauri_publish_uses_bound_app_package_manager() {
+    let dir = tempfile::tempdir().expect("create temp dir");
+    let tauri_dir = dir.path().join("src-tauri");
+    fs::create_dir_all(&tauri_dir).expect("create tauri dir");
+    let config_path = tauri_dir.join("tauri.conf.json");
+    fs::write(&config_path, "{}").expect("write tauri config");
+    fs::write(
+        dir.path().join("package.json"),
+        r#"{"packageManager":"pnpm@10.10.0"}"#,
+    )
+    .expect("write package json");
+    fs::write(dir.path().join("pnpm-lock.yaml"), "lockfileVersion: '9.0'")
+        .expect("write pnpm lockfile");
+
+    let mut parameters = BTreeMap::new();
+    parameters.insert(
+        "target".to_string(),
+        SpecValue::String("aarch64-apple-darwin".to_string()),
+    );
+    let command = render_provider_publish(PublishSpec {
+        version: SPEC_VERSION,
+        provider_id: "tauri".to_string(),
+        project_path: config_path.to_string_lossy().to_string(),
+        parameters,
+    })
+    .expect("render tauri command");
+
+    assert!(command.program.contains("pnpm"));
+    assert_eq!(
+        command.args,
+        vec![
+            "tauri",
+            "build",
+            "--config",
+            config_path.to_str().expect("config path"),
+            "--target",
+            "aarch64-apple-darwin"
+        ]
+    );
+    assert_eq!(command.working_dir.as_deref(), dir.path().to_str());
+}
+
+#[test]
 fn render_fails_for_nonexistent_project() {
     let spec = make_spec("/nonexistent/path/App.csproj", "/tmp/out");
     let result = render_provider_publish(spec);

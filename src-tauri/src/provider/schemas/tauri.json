@@ -1,0 +1,29 @@
+{
+  "parameters": {
+    "target": {
+      "type": "string",
+      "flag": "--target",
+      "description": "Tauri desktop target triple"
+    },
+    "bundles": {
+      "type": "array",
+      "flag": "--bundles",
+      "description": "Bundle types to build"
+    },
+    "features": {
+      "type": "array",
+      "flag": "--features",
+      "description": "Cargo features to activate"
+    },
+    "config": {
+      "type": "string",
+      "flag": "--config",
+      "description": "Additional Tauri configuration"
+    },
+    "verbose": {
+      "type": "boolean",
+      "flag": "--verbose",
+      "description": "Use verbose output"
+    }
+  }
+}
