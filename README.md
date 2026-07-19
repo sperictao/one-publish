@@ -215,6 +215,8 @@ pnpm build:renderer      # Frontend build only
 # Quality
 pnpm typecheck           # TypeScript type check + contract validation
 pnpm lint                # ESLint
+pnpm format              # Prettier code formatting (write)
+pnpm format:check        # Prettier formatting check (CI gate)
 pnpm test                # Vitest unit tests
 pnpm test:ui             # Vitest UI
 pnpm test:watch          # Vitest watch mode
@@ -285,7 +287,7 @@ OnePublish is evolving from a .NET publish GUI into a **commercial-grade, multi-
 
 1. Fork the repository
 2. Create a feature branch (`git checkout -b feat/amazing-feature`)
-3. Run the local quality gates: `pnpm typecheck && pnpm lint && pnpm test && pnpm check:i18n && pnpm check:design`. If you change Rust code, also run `cargo clippy --manifest-path src-tauri/Cargo.toml -- -D warnings && cargo test --manifest-path src-tauri/Cargo.toml`. (CI additionally runs the contracts drift check `pnpm check:contracts` and `cargo audit`.)
+3. Run the local quality gates: `pnpm typecheck && pnpm lint && pnpm test && pnpm check:i18n && pnpm check:design`. If you change Rust code, also run `cargo clippy --manifest-path src-tauri/Cargo.toml -- -D warnings && cargo test --manifest-path src-tauri/Cargo.toml`. (CI additionally runs the contracts drift check `pnpm check:contracts` and `cargo audit`.) A pre-commit hook (installed via `pnpm install`) auto-formats staged TS/TSX/JS/JSON files with Prettier and `eslint --fix`; run `pnpm format` to format the whole tree manually.
 4. Commit with descriptive messages
 5. Push and open a Pull Request
 
