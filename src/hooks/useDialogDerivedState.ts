@@ -25,7 +25,11 @@ export function useDialogDerivedState(params: {
       return buildDotnetProfileParameters(params.customConfig);
     }
     return params.activeProviderParameters;
-  }, [params.activeProviderId, params.activeProviderParameters, params.customConfig]);
+  }, [
+    params.activeProviderId,
+    params.activeProviderParameters,
+    params.customConfig,
+  ]);
 
   return {
     commandImportProjectPath,

@@ -22,7 +22,10 @@ export function Collapse({ open, className, children }: CollapseProps) {
         className
       )}
     >
-      <div className="min-h-0 overflow-hidden" {...(open ? {} : { inert: "" as never })}>
+      <div
+        className="min-h-0 overflow-hidden"
+        {...(open ? {} : { inert: "" as never })}
+      >
         {children}
       </div>
     </div>

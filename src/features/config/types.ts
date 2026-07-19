@@ -1,7 +1,4 @@
-import type {
-  ConfigParameters,
-  ConfigProfile,
-} from "@/lib/store/types";
+import type { ConfigParameters, ConfigProfile } from "@/lib/store/types";
 
 export interface TranslationMap {
   [key: string]: string | undefined;

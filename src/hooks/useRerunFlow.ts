@@ -11,10 +11,15 @@ interface TranslationMap {
 
 interface UseRerunFlowParams {
   historyT: TranslationMap;
-  extractSpecFromRecord: (record: ExecutionRecord) => ProviderPublishSpec | null;
+  extractSpecFromRecord: (
+    record: ExecutionRecord
+  ) => ProviderPublishSpec | null;
   restoreSpecToEditor: (spec: ProviderPublishSpec) => void;
   getRecentConfigKeyFromSpec: (spec: ProviderPublishSpec) => string | null;
-  runPublishSpec: (spec: ProviderPublishSpec, options?: RunPublishOptions) => Promise<void>;
+  runPublishSpec: (
+    spec: ProviderPublishSpec,
+    options?: RunPublishOptions
+  ) => Promise<void>;
 }
 
 export function useRerunFlow({
@@ -28,11 +33,15 @@ export function useRerunFlow({
     async (record: ExecutionRecord) => {
       const spec = extractSpecFromRecord(record);
       if (!spec) {
-        toast.error(historyT.historyMissingRecoverableSpec || "历史记录缺少可恢复的发布参数", {
-          description:
-            historyT.historyMissingRecoverableSpecHint ||
-            "请使用最新版本重新执行一次后再重跑",
-        });
+        toast.error(
+          historyT.historyMissingRecoverableSpec ||
+            "历史记录缺少可恢复的发布参数",
+          {
+            description:
+              historyT.historyMissingRecoverableSpecHint ||
+              "请使用最新版本重新执行一次后再重跑",
+          }
+        );
         return;
       }
 

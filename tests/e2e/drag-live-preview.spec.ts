@@ -213,7 +213,10 @@ async function installMockTauri(page: Page) {
     const mockGlobal = globalThis as typeof globalThis & {
       isTauri: boolean;
       __TAURI_INTERNALS__: {
-        invoke: (cmd: string, args?: Record<string, unknown>) => Promise<unknown>;
+        invoke: (
+          cmd: string,
+          args?: Record<string, unknown>
+        ) => Promise<unknown>;
       };
       __ONE_PUBLISH_E2E_MOCK__: {
         appState: typeof appState;
@@ -264,7 +267,9 @@ async function installMockTauri(page: Page) {
             );
             appState.repositories = repoIds
               .map((repoId) => nextOrder.get(String(repoId)))
-              .filter((repo): repo is (typeof appState.repositories)[number] => Boolean(repo));
+              .filter((repo): repo is (typeof appState.repositories)[number] =>
+                Boolean(repo)
+              );
             return clone(appState);
           }
           case "reorder_recent_publish_configs": {
@@ -278,7 +283,10 @@ async function installMockTauri(page: Page) {
           case "reorder_profiles": {
             const repoId = String(args?.repoId ?? "");
             const orderedProfiles = Array.isArray(args?.profiles)
-              ? (args?.profiles as Array<{ name: string; profileGroup?: string | null }>)
+              ? (args?.profiles as Array<{
+                  name: string;
+                  profileGroup?: string | null;
+                }>)
               : [];
             profilesByRepo[repoId] = reorderByName(
               profilesByRepo[repoId] ?? [],
@@ -383,7 +391,8 @@ async function measureDraggedRowFloatingAlignment(
           width: rect.width,
           height: rect.height,
           distance:
-            Math.abs(rect.top - rowRect.top) + Math.abs(rect.left - rowRect.left),
+            Math.abs(rect.top - rowRect.top) +
+            Math.abs(rect.left - rowRect.left),
         };
       })
       .sort((left, right) => left.distance - right.distance)[0];
@@ -408,7 +417,10 @@ async function expectDraggedRowAlignedWithFloatingShell(
   await expect
     .poll(
       async () => {
-        const alignment = await measureDraggedRowFloatingAlignment(page, rowSelector);
+        const alignment = await measureDraggedRowFloatingAlignment(
+          page,
+          rowSelector
+        );
         if (!alignment) {
           return null;
         }
@@ -463,7 +475,8 @@ async function measureDraggedRowAndFloatingShell(
           top: rect.top,
           left: rect.left,
           distance:
-            Math.abs(rect.top - rowRect.top) + Math.abs(rect.left - rowRect.left),
+            Math.abs(rect.top - rowRect.top) +
+            Math.abs(rect.left - rowRect.left),
         };
       })
       .sort((left, right) => left.distance - right.distance)[0];
@@ -575,17 +588,16 @@ test("live preview drag bubble feels correct across repository and config lists"
   );
   await expect
     .poll(() =>
-      page.evaluate(
-        () =>
-          (
-            window as typeof window & {
-              __ONE_PUBLISH_E2E_MOCK__: {
-                commandLog: Array<{ cmd: string; args: { repoIds?: string[] } }>;
-              };
-            }
-          ).__ONE_PUBLISH_E2E_MOCK__.commandLog
-            .filter((entry) => entry.cmd === "reorder_repositories")
-            .map((entry) => entry.args.repoIds ?? [])
+      page.evaluate(() =>
+        (
+          window as typeof window & {
+            __ONE_PUBLISH_E2E_MOCK__: {
+              commandLog: Array<{ cmd: string; args: { repoIds?: string[] } }>;
+            };
+          }
+        ).__ONE_PUBLISH_E2E_MOCK__.commandLog
+          .filter((entry) => entry.cmd === "reorder_repositories")
+          .map((entry) => entry.args.repoIds ?? [])
       )
     )
     .toContainEqual(["repo-a", "repo-c", "repo-b"]);
@@ -618,9 +630,7 @@ test("live preview drag bubble feels correct across repository and config lists"
   );
   await page.mouse.up();
 
-  const recentOrder = page.locator(
-    "[data-list-item-id^='recent:']"
-  );
+  const recentOrder = page.locator("[data-list-item-id^='recent:']");
   const recentThresholdY = await getBubbleThresholdPointerY(
     page,
     "[data-list-item-id='recent:userprofile:beta-profile']",
@@ -635,12 +645,16 @@ test("live preview drag bubble feels correct across repository and config lists"
     throw new Error("missing recent beta handle");
   }
 
-  await dragByHandle(page, "[data-list-item-id='recent:userprofile:beta-profile']", [
-    {
-      x: recentHandleBox.x + recentHandleBox.width / 2 + 12,
-      y: recentThresholdY + 8,
-    },
-  ]);
+  await dragByHandle(
+    page,
+    "[data-list-item-id='recent:userprofile:beta-profile']",
+    [
+      {
+        x: recentHandleBox.x + recentHandleBox.width / 2 + 12,
+        y: recentThresholdY + 8,
+      },
+    ]
+  );
 
   await expect(recentOrder.nth(0)).toHaveAttribute(
     "data-list-item-id",
@@ -674,7 +688,9 @@ test("live preview drag bubble feels correct across repository and config lists"
     "[data-list-item-id='pubxml:FolderProfile']"
   );
   const projectHandleBox = await page
-    .locator("[data-list-item-id='pubxml:ZipProfile'] button[aria-label='拖动排序']")
+    .locator(
+      "[data-list-item-id='pubxml:ZipProfile'] button[aria-label='拖动排序']"
+    )
     .boundingBox();
   if (!projectHandleBox) {
     throw new Error("missing project ZipProfile handle");
@@ -792,21 +808,20 @@ test("live preview drag bubble feels correct across repository and config lists"
   );
   await expect
     .poll(() =>
-      page.evaluate(
-        () =>
-          (
-            window as typeof window & {
-              __ONE_PUBLISH_E2E_MOCK__: {
-                profilesByRepo: Record<
-                  string,
-                  Array<{ name: string; profileGroup?: string | null }>
-                >;
-              };
-            }
-          ).__ONE_PUBLISH_E2E_MOCK__.profilesByRepo["repo-a"].map((profile) => ({
-            name: profile.name,
-            profileGroup: profile.profileGroup ?? null,
-          }))
+      page.evaluate(() =>
+        (
+          window as typeof window & {
+            __ONE_PUBLISH_E2E_MOCK__: {
+              profilesByRepo: Record<
+                string,
+                Array<{ name: string; profileGroup?: string | null }>
+              >;
+            };
+          }
+        ).__ONE_PUBLISH_E2E_MOCK__.profilesByRepo["repo-a"].map((profile) => ({
+          name: profile.name,
+          profileGroup: profile.profileGroup ?? null,
+        }))
       )
     )
     .toEqual([

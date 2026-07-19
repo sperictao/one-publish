@@ -133,7 +133,10 @@ async function installMockTauri(page: Page) {
     const mockGlobal = globalThis as typeof globalThis & {
       isTauri: boolean;
       __TAURI_INTERNALS__: {
-        invoke: (cmd: string, args?: Record<string, unknown>) => Promise<unknown>;
+        invoke: (
+          cmd: string,
+          args?: Record<string, unknown>
+        ) => Promise<unknown>;
       };
       __ONE_PUBLISH_E2E_MOCK__: {
         appState: typeof appState;
@@ -170,7 +173,9 @@ async function installMockTauri(page: Page) {
             const projectFile = String(args?.projectFile ?? "");
             const repoPath = String(args?.repoPath ?? "");
             const rootPath =
-              projectFile.replace(/\/App\.csproj$/, "") || repoPath || "/workspace/alpha-service";
+              projectFile.replace(/\/App\.csproj$/, "") ||
+              repoPath ||
+              "/workspace/alpha-service";
             return {
               root_path: rootPath,
               project_file: `${rootPath}/App.csproj`,
@@ -184,7 +189,9 @@ async function installMockTauri(page: Page) {
             const nextSelectedPreset = args?.selectedPreset;
             const nextCustomMode = args?.isCustomMode;
             const nextRepoId = appState.selectedRepoId;
-            const repo = appState.repositories.find((item) => item.id === nextRepoId);
+            const repo = appState.repositories.find(
+              (item) => item.id === nextRepoId
+            );
             if (repo) {
               if (typeof nextSelectedPreset === "string") {
                 repo.publishConfig.selectedPreset = nextSelectedPreset;
@@ -211,7 +218,9 @@ async function gotoApp(page: Page) {
   await page.goto("/", { waitUntil: "domcontentloaded" });
   await page.waitForLoadState("networkidle");
   await expect(page.locator("[data-list-item-id='repo-a']")).toBeVisible();
-  await expect(page.locator("[data-list-item-id='pubxml:FolderProfile']")).toBeVisible();
+  await expect(
+    page.locator("[data-list-item-id='pubxml:FolderProfile']")
+  ).toBeVisible();
 }
 
 async function measureSelectedRowDrift(page: Page) {
@@ -223,9 +232,8 @@ async function measureSelectedRowDrift(page: Page) {
     const floatingSurface = listShell?.querySelector<HTMLElement>(
       "[aria-hidden='true'] .floating-list-card[data-selected='true']"
     );
-    const floatingShell = floatingSurface?.parentElement?.parentElement as
-      | HTMLElement
-      | null;
+    const floatingShell = floatingSurface?.parentElement
+      ?.parentElement as HTMLElement | null;
 
     if (!selectedRow || !listShell || !floatingShell) {
       return null;
@@ -256,10 +264,21 @@ test("middle publish config floating card stays aligned after repeated repo swit
 }, testInfo) => {
   await gotoApp(page);
 
-  const samples: Array<{ step: string; topDelta: number; leftDelta: number; transform: string }> =
-    [];
+  const samples: Array<{
+    step: string;
+    topDelta: number;
+    leftDelta: number;
+    transform: string;
+  }> = [];
 
-  for (const repoId of ["repo-a", "repo-b", "repo-c", "repo-a", "repo-b", "repo-c"]) {
+  for (const repoId of [
+    "repo-a",
+    "repo-b",
+    "repo-c",
+    "repo-a",
+    "repo-b",
+    "repo-c",
+  ]) {
     await clickRepo(page, repoId);
     await page.waitForTimeout(700);
     const drift = await measureSelectedRowDrift(page);

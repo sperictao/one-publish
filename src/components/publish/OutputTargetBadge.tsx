@@ -61,10 +61,11 @@ function deriveBadge(
       return {
         variant: "danger",
         label: `${scheme}${t.outputTargetBadgeRemoteSuffix || ""}`,
-        detail: remote.host ? `${remote.host}${remote.path ? remote.path : ""}` : undefined,
+        detail: remote.host
+          ? `${remote.host}${remote.path ? remote.path : ""}`
+          : undefined,
         tooltip:
-          t.outputTargetBadgeRemoteTooltip ||
-          "远程协议将在 Phase 13 启用上传",
+          t.outputTargetBadgeRemoteTooltip || "远程协议将在 Phase 13 启用上传",
         icon: <CloudUpload className="size-3" aria-hidden />,
       };
     }

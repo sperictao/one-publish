@@ -35,7 +35,9 @@ interface ResolvedTrayPublishRequest {
   options: RunPublishOptions;
 }
 
-async function resolveDotnetProjectInfo(repo: Repository): Promise<ProjectInfo> {
+async function resolveDotnetProjectInfo(
+  repo: Repository
+): Promise<ProjectInfo> {
   try {
     const projectInfo = await resolvePreferredDotnetProjectInfo({
       repoPath: repo.path,
@@ -200,29 +202,32 @@ export function useTrayRecentPublish(params: {
     let disposed = false;
     let unlisten: (() => void) | null = null;
 
-    void listen<TrayPublishRequestPayload>("tray-publish-request", async (event) => {
-      try {
-        const resolved = await resolveTrayPublishRequest({
-          payload: event.payload,
-          specVersion: params.specVersion,
-          defaultOutputDir: params.defaultOutputDir,
-        });
-        if (!disposed) {
-          await params.runPublishSpec(resolved.spec, resolved.options);
-        }
-      } catch (error) {
-        await setTrayPublishStatus("failure").catch(() => {});
-        const description =
-          error instanceof Error ? error.message : String(error);
-        const notified = await showSystemNotification({
-          title: params.appT.trayPublishFailed || "状态栏发布启动失败",
-          body: description,
-        });
-        if (!notified) {
-          await showMainWindow().catch(() => {});
+    void listen<TrayPublishRequestPayload>(
+      "tray-publish-request",
+      async (event) => {
+        try {
+          const resolved = await resolveTrayPublishRequest({
+            payload: event.payload,
+            specVersion: params.specVersion,
+            defaultOutputDir: params.defaultOutputDir,
+          });
+          if (!disposed) {
+            await params.runPublishSpec(resolved.spec, resolved.options);
+          }
+        } catch (error) {
+          await setTrayPublishStatus("failure").catch(() => {});
+          const description =
+            error instanceof Error ? error.message : String(error);
+          const notified = await showSystemNotification({
+            title: params.appT.trayPublishFailed || "状态栏发布启动失败",
+            body: description,
+          });
+          if (!notified) {
+            await showMainWindow().catch(() => {});
+          }
         }
       }
-    })
+    )
       .then((handler) => {
         unlisten = handler;
       })

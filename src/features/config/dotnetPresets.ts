@@ -86,7 +86,11 @@ export const DOTNET_PRESETS: DotnetPreset[] = [
     id: "debug-osx-x64",
     name: "Debug - macOS x64",
     description: "Intel Mac",
-    config: { configuration: "Debug", runtime: "osx-x64", self_contained: true },
+    config: {
+      configuration: "Debug",
+      runtime: "osx-x64",
+      self_contained: true,
+    },
   },
   {
     id: "debug-linux-x64",
@@ -100,5 +104,4 @@ export const DOTNET_PRESETS: DotnetPreset[] = [
   },
 ];
 
-export const DEFAULT_DOTNET_PRESET_ID =
-  DOTNET_PRESETS[0]?.id ?? "release-fd";
+export const DEFAULT_DOTNET_PRESET_ID = DOTNET_PRESETS[0]?.id ?? "release-fd";

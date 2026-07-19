@@ -93,7 +93,9 @@ describe("useProjectShellState", () => {
     });
 
     await waitFor(() => {
-      expect(result.current.projectInfo?.project_file).toBe("/repo-b/App.csproj");
+      expect(result.current.projectInfo?.project_file).toBe(
+        "/repo-b/App.csproj"
+      );
     });
 
     await act(async () => {
@@ -137,7 +139,9 @@ describe("useProjectShellState", () => {
 
     await waitFor(() => {
       expect(result.current.isProjectInfoRefreshing).toBe(false);
-      expect(result.current.projectInfo?.project_file).toBe("/repo-a/App.csproj");
+      expect(result.current.projectInfo?.project_file).toBe(
+        "/repo-a/App.csproj"
+      );
     });
 
     rerender({
@@ -157,7 +161,9 @@ describe("useProjectShellState", () => {
 
     await waitFor(() => {
       expect(result.current.isProjectInfoRefreshing).toBe(false);
-      expect(result.current.projectInfo?.project_file).toBe("/repo-b/App.csproj");
+      expect(result.current.projectInfo?.project_file).toBe(
+        "/repo-b/App.csproj"
+      );
     });
   });
 
@@ -192,7 +198,9 @@ describe("useProjectShellState", () => {
     });
 
     await waitFor(() => {
-      expect(result.current.projectInfo?.project_file).toBe("/repo-a/App.csproj");
+      expect(result.current.projectInfo?.project_file).toBe(
+        "/repo-a/App.csproj"
+      );
     });
 
     rerender({
@@ -207,7 +215,9 @@ describe("useProjectShellState", () => {
     });
 
     await waitFor(() => {
-      expect(result.current.projectInfo?.project_file).toBe("/repo-b/App.csproj");
+      expect(result.current.projectInfo?.project_file).toBe(
+        "/repo-b/App.csproj"
+      );
     });
 
     rerender({
@@ -267,7 +277,9 @@ describe("useProjectShellState", () => {
     });
 
     await waitFor(() => {
-      expect(result.current.projectInfo?.project_file).toBe("/repo-a/App.csproj");
+      expect(result.current.projectInfo?.project_file).toBe(
+        "/repo-a/App.csproj"
+      );
       expect(result.current.projectProfilesRevision).toBe(1);
     });
 
@@ -283,7 +295,9 @@ describe("useProjectShellState", () => {
     });
 
     await waitFor(() => {
-      expect(result.current.projectInfo?.project_file).toBe("/repo-b/App.csproj");
+      expect(result.current.projectInfo?.project_file).toBe(
+        "/repo-b/App.csproj"
+      );
       expect(result.current.projectProfilesRevision).toBe(1);
     });
 
@@ -337,7 +351,9 @@ describe("useProjectShellState", () => {
     );
 
     await waitFor(() => {
-      expect(result.current.projectInfo?.project_file).toBe("/repo-a/App.csproj");
+      expect(result.current.projectInfo?.project_file).toBe(
+        "/repo-a/App.csproj"
+      );
     });
 
     rerender({
@@ -350,7 +366,9 @@ describe("useProjectShellState", () => {
   });
 
   it("存在显式 projectFile 绑定时优先解析绑定项目", async () => {
-    mocks.resolveProjectInfo.mockResolvedValue(createProjectInfo("/repo-bound"));
+    mocks.resolveProjectInfo.mockResolvedValue(
+      createProjectInfo("/repo-bound")
+    );
 
     const { result } = renderHook(() =>
       useProjectShellState({
@@ -369,9 +387,12 @@ describe("useProjectShellState", () => {
       );
     });
 
-    expect(mocks.resolveProjectInfo).toHaveBeenCalledWith("/repo-bound/App.csproj", {
-      silentFailure: true,
-    });
+    expect(mocks.resolveProjectInfo).toHaveBeenCalledWith(
+      "/repo-bound/App.csproj",
+      {
+        silentFailure: true,
+      }
+    );
     expect(mocks.scanProject).not.toHaveBeenCalled();
   });
 
@@ -390,7 +411,9 @@ describe("useProjectShellState", () => {
     );
 
     await waitFor(() => {
-      expect(result.current.projectInfo?.project_file).toBe("/repo-a/App.csproj");
+      expect(result.current.projectInfo?.project_file).toBe(
+        "/repo-a/App.csproj"
+      );
     });
 
     expect(mocks.resolveProjectInfo).not.toHaveBeenCalled();
@@ -421,9 +444,12 @@ describe("useProjectShellState", () => {
       );
     });
 
-    expect(mocks.resolveProjectInfo).toHaveBeenCalledWith("/repo-a/App.csproj", {
-      silentFailure: true,
-    });
+    expect(mocks.resolveProjectInfo).toHaveBeenCalledWith(
+      "/repo-a/App.csproj",
+      {
+        silentFailure: true,
+      }
+    );
     expect(mocks.scanProject).toHaveBeenCalledWith("/repo-a", {
       silentSuccess: true,
       silentFailure: true,

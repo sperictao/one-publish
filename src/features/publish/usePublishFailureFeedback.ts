@@ -34,7 +34,8 @@ export function getPublishFailureFeedback(
 
   if (failureReason === "output_path_incompatible") {
     return {
-      title: appT.publishOutputPathIncompatible || "发布目录路径与当前系统不兼容",
+      title:
+        appT.publishOutputPathIncompatible || "发布目录路径与当前系统不兼容",
       description: rawErrorMessage,
     };
   }
@@ -50,9 +51,7 @@ export function getPublishFailureFeedback(
 
   if (failureReason === "remote_target_not_implemented") {
     return {
-      title:
-        appT.publishRemoteTargetNotImplemented ||
-        "远程发布通道尚未启用",
+      title: appT.publishRemoteTargetNotImplemented || "远程发布通道尚未启用",
       description:
         appT.publishRemoteTargetNotImplementedDesc ||
         "当前版本仅支持本地或已挂载远程卷作为输出目录；请改用本地路径或 UNC/挂载点，远端协议（sftp / s3 / webdav）将在后续版本启用。",
@@ -117,8 +116,7 @@ export function getPublishFailureFeedback(
     return {
       title: appT.publishProcessFailed || "发布进程执行失败",
       description:
-        appT.publishProcessFailedDesc ||
-        "发布进程启动或等待失败，请稍后重试。",
+        appT.publishProcessFailedDesc || "发布进程启动或等待失败，请稍后重试。",
     };
   }
 

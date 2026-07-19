@@ -118,9 +118,15 @@ describe("ExecutionHistoryCard", () => {
       />
     );
 
-    expect(screen.getByRole("button", { name: "复制 Shell 片段" })).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "复制 GHA 片段" })).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "导出诊断索引" })).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "复制 Shell 片段" })
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "复制 GHA 片段" })
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "导出诊断索引" })
+    ).not.toBeInTheDocument();
   });
 
   it("带 warnings 的记录展示警告摘要", () => {

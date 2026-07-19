@@ -1,4 +1,10 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from "react";
 import { isTauri } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 
@@ -22,7 +28,9 @@ const EMPTY_PROJECT_INFO_SNAPSHOT: ProjectInfoSnapshot = {
   fingerprint: "",
 };
 
-function buildProjectInfoListFingerprint(projectInfo: ProjectInfo | null): string {
+function buildProjectInfoListFingerprint(
+  projectInfo: ProjectInfo | null
+): string {
   if (!projectInfo) {
     return "";
   }
@@ -43,12 +51,11 @@ function createProjectInfoSnapshot(
 
   return {
     projectInfo,
-    revision:
-      isSameSnapshot
-        ? previousSnapshot.revision
-        : previousSnapshot.revision === 0 && fingerprint === ""
-          ? 0
-          : previousSnapshot.revision + 1,
+    revision: isSameSnapshot
+      ? previousSnapshot.revision
+      : previousSnapshot.revision === 0 && fingerprint === ""
+        ? 0
+        : previousSnapshot.revision + 1,
     fingerprint,
   };
 }
@@ -97,17 +104,15 @@ export function useProjectShellState(params: {
   const canExposeProjectInfoRef = useRef(
     Boolean(
       params.selectedRepoPath &&
-        !params.isStateLoading &&
-        providerUsesProjectFile
+      !params.isStateLoading &&
+      providerUsesProjectFile
     )
   );
   const projectInfo = visibleProjectInfoSnapshot.projectInfo;
   const projectProfilesRevision = visibleProjectInfoSnapshot.revision;
   selectedScopeKeyRef.current = currentScopeKey;
   canExposeProjectInfoRef.current = Boolean(
-    params.selectedRepoPath &&
-      !params.isStateLoading &&
-      providerUsesProjectFile
+    params.selectedRepoPath && !params.isStateLoading && providerUsesProjectFile
   );
   const {
     scanProject: scanProjectRequest,
@@ -238,7 +243,8 @@ export function useProjectShellState(params: {
       selectedRepoProjectFile: params.selectedRepoProjectFile,
     });
     const cachedSnapshot = currentScopeKey
-      ? projectInfoCacheRef.current[currentScopeKey] ?? EMPTY_PROJECT_INFO_SNAPSHOT
+      ? (projectInfoCacheRef.current[currentScopeKey] ??
+        EMPTY_PROJECT_INFO_SNAPSHOT)
       : EMPTY_PROJECT_INFO_SNAPSHOT;
 
     setVisibleProjectInfoSnapshot(cachedSnapshot);

@@ -26,7 +26,8 @@ vi.mock("@tauri-apps/api/event", () => ({
 }));
 
 vi.mock("@/lib/store/api", async () => {
-  const actual = await vi.importActual<typeof import("@/lib/store/api")>("@/lib/store/api");
+  const actual =
+    await vi.importActual<typeof import("@/lib/store/api")>("@/lib/store/api");
   return {
     ...actual,
     getRepository: mocks.getRepository,
@@ -105,8 +106,9 @@ describe("useTrayRecentPublish", () => {
 
   it("支持从托盘直接执行 userprofile", async () => {
     const runPublishSpec = vi.fn().mockResolvedValue(undefined);
-    let handler: ((event: { payload: TrayPublishRequestPayload }) => Promise<void>) | null =
-      null;
+    let handler:
+      | ((event: { payload: TrayPublishRequestPayload }) => Promise<void>)
+      | null = null;
     mocks.listen.mockImplementation(async (_eventName, callback) => {
       handler = callback;
       return () => {};
@@ -137,9 +139,9 @@ describe("useTrayRecentPublish", () => {
     if (!handler) {
       throw new Error("tray handler missing");
     }
-    const trayHandler = handler as (
-      event: { payload: TrayPublishRequestPayload }
-    ) => Promise<void>;
+    const trayHandler = handler as (event: {
+      payload: TrayPublishRequestPayload;
+    }) => Promise<void>;
 
     await trayHandler({
       payload: {
@@ -171,8 +173,9 @@ describe("useTrayRecentPublish", () => {
 
   it("userprofile 里的空 output 会按默认输出目录规则标准化", async () => {
     const runPublishSpec = vi.fn().mockResolvedValue(undefined);
-    let handler: ((event: { payload: TrayPublishRequestPayload }) => Promise<void>) | null =
-      null;
+    let handler:
+      | ((event: { payload: TrayPublishRequestPayload }) => Promise<void>)
+      | null = null;
     mocks.listen.mockImplementation(async (_eventName, callback) => {
       handler = callback;
       return () => {};
@@ -204,9 +207,9 @@ describe("useTrayRecentPublish", () => {
     if (!handler) {
       throw new Error("tray handler missing");
     }
-    const trayHandler = handler as (
-      event: { payload: TrayPublishRequestPayload }
-    ) => Promise<void>;
+    const trayHandler = handler as (event: {
+      payload: TrayPublishRequestPayload;
+    }) => Promise<void>;
 
     await trayHandler({
       payload: {
@@ -232,8 +235,9 @@ describe("useTrayRecentPublish", () => {
 
   it("仓库 projectFile 是 .sln 时会回退扫描真实项目文件", async () => {
     const runPublishSpec = vi.fn().mockResolvedValue(undefined);
-    let handler: ((event: { payload: TrayPublishRequestPayload }) => Promise<void>) | null =
-      null;
+    let handler:
+      | ((event: { payload: TrayPublishRequestPayload }) => Promise<void>)
+      | null = null;
     mocks.listen.mockImplementation(async (_eventName, callback) => {
       handler = callback;
       return () => {};
@@ -274,9 +278,9 @@ describe("useTrayRecentPublish", () => {
     if (!handler) {
       throw new Error("tray handler missing");
     }
-    const trayHandler = handler as (
-      event: { payload: TrayPublishRequestPayload }
-    ) => Promise<void>;
+    const trayHandler = handler as (event: {
+      payload: TrayPublishRequestPayload;
+    }) => Promise<void>;
 
     await trayHandler({
       payload: {
@@ -300,8 +304,9 @@ describe("useTrayRecentPublish", () => {
 
   it("支持从托盘直接执行 pubxml", async () => {
     const runPublishSpec = vi.fn().mockResolvedValue(undefined);
-    let handler: ((event: { payload: TrayPublishRequestPayload }) => Promise<void>) | null =
-      null;
+    let handler:
+      | ((event: { payload: TrayPublishRequestPayload }) => Promise<void>)
+      | null = null;
     mocks.listen.mockImplementation(async (_eventName, callback) => {
       handler = callback;
       return () => {};
@@ -322,9 +327,9 @@ describe("useTrayRecentPublish", () => {
     if (!handler) {
       throw new Error("tray handler missing");
     }
-    const trayHandler = handler as (
-      event: { payload: TrayPublishRequestPayload }
-    ) => Promise<void>;
+    const trayHandler = handler as (event: {
+      payload: TrayPublishRequestPayload;
+    }) => Promise<void>;
 
     await trayHandler({
       payload: {
@@ -354,8 +359,9 @@ describe("useTrayRecentPublish", () => {
 
   it("托盘发布始终从后端仓库快照解析仓库", async () => {
     const runPublishSpec = vi.fn().mockResolvedValue(undefined);
-    let handler: ((event: { payload: TrayPublishRequestPayload }) => Promise<void>) | null =
-      null;
+    let handler:
+      | ((event: { payload: TrayPublishRequestPayload }) => Promise<void>)
+      | null = null;
     mocks.listen.mockImplementation(async (_eventName, callback) => {
       handler = callback;
       return () => {};
@@ -387,9 +393,9 @@ describe("useTrayRecentPublish", () => {
     if (!handler) {
       throw new Error("tray handler missing");
     }
-    const trayHandler = handler as (
-      event: { payload: TrayPublishRequestPayload }
-    ) => Promise<void>;
+    const trayHandler = handler as (event: {
+      payload: TrayPublishRequestPayload;
+    }) => Promise<void>;
 
     await trayHandler({
       payload: {
@@ -414,8 +420,9 @@ describe("useTrayRecentPublish", () => {
 
   it("后端仓库快照缺失时会反馈原始错误", async () => {
     const runPublishSpec = vi.fn().mockResolvedValue(undefined);
-    let handler: ((event: { payload: TrayPublishRequestPayload }) => Promise<void>) | null =
-      null;
+    let handler:
+      | ((event: { payload: TrayPublishRequestPayload }) => Promise<void>)
+      | null = null;
     mocks.listen.mockImplementation(async (_eventName, callback) => {
       handler = callback;
       return () => {};
@@ -440,9 +447,9 @@ describe("useTrayRecentPublish", () => {
     if (!handler) {
       throw new Error("tray handler missing");
     }
-    const trayHandler = handler as (
-      event: { payload: TrayPublishRequestPayload }
-    ) => Promise<void>;
+    const trayHandler = handler as (event: {
+      payload: TrayPublishRequestPayload;
+    }) => Promise<void>;
 
     await trayHandler({
       payload: {
@@ -461,8 +468,9 @@ describe("useTrayRecentPublish", () => {
 
   it("遇到失效配置时不会执行发布并拉起主窗口", async () => {
     const runPublishSpec = vi.fn().mockResolvedValue(undefined);
-    let handler: ((event: { payload: TrayPublishRequestPayload }) => Promise<void>) | null =
-      null;
+    let handler:
+      | ((event: { payload: TrayPublishRequestPayload }) => Promise<void>)
+      | null = null;
     mocks.listen.mockImplementation(async (_eventName, callback) => {
       handler = callback;
       return () => {};
@@ -487,9 +495,9 @@ describe("useTrayRecentPublish", () => {
     if (!handler) {
       throw new Error("tray handler missing");
     }
-    const trayHandler = handler as (
-      event: { payload: TrayPublishRequestPayload }
-    ) => Promise<void>;
+    const trayHandler = handler as (event: {
+      payload: TrayPublishRequestPayload;
+    }) => Promise<void>;
 
     await trayHandler({
       payload: {
@@ -509,8 +517,9 @@ describe("useTrayRecentPublish", () => {
 
   it("未绑定且存在多个候选项目时不会触发托盘发布", async () => {
     const runPublishSpec = vi.fn().mockResolvedValue(undefined);
-    let handler: ((event: { payload: TrayPublishRequestPayload }) => Promise<void>) | null =
-      null;
+    let handler:
+      | ((event: { payload: TrayPublishRequestPayload }) => Promise<void>)
+      | null = null;
     mocks.listen.mockImplementation(async (_eventName, callback) => {
       handler = callback;
       return () => {};
@@ -552,9 +561,9 @@ describe("useTrayRecentPublish", () => {
     if (!handler) {
       throw new Error("tray handler missing");
     }
-    const trayHandler = handler as (
-      event: { payload: TrayPublishRequestPayload }
-    ) => Promise<void>;
+    const trayHandler = handler as (event: {
+      payload: TrayPublishRequestPayload;
+    }) => Promise<void>;
 
     await trayHandler({
       payload: {
@@ -572,8 +581,9 @@ describe("useTrayRecentPublish", () => {
 
   it("如果系统通知发送失败会回退显示主窗口", async () => {
     const runPublishSpec = vi.fn().mockResolvedValue(undefined);
-    let handler: ((event: { payload: TrayPublishRequestPayload }) => Promise<void>) | null =
-      null;
+    let handler:
+      | ((event: { payload: TrayPublishRequestPayload }) => Promise<void>)
+      | null = null;
     mocks.listen.mockImplementation(async (_eventName, callback) => {
       handler = callback;
       return () => {};
@@ -600,9 +610,9 @@ describe("useTrayRecentPublish", () => {
       throw new Error("tray handler missing");
     }
 
-    const trayHandler = handler as (
-      event: { payload: TrayPublishRequestPayload }
-    ) => Promise<void>;
+    const trayHandler = handler as (event: {
+      payload: TrayPublishRequestPayload;
+    }) => Promise<void>;
 
     await trayHandler({
       payload: {

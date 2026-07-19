@@ -14,9 +14,7 @@ interface TranslationMap {
   [key: string]: string | undefined;
 }
 
-export function useProjectScanner(params: {
-  appT: TranslationMap;
-}) {
+export function useProjectScanner(params: { appT: TranslationMap }) {
   const { appT } = params;
 
   const handleProjectScanFailure = useCallback(
@@ -58,11 +56,14 @@ export function useProjectScanner(params: {
       }
 
       if (failureReason === "multiple_project_files_found") {
-        toast.error(appT.scanProjectMultipleCandidates || "检测到多个项目文件", {
-          description:
-            appT.scanProjectMultipleCandidatesDesc ||
-            "该仓库包含多个项目文件，请先在仓库设置里绑定明确的 Project File。",
-        });
+        toast.error(
+          appT.scanProjectMultipleCandidates || "检测到多个项目文件",
+          {
+            description:
+              appT.scanProjectMultipleCandidatesDesc ||
+              "该仓库包含多个项目文件，请先在仓库设置里绑定明确的 Project File。",
+          }
+        );
         return;
       }
 

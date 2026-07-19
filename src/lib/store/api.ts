@@ -1,8 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 
-import {
-  normalizeEnvironmentProviderIds,
-} from "@/features/environment/environment";
+import { normalizeEnvironmentProviderIds } from "@/features/environment/environment";
 import type { ParameterSchema } from "@/types/parameters";
 import type {
   AppState,
@@ -49,7 +47,9 @@ export async function getAppState(): Promise<AppState> {
 }
 
 export async function getRepository(repoId: string): Promise<Repository> {
-  const repository = await invoke<TauriRepository>("get_repository", { repoId });
+  const repository = await invoke<TauriRepository>("get_repository", {
+    repoId,
+  });
   return normalizeRepository(repository);
 }
 
@@ -68,7 +68,9 @@ export async function updateRepository(repo: Repository): Promise<AppState> {
   return normalizeAppState(state);
 }
 
-export async function reorderRepositories(repoIds: string[]): Promise<AppState> {
+export async function reorderRepositories(
+  repoIds: string[]
+): Promise<AppState> {
   const state = await invoke<TauriAppState>("reorder_repositories", {
     repoIds,
   });
@@ -120,7 +122,10 @@ export async function pushRecentPublishConfig(params: {
   repoId: string;
   configKey: string;
 }): Promise<AppState> {
-  const state = await invoke<TauriAppState>("push_recent_publish_config", params);
+  const state = await invoke<TauriAppState>(
+    "push_recent_publish_config",
+    params
+  );
   return normalizeAppState(state);
 }
 
@@ -128,7 +133,10 @@ export async function removeRecentPublishConfig(params: {
   repoId: string;
   configKey: string;
 }): Promise<AppState> {
-  const state = await invoke<TauriAppState>("remove_recent_publish_config", params);
+  const state = await invoke<TauriAppState>(
+    "remove_recent_publish_config",
+    params
+  );
   return normalizeAppState(state);
 }
 
@@ -137,7 +145,10 @@ export async function replaceRecentPublishConfigKey(params: {
   previousKey: string;
   nextKey: string;
 }): Promise<AppState> {
-  const state = await invoke<TauriAppState>("replace_recent_publish_config_key", params);
+  const state = await invoke<TauriAppState>(
+    "replace_recent_publish_config_key",
+    params
+  );
   return normalizeAppState(state);
 }
 
@@ -145,7 +156,10 @@ export async function reorderRecentPublishConfigs(params: {
   repoId: string;
   configKeys: string[];
 }): Promise<AppState> {
-  const state = await invoke<TauriAppState>("reorder_recent_publish_configs", params);
+  const state = await invoke<TauriAppState>(
+    "reorder_recent_publish_configs",
+    params
+  );
   return normalizeAppState(state);
 }
 
@@ -175,10 +189,13 @@ export async function readProjectPublishProfile(
   projectFile: string,
   profileName: string
 ): Promise<ProjectPublishProfileFile> {
-  return await invoke<ProjectPublishProfileFile>("read_project_publish_profile", {
-    projectFile,
-    profileName,
-  });
+  return await invoke<ProjectPublishProfileFile>(
+    "read_project_publish_profile",
+    {
+      projectFile,
+      profileName,
+    }
+  );
 }
 
 export async function detectRepositoryProvider(path: string): Promise<string> {
@@ -196,16 +213,21 @@ export async function scanProject(startPath?: string): Promise<ProjectInfo> {
 export async function scanProjectCandidates(
   startPath?: string
 ): Promise<ProjectScanCandidates> {
-  const result = await invoke<TauriProjectScanCandidates>("scan_project_candidates", {
-    startPath,
-  });
+  const result = await invoke<TauriProjectScanCandidates>(
+    "scan_project_candidates",
+    {
+      startPath,
+    }
+  );
   return {
     ...result,
     recommendedProjectFile: result.recommendedProjectFile ?? undefined,
   };
 }
 
-export async function resolveProjectInfo(projectFile: string): Promise<ProjectInfo> {
+export async function resolveProjectInfo(
+  projectFile: string
+): Promise<ProjectInfo> {
   return await invoke<ProjectInfo>("resolve_project_info", { projectFile });
 }
 
@@ -272,7 +294,9 @@ export async function getShortcutsHelp(): Promise<ShortcutHelp[]> {
 }
 
 export async function getProfiles(repoId: string): Promise<ConfigProfile[]> {
-  const profiles = await invoke<TauriConfigProfile[]>("get_profiles", { repoId });
+  const profiles = await invoke<TauriConfigProfile[]>("get_profiles", {
+    repoId,
+  });
   return profiles.map(normalizeConfigProfile);
 }
 
@@ -313,7 +337,10 @@ export async function reorderProfiles(params: {
   return normalizeAppState(state);
 }
 
-export async function deleteProfile(repoId: string, name: string): Promise<AppState> {
+export async function deleteProfile(
+  repoId: string,
+  name: string
+): Promise<AppState> {
   const state = await invoke<TauriAppState>("delete_profile", { repoId, name });
   return normalizeAppState(state);
 }
@@ -357,7 +384,9 @@ export async function getExecutionHistory(): Promise<ExecutionRecord[]> {
 export async function addExecutionRecord(
   record: ExecutionRecord
 ): Promise<ExecutionRecord[]> {
-  return await invoke<TauriExecutionRecord[]>("add_execution_record", { record });
+  return await invoke<TauriExecutionRecord[]>("add_execution_record", {
+    record,
+  });
 }
 
 export async function setExecutionRecordSnapshot(

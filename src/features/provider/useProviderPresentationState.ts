@@ -55,7 +55,9 @@ export function useProviderPresentationState(params: {
   const resolvedActiveProvider = useMemo(
     () =>
       params.activeProvider ||
-      availableProviders.find((provider) => provider.id === params.activeProviderId) ||
+      availableProviders.find(
+        (provider) => provider.id === params.activeProviderId
+      ) ||
       availableProviders[0] ||
       null,
     [params.activeProvider, params.activeProviderId, availableProviders]
@@ -83,80 +85,84 @@ export function useProviderPresentationState(params: {
     [availableProviders]
   );
 
-  const providerRuntimeBanner = useMemo<ProviderRuntimeBannerState | null>(() => {
-    if (
-      params.providerListState.status === "loading" &&
-      !params.providerListState.data?.length
-    ) {
-      return {
-        key: "provider-loading",
-        status: "loading",
-        title: params.appT.loadingProviders || "正在加载 Provider 列表...",
-        description:
-          params.appT.loadingProvidersDescription ||
-          "等待 Provider 运行时初始化完成后，参数编辑和命令导入功能才会恢复。",
-        onRetry: params.retryProviderList,
-      };
-    }
+  const providerRuntimeBanner =
+    useMemo<ProviderRuntimeBannerState | null>(() => {
+      if (
+        params.providerListState.status === "loading" &&
+        !params.providerListState.data?.length
+      ) {
+        return {
+          key: "provider-loading",
+          status: "loading",
+          title: params.appT.loadingProviders || "正在加载 Provider 列表...",
+          description:
+            params.appT.loadingProvidersDescription ||
+            "等待 Provider 运行时初始化完成后，参数编辑和命令导入功能才会恢复。",
+          onRetry: params.retryProviderList,
+        };
+      }
 
-    if (params.providerListState.status === "error") {
-      return {
-        key: "provider-error",
-        status: "error",
-        title: params.appT.providerListLoadFailed || "Provider 列表加载失败",
-        description: describeRuntimeError(
-          params.providerListState.error,
-          params.appT.providerListLoadFailedDescription ||
-            "未能读取可用 Provider，请重试。"
-        ),
-        onRetry: params.retryProviderList,
-      };
-    }
+      if (params.providerListState.status === "error") {
+        return {
+          key: "provider-error",
+          status: "error",
+          title: params.appT.providerListLoadFailed || "Provider 列表加载失败",
+          description: describeRuntimeError(
+            params.providerListState.error,
+            params.appT.providerListLoadFailedDescription ||
+              "未能读取可用 Provider，请重试。"
+          ),
+          onRetry: params.retryProviderList,
+        };
+      }
 
-    if (
-      params.activeProviderSchemaState.status === "loading" &&
-      !params.activeProviderSchemaState.data
-    ) {
-      return {
-        key: "provider-schema-loading",
-        status: "loading",
-        title: params.appT.loadingProviderSchema || "正在加载 Provider 参数定义...",
-        description:
-          params.appT.loadingProviderSchemaDescription ||
-          "参数表单和命令映射会在 schema 就绪后继续可用。",
-        onRetry: params.retryProviderSchema,
-      };
-    }
+      if (
+        params.activeProviderSchemaState.status === "loading" &&
+        !params.activeProviderSchemaState.data
+      ) {
+        return {
+          key: "provider-schema-loading",
+          status: "loading",
+          title:
+            params.appT.loadingProviderSchema ||
+            "正在加载 Provider 参数定义...",
+          description:
+            params.appT.loadingProviderSchemaDescription ||
+            "参数表单和命令映射会在 schema 就绪后继续可用。",
+          onRetry: params.retryProviderSchema,
+        };
+      }
 
-    if (params.activeProviderSchemaState.status === "error") {
-      return {
-        key: "provider-schema-error",
-        status: "error",
-        title: params.appT.providerSchemaLoadFailed || "Provider 参数定义加载失败",
-        description: describeRuntimeError(
-          params.activeProviderSchemaState.error,
-          params.appT.providerSchemaLoadFailedDescription ||
-            "无法读取当前 Provider 的参数定义，请重试。"
-        ),
-        onRetry: params.retryProviderSchema,
-      };
-    }
+      if (params.activeProviderSchemaState.status === "error") {
+        return {
+          key: "provider-schema-error",
+          status: "error",
+          title:
+            params.appT.providerSchemaLoadFailed || "Provider 参数定义加载失败",
+          description: describeRuntimeError(
+            params.activeProviderSchemaState.error,
+            params.appT.providerSchemaLoadFailedDescription ||
+              "无法读取当前 Provider 的参数定义，请重试。"
+          ),
+          onRetry: params.retryProviderSchema,
+        };
+      }
 
-    return null;
-  }, [
-    params.activeProviderSchemaState,
-    params.appT.loadingProviderSchema,
-    params.appT.loadingProviderSchemaDescription,
-    params.appT.loadingProviders,
-    params.appT.loadingProvidersDescription,
-    params.appT.providerListLoadFailed,
-    params.appT.providerListLoadFailedDescription,
-    params.appT.providerSchemaLoadFailed,
-    params.appT.providerSchemaLoadFailedDescription,
-    params.providerListState,
-    params.retryProviderList,
-    params.retryProviderSchema,
-  ]);
+      return null;
+    }, [
+      params.activeProviderSchemaState,
+      params.appT.loadingProviderSchema,
+      params.appT.loadingProviderSchemaDescription,
+      params.appT.loadingProviders,
+      params.appT.loadingProvidersDescription,
+      params.appT.providerListLoadFailed,
+      params.appT.providerListLoadFailedDescription,
+      params.appT.providerSchemaLoadFailed,
+      params.appT.providerSchemaLoadFailedDescription,
+      params.providerListState,
+      params.retryProviderList,
+      params.retryProviderSchema,
+    ]);
 
   return {
     availableProviders,

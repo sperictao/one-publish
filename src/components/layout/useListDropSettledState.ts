@@ -15,9 +15,9 @@ interface PointerListDragEndResult<TMeta> {
   pointer: PointerListPointer | null;
 }
 
-export function useListDropSettledState<TItemId extends string>(
-  options?: { resetKey?: string | null }
-) {
+export function useListDropSettledState<TItemId extends string>(options?: {
+  resetKey?: string | null;
+}) {
   const resetKey = options?.resetKey ?? null;
   const [settledItemId, setSettledItemId] = useState<TItemId | null>(null);
   const settledPointerRef = useRef<PointerListPointer | null>(null);
@@ -41,7 +41,9 @@ export function useListDropSettledState<TItemId extends string>(
   const setSettledItem = useCallback(
     (itemId: TItemId | null, pointer: PointerListPointer | null) => {
       settledPointerRef.current = itemId ? pointer : null;
-      setSettledItemId((previousId) => (previousId === itemId ? previousId : itemId));
+      setSettledItemId((previousId) =>
+        previousId === itemId ? previousId : itemId
+      );
     },
     []
   );

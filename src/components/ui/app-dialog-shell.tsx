@@ -9,7 +9,8 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 
-type AppDialogShellSize = "compact" | "default" | "wide" | "workspace" | "responsive";
+type AppDialogShellSize =
+  "compact" | "default" | "wide" | "workspace" | "responsive";
 type AppDialogShellPadding = "default" | "none";
 
 const contentSizeClassName: Record<AppDialogShellSize, string> = {
@@ -87,7 +88,12 @@ export function AppDialogShell({
         dialogClassName
       )}
     >
-      <div className={cn("p-1", isFixedSecondaryHeight && "h-full min-h-0 flex flex-col")}>
+      <div
+        className={cn(
+          "p-1",
+          isFixedSecondaryHeight && "h-full min-h-0 flex flex-col"
+        )}
+      >
         <div
           className={cn(
             "surface-modal flex min-h-0 flex-col overflow-hidden rounded-md",
@@ -114,7 +120,10 @@ export function AppDialogShell({
               ) : null}
               <div className="min-w-0 flex-1">
                 <DialogTitle
-                  className={cn("text-heading-20 font-semibold", titleClassName)}
+                  className={cn(
+                    "text-heading-20 font-semibold",
+                    titleClassName
+                  )}
                 >
                   {title}
                 </DialogTitle>
@@ -126,20 +135,25 @@ export function AppDialogShell({
                   </DialogDescription>
                 ) : null}
               </div>
-              {headerAside ? <div className="flex-shrink-0">{headerAside}</div> : null}
+              {headerAside ? (
+                <div className="flex-shrink-0">{headerAside}</div>
+              ) : null}
             </div>
           </DialogHeader>
 
           <div
             className={cn(
               "min-h-0 flex-1",
-              bodyScrollable ? "geist-scrollbar overflow-y-auto" : "relative overflow-hidden",
+              bodyScrollable
+                ? "geist-scrollbar overflow-y-auto"
+                : "relative overflow-hidden",
               bodyClassName
             )}
           >
             <div
               className={cn(
-                !bodyScrollable && "absolute inset-0 h-full w-full flex flex-col",
+                !bodyScrollable &&
+                  "absolute inset-0 h-full w-full flex flex-col",
                 bodyScrollable && "min-h-0",
                 bodyPadding === "default" && "p-5 sm:p-6",
                 bodyInnerClassName

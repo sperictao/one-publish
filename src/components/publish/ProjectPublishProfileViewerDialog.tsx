@@ -78,7 +78,9 @@ export function ProjectPublishProfileViewerDialog({
       return [];
     }
 
-    return buildProjectPublishProfileSupplementSections(viewerState.parsedProfile);
+    return buildProjectPublishProfileSupplementSections(
+      viewerState.parsedProfile
+    );
   }, [viewerState]);
 
   return (
@@ -102,11 +104,9 @@ export function ProjectPublishProfileViewerDialog({
         description={
           viewerState.profileName
             ? `${
-                t.viewConfigDescription ||
-                "查看项目发布配置文件中的全部参数。"
+                t.viewConfigDescription || "查看项目发布配置文件中的全部参数。"
               } · ${viewerState.profileName}`
-            : t.viewConfigDescription ||
-              "查看项目发布配置文件中的全部参数。"
+            : t.viewConfigDescription || "查看项目发布配置文件中的全部参数。"
         }
         icon={<Eye className="size-4" />}
         footer={
@@ -219,7 +219,9 @@ function ProjectPublishProfileSupplementSectionCard({
             </div>
             <CardDescription className="mt-1 text-label-12">
               {translations.fullParsedSectionTag || "标签"}:{" "}
-              <span className="font-mono text-label-13-mono">{section.tagName}</span>
+              <span className="font-mono text-label-13-mono">
+                {section.tagName}
+              </span>
             </CardDescription>
           </div>
           <span className="rounded-full bg-interactive/10 px-2 py-0.5 text-label-12 font-semibold text-interactive">
@@ -231,9 +233,7 @@ function ProjectPublishProfileSupplementSectionCard({
       <CardContent className="space-y-4 pt-0">
         {sectionAttributes.length > 0 ? (
           <ProjectPublishProfileMetadataBlock
-            label={
-              translations.fullParsedSectionAttributes || "分组属性"
-            }
+            label={translations.fullParsedSectionAttributes || "分组属性"}
             entries={sectionAttributes}
           />
         ) : null}
@@ -243,7 +243,9 @@ function ProjectPublishProfileSupplementSectionCard({
             key={`${section.id}:${entry.path}:${entry.key}`}
             className="space-y-3 rounded-sm border border-border bg-muted p-4"
           >
-            <div className="font-mono text-label-13-mono font-semibold text-foreground">{entry.key}</div>
+            <div className="font-mono text-label-13-mono font-semibold text-foreground">
+              {entry.key}
+            </div>
             <ProjectPublishProfileField
               label={translations.fullParsedEntryPath || "节点路径"}
               value={entry.path}
@@ -256,9 +258,7 @@ function ProjectPublishProfileSupplementSectionCard({
             />
             {Object.keys(entry.attributes).length > 0 ? (
               <ProjectPublishProfileMetadataBlock
-                label={
-                  translations.fullParsedEntryAttributes || "节点属性"
-                }
+                label={translations.fullParsedEntryAttributes || "节点属性"}
                 entries={Object.entries(entry.attributes)}
               />
             ) : null}
@@ -287,7 +287,9 @@ function ProjectPublishProfileMetadataBlock({
             key={`${label}:${key}`}
             className="grid gap-2 rounded-sm border border-border bg-muted px-3 py-2 sm:grid-cols-[minmax(0,140px)_1fr]"
           >
-            <div className="break-all font-mono text-label-13-mono font-semibold text-muted-foreground">{key}</div>
+            <div className="break-all font-mono text-label-13-mono font-semibold text-muted-foreground">
+              {key}
+            </div>
             <div className="break-all font-mono text-label-13-mono text-muted-foreground">
               {value}
             </div>

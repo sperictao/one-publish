@@ -26,7 +26,8 @@ describe("buildProjectPublishProfileSupplementSections", () => {
       </Project>
     `);
 
-    const sections = buildProjectPublishProfileSupplementSections(parsedProfile);
+    const sections =
+      buildProjectPublishProfileSupplementSections(parsedProfile);
 
     expect(sections).toHaveLength(2);
     expect(sections[0]?.tagName).toBe("PropertyGroup");

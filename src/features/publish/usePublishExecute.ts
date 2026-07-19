@@ -6,9 +6,7 @@ import type {
   TranslationMap,
 } from "@/features/publish/publishTransaction";
 import { usePublishStore } from "@/stores/publishStore";
-import {
-  createPublishExecutionRecord,
-} from "@/features/history/publishExecutionRecord";
+import { createPublishExecutionRecord } from "@/features/history/publishExecutionRecord";
 import { exportExecutionSnapshot } from "@/features/history/executionSnapshot";
 import { normalizePublishResult } from "@/features/history/publishFailure";
 import {
@@ -98,12 +96,9 @@ export function usePublishExecute({
     setReleaseChecklistOpen,
   ]);
 
-  const isCurrentPresentationRevision = useCallback(
-    (runRevision: number) => {
-      return presentationRevisionRef.current === runRevision;
-    },
-    []
-  );
+  const isCurrentPresentationRevision = useCallback((runRevision: number) => {
+    return presentationRevisionRef.current === runRevision;
+  }, []);
 
   const startPublishPresentationRun = useCallback(() => {
     const runRevision = presentationRevisionRef.current + 1;
@@ -338,16 +333,10 @@ export function usePublishExecute({
       repoId: selectedRepoId,
       recentConfigKey: request.recentConfigKey,
     });
-  }, [
-    appT,
-    runPublishSpec,
-    selectedRepoId,
-    validate,
-  ]);
+  }, [appT, runPublishSpec, selectedRepoId, validate]);
 
   const cancelPublish = useCallback(async () => {
-    const { isPublishing, isCancellingPublish } =
-      usePublishStore.getState();
+    const { isPublishing, isCancellingPublish } = usePublishStore.getState();
     if (!isPublishing || isCancellingPublish) {
       return;
     }
@@ -356,22 +345,15 @@ export function usePublishExecute({
     try {
       const cancelled = await cancelProviderPublish();
       if (cancelled) {
-        toast.message(
-          appT.cancellingPublish || "正在取消发布..."
-        );
+        toast.message(appT.cancellingPublish || "正在取消发布...");
       } else {
-        toast.message(
-          appT.noRunningPublishTask || "当前没有运行中的发布任务"
-        );
+        toast.message(appT.noRunningPublishTask || "当前没有运行中的发布任务");
       }
     } catch (err) {
       const [
         { extractInvokeErrorCode, extractInvokeErrorMessage },
         { getCancelPublishFeedback },
-      ] = await Promise.all([
-        loadInvokeErrors(),
-        loadCancelPublishFeedback(),
-      ]);
+      ] = await Promise.all([loadInvokeErrors(), loadCancelPublishFeedback()]);
       const errorCode = extractInvokeErrorCode(err);
       const feedback = getCancelPublishFeedback(
         appT,

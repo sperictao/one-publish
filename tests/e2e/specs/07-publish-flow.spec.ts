@@ -16,12 +16,14 @@ test.describe("Full Publish Flow — Happy Path", () => {
 
     // 1. Verify initial state — repo-a selected, publish panel visible
     const repoABtn = page.locator(
-      "[data-list-item-id='repo-a'] button[aria-pressed]",
+      "[data-list-item-id='repo-a'] button[aria-pressed]"
     );
     await expect(repoABtn).toHaveAttribute("aria-pressed", "true");
 
     // 2. Verify publish command preview is visible
-    const commandPreview = page.locator("[data-testid='publish-command-preview']");
+    const commandPreview = page.locator(
+      "[data-testid='publish-command-preview']"
+    );
     await expect(commandPreview).toBeVisible({ timeout: 10000 });
     await expect(commandPreview).toContainText("dotnet publish");
 
@@ -49,11 +51,13 @@ test.describe("Full Publish Flow — Happy Path", () => {
       .locator("[data-list-item-id='repo-b'] button[aria-pressed]")
       .click();
     await expect(
-      page.locator("[data-list-item-id='repo-b'] button[aria-pressed]"),
+      page.locator("[data-list-item-id='repo-b'] button[aria-pressed]")
     ).toHaveAttribute("aria-pressed", "true");
 
     // Command preview should still be visible
-    const commandPreview = page.locator("[data-testid='publish-command-preview']");
+    const commandPreview = page.locator(
+      "[data-testid='publish-command-preview']"
+    );
     await expect(commandPreview).toBeVisible({ timeout: 10000 });
 
     // Publish button should be usable
@@ -62,7 +66,9 @@ test.describe("Full Publish Flow — Happy Path", () => {
     await expect(publishBtn).not.toBeDisabled();
   });
 
-  test("publish command visible and survives preset switching", async ({ page }) => {
+  test("publish command visible and survives preset switching", async ({
+    page,
+  }) => {
     await gotoAppWithPublishConfig(page);
 
     const folder = page.locator("[data-testid='pubxml-select-FolderProfile']");
@@ -72,7 +78,9 @@ test.describe("Full Publish Flow — Happy Path", () => {
     await expect(zip).toBeVisible();
 
     // Command preview should be visible
-    const commandPreview = page.locator("[data-testid='publish-command-preview']");
+    const commandPreview = page.locator(
+      "[data-testid='publish-command-preview']"
+    );
     await expect(commandPreview).toBeVisible({ timeout: 10000 });
     await expect(folder).toHaveAttribute("data-selected", "true");
     await expect(commandPreview).toContainText("FolderProfile");
@@ -102,7 +110,7 @@ test.describe("Full Publish Flow — Error Paths", () => {
 
     // Wait for publish config panel
     await expect(
-      page.locator("[data-list-item-id='pubxml:FolderProfile']"),
+      page.locator("[data-list-item-id='pubxml:FolderProfile']")
     ).toBeVisible({ timeout: 15000 });
 
     // Click publish
@@ -124,7 +132,7 @@ test.describe("Full Publish Flow — Error Paths", () => {
     });
 
     await expect(
-      page.locator("[data-list-item-id='pubxml:FolderProfile']"),
+      page.locator("[data-list-item-id='pubxml:FolderProfile']")
     ).toBeVisible({ timeout: 15000 });
 
     // The publish button may be disabled or show an error
@@ -132,7 +140,9 @@ test.describe("Full Publish Flow — Error Paths", () => {
     await expect(publishBtn).toBeVisible({ timeout: 10000 });
   });
 
-  test("provider schema fetch failure is handled gracefully", async ({ page }) => {
+  test("provider schema fetch failure is handled gracefully", async ({
+    page,
+  }) => {
     await gotoApp(page, {
       errors: {
         get_provider_schema: "schema not found for provider",
@@ -140,20 +150,22 @@ test.describe("Full Publish Flow — Error Paths", () => {
     });
 
     // App should still render — repo list should be visible
-    await expect(
-      page.locator("[data-list-item-id='repo-a']"),
-    ).toBeVisible({ timeout: 15000 });
+    await expect(page.locator("[data-list-item-id='repo-a']")).toBeVisible({
+      timeout: 15000,
+    });
   });
 });
 
 test.describe("Publish Flow — Edge Cases", () => {
-  test("publish button is disabled when no repo is selected", async ({ page }) => {
+  test("publish button is disabled when no repo is selected", async ({
+    page,
+  }) => {
     await gotoApp(page);
 
     // Deselect repo-a by selecting then deselecting (or if there's a deselect mechanism)
     // Verify the publish panel still renders
     await expect(
-      page.locator("[data-testid='publish-status-panel']"),
+      page.locator("[data-testid='publish-status-panel']")
     ).toBeVisible({ timeout: 10000 });
   });
 
@@ -169,7 +181,7 @@ test.describe("Publish Flow — Edge Cases", () => {
 
     // Should not crash — app should still be responsive
     await expect(
-      page.locator("[data-testid='publish-status-panel']"),
+      page.locator("[data-testid='publish-status-panel']")
     ).toBeVisible({ timeout: 10000 });
   });
 });

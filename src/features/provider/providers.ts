@@ -1,4 +1,7 @@
-import type { ProviderManifest, ProviderProjectPathKind } from "@/lib/store/types";
+import type {
+  ProviderManifest,
+  ProviderProjectPathKind,
+} from "@/lib/store/types";
 
 type ProviderPresentation = Pick<
   ProviderManifest,
@@ -71,9 +74,7 @@ export function providerUsesProjectFile(
 export function providerRequiresProjectBinding(
   provider: ProviderPresentation | null | undefined
 ): boolean {
-  return (
-    provider?.requiresProjectBinding ?? providerUsesProjectFile(provider)
-  );
+  return provider?.requiresProjectBinding ?? providerUsesProjectFile(provider);
 }
 
 export function resolveEnvironmentProviderOptions(

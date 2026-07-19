@@ -89,9 +89,7 @@ export function MainContentShell({
               type="button"
               className={cn(
                 topbarViewButtonClass,
-                rightPanelView === "home"
-                  ? topbarViewButtonActiveClass
-                  : null
+                rightPanelView === "home" ? topbarViewButtonActiveClass : null
               )}
               onClick={(e) => {
                 e.stopPropagation();

@@ -16,7 +16,9 @@ export function normalizeGitHubUrl(remoteUrl) {
 
 export function parseGitHubRepo(remoteUrl) {
   const normalizedUrl = normalizeGitHubUrl(remoteUrl);
-  const match = normalizedUrl.match(/^https:\/\/github\.com\/([^/]+)\/([^/]+)$/);
+  const match = normalizedUrl.match(
+    /^https:\/\/github\.com\/([^/]+)\/([^/]+)$/
+  );
 
   if (!match) {
     return null;

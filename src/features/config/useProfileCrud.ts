@@ -3,9 +3,7 @@ import { toast } from "sonner";
 import type { Dispatch, SetStateAction } from "react";
 
 import { mapImportedSpecByProvider } from "@/features/provider/commandImportMapping";
-import {
-  createDotnetPublishConfigFromParameters,
-} from "@/features/config/dotnetPublishConfig";
+import { createDotnetPublishConfigFromParameters } from "@/features/config/dotnetPublishConfig";
 import { createUserProfileConfigKey } from "@/features/config/publishConfigIdentity";
 import type {
   ConfigParameters,
@@ -228,7 +226,12 @@ export function useProfileCrud({
         await refreshProfilesAfterMutation(repoId, repo.publishConfig.profiles);
       }
     },
-    [profileT.saveFailed, refreshProfilesAfterMutation, selectedRepoId, saveProfileToStore]
+    [
+      profileT.saveFailed,
+      refreshProfilesAfterMutation,
+      selectedRepoId,
+      saveProfileToStore,
+    ]
   );
 
   const deleteProfile = useCallback(
@@ -263,7 +266,12 @@ export function useProfileCrud({
       await applyImportedConfigFn(repoId, importedProfiles);
       await refreshProfilesAfterMutation(repoId);
     },
-    [profileT.importFailed, refreshProfilesAfterMutation, selectedRepoId, applyImportedConfigFn]
+    [
+      profileT.importFailed,
+      refreshProfilesAfterMutation,
+      selectedRepoId,
+      applyImportedConfigFn,
+    ]
   );
 
   const handleCreateProfileFromProjectProfile = useCallback(
@@ -273,7 +281,10 @@ export function useProfileCrud({
       }
 
       const existingNames = new Set(profiles.map((profile) => profile.name));
-      const profileName = buildCopiedProfileName(sourceProfileName, existingNames);
+      const profileName = buildCopiedProfileName(
+        sourceProfileName,
+        existingNames
+      );
       const parameters = buildProfileParameters(config);
 
       const state = await saveProfileToStore({

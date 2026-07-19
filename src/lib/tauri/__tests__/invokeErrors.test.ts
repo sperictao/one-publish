@@ -133,9 +133,7 @@ describe("analyzeBranchRefreshFailure", () => {
 
   it("中文子串『系统找不到指定的文件』配合 failed to execute git 命中 git_missing", () => {
     expect(
-      analyzeBranchRefreshFailure(
-        "failed to execute git: 系统找不到指定的文件"
-      )
+      analyzeBranchRefreshFailure("failed to execute git: 系统找不到指定的文件")
     ).toBe("git_missing");
   });
 
@@ -268,9 +266,15 @@ describe("analyzePublishExecutionFailure", () => {
     ["project_path_not_found", "project_path_not_found"],
     ["publish_output_windows_drive_root_missing", "output_path_invalid"],
     ["publish_output_windows_style_path_on_posix", "output_path_incompatible"],
-    ["publish_output_posix_absolute_path_on_windows", "output_path_incompatible"],
+    [
+      "publish_output_posix_absolute_path_on_windows",
+      "output_path_incompatible",
+    ],
     ["publish_output_path_incompatible", "output_path_incompatible"],
-    ["publish_protected_directory_access_denied", "protected_directory_access_denied"],
+    [
+      "publish_protected_directory_access_denied",
+      "protected_directory_access_denied",
+    ],
     ["publish_remote_target_not_implemented", "remote_target_not_implemented"],
     ["unsupported_provider", "unsupported_provider"],
     ["render_error", "render_error"],

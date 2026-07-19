@@ -35,7 +35,10 @@ export function parseOutputTargetLocal(raw: string): OutputTargetHint {
 export async function parseOutputTargetRemote(
   raw: string
 ): Promise<OutputTargetDescriptor> {
-  return await invoke<OutputTargetDescriptor>("describe_publish_output_target", {
-    raw,
-  });
+  return await invoke<OutputTargetDescriptor>(
+    "describe_publish_output_target",
+    {
+      raw,
+    }
+  );
 }

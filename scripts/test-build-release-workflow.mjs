@@ -142,10 +142,7 @@ assertContains(
   "if-no-files-found: error",
   "Upload bundles 未启用 if-no-files-found: error，可能掩盖产物缺失。"
 );
-assertContains(
-  "pnpm build:updater --",
-  "构建步骤仍未切到 build:updater。"
-);
+assertContains("pnpm build:updater --", "构建步骤仍未切到 build:updater。");
 assertContains(
   'node-version: "20"',
   "Setup Node 仍未升级到兼容 Vite 7 的版本。"
@@ -184,10 +181,7 @@ assertContains(
 for (const rule of workflowReleaseAssetRules) {
   assertContains(rule.fragment, rule.message);
 }
-assertContains(
-  "- name: Remove existing release",
-  "缺少旧 release 清理步骤。"
-);
+assertContains("- name: Remove existing release", "缺少旧 release 清理步骤。");
 assertContains(
   "- name: Checkout release ref",
   "release job 缺少仓库 checkout，无法读取 release notes 文件。"
@@ -197,13 +191,10 @@ assertContains(
   "缺少 release notes 解析步骤。"
 );
 assertContains(
-  "release_notes_path=\"./release-notes/${GITHUB_REF_NAME}.md\"",
+  'release_notes_path="./release-notes/${GITHUB_REF_NAME}.md"',
   "release notes 文件路径未绑定到 tag。"
 );
-assertContains(
-  "gh release create",
-  "Release 仍未使用 gh release create。"
-);
+assertContains("gh release create", "Release 仍未使用 gh release create。");
 assertStepNotContains(
   "Download bundles",
   "merge-multiple: true",
@@ -233,7 +224,7 @@ assertStepContains(
 );
 assertStepContains(
   "Generate latest updater manifest",
-  "--notes-file \"${RELEASE_NOTES_PATH}\"",
+  '--notes-file "${RELEASE_NOTES_PATH}"',
   "latest.json 生成步骤未注入 release notes 文件。"
 );
 assertStepNotContains(
@@ -278,7 +269,7 @@ assertStepNotContains(
 );
 assertStepContains(
   "Create GitHub Release",
-  "--notes-file \"${RELEASE_NOTES_PATH}\"",
+  '--notes-file "${RELEASE_NOTES_PATH}"',
   "GitHub Release 未使用 release notes 文件。"
 );
 

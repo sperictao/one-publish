@@ -29,9 +29,7 @@ export function BooleanParameter({
         <Label htmlFor={resolvedInputId} className="cursor-pointer">
           {resolvedLabel}
         </Label>
-        {definition.description && (
-          <HelpTip text={definition.description} />
-        )}
+        {definition.description && <HelpTip text={definition.description} />}
       </div>
       <Switch
         id={resolvedInputId}

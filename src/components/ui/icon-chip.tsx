@@ -16,7 +16,11 @@ interface IconChipProps {
 }
 
 /** Geist 图标 chip：interactive/10 底 + interactive 前景，6px 圆角。 */
-export function IconChip({ children, className, size = "md" }: IconChipProps): ReactNode {
+export function IconChip({
+  children,
+  className,
+  size = "md",
+}: IconChipProps): ReactNode {
   return (
     <span
       className={cn(

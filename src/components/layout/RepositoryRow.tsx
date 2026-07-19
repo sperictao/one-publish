@@ -91,7 +91,10 @@ export const RepositoryRow = memo(function RepositoryRow({
       }}
       onBlurCapture={(event) => {
         const nextFocusTarget = event.relatedTarget;
-        if (nextFocusTarget instanceof Node && event.currentTarget.contains(nextFocusTarget)) {
+        if (
+          nextFocusTarget instanceof Node &&
+          event.currentTarget.contains(nextFocusTarget)
+        ) {
           return;
         }
 

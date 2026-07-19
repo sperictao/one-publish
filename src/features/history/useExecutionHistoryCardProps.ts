@@ -34,7 +34,10 @@ interface UseExecutionHistoryCardPropsParams {
   clearHistoryFilters: () => void;
   openSnapshotFromRecord: (record: ExecutionRecord) => Promise<void>;
   rerunFromHistory: (record: ExecutionRecord) => Promise<void>;
-  copyHandoffSnippet: (record: ExecutionRecord, format: HandoffSnippetFormat) => Promise<void>;
+  copyHandoffSnippet: (
+    record: ExecutionRecord,
+    format: HandoffSnippetFormat
+  ) => Promise<void>;
 }
 
 export function useExecutionHistoryCardProps(

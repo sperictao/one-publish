@@ -1,9 +1,7 @@
 import { ask, open } from "@tauri-apps/plugin-dialog";
 import { toast } from "sonner";
 
-import {
-  defaultRepoPublishConfig,
-} from "@/lib/store/types";
+import { defaultRepoPublishConfig } from "@/lib/store/types";
 import {
   detectRepositoryProvider,
   listProviders,
@@ -336,7 +334,8 @@ export async function handleDetectRepoProviderRuntime(params: {
     if (failureReason === "path_not_found") {
       toast.error(appT.providerDetectPathNotFound || "仓库路径不存在", {
         description:
-          appT.providerDetectPathNotFoundDesc || "请确认 Project Root 路径存在且可访问。",
+          appT.providerDetectPathNotFoundDesc ||
+          "请确认 Project Root 路径存在且可访问。",
       });
       return null;
     }
@@ -344,7 +343,8 @@ export async function handleDetectRepoProviderRuntime(params: {
     if (failureReason === "not_directory") {
       toast.error(appT.providerDetectNotDirectory || "Project Root 不是目录", {
         description:
-          appT.providerDetectNotDirectoryDesc || "请填写项目根目录，而不是文件路径。",
+          appT.providerDetectNotDirectoryDesc ||
+          "请填写项目根目录，而不是文件路径。",
       });
       return null;
     }
@@ -441,7 +441,8 @@ export async function handleRefreshRepoBranchesRuntime(params: {
     if (failureReason === "not_directory") {
       toast.error(appT.branchPullNotDirectory || "仓库路径不是目录", {
         description:
-          appT.branchPullNotDirectoryDesc || "请确认填写的是仓库目录而非文件路径。",
+          appT.branchPullNotDirectoryDesc ||
+          "请确认填写的是仓库目录而非文件路径。",
       });
       return null;
     }
@@ -449,7 +450,8 @@ export async function handleRefreshRepoBranchesRuntime(params: {
     if (failureReason === "git_missing") {
       toast.error(appT.branchPullGitMissing || "未检测到 Git 命令", {
         description:
-          appT.branchPullGitMissingDesc || "请先安装 Git，并确保 git 已加入 PATH。",
+          appT.branchPullGitMissingDesc ||
+          "请先安装 Git，并确保 git 已加入 PATH。",
       });
       return null;
     }
@@ -457,7 +459,8 @@ export async function handleRefreshRepoBranchesRuntime(params: {
     if (failureReason === "cannot_connect_repo") {
       toast.error(appT.branchPullCannotConnect || "无法连接 Git 仓库", {
         description:
-          appT.branchPullCannotConnectDesc || "请检查网络代理、仓库地址和凭据后重试。",
+          appT.branchPullCannotConnectDesc ||
+          "请检查网络代理、仓库地址和凭据后重试。",
       });
       return null;
     }

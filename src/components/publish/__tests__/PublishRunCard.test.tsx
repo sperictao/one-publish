@@ -4,7 +4,8 @@ import { describe, expect, it, vi } from "vitest";
 import { PublishRunCard } from "@/components/publish/PublishRunCard";
 
 vi.mock("@/lib/store/api", async () => {
-  const actual = await vi.importActual<typeof import("@/lib/store/api")>("@/lib/store/api");
+  const actual =
+    await vi.importActual<typeof import("@/lib/store/api")>("@/lib/store/api");
   return {
     ...actual,
     openOutputDirectory: vi.fn(),
@@ -37,7 +38,8 @@ describe("PublishRunCard", () => {
           outputLogTitle: "执行发布",
           publishStatusLabel: "发布状态",
           statusSuccess: "成功",
-          publishStatusSuccessDetail: "发布已完成，可直接打开输出目录查看产物。",
+          publishStatusSuccessDetail:
+            "发布已完成，可直接打开输出目录查看产物。",
           outputDirectoryLabel: "输出目录",
           fileCountUnit: "个文件",
           noOutput: "无输出",
@@ -100,7 +102,8 @@ describe("PublishRunCard", () => {
           outputLogTitle: "执行发布",
           publishStatusLabel: "发布状态",
           publishStatusRunning: "发布中",
-          publishStatusRunningDetail: "发布命令正在执行，日志会持续追加到下方输出区域。",
+          publishStatusRunningDetail:
+            "发布命令正在执行，日志会持续追加到下方输出区域。",
           noOutput: "无输出",
         }}
         publishActions={{
@@ -181,7 +184,9 @@ describe("PublishRunCard", () => {
       />
     );
 
-    expect(screen.getByText('dotnet publish "/repo-a/App.csproj"')).toBeInTheDocument();
+    expect(
+      screen.getByText('dotnet publish "/repo-a/App.csproj"')
+    ).toBeInTheDocument();
 
     rerender(
       <PublishRunCard
@@ -193,7 +198,9 @@ describe("PublishRunCard", () => {
       />
     );
 
-    expect(screen.getByText('dotnet publish "/repo-a/App.csproj"')).toBeInTheDocument();
+    expect(
+      screen.getByText('dotnet publish "/repo-a/App.csproj"')
+    ).toBeInTheDocument();
     expect(screen.getByText("正在刷新发布信息...")).toBeInTheDocument();
     expect(screen.getByText("old log")).toBeInTheDocument();
 
@@ -213,7 +220,9 @@ describe("PublishRunCard", () => {
       />
     );
 
-    expect(screen.getByText('dotnet publish "/repo-b/App.csproj"')).toBeInTheDocument();
+    expect(
+      screen.getByText('dotnet publish "/repo-b/App.csproj"')
+    ).toBeInTheDocument();
   });
 
   it("成功且带 warnings 时展示警告摘要", () => {

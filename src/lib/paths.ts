@@ -2,7 +2,11 @@ const WINDOWS_DRIVE_RE = /^[a-zA-Z]:([\\/]|$)/;
 const UNC_ROOT_RE = /^\\\\[^\\/]+[\\/][^\\/]+[\\/]?$/;
 
 function isRootPath(path: string): boolean {
-  return /^[\\/]+$/.test(path) || /^[a-zA-Z]:[\\/]?$/.test(path) || UNC_ROOT_RE.test(path);
+  return (
+    /^[\\/]+$/.test(path) ||
+    /^[a-zA-Z]:[\\/]?$/.test(path) ||
+    UNC_ROOT_RE.test(path)
+  );
 }
 
 function splitPathSegments(path: string): string[] {
@@ -40,7 +44,11 @@ function pathSegmentsMatch(
 }
 
 export function isWindowsLikePath(path: string): boolean {
-  return WINDOWS_DRIVE_RE.test(path) || path.includes("\\") || path.startsWith("\\\\");
+  return (
+    WINDOWS_DRIVE_RE.test(path) ||
+    path.includes("\\") ||
+    path.startsWith("\\\\")
+  );
 }
 
 export function stripTrailingPathSeparators(path: string): string {
@@ -52,7 +60,9 @@ export function stripTrailingPathSeparators(path: string): string {
 
 export function getPathBasename(path: string): string {
   const segments = splitPathSegments(path);
-  return segments[segments.length - 1] || stripTrailingPathSeparators(path) || path;
+  return (
+    segments[segments.length - 1] || stripTrailingPathSeparators(path) || path
+  );
 }
 
 export function getPathRelativeToRoot(path: string, root: string): string {
@@ -76,8 +86,12 @@ export function getPathRelativeToRoot(path: string, root: string): string {
     return path;
   }
 
-  const separator = isWindowsLikePath(path) || isWindowsLikePath(root) ? "\\" : "/";
-  return pathSegments.slice(rootSegments.length).join(separator) || getPathBasename(path);
+  const separator =
+    isWindowsLikePath(path) || isWindowsLikePath(root) ? "\\" : "/";
+  return (
+    pathSegments.slice(rootSegments.length).join(separator) ||
+    getPathBasename(path)
+  );
 }
 
 export function joinPath(...parts: string[]): string {
@@ -114,7 +128,9 @@ export function appendExtensionToPath(
   extension: string,
   fallbackBase = "artifact"
 ): string {
-  const normalizedExtension = extension.startsWith(".") ? extension : `.${extension}`;
+  const normalizedExtension = extension.startsWith(".")
+    ? extension
+    : `.${extension}`;
   const base = stripTrailingPathSeparators(path);
 
   if (!base) {
@@ -128,7 +144,10 @@ export function appendExtensionToPath(
   return `${base}${normalizedExtension}`;
 }
 
-export function isPathEqualOrInside(candidate: string, parent: string): boolean {
+export function isPathEqualOrInside(
+  candidate: string,
+  parent: string
+): boolean {
   if (!candidate || !parent) {
     return false;
   }
@@ -154,7 +173,11 @@ export function remapPathPrefix(
     return path;
   }
 
-  const caseSensitive = preferCaseSensitivePathComparison([path, oldPrefix, newPrefix]);
+  const caseSensitive = preferCaseSensitivePathComparison([
+    path,
+    oldPrefix,
+    newPrefix,
+  ]);
   const pathSegments = splitPathSegments(path);
   const oldPrefixSegments = splitPathSegments(oldPrefix);
 
@@ -170,5 +193,7 @@ export function remapPathPrefix(
   }
 
   const suffixSegments = pathSegments.slice(oldPrefixSegments.length);
-  return suffixSegments.length ? joinPath(newPrefix, ...suffixSegments) : newPrefix;
+  return suffixSegments.length
+    ? joinPath(newPrefix, ...suffixSegments)
+    : newPrefix;
 }

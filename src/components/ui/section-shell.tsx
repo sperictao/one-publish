@@ -1,7 +1,12 @@
 import { useState, type ReactNode } from "react";
 import { ChevronDown, ChevronRight, type LucideIcon } from "lucide-react";
 
-import { Card, CardContent, CardDescription, CardHeader } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+} from "@/components/ui/card";
 
 interface SectionShellProps {
   icon: LucideIcon;
@@ -34,7 +39,9 @@ export function SectionShell({
         <Icon className="size-3.5" />
       </span>
       <div className="min-w-0 flex-1 text-left">
-        <Heading className="text-heading-14 font-semibold text-foreground">{title}</Heading>
+        <Heading className="text-heading-14 font-semibold text-foreground">
+          {title}
+        </Heading>
         <CardDescription className="mt-0.5 text-label-12 text-[hsl(var(--text-fine))]">
           {description}
         </CardDescription>

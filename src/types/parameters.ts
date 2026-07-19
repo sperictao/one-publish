@@ -10,14 +10,19 @@ export type { ParameterType, SpecValue };
 
 export type SpecParameters = Record<string, SpecValue>;
 
-export interface ParameterDefinition
-  extends Omit<TauriParameterDefinition, "multiple" | "prefix" | "description"> {
+export interface ParameterDefinition extends Omit<
+  TauriParameterDefinition,
+  "multiple" | "prefix" | "description"
+> {
   multiple?: boolean | null;
   prefix?: string | null;
   description?: string | null;
 }
 
-export interface ParameterSchema extends Omit<TauriParameterSchema, "parameters"> {
+export interface ParameterSchema extends Omit<
+  TauriParameterSchema,
+  "parameters"
+> {
   parameters: Record<string, ParameterDefinition>;
 }
 
@@ -28,9 +33,7 @@ export interface ParameterValueObject {
 export type ParameterValueArray = Array<ParameterValue>;
 
 export type ParameterValue =
-  | JsonValue
-  | ParameterValueArray
-  | ParameterValueObject;
+  JsonValue | ParameterValueArray | ParameterValueObject;
 
 export function toSpecValue(value: ParameterValue): SpecValue {
   if (value === null) {
@@ -87,7 +90,9 @@ export function toSpecParameters(
   return normalized;
 }
 
-export function fromSpecParameters(params: SpecParameters): Record<string, ParameterValue> {
+export function fromSpecParameters(
+  params: SpecParameters
+): Record<string, ParameterValue> {
   const normalized: Record<string, ParameterValue> = {};
   for (const [key, value] of Object.entries(params)) {
     normalized[key] = fromSpecValue(value);

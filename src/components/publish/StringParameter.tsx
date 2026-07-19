@@ -29,16 +29,16 @@ export function StringParameter({
     <div className="space-y-2 py-2">
       <div className="flex items-center gap-x-2">
         <Label htmlFor={resolvedInputId}>{resolvedLabel}</Label>
-        {definition.description && (
-          <HelpTip text={definition.description} />
-        )}
+        {definition.description && <HelpTip text={definition.description} />}
       </div>
       <Input
         id={resolvedInputId}
         type="text"
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        placeholder={t("common.stringParamPlaceholder", { flag: definition.flag })}
+        placeholder={t("common.stringParamPlaceholder", {
+          flag: definition.flag,
+        })}
         readOnly={readOnly}
       />
     </div>

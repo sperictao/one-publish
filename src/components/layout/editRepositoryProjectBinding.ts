@@ -24,7 +24,8 @@ export function reconcileProjectBinding(
 ): ProjectBindingResolution {
   const nextProjectFile = currentProjectFile.trim();
   const projectFiles = candidates?.projectFiles ?? [];
-  const recommendedProjectFile = candidates?.recommendedProjectFile?.trim() ?? "";
+  const recommendedProjectFile =
+    candidates?.recommendedProjectFile?.trim() ?? "";
 
   if (nextProjectFile && projectFiles.includes(nextProjectFile)) {
     return {

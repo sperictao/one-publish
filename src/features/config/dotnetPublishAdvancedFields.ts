@@ -64,11 +64,7 @@ export const DOTNET_FIXED_PROPERTY_KEYS = FIXED_PROPERTY_FIELD_CONFIGS.map(
 );
 
 export type DotnetAdvancedFieldControl =
-  | "framework-suggestions"
-  | "select"
-  | "boolean"
-  | "string"
-  | "property-map";
+  "framework-suggestions" | "select" | "boolean" | "string" | "property-map";
 
 export type DotnetAdvancedFieldSource =
   | {
@@ -272,11 +268,18 @@ function createBooleanDraftField(
     ...FALLBACK_BOOLEAN_DEFINITION,
     flag: fallbackFlagMap[key] || "",
   };
-  const draftKeyMap: Record<string, DotnetAdvancedFieldSource & { kind: "draft" }> = {
+  const draftKeyMap: Record<
+    string,
+    DotnetAdvancedFieldSource & { kind: "draft" }
+  > = {
     no_build: { kind: "draft", draftKey: "noBuild", valueType: "boolean" },
     no_restore: { kind: "draft", draftKey: "noRestore", valueType: "boolean" },
     no_logo: { kind: "draft", draftKey: "noLogo", valueType: "boolean" },
-    delete_existing_files: { kind: "draft", draftKey: "deleteExistingFiles", valueType: "boolean" },
+    delete_existing_files: {
+      kind: "draft",
+      draftKey: "deleteExistingFiles",
+      valueType: "boolean",
+    },
   };
 
   const fallbackLabelMap: Record<string, string> = {

@@ -11,14 +11,14 @@ const selectBtn = (name: string) => `[data-testid='pubxml-select-${name}']`;
 async function expectSelected(page: Page, name: string) {
   await expect(page.locator(selectBtn(name))).toHaveAttribute(
     "data-selected",
-    "true",
+    "true"
   );
 }
 
 async function expectNotSelected(page: Page, name: string) {
   await expect(page.locator(selectBtn(name))).toHaveAttribute(
     "data-selected",
-    "false",
+    "false"
   );
 }
 
@@ -27,13 +27,13 @@ test.describe("Preset Publish Workflow", () => {
     await gotoApp(page);
 
     await expect(
-      page.locator("[data-list-item-id='pubxml:FolderProfile']"),
+      page.locator("[data-list-item-id='pubxml:FolderProfile']")
     ).toBeVisible();
     await expect(
-      page.locator("[data-list-item-id='pubxml:ZipProfile']"),
+      page.locator("[data-list-item-id='pubxml:ZipProfile']")
     ).toBeVisible();
     await expect(
-      page.locator("[data-list-item-id='pubxml:WebDeploy']"),
+      page.locator("[data-list-item-id='pubxml:WebDeploy']")
     ).toBeVisible();
   });
 
@@ -58,7 +58,9 @@ test.describe("Preset Publish Workflow", () => {
     expect(errors).toEqual([]);
   });
 
-  test("rapid preset switching ends with last clicked profile selected", async ({ page }) => {
+  test("rapid preset switching ends with last clicked profile selected", async ({
+    page,
+  }) => {
     const errors: string[] = [];
     page.on("pageerror", (err) => errors.push(err.message));
 
@@ -86,7 +88,7 @@ test.describe("Preset Publish Workflow", () => {
       timeout: 10000,
     });
     await expect(
-      page.getByText("dotnet publish --configuration Release"),
+      page.getByText("dotnet publish --configuration Release")
     ).toBeVisible();
   });
 

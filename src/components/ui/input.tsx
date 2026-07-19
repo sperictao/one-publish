@@ -1,8 +1,7 @@
 import * as React from "react";
 import { cn } from "@/lib/utils";
 
-export interface InputProps
-  extends React.InputHTMLAttributes<HTMLInputElement> {
+export interface InputProps extends React.InputHTMLAttributes<HTMLInputElement> {
   /**
    * 裸模式：不应用 `surface-input`（无边框/背景/聚焦 ring）。
    * 用于外层容器已承载输入框视觉的场景（如带图标的搜索框），

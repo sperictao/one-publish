@@ -3,5 +3,4 @@ export const topbarIconButtonClass =
 
 export const topbarViewButtonClass = topbarIconButtonClass;
 
-export const topbarViewButtonActiveClass =
-  "bg-gray-alpha-200 text-foreground";
+export const topbarViewButtonActiveClass = "bg-gray-alpha-200 text-foreground";

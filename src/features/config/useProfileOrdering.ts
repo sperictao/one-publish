@@ -32,7 +32,9 @@ export function useProfileOrdering({
   reorderProfilesFn,
   profileT,
 }: UseProfileOrderingParams): UseProfileOrderingReturn {
-  const reorderProfilesQueueRef = useLazyRef<Promise<void>>(() => Promise.resolve());
+  const reorderProfilesQueueRef = useLazyRef<Promise<void>>(() =>
+    Promise.resolve()
+  );
   const selectedRepoIdRef = useLazyRef<string | null>(() => selectedRepoId);
   selectedRepoIdRef.current = selectedRepoId;
 

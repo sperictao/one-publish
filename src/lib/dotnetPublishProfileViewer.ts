@@ -6,7 +6,8 @@ import {
   type ProjectPublishProfileSection,
 } from "@/lib/projectPublishProfileXml";
 
-export type ProjectPublishProfileSupplementSection = ProjectPublishProfileSection;
+export type ProjectPublishProfileSupplementSection =
+  ProjectPublishProfileSection;
 
 export function buildProjectPublishProfileSupplementSections(
   parsedProfile: ParsedProjectPublishProfile

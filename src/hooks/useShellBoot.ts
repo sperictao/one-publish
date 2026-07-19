@@ -83,7 +83,12 @@ export function useShellBoot(params: UseShellBootParams) {
       return;
     }
     void setI18nLanguage(normalizedPreferenceLanguage);
-  }, [params.isStateLoading, language, normalizedPreferenceLanguage, setI18nLanguage]);
+  }, [
+    params.isStateLoading,
+    language,
+    normalizedPreferenceLanguage,
+    setI18nLanguage,
+  ]);
 
   // Startup recovery notice
   const shownNoticeRef = useRef<string | null>(null);

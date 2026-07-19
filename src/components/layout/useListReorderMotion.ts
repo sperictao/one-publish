@@ -85,8 +85,7 @@ export function useListReorderMotion(params: {
       }
 
       const previousRect = previousRectsRef.current[itemId];
-      const startTop =
-        visualRect?.top ?? previousRect?.top ?? layoutRect.top;
+      const startTop = visualRect?.top ?? previousRect?.top ?? layoutRect.top;
       const deltaY = startTop - layoutRect.top;
 
       if (Math.abs(deltaY) < 0.5) {

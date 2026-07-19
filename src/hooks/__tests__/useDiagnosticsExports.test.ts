@@ -52,14 +52,17 @@ function createExecutionRecord(
   };
 }
 
-function renderDiagnosticsExports(params: {
-  filteredExecutionHistory?: ExecutionRecord[];
-  snapshotPaths?: string[];
-  recentHistoryExports?: string[];
-  trackHistoryExport?: (outputPath: string) => void;
-} = {}) {
-  const filteredExecutionHistory =
-    params.filteredExecutionHistory ?? [createExecutionRecord()];
+function renderDiagnosticsExports(
+  params: {
+    filteredExecutionHistory?: ExecutionRecord[];
+    snapshotPaths?: string[];
+    recentHistoryExports?: string[];
+    trackHistoryExport?: (outputPath: string) => void;
+  } = {}
+) {
+  const filteredExecutionHistory = params.filteredExecutionHistory ?? [
+    createExecutionRecord(),
+  ];
 
   return renderHook(() =>
     useDiagnosticsExports({

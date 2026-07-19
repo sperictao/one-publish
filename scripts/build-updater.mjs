@@ -24,7 +24,9 @@ function run(command, args, options = {}) {
   }
 
   if (result.status !== 0) {
-    fail(`执行 ${command} ${args.join(" ")} 失败：退出码 ${result.status ?? 1}`);
+    fail(
+      `执行 ${command} ${args.join(" ")} 失败：退出码 ${result.status ?? 1}`
+    );
   }
 }
 
@@ -33,7 +35,13 @@ function normalizeForwardedArgs(args = []) {
 }
 
 function buildTauriBuildArgs(args = []) {
-  return ["tauri", "build", "--config", updaterConfigPath, ...normalizeForwardedArgs(args)];
+  return [
+    "tauri",
+    "build",
+    "--config",
+    updaterConfigPath,
+    ...normalizeForwardedArgs(args),
+  ];
 }
 
 function getPnpmCommand(_platform = process.platform) {
@@ -55,7 +63,10 @@ function getPnpmRunOptions(platform = process.platform) {
 
 function main(argv = process.argv.slice(2)) {
   run(process.execPath, ["scripts/generate-updater-config.mjs"]);
-  run(process.execPath, ["scripts/validate-updater-config.mjs", updaterConfigPath]);
+  run(process.execPath, [
+    "scripts/validate-updater-config.mjs",
+    updaterConfigPath,
+  ]);
 
   // 这里必须把 target 等参数直接传给 Tauri CLI，避免落到 Cargo 的 `--` 分隔符后面。
   run(getPnpmCommand(), buildTauriBuildArgs(argv), getPnpmRunOptions());
@@ -64,7 +75,12 @@ function main(argv = process.argv.slice(2)) {
 const isDirectExecution =
   process.argv[1] && pathToFileURL(process.argv[1]).href === import.meta.url;
 
-export { buildTauriBuildArgs, getPnpmCommand, getPnpmRunOptions, normalizeForwardedArgs };
+export {
+  buildTauriBuildArgs,
+  getPnpmCommand,
+  getPnpmRunOptions,
+  normalizeForwardedArgs,
+};
 
 if (isDirectExecution) {
   main();

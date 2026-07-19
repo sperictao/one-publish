@@ -27,13 +27,14 @@ const DialogOverlay = React.forwardRef<
 ));
 DialogOverlay.displayName = DialogPrimitive.Overlay.displayName;
 
-type DialogContentProps =
-  React.ComponentPropsWithoutRef<typeof DialogPrimitive.Content> & {
-    overlayClassName?: string;
-    closeButtonClassName?: string;
-    surfaceClassName?: string;
-    chrome?: "surface" | "bare";
-  };
+type DialogContentProps = React.ComponentPropsWithoutRef<
+  typeof DialogPrimitive.Content
+> & {
+  overlayClassName?: string;
+  closeButtonClassName?: string;
+  surfaceClassName?: string;
+  chrome?: "surface" | "bare";
+};
 
 const DialogContent = React.forwardRef<
   React.ElementRef<typeof DialogPrimitive.Content>,
@@ -146,10 +147,7 @@ const DialogTitle = React.forwardRef<
 >(({ className, ...props }, ref) => (
   <DialogPrimitive.Title
     ref={ref}
-    className={cn(
-      "text-heading-20 font-semibold",
-      className
-    )}
+    className={cn("text-heading-20 font-semibold", className)}
     {...props}
   />
 ));

@@ -91,7 +91,9 @@ const outputPath = path.resolve(
   args.output || "release-assets/latest.json"
 );
 const version = String(args.version || "").trim();
-const baseUrl = String(args.baseUrl || "").trim().replace(/\/$/, "");
+const baseUrl = String(args.baseUrl || "")
+  .trim()
+  .replace(/\/$/, "");
 const notesFile = String(args["notes-file"] || "").trim();
 let notes = args.notes ?? "";
 

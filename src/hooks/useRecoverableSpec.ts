@@ -89,25 +89,29 @@ export function useRecoverableSpec({
     ]
   );
 
-  const getRecentConfigKeyFromSpec = useCallback((spec: ProviderPublishSpec) => {
-    if (spec.provider_id !== "dotnet") {
-      return null;
-    }
-
-    const propertiesRaw = spec.parameters?.properties;
-    if (
-      propertiesRaw &&
-      typeof propertiesRaw === "object" &&
-      !Array.isArray(propertiesRaw)
-    ) {
-      const profileName = (propertiesRaw as Record<string, unknown>).PublishProfile;
-      if (typeof profileName === "string" && profileName.trim()) {
-        return createProjectProfileConfigKey(profileName);
+  const getRecentConfigKeyFromSpec = useCallback(
+    (spec: ProviderPublishSpec) => {
+      if (spec.provider_id !== "dotnet") {
+        return null;
       }
-    }
 
-    return null;
-  }, []);
+      const propertiesRaw = spec.parameters?.properties;
+      if (
+        propertiesRaw &&
+        typeof propertiesRaw === "object" &&
+        !Array.isArray(propertiesRaw)
+      ) {
+        const profileName = (propertiesRaw as Record<string, unknown>)
+          .PublishProfile;
+        if (typeof profileName === "string" && profileName.trim()) {
+          return createProjectProfileConfigKey(profileName);
+        }
+      }
+
+      return null;
+    },
+    []
+  );
 
   return {
     extractSpecFromRecord,

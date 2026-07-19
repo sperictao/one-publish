@@ -106,10 +106,7 @@ describe("mapImportedSpecByProvider", () => {
         Version: "1.0.0",
       },
     });
-    expect(result.mappedKeys).toEqual([
-      "delete_existing_files",
-      "properties",
-    ]);
+    expect(result.mappedKeys).toEqual(["delete_existing_files", "properties"]);
     expect(result.unmappedKeys).toEqual([]);
   });
 
@@ -155,10 +152,7 @@ describe("mapImportedSpecByProvider", () => {
       deleteExistingFiles: false,
       properties: {},
     });
-    expect(result.mappedKeys).toEqual([
-      "delete_existing_files",
-      "properties",
-    ]);
+    expect(result.mappedKeys).toEqual(["delete_existing_files", "properties"]);
     expect(result.unmappedKeys).toEqual([]);
   });
 

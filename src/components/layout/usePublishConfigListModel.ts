@@ -296,7 +296,8 @@ export function usePublishConfigListModel(params: {
     [params.recentConfigKeys, profileMap, pubxmlSet]
   );
   const filteredProfiles = useMemo(
-    () => params.profiles.filter((profile) => profileMatchesQuery(profile, query)),
+    () =>
+      params.profiles.filter((profile) => profileMatchesQuery(profile, query)),
     [params.profiles, query]
   );
   const filteredProjectProfiles = useMemo(
@@ -326,9 +327,7 @@ export function usePublishConfigListModel(params: {
 
   useEffect(() => {
     if (
-      groupFilterOptions.some(
-        (option) => option.value === groupFilterValue
-      )
+      groupFilterOptions.some((option) => option.value === groupFilterValue)
     ) {
       return;
     }
@@ -367,7 +366,8 @@ export function usePublishConfigListModel(params: {
     () => countProfiles(visibleGroupedFilteredProfiles),
     [visibleGroupedFilteredProfiles]
   );
-  const visibleConfigCount = visibleProjectProfiles.length + visibleCustomProfileCount;
+  const visibleConfigCount =
+    visibleProjectProfiles.length + visibleCustomProfileCount;
   const showRecentItems =
     !query &&
     params.groupFilterValue === ALL_GROUP_FILTER &&
@@ -470,8 +470,7 @@ export function usePublishConfigPreviewModel(params: {
     [params.previewProfiles, params.query]
   );
   const previewGroupedFilteredProfiles = useMemo(
-    () =>
-      buildProfileGroups(previewFilteredProfiles, params.defaultGroupName),
+    () => buildProfileGroups(previewFilteredProfiles, params.defaultGroupName),
     [previewFilteredProfiles, params.defaultGroupName]
   );
   const previewVisibleProjectProfiles = useMemo(

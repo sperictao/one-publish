@@ -58,7 +58,10 @@ function buildFallbackCommand(spec: HandoffSpec): string {
   return spec.provider_id;
 }
 
-function resolveCommand(spec: HandoffSpec, commandLine?: string | null): string {
+function resolveCommand(
+  spec: HandoffSpec,
+  commandLine?: string | null
+): string {
   return normalizeCommandLine(commandLine) || buildFallbackCommand(spec);
 }
 

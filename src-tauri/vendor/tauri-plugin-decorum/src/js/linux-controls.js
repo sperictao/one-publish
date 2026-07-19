@@ -35,7 +35,7 @@ document.addEventListener("DOMContentLoaded", () => {
   if (!tauri) {
     console.log("DECORUM: Tauri API not found. Exiting.");
     console.log(
-      "DECORUM: Set withGlobalTauri: true in tauri.conf.json to enable.",
+      "DECORUM: Set withGlobalTauri: true in tauri.conf.json to enable."
     );
     return;
   }

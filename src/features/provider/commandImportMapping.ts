@@ -61,7 +61,10 @@ function normalizeParameterValue(value: unknown): ParameterValue | undefined {
   return undefined;
 }
 
-function resolveProviderId(spec: CommandImportSpec, fallbackProviderId: string) {
+function resolveProviderId(
+  spec: CommandImportSpec,
+  fallbackProviderId: string
+) {
   const providerId = spec.provider_id || spec.providerId || fallbackProviderId;
   return providerId || fallbackProviderId;
 }
@@ -190,11 +193,10 @@ export function mapImportedSpecByProvider(
       if (key === "properties") {
         if (isPlainObject(rawValue)) {
           const normalized = normalizeDotnetPropertyMap(rawValue);
-          const {
-            deleteExistingFiles,
-            properties,
-          } = normalizeDeleteExistingFilesProperty(normalized);
-          dotnetUpdates.properties = sanitizeDotnetPublishProperties(properties);
+          const { deleteExistingFiles, properties } =
+            normalizeDeleteExistingFilesProperty(normalized);
+          dotnetUpdates.properties =
+            sanitizeDotnetPublishProperties(properties);
           if (
             deleteExistingFiles !== null &&
             dotnetUpdates.deleteExistingFiles === undefined

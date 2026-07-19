@@ -38,7 +38,9 @@ describe("createPublishExecutionRecord", () => {
       outputLog: "$ dotnet publish /repo/App.csproj\nbuild ok",
     });
 
-    expect(record.commandLine).toBe('$ dotnet publish "/repo/App.csproj" -c Release');
+    expect(record.commandLine).toBe(
+      '$ dotnet publish "/repo/App.csproj" -c Release'
+    );
     expect(record.failureSignature).toBeNull();
   });
 
@@ -65,7 +67,8 @@ describe("createPublishExecutionRecord", () => {
         file_count: 0,
         warnings: null,
       },
-      outputLog: "$ dotnet publish /repo/App.csproj\n[stderr] Build failed: boom",
+      outputLog:
+        "$ dotnet publish /repo/App.csproj\n[stderr] Build failed: boom",
     });
 
     expect(record.commandLine).toBe("$ dotnet publish /repo/App.csproj");

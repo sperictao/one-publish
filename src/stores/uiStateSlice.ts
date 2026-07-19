@@ -1,6 +1,9 @@
 import type { StateCreator } from "zustand";
 import { updateUIState } from "@/lib/store/api";
-import { applyUiStateMutation, type UiStateMutation } from "./appStoreMutations";
+import {
+  applyUiStateMutation,
+  type UiStateMutation,
+} from "./appStoreMutations";
 import { makeHandlePersistenceFailure } from "./appStoreHelpers";
 import type { AppStore } from "./appStore";
 

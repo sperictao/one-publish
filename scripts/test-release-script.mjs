@@ -17,11 +17,14 @@ assert.equal(
   normalizeGitHubUrl("git@github.com:sperictao/one-publish.git"),
   "https://github.com/sperictao/one-publish"
 );
-assert.deepEqual(parseGitHubRepo("https://github.com/sperictao/one-publish.git"), {
-  owner: "sperictao",
-  repo: "one-publish",
-  slug: "sperictao/one-publish",
-});
+assert.deepEqual(
+  parseGitHubRepo("https://github.com/sperictao/one-publish.git"),
+  {
+    owner: "sperictao",
+    repo: "one-publish",
+    slug: "sperictao/one-publish",
+  }
+);
 
 const workflowRun = selectWorkflowRun(
   [
@@ -63,13 +66,10 @@ const workflowRun = selectWorkflowRun(
 assert.equal(workflowRun?.id, 202);
 
 assert.equal(
-  buildJobSnapshot(
-    { status: "in_progress" },
-    [
-      { name: "release", status: "queued" },
-      { name: "build-macos", status: "completed", conclusion: "success" },
-    ]
-  ),
+  buildJobSnapshot({ status: "in_progress" }, [
+    { name: "release", status: "queued" },
+    { name: "build-macos", status: "completed", conclusion: "success" },
+  ]),
   "run=in_progress | build-macos=success, release=queued"
 );
 
@@ -104,7 +104,10 @@ assert.equal(
   "[failure] Cargo build: missing libgtk dependency (src-tauri/Cargo.toml:48)"
 );
 
-assert.equal(trimLogForDisplay("\u001b[31merror line\u001b[0m\nsecond line"), "error line\nsecond line");
+assert.equal(
+  trimLogForDisplay("\u001b[31merror line\u001b[0m\nsecond line"),
+  "error line\nsecond line"
+);
 
 assert.equal(
   formatGitHubFetchError(
@@ -133,26 +136,31 @@ console.log = (...args) => {
 };
 
 try {
-  const retriedResponse = await requestGitHub("https://api.github.com/repos/sperictao/one-publish", "", "重试测试", {
-    fetchImpl: async () => {
-      retryAttempts += 1;
-      if (retryAttempts === 1) {
-        throw new TypeError("fetch failed", {
-          cause: {
-            code: "ECONNRESET",
-            message: "socket hang up",
-          },
-        });
-      }
+  const retriedResponse = await requestGitHub(
+    "https://api.github.com/repos/sperictao/one-publish",
+    "",
+    "重试测试",
+    {
+      fetchImpl: async () => {
+        retryAttempts += 1;
+        if (retryAttempts === 1) {
+          throw new TypeError("fetch failed", {
+            cause: {
+              code: "ECONNRESET",
+              message: "socket hang up",
+            },
+          });
+        }
 
-      return {
-        ok: true,
-        status: 200,
-        text: async () => '{"ok":true}',
-      };
-    },
-    sleepImpl: async () => {},
-  });
+        return {
+          ok: true,
+          status: 200,
+          text: async () => '{"ok":true}',
+        };
+      },
+      sleepImpl: async () => {},
+    }
+  );
 
   assert.equal(retryAttempts, 2);
   assert.equal(await retriedResponse.text(), '{"ok":true}');

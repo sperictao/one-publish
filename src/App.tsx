@@ -6,9 +6,7 @@ import { SidebarPanelShell } from "@/components/layout/SidebarPanelShell";
 import { PanelSkeleton } from "@/components/layout/PanelSkeleton";
 import { ProviderRuntimeBanner } from "@/components/layout/ProviderRuntimeBanner";
 
-import {
-  Loader2,
-} from "lucide-react";
+import { Loader2 } from "lucide-react";
 
 const AppDialogsHost = lazy(async () => {
   const mod = await import("@/components/layout/AppDialogsHost");
@@ -44,7 +42,9 @@ function App() {
           <span className="inline-block animate-spin text-interactive">
             <Loader2 className="size-8" />
           </span>
-          <span className="text-label-14 text-muted-foreground">{boot.shell.appT.loading || "加载中…"}</span>
+          <span className="text-label-14 text-muted-foreground">
+            {boot.shell.appT.loading || "加载中…"}
+          </span>
         </div>
       </div>
     );
@@ -94,7 +94,10 @@ function App() {
 
         {/* Left Resize Handle */}
         {!boot.shell.leftPanelCollapsed && (
-          <ResizeHandle onResize={boot.shell.handleLeftPanelResize} showHeaderBorder={false} />
+          <ResizeHandle
+            onResize={boot.shell.handleLeftPanelResize}
+            showHeaderBorder={false}
+          />
         )}
 
         {/* Middle Panel - Publish Config */}
@@ -103,9 +106,7 @@ function App() {
           width={`${boot.shell.effectiveMiddlePanelWidth}px`}
         >
           <Suspense fallback={<PanelSkeleton />}>
-            <PublishConfigPanel
-              {...boot.publish.publishConfigPanelProps}
-            />
+            <PublishConfigPanel {...boot.publish.publishConfigPanelProps} />
           </Suspense>
         </SidebarPanelShell>
 
@@ -120,19 +121,30 @@ function App() {
             leftPanelCollapsed={boot.shell.leftPanelCollapsed}
             middlePanelCollapsed={boot.shell.middlePanelCollapsed}
             appT={boot.shell.appT}
-            configPanelT={boot.shell.translations.configPanel || EMPTY_CONFIG_PANEL_TRANSLATIONS}
+            configPanelT={
+              boot.shell.translations.configPanel ||
+              EMPTY_CONFIG_PANEL_TRANSLATIONS
+            }
             rightPanelView={boot.shell.rightPanelView}
             onExpandLeftPanel={() => boot.shell.setLeftPanelCollapsed(false)}
-            onExpandMiddlePanel={() => boot.shell.setMiddlePanelCollapsed(false)}
+            onExpandMiddlePanel={() =>
+              boot.shell.setMiddlePanelCollapsed(false)
+            }
             onSelectHomeView={() => boot.shell.setRightPanelView("home")}
             onSelectHistoryView={() => boot.shell.setRightPanelView("history")}
           >
             <Suspense fallback={<div className="flex h-full flex-col" />}>
               <PublishContentSection
-                showCommandImportResultCard={boot.publish.showCommandImportResultCard}
-                commandImportResultCardProps={boot.publish.commandImportResultCardProps}
+                showCommandImportResultCard={
+                  boot.publish.showCommandImportResultCard
+                }
+                commandImportResultCardProps={
+                  boot.publish.commandImportResultCardProps
+                }
                 publishRunCardProps={boot.publish.publishRunCardProps}
-                shouldLoadDiagnosticsSection={boot.publish.shouldLoadDiagnosticsSection}
+                shouldLoadDiagnosticsSection={
+                  boot.publish.shouldLoadDiagnosticsSection
+                }
                 diagnosticsSectionProps={boot.publish.diagnosticsSectionProps}
                 rightPanelView={boot.shell.rightPanelView}
               />
@@ -147,8 +159,12 @@ function App() {
             shortcutsOpen={boot.shell.shortcutsOpen}
             setShortcutsOpen={boot.shell.setShortcutsOpen}
             environmentDialogOpen={boot.shell.environmentDialogOpen}
-            handleEnvironmentDialogOpenChange={boot.shell.handleEnvironmentDialogOpenChange}
-            environmentDefaultProviderIds={boot.shell.environmentDefaultProviderIds}
+            handleEnvironmentDialogOpenChange={
+              boot.shell.handleEnvironmentDialogOpenChange
+            }
+            environmentDefaultProviderIds={
+              boot.shell.environmentDefaultProviderIds
+            }
             environmentInitialCheck={boot.shell.environmentInitialCheck}
             setEnvironmentLastCheck={boot.repo.setEnvironmentLastCheck}
             settingsOpen={boot.shell.settingsOpen}
@@ -165,11 +181,15 @@ function App() {
             setEnvironmentProviderIds={boot.shell.setEnvironmentProviderIds}
             theme={boot.shell.theme}
             setTheme={boot.shell.setTheme}
-            handleConfigDialogOpenChange={boot.shell.handleConfigDialogOpenChange}
+            handleConfigDialogOpenChange={
+              boot.shell.handleConfigDialogOpenChange
+            }
             environmentLastCheck={boot.repo.environmentLastCheck}
             openEnvironmentDialog={boot.shell.openEnvironmentDialog}
             activeProviderId={boot.publish.activeProviderId}
-            activeProviderUsesProjectFile={boot.publish.activeProviderUsesProjectFile}
+            activeProviderUsesProjectFile={
+              boot.publish.activeProviderUsesProjectFile
+            }
             activeProvider={boot.publish.activeProvider}
             availableProviders={boot.publish.providerRuntimeProviders}
             updaterState={boot.shell.updaterState}
@@ -193,25 +213,41 @@ function App() {
             quickCreateTemplateOptions={boot.publish.quickCreateTemplateOptions}
             quickCreateProfileName={boot.publish.quickCreateProfileName}
             quickCreateProfileGroup={boot.publish.quickCreateProfileGroup}
-            quickCreateProfileGroupOptions={boot.publish.quickCreateProfileGroupOptions}
-            quickCreateProfileCustomGroup={boot.publish.quickCreateProfileCustomGroup}
+            quickCreateProfileGroupOptions={
+              boot.publish.quickCreateProfileGroupOptions
+            }
+            quickCreateProfileCustomGroup={
+              boot.publish.quickCreateProfileCustomGroup
+            }
             quickCreateProfileDraft={boot.publish.quickCreateProfileDraft}
             projectFrameworkOptions={boot.publish.projectFrameworkOptions}
             quickCreateProfileSaving={boot.publish.quickCreateProfileSaving}
             quickCreateEditing={boot.publish.isQuickCreateEditing}
             dotnetSchema={boot.publish.providerSchemas.dotnet}
-            quickCreateGroupDefaultValue={boot.publish.QUICK_CREATE_PROFILE_GROUP_DEFAULT}
-            quickCreateGroupCustomValue={boot.publish.QUICK_CREATE_PROFILE_GROUP_CUSTOM}
+            quickCreateGroupDefaultValue={
+              boot.publish.QUICK_CREATE_PROFILE_GROUP_DEFAULT
+            }
+            quickCreateGroupCustomValue={
+              boot.publish.QUICK_CREATE_PROFILE_GROUP_CUSTOM
+            }
             profileT={boot.shell.profileT}
             appT={boot.shell.appT}
             cancelLabel={boot.shell.translations.common?.cancel || "取消"}
-            handleQuickCreateProfileOpenChange={boot.publish.handleQuickCreateProfileOpenChange}
+            handleQuickCreateProfileOpenChange={
+              boot.publish.handleQuickCreateProfileOpenChange
+            }
             applyQuickCreateTemplate={boot.publish.applyQuickCreateTemplate}
             setQuickCreateProfileName={boot.publish.setQuickCreateProfileName}
             setQuickCreateProfileGroup={boot.publish.setQuickCreateProfileGroup}
-            setQuickCreateProfileCustomGroup={boot.publish.setQuickCreateProfileCustomGroup}
-            updateQuickCreateProfileDraft={boot.publish.updateQuickCreateProfileDraft}
-            handleQuickCreateProfileSave={boot.publish.handleQuickCreateProfileSave}
+            setQuickCreateProfileCustomGroup={
+              boot.publish.setQuickCreateProfileCustomGroup
+            }
+            updateQuickCreateProfileDraft={
+              boot.publish.updateQuickCreateProfileDraft
+            }
+            handleQuickCreateProfileSave={
+              boot.publish.handleQuickCreateProfileSave
+            }
             configDialogOpen={boot.shell.configDialogOpen}
             profileManagement={boot.publish.profileManagement}
             handleLoadProfile={boot.publish.handleLoadProfile}
@@ -226,6 +262,5 @@ function App() {
     </div>
   );
 }
-
 
 export default App;

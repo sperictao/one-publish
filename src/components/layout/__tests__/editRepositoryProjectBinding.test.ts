@@ -73,7 +73,10 @@ describe("editRepositoryProjectBinding", () => {
       "/repo/src/App.csproj",
       "/repo/tools/Tool.csproj",
     ]);
-    const resolution = reconcileProjectBinding("/old/Legacy.csproj", candidates);
+    const resolution = reconcileProjectBinding(
+      "/old/Legacy.csproj",
+      candidates
+    );
 
     expect(resolution.nextProjectFile).toBe("");
     expect(resolution.isManualInput).toBe(false);

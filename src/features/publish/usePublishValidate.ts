@@ -6,9 +6,7 @@ import type { TranslationMap } from "@/features/publish/publishTransaction";
 import type { EnvironmentCheckSnapshot } from "@/features/environment/environment";
 import { renderPublishCommand } from "@/features/publish/renderPublishCommand";
 import { createPublishPreflightPipeline } from "@/features/publish/publishPreflight";
-import {
-  getRecentConfigKeyFromSelection,
-} from "@/features/config/publishConfigIdentity";
+import { getRecentConfigKeyFromSelection } from "@/features/config/publishConfigIdentity";
 import type { DotnetPreset } from "@/features/config/dotnetPresets";
 import type { ProviderPublishSpec } from "@/features/publish/publishRuntime";
 import type { ProjectInfo, PublishConfigStore } from "@/lib/store/types";
@@ -62,16 +60,11 @@ export interface UsePublishValidateParams {
     initialCheck?: EnvironmentCheckSnapshot | null,
     providerIds?: string[]
   ) => void;
-  setEnvironmentLastCheck: (
-    snapshot: EnvironmentCheckSnapshot | null
-  ) => void;
+  setEnvironmentLastCheck: (snapshot: EnvironmentCheckSnapshot | null) => void;
 }
 
 export interface UsePublishValidateResult {
-  getPublishStartBlocker: () =>
-    | "missing-repository"
-    | "missing-project"
-    | null;
+  getPublishStartBlocker: () => "missing-repository" | "missing-project" | null;
   resolvePublishRequest: () => Promise<{
     spec: ProviderPublishSpec;
     recentConfigKey?: string;
@@ -118,7 +111,8 @@ export function usePublishValidate({
   const presentationRevisionRef = useRef(0);
   const [publishPreviewCommand, setPublishPreviewCommand] = useState("");
   const hasPublishSpec =
-    selectedRepo !== null && !(activeProviderUsesProjectFile && projectInfo === null);
+    selectedRepo !== null &&
+    !(activeProviderUsesProjectFile && projectInfo === null);
   const prevHasPublishSpecRef = useRef(hasPublishSpec);
 
   if (prevHasPublishSpecRef.current !== hasPublishSpec) {
@@ -166,22 +160,23 @@ export function usePublishValidate({
     return "custom";
   }, [selectionIdentity]);
 
-  const buildCurrentPublishSpec = useCallback((): ProviderPublishSpec | null => {
-    if (!selectedRepo) {
-      return null;
-    }
+  const buildCurrentPublishSpec =
+    useCallback((): ProviderPublishSpec | null => {
+      if (!selectedRepo) {
+        return null;
+      }
 
-    if (activeProviderUsesProjectFile && !projectInfo) {
-      return null;
-    }
+      if (activeProviderUsesProjectFile && !projectInfo) {
+        return null;
+      }
 
-    return buildPublishSpec();
-  }, [
-    activeProviderUsesProjectFile,
-    buildPublishSpec,
-    projectInfo,
-    selectedRepo,
-  ]);
+      return buildPublishSpec();
+    }, [
+      activeProviderUsesProjectFile,
+      buildPublishSpec,
+      projectInfo,
+      selectedRepo,
+    ]);
 
   const getPublishStartBlocker = useCallback(() => {
     if (!selectedRepo) {
@@ -262,12 +257,9 @@ export function usePublishValidate({
     };
   }, [buildCurrentPublishSpec]);
 
-  const isCurrentPresentationRevision = useCallback(
-    (runRevision: number) => {
-      return presentationRevisionRef.current === runRevision;
-    },
-    []
-  );
+  const isCurrentPresentationRevision = useCallback((runRevision: number) => {
+    return presentationRevisionRef.current === runRevision;
+  }, []);
 
   const { runPublishPreflight, executePublishWithProtectedAccessRecovery } =
     useMemo(

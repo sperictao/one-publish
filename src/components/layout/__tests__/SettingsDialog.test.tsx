@@ -42,7 +42,8 @@ vi.mock("@/hooks/useI18n", () => {
       },
       general: {
         executionHistoryLimitLabel: "执行历史保留上限",
-        executionHistoryLimitDescription: "可设置 5~200 条，超出范围会自动修正并即时生效。",
+        executionHistoryLimitDescription:
+          "可设置 5~200 条，超出范围会自动修正并即时生效。",
       },
     },
     language: {
@@ -113,7 +114,10 @@ vi.mock("@/hooks/useI18n", () => {
         }
         if (params) {
           Object.keys(params).forEach((paramKey) => {
-            text = text.replace(new RegExp(`{{${paramKey}}}`, "g"), String(params[paramKey]));
+            text = text.replace(
+              new RegExp(`{{${paramKey}}}`, "g"),
+              String(params[paramKey])
+            );
           });
         }
         return text;
@@ -238,8 +242,12 @@ describe("SettingsDialog", () => {
 
       return (
         <div>
-          <button onClick={() => setLocalCount(localCount + 1)}>Inc Count</button>
-          <button onClick={() => setOtherState(otherState + 1)}>Inc Other</button>
+          <button onClick={() => setLocalCount(localCount + 1)}>
+            Inc Count
+          </button>
+          <button onClick={() => setOtherState(otherState + 1)}>
+            Inc Other
+          </button>
           <MemoTestComponent count={10} />
         </div>
       );
@@ -304,7 +312,10 @@ describe("SettingsDialog", () => {
     render(
       <UpdaterProgressBar
         translations={{
-          version: { downloading: "下载中...", downloadProgress: "已下载 {} / {}" },
+          version: {
+            downloading: "下载中...",
+            downloadProgress: "已下载 {} / {}",
+          },
         }}
         downloadProgress={{
           stage: "downloading",

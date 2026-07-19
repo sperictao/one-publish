@@ -24,7 +24,9 @@ vi.mock("@/components/layout/ResizeHandle", () => ({
 }));
 
 vi.mock("@/components/layout/SidebarPanelShell", () => ({
-  SidebarPanelShell: ({ children }: { children?: ReactNode }) => <div>{children}</div>,
+  SidebarPanelShell: ({ children }: { children?: ReactNode }) => (
+    <div>{children}</div>
+  ),
 }));
 
 vi.mock("@/components/layout/ProviderRuntimeBanner", () => ({
@@ -111,7 +113,16 @@ function makeBoot() {
         isCheckingUpdate: false,
         isInstallingUpdate: false,
         isOpeningUpdaterHelp: false,
-        downloadProgress: { stage: "idle", version: null, downloadedBytes: 0, totalBytes: null, percent: null, attempt: 0, maxAttempts: 0, message: null },
+        downloadProgress: {
+          stage: "idle",
+          version: null,
+          downloadedBytes: 0,
+          totalBytes: null,
+          percent: null,
+          attempt: 0,
+          maxAttempts: 0,
+          message: null,
+        },
       },
       checkForUpdates: noop,
       installAvailableUpdate: noop,

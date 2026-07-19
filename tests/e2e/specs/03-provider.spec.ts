@@ -10,19 +10,29 @@ test.describe("Provider Catalog", () => {
 
     // The provider selector should show "dotnet" as the active provider
     // (repo-a has providerId "dotnet")
-    await expect(page.locator("[data-list-item-id='repo-a']")).toContainText("dotnet");
+    await expect(page.locator("[data-list-item-id='repo-a']")).toContainText(
+      "dotnet"
+    );
   });
 
-  test("provider schema is loaded and publish config renders", async ({ page }) => {
+  test("provider schema is loaded and publish config renders", async ({
+    page,
+  }) => {
     await gotoApp(page);
 
     // Publish config panel should show profile items with dotnet-specific naming
     // (pubxml: prefix indicates dotnet publish profiles)
-    await expect(page.locator("[data-list-item-id='pubxml:FolderProfile']")).toBeVisible();
-    await expect(page.locator("[data-list-item-id='pubxml:ZipProfile']")).toBeVisible();
+    await expect(
+      page.locator("[data-list-item-id='pubxml:FolderProfile']")
+    ).toBeVisible();
+    await expect(
+      page.locator("[data-list-item-id='pubxml:ZipProfile']")
+    ).toBeVisible();
   });
 
-  test("provider schema parameters are rendered in publish command", async ({ page }) => {
+  test("provider schema parameters are rendered in publish command", async ({
+    page,
+  }) => {
     await gotoApp(page);
 
     // The publish command display should show dotnet publish with --configuration flag
@@ -31,7 +41,9 @@ test.describe("Provider Catalog", () => {
     await expect(publishSection).toBeVisible({ timeout: 15000 });
   });
 
-  test("execution history appears after switching to history view", async ({ page }) => {
+  test("execution history appears after switching to history view", async ({
+    page,
+  }) => {
     await gotoApp(page, {
       initialState: {
         executionHistory: [
@@ -61,7 +73,9 @@ test.describe("Provider Catalog", () => {
     await page.getByRole("button", { name: "历史记录" }).click();
 
     await expect(page.getByText("最近执行历史")).toBeVisible();
-    await expect(page.getByText("/workspace/alpha-service/App.csproj")).toBeVisible();
+    await expect(
+      page.getByText("/workspace/alpha-service/App.csproj")
+    ).toBeVisible();
   });
 });
 
@@ -71,6 +85,8 @@ test.describe("Multiple Providers", () => {
 
     // The mock provides dotnet, cargo, and go providers
     // Verify dotnet is visible (used by repos)
-    await expect(page.locator("[data-list-item-id='repo-a']")).toContainText("dotnet");
+    await expect(page.locator("[data-list-item-id='repo-a']")).toContainText(
+      "dotnet"
+    );
   });
 });

@@ -37,7 +37,8 @@ vi.mock("@/hooks/useI18n", () => ({
 }));
 
 vi.mock("@/lib/store/api", async () => {
-  const actual = await vi.importActual<typeof import("@/lib/store/api")>("@/lib/store/api");
+  const actual =
+    await vi.importActual<typeof import("@/lib/store/api")>("@/lib/store/api");
   return {
     ...actual,
     importConfig: mocks.importConfig,
@@ -201,7 +202,9 @@ describe("ConfigManagementContent", () => {
     fireEvent.click(screen.getByRole("button", { name: "导入配置" }));
 
     await waitFor(() => {
-      expect(mocks.importConfig).toHaveBeenCalledWith("/tmp/one-publish-config.json");
+      expect(mocks.importConfig).toHaveBeenCalledWith(
+        "/tmp/one-publish-config.json"
+      );
     });
 
     expect(mocks.applyImportedProfiles).not.toHaveBeenCalled();
@@ -213,7 +216,9 @@ describe("ConfigManagementContent", () => {
     fireEvent.click(screen.getByRole("button", { name: "导入配置" }));
 
     await waitFor(() => {
-      expect(mocks.applyImportedProfiles).toHaveBeenCalledWith(importedProfiles);
+      expect(mocks.applyImportedProfiles).toHaveBeenCalledWith(
+        importedProfiles
+      );
     });
   });
 });

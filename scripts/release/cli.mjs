@@ -66,11 +66,15 @@ export function parseReleaseArgs(argv) {
 
   const versionInput = parsed.values.version;
   if (!versionInput) {
-    throw new Error("缺少 --version 参数。\n示例：pnpm release --version 0.2.1");
+    throw new Error(
+      "缺少 --version 参数。\n示例：pnpm release --version 0.2.1"
+    );
   }
 
   const normalizedVersion = versionInput.replace(/^v/, "");
-  const validVersion = /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/.test(normalizedVersion);
+  const validVersion = /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/.test(
+    normalizedVersion
+  );
   if (!validVersion) {
     throw new Error(`版本号格式非法：${versionInput}`);
   }

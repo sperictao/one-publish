@@ -9,8 +9,7 @@ export function getCancelPublishFeedback(
     return {
       title: appT.cancelPublishFailed || "取消发布失败",
       description:
-        appT.cancelPublishFailedDesc ||
-        "取消发送失败，请检查进程状态后重试。",
+        appT.cancelPublishFailedDesc || "取消发送失败，请检查进程状态后重试。",
     };
   }
 

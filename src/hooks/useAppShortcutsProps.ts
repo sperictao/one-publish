@@ -8,7 +8,10 @@ interface UseAppShortcutsPropsParams {
   activeProviderRequiresProjectBinding: boolean;
   projectInfo: ProjectInfo | null;
   isPublishing: boolean;
-  scanProject: (path?: string, options?: { projectFile?: string }) => Promise<ProjectInfo | null>;
+  scanProject: (
+    path?: string,
+    options?: { projectFile?: string }
+  ) => Promise<ProjectInfo | null>;
   startPublish: () => void;
 }
 

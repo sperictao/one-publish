@@ -36,11 +36,7 @@ const FILE_ALIAS_ROOTS = {
 };
 
 const TRANSLATION_ALIAS_PATTERN = new RegExp(
-  [
-    "translations",
-    ...Object.keys(BASE_ALIAS_ROOTS),
-    "t",
-  ].join("|")
+  ["translations", ...Object.keys(BASE_ALIAS_ROOTS), "t"].join("|")
 );
 
 // Locale keys that are intentionally kept despite having no static source
@@ -114,11 +110,7 @@ function extractAliasRoots(file, source) {
 }
 
 function normalizeChain(chain) {
-  return chain
-    .replaceAll("?.", ".")
-    .split(".")
-    .filter(Boolean)
-    .join(".");
+  return chain.replaceAll("?.", ".").split(".").filter(Boolean).join(".");
 }
 
 function collectUsedTranslationKeys(file, source) {
@@ -137,7 +129,8 @@ function collectUsedTranslationKeys(file, source) {
   while ((match = propertyAccessRegex.exec(source))) {
     const [, alias, chain] = match;
     const normalizedChain = normalizeChain(chain);
-    const root = alias === "translations" ? aliases.translations || "" : aliases[alias];
+    const root =
+      alias === "translations" ? aliases.translations || "" : aliases[alias];
     if (!normalizedChain || (!root && alias !== "translations")) {
       continue;
     }
@@ -232,7 +225,9 @@ function collectJsxTextCjk(file, source) {
     if (node.kind === ts.SyntaxKind.JsxText) {
       const text = node.getText(sourceFile).replace(/\s+/g, " ").trim();
       if (text && CJK_PATTERN.test(text)) {
-        const { line } = sourceFile.getLineAndCharacterOfPosition(node.getStart(sourceFile));
+        const { line } = sourceFile.getLineAndCharacterOfPosition(
+          node.getStart(sourceFile)
+        );
         findings.push({ file, line: line + 1, text });
       }
     }
@@ -277,7 +272,9 @@ function collectHardcodedCjkUi(file, source) {
 
     if (
       (/(title|aria-label|placeholder)=["'][^"']*[\u3400-\u9fff]/.test(line) ||
-        /(title|aria-label|placeholder)=\{[^}]*["'][^"']*[\u3400-\u9fff]/.test(line)) &&
+        /(title|aria-label|placeholder)=\{[^}]*["'][^"']*[\u3400-\u9fff]/.test(
+          line
+        )) &&
       !hasTranslationFallbackContext
     ) {
       findings.push({ file, line: lineNumber, text: trimmed });
@@ -355,7 +352,9 @@ const uniqueMissingUsedKeys = [
       entry,
     ])
   ).values(),
-].sort((left, right) => formatLocation(left).localeCompare(formatLocation(right)));
+].sort((left, right) =>
+  formatLocation(left).localeCompare(formatLocation(right))
+);
 
 const uniqueHardcodedCjkUi = [
   ...new Map(
@@ -364,7 +363,9 @@ const uniqueHardcodedCjkUi = [
       entry,
     ])
   ).values(),
-].sort((left, right) => formatLocation(left).localeCompare(formatLocation(right)));
+].sort((left, right) =>
+  formatLocation(left).localeCompare(formatLocation(right))
+);
 
 if (uniqueMissingUsedKeys.length > 0) {
   problems.push(
@@ -389,7 +390,8 @@ if (uniqueHardcodedCjkUi.length > 0) {
 for (const locale of localeKeySets) {
   const orphans = [...locale.keys]
     .filter(
-      (key) => !hasUsedKeyCovering(usedKeys, key) && !isAllowlistedUnusedKey(key)
+      (key) =>
+        !hasUsedKeyCovering(usedKeys, key) && !isAllowlistedUnusedKey(key)
     )
     .sort();
   if (orphans.length > 0) {

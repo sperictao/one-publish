@@ -1,9 +1,4 @@
-import {
-  Layers3,
-  Loader2,
-  Save,
-  Sparkles,
-} from "lucide-react";
+import { Layers3, Loader2, Save, Sparkles } from "lucide-react";
 import { memo, startTransition, useCallback } from "react";
 
 import { AppDialogShell } from "@/components/ui/app-dialog-shell";
@@ -193,9 +188,7 @@ const QuickCreateBasicInfoSection = memo(function QuickCreateBasicInfoSection({
           </Label>
           <Input
             id="quick-profile-name"
-            placeholder={
-              profileT.profileNamePlaceholder || "输入配置文件名称"
-            }
+            placeholder={profileT.profileNamePlaceholder || "输入配置文件名称"}
             value={quickCreateProfileName}
             onChange={(event) => onProfileNameChange(event.target.value)}
             onKeyDown={onProfileNameKeyDown}
@@ -215,11 +208,17 @@ const QuickCreateBasicInfoSection = memo(function QuickCreateBasicInfoSection({
             value={quickCreateProfileGroup}
             onValueChange={onProfileGroupChange}
           >
-            <SelectTrigger id="quick-profile-group" className="h-8 text-label-12">
+            <SelectTrigger
+              id="quick-profile-group"
+              className="h-8 text-label-12"
+            >
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value={quickCreateGroupDefaultValue} className="text-label-12">
+              <SelectItem
+                value={quickCreateGroupDefaultValue}
+                className="text-label-12"
+              >
                 {profileT.quickCreateGroupDefault || "默认分组"}
               </SelectItem>
               {quickCreateProfileGroupOptions.map((group) => (
@@ -231,7 +230,10 @@ const QuickCreateBasicInfoSection = memo(function QuickCreateBasicInfoSection({
                   {group}
                 </SelectItem>
               ))}
-              <SelectItem value={quickCreateGroupCustomValue} className="text-label-12">
+              <SelectItem
+                value={quickCreateGroupCustomValue}
+                className="text-label-12"
+              >
                 {profileT.quickCreateGroupCustom || "自定义分组"}
               </SelectItem>
             </SelectContent>
@@ -244,7 +246,10 @@ const QuickCreateBasicInfoSection = memo(function QuickCreateBasicInfoSection({
 
         {quickCreateProfileGroup === quickCreateGroupCustomValue ? (
           <div className="space-y-1 md:col-span-2">
-            <Label htmlFor="quick-profile-group-custom" className="text-label-12">
+            <Label
+              htmlFor="quick-profile-group-custom"
+              className="text-label-12"
+            >
               {profileT.quickCreateGroupCustom || "自定义分组"}
             </Label>
             <Input
@@ -296,7 +301,9 @@ export function QuickCreateProfileDialog({
   const selectedTemplate =
     quickCreateTemplateOptions.find(
       (option) => option.id === quickCreateTemplateId
-    ) ?? quickCreateTemplateOptions[0] ?? null;
+    ) ??
+    quickCreateTemplateOptions[0] ??
+    null;
   const isSaveDisabled =
     quickCreateProfileSaving || !quickCreateProfileName.trim();
 

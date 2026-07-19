@@ -57,19 +57,23 @@ export const workflowUpdaterAssetRules = [
     message: "updater 资产未收集 macOS x64 签名。",
   },
   {
-    fragment: "copy_single ./artifacts/bundles-windows '*-setup.exe' ./updater-assets",
+    fragment:
+      "copy_single ./artifacts/bundles-windows '*-setup.exe' ./updater-assets",
     message: "updater 资产未固定选取 Windows setup.exe。",
   },
   {
-    fragment: "copy_single ./artifacts/bundles-windows '*-setup.exe.sig' ./updater-assets",
+    fragment:
+      "copy_single ./artifacts/bundles-windows '*-setup.exe.sig' ./updater-assets",
     message: "updater 资产未收集 Windows setup.exe 签名。",
   },
   {
-    fragment: "copy_single ./artifacts/bundles-linux '*.AppImage' ./updater-assets",
+    fragment:
+      "copy_single ./artifacts/bundles-linux '*.AppImage' ./updater-assets",
     message: "updater 资产未固定选取 Linux AppImage。",
   },
   {
-    fragment: "copy_single ./artifacts/bundles-linux '*.AppImage.sig' ./updater-assets",
+    fragment:
+      "copy_single ./artifacts/bundles-linux '*.AppImage.sig' ./updater-assets",
     message: "updater 资产未收集 Linux AppImage 签名。",
   },
 ];
@@ -80,7 +84,8 @@ export const workflowReleaseAssetRules = [
     message: "release 资产未包含 latest.json。",
   },
   {
-    fragment: "copy_single ./updater-assets '*aarch64.app.tar.gz' ./release-assets",
+    fragment:
+      "copy_single ./updater-assets '*aarch64.app.tar.gz' ./release-assets",
     message: "release 资产未包含 macOS aarch64 updater tarball。",
   },
   {
@@ -88,15 +93,18 @@ export const workflowReleaseAssetRules = [
     message: "release 资产未包含 macOS x64 updater tarball。",
   },
   {
-    fragment: "copy_single ./artifacts/bundles-macos-aarch64 '*aarch64*.dmg' ./release-assets",
+    fragment:
+      "copy_single ./artifacts/bundles-macos-aarch64 '*aarch64*.dmg' ./release-assets",
     message: "release 资产未包含 macOS aarch64 dmg。",
   },
   {
-    fragment: "copy_single ./artifacts/bundles-macos-x86_64 '*x64*.dmg' ./release-assets",
+    fragment:
+      "copy_single ./artifacts/bundles-macos-x86_64 '*x64*.dmg' ./release-assets",
     message: "release 资产未包含 macOS x64 dmg。",
   },
   {
-    fragment: "copy_single ./artifacts/bundles-macos-universal '*universal*.dmg' ./release-assets",
+    fragment:
+      "copy_single ./artifacts/bundles-macos-universal '*universal*.dmg' ./release-assets",
     message: "release 资产未固定选取 macOS universal dmg。",
   },
   {

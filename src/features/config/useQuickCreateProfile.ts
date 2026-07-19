@@ -129,7 +129,8 @@ export function useQuickCreateProfile({
   );
   const [quickCreateProfileCustomGroup, setQuickCreateProfileCustomGroup] =
     useState("");
-  const [quickCreateProfileSaving, setQuickCreateProfileSaving] = useState(false);
+  const [quickCreateProfileSaving, setQuickCreateProfileSaving] =
+    useState(false);
   const [editingProfileOriginalName, setEditingProfileOriginalName] = useState<
     string | null
   >(null);
@@ -159,32 +160,29 @@ export function useQuickCreateProfile({
     [resetQuickCreateProfileState]
   );
 
-  const openQuickEditProfileDialog = useCallback(
-    (profile: ConfigProfile) => {
-      if (profile.isSystemDefault || profile.providerId !== "dotnet") {
-        return;
-      }
+  const openQuickEditProfileDialog = useCallback((profile: ConfigProfile) => {
+    if (profile.isSystemDefault || profile.providerId !== "dotnet") {
+      return;
+    }
 
-      const parameters = profile.parameters || {};
-      const resolvedGroup = profile.profileGroup?.trim() || "";
+    const parameters = profile.parameters || {};
+    const resolvedGroup = profile.profileGroup?.trim() || "";
 
-      setQuickCreateProfileName(profile.name);
-      setQuickCreateTemplateId(QUICK_CREATE_CUSTOM_TEMPLATE_ID);
-      setQuickCreateProfileDraft(
-        createDotnetPublishConfigFromParameters(
-          parameters as Record<string, unknown>
-        )
-      );
-      setQuickCreateProfileGroup(
-        resolvedGroup || QUICK_CREATE_PROFILE_GROUP_DEFAULT
-      );
-      setQuickCreateProfileCustomGroup("");
-      setQuickCreateProfileSaving(false);
-      setEditingProfileOriginalName(profile.name);
-      setQuickCreateProfileOpen(true);
-    },
-    []
-  );
+    setQuickCreateProfileName(profile.name);
+    setQuickCreateTemplateId(QUICK_CREATE_CUSTOM_TEMPLATE_ID);
+    setQuickCreateProfileDraft(
+      createDotnetPublishConfigFromParameters(
+        parameters as Record<string, unknown>
+      )
+    );
+    setQuickCreateProfileGroup(
+      resolvedGroup || QUICK_CREATE_PROFILE_GROUP_DEFAULT
+    );
+    setQuickCreateProfileCustomGroup("");
+    setQuickCreateProfileSaving(false);
+    setEditingProfileOriginalName(profile.name);
+    setQuickCreateProfileOpen(true);
+  }, []);
 
   const quickCreateTemplateOptions = useMemo<QuickCreateTemplateOption[]>(
     () => [

@@ -36,7 +36,10 @@ export function isProtectedOutputAccessFailure(params: {
   outputLog?: string | null;
 }): boolean {
   const message = [params.error, params.outputLog]
-    .filter((part): part is string => typeof part === "string" && part.trim().length > 0)
+    .filter(
+      (part): part is string =>
+        typeof part === "string" && part.trim().length > 0
+    )
     .join("\n");
 
   if (!MACOS_PROTECTED_OUTPUT_PATH_PATTERN.test(message)) {

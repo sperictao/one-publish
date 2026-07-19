@@ -43,7 +43,8 @@ OnePublish es una **aplicación de escritorio multiplataforma** que te ofrece un
 ## 📸 Capturas de Pantalla
 
 <!-- TODO: agregar capturas de pantalla reales -->
-> *Capturas de pantalla próximamente. Mientras tanto, consulta la [filosofía de diseño](docs/design-philosophy.md) y la [especificación de diseño Geist](DESIGN.md).*
+
+> _Capturas de pantalla próximamente. Mientras tanto, consulta la [filosofía de diseño](docs/design-philosophy.md) y la [especificación de diseño Geist](DESIGN.md)._
 
 ---
 
@@ -51,12 +52,12 @@ OnePublish es una **aplicación de escritorio multiplataforma** que te ofrece un
 
 ### Prerrequisitos
 
-| Requerido | Versión | Propósito |
-|-----------|---------|-----------|
-| **Node.js** | ≥ 20.19 | Tiempo de ejecución del frontend |
-| **pnpm** | más reciente | Gestor de paquetes |
-| **Rust** | ≥ 1.77 | Compilación del backend Tauri |
-| **SDK Objetivo** | varía | Al menos uno de: .NET SDK / Rust / Go / Java (Gradle) |
+| Requerido        | Versión      | Propósito                                             |
+| ---------------- | ------------ | ----------------------------------------------------- |
+| **Node.js**      | ≥ 20.19      | Tiempo de ejecución del frontend                      |
+| **pnpm**         | más reciente | Gestor de paquetes                                    |
+| **Rust**         | ≥ 1.77       | Compilación del backend Tauri                         |
+| **SDK Objetivo** | varía        | Al menos uno de: .NET SDK / Rust / Go / Java (Gradle) |
 
 ### macOS — Instalar Dependencias de Desarrollo
 
@@ -182,21 +183,21 @@ one-publish/
 
 ## 🛠️ Stack Tecnológico
 
-| Capa | Tecnología |
-|------|------------|
-| **Framework Frontend** | React 18 + TypeScript |
-| **Herramienta de Compilación** | Vite 7 |
-| **Estilos** | Tailwind CSS 3 + shadcn/ui (Radix UI) |
-| **Sistema de Diseño** | Vercel Geist (tokens de diseño, colores P3 de gama amplia, temas claro y oscuro) |
-| **Gestión de Estado** | Zustand 5 |
-| **Iconos** | Lucide React |
-| **Notificaciones** | Sonner |
-| **Framework de Escritorio** | Tauri 2.x (Rust) |
-| **Persistencia** | Almacenamiento en archivos JSON (`~/.one-publish/config.json`) |
-| **Puenteo de Tipos** | `ts-rs` (generación de contratos Rust ↔ TypeScript) |
-| **Pruebas Unitarias** | Vitest (frontend) + Rust `#[cfg(test)]` (backend) |
-| **Pruebas E2E** | Playwright |
-| **Gestor de Paquetes** | pnpm |
+| Capa                           | Tecnología                                                                       |
+| ------------------------------ | -------------------------------------------------------------------------------- |
+| **Framework Frontend**         | React 18 + TypeScript                                                            |
+| **Herramienta de Compilación** | Vite 7                                                                           |
+| **Estilos**                    | Tailwind CSS 3 + shadcn/ui (Radix UI)                                            |
+| **Sistema de Diseño**          | Vercel Geist (tokens de diseño, colores P3 de gama amplia, temas claro y oscuro) |
+| **Gestión de Estado**          | Zustand 5                                                                        |
+| **Iconos**                     | Lucide React                                                                     |
+| **Notificaciones**             | Sonner                                                                           |
+| **Framework de Escritorio**    | Tauri 2.x (Rust)                                                                 |
+| **Persistencia**               | Almacenamiento en archivos JSON (`~/.one-publish/config.json`)                   |
+| **Puenteo de Tipos**           | `ts-rs` (generación de contratos Rust ↔ TypeScript)                              |
+| **Pruebas Unitarias**          | Vitest (frontend) + Rust `#[cfg(test)]` (backend)                                |
+| **Pruebas E2E**                | Playwright                                                                       |
+| **Gestor de Paquetes**         | pnpm                                                                             |
 
 ---
 
@@ -250,12 +251,12 @@ Archivos de traducción: `src/i18n/zh.json` | `src/i18n/en.json` (~776 claves ca
 
 ## 🧪 Pruebas
 
-| Capa | Herramienta | Cobertura |
-|------|-------------|-----------|
-| Pruebas unitarias frontend | Vitest + Testing Library | Componentes, hooks, stores, lib |
-| Pruebas unitarias backend | Rust `#[cfg(test)]` | Compilación de providers, migraciones de store, generación de planes |
-| E2E | Playwright (12 especificaciones) | Inicio de app, panel de repositorio, selección de provider, preajustes de publicación, configuración personalizada, verificación previa, flujo de publicación, pruebas de contratos |
-| Puertas de calidad | TypeScript estricto + contratos `ts-rs` | Aplicado en compilación y CI |
+| Capa                       | Herramienta                             | Cobertura                                                                                                                                                                           |
+| -------------------------- | --------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Pruebas unitarias frontend | Vitest + Testing Library                | Componentes, hooks, stores, lib                                                                                                                                                     |
+| Pruebas unitarias backend  | Rust `#[cfg(test)]`                     | Compilación de providers, migraciones de store, generación de planes                                                                                                                |
+| E2E                        | Playwright (12 especificaciones)        | Inicio de app, panel de repositorio, selección de provider, preajustes de publicación, configuración personalizada, verificación previa, flujo de publicación, pruebas de contratos |
+| Puertas de calidad         | TypeScript estricto + contratos `ts-rs` | Aplicado en compilación y CI                                                                                                                                                        |
 
 ---
 
@@ -263,20 +264,20 @@ Archivos de traducción: `src/i18n/zh.json` | `src/i18n/en.json` (~776 claves ca
 
 OnePublish está evolucionando de una GUI de publicación .NET a un **producto de publicación multi-lenguaje de grado comercial**. El plan maestro abarca 11 fases:
 
-| Fase | Tema | Estado |
-|------|------|--------|
-| 0 | Fundación de ingeniería (pruebas, CI) | ✅ Completado |
-| 1 | Abstracción del núcleo de publicación (Spec, Plan, Logging) | ✅ Completado |
-| 2 | Proveedores de lenguaje (Rust/Go/Java) | ✅ Completado |
-| 3 | 100% de expresividad de parámetros (editor de esquemas) | ✅ Completado |
-| 4 | Funcionalidades comerciales (import/export, verificaciones de entorno, firma) | ✅ Completado |
-| 5 | UX de operaciones de lanzamiento (asistente de lista de verificación, verificación previa) | ✅ Completado |
-| 6 | Puente UX multi-proveedor | ✅ Completado |
-| 7 | Confiabilidad de ejecución y DevEx (transmisión, cancelación, instantáneas) | ✅ Completado |
-| 8 | Inteligencia de ejecución y recuperación (historial, re-ejecución, agrupación de fallos) | ✅ Completado |
-| 9 | Profundización de diagnósticos y transferencia al equipo | ✅ Completado |
-| 10 | Señal de colaboración e inteligencia de línea de tiempo | ✅ Completado |
-| 11 | Integración de flujo de trabajo en equipo | 🚧 En Progreso |
+| Fase | Tema                                                                                       | Estado         |
+| ---- | ------------------------------------------------------------------------------------------ | -------------- |
+| 0    | Fundación de ingeniería (pruebas, CI)                                                      | ✅ Completado  |
+| 1    | Abstracción del núcleo de publicación (Spec, Plan, Logging)                                | ✅ Completado  |
+| 2    | Proveedores de lenguaje (Rust/Go/Java)                                                     | ✅ Completado  |
+| 3    | 100% de expresividad de parámetros (editor de esquemas)                                    | ✅ Completado  |
+| 4    | Funcionalidades comerciales (import/export, verificaciones de entorno, firma)              | ✅ Completado  |
+| 5    | UX de operaciones de lanzamiento (asistente de lista de verificación, verificación previa) | ✅ Completado  |
+| 6    | Puente UX multi-proveedor                                                                  | ✅ Completado  |
+| 7    | Confiabilidad de ejecución y DevEx (transmisión, cancelación, instantáneas)                | ✅ Completado  |
+| 8    | Inteligencia de ejecución y recuperación (historial, re-ejecución, agrupación de fallos)   | ✅ Completado  |
+| 9    | Profundización de diagnósticos y transferencia al equipo                                   | ✅ Completado  |
+| 10   | Señal de colaboración e inteligencia de línea de tiempo                                    | ✅ Completado  |
+| 11   | Integración de flujo de trabajo en equipo                                                  | 🚧 En Progreso |
 
 ---
 

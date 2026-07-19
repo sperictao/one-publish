@@ -29,21 +29,22 @@
 **依赖集合与版本号完全一致**，差异仅来自 Cargo 对 `Cargo.toml` 的自动规范化
 （展开简写、补 `autobins`/`autotests` 等字段、重排段落）。无本地依赖增删或版本 pin 调整。
 
-| 依赖 | 目标 | orig 声明 | vendored Cargo.toml 声明 | 差异 |
-|---|---|---|---|---|
-| tauri | 通用 | `2.0.0-rc` | `2.0.0-rc` | 无 |
-| serde | 通用 | `1.0` | `1.0` | 无 |
-| anyhow | 通用 | `1.0` | `1.0` | 无 |
-| rand | macos | `^0.8` | `^0.8` | 无 |
-| cocoa | macos | `0.25` | `0.25` | 无 |
-| objc | macos | `0.2` | `0.2` | 无 |
-| enigo | windows | `0.1.3` | `0.1.3` | 无 |
-| linicon | linux | `2.3.0` | `2.3.0` | 无 |
-| tauri-plugin (build-dep) | 通用 | `2.0.0-rc` + `["build"]` | `2.0.0-rc` + `["build"]` | 无 |
+| 依赖                     | 目标    | orig 声明                | vendored Cargo.toml 声明 | 差异 |
+| ------------------------ | ------- | ------------------------ | ------------------------ | ---- |
+| tauri                    | 通用    | `2.0.0-rc`               | `2.0.0-rc`               | 无   |
+| serde                    | 通用    | `1.0`                    | `1.0`                    | 无   |
+| anyhow                   | 通用    | `1.0`                    | `1.0`                    | 无   |
+| rand                     | macos   | `^0.8`                   | `^0.8`                   | 无   |
+| cocoa                    | macos   | `0.25`                   | `0.25`                   | 无   |
+| objc                     | macos   | `0.2`                    | `0.2`                    | 无   |
+| enigo                    | windows | `0.1.3`                  | `0.1.3`                  | 无   |
+| linicon                  | linux   | `2.3.0`                  | `2.3.0`                  | 无   |
+| tauri-plugin (build-dep) | 通用    | `2.0.0-rc` + `["build"]` | `2.0.0-rc` + `["build"]` | 无   |
 
 ### 3.2 源码层定制点
 
 vendor 提交信息（`31ce018`）声明的本地化动机：
+
 > enable local patching for traffic light positioning fixes
 > （为 macOS 交通灯位置修复开启本地 patch 能力）
 
@@ -55,6 +56,7 @@ vendor 提交信息（`31ce018`）声明的本地化动机：
 
 vendor 目录的源码（`src/traffic.rs` 等）目前与上游 1.1.1 一致；
 若未来在 `src/traffic.rs` 等文件上叠加本地 patch，请在本节追加：
+
 - patch 文件路径与函数
 - 与上游对应版本的 diff 摘要
 - 定制动机

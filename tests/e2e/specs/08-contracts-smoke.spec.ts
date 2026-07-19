@@ -21,21 +21,35 @@ test.describe("Contract Drift Detection", () => {
   /**
    * Helper: invoke a Tauri command and return its result.
    */
-  async function invoke(page: import("@playwright/test").Page, cmd: string, args?: Record<string, unknown>) {
+  async function invoke(
+    page: import("@playwright/test").Page,
+    cmd: string,
+    args?: Record<string, unknown>
+  ) {
     return page.evaluate(
       async ({ cmd, args }) => {
-        const win = window as unknown as { __TAURI_INTERNALS__?: { invoke: (c: string, a?: Record<string, unknown>) => Promise<unknown> } };
+        const win = window as unknown as {
+          __TAURI_INTERNALS__?: {
+            invoke: (
+              c: string,
+              a?: Record<string, unknown>
+            ) => Promise<unknown>;
+          };
+        };
         if (!win.__TAURI_INTERNALS__?.invoke) {
           throw new Error("Mock Tauri not installed");
         }
         return win.__TAURI_INTERNALS__.invoke(cmd, args);
       },
-      { cmd, args },
+      { cmd, args }
     );
   }
 
   test("get_app_state returns valid AppState shape", async ({ page }) => {
-    const state = (await invoke(page, "get_app_state")) as Record<string, unknown>;
+    const state = (await invoke(page, "get_app_state")) as Record<
+      string,
+      unknown
+    >;
 
     // Required top-level fields from AppState
     expect(state).toHaveProperty("repositories");
@@ -61,8 +75,12 @@ test.describe("Contract Drift Detection", () => {
     }
   });
 
-  test("list_providers returns valid ProviderCatalogEntry shape", async ({ page }) => {
-    const providers = (await invoke(page, "list_providers")) as Array<Record<string, unknown>>;
+  test("list_providers returns valid ProviderCatalogEntry shape", async ({
+    page,
+  }) => {
+    const providers = (await invoke(page, "list_providers")) as Array<
+      Record<string, unknown>
+    >;
 
     expect(Array.isArray(providers)).toBe(true);
     expect(providers.length).toBeGreaterThan(0);
@@ -75,8 +93,12 @@ test.describe("Contract Drift Detection", () => {
     expect(typeof p.id).toBe("string");
   });
 
-  test("get_provider_schema returns valid ParameterSchema shape", async ({ page }) => {
-    const schema = (await invoke(page, "get_provider_schema", { providerId: "dotnet" })) as Record<string, unknown>;
+  test("get_provider_schema returns valid ParameterSchema shape", async ({
+    page,
+  }) => {
+    const schema = (await invoke(page, "get_provider_schema", {
+      providerId: "dotnet",
+    })) as Record<string, unknown>;
 
     expect(schema).toHaveProperty("parameters");
     const params = schema.parameters as Record<string, unknown>;
@@ -85,7 +107,9 @@ test.describe("Contract Drift Detection", () => {
     expect(params).toHaveProperty("runtime");
   });
 
-  test("render_provider_publish returns valid RenderedPublishCommand shape", async ({ page }) => {
+  test("render_provider_publish returns valid RenderedPublishCommand shape", async ({
+    page,
+  }) => {
     const cmd = (await invoke(page, "render_provider_publish", {
       providerId: "dotnet",
       spec: { parameters: { configuration: "Release" } },
@@ -99,8 +123,13 @@ test.describe("Contract Drift Detection", () => {
     expect(Array.isArray(cmd.args)).toBe(true);
   });
 
-  test("run_environment_check returns valid EnvironmentCheckResult shape", async ({ page }) => {
-    const result = (await invoke(page, "run_environment_check")) as Record<string, unknown>;
+  test("run_environment_check returns valid EnvironmentCheckResult shape", async ({
+    page,
+  }) => {
+    const result = (await invoke(page, "run_environment_check")) as Record<
+      string,
+      unknown
+    >;
 
     expect(result).toHaveProperty("is_ready");
     expect(result).toHaveProperty("providers");
@@ -110,7 +139,9 @@ test.describe("Contract Drift Detection", () => {
     expect(Array.isArray(result.providers)).toBe(true);
   });
 
-  test("scan_repository_branches returns valid BranchScanResult shape", async ({ page }) => {
+  test("scan_repository_branches returns valid BranchScanResult shape", async ({
+    page,
+  }) => {
     const result = (await invoke(page, "scan_repository_branches", {
       repoId: "repo-a",
     })) as Record<string, unknown>;
@@ -120,7 +151,9 @@ test.describe("Contract Drift Detection", () => {
     expect(Array.isArray(result.branches)).toBe(true);
   });
 
-  test("execute_provider_publish returns valid PublishResult shape", async ({ page }) => {
+  test("execute_provider_publish returns valid PublishResult shape", async ({
+    page,
+  }) => {
     const result = (await invoke(page, "execute_provider_publish", {
       providerId: "dotnet",
       spec: { parameters: {} },
@@ -144,7 +177,9 @@ test.describe("Contract Drift Detection", () => {
     expect(command).toHaveProperty("display_command");
   });
 
-  test("error injection works and throws with correct shape", async ({ page }) => {
+  test("error injection works and throws with correct shape", async ({
+    page,
+  }) => {
     // Re-install with error injection
     await installMockTauri(page, {
       errors: { update_publish_state: "injected test error" },
@@ -153,9 +188,15 @@ test.describe("Contract Drift Detection", () => {
 
     // This should throw
     const error = await page.evaluate(async () => {
-      const win = window as unknown as { __TAURI_INTERNALS__?: { invoke: (c: string, a?: Record<string, unknown>) => Promise<unknown> } };
+      const win = window as unknown as {
+        __TAURI_INTERNALS__?: {
+          invoke: (c: string, a?: Record<string, unknown>) => Promise<unknown>;
+        };
+      };
       try {
-        await win.__TAURI_INTERNALS__!.invoke("update_publish_state", { selectedPreset: "test" });
+        await win.__TAURI_INTERNALS__!.invoke("update_publish_state", {
+          selectedPreset: "test",
+        });
         return null;
       } catch (e) {
         return (e as Error).message;

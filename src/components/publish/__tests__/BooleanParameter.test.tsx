@@ -1,15 +1,15 @@
-import { describe, it, expect, vi } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/react';
-import { BooleanParameter } from '../BooleanParameter';
+import { describe, it, expect, vi } from "vitest";
+import { render, screen, fireEvent } from "@testing-library/react";
+import { BooleanParameter } from "../BooleanParameter";
 
-describe('BooleanParameter', () => {
+describe("BooleanParameter", () => {
   const definition = {
-    type: 'boolean' as const,
-    flag: '--release',
-    description: 'Build in release mode',
+    type: "boolean" as const,
+    flag: "--release",
+    description: "Build in release mode",
   };
 
-  it('renders switch with correct initial state', () => {
+  it("renders switch with correct initial state", () => {
     render(
       <BooleanParameter
         definition={definition}
@@ -18,10 +18,10 @@ describe('BooleanParameter', () => {
       />
     );
 
-    expect(screen.getByLabelText('--release')).toBeInTheDocument();
+    expect(screen.getByLabelText("--release")).toBeInTheDocument();
   });
 
-  it('calls onChange when switch is toggled', () => {
+  it("calls onChange when switch is toggled", () => {
     const handleChange = vi.fn();
     render(
       <BooleanParameter
@@ -31,13 +31,13 @@ describe('BooleanParameter', () => {
       />
     );
 
-    const switchElement = screen.getByRole('switch');
+    const switchElement = screen.getByRole("switch");
     fireEvent.click(switchElement);
 
     expect(handleChange).toHaveBeenCalledWith(true);
   });
 
-  it('displays description as tooltip', () => {
+  it("displays description as tooltip", () => {
     render(
       <BooleanParameter
         definition={definition}
@@ -46,7 +46,7 @@ describe('BooleanParameter', () => {
       />
     );
 
-    const helpIcon = screen.getByLabelText('查看说明');
+    const helpIcon = screen.getByLabelText("查看说明");
     expect(helpIcon).toBeInTheDocument();
   });
 });

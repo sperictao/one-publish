@@ -21,9 +21,11 @@ describe("handoffSnippet", () => {
       commandLine: "$ dotnet publish /tmp/demo/src/app.csproj -c Release",
     });
 
-    expect(snippet).toContain('# provider: dotnet');
+    expect(snippet).toContain("# provider: dotnet");
     expect(snippet).toContain('cd "/tmp/demo/src"');
-    expect(snippet).toContain("dotnet publish /tmp/demo/src/app.csproj -c Release");
+    expect(snippet).toContain(
+      "dotnet publish /tmp/demo/src/app.csproj -c Release"
+    );
   });
 
   it("生成 GitHub Actions 片段时包含 working-directory", () => {

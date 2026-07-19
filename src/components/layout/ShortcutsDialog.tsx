@@ -12,19 +12,14 @@ interface ShortcutsDialogProps {
   onOpenChange: (open: boolean) => void;
 }
 
-export function ShortcutsDialog({
-  open,
-  onOpenChange,
-}: ShortcutsDialogProps) {
+export function ShortcutsDialog({ open, onOpenChange }: ShortcutsDialogProps) {
   const [shortcuts, setShortcuts] = useState<ShortcutHelp[]>([]);
   const { translations } = useI18n();
   const shortcutT = translations.shortcuts || {};
 
   useEffect(() => {
     if (open) {
-      getShortcutsHelp()
-        .then(setShortcuts)
-        .catch(console.error);
+      getShortcutsHelp().then(setShortcuts).catch(console.error);
     }
   }, [open]);
 

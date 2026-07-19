@@ -21,11 +21,15 @@ test.describe("Custom Publish Mode", () => {
     if (await newConfigBtn.isVisible()) {
       await newConfigBtn.click();
       // Wait for the custom config form or command preview to appear
-      await expect(page.getByText(/--configuration/)).toBeVisible({ timeout: 10000 });
+      await expect(page.getByText(/--configuration/)).toBeVisible({
+        timeout: 10000,
+      });
     }
   });
 
-  test("configuration parameter is present in custom form", async ({ page }) => {
+  test("configuration parameter is present in custom form", async ({
+    page,
+  }) => {
     await gotoApp(page);
 
     // The publish command preview includes --configuration Release

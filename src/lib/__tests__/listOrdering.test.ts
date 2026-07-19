@@ -22,10 +22,10 @@ function createProfile(name: string, profileGroup?: string): ConfigProfile {
 describe("listOrdering", () => {
   it("会按持久化顺序排序并把新增项追加到末尾", () => {
     expect(
-      applyStoredOrder(["FolderProfile", "ZipProfile", "SingleFile"], [
-        "ZipProfile",
-        "FolderProfile",
-      ])
+      applyStoredOrder(
+        ["FolderProfile", "ZipProfile", "SingleFile"],
+        ["ZipProfile", "FolderProfile"]
+      )
     ).toEqual(["ZipProfile", "FolderProfile", "SingleFile"]);
   });
 

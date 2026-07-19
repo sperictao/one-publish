@@ -1,6 +1,10 @@
 import { useCallback, useMemo } from "react";
 import { usePublishRunner } from "@/features/publish/usePublishRunner";
-import { useProfiles, QUICK_CREATE_PROFILE_GROUP_CUSTOM, QUICK_CREATE_PROFILE_GROUP_DEFAULT } from "@/features/config/useProfiles";
+import {
+  useProfiles,
+  QUICK_CREATE_PROFILE_GROUP_CUSTOM,
+  QUICK_CREATE_PROFILE_GROUP_DEFAULT,
+} from "@/features/config/useProfiles";
 import { useCommandImport } from "@/hooks/useCommandImport";
 import { useScopedConfigs } from "@/features/config/useScopedConfigs";
 import { useProviderPresentationState } from "@/features/provider/useProviderPresentationState";
@@ -8,14 +12,22 @@ import { usePresetText } from "@/hooks/usePresetText";
 import { usePublishConfigPanelProps } from "@/hooks/usePublishConfigPanelProps";
 import { usePublishRunCardProps } from "@/hooks/usePublishRunCardProps";
 import { buildDotnetProfileParameters } from "@/features/config/dotnetPublishConfig";
-import { DEFAULT_DOTNET_PRESET_ID, DOTNET_PRESETS } from "@/features/config/dotnetPresets";
+import {
+  DEFAULT_DOTNET_PRESET_ID,
+  DOTNET_PRESETS,
+} from "@/features/config/dotnetPresets";
 import type { PublishConfigStore } from "@/lib/store/types";
 import type { EnvironmentCheckSnapshot } from "@/features/environment/environment";
 import type { CommandImportResultCardProps } from "@/components/publish/CommandImportResultCard";
 import type { ProviderPublishSpec } from "@/features/publish/publishRuntime";
 import type { ParameterValue, ParameterSchema } from "@/types/parameters";
 import type { ResourceState } from "@/features/provider/useProviderRuntime";
-import type { ProviderManifest, Repository, ProjectInfo, ExecutionRecord } from "@/lib/store/types";
+import type {
+  ProviderManifest,
+  Repository,
+  ProjectInfo,
+  ExecutionRecord,
+} from "@/lib/store/types";
 
 const SPEC_VERSION = 1;
 const EMPTY_STRING_LIST: string[] = [];
@@ -38,7 +50,11 @@ interface UsePublishBootParams {
   pushRecentPublishConfig: (key: string, repoId?: string | null) => void;
   removeRecentPublishConfig: (key: string, repoId?: string | null) => void;
   reorderRecentPublishConfigs: (keys: string[], repoId?: string | null) => void;
-  replaceRecentPublishConfigKey: (previousKey: string, nextKey: string, repoId?: string | null) => void;
+  replaceRecentPublishConfigKey: (
+    previousKey: string,
+    nextKey: string,
+    repoId?: string | null
+  ) => void;
   defaultOutputDir: string;
   executionHistoryLimit: number;
 
@@ -50,7 +66,10 @@ interface UsePublishBootParams {
   failureT: TranslationMap;
   profileT: TranslationMap;
   language: "zh" | "en";
-  openEnvironmentDialog: (initialCheck?: EnvironmentCheckSnapshot | null, providerIds?: string[]) => void;
+  openEnvironmentDialog: (
+    initialCheck?: EnvironmentCheckSnapshot | null,
+    providerIds?: string[]
+  ) => void;
   leftPanelCollapsed: boolean;
   setLeftPanelCollapsed: (collapsed: boolean) => void;
   middlePanelCollapsed: boolean;
@@ -63,10 +82,15 @@ interface UsePublishBootParams {
   selectedRepo: Repository | null;
   projectInfo: ProjectInfo | null;
   isProjectInfoRefreshing: boolean;
-  scanProject: (path?: string, options?: { projectFile?: string }) => Promise<ProjectInfo | null>;
+  scanProject: (
+    path?: string,
+    options?: { projectFile?: string }
+  ) => Promise<ProjectInfo | null>;
   orderedProjectPublishProfiles: string[];
   reorderProjectPublishProfiles: (orderedNames: string[]) => void;
-  extractSpecFromRecord: (record: ExecutionRecord) => ProviderPublishSpec | null;
+  extractSpecFromRecord: (
+    record: ExecutionRecord
+  ) => ProviderPublishSpec | null;
   restoreSpecToEditor: (spec: ProviderPublishSpec) => void;
   getRecentConfigKeyFromSpec: (spec: ProviderPublishSpec) => string | null;
   setEnvironmentLastCheck: (snapshot: EnvironmentCheckSnapshot | null) => void;
@@ -84,7 +108,9 @@ interface UsePublishBootParams {
   providerRuntimeProviders: ProviderManifest[];
   activeProvider: ProviderManifest | null;
   activeProviderParameters: Record<string, ParameterValue>;
-  setProviderParameters: React.Dispatch<React.SetStateAction<Record<string, Record<string, ParameterValue>>>>;
+  setProviderParameters: React.Dispatch<
+    React.SetStateAction<Record<string, Record<string, ParameterValue>>>
+  >;
   applyProfileProvider: (providerId: string) => void;
   applyRecoveredSpecProvider: (providerId: string) => void;
   applySelectedRepositoryProvider: (providerId?: string | null) => void;
@@ -277,18 +303,17 @@ export function usePublishBoot(params: UsePublishBootParams) {
   });
 
   // Memoized command import result card props
-  const commandImportResultCardProps = useMemo<
-    CommandImportResultCardProps | null
-  >(() => {
-    if (!activeImportFeedback) {
-      return null;
-    }
-    return {
-      activeImportFeedback,
-      providerLabel: activeProviderLabel,
-      appT: params.appT,
-    };
-  }, [activeImportFeedback, activeProviderLabel, params.appT]);
+  const commandImportResultCardProps =
+    useMemo<CommandImportResultCardProps | null>(() => {
+      if (!activeImportFeedback) {
+        return null;
+      }
+      return {
+        activeImportFeedback,
+        providerLabel: activeProviderLabel,
+        appT: params.appT,
+      };
+    }, [activeImportFeedback, activeProviderLabel, params.appT]);
 
   // Derived visibility flags
   const showCommandImportResultCard = Boolean(
@@ -297,22 +322,23 @@ export function usePublishBoot(params: UsePublishBootParams) {
   const shouldLoadDiagnosticsSection = params.selectedRepo
     ? params.rightPanelView === "history"
     : false;
-  const diagnosticsSectionProps = shouldLoadDiagnosticsSection && params.selectedRepo
-    ? {
-        rightPanelView: params.rightPanelView,
-        appT: params.appT,
-        historyT: params.historyT,
-        failureT: params.failureT,
-        executionHistory: params.executionHistory,
-        executionHistoryLimit: params.executionHistoryLimit,
-        selectedRepo: params.selectedRepo,
-        isPublishing: params.isPublishing,
-        recentHistoryExports: params.recentHistoryExports,
-        trackHistoryExport: params.trackHistoryExport,
-        extractSpecFromRecord: params.extractSpecFromRecord,
-        rerunFromHistory: params.extractSpecFromRecord as any, // overridden by useAppBoot
-      }
-    : null;
+  const diagnosticsSectionProps =
+    shouldLoadDiagnosticsSection && params.selectedRepo
+      ? {
+          rightPanelView: params.rightPanelView,
+          appT: params.appT,
+          historyT: params.historyT,
+          failureT: params.failureT,
+          executionHistory: params.executionHistory,
+          executionHistoryLimit: params.executionHistoryLimit,
+          selectedRepo: params.selectedRepo,
+          isPublishing: params.isPublishing,
+          recentHistoryExports: params.recentHistoryExports,
+          trackHistoryExport: params.trackHistoryExport,
+          extractSpecFromRecord: params.extractSpecFromRecord,
+          rerunFromHistory: params.extractSpecFromRecord as any, // overridden by useAppBoot
+        }
+      : null;
 
   // Memoized publish config panel props
   const publishConfigPanelProps = usePublishConfigPanelProps({

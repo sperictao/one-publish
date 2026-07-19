@@ -28,11 +28,15 @@ test.describe("App Boot", () => {
     await gotoApp(page);
 
     // The publish config panel should show profile items
-    const folderProfile = page.locator("[data-list-item-id='pubxml:FolderProfile']");
+    const folderProfile = page.locator(
+      "[data-list-item-id='pubxml:FolderProfile']"
+    );
     await expect(folderProfile).toBeVisible({ timeout: 15000 });
   });
 
-  test("three-panel layout is present with resizable handles", async ({ page }) => {
+  test("three-panel layout is present with resizable handles", async ({
+    page,
+  }) => {
     await gotoApp(page);
 
     // The app root should be visible
@@ -43,19 +47,27 @@ test.describe("App Boot", () => {
     await expect(page.locator("[data-list-item-id='repo-a']")).toBeVisible();
   });
 
-  test("switches repository selection and updates middle panel", async ({ page }) => {
+  test("switches repository selection and updates middle panel", async ({
+    page,
+  }) => {
     await gotoApp(page);
 
     // Click repo-b selection button
-    const repoBBtn = page.locator("[data-list-item-id='repo-b'] button[aria-pressed]");
+    const repoBBtn = page.locator(
+      "[data-list-item-id='repo-b'] button[aria-pressed]"
+    );
     await repoBBtn.click();
 
     // Wait for repo-b to become selected (aria-pressed="true")
-    await expect(page.locator("[data-list-item-id='repo-b'] button[aria-pressed]")).toHaveAttribute("aria-pressed", "true");
+    await expect(
+      page.locator("[data-list-item-id='repo-b'] button[aria-pressed]")
+    ).toHaveAttribute("aria-pressed", "true");
 
     // After selecting repo-b, publish config should still be visible
     // (the panel updates to show repo-b's config)
-    await expect(page.locator("[data-list-item-id='pubxml:FolderProfile']")).toBeVisible({ timeout: 10000 });
+    await expect(
+      page.locator("[data-list-item-id='pubxml:FolderProfile']")
+    ).toBeVisible({ timeout: 10000 });
   });
 
   test("app is functional with mocked Tauri backend", async ({ page }) => {
@@ -64,10 +76,16 @@ test.describe("App Boot", () => {
     await page.goto("/", { waitUntil: "domcontentloaded" });
 
     // Verify the mock layer is active
-    const isMocked = await page.evaluate(() => !!(window as unknown as { isTauri?: boolean }).isTauri);
+    const isMocked = await page.evaluate(
+      () => !!(window as unknown as { isTauri?: boolean }).isTauri
+    );
     expect(isMocked).toBe(false); // isTauri=false means mock is active
 
-    const hasInternals = await page.evaluate(() => !!(window as unknown as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__);
+    const hasInternals = await page.evaluate(
+      () =>
+        !!(window as unknown as { __TAURI_INTERNALS__?: unknown })
+          .__TAURI_INTERNALS__
+    );
     expect(hasInternals).toBe(true);
   });
 });
@@ -88,7 +106,9 @@ test.describe("Layout & Resize", () => {
     await gotoApp(page);
 
     // Each repo row should have a pressable button
-    const buttons = page.locator("[data-list-item-id='repo-a'] button[aria-pressed]");
+    const buttons = page.locator(
+      "[data-list-item-id='repo-a'] button[aria-pressed]"
+    );
     await expect(buttons).toHaveCount(1);
 
     const isPressed = await buttons.getAttribute("aria-pressed");

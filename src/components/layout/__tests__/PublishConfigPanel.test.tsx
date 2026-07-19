@@ -1,5 +1,20 @@
-import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
-import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import {
+  afterAll,
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+} from "vitest";
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import { PublishConfigPanel } from "@/components/layout/PublishConfigPanel";
 import { __setTranslationsCacheForTest } from "@/hooks/useI18n";
 import type { ConfigProfile, PublishConfigStore } from "@/lib/store/types";
@@ -23,9 +38,14 @@ function createDomRect(top: number, height = ROW_HEIGHT): DOMRect {
   } as DOMRect;
 }
 
-function getRenderedConfigIds(container: HTMLElement, prefix: string): string[] {
+function getRenderedConfigIds(
+  container: HTMLElement,
+  prefix: string
+): string[] {
   return Array.from(
-    container.querySelectorAll<HTMLElement>("[data-list-row='true'][data-list-item-id]")
+    container.querySelectorAll<HTMLElement>(
+      "[data-list-row='true'][data-list-item-id]"
+    )
   )
     .map((row) => row.dataset.listItemId ?? "")
     .filter((itemId) => itemId.startsWith(prefix));
@@ -138,10 +158,9 @@ beforeAll(() => {
   getBoundingClientRectSpy = vi
     .spyOn(HTMLElement.prototype, "getBoundingClientRect")
     .mockImplementation(function mockRect(this: HTMLElement) {
-      const rowElement =
-        this.matches("[data-list-row='true']")
-          ? this
-          : this.closest<HTMLElement>("[data-list-row='true']");
+      const rowElement = this.matches("[data-list-row='true']")
+        ? this
+        : this.closest<HTMLElement>("[data-list-row='true']");
 
       if (rowElement) {
         const rows = Array.from(
@@ -214,7 +233,10 @@ describe("PublishConfigPanel", () => {
         projectPublishProfiles={[]}
         isProjectProfilesRefreshing
         onSelectProjectProfile={() => {}}
-        onCopyProjectProfileToCustom={async (_name, _config: PublishConfigStore) => "copied"}
+        onCopyProjectProfileToCustom={async (
+          _name,
+          _config: PublishConfigStore
+        ) => "copied"}
         recentConfigKeys={[]}
         favoriteConfigKeys={[]}
         onToggleFavoriteConfig={() => {}}
@@ -247,7 +269,10 @@ describe("PublishConfigPanel", () => {
         projectPublishProfiles={["FolderProfile"]}
         isProjectProfilesRefreshing={false}
         onSelectProjectProfile={() => {}}
-        onCopyProjectProfileToCustom={async (_name, _config: PublishConfigStore) => "copied"}
+        onCopyProjectProfileToCustom={async (
+          _name,
+          _config: PublishConfigStore
+        ) => "copied"}
         recentConfigKeys={[]}
         favoriteConfigKeys={[]}
         onToggleFavoriteConfig={() => {}}
@@ -266,7 +291,10 @@ describe("PublishConfigPanel", () => {
     const onSelectProfile = vi.fn();
     const onSelectProjectProfile = vi.fn();
     const onRemoveRecentConfig = vi.fn();
-    const profiles = [createProfile("alpha-profile"), createProfile("beta-profile")];
+    const profiles = [
+      createProfile("alpha-profile"),
+      createProfile("beta-profile"),
+    ];
 
     const { container } = render(
       <PublishConfigPanel
@@ -283,7 +311,10 @@ describe("PublishConfigPanel", () => {
         dotnetSchema={dotnetSchema}
         projectPublishProfiles={[]}
         onSelectProjectProfile={onSelectProjectProfile}
-        onCopyProjectProfileToCustom={async (_name, _config: PublishConfigStore) => "copied"}
+        onCopyProjectProfileToCustom={async (
+          _name,
+          _config: PublishConfigStore
+        ) => "copied"}
         recentConfigKeys={["userprofile:beta-profile"]}
         favoriteConfigKeys={[]}
         onToggleFavoriteConfig={() => {}}
@@ -336,7 +367,9 @@ describe("PublishConfigPanel", () => {
     fireEvent.click(removeRecentItem);
 
     await waitFor(() => {
-      expect(onRemoveRecentConfig).toHaveBeenCalledWith("userprofile:beta-profile");
+      expect(onRemoveRecentConfig).toHaveBeenCalledWith(
+        "userprofile:beta-profile"
+      );
     });
     expect(onSelectProfile).not.toHaveBeenCalled();
     expect(onSelectProjectProfile).not.toHaveBeenCalled();
@@ -359,7 +392,10 @@ describe("PublishConfigPanel", () => {
         dotnetSchema={dotnetSchema}
         projectPublishProfiles={["FolderProfile", "ZipProfile"]}
         onSelectProjectProfile={() => {}}
-        onCopyProjectProfileToCustom={async (_name, _config: PublishConfigStore) => "copied"}
+        onCopyProjectProfileToCustom={async (
+          _name,
+          _config: PublishConfigStore
+        ) => "copied"}
         recentConfigKeys={["pubxml:FolderProfile"]}
         favoriteConfigKeys={[]}
         onToggleFavoriteConfig={() => {}}
@@ -408,7 +444,10 @@ describe("PublishConfigPanel", () => {
         dotnetSchema={dotnetSchema}
         projectPublishProfiles={["FolderProfile", "ZipProfile"]}
         onSelectProjectProfile={() => {}}
-        onCopyProjectProfileToCustom={async (_name, _config: PublishConfigStore) => "copied"}
+        onCopyProjectProfileToCustom={async (
+          _name,
+          _config: PublishConfigStore
+        ) => "copied"}
         recentConfigKeys={["pubxml:FolderProfile"]}
         favoriteConfigKeys={[]}
         onToggleFavoriteConfig={() => {}}
@@ -420,7 +459,10 @@ describe("PublishConfigPanel", () => {
     );
 
     await waitFor(() => {
-      expect(getProjectRow()).toHaveAttribute("data-list-visual-target", "true");
+      expect(getProjectRow()).toHaveAttribute(
+        "data-list-visual-target",
+        "true"
+      );
     });
     expect(getRecentRow()).toHaveAttribute("data-list-visual-target", "false");
     expect(container.querySelector(".floating-list-card")).toBeNull();
@@ -435,7 +477,10 @@ describe("PublishConfigPanel", () => {
           selectedRepoId="repo-a"
           selectedPreset="release-fd"
           isCustomMode={true}
-          profiles={[createProfile("alpha-profile"), createProfile("beta-profile")]}
+          profiles={[
+            createProfile("alpha-profile"),
+            createProfile("beta-profile"),
+          ]}
           activeProfileName="alpha-profile"
           onSelectProfile={() => {}}
           onCreateProfile={() => {}}
@@ -446,7 +491,10 @@ describe("PublishConfigPanel", () => {
           dotnetSchema={dotnetSchema}
           projectPublishProfiles={[]}
           onSelectProjectProfile={() => {}}
-          onCopyProjectProfileToCustom={async (_name, _config: PublishConfigStore) => "copied"}
+          onCopyProjectProfileToCustom={async (
+            _name,
+            _config: PublishConfigStore
+          ) => "copied"}
           recentConfigKeys={[]}
           favoriteConfigKeys={[]}
           onToggleFavoriteConfig={() => {}}
@@ -468,7 +516,10 @@ describe("PublishConfigPanel", () => {
           selectedRepoId="repo-b"
           selectedPreset="release-fd"
           isCustomMode={true}
-          profiles={[createProfile("beta-profile"), createProfile("alpha-profile")]}
+          profiles={[
+            createProfile("beta-profile"),
+            createProfile("alpha-profile"),
+          ]}
           activeProfileName="alpha-profile"
           onSelectProfile={() => {}}
           onCreateProfile={() => {}}
@@ -479,7 +530,10 @@ describe("PublishConfigPanel", () => {
           dotnetSchema={dotnetSchema}
           projectPublishProfiles={[]}
           onSelectProjectProfile={() => {}}
-          onCopyProjectProfileToCustom={async (_name, _config: PublishConfigStore) => "copied"}
+          onCopyProjectProfileToCustom={async (
+            _name,
+            _config: PublishConfigStore
+          ) => "copied"}
           recentConfigKeys={[]}
           favoriteConfigKeys={[]}
           onToggleFavoriteConfig={() => {}}
@@ -549,7 +603,10 @@ describe("PublishConfigPanel", () => {
         projectPublishProfiles={["C PRD"]}
         isProjectProfilesRefreshing
         onSelectProjectProfile={() => {}}
-        onCopyProjectProfileToCustom={async (_name, _config: PublishConfigStore) => "copied"}
+        onCopyProjectProfileToCustom={async (
+          _name,
+          _config: PublishConfigStore
+        ) => "copied"}
         recentConfigKeys={[]}
         favoriteConfigKeys={[]}
         onToggleFavoriteConfig={() => {}}
@@ -591,7 +648,10 @@ describe("PublishConfigPanel", () => {
         ]}
         isProjectProfilesRefreshing
         onSelectProjectProfile={() => {}}
-        onCopyProjectProfileToCustom={async (_name, _config: PublishConfigStore) => "copied"}
+        onCopyProjectProfileToCustom={async (
+          _name,
+          _config: PublishConfigStore
+        ) => "copied"}
         recentConfigKeys={[]}
         favoriteConfigKeys={[]}
         onToggleFavoriteConfig={() => {}}
@@ -615,7 +675,10 @@ describe("PublishConfigPanel", () => {
       <PublishConfigPanel
         selectedPreset="release-fd"
         isCustomMode={true}
-        profiles={[createProfile("alpha-profile"), createProfile("beta-profile")]}
+        profiles={[
+          createProfile("alpha-profile"),
+          createProfile("beta-profile"),
+        ]}
         activeProfileName="alpha-profile"
         onSelectProfile={() => {}}
         onCreateProfile={() => {}}
@@ -626,7 +689,10 @@ describe("PublishConfigPanel", () => {
         dotnetSchema={dotnetSchema}
         projectPublishProfiles={[]}
         onSelectProjectProfile={() => {}}
-        onCopyProjectProfileToCustom={async (_name, _config: PublishConfigStore) => "copied"}
+        onCopyProjectProfileToCustom={async (
+          _name,
+          _config: PublishConfigStore
+        ) => "copied"}
         recentConfigKeys={[]}
         favoriteConfigKeys={[]}
         onToggleFavoriteConfig={() => {}}
@@ -678,7 +744,10 @@ describe("PublishConfigPanel", () => {
       <PublishConfigPanel
         selectedPreset="release-fd"
         isCustomMode={true}
-        profiles={[createProfile("alpha-profile"), createProfile("beta-profile")]}
+        profiles={[
+          createProfile("alpha-profile"),
+          createProfile("beta-profile"),
+        ]}
         activeProfileName="alpha-profile"
         onSelectProfile={() => {}}
         onCreateProfile={() => {}}
@@ -689,7 +758,10 @@ describe("PublishConfigPanel", () => {
         dotnetSchema={dotnetSchema}
         projectPublishProfiles={[]}
         onSelectProjectProfile={() => {}}
-        onCopyProjectProfileToCustom={async (_name, _config: PublishConfigStore) => "copied"}
+        onCopyProjectProfileToCustom={async (
+          _name,
+          _config: PublishConfigStore
+        ) => "copied"}
         recentConfigKeys={[
           "userprofile:alpha-profile",
           "userprofile:beta-profile",
@@ -783,7 +855,10 @@ describe("PublishConfigPanel", () => {
         dotnetSchema={dotnetSchema}
         projectPublishProfiles={["FolderProfile", "ZipProfile"]}
         onSelectProjectProfile={() => {}}
-        onCopyProjectProfileToCustom={async (_name, _config: PublishConfigStore) => "copied"}
+        onCopyProjectProfileToCustom={async (
+          _name,
+          _config: PublishConfigStore
+        ) => "copied"}
         recentConfigKeys={[]}
         favoriteConfigKeys={[]}
         onToggleFavoriteConfig={() => {}}
@@ -868,7 +943,10 @@ describe("PublishConfigPanel", () => {
         dotnetSchema={dotnetSchema}
         projectPublishProfiles={[]}
         onSelectProjectProfile={() => {}}
-        onCopyProjectProfileToCustom={async (_name, _config: PublishConfigStore) => "copied"}
+        onCopyProjectProfileToCustom={async (
+          _name,
+          _config: PublishConfigStore
+        ) => "copied"}
         recentConfigKeys={[]}
         favoriteConfigKeys={[]}
         onToggleFavoriteConfig={() => {}}
@@ -1032,7 +1110,10 @@ describe("PublishConfigPanel", () => {
         projectFilePath="/repo/Project.csproj"
         projectFrameworkOptions={["net8.0", "net9.0"]}
         onSelectProjectProfile={() => {}}
-        onCopyProjectProfileToCustom={async (_name, _config: PublishConfigStore) => "copied"}
+        onCopyProjectProfileToCustom={async (
+          _name,
+          _config: PublishConfigStore
+        ) => "copied"}
         recentConfigKeys={[]}
         favoriteConfigKeys={[]}
         onToggleFavoriteConfig={() => {}}
@@ -1074,11 +1155,15 @@ describe("PublishConfigPanel", () => {
     expect(await screen.findByText("发布参数")).toBeInTheDocument();
     expect(screen.getByText("输出与部署")).toBeInTheDocument();
     expect(screen.getByText("高级参数")).toBeInTheDocument();
-    expect(screen.getByText("/repo/Properties/PublishProfiles/FolderProfile.pubxml")).toBeInTheDocument();
+    expect(
+      screen.getByText("/repo/Properties/PublishProfiles/FolderProfile.pubxml")
+    ).toBeInTheDocument();
     expect(screen.queryByText("dotnet publish 参数")).not.toBeInTheDocument();
     expect(screen.queryByText("发布相关 MSBuild 属性")).not.toBeInTheDocument();
     expect(screen.queryByText("配置文件参数统计")).not.toBeInTheDocument();
-    expect(screen.queryByText("PublishItems › ResolvedFileToPublish")).not.toBeInTheDocument();
+    expect(
+      screen.queryByText("PublishItems › ResolvedFileToPublish")
+    ).not.toBeInTheDocument();
     expect(screen.queryByText("原始配置文件")).not.toBeInTheDocument();
     expect(
       screen.getAllByText(
@@ -1101,16 +1186,30 @@ describe("PublishConfigPanel", () => {
         name: "自包含部署",
       })
     ).toBeDisabled();
-    expect(screen.queryByRole("button", { name: /remove item/i })).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /remove entry/i })).not.toBeInTheDocument();
-    expect(screen.getByRole("textbox", { name: "目标框架" })).toHaveValue("net8.0");
-    expect(screen.getByRole("switch", { name: "发布前清空目标目录" })).toBeChecked();
-    expect(screen.queryByRole("combobox", { name: "上次使用的构建配置" })).not.toBeInTheDocument();
-    expect(screen.queryByRole("textbox", { name: "发布提供程序" })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /remove item/i })
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /remove entry/i })
+    ).not.toBeInTheDocument();
+    expect(screen.getByRole("textbox", { name: "目标框架" })).toHaveValue(
+      "net8.0"
+    );
+    expect(
+      screen.getByRole("switch", { name: "发布前清空目标目录" })
+    ).toBeChecked();
+    expect(
+      screen.queryByRole("combobox", { name: "上次使用的构建配置" })
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("textbox", { name: "发布提供程序" })
+    ).not.toBeInTheDocument();
     expect(
       screen.getAllByRole("switch", { name: "发布前清空目标目录" })
     ).toHaveLength(1);
-    expect(screen.queryByRole("textbox", { name: "目标 ID" })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("textbox", { name: "目标 ID" })
+    ).not.toBeInTheDocument();
 
     fireEvent.click(
       screen.getByRole("button", {
@@ -1118,10 +1217,16 @@ describe("PublishConfigPanel", () => {
       })
     );
 
-    expect(screen.queryByRole("textbox", { name: "目标 ID" })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("textbox", { name: "目标 ID" })
+    ).not.toBeInTheDocument();
     expect(screen.getByRole("switch", { name: "单文件发布" })).toBeChecked();
-    expect(screen.getByRole("combobox", { name: "日志详细级别" })).toBeDisabled();
-    expect(screen.queryByText("当前未设置条件编译常量。")).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("combobox", { name: "日志详细级别" })
+    ).toBeDisabled();
+    expect(
+      screen.queryByText("当前未设置条件编译常量。")
+    ).not.toBeInTheDocument();
 
     const parsedFieldsToggle = screen.getByRole("button", {
       name: /完整解析参数/,
@@ -1132,11 +1237,14 @@ describe("PublishConfigPanel", () => {
     expect(
       screen.getByText(
         (_, element) =>
-          element?.tagName === "P" && element.textContent === "标签: PropertyGroup"
+          element?.tagName === "P" &&
+          element.textContent === "标签: PropertyGroup"
       )
     ).toBeInTheDocument();
     expect(screen.getByText("Condition")).toBeInTheDocument();
-    expect(screen.getByText("'$(Configuration)'=='Release'")).toBeInTheDocument();
+    expect(
+      screen.getByText("'$(Configuration)'=='Release'")
+    ).toBeInTheDocument();
     expect(
       screen.getByText("PublishItems › ResolvedFileToPublish")
     ).toBeInTheDocument();
@@ -1228,7 +1336,10 @@ describe("PublishConfigPanel", () => {
         projectFilePath="/repo/Project.csproj"
         projectFrameworkOptions={["net8.0"]}
         onSelectProjectProfile={() => {}}
-        onCopyProjectProfileToCustom={async (_name, _config: PublishConfigStore) => "copied"}
+        onCopyProjectProfileToCustom={async (
+          _name,
+          _config: PublishConfigStore
+        ) => "copied"}
         recentConfigKeys={[]}
         favoriteConfigKeys={[]}
         onToggleFavoriteConfig={() => {}}
@@ -1268,7 +1379,9 @@ describe("PublishConfigPanel", () => {
 
 describe("PublishConfigPanel — preset selection state", () => {
   /** Minimal required props for PublishConfigPanel, with overrides. */
-  function baseProps(overrides: Partial<Parameters<typeof PublishConfigPanel>[0]> = {}) {
+  function baseProps(
+    overrides: Partial<Parameters<typeof PublishConfigPanel>[0]> = {}
+  ) {
     return {
       selectedPreset: "release-fd",
       isCustomMode: false,
@@ -1285,7 +1398,10 @@ describe("PublishConfigPanel — preset selection state", () => {
       projectPublishProfiles: [] as string[],
       isProjectProfilesRefreshing: false,
       onSelectProjectProfile: () => {},
-      onCopyProjectProfileToCustom: async (_name: string, _config: PublishConfigStore) => "copied",
+      onCopyProjectProfileToCustom: async (
+        _name: string,
+        _config: PublishConfigStore
+      ) => "copied",
       recentConfigKeys: [] as string[],
       favoriteConfigKeys: [] as string[],
       onToggleFavoriteConfig: () => {},
@@ -1304,7 +1420,7 @@ describe("PublishConfigPanel — preset selection state", () => {
           selectedPreset: "profile-FolderProfile",
           projectPublishProfiles: ["FolderProfile", "ZipProfile", "WebDeploy"],
         })}
-      />,
+      />
     );
 
     const folderBtn = screen.getByTestId("pubxml-select-FolderProfile");
@@ -1324,7 +1440,7 @@ describe("PublishConfigPanel — preset selection state", () => {
           selectedPreset: "release-fd",
           projectPublishProfiles: ["FolderProfile", "ZipProfile"],
         })}
-      />,
+      />
     );
 
     const folderBtn = screen.getByTestId("pubxml-select-FolderProfile");
@@ -1341,16 +1457,16 @@ describe("PublishConfigPanel — preset selection state", () => {
           selectedPreset: "profile-FolderProfile",
           projectPublishProfiles: ["FolderProfile", "ZipProfile"],
         })}
-      />,
+      />
     );
 
     expect(screen.getByTestId("pubxml-select-FolderProfile")).toHaveAttribute(
       "data-selected",
-      "true",
+      "true"
     );
     expect(screen.getByTestId("pubxml-select-ZipProfile")).toHaveAttribute(
       "data-selected",
-      "false",
+      "false"
     );
 
     rerender(
@@ -1359,16 +1475,16 @@ describe("PublishConfigPanel — preset selection state", () => {
           selectedPreset: "profile-ZipProfile",
           projectPublishProfiles: ["FolderProfile", "ZipProfile"],
         })}
-      />,
+      />
     );
 
     expect(screen.getByTestId("pubxml-select-FolderProfile")).toHaveAttribute(
       "data-selected",
-      "false",
+      "false"
     );
     expect(screen.getByTestId("pubxml-select-ZipProfile")).toHaveAttribute(
       "data-selected",
-      "true",
+      "true"
     );
   });
 });

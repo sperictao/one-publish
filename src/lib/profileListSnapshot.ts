@@ -17,7 +17,9 @@ export function buildProfileListFingerprint(
 ): string {
   return profiles
     .map((profile) =>
-      [profile.name, profile.providerId, profile.profileGroup || ""].join("\u0000")
+      [profile.name, profile.providerId, profile.profileGroup || ""].join(
+        "\u0000"
+      )
     )
     .join("\u0001");
 }
@@ -31,12 +33,11 @@ export function createProfileListSnapshot(
 
   return {
     profiles,
-    revision:
-      isSameSnapshot
-        ? previousSnapshot.revision
-        : previousSnapshot.revision === 0 && fingerprint === ""
-          ? 0
-          : previousSnapshot.revision + 1,
+    revision: isSameSnapshot
+      ? previousSnapshot.revision
+      : previousSnapshot.revision === 0 && fingerprint === ""
+        ? 0
+        : previousSnapshot.revision + 1,
     fingerprint,
   };
 }

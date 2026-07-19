@@ -64,7 +64,8 @@ export function useDiagnosticsExports({
       });
 
       const selected = await save({
-        title: options?.title ?? (historyT.exportHistoryTitle || "导出执行历史"),
+        title:
+          options?.title ?? (historyT.exportHistoryTitle || "导出执行历史"),
         defaultPath: exportPlan.defaultPath,
         filters: exportPlan.filters,
       });
@@ -82,7 +83,8 @@ export function useDiagnosticsExports({
 
         trackHistoryExport(outputPath);
         toast.success(
-          options?.successMessage ?? (historyT.historyExported || "执行历史已导出"),
+          options?.successMessage ??
+            (historyT.historyExported || "执行历史已导出"),
           {
             description: outputPath,
           }

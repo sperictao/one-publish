@@ -34,7 +34,10 @@ export interface PublishStateSlice {
   /** 记录最近使用的发布配置 */
   pushRecentPublishConfig: (configKey: string, repoId?: string | null) => void;
   /** 移除最近使用的发布配置 */
-  removeRecentPublishConfig: (configKey: string, repoId?: string | null) => void;
+  removeRecentPublishConfig: (
+    configKey: string,
+    repoId?: string | null
+  ) => void;
   /** 替换最近使用发布配置的 key */
   replaceRecentPublishConfigKey: (
     previousKey: string,

@@ -45,7 +45,9 @@ export function useRepoBoot(params: UseRepoBootParams) {
   // Local state
   const [environmentLastCheck, setEnvironmentLastCheck] =
     useState<EnvironmentCheckSnapshot | null>(null);
-  const [recentHistoryExports, setRecentHistoryExports] = useState<string[]>([]);
+  const [recentHistoryExports, setRecentHistoryExports] = useState<string[]>(
+    []
+  );
 
   const trackHistoryExport = useCallback((outputPath: string) => {
     setRecentHistoryExports((prev) =>
@@ -54,14 +56,11 @@ export function useRepoBoot(params: UseRepoBootParams) {
   }, []);
 
   // Repository view state
-  const {
-    selectedRepo,
-    branchConnectivityByRepoId,
-    actualBranchByRepoId,
-  } = useRepositoryViewState({
-    repositories: params.repositories,
-    selectedRepoId: params.selectedRepoId,
-  });
+  const { selectedRepo, branchConnectivityByRepoId, actualBranchByRepoId } =
+    useRepositoryViewState({
+      repositories: params.repositories,
+      selectedRepoId: params.selectedRepoId,
+    });
 
   // Repository actions
   const {
@@ -84,24 +83,23 @@ export function useRepoBoot(params: UseRepoBootParams) {
   });
 
   // Project shell state
-  const { projectInfo, isProjectInfoRefreshing, scanProject } = useProjectShellState({
-    appT: params.appT,
-    selectedRepoId: params.selectedRepoId,
-    selectedRepoPath: selectedRepo?.path,
-    selectedRepoProjectFile: selectedRepo?.projectFile ?? undefined,
-    isStateLoading: params.isStateLoading,
-    activeProviderUsesProjectFile: params.activeProviderUsesProjectFile,
-  });
+  const { projectInfo, isProjectInfoRefreshing, scanProject } =
+    useProjectShellState({
+      appT: params.appT,
+      selectedRepoId: params.selectedRepoId,
+      selectedRepoPath: selectedRepo?.path,
+      selectedRepoProjectFile: selectedRepo?.projectFile ?? undefined,
+      isStateLoading: params.isStateLoading,
+      activeProviderUsesProjectFile: params.activeProviderUsesProjectFile,
+    });
 
   // Project publish profile ordering
-  const {
-    orderedProjectPublishProfiles,
-    reorderProjectPublishProfiles,
-  } = useProjectPublishProfileOrder({
-    repoId: params.selectedRepoId,
-    projectFilePath: projectInfo?.project_file,
-    projectPublishProfiles: projectInfo?.publish_profiles || [],
-  });
+  const { orderedProjectPublishProfiles, reorderProjectPublishProfiles } =
+    useProjectPublishProfileOrder({
+      repoId: params.selectedRepoId,
+      projectFilePath: projectInfo?.project_file,
+      projectPublishProfiles: projectInfo?.publish_profiles || [],
+    });
 
   // Recoverable spec
   const {

@@ -181,9 +181,7 @@ export function usePublishNotify({
         const notified = await notifyFeedback(
           "warning",
           appT.publishCancelled || "发布已取消",
-          event.error ||
-            appT.userCancelledTask ||
-            "用户取消了执行任务",
+          event.error || appT.userCancelledTask || "用户取消了执行任务",
           event.feedbackMode
         );
         await restoreMainWindowIfNeeded(

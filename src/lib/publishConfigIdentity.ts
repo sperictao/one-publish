@@ -248,7 +248,8 @@ export function resolveSelectedPublishConfigKeyFromIdentity(
 
   if (
     identity.kind === "project-profile" &&
-    (!params.hasProjectProfile || params.hasProjectProfile(identity.profileName))
+    (!params.hasProjectProfile ||
+      params.hasProjectProfile(identity.profileName))
   ) {
     return identity.configKey;
   }

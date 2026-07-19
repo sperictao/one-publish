@@ -1,9 +1,4 @@
-import {
-  useMemo,
-  useState,
-  type Dispatch,
-  type SetStateAction,
-} from "react";
+import { useMemo, useState, type Dispatch, type SetStateAction } from "react";
 
 import type { ParameterValue } from "@/types/parameters";
 

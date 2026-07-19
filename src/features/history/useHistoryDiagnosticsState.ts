@@ -66,7 +66,8 @@ export function useHistoryDiagnosticsState(params: {
   );
 
   const failureGroupCount = useMemo(
-    () => groupExecutionFailures(historyViewState.filteredExecutionHistory).length,
+    () =>
+      groupExecutionFailures(historyViewState.filteredExecutionHistory).length,
     [historyViewState.filteredExecutionHistory]
   );
 

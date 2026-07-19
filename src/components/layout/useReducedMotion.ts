@@ -8,7 +8,10 @@ export function useReducedMotion(): React.MutableRefObject<boolean> {
   const ref = useRef(false);
 
   useEffect(() => {
-    if (typeof window === "undefined" || typeof window.matchMedia !== "function") {
+    if (
+      typeof window === "undefined" ||
+      typeof window.matchMedia !== "function"
+    ) {
       return;
     }
 

@@ -9,9 +9,7 @@ import {
   type ReactNode,
 } from "react";
 import { cn } from "@/lib/utils";
-import {
-  reorderItemsByDrop,
-} from "@/lib/listOrdering";
+import { reorderItemsByDrop } from "@/lib/listOrdering";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { SectionLabel } from "@/components/ui/section-label";
@@ -162,7 +160,9 @@ interface RepositoryListProps {
     path: string,
     options?: { silentSuccess?: boolean }
   ) => Promise<string | null>;
-  onScanProjectCandidates: (path: string) => Promise<ProjectScanCandidates | null>;
+  onScanProjectCandidates: (
+    path: string
+  ) => Promise<ProjectScanCandidates | null>;
   onRefreshBranches: (
     path: string,
     options?: { silentSuccess?: boolean }
@@ -315,104 +315,101 @@ export const RepositoryList = memo(function RepositoryList({
     }
   }, []);
 
-  const repoListContent = useMemo(
-    () => {
-      // Stable per-row ref composer: avoids allocating a fresh closure per row
-      // per render, which would bust RepositoryRow's React.memo.
-      const composeRowRef = (repoId: string) => (node: HTMLDivElement | null) =>
-        composeNodeRefs(
-          repositoryReorder.setItemRef(repoId, undefined),
-          repoMotion.setItemRef(repoId)
-        )(node);
+  const repoListContent = useMemo(() => {
+    // Stable per-row ref composer: avoids allocating a fresh closure per row
+    // per render, which would bust RepositoryRow's React.memo.
+    const composeRowRef = (repoId: string) => (node: HTMLDivElement | null) =>
+      composeNodeRefs(
+        repositoryReorder.setItemRef(repoId, undefined),
+        repoMotion.setItemRef(repoId)
+      )(node);
 
-      return (
-        <div
-          className="list-scroll-shell geist-scrollbar relative flex-1 overflow-auto px-2 py-2"
-          onPointerEnter={(event) => {
-            if (handleListPointerReentry(event)) {
-              return;
-            }
-            clearSettledRepoId();
-            interaction.handleListPointerEnter();
-          }}
-          onPointerLeave={() => {
-            handleListPointerLeave();
-            interaction.handleListPointerLeave();
-          }}
-        >
-          {previewRepos.length === 0 ? (
-            <EmptyState
-              className="h-full"
-              icon={FolderGit2}
-              title={repoT.noRepositories || "暂无仓库"}
-              hint={repoT.noRepositoriesHint || "点击下方添加仓库"}
-            />
-          ) : (
-            <div className="repo-list-grid space-y-1.5">
-              {previewRepos.map((repo) => (
-                <RepositoryRow
-                  key={repo.id}
-                  repo={repo}
-                  isSelected={selectedRepoId === repo.id}
-                  isVisualTarget={visualTargetRepoId === repo.id}
-                  isMenuOpen={interaction.isMenuOpenForRepo(repo.id)}
-                  canConnectBranch={branchConnectivityByRepoId[repo.id] ?? false}
-                  actualBranch={actualBranchByRepoId[repo.id]}
-                  repoT={repoT}
-                  rowRef={composeRowRef(repo.id)}
-                  onSelect={onSelectRepo}
-                  onOpenDirectory={onOpenRepoDirectory}
-                  onEdit={openEditDialog}
-                  onRemove={onRemoveRepo}
-                  onRowMouseEnter={interaction.handleRowMouseEnter}
-                  onRowFocus={interaction.handleRowFocus}
-                  onRowBlur={interaction.handleRowBlur}
-                  onMenuOpenChange={interaction.handleMenuOpenChange}
-                  dragEnabled={repoDragEnabled}
-                  dragHandleVisible={repoDragEnabled}
-                  dragHandleLabel={repoT.dragToReorder || "拖动排序"}
-                  dragDisabledLabel={
-                    repoT.dragDisabledWhileSearching || "搜索时无法排序"
-                  }
-                  isDragging={repositoryReorder.draggingItemId === repo.id}
-                  dragPreviewStyle={repositoryReorder.dragPreviewStyle}
-                  onHandlePointerDown={repositoryReorder.startDrag}
-                />
-              ))}
-            </div>
-          )}
-        </div>
-      );
-    },
-    [
-      branchConnectivityByRepoId,
-      actualBranchByRepoId,
-      handleListPointerLeave,
-      handleListPointerReentry,
-      previewRepos,
-      interaction.handleListPointerEnter,
-      interaction.handleListPointerLeave,
-      interaction.handleMenuOpenChange,
-      interaction.handleRowBlur,
-      interaction.handleRowFocus,
-      interaction.handleRowMouseEnter,
-      interaction.isMenuOpenForRepo,
-      onRemoveRepo,
-      onOpenRepoDirectory,
-      onSelectRepo,
-      openEditDialog,
-      repoT,
-      repoMotion,
-      repoDragEnabled,
-      repositoryReorder.dragPreviewStyle,
-      repositoryReorder.draggingItemId,
-      repositoryReorder.setItemRef,
-      repositoryReorder.startDrag,
-      clearSettledRepoId,
-      selectedRepoId,
-      visualTargetRepoId,
-    ]
-  );
+    return (
+      <div
+        className="list-scroll-shell geist-scrollbar relative flex-1 overflow-auto px-2 py-2"
+        onPointerEnter={(event) => {
+          if (handleListPointerReentry(event)) {
+            return;
+          }
+          clearSettledRepoId();
+          interaction.handleListPointerEnter();
+        }}
+        onPointerLeave={() => {
+          handleListPointerLeave();
+          interaction.handleListPointerLeave();
+        }}
+      >
+        {previewRepos.length === 0 ? (
+          <EmptyState
+            className="h-full"
+            icon={FolderGit2}
+            title={repoT.noRepositories || "暂无仓库"}
+            hint={repoT.noRepositoriesHint || "点击下方添加仓库"}
+          />
+        ) : (
+          <div className="repo-list-grid space-y-1.5">
+            {previewRepos.map((repo) => (
+              <RepositoryRow
+                key={repo.id}
+                repo={repo}
+                isSelected={selectedRepoId === repo.id}
+                isVisualTarget={visualTargetRepoId === repo.id}
+                isMenuOpen={interaction.isMenuOpenForRepo(repo.id)}
+                canConnectBranch={branchConnectivityByRepoId[repo.id] ?? false}
+                actualBranch={actualBranchByRepoId[repo.id]}
+                repoT={repoT}
+                rowRef={composeRowRef(repo.id)}
+                onSelect={onSelectRepo}
+                onOpenDirectory={onOpenRepoDirectory}
+                onEdit={openEditDialog}
+                onRemove={onRemoveRepo}
+                onRowMouseEnter={interaction.handleRowMouseEnter}
+                onRowFocus={interaction.handleRowFocus}
+                onRowBlur={interaction.handleRowBlur}
+                onMenuOpenChange={interaction.handleMenuOpenChange}
+                dragEnabled={repoDragEnabled}
+                dragHandleVisible={repoDragEnabled}
+                dragHandleLabel={repoT.dragToReorder || "拖动排序"}
+                dragDisabledLabel={
+                  repoT.dragDisabledWhileSearching || "搜索时无法排序"
+                }
+                isDragging={repositoryReorder.draggingItemId === repo.id}
+                dragPreviewStyle={repositoryReorder.dragPreviewStyle}
+                onHandlePointerDown={repositoryReorder.startDrag}
+              />
+            ))}
+          </div>
+        )}
+      </div>
+    );
+  }, [
+    branchConnectivityByRepoId,
+    actualBranchByRepoId,
+    handleListPointerLeave,
+    handleListPointerReentry,
+    previewRepos,
+    interaction.handleListPointerEnter,
+    interaction.handleListPointerLeave,
+    interaction.handleMenuOpenChange,
+    interaction.handleRowBlur,
+    interaction.handleRowFocus,
+    interaction.handleRowMouseEnter,
+    interaction.isMenuOpenForRepo,
+    onRemoveRepo,
+    onOpenRepoDirectory,
+    onSelectRepo,
+    openEditDialog,
+    repoT,
+    repoMotion,
+    repoDragEnabled,
+    repositoryReorder.dragPreviewStyle,
+    repositoryReorder.draggingItemId,
+    repositoryReorder.setItemRef,
+    repositoryReorder.startDrag,
+    clearSettledRepoId,
+    selectedRepoId,
+    visualTargetRepoId,
+  ]);
 
   return (
     <div className="repo-list-root flex h-full flex-col">

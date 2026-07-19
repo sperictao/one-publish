@@ -18,7 +18,8 @@ vi.mock("sonner", () => ({
 }));
 
 vi.mock("@/lib/store/api", async () => {
-  const actual = await vi.importActual<typeof import("@/lib/store/api")>("@/lib/store/api");
+  const actual =
+    await vi.importActual<typeof import("@/lib/store/api")>("@/lib/store/api");
   return {
     ...actual,
     getProfiles: mocks.getProfiles,
@@ -116,14 +117,18 @@ describe("useProfiles", () => {
     });
 
     await waitFor(() => {
-      expect(result.current.profiles.map((profile) => profile.name)).toEqual(["beta"]);
+      expect(result.current.profiles.map((profile) => profile.name)).toEqual([
+        "beta",
+      ]);
     });
 
     await act(async () => {
       repoA.resolve([createProfile("alpha")]);
     });
 
-    expect(result.current.profiles.map((profile) => profile.name)).toEqual(["beta"]);
+    expect(result.current.profiles.map((profile) => profile.name)).toEqual([
+      "beta",
+    ]);
     expect(mocks.getProfiles).toHaveBeenNthCalledWith(1, "repo-a");
     expect(mocks.getProfiles).toHaveBeenNthCalledWith(2, "repo-b");
   });
@@ -170,7 +175,9 @@ describe("useProfiles", () => {
     });
 
     await waitFor(() => {
-      expect(result.current.profiles.map((profile) => profile.name)).toEqual(["alpha"]);
+      expect(result.current.profiles.map((profile) => profile.name)).toEqual([
+        "alpha",
+      ]);
     });
 
     rerender("repo-b");
@@ -181,7 +188,9 @@ describe("useProfiles", () => {
     });
 
     await waitFor(() => {
-      expect(result.current.profiles.map((profile) => profile.name)).toEqual(["beta"]);
+      expect(result.current.profiles.map((profile) => profile.name)).toEqual([
+        "beta",
+      ]);
     });
   });
 
@@ -229,7 +238,9 @@ describe("useProfiles", () => {
     });
 
     await waitFor(() => {
-      expect(result.current.profiles.map((profile) => profile.name)).toEqual(["alpha"]);
+      expect(result.current.profiles.map((profile) => profile.name)).toEqual([
+        "alpha",
+      ]);
     });
 
     rerender("repo-b");
@@ -239,12 +250,16 @@ describe("useProfiles", () => {
     });
 
     await waitFor(() => {
-      expect(result.current.profiles.map((profile) => profile.name)).toEqual(["beta"]);
+      expect(result.current.profiles.map((profile) => profile.name)).toEqual([
+        "beta",
+      ]);
     });
 
     rerender("repo-a");
 
-    expect(result.current.profiles.map((profile) => profile.name)).toEqual(["alpha"]);
+    expect(result.current.profiles.map((profile) => profile.name)).toEqual([
+      "alpha",
+    ]);
     expect(result.current.isProfilesRefreshing).toBe(true);
 
     await act(async () => {
@@ -252,7 +267,9 @@ describe("useProfiles", () => {
     });
 
     await waitFor(() => {
-      expect(result.current.profiles.map((profile) => profile.name)).toEqual(["alpha-new"]);
+      expect(result.current.profiles.map((profile) => profile.name)).toEqual([
+        "alpha-new",
+      ]);
       expect(result.current.isProfilesRefreshing).toBe(false);
     });
   });
@@ -301,7 +318,9 @@ describe("useProfiles", () => {
     });
 
     await waitFor(() => {
-      expect(result.current.profiles.map((profile) => profile.name)).toEqual(["alpha"]);
+      expect(result.current.profiles.map((profile) => profile.name)).toEqual([
+        "alpha",
+      ]);
       expect(result.current.profilesRevision).toBe(1);
     });
 
@@ -312,13 +331,17 @@ describe("useProfiles", () => {
     });
 
     await waitFor(() => {
-      expect(result.current.profiles.map((profile) => profile.name)).toEqual(["beta"]);
+      expect(result.current.profiles.map((profile) => profile.name)).toEqual([
+        "beta",
+      ]);
       expect(result.current.profilesRevision).toBe(1);
     });
 
     rerender("repo-a");
 
-    expect(result.current.profiles.map((profile) => profile.name)).toEqual(["alpha"]);
+    expect(result.current.profiles.map((profile) => profile.name)).toEqual([
+      "alpha",
+    ]);
     expect(result.current.profilesRevision).toBe(1);
     expect(result.current.isProfilesRefreshing).toBe(true);
 
@@ -575,7 +598,9 @@ describe("useProfiles", () => {
     });
 
     await act(async () => {
-      await result.current.profileManagement.applyImportedProfiles(importedProfiles);
+      await result.current.profileManagement.applyImportedProfiles(
+        importedProfiles
+      );
     });
 
     expect(mocks.applyImportedConfig).toHaveBeenCalledWith(

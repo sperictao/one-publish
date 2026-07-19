@@ -7,7 +7,8 @@ const mocks = vi.hoisted(() => ({
 }));
 
 vi.mock("@/lib/store/api", async () => {
-  const actual = await vi.importActual<typeof import("@/lib/store/api")>("@/lib/store/api");
+  const actual =
+    await vi.importActual<typeof import("@/lib/store/api")>("@/lib/store/api");
   return {
     ...actual,
     checkRepositoryBranchConnectivity: mocks.checkRepositoryBranchConnectivity,
@@ -39,7 +40,10 @@ function createRepository(): Repository {
   };
 }
 
-function createRepositoryWithId(id: string, overrides?: Partial<Repository>): Repository {
+function createRepositoryWithId(
+  id: string,
+  overrides?: Partial<Repository>
+): Repository {
   return {
     ...createRepository(),
     id,

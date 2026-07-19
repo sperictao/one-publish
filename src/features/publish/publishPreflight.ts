@@ -29,8 +29,7 @@ export interface PublishPreparationOptions {
   trayStatusEffect: boolean;
 }
 
-export interface AbortPublishPreparationOptions
-  extends PublishPreparationOptions {
+export interface AbortPublishPreparationOptions extends PublishPreparationOptions {
   runRevision: number;
   level: "error" | "warning";
   title: string;
@@ -58,9 +57,7 @@ export interface PublishPreflightDeps {
     initialCheck?: EnvironmentCheckSnapshot | null,
     providerIds?: string[]
   ) => void;
-  setEnvironmentLastCheck: (
-    snapshot: EnvironmentCheckSnapshot | null
-  ) => void;
+  setEnvironmentLastCheck: (snapshot: EnvironmentCheckSnapshot | null) => void;
 }
 
 // ── Factory ────────────────────────────────────────────────────────
@@ -123,9 +120,7 @@ export function createPublishPreflightPipeline(deps: PublishPreflightDeps) {
       ]);
       setEnvironmentLastCheck(environmentCheck);
 
-      const critical = env.issues.find(
-        (item) => item.severity === "critical"
-      );
+      const critical = env.issues.find((item) => item.severity === "critical");
       if (critical) {
         await abortPublishPreparation({
           ...options,
@@ -141,9 +136,7 @@ export function createPublishPreflightPipeline(deps: PublishPreflightDeps) {
         return false;
       }
 
-      const warning = env.issues.find(
-        (item) => item.severity === "warning"
-      );
+      const warning = env.issues.find((item) => item.severity === "warning");
       if (warning) {
         await notifyFeedback(
           "warning",

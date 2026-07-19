@@ -2,7 +2,10 @@ import { renderHook } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 
 import { useEnvironmentStatus } from "@/features/environment/useEnvironmentStatus";
-import type { EnvironmentCheckSnapshot, EnvironmentCheckResult } from "@/features/environment/environment";
+import type {
+  EnvironmentCheckSnapshot,
+  EnvironmentCheckResult,
+} from "@/features/environment/environment";
 
 const multiProviderResult: EnvironmentCheckResult = {
   is_ready: false,

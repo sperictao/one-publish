@@ -1,14 +1,25 @@
 import { create } from "zustand";
 
-import { getAppState, getExecutionHistory, addExecutionRecord, setExecutionRecordSnapshot } from "@/lib/store/api";
+import {
+  getAppState,
+  getExecutionHistory,
+  addExecutionRecord,
+  setExecutionRecordSnapshot,
+} from "@/lib/store/api";
 import type { AppState, ExecutionRecord } from "@/lib/store/types";
-import { migrateLegacyFavorites, persistFavorites } from "@/stores/favoriteConfigs";
+import {
+  migrateLegacyFavorites,
+  persistFavorites,
+} from "@/stores/favoriteConfigs";
 
 // ── Slice imports ──
 import { createRepositorySlice, type RepositorySlice } from "./repositorySlice";
 import { createUiStateSlice, type UiStateSlice } from "./uiStateSlice";
 import { createPreferenceSlice, type PreferenceSlice } from "./preferenceSlice";
-import { createPublishStateSlice, type PublishStateSlice } from "./publishStateSlice";
+import {
+  createPublishStateSlice,
+  type PublishStateSlice,
+} from "./publishStateSlice";
 import { createFavoritesSlice, type FavoritesSlice } from "./favoritesSlice";
 import { mergeBootstrapAppState } from "./appStoreMutations";
 
@@ -22,7 +33,10 @@ interface BaseSlice {
   _restoreAuthoritativeState: () => Promise<AppState>;
   loadExecutionHistory: () => Promise<void>;
   savePublishRecord: (record: ExecutionRecord) => Promise<void>;
-  setExecutionSnapshotPath: (recordId: string, snapshotPath: string) => Promise<void>;
+  setExecutionSnapshotPath: (
+    recordId: string,
+    snapshotPath: string
+  ) => Promise<void>;
 }
 
 // ── Combined store type (imported by slices for type-safe get()) ──
@@ -65,11 +79,14 @@ export const useAppStore = create<AppStore>()((...args) => {
             set({ favoriteConfigKeysByRepo: migrated });
           }
         }
-        set((state) => ({
-          ...mergeBootstrapAppState(state, appState),
-          isLoading: false,
-          error: null,
-        }) as Record<string, unknown>);
+        set(
+          (state) =>
+            ({
+              ...mergeBootstrapAppState(state, appState),
+              isLoading: false,
+              error: null,
+            }) as Record<string, unknown>
+        );
       } catch (err) {
         console.error("加载应用状态失败:", err);
         set({ isLoading: false, error: String(err) });
@@ -78,10 +95,13 @@ export const useAppStore = create<AppStore>()((...args) => {
 
     _restoreAuthoritativeState: async () => {
       const authoritativeState = await getAppState();
-      set((state) => ({
-        ...mergeBootstrapAppState(state, authoritativeState),
-        error: null,
-      }) as Record<string, unknown>);
+      set(
+        (state) =>
+          ({
+            ...mergeBootstrapAppState(state, authoritativeState),
+            error: null,
+          }) as Record<string, unknown>
+      );
       return authoritativeState;
     },
 
@@ -106,7 +126,10 @@ export const useAppStore = create<AppStore>()((...args) => {
 
     setExecutionSnapshotPath: async (recordId, snapshotPath) => {
       try {
-        const history = await setExecutionRecordSnapshot(recordId, snapshotPath);
+        const history = await setExecutionRecordSnapshot(
+          recordId,
+          snapshotPath
+        );
         set({ executionHistory: history });
       } catch (err) {
         console.error("设置执行快照路径失败:", err);

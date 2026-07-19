@@ -119,7 +119,8 @@ export function createEnvironmentCheckSnapshot(
   return {
     providerIds: normalizedProviderIds,
     result:
-      filterEnvironmentResultByProviderIds(result, normalizedProviderIds) ?? result,
+      filterEnvironmentResultByProviderIds(result, normalizedProviderIds) ??
+      result,
   };
 }
 
@@ -163,7 +164,10 @@ export function scopeEnvironmentCheckSnapshot(
     return null;
   }
 
-  if (providerIds === undefined || matchesEnvironmentCheckSnapshot(snapshot, providerIds)) {
+  if (
+    providerIds === undefined ||
+    matchesEnvironmentCheckSnapshot(snapshot, providerIds)
+  ) {
     return snapshot;
   }
 

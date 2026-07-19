@@ -11,7 +11,10 @@ import { readProjectPublishProfile } from "@/lib/store/api";
 import { type ProjectInfo, type PublishConfigStore } from "@/lib/store/types";
 import type { ParameterValue } from "@/types/parameters";
 
-export type DotnetProjectInfo = Pick<ProjectInfo, "root_path" | "project_file"> & {
+export type DotnetProjectInfo = Pick<
+  ProjectInfo,
+  "root_path" | "project_file"
+> & {
   target_frameworks?: string[];
 };
 
@@ -34,11 +37,9 @@ export async function resolveDotnetProjectProfile(params: {
     profileName
   );
   const parsedProfile = parseProjectPublishProfileXml(profileFile.content);
-  const rawParameters =
-    extractDotnetPublishParametersFromProjectProfile(parsedProfile) as Record<
-      string,
-      ParameterValue
-    >;
+  const rawParameters = extractDotnetPublishParametersFromProjectProfile(
+    parsedProfile
+  ) as Record<string, ParameterValue>;
   const normalizedParameters = normalizeDotnetProjectBoundParameters({
     parameters: rawParameters,
     defaultOutputDir,
@@ -51,6 +52,7 @@ export async function resolveDotnetProjectProfile(params: {
     filePath: profileFile.filePath,
     parsedProfile,
     parameters: normalizedParameters,
-    editableConfig: createDotnetPublishConfigFromParameters(normalizedParameters),
+    editableConfig:
+      createDotnetPublishConfigFromParameters(normalizedParameters),
   };
 }

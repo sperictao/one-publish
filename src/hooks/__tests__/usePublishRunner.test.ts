@@ -94,7 +94,8 @@ vi.mock("@/features/publish/publishRuntime", () => ({
 }));
 
 vi.mock("@/lib/store/api", async () => {
-  const actual = await vi.importActual<typeof import("@/lib/store/api")>("@/lib/store/api");
+  const actual =
+    await vi.importActual<typeof import("@/lib/store/api")>("@/lib/store/api");
   return {
     ...actual,
     openOutputDirectory: mocks.openOutputDirectory,
@@ -730,8 +731,8 @@ describe("usePublishRunner", () => {
           success: false,
           error: "发布失败，退出代码: Some(1)",
           output_log: [
-            "$ dotnet publish \"/repo/App.csproj\"",
-            "/repo/App.csproj(79,3): error MSB3021: Unable to copy file \"/Users/test/.nuget/packages/hip.core/2.7.2.1/lib/net8.0/HiP.Core.xml\" to \"/Users/test/Downloads/publish/App/Debug/../HiP.Core.xml\".",
+            '$ dotnet publish "/repo/App.csproj"',
+            '/repo/App.csproj(79,3): error MSB3021: Unable to copy file "/Users/test/.nuget/packages/hip.core/2.7.2.1/lib/net8.0/HiP.Core.xml" to "/Users/test/Downloads/publish/App/Debug/../HiP.Core.xml".',
             "Access to the path '/Users/test/Downloads/publish/App/HiP.Core.xml' is denied.",
           ].join("\n"),
           output_dir: "",
@@ -920,8 +921,13 @@ describe("usePublishRunner", () => {
       );
     });
 
-    expect(props.pushRecentConfig).toHaveBeenCalledWith("userprofile:beta", "repo-2");
-    expect(mocks.openOutputDirectory).toHaveBeenCalledWith("/exports/App/Release");
+    expect(props.pushRecentConfig).toHaveBeenCalledWith(
+      "userprofile:beta",
+      "repo-2"
+    );
+    expect(mocks.openOutputDirectory).toHaveBeenCalledWith(
+      "/exports/App/Release"
+    );
     expect(mocks.showSystemNotification).toHaveBeenCalledWith({
       title: "发布成功",
       body: "输出目录: /exports/App/Release",
@@ -970,7 +976,8 @@ describe("usePublishRunner", () => {
       createPublishResult({
         success: false,
         error: "publish failed",
-        output_log: '$ dotnet publish "/repo/App.csproj"\n[stderr] publish failed\n',
+        output_log:
+          '$ dotnet publish "/repo/App.csproj"\n[stderr] publish failed\n',
         output_dir: "",
         file_count: 0,
       })
@@ -1014,7 +1021,8 @@ describe("usePublishRunner", () => {
       createPublishResult({
         success: false,
         error: "publish failed",
-        output_log: '$ dotnet publish "/repo/App.csproj"\n[stderr] publish failed\n',
+        output_log:
+          '$ dotnet publish "/repo/App.csproj"\n[stderr] publish failed\n',
         output_dir: "",
         file_count: 0,
       })
@@ -1246,8 +1254,9 @@ describe("usePublishRunner", () => {
   });
 
   it("isPublishing_set_during_preflight", async () => {
-    let resolveEnvironmentCheck: (value: EnvironmentCheckResult) => void =
-      () => {};
+    let resolveEnvironmentCheck: (
+      value: EnvironmentCheckResult
+    ) => void = () => {};
     mocks.runEnvironmentCheck.mockImplementation(
       () =>
         new Promise<EnvironmentCheckResult>((resolve) => {

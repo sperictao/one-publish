@@ -175,9 +175,9 @@ describe("useRecoverableSpec", () => {
     it.each(cases)("$name", ({ spec, expected }) => {
       const { hook } = setup();
 
-      expect(hook.result.current.extractSpecFromRecord(createRecord(spec))).toEqual(
-        expected
-      );
+      expect(
+        hook.result.current.extractSpecFromRecord(createRecord(spec))
+      ).toEqual(expected);
     });
   });
 
@@ -293,7 +293,9 @@ describe("useRecoverableSpec", () => {
     it.each(cases)("$name", ({ spec, expected }) => {
       const { hook } = setup();
 
-      expect(hook.result.current.getRecentConfigKeyFromSpec(spec)).toBe(expected);
+      expect(hook.result.current.getRecentConfigKeyFromSpec(spec)).toBe(
+        expected
+      );
     });
   });
 });

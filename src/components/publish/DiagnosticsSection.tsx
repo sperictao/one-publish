@@ -20,7 +20,9 @@ export interface DiagnosticsSectionProps {
   isPublishing: boolean;
   recentHistoryExports: string[];
   trackHistoryExport: (outputPath: string) => void;
-  extractSpecFromRecord: (record: ExecutionRecord) => ProviderPublishSpec | null;
+  extractSpecFromRecord: (
+    record: ExecutionRecord
+  ) => ProviderPublishSpec | null;
   rerunFromHistory: (record: ExecutionRecord) => Promise<void>;
 }
 
@@ -58,19 +60,13 @@ export function DiagnosticsSection({
     selectedRepo,
   });
 
-  const {
-    copyHandoffSnippet,
-    openSnapshotFromRecord,
-  } = useHistoryActions({
+  const { copyHandoffSnippet, openSnapshotFromRecord } = useHistoryActions({
     appT,
     historyT,
     extractSpecFromRecord,
   });
 
-  const {
-    isExportingHistory,
-    exportExecutionHistory,
-  } = useDiagnosticsExports({
+  const { isExportingHistory, exportExecutionHistory } = useDiagnosticsExports({
     historyT,
     snapshotPaths,
     recentHistoryExports,
