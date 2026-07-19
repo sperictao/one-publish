@@ -365,13 +365,35 @@ async fn resolve_install_update(
     pending_update_state: &PendingUpdateState,
     expected_version: Option<&str>,
 ) -> Result<Option<(Update, bool)>, crate::errors::AppError> {
+    resolve_update_with_fetch(pending_update_state, expected_version, || {
+        fetch_remote_update(app, pending_update_state)
+    })
+    .await
+}
+
+/// 注入 fetch 闭包的 pending 状态机解析 seam。
+///
+/// `fetch_remote` 无参、返回 `Future<Output = Result<Option<Update>, AppError>>`，与生产实现
+/// `fetch_remote_update`（扣除 `app` / `state` 参数）语义一致。命中缓存返回 `(update, true)`，
+/// miss 则调用 `fetch_remote` 返回 `(update, false)`。纯状态机逻辑，便于单测。
+///
+/// 闭包签名取 `FnOnce() -> Fut`（而非 `FnOnce(&PendingUpdateState) -> Fut`），让 `Fut` 作为
+/// 单一泛型类型由编译器推断（同 `download_with_retry` 模式），规避 `for<'a>` HRTB 生命周期
+/// 约束；生产封装通过捕获 `&PendingUpdateState` 将 state 注入闭包。
+async fn resolve_update_with_fetch<F, Fut>(
+    pending_update_state: &PendingUpdateState,
+    expected_version: Option<&str>,
+    fetch_remote: F,
+) -> Result<Option<(Update, bool)>, crate::errors::AppError>
+where
+    F: FnOnce() -> Fut,
+    Fut: Future<Output = Result<Option<Update>, crate::errors::AppError>>,
+{
     if let Some(update) = get_pending_update(pending_update_state, expected_version) {
         return Ok(Some((update, true)));
     }
 
-    Ok(fetch_remote_update(app, pending_update_state)
-        .await?
-        .map(|update| (update, false)))
+    Ok(fetch_remote().await?.map(|update| (update, false)))
 }
 
 async fn refresh_update_after_cached_failure(
@@ -379,23 +401,72 @@ async fn refresh_update_after_cached_failure(
     pending_update_state: &PendingUpdateState,
     previous_update: &Update,
 ) -> Option<Update> {
+    let previous_metadata = update_metadata_from(previous_update);
+    refresh_after_failure_with_fetch(pending_update_state, &previous_metadata, || {
+        fetch_remote_update(app, pending_update_state)
+    })
+    .await
+}
+
+/// 注入 fetch 闭包的缓存失败刷新 seam。
+///
+/// 先清缓存，再调用 `fetch_remote` 重新拉取；若远端 metadata 与 `previous_metadata`
+/// 一致则返回 `None`（视为同一损坏包，不重试），否则返回新 `Update`。纯状态机逻辑，便于单测。
+///
+/// 接收 `&UpdateMetadata` 而非 `&Update`，是因为 `Update` 在测试中不可构造；
+/// 上层封装 `refresh_update_after_cached_failure` 会先调用 `update_metadata_from`
+/// 抽出可比较字段再传入。闭包签名同 `resolve_update_with_fetch`，规避 HRTB。
+async fn refresh_after_failure_with_fetch<F, Fut>(
+    pending_update_state: &PendingUpdateState,
+    previous_metadata: &UpdateMetadata<'_>,
+    fetch_remote: F,
+) -> Option<Update>
+where
+    F: FnOnce() -> Fut,
+    Fut: Future<Output = Result<Option<Update>, crate::errors::AppError>>,
+{
     set_pending_update(pending_update_state, None);
 
-    let Ok(maybe_update) = fetch_remote_update(app, pending_update_state).await else {
+    let Ok(maybe_update) = fetch_remote().await else {
         return None;
     };
 
     maybe_update.and_then(|update| {
-        let metadata_changed = update.version != previous_update.version
-            || update.download_url != previous_update.download_url
-            || update.signature != previous_update.signature;
-
-        if metadata_changed {
+        if update_metadata_changed(previous_metadata, &update_metadata_from(&update)) {
             Some(update)
         } else {
             None
         }
     })
+}
+
+/// `Update` 中参与「是否需要重新下载」判定的关键字段快照。
+///
+/// 抽出原始 `&str` 而非直接用 `&Update`，是因为 `tauri_plugin_updater::Update`
+/// 含私有字段（`run_on_main_thread` 等）且无公开构造器，测试中无法构造实例。
+/// 本结构仅由 `String`/`&str` 组成，可在测试中自由构造，从而让
+/// `update_metadata_changed` 成为真正可单测的纯函数。
+struct UpdateMetadata<'a> {
+    version: &'a str,
+    download_url: &'a str,
+    signature: &'a str,
+}
+
+fn update_metadata_from(update: &Update) -> UpdateMetadata<'_> {
+    UpdateMetadata {
+        version: update.version.as_str(),
+        download_url: update.download_url.as_str(),
+        signature: update.signature.as_str(),
+    }
+}
+
+/// 比较两份 update metadata 是否变化（版本号、下载地址、签名）。
+///
+/// 任一字段不同即视为已变化（应允许重新下载）。纯函数，便于单测。
+fn update_metadata_changed(prev: &UpdateMetadata<'_>, next: &UpdateMetadata<'_>) -> bool {
+    next.version != prev.version
+        || next.download_url != prev.download_url
+        || next.signature != prev.signature
 }
 
 fn resolve_updater_help_paths() -> Result<(PathBuf, PathBuf), crate::errors::AppError> {
@@ -601,11 +672,14 @@ mod tests {
     use super::{
         download_failure_to_app_error, download_with_retry, extract_http_status_code,
         is_retryable_download_error, is_retryable_status_code, map_updater_error,
-        normalize_expected_version, DownloadFailure, UPDATE_DOWNLOAD_MAX_ATTEMPTS,
+        normalize_expected_version, refresh_after_failure_with_fetch, resolve_update_with_fetch,
+        update_metadata_changed, DownloadFailure, PendingUpdateState, UpdateMetadata,
+        UPDATE_DOWNLOAD_MAX_ATTEMPTS,
     };
     use crate::errors::{AppError, ErrorKind};
+    use std::sync::{Arc, Mutex};
     use std::time::Duration;
-    use tauri_plugin_updater::Error as UpdaterError;
+    use tauri_plugin_updater::{Error as UpdaterError, Update};
 
     #[test]
     fn updater_empty_endpoints_error_is_actionable() {
@@ -786,5 +860,159 @@ mod tests {
         let failure = result.expect_err("重试后遇到致命错误应停止");
         assert_eq!(failure.attempts, 2);
         assert!(failure.error.to_string().contains("404"));
+    }
+
+    // ---- pending 状态机 seam 测试 ----
+    //
+    // 注意：`tauri_plugin_updater::Update` 含私有字段（`run_on_main_thread` 等）且无公开
+    // 构造器，测试中无法构造实例。因此涉及 `Some(Update)` 的路径无法直接覆盖：
+    //   - `resolve_update_with_fetch` 的缓存命中分支（需预填 `Update`）；
+    //   - `refresh_after_failure_with_fetch` 的 metadata 变化/不变命中分支（需 `Some(Update)`）。
+    // 已覆盖：
+    //   - `update_metadata_changed` 纯函数（覆盖 Some 路径的决策逻辑，4 个字段维度）；
+    //   - 两 seam 的 None / Err 路径 + fetch 调用计数（覆盖缓存 miss -> fetch 的状态机分支）。
+    // `Some(Update)` 命中分支由生产代码 `install_update` 集成覆盖。
+
+    fn metadata(version: &'static str, url: &'static str, signature: &'static str) -> UpdateMetadata<'static> {
+        UpdateMetadata {
+            version,
+            download_url: url,
+            signature,
+        }
+    }
+
+    #[test]
+    fn metadata_unchanged_when_all_fields_equal() {
+        let prev = metadata("1.2.3", "https://example.com/v1.2.3.pkg", "sig-prev");
+        let next = metadata("1.2.3", "https://example.com/v1.2.3.pkg", "sig-prev");
+        assert!(!update_metadata_changed(&prev, &next));
+    }
+
+    #[test]
+    fn metadata_changed_when_version_differs() {
+        let prev = metadata("1.2.3", "https://example.com/pkg", "sig");
+        let next = metadata("1.2.4", "https://example.com/pkg", "sig");
+        assert!(update_metadata_changed(&prev, &next));
+    }
+
+    #[test]
+    fn metadata_changed_when_download_url_differs() {
+        let prev = metadata("1.2.3", "https://example.com/old.pkg", "sig");
+        let next = metadata("1.2.3", "https://example.com/new.pkg", "sig");
+        assert!(update_metadata_changed(&prev, &next));
+    }
+
+    #[test]
+    fn metadata_changed_when_signature_differs() {
+        let prev = metadata("1.2.3", "https://example.com/pkg", "sig-old");
+        let next = metadata("1.2.3", "https://example.com/pkg", "sig-new");
+        assert!(update_metadata_changed(&prev, &next));
+    }
+
+    /// 记录 fetch 是否被调用（`FnOnce` seam 最多调用一次，故用共享 flag 即可）。
+    /// 闭包无参、返回 boxed `Send` future（`Fut` 泛型由 seam 推断为该 trait object）。
+    type BoxedFetchFut = std::pin::Pin<
+        Box<dyn std::future::Future<Output = Result<Option<Update>, AppError>> + Send>,
+    >;
+
+    fn recording_fetch(outcome: Result<Option<Update>, AppError>) -> (Arc<Mutex<bool>>, impl FnOnce() -> BoxedFetchFut) {
+        let called = Arc::new(Mutex::new(false));
+        let called_for_closure = called.clone();
+        let fetch = move || {
+            *called_for_closure.lock().expect("fetch flag poisoned") = true;
+            // 显式标注目标 trait object 类型触发 unsized coercion。
+            let fut: BoxedFetchFut = Box::pin(async move { outcome });
+            fut
+        };
+        (called, fetch)
+    }
+
+    #[tokio::test]
+    async fn resolve_calls_fetch_and_returns_none_when_cache_empty() {
+        // 缓存为空 + fetch 返回 None -> 结果 None，且 fetch 被调用一次。
+        // （缓存命中跳过 fetch 的分支无法测试：需预填 `Update`，而 `Update` 不可构造。）
+        let state = PendingUpdateState::default();
+        let (called, fetch) = recording_fetch(Ok(None));
+
+        let result = resolve_update_with_fetch(&state, None, fetch).await;
+
+        // `Update` 未实现 `Debug`，无法 `unwrap`；用 as_ref 断言 Ok(None)。
+        assert!(matches!(result.as_ref(), Ok(None)), "应返回 Ok(None)");
+        assert!(
+            *called.lock().expect("fetch flag poisoned"),
+            "缓存 miss 时应调用 fetch"
+        );
+    }
+
+    #[tokio::test]
+    async fn resolve_propagates_fetch_error() {
+        // 缓存为空 + fetch 返回 Err -> 透传 Err，fetch 被调用。
+        let state = PendingUpdateState::default();
+        let err = AppError::updater_with_code("boom".to_string(), "check_update_failed");
+        let (called, fetch) = recording_fetch(Err(err));
+
+        let result = resolve_update_with_fetch(&state, None, fetch).await;
+
+        // `Update` 未实现 `Debug`，无法用 `expect_err`；手动断言 Err 分支。
+        let err = match result {
+            Err(err) => err,
+            Ok(_) => panic!("fetch 失败应透传 Err"),
+        };
+        assert_eq!(err.code.as_deref(), Some("check_update_failed"));
+        assert!(
+            *called.lock().expect("fetch flag poisoned"),
+            "缓存 miss 时应调用 fetch"
+        );
+    }
+
+    #[tokio::test]
+    async fn resolve_does_not_panic_with_version_filter_on_empty_cache() {
+        // 缓存为空 + 带 expected_version 过滤 + fetch None -> Ok(None)。
+        // 覆盖 `get_pending_update` 的 version 匹配分支在缓存为空时的早退语义。
+        let state = PendingUpdateState::default();
+        let (called, fetch) = recording_fetch(Ok(None));
+
+        let result = resolve_update_with_fetch(&state, Some("1.2.3"), fetch).await;
+
+        assert!(matches!(result.as_ref(), Ok(None)), "应返回 Ok(None)");
+        assert!(
+            *called.lock().expect("fetch flag poisoned"),
+            "缓存为空时即便带版本过滤也应调用 fetch"
+        );
+    }
+
+    #[tokio::test]
+    async fn refresh_clears_cache_then_returns_none_on_fetch_error() {
+        // 缓存失败刷新：先清缓存，fetch 返回 Err -> 返回 None。
+        // （无法预填 `Update` 验证「清缓存」效果，但可确认 fetch 失败路径返回 None。）
+        let state = PendingUpdateState::default();
+        let previous = metadata("1.2.3", "https://example.com/pkg", "sig");
+        let err = AppError::updater_with_code("boom".to_string(), "check_update_failed");
+        let (called, fetch) = recording_fetch(Err(err));
+
+        let result = refresh_after_failure_with_fetch(&state, &previous, fetch).await;
+
+        assert!(result.is_none(), "fetch 失败应返回 None");
+        assert!(
+            *called.lock().expect("fetch flag poisoned"),
+            "刷新时应调用 fetch"
+        );
+        assert!(
+            state.pending_update.lock().unwrap().is_none(),
+            "刷新后缓存应被清空"
+        );
+    }
+
+    #[tokio::test]
+    async fn refresh_returns_none_when_fetch_returns_none() {
+        // fetch 返回 None（远端无更新）-> 返回 None。
+        let state = PendingUpdateState::default();
+        let previous = metadata("1.2.3", "https://example.com/pkg", "sig");
+        let (called, fetch) = recording_fetch(Ok(None));
+
+        let result = refresh_after_failure_with_fetch(&state, &previous, fetch).await;
+
+        assert!(result.is_none(), "fetch 返回 None 时应返回 None");
+        assert!(*called.lock().expect("fetch flag poisoned"));
     }
 }
