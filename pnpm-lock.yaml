@@ -105,6 +105,9 @@ importers:
       eslint:
         specifier: ^10.7.0
         version: 10.7.0(jiti@1.21.7)
+      eslint-config-prettier:
+        specifier: ^10.0.0
+        version: 10.1.8(eslint@10.7.0(jiti@1.21.7))
       eslint-plugin-react-hooks:
         specifier: ^7.1.1
         version: 7.1.1(eslint@10.7.0(jiti@1.21.7))
@@ -123,6 +126,9 @@ importers:
       postcss:
         specifier: ^8.4.49
         version: 8.5.6
+      prettier:
+        specifier: ^3.6.2
+        version: 3.9.5
       react-doctor:
         specifier: ^0.2.10
         version: 0.2.10(eslint@10.7.0(jiti@1.21.7))
@@ -2377,6 +2383,12 @@ packages:
     resolution: {integrity: sha512-TtpcNJ3XAzx3Gq8sWRzJaVajRs0uVxA2YAkdb1jm2YkPz4G6egUFAyA3n5vtEIZefPk5Wa4UXbKuS5fKkJWdgA==}
     engines: {node: '>=10'}
 
+  eslint-config-prettier@10.1.8:
+    resolution: {integrity: sha512-82GZUjRS0p/jganf6q1rEO25VSoHH0hKPCTrgillPjdI/3bgBhAE1QzHrHTizjpRvy6pGAvKjDJtk2pF9NDq8w==}
+    hasBin: true
+    peerDependencies:
+      eslint: '>=7.0.0'
+
   eslint-plugin-react-hooks@7.1.1:
     resolution: {integrity: sha512-f2I7Gw6JbvCexzIInuSbZpfdQ44D7iqdWX01FKLvrPgqxoE7oMj8clOfto8U6vYiz4yd5oKu39rRSVOe1zRu0g==}
     engines: {node: '>=18'}
@@ -2949,6 +2961,11 @@ packages:
   prelude-ls@1.2.1:
     resolution: {integrity: sha512-vkcDPrRZo1QZLbn5RLGPpg/WmIQ65qoWWhcGKf/b5eplkkarX0m9z8ppCat4mlOqUsWpyNuYgO3VRyrYHSzX5g==}
     engines: {node: '>= 0.8.0'}
+
+  prettier@3.9.5:
+    resolution: {integrity: sha512-/FVl766LpUfB5vXgCYOYa0MeV/441Ia99AeICQIQFTY/Nw0roZwULcXpku5i1/m5kt/baz+s4Zogspd839HSMg==}
+    engines: {node: '>=14'}
+    hasBin: true
 
   pretty-format@27.5.1:
     resolution: {integrity: sha512-Qb1gy5OrP5+zDf2Bvnzdl3jsTf1qXVMazbvCoKhtKqVs4/YK4ozX4gKQJJVyNe+cajNPn0KoC0MC3FUmaHWEmQ==}
@@ -5378,6 +5395,10 @@ snapshots:
 
   escape-string-regexp@4.0.0: {}
 
+  eslint-config-prettier@10.1.8(eslint@10.7.0(jiti@1.21.7)):
+    dependencies:
+      eslint: 10.7.0(jiti@1.21.7)
+
   eslint-plugin-react-hooks@7.1.1(eslint@10.7.0(jiti@1.21.7)):
     dependencies:
       '@babel/core': 7.28.5
@@ -5971,6 +5992,8 @@ snapshots:
       source-map-js: 1.2.1
 
   prelude-ls@1.2.1: {}
+
+  prettier@3.9.5: {}
 
   pretty-format@27.5.1:
     dependencies:
