@@ -1,9 +1,272 @@
-/* Tailwind CSS v3 */
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+/* Tailwind CSS v4 */
+@import "tailwindcss";
 
-/* shadcn/ui Theme Variables — Vercel Geist.
+/* Class-based dark mode (replaces v3 darkMode: "class"). */
+@custom-variant dark (&:where(.dark, .dark *));
+
+/* Theme tokens - v4 @theme inline. The `inline` modifier makes utilities
+   resolve to the runtime CSS variable value rather than a static copy, so
+   `:root`/`.dark`/`@media (color-gamut: p3)` overrides below continue to
+   drive bg/text/border etc. at runtime.
+
+   Namespace mapping (v3 theme.extend -> v4 @theme):
+   - colors.*          -> --color-*
+   - borderRadius.*    -> --radius-*
+   - boxShadow.*       -> --shadow-*
+   - fontFamily.*      -> --font-*
+   - fontSize.*        -> --text-* + --text-*--line-height/--letter-spacing
+   - animation.*       -> --animate-*
+   - keyframes.*       -> @keyframes (inside @theme)
+   - transitionTimingFunction.* -> --ease-* */
+@theme inline {
+  /* Semantic colors. Two forms coexist by necessity:
+   *  - hsl(var(--*)) for colors that take Tailwind alpha modifiers (bg-foo/NN).
+   *    The variable holds a raw HSL triplet.
+   *  - var(--*) for step tokens and aliases whose variable carries the full
+   *    color function (hsl/oklch), enabling P3 wide-gamut. */
+  --color-background: hsl(var(--background));
+  --color-foreground: hsl(var(--foreground));
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: hsl(var(--primary));
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: hsl(var(--secondary));
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: hsl(var(--muted-foreground));
+  --color-accent: hsl(var(--accent));
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: hsl(var(--destructive));
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-success: hsl(var(--success));
+  --color-success-foreground: var(--success-foreground);
+  --color-warning: hsl(var(--warning));
+  --color-warning-foreground: var(--warning-foreground);
+  --color-interactive: hsl(var(--interactive));
+  --color-interactive-foreground: var(--interactive-foreground);
+  --color-interactive-hover: hsl(var(--interactive-hover));
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: hsl(var(--ring));
+  --color-background-200: var(--background-200);
+
+  /* Geist step tokens - var(--*) form (variables carry hsl()/oklch(), the
+   * latter applied via @media (color-gamut: p3) below). */
+  --color-gray-100: var(--gray-100);
+  --color-gray-200: var(--gray-200);
+  --color-gray-300: var(--gray-300);
+  --color-gray-400: var(--gray-400);
+  --color-gray-500: var(--gray-500);
+  --color-gray-600: var(--gray-600);
+  --color-gray-700: var(--gray-700);
+  --color-gray-800: var(--gray-800);
+  --color-gray-900: var(--gray-900);
+  --color-gray-1000: var(--gray-1000);
+
+  --color-gray-alpha-100: var(--gray-alpha-100);
+  --color-gray-alpha-200: var(--gray-alpha-200);
+  --color-gray-alpha-300: var(--gray-alpha-300);
+  --color-gray-alpha-400: var(--gray-alpha-400);
+  --color-gray-alpha-500: var(--gray-alpha-500);
+  --color-gray-alpha-600: var(--gray-alpha-600);
+  --color-gray-alpha-700: var(--gray-alpha-700);
+  --color-gray-alpha-800: var(--gray-alpha-800);
+  --color-gray-alpha-900: var(--gray-alpha-900);
+  --color-gray-alpha-1000: var(--gray-alpha-1000);
+
+  --color-blue-100: var(--blue-100);
+  --color-blue-200: var(--blue-200);
+  --color-blue-300: var(--blue-300);
+  --color-blue-400: var(--blue-400);
+  --color-blue-500: var(--blue-500);
+  --color-blue-600: var(--blue-600);
+  --color-blue-700: var(--blue-700);
+  --color-blue-800: var(--blue-800);
+  --color-blue-900: var(--blue-900);
+  --color-blue-1000: var(--blue-1000);
+
+  --color-red-100: var(--red-100);
+  --color-red-200: var(--red-200);
+  --color-red-300: var(--red-300);
+  --color-red-400: var(--red-400);
+  --color-red-500: var(--red-500);
+  --color-red-600: var(--red-600);
+  --color-red-700: var(--red-700);
+  --color-red-800: var(--red-800);
+  --color-red-900: var(--red-900);
+  --color-red-1000: var(--red-1000);
+
+  --color-amber-100: var(--amber-100);
+  --color-amber-200: var(--amber-200);
+  --color-amber-300: var(--amber-300);
+  --color-amber-400: var(--amber-400);
+  --color-amber-500: var(--amber-500);
+  --color-amber-600: var(--amber-600);
+  --color-amber-700: var(--amber-700);
+  --color-amber-800: var(--amber-800);
+  --color-amber-900: var(--amber-900);
+  --color-amber-1000: var(--amber-1000);
+
+  --color-green-100: var(--green-100);
+  --color-green-200: var(--green-200);
+  --color-green-300: var(--green-300);
+  --color-green-400: var(--green-400);
+  --color-green-500: var(--green-500);
+  --color-green-600: var(--green-600);
+  --color-green-700: var(--green-700);
+  --color-green-800: var(--green-800);
+  --color-green-900: var(--green-900);
+  --color-green-1000: var(--green-1000);
+
+  --color-teal-100: var(--teal-100);
+  --color-teal-200: var(--teal-200);
+  --color-teal-300: var(--teal-300);
+  --color-teal-400: var(--teal-400);
+  --color-teal-500: var(--teal-500);
+  --color-teal-600: var(--teal-600);
+  --color-teal-700: var(--teal-700);
+  --color-teal-800: var(--teal-800);
+  --color-teal-900: var(--teal-900);
+  --color-teal-1000: var(--teal-1000);
+
+  --color-purple-100: var(--purple-100);
+  --color-purple-200: var(--purple-200);
+  --color-purple-300: var(--purple-300);
+  --color-purple-400: var(--purple-400);
+  --color-purple-500: var(--purple-500);
+  --color-purple-600: var(--purple-600);
+  --color-purple-700: var(--purple-700);
+  --color-purple-800: var(--purple-800);
+  --color-purple-900: var(--purple-900);
+  --color-purple-1000: var(--purple-1000);
+
+  --color-pink-100: var(--pink-100);
+  --color-pink-200: var(--pink-200);
+  --color-pink-300: var(--pink-300);
+  --color-pink-400: var(--pink-400);
+  --color-pink-500: var(--pink-500);
+  --color-pink-600: var(--pink-600);
+  --color-pink-700: var(--pink-700);
+  --color-pink-800: var(--pink-800);
+  --color-pink-900: var(--pink-900);
+  --color-pink-1000: var(--pink-1000);
+
+  /* Geist radii: 6px everyday, 12px menus/modals, 16px fullscreen. */
+  --radius-none: 0px;
+  --radius-sm: 6px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-full: 9999px;
+
+  /* Geist elevation - tonal surfaces + borders first, shadows stay subtle.
+   * Only `raised` is exposed as a Tailwind utility; popover/modal shadows
+   * are applied via the .surface-popover/.surface-modal CSS classes. */
+  --shadow-raised: 0 2px 2px rgba(0, 0, 0, 0.04);
+
+  /* Geist typography tokens - design.md typography section. Font weight is
+   * not bound here; pair with font-medium/font-semibold/font-normal at the
+   * call site. Mono variants are kept distinct where metrics differ. */
+  --font-sans:
+    "Geist-Variable", "-apple-system", "BlinkMacSystemFont", "Segoe UI", Roboto,
+    "Helvetica Neue", Arial, sans-serif;
+  --font-mono:
+    "GeistMono-Variable", "ui-monospace", "SFMono-Regular", "SF Mono", Consolas,
+    "Liberation Mono", Menlo, monospace;
+
+  --text-heading-72: 72px;
+  --text-heading-72--line-height: 72px;
+  --text-heading-72--letter-spacing: -4.32px;
+  --text-heading-64: 64px;
+  --text-heading-64--line-height: 64px;
+  --text-heading-64--letter-spacing: -3.84px;
+  --text-heading-56: 56px;
+  --text-heading-56--line-height: 56px;
+  --text-heading-56--letter-spacing: -3.36px;
+  --text-heading-48: 48px;
+  --text-heading-48--line-height: 56px;
+  --text-heading-48--letter-spacing: -2.88px;
+  --text-heading-40: 40px;
+  --text-heading-40--line-height: 48px;
+  --text-heading-40--letter-spacing: -2.4px;
+  --text-heading-32: 32px;
+  --text-heading-32--line-height: 40px;
+  --text-heading-32--letter-spacing: -1.28px;
+  --text-heading-24: 24px;
+  --text-heading-24--line-height: 32px;
+  --text-heading-24--letter-spacing: -0.96px;
+  --text-heading-20: 20px;
+  --text-heading-20--line-height: 26px;
+  --text-heading-20--letter-spacing: -0.4px;
+  --text-heading-16: 16px;
+  --text-heading-16--line-height: 24px;
+  --text-heading-16--letter-spacing: -0.32px;
+  --text-heading-14: 14px;
+  --text-heading-14--line-height: 20px;
+  --text-heading-14--letter-spacing: -0.28px;
+
+  --text-button-16: 16px;
+  --text-button-16--line-height: 20px;
+  --text-button-14: 14px;
+  --text-button-14--line-height: 20px;
+  --text-button-12: 12px;
+  --text-button-12--line-height: 16px;
+
+  --text-label-20: 20px;
+  --text-label-20--line-height: 32px;
+  --text-label-18: 18px;
+  --text-label-18--line-height: 20px;
+  --text-label-16: 16px;
+  --text-label-16--line-height: 20px;
+  --text-label-14: 14px;
+  --text-label-14--line-height: 20px;
+  --text-label-14-mono: 14px;
+  --text-label-14-mono--line-height: 20px;
+  --text-label-13: 13px;
+  --text-label-13--line-height: 16px;
+  --text-label-13-mono: 13px;
+  --text-label-13-mono--line-height: 20px;
+  --text-label-12: 12px;
+  --text-label-12--line-height: 16px;
+  --text-label-12-mono: 12px;
+  --text-label-12-mono--line-height: 16px;
+
+  --text-copy-24: 24px;
+  --text-copy-24--line-height: 36px;
+  --text-copy-20: 20px;
+  --text-copy-20--line-height: 36px;
+  --text-copy-18: 18px;
+  --text-copy-18--line-height: 28px;
+  --text-copy-16: 16px;
+  --text-copy-16--line-height: 24px;
+  --text-copy-14: 14px;
+  --text-copy-14--line-height: 20px;
+  --text-copy-14-mono: 14px;
+  --text-copy-14-mono--line-height: 20px;
+  --text-copy-13: 13px;
+  --text-copy-13--line-height: 18px;
+  --text-copy-13-mono: 13px;
+  --text-copy-13-mono--line-height: 18px;
+
+  /* Geist motion: only when it clarifies a change. Short, physical easing.
+   * 时长/缓动单一来源见 motion-tokens.json。 */
+  --animate-fade-in: fadeIn 150ms cubic-bezier(0.175, 0.885, 0.32, 1.1);
+
+  @keyframes fadeIn {
+    0% {
+      opacity: 0;
+    }
+    100% {
+      opacity: 1;
+    }
+  }
+
+  --ease-geist: cubic-bezier(0.175, 0.885, 0.32, 1.1);
+  --ease-move: cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+/* shadcn/ui Theme Variables - Vercel Geist.
    Light theme per design.md, Dark theme per design.dark.md.
 
    Two variable forms coexist by necessity:
@@ -13,8 +276,8 @@
    - A small set of semantic colors (`--background`, `--foreground`,
      `--primary`, `--secondary`, `--accent`, `--muted-foreground`,
      `--interactive`, `--interactive-hover`, `--destructive`, `--success`,
-     `--warning`, `--ring`) keep raw HSL triplets so Tailwind v3.4 can compose
-     alpha modifiers (`bg-foo/NN` → `hsl(var(--foo) / 0.NN)`). These mirror the
+     `--warning`, `--ring`) keep raw HSL triplets so Tailwind v4 can compose
+     alpha modifiers (`bg-foo/NN` -> `hsl(var(--foo) / 0.NN)`). These mirror the
      corresponding Geist step values.
    - `--text-fine` / `--terminal-bg` / `--terminal-fg` are raw triplets because
      component code consumes them via `hsl(var(--*))` arbitrary values. */
