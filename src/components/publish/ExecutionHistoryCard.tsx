@@ -326,6 +326,16 @@ export function ExecutionHistoryCard({
                       >
                         {historyT.copyShellSnippet || "复制 Shell 片段"}
                       </Button>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        onClick={() =>
+                          void onCopyHandoffSnippet(record, "gitlab-ci")
+                        }
+                      >
+                        {historyT.copyGitlabSnippet || "复制 GitLab CI 片段"}
+                      </Button>
                     </>
                   )}
                 </div>
