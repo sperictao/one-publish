@@ -8,7 +8,7 @@
 
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Tauri 2](https://img.shields.io/badge/Tauri-2.x-FFC131?logo=tauri&logoColor=white)](https://tauri.app)
-[![React 18](https://img.shields.io/badge/React-18-61DAFB?logo=react&logoColor=white)](https://react.dev)
+[![React 19](https://img.shields.io/badge/React-19-61DAFB?logo=react&logoColor=white)](https://react.dev)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.x-3178C6?logo=typescript&logoColor=white)](https://www.typescriptlang.org)
 [![Rust](https://img.shields.io/badge/Rust-1.77+-DEA584?logo=rust&logoColor=white)](https://www.rust-lang.org)
 
@@ -185,7 +185,7 @@ one-publish/
 
 | 계층                      | 기술                                                           |
 | ------------------------- | -------------------------------------------------------------- |
-| **프론트엔드 프레임워크** | React 18 + TypeScript                                          |
+| **프론트엔드 프레임워크** | React 19 + TypeScript                                          |
 | **빌드 도구**             | Vite 7                                                         |
 | **스타일링**              | Tailwind CSS 3 + shadcn/ui (Radix UI)                          |
 | **디자인 시스템**         | Vercel Geist (디자인 토큰, P3 광색역 컬러, 다크 & 라이트 테마) |
