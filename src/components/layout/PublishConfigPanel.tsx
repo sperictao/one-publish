@@ -38,10 +38,6 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { type ConfigProfile, type PublishConfigStore } from "@/lib/store/types";
-import {
-  ProjectPublishProfileViewerDialog,
-  type ProjectProfileViewerState,
-} from "@/components/publish/ProjectPublishProfileViewerDialog";
 import { resolveDotnetProjectProfile } from "@/lib/dotnetProjectProfile";
 import { extractInvokeErrorMessage } from "@/lib/tauri/invokeErrors";
 import {
@@ -78,6 +74,10 @@ import {
 import { createFavoriteConfigAction } from "@/components/layout/publishConfigPanel/favoriteConfigAction";
 import { ProfileListItem } from "@/components/layout/publishConfigPanel/ProfileListItem";
 import { configRowClass } from "@/components/layout/publishConfigPanel/configRowClass";
+import {
+  ProjectProfileViewer,
+  type ProjectProfileViewerHandle,
+} from "@/components/layout/publishConfigPanel/ProjectProfileViewer";
 
 const EMPTY_FRAMEWORK_OPTIONS: string[] = [];
 
@@ -217,13 +217,7 @@ export const PublishConfigPanel = memo(function PublishConfigPanel({
   const [preferredSelectedRenderAnchor, setPreferredSelectedRenderAnchor] =
     useState<PreferredSelectedRenderAnchor | null>(null);
   const [showReorderControls, setShowReorderControls] = useState(false);
-  const [projectProfileViewerOpen, setProjectProfileViewerOpen] =
-    useState(false);
-  const [projectProfileViewerState, setProjectProfileViewerState] =
-    useState<ProjectProfileViewerState>({
-      status: "idle",
-      profileName: null,
-    });
+  const projectProfileViewerRef = useRef<ProjectProfileViewerHandle>(null);
   const { translations } = useI18n();
   const t = translations.configPanel || {};
   const appT = translations.app || {};
@@ -261,7 +255,6 @@ export const PublishConfigPanel = memo(function PublishConfigPanel({
   const reorderControlsLabel = showReorderControls
     ? t.hideReorderControls || "关闭排序"
     : t.showReorderControls || "开启排序";
-  const latestProjectProfileRequestId = useRef(0);
 
   const {
     query,
@@ -518,74 +511,6 @@ export const PublishConfigPanel = memo(function PublishConfigPanel({
     settledConfigRenderId ??
     interaction.visualTargetItemId;
 
-  const handleViewProjectProfile = useCallback(
-    async (profileName: string) => {
-      setProjectProfileViewerOpen(true);
-
-      if (!projectFilePath) {
-        const errorMessage = "当前项目文件路径不可用，无法读取发布配置。";
-        setProjectProfileViewerState({
-          status: "error",
-          profileName,
-          errorMessage,
-        });
-        toast.error(t.loadConfigFailed || "加载配置失败", {
-          description: errorMessage,
-        });
-        return;
-      }
-
-      const requestId = latestProjectProfileRequestId.current + 1;
-      latestProjectProfileRequestId.current = requestId;
-      setProjectProfileViewerState({
-        status: "loading",
-        profileName,
-      });
-
-      resolveDotnetProjectProfile({
-        projectInfo: {
-          root_path: "",
-          project_file: projectFilePath,
-          target_frameworks: projectFrameworkOptions,
-        },
-        profileName,
-      })
-        .then((resolvedProfile) => {
-          if (latestProjectProfileRequestId.current !== requestId) {
-            return;
-          }
-
-          setProjectProfileViewerState({
-            status: "ready",
-            profileName: resolvedProfile.profileName,
-            filePath: resolvedProfile.filePath,
-            editableConfig: resolvedProfile.editableConfig,
-            parsedProfile: resolvedProfile.parsedProfile,
-          });
-        })
-        .catch((error) => {
-          if (latestProjectProfileRequestId.current !== requestId) {
-            return;
-          }
-
-          const errorMessage =
-            error instanceof Error
-              ? error.message
-              : extractInvokeErrorMessage(error);
-
-          setProjectProfileViewerState({
-            status: "error",
-            profileName,
-            errorMessage,
-          });
-          toast.error(t.loadConfigFailed || "加载配置失败", {
-            description: errorMessage,
-          });
-        });
-    },
-    [projectFilePath, projectFrameworkOptions, t.loadConfigFailed]
-  );
-
   const handleCopyProjectProfileToCustom = useCallback(
     async (profileName: string) => {
       if (!projectFilePath) {
@@ -638,10 +563,6 @@ export const PublishConfigPanel = memo(function PublishConfigPanel({
       t.copyConfigSuccessDescription,
     ]
   );
-
-  const handleProjectProfileViewerOpenChange = useCallback((open: boolean) => {
-    setProjectProfileViewerOpen(open);
-  }, []);
 
   const handleSelectRecentItem = useCallback(
     (item: (typeof recentItems)[number]) => {
@@ -968,7 +889,8 @@ export const PublishConfigPanel = memo(function PublishConfigPanel({
                           icon: (
                             <Eye className="size-3.5 text-muted-foreground" />
                           ),
-                          onSelect: () => handleViewProjectProfile(name),
+                          onSelect: () =>
+                            projectProfileViewerRef.current?.viewProfile(name),
                         },
                       ]}
                       onOpenChange={(open) => {
@@ -1112,7 +1034,6 @@ export const PublishConfigPanel = memo(function PublishConfigPanel({
     moreActionsLabel,
     unfavoriteConfigLabel,
     handleCopyProjectProfileToCustom,
-    handleViewProjectProfile,
     interaction.handleListPointerEnter,
     interaction.handleListPointerLeave,
     interaction.handleMenuOpenChange,
@@ -1344,16 +1265,15 @@ export const PublishConfigPanel = memo(function PublishConfigPanel({
         {configListContent}
       </div>
 
-      <ProjectPublishProfileViewerDialog
-        open={projectProfileViewerOpen}
-        onOpenChange={handleProjectProfileViewerOpenChange}
-        viewerState={projectProfileViewerState}
-        dotnetSchema={dotnetSchema}
+      <ProjectProfileViewer
+        ref={projectProfileViewerRef}
+        projectFilePath={projectFilePath}
         projectFrameworkOptions={projectFrameworkOptions}
+        dotnetSchema={dotnetSchema}
+        configPanelT={t}
         profileT={profileT}
         appT={appT}
         commonT={commonT}
-        configPanelT={t}
       />
     </div>
   );
