@@ -5,7 +5,6 @@ import {
   useState,
   useMemo,
   memo,
-  type CSSProperties,
   type PointerEvent as ReactPointerEvent,
 } from "react";
 import { cn } from "@/lib/utils";
@@ -33,19 +32,12 @@ import {
   Check,
   ChevronRight,
   ChevronDown,
-  Trash2,
-  Pencil,
   Clock,
-  Star,
   X,
   ArrowUpDown,
 } from "lucide-react";
 import { toast } from "sonner";
 import { type ConfigProfile, type PublishConfigStore } from "@/lib/store/types";
-import {
-  ProjectPublishProfileViewerDialog,
-  type ProjectProfileViewerState,
-} from "@/components/publish/ProjectPublishProfileViewerDialog";
 import { resolveDotnetProjectProfile } from "@/lib/dotnetProjectProfile";
 import { extractInvokeErrorMessage } from "@/lib/tauri/invokeErrors";
 import {
@@ -57,10 +49,7 @@ import {
   getUserProfileNameFromRenderId,
 } from "@/features/config/publishConfigIdentity";
 import { useI18n } from "@/hooks/useI18n";
-import {
-  RowActionsMenu,
-  type RowActionsMenuAction,
-} from "@/components/layout/RowActionsMenu";
+import { RowActionsMenu } from "@/components/layout/RowActionsMenu";
 import { ListDragHandle } from "@/components/layout/ListReorderControls";
 import { topbarIconButtonClass } from "@/components/layout/topbarButtonStyles";
 import { SectionLabel } from "@/components/ui/section-label";
@@ -77,77 +66,20 @@ import {
   usePublishConfigPreviewModel,
 } from "@/components/layout/usePublishConfigListModel";
 import type { ParameterSchema } from "@/types/parameters";
+import { CollapseIcon } from "@/components/layout/publishConfigPanel/CollapseIcon";
+import {
+  hasSameProfileOrder,
+  hasSameStringOrder,
+} from "@/components/layout/publishConfigPanel/listOrderComparisons";
+import { createFavoriteConfigAction } from "@/components/layout/publishConfigPanel/favoriteConfigAction";
+import { ProfileListItem } from "@/components/layout/publishConfigPanel/ProfileListItem";
+import { configRowClass } from "@/components/layout/publishConfigPanel/configRowClass";
+import {
+  ProjectProfileViewer,
+  type ProjectProfileViewerHandle,
+} from "@/components/layout/publishConfigPanel/ProjectProfileViewer";
 
 const EMPTY_FRAMEWORK_OPTIONS: string[] = [];
-
-const configRowClass =
-  "flex w-full items-center gap-2.5 rounded-sm border border-transparent bg-transparent py-2 pr-11 text-left shadow-none outline-none transition-colors duration-150 ease-geist hover:bg-gray-alpha-100 focus-ring";
-
-// Collapse toggle icon (reused from BranchPanel)
-function CollapseIcon() {
-  return (
-    <svg
-      width="14"
-      height="14"
-      viewBox="0 0 16 16"
-      fill="none"
-      xmlns="http://www.w3.org/2000/svg"
-    >
-      <rect
-        x="1.5"
-        y="1.5"
-        width="13"
-        height="13"
-        rx="2.5"
-        stroke="currentColor"
-        strokeWidth="1"
-        fill="none"
-      />
-      <line
-        x1="5.5"
-        y1="1.5"
-        x2="5.5"
-        y2="14.5"
-        stroke="currentColor"
-        strokeWidth="1"
-      />
-      <path
-        className="transition-transform duration-150 ease-geist group-hover:-translate-x-0.5"
-        d="M11.5 5.5L9 8L11.5 10.5"
-        stroke="currentColor"
-        strokeWidth="1"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </svg>
-  );
-}
-
-function hasSameStringOrder(
-  left: readonly string[],
-  right: readonly string[]
-): boolean {
-  return (
-    left.length === right.length &&
-    left.every((value, index) => value === right[index])
-  );
-}
-
-function hasSameProfileOrder(
-  left: readonly ConfigProfile[],
-  right: readonly ConfigProfile[]
-): boolean {
-  return (
-    left.length === right.length &&
-    left.every((profile, index) => {
-      const nextProfile = right[index];
-      return (
-        profile.name === nextProfile.name &&
-        (profile.profileGroup || "") === (nextProfile.profileGroup || "")
-      );
-    })
-  );
-}
 
 export interface PublishConfigPanelProps {
   selectedRepoId?: string | null;
@@ -246,214 +178,6 @@ function ConfigGroup({
   );
 }
 
-function createFavoriteConfigAction({
-  isFavorite,
-  favoriteLabel,
-  unfavoriteLabel,
-  onSelect,
-}: {
-  isFavorite: boolean;
-  favoriteLabel: string;
-  unfavoriteLabel: string;
-  onSelect: () => void | Promise<unknown>;
-}): RowActionsMenuAction {
-  return {
-    key: "favorite",
-    label: isFavorite ? unfavoriteLabel : favoriteLabel,
-    icon: (
-      <Star
-        className={cn(
-          "size-3.5",
-          isFavorite ? "fill-success text-success" : "text-muted-foreground"
-        )}
-      />
-    ),
-    onSelect,
-  };
-}
-
-// User profile item with delete button on hover
-function ProfileItem({
-  profile,
-  configKey,
-  configId,
-  isSelected,
-  isVisualTarget,
-  isFavorite,
-  isMenuOpen,
-  onClick,
-  onToggleFavorite,
-  onEdit,
-  canEdit,
-  editTitle,
-  deleteTitle,
-  favoriteLabel,
-  unfavoriteLabel,
-  moreActionsLabel,
-  onDelete,
-  onMenuOpenChange,
-  rowRef,
-  onItemMouseEnter,
-  onItemFocus,
-  onItemBlur,
-  dragEnabled,
-  dragHandleVisible,
-  dragHandleLabel,
-  dragDisabledLabel,
-  isDragging,
-  dragPreviewStyle,
-  onHandlePointerDown,
-}: {
-  profile: ConfigProfile;
-  configKey: string;
-  configId: string;
-  isSelected: boolean;
-  isVisualTarget: boolean;
-  isFavorite: boolean;
-  isMenuOpen: boolean;
-  onClick: () => void;
-  onToggleFavorite: (configKey: string) => void;
-  onEdit: () => void;
-  canEdit: boolean;
-  editTitle: string;
-  deleteTitle: string;
-  favoriteLabel: string;
-  unfavoriteLabel: string;
-  moreActionsLabel: string;
-  onDelete: () => void;
-  onMenuOpenChange: (open: boolean) => void;
-  rowRef: (node: HTMLDivElement | null) => void;
-  onItemMouseEnter: () => void;
-  onItemFocus: () => void;
-  onItemBlur: () => void;
-  groupKey: string;
-  dragEnabled: boolean;
-  dragHandleVisible: boolean;
-  dragHandleLabel: string;
-  dragDisabledLabel: string;
-  isDragging: boolean;
-  dragPreviewStyle?: CSSProperties;
-  onHandlePointerDown: (
-    profileName: string,
-    event: ReactPointerEvent<HTMLButtonElement>
-  ) => void;
-}) {
-  const actions: RowActionsMenuAction[] = [
-    createFavoriteConfigAction({
-      isFavorite,
-      favoriteLabel,
-      unfavoriteLabel,
-      onSelect: () => onToggleFavorite(configKey),
-    }),
-  ];
-
-  if (canEdit) {
-    actions.push({
-      key: "edit",
-      label: editTitle,
-      icon: <Pencil className="size-3.5 text-muted-foreground" />,
-      onSelect: onEdit,
-    });
-  }
-
-  if (!profile.isSystemDefault) {
-    actions.push({
-      key: "delete",
-      label: deleteTitle,
-      icon: <Trash2 className="size-3.5" />,
-      onSelect: onDelete,
-      destructive: true,
-      separatorBefore: canEdit,
-    });
-  }
-
-  return (
-    <div
-      ref={rowRef}
-      data-list-row="true"
-      data-list-item-id={configId}
-      data-list-visual-target={isVisualTarget ? "true" : "false"}
-      data-list-menu-open={isMenuOpen ? "true" : "false"}
-      className={cn(
-        "group relative z-10",
-        isDragging && "pointer-events-none z-40"
-      )}
-      style={isDragging ? dragPreviewStyle : undefined}
-      onMouseEnter={onItemMouseEnter}
-      onFocusCapture={onItemFocus}
-      onBlurCapture={(event) => {
-        const nextFocusTarget = event.relatedTarget;
-        if (
-          nextFocusTarget instanceof Node &&
-          event.currentTarget.contains(nextFocusTarget)
-        ) {
-          return;
-        }
-
-        onItemBlur();
-      }}
-    >
-      <ListDragHandle
-        visible={dragHandleVisible}
-        enabled={dragEnabled}
-        label={dragHandleLabel}
-        disabledLabel={dragDisabledLabel}
-        onPointerDown={(event) => {
-          onHandlePointerDown(profile.name, event);
-        }}
-      />
-      <button
-        type="button"
-        aria-pressed={isSelected}
-        className={cn(
-          configRowClass,
-          isSelected && "bg-accent",
-          dragHandleVisible ? "pl-10" : "pl-3"
-        )}
-        onClick={onClick}
-      >
-        <span
-          className={cn(
-            "flex size-8 flex-shrink-0 items-center justify-center rounded-sm transition-colors duration-150 ease-geist",
-            isSelected
-              ? "bg-interactive/10"
-              : "bg-muted group-hover:bg-interactive/10"
-          )}
-        >
-          <FileText
-            className={cn(
-              "size-4 transition-colors duration-150 ease-geist",
-              isSelected
-                ? "text-interactive"
-                : "text-muted-foreground group-hover:text-interactive"
-            )}
-          />
-        </span>
-        <div className="min-w-0 flex flex-1 items-center overflow-hidden">
-          <span
-            className={cn(
-              "truncate text-label-13 font-semibold transition-colors duration-150 ease-geist",
-              isSelected ? "text-foreground" : "text-foreground/78"
-            )}
-          >
-            {profile.name}
-          </span>
-        </div>
-      </button>
-      <div className="absolute inset-y-0 right-3 flex items-center">
-        <RowActionsMenu
-          open={isMenuOpen}
-          moreActionsLabel={moreActionsLabel}
-          itemLabel={profile.name}
-          actions={actions}
-          onOpenChange={onMenuOpenChange}
-          stopPropagation
-        />
-      </div>
-    </div>
-  );
-}
-
 export const PublishConfigPanel = memo(function PublishConfigPanel({
   selectedRepoId,
   selectedPreset,
@@ -493,13 +217,7 @@ export const PublishConfigPanel = memo(function PublishConfigPanel({
   const [preferredSelectedRenderAnchor, setPreferredSelectedRenderAnchor] =
     useState<PreferredSelectedRenderAnchor | null>(null);
   const [showReorderControls, setShowReorderControls] = useState(false);
-  const [projectProfileViewerOpen, setProjectProfileViewerOpen] =
-    useState(false);
-  const [projectProfileViewerState, setProjectProfileViewerState] =
-    useState<ProjectProfileViewerState>({
-      status: "idle",
-      profileName: null,
-    });
+  const projectProfileViewerRef = useRef<ProjectProfileViewerHandle>(null);
   const { translations } = useI18n();
   const t = translations.configPanel || {};
   const appT = translations.app || {};
@@ -537,7 +255,6 @@ export const PublishConfigPanel = memo(function PublishConfigPanel({
   const reorderControlsLabel = showReorderControls
     ? t.hideReorderControls || "关闭排序"
     : t.showReorderControls || "开启排序";
-  const latestProjectProfileRequestId = useRef(0);
 
   const {
     query,
@@ -794,74 +511,6 @@ export const PublishConfigPanel = memo(function PublishConfigPanel({
     settledConfigRenderId ??
     interaction.visualTargetItemId;
 
-  const handleViewProjectProfile = useCallback(
-    async (profileName: string) => {
-      setProjectProfileViewerOpen(true);
-
-      if (!projectFilePath) {
-        const errorMessage = "当前项目文件路径不可用，无法读取发布配置。";
-        setProjectProfileViewerState({
-          status: "error",
-          profileName,
-          errorMessage,
-        });
-        toast.error(t.loadConfigFailed || "加载配置失败", {
-          description: errorMessage,
-        });
-        return;
-      }
-
-      const requestId = latestProjectProfileRequestId.current + 1;
-      latestProjectProfileRequestId.current = requestId;
-      setProjectProfileViewerState({
-        status: "loading",
-        profileName,
-      });
-
-      resolveDotnetProjectProfile({
-        projectInfo: {
-          root_path: "",
-          project_file: projectFilePath,
-          target_frameworks: projectFrameworkOptions,
-        },
-        profileName,
-      })
-        .then((resolvedProfile) => {
-          if (latestProjectProfileRequestId.current !== requestId) {
-            return;
-          }
-
-          setProjectProfileViewerState({
-            status: "ready",
-            profileName: resolvedProfile.profileName,
-            filePath: resolvedProfile.filePath,
-            editableConfig: resolvedProfile.editableConfig,
-            parsedProfile: resolvedProfile.parsedProfile,
-          });
-        })
-        .catch((error) => {
-          if (latestProjectProfileRequestId.current !== requestId) {
-            return;
-          }
-
-          const errorMessage =
-            error instanceof Error
-              ? error.message
-              : extractInvokeErrorMessage(error);
-
-          setProjectProfileViewerState({
-            status: "error",
-            profileName,
-            errorMessage,
-          });
-          toast.error(t.loadConfigFailed || "加载配置失败", {
-            description: errorMessage,
-          });
-        });
-    },
-    [projectFilePath, projectFrameworkOptions, t.loadConfigFailed]
-  );
-
   const handleCopyProjectProfileToCustom = useCallback(
     async (profileName: string) => {
       if (!projectFilePath) {
@@ -914,10 +563,6 @@ export const PublishConfigPanel = memo(function PublishConfigPanel({
       t.copyConfigSuccessDescription,
     ]
   );
-
-  const handleProjectProfileViewerOpenChange = useCallback((open: boolean) => {
-    setProjectProfileViewerOpen(open);
-  }, []);
 
   const handleSelectRecentItem = useCallback(
     (item: (typeof recentItems)[number]) => {
@@ -1244,7 +889,8 @@ export const PublishConfigPanel = memo(function PublishConfigPanel({
                           icon: (
                             <Eye className="size-3.5 text-muted-foreground" />
                           ),
-                          onSelect: () => handleViewProjectProfile(name),
+                          onSelect: () =>
+                            projectProfileViewerRef.current?.viewProfile(name),
                         },
                       ]}
                       onOpenChange={(open) => {
@@ -1269,7 +915,7 @@ export const PublishConfigPanel = memo(function PublishConfigPanel({
               {group.items.map((profile) => {
                 const configKey = createUserProfileConfigKey(profile.name);
                 return (
-                  <ProfileItem
+                  <ProfileListItem
                     key={profile.name}
                     profile={profile}
                     configKey={configKey}
@@ -1388,7 +1034,6 @@ export const PublishConfigPanel = memo(function PublishConfigPanel({
     moreActionsLabel,
     unfavoriteConfigLabel,
     handleCopyProjectProfileToCustom,
-    handleViewProjectProfile,
     interaction.handleListPointerEnter,
     interaction.handleListPointerLeave,
     interaction.handleMenuOpenChange,
@@ -1620,16 +1265,15 @@ export const PublishConfigPanel = memo(function PublishConfigPanel({
         {configListContent}
       </div>
 
-      <ProjectPublishProfileViewerDialog
-        open={projectProfileViewerOpen}
-        onOpenChange={handleProjectProfileViewerOpenChange}
-        viewerState={projectProfileViewerState}
-        dotnetSchema={dotnetSchema}
+      <ProjectProfileViewer
+        ref={projectProfileViewerRef}
+        projectFilePath={projectFilePath}
         projectFrameworkOptions={projectFrameworkOptions}
+        dotnetSchema={dotnetSchema}
+        configPanelT={t}
         profileT={profileT}
         appT={appT}
         commonT={commonT}
-        configPanelT={t}
       />
     </div>
   );
