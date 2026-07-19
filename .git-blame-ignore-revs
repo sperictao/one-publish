@@ -1,0 +1,6 @@
+# Reformat commits to skip in `git blame`.
+# Configure once per clone:
+#   git config blame.ignoreRevsFile .git-blame-ignore-revs
+
+# style: 全仓 prettier 格式化（首次引入 prettier 后的一次性 reformat，触及 218 文件）
+0443b86f124fd889a818442a2d2980c37efeadd2
