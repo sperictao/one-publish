@@ -734,7 +734,8 @@
     "exportDiagnosticsIndexFailed": "导出诊断索引失败",
     "warningsLabel": "警告",
     "warningsExpand": "展开警告",
-    "warningsCollapse": "收起警告"
+    "warningsCollapse": "收起警告",
+    "legacyPlaintextHint": "较早的记录在密钥脱敏功能上线前保存，命令行可能含明文密钥。如担心泄露，可在设置中将保留上限调到 5 触发裁剪，或重新执行覆盖历史。"
   },
   "configPanel": {
     "allConfigs": "全部",

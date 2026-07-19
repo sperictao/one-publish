@@ -734,7 +734,8 @@
     "exportDiagnosticsIndexFailed": "Failed to export diagnostics index",
     "warningsLabel": "Warnings",
     "warningsExpand": "Expand warnings",
-    "warningsCollapse": "Collapse warnings"
+    "warningsCollapse": "Collapse warnings",
+    "legacyPlaintextHint": "Older records were saved before secret redaction, so their command lines may contain plaintext keys. To be safe, lower the retention limit to 5 in Settings to trigger trimming, or rerun to overwrite history."
   },
   "configPanel": {
     "allConfigs": "All",
