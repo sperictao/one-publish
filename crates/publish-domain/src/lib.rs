@@ -1,0 +1,894 @@
+use std::collections::{BTreeMap, BTreeSet};
+
+use serde::{Deserialize, Serialize};
+use serde_json::Value;
+use sha2::{Digest, Sha256};
+
+pub const PLANNING_INPUT_SNAPSHOT_VERSION: u32 = 1;
+pub const PUBLISH_PLAN_VERSION: u32 = 1;
+pub const ADAPTER_CONTRACT_VERSION: u32 = 1;
+pub const ARTIFACT_MANIFEST_VERSION: u32 = 1;
+pub const PUBLISH_EVENT_VERSION: u32 = 1;
+pub const DELIVERY_RECEIPT_VERSION: u32 = 1;
+
+#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
+pub enum PublishError {
+    #[error("unsupported planning input snapshot version {actual}; expected {expected}")]
+    UnsupportedSnapshotVersion { actual: u32, expected: u32 },
+    #[error("unsupported publish plan version {actual}; expected {expected}")]
+    UnsupportedPlanVersion { actual: u32, expected: u32 },
+    #[error("unsupported adapter contract version {actual}; expected {expected}")]
+    UnsupportedAdapterContractVersion { actual: u32, expected: u32 },
+    #[error("adapter {kind:?}/{id}@{version} is not registered")]
+    AdapterNotRegistered {
+        kind: AdapterKind,
+        id: String,
+        version: u32,
+    },
+    #[error(
+        "adapter {kind:?}/{id} does not provide requested version {requested}; available versions are {available:?}"
+    )]
+    AdapterVersionMismatch {
+        kind: AdapterKind,
+        id: String,
+        requested: u32,
+        available: Vec<u32>,
+    },
+    #[error("adapter {id} is registered as {actual:?}, not {expected:?}")]
+    AdapterKindMismatch {
+        id: String,
+        expected: AdapterKind,
+        actual: AdapterKind,
+    },
+    #[error("adapter {kind:?}/{id}@{version} is already registered")]
+    DuplicateAdapter {
+        kind: AdapterKind,
+        id: String,
+        version: u32,
+    },
+    #[error("adapter {adapter} uses unsupported settings schema version {actual}; current version is {current}")]
+    UnsupportedSchemaVersion {
+        adapter: String,
+        actual: u32,
+        current: u32,
+    },
+    #[error("invalid adapter {adapter}: {message}")]
+    InvalidAdapter { adapter: String, message: String },
+    #[error("invalid settings for adapter {adapter}: {message}")]
+    InvalidAdapterSettings { adapter: String, message: String },
+    #[error("adapter {consumer} requires missing capability {capability}")]
+    MissingCapability {
+        consumer: String,
+        capability: String,
+    },
+    #[error(
+        "adapter {consumer} requires capability {capability} versions {minimum}..={maximum}, but selected adapters provide {provided:?}"
+    )]
+    IncompatibleCapability {
+        consumer: String,
+        capability: String,
+        minimum: u32,
+        maximum: u32,
+        provided: Vec<u32>,
+    },
+    #[error("invalid publish plan: {0}")]
+    InvalidPlan(String),
+    #[error("publish plan digest mismatch: expected {expected}, got {actual}")]
+    PlanDigestMismatch { expected: String, actual: String },
+    #[error("artifact digest mismatch for {artifact}: expected {expected}, got {actual}")]
+    ArtifactDigestMismatch {
+        artifact: String,
+        expected: String,
+        actual: String,
+    },
+    #[error("invalid artifact {artifact}: {message}")]
+    InvalidArtifact { artifact: String, message: String },
+    #[error("publish plan did not produce an artifact manifest")]
+    MissingArtifactManifest,
+    #[error("publish plan did not produce a delivery receipt")]
+    MissingDeliveryReceipt,
+    #[error("publish plan execution was incomplete; missing nodes: {missing:?}")]
+    IncompletePlanExecution { missing: Vec<String> },
+    #[error("adapter execution failed: {0}")]
+    Execution(String),
+    #[error("I/O operation {operation} failed: {message}")]
+    Io { operation: String, message: String },
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum AdapterKind {
+    ProjectProvider,
+    ArtifactProcessor,
+    ExecutionBackend,
+    ArtifactStore,
+    DeliveryDestination,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+pub struct AdapterIdentity {
+    pub kind: AdapterKind,
+    pub id: String,
+    pub version: u32,
+}
+
+impl AdapterIdentity {
+    pub fn new(kind: AdapterKind, id: impl Into<String>, version: u32) -> Self {
+        Self {
+            kind,
+            id: id.into(),
+            version,
+        }
+    }
+
+    pub fn display_name(&self) -> String {
+        format!("{:?}/{}@{}", self.kind, self.id, self.version)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AdapterSchema {
+    pub version: u32,
+    pub fields: BTreeMap<String, AdapterSchemaField>,
+}
+
+impl AdapterSchema {
+    pub fn new(version: u32) -> Self {
+        Self {
+            version,
+            fields: BTreeMap::new(),
+        }
+    }
+
+    pub fn with_required_string(mut self, key: impl Into<String>) -> Self {
+        self.fields.insert(
+            key.into(),
+            AdapterSchemaField {
+                value_type: AdapterSchemaValueType::String,
+                required: true,
+            },
+        );
+        self
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AdapterSchemaField {
+    pub value_type: AdapterSchemaValueType,
+    pub required: bool,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum AdapterSchemaValueType {
+    String,
+    Boolean,
+    Number,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Capability {
+    pub id: String,
+    pub version: u32,
+}
+
+impl Capability {
+    pub fn new(id: impl Into<String>, version: u32) -> Self {
+        Self {
+            id: id.into(),
+            version,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct CapabilityRequirement {
+    pub id: String,
+    pub minimum_version: u32,
+    pub maximum_version: u32,
+}
+
+impl CapabilityRequirement {
+    pub fn exact(id: impl Into<String>, version: u32) -> Self {
+        Self {
+            id: id.into(),
+            minimum_version: version,
+            maximum_version: version,
+        }
+    }
+
+    pub fn accepts(&self, version: u32) -> bool {
+        (self.minimum_version..=self.maximum_version).contains(&version)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PublishingCapability {
+    pub provides: Vec<Capability>,
+    pub requires: Vec<CapabilityRequirement>,
+}
+
+impl PublishingCapability {
+    pub fn validate(&self, adapter: &str) -> Result<(), PublishError> {
+        let mut provided = BTreeSet::new();
+        for capability in &self.provides {
+            if capability.id.trim().is_empty() || capability.version == 0 {
+                return Err(PublishError::InvalidAdapter {
+                    adapter: adapter.to_string(),
+                    message: "provided capabilities require a non-empty id and positive version"
+                        .to_string(),
+                });
+            }
+            if !provided.insert((&capability.id, capability.version)) {
+                return Err(PublishError::InvalidAdapter {
+                    adapter: adapter.to_string(),
+                    message: format!(
+                        "capability {}@{} is declared more than once",
+                        capability.id, capability.version
+                    ),
+                });
+            }
+        }
+
+        for requirement in &self.requires {
+            if requirement.id.trim().is_empty()
+                || requirement.minimum_version == 0
+                || requirement.minimum_version > requirement.maximum_version
+            {
+                return Err(PublishError::InvalidAdapter {
+                    adapter: adapter.to_string(),
+                    message: "capability requirements require a valid id and version range"
+                        .to_string(),
+                });
+            }
+        }
+        Ok(())
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AdapterDescriptor {
+    pub kind: AdapterKind,
+    pub id: String,
+    pub version: u32,
+    pub contract_version: u32,
+    pub schema: AdapterSchema,
+    pub capabilities: PublishingCapability,
+    /// Opaque executable ids resolved by the execution backend; never raw paths or command names.
+    pub allowed_programs: BTreeSet<String>,
+}
+
+impl AdapterDescriptor {
+    pub fn new(
+        kind: AdapterKind,
+        id: impl Into<String>,
+        version: u32,
+        schema: AdapterSchema,
+        capabilities: PublishingCapability,
+    ) -> Self {
+        Self {
+            kind,
+            id: id.into(),
+            version,
+            contract_version: ADAPTER_CONTRACT_VERSION,
+            schema,
+            capabilities,
+            allowed_programs: BTreeSet::new(),
+        }
+    }
+
+    pub fn with_allowed_program(mut self, program: impl Into<String>) -> Self {
+        self.allowed_programs.insert(program.into());
+        self
+    }
+
+    pub fn identity(&self) -> AdapterIdentity {
+        AdapterIdentity::new(self.kind, self.id.clone(), self.version)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct AdapterSettings {
+    pub schema_version: u32,
+    pub values: BTreeMap<String, Value>,
+}
+
+impl AdapterSettings {
+    pub fn new(schema_version: u32) -> Self {
+        Self {
+            schema_version,
+            values: BTreeMap::new(),
+        }
+    }
+
+    pub fn with_value(mut self, key: impl Into<String>, value: Value) -> Self {
+        self.values.insert(key.into(), value);
+        self
+    }
+
+    pub fn string(&self, key: &str, adapter: &str) -> Result<&str, PublishError> {
+        self.values.get(key).and_then(Value::as_str).ok_or_else(|| {
+            PublishError::InvalidAdapterSettings {
+                adapter: adapter.to_string(),
+                message: format!("{key} must be a string"),
+            }
+        })
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct AdapterBinding {
+    pub binding_id: String,
+    pub adapter: AdapterIdentity,
+    pub settings: AdapterSettings,
+}
+
+impl AdapterBinding {
+    pub fn new(
+        binding_id: impl Into<String>,
+        adapter: AdapterIdentity,
+        settings: AdapterSettings,
+    ) -> Self {
+        Self {
+            binding_id: binding_id.into(),
+            adapter,
+            settings,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct AdapterSelection {
+    pub project_provider: AdapterBinding,
+    pub artifact_processors: Vec<AdapterBinding>,
+    pub execution_backend: AdapterBinding,
+    pub artifact_store: AdapterBinding,
+    pub delivery_destinations: Vec<AdapterBinding>,
+}
+
+impl AdapterSelection {
+    pub fn ordered_bindings(&self) -> Vec<&AdapterBinding> {
+        let mut bindings = Vec::with_capacity(4 + self.artifact_processors.len());
+        bindings.push(&self.project_provider);
+        bindings.extend(self.artifact_processors.iter());
+        bindings.push(&self.execution_backend);
+        bindings.push(&self.artifact_store);
+        bindings.extend(self.delivery_destinations.iter());
+        bindings
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SourceSnapshot {
+    pub revision: String,
+    pub workspace_digest: Option<String>,
+    pub dirty: bool,
+    pub captured_at: String,
+    pub reproducible: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ExternalPrecondition {
+    pub checked_at: String,
+    pub valid_until: String,
+    pub result_digest: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct PlanningInputSnapshot {
+    pub version: u32,
+    pub configuration_revision: String,
+    pub runtime_revision: String,
+    pub release_input: BTreeMap<String, Value>,
+    pub source: SourceSnapshot,
+    pub external_preconditions: BTreeMap<String, ExternalPrecondition>,
+    pub adapters: AdapterSelection,
+}
+
+impl PlanningInputSnapshot {
+    pub fn digest(&self) -> Result<String, PublishError> {
+        canonical_digest(self)
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum PlanStage {
+    InspectSource,
+    PrepareIdentity,
+    Build,
+    CollectArtifacts,
+    ProcessArtifacts,
+    PersistManifest,
+    StageRoutes,
+    PublishRoutes,
+    ObserveRoutes,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum PlanOperation {
+    RunProgram {
+        program: String,
+        args: Vec<String>,
+        working_directory: Option<String>,
+        environment_references: BTreeMap<String, String>,
+    },
+    AdapterAction {
+        action: String,
+        inputs: BTreeMap<String, Value>,
+    },
+}
+
+impl PlanOperation {
+    pub fn validate(&self) -> Result<(), PublishError> {
+        match self {
+            Self::RunProgram { program, .. } if program.trim().is_empty() => Err(
+                PublishError::InvalidPlan("structured command program cannot be empty".to_string()),
+            ),
+            Self::RunProgram { program, args, .. }
+                if contains_shell_interpreter(program, args) =>
+            {
+                Err(PublishError::InvalidPlan(format!(
+                    "shell interpreter references are not allowed in structured publish commands: {program}"
+                )))
+            }
+            Self::AdapterAction { action, .. } if action.trim().is_empty() => Err(
+                PublishError::InvalidPlan("adapter action cannot be empty".to_string()),
+            ),
+            _ => Ok(()),
+        }
+    }
+}
+
+fn contains_shell_interpreter(program: &str, args: &[String]) -> bool {
+    is_shell_interpreter(program) || args.iter().any(|arg| is_shell_interpreter(arg))
+}
+
+fn is_shell_interpreter(value: &str) -> bool {
+    let normalized = value.replace('\\', "/");
+    let file_name = normalized
+        .rsplit('/')
+        .next()
+        .unwrap_or_default()
+        .to_ascii_lowercase();
+    matches!(
+        file_name.as_str(),
+        "sh" | "bash"
+            | "zsh"
+            | "fish"
+            | "cmd"
+            | "cmd.exe"
+            | "powershell"
+            | "powershell.exe"
+            | "pwsh"
+            | "pwsh.exe"
+    )
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum PlanSideEffect {
+    FileSystem,
+    Network,
+    SourceMutation,
+    ExternalSystem,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct PlanNodeTemplate {
+    pub local_id: String,
+    pub stage: PlanStage,
+    pub operation: PlanOperation,
+    pub artifact_inputs: Vec<String>,
+    pub artifact_outputs: Vec<String>,
+    pub side_effects: Vec<PlanSideEffect>,
+    pub irreversible: bool,
+}
+
+impl PlanNodeTemplate {
+    pub fn command(
+        local_id: impl Into<String>,
+        stage: PlanStage,
+        program: impl Into<String>,
+        args: Vec<String>,
+    ) -> Self {
+        Self {
+            local_id: local_id.into(),
+            stage,
+            operation: PlanOperation::RunProgram {
+                program: program.into(),
+                args,
+                working_directory: None,
+                environment_references: BTreeMap::new(),
+            },
+            artifact_inputs: Vec::new(),
+            artifact_outputs: Vec::new(),
+            side_effects: Vec::new(),
+            irreversible: false,
+        }
+    }
+
+    pub fn adapter_action(
+        local_id: impl Into<String>,
+        stage: PlanStage,
+        action: impl Into<String>,
+        inputs: BTreeMap<String, Value>,
+    ) -> Self {
+        Self {
+            local_id: local_id.into(),
+            stage,
+            operation: PlanOperation::AdapterAction {
+                action: action.into(),
+                inputs,
+            },
+            artifact_inputs: Vec::new(),
+            artifact_outputs: Vec::new(),
+            side_effects: Vec::new(),
+            irreversible: false,
+        }
+    }
+
+    pub fn with_artifact_io(mut self, inputs: Vec<String>, outputs: Vec<String>) -> Self {
+        self.artifact_inputs = inputs;
+        self.artifact_outputs = outputs;
+        self
+    }
+
+    pub fn with_side_effects(mut self, side_effects: Vec<PlanSideEffect>) -> Self {
+        self.side_effects = side_effects;
+        self
+    }
+
+    pub fn irreversible(mut self) -> Self {
+        self.irreversible = true;
+        self
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct PlanNode {
+    pub id: String,
+    pub stage: PlanStage,
+    pub adapter: AdapterIdentity,
+    pub binding_id: String,
+    pub settings: AdapterSettings,
+    pub operation: PlanOperation,
+    pub depends_on: Vec<String>,
+    pub artifact_inputs: Vec<String>,
+    pub artifact_outputs: Vec<String>,
+    pub side_effects: Vec<PlanSideEffect>,
+    pub irreversible: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct PublishPlan {
+    pub version: u32,
+    pub snapshot_digest: String,
+    pub adapters: Vec<AdapterBinding>,
+    pub execution_backend: AdapterIdentity,
+    pub nodes: Vec<PlanNode>,
+    pub digest: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ArtifactCandidate {
+    pub role: String,
+    pub file_name: String,
+    pub media_type: String,
+    pub platform: String,
+    pub architecture: String,
+    pub size: u64,
+    pub digest: String,
+    pub bytes: Vec<u8>,
+}
+
+impl ArtifactCandidate {
+    pub fn new(
+        role: impl Into<String>,
+        file_name: impl Into<String>,
+        media_type: impl Into<String>,
+        platform: impl Into<String>,
+        architecture: impl Into<String>,
+        bytes: Vec<u8>,
+    ) -> Self {
+        Self {
+            role: role.into(),
+            file_name: file_name.into(),
+            media_type: media_type.into(),
+            platform: platform.into(),
+            architecture: architecture.into(),
+            size: bytes.len() as u64,
+            digest: sha256_hex(&bytes),
+            bytes,
+        }
+    }
+
+    pub fn verify(&self) -> Result<(), PublishError> {
+        validate_artifact_metadata(
+            &self.file_name,
+            &self.role,
+            &self.media_type,
+            &self.platform,
+            &self.architecture,
+        )?;
+        let actual = sha256_hex(&self.bytes);
+        if actual != self.digest || self.size != self.bytes.len() as u64 {
+            return Err(PublishError::ArtifactDigestMismatch {
+                artifact: self.file_name.clone(),
+                expected: self.digest.clone(),
+                actual,
+            });
+        }
+        Ok(())
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ArtifactManifestEntry {
+    pub role: String,
+    pub file_name: String,
+    pub media_type: String,
+    pub platform: String,
+    pub architecture: String,
+    pub size: u64,
+    pub digest: String,
+    pub locator: String,
+    pub retention: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ArtifactManifest {
+    pub version: u32,
+    pub planning_snapshot_digest: String,
+    pub artifacts: Vec<ArtifactManifestEntry>,
+    pub digest: String,
+}
+
+impl ArtifactManifest {
+    pub fn seal(
+        planning_snapshot_digest: impl Into<String>,
+        artifacts: Vec<ArtifactManifestEntry>,
+    ) -> Result<Self, PublishError> {
+        if artifacts.is_empty() {
+            return Err(PublishError::Execution(
+                "cannot seal an empty artifact manifest".to_string(),
+            ));
+        }
+        for artifact in &artifacts {
+            artifact.validate()?;
+        }
+        let mut manifest = Self {
+            version: ARTIFACT_MANIFEST_VERSION,
+            planning_snapshot_digest: planning_snapshot_digest.into(),
+            artifacts,
+            digest: String::new(),
+        };
+        manifest.digest = manifest.recomputed_digest()?;
+        Ok(manifest)
+    }
+
+    pub fn recomputed_digest(&self) -> Result<String, PublishError> {
+        #[derive(Serialize)]
+        struct DigestInput<'a> {
+            version: u32,
+            planning_snapshot_digest: &'a str,
+            artifacts: &'a [ArtifactManifestEntry],
+        }
+
+        canonical_digest(&DigestInput {
+            version: self.version,
+            planning_snapshot_digest: &self.planning_snapshot_digest,
+            artifacts: &self.artifacts,
+        })
+    }
+
+    pub fn validate(&self) -> Result<(), PublishError> {
+        if self.version != ARTIFACT_MANIFEST_VERSION {
+            return Err(PublishError::Execution(format!(
+                "unsupported artifact manifest version {}",
+                self.version
+            )));
+        }
+        if self.artifacts.is_empty() {
+            return Err(PublishError::Execution(
+                "artifact manifest cannot be empty".to_string(),
+            ));
+        }
+        for artifact in &self.artifacts {
+            artifact.validate()?;
+        }
+        let actual = self.recomputed_digest()?;
+        if actual != self.digest {
+            return Err(PublishError::Execution(format!(
+                "artifact manifest digest mismatch: expected {}, got {actual}",
+                self.digest
+            )));
+        }
+        Ok(())
+    }
+}
+
+impl ArtifactManifestEntry {
+    pub fn validate(&self) -> Result<(), PublishError> {
+        validate_artifact_metadata(
+            &self.file_name,
+            &self.role,
+            &self.media_type,
+            &self.platform,
+            &self.architecture,
+        )?;
+        if self.locator.trim().is_empty() || self.retention.trim().is_empty() {
+            return Err(PublishError::InvalidArtifact {
+                artifact: self.file_name.clone(),
+                message: "store locator and retention are required".to_string(),
+            });
+        }
+        if self.digest.len() != 64 || !self.digest.bytes().all(|byte| byte.is_ascii_hexdigit()) {
+            return Err(PublishError::InvalidArtifact {
+                artifact: self.file_name.clone(),
+                message: "content digest must be a 64-character SHA-256 value".to_string(),
+            });
+        }
+        Ok(())
+    }
+}
+
+fn validate_artifact_metadata(
+    file_name: &str,
+    role: &str,
+    media_type: &str,
+    platform: &str,
+    architecture: &str,
+) -> Result<(), PublishError> {
+    if file_name.trim().is_empty()
+        || file_name == "."
+        || file_name == ".."
+        || file_name.contains(['/', '\\', '\0'])
+    {
+        return Err(PublishError::InvalidArtifact {
+            artifact: file_name.to_string(),
+            message: "file name must be a single portable path component".to_string(),
+        });
+    }
+    if [role, media_type, platform, architecture]
+        .iter()
+        .any(|value| value.trim().is_empty())
+    {
+        return Err(PublishError::InvalidArtifact {
+            artifact: file_name.to_string(),
+            message: "role, media type, platform, and architecture are required".to_string(),
+        });
+    }
+    Ok(())
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum DeliveryStatus {
+    Pending,
+    Staged,
+    Submitted,
+    Published,
+    Failed,
+    Rejected,
+    Cancelled,
+    Expired,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct DeliveryReceipt {
+    pub version: u32,
+    pub receipt_id: String,
+    pub revision: u32,
+    pub route_id: String,
+    pub manifest_digest: String,
+    pub status: DeliveryStatus,
+    pub external_reference: String,
+}
+
+impl DeliveryReceipt {
+    pub fn published(
+        receipt_id: impl Into<String>,
+        route_id: impl Into<String>,
+        manifest_digest: impl Into<String>,
+        external_reference: impl Into<String>,
+    ) -> Self {
+        Self {
+            version: DELIVERY_RECEIPT_VERSION,
+            receipt_id: receipt_id.into(),
+            revision: 1,
+            route_id: route_id.into(),
+            manifest_digest: manifest_digest.into(),
+            status: DeliveryStatus::Published,
+            external_reference: external_reference.into(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct PublishEvent {
+    pub version: u32,
+    pub event_id: String,
+    pub attempt_id: String,
+    pub sequence: u64,
+    pub plan_digest: String,
+    pub plan_node_id: String,
+    pub kind: String,
+    pub payload: BTreeMap<String, Value>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct PublishOutcome {
+    pub manifest: ArtifactManifest,
+    pub events: Vec<PublishEvent>,
+    pub receipts: Vec<DeliveryReceipt>,
+}
+
+impl PublishPlan {
+    pub fn seal(
+        snapshot_digest: String,
+        adapters: Vec<AdapterBinding>,
+        execution_backend: AdapterIdentity,
+        nodes: Vec<PlanNode>,
+    ) -> Result<Self, PublishError> {
+        let mut plan = Self {
+            version: PUBLISH_PLAN_VERSION,
+            snapshot_digest,
+            adapters,
+            execution_backend,
+            nodes,
+            digest: String::new(),
+        };
+        plan.digest = plan.recomputed_digest()?;
+        Ok(plan)
+    }
+
+    pub fn recomputed_digest(&self) -> Result<String, PublishError> {
+        #[derive(Serialize)]
+        struct DigestInput<'a> {
+            version: u32,
+            snapshot_digest: &'a str,
+            adapters: &'a [AdapterBinding],
+            execution_backend: &'a AdapterIdentity,
+            nodes: &'a [PlanNode],
+        }
+
+        canonical_digest(&DigestInput {
+            version: self.version,
+            snapshot_digest: &self.snapshot_digest,
+            adapters: &self.adapters,
+            execution_backend: &self.execution_backend,
+            nodes: &self.nodes,
+        })
+    }
+}
+
+pub fn canonical_digest<T: Serialize>(value: &T) -> Result<String, PublishError> {
+    let serialized = serde_json::to_value(value).map_err(|error| {
+        PublishError::InvalidPlan(format!("cannot serialize contract: {error}"))
+    })?;
+    let canonical = canonicalize_json(serialized);
+    let bytes = serde_json::to_vec(&canonical).map_err(|error| {
+        PublishError::InvalidPlan(format!("cannot serialize canonical contract: {error}"))
+    })?;
+    Ok(sha256_hex(&bytes))
+}
+
+pub fn sha256_hex(bytes: &[u8]) -> String {
+    hex::encode(Sha256::digest(bytes))
+}
+
+fn canonicalize_json(value: Value) -> Value {
+    match value {
+        Value::Array(values) => Value::Array(values.into_iter().map(canonicalize_json).collect()),
+        Value::Object(values) => {
+            let sorted = values
+                .into_iter()
+                .map(|(key, value)| (key, canonicalize_json(value)))
+                .collect::<BTreeMap<_, _>>();
+            Value::Object(sorted.into_iter().collect())
+        }
+        scalar => scalar,
+    }
+}

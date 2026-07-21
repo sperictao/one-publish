@@ -1,0 +1,622 @@
+use std::collections::BTreeMap;
+use std::sync::Arc;
+
+use publish_domain::{
+    AdapterDescriptor, AdapterIdentity, AdapterKind, AdapterSettings, ArtifactCandidate,
+    ArtifactManifest, DeliveryReceipt, PlanNode, PlanNodeTemplate, PlanOperation,
+    PlanningInputSnapshot, PublishError, PublishPlan, ADAPTER_CONTRACT_VERSION,
+};
+
+mod local;
+
+pub use local::{LocalDirectoryDestination, LocalExecutionBackend, TemporaryArtifactStore};
+
+#[derive(Debug)]
+pub struct AdapterExecutionContext<'a> {
+    pub attempt_id: &'a str,
+    pub plan_digest: &'a str,
+    pub snapshot_digest: &'a str,
+    pub artifacts: &'a [ArtifactCandidate],
+    pub manifest: Option<&'a ArtifactManifest>,
+    pub receipts: &'a [DeliveryReceipt],
+}
+
+#[derive(Debug, Default)]
+pub struct AdapterExecutionOutput {
+    pub artifacts: Vec<ArtifactCandidate>,
+    pub manifest: Option<ArtifactManifest>,
+    pub receipts: Vec<DeliveryReceipt>,
+}
+
+pub trait PlanNodeExecutor {
+    fn execute_node(&mut self, node: &PlanNode) -> Result<(), PublishError>;
+}
+
+pub trait AdapterContract: Send + Sync {
+    fn descriptor(&self) -> &AdapterDescriptor;
+
+    fn default_settings(&self) -> AdapterSettings;
+
+    fn migrate_settings(
+        &self,
+        settings: &AdapterSettings,
+    ) -> Result<AdapterSettings, PublishError> {
+        let descriptor = self.descriptor();
+        if settings.schema_version != descriptor.schema.version {
+            return Err(PublishError::UnsupportedSchemaVersion {
+                adapter: descriptor.identity().display_name(),
+                actual: settings.schema_version,
+                current: descriptor.schema.version,
+            });
+        }
+        Ok(settings.clone())
+    }
+
+    fn validate_settings(&self, settings: &AdapterSettings) -> Result<(), PublishError> {
+        validate_settings_against_schema(self.descriptor(), settings)
+    }
+
+    fn summarize_settings(&self, _settings: &AdapterSettings) -> Result<String, PublishError> {
+        Ok(self.descriptor().id.clone())
+    }
+
+    fn plan_fragment(
+        &self,
+        snapshot: &PlanningInputSnapshot,
+        settings: &AdapterSettings,
+    ) -> Result<Vec<PlanNodeTemplate>, PublishError>;
+
+    fn execute_node(
+        &self,
+        _node: &PlanNode,
+        _context: &AdapterExecutionContext<'_>,
+    ) -> Result<AdapterExecutionOutput, PublishError> {
+        Err(PublishError::Execution(format!(
+            "adapter {} does not execute plan nodes",
+            self.descriptor().identity().display_name()
+        )))
+    }
+
+    fn execute_plan(
+        &self,
+        _plan: &PublishPlan,
+        _executor: &mut dyn PlanNodeExecutor,
+    ) -> Result<(), PublishError> {
+        Err(PublishError::Execution(format!(
+            "adapter {} is not an execution backend",
+            self.descriptor().identity().display_name()
+        )))
+    }
+}
+
+pub trait ProjectProvider: AdapterContract {}
+pub trait ArtifactProcessor: AdapterContract {}
+pub trait ExecutionBackend: AdapterContract {}
+pub trait ArtifactStore: AdapterContract {}
+pub trait DeliveryDestination: AdapterContract {}
+
+#[derive(Debug, Clone)]
+pub struct AdapterConformanceFixture {
+    pub snapshot: PlanningInputSnapshot,
+    pub forbidden_values: Vec<String>,
+}
+
+impl AdapterConformanceFixture {
+    pub fn new(snapshot: PlanningInputSnapshot) -> Self {
+        Self {
+            snapshot,
+            forbidden_values: Vec::new(),
+        }
+    }
+}
+
+#[derive(Default)]
+pub struct AdapterRegistry {
+    project_providers: BTreeMap<(String, u32), Arc<dyn ProjectProvider>>,
+    artifact_processors: BTreeMap<(String, u32), Arc<dyn ArtifactProcessor>>,
+    execution_backends: BTreeMap<(String, u32), Arc<dyn ExecutionBackend>>,
+    artifact_stores: BTreeMap<(String, u32), Arc<dyn ArtifactStore>>,
+    delivery_destinations: BTreeMap<(String, u32), Arc<dyn DeliveryDestination>>,
+}
+
+impl AdapterRegistry {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    pub fn register_project_provider(
+        &mut self,
+        adapter: Arc<dyn ProjectProvider>,
+        fixture: &AdapterConformanceFixture,
+    ) -> Result<(), PublishError> {
+        verify_adapter_conformance(adapter.as_ref(), AdapterKind::ProjectProvider, fixture)?;
+        insert_adapter(&mut self.project_providers, adapter)
+    }
+
+    pub fn register_artifact_processor(
+        &mut self,
+        adapter: Arc<dyn ArtifactProcessor>,
+        fixture: &AdapterConformanceFixture,
+    ) -> Result<(), PublishError> {
+        verify_adapter_conformance(adapter.as_ref(), AdapterKind::ArtifactProcessor, fixture)?;
+        insert_adapter(&mut self.artifact_processors, adapter)
+    }
+
+    pub fn register_execution_backend(
+        &mut self,
+        adapter: Arc<dyn ExecutionBackend>,
+        fixture: &AdapterConformanceFixture,
+    ) -> Result<(), PublishError> {
+        verify_adapter_conformance(adapter.as_ref(), AdapterKind::ExecutionBackend, fixture)?;
+        insert_adapter(&mut self.execution_backends, adapter)
+    }
+
+    pub fn register_artifact_store(
+        &mut self,
+        adapter: Arc<dyn ArtifactStore>,
+        fixture: &AdapterConformanceFixture,
+    ) -> Result<(), PublishError> {
+        verify_adapter_conformance(adapter.as_ref(), AdapterKind::ArtifactStore, fixture)?;
+        insert_adapter(&mut self.artifact_stores, adapter)
+    }
+
+    pub fn register_delivery_destination(
+        &mut self,
+        adapter: Arc<dyn DeliveryDestination>,
+        fixture: &AdapterConformanceFixture,
+    ) -> Result<(), PublishError> {
+        verify_adapter_conformance(adapter.as_ref(), AdapterKind::DeliveryDestination, fixture)?;
+        insert_adapter(&mut self.delivery_destinations, adapter)
+    }
+
+    pub fn descriptor(
+        &self,
+        identity: &AdapterIdentity,
+    ) -> Result<&AdapterDescriptor, PublishError> {
+        Ok(self.resolve(identity)?.descriptor())
+    }
+
+    pub fn migrate_and_validate_settings(
+        &self,
+        identity: &AdapterIdentity,
+        settings: &AdapterSettings,
+    ) -> Result<AdapterSettings, PublishError> {
+        let adapter = self.resolve(identity)?;
+        let migrated = adapter.migrate_settings(settings)?;
+        let repeated = adapter.migrate_settings(settings)?;
+        if migrated != repeated {
+            return Err(PublishError::InvalidAdapter {
+                adapter: adapter.descriptor().identity().display_name(),
+                message: "settings migration is not deterministic".to_string(),
+            });
+        }
+        adapter.validate_settings(&migrated)?;
+        Ok(migrated)
+    }
+
+    pub fn plan_fragment(
+        &self,
+        identity: &AdapterIdentity,
+        snapshot: &PlanningInputSnapshot,
+        settings: &AdapterSettings,
+    ) -> Result<Vec<PlanNodeTemplate>, PublishError> {
+        let adapter = self.resolve(identity)?;
+        let first = adapter.plan_fragment(snapshot, settings)?;
+        let second = adapter.plan_fragment(snapshot, settings)?;
+        if first != second {
+            return Err(PublishError::InvalidAdapter {
+                adapter: adapter.descriptor().identity().display_name(),
+                message: "plan fragment is not deterministic".to_string(),
+            });
+        }
+        validate_fragment(adapter.descriptor(), settings, &first, &[])?;
+        Ok(first)
+    }
+
+    pub fn validate_plan_node(&self, node: &PlanNode) -> Result<(), PublishError> {
+        let descriptor = self.descriptor(&node.adapter)?;
+        validate_operation(descriptor, &node.operation)
+    }
+
+    pub fn execute_node(
+        &self,
+        node: &PlanNode,
+        context: &AdapterExecutionContext<'_>,
+    ) -> Result<AdapterExecutionOutput, PublishError> {
+        self.resolve(&node.adapter)?.execute_node(node, context)
+    }
+
+    pub fn execute_plan(
+        &self,
+        identity: &AdapterIdentity,
+        plan: &PublishPlan,
+        executor: &mut dyn PlanNodeExecutor,
+    ) -> Result<(), PublishError> {
+        if identity.kind != AdapterKind::ExecutionBackend {
+            return Err(PublishError::AdapterKindMismatch {
+                id: identity.id.clone(),
+                expected: AdapterKind::ExecutionBackend,
+                actual: identity.kind,
+            });
+        }
+        self.resolve(identity)?.execute_plan(plan, executor)
+    }
+
+    pub fn validate_capabilities<'a, I>(&self, identities: I) -> Result<(), PublishError>
+    where
+        I: IntoIterator<Item = &'a AdapterIdentity>,
+    {
+        let mut descriptors = BTreeMap::<AdapterIdentity, &AdapterDescriptor>::new();
+        for identity in identities {
+            descriptors
+                .entry(identity.clone())
+                .or_insert(self.descriptor(identity)?);
+        }
+
+        let mut provided = BTreeMap::<&str, std::collections::BTreeSet<u32>>::new();
+        for descriptor in descriptors.values() {
+            for capability in &descriptor.capabilities.provides {
+                provided
+                    .entry(&capability.id)
+                    .or_default()
+                    .insert(capability.version);
+            }
+        }
+
+        for descriptor in descriptors.values() {
+            for requirement in &descriptor.capabilities.requires {
+                let Some(versions) = provided.get(requirement.id.as_str()) else {
+                    return Err(PublishError::MissingCapability {
+                        consumer: descriptor.identity().display_name(),
+                        capability: requirement.id.clone(),
+                    });
+                };
+                if !versions.iter().any(|version| requirement.accepts(*version)) {
+                    return Err(PublishError::IncompatibleCapability {
+                        consumer: descriptor.identity().display_name(),
+                        capability: requirement.id.clone(),
+                        minimum: requirement.minimum_version,
+                        maximum: requirement.maximum_version,
+                        provided: versions.iter().copied().collect(),
+                    });
+                }
+            }
+        }
+        Ok(())
+    }
+
+    fn resolve(&self, identity: &AdapterIdentity) -> Result<AdapterRef<'_>, PublishError> {
+        let key = (identity.id.clone(), identity.version);
+        let adapter = match identity.kind {
+            AdapterKind::ProjectProvider => self
+                .project_providers
+                .get(&key)
+                .map(|adapter| AdapterRef::ProjectProvider(adapter.as_ref())),
+            AdapterKind::ArtifactProcessor => self
+                .artifact_processors
+                .get(&key)
+                .map(|adapter| AdapterRef::ArtifactProcessor(adapter.as_ref())),
+            AdapterKind::ExecutionBackend => self
+                .execution_backends
+                .get(&key)
+                .map(|adapter| AdapterRef::ExecutionBackend(adapter.as_ref())),
+            AdapterKind::ArtifactStore => self
+                .artifact_stores
+                .get(&key)
+                .map(|adapter| AdapterRef::ArtifactStore(adapter.as_ref())),
+            AdapterKind::DeliveryDestination => self
+                .delivery_destinations
+                .get(&key)
+                .map(|adapter| AdapterRef::DeliveryDestination(adapter.as_ref())),
+        };
+
+        adapter.ok_or_else(|| self.unresolved_adapter(identity))
+    }
+
+    fn unresolved_adapter(&self, identity: &AdapterIdentity) -> PublishError {
+        let available = match identity.kind {
+            AdapterKind::ProjectProvider => {
+                available_versions(&self.project_providers, &identity.id)
+            }
+            AdapterKind::ArtifactProcessor => {
+                available_versions(&self.artifact_processors, &identity.id)
+            }
+            AdapterKind::ExecutionBackend => {
+                available_versions(&self.execution_backends, &identity.id)
+            }
+            AdapterKind::ArtifactStore => available_versions(&self.artifact_stores, &identity.id),
+            AdapterKind::DeliveryDestination => {
+                available_versions(&self.delivery_destinations, &identity.id)
+            }
+        };
+        if available.is_empty() {
+            PublishError::AdapterNotRegistered {
+                kind: identity.kind,
+                id: identity.id.clone(),
+                version: identity.version,
+            }
+        } else {
+            PublishError::AdapterVersionMismatch {
+                kind: identity.kind,
+                id: identity.id.clone(),
+                requested: identity.version,
+                available,
+            }
+        }
+    }
+}
+
+enum AdapterRef<'a> {
+    ProjectProvider(&'a dyn ProjectProvider),
+    ArtifactProcessor(&'a dyn ArtifactProcessor),
+    ExecutionBackend(&'a dyn ExecutionBackend),
+    ArtifactStore(&'a dyn ArtifactStore),
+    DeliveryDestination(&'a dyn DeliveryDestination),
+}
+
+macro_rules! dispatch_adapter {
+    ($self:expr, $adapter:ident => $expression:expr) => {
+        match $self {
+            AdapterRef::ProjectProvider($adapter) => $expression,
+            AdapterRef::ArtifactProcessor($adapter) => $expression,
+            AdapterRef::ExecutionBackend($adapter) => $expression,
+            AdapterRef::ArtifactStore($adapter) => $expression,
+            AdapterRef::DeliveryDestination($adapter) => $expression,
+        }
+    };
+}
+
+impl<'a> AdapterRef<'a> {
+    fn descriptor(&self) -> &'a AdapterDescriptor {
+        dispatch_adapter!(self, adapter => adapter.descriptor())
+    }
+
+    fn migrate_settings(
+        &self,
+        settings: &AdapterSettings,
+    ) -> Result<AdapterSettings, PublishError> {
+        dispatch_adapter!(self, adapter => adapter.migrate_settings(settings))
+    }
+
+    fn validate_settings(&self, settings: &AdapterSettings) -> Result<(), PublishError> {
+        dispatch_adapter!(self, adapter => adapter.validate_settings(settings))
+    }
+
+    fn plan_fragment(
+        &self,
+        snapshot: &PlanningInputSnapshot,
+        settings: &AdapterSettings,
+    ) -> Result<Vec<PlanNodeTemplate>, PublishError> {
+        dispatch_adapter!(self, adapter => adapter.plan_fragment(snapshot, settings))
+    }
+
+    fn execute_node(
+        &self,
+        node: &PlanNode,
+        context: &AdapterExecutionContext<'_>,
+    ) -> Result<AdapterExecutionOutput, PublishError> {
+        dispatch_adapter!(self, adapter => adapter.execute_node(node, context))
+    }
+
+    fn execute_plan(
+        &self,
+        plan: &PublishPlan,
+        executor: &mut dyn PlanNodeExecutor,
+    ) -> Result<(), PublishError> {
+        dispatch_adapter!(self, adapter => adapter.execute_plan(plan, executor))
+    }
+}
+
+pub fn verify_adapter_conformance<T: AdapterContract + ?Sized>(
+    adapter: &T,
+    expected_kind: AdapterKind,
+    fixture: &AdapterConformanceFixture,
+) -> Result<(), PublishError> {
+    let descriptor = adapter.descriptor();
+    validate_descriptor(descriptor, expected_kind)?;
+    descriptor
+        .capabilities
+        .validate(&descriptor.identity().display_name())?;
+
+    let default_settings = adapter.default_settings();
+    let settings = adapter.migrate_settings(&default_settings)?;
+    let repeated_settings = adapter.migrate_settings(&default_settings)?;
+    if settings != repeated_settings {
+        return Err(PublishError::InvalidAdapter {
+            adapter: descriptor.identity().display_name(),
+            message: "settings migration is not deterministic".to_string(),
+        });
+    }
+    adapter.validate_settings(&settings)?;
+    if adapter.summarize_settings(&settings)?.trim().is_empty() {
+        return Err(PublishError::InvalidAdapter {
+            adapter: descriptor.identity().display_name(),
+            message: "settings summary cannot be empty".to_string(),
+        });
+    }
+
+    let first = adapter.plan_fragment(&fixture.snapshot, &settings)?;
+    let second = adapter.plan_fragment(&fixture.snapshot, &settings)?;
+    if first != second {
+        return Err(PublishError::InvalidAdapter {
+            adapter: descriptor.identity().display_name(),
+            message: "plan fragment is not deterministic".to_string(),
+        });
+    }
+
+    validate_fragment(descriptor, &settings, &first, &fixture.forbidden_values)
+}
+
+fn validate_descriptor(
+    descriptor: &AdapterDescriptor,
+    expected_kind: AdapterKind,
+) -> Result<(), PublishError> {
+    if descriptor.kind != expected_kind {
+        return Err(PublishError::AdapterKindMismatch {
+            id: descriptor.id.clone(),
+            expected: expected_kind,
+            actual: descriptor.kind,
+        });
+    }
+    if descriptor.contract_version != ADAPTER_CONTRACT_VERSION {
+        return Err(PublishError::UnsupportedAdapterContractVersion {
+            actual: descriptor.contract_version,
+            expected: ADAPTER_CONTRACT_VERSION,
+        });
+    }
+    if descriptor.id.trim().is_empty() || descriptor.version == 0 || descriptor.schema.version == 0
+    {
+        return Err(PublishError::InvalidAdapter {
+            adapter: descriptor.identity().display_name(),
+            message: "id, adapter version, and schema version must be present".to_string(),
+        });
+    }
+    if descriptor
+        .allowed_programs
+        .iter()
+        .any(|program| !is_opaque_executable_id(program))
+    {
+        return Err(PublishError::InvalidAdapter {
+            adapter: descriptor.identity().display_name(),
+            message: "allowed programs must be namespaced opaque executable ids".to_string(),
+        });
+    }
+    Ok(())
+}
+
+fn is_opaque_executable_id(program: &str) -> bool {
+    let mut parts = program.split(':');
+    let namespace = parts.next().unwrap_or_default();
+    let name = parts.next().unwrap_or_default();
+    parts.next().is_none()
+        && [namespace, name].iter().all(|part| {
+            !part.is_empty()
+                && part
+                    .bytes()
+                    .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'.' | b'_' | b'-'))
+        })
+}
+
+fn validate_fragment(
+    descriptor: &AdapterDescriptor,
+    settings: &AdapterSettings,
+    nodes: &[PlanNodeTemplate],
+    forbidden_values: &[String],
+) -> Result<(), PublishError> {
+    let mut ids = std::collections::BTreeSet::new();
+    for node in nodes {
+        if node.local_id.trim().is_empty() || !ids.insert(&node.local_id) {
+            return Err(PublishError::InvalidAdapter {
+                adapter: descriptor.identity().display_name(),
+                message: "plan node ids must be non-empty and unique".to_string(),
+            });
+        }
+        validate_operation(descriptor, &node.operation)?;
+    }
+
+    let serialized = serde_json::to_string(&(settings, nodes)).map_err(|error| {
+        PublishError::InvalidAdapter {
+            adapter: descriptor.identity().display_name(),
+            message: format!("adapter settings and plan fragment cannot be serialized: {error}"),
+        }
+    })?;
+    if forbidden_values
+        .iter()
+        .any(|value| !value.is_empty() && serialized.contains(value.as_str()))
+    {
+        return Err(PublishError::InvalidAdapter {
+            adapter: descriptor.identity().display_name(),
+            message: "adapter settings or plan fragment contains a forbidden value".to_string(),
+        });
+    }
+    Ok(())
+}
+
+fn validate_operation(
+    descriptor: &AdapterDescriptor,
+    operation: &PlanOperation,
+) -> Result<(), PublishError> {
+    operation.validate()?;
+    if let PlanOperation::RunProgram { program, .. } = operation {
+        if !descriptor.allowed_programs.contains(program) {
+            return Err(PublishError::InvalidAdapter {
+                adapter: descriptor.identity().display_name(),
+                message: format!("program {program} is not declared by the adapter"),
+            });
+        }
+    }
+    Ok(())
+}
+
+fn validate_settings_against_schema(
+    descriptor: &AdapterDescriptor,
+    settings: &AdapterSettings,
+) -> Result<(), PublishError> {
+    if settings.schema_version != descriptor.schema.version {
+        return Err(PublishError::UnsupportedSchemaVersion {
+            adapter: descriptor.identity().display_name(),
+            actual: settings.schema_version,
+            current: descriptor.schema.version,
+        });
+    }
+
+    if let Some(key) = settings
+        .values
+        .keys()
+        .find(|key| !descriptor.schema.fields.contains_key(*key))
+    {
+        return Err(PublishError::InvalidAdapterSettings {
+            adapter: descriptor.identity().display_name(),
+            message: format!("unknown setting {key}"),
+        });
+    }
+
+    for (key, field) in &descriptor.schema.fields {
+        let value = settings.values.get(key);
+        if field.required && value.is_none() {
+            return Err(PublishError::InvalidAdapterSettings {
+                adapter: descriptor.identity().display_name(),
+                message: format!("missing required setting {key}"),
+            });
+        }
+        let Some(value) = value else {
+            continue;
+        };
+        let valid = match field.value_type {
+            publish_domain::AdapterSchemaValueType::String => value.is_string(),
+            publish_domain::AdapterSchemaValueType::Boolean => value.is_boolean(),
+            publish_domain::AdapterSchemaValueType::Number => value.is_number(),
+        };
+        if !valid {
+            return Err(PublishError::InvalidAdapterSettings {
+                adapter: descriptor.identity().display_name(),
+                message: format!("setting {key} has the wrong type"),
+            });
+        }
+    }
+    Ok(())
+}
+
+fn insert_adapter<T: AdapterContract + ?Sized>(
+    adapters: &mut BTreeMap<(String, u32), Arc<T>>,
+    adapter: Arc<T>,
+) -> Result<(), PublishError> {
+    let descriptor = adapter.descriptor();
+    let key = (descriptor.id.clone(), descriptor.version);
+    if adapters.contains_key(&key) {
+        return Err(PublishError::DuplicateAdapter {
+            kind: descriptor.kind,
+            id: descriptor.id.clone(),
+            version: descriptor.version,
+        });
+    }
+    adapters.insert(key, adapter);
+    Ok(())
+}
+
+fn available_versions<T: ?Sized>(adapters: &BTreeMap<(String, u32), Arc<T>>, id: &str) -> Vec<u32> {
+    adapters
+        .keys()
+        .filter_map(|(adapter_id, version)| (adapter_id == id).then_some(*version))
+        .collect()
+}
