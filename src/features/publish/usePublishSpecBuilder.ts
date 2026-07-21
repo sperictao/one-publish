@@ -17,20 +17,35 @@ export function usePublishSpecBuilder(params: {
   specVersion: number;
   getCurrentConfig: () => DotnetPublishIntentConfig;
 }) {
+  const {
+    activeProviderId,
+    activeProviderUsesProjectFile,
+    activeProviderParameters,
+    projectInfo,
+    selectedRepo,
+    specVersion,
+    getCurrentConfig,
+  } = params;
   const buildPublishSpec = useCallback((): ProviderPublishSpec | null => {
     return buildProviderPublishSpec({
-      providerId: params.activeProviderId,
-      providerUsesProjectFile: params.activeProviderUsesProjectFile,
-      providerParameters: params.activeProviderParameters,
-      projectInfo: params.projectInfo,
-      repository: params.selectedRepo,
-      specVersion: params.specVersion,
+      providerId: activeProviderId,
+      providerUsesProjectFile: activeProviderUsesProjectFile,
+      providerParameters: activeProviderParameters,
+      projectInfo,
+      repository: selectedRepo,
+      specVersion,
       dotnetConfig:
-        params.activeProviderId === "dotnet"
-          ? params.getCurrentConfig()
-          : undefined,
+        activeProviderId === "dotnet" ? getCurrentConfig() : undefined,
     });
-  }, [params]);
+  }, [
+    activeProviderId,
+    activeProviderParameters,
+    activeProviderUsesProjectFile,
+    getCurrentConfig,
+    projectInfo,
+    selectedRepo,
+    specVersion,
+  ]);
 
   return { buildPublishSpec };
 }

@@ -325,4 +325,108 @@ describe("PublishRunCard", () => {
 
     expect(screen.queryByText(/个警告/)).not.toBeInTheDocument();
   });
+
+  it("展示选中配置对应的本地计划摘要与阻塞原因", () => {
+    render(
+      <PublishRunCard
+        outputLog=""
+        publishResult={null}
+        appT={{ outputLogTitle: "执行发布", noOutput: "无输出" }}
+        preparedRuntime={{
+          configurationId: "configuration-A",
+          configurationRevisionId: "revision-A",
+          command: {
+            program: "dotnet",
+            args: ["publish"],
+            working_dir: "/repo",
+            display_command: "dotnet publish /repo/App.csproj",
+            env: [],
+          },
+          plan: {
+            version: 1,
+            digest: "plan-digest-A",
+            snapshotDigest: "snapshot-digest-A",
+            executionBackend: "local-execution",
+            nodes: [
+              {
+                id: "build",
+                stage: "build",
+                adapterId: "selected-project-provider",
+                operation: "selected-project-provider:publish",
+                irreversible: false,
+              },
+              {
+                id: "persist",
+                stage: "persist_manifest",
+                adapterId: "temporary-artifact-store",
+                operation: "persist_manifest",
+                irreversible: false,
+              },
+            ],
+          },
+          blockedReason: "publish output access is denied",
+          runtimeToken: "",
+        }}
+        publishActions={{
+          isPublishing: false,
+          isCancellingPublish: false,
+          startDisabled: true,
+          onStartPublish: vi.fn(),
+          onCancelPublish: vi.fn(),
+        }}
+      />
+    );
+
+    const plan = screen.getByTestId("publish-runtime-plan");
+    expect(plan).toHaveTextContent("revision-A");
+    expect(plan).toHaveTextContent("plan-digest-A");
+    expect(plan).toHaveTextContent("local-execution");
+    expect(plan).toHaveTextContent("build");
+    expect(plan).toHaveTextContent("persist_manifest");
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "publish output access is denied"
+    );
+    expect(screen.getByTestId("publish-execute-btn")).toBeDisabled();
+  });
+
+  it("展示 Manifest、稳定 Receipt ID 与最终 Delivery Lifecycle", () => {
+    render(
+      <PublishRunCard
+        outputLog="published"
+        publishResult={null}
+        appT={{ outputLogTitle: "执行发布", noOutput: "无输出" }}
+        runtimeResult={{
+          attempt: {
+            attemptId: "attempt-A",
+            backendRunId: "backend-run-A",
+            configurationRevisionId: "revision-A",
+            planDigest: "plan-digest-A",
+            executionBackend: "local-execution",
+            status: "published",
+            manifestDigest: "manifest-digest-A",
+            manifest: { digest: "manifest-digest-A", artifactCount: 2 },
+            receipts: [
+              {
+                receiptId: "receipt-stable-A",
+                routeId: "local-delivery",
+                manifestDigest: "manifest-digest-A",
+                status: "published",
+                externalReference: "/repo/publish-output",
+              },
+            ],
+            events: [],
+            error: null,
+          },
+          publishResult: null,
+        }}
+        publishActions={null}
+      />
+    );
+
+    const result = screen.getByTestId("publish-runtime-result");
+    expect(result).toHaveTextContent("manifest-digest-A");
+    expect(result).toHaveTextContent("2");
+    expect(result).toHaveTextContent("receipt-stable-A");
+    expect(result).toHaveTextContent("published");
+  });
 });

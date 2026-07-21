@@ -10,8 +10,10 @@ import {
   cancelProviderPublish,
   executeProviderPublish,
   importProviderPublishSpecFromCommand,
+  preparePublishRuntime,
   preflightProviderPublishOutput,
   renderProviderPublish,
+  startPublishRuntime,
   type ProviderPublishSpec,
 } from "@/features/publish/publishRuntime";
 
@@ -99,6 +101,65 @@ describe("publishRuntime", () => {
       command: "dotnet publish /repo/App.csproj",
       providerId: "dotnet",
       projectPath: "/repo/App.csproj",
+    });
+  });
+
+  it("prepares and starts the sealed local publish runtime through request contracts", async () => {
+    const prepared = {
+      configurationId: "configuration-A",
+      configurationRevisionId: "revision-A",
+      command: {
+        program: "dotnet",
+        args: ["publish", "/repo/App.csproj"],
+        working_dir: "/repo",
+        display_command: "dotnet publish /repo/App.csproj",
+        env: [],
+      },
+      plan: {
+        version: 1,
+        digest: "plan-A",
+        snapshotDigest: "snapshot-A",
+        executionBackend: "local-execution",
+        nodes: [],
+      },
+      blockedReason: null,
+      runtimeToken: "sealed-runtime-A",
+    };
+    const started = {
+      attempt: {
+        attemptId: "attempt-A",
+        backendRunId: "backend-run-A",
+        configurationRevisionId: "revision-A",
+        planDigest: "plan-A",
+        executionBackend: "local-execution",
+        status: "published",
+        manifestDigest: "manifest-A",
+        manifest: { digest: "manifest-A", artifactCount: 2 },
+        receipts: [],
+        events: [],
+        error: null,
+      },
+      publishResult: null,
+    };
+    invokeMock.mockResolvedValueOnce(prepared).mockResolvedValueOnce(started);
+
+    const prepareRequest = {
+      repositoryId: "repository-A",
+      repositoryPath: "/repo",
+      configurationId: "configuration-A",
+      configurationRevisionId: "revision-A",
+      spec,
+    };
+    await expect(preparePublishRuntime(prepareRequest)).resolves.toBe(prepared);
+    await expect(
+      startPublishRuntime({ runtimeToken: prepared.runtimeToken })
+    ).resolves.toBe(started);
+
+    expect(invokeMock).toHaveBeenNthCalledWith(1, "prepare_publish_runtime", {
+      request: prepareRequest,
+    });
+    expect(invokeMock).toHaveBeenNthCalledWith(2, "start_publish_runtime", {
+      request: { runtimeToken: "sealed-runtime-A" },
     });
   });
 });

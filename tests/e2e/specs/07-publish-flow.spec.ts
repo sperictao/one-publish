@@ -97,6 +97,40 @@ test.describe("Full Publish Flow — Happy Path", () => {
     await expect(commandPreview).toBeVisible({ timeout: 5000 });
     await expect(commandPreview).toContainText("FolderProfile");
   });
+
+  test("saved configuration runs through plan → Manifest → Receipt → lifecycle", async ({
+    page,
+  }) => {
+    await gotoAppWithPublishConfig(page);
+
+    await page
+      .locator(
+        "[data-list-item-id='userprofile:profile-folder'] button[aria-pressed]"
+      )
+      .click();
+
+    const plan = page.locator("[data-testid='publish-runtime-plan']");
+    await expect(plan).toBeVisible({ timeout: 10000 });
+    await expect(plan).toContainText("profile-folder-revision-1");
+    await expect(plan).toContainText("local-execution");
+    await expect(plan).toContainText("persist_manifest");
+
+    const publishBtn = page.locator("[data-testid='publish-execute-btn']");
+    await expect(publishBtn).not.toBeDisabled();
+    await publishBtn.click();
+
+    const runtimeResult = page.locator(
+      "[data-testid='publish-runtime-result']"
+    );
+    await expect(runtimeResult).toBeVisible({ timeout: 15000 });
+    await expect(runtimeResult).toContainText(
+      "manifest-profile-folder-revision-1"
+    );
+    await expect(runtimeResult).toContainText(
+      "receipt-profile-folder-revision-1"
+    );
+    await expect(runtimeResult).toContainText("published");
+  });
 });
 
 test.describe("Full Publish Flow — Error Paths", () => {

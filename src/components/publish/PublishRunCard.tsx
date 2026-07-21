@@ -18,6 +18,10 @@ import {
   XCircle,
 } from "lucide-react";
 import type { PublishResult } from "@/features/publish/publishRuntime";
+import type {
+  PreparedPublishRuntime,
+  PublishRuntimeResult,
+} from "@/generated/tauri-contracts";
 import {
   useElapsedTimer,
   formatElapsed,
@@ -49,6 +53,10 @@ export interface PublishRunCardProps {
   publishResult: PublishResult | null;
   appT: Record<string, string | undefined>;
   publishActions: PublishRunCardActions | null;
+  preparedRuntime?: PreparedPublishRuntime | null;
+  activeRuntime?: PreparedPublishRuntime | null;
+  runtimeResult?: PublishRuntimeResult | null;
+  runtimePreparationError?: string | null;
   isRefreshing?: boolean;
 }
 
@@ -59,6 +67,10 @@ export const PublishRunCard = memo(function PublishRunCard({
   outputLog: currentOutputLog,
   getOutputLogSnapshot,
   publishResult: currentPublishResult,
+  preparedRuntime: currentPreparedRuntime = null,
+  activeRuntime: currentActiveRuntime = null,
+  runtimeResult: currentRuntimeResult = null,
+  runtimePreparationError: currentRuntimePreparationError = null,
   appT,
   publishActions: currentPublishActions,
   isRefreshing = false,
@@ -70,6 +82,10 @@ export const PublishRunCard = memo(function PublishRunCard({
     outputLog: currentOutputLog,
     publishResult: currentPublishResult,
     publishActions: currentPublishActions,
+    preparedRuntime: currentPreparedRuntime,
+    activeRuntime: currentActiveRuntime,
+    runtimeResult: currentRuntimeResult,
+    runtimePreparationError: currentRuntimePreparationError,
   });
 
   if (!isRefreshing) {
@@ -77,18 +93,35 @@ export const PublishRunCard = memo(function PublishRunCard({
       outputLog: currentOutputLog,
       publishResult: currentPublishResult,
       publishActions: currentPublishActions,
+      preparedRuntime: currentPreparedRuntime,
+      activeRuntime: currentActiveRuntime,
+      runtimeResult: currentRuntimeResult,
+      runtimePreparationError: currentRuntimePreparationError,
     };
   }
 
   const outputLog = isRefreshing
     ? frozenDisplayRef.current.outputLog
     : currentOutputLog;
-  const publishResult = isRefreshing
+  const legacyPublishResult = isRefreshing
     ? frozenDisplayRef.current.publishResult
     : currentPublishResult;
   const publishActions = isRefreshing
     ? frozenDisplayRef.current.publishActions
     : currentPublishActions;
+  const preparedRuntime = isRefreshing
+    ? frozenDisplayRef.current.preparedRuntime
+    : currentPreparedRuntime;
+  const activeRuntime = isRefreshing
+    ? frozenDisplayRef.current.activeRuntime
+    : currentActiveRuntime;
+  const runtimeResult = isRefreshing
+    ? frozenDisplayRef.current.runtimeResult
+    : currentRuntimeResult;
+  const runtimePreparationError = isRefreshing
+    ? frozenDisplayRef.current.runtimePreparationError
+    : currentRuntimePreparationError;
+  const publishResult = legacyPublishResult ?? runtimeResult?.publishResult;
 
   const handleOpenOutputDir = useCallback(async () => {
     const outputDir = publishResult?.output_dir?.trim();
@@ -116,19 +149,34 @@ export const PublishRunCard = memo(function PublishRunCard({
   const isRunning = Boolean(publishActions?.isPublishing);
   const elapsedMs = useElapsedTimer(isRunning);
 
-  if (!outputLog && !publishResult && !publishActions && !isRefreshing) {
+  if (
+    !outputLog &&
+    !publishResult &&
+    !publishActions &&
+    !preparedRuntime &&
+    !activeRuntime &&
+    !runtimeResult &&
+    !runtimePreparationError &&
+    !isRefreshing
+  ) {
     return null;
   }
 
   const publishVisualState: PublishVisualState = publishActions?.isPublishing
     ? "running"
-    : publishResult
-      ? publishResult.success
-        ? "success"
-        : publishResult.cancelled
+    : runtimeResult?.attempt.status === "published"
+      ? "success"
+      : runtimeResult?.attempt.status === "failed"
+        ? runtimeResult.publishResult?.cancelled
           ? "cancelled"
           : "failed"
-      : "idle";
+        : publishResult
+          ? publishResult.success
+            ? "success"
+            : publishResult.cancelled
+              ? "cancelled"
+              : "failed"
+          : "idle";
 
   const statusMeta =
     publishVisualState === "running"
@@ -198,7 +246,10 @@ export const PublishRunCard = memo(function PublishRunCard({
               };
 
   const StatusIcon = statusMeta.icon;
-  const successFileCount = publishResult?.file_count ?? 0;
+  const successFileCount =
+    runtimeResult?.attempt.manifest?.artifactCount ??
+    publishResult?.file_count ??
+    0;
 
   const elapsedText =
     elapsedMs > 0 && (isRunning || publishResult != null)
@@ -214,7 +265,9 @@ export const PublishRunCard = memo(function PublishRunCard({
   }
   const statusFact = statusFacts.length > 0 ? statusFacts.join(" · ") : null;
   const failureMessage =
-    publishVisualState === "failed" ? publishResult?.error?.trim() : null;
+    publishVisualState === "failed"
+      ? runtimeResult?.attempt.error?.trim() || publishResult?.error?.trim()
+      : null;
 
   // 已有执行结果（success/failed/cancelled）时日志默认收起，让结果摘要成为焦点；
   // idle/running 时保持展开，用户正在看实时日志。
@@ -260,6 +313,77 @@ export const PublishRunCard = memo(function PublishRunCard({
             </code>
           </div>
         )}
+
+        {preparedRuntime ? (
+          <section
+            data-testid="publish-runtime-plan"
+            className="min-w-0 rounded-sm border border-border bg-muted/20 px-3 py-3"
+          >
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <SectionLabel as="div">
+                {appT.publishRuntimePlanLabel || "本地发布计划"}
+              </SectionLabel>
+              <span className="font-mono text-label-12 text-muted-foreground">
+                {preparedRuntime.configurationRevisionId}
+              </span>
+            </div>
+            <dl className="mt-2 grid min-w-0 gap-1 text-label-12 sm:grid-cols-2">
+              <div className="min-w-0">
+                <dt className="text-muted-foreground">
+                  {appT.publishRuntimePlanDigestLabel || "Plan Digest"}
+                </dt>
+                <dd className="truncate font-mono">
+                  {preparedRuntime.plan.digest}
+                </dd>
+              </div>
+              <div className="min-w-0">
+                <dt className="text-muted-foreground">
+                  {appT.publishRuntimeBackendLabel || "Execution Backend"}
+                </dt>
+                <dd className="truncate font-mono">
+                  {preparedRuntime.plan.executionBackend}
+                </dd>
+              </div>
+            </dl>
+            <ol className="mt-2 flex flex-wrap gap-1.5">
+              {preparedRuntime.plan.nodes.map((node) => (
+                <li
+                  key={node.id}
+                  className="rounded-sm border border-border bg-background px-2 py-1 font-mono text-label-12 text-muted-foreground"
+                >
+                  {node.stage}
+                </li>
+              ))}
+            </ol>
+            {preparedRuntime.blockedReason ? (
+              <div
+                role="alert"
+                className="mt-2 rounded-sm border border-destructive/20 bg-destructive/5 px-3 py-2 text-copy-14 text-destructive"
+              >
+                {preparedRuntime.blockedReason}
+              </div>
+            ) : null}
+          </section>
+        ) : null}
+
+        {!preparedRuntime && runtimePreparationError ? (
+          <div
+            role="alert"
+            className="rounded-sm border border-destructive/20 bg-destructive/5 px-3 py-2 text-copy-14 text-destructive"
+          >
+            {runtimePreparationError}
+          </div>
+        ) : null}
+
+        {activeRuntime &&
+        activeRuntime.configurationRevisionId !==
+          preparedRuntime?.configurationRevisionId ? (
+          <div className="rounded-sm border border-interactive/20 bg-interactive/5 px-3 py-2 text-label-12 text-interactive">
+            {(appT.publishRuntimeActiveRevisionLabel || "正在执行配置版本") +
+              ": " +
+              activeRuntime.configurationRevisionId}
+          </div>
+        ) : null}
 
         {/* ② 动作行 */}
         {publishActions && (
@@ -454,6 +578,44 @@ export const PublishRunCard = memo(function PublishRunCard({
               </SectionLabel>
               <p className="mt-1 break-words">{failureMessage}</p>
             </div>
+          ) : null}
+
+          {runtimeResult ? (
+            <section
+              data-testid="publish-runtime-result"
+              className="rounded-sm border border-border bg-muted/20 px-3 py-3"
+            >
+              <SectionLabel as="div">
+                {appT.publishRuntimeResultLabel || "PublishRuntime 结果"}
+              </SectionLabel>
+              <dl className="mt-2 grid min-w-0 gap-2 text-label-12 sm:grid-cols-2">
+                <div className="min-w-0">
+                  <dt className="text-muted-foreground">
+                    {appT.publishRuntimeManifestLabel || "Artifact Manifest"}
+                  </dt>
+                  <dd className="truncate font-mono">
+                    {runtimeResult.attempt.manifestDigest || "-"}
+                  </dd>
+                </div>
+                <div>
+                  <dt className="text-muted-foreground">
+                    {appT.publishRuntimeArtifactCountLabel || "Artifacts"}
+                  </dt>
+                  <dd>{runtimeResult.attempt.manifest?.artifactCount ?? 0}</dd>
+                </div>
+              </dl>
+              {runtimeResult.attempt.receipts.map((receipt) => (
+                <div
+                  key={receipt.receiptId}
+                  className="mt-2 grid min-w-0 gap-1 border-t border-border pt-2 text-label-12 sm:grid-cols-2"
+                >
+                  <span className="truncate font-mono">
+                    {receipt.receiptId}
+                  </span>
+                  <span className="font-semibold">{receipt.status}</span>
+                </div>
+              ))}
+            </section>
           ) : null}
 
           {/* 发布结果警告摘要：成功但有 warning 时显示，可折叠展开列表 */}

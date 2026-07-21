@@ -47,6 +47,32 @@ export type RenderedPublishCommand = { program: string, args: Array<string>, wor
 
 export type PublishResult = { provider_id: string, success: boolean, cancelled: boolean, error: string | null, command: RenderedPublishCommand, output_log: string, output_dir: string, file_count: number, warnings: Array<string> | null, };
 
+export type PreparePublishRuntimeRequest = { repositoryId: string, repositoryPath: string, configurationId: string, configurationRevisionId: string, spec: PublishSpec, };
+
+export type RuntimePlanStage = "inspect_source" | "prepare_identity" | "build" | "collect_artifacts" | "process_artifacts" | "persist_manifest" | "stage_routes" | "publish_routes" | "observe_routes";
+
+export type RuntimePlanNodeSummary = { id: string, stage: RuntimePlanStage, adapterId: string, operation: string, irreversible: boolean, };
+
+export type RuntimePlanSummary = { version: number, digest: string, snapshotDigest: string, executionBackend: string, nodes: Array<RuntimePlanNodeSummary>, };
+
+export type PreparedPublishRuntime = { configurationId: string, configurationRevisionId: string, command: RenderedPublishCommand, plan: RuntimePlanSummary, blockedReason: string | null, runtimeToken: string, };
+
+export type StartPublishRuntimeRequest = { runtimeToken: string, };
+
+export type RuntimeAttemptStatus = "running" | "published" | "failed";
+
+export type RuntimeArtifactManifestSummary = { digest: string, artifactCount: number, };
+
+export type RuntimeDeliveryStatus = "pending" | "staged" | "submitted" | "published" | "failed" | "rejected" | "cancelled" | "expired";
+
+export type RuntimeDeliveryReceiptSummary = { receiptId: string, routeId: string, manifestDigest: string, status: RuntimeDeliveryStatus, externalReference: string, };
+
+export type RuntimePublishEventSummary = { eventId: string, planNodeId: string, kind: string, manifestDigest: string | null, receiptId: string | null, deliveryStatus: string | null, error: string | null, };
+
+export type RuntimeAttemptResult = { attemptId: string, backendRunId: string, configurationRevisionId: string, planDigest: string, executionBackend: string, status: RuntimeAttemptStatus, manifestDigest: string | null, manifest: RuntimeArtifactManifestSummary | null, receipts: Array<RuntimeDeliveryReceiptSummary>, events: Array<RuntimePublishEventSummary>, error: string | null, };
+
+export type PublishRuntimeResult = { attempt: RuntimeAttemptResult, publishResult: PublishResult | null, };
+
 export type ProjectScanCandidates = { rootPath: string, solutionFiles: Array<string>, projectFiles: Array<string>, recommendedProjectFile: string | null, };
 
 export type RepositoryBranchConnectivityResult = { canConnect: boolean, };

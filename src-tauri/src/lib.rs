@@ -13,6 +13,7 @@ pub mod parameter;
 pub mod plan;
 pub mod process_utils;
 pub mod provider;
+pub mod publish_runtime;
 pub mod security;
 pub mod shortcuts;
 pub mod spec;
@@ -135,6 +136,8 @@ pub fn run() {
             commands::cancel_provider_publish,
             commands::preflight_publish_output,
             commands::describe_publish_output_target,
+            publish_runtime::prepare_publish_runtime,
+            publish_runtime::start_publish_runtime,
             commands::check_update,
             commands::install_update,
             commands::get_updater_help_paths,

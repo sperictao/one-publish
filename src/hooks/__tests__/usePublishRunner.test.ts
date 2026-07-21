@@ -22,6 +22,8 @@ const mocks = vi.hoisted(() => ({
   setTrayPublishStatus: vi.fn(),
   showMainWindow: vi.fn(),
   renderPublishCommand: vi.fn(),
+  preparePublishRuntime: vi.fn(),
+  startPublishRuntime: vi.fn(),
   useDotnetPublishSelection: vi.fn(),
   usePublishSpecBuilder: vi.fn(),
 }));
@@ -91,6 +93,8 @@ vi.mock("@/features/publish/publishRuntime", () => ({
   cancelProviderPublish: () => mocks.invoke("cancel_provider_publish"),
   renderProviderPublish: mocks.renderPublishCommand,
   preflightProviderPublishOutput: mocks.preflightPublishOutput,
+  preparePublishRuntime: mocks.preparePublishRuntime,
+  startPublishRuntime: mocks.startPublishRuntime,
 }));
 
 vi.mock("@/lib/store/api", async () => {
@@ -196,6 +200,62 @@ function createPublishResult(
   };
 }
 
+function createPreparedRuntime(revision: string) {
+  return {
+    configurationId: "profile-42",
+    configurationRevisionId: revision,
+    command: {
+      ...createRenderedCommand(),
+      env: [],
+    },
+    plan: {
+      version: 1,
+      digest: `plan-${revision}`,
+      snapshotDigest: `snapshot-${revision}`,
+      executionBackend: "local-execution",
+      nodes: [
+        {
+          id: "build",
+          stage: "build" as const,
+          adapterId: "selected-project-provider",
+          operation: "selected-project-provider:publish",
+          irreversible: false,
+        },
+      ],
+    },
+    blockedReason: null,
+    runtimeToken: `token-${revision}`,
+  };
+}
+
+function createRuntimeResult(revision: string) {
+  const publishResult = createPublishResult();
+  return {
+    attempt: {
+      attemptId: `attempt-${revision}`,
+      backendRunId: `backend-${revision}`,
+      configurationRevisionId: revision,
+      planDigest: `plan-${revision}`,
+      executionBackend: "local-execution",
+      status: "published" as const,
+      manifestDigest: `manifest-${revision}`,
+      manifest: { digest: `manifest-${revision}`, artifactCount: 3 },
+      receipts: [
+        {
+          receiptId: `receipt-${revision}`,
+          routeId: "local-delivery",
+          manifestDigest: `manifest-${revision}`,
+          status: "published",
+          externalReference: "/exports/App/Release",
+        },
+      ],
+      events: [],
+      error: null,
+    },
+    publishResult,
+  };
+}
+
 function createRunnerProps() {
   return {
     appT: {
@@ -270,6 +330,14 @@ describe("usePublishRunner", () => {
     mocks.analyzePublishExecutionFailure.mockReturnValue("process_failed");
     mocks.setTrayPublishStatus.mockResolvedValue(true);
     mocks.renderPublishCommand.mockResolvedValue(createRenderedCommand());
+    mocks.preparePublishRuntime.mockImplementation(
+      async (request: { configurationRevisionId: string }) =>
+        createPreparedRuntime(request.configurationRevisionId)
+    );
+    mocks.startPublishRuntime.mockImplementation(
+      async (request: { runtimeToken: string }) =>
+        createRuntimeResult(request.runtimeToken.replace("token-", ""))
+    );
     buildPublishSpecMock = vi.fn(() => ({
       version: 1,
       provider_id: "dotnet",
@@ -382,6 +450,12 @@ describe("usePublishRunner", () => {
     props.configurationId = "profile-42";
     props.configurationRevisionId = "revision-7";
     const { result } = renderHook(() => usePublishRunner(props));
+
+    await waitFor(() => {
+      expect(result.current.preparedRuntime?.configurationRevisionId).toBe(
+        "revision-7"
+      );
+    });
 
     await act(async () => {
       await result.current.startPublish();
@@ -1308,6 +1382,90 @@ describe("usePublishRunner", () => {
     expect(usePublishStore.getState().isPublishing).toBe(true);
 
     usePublishStore.getState().setIsPublishing(false);
+  });
+
+  it("切换选中配置只更新下一次手动执行，不改变已经启动的 Attempt", async () => {
+    mocks.runEnvironmentCheck.mockResolvedValue(readyEnvironment);
+    mocks.useDotnetPublishSelection.mockReturnValue({
+      getCurrentConfig: vi.fn(),
+      selectionIdentity: {
+        kind: "user-profile",
+        profileId: "profile-42",
+        configKey: "userprofile:profile-42",
+      },
+      recentConfigKeyForCurrentSelection: "userprofile:profile-42",
+      isResolvingSelectedProjectProfile: false,
+    });
+    let resolveAttemptA: (
+      value: ReturnType<typeof createRuntimeResult>
+    ) => void = () => {};
+    mocks.startPublishRuntime.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          resolveAttemptA = resolve;
+        })
+    );
+
+    const props = createRunnerProps();
+    props.isCustomMode = true;
+    props.selectedPreset = "userprofile:profile-42";
+    props.configurationId = "profile-42";
+    props.configurationRevisionId = "revision-A";
+    const { result, rerender } = renderHook(
+      (hookProps: ReturnType<typeof createRunnerProps>) =>
+        usePublishRunner(hookProps),
+      { initialProps: props }
+    );
+
+    await waitFor(() => {
+      expect(result.current.preparedRuntime?.configurationRevisionId).toBe(
+        "revision-A"
+      );
+    });
+
+    let attemptA: Promise<void> | undefined;
+    act(() => {
+      attemptA = result.current.startPublish();
+    });
+    await waitFor(() => {
+      expect(mocks.startPublishRuntime).toHaveBeenCalledWith({
+        runtimeToken: "token-revision-A",
+      });
+      expect(result.current.activeRuntime?.configurationRevisionId).toBe(
+        "revision-A"
+      );
+    });
+
+    rerender({
+      ...props,
+      configurationRevisionId: "revision-B",
+    });
+    await waitFor(() => {
+      expect(result.current.preparedRuntime?.configurationRevisionId).toBe(
+        "revision-B"
+      );
+      expect(result.current.activeRuntime?.configurationRevisionId).toBe(
+        "revision-A"
+      );
+    });
+
+    await act(async () => {
+      resolveAttemptA(createRuntimeResult("revision-A"));
+      await attemptA;
+    });
+    expect(result.current.runtimeResult?.attempt.configurationRevisionId).toBe(
+      "revision-A"
+    );
+
+    await act(async () => {
+      await result.current.startPublish();
+    });
+    expect(mocks.startPublishRuntime).toHaveBeenLastCalledWith({
+      runtimeToken: "token-revision-B",
+    });
+    expect(result.current.activeRuntime?.configurationRevisionId).toBe(
+      "revision-B"
+    );
   });
 
   it("isPublishing_set_during_preflight", async () => {

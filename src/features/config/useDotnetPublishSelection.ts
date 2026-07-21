@@ -56,42 +56,51 @@ export function useDotnetPublishSelection(params: {
   projectInfo: ProjectInfo | null;
   presets: DotnetPreset[];
 }) {
+  const {
+    activeProviderId,
+    selectedPreset,
+    isCustomMode,
+    customConfig,
+    defaultOutputDir,
+    projectInfo,
+    presets,
+  } = params;
   const buildDefaultScopedOutputDir = useCallback(
     (configuration?: string) => {
-      if (!params.defaultOutputDir) {
+      if (!defaultOutputDir) {
         return "";
       }
 
       const resolvedConfiguration = configuration?.trim() || "Release";
-      const projectName = params.projectInfo?.project_file
-        ? stripFileExtension(getPathBasename(params.projectInfo.project_file))
-        : params.projectInfo?.root_path
-          ? getPathBasename(params.projectInfo.root_path)
+      const projectName = projectInfo?.project_file
+        ? stripFileExtension(getPathBasename(projectInfo.project_file))
+        : projectInfo?.root_path
+          ? getPathBasename(projectInfo.root_path)
           : "";
 
       return projectName
-        ? joinPath(params.defaultOutputDir, projectName, resolvedConfiguration)
-        : joinPath(params.defaultOutputDir, resolvedConfiguration);
+        ? joinPath(defaultOutputDir, projectName, resolvedConfiguration)
+        : joinPath(defaultOutputDir, resolvedConfiguration);
     },
-    [params.defaultOutputDir, params.projectInfo]
+    [defaultOutputDir, projectInfo]
   );
 
   const selectionIdentity = useMemo(
     () =>
       resolvePublishSelectionIdentity({
-        activeProviderId: params.activeProviderId,
-        isCustomMode: params.isCustomMode,
-        selectedPreset: params.selectedPreset,
+        activeProviderId,
+        isCustomMode,
+        selectedPreset,
       }),
-    [params.activeProviderId, params.isCustomMode, params.selectedPreset]
+    [activeProviderId, isCustomMode, selectedPreset]
   );
   const selectedProjectProfileName =
     getProjectProfileNameFromSelection(selectionIdentity);
 
   const getCurrentConfig = useCallback((): PublishConfig => {
-    if (params.isCustomMode) {
-      const config = storeConfigToPublishConfig(params.customConfig);
-      if (!config.output_dir && params.defaultOutputDir) {
+    if (isCustomMode) {
+      const config = storeConfigToPublishConfig(customConfig);
+      if (!config.output_dir && defaultOutputDir) {
         return {
           ...config,
           output_dir: buildDefaultScopedOutputDir(config.configuration),
@@ -118,11 +127,9 @@ export function useDotnetPublishSelection(params: {
       };
     }
 
-    const preset = params.presets.find(
-      (item) => item.id === params.selectedPreset
-    );
+    const preset = presets.find((item) => item.id === selectedPreset);
     if (!preset) {
-      const config = storeConfigToPublishConfig(params.customConfig);
+      const config = storeConfigToPublishConfig(customConfig);
       return {
         ...config,
         output_dir:
@@ -131,14 +138,10 @@ export function useDotnetPublishSelection(params: {
       };
     }
 
-    const outputDir = params.defaultOutputDir
+    const outputDir = defaultOutputDir
       ? buildDefaultScopedOutputDir(preset.config.configuration)
-      : params.projectInfo
-        ? joinPath(
-            params.projectInfo.root_path,
-            "publish",
-            params.selectedPreset
-          )
+      : projectInfo
+        ? joinPath(projectInfo.root_path, "publish", selectedPreset)
         : "";
 
     return {
@@ -154,7 +157,16 @@ export function useDotnetPublishSelection(params: {
       use_profile: false,
       profile_name: "",
     };
-  }, [buildDefaultScopedOutputDir, params, selectedProjectProfileName]);
+  }, [
+    buildDefaultScopedOutputDir,
+    customConfig,
+    defaultOutputDir,
+    isCustomMode,
+    presets,
+    projectInfo,
+    selectedPreset,
+    selectedProjectProfileName,
+  ]);
 
   const recentConfigKeyForCurrentSelection = useMemo(() => {
     return getRecentConfigKeyFromSelection(selectionIdentity);

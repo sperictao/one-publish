@@ -43,6 +43,9 @@ regex = "1.11"
 semver = "1.0"
 toml_edit = "0.23"
 ts-rs = { version = "9.0.1", features = ["chrono-impl", "serde-json-impl"] }
+publish-adapters = { path = "../crates/publish-adapters" }
+publish-domain = { path = "../crates/publish-domain" }
+publish-runner-core = { path = "../crates/publish-runner-core" }
 
 [target.'cfg(any(target_os = "macos", target_os = "windows", target_os = "linux"))'.dependencies]
 tauri-plugin-single-instance = "2"

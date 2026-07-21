@@ -8,7 +8,11 @@ import { renderPublishCommand } from "@/features/publish/renderPublishCommand";
 import { createPublishPreflightPipeline } from "@/features/publish/publishPreflight";
 import { getRecentConfigKeyFromSelection } from "@/features/config/publishConfigIdentity";
 import type { DotnetPreset } from "@/features/config/dotnetPresets";
-import type { ProviderPublishSpec } from "@/features/publish/publishRuntime";
+import {
+  preparePublishRuntime,
+  type PreparedPublishRuntime,
+  type ProviderPublishSpec,
+} from "@/features/publish/publishRuntime";
 import type { ProjectInfo, PublishConfigStore } from "@/lib/store/types";
 import type { ParameterValue } from "@/types/parameters";
 import type { PublishResult } from "@/generated/tauri-contracts";
@@ -20,6 +24,7 @@ export function buildPublishPresentationScopeKey(params: {
   selectionKey: string;
   projectFile: string | null;
   specVersion: number;
+  configurationRevisionId?: string | null;
 }) {
   return JSON.stringify({
     selectedRepoId: params.selectedRepoId ?? params.selectedRepoPath,
@@ -27,6 +32,7 @@ export function buildPublishPresentationScopeKey(params: {
     selectionKey: params.selectionKey,
     projectFile: params.projectFile,
     specVersion: params.specVersion,
+    configurationRevisionId: params.configurationRevisionId ?? null,
   });
 }
 
@@ -43,6 +49,8 @@ export interface UsePublishValidateParams {
   specVersion: number;
   selectedRepoId: string | null;
   selectedRepo: { path: string } | null;
+  configurationId?: string | null;
+  configurationRevisionId?: string | null;
   appT: TranslationMap;
   outputLog: string;
   resetLogCapture: () => void;
@@ -64,10 +72,16 @@ export interface UsePublishValidateParams {
 }
 
 export interface UsePublishValidateResult {
-  getPublishStartBlocker: () => "missing-repository" | "missing-project" | null;
+  getPublishStartBlocker: () =>
+    | "missing-repository"
+    | "missing-project"
+    | "runtime-not-ready"
+    | "runtime-blocked"
+    | null;
   resolvePublishRequest: () => Promise<{
     spec: ProviderPublishSpec;
     recentConfigKey?: string;
+    preparedRuntime?: PreparedPublishRuntime;
   } | null>;
   runPublishPreflight: (
     spec: ProviderPublishSpec,
@@ -82,6 +96,8 @@ export interface UsePublishValidateResult {
     spec: ProviderPublishSpec
   ) => Promise<PublishResult>;
   publishPreviewCommand: string;
+  preparedRuntime: PreparedPublishRuntime | null;
+  runtimePreparationError: string | null;
   isResolvingSelectedProjectProfile: boolean;
   publishPresentationScopeKey: string;
 }
@@ -99,6 +115,8 @@ export function usePublishValidate({
   specVersion,
   selectedRepoId,
   selectedRepo,
+  configurationId,
+  configurationRevisionId,
   appT,
   outputLog: _outputLog,
   resetLogCapture,
@@ -109,7 +127,42 @@ export function usePublishValidate({
   setEnvironmentLastCheck,
 }: UsePublishValidateParams): UsePublishValidateResult {
   const presentationRevisionRef = useRef(0);
-  const [publishPreviewCommand, setPublishPreviewCommand] = useState("");
+  const [legacyPublishPreviewCommand, setLegacyPublishPreviewCommand] =
+    useState("");
+  const [preparedRuntimeState, setPreparedRuntimeState] = useState<{
+    key: string;
+    value: PreparedPublishRuntime;
+  } | null>(null);
+  const [runtimePreparationErrorState, setRuntimePreparationErrorState] =
+    useState<{ key: string; message: string } | null>(null);
+  const selectedRepoPath = selectedRepo?.path ?? null;
+  const runtimePreparationKey =
+    selectedRepoId &&
+    selectedRepoPath &&
+    configurationId &&
+    configurationRevisionId
+      ? JSON.stringify({
+          selectedRepoId,
+          selectedRepoPath,
+          configurationId,
+          configurationRevisionId,
+          activeProviderId,
+          projectFile: projectInfo?.project_file ?? null,
+          specVersion,
+        })
+      : null;
+  const preparedRuntime =
+    runtimePreparationKey && preparedRuntimeState?.key === runtimePreparationKey
+      ? preparedRuntimeState.value
+      : null;
+  const runtimePreparationError =
+    runtimePreparationKey &&
+    runtimePreparationErrorState?.key === runtimePreparationKey
+      ? runtimePreparationErrorState.message
+      : null;
+  const publishPreviewCommand = runtimePreparationKey
+    ? (preparedRuntime?.command.display_command ?? "")
+    : legacyPublishPreviewCommand;
   const hasPublishSpec =
     selectedRepo !== null &&
     !(activeProviderUsesProjectFile && projectInfo === null);
@@ -118,7 +171,7 @@ export function usePublishValidate({
   if (prevHasPublishSpecRef.current !== hasPublishSpec) {
     prevHasPublishSpecRef.current = hasPublishSpec;
     if (!hasPublishSpec) {
-      setPublishPreviewCommand("");
+      setLegacyPublishPreviewCommand("");
     }
   }
 
@@ -187,8 +240,24 @@ export function usePublishValidate({
       return "missing-project";
     }
 
+    if (configurationId && configurationRevisionId) {
+      if (!preparedRuntime) {
+        return "runtime-not-ready";
+      }
+      if (preparedRuntime.blockedReason) {
+        return "runtime-blocked";
+      }
+    }
+
     return null;
-  }, [activeProviderUsesProjectFile, projectInfo, selectedRepo]);
+  }, [
+    activeProviderUsesProjectFile,
+    configurationId,
+    configurationRevisionId,
+    preparedRuntime,
+    projectInfo,
+    selectedRepo,
+  ]);
 
   const resolvePublishRequest = useCallback(async () => {
     if (getPublishStartBlocker()) {
@@ -203,10 +272,17 @@ export function usePublishValidate({
     return {
       spec,
       recentConfigKey: recentConfigKeyForCurrentSelection ?? undefined,
+      preparedRuntime:
+        configurationId && configurationRevisionId
+          ? (preparedRuntime ?? undefined)
+          : undefined,
     };
   }, [
     buildPublishSpec,
+    configurationId,
+    configurationRevisionId,
     getPublishStartBlocker,
+    preparedRuntime,
     recentConfigKeyForCurrentSelection,
   ]);
 
@@ -214,17 +290,19 @@ export function usePublishValidate({
     () =>
       buildPublishPresentationScopeKey({
         selectedRepoId,
-        selectedRepoPath: selectedRepo?.path ?? null,
+        selectedRepoPath,
         activeProviderId,
         selectionKey: publishPresentationSelectionKey,
         projectFile: projectInfo?.project_file ?? null,
         specVersion,
+        configurationRevisionId,
       }),
     [
       activeProviderId,
+      configurationRevisionId,
       projectInfo?.project_file,
       publishPresentationSelectionKey,
-      selectedRepo?.path,
+      selectedRepoPath,
       selectedRepoId,
       specVersion,
     ]
@@ -240,22 +318,63 @@ export function usePublishValidate({
       };
     }
 
-    void renderPublishCommand(spec)
-      .then((command) => {
-        if (!disposed) {
-          setPublishPreviewCommand(command.display_command);
-        }
+    if (
+      runtimePreparationKey &&
+      selectedRepoId &&
+      configurationId &&
+      configurationRevisionId &&
+      selectedRepoPath
+    ) {
+      void preparePublishRuntime({
+        repositoryId: selectedRepoId,
+        repositoryPath: selectedRepoPath,
+        configurationId,
+        configurationRevisionId,
+        spec,
       })
-      .catch(() => {
-        if (!disposed) {
-          setPublishPreviewCommand("");
-        }
-      });
+        .then((prepared) => {
+          if (!disposed) {
+            setPreparedRuntimeState({
+              key: runtimePreparationKey,
+              value: prepared,
+            });
+            setRuntimePreparationErrorState(null);
+          }
+        })
+        .catch((error) => {
+          if (!disposed) {
+            setPreparedRuntimeState(null);
+            setRuntimePreparationErrorState({
+              key: runtimePreparationKey,
+              message: String(error),
+            });
+          }
+        });
+    } else {
+      void renderPublishCommand(spec)
+        .then((command) => {
+          if (!disposed) {
+            setLegacyPublishPreviewCommand(command.display_command);
+          }
+        })
+        .catch(() => {
+          if (!disposed) {
+            setLegacyPublishPreviewCommand("");
+          }
+        });
+    }
 
     return () => {
       disposed = true;
     };
-  }, [buildCurrentPublishSpec]);
+  }, [
+    buildCurrentPublishSpec,
+    configurationId,
+    configurationRevisionId,
+    runtimePreparationKey,
+    selectedRepoPath,
+    selectedRepoId,
+  ]);
 
   const isCurrentPresentationRevision = useCallback((runRevision: number) => {
     return presentationRevisionRef.current === runRevision;
@@ -292,6 +411,8 @@ export function usePublishValidate({
     runPublishPreflight,
     executePublishWithProtectedAccessRecovery,
     publishPreviewCommand,
+    preparedRuntime,
+    runtimePreparationError,
     isResolvingSelectedProjectProfile,
     publishPresentationScopeKey,
   };

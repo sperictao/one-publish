@@ -11,10 +11,11 @@ use publish_domain::{
     sha256_hex, AdapterBinding, AdapterDescriptor, AdapterIdentity, AdapterKind, AdapterSchema,
     AdapterSelection, AdapterSettings, ArtifactCandidate, Capability, CapabilityRequirement,
     DeliveryStatus, PlanNode, PlanNodeTemplate, PlanOperation, PlanSideEffect, PlanStage,
-    PlanningInputSnapshot, PublishError, PublishPlan, PublishingCapability, SourceSnapshot,
-    ARTIFACT_MANIFEST_VERSION, PLANNING_INPUT_SNAPSHOT_VERSION, PUBLISH_EVENT_VERSION,
+    PlanningInputSnapshot, PublishAttemptStatus, PublishError, PublishPlan, PublishingCapability,
+    ReleaseIdentity, SourceSnapshot, ARTIFACT_MANIFEST_VERSION, PLANNING_INPUT_SNAPSHOT_VERSION,
+    PUBLISH_EVENT_VERSION,
 };
-use publish_runner_core::PublishRuntime;
+use publish_runner_core::{PublishRuntime, StartPublishAttempt};
 use serde_json::Value;
 
 const ARTIFACT_BYTES: &[u8] = b"one-publish fake artifact\n";
@@ -253,15 +254,219 @@ fn fake_adapters_execute_one_plan_into_manifest_events_and_receipt() {
         assert_eq!(event.version, PUBLISH_EVENT_VERSION);
         assert_eq!(event.sequence, index as u64 + 1);
         assert_eq!(event.plan_node_id, plan.nodes[index].id);
-        assert_eq!(event.payload.len(), 1);
         assert!(event.payload.contains_key("adapter"));
     }
+    assert_eq!(
+        outcome
+            .events
+            .iter()
+            .find(|event| event.plan_node_id == persist.id)
+            .and_then(|event| event.payload.get("manifest_digest"))
+            .and_then(Value::as_str),
+        Some(outcome.manifest.digest.as_str())
+    );
+    assert_eq!(
+        outcome
+            .events
+            .iter()
+            .find(|event| event.plan_node_id == publish.id)
+            .and_then(|event| event.payload.get("delivery_status"))
+            .and_then(Value::as_str),
+        Some("published")
+    );
 
     assert_eq!(outcome.receipts.len(), 1);
     let receipt = &outcome.receipts[0];
     assert_eq!(receipt.status, DeliveryStatus::Published);
     assert_eq!(receipt.manifest_digest, outcome.manifest.digest);
     assert_eq!(receipt.route_id, "destination");
+}
+
+#[test]
+fn runtime_freezes_a_successful_local_attempt_and_reduces_its_published_result() {
+    let store_dir = tempfile::tempdir().expect("create temporary store");
+    let delivery_dir = tempfile::tempdir().expect("create local delivery directory");
+    let (runtime, snapshot) = fixture_runtime(
+        store_dir.path(),
+        delivery_dir.path(),
+        CapabilityRequirement::exact("structured-plan-execution", 1),
+    );
+    let prepared = runtime
+        .prepare_attempt(&snapshot)
+        .expect("prepare publish attempt");
+    let release_identity = ReleaseIdentity::new(
+        "fake-project:app",
+        snapshot.source.clone(),
+        "1.0.0",
+        "stable",
+        None,
+    );
+
+    let attempt = runtime
+        .start_attempt(
+            &prepared,
+            StartPublishAttempt::new("attempt-001", "local-run-001", release_identity.clone()),
+        )
+        .expect("start publish attempt");
+
+    assert_eq!(attempt.status, PublishAttemptStatus::Published);
+    assert_eq!(attempt.attempt.attempt_id, "attempt-001");
+    assert_eq!(attempt.attempt.backend_run_id, "local-run-001");
+    assert_eq!(
+        attempt.attempt.configuration_revision,
+        snapshot.configuration_revision
+    );
+    assert_eq!(attempt.attempt.runtime_revision, snapshot.runtime_revision);
+    assert_eq!(attempt.attempt.plan_digest, prepared.plan.digest);
+    assert_eq!(attempt.attempt.release_identity, release_identity);
+    assert_eq!(
+        attempt.attempt.manifest_digest.as_deref(),
+        attempt
+            .manifest
+            .as_ref()
+            .map(|manifest| manifest.digest.as_str())
+    );
+    assert_eq!(attempt.receipts.len(), 1);
+    assert_eq!(attempt.receipts[0].status, DeliveryStatus::Published);
+    assert_eq!(
+        attempt.receipts[0].manifest_digest,
+        attempt
+            .manifest
+            .as_ref()
+            .expect("sealed artifact manifest")
+            .digest
+    );
+    assert!(attempt.error.is_none());
+    assert!(attempt
+        .events
+        .iter()
+        .all(|event| event.backend_run_id == "local-run-001"));
+}
+
+#[test]
+fn runtime_preserves_a_failed_attempt_after_the_manifest_is_sealed() {
+    let store_dir = tempfile::tempdir().expect("create temporary store");
+    let delivery_parent = tempfile::tempdir().expect("create delivery parent");
+    let blocked_delivery_path = delivery_parent.path().join("not-a-directory");
+    fs::write(&blocked_delivery_path, b"occupied by a file").expect("create blocking file");
+    let (runtime, snapshot) = fixture_runtime(
+        store_dir.path(),
+        &blocked_delivery_path,
+        CapabilityRequirement::exact("structured-plan-execution", 1),
+    );
+    let prepared = runtime
+        .prepare_attempt(&snapshot)
+        .expect("prepare publish attempt");
+
+    let attempt = runtime
+        .start_attempt(
+            &prepared,
+            StartPublishAttempt::new(
+                "attempt-failed-001",
+                "local-run-failed-001",
+                ReleaseIdentity::new(
+                    "fake-project:app",
+                    snapshot.source.clone(),
+                    "1.0.0",
+                    "stable",
+                    None,
+                ),
+            ),
+        )
+        .expect("started failures are returned as attempt state");
+
+    assert_eq!(attempt.status, PublishAttemptStatus::Failed);
+    assert!(attempt
+        .error
+        .as_deref()
+        .is_some_and(|error| error.contains("create directory")));
+    assert!(attempt.manifest.is_some());
+    assert_eq!(
+        attempt.attempt.manifest_digest.as_deref(),
+        attempt
+            .manifest
+            .as_ref()
+            .map(|manifest| manifest.digest.as_str())
+    );
+    assert!(attempt.receipts.is_empty());
+    assert_eq!(
+        attempt.events.last().map(|event| event.kind.as_str()),
+        Some("plan_node_failed")
+    );
+    assert_eq!(
+        attempt
+            .events
+            .last()
+            .and_then(|event| event.payload.get("error"))
+            .and_then(Value::as_str),
+        attempt.error.as_deref()
+    );
+}
+
+#[test]
+fn runtime_does_not_restart_an_attempt_with_a_reselected_configuration() {
+    let store_dir = tempfile::tempdir().expect("create temporary store");
+    let delivery_dir = tempfile::tempdir().expect("create local delivery directory");
+    let (runtime, snapshot_a) = fixture_runtime(
+        store_dir.path(),
+        delivery_dir.path(),
+        CapabilityRequirement::exact("structured-plan-execution", 1),
+    );
+    let prepared_a = runtime
+        .prepare_attempt(&snapshot_a)
+        .expect("prepare revision A");
+    let mut snapshot_b = snapshot_a.clone();
+    snapshot_b.configuration_revision = "config-revision-2".to_string();
+    snapshot_b
+        .release_input
+        .insert("version".to_string(), Value::String("2.0.0".to_string()));
+    let prepared_b = runtime
+        .prepare_attempt(&snapshot_b)
+        .expect("prepare revision B");
+
+    let attempt_a = runtime
+        .start_attempt(
+            &prepared_a,
+            StartPublishAttempt::new(
+                "attempt-fixed-001",
+                "local-run-fixed-001",
+                ReleaseIdentity::new(
+                    "fake-project:app",
+                    snapshot_a.source.clone(),
+                    "1.0.0",
+                    "stable",
+                    None,
+                ),
+            ),
+        )
+        .expect("start revision A");
+
+    let restart = runtime.start_attempt(
+        &prepared_b,
+        StartPublishAttempt::new(
+            "attempt-fixed-001",
+            "local-run-reselected-002",
+            ReleaseIdentity::new(
+                "fake-project:app",
+                snapshot_b.source.clone(),
+                "2.0.0",
+                "stable",
+                None,
+            ),
+        ),
+    );
+
+    assert!(matches!(
+        restart,
+        Err(PublishError::AttemptAlreadyStarted { attempt_id })
+            if attempt_id == "attempt-fixed-001"
+    ));
+    assert_eq!(
+        attempt_a.attempt.configuration_revision,
+        snapshot_a.configuration_revision
+    );
+    assert_eq!(attempt_a.attempt.plan_digest, prepared_a.plan.digest);
+    assert_ne!(attempt_a.attempt.plan_digest, prepared_b.plan.digest);
 }
 
 #[test]

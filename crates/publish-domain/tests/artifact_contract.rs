@@ -36,3 +36,19 @@ fn manifest_entries_enforce_the_same_portable_file_name_boundary() {
 
     assert!(matches!(result, Err(PublishError::InvalidArtifact { .. })));
 }
+
+#[test]
+fn artifact_paths_can_preserve_safe_output_subdirectories() {
+    let artifact = ArtifactCandidate::new(
+        "runtime-library",
+        "runtimes/linux-x64/native.so",
+        "application/octet-stream",
+        "linux",
+        "x86_64",
+        b"artifact".to_vec(),
+    );
+
+    artifact
+        .verify()
+        .expect("safe relative artifact paths stay within adapter roots");
+}

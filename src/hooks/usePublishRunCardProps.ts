@@ -1,6 +1,10 @@
 import { useMemo } from "react";
 import type { PublishRunCardProps } from "@/components/publish/PublishRunCard";
 import type { Repository, ProjectInfo } from "@/lib/store/types";
+import type {
+  PreparedPublishRuntime,
+  PublishRuntimeResult,
+} from "@/generated/tauri-contracts";
 import { usePublishStore } from "@/stores/publishStore";
 
 type TranslationMap = Record<string, string | undefined>;
@@ -18,6 +22,11 @@ interface UsePublishRunCardPropsParams {
   activeProviderRequiresProjectBinding: boolean;
   projectInfo: ProjectInfo | null;
   publishPreviewCommand: string | null;
+  preparedRuntime: PreparedPublishRuntime | null;
+  activeRuntime: PreparedPublishRuntime | null;
+  runtimeResult: PublishRuntimeResult | null;
+  runtimePreparationError: string | null;
+  requiresPreparedRuntime: boolean;
   isPublishing: boolean;
   isCancellingPublish: boolean;
   startPublish: () => void;
@@ -35,6 +44,10 @@ export function usePublishRunCardProps(
       outputLog: params.outputLog,
       getOutputLogSnapshot: params.getOutputLogSnapshot,
       publishResult: params.publishResult,
+      preparedRuntime: params.preparedRuntime,
+      activeRuntime: params.activeRuntime,
+      runtimeResult: params.runtimeResult,
+      runtimePreparationError: params.runtimePreparationError,
       appT: params.appT,
       isRefreshing: params.isRefreshing,
       publishActions:
@@ -51,7 +64,12 @@ export function usePublishRunCardProps(
               cancellingLabel: params.appT.cancelling || "取消中...",
               isPublishing: params.isPublishing,
               isCancellingPublish: params.isCancellingPublish,
-              startDisabled: !params.selectedRepo,
+              startDisabled:
+                !params.selectedRepo ||
+                (params.requiresPreparedRuntime &&
+                  (!params.preparedRuntime ||
+                    Boolean(params.preparedRuntime.blockedReason) ||
+                    !params.preparedRuntime.runtimeToken)),
               onStartPublish: params.startPublish,
               onCancelPublish: params.cancelPublish,
               managementLabel:
@@ -68,6 +86,7 @@ export function usePublishRunCardProps(
     [
       params.activeProviderRequiresProjectBinding,
       params.activeProviderId,
+      params.activeRuntime,
       params.appT,
       params.cancelPublish,
       params.configT.execute,
@@ -78,8 +97,12 @@ export function usePublishRunCardProps(
       params.isPublishing,
       params.outputLog,
       params.publishPreviewCommand,
+      params.preparedRuntime,
       params.projectInfo,
       params.publishResult,
+      params.requiresPreparedRuntime,
+      params.runtimeResult,
+      params.runtimePreparationError,
       params.publishT.command,
       params.selectedRepo,
       params.startPublish,

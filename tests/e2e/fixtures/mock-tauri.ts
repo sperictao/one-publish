@@ -434,7 +434,7 @@ export async function installMockTauri(
               if (repo && typeof args?.isCustomMode === "boolean") {
                 repo.publishConfig.isCustomMode = args.isCustomMode;
               }
-              return null;
+              return clone(appState);
             }
 
             case "update_ui_state":
@@ -477,6 +477,30 @@ export async function installMockTauri(
             case "get_execution_history":
               return clone(appState.executionHistory ?? []);
 
+            case "push_recent_publish_config": {
+              const repoId = args?.repoId as string;
+              const configKey = args?.configKey as string;
+              const current = appState.recentConfigKeysByRepo[repoId] ?? [];
+              appState.recentConfigKeysByRepo[repoId] = [
+                configKey,
+                ...current.filter((key) => key !== configKey),
+              ];
+              return clone(appState);
+            }
+
+            case "add_execution_record": {
+              const record =
+                args?.record as AppState["executionHistory"][number];
+              appState.executionHistory = [
+                record,
+                ...(appState.executionHistory ?? []),
+              ];
+              return clone(appState.executionHistory);
+            }
+
+            case "set_execution_record_snapshot":
+              return clone(appState.executionHistory ?? []);
+
             case "get_repository": {
               const repoId = (args?.repoId || args?.repo_id) as string;
               return clone(
@@ -494,13 +518,10 @@ export async function installMockTauri(
             case "save_profile":
             case "update_profile":
             case "delete_profile":
-            case "push_recent_publish_config":
             case "remove_recent_publish_config":
             case "reorder_recent_publish_configs":
             case "reorder_profiles":
             case "replace_recent_publish_config_key":
-            case "add_execution_record":
-            case "set_execution_record_snapshot":
             case "update_tray_menu":
               return null;
 
@@ -585,6 +606,117 @@ export async function installMockTauri(
             }
 
             // ── Publish ──
+            case "prepare_publish_runtime": {
+              const request = args?.request as
+                | {
+                    configurationId: string;
+                    configurationRevisionId: string;
+                  }
+                | undefined;
+              const revision =
+                request?.configurationRevisionId || "mock-revision";
+              return {
+                configurationId:
+                  request?.configurationId || "mock-configuration",
+                configurationRevisionId: revision,
+                command: {
+                  program: "dotnet",
+                  args: ["publish"],
+                  working_dir: "/workspace/alpha-service",
+                  display_command: "dotnet publish",
+                  env: [],
+                },
+                plan: {
+                  version: 1,
+                  digest: `plan-${revision}`,
+                  snapshotDigest: `snapshot-${revision}`,
+                  executionBackend: "local-execution",
+                  nodes: [
+                    {
+                      id: "build",
+                      stage: "build",
+                      adapterId: "selected-project-provider",
+                      operation: "selected-project-provider:publish",
+                      irreversible: false,
+                    },
+                    {
+                      id: "persist",
+                      stage: "persist_manifest",
+                      adapterId: "temporary-artifact-store",
+                      operation: "persist_manifest",
+                      irreversible: false,
+                    },
+                    {
+                      id: "stage",
+                      stage: "stage_routes",
+                      adapterId: "local-directory",
+                      operation: "stage_local_directory",
+                      irreversible: false,
+                    },
+                    {
+                      id: "publish",
+                      stage: "publish_routes",
+                      adapterId: "local-directory",
+                      operation: "publish_local_directory",
+                      irreversible: true,
+                    },
+                  ],
+                },
+                blockedReason: null,
+                runtimeToken: `runtime-${revision}`,
+              };
+            }
+
+            case "start_publish_runtime": {
+              const runtimeToken = (
+                args?.request as { runtimeToken?: string } | undefined
+              )?.runtimeToken;
+              const revision =
+                runtimeToken?.replace("runtime-", "") || "mock-revision";
+              const manifestDigest = `manifest-${revision}`;
+              return {
+                attempt: {
+                  attemptId: `attempt-${revision}`,
+                  backendRunId: `backend-${revision}`,
+                  configurationRevisionId: revision,
+                  planDigest: `plan-${revision}`,
+                  executionBackend: "local-execution",
+                  status: "published",
+                  manifestDigest,
+                  manifest: { digest: manifestDigest, artifactCount: 12 },
+                  receipts: [
+                    {
+                      receiptId: `receipt-${revision}`,
+                      routeId: "local-delivery",
+                      manifestDigest,
+                      status: "published",
+                      externalReference: "/tmp/publish-output",
+                    },
+                  ],
+                  events: [],
+                  error: null,
+                },
+                publishResult: {
+                  provider_id: "dotnet",
+                  success: true,
+                  cancelled: false,
+                  error: null,
+                  command: {
+                    program: "dotnet",
+                    args: ["publish"],
+                    working_dir: "/workspace/alpha-service",
+                    display_command: "dotnet publish",
+                    env: [],
+                  },
+                  output_log:
+                    "[mock] Publishing...\n[mock] Publish succeeded.\n",
+                  output_dir: "/tmp/publish-output",
+                  file_count: 12,
+                  warnings: null,
+                },
+              };
+            }
+
             case "preflight_publish_output": {
               const outputDir =
                 (args?.spec &&

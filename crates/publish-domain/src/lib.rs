@@ -10,6 +10,7 @@ pub const ADAPTER_CONTRACT_VERSION: u32 = 1;
 pub const ARTIFACT_MANIFEST_VERSION: u32 = 1;
 pub const PUBLISH_EVENT_VERSION: u32 = 1;
 pub const DELIVERY_RECEIPT_VERSION: u32 = 1;
+pub const RELEASE_ATTEMPT_VERSION: u32 = 1;
 
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum PublishError {
@@ -89,6 +90,8 @@ pub enum PublishError {
     MissingDeliveryReceipt,
     #[error("publish plan execution was incomplete; missing nodes: {missing:?}")]
     IncompletePlanExecution { missing: Vec<String> },
+    #[error("publish attempt {attempt_id} has already started")]
+    AttemptAlreadyStarted { attempt_id: String },
     #[error("adapter execution failed: {0}")]
     Execution(String),
     #[error("I/O operation {operation} failed: {message}")]
@@ -365,6 +368,33 @@ pub struct SourceSnapshot {
     pub dirty: bool,
     pub captured_at: String,
     pub reproducible: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ReleaseIdentity {
+    pub project_identity: String,
+    pub source: SourceSnapshot,
+    pub version: String,
+    pub channel: String,
+    pub build_sequence: Option<String>,
+}
+
+impl ReleaseIdentity {
+    pub fn new(
+        project_identity: impl Into<String>,
+        source: SourceSnapshot,
+        version: impl Into<String>,
+        channel: impl Into<String>,
+        build_sequence: Option<String>,
+    ) -> Self {
+        Self {
+            project_identity: project_identity.into(),
+            source,
+            version: version.into(),
+            channel: channel.into(),
+            build_sequence,
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -741,14 +771,11 @@ fn validate_artifact_metadata(
     platform: &str,
     architecture: &str,
 ) -> Result<(), PublishError> {
-    if file_name.trim().is_empty()
-        || file_name == "."
-        || file_name == ".."
-        || file_name.contains(['/', '\\', '\0'])
-    {
+    if !is_safe_portable_relative_path(file_name) {
         return Err(PublishError::InvalidArtifact {
             artifact: file_name.to_string(),
-            message: "file name must be a single portable path component".to_string(),
+            message: "artifact path must be a portable relative path within adapter roots"
+                .to_string(),
         });
     }
     if [role, media_type, platform, architecture]
@@ -761,6 +788,16 @@ fn validate_artifact_metadata(
         });
     }
     Ok(())
+}
+
+fn is_safe_portable_relative_path(path: &str) -> bool {
+    !path.trim().is_empty()
+        && !path.starts_with('/')
+        && !path.ends_with('/')
+        && !path.contains(['\\', '\0', ':'])
+        && path
+            .split('/')
+            .all(|component| !component.is_empty() && component != "." && component != "..")
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -811,11 +848,45 @@ pub struct PublishEvent {
     pub version: u32,
     pub event_id: String,
     pub attempt_id: String,
+    pub backend_run_id: String,
     pub sequence: u64,
     pub plan_digest: String,
     pub plan_node_id: String,
     pub kind: String,
     pub payload: BTreeMap<String, Value>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum PublishAttemptStatus {
+    Running,
+    Published,
+    Failed,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ReleaseAttempt {
+    pub version: u32,
+    pub attempt_id: String,
+    pub configuration_revision: String,
+    pub planning_snapshot_digest: String,
+    pub plan_version: u32,
+    pub plan_digest: String,
+    pub release_identity: ReleaseIdentity,
+    pub execution_backend: AdapterIdentity,
+    pub runtime_revision: String,
+    pub backend_run_id: String,
+    pub manifest_digest: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct PublishAttemptView {
+    pub attempt: ReleaseAttempt,
+    pub status: PublishAttemptStatus,
+    pub manifest: Option<ArtifactManifest>,
+    pub events: Vec<PublishEvent>,
+    pub receipts: Vec<DeliveryReceipt>,
+    pub error: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

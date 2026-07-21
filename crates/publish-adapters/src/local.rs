@@ -146,6 +146,9 @@ impl AdapterContract for TemporaryArtifactStore {
             let artifact_directory = root.join(&artifact.digest);
             create_directory(&artifact_directory)?;
             let stored_path = artifact_directory.join(&artifact.file_name);
+            if let Some(parent) = stored_path.parent() {
+                create_directory(parent)?;
+            }
             persist_content_addressed(&stored_path, &artifact.bytes, &artifact.digest)?;
             entries.push(ArtifactManifestEntry {
                 role: artifact.role.clone(),
@@ -248,6 +251,9 @@ impl AdapterContract for LocalDirectoryDestination {
         for artifact in &manifest.artifacts {
             let source = Path::new(&artifact.locator);
             let destination = directory.join(&artifact.file_name);
+            if let Some(parent) = destination.parent() {
+                create_directory(parent)?;
+            }
             copy_verified(source, &destination, &artifact.digest)?;
         }
 

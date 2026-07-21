@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 
 import type {
@@ -11,7 +11,11 @@ import { exportExecutionSnapshot } from "@/features/history/executionSnapshot";
 import { normalizePublishResult } from "@/features/history/publishFailure";
 import {
   cancelProviderPublish,
+  startPublishRuntime,
+  type PreparedPublishRuntime,
   type ProviderPublishSpec,
+  type PublishResult,
+  type PublishRuntimeResult,
 } from "@/features/publish/publishRuntime";
 import {
   createFailedPublishTransactionResult,
@@ -52,8 +56,11 @@ export interface UsePublishExecuteResult {
   cancelPublish: () => Promise<void>;
   runPublishSpec: (
     spec: ProviderPublishSpec,
-    options?: RunPublishOptions
+    options?: RunPublishOptions,
+    preparedRuntime?: PreparedPublishRuntime
   ) => Promise<void>;
+  activeRuntime: PreparedPublishRuntime | null;
+  runtimeResult: PublishRuntimeResult | null;
 }
 
 export function usePublishExecute({
@@ -71,6 +78,10 @@ export function usePublishExecute({
   currentConfigurationBlockedReason,
 }: UsePublishExecuteParams): UsePublishExecuteResult {
   const presentationRevisionRef = useRef(0);
+  const [activeRuntime, setActiveRuntime] =
+    useState<PreparedPublishRuntime | null>(null);
+  const [runtimeResult, setRuntimeResult] =
+    useState<PublishRuntimeResult | null>(null);
 
   const setIsPublishing = usePublishStore((s) => s.setIsPublishing);
   const setIsCancellingPublish = usePublishStore(
@@ -142,7 +153,11 @@ export function usePublishExecute({
   }, [validate.publishPresentationScopeKey, resetPublishPresentation]);
 
   const runPublishSpec = useCallback(
-    async (spec: ProviderPublishSpec, options?: RunPublishOptions) => {
+    async (
+      spec: ProviderPublishSpec,
+      options?: RunPublishOptions,
+      preparedRuntime?: PreparedPublishRuntime
+    ) => {
       if (usePublishStore.getState().isPublishing) {
         return;
       }
@@ -174,8 +189,36 @@ export function usePublishExecute({
           pushRecentConfig(transaction.recentConfigKey!, transaction.repoId);
         }
 
-        const result =
-          await validate.executePublishWithProtectedAccessRecovery(spec);
+        let result: PublishResult;
+        if (preparedRuntime) {
+          setActiveRuntime(preparedRuntime);
+          setRuntimeResult(null);
+          const completedRuntime = await startPublishRuntime({
+            runtimeToken: preparedRuntime.runtimeToken,
+          });
+          setRuntimeResult(completedRuntime);
+          const providerResult = completedRuntime.publishResult;
+          if (!providerResult) {
+            throw new Error(
+              completedRuntime.attempt.error ||
+                "PublishRuntime completed without a provider result"
+            );
+          }
+          result =
+            completedRuntime.attempt.status === "published"
+              ? providerResult
+              : {
+                  ...providerResult,
+                  success: false,
+                  error:
+                    completedRuntime.attempt.error ||
+                    providerResult.error ||
+                    "PublishRuntime failed",
+                };
+        } else {
+          result =
+            await validate.executePublishWithProtectedAccessRecovery(spec);
+        }
         const outputLogSnapshot =
           result.output_log || (await waitForOutputLogSnapshot());
         const resolvedResult = normalizePublishResult({
@@ -341,17 +384,41 @@ export function usePublishExecute({
       return;
     }
 
+    if (blocker === "runtime-not-ready") {
+      toast.error(
+        appT.publishRuntimeNotReady || "发布计划尚未准备完成",
+        validate.runtimePreparationError
+          ? { description: validate.runtimePreparationError }
+          : undefined
+      );
+      return;
+    }
+
+    if (blocker === "runtime-blocked") {
+      toast.error(publishT.configurationBlocked || "当前发布配置不可执行", {
+        description:
+          validate.preparedRuntime?.blockedReason ||
+          appT.publishRuntimeBlocked ||
+          "本地发布计划存在阻塞项",
+      });
+      return;
+    }
+
     const request = await validate.resolvePublishRequest();
     if (!request) {
       return;
     }
 
-    await runPublishSpec(request.spec, {
-      repoId: selectedRepoId,
-      recentConfigKey: request.recentConfigKey,
-      configurationId: currentConfigurationId,
-      configurationRevisionId: currentConfigurationRevisionId,
-    });
+    await runPublishSpec(
+      request.spec,
+      {
+        repoId: selectedRepoId,
+        recentConfigKey: request.recentConfigKey,
+        configurationId: currentConfigurationId,
+        configurationRevisionId: currentConfigurationRevisionId,
+      },
+      request.preparedRuntime
+    );
   }, [
     appT,
     currentConfigurationBlockedReason,
@@ -400,5 +467,7 @@ export function usePublishExecute({
     startPublish,
     cancelPublish,
     runPublishSpec,
+    activeRuntime,
+    runtimeResult,
   };
 }

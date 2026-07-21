@@ -3034,6 +3034,9 @@ dependencies = [
  "json5",
  "log",
  "open",
+ "publish-adapters",
+ "publish-domain",
+ "publish-runner-core",
  "regex",
  "semver",
  "serde",
@@ -3566,6 +3569,44 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn 1.0.109",
+]
+
+[[package]]
+name = "publish-adapters"
+version = "0.1.0"
+dependencies = [
+ "publish-domain",
+ "serde_json",
+]
+
+[[package]]
+name = "publish-domain"
+version = "0.1.0"
+dependencies = [
+ "hex",
+ "serde",
+ "serde_json",
+ "sha2 0.10.9",
+ "thiserror 2.0.17",
+]
+
+[[package]]
+name = "publish-planner"
+version = "0.1.0"
+dependencies = [
+ "publish-adapters",
+ "publish-domain",
+]
+
+[[package]]
+name = "publish-runner-core"
+version = "0.1.0"
+dependencies = [
+ "publish-adapters",
+ "publish-domain",
+ "publish-planner",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]

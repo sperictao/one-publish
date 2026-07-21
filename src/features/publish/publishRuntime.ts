@@ -1,15 +1,26 @@
 import { invoke } from "@tauri-apps/api/core";
 
 import type {
+  PreparedPublishRuntime,
+  PreparePublishRuntimeRequest,
   PublishOutputPreflightResult,
   PublishResult as TauriPublishResult,
+  PublishRuntimeResult,
   PublishSpec as TauriPublishSpec,
   RenderedPublishCommand,
+  StartPublishRuntimeRequest,
 } from "@/generated/tauri-contracts";
 
 export type ProviderPublishSpec = TauriPublishSpec;
 export type PublishResult = TauriPublishResult;
-export type { PublishOutputPreflightResult, RenderedPublishCommand };
+export type {
+  PreparedPublishRuntime,
+  PreparePublishRuntimeRequest,
+  PublishOutputPreflightResult,
+  PublishRuntimeResult,
+  RenderedPublishCommand,
+  StartPublishRuntimeRequest,
+};
 
 export interface ImportProviderPublishSpecFromCommandParams {
   command: string;
@@ -21,6 +32,22 @@ export async function executeProviderPublish(
   spec: ProviderPublishSpec
 ): Promise<PublishResult> {
   return await invoke<PublishResult>("execute_provider_publish", { spec });
+}
+
+export async function preparePublishRuntime(
+  request: PreparePublishRuntimeRequest
+): Promise<PreparedPublishRuntime> {
+  return await invoke<PreparedPublishRuntime>("prepare_publish_runtime", {
+    request,
+  });
+}
+
+export async function startPublishRuntime(
+  request: StartPublishRuntimeRequest
+): Promise<PublishRuntimeResult> {
+  return await invoke<PublishRuntimeResult>("start_publish_runtime", {
+    request,
+  });
 }
 
 export async function cancelProviderPublish(): Promise<boolean> {

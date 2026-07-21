@@ -169,6 +169,7 @@ dependencies = [
  "publish-adapters",
  "publish-domain",
  "publish-planner",
+ "serde",
  "serde_json",
  "tempfile",
 ]
