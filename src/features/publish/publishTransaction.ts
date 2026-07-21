@@ -15,6 +15,8 @@ export interface PublishTransactionRunOptions {
   restoreWindowOnFailure?: boolean;
   feedbackMode?: "toast" | "system";
   trayStatusEffect?: boolean;
+  configurationId?: string | null;
+  configurationRevisionId?: string | null;
 }
 
 export type RunPublishOptions = PublishTransactionRunOptions;
@@ -26,6 +28,8 @@ export interface PublishTransactionContext {
   restoreWindowOnFailure: boolean;
   feedbackMode: "toast" | "system";
   trayStatusEffect: boolean;
+  configurationId: string | null;
+  configurationRevisionId: string | null;
   startedAt: string;
 }
 
@@ -41,6 +45,8 @@ export function createPublishTransactionContext(params: {
     restoreWindowOnFailure: params.options?.restoreWindowOnFailure ?? false,
     feedbackMode: params.options?.feedbackMode ?? "toast",
     trayStatusEffect: params.options?.trayStatusEffect ?? false,
+    configurationId: params.options?.configurationId ?? null,
+    configurationRevisionId: params.options?.configurationRevisionId ?? null,
     startedAt: params.startedAt ?? new Date().toISOString(),
   };
 }

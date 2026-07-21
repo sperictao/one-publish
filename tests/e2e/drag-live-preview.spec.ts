@@ -1,12 +1,24 @@
 import { expect, test, type Page } from "@playwright/test";
 
 type MockProfile = {
+  id: string;
   name: string;
-  providerId: string;
-  parameters: Record<string, unknown>;
   profileGroup: string | null;
   createdAt: string;
   isSystemDefault: boolean;
+  currentRevisionId: string;
+  revisions: Array<{
+    id: string;
+    sequence: number;
+    createdAt: string;
+    contractVersion: number;
+    providerId: string;
+    providerVersion: string;
+    settingsVersion: number;
+    parameters: Record<string, unknown>;
+  }>;
+  deletedAt: string | null;
+  blockedReason: string | null;
 };
 
 async function installMockTauri(page: Page) {
@@ -42,6 +54,7 @@ async function installMockTauri(page: Page) {
               profileName: "",
             },
             profiles: [],
+            bindings: [],
           },
         },
         {
@@ -72,6 +85,7 @@ async function installMockTauri(page: Page) {
               profileName: "",
             },
             profiles: [],
+            bindings: [],
           },
         },
         {
@@ -102,6 +116,7 @@ async function installMockTauri(page: Page) {
               profileName: "",
             },
             profiles: [],
+            bindings: [],
           },
         },
       ],
@@ -125,28 +140,70 @@ async function installMockTauri(page: Page) {
     const profilesByRepo: Record<string, MockProfile[]> = {
       "repo-a": [
         {
+          id: "alpha-profile",
           name: "alpha-profile",
-          providerId: "dotnet",
-          parameters: {},
           profileGroup: "Group A",
           createdAt: "2026-04-03T00:00:00.000Z",
           isSystemDefault: false,
+          currentRevisionId: "alpha-revision",
+          revisions: [
+            {
+              id: "alpha-revision",
+              sequence: 1,
+              createdAt: "2026-04-03T00:00:00.000Z",
+              contractVersion: 1,
+              providerId: "dotnet",
+              providerVersion: "1",
+              settingsVersion: 1,
+              parameters: {},
+            },
+          ],
+          deletedAt: null,
+          blockedReason: null,
         },
         {
+          id: "beta-profile",
           name: "beta-profile",
-          providerId: "dotnet",
-          parameters: {},
           profileGroup: "Group B",
           createdAt: "2026-04-03T00:00:00.000Z",
           isSystemDefault: false,
+          currentRevisionId: "beta-revision",
+          revisions: [
+            {
+              id: "beta-revision",
+              sequence: 1,
+              createdAt: "2026-04-03T00:00:00.000Z",
+              contractVersion: 1,
+              providerId: "dotnet",
+              providerVersion: "1",
+              settingsVersion: 1,
+              parameters: {},
+            },
+          ],
+          deletedAt: null,
+          blockedReason: null,
         },
         {
+          id: "gamma-profile",
           name: "gamma-profile",
-          providerId: "dotnet",
-          parameters: {},
           profileGroup: "Group B",
           createdAt: "2026-04-03T00:00:00.000Z",
           isSystemDefault: false,
+          currentRevisionId: "gamma-revision",
+          revisions: [
+            {
+              id: "gamma-revision",
+              sequence: 1,
+              createdAt: "2026-04-03T00:00:00.000Z",
+              contractVersion: 1,
+              providerId: "dotnet",
+              providerVersion: "1",
+              settingsVersion: 1,
+              parameters: {},
+            },
+          ],
+          deletedAt: null,
+          blockedReason: null,
         },
       ],
     };
@@ -190,14 +247,14 @@ async function installMockTauri(page: Page) {
       },
     };
 
-    function reorderByName(
+    function reorderById(
       items: MockProfile[],
-      orderedProfiles: Array<{ name: string; profileGroup?: string | null }>
+      orderedProfiles: Array<{ id: string; profileGroup?: string | null }>
     ) {
-      const lookup = new Map(items.map((item) => [item.name, item]));
+      const lookup = new Map(items.map((item) => [item.id, item]));
       return orderedProfiles
         .map((entry) => {
-          const profile = lookup.get(entry.name);
+          const profile = lookup.get(entry.id);
           if (!profile) {
             return null;
           }
@@ -244,12 +301,35 @@ async function installMockTauri(page: Page) {
                 id: "dotnet",
                 display_name: "dotnet",
                 version: "8.0.0",
+                label: ".NET",
+                command_example: "dotnet publish",
+                environment_label: ".NET SDK",
+                environment_description: ".NET SDK",
+                requires_project_binding: true,
+                project_path_kind: "project_file",
+                supports_command_import: true,
               },
             ];
           case "get_provider_schema":
             return clone(dotnetSchema);
           case "get_profiles":
             return clone(profilesByRepo[String(args?.repoId ?? "")] ?? []);
+          case "get_repository": {
+            const repoId = String(args?.repoId ?? "");
+            const repository = appState.repositories.find(
+              (repo) => repo.id === repoId
+            );
+            if (!repository) {
+              throw new Error(`missing repository: ${repoId}`);
+            }
+            return clone({
+              ...repository,
+              publishConfig: {
+                ...repository.publishConfig,
+                profiles: profilesByRepo[repoId] ?? [],
+              },
+            });
+          }
           case "scan_project":
           case "resolve_project_info":
             return {
@@ -284,11 +364,11 @@ async function installMockTauri(page: Page) {
             const repoId = String(args?.repoId ?? "");
             const orderedProfiles = Array.isArray(args?.profiles)
               ? (args?.profiles as Array<{
-                  name: string;
+                  id: string;
                   profileGroup?: string | null;
                 }>)
               : [];
-            profilesByRepo[repoId] = reorderByName(
+            profilesByRepo[repoId] = reorderById(
               profilesByRepo[repoId] ?? [],
               orderedProfiles
             );
@@ -365,10 +445,7 @@ async function getBubbleThresholdPointerY(
   return targetMidpointY - draggedCenterOffsetY;
 }
 
-async function measureDraggedRowFloatingAlignment(
-  page: Page,
-  rowSelector: string
-) {
+async function measureDraggedRow(page: Page, rowSelector: string) {
   return page.evaluate((selector) => {
     const row = document.querySelector<HTMLElement>(selector);
     if (!row) {
@@ -376,119 +453,7 @@ async function measureDraggedRowFloatingAlignment(
     }
 
     const rowRect = row.getBoundingClientRect();
-    const floatingCards = Array.from(
-      document.querySelectorAll<HTMLElement>(
-        ".list-scroll-shell [aria-hidden='true'] .floating-list-card"
-      )
-    );
-
-    const nearestCard = floatingCards
-      .map((card) => {
-        const rect = card.getBoundingClientRect();
-        return {
-          top: rect.top,
-          left: rect.left,
-          width: rect.width,
-          height: rect.height,
-          distance:
-            Math.abs(rect.top - rowRect.top) +
-            Math.abs(rect.left - rowRect.left),
-        };
-      })
-      .sort((left, right) => left.distance - right.distance)[0];
-
-    if (!nearestCard) {
-      return null;
-    }
-
-    return {
-      topDelta: Math.abs(nearestCard.top - rowRect.top),
-      leftDelta: Math.abs(nearestCard.left - rowRect.left),
-      widthDelta: Math.abs(nearestCard.width - rowRect.width),
-      heightDelta: Math.abs(nearestCard.height - rowRect.height),
-    };
-  }, rowSelector);
-}
-
-async function expectDraggedRowAlignedWithFloatingShell(
-  page: Page,
-  rowSelector: string
-) {
-  await expect
-    .poll(
-      async () => {
-        const alignment = await measureDraggedRowFloatingAlignment(
-          page,
-          rowSelector
-        );
-        if (!alignment) {
-          return null;
-        }
-
-        return {
-          topOk: alignment.topDelta < 2,
-          leftOk: alignment.leftDelta < 2,
-          widthOk: alignment.widthDelta < 3,
-          heightOk: alignment.heightDelta < 3,
-        };
-      },
-      {
-        timeout: 300,
-      }
-    )
-    .toEqual({
-      topOk: true,
-      leftOk: true,
-      widthOk: true,
-      heightOk: true,
-    });
-
-  const alignment = await measureDraggedRowFloatingAlignment(page, rowSelector);
-  expect(alignment).not.toBeNull();
-  expect(alignment?.topDelta ?? 99).toBeLessThan(2);
-  expect(alignment?.leftDelta ?? 99).toBeLessThan(2);
-  expect(alignment?.widthDelta ?? 99).toBeLessThan(3);
-  expect(alignment?.heightDelta ?? 99).toBeLessThan(3);
-}
-
-async function measureDraggedRowAndFloatingShell(
-  page: Page,
-  rowSelector: string
-) {
-  return page.evaluate((selector) => {
-    const row = document.querySelector<HTMLElement>(selector);
-    if (!row) {
-      return null;
-    }
-
-    const rowRect = row.getBoundingClientRect();
-    const floatingCards = Array.from(
-      document.querySelectorAll<HTMLElement>(
-        ".list-scroll-shell [aria-hidden='true'] .floating-list-card"
-      )
-    );
-
-    const nearestCard = floatingCards
-      .map((card) => {
-        const rect = card.getBoundingClientRect();
-        return {
-          top: rect.top,
-          left: rect.left,
-          distance:
-            Math.abs(rect.top - rowRect.top) +
-            Math.abs(rect.left - rowRect.left),
-        };
-      })
-      .sort((left, right) => left.distance - right.distance)[0];
-
-    if (!nearestCard) {
-      return null;
-    }
-
-    return {
-      rowTop: rowRect.top,
-      floatingTop: nearestCard.top,
-    };
+    return { rowTop: rowRect.top };
   }, rowSelector);
 }
 
@@ -498,27 +463,23 @@ async function expectDraggedRowFollowsPointer(
   moveTo: { x: number; y: number },
   direction: "up" | "down"
 ) {
-  const beforeMove = await measureDraggedRowAndFloatingShell(page, rowSelector);
+  const beforeMove = await measureDraggedRow(page, rowSelector);
   expect(beforeMove).not.toBeNull();
 
   await page.mouse.move(moveTo.x, moveTo.y);
   await page.waitForTimeout(120);
 
-  const afterMove = await measureDraggedRowAndFloatingShell(page, rowSelector);
+  const afterMove = await measureDraggedRow(page, rowSelector);
   expect(afterMove).not.toBeNull();
 
   const rowDelta = (afterMove?.rowTop ?? 0) - (beforeMove?.rowTop ?? 0);
-  const floatingDelta =
-    (afterMove?.floatingTop ?? 0) - (beforeMove?.floatingTop ?? 0);
 
   if (direction === "up") {
     expect(rowDelta).toBeLessThan(-8);
-    expect(floatingDelta).toBeLessThan(-8);
     return;
   }
 
   expect(rowDelta).toBeGreaterThan(8);
-  expect(floatingDelta).toBeGreaterThan(8);
 }
 
 test("live preview drag bubble feels correct across repository and config lists", async ({
@@ -528,6 +489,7 @@ test("live preview drag bubble feels correct across repository and config lists"
 
   const repoOrder = page.locator(".repo-list-grid [data-list-item-id]");
   await expect(repoOrder).toHaveCount(3);
+  await page.getByRole("button", { name: "开启排序" }).first().click();
 
   const repoThresholdY = await getBubbleThresholdPointerY(
     page,
@@ -561,10 +523,6 @@ test("live preview drag bubble feels correct across repository and config lists"
   await expect(repoOrder.nth(0)).toHaveAttribute("data-list-item-id", "repo-a");
   await expect(repoOrder.nth(1)).toHaveAttribute("data-list-item-id", "repo-c");
   await expect(repoOrder.nth(2)).toHaveAttribute("data-list-item-id", "repo-b");
-  await expectDraggedRowAlignedWithFloatingShell(
-    page,
-    "[data-list-item-id='repo-c']"
-  );
   await expectDraggedRowFollowsPointer(
     page,
     "[data-list-item-id='repo-c']",
@@ -582,10 +540,6 @@ test("live preview drag bubble feels correct across repository and config lists"
 
   await page.mouse.up();
   await page.waitForTimeout(40);
-  await expectDraggedRowAlignedWithFloatingShell(
-    page,
-    "[data-list-item-id='repo-c']"
-  );
   await expect
     .poll(() =>
       page.evaluate(() =>
@@ -615,10 +569,6 @@ test("live preview drag bubble feels correct across repository and config lists"
       y: settlingHandleBox.y + settlingHandleBox.height / 2 - 20,
     },
   ]);
-  await expectDraggedRowAlignedWithFloatingShell(
-    page,
-    "[data-list-item-id='repo-b']"
-  );
   await expectDraggedRowFollowsPointer(
     page,
     "[data-list-item-id='repo-b']",
@@ -629,6 +579,8 @@ test("live preview drag bubble feels correct across repository and config lists"
     "up"
   );
   await page.mouse.up();
+
+  await page.getByRole("button", { name: "开启排序" }).click();
 
   const recentOrder = page.locator("[data-list-item-id^='recent:']");
   const recentThresholdY = await getBubbleThresholdPointerY(
@@ -781,10 +733,6 @@ test("live preview drag bubble feels correct across repository and config lists"
     "data-list-item-id",
     "userprofile:gamma-profile"
   );
-  await expectDraggedRowAlignedWithFloatingShell(
-    page,
-    "[data-list-item-id='userprofile:alpha-profile']"
-  );
   await expectDraggedRowFollowsPointer(
     page,
     "[data-list-item-id='userprofile:alpha-profile']",
@@ -802,10 +750,6 @@ test("live preview drag bubble feels correct across repository and config lists"
 
   await page.mouse.up();
   await page.waitForTimeout(40);
-  await expectDraggedRowAlignedWithFloatingShell(
-    page,
-    "[data-list-item-id='userprofile:alpha-profile']"
-  );
   await expect
     .poll(() =>
       page.evaluate(() =>

@@ -11,6 +11,8 @@ export interface QuickCreateTemplateOption {
 }
 
 export interface LoadableProfile {
+  id?: string;
+  revisionId?: string;
   name: string;
   providerId?: string;
   provider_id?: string;

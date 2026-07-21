@@ -50,6 +50,8 @@ test.describe("Provider Catalog", () => {
           {
             id: "history-boot-1",
             repoId: "repo-a",
+            configurationId: null,
+            configurationRevisionId: null,
             providerId: "dotnet",
             projectPath: "/workspace/alpha-service/App.csproj",
             startedAt: "2026-04-02T10:00:00.000Z",

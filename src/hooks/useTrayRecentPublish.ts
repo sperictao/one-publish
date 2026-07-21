@@ -18,7 +18,7 @@ import { analyzeProjectScanFailure } from "@/lib/tauri/invokeErrors";
 import type { ProviderPublishSpec } from "@/features/publish/publishRuntime";
 import type { RunPublishOptions } from "@/features/publish/publishTransaction";
 import { toSpecParameters } from "@/types/parameters";
-import type { ProjectInfo } from "@/lib/store/types";
+import type { ConfigProfile, ProjectInfo } from "@/lib/store/types";
 import type { Repository } from "@/lib/store/types";
 
 interface TranslationMap {
@@ -70,15 +70,11 @@ async function resolveDotnetProjectInfo(
 
 async function resolveUserProfileSpec(params: {
   repo: Repository;
-  profileName: string;
+  profile: ConfigProfile;
   specVersion: number;
   defaultOutputDir: string;
 }): Promise<ProviderPublishSpec> {
-  const profiles = await getProfiles(params.repo.id);
-  const profile = profiles.find((item) => item.name === params.profileName);
-  if (!profile) {
-    throw new Error(`missing user profile: ${params.profileName}`);
-  }
+  const { profile } = params;
 
   const providerId = profile.providerId || params.repo.providerId || "dotnet";
   if (providerId === "dotnet") {
@@ -132,7 +128,8 @@ async function resolvePubxmlSpec(params: {
 
 function createTrayRunOptions(
   repoId: string,
-  configKey: string
+  configKey: string,
+  configuration?: { id: string; revisionId: string }
 ): RunPublishOptions {
   return {
     repoId,
@@ -141,6 +138,8 @@ function createTrayRunOptions(
     restoreWindowOnFailure: false,
     feedbackMode: "system",
     trayStatusEffect: true,
+    configurationId: configuration?.id ?? null,
+    configurationRevisionId: configuration?.revisionId ?? null,
   };
 }
 
@@ -158,15 +157,23 @@ export async function resolveTrayPublishRequest(params: {
   }
 
   if (identity.kind === "user-profile") {
+    const profiles = await getProfiles(repo.id);
+    const profile = profiles.find((item) => item.id === identity.profileId);
+    if (!profile) {
+      throw new Error(`missing user profile: ${identity.profileId}`);
+    }
+    if (profile.blockedReason) {
+      throw new Error(`配置不可执行：${profile.blockedReason}`);
+    }
     const spec = await resolveUserProfileSpec({
       repo,
-      profileName: identity.profileName,
+      profile,
       specVersion: params.specVersion,
       defaultOutputDir: params.defaultOutputDir,
     });
     return {
       spec,
-      options: createTrayRunOptions(repo.id, configKey),
+      options: createTrayRunOptions(repo.id, configKey, profile),
     };
   }
 

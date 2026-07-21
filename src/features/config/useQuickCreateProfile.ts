@@ -1,7 +1,6 @@
 import { useCallback, useMemo, useState } from "react";
 
 import { toast } from "sonner";
-import { createUserProfileConfigKey } from "@/features/config/publishConfigIdentity";
 import {
   createDefaultDotnetPublishConfig,
   createDotnetPublishConfigFromParameters,
@@ -53,11 +52,6 @@ export interface UseQuickCreateProfileParams {
     description: string;
   };
   buildProfileParameters: (config: PublishConfigStore) => ConfigParameters;
-  replaceScopedConfigKey: (
-    previousKey: string,
-    nextKey: string,
-    repoId?: string | null
-  ) => void;
   refreshProfilesAfterMutation: (
     repoId: string,
     preFetchedProfiles?: ConfigProfile[]
@@ -71,7 +65,7 @@ export interface UseQuickCreateProfileParams {
   }) => Promise<StoreMutationResult>;
   updateProfile: (params: {
     repoId: string;
-    originalName: string;
+    profileId: string;
     name: string;
     providerId: string;
     parameters: ConfigParameters;
@@ -111,7 +105,6 @@ export function useQuickCreateProfile({
   language,
   getPresetText,
   buildProfileParameters,
-  replaceScopedConfigKey,
   refreshProfilesAfterMutation,
   saveProfileToStore,
   updateProfile,
@@ -131,9 +124,7 @@ export function useQuickCreateProfile({
     useState("");
   const [quickCreateProfileSaving, setQuickCreateProfileSaving] =
     useState(false);
-  const [editingProfileOriginalName, setEditingProfileOriginalName] = useState<
-    string | null
-  >(null);
+  const [editingProfileId, setEditingProfileId] = useState<string | null>(null);
 
   const resetQuickCreateProfileState = useCallback(() => {
     setQuickCreateProfileName("");
@@ -142,7 +133,7 @@ export function useQuickCreateProfile({
     setQuickCreateProfileGroup(QUICK_CREATE_PROFILE_GROUP_DEFAULT);
     setQuickCreateProfileCustomGroup("");
     setQuickCreateProfileSaving(false);
-    setEditingProfileOriginalName(null);
+    setEditingProfileId(null);
   }, []);
 
   const openQuickCreateProfileDialog = useCallback(() => {
@@ -180,7 +171,7 @@ export function useQuickCreateProfile({
     );
     setQuickCreateProfileCustomGroup("");
     setQuickCreateProfileSaving(false);
-    setEditingProfileOriginalName(profile.name);
+    setEditingProfileId(profile.id);
     setQuickCreateProfileOpen(true);
   }, []);
 
@@ -291,14 +282,13 @@ export function useQuickCreateProfile({
 
     try {
       const parameters = buildProfileParameters(quickCreateProfileDraft);
-      const isEditing = Boolean(editingProfileOriginalName);
-      const nextProfileKey = createUserProfileConfigKey(profileName);
+      const isEditing = Boolean(editingProfileId);
 
       let mutationState;
-      if (editingProfileOriginalName) {
+      if (editingProfileId) {
         mutationState = await updateProfile({
           repoId: selectedRepoId,
-          originalName: editingProfileOriginalName,
+          profileId: editingProfileId,
           name: profileName,
           providerId: "dotnet",
           parameters,
@@ -317,31 +307,19 @@ export function useQuickCreateProfile({
       const mutationRepo = mutationState.repositories.find(
         (r) => r.id === selectedRepoId
       );
-      if (mutationRepo) {
-        await refreshProfilesAfterMutation(
-          selectedRepoId,
-          mutationRepo.publishConfig.profiles
-        );
+      const nextProfiles = mutationRepo
+        ? await refreshProfilesAfterMutation(
+            selectedRepoId,
+            mutationRepo.publishConfig.profiles
+          )
+        : await refreshProfilesAfterMutation(selectedRepoId);
+      const savedProfile = editingProfileId
+        ? nextProfiles.find((profile) => profile.id === editingProfileId)
+        : nextProfiles.find((profile) => profile.name === profileName);
+      if (!savedProfile?.id) {
+        throw new Error("保存后未找到配置身份");
       }
-
-      onProfileSaved({
-        name: profileName,
-        providerId: "dotnet",
-        parameters,
-        profileGroup: resolvedProfileGroup || undefined,
-        createdAt: new Date().toISOString(),
-        isSystemDefault: false,
-      });
-      if (
-        editingProfileOriginalName &&
-        editingProfileOriginalName !== profileName
-      ) {
-        replaceScopedConfigKey(
-          createUserProfileConfigKey(editingProfileOriginalName),
-          nextProfileKey,
-          selectedRepoId
-        );
-      }
+      onProfileSaved(savedProfile);
 
       toast.success(
         isEditing
@@ -354,7 +332,7 @@ export function useQuickCreateProfile({
       console.error("保存配置文件失败:", err);
       toast.error(
         extractInvokeErrorMessage(err) ||
-          (editingProfileOriginalName
+          (editingProfileId
             ? profileT.quickEditFailed || "更新配置文件失败"
             : profileT.saveFailed || "保存配置文件失败")
       );
@@ -363,7 +341,7 @@ export function useQuickCreateProfile({
     }
   }, [
     buildProfileParameters,
-    editingProfileOriginalName,
+    editingProfileId,
     handleQuickCreateProfileOpenChange,
     onProfileSaved,
     profileT,
@@ -372,7 +350,6 @@ export function useQuickCreateProfile({
     quickCreateProfileGroup,
     quickCreateProfileName,
     quickCreateProfileSaving,
-    replaceScopedConfigKey,
     refreshProfilesAfterMutation,
     saveProfileToStore,
     selectedRepoId,
@@ -390,7 +367,7 @@ export function useQuickCreateProfile({
     quickCreateProfileCustomGroup,
     setQuickCreateProfileCustomGroup,
     quickCreateProfileSaving,
-    isQuickCreateEditing: editingProfileOriginalName !== null,
+    isQuickCreateEditing: editingProfileId !== null,
     openQuickCreateProfileDialog,
     openQuickEditProfileDialog,
     handleQuickCreateProfileOpenChange,

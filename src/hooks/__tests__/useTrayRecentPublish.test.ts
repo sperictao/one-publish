@@ -77,6 +77,7 @@ function createRepository(overrides?: Partial<Repository>): Repository {
         profileName: "",
       },
       profiles: [],
+      bindings: [],
     },
     ...overrides,
   };
@@ -115,7 +116,9 @@ describe("useTrayRecentPublish", () => {
     });
     mocks.getProfiles.mockResolvedValue([
       {
-        name: "alpha",
+        id: "profile-42",
+        revisionId: "revision-7",
+        name: "Renamed",
         providerId: "dotnet",
         parameters: {
           configuration: "Release",
@@ -146,7 +149,7 @@ describe("useTrayRecentPublish", () => {
     await trayHandler({
       payload: {
         repoId: "repo-1",
-        configKey: "userprofile:alpha",
+        configKey: "userprofile:profile-42",
       },
     });
 
@@ -162,7 +165,9 @@ describe("useTrayRecentPublish", () => {
       },
       expect.objectContaining({
         repoId: "repo-1",
-        recentConfigKey: "userprofile:alpha",
+        recentConfigKey: "userprofile:profile-42",
+        configurationId: "profile-42",
+        configurationRevisionId: "revision-7",
         openOutputDirOnSuccess: true,
         restoreWindowOnFailure: false,
         feedbackMode: "system",
@@ -182,6 +187,8 @@ describe("useTrayRecentPublish", () => {
     });
     mocks.getProfiles.mockResolvedValue([
       {
+        id: "alpha",
+        revisionId: "alpha-revision",
         name: "alpha",
         providerId: "dotnet",
         parameters: {
@@ -244,6 +251,8 @@ describe("useTrayRecentPublish", () => {
     });
     mocks.getProfiles.mockResolvedValue([
       {
+        id: "alpha",
+        revisionId: "alpha-revision",
         name: "alpha",
         providerId: "dotnet",
         parameters: {
@@ -368,6 +377,8 @@ describe("useTrayRecentPublish", () => {
     });
     mocks.getProfiles.mockResolvedValue([
       {
+        id: "alpha",
+        revisionId: "alpha-revision",
         name: "alpha",
         providerId: "dotnet",
         parameters: {
@@ -515,6 +526,62 @@ describe("useTrayRecentPublish", () => {
     expect(mocks.showMainWindow).not.toHaveBeenCalled();
   });
 
+  it("Provider 版本不兼容的配置不会从托盘绕过阻断执行", async () => {
+    const runPublishSpec = vi.fn().mockResolvedValue(undefined);
+    let handler:
+      | ((event: { payload: TrayPublishRequestPayload }) => Promise<void>)
+      | null = null;
+    mocks.listen.mockImplementation(async (_eventName, callback) => {
+      handler = callback;
+      return () => {};
+    });
+    mocks.getProfiles.mockResolvedValue([
+      {
+        id: "blocked-profile",
+        revisionId: "blocked-revision",
+        name: "Future Cargo",
+        providerId: "cargo",
+        parameters: { release: true },
+        blockedReason: "provider_version_unsupported:7",
+      },
+    ]);
+
+    renderHook(() =>
+      useTrayRecentPublish({
+        appT: {
+          trayPublishFailed: "状态栏发布启动失败",
+        },
+        defaultOutputDir: "/exports",
+        specVersion: 1,
+        runPublishSpec,
+      })
+    );
+
+    await waitFor(() => {
+      expect(handler).not.toBeNull();
+    });
+    if (!handler) {
+      throw new Error("tray handler missing");
+    }
+
+    const trayHandler = handler as (event: {
+      payload: TrayPublishRequestPayload;
+    }) => Promise<void>;
+    await trayHandler({
+      payload: {
+        repoId: "repo-1",
+        configKey: "userprofile:blocked-profile",
+      },
+    });
+
+    expect(runPublishSpec).not.toHaveBeenCalled();
+    expect(mocks.setTrayPublishStatus).toHaveBeenCalledWith("failure");
+    expect(mocks.showSystemNotification).toHaveBeenCalledWith({
+      title: "状态栏发布启动失败",
+      body: "配置不可执行：provider_version_unsupported:7",
+    });
+  });
+
   it("未绑定且存在多个候选项目时不会触发托盘发布", async () => {
     const runPublishSpec = vi.fn().mockResolvedValue(undefined);
     let handler:
@@ -531,6 +598,8 @@ describe("useTrayRecentPublish", () => {
     );
     mocks.getProfiles.mockResolvedValue([
       {
+        id: "alpha",
+        revisionId: "alpha-revision",
         name: "alpha",
         providerId: "dotnet",
         parameters: {

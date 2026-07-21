@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import {
   loadFavorites,
   migrateLegacyFavorites,
+  migrateNameBasedProfileFavorites,
   persistFavorites,
   type FavoriteConfigsByRepo,
 } from "@/stores/favoriteConfigs";
@@ -114,6 +115,51 @@ describe("migrateLegacyFavorites", () => {
 
     expect(current).toEqual(snapshot);
     expect(next).not.toBe(current);
+  });
+});
+
+describe("migrateNameBasedProfileFavorites", () => {
+  const repositories = [
+    {
+      id: "repo-1",
+      publishConfig: {
+        profiles: [
+          { id: "profile-42", name: "alpha" },
+          { id: "profile-99", name: "beta" },
+        ],
+      },
+    },
+  ];
+
+  it("replaces legacy name keys with immutable profile IDs and persists other keys", () => {
+    const current = {
+      "repo-1": [
+        "userprofile:alpha",
+        "preset:release-fd",
+        "userprofile:profile-99",
+      ],
+    };
+
+    expect(migrateNameBasedProfileFavorites(current, repositories)).toEqual({
+      "repo-1": [
+        "userprofile:profile-42",
+        "preset:release-fd",
+        "userprofile:profile-99",
+      ],
+    });
+    expect(current["repo-1"][0]).toBe("userprofile:alpha");
+  });
+
+  it("is idempotent and does not guess an ID for an unknown legacy name", () => {
+    const current = {
+      "repo-1": ["userprofile:profile-42", "userprofile:missing"],
+    };
+
+    const once = migrateNameBasedProfileFavorites(current, repositories);
+    const twice = migrateNameBasedProfileFavorites(once, repositories);
+
+    expect(once).toEqual(current);
+    expect(twice).toEqual(current);
   });
 });
 

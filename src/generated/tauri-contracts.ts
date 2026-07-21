@@ -63,7 +63,7 @@ export type UpdaterHelpPaths = { docsPath: string, templatePath: string, };
 
 export type ConfigExport = { version: number, exported_at: string, profiles: Array<ConfigExportProfile>, };
 
-export type ConfigExportProfile = { name: string, provider_id: string, parameters: { [key: string]: JsonValue }, profile_group: string | null, created_at: string, is_system_default: boolean, };
+export type ConfigExportProfile = { name: string, provider_id: string, contract_version: number, provider_version: string, settings_version: number, parameters: { [key: string]: JsonValue }, profile_group: string | null, created_at: string, is_system_default: boolean, };
 
 export type EnvironmentCheckResult = { is_ready: boolean, providers: Array<ProviderStatus>, issues: Array<EnvironmentIssue>, checked_at: string, };
 
@@ -101,13 +101,17 @@ export type AppState = { repositories: Array<Repository>, selectedRepoId: string
 
 export type Branch = { name: string, isMain: boolean, isCurrent: boolean, path: string, commitCount: number | null, };
 
-export type ConfigProfile = { name: string, providerId: string, parameters: JsonValue, profileGroup: string | null, createdAt: string, isSystemDefault: boolean, };
+export type ConfigProfile = { id: string, name: string, profileGroup: string | null, createdAt: string, isSystemDefault: boolean, currentRevisionId: string, revisions: Array<PublishConfigurationRevision>, deletedAt: string | null, blockedReason: string | null, };
 
-export type ExecutionRecord = { id: string, repoId: string | null, providerId: string, projectPath: string, startedAt: string, finishedAt: string, success: boolean, cancelled: boolean, outputDir: string | null, error: string | null, commandLine: string | null, snapshotPath: string | null, failureSignature: string | null, outputExcerpt: string | null, spec: JsonValue | null, fileCount: number, warnings: Array<string> | null, };
+export type ConfigurationBindingReference = { id: string, configurationId: string, configurationRevisionId: string, externalIdentity: string, };
+
+export type ExecutionRecord = { id: string, repoId: string | null, configurationId: string | null, configurationRevisionId: string | null, providerId: string, projectPath: string, startedAt: string, finishedAt: string, success: boolean, cancelled: boolean, outputDir: string | null, error: string | null, commandLine: string | null, snapshotPath: string | null, failureSignature: string | null, outputExcerpt: string | null, spec: JsonValue | null, fileCount: number, warnings: Array<string> | null, };
 
 export type PublishConfigStore = { configuration: string, runtime: string, framework: string, selfContained: boolean, outputDir: string, noBuild: boolean, noRestore: boolean, verbosity: string, noLogo: boolean, deleteExistingFiles: boolean, properties: { [key: string]: string }, useProfile: boolean, profileName: string, };
 
-export type RepoPublishConfig = { selectedPreset: string, isCustomMode: boolean, customConfig: PublishConfigStore, profiles: Array<ConfigProfile>, };
+export type PublishConfigurationRevision = { id: string, sequence: number, createdAt: string, contractVersion: number, providerId: string, providerVersion: string, settingsVersion: number, parameters: JsonValue, };
+
+export type RepoPublishConfig = { selectedPreset: string, isCustomMode: boolean, customConfig: PublishConfigStore, profiles: Array<ConfigProfile>, bindings: Array<ConfigurationBindingReference>, };
 
 export type Repository = { id: string, name: string, path: string, projectFile: string | null, currentBranch: string, branches: Array<Branch>, isMain: boolean, providerId: string | null, publishConfig: RepoPublishConfig, };
 

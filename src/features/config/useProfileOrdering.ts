@@ -47,7 +47,7 @@ export function useProfileOrdering({
 
       const nextProfileOrder: ProfileOrderEntry[] = nextProfiles.map(
         (profile) => ({
-          name: profile.name,
+          id: profile.id,
           profileGroup: profile.profileGroup ?? null,
         })
       );

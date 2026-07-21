@@ -131,12 +131,15 @@ describe("ConfigManagementContent", () => {
     renderConfigManagementContent({
       profiles: [
         {
+          id: "profile-release",
+          revisionId: "revision-release",
           name: "Release",
           providerId: "dotnet",
           parameters: {},
           profileGroup: null,
           createdAt: "2026-04-02T12:00:00.000Z",
           isSystemDefault: false,
+          externalBindingIds: [],
         },
       ],
     });

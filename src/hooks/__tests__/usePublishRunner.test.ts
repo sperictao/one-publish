@@ -212,6 +212,7 @@ function createRunnerProps() {
       success: "发布成功",
       failed: "发布失败",
       output: "输出目录: {{dir}}",
+      configurationBlocked: "当前发布配置不可执行",
     },
     selectedRepoId: "repo-1",
     selectedRepo: { path: "/repo" },
@@ -235,6 +236,9 @@ function createRunnerProps() {
     openEnvironmentDialog: vi.fn(),
     setEnvironmentLastCheck: vi.fn(),
     savePublishRecord: vi.fn(),
+    configurationId: null as string | null,
+    configurationRevisionId: null as string | null,
+    currentConfigurationBlockedReason: null as string | null,
   };
 }
 
@@ -336,6 +340,59 @@ describe("usePublishRunner", () => {
       })
     );
     expect(buildPublishSpecMock).toHaveBeenCalled();
+  });
+
+  it("当前配置不兼容时显示原因且不会解析或执行发布", async () => {
+    const props = createRunnerProps();
+    props.currentConfigurationBlockedReason = "provider_version_unsupported:7";
+    const { result } = renderHook(() => usePublishRunner(props));
+    const previewBuildCalls = buildPublishSpecMock.mock.calls.length;
+
+    await act(async () => {
+      await result.current.startPublish();
+    });
+
+    expect(mocks.toast.error).toHaveBeenCalledWith("当前发布配置不可执行", {
+      description: "provider_version_unsupported:7",
+    });
+    expect(buildPublishSpecMock).toHaveBeenCalledTimes(previewBuildCalls);
+    expect(mocks.invoke).not.toHaveBeenCalledWith(
+      "execute_provider_publish",
+      expect.anything()
+    );
+  });
+
+  it("手动 userprofile 发布记录固定当前 profile 与 revision ID", async () => {
+    mocks.runEnvironmentCheck.mockResolvedValue(readyEnvironment);
+    mocks.invoke.mockResolvedValue(createPublishResult());
+    mocks.useDotnetPublishSelection.mockReturnValue({
+      getCurrentConfig: vi.fn(),
+      selectionIdentity: {
+        kind: "user-profile",
+        profileId: "profile-42",
+        configKey: "userprofile:profile-42",
+      },
+      recentConfigKeyForCurrentSelection: "userprofile:profile-42",
+      isResolvingSelectedProjectProfile: false,
+    });
+
+    const props = createRunnerProps();
+    props.selectedPreset = "userprofile:profile-42";
+    props.isCustomMode = true;
+    props.configurationId = "profile-42";
+    props.configurationRevisionId = "revision-7";
+    const { result } = renderHook(() => usePublishRunner(props));
+
+    await act(async () => {
+      await result.current.startPublish();
+    });
+
+    expect(props.savePublishRecord).toHaveBeenCalledWith(
+      expect.objectContaining({
+        configurationId: "profile-42",
+        configurationRevisionId: "revision-7",
+      })
+    );
   });
 
   it("发布成功后自动导出执行快照并写入记录 snapshotPath", async () => {

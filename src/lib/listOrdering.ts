@@ -190,22 +190,22 @@ export function buildProfileGroups(
 
 export function reorderProfilesByDrop(params: {
   profiles: readonly ConfigProfile[];
-  activeProfileName: string;
-  targetProfileName: string;
+  activeProfileId: string;
+  targetProfileId: string;
   targetGroupKey: string;
   position: DropPosition;
   defaultGroupName: string;
 }): ConfigProfile[] {
   const {
     profiles,
-    activeProfileName,
-    targetProfileName,
+    activeProfileId,
+    targetProfileId,
     targetGroupKey,
     position,
     defaultGroupName,
   } = params;
 
-  if (activeProfileName === targetProfileName) {
+  if (activeProfileId === targetProfileId) {
     return [...profiles];
   }
 
@@ -216,17 +216,17 @@ export function reorderProfilesByDrop(params: {
     })
   );
 
-  const profileLocationByName = new Map<
+  const profileLocationById = new Map<
     string,
     { group: (typeof groups)[number]; index: number }
   >();
   for (const group of groups) {
     group.items.forEach((profile, index) => {
-      profileLocationByName.set(profile.name, { group, index });
+      profileLocationById.set(profile.id, { group, index });
     });
   }
 
-  const activeLocation = profileLocationByName.get(activeProfileName);
+  const activeLocation = profileLocationById.get(activeProfileId);
   if (!activeLocation) {
     return [...profiles];
   }
@@ -240,7 +240,7 @@ export function reorderProfilesByDrop(params: {
   }
 
   const targetIndex = targetGroup.items.findIndex(
-    (profile) => profile.name === targetProfileName
+    (profile) => profile.id === targetProfileId
   );
   if (targetIndex === -1) {
     return [...profiles];

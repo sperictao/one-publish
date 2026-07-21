@@ -6,15 +6,15 @@ import {
   createProjectProfileSelectedPreset,
   createRecentConfigRenderId,
   createUserProfileConfigKey,
-  getActiveProfileNameFromSelection,
+  getActiveProfileIdFromSelection,
   getProjectProfileNameFromConfigKey,
   getProjectProfileNameFromSelection,
   getProjectProfileNameFromRenderId,
   getRecentConfigKeyFromSelection,
   getRecentConfigKeyFromRenderId,
   getSelectedProjectProfileName,
-  getUserProfileNameFromConfigKey,
-  getUserProfileNameFromRenderId,
+  getUserProfileIdFromConfigKey,
+  getUserProfileIdFromRenderId,
   normalizeRenderableConfigId,
   parsePublishConfigKey,
   resolveDotnetRecentConfigKeyForSelection,
@@ -39,9 +39,9 @@ describe("publishConfigIdentity", () => {
       kind: "project-profile",
       profileName: "Release:Folder",
     });
-    expect(parsePublishConfigKey("userprofile: Team:Prod ")).toEqual({
+    expect(parsePublishConfigKey("userprofile: profile-42 ")).toEqual({
       kind: "user-profile",
-      profileName: "Team:Prod",
+      profileId: "profile-42",
     });
     expect(parsePublishConfigKey("preset:folder")).toEqual({
       kind: "preset",
@@ -105,15 +105,25 @@ describe("publishConfigIdentity", () => {
     });
     expect(userProfileIdentity).toEqual({
       kind: "user-profile",
-      profileName: "alpha",
+      profileId: "alpha",
       configKey: "userprofile:alpha",
     });
-    expect(getActiveProfileNameFromSelection(userProfileIdentity)).toBe(
-      "alpha"
-    );
+    expect(getActiveProfileIdFromSelection(userProfileIdentity)).toBe("alpha");
     expect(getRecentConfigKeyFromSelection(userProfileIdentity)).toBe(
       "userprofile:alpha"
     );
+
+    expect(
+      resolvePublishSelectionIdentity({
+        activeProviderId: "cargo",
+        isCustomMode: true,
+        selectedPreset: "userprofile:cargo-profile",
+      })
+    ).toEqual({
+      kind: "user-profile",
+      profileId: "cargo-profile",
+      configKey: "userprofile:cargo-profile",
+    });
 
     const projectProfileIdentity = resolvePublishSelectionIdentity({
       activeProviderId: "dotnet",
@@ -194,7 +204,7 @@ describe("publishConfigIdentity", () => {
     expect(
       resolveSelectedPublishConfigKeyFromIdentity({
         kind: "user-profile",
-        profileName: "alpha",
+        profileId: "alpha",
         configKey: "userprofile:alpha",
       })
     ).toBe("userprofile:alpha");
@@ -233,9 +243,11 @@ describe("publishConfigIdentity", () => {
     expect(getProjectProfileNameFromConfigKey("userprofile:alpha")).toBeNull();
     expect(getProjectProfileNameFromConfigKey("preset:folder")).toBeNull();
 
-    expect(getUserProfileNameFromConfigKey("userprofile:Team")).toBe("Team");
-    expect(getUserProfileNameFromConfigKey("pubxml:Release")).toBeNull();
-    expect(getUserProfileNameFromConfigKey("")).toBeNull();
+    expect(getUserProfileIdFromConfigKey("userprofile:profile-42")).toBe(
+      "profile-42"
+    );
+    expect(getUserProfileIdFromConfigKey("pubxml:Release")).toBeNull();
+    expect(getUserProfileIdFromConfigKey("")).toBeNull();
   });
 
   it("extracts profile names from render ids", () => {
@@ -244,9 +256,21 @@ describe("publishConfigIdentity", () => {
     expect(getProjectProfileNameFromRenderId(null)).toBeNull();
     expect(getProjectProfileNameFromRenderId("")).toBeNull();
 
-    expect(getUserProfileNameFromRenderId("userprofile:Team")).toBe("Team");
-    expect(getUserProfileNameFromRenderId("pubxml:Foo")).toBeNull();
-    expect(getUserProfileNameFromRenderId(null)).toBeNull();
+    expect(getUserProfileIdFromRenderId("userprofile:profile-42")).toBe(
+      "profile-42"
+    );
+    expect(getUserProfileIdFromRenderId("pubxml:Foo")).toBeNull();
+    expect(getUserProfileIdFromRenderId(null)).toBeNull();
+  });
+
+  it("keeps a user profile key stable when its display name changes", () => {
+    const configKey = createUserProfileConfigKey("profile-42");
+
+    expect(configKey).toBe("userprofile:profile-42");
+    expect(parsePublishConfigKey(configKey)).toEqual({
+      kind: "user-profile",
+      profileId: "profile-42",
+    });
   });
 
   it("creates preset config keys explicitly", () => {
@@ -257,7 +281,7 @@ describe("publishConfigIdentity", () => {
     expect(userKey).toBe("userprofile:My Team");
     expect(parsePublishConfigKey(userKey)).toEqual({
       kind: "user-profile",
-      profileName: "My Team",
+      profileId: "My Team",
     });
   });
 

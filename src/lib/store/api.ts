@@ -17,7 +17,6 @@ import type {
 } from "./types";
 import {
   normalizeAppState,
-  normalizeConfigProfile,
   normalizeImportedConfigProfile,
   normalizeRepository,
   toExportConfigProfile,
@@ -25,7 +24,6 @@ import {
 import type {
   AppState as TauriAppState,
   ConfigExport as TauriConfigExport,
-  ConfigProfile as TauriConfigProfile,
   ExecutionRecord as TauriExecutionRecord,
   ProjectInfo,
   ProjectPublishProfileFile,
@@ -294,10 +292,10 @@ export async function getShortcutsHelp(): Promise<ShortcutHelp[]> {
 }
 
 export async function getProfiles(repoId: string): Promise<ConfigProfile[]> {
-  const profiles = await invoke<TauriConfigProfile[]>("get_profiles", {
+  const repository = await invoke<TauriRepository>("get_repository", {
     repoId,
   });
-  return profiles.map(normalizeConfigProfile);
+  return normalizeRepository(repository).publishConfig.profiles;
 }
 
 export async function saveProfile(params: {
@@ -313,7 +311,7 @@ export async function saveProfile(params: {
 
 export async function updateProfile(params: {
   repoId: string;
-  originalName: string;
+  profileId: string;
   name: string;
   providerId: string;
   parameters: ConfigParameters;
@@ -330,7 +328,7 @@ export async function reorderProfiles(params: {
   const state = await invoke<TauriAppState>("reorder_profiles", {
     repoId: params.repoId,
     profiles: params.profiles.map((profile) => ({
-      name: profile.name,
+      id: profile.id,
       profileGroup: profile.profileGroup ?? null,
     })),
   });
@@ -339,20 +337,20 @@ export async function reorderProfiles(params: {
 
 export async function deleteProfile(
   repoId: string,
-  name: string
+  profileId: string
 ): Promise<AppState> {
-  const state = await invoke<TauriAppState>("delete_profile", { repoId, name });
+  const state = await invoke<TauriAppState>("delete_profile", {
+    repoId,
+    profileId,
+  });
   return normalizeAppState(state);
 }
 
 export async function exportConfig(params: {
-  profiles: ConfigProfile[];
+  repoId: string;
   filePath: string;
 }): Promise<string> {
-  return await invoke<string>("export_config", {
-    profiles: params.profiles.map(toExportConfigProfile),
-    file_path: params.filePath,
-  });
+  return await invoke<string>("export_config", params);
 }
 
 export async function importConfig(filePath: string): Promise<ConfigExport> {

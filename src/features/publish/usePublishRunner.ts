@@ -32,6 +32,9 @@ interface UsePublishRunnerParams {
   ) => void;
   setEnvironmentLastCheck: (snapshot: EnvironmentCheckSnapshot | null) => void;
   savePublishRecord: (record: ExecutionRecord) => Promise<void>;
+  configurationId?: string | null;
+  configurationRevisionId?: string | null;
+  currentConfigurationBlockedReason?: string | null;
 }
 
 export function usePublishRunner({
@@ -53,6 +56,9 @@ export function usePublishRunner({
   openEnvironmentDialog,
   setEnvironmentLastCheck,
   savePublishRecord,
+  configurationId,
+  configurationRevisionId,
+  currentConfigurationBlockedReason,
 }: UsePublishRunnerParams) {
   // --- Log stream (shared, called once) ---
   const {
@@ -102,6 +108,9 @@ export function usePublishRunner({
     getOutputLogSnapshot,
     replaceCapturedOutputLog,
     validate,
+    currentConfigurationId: configurationId,
+    currentConfigurationRevisionId: configurationRevisionId,
+    currentConfigurationBlockedReason,
   });
 
   // --- Public API (unchanged) ---

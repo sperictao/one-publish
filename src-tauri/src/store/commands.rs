@@ -17,7 +17,7 @@ use std::collections::{BTreeMap, BTreeSet};
 #[derive(Debug, Clone, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ProfileOrderEntry {
-    pub name: String,
+    pub id: String,
     #[serde(default)]
     pub profile_group: Option<String>,
 }
@@ -123,6 +123,11 @@ pub async fn remove_repository(
     Ok(get_bootstrap_state())
 }
 
+fn merge_repository_metadata(existing: &Repository, mut update: Repository) -> Repository {
+    update.publish_config = existing.publish_config.clone();
+    update
+}
+
 #[tauri::command]
 pub async fn update_repository(
     app: tauri::AppHandle,
@@ -131,15 +136,11 @@ pub async fn update_repository(
     let _timer =
         crate::commands::middleware::CommandTimer::new("store::commands::update_repository");
     let mut state = get_state();
+    let existing = find_repository(&state.repositories, &repo.id)?;
+    let repo = merge_repository_metadata(existing, repo);
     validate_repository_project_binding(&repo).await?;
-
-    if let Some(existing) = state
-        .repositories
-        .iter_mut()
-        .find(|item| item.id == repo.id)
-    {
-        *existing = repo;
-    }
+    let repo_id = repo.id.clone();
+    *find_repository_mut(&mut state.repositories, &repo_id)? = repo;
 
     persist_state_and_refresh_tray(&app, state).await?;
     Ok(get_bootstrap_state())
@@ -285,8 +286,10 @@ pub async fn get_profiles(repo_id: String) -> Result<Vec<ConfigProfile>, AppErro
     with_read_state(|state| {
         Ok(find_repository(&state.repositories, &repo_id)?
             .publish_config
-            .profiles
-            .clone())
+            .active_profiles()
+            .into_iter()
+            .cloned()
+            .collect())
     })
 }
 
@@ -303,32 +306,13 @@ pub async fn save_profile(
     let mut state = get_state();
     let repo = find_repository_mut(&mut state.repositories, &repo_id)?;
 
-    if repo
-        .publish_config
-        .profiles
-        .iter()
-        .any(|profile| profile.name == name)
-    {
-        return Err(AppError::validation_with_code(
-            format!("配置文件 '{}' 已存在", name),
-            "profile_exists",
-        ));
-    }
-
-    let normalized_profile_group = profile_group
-        .map(|value| value.trim().to_string())
-        .filter(|value| !value.is_empty());
-
-    let profile = ConfigProfile {
-        name: name.clone(),
+    repo.publish_config.create_profile(
+        name,
         provider_id,
         parameters,
-        profile_group: normalized_profile_group,
-        created_at: chrono::Utc::now().to_rfc3339(),
-        is_system_default: false,
-    };
-
-    repo.publish_config.profiles.push(profile);
+        profile_group,
+        chrono::Utc::now().to_rfc3339(),
+    )?;
     let response = state.clone();
     persist_state_and_refresh_tray(&app, state).await?;
     Ok(response)
@@ -338,7 +322,7 @@ pub async fn save_profile(
 pub async fn update_profile(
     app: tauri::AppHandle,
     repo_id: String,
-    original_name: String,
+    profile_id: String,
     name: String,
     provider_id: String,
     parameters: serde_json::Value,
@@ -348,46 +332,14 @@ pub async fn update_profile(
     let mut state = get_state();
     let repo = find_repository_mut(&mut state.repositories, &repo_id)?;
 
-    if original_name != name
-        && repo
-            .publish_config
-            .profiles
-            .iter()
-            .any(|profile| profile.name == name)
-    {
-        return Err(AppError::validation_with_code(
-            format!("配置文件 '{}' 已存在", name),
-            "profile_exists",
-        ));
-    }
-
-    let normalized_profile_group = profile_group
-        .map(|value| value.trim().to_string())
-        .filter(|value| !value.is_empty());
-
-    let profile = repo
-        .publish_config
-        .profiles
-        .iter_mut()
-        .find(|profile| profile.name == original_name)
-        .ok_or_else(|| {
-            AppError::validation_with_code(
-                format!("未找到配置文件: {}", original_name),
-                "profile_not_found",
-            )
-        })?;
-
-    if profile.is_system_default {
-        return Err(AppError::validation_with_code(
-            "不能编辑系统默认配置文件",
-            "system_profile_immutable",
-        ));
-    }
-
-    profile.name = name;
-    profile.provider_id = provider_id;
-    profile.parameters = parameters;
-    profile.profile_group = normalized_profile_group;
+    repo.publish_config.update_profile(
+        &profile_id,
+        name,
+        provider_id,
+        parameters,
+        profile_group,
+        chrono::Utc::now().to_rfc3339(),
+    )?;
 
     let response = state.clone();
     persist_state_and_refresh_tray(&app, state).await?;
@@ -398,29 +350,21 @@ pub async fn update_profile(
 pub async fn delete_profile(
     app: tauri::AppHandle,
     repo_id: String,
-    name: String,
+    profile_id: String,
 ) -> Result<AppState, AppError> {
     let _timer = crate::commands::middleware::CommandTimer::new("store::commands::delete_profile");
     let mut state = get_state();
-    let repo = find_repository_mut(&mut state.repositories, &repo_id)?;
-
-    if let Some(profile) = repo
-        .publish_config
-        .profiles
-        .iter()
-        .find(|profile| profile.name == name)
     {
-        if profile.is_system_default {
-            return Err(AppError::validation_with_code(
-                "不能删除系统默认配置文件",
-                "system_profile_immutable",
-            ));
-        }
+        let repo = find_repository_mut(&mut state.repositories, &repo_id)?;
+        repo.publish_config
+            .delete_profile(&profile_id, chrono::Utc::now().to_rfc3339())?;
     }
-
-    repo.publish_config
-        .profiles
-        .retain(|profile| profile.name != name);
+    remove_recent_publish_config_state(
+        &mut state.recent_repo_ids,
+        &mut state.recent_config_keys_by_repo,
+        &repo_id,
+        &format!("userprofile:{profile_id}"),
+    );
     let response = state.clone();
     persist_state_and_refresh_tray(&app, state).await?;
     Ok(response)
@@ -549,56 +493,12 @@ pub async fn reorder_profiles(
 
     {
         let repo = find_repository_mut(&mut state.repositories, &repo_id)?;
-        let current_names = repo
-            .publish_config
-            .profiles
-            .iter()
-            .map(|profile| profile.name.clone())
-            .collect::<Vec<_>>();
-        let requested_names = normalize_ordered_ids(
+        repo.publish_config.reorder_profiles(
             profiles
-                .iter()
-                .map(|profile| profile.name.clone())
-                .collect::<Vec<_>>(),
-        );
-
-        ensure_exact_order_match(&current_names, &requested_names, "profile_order_mismatch")?;
-
-        if current_names == requested_names
-            && repo
-                .publish_config
-                .profiles
-                .iter()
-                .zip(profiles.iter())
-                .all(|(current, next)| {
-                    current.profile_group.as_deref().unwrap_or("").trim()
-                        == next.profile_group.as_deref().unwrap_or("").trim()
-                })
-        {
-            return Ok(get_bootstrap_state());
-        }
-
-        let mut profile_map = repo
-            .publish_config
-            .profiles
-            .drain(..)
-            .map(|profile| (profile.name.clone(), profile))
-            .collect::<BTreeMap<_, _>>();
-
-        let next_profiles = profiles
-            .into_iter()
-            .filter_map(|entry| {
-                profile_map.remove(&entry.name).map(|mut profile| {
-                    profile.profile_group = entry
-                        .profile_group
-                        .map(|value| value.trim().to_string())
-                        .filter(|value| !value.is_empty());
-                    profile
-                })
-            })
-            .collect::<Vec<_>>();
-
-        repo.publish_config.profiles = next_profiles;
+                .into_iter()
+                .map(|entry| (entry.id, entry.profile_group))
+                .collect(),
+        )?;
     }
 
     let response = state.clone();
@@ -619,8 +519,7 @@ fn redact_sensitive_spec_values(value: &mut serde_json::Value) {
         serde_json::Value::Object(map) => {
             for (key, item) in map.iter_mut() {
                 if crate::security::is_sensitive_key(key) {
-                    *item =
-                        serde_json::Value::String(crate::security::REDACTED_VALUE.to_string());
+                    *item = serde_json::Value::String(crate::security::REDACTED_VALUE.to_string());
                     continue;
                 }
                 redact_sensitive_spec_values(item);
@@ -702,13 +601,16 @@ pub async fn set_execution_record_snapshot(
 
 #[cfg(test)]
 mod tests {
-    use super::{sanitize_record_for_storage, ExecutionRecord};
+    use super::{merge_repository_metadata, sanitize_record_for_storage, ExecutionRecord};
+    use crate::store::{ConfigurationBindingReference, RepoPublishConfig, Repository};
     use serde_json::json;
 
     fn test_record() -> ExecutionRecord {
         ExecutionRecord {
             id: "rec-1".to_string(),
             repo_id: Some("repo-1".to_string()),
+            configuration_id: None,
+            configuration_revision_id: None,
             provider_id: "dotnet".to_string(),
             project_path: "/repo/App.csproj".to_string(),
             started_at: "2026-07-18T10:00:00.000Z".to_string(),
@@ -725,6 +627,76 @@ mod tests {
             file_count: 2,
             warnings: None,
         }
+    }
+
+    #[test]
+    fn repository_metadata_update_preserves_authoritative_publish_history() {
+        let mut publish_config = RepoPublishConfig::default();
+        let profile = publish_config
+            .create_profile(
+                "Release".to_string(),
+                "dotnet".to_string(),
+                serde_json::json!({ "configuration": "Release" }),
+                None,
+                "2026-07-21T10:00:00Z".to_string(),
+            )
+            .expect("create profile")
+            .clone();
+        let deleted_profile = publish_config
+            .create_profile(
+                "Deleted".to_string(),
+                "dotnet".to_string(),
+                serde_json::json!({ "configuration": "Debug" }),
+                None,
+                "2026-07-21T09:00:00Z".to_string(),
+            )
+            .expect("create profile to delete")
+            .clone();
+        publish_config
+            .delete_profile(&deleted_profile.id, "2026-07-21T09:30:00Z".to_string())
+            .expect("tombstone profile");
+        publish_config.bindings.push(ConfigurationBindingReference {
+            id: "binding-1".to_string(),
+            configuration_id: profile.id.clone(),
+            configuration_revision_id: profile.current_revision_id.clone(),
+            external_identity: "github:owner/repo:stable".to_string(),
+        });
+        let existing = Repository {
+            id: "repo-1".to_string(),
+            name: "Before".to_string(),
+            path: "/repo".to_string(),
+            project_file: None,
+            current_branch: "main".to_string(),
+            branches: Vec::new(),
+            is_main: true,
+            provider_id: Some("dotnet".to_string()),
+            publish_config,
+        };
+        let update = Repository {
+            name: "After".to_string(),
+            publish_config: RepoPublishConfig::default(),
+            ..existing.clone()
+        };
+
+        let merged = merge_repository_metadata(&existing, update);
+
+        assert_eq!(merged.name, "After");
+        assert_eq!(merged.publish_config.profiles.len(), 2);
+        assert_eq!(
+            merged.publish_config.profiles[0].current_revision_id,
+            profile.current_revision_id
+        );
+        assert_eq!(
+            merged.publish_config.profiles[0].revisions,
+            profile.revisions
+        );
+        assert_eq!(merged.publish_config.bindings.len(), 1);
+        assert!(merged
+            .publish_config
+            .profile(&deleted_profile.id)
+            .expect("tombstone remains")
+            .deleted_at
+            .is_some());
     }
 
     #[test]
@@ -748,8 +720,7 @@ mod tests {
         let spec = record.spec.expect("spec");
         assert_eq!(spec["parameters"]["ClientSecret"], "<redacted>");
         assert_eq!(
-            spec["parameters"]["properties"]["ClientSecret"],
-            "<redacted>",
+            spec["parameters"]["properties"]["ClientSecret"], "<redacted>",
             "嵌套 properties 内的密钥也必须被遮蔽"
         );
         assert_eq!(spec["parameters"]["output"], "/tmp/o");

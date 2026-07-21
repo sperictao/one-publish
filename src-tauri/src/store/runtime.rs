@@ -124,8 +124,16 @@ pub(crate) fn get_execution_history_snapshot() -> Vec<ExecutionRecord> {
 }
 
 pub(crate) fn build_frontend_state(state: &AppState) -> AppState {
+    let mut repositories = state.repositories.clone();
+    for repository in &mut repositories {
+        repository
+            .publish_config
+            .profiles
+            .retain(|profile| profile.deleted_at.is_none());
+    }
+
     AppState {
-        repositories: state.repositories.clone(),
+        repositories,
         selected_repo_id: state.selected_repo_id.clone(),
         left_panel_width: state.left_panel_width,
         middle_panel_width: state.middle_panel_width,

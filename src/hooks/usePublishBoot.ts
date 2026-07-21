@@ -12,6 +12,7 @@ import { usePresetText } from "@/hooks/usePresetText";
 import { usePublishConfigPanelProps } from "@/hooks/usePublishConfigPanelProps";
 import { usePublishRunCardProps } from "@/hooks/usePublishRunCardProps";
 import { buildDotnetProfileParameters } from "@/features/config/dotnetPublishConfig";
+import { parsePublishConfigKey } from "@/features/config/publishConfigIdentity";
 import {
   DEFAULT_DOTNET_PRESET_ID,
   DOTNET_PRESETS,
@@ -241,6 +242,19 @@ export function usePublishBoot(params: UsePublishBootParams) {
     profileManagement,
   } = profilesState;
 
+  const selectedConfiguration = useMemo(() => {
+    if (!params.isCustomMode) {
+      return null;
+    }
+    const identity = parsePublishConfigKey(params.selectedPreset);
+    if (identity?.kind !== "user-profile") {
+      return null;
+    }
+    return (
+      profiles.find((profile) => profile.id === identity.profileId) ?? null
+    );
+  }, [params.isCustomMode, params.selectedPreset, profiles]);
+
   // Publish runner
   const {
     outputLog,
@@ -269,6 +283,10 @@ export function usePublishBoot(params: UsePublishBootParams) {
     openEnvironmentDialog: params.openEnvironmentDialog,
     setEnvironmentLastCheck: params.setEnvironmentLastCheck,
     savePublishRecord: params.savePublishRecord,
+    configurationId: selectedConfiguration?.id ?? null,
+    configurationRevisionId: selectedConfiguration?.revisionId ?? null,
+    currentConfigurationBlockedReason:
+      selectedConfiguration?.blockedReason ?? null,
   });
 
   // Derived values

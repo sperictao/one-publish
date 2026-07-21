@@ -28,9 +28,11 @@ pub use commands::{
     update_preferences, update_profile, update_publish_state, update_repository, update_ui_state,
 };
 pub use runtime::{get_state, update_state};
+pub(crate) use types::ConfigurationImport;
 pub use types::{
-    AppState, Branch, ConfigProfile, ExecutionRecord, PublishConfigStore, RepoPublishConfig,
-    Repository,
+    AppState, Branch, ConfigProfile, ConfigurationBindingReference, ExecutionRecord,
+    PublishConfigStore, PublishConfigurationRevision, RepoPublishConfig, Repository,
+    CURRENT_SETTINGS_VERSION, PUBLISH_CONFIGURATION_CONTRACT_VERSION,
 };
 
 #[cfg(test)]

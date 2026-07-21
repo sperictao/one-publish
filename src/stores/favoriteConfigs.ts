@@ -8,6 +8,13 @@ const LEGACY_SCOPE = "__legacy__";
 
 export type FavoriteConfigsByRepo = Record<string, string[]>;
 
+interface FavoriteMigrationRepository {
+  id: string;
+  publishConfig: {
+    profiles: Array<{ id: string; name: string }>;
+  };
+}
+
 export function loadFavorites(): FavoriteConfigsByRepo {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
@@ -62,4 +69,60 @@ export function migrateLegacyFavorites(
   const next = { ...current, [repoId]: legacy };
   delete next[LEGACY_SCOPE];
   return next;
+}
+
+/**
+ * Rewrites the pre-immutable-identity `userprofile:<name>` favorites once the
+ * backend has migrated repository profiles and supplied their IDs.
+ */
+export function migrateNameBasedProfileFavorites(
+  current: FavoriteConfigsByRepo,
+  repositories: readonly FavoriteMigrationRepository[]
+): FavoriteConfigsByRepo {
+  let changed = false;
+  const next = { ...current };
+
+  for (const repository of repositories) {
+    const scoped = current[repository.id];
+    if (!scoped) {
+      continue;
+    }
+
+    const profileIds = new Set<string>();
+    const profileIdByName = new Map<string, string>();
+    for (const profile of repository.publishConfig.profiles) {
+      const profileId = profile.id.trim();
+      if (!profileId) {
+        continue;
+      }
+      profileIds.add(profileId);
+      profileIdByName.set(profile.name, profileId);
+    }
+
+    const migrated = scoped.map((configKey) => {
+      if (!configKey.startsWith("userprofile:")) {
+        return configKey;
+      }
+
+      const value = configKey.slice("userprofile:".length).trim();
+      if (!value || profileIds.has(value)) {
+        return configKey;
+      }
+
+      const profileId = profileIdByName.get(value);
+      if (!profileId) {
+        return configKey;
+      }
+
+      changed = true;
+      return `userprofile:${profileId}`;
+    });
+    const uniqueMigrated = Array.from(new Set(migrated));
+    if (uniqueMigrated.length !== migrated.length) {
+      changed = true;
+    }
+    next[repository.id] = uniqueMigrated;
+  }
+
+  return changed ? next : current;
 }

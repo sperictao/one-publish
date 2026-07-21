@@ -10,12 +10,15 @@ import {
 
 function createProfile(name: string, profileGroup?: string): ConfigProfile {
   return {
+    id: name,
+    revisionId: `${name}-revision`,
     name,
     providerId: "dotnet",
     parameters: {},
     profileGroup,
     createdAt: "2026-04-03T00:00:00.000Z",
     isSystemDefault: false,
+    externalBindingIds: [],
   };
 }
 
@@ -104,8 +107,8 @@ describe("listOrdering", () => {
         createProfile("beta", "Group B"),
         createProfile("gamma", "Group B"),
       ],
-      activeProfileName: "alpha",
-      targetProfileName: "gamma",
+      activeProfileId: "alpha",
+      targetProfileId: "gamma",
       targetGroupKey: "Group B",
       position: "before",
       defaultGroupName: "默认分组",

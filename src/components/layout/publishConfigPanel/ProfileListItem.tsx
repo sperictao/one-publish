@@ -2,7 +2,7 @@ import {
   type CSSProperties,
   type PointerEvent as ReactPointerEvent,
 } from "react";
-import { FileText, Pencil, Trash2 } from "lucide-react";
+import { AlertTriangle, Eye, FileText, Pencil, Trash2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { type ConfigProfile } from "@/lib/store/types";
 import {
@@ -23,10 +23,15 @@ export interface ProfileListItemProps {
   isMenuOpen: boolean;
   onClick: () => void;
   onToggleFavorite: (configKey: string) => void;
+  onView: () => void;
   onEdit: () => void;
   canEdit: boolean;
+  viewTitle: string;
   editTitle: string;
+  updateUnavailableTitle: string;
   deleteTitle: string;
+  blockedDeleteTitle: string;
+  blockedStatusTitle: string;
   favoriteLabel: string;
   unfavoriteLabel: string;
   moreActionsLabel: string;
@@ -44,7 +49,7 @@ export interface ProfileListItemProps {
   isDragging: boolean;
   dragPreviewStyle?: CSSProperties;
   onHandlePointerDown: (
-    profileName: string,
+    profileId: string,
     event: ReactPointerEvent<HTMLButtonElement>
   ) => void;
 }
@@ -60,10 +65,15 @@ export function ProfileListItem({
   isMenuOpen,
   onClick,
   onToggleFavorite,
+  onView,
   onEdit,
   canEdit,
+  viewTitle,
   editTitle,
+  updateUnavailableTitle,
   deleteTitle,
+  blockedDeleteTitle,
+  blockedStatusTitle,
   favoriteLabel,
   unfavoriteLabel,
   moreActionsLabel,
@@ -89,24 +99,35 @@ export function ProfileListItem({
       onSelect: () => onToggleFavorite(configKey),
     }),
   ];
+  const deleteBlocked = profile.externalBindingIds.length > 0;
+  const canUseUpdateEntry = !profile.isSystemDefault;
 
-  if (canEdit) {
+  actions.push({
+    key: "view",
+    label: viewTitle,
+    icon: <Eye className="size-3.5 text-muted-foreground" />,
+    onSelect: onView,
+  });
+
+  if (canUseUpdateEntry) {
     actions.push({
       key: "edit",
-      label: editTitle,
+      label: canEdit ? editTitle : updateUnavailableTitle,
       icon: <Pencil className="size-3.5 text-muted-foreground" />,
       onSelect: onEdit,
+      disabled: !canEdit,
     });
   }
 
   if (!profile.isSystemDefault) {
     actions.push({
       key: "delete",
-      label: deleteTitle,
+      label: deleteBlocked ? blockedDeleteTitle : deleteTitle,
       icon: <Trash2 className="size-3.5" />,
-      onSelect: onDelete,
-      destructive: true,
-      separatorBefore: canEdit,
+      onSelect: deleteBlocked ? onEdit : onDelete,
+      disabled: deleteBlocked && !canEdit,
+      destructive: !deleteBlocked,
+      separatorBefore: canUseUpdateEntry,
     });
   }
 
@@ -142,7 +163,7 @@ export function ProfileListItem({
         label={dragHandleLabel}
         disabledLabel={dragDisabledLabel}
         onPointerDown={(event) => {
-          onHandlePointerDown(profile.name, event);
+          onHandlePointerDown(profile.id, event);
         }}
       />
       <button
@@ -172,7 +193,7 @@ export function ProfileListItem({
             )}
           />
         </span>
-        <div className="min-w-0 flex flex-1 items-center overflow-hidden">
+        <div className="min-w-0 flex flex-1 items-center gap-2 overflow-hidden">
           <span
             className={cn(
               "truncate text-label-13 font-semibold transition-colors duration-150 ease-geist",
@@ -181,6 +202,16 @@ export function ProfileListItem({
           >
             {profile.name}
           </span>
+          {profile.blockedReason ? (
+            <span
+              className="flex min-w-0 items-center gap-1 truncate text-label-11 text-warning"
+              title={blockedStatusTitle}
+              aria-label={blockedStatusTitle}
+            >
+              <AlertTriangle className="size-3 shrink-0" />
+              <span className="truncate">{blockedStatusTitle}</span>
+            </span>
+          ) : null}
         </div>
       </button>
       <div className="absolute inset-y-0 right-3 flex items-center">

@@ -8,7 +8,10 @@ use super::runtime::{
     apply_selected_repo_id_update, build_frontend_state, find_repository,
     validate_repository_project_binding,
 };
-use super::{AppState, ExecutionRecord, PublishConfigStore, RepoPublishConfig, Repository};
+use super::{
+    AppState, ConfigurationBindingReference, ConfigurationImport, ExecutionRecord,
+    PublishConfigStore, RepoPublishConfig, Repository,
+};
 use std::collections::BTreeMap;
 use std::fs;
 use tempfile::TempDir;
@@ -28,6 +31,364 @@ fn test_repo(id: &str) -> Repository {
 }
 
 #[test]
+fn repo_publish_config_create_profile_assigns_identity_and_initial_revision() {
+    let mut config = RepoPublishConfig::default();
+
+    let profile = config
+        .create_profile(
+            "Release".to_string(),
+            "dotnet".to_string(),
+            serde_json::json!({ "configuration": "Release" }),
+            Some("Production".to_string()),
+            "2026-07-21T10:00:00Z".to_string(),
+        )
+        .expect("create profile");
+
+    assert!(!profile.id.is_empty());
+    assert_eq!(profile.current_revision_id, profile.revisions[0].id);
+    assert_eq!(profile.revisions.len(), 1);
+    assert_eq!(profile.revisions[0].sequence, 1);
+    assert_eq!(profile.revisions[0].contract_version, 1);
+    assert_eq!(profile.revisions[0].provider_version, "1");
+    assert_eq!(profile.revisions[0].settings_version, 1);
+    assert_eq!(profile.revisions[0].provider_id, "dotnet");
+    assert_eq!(
+        profile.revisions[0].parameters,
+        serde_json::json!({ "configuration": "Release" })
+    );
+    assert_eq!(profile.profile_group.as_deref(), Some("Production"));
+    assert_eq!(profile.blocked_reason, None);
+}
+
+#[test]
+fn repo_publish_config_content_update_appends_revision_without_moving_binding() {
+    let mut config = RepoPublishConfig::default();
+    let created = config
+        .create_profile(
+            "Release".to_string(),
+            "dotnet".to_string(),
+            serde_json::json!({ "configuration": "Release" }),
+            None,
+            "2026-07-21T10:00:00Z".to_string(),
+        )
+        .expect("create profile")
+        .clone();
+    let original_revision_id = created.current_revision_id.clone();
+    config.bindings.push(ConfigurationBindingReference {
+        id: "binding-1".to_string(),
+        configuration_id: created.id.clone(),
+        configuration_revision_id: original_revision_id.clone(),
+        external_identity: "github:owner/repo:stable".to_string(),
+    });
+
+    config
+        .update_profile(
+            &created.id,
+            "Release".to_string(),
+            "dotnet".to_string(),
+            serde_json::json!({ "configuration": "Debug" }),
+            None,
+            "2026-07-21T11:00:00Z".to_string(),
+        )
+        .expect("update profile");
+
+    let updated = config.profile(&created.id).expect("updated profile");
+    assert_eq!(updated.revisions.len(), 2);
+    assert_eq!(updated.revisions[0].id, original_revision_id);
+    assert_eq!(updated.revisions[1].sequence, 2);
+    assert_eq!(updated.current_revision_id, updated.revisions[1].id);
+    assert_eq!(
+        updated.revisions[1].parameters,
+        serde_json::json!({ "configuration": "Debug" })
+    );
+    assert_eq!(
+        config.bindings[0].configuration_revision_id,
+        updated.revisions[0].id
+    );
+}
+
+#[test]
+fn repo_publish_config_selection_and_identity_references_survive_rename() {
+    let mut repo = test_repo("repo-1");
+    let created = repo
+        .publish_config
+        .create_profile(
+            "Before".to_string(),
+            "dotnet".to_string(),
+            serde_json::json!({ "configuration": "Release" }),
+            None,
+            "2026-07-21T10:00:00Z".to_string(),
+        )
+        .expect("create profile")
+        .clone();
+    repo.publish_config
+        .select_profile(&created.id)
+        .expect("select profile");
+    assert!(repo.publish_config.is_custom_mode);
+    repo.publish_config
+        .bindings
+        .push(ConfigurationBindingReference {
+            id: "binding-1".to_string(),
+            configuration_id: created.id.clone(),
+            configuration_revision_id: created.current_revision_id.clone(),
+            external_identity: "github:owner/repo:stable".to_string(),
+        });
+    let recent_key = format!("userprofile:{}", created.id);
+    let mut state = AppState {
+        repositories: vec![repo],
+        recent_repo_ids: vec!["repo-1".to_string()],
+        recent_config_keys_by_repo: BTreeMap::from([(
+            "repo-1".to_string(),
+            vec![recent_key.clone()],
+        )]),
+        execution_history: vec![ExecutionRecord {
+            id: "history-1".to_string(),
+            repo_id: Some("repo-1".to_string()),
+            configuration_id: Some(created.id.clone()),
+            configuration_revision_id: Some(created.current_revision_id.clone()),
+            provider_id: "dotnet".to_string(),
+            project_path: "/repo/App.csproj".to_string(),
+            started_at: "2026-07-21T10:00:00Z".to_string(),
+            finished_at: "2026-07-21T10:01:00Z".to_string(),
+            success: true,
+            cancelled: false,
+            output_dir: None,
+            error: None,
+            command_line: None,
+            snapshot_path: None,
+            failure_signature: None,
+            output_excerpt: None,
+            spec: None,
+            file_count: 0,
+            warnings: None,
+        }],
+        ..AppState::default()
+    };
+
+    state.repositories[0]
+        .publish_config
+        .update_profile(
+            &created.id,
+            "After".to_string(),
+            "dotnet".to_string(),
+            serde_json::json!({ "configuration": "Release" }),
+            Some("Renamed Group".to_string()),
+            "2026-07-21T11:00:00Z".to_string(),
+        )
+        .expect("rename profile");
+
+    let config = &state.repositories[0].publish_config;
+    let renamed = config.profile(&created.id).expect("renamed profile");
+    assert_eq!(renamed.name, "After");
+    assert_eq!(renamed.profile_group.as_deref(), Some("Renamed Group"));
+    assert_eq!(renamed.revisions.len(), 1);
+    assert_eq!(renamed.current_revision_id, created.current_revision_id);
+    assert_eq!(config.selected_preset, recent_key);
+    assert_eq!(
+        state.recent_config_keys_by_repo["repo-1"],
+        vec![format!("userprofile:{}", created.id)]
+    );
+    assert_eq!(
+        state.execution_history[0].configuration_id.as_deref(),
+        Some(created.id.as_str())
+    );
+    assert_eq!(
+        state.execution_history[0]
+            .configuration_revision_id
+            .as_deref(),
+        Some(created.current_revision_id.as_str())
+    );
+    assert_eq!(config.bindings[0].configuration_id, created.id);
+    assert_eq!(
+        config.bindings[0].configuration_revision_id,
+        created.current_revision_id
+    );
+}
+
+#[test]
+fn repo_publish_config_delete_is_blocked_by_binding_then_tombstones_history() {
+    let mut config = RepoPublishConfig::default();
+    let created = config
+        .create_profile(
+            "Release".to_string(),
+            "dotnet".to_string(),
+            serde_json::json!({ "configuration": "Release" }),
+            None,
+            "2026-07-21T10:00:00Z".to_string(),
+        )
+        .expect("create profile")
+        .clone();
+    config.select_profile(&created.id).expect("select profile");
+    config.bindings.push(ConfigurationBindingReference {
+        id: "binding-1".to_string(),
+        configuration_id: created.id.clone(),
+        configuration_revision_id: created.current_revision_id.clone(),
+        external_identity: "github:owner/repo:stable".to_string(),
+    });
+
+    let error = config
+        .delete_profile(&created.id, "2026-07-21T11:00:00Z".to_string())
+        .expect_err("bound profile deletion should be blocked");
+    assert_eq!(
+        error.code.as_deref(),
+        Some("profile_delete_blocked_by_binding")
+    );
+    assert_eq!(config.active_profiles().len(), 1);
+
+    config.bindings.clear();
+    config
+        .delete_profile(&created.id, "2026-07-21T11:00:00Z".to_string())
+        .expect("delete unbound profile");
+
+    assert!(config.active_profiles().is_empty());
+    let tombstone = config
+        .profile(&created.id)
+        .expect("tombstone remains resolvable");
+    assert_eq!(
+        tombstone.deleted_at.as_deref(),
+        Some("2026-07-21T11:00:00Z")
+    );
+    assert_eq!(tombstone.current_revision_id, created.current_revision_id);
+    assert_eq!(tombstone.revisions, created.revisions);
+    assert_eq!(config.selected_preset, "release-fd");
+}
+
+#[test]
+fn repo_publish_config_import_creates_unselected_identity_and_skips_duplicate_name() {
+    let mut config = RepoPublishConfig::default();
+    let selected = config
+        .create_profile(
+            "Existing".to_string(),
+            "dotnet".to_string(),
+            serde_json::json!({ "configuration": "Release" }),
+            None,
+            "2026-07-21T10:00:00Z".to_string(),
+        )
+        .expect("create selected profile")
+        .clone();
+    config
+        .select_profile(&selected.id)
+        .expect("select existing profile");
+    config.bindings.push(ConfigurationBindingReference {
+        id: "binding-1".to_string(),
+        configuration_id: selected.id.clone(),
+        configuration_revision_id: selected.current_revision_id.clone(),
+        external_identity: "github:owner/repo:stable".to_string(),
+    });
+
+    let duplicate = config
+        .import_profile(ConfigurationImport {
+            name: "Existing".to_string(),
+            provider_id: "dotnet".to_string(),
+            contract_version: 1,
+            provider_version: "1".to_string(),
+            settings_version: 1,
+            parameters: serde_json::json!({ "configuration": "Debug" }),
+            profile_group: Some("Should Not Replace".to_string()),
+            created_at: "2026-07-21T11:00:00Z".to_string(),
+            is_system_default: false,
+        })
+        .expect("duplicate import should be an explicit skip");
+    assert!(duplicate.is_none());
+    assert_eq!(
+        config
+            .profile(&selected.id)
+            .expect("existing profile")
+            .current_revision()
+            .expect("existing revision")
+            .parameters,
+        serde_json::json!({ "configuration": "Release" })
+    );
+
+    let imported = config
+        .import_profile(ConfigurationImport {
+            name: "Unknown Adapter".to_string(),
+            provider_id: "future-provider".to_string(),
+            contract_version: 1,
+            provider_version: "7".to_string(),
+            settings_version: 3,
+            parameters: serde_json::json!({ "futureSetting": true }),
+            profile_group: None,
+            created_at: "2026-07-21T12:00:00Z".to_string(),
+            is_system_default: false,
+        })
+        .expect("import profile")
+        .expect("new profile should be imported")
+        .clone();
+
+    assert_ne!(imported.id, selected.id);
+    assert_ne!(imported.current_revision_id, selected.current_revision_id);
+    let imported_revision = imported.current_revision().expect("imported revision");
+    assert_eq!(imported_revision.provider_id, "future-provider");
+    assert_eq!(imported_revision.provider_version, "7");
+    assert_eq!(imported_revision.settings_version, 3);
+    assert_eq!(
+        imported.blocked_reason.as_deref(),
+        Some("provider_unavailable:future-provider")
+    );
+    assert_eq!(
+        config.selected_preset,
+        format!("userprofile:{}", selected.id)
+    );
+    assert_eq!(config.bindings.len(), 1);
+    assert!(config
+        .bindings
+        .iter()
+        .all(|binding| binding.configuration_id != imported.id));
+}
+
+#[test]
+fn repo_publish_config_reorders_active_profiles_by_id_without_new_revisions() {
+    let mut config = RepoPublishConfig::default();
+    let alpha = config
+        .create_profile(
+            "Alpha".to_string(),
+            "dotnet".to_string(),
+            serde_json::json!({}),
+            None,
+            "2026-07-21T10:00:00Z".to_string(),
+        )
+        .expect("create alpha")
+        .clone();
+    let beta = config
+        .create_profile(
+            "Beta".to_string(),
+            "cargo".to_string(),
+            serde_json::json!({}),
+            None,
+            "2026-07-21T11:00:00Z".to_string(),
+        )
+        .expect("create beta")
+        .clone();
+
+    config
+        .reorder_profiles(vec![
+            (beta.id.clone(), Some("First".to_string())),
+            (alpha.id.clone(), None),
+        ])
+        .expect("reorder profiles");
+
+    assert_eq!(
+        config
+            .active_profiles()
+            .iter()
+            .map(|profile| profile.id.as_str())
+            .collect::<Vec<_>>(),
+        vec![beta.id.as_str(), alpha.id.as_str()]
+    );
+    assert_eq!(
+        config
+            .profile(&beta.id)
+            .expect("beta")
+            .profile_group
+            .as_deref(),
+        Some("First")
+    );
+    assert_eq!(config.profile(&alpha.id).expect("alpha").revisions.len(), 1);
+    assert_eq!(config.profile(&beta.id).expect("beta").revisions.len(), 1);
+}
+
+#[test]
 fn bootstrap_state_serialization_excludes_execution_history() {
     let state = AppState {
         repositories: vec![Repository {
@@ -44,6 +405,8 @@ fn bootstrap_state_serialization_excludes_execution_history() {
         execution_history: vec![ExecutionRecord {
             id: "history-1".to_string(),
             repo_id: Some("repo-1".to_string()),
+            configuration_id: None,
+            configuration_revision_id: None,
             provider_id: "dotnet".to_string(),
             project_path: "/repo/App.csproj".to_string(),
             started_at: "2026-03-28T10:00:00.000Z".to_string(),
@@ -85,6 +448,74 @@ fn bootstrap_state_serialization_excludes_execution_history() {
         serialized.get("startupNotice"),
         Some(&serde_json::Value::Null)
     );
+}
+
+#[test]
+fn bootstrap_state_exposes_only_active_profiles_while_storage_keeps_tombstones() {
+    let mut repo = test_repo("repo-1");
+    let deleted = repo
+        .publish_config
+        .create_profile(
+            "Deleted".to_string(),
+            "dotnet".to_string(),
+            serde_json::json!({}),
+            None,
+            "2026-07-21T10:00:00Z".to_string(),
+        )
+        .expect("create deleted profile")
+        .clone();
+    repo.publish_config
+        .create_profile(
+            "Active".to_string(),
+            "dotnet".to_string(),
+            serde_json::json!({}),
+            None,
+            "2026-07-21T11:00:00Z".to_string(),
+        )
+        .expect("create active profile");
+    repo.publish_config
+        .delete_profile(&deleted.id, "2026-07-21T12:00:00Z".to_string())
+        .expect("delete profile");
+    let state = AppState {
+        repositories: vec![repo],
+        ..AppState::default()
+    };
+
+    let frontend = build_frontend_state(&state);
+
+    assert_eq!(state.repositories[0].publish_config.profiles.len(), 2);
+    assert_eq!(frontend.repositories[0].publish_config.profiles.len(), 1);
+    assert_eq!(
+        frontend.repositories[0].publish_config.profiles[0].name,
+        "Active"
+    );
+    assert!(state.repositories[0]
+        .publish_config
+        .profile(&deleted.id)
+        .is_some());
+}
+
+#[test]
+fn legacy_execution_record_keeps_configuration_identity_unresolved() {
+    let record: ExecutionRecord = serde_json::from_value(serde_json::json!({
+        "id": "history-1",
+        "repoId": "repo-1",
+        "providerId": "dotnet",
+        "projectPath": "/repo/App.csproj",
+        "startedAt": "2026-07-21T10:00:00Z",
+        "finishedAt": "2026-07-21T10:01:00Z",
+        "success": true,
+        "outputDir": null,
+        "error": null,
+        "commandLine": null,
+        "snapshotPath": null,
+        "failureSignature": null,
+        "spec": null
+    }))
+    .expect("deserialize legacy execution record");
+
+    assert_eq!(record.configuration_id, None);
+    assert_eq!(record.configuration_revision_id, None);
 }
 
 #[test]
@@ -206,6 +637,123 @@ fn load_from_path_migrates_legacy_global_publish_fields() {
     assert_eq!(repo_publish_config.custom_config.configuration, "Debug");
     assert_eq!(repo_publish_config.profiles.len(), 1);
     assert!(state.startup_notice.is_none());
+}
+
+#[test]
+fn load_from_path_migrates_name_based_profiles_once_and_writes_versioned_schema() {
+    let temp_dir = TempDir::new().expect("temp dir");
+    let config_path = temp_dir.path().join("config.json");
+    let legacy_payload = serde_json::json!({
+        "repositories": [
+            {
+                "id": "repo-1",
+                "name": "Repo 1",
+                "path": "/repo-1",
+                "currentBranch": "main",
+                "branches": [],
+                "isMain": true,
+                "providerId": "dotnet",
+                "publishConfig": {
+                    "selectedPreset": "userprofile:Beta",
+                    "isCustomMode": false,
+                    "customConfig": PublishConfigStore::default(),
+                    "profiles": [
+                        {
+                            "name": "Alpha",
+                            "providerId": "cargo",
+                            "parameters": { "release": true },
+                            "profileGroup": "Build",
+                            "createdAt": "2026-04-01T10:00:00Z",
+                            "isSystemDefault": false
+                        },
+                        {
+                            "name": "Beta",
+                            "providerId": "dotnet",
+                            "parameters": { "configuration": "Debug" },
+                            "profileGroup": "Deploy",
+                            "createdAt": "2026-04-02T11:00:00Z",
+                            "isSystemDefault": false
+                        }
+                    ]
+                }
+            },
+            {
+                "id": "repo-2",
+                "name": "Repo 2",
+                "path": "/repo-2",
+                "currentBranch": "main",
+                "branches": [],
+                "isMain": true,
+                "providerId": "dotnet",
+                "publishConfig": {
+                    "selectedPreset": "profile-FolderProfile",
+                    "isCustomMode": false,
+                    "customConfig": PublishConfigStore::default(),
+                    "profiles": []
+                }
+            }
+        ],
+        "recentRepoIds": ["repo-1"],
+        "recentConfigKeysByRepo": {
+            "repo-1": ["userprofile:Beta", "pubxml:FolderProfile"]
+        }
+    });
+    fs::write(
+        &config_path,
+        serde_json::to_vec_pretty(&legacy_payload).expect("serialize legacy payload"),
+    )
+    .expect("write legacy config");
+
+    let first = load_from_path(&config_path);
+    let first_config = &first.repositories[0].publish_config;
+    assert_eq!(
+        first_config
+            .active_profiles()
+            .iter()
+            .map(|profile| profile.name.as_str())
+            .collect::<Vec<_>>(),
+        vec!["Alpha", "Beta"]
+    );
+    let alpha = first_config.active_profiles()[0];
+    let beta = first_config.active_profiles()[1];
+    assert_eq!(alpha.profile_group.as_deref(), Some("Build"));
+    assert_eq!(alpha.created_at, "2026-04-01T10:00:00Z");
+    assert_eq!(
+        alpha.current_revision().expect("alpha revision").parameters,
+        serde_json::json!({ "release": true })
+    );
+    assert_eq!(
+        first_config.selected_preset,
+        format!("userprofile:{}", beta.id)
+    );
+    assert_eq!(
+        first.recent_config_keys_by_repo["repo-1"],
+        vec![
+            format!("userprofile:{}", beta.id),
+            "pubxml:FolderProfile".to_string()
+        ]
+    );
+    assert_eq!(
+        first.repositories[1].publish_config.selected_preset,
+        "profile-FolderProfile"
+    );
+
+    let persisted = fs::read_to_string(&config_path).expect("read migrated config");
+    let persisted_json: serde_json::Value =
+        serde_json::from_str(&persisted).expect("parse migrated config");
+    assert_eq!(persisted_json["schemaVersion"], 2);
+    assert!(
+        persisted_json["repositories"][0]["publishConfig"]["profiles"][0]
+            .get("providerId")
+            .is_none()
+    );
+
+    let second = load_from_path(&config_path);
+    let second_profiles = second.repositories[0].publish_config.active_profiles();
+    assert_eq!(second_profiles[0].id, alpha.id);
+    assert_eq!(second_profiles[0].revisions, alpha.revisions);
+    assert_eq!(second_profiles[1].id, beta.id);
+    assert_eq!(second_profiles[1].revisions, beta.revisions);
 }
 
 #[test]

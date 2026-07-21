@@ -45,7 +45,7 @@ import { useQuickCreateProfile } from "./useQuickCreateProfile";
 import { useProfileOrdering } from "./useProfileOrdering";
 import { useProfileSelection } from "./useProfileSelection";
 import {
-  getActiveProfileNameFromSelection,
+  getActiveProfileIdFromSelection,
   resolvePublishSelectionIdentity,
 } from "./publishConfigIdentity";
 
@@ -97,7 +97,6 @@ export function useProfiles({
   setSelectedPreset,
   setProviderParameters,
   applyDotnetCustomConfig,
-  replaceScopedConfigKey,
   presets,
   defaultPresetId,
   getPresetText,
@@ -115,13 +114,8 @@ export function useProfiles({
       }),
     [activeProviderId, isCustomMode, selectedPreset]
   );
-  const persistedActiveProfileName =
-    getActiveProfileNameFromSelection(selectionIdentity);
-  const activeProfileName =
-    activeProviderId === "dotnet"
-      ? persistedActiveProfileName
-      : localActiveProfileName;
-
+  const persistedActiveProfileId =
+    getActiveProfileIdFromSelection(selectionIdentity);
   const handleRepositoryScopeChange = useCallback(() => {
     setLocalActiveProfileName(null);
   }, []);
@@ -139,11 +133,16 @@ export function useProfiles({
     profileT,
     onRepositoryScopeChange: handleRepositoryScopeChange,
   });
+  const activeProfileName =
+    activeProviderId === "dotnet"
+      ? (profiles.find((profile) => profile.id === persistedActiveProfileId)
+          ?.name ?? null)
+      : localActiveProfileName;
 
   const crud = useProfileCrud({
     selectedRepoId,
     profiles,
-    activeProfileName,
+    activeProfileId: persistedActiveProfileId,
     isCustomMode,
     defaultPresetId,
     profileT,
@@ -180,7 +179,6 @@ export function useProfiles({
     language,
     getPresetText,
     buildProfileParameters,
-    replaceScopedConfigKey,
     refreshProfilesAfterMutation,
     saveProfileToStore,
     updateProfile,
@@ -209,18 +207,18 @@ export function useProfiles({
   });
 
   const handleDeleteProfileFromPanel = useCallback(
-    async (name: string) => {
+    async (profileId: string) => {
       if (!selectedRepoId) {
         return;
       }
 
       try {
-        await crud.deleteProfileByName(selectedRepoId, name);
+        await crud.deleteProfileById(selectedRepoId, profileId);
       } catch (err) {
         console.error("删除配置文件失败:", err);
       }
     },
-    [crud.deleteProfileByName, selectedRepoId]
+    [crud.deleteProfileById, selectedRepoId]
   );
 
   const profileManagement = useMemo<ProfileManagementActions>(

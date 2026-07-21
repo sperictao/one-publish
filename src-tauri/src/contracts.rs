@@ -66,8 +66,10 @@ pub fn generate_tauri_contracts() -> String {
     push_contract::<crate::store::AppState>(&mut declarations);
     push_contract::<crate::store::Branch>(&mut declarations);
     push_contract::<crate::store::ConfigProfile>(&mut declarations);
+    push_contract::<crate::store::ConfigurationBindingReference>(&mut declarations);
     push_contract::<crate::store::ExecutionRecord>(&mut declarations);
     push_contract::<crate::store::PublishConfigStore>(&mut declarations);
+    push_contract::<crate::store::PublishConfigurationRevision>(&mut declarations);
     push_contract::<crate::store::RepoPublishConfig>(&mut declarations);
     push_contract::<crate::store::Repository>(&mut declarations);
     push_contract::<crate::tauri_release::ReleaseAttempt>(&mut declarations);

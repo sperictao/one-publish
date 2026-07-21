@@ -57,6 +57,8 @@ function toStoredSpecValue(spec: ProviderPublishSpec): JsonValue {
 export function createPublishExecutionRecord(params: {
   spec: ProviderPublishSpec;
   repoId: string | null;
+  configurationId?: string | null;
+  configurationRevisionId?: string | null;
   startedAt: string;
   finishedAt: string;
   result: PublishResult;
@@ -78,6 +80,8 @@ export function createPublishExecutionRecord(params: {
   return {
     id: `${Date.now()}-${Math.random().toString(16).slice(2, 8)}`,
     repoId: params.repoId,
+    configurationId: params.configurationId ?? null,
+    configurationRevisionId: params.configurationRevisionId ?? null,
     providerId: params.spec.provider_id,
     projectPath: params.spec.project_path,
     startedAt: params.startedAt,

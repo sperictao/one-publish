@@ -42,6 +42,9 @@ export interface UsePublishExecuteParams {
   getOutputLogSnapshot: () => string;
   replaceCapturedOutputLog: (log: string) => void;
   validate: UsePublishValidateResult;
+  currentConfigurationId?: string | null;
+  currentConfigurationRevisionId?: string | null;
+  currentConfigurationBlockedReason?: string | null;
 }
 
 export interface UsePublishExecuteResult {
@@ -63,6 +66,9 @@ export function usePublishExecute({
   getOutputLogSnapshot,
   replaceCapturedOutputLog,
   validate,
+  currentConfigurationId,
+  currentConfigurationRevisionId,
+  currentConfigurationBlockedReason,
 }: UsePublishExecuteParams): UsePublishExecuteResult {
   const presentationRevisionRef = useRef(0);
 
@@ -185,6 +191,8 @@ export function usePublishExecute({
         const record = createPublishExecutionRecord({
           spec,
           repoId: transaction.repoId,
+          configurationId: transaction.configurationId,
+          configurationRevisionId: transaction.configurationRevisionId,
           startedAt: transaction.startedAt,
           finishedAt: new Date().toISOString(),
           result: resolvedResult,
@@ -264,6 +272,8 @@ export function usePublishExecute({
         const record = createPublishExecutionRecord({
           spec,
           repoId: transaction.repoId,
+          configurationId: transaction.configurationId,
+          configurationRevisionId: transaction.configurationRevisionId,
           startedAt: transaction.startedAt,
           finishedAt: new Date().toISOString(),
           result: failedResult,
@@ -312,6 +322,13 @@ export function usePublishExecute({
   );
 
   const startPublish = useCallback(async () => {
+    if (currentConfigurationBlockedReason) {
+      toast.error(publishT.configurationBlocked || "当前发布配置不可执行", {
+        description: currentConfigurationBlockedReason,
+      });
+      return;
+    }
+
     const blocker = validate.getPublishStartBlocker();
 
     if (blocker === "missing-repository") {
@@ -332,8 +349,19 @@ export function usePublishExecute({
     await runPublishSpec(request.spec, {
       repoId: selectedRepoId,
       recentConfigKey: request.recentConfigKey,
+      configurationId: currentConfigurationId,
+      configurationRevisionId: currentConfigurationRevisionId,
     });
-  }, [appT, runPublishSpec, selectedRepoId, validate]);
+  }, [
+    appT,
+    currentConfigurationBlockedReason,
+    currentConfigurationId,
+    currentConfigurationRevisionId,
+    publishT.configurationBlocked,
+    runPublishSpec,
+    selectedRepoId,
+    validate,
+  ]);
 
   const cancelPublish = useCallback(async () => {
     const { isPublishing, isCancellingPublish } = usePublishStore.getState();

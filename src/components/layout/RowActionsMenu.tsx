@@ -15,6 +15,7 @@ export type RowActionsMenuAction = {
   label: string;
   icon: ReactNode;
   onSelect: () => unknown;
+  disabled?: boolean;
   destructive?: boolean;
   separatorBefore?: boolean;
 };
@@ -66,6 +67,7 @@ export function RowActionsMenu({
           <Fragment key={action.key}>
             {action.separatorBefore ? <DropdownMenuSeparator /> : null}
             <DropdownMenuItem
+              disabled={action.disabled}
               className={cn(
                 action.destructive && "text-destructive focus:bg-destructive/10"
               )}

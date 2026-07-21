@@ -5,7 +5,7 @@ use std::collections::BTreeMap;
 use std::path::PathBuf;
 use ts_rs::TS;
 
-const CONFIG_VERSION: u32 = 1;
+pub const CONFIG_VERSION: u32 = 2;
 
 /// Configuration profile for saving build settings
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
@@ -13,6 +13,12 @@ const CONFIG_VERSION: u32 = 1;
 pub struct ConfigProfile {
     pub name: String,
     pub provider_id: String,
+    #[serde(default = "default_contract_version")]
+    pub contract_version: u32,
+    #[serde(default = "default_provider_version")]
+    pub provider_version: String,
+    #[serde(default = "default_settings_version")]
+    pub settings_version: u32,
     pub parameters: BTreeMap<String, serde_json::Value>,
     #[serde(default)]
     pub profile_group: Option<String>,
@@ -25,12 +31,27 @@ impl Default for ConfigProfile {
         Self {
             name: "Default".to_string(),
             provider_id: "dotnet".to_string(),
+            contract_version: default_contract_version(),
+            provider_version: default_provider_version(),
+            settings_version: default_settings_version(),
             parameters: BTreeMap::new(),
             profile_group: None,
             created_at: Utc::now(),
             is_system_default: false,
         }
     }
+}
+
+fn default_contract_version() -> u32 {
+    crate::store::PUBLISH_CONFIGURATION_CONTRACT_VERSION
+}
+
+fn default_provider_version() -> String {
+    "1".to_string()
+}
+
+fn default_settings_version() -> u32 {
+    crate::store::CURRENT_SETTINGS_VERSION
 }
 
 /// Exported configuration format
@@ -54,6 +75,108 @@ pub enum ImportError {
 
     #[error("validation failed: {0}")]
     ValidationFailed(String),
+}
+
+fn remove_sensitive_fields(value: &mut serde_json::Value) {
+    match value {
+        serde_json::Value::Object(map) => {
+            map.retain(|key, _| !crate::security::is_sensitive_key(key));
+            for item in map.values_mut() {
+                remove_sensitive_fields(item);
+            }
+        }
+        serde_json::Value::Array(items) => {
+            for item in items {
+                remove_sensitive_fields(item);
+            }
+        }
+        serde_json::Value::Null
+        | serde_json::Value::Bool(_)
+        | serde_json::Value::Number(_)
+        | serde_json::Value::String(_) => {}
+    }
+}
+
+fn sanitize_backup_parameters(parameters: &mut BTreeMap<String, serde_json::Value>) {
+    parameters.retain(|key, _| !crate::security::is_sensitive_key(key));
+    for value in parameters.values_mut() {
+        remove_sensitive_fields(value);
+    }
+    crate::security::sanitize_json_map(parameters);
+}
+
+fn contains_sensitive_field(value: &serde_json::Value) -> bool {
+    match value {
+        serde_json::Value::Object(map) => map.iter().any(|(key, item)| {
+            crate::security::is_sensitive_key(key) || contains_sensitive_field(item)
+        }),
+        serde_json::Value::Array(items) => items.iter().any(contains_sensitive_field),
+        serde_json::Value::Null
+        | serde_json::Value::Bool(_)
+        | serde_json::Value::Number(_)
+        | serde_json::Value::String(_) => false,
+    }
+}
+
+fn profile_contains_sensitive_field(profile: &ConfigProfile) -> bool {
+    profile.parameters.iter().any(|(key, value)| {
+        crate::security::is_sensitive_key(key) || contains_sensitive_field(value)
+    })
+}
+
+pub fn build_config_export(
+    config: &crate::store::RepoPublishConfig,
+    exported_at: DateTime<Utc>,
+) -> Result<ConfigExport, ImportError> {
+    let profiles = config
+        .active_profiles()
+        .into_iter()
+        .map(|profile| {
+            let revision = profile.current_revision().ok_or_else(|| {
+                ImportError::InvalidFormat(format!(
+                    "profile '{}' is missing current revision",
+                    profile.name
+                ))
+            })?;
+            let parameters = revision.parameters.as_object().ok_or_else(|| {
+                ImportError::InvalidFormat(format!(
+                    "profile '{}' parameters must be an object",
+                    profile.name
+                ))
+            })?;
+            let mut parameters = parameters
+                .iter()
+                .map(|(key, value)| (key.clone(), value.clone()))
+                .collect::<BTreeMap<_, _>>();
+            sanitize_backup_parameters(&mut parameters);
+            let created_at = DateTime::parse_from_rfc3339(&profile.created_at)
+                .map_err(|error| {
+                    ImportError::InvalidFormat(format!(
+                        "profile '{}' has invalid created_at: {error}",
+                        profile.name
+                    ))
+                })?
+                .with_timezone(&Utc);
+
+            Ok(ConfigProfile {
+                name: profile.name.clone(),
+                provider_id: revision.provider_id.clone(),
+                contract_version: revision.contract_version,
+                provider_version: revision.provider_version.clone(),
+                settings_version: revision.settings_version,
+                parameters,
+                profile_group: profile.profile_group.clone(),
+                created_at,
+                is_system_default: profile.is_system_default,
+            })
+        })
+        .collect::<Result<Vec<_>, ImportError>>()?;
+
+    Ok(ConfigExport {
+        version: CONFIG_VERSION,
+        exported_at,
+        profiles,
+    })
 }
 
 /// Remove machine-specific paths from PublishSpec for export
@@ -87,10 +210,25 @@ pub fn validate_import(config: &ConfigExport) -> Result<(), ImportError> {
     let registry = crate::provider::registry::ProviderRegistry::new();
 
     for profile in &config.profiles {
+        if profile_contains_sensitive_field(profile) {
+            return Err(ImportError::ValidationFailed(format!(
+                "profile '{}' contains credential fields",
+                profile.name
+            )));
+        }
+
         // Check if provider exists
-        let provider = registry
-            .get(&profile.provider_id)
-            .map_err(|_| ImportError::ProviderNotFound(profile.provider_id.clone()))?;
+        let Ok(provider) = registry.get(&profile.provider_id) else {
+            continue;
+        };
+
+        let current_provider_version = &provider.manifest().version;
+        if profile.contract_version != crate::store::PUBLISH_CONFIGURATION_CONTRACT_VERSION
+            || &profile.provider_version != current_provider_version
+            || profile.settings_version != crate::store::CURRENT_SETTINGS_VERSION
+        {
+            continue;
+        }
 
         // Validate parameters against schema
         let schema = provider
@@ -162,6 +300,90 @@ fn validate_parameter_type(
 mod tests {
     use super::*;
     use crate::spec::{SpecValue, SPEC_VERSION};
+    use crate::store::{ConfigurationBindingReference, RepoPublishConfig};
+    use chrono::TimeZone;
+
+    #[test]
+    fn backup_projects_only_current_content_and_omits_identity_selection_bindings_and_secrets() {
+        let mut repo_config = RepoPublishConfig::default();
+        let created = repo_config
+            .create_profile(
+                "Release".to_string(),
+                "dotnet".to_string(),
+                serde_json::json!({
+                    "configuration": "Release",
+                    "apiToken": "old-secret"
+                }),
+                Some("Production".to_string()),
+                "2026-07-21T10:00:00Z".to_string(),
+            )
+            .expect("create profile")
+            .clone();
+        repo_config
+            .select_profile(&created.id)
+            .expect("select profile");
+        repo_config
+            .update_profile(
+                &created.id,
+                "Release".to_string(),
+                "dotnet".to_string(),
+                serde_json::json!({
+                    "configuration": "Debug",
+                    "nested": {
+                        "privateKey": "new-secret",
+                        "keep": "value"
+                    }
+                }),
+                Some("Production".to_string()),
+                "2026-07-21T11:00:00Z".to_string(),
+            )
+            .expect("update profile");
+        repo_config.bindings.push(ConfigurationBindingReference {
+            id: "binding-1".to_string(),
+            configuration_id: created.id,
+            configuration_revision_id: created.current_revision_id,
+            external_identity: "github:owner/repo:stable".to_string(),
+        });
+
+        let backup = build_config_export(
+            &repo_config,
+            chrono::Utc.with_ymd_and_hms(2026, 7, 21, 12, 0, 0).unwrap(),
+        )
+        .expect("build backup");
+        let json = serde_json::to_string(&backup).expect("serialize backup");
+
+        assert_eq!(backup.profiles.len(), 1);
+        assert_eq!(
+            backup.profiles[0].parameters.get("configuration"),
+            Some(&serde_json::Value::String("Debug".to_string()))
+        );
+        assert_eq!(
+            backup.profiles[0]
+                .parameters
+                .get("nested")
+                .and_then(|value| value.get("keep")),
+            Some(&serde_json::Value::String("value".to_string()))
+        );
+        for forbidden in [
+            "old-secret",
+            "new-secret",
+            "<redacted>",
+            "apiToken",
+            "privateKey",
+            "configuration_id",
+            "configurationId",
+            "revision_id",
+            "revisionId",
+            "selectedPreset",
+            "binding-1",
+            "external_identity",
+        ] {
+            assert!(
+                !json.contains(forbidden),
+                "backup leaked {forbidden}: {json}"
+            );
+        }
+    }
 
     #[test]
     fn sanitize_removes_project_path() {
@@ -236,6 +458,7 @@ mod tests {
             profile_group: None,
             created_at: Utc::now(),
             is_system_default: false,
+            ..ConfigProfile::default()
         };
 
         let config = ConfigExport {
@@ -259,7 +482,7 @@ mod tests {
     }
 
     #[test]
-    fn validate_rejects_invalid_provider() {
+    fn validate_preserves_unknown_provider_for_blocked_import() {
         let profile = ConfigProfile {
             name: "Test".to_string(),
             provider_id: "invalid_provider".to_string(),
@@ -267,6 +490,7 @@ mod tests {
             profile_group: None,
             created_at: Utc::now(),
             is_system_default: false,
+            ..ConfigProfile::default()
         };
 
         let config = ConfigExport {
@@ -275,7 +499,55 @@ mod tests {
             profiles: vec![profile],
         };
 
-        assert!(validate_import(&config).is_err());
+        assert!(validate_import(&config).is_ok());
+    }
+
+    #[test]
+    fn validate_rejects_nested_credential_fields_on_import() {
+        let profile = ConfigProfile {
+            name: "Test".to_string(),
+            provider_id: "dotnet".to_string(),
+            parameters: BTreeMap::from([(
+                "nested".to_string(),
+                serde_json::json!({ "apiToken": "must-not-enter-storage" }),
+            )]),
+            profile_group: None,
+            created_at: Utc::now(),
+            is_system_default: false,
+            ..ConfigProfile::default()
+        };
+        let config = ConfigExport {
+            version: CONFIG_VERSION,
+            exported_at: Utc::now(),
+            profiles: vec![profile],
+        };
+
+        let error = validate_import(&config).expect_err("credential import must fail");
+        assert!(error.to_string().contains("credential fields"));
+    }
+
+    #[test]
+    fn validate_preserves_incompatible_provider_revision_without_current_schema_validation() {
+        let profile = ConfigProfile {
+            name: "Future dotnet".to_string(),
+            provider_id: "dotnet".to_string(),
+            provider_version: "999".to_string(),
+            parameters: BTreeMap::from([(
+                "configuration".to_string(),
+                serde_json::Value::Bool(false),
+            )]),
+            profile_group: None,
+            created_at: Utc::now(),
+            is_system_default: false,
+            ..ConfigProfile::default()
+        };
+        let config = ConfigExport {
+            version: CONFIG_VERSION,
+            exported_at: Utc::now(),
+            profiles: vec![profile],
+        };
+
+        assert!(validate_import(&config).is_ok());
     }
 
     #[test]
@@ -294,6 +566,7 @@ mod tests {
             profile_group: None,
             created_at: Utc::now(),
             is_system_default: false,
+            ..ConfigProfile::default()
         };
 
         let config = ConfigExport {

@@ -1,5 +1,6 @@
 use super::migration::{
-    migrate_legacy_state, sanitize_state, LegacyStoredAppState, StoredAppState,
+    migrate_legacy_state, sanitize_stored_state, LegacyStoredAppState, StoredAppState,
+    CURRENT_STORE_SCHEMA_VERSION,
 };
 use super::types::AppState;
 use std::fs::{self};
@@ -96,10 +97,29 @@ pub(crate) fn load_from_path(path: &Path) -> AppState {
 
     if is_legacy_schema {
         if let Ok(legacy_state) = serde_json::from_str::<LegacyStoredAppState>(&content) {
-            return migrate_legacy_state(legacy_state);
+            let state = migrate_legacy_state(legacy_state);
+            if let Err(error) = save_to_path(&state, path) {
+                log::warn!(
+                    "写回迁移后的配置失败。路径: {}, 错误: {}",
+                    path.display(),
+                    error
+                );
+            }
+            return state;
         }
-    } else if let Ok(state) = serde_json::from_str::<StoredAppState>(&content) {
-        return sanitize_state(state.into());
+    } else if let Ok(stored_state) = serde_json::from_str::<StoredAppState>(&content) {
+        let schema_changed = stored_state.schema_version != CURRENT_STORE_SCHEMA_VERSION;
+        let (state, profiles_migrated) = sanitize_stored_state(stored_state.into());
+        if schema_changed || profiles_migrated {
+            if let Err(error) = save_to_path(&state, path) {
+                log::warn!(
+                    "写回迁移后的配置失败。路径: {}, 错误: {}",
+                    path.display(),
+                    error
+                );
+            }
+        }
+        return state;
     }
 
     let mut fallback_state = AppState::default();

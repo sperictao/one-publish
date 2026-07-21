@@ -333,7 +333,7 @@ fn build_recent_repo_menus(state: &crate::store::AppState) -> Vec<TrayRecentRepo
                     .publish_config
                     .profiles
                     .iter()
-                    .find(|profile| profile.name == key_value)
+                    .find(|profile| profile.id == key_value && profile.deleted_at.is_none())
                     .map(|profile| profile.name.clone()),
                 "pubxml" => valid_pubxml_names
                     .iter()
@@ -657,13 +657,17 @@ mod tests {
             publish_config: RepoPublishConfig {
                 profiles: profiles
                     .into_iter()
-                    .map(|name| ConfigProfile {
-                        name: name.to_string(),
-                        provider_id: "dotnet".to_string(),
-                        parameters: serde_json::json!({}),
-                        profile_group: None,
-                        created_at: "2026-04-02T10:00:00Z".to_string(),
-                        is_system_default: false,
+                    .map(|name| {
+                        let mut profile = ConfigProfile::new(
+                            name.to_string(),
+                            "dotnet".to_string(),
+                            serde_json::json!({}),
+                            None,
+                            "2026-04-02T10:00:00Z".to_string(),
+                            false,
+                        );
+                        profile.id = format!("{name}-id");
+                        profile
                     })
                     .collect(),
                 ..RepoPublishConfig::default()
@@ -803,18 +807,18 @@ mod tests {
             "repo-a".to_string(),
             vec![
                 "preset:release-fd".to_string(),
-                "userprofile:alpha".to_string(),
+                "userprofile:alpha-id".to_string(),
                 "pubxml:ReleaseProfile".to_string(),
                 "userprofile:missing".to_string(),
-                "userprofile:beta".to_string(),
-                "userprofile:gamma".to_string(),
-                "userprofile:delta".to_string(),
+                "userprofile:beta-id".to_string(),
+                "userprofile:gamma-id".to_string(),
+                "userprofile:delta-id".to_string(),
             ],
         );
         for index in 2..=7 {
             recent_config_keys_by_repo.insert(
                 format!("repo-{index}"),
-                vec!["userprofile:profile".to_string()],
+                vec!["userprofile:profile-id".to_string()],
             );
         }
 

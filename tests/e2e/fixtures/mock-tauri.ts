@@ -17,6 +17,7 @@ import { expect, type Page } from "@playwright/test";
 import type {
   AppState,
   Branch,
+  ConfigProfile,
   EnvironmentCheckResult,
   ParameterSchema,
   ProviderCatalogEntry,
@@ -49,6 +50,36 @@ const DEFAULT_BRANCHES: Branch[] = [
   },
 ];
 
+function createConfigProfile(
+  id: string,
+  name: string,
+  createdAt: string
+): ConfigProfile {
+  const revisionId = `${id}-revision-1`;
+  return {
+    id,
+    name,
+    profileGroup: null,
+    createdAt,
+    isSystemDefault: false,
+    currentRevisionId: revisionId,
+    revisions: [
+      {
+        id: revisionId,
+        sequence: 1,
+        createdAt,
+        contractVersion: 1,
+        providerId: "dotnet",
+        providerVersion: "1",
+        settingsVersion: 1,
+        parameters: {},
+      },
+    ],
+    deletedAt: null,
+    blockedReason: null,
+  };
+}
+
 const DEFAULT_REPOSITORIES: Repository[] = [
   {
     id: "repo-a",
@@ -78,23 +109,18 @@ const DEFAULT_REPOSITORIES: Repository[] = [
         profileName: "",
       },
       profiles: [
-        {
-          name: "FolderProfile",
-          providerId: "dotnet",
-          parameters: {},
-          profileGroup: null,
-          createdAt: "2025-01-01T00:00:00Z",
-          isSystemDefault: false,
-        },
-        {
-          name: "ZipProfile",
-          providerId: "dotnet",
-          parameters: {},
-          profileGroup: null,
-          createdAt: "2025-01-02T00:00:00Z",
-          isSystemDefault: false,
-        },
+        createConfigProfile(
+          "profile-folder",
+          "FolderProfile",
+          "2025-01-01T00:00:00Z"
+        ),
+        createConfigProfile(
+          "profile-zip",
+          "ZipProfile",
+          "2025-01-02T00:00:00Z"
+        ),
       ],
+      bindings: [],
     },
   },
   {
@@ -133,15 +159,13 @@ const DEFAULT_REPOSITORIES: Repository[] = [
         profileName: "",
       },
       profiles: [
-        {
-          name: "FolderProfile",
-          providerId: "dotnet",
-          parameters: {},
-          profileGroup: null,
-          createdAt: "2025-01-01T00:00:00Z",
-          isSystemDefault: false,
-        },
+        createConfigProfile(
+          "profile-folder",
+          "FolderProfile",
+          "2025-01-01T00:00:00Z"
+        ),
       ],
+      bindings: [],
     },
   },
 ];

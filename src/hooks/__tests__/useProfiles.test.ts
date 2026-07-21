@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const mocks = vi.hoisted(() => ({
   getProfiles: vi.fn(),
   saveProfile: vi.fn(),
+  updateProfile: vi.fn(),
   deleteProfile: vi.fn(),
   exportConfig: vi.fn(),
   applyImportedConfig: vi.fn(),
@@ -24,6 +25,7 @@ vi.mock("@/lib/store/api", async () => {
     ...actual,
     getProfiles: mocks.getProfiles,
     saveProfile: mocks.saveProfile,
+    updateProfile: mocks.updateProfile,
     deleteProfile: mocks.deleteProfile,
     exportConfig: mocks.exportConfig,
     applyImportedConfig: mocks.applyImportedConfig,
@@ -47,12 +49,16 @@ const defaultUseProfilesProps: UseProfilesTestProps = {
 
 function createProfile(name: string): ConfigProfile {
   return {
+    id: name,
+    revisionId: `${name}-revision`,
     name,
     providerId: "dotnet",
     parameters: {},
     profileGroup: undefined,
     createdAt: "2026-04-02T00:00:00.000Z",
     isSystemDefault: false,
+    externalBindingIds: [],
+    blockedReason: null,
   };
 }
 
@@ -68,6 +74,7 @@ describe("useProfiles", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.saveProfile.mockResolvedValue({ repositories: [] });
+    mocks.updateProfile.mockResolvedValue({ repositories: [] });
     mocks.deleteProfile.mockResolvedValue({ repositories: [] });
     mocks.exportConfig.mockResolvedValue("/tmp/one-publish-config.json");
     mocks.applyImportedConfig.mockResolvedValue(undefined);
@@ -559,6 +566,122 @@ describe("useProfiles", () => {
         "Release",
       ]);
     });
+  });
+
+  it("按 profileId 保存重命名修订并保持同一选择 key，不替换收藏或最近使用 key", async () => {
+    const original = { ...createProfile("Alpha"), id: "profile-42" };
+    const renamed = {
+      ...original,
+      revisionId: "revision-2",
+      name: "Renamed",
+    };
+    mocks.getProfiles.mockResolvedValue([original]);
+    mocks.updateProfile.mockResolvedValue({
+      repositories: [{ id: "repo-1", publishConfig: { profiles: [renamed] } }],
+    });
+    const setSelectedPreset = vi.fn();
+    const replaceScopedConfigKey = vi.fn();
+
+    const { result } = renderHook(() =>
+      useProfiles({
+        appT: {},
+        profileT: {},
+        language: "zh",
+        selectedRepoId: "repo-1",
+        activeProviderId: "dotnet",
+        providerSchemas: {},
+        applyProfileProvider: vi.fn(),
+        setIsCustomMode: vi.fn(),
+        isCustomMode: true,
+        selectedPreset: "userprofile:profile-42",
+        setSelectedPreset,
+        setProviderParameters: vi.fn(),
+        applyDotnetCustomConfig: vi.fn(),
+        replaceScopedConfigKey,
+        presets: [],
+        defaultPresetId: "release-fd",
+        getPresetText: (_presetId, fallbackName, fallbackDescription) => ({
+          name: fallbackName,
+          description: fallbackDescription,
+        }),
+        buildProfileParameters: () => ({ configuration: "Release" }),
+      })
+    );
+
+    await waitFor(() => expect(result.current.profiles).toEqual([original]));
+
+    act(() => {
+      result.current.openQuickEditProfileDialog(original);
+      result.current.setQuickCreateProfileName("Renamed");
+    });
+    await act(async () => {
+      await result.current.handleQuickCreateProfileSave();
+    });
+
+    expect(mocks.updateProfile).toHaveBeenCalledWith(
+      expect.objectContaining({
+        repoId: "repo-1",
+        profileId: "profile-42",
+        name: "Renamed",
+      })
+    );
+    expect(setSelectedPreset).toHaveBeenCalledWith("userprofile:profile-42");
+    expect(replaceScopedConfigKey).not.toHaveBeenCalled();
+    expect(result.current.activeProfileName).toBe("Renamed");
+  });
+
+  it("非 dotnet 配置也按稳定 ID 成为当前配置", async () => {
+    const cargoProfile = {
+      ...createProfile("Cargo Release"),
+      id: "cargo-profile-42",
+      revisionId: "cargo-revision-7",
+      providerId: "cargo",
+      parameters: { release: true },
+    };
+    mocks.getProfiles.mockResolvedValue([cargoProfile]);
+    const setIsCustomMode = vi.fn();
+    const setSelectedPreset = vi.fn();
+    const setProviderParameters = vi.fn();
+
+    const { result } = renderHook(() =>
+      useProfiles({
+        appT: {},
+        profileT: {},
+        language: "zh",
+        selectedRepoId: "repo-1",
+        activeProviderId: "cargo",
+        providerSchemas: {},
+        applyProfileProvider: vi.fn(),
+        setIsCustomMode,
+        isCustomMode: false,
+        selectedPreset: "release",
+        setSelectedPreset,
+        setProviderParameters,
+        applyDotnetCustomConfig: vi.fn(),
+        replaceScopedConfigKey: vi.fn(),
+        presets: [],
+        defaultPresetId: "release-fd",
+        getPresetText: (_presetId, fallbackName, fallbackDescription) => ({
+          name: fallbackName,
+          description: fallbackDescription,
+        }),
+        buildProfileParameters: () => ({}),
+      })
+    );
+    await waitFor(() =>
+      expect(result.current.profiles).toEqual([cargoProfile])
+    );
+
+    act(() => {
+      result.current.handleSelectProfileFromPanel(cargoProfile);
+    });
+
+    expect(setIsCustomMode).toHaveBeenCalledWith(true);
+    expect(setSelectedPreset).toHaveBeenCalledWith(
+      "userprofile:cargo-profile-42"
+    );
+    expect(setProviderParameters).toHaveBeenCalled();
+    expect(result.current.activeProfileName).toBe("Cargo Release");
   });
 
   it("通过 profileManagement 应用导入配置后刷新同一个 owner snapshot", async () => {

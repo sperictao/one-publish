@@ -151,7 +151,8 @@
     "success": "Publish finished",
     "output": "Output directory: {{dir}}",
     "failed": "Publish failed",
-    "error": "Error: {{error}}"
+    "error": "Error: {{error}}",
+    "configurationBlocked": "The current publish profile cannot run"
   },
   "releaseChecklist": {
     "title": "Signed Release Checklist",
@@ -760,7 +761,11 @@
     "dragToReorder": "Drag to reorder",
     "dragDisabledWhileSearching": "Reordering is unavailable while searching",
     "editConfig": "Edit profile",
+    "updateConfig": "Update profile",
+    "updateUnavailable": "Update profile (no editor is available for this provider)",
     "deleteConfig": "Delete profile",
+    "deleteBlocked": "Delete blocked: {{reason}}. Update the profile to resolve its bindings first",
+    "configurationBlocked": "Profile cannot run: {{reason}}",
     "copyConfig": "Copy as custom config",
     "copyConfigSuccess": "Copied as custom config",
     "copyConfigSuccessDescription": "Generated an editable custom config from project publish profile: {{name}}",

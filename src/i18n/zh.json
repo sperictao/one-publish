@@ -151,7 +151,8 @@
     "success": "发布完成",
     "output": "输出目录: {{dir}}",
     "failed": "发布失败",
-    "error": "错误: {{error}}"
+    "error": "错误: {{error}}",
+    "configurationBlocked": "当前发布配置不可执行"
   },
   "releaseChecklist": {
     "title": "签名发布清单",
@@ -760,7 +761,11 @@
     "dragToReorder": "拖动排序",
     "dragDisabledWhileSearching": "搜索时无法排序",
     "editConfig": "编辑配置",
+    "updateConfig": "更新配置",
+    "updateUnavailable": "更新配置（当前 Provider 暂无可用编辑器）",
     "deleteConfig": "删除配置",
+    "deleteBlocked": "删除受阻：{{reason}}。请先更新配置处理绑定",
+    "configurationBlocked": "配置不可执行：{{reason}}",
     "copyConfig": "复制为自定义配置",
     "copyConfigSuccess": "已复制为自定义配置",
     "copyConfigSuccessDescription": "已根据项目发布配置生成可编辑的自定义配置：{{name}}",

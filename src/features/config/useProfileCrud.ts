@@ -29,7 +29,7 @@ interface StoreMutationResult {
 export interface UseProfileCrudParams {
   selectedRepoId: string | null;
   profiles: ConfigProfile[];
-  activeProfileName: string | null;
+  activeProfileId: string | null;
   isCustomMode: boolean;
   defaultPresetId: string;
   profileT: TranslationMap;
@@ -59,10 +59,10 @@ export interface UseProfileCrudParams {
   }) => Promise<StoreMutationResult>;
   deleteProfileFromStore: (
     repoId: string,
-    name: string
+    profileId: string
   ) => Promise<StoreMutationResult>;
   exportConfigFn: (params: {
-    profiles: ConfigProfile[];
+    repoId: string;
     filePath: string;
   }) => Promise<string>;
   applyImportedConfigFn: (
@@ -76,7 +76,7 @@ export interface UseProfileCrudReturn {
   handleLoadProfile: (profile: LoadableProfile) => void;
   saveProfile: (params: ProfileManagementSaveParams) => Promise<void>;
   deleteProfile: (profile: ConfigProfile) => Promise<void>;
-  deleteProfileByName: (repoId: string, name: string) => Promise<void>;
+  deleteProfileById: (repoId: string, profileId: string) => Promise<void>;
   exportProfiles: (filePath: string) => Promise<void>;
   applyImportedProfiles: (profiles: ConfigProfile[]) => Promise<void>;
   handleCreateProfileFromProjectProfile: (
@@ -89,7 +89,7 @@ export interface UseProfileCrudReturn {
 export function useProfileCrud({
   selectedRepoId,
   profiles,
-  activeProfileName,
+  activeProfileId,
   isCustomMode,
   defaultPresetId,
   profileT,
@@ -139,14 +139,18 @@ export function useProfileCrud({
             }
           )
         );
-        setSelectedPreset(createUserProfileConfigKey(profile.name));
-        setActiveProfileName(profile.name);
       } else {
         setProviderParameters((prev) => ({
           ...prev,
           [mapping.providerId]: mapping.providerParameters,
         }));
       }
+
+      if (profile.id) {
+        setIsCustomMode(true);
+        setSelectedPreset(createUserProfileConfigKey(profile.id));
+      }
+      setActiveProfileName(profile.name);
 
       toast.success(appT.profileLoaded || "配置文件已加载", {
         description: `${appT.loadedProfile || "已加载配置文件"}: ${profile.name}`,
@@ -160,6 +164,7 @@ export function useProfileCrud({
       providerSchemas,
       setActiveProfileName,
       setProviderParameters,
+      setIsCustomMode,
       setSelectedPreset,
     ]
   );
@@ -171,15 +176,15 @@ export function useProfileCrud({
     [applyProfile]
   );
 
-  const deleteProfileByName = useCallback(
-    async (repoId: string, name: string) => {
-      const state = await deleteProfileFromStore(repoId, name);
+  const deleteProfileById = useCallback(
+    async (repoId: string, profileId: string) => {
+      const state = await deleteProfileFromStore(repoId, profileId);
       const repo = state.repositories.find((r) => r.id === repoId);
       if (repo) {
         await refreshProfilesAfterMutation(repoId, repo.publishConfig.profiles);
       }
       if (isCurrentRepo(repoId)) {
-        if (activeProfileName === name) {
+        if (activeProfileId === profileId) {
           setActiveProfileName(null);
           if (isCustomMode) {
             setIsCustomMode(false);
@@ -189,7 +194,7 @@ export function useProfileCrud({
       }
     },
     [
-      activeProfileName,
+      activeProfileId,
       defaultPresetId,
       isCurrentRepo,
       isCustomMode,
@@ -240,19 +245,22 @@ export function useProfileCrud({
         throw new Error(profileT.deleteFailed || "删除配置文件失败");
       }
 
-      await deleteProfileByName(selectedRepoId, profile.name);
+      await deleteProfileById(selectedRepoId, profile.id);
     },
-    [deleteProfileByName, profileT.deleteFailed, selectedRepoId]
+    [deleteProfileById, profileT.deleteFailed, selectedRepoId]
   );
 
   const exportProfiles = useCallback(
     async (filePath: string) => {
+      if (!selectedRepoId) {
+        throw new Error(profileT.exportFailed || "导出配置失败");
+      }
       await exportConfigFn({
-        profiles,
+        repoId: selectedRepoId,
         filePath,
       });
     },
-    [profiles, exportConfigFn]
+    [exportConfigFn, profileT.exportFailed, selectedRepoId]
   );
 
   const applyImportedProfiles = useCallback(
@@ -295,16 +303,22 @@ export function useProfileCrud({
       });
 
       const repo = state.repositories.find((r) => r.id === selectedRepoId);
-      if (repo) {
-        await refreshProfilesAfterMutation(
-          selectedRepoId,
-          repo.publishConfig.profiles
-        );
+      const nextProfiles = repo
+        ? await refreshProfilesAfterMutation(
+            selectedRepoId,
+            repo.publishConfig.profiles
+          )
+        : await refreshProfilesAfterMutation(selectedRepoId);
+      const createdProfile = nextProfiles.find(
+        (profile) => profile.name === profileName && profile.id
+      );
+      if (!createdProfile) {
+        throw new Error("保存后未找到配置身份");
       }
 
-      setActiveProfileName(profileName);
+      setActiveProfileName(createdProfile.name);
       applyDotnetCustomConfig(config);
-      setSelectedPreset(createUserProfileConfigKey(profileName));
+      setSelectedPreset(createUserProfileConfigKey(createdProfile.id));
 
       return profileName;
     },
@@ -345,7 +359,7 @@ export function useProfileCrud({
     handleLoadProfile,
     saveProfile,
     deleteProfile,
-    deleteProfileByName,
+    deleteProfileById,
     exportProfiles,
     applyImportedProfiles,
     handleCreateProfileFromProjectProfile,

@@ -59,6 +59,7 @@ function createAppState(): AppState {
             configuration: "Debug",
           },
           profiles: [],
+          bindings: [],
         },
       },
     ],

@@ -46,7 +46,7 @@ import {
   createUserProfileConfigKey,
   getProjectProfileNameFromRenderId,
   getRecentConfigKeyFromRenderId,
-  getUserProfileNameFromRenderId,
+  getUserProfileIdFromRenderId,
 } from "@/features/config/publishConfigIdentity";
 import { useI18n } from "@/hooks/useI18n";
 import { RowActionsMenu } from "@/components/layout/RowActionsMenu";
@@ -93,7 +93,7 @@ export interface PublishConfigPanelProps {
   onEditProfile: (profile: ConfigProfile) => void;
   onRefreshProfiles: () => void;
   onOpenConfigDialog: () => void;
-  onDeleteProfile: (name: string) => void;
+  onDeleteProfile: (profileId: string) => void;
   dotnetSchema?: ParameterSchema;
   projectPublishProfiles: string[];
   isProjectProfilesRefreshing?: boolean;
@@ -236,6 +236,8 @@ export const PublishConfigPanel = memo(function PublishConfigPanel({
   const unfavoriteConfigLabel = t.unfavoriteConfig || "取消收藏";
   const removeRecentLabel = t.removeRecent || "从最近使用移除";
   const deleteConfigLabel = t.deleteConfig || "删除配置";
+  const deleteBlockedLabel =
+    t.deleteBlocked || "删除受阻：{{reason}}。请先更新配置处理绑定";
   const recentlyUsedLabel = t.recentlyUsed || "最近使用";
   const dragToReorderLabel = t.dragToReorder || "拖动排序";
   const dragDisabledWhileSearchingLabel =
@@ -243,7 +245,11 @@ export const PublishConfigPanel = memo(function PublishConfigPanel({
   const profileGroupLabel = t.profileGroup || "项目发布配置";
   const copyConfigLabel = t.copyConfig || "复制为自定义配置";
   const viewConfigLabel = t.viewConfig || "查看配置";
-  const editConfigLabel = t.editConfig || "编辑配置";
+  const editConfigLabel = t.updateConfig || t.editConfig || "更新配置";
+  const updateUnavailableLabel =
+    t.updateUnavailable || "更新配置（当前 Provider 暂无可用编辑器）";
+  const configurationBlockedLabel =
+    t.configurationBlocked || "配置不可执行：{{reason}}";
   const noConfigsLabel = t.noConfigs || "暂无配置";
   const projectProfilesRefreshingLabel =
     t.refreshingProjectProfiles || "正在刷新项目发布配置…";
@@ -386,11 +392,11 @@ export const PublishConfigPanel = memo(function PublishConfigPanel({
         createUserProfileConfigKey(itemId)
       );
     },
-    onCommit: (activeProfileName, target) => {
+    onCommit: (activeProfileId, target) => {
       const nextProfiles = reorderProfilesByDrop({
         profiles,
-        activeProfileName,
-        targetProfileName: target.itemId,
+        activeProfileId,
+        targetProfileId: target.itemId,
         targetGroupKey: target.meta.groupKey,
         position: target.position,
         defaultGroupName,
@@ -438,8 +444,8 @@ export const PublishConfigPanel = memo(function PublishConfigPanel({
       customProfileReorder.draggingItemId && customProfileReorder.dropTarget
         ? reorderProfilesByDrop({
             profiles,
-            activeProfileName: customProfileReorder.draggingItemId,
-            targetProfileName: customProfileReorder.dropTarget.itemId,
+            activeProfileId: customProfileReorder.draggingItemId,
+            targetProfileId: customProfileReorder.dropTarget.itemId,
             targetGroupKey: customProfileReorder.dropTarget.meta.groupKey,
             position: customProfileReorder.dropTarget.position,
             defaultGroupName,
@@ -480,9 +486,9 @@ export const PublishConfigPanel = memo(function PublishConfigPanel({
     resetKey: selectedRepoScopeId,
   });
   const customMotion = useListReorderMotion({
-    orderedIds: previewProfiles.map((profile) => profile.name),
+    orderedIds: previewProfiles.map((profile) => profile.id),
     draggingItemId: customProfileReorder.draggingItemId,
-    settledItemId: getUserProfileNameFromRenderId(settledConfigRenderId),
+    settledItemId: getUserProfileIdFromRenderId(settledConfigRenderId),
     resetKey: selectedRepoScopeId,
   });
   const draggingConfigRenderId = useMemo(() => {
@@ -913,10 +919,14 @@ export const PublishConfigPanel = memo(function PublishConfigPanel({
               visible={true}
             >
               {group.items.map((profile) => {
-                const configKey = createUserProfileConfigKey(profile.name);
+                const configKey = createUserProfileConfigKey(profile.id);
+                const blockedReason =
+                  profile.externalBindingIds.length > 0
+                    ? `${profile.externalBindingIds.length} 个外部绑定仍在引用此配置`
+                    : "";
                 return (
                   <ProfileListItem
-                    key={profile.name}
+                    key={profile.id}
                     profile={profile}
                     configKey={configKey}
                     configId={configKey}
@@ -932,25 +942,36 @@ export const PublishConfigPanel = memo(function PublishConfigPanel({
                       onSelectProfile(profile);
                     }}
                     onToggleFavorite={onToggleFavoriteConfig}
+                    onView={() => onSelectProfile(profile)}
                     onEdit={() => onEditProfile(profile)}
                     canEdit={
                       !profile.isSystemDefault &&
                       profile.providerId === "dotnet"
                     }
+                    viewTitle={viewConfigLabel}
                     editTitle={editConfigLabel}
+                    updateUnavailableTitle={updateUnavailableLabel}
                     deleteTitle={deleteConfigLabel}
+                    blockedDeleteTitle={deleteBlockedLabel.replace(
+                      "{{reason}}",
+                      blockedReason
+                    )}
+                    blockedStatusTitle={configurationBlockedLabel.replace(
+                      "{{reason}}",
+                      profile.blockedReason || ""
+                    )}
                     favoriteLabel={favoriteConfigLabel}
                     unfavoriteLabel={unfavoriteConfigLabel}
                     moreActionsLabel={moreActionsLabel}
-                    onDelete={() => onDeleteProfile(profile.name)}
+                    onDelete={() => onDeleteProfile(profile.id)}
                     onMenuOpenChange={(open) => {
                       interaction.handleMenuOpenChange(configKey, open);
                     }}
                     rowRef={composeNodeRefs(
-                      customProfileReorder.setItemRef(profile.name, {
+                      customProfileReorder.setItemRef(profile.id, {
                         groupKey: group.groupKey,
                       }),
-                      customMotion.setItemRef(profile.name)
+                      customMotion.setItemRef(profile.id)
                     )}
                     onItemMouseEnter={() =>
                       interaction.handleRowMouseEnter(configKey)
@@ -963,7 +984,7 @@ export const PublishConfigPanel = memo(function PublishConfigPanel({
                     dragHandleLabel={dragToReorderLabel}
                     dragDisabledLabel={dragDisabledWhileSearchingLabel}
                     isDragging={
-                      customProfileReorder.draggingItemId === profile.name
+                      customProfileReorder.draggingItemId === profile.id
                     }
                     dragPreviewStyle={customProfileReorder.dragPreviewStyle}
                     onHandlePointerDown={customProfileReorder.startDrag}
@@ -991,6 +1012,7 @@ export const PublishConfigPanel = memo(function PublishConfigPanel({
       </div>
     );
   }, [
+    deleteBlockedLabel,
     deleteConfigLabel,
     favoriteSet,
     favoriteConfigLabel,
@@ -1050,6 +1072,8 @@ export const PublishConfigPanel = memo(function PublishConfigPanel({
     dragDisabledWhileSearchingLabel,
     dragToReorderLabel,
     editConfigLabel,
+    updateUnavailableLabel,
+    configurationBlockedLabel,
     noConfigsLabel,
     profileGroupLabel,
     recentlyUsedLabel,

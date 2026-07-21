@@ -9,9 +9,17 @@ use super::types::{
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 
+pub(crate) const CURRENT_STORE_SCHEMA_VERSION: u32 = 2;
+
+fn legacy_store_schema_version() -> u32 {
+    0
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct StoredAppState {
+    #[serde(default = "legacy_store_schema_version")]
+    pub(crate) schema_version: u32,
     #[serde(default)]
     pub(crate) repositories: Vec<Repository>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -114,6 +122,7 @@ impl From<StoredAppState> for AppState {
 impl From<AppState> for StoredAppState {
     fn from(value: AppState) -> Self {
         Self {
+            schema_version: CURRENT_STORE_SCHEMA_VERSION,
             repositories: value.repositories,
             selected_repo_id: value.selected_repo_id,
             left_panel_width: value.left_panel_width,
@@ -138,7 +147,50 @@ impl From<&AppState> for StoredAppState {
     }
 }
 
-pub(crate) fn sanitize_state(mut state: AppState) -> AppState {
+fn migrate_profile_identities(state: &mut AppState) -> bool {
+    let mut migrated = false;
+
+    for repo in &mut state.repositories {
+        for profile in &mut repo.publish_config.profiles {
+            migrated |= profile.migrate_legacy_identity();
+        }
+
+        let profile_ids_by_name = repo
+            .publish_config
+            .profiles
+            .iter()
+            .filter(|profile| profile.deleted_at.is_none())
+            .map(|profile| (profile.name.clone(), profile.id.clone()))
+            .collect::<BTreeMap<_, _>>();
+        if let Some(profile_name) = repo
+            .publish_config
+            .selected_preset
+            .strip_prefix("userprofile:")
+        {
+            if let Some(profile_id) = profile_ids_by_name.get(profile_name) {
+                repo.publish_config.selected_preset = format!("userprofile:{profile_id}");
+                migrated = true;
+            }
+        }
+
+        if let Some(recent_keys) = state.recent_config_keys_by_repo.get_mut(&repo.id) {
+            for recent_key in recent_keys {
+                let Some(profile_name) = recent_key.strip_prefix("userprofile:") else {
+                    continue;
+                };
+                if let Some(profile_id) = profile_ids_by_name.get(profile_name) {
+                    *recent_key = format!("userprofile:{profile_id}");
+                    migrated = true;
+                }
+            }
+        }
+    }
+
+    migrated
+}
+
+fn sanitize_state_with_migration(mut state: AppState) -> (AppState, bool) {
+    let profiles_migrated = migrate_profile_identities(&mut state);
     state.execution_history_limit =
         normalize_execution_history_limit(state.execution_history_limit);
     trim_execution_history(&mut state.execution_history, state.execution_history_limit);
@@ -151,7 +203,15 @@ pub(crate) fn sanitize_state(mut state: AppState) -> AppState {
         migrate_delete_existing_files_property(&mut repo.publish_config.custom_config);
     }
 
-    state
+    (state, profiles_migrated)
+}
+
+pub(crate) fn sanitize_state(state: AppState) -> AppState {
+    sanitize_state_with_migration(state).0
+}
+
+pub(crate) fn sanitize_stored_state(state: AppState) -> (AppState, bool) {
+    sanitize_state_with_migration(state)
 }
 
 fn migrate_delete_existing_files_property(config: &mut PublishConfigStore) {
@@ -199,6 +259,7 @@ pub(crate) fn migrate_legacy_state(legacy: LegacyStoredAppState) -> AppState {
             is_custom_mode: legacy.is_custom_mode,
             custom_config: legacy.custom_config,
             profiles: legacy.profiles,
+            bindings: Vec::new(),
         };
 
         for repo in &mut state.repositories {

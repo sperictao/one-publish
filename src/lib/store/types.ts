@@ -47,6 +47,8 @@ export interface ExecutionRecord extends Omit<
   | "outputExcerpt"
   | "spec"
   | "warnings"
+  | "configurationId"
+  | "configurationRevisionId"
 > {
   repoId?: string | null;
   outputDir?: string | null;
@@ -57,6 +59,8 @@ export interface ExecutionRecord extends Omit<
   outputExcerpt?: string | null;
   spec?: JsonValue | null;
   warnings?: string[] | null;
+  configurationId?: string | null;
+  configurationRevisionId?: string | null;
 }
 
 export interface ProjectScanCandidates extends Omit<
@@ -68,16 +72,24 @@ export interface ProjectScanCandidates extends Omit<
 
 export type ConfigParameters = Record<string, JsonValue>;
 
-export interface ConfigProfile extends Omit<
-  TauriConfigProfile,
-  "parameters" | "profileGroup"
-> {
+export interface ConfigProfile {
+  id: string;
+  revisionId: string;
+  name: string;
+  providerId: string;
   parameters: ConfigParameters;
   profileGroup?: string | null;
+  createdAt: string;
+  isSystemDefault: boolean;
+  externalBindingIds: string[];
+  blockedReason?: string | null;
+  contractVersion?: number;
+  providerVersion?: string;
+  settingsVersion?: number;
 }
 
 export interface ProfileOrderEntry {
-  name: string;
+  id: string;
   profileGroup?: string | null;
 }
 
@@ -153,11 +165,30 @@ function normalizeConfigParameters(
 }
 
 export function normalizeConfigProfile(
-  profile: TauriConfigProfile
+  profile: TauriConfigProfile,
+  externalBindingIds: string[] = []
 ): ConfigProfile {
+  const currentRevision = profile.revisions.find(
+    (revision) => revision.id === profile.currentRevisionId
+  );
+
+  if (!currentRevision) {
+    throw new Error(
+      `Profile ${profile.id} is missing current revision ${profile.currentRevisionId}`
+    );
+  }
+
   return {
-    ...profile,
-    parameters: normalizeConfigParameters(profile.parameters),
+    id: profile.id,
+    revisionId: currentRevision.id,
+    name: profile.name,
+    providerId: currentRevision.providerId,
+    parameters: normalizeConfigParameters(currentRevision.parameters),
+    profileGroup: profile.profileGroup,
+    createdAt: profile.createdAt,
+    isSystemDefault: profile.isSystemDefault,
+    externalBindingIds,
+    blockedReason: profile.blockedReason,
   };
 }
 
@@ -165,21 +196,39 @@ export function normalizeImportedConfigProfile(
   profile: ConfigExportProfile
 ): ConfigProfile {
   return {
+    id: "",
+    revisionId: "",
     name: profile.name,
     providerId: profile.provider_id,
+    contractVersion: profile.contract_version,
+    providerVersion: profile.provider_version,
+    settingsVersion: profile.settings_version,
     parameters: normalizeConfigParameters(profile.parameters),
     profileGroup: profile.profile_group,
     createdAt: profile.created_at,
     isSystemDefault: profile.is_system_default,
+    externalBindingIds: [],
+    blockedReason: null,
   };
 }
 
 export function toExportConfigProfile(
   profile: ConfigProfile
 ): ConfigExportProfile {
+  if (
+    profile.contractVersion === undefined ||
+    profile.providerVersion === undefined ||
+    profile.settingsVersion === undefined
+  ) {
+    throw new Error(`Profile ${profile.name} is missing adapter version data`);
+  }
+
   return {
     name: profile.name,
     provider_id: profile.providerId,
+    contract_version: profile.contractVersion,
+    provider_version: profile.providerVersion,
+    settings_version: profile.settingsVersion,
     parameters: profile.parameters,
     profile_group: profile.profileGroup ?? null,
     created_at: profile.createdAt,
@@ -190,9 +239,24 @@ export function toExportConfigProfile(
 function normalizeRepoPublishConfig(
   config: TauriRepoPublishConfig
 ): RepoPublishConfig {
+  const bindingIdsByConfigurationId = new Map<string, string[]>();
+  for (const binding of config.bindings) {
+    const bindingIds =
+      bindingIdsByConfigurationId.get(binding.configurationId) ?? [];
+    bindingIds.push(binding.id);
+    bindingIdsByConfigurationId.set(binding.configurationId, bindingIds);
+  }
+
   return {
     ...config,
-    profiles: config.profiles.map(normalizeConfigProfile),
+    profiles: config.profiles
+      .filter((profile) => profile.deletedAt === null)
+      .map((profile) =>
+        normalizeConfigProfile(
+          profile,
+          bindingIdsByConfigurationId.get(profile.id) ?? []
+        )
+      ),
   };
 }
 
@@ -265,6 +329,7 @@ export const defaultRepoPublishConfig: RepoPublishConfig = {
   isCustomMode: false,
   customConfig: { ...defaultPublishConfigStore },
   profiles: [],
+  bindings: [],
 };
 
 export type { EnvironmentCheckResult };

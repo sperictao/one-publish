@@ -92,7 +92,7 @@ function buildRecentItems(params: {
     }
 
     if (identity?.kind === "user-profile") {
-      const profile = params.profileMap.get(identity.profileName);
+      const profile = params.profileMap.get(identity.profileId);
       if (!profile) {
         continue;
       }
@@ -218,7 +218,7 @@ function buildConfigIds(params: {
 
   for (const group of params.visibleProfileGroups) {
     for (const profile of group.items) {
-      ids.push(createUserProfileConfigKey(profile.name));
+      ids.push(createUserProfileConfigKey(profile.id));
     }
   }
 
@@ -279,7 +279,7 @@ export function usePublishConfigListModel(params: {
     [params.favoriteConfigKeys]
   );
   const profileMap = useMemo(
-    () => new Map(params.profiles.map((profile) => [profile.name, profile])),
+    () => new Map(params.profiles.map((profile) => [profile.id, profile])),
     [params.profiles]
   );
   const pubxmlSet = useMemo(

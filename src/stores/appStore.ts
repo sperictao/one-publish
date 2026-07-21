@@ -9,6 +9,7 @@ import {
 import type { AppState, ExecutionRecord } from "@/lib/store/types";
 import {
   migrateLegacyFavorites,
+  migrateNameBasedProfileFavorites,
   persistFavorites,
 } from "@/stores/favoriteConfigs";
 
@@ -68,16 +69,28 @@ export const useAppStore = create<AppStore>()((...args) => {
     loadState: async () => {
       try {
         const appState = await getAppState();
-        // Migrate legacy favorites into the current repo scope
+        let favorites = get().favoriteConfigKeysByRepo;
+
+        // Migrate legacy favorites into the current repo scope.
         if (appState.selectedRepoId) {
           const migrated = migrateLegacyFavorites(
-            get().favoriteConfigKeysByRepo,
+            favorites,
             appState.selectedRepoId
           );
           if (migrated) {
-            persistFavorites(migrated);
-            set({ favoriteConfigKeysByRepo: migrated });
+            favorites = migrated;
           }
+        }
+
+        // The backend migrates profiles first, so its name-to-ID map is the
+        // authoritative source for the one-time localStorage rewrite.
+        favorites = migrateNameBasedProfileFavorites(
+          favorites,
+          appState.repositories
+        );
+        if (favorites !== get().favoriteConfigKeysByRepo) {
+          persistFavorites(favorites);
+          set({ favoriteConfigKeysByRepo: favorites });
         }
         set(
           (state) =>

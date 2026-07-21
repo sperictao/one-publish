@@ -18,7 +18,7 @@ export type PublishConfigIdentity =
     }
   | {
       kind: "user-profile";
-      profileName: string;
+      profileId: string;
     };
 
 export type PublishSelectionIdentity =
@@ -41,7 +41,7 @@ export type PublishSelectionIdentity =
     }
   | {
       kind: "user-profile";
-      profileName: string;
+      profileId: string;
       configKey: PublishConfigKey;
     };
 
@@ -81,8 +81,8 @@ export function createProjectProfileConfigKey(profileName: string) {
   return createConfigKey("pubxml", profileName);
 }
 
-export function createUserProfileConfigKey(profileName: string) {
-  return createConfigKey("userprofile", profileName);
+export function createUserProfileConfigKey(profileId: string) {
+  return createConfigKey("userprofile", profileId);
 }
 
 export function parsePublishConfigKey(
@@ -116,7 +116,7 @@ export function parsePublishConfigKey(
   if (keyKind === "userprofile") {
     return {
       kind: "user-profile",
-      profileName: keyValue,
+      profileId: keyValue,
     };
   }
 
@@ -128,9 +128,9 @@ export function getProjectProfileNameFromConfigKey(configKey: string) {
   return identity?.kind === "project-profile" ? identity.profileName : null;
 }
 
-export function getUserProfileNameFromConfigKey(configKey: string) {
+export function getUserProfileIdFromConfigKey(configKey: string) {
   const identity = parsePublishConfigKey(configKey);
-  return identity?.kind === "user-profile" ? identity.profileName : null;
+  return identity?.kind === "user-profile" ? identity.profileId : null;
 }
 
 export function createRecentConfigRenderId(
@@ -164,12 +164,12 @@ export function getProjectProfileNameFromRenderId(renderId: string | null) {
   return getProjectProfileNameFromConfigKey(renderId);
 }
 
-export function getUserProfileNameFromRenderId(renderId: string | null) {
+export function getUserProfileIdFromRenderId(renderId: string | null) {
   if (!renderId) {
     return null;
   }
 
-  return getUserProfileNameFromConfigKey(renderId);
+  return getUserProfileIdFromConfigKey(renderId);
 }
 
 export function resolvePublishSelectionIdentity(params: {
@@ -177,25 +177,32 @@ export function resolvePublishSelectionIdentity(params: {
   isCustomMode: boolean;
   selectedPreset: string;
 }): PublishSelectionIdentity {
-  if (params.activeProviderId !== "dotnet") {
-    return {
-      kind: "provider",
-      providerId: params.activeProviderId,
-    };
-  }
-
   if (params.isCustomMode) {
     const selectedConfig = parsePublishConfigKey(params.selectedPreset);
     if (selectedConfig?.kind === "user-profile") {
       return {
         kind: "user-profile",
-        profileName: selectedConfig.profileName,
-        configKey: createUserProfileConfigKey(selectedConfig.profileName),
+        profileId: selectedConfig.profileId,
+        configKey: createUserProfileConfigKey(selectedConfig.profileId),
+      };
+    }
+
+    if (params.activeProviderId !== "dotnet") {
+      return {
+        kind: "provider",
+        providerId: params.activeProviderId,
       };
     }
 
     return {
       kind: "custom",
+    };
+  }
+
+  if (params.activeProviderId !== "dotnet") {
+    return {
+      kind: "provider",
+      providerId: params.activeProviderId,
     };
   }
 
@@ -218,10 +225,10 @@ export function resolvePublishSelectionIdentity(params: {
   };
 }
 
-export function getActiveProfileNameFromSelection(
+export function getActiveProfileIdFromSelection(
   identity: PublishSelectionIdentity
 ) {
-  return identity.kind === "user-profile" ? identity.profileName : null;
+  return identity.kind === "user-profile" ? identity.profileId : null;
 }
 
 export function getProjectProfileNameFromSelection(

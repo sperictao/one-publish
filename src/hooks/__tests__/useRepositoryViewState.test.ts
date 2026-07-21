@@ -36,6 +36,7 @@ function createRepository(): Repository {
         configuration: "Release",
       },
       profiles: [],
+      bindings: [],
     },
   };
 }

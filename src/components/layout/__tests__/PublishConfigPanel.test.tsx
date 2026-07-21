@@ -61,14 +61,23 @@ vi.mock("@/lib/dotnetProjectProfile", () => ({
   resolveDotnetProjectProfile: resolveDotnetProjectProfileMock,
 }));
 
-function createProfile(name: string, profileGroup?: string): ConfigProfile {
+function createProfile(
+  name: string,
+  profileGroup?: string,
+  overrides: Partial<ConfigProfile> = {}
+): ConfigProfile {
   return {
+    id: name,
+    revisionId: `${name}-revision`,
     name,
     providerId: "dotnet",
     parameters: {},
     profileGroup,
     createdAt: new Date().toISOString(),
     isSystemDefault: false,
+    externalBindingIds: [],
+    blockedReason: null,
+    ...overrides,
   };
 }
 
@@ -197,6 +206,11 @@ beforeAll(() => {
         removeRecent: "从最近使用移除",
         deleteConfig: "删除配置",
         editConfig: "编辑配置",
+        updateConfig: "更新配置",
+        updateUnavailable: "更新配置（当前 Provider 暂无可用编辑器）",
+        viewConfig: "查看配置",
+        deleteBlocked: "删除受阻：{{reason}}。请先更新配置处理绑定",
+        configurationBlocked: "配置不可执行：{{reason}}",
         searchConfig: "搜索配置",
         refreshingProjectProfiles: "正在刷新项目发布配置...",
         refreshingCustomProfiles: "正在刷新自定义配置...",
@@ -215,6 +229,173 @@ beforeEach(() => {
 });
 
 describe("PublishConfigPanel", () => {
+  it("自定义配置菜单提供查看、更新和删除，绑定配置的删除入口明确阻断并复用更新", async () => {
+    const editable = createProfile("Alpha", undefined, { id: "profile-42" });
+    const bound = createProfile("Nightly", undefined, {
+      id: "profile-99",
+      externalBindingIds: ["binding-1", "binding-2"],
+    });
+    const boundCargo = createProfile("Cargo Nightly", undefined, {
+      id: "profile-cargo",
+      providerId: "cargo",
+      externalBindingIds: ["binding-3"],
+      blockedReason: "provider_version_unsupported:7",
+    });
+    const onSelectProfile = vi.fn();
+    const onEditProfile = vi.fn();
+    const onDeleteProfile = vi.fn();
+    const { container } = render(
+      <PublishConfigPanel
+        selectedPreset="userprofile:profile-42"
+        isCustomMode
+        profiles={[editable, bound, boundCargo]}
+        activeProfileName="Alpha"
+        onSelectProfile={onSelectProfile}
+        onCreateProfile={() => {}}
+        onEditProfile={onEditProfile}
+        onRefreshProfiles={() => {}}
+        onOpenConfigDialog={() => {}}
+        onDeleteProfile={onDeleteProfile}
+        dotnetSchema={dotnetSchema}
+        projectPublishProfiles={[]}
+        onSelectProjectProfile={() => {}}
+        onCopyProjectProfileToCustom={async () => "copied"}
+        recentConfigKeys={[]}
+        favoriteConfigKeys={[]}
+        onToggleFavoriteConfig={() => {}}
+        onRemoveRecentConfig={() => {}}
+        onReorderRecentConfigs={() => {}}
+        onReorderProjectProfiles={() => {}}
+        onReorderProfiles={() => {}}
+      />
+    );
+
+    const editableRow = container.querySelector<HTMLElement>(
+      '[data-list-item-id="userprofile:profile-42"]'
+    );
+    expect(editableRow).not.toBeNull();
+    const editableTrigger = within(editableRow!).getByRole("button", {
+      name: "更多操作: Alpha",
+    });
+    fireEvent.pointerDown(editableTrigger, { button: 0, ctrlKey: false });
+    fireEvent.click(editableTrigger);
+
+    const view = await screen.findByRole("menuitem", { name: "查看配置" });
+    expect(screen.getByRole("menuitem", { name: "更新配置" })).toBeVisible();
+    expect(screen.getByRole("menuitem", { name: "删除配置" })).toBeVisible();
+    fireEvent.click(view);
+    expect(onSelectProfile).toHaveBeenCalledWith(editable);
+
+    const boundRow = container.querySelector<HTMLElement>(
+      '[data-list-item-id="userprofile:profile-99"]'
+    );
+    const boundTrigger = within(boundRow!).getByRole("button", {
+      name: "更多操作: Nightly",
+    });
+    fireEvent.pointerDown(boundTrigger, { button: 0, ctrlKey: false });
+    fireEvent.click(boundTrigger);
+    fireEvent.click(
+      await screen.findByRole("menuitem", {
+        name: "删除受阻：2 个外部绑定仍在引用此配置。请先更新配置处理绑定",
+      })
+    );
+
+    expect(onEditProfile).toHaveBeenCalledWith(bound);
+    expect(onDeleteProfile).not.toHaveBeenCalled();
+
+    const boundCargoRow = container.querySelector<HTMLElement>(
+      '[data-list-item-id="userprofile:profile-cargo"]'
+    );
+    const boundCargoTrigger = within(boundCargoRow!).getByRole("button", {
+      name: "更多操作: Cargo Nightly",
+    });
+    expect(
+      within(boundCargoRow!).getByLabelText(
+        "配置不可执行：provider_version_unsupported:7"
+      )
+    ).toBeVisible();
+    fireEvent.pointerDown(boundCargoTrigger, { button: 0, ctrlKey: false });
+    fireEvent.click(boundCargoTrigger);
+    const unavailableUpdate = await screen.findByRole("menuitem", {
+      name: "更新配置（当前 Provider 暂无可用编辑器）",
+    });
+    expect(unavailableUpdate).toHaveAttribute("data-disabled");
+    const unavailableDelete = screen.getByRole("menuitem", {
+      name: "删除受阻：1 个外部绑定仍在引用此配置。请先更新配置处理绑定",
+    });
+    expect(unavailableDelete).toHaveAttribute("data-disabled");
+    fireEvent.click(unavailableDelete);
+
+    expect(onSelectProfile).not.toHaveBeenCalledWith(boundCargo);
+    expect(onEditProfile).not.toHaveBeenCalledWith(boundCargo);
+    expect(onDeleteProfile).not.toHaveBeenCalledWith("profile-cargo");
+  });
+
+  it("重命名后选中、收藏和最近使用继续引用同一 profile ID", async () => {
+    const original = createProfile("Alpha", undefined, { id: "profile-42" });
+    const sharedProps = {
+      selectedPreset: "userprofile:profile-42",
+      isCustomMode: true,
+      activeProfileName: "Alpha",
+      onSelectProfile: vi.fn(),
+      onCreateProfile: vi.fn(),
+      onEditProfile: vi.fn(),
+      onRefreshProfiles: vi.fn(),
+      onOpenConfigDialog: vi.fn(),
+      onDeleteProfile: vi.fn(),
+      dotnetSchema,
+      projectPublishProfiles: [] as string[],
+      onSelectProjectProfile: vi.fn(),
+      onCopyProjectProfileToCustom: async () => "copied",
+      recentConfigKeys: ["userprofile:profile-42"],
+      favoriteConfigKeys: ["userprofile:profile-42"],
+      onToggleFavoriteConfig: vi.fn(),
+      onRemoveRecentConfig: vi.fn(),
+      onReorderRecentConfigs: vi.fn(),
+      onReorderProjectProfiles: vi.fn(),
+      onReorderProfiles: vi.fn(),
+    };
+    const { container, rerender } = render(
+      <PublishConfigPanel {...sharedProps} profiles={[original]} />
+    );
+
+    const renamed = {
+      ...original,
+      revisionId: "revision-2",
+      name: "Renamed",
+    };
+    rerender(
+      <PublishConfigPanel
+        {...sharedProps}
+        activeProfileName="Renamed"
+        profiles={[renamed]}
+      />
+    );
+
+    const profileRow = container.querySelector<HTMLElement>(
+      '[data-list-item-id="userprofile:profile-42"]'
+    );
+    const recentRow = container.querySelector<HTMLElement>(
+      '[data-list-item-id="recent:userprofile:profile-42"]'
+    );
+    expect(profileRow).not.toBeNull();
+    expect(recentRow).toHaveTextContent("Renamed");
+    expect(
+      within(profileRow!).getByRole("button", { name: "Renamed" })
+    ).toHaveAttribute("aria-pressed", "true");
+
+    const trigger = within(profileRow!).getByRole("button", {
+      name: "更多操作: Renamed",
+    });
+    fireEvent.pointerDown(trigger, { button: 0, ctrlKey: false });
+    fireEvent.click(trigger);
+    fireEvent.click(await screen.findByRole("menuitem", { name: "取消收藏" }));
+
+    expect(sharedProps.onToggleFavoriteConfig).toHaveBeenCalledWith(
+      "userprofile:profile-42"
+    );
+  });
+
   it("项目发布配置刷新期间不会阻塞自定义配置组渲染", async () => {
     render(
       <PublishConfigPanel

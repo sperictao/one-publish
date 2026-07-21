@@ -30,6 +30,7 @@ function createRepository(path: string): Repository {
         profileName: "",
       },
       profiles: [],
+      bindings: [],
     },
   };
 }

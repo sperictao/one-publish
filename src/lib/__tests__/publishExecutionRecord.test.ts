@@ -13,6 +13,47 @@ function createCommand(displayCommand = "dotnet publish /repo/App.csproj") {
 }
 
 describe("createPublishExecutionRecord", () => {
+  it("固定手动发布使用的配置身份与修订，未提供时保持 legacy null", () => {
+    const baseParams = {
+      spec: {
+        version: 1,
+        provider_id: "dotnet",
+        project_path: "/repo/App.csproj",
+        parameters: {},
+      },
+      repoId: "repo-1",
+      startedAt: "2026-07-21T10:00:00.000Z",
+      finishedAt: "2026-07-21T10:00:03.000Z",
+      result: {
+        provider_id: "dotnet",
+        success: true,
+        cancelled: false,
+        error: null,
+        command: createCommand(),
+        output_log: "build ok",
+        output_dir: "/repo/out",
+        file_count: 2,
+        warnings: null,
+      },
+      outputLog: "build ok",
+    };
+
+    expect(
+      createPublishExecutionRecord({
+        ...baseParams,
+        configurationId: "profile-42",
+        configurationRevisionId: "revision-7",
+      })
+    ).toMatchObject({
+      configurationId: "profile-42",
+      configurationRevisionId: "revision-7",
+    });
+    expect(createPublishExecutionRecord(baseParams)).toMatchObject({
+      configurationId: null,
+      configurationRevisionId: null,
+    });
+  });
+
   it("优先使用后端返回的命令行", () => {
     const record = createPublishExecutionRecord({
       spec: {
