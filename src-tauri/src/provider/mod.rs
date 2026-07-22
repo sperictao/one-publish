@@ -6,7 +6,7 @@ use crate::parameter::{ParameterSchema, RenderError};
 use crate::plan::ExecutionPlan;
 use crate::spec::PublishSpec;
 use serde::{Deserialize, Serialize};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use ts_rs::TS;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
@@ -62,6 +62,13 @@ pub enum ProviderProjectFileMatcher {
     Extension(String),
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ProviderSourceInputKind {
+    DeclaredNonSecret,
+    Generated,
+    EnvironmentDependent,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ProviderRepositoryDiscovery {
     pub provider_id: String,
@@ -90,6 +97,8 @@ pub trait Provider: Send + Sync {
     }
 
     fn resolve_working_dir(&self, spec: &PublishSpec) -> Option<PathBuf>;
+
+    fn classify_source_input(&self, relative: &Path) -> ProviderSourceInputKind;
 
     fn infer_output_dir(&self, spec: &PublishSpec) -> String;
 

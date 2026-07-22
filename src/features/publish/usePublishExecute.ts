@@ -63,6 +63,12 @@ export interface UsePublishExecuteResult {
   runtimeResult: PublishRuntimeResult | null;
 }
 
+type ActivePublishRun = {
+  revision: number;
+  phase: "preflight" | "running";
+  cancelled: boolean;
+};
+
 export function usePublishExecute({
   appT,
   publishT,
@@ -78,6 +84,7 @@ export function usePublishExecute({
   currentConfigurationBlockedReason,
 }: UsePublishExecuteParams): UsePublishExecuteResult {
   const presentationRevisionRef = useRef(0);
+  const activeRunRef = useRef<ActivePublishRun | null>(null);
   const [activeRuntime, setActiveRuntime] =
     useState<PreparedPublishRuntime | null>(null);
   const [runtimeResult, setRuntimeResult] =
@@ -167,6 +174,11 @@ export function usePublishExecute({
         options,
       });
       const runRevision = startPublishPresentationRun();
+      activeRunRef.current = {
+        revision: runRevision,
+        phase: "preflight",
+        cancelled: false,
+      };
       setIsPublishing(true);
 
       const preflightPassed = await validate.runPublishPreflight(spec, {
@@ -174,16 +186,34 @@ export function usePublishExecute({
         feedbackMode: transaction.feedbackMode,
         restoreWindowOnFailure: transaction.restoreWindowOnFailure,
         trayStatusEffect: transaction.trayStatusEffect,
+        isCancelled: () => {
+          const activeRun = activeRunRef.current;
+          return activeRun?.revision !== runRevision || activeRun.cancelled;
+        },
       });
-      if (!preflightPassed) {
-        setIsPublishing(false);
+      const activeRun = activeRunRef.current;
+      if (
+        !preflightPassed ||
+        activeRun?.revision !== runRevision ||
+        activeRun.cancelled
+      ) {
+        if (activeRun?.revision === runRevision) {
+          activeRunRef.current = null;
+          setIsPublishing(false);
+          setIsCancellingPublish(false);
+        }
         return;
       }
+      activeRun.phase = "running";
+
+      setActiveRuntime(preparedRuntime ?? null);
+      setRuntimeResult(null);
 
       if (isCurrentPresentationRevision(runRevision)) {
         setLastPublishSpec(spec);
       }
 
+      let runtimeAccepted = false;
       try {
         if (shouldRecordRecentConfig(transaction)) {
           pushRecentConfig(transaction.recentConfigKey!, transaction.repoId);
@@ -191,11 +221,10 @@ export function usePublishExecute({
 
         let result: PublishResult;
         if (preparedRuntime) {
-          setActiveRuntime(preparedRuntime);
-          setRuntimeResult(null);
           const completedRuntime = await startPublishRuntime({
             runtimeToken: preparedRuntime.runtimeToken,
           });
+          runtimeAccepted = true;
           setRuntimeResult(completedRuntime);
           const providerResult = completedRuntime.publishResult;
           if (!providerResult) {
@@ -285,6 +314,14 @@ export function usePublishExecute({
           });
         }
       } catch (err) {
+        if (
+          preparedRuntime &&
+          !runtimeAccepted &&
+          activeRunRef.current?.revision === runRevision
+        ) {
+          setActiveRuntime(null);
+          setRuntimeResult(null);
+        }
         const [
           { analyzePublishExecutionFailure, extractInvokeErrorMessage },
           { getPublishFailureFeedback },
@@ -342,8 +379,11 @@ export function usePublishExecute({
           record,
         });
       } finally {
-        setIsPublishing(false);
-        setIsCancellingPublish(false);
+        if (activeRunRef.current?.revision === runRevision) {
+          activeRunRef.current = null;
+          setIsPublishing(false);
+          setIsCancellingPublish(false);
+        }
       }
     },
     [
@@ -437,6 +477,17 @@ export function usePublishExecute({
     }
 
     setIsCancellingPublish(true);
+    const activeRun = activeRunRef.current;
+    if (activeRun?.phase === "preflight") {
+      activeRun.cancelled = true;
+      resetPublishPresentation();
+      setActiveRuntime(null);
+      setRuntimeResult(null);
+      setIsPublishing(false);
+      setIsCancellingPublish(false);
+      toast.message(appT.cancellingPublish || "正在取消发布...");
+      return;
+    }
     try {
       const cancelled = await cancelProviderPublish();
       if (cancelled) {
@@ -461,7 +512,7 @@ export function usePublishExecute({
     } finally {
       setIsCancellingPublish(false);
     }
-  }, [appT, setIsCancellingPublish]);
+  }, [appT, resetPublishPresentation, setIsCancellingPublish, setIsPublishing]);
 
   return {
     startPublish,

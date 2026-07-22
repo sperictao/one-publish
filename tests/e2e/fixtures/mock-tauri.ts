@@ -20,6 +20,7 @@ import type {
   ConfigProfile,
   EnvironmentCheckResult,
   ParameterSchema,
+  PublishSpec,
   ProviderCatalogEntry,
   Repository,
 } from "@/generated/tauri-contracts";
@@ -396,6 +397,41 @@ export async function installMockTauri(
   await page.addInitScript(
     (opts: Record<string, unknown>) => {
       const clone = (v: unknown) => JSON.parse(JSON.stringify(v));
+      const renderMockPublishCommand = (spec?: PublishSpec) => {
+        const providerId = spec?.provider_id || "dotnet";
+        const parameters = spec?.parameters ?? {};
+        const configuration =
+          typeof parameters.configuration === "string"
+            ? parameters.configuration
+            : "Release";
+        const output =
+          typeof parameters.output === "string" ? parameters.output : null;
+        const properties =
+          parameters.properties && typeof parameters.properties === "object"
+            ? (parameters.properties as Record<string, unknown>)
+            : {};
+        const publishProfile =
+          typeof properties.PublishProfile === "string"
+            ? properties.PublishProfile
+            : null;
+        const commandArgs = ["publish", "--configuration", configuration];
+        let displayCommand = `${providerId} publish --configuration ${configuration}`;
+        if (publishProfile) {
+          commandArgs.push("--property", `PublishProfile=${publishProfile}`);
+          displayCommand += ` --property PublishProfile=${publishProfile}`;
+        }
+        if (output) {
+          commandArgs.push("--output", output);
+          displayCommand += ` --output ${output}`;
+        }
+        return {
+          program: providerId,
+          args: commandArgs,
+          working_dir: "/workspace/alpha-service",
+          display_command: displayCommand,
+          env: [],
+        };
+      };
 
       const appState = clone(opts.appState) as AppState;
       const providerList = clone(opts.providers) as ProviderCatalogEntry[];
@@ -611,6 +647,7 @@ export async function installMockTauri(
                 | {
                     configurationId: string;
                     configurationRevisionId: string;
+                    spec: PublishSpec;
                   }
                 | undefined;
               const revision =
@@ -619,13 +656,7 @@ export async function installMockTauri(
                 configurationId:
                   request?.configurationId || "mock-configuration",
                 configurationRevisionId: revision,
-                command: {
-                  program: "dotnet",
-                  args: ["publish"],
-                  working_dir: "/workspace/alpha-service",
-                  display_command: "dotnet publish",
-                  env: [],
-                },
+                command: renderMockPublishCommand(request?.spec),
                 plan: {
                   version: 1,
                   digest: `plan-${revision}`,
@@ -686,14 +717,35 @@ export async function installMockTauri(
                   manifest: { digest: manifestDigest, artifactCount: 12 },
                   receipts: [
                     {
+                      version: 1,
                       receiptId: `receipt-${revision}`,
+                      revision: 1,
                       routeId: "local-delivery",
                       manifestDigest,
                       status: "published",
                       externalReference: "/tmp/publish-output",
                     },
                   ],
-                  events: [],
+                  events: [
+                    {
+                      eventId: `event-${revision}`,
+                      planNodeId: "publish",
+                      kind: "delivery_receipt_observed",
+                      manifestDigest,
+                      receiptId: `receipt-${revision}`,
+                      deliveryStatus: "published",
+                      receipt: {
+                        version: 1,
+                        receiptId: `receipt-${revision}`,
+                        revision: 1,
+                        routeId: "local-delivery",
+                        manifestDigest,
+                        status: "published",
+                        externalReference: "/tmp/publish-output",
+                      },
+                      error: null,
+                    },
+                  ],
                   error: null,
                 },
                 publishResult: {
@@ -741,22 +793,9 @@ export async function installMockTauri(
             }
 
             case "render_provider_publish": {
-              const providerId = (args?.providerId as string) || "dotnet";
-              const spec = args?.spec as Record<string, unknown> | undefined;
-              const parameters = (spec?.parameters ?? {}) as Record<
-                string,
-                unknown
-              >;
-              const output =
-                typeof parameters.output === "string" ? parameters.output : "";
-              const outputArgs = output ? ["--output", output] : [];
-              const displayOutput = output ? ` --output ${output}` : "";
-              return {
-                program: providerId,
-                args: ["publish", "--configuration", "Release", ...outputArgs],
-                working_dir: "/workspace/alpha-service",
-                display_command: `${providerId} publish --configuration Release${displayOutput}`,
-              };
+              return renderMockPublishCommand(
+                args?.spec as PublishSpec | undefined
+              );
             }
 
             case "execute_provider_publish": {

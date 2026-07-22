@@ -5,10 +5,10 @@ use publish_adapters::{
     AdapterExecutionContext, AdapterExecutionOutput, AdapterRegistry, PlanNodeExecutor,
 };
 use publish_domain::{
-    sha256_hex, ArtifactCandidate, ArtifactManifest, DeliveryReceipt, PlanNode,
-    PlanningInputSnapshot, PublishAttemptStatus, PublishAttemptView, PublishError, PublishEvent,
-    PublishOutcome, PublishPlan, ReleaseAttempt, ReleaseIdentity, PUBLISH_EVENT_VERSION,
-    PUBLISH_PLAN_VERSION, RELEASE_ATTEMPT_VERSION,
+    sha256_hex, AdapterKind, ArtifactCandidate, ArtifactManifest, DeliveryReceipt, DeliveryStatus,
+    PlanNode, PlanStage, PlanningInputSnapshot, PublishAttemptStatus, PublishAttemptView,
+    PublishError, PublishEvent, PublishOutcome, PublishPlan, ReleaseAttempt, ReleaseIdentity,
+    DELIVERY_RECEIPT_VERSION, PUBLISH_EVENT_VERSION, PUBLISH_PLAN_VERSION, RELEASE_ATTEMPT_VERSION,
 };
 use publish_planner::PublishPlanner;
 use serde::{Deserialize, Serialize};
@@ -18,6 +18,254 @@ use serde_json::Value;
 pub struct PreparedPublishPlan {
     pub snapshot: PlanningInputSnapshot,
     pub plan: PublishPlan,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct ReducedPublishEvents {
+    pub status: PublishAttemptStatus,
+    pub manifest_digest: Option<String>,
+    pub receipts: Vec<DeliveryReceipt>,
+    pub error: Option<String>,
+}
+
+pub fn reduce_publish_events(
+    events: &[PublishEvent],
+) -> Result<ReducedPublishEvents, PublishError> {
+    let mut manifest_digest = None;
+    let mut receipts = BTreeMap::<String, DeliveryReceipt>::new();
+    let mut failure = None;
+    let mut event_identity: Option<(String, String, String)> = None;
+
+    for (index, event) in events.iter().enumerate() {
+        if event.version != PUBLISH_EVENT_VERSION {
+            return Err(PublishError::Execution(format!(
+                "unsupported publish event version {}; expected {}",
+                event.version, PUBLISH_EVENT_VERSION
+            )));
+        }
+        let expected_sequence = index as u64 + 1;
+        if event.sequence != expected_sequence {
+            return Err(PublishError::Execution(format!(
+                "publish event sequence {} is invalid; expected {expected_sequence}",
+                event.sequence
+            )));
+        }
+        let current_identity = (
+            event.attempt_id.clone(),
+            event.backend_run_id.clone(),
+            event.plan_digest.clone(),
+        );
+        if let Some(expected_identity) = &event_identity {
+            if expected_identity != &current_identity {
+                return Err(PublishError::Execution(
+                    "publish events do not belong to one sealed attempt".to_string(),
+                ));
+            }
+        } else {
+            event_identity = Some(current_identity);
+        }
+
+        if let Some(digest) = event.payload.get("manifest_digest").and_then(Value::as_str) {
+            if let Some(existing) = &manifest_digest {
+                if existing != digest {
+                    return Err(PublishError::Execution(format!(
+                        "publish events bind conflicting artifact manifests {existing} and {digest}"
+                    )));
+                }
+            } else {
+                manifest_digest = Some(digest.to_string());
+            }
+        }
+
+        match event.kind.as_str() {
+            "delivery_receipt_observed" => {
+                let receipt_value = event.payload.get("receipt").ok_or_else(|| {
+                    PublishError::Execution(format!(
+                        "publish event {} is missing its delivery receipt revision",
+                        event.event_id
+                    ))
+                })?;
+                let receipt: DeliveryReceipt = serde_json::from_value(receipt_value.clone())
+                    .map_err(|error| {
+                        PublishError::Execution(format!(
+                            "publish event {} contains an invalid delivery receipt: {error}",
+                            event.event_id
+                        ))
+                    })?;
+                validate_receipt_revision(&receipt)?;
+                match receipts.get(&receipt.receipt_id) {
+                    Some(existing) if receipt.revision < existing.revision => {
+                        return Err(PublishError::Execution(format!(
+                            "delivery receipt {} revision moved backwards from {} to {}",
+                            receipt.receipt_id, existing.revision, receipt.revision
+                        )));
+                    }
+                    Some(existing) if receipt.revision == existing.revision => {
+                        if existing != &receipt {
+                            return Err(PublishError::Execution(format!(
+                                "delivery receipt {} revision {} has conflicting evidence",
+                                receipt.receipt_id, receipt.revision
+                            )));
+                        }
+                    }
+                    Some(existing) => {
+                        validate_receipt_transition(existing, &receipt)?;
+                        receipts.insert(receipt.receipt_id.clone(), receipt);
+                    }
+                    _ => {
+                        validate_initial_receipt_revision(&receipt)?;
+                        receipts.insert(receipt.receipt_id.clone(), receipt);
+                    }
+                }
+            }
+            "plan_node_failed" => {
+                if failure.is_none() {
+                    failure = Some(
+                        event
+                            .payload
+                            .get("error")
+                            .and_then(Value::as_str)
+                            .map(str::to_string)
+                            .unwrap_or_else(|| {
+                                format!("publish plan node {} failed", event.plan_node_id)
+                            }),
+                    );
+                }
+            }
+            _ => {}
+        }
+    }
+
+    if let Some(expected_manifest) = manifest_digest.as_deref() {
+        if let Some(receipt) = receipts
+            .values()
+            .find(|receipt| receipt.manifest_digest != expected_manifest)
+        {
+            return Err(PublishError::Execution(format!(
+                "delivery receipt {} references manifest {}, expected {expected_manifest}",
+                receipt.receipt_id, receipt.manifest_digest
+            )));
+        }
+    }
+
+    if failure.is_none() {
+        if let Some(receipt) = receipts
+            .values()
+            .find(|receipt| is_failed_delivery_status(receipt.status))
+        {
+            failure = Some(format!(
+                "delivery receipt {} is {}",
+                receipt.receipt_id,
+                delivery_status_name(receipt.status)
+            ));
+        }
+    }
+
+    let status = if failure.is_some() {
+        PublishAttemptStatus::Failed
+    } else if !receipts.is_empty()
+        && receipts
+            .values()
+            .all(|receipt| receipt.status == DeliveryStatus::Published)
+    {
+        PublishAttemptStatus::Published
+    } else {
+        PublishAttemptStatus::Running
+    };
+
+    Ok(ReducedPublishEvents {
+        status,
+        manifest_digest,
+        receipts: receipts.into_values().collect(),
+        error: failure,
+    })
+}
+
+fn validate_receipt_revision(receipt: &DeliveryReceipt) -> Result<(), PublishError> {
+    if receipt.version != DELIVERY_RECEIPT_VERSION
+        || receipt.revision == 0
+        || receipt.receipt_id.trim().is_empty()
+        || receipt.route_id.trim().is_empty()
+        || receipt.manifest_digest.trim().is_empty()
+        || receipt.external_reference.trim().is_empty()
+    {
+        return Err(PublishError::Execution(format!(
+            "delivery receipt {} has invalid immutable revision evidence",
+            receipt.receipt_id
+        )));
+    }
+    Ok(())
+}
+
+fn validate_initial_receipt_revision(receipt: &DeliveryReceipt) -> Result<(), PublishError> {
+    if receipt.revision != 1 {
+        return Err(PublishError::Execution(format!(
+            "delivery receipt {} must start at revision 1, got {}",
+            receipt.receipt_id, receipt.revision
+        )));
+    }
+    Ok(())
+}
+
+fn validate_receipt_transition(
+    previous: &DeliveryReceipt,
+    next: &DeliveryReceipt,
+) -> Result<(), PublishError> {
+    let expected_revision = previous.revision.checked_add(1).ok_or_else(|| {
+        PublishError::Execution(format!(
+            "delivery receipt {} exhausted its revision range",
+            previous.receipt_id
+        ))
+    })?;
+    if next.revision != expected_revision {
+        return Err(PublishError::Execution(format!(
+            "delivery receipt {} revision {} is not continuous after revision {}",
+            next.receipt_id, next.revision, previous.revision
+        )));
+    }
+    if next.route_id != previous.route_id
+        || next.manifest_digest != previous.manifest_digest
+        || next.external_reference != previous.external_reference
+    {
+        return Err(PublishError::Execution(format!(
+            "delivery receipt {} changed its stable identity at revision {}",
+            next.receipt_id, next.revision
+        )));
+    }
+    if !is_valid_delivery_transition(previous.status, next.status) {
+        return Err(PublishError::Execution(format!(
+            "delivery receipt {} has invalid lifecycle transition {} -> {}",
+            next.receipt_id,
+            delivery_status_name(previous.status),
+            delivery_status_name(next.status)
+        )));
+    }
+    Ok(())
+}
+
+fn is_valid_delivery_transition(previous: DeliveryStatus, next: DeliveryStatus) -> bool {
+    match previous {
+        DeliveryStatus::Pending => true,
+        DeliveryStatus::Staged => !matches!(next, DeliveryStatus::Pending),
+        DeliveryStatus::Submitted => {
+            !matches!(next, DeliveryStatus::Pending | DeliveryStatus::Staged)
+        }
+        DeliveryStatus::Published
+        | DeliveryStatus::Failed
+        | DeliveryStatus::Rejected
+        | DeliveryStatus::Cancelled
+        | DeliveryStatus::Expired => false,
+    }
+}
+
+fn is_failed_delivery_status(status: DeliveryStatus) -> bool {
+    matches!(
+        status,
+        DeliveryStatus::Failed
+            | DeliveryStatus::Rejected
+            | DeliveryStatus::Cancelled
+            | DeliveryStatus::Expired
+    )
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -116,8 +364,8 @@ impl PublishRuntime {
             &prepared.plan,
             &mut executor,
         ) {
-            Ok(()) => Ok(executor.finish_attempt(&prepared.plan, attempt)),
-            Err(error) => Ok(executor.finish_failed_attempt(attempt, error)),
+            Ok(()) => executor.finish_attempt(&prepared.plan, attempt),
+            Err(error) => executor.finish_failed_attempt(attempt, error),
         }
     }
 
@@ -288,7 +536,7 @@ impl<'a> RuntimeNodeExecutor<'a> {
 
     fn finish(self, plan: &PublishPlan) -> Result<PublishOutcome, PublishError> {
         self.validate_completion(plan)?;
-        Ok(self.into_outcome())
+        self.into_outcome()
     }
 
     fn validate_completion(&self, plan: &PublishPlan) -> Result<(), PublishError> {
@@ -323,39 +571,45 @@ impl<'a> RuntimeNodeExecutor<'a> {
         Ok(())
     }
 
-    fn into_outcome(self) -> PublishOutcome {
-        PublishOutcome {
-            manifest: self
-                .manifest
-                .expect("validated runtime execution must have an artifact manifest"),
+    fn into_outcome(self) -> Result<PublishOutcome, PublishError> {
+        let projection = reduce_publish_events(&self.events)?;
+        self.validate_event_projection(&projection)?;
+        Ok(PublishOutcome {
+            manifest: self.manifest.ok_or(PublishError::MissingArtifactManifest)?,
             events: self.events,
-            receipts: self.receipts,
-        }
+            receipts: projection.receipts,
+        })
     }
 
-    fn finish_attempt(self, plan: &PublishPlan, attempt: ReleaseAttempt) -> PublishAttemptView {
+    fn finish_attempt(
+        mut self,
+        plan: &PublishPlan,
+        mut attempt: ReleaseAttempt,
+    ) -> Result<PublishAttemptView, PublishError> {
         if let Err(error) = self.validate_completion(plan) {
             return self.finish_failed_attempt(attempt, error);
         }
 
-        let outcome = self.into_outcome();
-        let mut attempt = attempt;
-        attempt.manifest_digest = Some(outcome.manifest.digest.clone());
-        PublishAttemptView {
-            attempt,
-            status: reduce_attempt_status(&outcome.events),
-            manifest: Some(outcome.manifest),
-            events: outcome.events,
-            receipts: outcome.receipts,
-            error: None,
+        let projection = reduce_publish_events(&self.events)?;
+        if let Err(error) = self.validate_event_projection(&projection) {
+            return self.finish_failed_attempt(attempt, error);
         }
+        attempt.manifest_digest = projection.manifest_digest.clone();
+        Ok(PublishAttemptView {
+            attempt,
+            status: projection.status,
+            manifest: self.manifest.take(),
+            events: self.events,
+            receipts: projection.receipts,
+            error: projection.error,
+        })
     }
 
     fn finish_failed_attempt(
         mut self,
         mut attempt: ReleaseAttempt,
         error: PublishError,
-    ) -> PublishAttemptView {
+    ) -> Result<PublishAttemptView, PublishError> {
         let message = error.to_string();
         if !self
             .events
@@ -364,18 +618,35 @@ impl<'a> RuntimeNodeExecutor<'a> {
         {
             self.append_failure_event("runtime", None, &message);
         }
-        attempt.manifest_digest = self
-            .manifest
-            .as_ref()
-            .map(|manifest| manifest.digest.clone());
-        PublishAttemptView {
+        let projection = reduce_publish_events(&self.events)?;
+        attempt.manifest_digest = projection.manifest_digest.clone();
+        Ok(PublishAttemptView {
             attempt,
-            status: reduce_attempt_status(&self.events),
+            status: projection.status,
             manifest: self.manifest,
             events: self.events,
-            receipts: self.receipts,
-            error: Some(message),
+            receipts: projection.receipts,
+            error: projection.error.or(Some(message)),
+        })
+    }
+
+    fn validate_event_projection(
+        &self,
+        projection: &ReducedPublishEvents,
+    ) -> Result<(), PublishError> {
+        let manifest = self
+            .manifest
+            .as_ref()
+            .ok_or(PublishError::MissingArtifactManifest)?;
+        if projection.manifest_digest.as_deref() != Some(manifest.digest.as_str()) {
+            return Err(PublishError::Execution(
+                "publish events did not bind the sealed artifact manifest".to_string(),
+            ));
         }
+        if projection.receipts.is_empty() {
+            return Err(PublishError::MissingDeliveryReceipt);
+        }
+        Ok(())
     }
 
     fn merge_output(
@@ -383,6 +654,79 @@ impl<'a> RuntimeNodeExecutor<'a> {
         node: &PlanNode,
         output: AdapterExecutionOutput,
     ) -> Result<(), PublishError> {
+        if output.manifest.is_some() && self.manifest.is_some() {
+            return Err(PublishError::Execution(
+                "artifact manifest can only be sealed once".to_string(),
+            ));
+        }
+        if let Some(manifest) = output.manifest.as_ref() {
+            manifest.validate()?;
+        }
+
+        let manifest_digest = output
+            .manifest
+            .as_ref()
+            .map(|manifest| manifest.digest.as_str())
+            .or_else(|| {
+                self.manifest
+                    .as_ref()
+                    .map(|manifest| manifest.digest.as_str())
+            });
+        let mut validated_receipts = self.receipts.clone();
+        for receipt in &output.receipts {
+            validate_receipt_revision(receipt)?;
+            if node.adapter.kind != AdapterKind::DeliveryDestination
+                || node.stage != PlanStage::PublishRoutes
+            {
+                return Err(PublishError::Execution(format!(
+                    "plan node {} cannot emit delivery receipt {}",
+                    node.id, receipt.receipt_id
+                )));
+            }
+            if receipt.route_id != node.binding_id {
+                return Err(PublishError::Execution(format!(
+                    "delivery receipt {} references route {}, expected {}",
+                    receipt.receipt_id, receipt.route_id, node.binding_id
+                )));
+            }
+            if let Some(expected_manifest) = manifest_digest {
+                if receipt.manifest_digest != expected_manifest {
+                    return Err(PublishError::Execution(format!(
+                        "delivery receipt {} references manifest {}, expected {expected_manifest}",
+                        receipt.receipt_id, receipt.manifest_digest
+                    )));
+                }
+            } else {
+                return Err(PublishError::MissingArtifactManifest);
+            }
+
+            if let Some(existing) = validated_receipts
+                .iter()
+                .rev()
+                .find(|existing| existing.receipt_id == receipt.receipt_id)
+            {
+                if receipt.revision < existing.revision {
+                    return Err(PublishError::Execution(format!(
+                        "delivery receipt {} revision moved backwards from {} to {}",
+                        receipt.receipt_id, existing.revision, receipt.revision
+                    )));
+                }
+                if receipt.revision == existing.revision {
+                    if existing != receipt {
+                        return Err(PublishError::Execution(format!(
+                            "delivery receipt {} revision {} has conflicting evidence",
+                            receipt.receipt_id, receipt.revision
+                        )));
+                    }
+                } else {
+                    validate_receipt_transition(existing, receipt)?;
+                }
+            } else {
+                validate_initial_receipt_revision(receipt)?;
+            }
+            validated_receipts.push(receipt.clone());
+        }
+
         let mut payload = BTreeMap::from([(
             "adapter".to_string(),
             Value::String(node.adapter.display_name()),
@@ -393,32 +737,25 @@ impl<'a> RuntimeNodeExecutor<'a> {
                 Value::String(manifest.digest.clone()),
             );
         }
-        if let Some(receipt) = output.receipts.first() {
-            payload.insert(
-                "receipt_id".to_string(),
-                Value::String(receipt.receipt_id.clone()),
-            );
-            payload.insert(
-                "receipt_revision".to_string(),
-                Value::Number(receipt.revision.into()),
-            );
-            payload.insert(
-                "delivery_status".to_string(),
-                Value::String(delivery_status_name(receipt.status).to_string()),
-            );
-        }
         self.artifacts.extend(output.artifacts);
         if let Some(manifest) = output.manifest {
-            if self.manifest.is_some() {
-                return Err(PublishError::Execution(
-                    "artifact manifest can only be sealed once".to_string(),
-                ));
-            }
-            manifest.validate()?;
             self.manifest = Some(manifest);
         }
-        self.receipts.extend(output.receipts);
+        let receipts = output.receipts;
+        self.receipts.extend(receipts.iter().cloned());
         self.append_event(&node.id, "plan_node_completed", payload);
+        for receipt in receipts {
+            let receipt = serde_json::to_value(receipt).map_err(|error| {
+                PublishError::Execution(format!(
+                    "failed to serialize delivery receipt event: {error}"
+                ))
+            })?;
+            self.append_event(
+                &node.id,
+                "delivery_receipt_observed",
+                BTreeMap::from([("receipt".to_string(), receipt)]),
+            );
+        }
         Ok(())
     }
 
@@ -513,27 +850,15 @@ impl PlanNodeExecutor for RuntimeNodeExecutor<'_> {
     }
 }
 
-fn reduce_attempt_status(events: &[PublishEvent]) -> PublishAttemptStatus {
-    if events.iter().any(|event| event.kind == "plan_node_failed") {
-        return PublishAttemptStatus::Failed;
-    }
-    if events.iter().any(|event| {
-        event.payload.get("delivery_status").and_then(Value::as_str) == Some("published")
-    }) {
-        return PublishAttemptStatus::Published;
-    }
-    PublishAttemptStatus::Running
-}
-
-fn delivery_status_name(status: publish_domain::DeliveryStatus) -> &'static str {
+fn delivery_status_name(status: DeliveryStatus) -> &'static str {
     match status {
-        publish_domain::DeliveryStatus::Pending => "pending",
-        publish_domain::DeliveryStatus::Staged => "staged",
-        publish_domain::DeliveryStatus::Submitted => "submitted",
-        publish_domain::DeliveryStatus::Published => "published",
-        publish_domain::DeliveryStatus::Failed => "failed",
-        publish_domain::DeliveryStatus::Rejected => "rejected",
-        publish_domain::DeliveryStatus::Cancelled => "cancelled",
-        publish_domain::DeliveryStatus::Expired => "expired",
+        DeliveryStatus::Pending => "pending",
+        DeliveryStatus::Staged => "staged",
+        DeliveryStatus::Submitted => "submitted",
+        DeliveryStatus::Published => "published",
+        DeliveryStatus::Failed => "failed",
+        DeliveryStatus::Rejected => "rejected",
+        DeliveryStatus::Cancelled => "cancelled",
+        DeliveryStatus::Expired => "expired",
     }
 }

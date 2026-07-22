@@ -242,10 +242,15 @@ impl AdapterContract for LocalDirectoryDestination {
         let manifest = context
             .manifest
             .ok_or(PublishError::MissingArtifactManifest)?;
-        let directory = PathBuf::from(
+        let delivery_root = PathBuf::from(
             node.settings
                 .string("directory", &self.descriptor.identity().display_name())?,
         );
+        let attempt_directory = format!(
+            "attempt-{}",
+            &sha256_hex(context.attempt_id.as_bytes())[..24]
+        );
+        let directory = delivery_root.join(attempt_directory);
         create_directory(&directory)?;
 
         for artifact in &manifest.artifacts {

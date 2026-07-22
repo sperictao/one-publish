@@ -1,6 +1,6 @@
 use super::{
     Provider, ProviderCapabilities, ProviderCatalogEntry, ProviderManifest,
-    ProviderRepositoryDiscovery,
+    ProviderRepositoryDiscovery, ProviderSourceInputKind,
 };
 #[cfg(test)]
 use super::{ProviderProjectFileMatcher, ProviderProjectPathKind, ProviderRepositoryMarker};
@@ -171,6 +171,16 @@ impl Provider for BuiltInProvider {
         }
     }
 
+    fn classify_source_input(&self, relative: &Path) -> ProviderSourceInputKind {
+        if is_generated_source_path(self.kind, relative) {
+            ProviderSourceInputKind::Generated
+        } else if is_declared_non_secret_source_input(self.kind, relative) {
+            ProviderSourceInputKind::DeclaredNonSecret
+        } else {
+            ProviderSourceInputKind::EnvironmentDependent
+        }
+    }
+
     fn infer_output_dir(&self, spec: &PublishSpec) -> String {
         match self.kind {
             BuiltInProviderKind::Tauri => super::providers::tauri::infer_bundle_dir(spec),
@@ -242,6 +252,145 @@ impl Provider for BuiltInProvider {
             _ => Ok(program.to_string()),
         }
     }
+}
+
+fn is_generated_source_path(kind: BuiltInProviderKind, relative: &Path) -> bool {
+    let components = source_components(relative);
+    let Some(first) = components.first().map(String::as_str) else {
+        return false;
+    };
+    if first == ".git" || first.ends_with(".one-publish-deliveries") {
+        return true;
+    }
+    match kind {
+        BuiltInProviderKind::Dotnet => matches!(first, "bin" | "obj"),
+        BuiltInProviderKind::Cargo => first == "target",
+        BuiltInProviderKind::Go => first == "dist",
+        BuiltInProviderKind::JavaGradle => matches!(first, ".gradle" | "build" | "out"),
+        BuiltInProviderKind::Tauri => {
+            matches!(
+                first,
+                "node_modules" | "target" | "dist" | "build" | ".next" | ".svelte-kit"
+            ) || components
+                .get(1)
+                .is_some_and(|second| first == "src-tauri" && second == "target")
+        }
+    }
+}
+
+fn is_declared_non_secret_source_input(kind: BuiltInProviderKind, relative: &Path) -> bool {
+    let components = source_components(relative);
+    let file_name = relative
+        .file_name()
+        .and_then(|name| name.to_str())
+        .unwrap_or_default()
+        .to_ascii_lowercase();
+    let extension = relative
+        .extension()
+        .and_then(|extension| extension.to_str())
+        .unwrap_or_default()
+        .to_ascii_lowercase();
+    match kind {
+        BuiltInProviderKind::Dotnet => {
+            matches!(
+                extension.as_str(),
+                "cs" | "fs"
+                    | "vb"
+                    | "csproj"
+                    | "fsproj"
+                    | "vbproj"
+                    | "sln"
+                    | "slnx"
+                    | "props"
+                    | "targets"
+                    | "resx"
+                    | "razor"
+                    | "cshtml"
+                    | "xaml"
+                    | "axaml"
+            ) || matches!(
+                file_name.as_str(),
+                "global.json" | "directory.packages.props" | "packages.lock.json"
+            ) || starts_with_source_directory(&components, &["wwwroot"])
+                || starts_with_source_directory(&components, &["resources"])
+        }
+        BuiltInProviderKind::Cargo => {
+            extension == "rs"
+                || matches!(
+                    file_name.as_str(),
+                    "cargo.toml" | "cargo.lock" | "rust-toolchain" | "rust-toolchain.toml"
+                )
+                || starts_with_source_directory(&components, &["assets"])
+                || starts_with_source_directory(&components, &["resources"])
+        }
+        BuiltInProviderKind::Go => {
+            extension == "go"
+                || matches!(
+                    file_name.as_str(),
+                    "go.mod" | "go.sum" | "go.work" | "go.work.sum"
+                )
+                || ["assets", "embed", "static", "templates"]
+                    .iter()
+                    .any(|directory| starts_with_source_directory(&components, &[*directory]))
+        }
+        BuiltInProviderKind::JavaGradle => {
+            matches!(extension.as_str(), "java" | "kt" | "kts" | "gradle")
+                || matches!(
+                    file_name.as_str(),
+                    "settings.gradle"
+                        | "settings.gradle.kts"
+                        | "gradlew"
+                        | "gradlew.bat"
+                        | "gradle-wrapper.jar"
+                        | "gradle-wrapper.properties"
+                )
+                || starts_with_source_directory(&components, &["src", "main", "resources"])
+                || starts_with_source_directory(&components, &["src", "test", "resources"])
+        }
+        BuiltInProviderKind::Tauri => {
+            matches!(
+                file_name.as_str(),
+                "package.json"
+                    | "pnpm-lock.yaml"
+                    | "package-lock.json"
+                    | "npm-shrinkwrap.json"
+                    | "yarn.lock"
+                    | "bun.lock"
+                    | "bun.lockb"
+                    | "cargo.toml"
+                    | "cargo.lock"
+                    | "rust-toolchain"
+                    | "rust-toolchain.toml"
+                    | "tauri.conf.json"
+                    | "tauri.conf.json5"
+            ) || ["src", "public", "static"]
+                .iter()
+                .any(|directory| starts_with_source_directory(&components, &[*directory]))
+                || starts_with_source_directory(&components, &["src-tauri", "src"])
+                || starts_with_source_directory(&components, &["src-tauri", "icons"])
+        }
+    }
+}
+
+fn source_components(relative: &Path) -> Vec<String> {
+    relative
+        .components()
+        .filter_map(|component| match component {
+            std::path::Component::Normal(value) => {
+                Some(value.to_string_lossy().to_ascii_lowercase())
+            }
+            _ => None,
+        })
+        .collect()
+}
+
+fn starts_with_source_directory(components: &[String], prefix: &[&str]) -> bool {
+    components
+        .iter()
+        .map(String::as_str)
+        .zip(prefix.iter().copied())
+        .all(|(component, expected)| component == expected)
+        && components.len() > prefix.len()
 }
 
 fn compile_single_step(

@@ -65,9 +65,9 @@ export type RuntimeArtifactManifestSummary = { digest: string, artifactCount: nu
 
 export type RuntimeDeliveryStatus = "pending" | "staged" | "submitted" | "published" | "failed" | "rejected" | "cancelled" | "expired";
 
-export type RuntimeDeliveryReceiptSummary = { receiptId: string, routeId: string, manifestDigest: string, status: RuntimeDeliveryStatus, externalReference: string, };
+export type RuntimeDeliveryReceiptSummary = { version: number, receiptId: string, revision: number, routeId: string, manifestDigest: string, status: RuntimeDeliveryStatus, externalReference: string, };
 
-export type RuntimePublishEventSummary = { eventId: string, planNodeId: string, kind: string, manifestDigest: string | null, receiptId: string | null, deliveryStatus: string | null, error: string | null, };
+export type RuntimePublishEventSummary = { eventId: string, planNodeId: string, kind: string, manifestDigest: string | null, receiptId: string | null, deliveryStatus: string | null, receipt: RuntimeDeliveryReceiptSummary | null, error: string | null, };
 
 export type RuntimeAttemptResult = { attemptId: string, backendRunId: string, configurationRevisionId: string, planDigest: string, executionBackend: string, status: RuntimeAttemptStatus, manifestDigest: string | null, manifest: RuntimeArtifactManifestSummary | null, receipts: Array<RuntimeDeliveryReceiptSummary>, events: Array<RuntimePublishEventSummary>, error: string | null, };
 

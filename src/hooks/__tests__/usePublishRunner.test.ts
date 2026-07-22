@@ -109,8 +109,18 @@ vi.mock("@/lib/store/api", async () => {
 });
 
 vi.mock("@/lib/tauri/invokeErrors", () => ({
-  extractInvokeErrorMessage: (error: unknown) =>
-    error instanceof Error ? error.message : String(error),
+  extractInvokeErrorMessage: (error: unknown) => {
+    if (error instanceof Error) {
+      return error.message;
+    }
+    if (error && typeof error === "object" && "message" in error) {
+      const message = (error as { message?: unknown }).message;
+      if (typeof message === "string") {
+        return message;
+      }
+    }
+    return String(error);
+  },
   extractInvokeErrorCode: () => "publish_cancel_failed",
   analyzePublishExecutionFailure: mocks.analyzePublishExecutionFailure,
 }));
@@ -242,14 +252,35 @@ function createRuntimeResult(revision: string) {
       manifest: { digest: `manifest-${revision}`, artifactCount: 3 },
       receipts: [
         {
+          version: 1,
           receiptId: `receipt-${revision}`,
+          revision: 1,
           routeId: "local-delivery",
           manifestDigest: `manifest-${revision}`,
           status: "published",
           externalReference: "/exports/App/Release",
         },
       ],
-      events: [],
+      events: [
+        {
+          eventId: `event-${revision}`,
+          planNodeId: "publish-routes",
+          kind: "delivery_receipt_observed",
+          manifestDigest: `manifest-${revision}`,
+          receiptId: `receipt-${revision}`,
+          deliveryStatus: "published",
+          receipt: {
+            version: 1,
+            receiptId: `receipt-${revision}`,
+            revision: 1,
+            routeId: "local-delivery",
+            manifestDigest: `manifest-${revision}`,
+            status: "published",
+            externalReference: "/exports/App/Release",
+          },
+          error: null,
+        },
+      ],
       error: null,
     },
     publishResult,
@@ -1468,6 +1499,152 @@ describe("usePublishRunner", () => {
     );
   });
 
+  it("同一 revision 的单次运行输入变化会立即使旧 Runtime 令牌失效", async () => {
+    mocks.runEnvironmentCheck.mockResolvedValue(readyEnvironment);
+    let currentOutput = "/exports/App/A";
+    buildPublishSpecMock = vi.fn(() => ({
+      version: 1,
+      provider_id: "dotnet",
+      project_path: "/repo/App.csproj",
+      parameters: {
+        configuration: "Release",
+        output: currentOutput,
+      },
+    }));
+    mocks.usePublishSpecBuilder.mockReturnValue({
+      buildPublishSpec: buildPublishSpecMock,
+    });
+    mocks.preparePublishRuntime
+      .mockResolvedValueOnce(createPreparedRuntime("revision-A"))
+      .mockImplementationOnce(() => new Promise(() => {}));
+
+    const props = createRunnerProps();
+    props.configurationId = "profile-42";
+    props.configurationRevisionId = "revision-A";
+    const { result, rerender } = renderHook(
+      (hookProps: ReturnType<typeof createRunnerProps>) =>
+        usePublishRunner(hookProps),
+      { initialProps: props }
+    );
+
+    await waitFor(() => {
+      expect(result.current.preparedRuntime?.runtimeToken).toBe(
+        "token-revision-A"
+      );
+    });
+
+    currentOutput = "/exports/App/B";
+    rerender({
+      ...props,
+      selectedRepo: { path: "/repo" },
+    });
+
+    expect(result.current.preparedRuntime).toBeNull();
+    await act(async () => {
+      await result.current.startPublish();
+    });
+    expect(mocks.startPublishRuntime).not.toHaveBeenCalled();
+  });
+
+  it("Runtime 准备失败展示 Tauri 结构化错误消息", async () => {
+    mocks.preparePublishRuntime.mockRejectedValue({
+      code: "publish_runtime_source_changed",
+      message: "source changed since preparation",
+    });
+    const props = createRunnerProps();
+    props.configurationId = "profile-42";
+    props.configurationRevisionId = "revision-A";
+
+    const { result } = renderHook(() => usePublishRunner(props));
+
+    await waitFor(() => {
+      expect(result.current.runtimePreparationError).toBe(
+        "source changed since preparation"
+      );
+    });
+  });
+
+  it("新的 legacy 手动执行会替换之前的 Runtime 结果", async () => {
+    mocks.runEnvironmentCheck.mockResolvedValue(readyEnvironment);
+    const props = createRunnerProps();
+    props.configurationId = "profile-42";
+    props.configurationRevisionId = "revision-A";
+    const { result, rerender } = renderHook(
+      (hookProps: ReturnType<typeof createRunnerProps>) =>
+        usePublishRunner(hookProps),
+      { initialProps: props }
+    );
+
+    await waitFor(() => {
+      expect(result.current.preparedRuntime?.runtimeToken).toBe(
+        "token-revision-A"
+      );
+    });
+    await act(async () => {
+      await result.current.startPublish();
+    });
+    expect(result.current.runtimeResult?.attempt.status).toBe("published");
+
+    rerender({
+      ...props,
+      configurationId: null,
+      configurationRevisionId: null,
+    });
+    mocks.invoke.mockRejectedValueOnce(new Error("legacy provider failed"));
+    await act(async () => {
+      await result.current.runPublishSpec({
+        version: 1,
+        provider_id: "dotnet",
+        project_path: "/repo/App.csproj",
+        parameters: { configuration: "Release" },
+      });
+    });
+
+    expect(result.current.activeRuntime).toBeNull();
+    expect(result.current.runtimeResult).toBeNull();
+    expect(usePublishStore.getState().publishResult).toEqual(
+      expect.objectContaining({
+        success: false,
+        error: "legacy provider failed",
+      })
+    );
+  });
+
+  it("预检阻断不会把尚未启动的 Runtime 标记为当前 Attempt", async () => {
+    mocks.runEnvironmentCheck.mockResolvedValue({
+      ...readyEnvironment,
+      is_ready: false,
+      issues: [
+        {
+          severity: "critical",
+          provider_id: "dotnet",
+          issue_type: "missing_tool",
+          description: ".NET SDK missing",
+          fixes: [],
+        },
+      ],
+    });
+    const props = createRunnerProps();
+    props.configurationId = "profile-42";
+    props.configurationRevisionId = "revision-A";
+    const { result } = renderHook(() => usePublishRunner(props));
+
+    await waitFor(() => {
+      expect(result.current.preparedRuntime?.runtimeToken).toBe(
+        "token-revision-A"
+      );
+    });
+    await act(async () => {
+      await result.current.startPublish();
+    });
+
+    expect(mocks.startPublishRuntime).not.toHaveBeenCalled();
+    expect(mocks.preflightPublishOutput).not.toHaveBeenCalled();
+    expect(mocks.requestProtectedOutputAccess).not.toHaveBeenCalled();
+    expect(result.current.activeRuntime).toBeNull();
+    expect(result.current.runtimeResult).toBeNull();
+  });
+
   it("isPublishing_set_during_preflight", async () => {
     let resolveEnvironmentCheck: (
       value: EnvironmentCheckResult
@@ -1524,5 +1701,83 @@ describe("usePublishRunner", () => {
     expect(usePublishStore.getState().isPublishing).toBe(false);
     expect(mocks.invoke).not.toHaveBeenCalled();
     expect(props.savePublishRecord).not.toHaveBeenCalled();
+  });
+
+  it("预检期间取消会阻止尚未接受的 Runtime 启动", async () => {
+    let resolveEnvironmentCheck: (
+      value: EnvironmentCheckResult
+    ) => void = () => {};
+    mocks.runEnvironmentCheck.mockImplementation(
+      () =>
+        new Promise<EnvironmentCheckResult>((resolve) => {
+          resolveEnvironmentCheck = resolve;
+        })
+    );
+    const props = createRunnerProps();
+    const { result } = renderHook(() => usePublishRunner(props));
+    const spec = {
+      version: 1,
+      provider_id: "dotnet",
+      project_path: "/repo/App.csproj",
+      parameters: { configuration: "Release" },
+    };
+    let publishPromise: Promise<void> | undefined;
+
+    act(() => {
+      publishPromise = result.current.runPublishSpec(
+        spec,
+        { repoId: "repo-1" },
+        createPreparedRuntime("revision-cancelled-before-start")
+      );
+    });
+    expect(usePublishStore.getState().isPublishing).toBe(true);
+
+    await act(async () => {
+      await result.current.cancelPublish();
+    });
+    expect(usePublishStore.getState().isPublishing).toBe(false);
+    expect(mocks.invoke).not.toHaveBeenCalledWith("cancel_provider_publish");
+
+    await act(async () => {
+      resolveEnvironmentCheck(readyEnvironment);
+      await publishPromise;
+    });
+
+    expect(mocks.startPublishRuntime).not.toHaveBeenCalled();
+    expect(mocks.preflightPublishOutput).not.toHaveBeenCalled();
+    expect(mocks.requestProtectedOutputAccess).not.toHaveBeenCalled();
+    expect(result.current.activeRuntime).toBeNull();
+    expect(result.current.runtimeResult).toBeNull();
+  });
+
+  it("Runtime 启动请求被拒绝后不会保留活动 Attempt 绑定", async () => {
+    mocks.runEnvironmentCheck.mockResolvedValue(readyEnvironment);
+    mocks.startPublishRuntime.mockRejectedValueOnce(
+      new Error("runtime request rejected")
+    );
+    const props = createRunnerProps();
+    const { result } = renderHook(() => usePublishRunner(props));
+
+    await act(async () => {
+      await result.current.runPublishSpec(
+        {
+          version: 1,
+          provider_id: "dotnet",
+          project_path: "/repo/App.csproj",
+          parameters: { configuration: "Release" },
+        },
+        { repoId: "repo-1" },
+        createPreparedRuntime("revision-rejected")
+      );
+    });
+
+    expect(result.current.activeRuntime).toBeNull();
+    expect(result.current.runtimeResult).toBeNull();
+    expect(usePublishStore.getState().publishResult).toEqual(
+      expect.objectContaining({
+        success: false,
+        error: "runtime request rejected",
+      })
+    );
   });
 });

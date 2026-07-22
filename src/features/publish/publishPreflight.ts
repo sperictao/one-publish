@@ -27,6 +27,7 @@ export interface PublishPreparationOptions {
   feedbackMode: "toast" | "system";
   restoreWindowOnFailure: boolean;
   trayStatusEffect: boolean;
+  isCancelled: () => boolean;
 }
 
 export interface AbortPublishPreparationOptions extends PublishPreparationOptions {
@@ -83,9 +84,16 @@ export function createPublishPreflightPipeline(deps: PublishPreflightDeps) {
     title,
     description,
     onAfterNotify,
+    isCancelled,
   }: AbortPublishPreparationOptions) {
+    if (isCancelled()) {
+      return;
+    }
     if (trayStatusEffect) {
       await syncTrayPublishStatus(level === "error" ? "failure" : "idle");
+      if (isCancelled()) {
+        return;
+      }
     }
     const notified = await notifyFeedback(
       level,
@@ -93,18 +101,31 @@ export function createPublishPreflightPipeline(deps: PublishPreflightDeps) {
       description,
       feedbackMode
     );
+    if (isCancelled()) {
+      return;
+    }
     onAfterNotify?.(notified);
     if (isCurrentPresentationRevision(runRevision)) {
       resetLogCapture();
+    }
+    if (isCancelled()) {
+      return;
     }
     await restoreMainWindowIfNeeded(restoreWindowOnFailure || !notified);
   }
 
   async function requestProtectedOutputAccessWithWindow(
     spec: ProviderPublishSpec,
-    outputPreflight: PublishOutputPreflightResult
+    outputPreflight: PublishOutputPreflightResult,
+    isCancelled: () => boolean = () => false
   ) {
+    if (isCancelled()) {
+      return null;
+    }
     await restoreMainWindowIfNeeded(true);
+    if (isCancelled()) {
+      return null;
+    }
     return await requestProtectedOutputAccess(spec, outputPreflight, appT);
   }
 
@@ -112,9 +133,15 @@ export function createPublishPreflightPipeline(deps: PublishPreflightDeps) {
     spec: ProviderPublishSpec,
     options: PublishPreparationOptions & { runRevision: number }
   ): Promise<boolean> {
+    if (options.isCancelled()) {
+      return false;
+    }
     // ── Environment check ──
     try {
       const env = await runEnvironmentCheck([spec.provider_id]);
+      if (options.isCancelled()) {
+        return false;
+      }
       const environmentCheck = createEnvironmentCheckSnapshot(env, [
         spec.provider_id,
       ]);
@@ -122,6 +149,9 @@ export function createPublishPreflightPipeline(deps: PublishPreflightDeps) {
 
       const critical = env.issues.find((item) => item.severity === "critical");
       if (critical) {
+        if (options.isCancelled()) {
+          return false;
+        }
         await abortPublishPreparation({
           ...options,
           level: "error",
@@ -138,6 +168,9 @@ export function createPublishPreflightPipeline(deps: PublishPreflightDeps) {
 
       const warning = env.issues.find((item) => item.severity === "warning");
       if (warning) {
+        if (options.isCancelled()) {
+          return false;
+        }
         await notifyFeedback(
           "warning",
           appT.environmentWarning || "环境存在警告",
@@ -146,7 +179,13 @@ export function createPublishPreflightPipeline(deps: PublishPreflightDeps) {
         );
       }
     } catch (err) {
+      if (options.isCancelled()) {
+        return false;
+      }
       const { extractInvokeErrorMessage } = await loadInvokeErrors();
+      if (options.isCancelled()) {
+        return false;
+      }
       await abortPublishPreparation({
         ...options,
         level: "error",
@@ -157,11 +196,23 @@ export function createPublishPreflightPipeline(deps: PublishPreflightDeps) {
     }
 
     // ── Output preflight ──
+    if (options.isCancelled()) {
+      return false;
+    }
     let outputPreflight: PublishOutputPreflightResult;
     try {
       outputPreflight = await preflightPublishOutput(spec);
+      if (options.isCancelled()) {
+        return false;
+      }
     } catch (err) {
+      if (options.isCancelled()) {
+        return false;
+      }
       const { extractInvokeErrorMessage } = await loadInvokeErrors();
+      if (options.isCancelled()) {
+        return false;
+      }
       await abortPublishPreparation({
         ...options,
         level: "error",
@@ -172,6 +223,9 @@ export function createPublishPreflightPipeline(deps: PublishPreflightDeps) {
     }
 
     if (outputPreflight.validation.status === "incompatible") {
+      if (options.isCancelled()) {
+        return false;
+      }
       await abortPublishPreparation({
         ...options,
         level: "error",
@@ -188,11 +242,21 @@ export function createPublishPreflightPipeline(deps: PublishPreflightDeps) {
       try {
         const accessRequest = await requestProtectedOutputAccessWithWindow(
           spec,
-          outputPreflight
+          outputPreflight,
+          options.isCancelled
         );
+        if (!accessRequest || options.isCancelled()) {
+          return false;
+        }
         outputPreflight = accessRequest.preflight;
       } catch (err) {
+        if (options.isCancelled()) {
+          return false;
+        }
         const { extractInvokeErrorMessage } = await loadInvokeErrors();
+        if (options.isCancelled()) {
+          return false;
+        }
         await abortPublishPreparation({
           ...options,
           level: "error",
@@ -206,6 +270,9 @@ export function createPublishPreflightPipeline(deps: PublishPreflightDeps) {
     }
 
     if (outputPreflight.access.status === "denied") {
+      if (options.isCancelled()) {
+        return false;
+      }
       await abortPublishPreparation({
         ...options,
         level: "error",
@@ -220,7 +287,7 @@ export function createPublishPreflightPipeline(deps: PublishPreflightDeps) {
       return false;
     }
 
-    return true;
+    return !options.isCancelled();
   }
 
   async function requestProtectedOutputAccessForRetry(
@@ -243,6 +310,7 @@ export function createPublishPreflightPipeline(deps: PublishPreflightDeps) {
       outputPreflight
     );
     return (
+      accessRequest !== null &&
       accessRequest.selectedDirectory !== null &&
       accessRequest.preflight.access.status !== "denied"
     );

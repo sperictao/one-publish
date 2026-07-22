@@ -4,18 +4,18 @@ use std::sync::Arc;
 
 use publish_adapters::{
     AdapterConformanceFixture, AdapterContract, AdapterExecutionContext, AdapterExecutionOutput,
-    AdapterRegistry, ArtifactProcessor, LocalDirectoryDestination, LocalExecutionBackend,
-    ProjectProvider, TemporaryArtifactStore,
+    AdapterRegistry, ArtifactProcessor, DeliveryDestination, LocalDirectoryDestination,
+    LocalExecutionBackend, ProjectProvider, TemporaryArtifactStore,
 };
 use publish_domain::{
     sha256_hex, AdapterBinding, AdapterDescriptor, AdapterIdentity, AdapterKind, AdapterSchema,
     AdapterSelection, AdapterSettings, ArtifactCandidate, Capability, CapabilityRequirement,
-    DeliveryStatus, PlanNode, PlanNodeTemplate, PlanOperation, PlanSideEffect, PlanStage,
-    PlanningInputSnapshot, PublishAttemptStatus, PublishError, PublishPlan, PublishingCapability,
-    ReleaseIdentity, SourceSnapshot, ARTIFACT_MANIFEST_VERSION, PLANNING_INPUT_SNAPSHOT_VERSION,
-    PUBLISH_EVENT_VERSION,
+    DeliveryReceipt, DeliveryStatus, PlanNode, PlanNodeTemplate, PlanOperation, PlanSideEffect,
+    PlanStage, PlanningInputSnapshot, PublishAttemptStatus, PublishError, PublishEvent,
+    PublishPlan, PublishingCapability, ReleaseIdentity, SourceSnapshot, ARTIFACT_MANIFEST_VERSION,
+    DELIVERY_RECEIPT_VERSION, PLANNING_INPUT_SNAPSHOT_VERSION, PUBLISH_EVENT_VERSION,
 };
-use publish_runner_core::{PublishRuntime, StartPublishAttempt};
+use publish_runner_core::{reduce_publish_events, PublishRuntime, StartPublishAttempt};
 use serde_json::Value;
 
 const ARTIFACT_BYTES: &[u8] = b"one-publish fake artifact\n";
@@ -190,6 +190,85 @@ impl AdapterContract for InjectingExecutionBackend {
 
 impl publish_adapters::ExecutionBackend for InjectingExecutionBackend {}
 
+struct MalformedReceiptDestination {
+    delegate: LocalDirectoryDestination,
+    wrong_route: bool,
+}
+
+impl MalformedReceiptDestination {
+    fn new(directory: &std::path::Path) -> Self {
+        Self {
+            delegate: LocalDirectoryDestination::new(directory),
+            wrong_route: false,
+        }
+    }
+
+    fn wrong_route(directory: &std::path::Path) -> Self {
+        Self {
+            delegate: LocalDirectoryDestination::new(directory),
+            wrong_route: true,
+        }
+    }
+}
+
+impl AdapterContract for MalformedReceiptDestination {
+    fn descriptor(&self) -> &AdapterDescriptor {
+        self.delegate.descriptor()
+    }
+
+    fn default_settings(&self) -> AdapterSettings {
+        self.delegate.default_settings()
+    }
+
+    fn plan_fragment(
+        &self,
+        snapshot: &PlanningInputSnapshot,
+        settings: &AdapterSettings,
+    ) -> Result<Vec<PlanNodeTemplate>, PublishError> {
+        self.delegate.plan_fragment(snapshot, settings)
+    }
+
+    fn execute_node(
+        &self,
+        node: &PlanNode,
+        context: &AdapterExecutionContext<'_>,
+    ) -> Result<AdapterExecutionOutput, PublishError> {
+        let PlanOperation::AdapterAction { action, .. } = &node.operation else {
+            return Err(PublishError::Execution(
+                "malformed receipt fixture expected an adapter action".to_string(),
+            ));
+        };
+        if action == "stage_local_directory" {
+            return Ok(AdapterExecutionOutput::default());
+        }
+        let manifest = context
+            .manifest
+            .ok_or(PublishError::MissingArtifactManifest)?;
+        Ok(AdapterExecutionOutput {
+            receipts: vec![DeliveryReceipt {
+                version: DELIVERY_RECEIPT_VERSION,
+                receipt_id: if self.wrong_route {
+                    "receipt-wrong-route".to_string()
+                } else {
+                    String::new()
+                },
+                revision: 1,
+                route_id: if self.wrong_route {
+                    "another-route".to_string()
+                } else {
+                    node.binding_id.clone()
+                },
+                manifest_digest: manifest.digest.clone(),
+                status: DeliveryStatus::Published,
+                external_reference: "local://malformed".to_string(),
+            }],
+            ..AdapterExecutionOutput::default()
+        })
+    }
+}
+
+impl DeliveryDestination for MalformedReceiptDestination {}
+
 #[test]
 fn fake_adapters_execute_one_plan_into_manifest_events_and_receipt() {
     let store_dir = tempfile::tempdir().expect("create temporary store");
@@ -243,18 +322,22 @@ fn fake_adapters_execute_one_plan_into_manifest_events_and_receipt() {
         ARTIFACT_BYTES
     );
 
-    let delivered_path = delivery_dir.path().join("app.bin");
+    let delivered_path = delivery_dir
+        .path()
+        .join(format!("attempt-{}", &sha256_hex(b"attempt-001")[..24]))
+        .join("app.bin");
     assert_eq!(
         fs::read(delivered_path).expect("read delivered artifact"),
         ARTIFACT_BYTES
     );
 
-    assert_eq!(outcome.events.len(), plan.nodes.len());
+    assert_eq!(
+        outcome.events.len(),
+        plan.nodes.len() + outcome.receipts.len()
+    );
     for (index, event) in outcome.events.iter().enumerate() {
         assert_eq!(event.version, PUBLISH_EVENT_VERSION);
         assert_eq!(event.sequence, index as u64 + 1);
-        assert_eq!(event.plan_node_id, plan.nodes[index].id);
-        assert!(event.payload.contains_key("adapter"));
     }
     assert_eq!(
         outcome
@@ -269,8 +352,11 @@ fn fake_adapters_execute_one_plan_into_manifest_events_and_receipt() {
         outcome
             .events
             .iter()
-            .find(|event| event.plan_node_id == publish.id)
-            .and_then(|event| event.payload.get("delivery_status"))
+            .find(|event| {
+                event.plan_node_id == publish.id && event.kind == "delivery_receipt_observed"
+            })
+            .and_then(|event| event.payload.get("receipt"))
+            .and_then(|receipt| receipt.get("status"))
             .and_then(Value::as_str),
         Some("published")
     );
@@ -280,6 +366,158 @@ fn fake_adapters_execute_one_plan_into_manifest_events_and_receipt() {
     assert_eq!(receipt.status, DeliveryStatus::Published);
     assert_eq!(receipt.manifest_digest, outcome.manifest.digest);
     assert_eq!(receipt.route_id, "destination");
+}
+
+#[test]
+fn event_reducer_projects_every_receipt_revision_and_terminal_failure() {
+    let manifest_digest = "a".repeat(64);
+    let event = |sequence: u64, kind: &str, payload: BTreeMap<String, Value>| PublishEvent {
+        version: PUBLISH_EVENT_VERSION,
+        event_id: format!("event-{sequence}"),
+        attempt_id: "attempt-events".to_string(),
+        backend_run_id: "backend-events".to_string(),
+        sequence,
+        plan_digest: "plan-events".to_string(),
+        plan_node_id: "publish-routes".to_string(),
+        kind: kind.to_string(),
+        payload,
+    };
+    let receipt_payload = |receipt_id: &str, revision: u32, status: DeliveryStatus| {
+        BTreeMap::from([(
+            "receipt".to_string(),
+            serde_json::json!({
+                "version": DELIVERY_RECEIPT_VERSION,
+                "receipt_id": receipt_id,
+                "revision": revision,
+                "route_id": receipt_id.replace("receipt", "route"),
+                "manifest_digest": manifest_digest,
+                "status": status,
+                "external_reference": format!("local://{receipt_id}"),
+            }),
+        )])
+    };
+    let events = vec![
+        event(
+            1,
+            "plan_node_completed",
+            BTreeMap::from([(
+                "manifest_digest".to_string(),
+                Value::String(manifest_digest.clone()),
+            )]),
+        ),
+        event(
+            2,
+            "delivery_receipt_observed",
+            receipt_payload("receipt-a", 1, DeliveryStatus::Submitted),
+        ),
+        event(
+            3,
+            "delivery_receipt_observed",
+            receipt_payload("receipt-a", 2, DeliveryStatus::Published),
+        ),
+        event(
+            4,
+            "delivery_receipt_observed",
+            receipt_payload("receipt-b", 1, DeliveryStatus::Rejected),
+        ),
+    ];
+
+    let projection = reduce_publish_events(&events).expect("reduce standard publish events");
+
+    assert_eq!(
+        projection.manifest_digest.as_deref(),
+        Some(manifest_digest.as_str())
+    );
+    assert_eq!(projection.receipts.len(), 2);
+    assert_eq!(projection.receipts[0].receipt_id, "receipt-a");
+    assert_eq!(projection.receipts[0].revision, 2);
+    assert_eq!(projection.receipts[0].status, DeliveryStatus::Published);
+    assert_eq!(projection.receipts[1].receipt_id, "receipt-b");
+    assert_eq!(projection.receipts[1].status, DeliveryStatus::Rejected);
+    assert_eq!(projection.status, PublishAttemptStatus::Failed);
+    assert!(projection
+        .error
+        .as_deref()
+        .is_some_and(|error| error.contains("receipt-b") && error.contains("rejected")));
+}
+
+#[test]
+fn event_reducer_rejects_invalid_receipt_revision_transitions() {
+    let manifest_digest = "b".repeat(64);
+    let receipt_event =
+        |sequence: u64, revision: u32, route_id: &str, status: DeliveryStatus| PublishEvent {
+            version: PUBLISH_EVENT_VERSION,
+            event_id: format!("event-{sequence}"),
+            attempt_id: "attempt-revisions".to_string(),
+            backend_run_id: "backend-revisions".to_string(),
+            sequence,
+            plan_digest: "plan-revisions".to_string(),
+            plan_node_id: "publish-routes".to_string(),
+            kind: "delivery_receipt_observed".to_string(),
+            payload: BTreeMap::from([(
+                "receipt".to_string(),
+                serde_json::json!({
+                    "version": DELIVERY_RECEIPT_VERSION,
+                    "receipt_id": "receipt-a",
+                    "revision": revision,
+                    "route_id": route_id,
+                    "manifest_digest": manifest_digest,
+                    "status": status,
+                    "external_reference": "local://stable",
+                }),
+            )]),
+        };
+    let manifest_event = || PublishEvent {
+        version: PUBLISH_EVENT_VERSION,
+        event_id: "event-1".to_string(),
+        attempt_id: "attempt-revisions".to_string(),
+        backend_run_id: "backend-revisions".to_string(),
+        sequence: 1,
+        plan_digest: "plan-revisions".to_string(),
+        plan_node_id: "persist-manifest".to_string(),
+        kind: "plan_node_completed".to_string(),
+        payload: BTreeMap::from([(
+            "manifest_digest".to_string(),
+            Value::String(manifest_digest.clone()),
+        )]),
+    };
+
+    let revision_gap = vec![
+        manifest_event(),
+        receipt_event(2, 1, "route-a", DeliveryStatus::Pending),
+        receipt_event(3, 3, "route-a", DeliveryStatus::Published),
+    ];
+    let invalid_initial_revision = vec![
+        manifest_event(),
+        receipt_event(2, 2, "route-a", DeliveryStatus::Submitted),
+    ];
+    let route_change = vec![
+        manifest_event(),
+        receipt_event(2, 1, "route-a", DeliveryStatus::Pending),
+        receipt_event(3, 2, "route-b", DeliveryStatus::Published),
+    ];
+    let terminal_regression = vec![
+        manifest_event(),
+        receipt_event(2, 1, "route-a", DeliveryStatus::Published),
+        receipt_event(3, 2, "route-a", DeliveryStatus::Pending),
+    ];
+
+    assert!(reduce_publish_events(&revision_gap)
+        .expect_err("receipt revisions must be continuous")
+        .to_string()
+        .contains("revision"));
+    assert!(reduce_publish_events(&invalid_initial_revision)
+        .expect_err("receipt evidence must start at revision one")
+        .to_string()
+        .contains("start at revision 1"));
+    assert!(reduce_publish_events(&route_change)
+        .expect_err("receipt route identity must be stable")
+        .to_string()
+        .contains("identity"));
+    assert!(reduce_publish_events(&terminal_regression)
+        .expect_err("terminal receipt lifecycle cannot regress")
+        .to_string()
+        .contains("lifecycle"));
 }
 
 #[test]
@@ -401,6 +639,97 @@ fn runtime_preserves_a_failed_attempt_after_the_manifest_is_sealed() {
             .and_then(Value::as_str),
         attempt.error.as_deref()
     );
+}
+
+#[test]
+fn malformed_receipt_is_reduced_to_a_failed_attempt_without_invalid_evidence() {
+    let store_dir = tempfile::tempdir().expect("create temporary store");
+    let delivery_dir = tempfile::tempdir().expect("create local delivery directory");
+    let (runtime, snapshot) = fixture_runtime_with_destination(
+        store_dir.path(),
+        delivery_dir.path(),
+        Arc::new(MalformedReceiptDestination::new(delivery_dir.path())),
+    );
+    let prepared = runtime
+        .prepare_attempt(&snapshot)
+        .expect("prepare malformed receipt attempt");
+
+    let attempt = runtime
+        .start_attempt(
+            &prepared,
+            StartPublishAttempt::new(
+                "attempt-malformed-receipt",
+                "local-run-malformed-receipt",
+                ReleaseIdentity::new(
+                    "fake-project:app",
+                    snapshot.source.clone(),
+                    "1.0.0",
+                    "stable",
+                    None,
+                ),
+            ),
+        )
+        .expect("invalid adapter evidence must remain an inspectable failed attempt");
+
+    assert_eq!(attempt.status, PublishAttemptStatus::Failed);
+    assert!(attempt.manifest.is_some());
+    assert!(attempt.receipts.is_empty());
+    assert!(attempt
+        .error
+        .as_deref()
+        .is_some_and(|error| error.contains("invalid immutable revision evidence")));
+    assert!(!attempt
+        .events
+        .iter()
+        .any(|event| event.kind == "delivery_receipt_observed"));
+    assert_eq!(
+        attempt.events.last().map(|event| event.kind.as_str()),
+        Some("plan_node_failed")
+    );
+}
+
+#[test]
+fn receipt_from_the_wrong_route_is_reduced_to_a_failed_attempt() {
+    let store_dir = tempfile::tempdir().expect("create temporary store");
+    let delivery_dir = tempfile::tempdir().expect("create local delivery directory");
+    let (runtime, snapshot) = fixture_runtime_with_destination(
+        store_dir.path(),
+        delivery_dir.path(),
+        Arc::new(MalformedReceiptDestination::wrong_route(
+            delivery_dir.path(),
+        )),
+    );
+    let prepared = runtime
+        .prepare_attempt(&snapshot)
+        .expect("prepare wrong-route receipt attempt");
+
+    let attempt = runtime
+        .start_attempt(
+            &prepared,
+            StartPublishAttempt::new(
+                "attempt-wrong-route",
+                "local-run-wrong-route",
+                ReleaseIdentity::new(
+                    "fake-project:app",
+                    snapshot.source.clone(),
+                    "1.0.0",
+                    "stable",
+                    None,
+                ),
+            ),
+        )
+        .expect("wrong-route evidence must remain an inspectable failed attempt");
+
+    assert_eq!(attempt.status, PublishAttemptStatus::Failed);
+    assert!(attempt.receipts.is_empty());
+    assert!(attempt
+        .error
+        .as_deref()
+        .is_some_and(|error| error.contains("another-route") && error.contains("destination")));
+    assert!(!attempt
+        .events
+        .iter()
+        .any(|event| event.kind == "delivery_receipt_observed"));
 }
 
 #[test]
@@ -763,6 +1092,36 @@ fn fixture_runtime_with_backend(
     backend_requirement: CapabilityRequirement,
     execution_backend: Arc<dyn publish_adapters::ExecutionBackend>,
 ) -> (PublishRuntime, PlanningInputSnapshot) {
+    fixture_runtime_with_backend_and_destination(
+        store_directory,
+        delivery_directory,
+        backend_requirement,
+        execution_backend,
+        Arc::new(LocalDirectoryDestination::new(delivery_directory)),
+    )
+}
+
+fn fixture_runtime_with_destination(
+    store_directory: &std::path::Path,
+    delivery_directory: &std::path::Path,
+    destination: Arc<dyn DeliveryDestination>,
+) -> (PublishRuntime, PlanningInputSnapshot) {
+    fixture_runtime_with_backend_and_destination(
+        store_directory,
+        delivery_directory,
+        CapabilityRequirement::exact("structured-plan-execution", 1),
+        Arc::new(LocalExecutionBackend::new()),
+        destination,
+    )
+}
+
+fn fixture_runtime_with_backend_and_destination(
+    store_directory: &std::path::Path,
+    delivery_directory: &std::path::Path,
+    backend_requirement: CapabilityRequirement,
+    execution_backend: Arc<dyn publish_adapters::ExecutionBackend>,
+    destination: Arc<dyn DeliveryDestination>,
+) -> (PublishRuntime, PlanningInputSnapshot) {
     let snapshot = fixture_snapshot(
         store_directory.to_string_lossy().as_ref(),
         delivery_directory.to_string_lossy().as_ref(),
@@ -788,10 +1147,7 @@ fn fixture_runtime_with_backend(
         )
         .expect("register temporary store");
     registry
-        .register_delivery_destination(
-            Arc::new(LocalDirectoryDestination::new(delivery_directory)),
-            &fixture,
-        )
+        .register_delivery_destination(destination, &fixture)
         .expect("register local directory destination");
     (PublishRuntime::new(registry), snapshot)
 }

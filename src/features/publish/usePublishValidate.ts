@@ -16,6 +16,7 @@ import {
 import type { ProjectInfo, PublishConfigStore } from "@/lib/store/types";
 import type { ParameterValue } from "@/types/parameters";
 import type { PublishResult } from "@/generated/tauri-contracts";
+import { extractInvokeErrorMessage } from "@/lib/tauri/invokeErrors";
 
 export function buildPublishPresentationScopeKey(params: {
   selectedRepoId: string | null;
@@ -90,6 +91,7 @@ export interface UsePublishValidateResult {
       feedbackMode: "toast" | "system";
       restoreWindowOnFailure: boolean;
       trayStatusEffect: boolean;
+      isCancelled: () => boolean;
     }
   ) => Promise<boolean>;
   executePublishWithProtectedAccessRecovery: (
@@ -136,33 +138,6 @@ export function usePublishValidate({
   const [runtimePreparationErrorState, setRuntimePreparationErrorState] =
     useState<{ key: string; message: string } | null>(null);
   const selectedRepoPath = selectedRepo?.path ?? null;
-  const runtimePreparationKey =
-    selectedRepoId &&
-    selectedRepoPath &&
-    configurationId &&
-    configurationRevisionId
-      ? JSON.stringify({
-          selectedRepoId,
-          selectedRepoPath,
-          configurationId,
-          configurationRevisionId,
-          activeProviderId,
-          projectFile: projectInfo?.project_file ?? null,
-          specVersion,
-        })
-      : null;
-  const preparedRuntime =
-    runtimePreparationKey && preparedRuntimeState?.key === runtimePreparationKey
-      ? preparedRuntimeState.value
-      : null;
-  const runtimePreparationError =
-    runtimePreparationKey &&
-    runtimePreparationErrorState?.key === runtimePreparationKey
-      ? runtimePreparationErrorState.message
-      : null;
-  const publishPreviewCommand = runtimePreparationKey
-    ? (preparedRuntime?.command.display_command ?? "")
-    : legacyPublishPreviewCommand;
   const hasPublishSpec =
     selectedRepo !== null &&
     !(activeProviderUsesProjectFile && projectInfo === null);
@@ -230,6 +205,37 @@ export function usePublishValidate({
       projectInfo,
       selectedRepo,
     ]);
+
+  const currentPublishSpec = useMemo(
+    () => buildCurrentPublishSpec(),
+    [buildCurrentPublishSpec]
+  );
+  const runtimePreparationKey =
+    selectedRepoId &&
+    selectedRepoPath &&
+    configurationId &&
+    configurationRevisionId &&
+    currentPublishSpec
+      ? JSON.stringify({
+          selectedRepoId,
+          selectedRepoPath,
+          configurationId,
+          configurationRevisionId,
+          spec: currentPublishSpec,
+        })
+      : null;
+  const preparedRuntime =
+    runtimePreparationKey && preparedRuntimeState?.key === runtimePreparationKey
+      ? preparedRuntimeState.value
+      : null;
+  const runtimePreparationError =
+    runtimePreparationKey &&
+    runtimePreparationErrorState?.key === runtimePreparationKey
+      ? runtimePreparationErrorState.message
+      : null;
+  const publishPreviewCommand = runtimePreparationKey
+    ? (preparedRuntime?.command.display_command ?? "")
+    : legacyPublishPreviewCommand;
 
   const getPublishStartBlocker = useCallback(() => {
     if (!selectedRepo) {
@@ -310,7 +316,7 @@ export function usePublishValidate({
 
   useEffect(() => {
     let disposed = false;
-    const spec = buildCurrentPublishSpec();
+    const spec = currentPublishSpec;
 
     if (!spec) {
       return () => {
@@ -346,7 +352,7 @@ export function usePublishValidate({
             setPreparedRuntimeState(null);
             setRuntimePreparationErrorState({
               key: runtimePreparationKey,
-              message: String(error),
+              message: extractInvokeErrorMessage(error),
             });
           }
         });
@@ -368,9 +374,9 @@ export function usePublishValidate({
       disposed = true;
     };
   }, [
-    buildCurrentPublishSpec,
     configurationId,
     configurationRevisionId,
+    currentPublishSpec,
     runtimePreparationKey,
     selectedRepoPath,
     selectedRepoId,
