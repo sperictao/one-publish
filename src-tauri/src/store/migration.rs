@@ -260,6 +260,7 @@ pub(crate) fn migrate_legacy_state(legacy: LegacyStoredAppState) -> AppState {
             custom_config: legacy.custom_config,
             profiles: legacy.profiles,
             bindings: Vec::new(),
+            applied_bundles: Vec::new(),
         };
 
         for repo in &mut state.repositories {

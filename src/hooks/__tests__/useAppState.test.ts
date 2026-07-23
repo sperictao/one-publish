@@ -60,6 +60,7 @@ function createAppState(): AppState {
           },
           profiles: [],
           bindings: [],
+          appliedBundles: [],
         },
       },
     ],

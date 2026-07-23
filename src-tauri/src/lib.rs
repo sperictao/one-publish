@@ -1,6 +1,7 @@
 // Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
 
 pub mod artifact;
+pub mod automation;
 pub mod command_parser;
 pub mod commands;
 pub mod compiler;
@@ -138,6 +139,9 @@ pub fn run() {
             commands::describe_publish_output_target,
             publish_runtime::prepare_publish_runtime,
             publish_runtime::start_publish_runtime,
+            automation::list_automation_bindings,
+            automation::preview_automation_change,
+            automation::apply_automation_change,
             commands::check_update,
             commands::install_update,
             commands::get_updater_help_paths,

@@ -31,6 +31,7 @@ function createRepository(path: string): Repository {
       },
       profiles: [],
       bindings: [],
+      appliedBundles: [],
     },
   };
 }

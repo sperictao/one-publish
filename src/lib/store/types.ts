@@ -330,6 +330,7 @@ export const defaultRepoPublishConfig: RepoPublishConfig = {
   customConfig: { ...defaultPublishConfigStore },
   profiles: [],
   bindings: [],
+  appliedBundles: [],
 };
 
 export type { EnvironmentCheckResult };

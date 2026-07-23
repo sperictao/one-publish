@@ -27,12 +27,15 @@ pub use commands::{
     replace_recent_publish_config_key, save_app_state, save_profile, set_execution_record_snapshot,
     update_preferences, update_profile, update_publish_state, update_repository, update_ui_state,
 };
+pub(crate) use runtime::{find_repository, find_repository_mut, persist_state_and_refresh_tray};
 pub use runtime::{get_state, update_state};
+pub(crate) use types::new_configuration_identity;
 pub(crate) use types::ConfigurationImport;
 pub use types::{
-    AppState, Branch, ConfigProfile, ConfigurationBindingReference, ExecutionRecord,
-    PublishConfigStore, PublishConfigurationRevision, RepoPublishConfig, Repository,
-    CURRENT_SETTINGS_VERSION, PUBLISH_CONFIGURATION_CONTRACT_VERSION,
+    AppState, AppliedProjectionBundle, AutomationBinding, AutomationTriggerPolicy, Branch,
+    ConfigProfile, ExecutionRecord, PublishConfigStore, PublishConfigurationRevision,
+    RepoPublishConfig, Repository, CURRENT_SETTINGS_VERSION,
+    PUBLISH_CONFIGURATION_CONTRACT_VERSION,
 };
 
 #[cfg(test)]

@@ -9,7 +9,7 @@ pub const CURRENT_SETTINGS_VERSION: u32 = 1;
 
 static CONFIGURATION_ID_SEQUENCE: AtomicU64 = AtomicU64::new(0);
 
-fn new_configuration_identity(kind: &str) -> String {
+pub(crate) fn new_configuration_identity(kind: &str) -> String {
     let timestamp = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .unwrap_or_default()
@@ -169,13 +169,39 @@ fn unknown_provider_version() -> String {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(tag = "type", rename_all = "camelCase")]
+pub enum AutomationTriggerPolicy {
+    #[serde(rename_all = "camelCase")]
+    TagPush {
+        tag_prefix: String,
+    },
+    Manual,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[serde(rename_all = "camelCase")]
 #[ts(rename_all = "camelCase")]
-pub struct ConfigurationBindingReference {
+pub struct AutomationBinding {
     pub id: String,
     pub configuration_id: String,
     pub configuration_revision_id: String,
+    pub execution_backend_id: String,
+    pub trigger_policy: AutomationTriggerPolicy,
+    pub runtime_revision: String,
     pub external_identity: String,
+    pub created_at: String,
+    pub updated_at: String,
+}
+
+/// 每个执行后端最近一次成功应用的投影包状态，用于漂移检测与解除时的归属边界。
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(rename_all = "camelCase")]
+pub struct AppliedProjectionBundle {
+    pub backend_id: String,
+    pub digest: String,
+    pub files: Vec<String>,
+    pub applied_at: String,
 }
 
 pub(crate) struct ConfigurationImport {
@@ -437,7 +463,9 @@ pub struct RepoPublishConfig {
     #[serde(default)]
     pub profiles: Vec<ConfigProfile>,
     #[serde(default)]
-    pub bindings: Vec<ConfigurationBindingReference>,
+    pub bindings: Vec<AutomationBinding>,
+    #[serde(default)]
+    pub applied_bundles: Vec<AppliedProjectionBundle>,
 }
 
 impl Default for RepoPublishConfig {
@@ -448,6 +476,7 @@ impl Default for RepoPublishConfig {
             custom_config: PublishConfigStore::default(),
             profiles: Vec::new(),
             bindings: Vec::new(),
+            applied_bundles: Vec::new(),
         }
     }
 }

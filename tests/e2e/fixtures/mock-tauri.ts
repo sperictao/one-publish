@@ -122,6 +122,7 @@ const DEFAULT_REPOSITORIES: Repository[] = [
         ),
       ],
       bindings: [],
+      appliedBundles: [],
     },
   },
   {
@@ -167,6 +168,7 @@ const DEFAULT_REPOSITORIES: Repository[] = [
         ),
       ],
       bindings: [],
+      appliedBundles: [],
     },
   },
 ];

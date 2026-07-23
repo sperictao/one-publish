@@ -67,6 +67,7 @@ import {
 } from "@/components/layout/usePublishConfigListModel";
 import type { ParameterSchema } from "@/types/parameters";
 import { CollapseIcon } from "@/components/layout/publishConfigPanel/CollapseIcon";
+import { AutomationBindingsSection } from "@/components/publish/AutomationBindingsSection";
 import {
   hasSameProfileOrder,
   hasSameStringOrder,
@@ -1287,6 +1288,12 @@ export const PublishConfigPanel = memo(function PublishConfigPanel({
         </div>
 
         {configListContent}
+
+        <AutomationBindingsSection
+          repoId={selectedRepoScopeId}
+          profiles={profiles}
+          configPanelT={t}
+        />
       </div>
 
       <ProjectProfileViewer

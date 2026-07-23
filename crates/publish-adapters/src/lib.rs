@@ -3,13 +3,18 @@ use std::sync::Arc;
 
 use publish_domain::{
     AdapterDescriptor, AdapterIdentity, AdapterKind, AdapterSettings, ArtifactCandidate,
-    ArtifactManifest, DeliveryReceipt, PlanNode, PlanNodeTemplate, PlanOperation,
-    PlanningInputSnapshot, PublishError, PublishPlan, ADAPTER_CONTRACT_VERSION,
+    ArtifactManifest, AutomationBindingProjection, AutomationProjectionBundle, DeliveryReceipt,
+    PlanNode, PlanNodeTemplate, PlanOperation, PlanningInputSnapshot, PublishError, PublishPlan,
+    ADAPTER_CONTRACT_VERSION,
 };
 
+mod fake;
 mod local;
 
+pub use fake::{FakeAutomationBackend, FAKE_AUTOMATION_BACKEND_ID};
 pub use local::{LocalDirectoryDestination, LocalExecutionBackend, TemporaryArtifactStore};
+
+pub const AUTOMATION_PROJECTION_CAPABILITY: &str = "automation-projection";
 
 #[derive(Debug)]
 pub struct AdapterExecutionContext<'a> {
@@ -91,7 +96,20 @@ pub trait AdapterContract: Send + Sync {
 
 pub trait ProjectProvider: AdapterContract {}
 pub trait ArtifactProcessor: AdapterContract {}
-pub trait ExecutionBackend: AdapterContract {}
+
+pub trait ExecutionBackend: AdapterContract {
+    /// 由后端把仓库全部自动化绑定渲染为其拥有的投影包（ADR-0048）。
+    fn render_automation_bundle(
+        &self,
+        _bindings: &[AutomationBindingProjection],
+    ) -> Result<AutomationProjectionBundle, PublishError> {
+        Err(PublishError::MissingCapability {
+            consumer: self.descriptor().identity().display_name(),
+            capability: AUTOMATION_PROJECTION_CAPABILITY.to_string(),
+        })
+    }
+}
+
 pub trait ArtifactStore: AdapterContract {}
 pub trait DeliveryDestination: AdapterContract {}
 

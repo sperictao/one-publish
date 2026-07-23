@@ -602,7 +602,7 @@ pub async fn set_execution_record_snapshot(
 #[cfg(test)]
 mod tests {
     use super::{merge_repository_metadata, sanitize_record_for_storage, ExecutionRecord};
-    use crate::store::{ConfigurationBindingReference, RepoPublishConfig, Repository};
+    use crate::store::{AutomationBinding, AutomationTriggerPolicy, RepoPublishConfig, Repository};
     use serde_json::json;
 
     fn test_record() -> ExecutionRecord {
@@ -655,11 +655,16 @@ mod tests {
         publish_config
             .delete_profile(&deleted_profile.id, "2026-07-21T09:30:00Z".to_string())
             .expect("tombstone profile");
-        publish_config.bindings.push(ConfigurationBindingReference {
+        publish_config.bindings.push(AutomationBinding {
             id: "binding-1".to_string(),
             configuration_id: profile.id.clone(),
             configuration_revision_id: profile.current_revision_id.clone(),
-            external_identity: "github:owner/repo:stable".to_string(),
+            execution_backend_id: "fake-automation".to_string(),
+            trigger_policy: AutomationTriggerPolicy::Manual,
+            runtime_revision: "plan-v1.adapter-v1.fake-automation@1".to_string(),
+            external_identity: "one-publish/automation/binding-1.json".to_string(),
+            created_at: "2026-07-21T10:00:00Z".to_string(),
+            updated_at: "2026-07-21T10:00:00Z".to_string(),
         });
         let existing = Repository {
             id: "repo-1".to_string(),

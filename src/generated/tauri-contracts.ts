@@ -125,11 +125,45 @@ export type SpecValue = null | boolean | number | string | Array<SpecValue> | { 
 
 export type AppState = { repositories: Array<Repository>, selectedRepoId: string | null, leftPanelWidth: number, middlePanelWidth: number, panelWidthsCustomized: boolean, minimizeToTrayOnClose: boolean, language: string, defaultOutputDir: string, theme: string, executionHistoryLimit: number, environmentProviderIds: Array<string>, recentRepoIds: Array<string>, recentConfigKeysByRepo: { [key: string]: Array<string> }, executionHistory: Array<ExecutionRecord>, startupNotice: string | null, };
 
+export type AppliedProjectionBundle = { backendId: string, digest: string, files: Array<string>, appliedAt: string, };
+
+export type AutomationApplyResult = { 
+/**
+ * None 表示预览与仓库已一致，本次没有产生接入提交。
+ */
+commitSha: string | null, pushedBranch: string | null, bindings: Array<AutomationBinding>, };
+
+export type AutomationBinding = { id: string, configurationId: string, configurationRevisionId: string, executionBackendId: string, triggerPolicy: AutomationTriggerPolicy, runtimeRevision: string, externalIdentity: string, createdAt: string, updatedAt: string, };
+
+export type AutomationBindingView = { binding: AutomationBinding, configurationName: string | null, blockedReason: string | null, };
+
+export type AutomationBindingsView = { bindings: Array<AutomationBindingView>, drift: Array<AutomationFileChangeView>, };
+
+export type AutomationChangeRequest = { "kind": "install", configurationId: string, executionBackendId: string, triggerPolicy: AutomationTriggerPolicy, 
+/**
+ * 由预览归一化填充；应用必须回传同一身份，否则确认摘要无法匹配。
+ */
+bindingId: string | null, } | { "kind": "upgradeRevision", bindingId: string, } | { "kind": "reconcile" } | { "kind": "detach", bindingId: string, };
+
+export type AutomationFileChangeKindView = "added" | "updated" | "removed";
+
+export type AutomationFileChangeView = { path: string, kind: AutomationFileChangeKindView, currentContent: string | null, expectedContent: string | null, };
+
+export type AutomationProjectionPreview = { 
+/**
+ * 归一化后的变更请求；应用时必须原样回传。
+ */
+change: AutomationChangeRequest, 
+/**
+ * 覆盖期望投影与完整差异的确认摘要；应用时必须回传，任何一方变化都会失效。
+ */
+confirmationDigest: string, changes: Array<AutomationFileChangeView>, };
+
+export type AutomationTriggerPolicy = { "type": "tagPush", tagPrefix: string, } | { "type": "manual" };
+
 export type Branch = { name: string, isMain: boolean, isCurrent: boolean, path: string, commitCount: number | null, };
 
 export type ConfigProfile = { id: string, name: string, profileGroup: string | null, createdAt: string, isSystemDefault: boolean, currentRevisionId: string, revisions: Array<PublishConfigurationRevision>, deletedAt: string | null, blockedReason: string | null, };
-
-export type ConfigurationBindingReference = { id: string, configurationId: string, configurationRevisionId: string, externalIdentity: string, };
 
 export type ExecutionRecord = { id: string, repoId: string | null, configurationId: string | null, configurationRevisionId: string | null, providerId: string, projectPath: string, startedAt: string, finishedAt: string, success: boolean, cancelled: boolean, outputDir: string | null, error: string | null, commandLine: string | null, snapshotPath: string | null, failureSignature: string | null, outputExcerpt: string | null, spec: JsonValue | null, fileCount: number, warnings: Array<string> | null, };
 
@@ -137,7 +171,7 @@ export type PublishConfigStore = { configuration: string, runtime: string, frame
 
 export type PublishConfigurationRevision = { id: string, sequence: number, createdAt: string, contractVersion: number, providerId: string, providerVersion: string, settingsVersion: number, parameters: JsonValue, };
 
-export type RepoPublishConfig = { selectedPreset: string, isCustomMode: boolean, customConfig: PublishConfigStore, profiles: Array<ConfigProfile>, bindings: Array<ConfigurationBindingReference>, };
+export type RepoPublishConfig = { selectedPreset: string, isCustomMode: boolean, customConfig: PublishConfigStore, profiles: Array<ConfigProfile>, bindings: Array<AutomationBinding>, appliedBundles: Array<AppliedProjectionBundle>, };
 
 export type Repository = { id: string, name: string, path: string, projectFile: string | null, currentBranch: string, branches: Array<Branch>, isMain: boolean, providerId: string | null, publishConfig: RepoPublishConfig, };
 

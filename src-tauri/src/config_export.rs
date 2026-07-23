@@ -300,7 +300,7 @@ fn validate_parameter_type(
 mod tests {
     use super::*;
     use crate::spec::{SpecValue, SPEC_VERSION};
-    use crate::store::{ConfigurationBindingReference, RepoPublishConfig};
+    use crate::store::{AutomationBinding, AutomationTriggerPolicy, RepoPublishConfig};
     use chrono::TimeZone;
 
     #[test]
@@ -338,11 +338,18 @@ mod tests {
                 "2026-07-21T11:00:00Z".to_string(),
             )
             .expect("update profile");
-        repo_config.bindings.push(ConfigurationBindingReference {
+        repo_config.bindings.push(AutomationBinding {
             id: "binding-1".to_string(),
             configuration_id: created.id,
             configuration_revision_id: created.current_revision_id,
-            external_identity: "github:owner/repo:stable".to_string(),
+            execution_backend_id: "fake-automation".to_string(),
+            trigger_policy: AutomationTriggerPolicy::TagPush {
+                tag_prefix: "v".to_string(),
+            },
+            runtime_revision: "plan-v1.adapter-v1.fake-automation@1".to_string(),
+            external_identity: "one-publish/automation/binding-1.json".to_string(),
+            created_at: "2026-07-21T10:00:00Z".to_string(),
+            updated_at: "2026-07-21T10:00:00Z".to_string(),
         });
 
         let backup = build_config_export(

@@ -9,12 +9,28 @@ use super::runtime::{
     validate_repository_project_binding,
 };
 use super::{
-    AppState, ConfigurationBindingReference, ConfigurationImport, ExecutionRecord,
+    AppState, AutomationBinding, AutomationTriggerPolicy, ConfigurationImport, ExecutionRecord,
     PublishConfigStore, RepoPublishConfig, Repository,
 };
 use std::collections::BTreeMap;
 use std::fs;
 use tempfile::TempDir;
+
+fn test_binding(configuration_id: &str, configuration_revision_id: &str) -> AutomationBinding {
+    AutomationBinding {
+        id: "binding-1".to_string(),
+        configuration_id: configuration_id.to_string(),
+        configuration_revision_id: configuration_revision_id.to_string(),
+        execution_backend_id: "fake-automation".to_string(),
+        trigger_policy: AutomationTriggerPolicy::TagPush {
+            tag_prefix: "v".to_string(),
+        },
+        runtime_revision: "plan-v1.adapter-v1.fake-automation@1".to_string(),
+        external_identity: "one-publish/automation/binding-1.json".to_string(),
+        created_at: "2026-07-21T10:00:00Z".to_string(),
+        updated_at: "2026-07-21T10:00:00Z".to_string(),
+    }
+}
 
 fn test_repo(id: &str) -> Repository {
     Repository {
@@ -74,12 +90,9 @@ fn repo_publish_config_content_update_appends_revision_without_moving_binding() 
         .expect("create profile")
         .clone();
     let original_revision_id = created.current_revision_id.clone();
-    config.bindings.push(ConfigurationBindingReference {
-        id: "binding-1".to_string(),
-        configuration_id: created.id.clone(),
-        configuration_revision_id: original_revision_id.clone(),
-        external_identity: "github:owner/repo:stable".to_string(),
-    });
+    config
+        .bindings
+        .push(test_binding(&created.id, &original_revision_id));
 
     config
         .update_profile(
@@ -108,6 +121,46 @@ fn repo_publish_config_content_update_appends_revision_without_moving_binding() 
 }
 
 #[test]
+fn switching_the_current_configuration_never_touches_automation_bindings() {
+    let mut config = RepoPublishConfig::default();
+    let bound = config
+        .create_profile(
+            "Stable".to_string(),
+            "dotnet".to_string(),
+            serde_json::json!({ "configuration": "Release" }),
+            None,
+            "2026-07-21T10:00:00Z".to_string(),
+        )
+        .expect("create bound profile")
+        .clone();
+    let other = config
+        .create_profile(
+            "Nightly".to_string(),
+            "dotnet".to_string(),
+            serde_json::json!({ "configuration": "Debug" }),
+            None,
+            "2026-07-21T10:05:00Z".to_string(),
+        )
+        .expect("create other profile")
+        .clone();
+    config
+        .bindings
+        .push(test_binding(&bound.id, &bound.current_revision_id));
+    let bindings_before = config.bindings.clone();
+    let bundles_before = config.applied_bundles.clone();
+
+    config.select_profile(&other.id).expect("select other");
+    config.select_profile(&bound.id).expect("select bound");
+    config
+        .select_profile(&other.id)
+        .expect("select other again");
+
+    assert_eq!(config.bindings, bindings_before);
+    assert_eq!(config.applied_bundles, bundles_before);
+    assert_eq!(config.selected_preset, format!("userprofile:{}", other.id));
+}
+
+#[test]
 fn repo_publish_config_selection_and_identity_references_survive_rename() {
     let mut repo = test_repo("repo-1");
     let created = repo
@@ -127,12 +180,7 @@ fn repo_publish_config_selection_and_identity_references_survive_rename() {
     assert!(repo.publish_config.is_custom_mode);
     repo.publish_config
         .bindings
-        .push(ConfigurationBindingReference {
-            id: "binding-1".to_string(),
-            configuration_id: created.id.clone(),
-            configuration_revision_id: created.current_revision_id.clone(),
-            external_identity: "github:owner/repo:stable".to_string(),
-        });
+        .push(test_binding(&created.id, &created.current_revision_id));
     let recent_key = format!("userprofile:{}", created.id);
     let mut state = AppState {
         repositories: vec![repo],
@@ -219,12 +267,9 @@ fn repo_publish_config_delete_is_blocked_by_binding_then_tombstones_history() {
         .expect("create profile")
         .clone();
     config.select_profile(&created.id).expect("select profile");
-    config.bindings.push(ConfigurationBindingReference {
-        id: "binding-1".to_string(),
-        configuration_id: created.id.clone(),
-        configuration_revision_id: created.current_revision_id.clone(),
-        external_identity: "github:owner/repo:stable".to_string(),
-    });
+    config
+        .bindings
+        .push(test_binding(&created.id, &created.current_revision_id));
 
     let error = config
         .delete_profile(&created.id, "2026-07-21T11:00:00Z".to_string())
@@ -269,12 +314,9 @@ fn repo_publish_config_import_creates_unselected_identity_and_skips_duplicate_na
     config
         .select_profile(&selected.id)
         .expect("select existing profile");
-    config.bindings.push(ConfigurationBindingReference {
-        id: "binding-1".to_string(),
-        configuration_id: selected.id.clone(),
-        configuration_revision_id: selected.current_revision_id.clone(),
-        external_identity: "github:owner/repo:stable".to_string(),
-    });
+    config
+        .bindings
+        .push(test_binding(&selected.id, &selected.current_revision_id));
 
     let duplicate = config
         .import_profile(ConfigurationImport {

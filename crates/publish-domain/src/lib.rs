@@ -11,6 +11,7 @@ pub const ARTIFACT_MANIFEST_VERSION: u32 = 1;
 pub const PUBLISH_EVENT_VERSION: u32 = 1;
 pub const DELIVERY_RECEIPT_VERSION: u32 = 1;
 pub const RELEASE_ATTEMPT_VERSION: u32 = 1;
+pub const AUTOMATION_PROJECTION_BUNDLE_VERSION: u32 = 1;
 
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum PublishError {
@@ -790,7 +791,7 @@ fn validate_artifact_metadata(
     Ok(())
 }
 
-fn is_safe_portable_relative_path(path: &str) -> bool {
+pub fn is_safe_portable_relative_path(path: &str) -> bool {
     !path.trim().is_empty()
         && !path.starts_with('/')
         && !path.ends_with('/')
@@ -894,6 +895,167 @@ pub struct PublishOutcome {
     pub manifest: ArtifactManifest,
     pub events: Vec<PublishEvent>,
     pub receipts: Vec<DeliveryReceipt>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum AutomationTriggerPolicy {
+    TagPush { tag_prefix: String },
+    Manual,
+}
+
+/// 分层的只读运行投影：公开设置、受保护变量引用与秘密引用；三层都不携带秘密值。
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+pub struct AutomationProjection {
+    pub public_settings: BTreeMap<String, Value>,
+    pub protected_variables: BTreeMap<String, String>,
+    pub secret_references: BTreeMap<String, String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct AutomationBindingProjection {
+    pub binding_id: String,
+    pub configuration_id: String,
+    pub configuration_revision_id: String,
+    pub trigger_policy: AutomationTriggerPolicy,
+    pub runtime_revision: String,
+    pub projection: AutomationProjection,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AutomationBundleFile {
+    pub content: String,
+    /// 拥有该资源的绑定；None 表示由整个 Bundle 共享（例如 Bundle 清单）。
+    pub binding_id: Option<String>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum AutomationFileChangeKind {
+    Added,
+    Updated,
+    Removed,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AutomationBundleFileChange {
+    pub path: String,
+    pub kind: AutomationFileChangeKind,
+    pub current_content: Option<String>,
+    pub expected_content: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AutomationProjectionBundle {
+    pub version: u32,
+    pub backend: AdapterIdentity,
+    pub files: BTreeMap<String, AutomationBundleFile>,
+    pub digest: String,
+}
+
+impl AutomationProjectionBundle {
+    pub fn seal(
+        backend: AdapterIdentity,
+        files: BTreeMap<String, AutomationBundleFile>,
+    ) -> Result<Self, PublishError> {
+        if files.is_empty() {
+            return Err(PublishError::Execution(
+                "cannot seal an empty automation projection bundle".to_string(),
+            ));
+        }
+        for path in files.keys() {
+            if !is_safe_portable_relative_path(path) {
+                return Err(PublishError::InvalidArtifact {
+                    artifact: path.clone(),
+                    message: "bundle path must be a portable relative path inside the repository"
+                        .to_string(),
+                });
+            }
+        }
+        let mut bundle = Self {
+            version: AUTOMATION_PROJECTION_BUNDLE_VERSION,
+            backend,
+            files,
+            digest: String::new(),
+        };
+        bundle.digest = bundle.recomputed_digest()?;
+        Ok(bundle)
+    }
+
+    pub fn recomputed_digest(&self) -> Result<String, PublishError> {
+        #[derive(Serialize)]
+        struct DigestInput<'a> {
+            version: u32,
+            backend: &'a AdapterIdentity,
+            files: &'a BTreeMap<String, AutomationBundleFile>,
+        }
+
+        canonical_digest(&DigestInput {
+            version: self.version,
+            backend: &self.backend,
+            files: &self.files,
+        })
+    }
+
+    pub fn validate(&self) -> Result<(), PublishError> {
+        if self.version != AUTOMATION_PROJECTION_BUNDLE_VERSION {
+            return Err(PublishError::Execution(format!(
+                "unsupported automation projection bundle version {}",
+                self.version
+            )));
+        }
+        let actual = self.recomputed_digest()?;
+        if actual != self.digest {
+            return Err(PublishError::Execution(format!(
+                "automation projection bundle digest mismatch: expected {}, got {actual}",
+                self.digest
+            )));
+        }
+        Ok(())
+    }
+
+    /// 以期望文件与既有归属的并集为边界，对仓库现状做差异；不触碰边界外的仓库文件。
+    pub fn diff_against(
+        &self,
+        actual_files: &BTreeMap<String, String>,
+        previously_owned: &BTreeSet<String>,
+    ) -> Vec<AutomationBundleFileChange> {
+        diff_automation_files(&self.files, actual_files, previously_owned)
+    }
+}
+
+/// 独立的差异函数：期望文件集允许为空（例如解除最后一个绑定后）。
+pub fn diff_automation_files(
+    expected_files: &BTreeMap<String, AutomationBundleFile>,
+    actual_files: &BTreeMap<String, String>,
+    previously_owned: &BTreeSet<String>,
+) -> Vec<AutomationBundleFileChange> {
+    let candidates = expected_files
+        .keys()
+        .chain(previously_owned.iter())
+        .collect::<BTreeSet<_>>();
+
+    candidates
+        .into_iter()
+        .filter_map(|path| {
+            let expected = expected_files.get(path).map(|file| file.content.as_str());
+            let actual = actual_files.get(path).map(String::as_str);
+            let kind = match (expected, actual) {
+                (Some(_), None) => AutomationFileChangeKind::Added,
+                (Some(expected), Some(actual)) if expected != actual => {
+                    AutomationFileChangeKind::Updated
+                }
+                (None, Some(_)) => AutomationFileChangeKind::Removed,
+                _ => return None,
+            };
+            Some(AutomationBundleFileChange {
+                path: path.clone(),
+                kind,
+                current_content: actual.map(str::to_string),
+                expected_content: expected.map(str::to_string),
+            })
+        })
+        .collect()
 }
 
 impl PublishPlan {

@@ -78,6 +78,7 @@ function createRepository(overrides?: Partial<Repository>): Repository {
       },
       profiles: [],
       bindings: [],
+      appliedBundles: [],
     },
     ...overrides,
   };

@@ -55,6 +55,7 @@ async function installMockTauri(page: Page) {
             },
             profiles: [],
             bindings: [],
+            appliedBundles: [],
           },
         },
         {
@@ -86,6 +87,7 @@ async function installMockTauri(page: Page) {
             },
             profiles: [],
             bindings: [],
+            appliedBundles: [],
           },
         },
         {
@@ -117,6 +119,7 @@ async function installMockTauri(page: Page) {
             },
             profiles: [],
             bindings: [],
+            appliedBundles: [],
           },
         },
       ],
