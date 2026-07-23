@@ -12,6 +12,7 @@ release-assets/
 release-notes/
 
 # Tauri Rust / generated artifacts (out of scope: rustfmt owns .rs)
+target/
 src-tauri/target/
 src-tauri/gen/
 

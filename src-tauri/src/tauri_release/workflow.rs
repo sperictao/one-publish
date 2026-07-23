@@ -99,11 +99,11 @@ fn render_matrix(config: &TauriReleaseConfig) -> String {
             .to_string_lossy()
             .replace('\\', "/")
     };
-    let updater_args = config
-        .updater
-        .enabled
-        .then_some(" --config .one-publish-tauri-config.json")
-        .unwrap_or("");
+    let updater_args = if config.updater.enabled {
+        " --config .one-publish-tauri-config.json"
+    } else {
+        ""
+    };
     config
         .enabled_targets
         .iter()

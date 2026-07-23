@@ -117,7 +117,7 @@ pub struct VersionMirror {
     pub selector: String,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[serde(rename_all = "camelCase")]
 #[ts(rename_all = "camelCase")]
 pub struct TauriUpdaterSettings {
@@ -125,17 +125,6 @@ pub struct TauriUpdaterSettings {
     pub endpoint: Option<String>,
     pub public_key: Option<String>,
     pub private_key_secret_name: Option<String>,
-}
-
-impl Default for TauriUpdaterSettings {
-    fn default() -> Self {
-        Self {
-            enabled: false,
-            endpoint: None,
-            public_key: None,
-            private_key_secret_name: None,
-        }
-    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
