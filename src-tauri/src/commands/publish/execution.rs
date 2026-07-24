@@ -37,6 +37,17 @@ struct PreparedPublishCommand {
     working_dir_path: Option<PathBuf>,
 }
 
+/// 密封 Publish Plan 节点物化出的结构化构建命令：program 与 args 来自计划节点，
+/// 执行层只负责解析可执行文件路径并运行，不得重新推导或替换命令。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct SealedBuildCommand {
+    pub provider_id: String,
+    pub program: String,
+    pub args: Vec<String>,
+    pub working_directory: PathBuf,
+    pub output_directory: PathBuf,
+}
+
 fn prepare_publish_command(
     spec: &PublishSpec,
 ) -> Result<PreparedPublishCommand, crate::errors::AppError> {
@@ -130,8 +141,36 @@ pub(crate) async fn execute_publish_spec(
     let prepared = prepare_publish_command(&spec)?;
     let output_policy = output_policy::resolve_publish_output_policy(&spec)?;
     apply_cleanup_policy(&output_policy)?;
+    let output_dir = output_policy.output_dir().to_string();
+    run_publish_process(app, &spec.provider_id, prepared, &output_dir).await
+}
 
-    let session_id = build_publish_session_id(&spec.provider_id);
+/// 执行密封计划节点的构建命令：不经过 spec 渲染管道，命令即计划节点的唯一事实来源。
+pub(crate) async fn execute_sealed_build(
+    app: &AppHandle,
+    request: &SealedBuildCommand,
+) -> Result<PublishResult, crate::errors::AppError> {
+    let prepared = PreparedPublishCommand {
+        command: RenderedPublishCommand {
+            program: resolve_spawn_program(&request.program),
+            args: request.args.clone(),
+            working_dir: Some(request.working_directory.to_string_lossy().to_string()),
+            display_command: build_display_command(&request.program, &request.args),
+            env: Vec::new(),
+        },
+        working_dir_path: Some(request.working_directory.clone()),
+    };
+    let output_dir = request.output_directory.to_string_lossy().to_string();
+    run_publish_process(app, &request.provider_id, prepared, &output_dir).await
+}
+
+async fn run_publish_process(
+    app: &AppHandle,
+    provider_id: &str,
+    prepared: PreparedPublishCommand,
+    output_dir: &str,
+) -> Result<PublishResult, crate::errors::AppError> {
+    let session_id = build_publish_session_id(provider_id);
     let permit = reserve_execution(session_id.clone()).await?;
     // 在 spawn 前通知前端锁定本会话，替代旧的"首 chunk 锁存"策略，
     // 避免上一运行迟到的尾部 chunk 锁存成错误会话导致新运行日志被静默丢弃。
@@ -139,7 +178,7 @@ pub(crate) async fn execute_publish_spec(
     let execution_result: Result<PublishResult, crate::errors::AppError> = async {
         if permit.is_cancel_requested() {
             return Ok(PublishResult {
-                provider_id: spec.provider_id.clone(),
+                provider_id: provider_id.to_string(),
                 success: false,
                 cancelled: true,
                 error: Some("发布已取消".to_string()),
@@ -153,7 +192,7 @@ pub(crate) async fn execute_publish_spec(
 
         log::info!(
             "Executing provider plan: provider={} program={} args={}",
-            spec.provider_id,
+            provider_id,
             prepared.command.program,
             prepared.command.args.join(" ")
         );
@@ -183,97 +222,101 @@ pub(crate) async fn execute_publish_spec(
         let cancel_requested = Arc::clone(&permit.cancel_requested);
         permit.mark_running().await;
 
-        let run_result: PublishRunResult =
-            async {
-                let (sender, receiver) = mpsc::unbounded_channel::<(String, String)>();
-                let collector = tokio::spawn(collect_log_chunks(
-                    app.clone(),
-                    session_id.clone(),
-                    receiver,
-                ));
-                let mut readers = Vec::new();
-                if let Some(stdout) = stdout {
-                    readers.push(tokio::spawn(read_stream_chunks(
-                        stdout,
-                        "stdout",
-                        sender.clone(),
-                    )));
-                }
-                if let Some(stderr) = stderr {
-                    readers.push(tokio::spawn(read_stream_chunks(
-                        stderr,
-                        "stderr",
-                        sender.clone(),
-                    )));
-                }
-                drop(sender);
+        let run_result: PublishRunResult = async {
+            let (sender, receiver) = mpsc::unbounded_channel::<(String, String)>();
+            let collector = tokio::spawn(collect_log_chunks(
+                app.clone(),
+                session_id.clone(),
+                receiver,
+            ));
+            let mut readers = Vec::new();
+            if let Some(stdout) = stdout {
+                readers.push(tokio::spawn(read_stream_chunks(
+                    stdout,
+                    "stdout",
+                    sender.clone(),
+                )));
+            }
+            if let Some(stderr) = stderr {
+                readers.push(tokio::spawn(read_stream_chunks(
+                    stderr,
+                    "stderr",
+                    sender.clone(),
+                )));
+            }
+            drop(sender);
 
-                // A cancel that landed while the execution was still starting
-                // is serviced immediately instead of entering the select.
-                let cancelled_before_wait =
-                    cancel_requested.load(std::sync::atomic::Ordering::SeqCst);
-                let status = if cancelled_before_wait {
-                    let _ = child.start_kill();
-                    child.wait().await
-                } else {
-                    tokio::select! {
-                        status = child.wait() => status,
-                        _ = permit.cancel_notify.notified() => {
-                            let _ = child.start_kill();
-                            child.wait().await
-                        }
+            // A cancel that landed while the execution was still starting
+            // is serviced immediately instead of entering the select.
+            let cancelled_before_wait = cancel_requested.load(std::sync::atomic::Ordering::SeqCst);
+            let status = if cancelled_before_wait {
+                let _ = child.start_kill();
+                child.wait().await
+            } else {
+                tokio::select! {
+                    status = child.wait() => status,
+                    _ = permit.cancel_notify.notified() => {
+                        let _ = child.start_kill();
+                        child.wait().await
                     }
                 }
-                .map_err(|error| {
-                    publish_error(
-                        format!("failed to wait publish process: {}", error),
-                        classify_process_wait_error(error.kind()),
-                    )
-                })?;
-
-                for reader in readers {
-                    let _ = reader.await;
-                }
-
-                let mut log_summary = collector.await.map_err(|error| {
-                    publish_error(
-                        format!("failed to collect publish logs: {}", error),
-                        "publish_log_collect_failed",
-                    )
-                })?;
-                let cancelled = cancel_requested.load(std::sync::atomic::Ordering::SeqCst);
-                if cancelled {
-                    let cancelled_line = if log_summary.ends_with_newline {
-                        "[cancelled] 发布已取消".to_string()
-                    } else {
-                        "\n[cancelled] 发布已取消".to_string()
-                    };
-                    emit_publish_log(app, &session_id, &cancelled_line);
-                    log_summary.output.push_str(&cancelled_line);
-                }
-
-                let success = status.success() && !cancelled;
-                let error = if cancelled {
-                    Some("发布已取消".to_string())
-                } else if success {
-                    None
-                } else {
-                    Some(format!("发布失败，退出代码: {:?}", status.code()))
-                };
-                Ok((success, cancelled, error, log_summary.output, log_summary.warnings))
             }
-            .await;
+            .map_err(|error| {
+                publish_error(
+                    format!("failed to wait publish process: {}", error),
+                    classify_process_wait_error(error.kind()),
+                )
+            })?;
+
+            for reader in readers {
+                let _ = reader.await;
+            }
+
+            let mut log_summary = collector.await.map_err(|error| {
+                publish_error(
+                    format!("failed to collect publish logs: {}", error),
+                    "publish_log_collect_failed",
+                )
+            })?;
+            let cancelled = cancel_requested.load(std::sync::atomic::Ordering::SeqCst);
+            if cancelled {
+                let cancelled_line = if log_summary.ends_with_newline {
+                    "[cancelled] 发布已取消".to_string()
+                } else {
+                    "\n[cancelled] 发布已取消".to_string()
+                };
+                emit_publish_log(app, &session_id, &cancelled_line);
+                log_summary.output.push_str(&cancelled_line);
+            }
+
+            let success = status.success() && !cancelled;
+            let error = if cancelled {
+                Some("发布已取消".to_string())
+            } else if success {
+                None
+            } else {
+                Some(format!("发布失败，退出代码: {:?}", status.code()))
+            };
+            Ok((
+                success,
+                cancelled,
+                error,
+                log_summary.output,
+                log_summary.warnings,
+            ))
+        }
+        .await;
 
         let (success, cancelled, error, output_log, warnings) = run_result?;
-        let output_dir = output_policy.output_dir().to_string();
+        let output_dir = output_dir.to_string();
         let file_count = if success {
-            count_output_files(output_policy.output_dir())
+            count_output_files(&output_dir)
         } else {
             0
         };
 
         Ok(PublishResult {
-            provider_id: spec.provider_id.clone(),
+            provider_id: provider_id.to_string(),
             success,
             cancelled,
             error,

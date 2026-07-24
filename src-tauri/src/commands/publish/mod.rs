@@ -24,6 +24,7 @@ pub use preflight::{
 use self::errors::{publish_render_error, publish_schema_error};
 pub(crate) use self::execution::execute_publish_spec;
 use self::execution::render_publish_command;
+pub(crate) use self::execution::{execute_sealed_build, SealedBuildCommand};
 #[cfg(test)]
 use self::output::{infer_output_dir, resolve_plan_command, resolve_runtime_program};
 use self::session::cancel_running_execution;

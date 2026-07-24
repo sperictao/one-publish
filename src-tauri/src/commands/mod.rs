@@ -46,6 +46,7 @@ pub use publish::{
     PublishOutputValidationStatus, PublishResult, PublishSessionStartedEvent, RemoteLocationKind,
     RemoteLocationSummary, RenderedPublishCommand,
 };
+pub(crate) use publish::{execute_sealed_build, SealedBuildCommand};
 pub(crate) use repository::{
     __cmd__check_repository_branch_connectivity, __cmd__detect_repository_provider,
     __cmd__read_project_publish_profile, __cmd__resolve_project_info, __cmd__scan_project,

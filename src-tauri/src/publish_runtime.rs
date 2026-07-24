@@ -28,11 +28,12 @@ use ts_rs::TS;
 
 use crate::commands::{
     preflight_publish_output, render_provider_publish, PublishOutputAccessStatus,
-    PublishOutputValidationStatus, RemoteLocationKind, RenderedPublishCommand,
+    PublishOutputValidationStatus, RemoteLocationKind, RenderedPublishCommand, SealedBuildCommand,
 };
 use crate::errors::AppError;
 use crate::provider::{registry::provider_registry, ProviderSourceInputKind};
 use crate::spec::PublishSpec;
+use crate::tauri_release::{ReleaseGate, TauriReleaseConfig};
 
 const SELECTED_PROVIDER_ID: &str = "selected-project-provider";
 const SELECTED_PROVIDER_PROGRAM: &str = "selected-project-provider:publish";
@@ -42,6 +43,9 @@ const LOCAL_DESTINATION_ID: &str = "local-directory";
 const STRUCTURED_PLAN_EXECUTION: &str = "structured-plan-execution";
 const ARTIFACT_VERIFIED: &str = "artifact-verified";
 const RUNTIME_REVISION: &str = "one-publish-runtime-v1";
+/// Tauri 配置的 Release Gate 计划节点动作；门禁位于构建与交付副作用之前（ADR-0014）。
+const TAURI_RELEASE_GATE_ACTION: &str = "run_release_gate";
+const RELEASE_GATES_INPUT: &str = "release_gates";
 static ATTEMPT_SEQUENCE: AtomicU64 = AtomicU64::new(0);
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
@@ -203,6 +207,12 @@ pub struct PublishRuntimeResult {
 
 pub(crate) trait ProviderExecutionPort: Send + Sync {
     fn execute(&self, spec: PublishSpec) -> Result<crate::commands::PublishResult, AppError>;
+
+    /// 运行密封计划节点物化出的结构化构建命令；执行层不得重新推导或替换命令。
+    fn execute_build(
+        &self,
+        request: SealedBuildCommand,
+    ) -> Result<crate::commands::PublishResult, AppError>;
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -314,7 +324,7 @@ impl AdapterContract for SelectedProjectProvider {
 impl ProjectProvider for SelectedProjectProvider {}
 
 /// 通过既有 Provider 执行管道运行密封的发布规格并收集产物；
-/// 构建执行的完整迁移属于后续 Ticket，这里只保证计划与执行共享一个事实来源。
+/// 非 Tauri Provider 的构建执行迁移属于后续 Ticket，这里只保证计划与执行共享一个事实来源。
 fn run_bridged_execution(
     execution: &SelectedProviderExecution,
     spec_json: &str,
@@ -326,6 +336,15 @@ fn run_bridged_execution(
         .port
         .execute(spec)
         .map_err(|error| PublishError::Execution(error.to_string()))?;
+    finish_provider_execution(execution, result, classify_generic_artifact)
+}
+
+/// 校验 Provider 执行结果并从其原生输出目录收集产物；失败保留根因并阻止后续副作用。
+fn finish_provider_execution(
+    execution: &SelectedProviderExecution,
+    result: crate::commands::PublishResult,
+    classify: fn(&Path) -> (&'static str, &'static str),
+) -> Result<AdapterExecutionOutput, PublishError> {
     execution
         .result
         .lock()
@@ -356,24 +375,23 @@ fn run_bridged_execution(
     execution.source_guard.validate_for_execution()?;
 
     Ok(AdapterExecutionOutput {
-        artifacts: collect_artifacts(&execution.output_directory)?,
+        artifacts: collect_artifacts_with(&execution.output_directory, classify)?,
         ..AdapterExecutionOutput::default()
     })
 }
 
-/// Tauri 配置的运行时包装：发现、检查与计划完全委托内置 Tauri Provider（合同不变），
-/// 只有本地构建执行仍桥接现有执行端口（T05 只迁移发现与计划）。
+/// Tauri 配置的运行时包装：发现、检查与计划委托内置 Tauri Provider（合同不变），
+/// 并补充 Release Gate 节点；构建按密封计划节点直接经执行端口运行（T06），
+/// 不再桥接旧的发布规格管道。
 struct TauriRuntimeProvider {
     provider: TauriProjectProvider,
     default_settings: AdapterSettings,
-    spec_json: String,
     repository_root: PathBuf,
     execution: Option<SelectedProviderExecution>,
 }
 
 impl TauriRuntimeProvider {
     fn new(
-        spec_json: String,
         config_path: String,
         build_driver: String,
         repository_root: PathBuf,
@@ -385,10 +403,50 @@ impl TauriRuntimeProvider {
         Self {
             provider: TauriProjectProvider::new(),
             default_settings,
-            spec_json,
             repository_root,
             execution,
         }
+    }
+
+    /// 执行密封的 Tauri 构建节点：程序与参数只能来自计划节点固定的构建驱动，
+    /// 配置入口在执行时物化为绝对路径，工作目录为应用根（与驱动命令语义一致）。
+    fn run_sealed_build(
+        &self,
+        node: &PlanNode,
+        config_path: &str,
+        driver: TauriBuildDriver,
+    ) -> Result<AdapterExecutionOutput, PublishError> {
+        let execution = self.execution.as_ref().ok_or_else(|| {
+            PublishError::Execution(
+                "tauri execution port is unavailable for this runtime".to_string(),
+            )
+        })?;
+        let absolute_config = self.repository_root.join(config_path);
+        let app_root =
+            publish_adapters::tauri::resolve_app_root(&absolute_config).ok_or_else(|| {
+                PublishError::Execution(format!(
+                    "cannot resolve Tauri app root from {config_path} for node {}",
+                    node.id
+                ))
+            })?;
+        let mut args = driver
+            .build_args()
+            .iter()
+            .map(|arg| (*arg).to_string())
+            .collect::<Vec<_>>();
+        args.push("--config".to_string());
+        args.push(absolute_config.to_string_lossy().to_string());
+        let result = execution
+            .port
+            .execute_build(SealedBuildCommand {
+                provider_id: TAURI_PROVIDER_ID.to_string(),
+                program: driver.name().to_string(),
+                args,
+                working_directory: app_root,
+                output_directory: execution.output_directory.clone(),
+            })
+            .map_err(|error| PublishError::Execution(error.to_string()))?;
+        finish_provider_execution(execution, result, classify_tauri_artifact)
     }
 }
 
@@ -406,7 +464,21 @@ impl AdapterContract for TauriRuntimeProvider {
         snapshot: &PlanningInputSnapshot,
         settings: &AdapterSettings,
     ) -> Result<Vec<PlanNodeTemplate>, PublishError> {
-        self.provider.plan_fragment(snapshot, settings)
+        let mut templates = self.provider.plan_fragment(snapshot, settings)?;
+        for (index, gate) in release_gates_from_snapshot(snapshot)?.iter().enumerate() {
+            if gate.program.trim().is_empty() {
+                return Err(PublishError::InvalidPlan(
+                    "release gate program cannot be empty".to_string(),
+                ));
+            }
+            templates.push(PlanNodeTemplate::adapter_action(
+                format!("gate-{index}"),
+                PlanStage::PrepareIdentity,
+                TAURI_RELEASE_GATE_ACTION,
+                release_gate_inputs(gate)?,
+            ));
+        }
+        Ok(templates)
     }
 
     fn execute_node(
@@ -429,24 +501,33 @@ impl AdapterContract for TauriRuntimeProvider {
                 }
                 Ok(AdapterExecutionOutput::default())
             }
-            PlanOperation::RunProgram { program, args, .. } => {
+            PlanOperation::AdapterAction { action, inputs }
+                if action == TAURI_RELEASE_GATE_ACTION =>
+            {
+                run_release_gate(&self.repository_root, node, inputs)
+            }
+            PlanOperation::RunProgram {
+                program,
+                args,
+                working_directory,
+                environment_references,
+            } => {
                 let driver = TauriBuildDriver::parse(build_driver).ok_or_else(|| {
                     PublishError::Execution(format!("unknown tauri build driver {build_driver}"))
                 })?;
+                // 工作目录与环境引用由本 Provider 在执行时确定；密封节点携带任何
+                // 额外执行输入都视为篡改，而不是被静默丢弃。
                 if *program != driver.program_id()
                     || *args != driver.build_command_args(config_path)
+                    || working_directory.is_some()
+                    || !environment_references.is_empty()
                 {
                     return Err(PublishError::InvalidPlan(format!(
                         "node {} is not the sealed tauri build operation",
                         node.id
                     )));
                 }
-                let execution = self.execution.as_ref().ok_or_else(|| {
-                    PublishError::Execution(
-                        "tauri execution port is unavailable for this runtime".to_string(),
-                    )
-                })?;
-                run_bridged_execution(execution, &self.spec_json)
+                self.run_sealed_build(node, config_path, driver)
             }
             _ => Err(PublishError::Execution(format!(
                 "node {} is not a tauri provider operation",
@@ -454,6 +535,72 @@ impl AdapterContract for TauriRuntimeProvider {
             ))),
         }
     }
+}
+
+/// 从密封快照读取 Release Gate；缺失键代表没有配置门禁。
+fn release_gates_from_snapshot(
+    snapshot: &PlanningInputSnapshot,
+) -> Result<Vec<ReleaseGate>, PublishError> {
+    match snapshot.release_input.get(RELEASE_GATES_INPUT) {
+        None => Ok(Vec::new()),
+        Some(value) => serde_json::from_value(value.clone()).map_err(|error| {
+            PublishError::InvalidPlan(format!("sealed release gates cannot be decoded: {error}"))
+        }),
+    }
+}
+
+/// 门禁节点输入直接使用 ReleaseGate 的序列化形状；密封与解码共享一个字段来源。
+fn release_gate_inputs(gate: &ReleaseGate) -> Result<BTreeMap<String, Value>, PublishError> {
+    match serde_json::to_value(gate) {
+        Ok(Value::Object(fields)) => Ok(fields.into_iter().collect()),
+        _ => Err(PublishError::InvalidPlan(
+            "release gate cannot be sealed into plan node inputs".to_string(),
+        )),
+    }
+}
+
+/// 在仓库根执行一个结构化门禁命令；任何非零退出都终止后续节点并保留完整输出根因。
+fn run_release_gate(
+    repository_root: &Path,
+    node: &PlanNode,
+    inputs: &BTreeMap<String, Value>,
+) -> Result<AdapterExecutionOutput, PublishError> {
+    let gate: ReleaseGate = serde_json::from_value(Value::Object(
+        inputs.clone().into_iter().collect(),
+    ))
+    .map_err(|error| {
+        PublishError::InvalidPlan(format!(
+            "node {} has invalid sealed release gate inputs: {error}",
+            node.id
+        ))
+    })?;
+    if gate.program.trim().is_empty() {
+        return Err(PublishError::InvalidPlan(format!(
+            "node {} has no sealed release gate program",
+            node.id
+        )));
+    }
+
+    let output = crate::process_utils::new_std_command(&gate.program)
+        .args(&gate.args)
+        .current_dir(repository_root)
+        .output()
+        .map_err(|error| {
+            PublishError::Execution(format!(
+                "failed to start release gate '{}': {error}",
+                gate.program
+            ))
+        })?;
+    if output.status.success() {
+        return Ok(AdapterExecutionOutput::default());
+    }
+    Err(PublishError::Execution(format!(
+        "release gate failed: {} {}\n{}{}",
+        gate.program,
+        gate.args.join(" "),
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr),
+    )))
 }
 
 impl ProjectProvider for TauriRuntimeProvider {
@@ -468,6 +615,7 @@ impl ProjectProvider for TauriRuntimeProvider {
 pub(crate) fn prepare_runtime(
     request: PreparePublishRuntimeRequest,
     resolved: ResolvedPublishConfiguration,
+    tauri_release: Option<TauriReleaseConfig>,
 ) -> Result<PreparedPublishRuntime, AppError> {
     validate_prepare_request(&request)?;
     let tauri_binding = if request.spec.provider_id == TAURI_PROVIDER_ID {
@@ -480,6 +628,15 @@ pub(crate) fn prepare_runtime(
         }
     } else {
         None
+    };
+    // 门禁属于绑定的 Tauri 应用：仓库配置绑定其他应用时不适用于本配置。
+    let release_gates = match (&tauri_binding, tauri_release) {
+        (Some(binding), Some(config))
+            if same_repository_relative_path(&config.app_config_path, &binding.config_path) =>
+        {
+            config.release_gates
+        }
+        _ => Vec::new(),
     };
     let command = render_provider_publish(request.spec.clone())?;
     let preflight = preflight_publish_output(request.spec.clone());
@@ -521,8 +678,9 @@ pub(crate) fn prepare_runtime(
         &provider_output_directory,
         &delivery_directory,
         tauri_binding.as_ref(),
+        &release_gates,
     )?;
-    let registry = build_registry(&snapshot, spec_json, &delivery_directory)?;
+    let registry = build_registry(&snapshot, &delivery_directory)?;
     let prepared = PublishRuntime::new(registry)
         .prepare_attempt(&snapshot)
         .map_err(runtime_error)?;
@@ -542,11 +700,27 @@ pub(crate) fn prepare_runtime(
     })
 }
 
-/// prepare 阶段解析出的 Tauri Provider 设置值：显式候选绑定（ADR-0044）加接入时确定的构建驱动。
+/// 归一化比较仓库相对路径：分隔符与 "./" 写法差异不构成不同的应用绑定，
+/// 避免仅因路径拼写不同就静默跳过已配置的 Release Gate。
+fn same_repository_relative_path(left: &str, right: &str) -> bool {
+    let segments = |value: &str| {
+        value
+            .replace('\\', "/")
+            .split('/')
+            .filter(|segment| !segment.is_empty() && *segment != ".")
+            .map(str::to_string)
+            .collect::<Vec<_>>()
+    };
+    segments(left) == segments(right)
+}
+
+/// prepare 阶段解析出的 Tauri Provider 设置值：显式候选绑定（ADR-0044）、接入时确定的
+/// 构建驱动，以及按 Tauri 版本来源语义解析的发布版本（ADR-0007）。
 #[derive(Debug, Clone)]
 pub(crate) struct ResolvedTauriSettings {
     config_path: String,
     build_driver: TauriBuildDriver,
+    version: String,
 }
 
 enum TauriBindingCheck {
@@ -598,6 +772,7 @@ fn prepare_tauri_binding(
         Ok(inspection) => Ok(TauriBindingCheck::Bound(ResolvedTauriSettings {
             config_path,
             build_driver: inspection.build_driver,
+            version: inspection.version_source.version,
         })),
         Err(error) => Ok(TauriBindingCheck::Blocked(error.to_string())),
     }
@@ -740,6 +915,11 @@ pub fn prepare_publish_runtime(
     let blocked_reason = (configuration.current_revision_id != revision.id)
         .then(|| "selected publish configuration revision is no longer current".to_string())
         .or_else(|| configuration.blocked_reason.clone());
+    let tauri_release = if revision.provider_id == TAURI_PROVIDER_ID {
+        crate::tauri_release::stored_release_config(&request.repository_id)?
+    } else {
+        None
+    };
     prepare_runtime(
         request,
         ResolvedPublishConfiguration {
@@ -747,6 +927,7 @@ pub fn prepare_publish_runtime(
             parameters: revision.parameters.clone(),
             blocked_reason,
         },
+        tauri_release,
     )
 }
 
@@ -762,6 +943,14 @@ impl ProviderExecutionPort for TauriProviderExecutionPort {
                 self.app.clone(),
                 spec,
             ))
+    }
+
+    fn execute_build(
+        &self,
+        request: SealedBuildCommand,
+    ) -> Result<crate::commands::PublishResult, AppError> {
+        self.runtime
+            .block_on(crate::commands::execute_sealed_build(&self.app, &request))
     }
 }
 
@@ -800,7 +989,6 @@ pub(crate) fn start_runtime_with_port(
         serde_json::from_str(&request.runtime_token).map_err(runtime_serialization_error)?;
     let source_guard = PreparedSourceGuard::from_snapshot(&prepared.snapshot)?;
     source_guard.validate()?;
-    let spec_json = sealed_spec_json(&prepared.snapshot)?;
     let provider_output_directory = prepared
         .snapshot
         .release_input
@@ -832,7 +1020,6 @@ pub(crate) fn start_runtime_with_port(
     let result = Arc::new(Mutex::new(None));
     let registry = build_execution_registry(
         &prepared.snapshot,
-        spec_json,
         &provider_output_directory,
         &delivery_directory,
         source_guard,
@@ -866,29 +1053,6 @@ pub(crate) fn start_runtime_with_port(
     })
 }
 
-/// 从快照恢复密封的执行输入：Tauri 配置放在发布输入里，其他 Provider 仍在自身设置里。
-fn sealed_spec_json(snapshot: &PlanningInputSnapshot) -> Result<String, AppError> {
-    let binding = &snapshot.adapters.project_provider;
-    if binding.adapter.id == TAURI_PROVIDER_ID {
-        return snapshot
-            .release_input
-            .get("publish_spec")
-            .and_then(Value::as_str)
-            .map(str::to_string)
-            .ok_or_else(|| {
-                AppError::publish_with_code(
-                    "prepared runtime has no sealed publish spec",
-                    "publish_runtime_spec_missing",
-                )
-            });
-    }
-    binding
-        .settings
-        .string("spec_json", &binding.adapter.display_name())
-        .map_err(runtime_error)
-        .map(str::to_string)
-}
-
 fn validate_prepare_request(request: &PreparePublishRuntimeRequest) -> Result<(), AppError> {
     if request.repository_id.trim().is_empty()
         || request.repository_path.trim().is_empty()
@@ -909,6 +1073,7 @@ fn build_snapshot(
     provider_output_directory: &str,
     delivery_directory: &str,
     tauri_binding: Option<&ResolvedTauriSettings>,
+    release_gates: &[ReleaseGate],
 ) -> Result<PlanningInputSnapshot, AppError> {
     let project_identity = project_identity(&request.repository_path, &request.spec)?;
     let repository = canonical_repository(Path::new(&request.repository_path))?;
@@ -978,9 +1143,18 @@ fn build_snapshot(
     let empty_settings = AdapterSettings::new(1);
     let project_provider = match tauri_binding {
         Some(binding) => {
-            // 密封的执行输入进快照的发布输入而不是 Provider 设置，保持 Tauri adapter
-            // 的 (tauri, v1) 设置合同唯一；start 时重算计划即可发现任何篡改。
-            release_input.insert("publish_spec".to_string(), Value::String(spec_json));
+            // Tauri 发布身份使用 Provider 按版本来源语义解析的版本；
+            // Release Gate 密封进发布输入，保持 Tauri adapter 的 (tauri, v1) 设置合同唯一。
+            release_input.insert(
+                "version".to_string(),
+                Value::String(binding.version.clone()),
+            );
+            if !release_gates.is_empty() {
+                release_input.insert(
+                    RELEASE_GATES_INPUT.to_string(),
+                    serde_json::to_value(release_gates).map_err(runtime_serialization_error)?,
+                );
+            }
             AdapterBinding::new(
                 "project",
                 AdapterIdentity::new(AdapterKind::ProjectProvider, TAURI_PROVIDER_ID, 1),
@@ -1034,12 +1208,11 @@ fn build_snapshot(
 
 fn build_registry(
     snapshot: &PlanningInputSnapshot,
-    spec_json: String,
     delivery_directory: &str,
 ) -> Result<AdapterRegistry, AppError> {
     let fixture = AdapterConformanceFixture::new(snapshot.clone());
     let mut registry = AdapterRegistry::new();
-    register_project_provider(&mut registry, snapshot, spec_json, None, &fixture)?;
+    register_project_provider(&mut registry, snapshot, None, &fixture)?;
     registry
         .register_execution_backend(Arc::new(LocalExecutionBackend::new()), &fixture)
         .map_err(runtime_error)?;
@@ -1060,7 +1233,6 @@ fn build_registry(
 
 fn build_execution_registry(
     snapshot: &PlanningInputSnapshot,
-    spec_json: String,
     provider_output_directory: &str,
     delivery_directory: &str,
     source_guard: PreparedSourceGuard,
@@ -1072,7 +1244,6 @@ fn build_execution_registry(
     register_project_provider(
         &mut registry,
         snapshot,
-        spec_json,
         Some(SelectedProviderExecution {
             port,
             result,
@@ -1103,13 +1274,12 @@ fn build_execution_registry(
 fn register_project_provider(
     registry: &mut AdapterRegistry,
     snapshot: &PlanningInputSnapshot,
-    spec_json: String,
     execution: Option<SelectedProviderExecution>,
     fixture: &AdapterConformanceFixture,
 ) -> Result<(), AppError> {
     let binding = &snapshot.adapters.project_provider;
+    let adapter_name = binding.adapter.display_name();
     if binding.adapter.id == TAURI_PROVIDER_ID {
-        let adapter_name = binding.adapter.display_name();
         let config_path = binding
             .settings
             .string("config_path", &adapter_name)
@@ -1133,7 +1303,6 @@ fn register_project_provider(
         registry
             .register_project_provider(
                 Arc::new(TauriRuntimeProvider::new(
-                    spec_json,
                     config_path,
                     build_driver,
                     PathBuf::from(repository_root),
@@ -1143,6 +1312,11 @@ fn register_project_provider(
             )
             .map_err(runtime_error)?;
     } else {
+        let spec_json = binding
+            .settings
+            .string("spec_json", &adapter_name)
+            .map_err(runtime_error)?
+            .to_string();
         registry
             .register_project_provider(
                 Arc::new(SelectedProjectProvider::with_execution(
@@ -1155,7 +1329,53 @@ fn register_project_provider(
     Ok(())
 }
 
-fn collect_artifacts(root: &Path) -> Result<Vec<ArtifactCandidate>, PublishError> {
+/// 非 Tauri Provider 的产物暂以统一角色进入清单；逐 Provider 的角色分类属于后续 Ticket。
+fn classify_generic_artifact(_relative: &Path) -> (&'static str, &'static str) {
+    ("provider-output", "application/octet-stream")
+}
+
+/// Tauri bundle 输出按逻辑角色与媒体类型进入 Artifact Manifest：
+/// 安装包、Updater 归档与 Updater 签名可被交付路线按角色选择，其余为构建支撑文件。
+fn classify_tauri_artifact(relative: &Path) -> (&'static str, &'static str) {
+    let name = relative
+        .file_name()
+        .and_then(|name| name.to_str())
+        .unwrap_or_default()
+        .to_ascii_lowercase();
+    if name.ends_with(".sig") {
+        return ("updater-signature", "application/octet-stream");
+    }
+    if name.ends_with(".app.tar.gz") {
+        return ("updater-archive", "application/gzip");
+    }
+    if name.ends_with(".nsis.zip") || name.ends_with(".msi.zip") {
+        return ("updater-archive", "application/zip");
+    }
+    if name.ends_with(".dmg") {
+        return ("installer", "application/x-apple-diskimage");
+    }
+    if name.ends_with(".msi") {
+        return ("installer", "application/x-msi");
+    }
+    if name.ends_with(".exe") {
+        return ("installer", "application/vnd.microsoft.portable-executable");
+    }
+    if name.ends_with(".appimage") {
+        return ("installer", "application/vnd.appimage");
+    }
+    if name.ends_with(".deb") {
+        return ("installer", "application/vnd.debian.binary-package");
+    }
+    if name.ends_with(".rpm") {
+        return ("installer", "application/x-rpm");
+    }
+    ("build-support", "application/octet-stream")
+}
+
+fn collect_artifacts_with(
+    root: &Path,
+    classify: fn(&Path) -> (&'static str, &'static str),
+) -> Result<Vec<ArtifactCandidate>, PublishError> {
     let metadata = fs::symlink_metadata(root).map_err(|error| PublishError::Io {
         operation: format!("inspect provider output {}", root.display()),
         message: error.to_string(),
@@ -1231,10 +1451,11 @@ fn collect_artifacts(root: &Path) -> Result<Vec<ArtifactCandidate>, PublishError
                 operation: format!("read provider artifact {}", path.display()),
                 message: error.to_string(),
             })?;
+            let (role, media_type) = classify(relative);
             Ok(ArtifactCandidate::new(
-                "provider-output",
+                role,
                 relative.to_string_lossy().replace('\\', "/"),
-                "application/octet-stream",
+                media_type,
                 std::env::consts::OS,
                 std::env::consts::ARCH,
                 bytes,
@@ -2206,17 +2427,28 @@ fn runtime_serialization_error(error: serde_json::Error) -> AppError {
 mod tests {
     use std::collections::BTreeMap;
     use std::process::Command;
-    use std::sync::Arc;
+    use std::sync::{Arc, Mutex};
 
-    use crate::commands::{PublishResult, RenderedPublishCommand};
+    use publish_runner_core::{PreparedPublishPlan, PublishRuntime, StartPublishAttempt};
+
+    use crate::commands::{PublishResult, RenderedPublishCommand, SealedBuildCommand};
     use crate::spec::{PublishSpec, SpecValue, SPEC_VERSION};
+    use crate::tauri_release::{ReleaseGate, TauriReleaseConfig};
 
     use super::{
-        capture_source_snapshot, normalize_remote_namespace, prepare_runtime, project_identity,
+        capture_source_snapshot, normalize_remote_namespace, project_identity,
         start_runtime_with_port, AttemptIdentity, PreparePublishRuntimeRequest,
         ProviderExecutionPort, ResolvedPublishConfiguration, RuntimeAttemptStatus,
         RuntimePlanStage, StartPublishRuntimeRequest,
     };
+
+    /// 非 Tauri 场景不涉及 Tauri 发布配置；测试沿用两参形式。
+    fn prepare_runtime(
+        request: PreparePublishRuntimeRequest,
+        resolved: ResolvedPublishConfiguration,
+    ) -> Result<super::PreparedPublishRuntime, crate::errors::AppError> {
+        super::prepare_runtime(request, resolved, None)
+    }
 
     struct FakeProviderExecution {
         output_directory: std::path::PathBuf,
@@ -2283,6 +2515,114 @@ mod tests {
                 output_log: "published".to_string(),
                 output_dir: self.output_directory.to_string_lossy().to_string(),
                 file_count,
+                warnings: None,
+            })
+        }
+
+        fn execute_build(
+            &self,
+            request: SealedBuildCommand,
+        ) -> Result<PublishResult, crate::errors::AppError> {
+            panic!(
+                "non-tauri providers must not execute sealed build commands: {}",
+                request.program
+            );
+        }
+    }
+
+    /// Tauri 密封构建的受控 fixture：记录端口收到的结构化命令，
+    /// 并在 Provider 原生 bundle 目录写出可分类的桌面产物。
+    struct FakeTauriBuild {
+        output_directory: std::path::PathBuf,
+        failure: Option<String>,
+        requests: Mutex<Vec<SealedBuildCommand>>,
+    }
+
+    impl FakeTauriBuild {
+        fn new(output_directory: std::path::PathBuf) -> Self {
+            Self {
+                output_directory,
+                failure: None,
+                requests: Mutex::new(Vec::new()),
+            }
+        }
+
+        fn failing(output_directory: std::path::PathBuf, error: &str) -> Self {
+            Self {
+                failure: Some(error.to_string()),
+                ..Self::new(output_directory)
+            }
+        }
+
+        fn requests(&self) -> Vec<SealedBuildCommand> {
+            self.requests.lock().expect("fake build requests").clone()
+        }
+    }
+
+    impl ProviderExecutionPort for FakeTauriBuild {
+        fn execute(&self, _spec: PublishSpec) -> Result<PublishResult, crate::errors::AppError> {
+            panic!("tauri runtime must not fall back to the legacy publish spec pipeline");
+        }
+
+        fn execute_build(
+            &self,
+            request: SealedBuildCommand,
+        ) -> Result<PublishResult, crate::errors::AppError> {
+            self.requests
+                .lock()
+                .expect("fake build requests")
+                .push(request.clone());
+            let command = RenderedPublishCommand {
+                program: request.program.clone(),
+                args: request.args.clone(),
+                working_dir: Some(request.working_directory.to_string_lossy().to_string()),
+                display_command: format!("{} {}", request.program, request.args.join(" ")),
+                env: Vec::new(),
+            };
+            if let Some(error) = &self.failure {
+                return Ok(PublishResult {
+                    provider_id: request.provider_id,
+                    success: false,
+                    cancelled: false,
+                    error: Some(error.clone()),
+                    command,
+                    output_log: error.clone(),
+                    output_dir: self.output_directory.to_string_lossy().to_string(),
+                    file_count: 0,
+                    warnings: None,
+                });
+            }
+
+            std::fs::create_dir_all(self.output_directory.join("dmg"))
+                .expect("create dmg bundle directory");
+            std::fs::create_dir_all(self.output_directory.join("macos"))
+                .expect("create macos bundle directory");
+            std::fs::write(
+                self.output_directory.join("dmg").join("Demo.dmg"),
+                b"installer",
+            )
+            .expect("write installer bundle");
+            std::fs::write(
+                self.output_directory.join("macos").join("Demo.app.tar.gz"),
+                b"updater-archive",
+            )
+            .expect("write updater archive");
+            std::fs::write(
+                self.output_directory
+                    .join("macos")
+                    .join("Demo.app.tar.gz.sig"),
+                b"updater-signature",
+            )
+            .expect("write updater signature");
+            Ok(PublishResult {
+                provider_id: request.provider_id,
+                success: true,
+                cancelled: false,
+                error: None,
+                command,
+                output_log: "built".to_string(),
+                output_dir: self.output_directory.to_string_lossy().to_string(),
+                file_count: 3,
                 warnings: None,
             })
         }
@@ -2668,8 +3008,35 @@ mod tests {
         assert!(prepared.runtime_token.is_empty());
     }
 
+    fn tauri_release_config(gates: Vec<ReleaseGate>) -> TauriReleaseConfig {
+        TauriReleaseConfig {
+            app_config_path: "src-tauri/tauri.conf.json".to_string(),
+            release_gates: gates,
+            ..TauriReleaseConfig::default()
+        }
+    }
+
+    fn gate(program: &str, args: &[&str]) -> ReleaseGate {
+        ReleaseGate {
+            program: program.to_string(),
+            args: args.iter().map(|arg| (*arg).to_string()).collect(),
+        }
+    }
+
+    fn tauri_bundle_directory(repository: &std::path::Path) -> std::path::PathBuf {
+        repository
+            .join("src-tauri")
+            .join("target")
+            .join("release")
+            .join("bundle")
+    }
+
+    fn decoded_runtime_token(prepared: &super::PreparedPublishRuntime) -> PreparedPublishPlan {
+        serde_json::from_str(&prepared.runtime_token).expect("decode prepared runtime token")
+    }
+
     #[test]
-    fn tauri_runtime_executes_the_provider_plan_through_the_execution_port() {
+    fn tauri_plan_seals_release_gates_between_inspect_and_build() {
         let repository = tempfile::tempdir().expect("create repository");
         write_tauri_app(repository.path(), ".", "1.2.3");
         initialize_git_repository(repository.path());
@@ -2677,25 +3044,173 @@ mod tests {
             repository.path(),
             &repository.path().join("src-tauri/tauri.conf.json"),
         );
-        let prepared = prepare_runtime(request, resolved).expect("prepare tauri configuration");
+
+        let prepared = super::prepare_runtime(
+            request,
+            resolved,
+            Some(tauri_release_config(vec![
+                gate("git", &["rev-parse", "HEAD"]),
+                gate("git", &["status", "--porcelain"]),
+            ])),
+        )
+        .expect("prepare tauri configuration with release gates");
+
         assert!(prepared.blocked_reason.is_none());
-        let output_directory = repository
-            .path()
-            .join("src-tauri")
-            .join("target")
-            .join("release")
-            .join("bundle");
+        let tauri_nodes = prepared
+            .plan
+            .nodes
+            .iter()
+            .filter(|node| node.adapter_id == "tauri")
+            .map(|node| (node.stage, node.operation.as_str()))
+            .collect::<Vec<_>>();
+        assert_eq!(
+            tauri_nodes,
+            vec![
+                (RuntimePlanStage::InspectSource, "inspect_tauri_project"),
+                (RuntimePlanStage::PrepareIdentity, "run_release_gate"),
+                (RuntimePlanStage::PrepareIdentity, "run_release_gate"),
+                (RuntimePlanStage::Build, "tauri-driver:pnpm"),
+            ]
+        );
+        let sealed = decoded_runtime_token(&prepared);
+        assert_eq!(
+            sealed
+                .snapshot
+                .release_input
+                .get("version")
+                .and_then(serde_json::Value::as_str),
+            Some("1.2.3"),
+            "tauri release identity must use the provider-resolved version"
+        );
+    }
+
+    #[test]
+    fn tauri_release_gates_apply_across_relative_path_spellings() {
+        let repository = tempfile::tempdir().expect("create repository");
+        write_tauri_app(repository.path(), ".", "1.2.3");
+        initialize_git_repository(repository.path());
+        let (request, resolved) = tauri_prepare_request(
+            repository.path(),
+            &repository.path().join("src-tauri/tauri.conf.json"),
+        );
+        let mut config = tauri_release_config(vec![gate("git", &["rev-parse", "HEAD"])]);
+        config.app_config_path = "./src-tauri/tauri.conf.json".to_string();
+
+        let prepared = super::prepare_runtime(request, resolved, Some(config))
+            .expect("prepare tauri configuration");
+
+        assert_eq!(
+            prepared
+                .plan
+                .nodes
+                .iter()
+                .filter(|node| node.operation == "run_release_gate")
+                .count(),
+            1,
+            "a ./-spelled binding still targets the same app and must keep its gates"
+        );
+    }
+
+    #[test]
+    fn tauri_release_gates_bound_to_another_app_are_not_sealed() {
+        let repository = tempfile::tempdir().expect("create repository");
+        write_tauri_app(repository.path(), ".", "1.2.3");
+        initialize_git_repository(repository.path());
+        let (request, resolved) = tauri_prepare_request(
+            repository.path(),
+            &repository.path().join("src-tauri/tauri.conf.json"),
+        );
+        let mut config = tauri_release_config(vec![gate("git", &["rev-parse", "HEAD"])]);
+        config.app_config_path = "apps/other/src-tauri/tauri.conf.json".to_string();
+
+        let prepared = super::prepare_runtime(request, resolved, Some(config))
+            .expect("prepare tauri configuration");
+
+        assert!(prepared
+            .plan
+            .nodes
+            .iter()
+            .all(|node| node.operation != "run_release_gate"));
+    }
+
+    #[test]
+    fn tauri_gate_failure_blocks_build_and_delivery_with_the_root_cause() {
+        let repository = tempfile::tempdir().expect("create repository");
+        write_tauri_app(repository.path(), ".", "1.2.3");
+        initialize_git_repository(repository.path());
+        let (request, resolved) = tauri_prepare_request(
+            repository.path(),
+            &repository.path().join("src-tauri/tauri.conf.json"),
+        );
+        let prepared = super::prepare_runtime(
+            request,
+            resolved,
+            Some(tauri_release_config(vec![gate(
+                "git",
+                &["rev-parse", "--verify", "one-publish-missing-gate-ref"],
+            )])),
+        )
+        .expect("prepare tauri configuration with a failing gate");
+        let bundle_directory = tauri_bundle_directory(repository.path());
+        let build = Arc::new(FakeTauriBuild::new(bundle_directory.clone()));
 
         let result = start_runtime_with_port(
             StartPublishRuntimeRequest {
                 runtime_token: prepared.runtime_token,
             },
-            Arc::new(FakeProviderExecution {
-                output_directory,
-                output_is_file: false,
-                failure: None,
-                source_change: None,
-            }),
+            Arc::clone(&build) as Arc<dyn ProviderExecutionPort>,
+            AttemptIdentity {
+                attempt_id: "attempt-gate-failed".to_string(),
+                backend_run_id: "run-gate-failed".to_string(),
+            },
+        )
+        .expect("gate failure must reduce to a failed attempt");
+
+        assert_eq!(result.attempt.status, RuntimeAttemptStatus::Failed);
+        assert!(result.attempt.manifest.is_none());
+        assert!(result.attempt.receipts.is_empty());
+        assert!(result
+            .attempt
+            .error
+            .as_deref()
+            .is_some_and(|error| error.contains("release gate failed")));
+        assert!(
+            build.requests().is_empty(),
+            "a failed gate must stop the build side effect"
+        );
+        assert!(
+            !bundle_directory.exists(),
+            "no bundle output may appear after a failed gate"
+        );
+        assert!(result.publish_result.is_none());
+    }
+
+    #[test]
+    fn tauri_build_runs_the_sealed_driver_command_after_its_gates() {
+        let repository = tempfile::tempdir().expect("create repository");
+        write_tauri_app(repository.path(), ".", "1.2.3");
+        initialize_git_repository(repository.path());
+        let (request, resolved) = tauri_prepare_request(
+            repository.path(),
+            &repository.path().join("src-tauri/tauri.conf.json"),
+        );
+        let prepared = super::prepare_runtime(
+            request,
+            resolved,
+            Some(tauri_release_config(vec![gate(
+                "git",
+                &["rev-parse", "HEAD"],
+            )])),
+        )
+        .expect("prepare tauri configuration");
+        let bundle_directory = tauri_bundle_directory(repository.path());
+        let build = Arc::new(FakeTauriBuild::new(bundle_directory.clone()));
+
+        let result = start_runtime_with_port(
+            StartPublishRuntimeRequest {
+                runtime_token: prepared.runtime_token,
+            },
+            Arc::clone(&build) as Arc<dyn ProviderExecutionPort>,
             AttemptIdentity {
                 attempt_id: "attempt-tauri".to_string(),
                 backend_run_id: "run-tauri".to_string(),
@@ -2704,11 +3219,298 @@ mod tests {
         .expect("start tauri runtime");
 
         assert_eq!(result.attempt.status, RuntimeAttemptStatus::Published);
-        assert!(result.attempt.manifest_digest.is_some());
+        let canonical_repository =
+            std::fs::canonicalize(repository.path()).expect("canonicalize repository");
+        let requests = build.requests();
+        assert_eq!(requests.len(), 1, "the sealed build runs exactly once");
+        assert_eq!(requests[0].program, "pnpm");
+        assert_eq!(
+            requests[0].args,
+            vec![
+                "tauri".to_string(),
+                "build".to_string(),
+                "--config".to_string(),
+                canonical_repository
+                    .join("src-tauri/tauri.conf.json")
+                    .to_string_lossy()
+                    .to_string(),
+            ]
+        );
+        assert_eq!(requests[0].working_directory, canonical_repository);
+        assert_eq!(
+            result
+                .attempt
+                .manifest
+                .as_ref()
+                .map(|manifest| manifest.artifact_count),
+            Some(3)
+        );
+        assert_eq!(result.attempt.receipts.len(), 1);
+        let delivery_directory =
+            std::path::PathBuf::from(&result.attempt.receipts[0].external_reference);
+        assert!(delivery_directory.join("dmg").join("Demo.dmg").is_file());
+        assert!(
+            bundle_directory.join("dmg").join("Demo.dmg").is_file(),
+            "delivery must not replace or clean the provider-native bundle output"
+        );
         assert!(result
             .publish_result
             .as_ref()
             .is_some_and(|publish| publish.success));
+    }
+
+    #[test]
+    fn tauri_manifest_entries_carry_roles_platform_and_architecture() {
+        let repository = tempfile::tempdir().expect("create repository");
+        write_tauri_app(repository.path(), ".", "1.2.3");
+        initialize_git_repository(repository.path());
+        let (request, resolved) = tauri_prepare_request(
+            repository.path(),
+            &repository.path().join("src-tauri/tauri.conf.json"),
+        );
+        let prepared =
+            super::prepare_runtime(request, resolved, None).expect("prepare tauri configuration");
+        let sealed = decoded_runtime_token(&prepared);
+        let release_value = |key: &str| {
+            sealed
+                .snapshot
+                .release_input
+                .get(key)
+                .and_then(serde_json::Value::as_str)
+                .expect("sealed release input value")
+                .to_string()
+        };
+        let bundle_directory = tauri_bundle_directory(repository.path());
+        let source_guard = super::PreparedSourceGuard::from_snapshot(&sealed.snapshot)
+            .expect("restore source guard");
+        let registry = super::build_execution_registry(
+            &sealed.snapshot,
+            &release_value("provider_output_directory"),
+            &release_value("delivery_directory"),
+            source_guard,
+            Arc::new(FakeTauriBuild::new(bundle_directory)),
+            Arc::new(Mutex::new(None)),
+        )
+        .expect("build execution registry");
+
+        let view = PublishRuntime::new(registry)
+            .start_attempt(
+                &sealed,
+                StartPublishAttempt::new(
+                    "attempt-roles",
+                    "run-roles",
+                    super::release_identity(&sealed.snapshot).expect("release identity"),
+                ),
+            )
+            .expect("run tauri attempt");
+
+        let manifest = view.manifest.expect("sealed artifact manifest");
+        let entries = manifest
+            .artifacts
+            .iter()
+            .map(|entry| {
+                (
+                    entry.file_name.as_str(),
+                    entry.role.as_str(),
+                    entry.media_type.as_str(),
+                )
+            })
+            .collect::<Vec<_>>();
+        assert_eq!(
+            entries,
+            vec![
+                ("dmg/Demo.dmg", "installer", "application/x-apple-diskimage"),
+                (
+                    "macos/Demo.app.tar.gz",
+                    "updater-archive",
+                    "application/gzip"
+                ),
+                (
+                    "macos/Demo.app.tar.gz.sig",
+                    "updater-signature",
+                    "application/octet-stream"
+                ),
+            ]
+        );
+        for entry in &manifest.artifacts {
+            assert_eq!(entry.platform, std::env::consts::OS);
+            assert_eq!(entry.architecture, std::env::consts::ARCH);
+            assert!(
+                std::path::Path::new(&entry.locator).is_file(),
+                "manifest locator must point at the stored artifact: {}",
+                entry.locator
+            );
+        }
+    }
+
+    #[test]
+    fn tauri_build_failure_stops_delivery_and_keeps_the_root_cause() {
+        let repository = tempfile::tempdir().expect("create repository");
+        write_tauri_app(repository.path(), ".", "1.2.3");
+        initialize_git_repository(repository.path());
+        let (request, resolved) = tauri_prepare_request(
+            repository.path(),
+            &repository.path().join("src-tauri/tauri.conf.json"),
+        );
+        let prepared =
+            super::prepare_runtime(request, resolved, None).expect("prepare tauri configuration");
+        let bundle_directory = tauri_bundle_directory(repository.path());
+        let build = Arc::new(FakeTauriBuild::failing(
+            bundle_directory,
+            "tauri build exited with code 101",
+        ));
+
+        let result = start_runtime_with_port(
+            StartPublishRuntimeRequest {
+                runtime_token: prepared.runtime_token,
+            },
+            Arc::clone(&build) as Arc<dyn ProviderExecutionPort>,
+            AttemptIdentity {
+                attempt_id: "attempt-build-failed".to_string(),
+                backend_run_id: "run-build-failed".to_string(),
+            },
+        )
+        .expect("build failure must reduce to a failed attempt");
+
+        assert_eq!(result.attempt.status, RuntimeAttemptStatus::Failed);
+        assert!(result.attempt.manifest.is_none());
+        assert!(result.attempt.receipts.is_empty());
+        assert!(result
+            .attempt
+            .error
+            .as_deref()
+            .is_some_and(|error| error.contains("tauri build exited with code 101")));
+        assert!(!result.publish_result.expect("failed build result").success);
+    }
+
+    #[test]
+    fn tauri_workspace_build_records_head_dirty_state_and_a_stable_digest() {
+        let repository = tempfile::tempdir().expect("create repository");
+        write_tauri_app(repository.path(), ".", "1.2.3");
+        initialize_git_repository(repository.path());
+        let draft = repository.path().join("notes.md");
+        std::fs::write(&draft, "uncommitted draft").expect("write uncommitted source");
+        let request_pair = || {
+            tauri_prepare_request(
+                repository.path(),
+                &repository.path().join("src-tauri/tauri.conf.json"),
+            )
+        };
+
+        let (request, resolved) = request_pair();
+        let first =
+            super::prepare_runtime(request, resolved, None).expect("prepare workspace build");
+        let (request, resolved) = request_pair();
+        let second = super::prepare_runtime(request, resolved, None)
+            .expect("re-prepare unchanged workspace build");
+
+        let first_source = decoded_runtime_token(&first).snapshot.source;
+        let second_source = decoded_runtime_token(&second).snapshot.source;
+        let head = {
+            let output = Command::new("git")
+                .arg("-C")
+                .arg(repository.path())
+                .args(["rev-parse", "HEAD"])
+                .output()
+                .expect("read fixture HEAD");
+            String::from_utf8_lossy(&output.stdout).trim().to_string()
+        };
+        assert_eq!(first_source.revision, head);
+        assert!(first_source.dirty);
+        assert!(!first_source.reproducible);
+        assert!(first_source.workspace_digest.is_some());
+        assert_eq!(
+            first_source.workspace_digest,
+            second_source.workspace_digest
+        );
+
+        let bundle_directory = tauri_bundle_directory(repository.path());
+        let result = start_runtime_with_port(
+            StartPublishRuntimeRequest {
+                runtime_token: second.runtime_token,
+            },
+            Arc::new(FakeTauriBuild::new(bundle_directory)),
+            AttemptIdentity {
+                attempt_id: "attempt-workspace".to_string(),
+                backend_run_id: "run-workspace".to_string(),
+            },
+        )
+        .expect("run workspace build");
+
+        assert_eq!(result.attempt.status, RuntimeAttemptStatus::Published);
+        assert_eq!(
+            std::fs::read_to_string(&draft).expect("read uncommitted source"),
+            "uncommitted draft",
+            "workspace builds must not save or modify uncommitted changes"
+        );
+    }
+
+    #[test]
+    fn tauri_build_rejects_an_operation_that_drifts_from_the_sealed_driver() {
+        use publish_adapters::AdapterExecutionContext;
+
+        let repository = tempfile::tempdir().expect("create repository");
+        write_tauri_app(repository.path(), ".", "1.2.3");
+        let provider = super::TauriRuntimeProvider::new(
+            "src-tauri/tauri.conf.json".to_string(),
+            "pnpm".to_string(),
+            repository.path().to_path_buf(),
+            None,
+        );
+        let settings = publish_domain::AdapterSettings::new(1)
+            .with_value(
+                "config_path",
+                serde_json::Value::String("src-tauri/tauri.conf.json".to_string()),
+            )
+            .with_value(
+                "build_driver",
+                serde_json::Value::String("pnpm".to_string()),
+            );
+        let drifted = publish_domain::PlanNode {
+            id: "project.build".to_string(),
+            stage: publish_domain::PlanStage::Build,
+            adapter: publish_domain::AdapterIdentity::new(
+                publish_domain::AdapterKind::ProjectProvider,
+                "tauri",
+                1,
+            ),
+            binding_id: "project".to_string(),
+            settings,
+            operation: publish_domain::PlanOperation::RunProgram {
+                program: "tauri-driver:yarn".to_string(),
+                args: vec![
+                    "tauri".to_string(),
+                    "build".to_string(),
+                    "--config".to_string(),
+                    "src-tauri/tauri.conf.json".to_string(),
+                ],
+                working_directory: None,
+                environment_references: BTreeMap::new(),
+            },
+            depends_on: Vec::new(),
+            artifact_inputs: Vec::new(),
+            artifact_outputs: Vec::new(),
+            side_effects: Vec::new(),
+            irreversible: false,
+        };
+        let context = AdapterExecutionContext {
+            attempt_id: "attempt-drift",
+            plan_digest: "plan-digest",
+            snapshot_digest: "snapshot-digest",
+            artifacts: &[],
+            manifest: None,
+            receipts: &[],
+        };
+
+        let error = publish_adapters::AdapterContract::execute_node(&provider, &drifted, &context)
+            .expect_err("a drifted build operation must never execute");
+
+        assert!(
+            error
+                .to_string()
+                .contains("is not the sealed tauri build operation"),
+            "unexpected error: {error}"
+        );
     }
 
     #[test]

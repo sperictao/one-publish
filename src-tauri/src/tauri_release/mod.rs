@@ -16,6 +16,14 @@ use crate::errors::AppError;
 use std::collections::BTreeSet;
 use std::path::{Component, Path};
 
+/// 供通用 PublishRuntime 读取仓库的 Tauri 发布配置（例如 Release Gate）；
+/// 配置缺失不是错误，由调用方决定语义。
+pub(crate) fn stored_release_config(
+    repository_id: &str,
+) -> Result<Option<TauriReleaseConfig>, AppError> {
+    storage::get_config(repository_id)
+}
+
 #[tauri::command]
 pub fn inspect_tauri_repository(
     repository_path: String,
