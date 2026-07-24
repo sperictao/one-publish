@@ -4,19 +4,20 @@ use std::path::{Path, PathBuf};
 
 use publish_domain::{
     sha256_hex, AdapterDescriptor, AdapterKind, AdapterSchema, AdapterSettings, ArtifactManifest,
-    ArtifactManifestEntry, Capability, CapabilityRequirement, DeliveryReceipt, PlanNode,
-    PlanNodeTemplate, PlanSideEffect, PlanStage, PlanningInputSnapshot, PublishError, PublishPlan,
-    PublishingCapability,
+    ArtifactManifestEntry, Capability, CapabilityRequirement, DeliveryEnvelope, DeliveryReceipt,
+    PlanNode, PlanNodeTemplate, PlanSideEffect, PlanStage, PlanningInputSnapshot, PublishError,
+    PublishPlan, PublishingCapability,
 };
 use serde_json::Value;
 
 use crate::{
-    AdapterContract, AdapterExecutionContext, AdapterExecutionOutput, ArtifactStore,
-    DeliveryDestination, ExecutionBackend, PlanNodeExecutor, ARTIFACT_VERIFIED_CAPABILITY,
-    STRUCTURED_PLAN_EXECUTION_CAPABILITY,
+    action_name, require_action, AdapterContract, AdapterExecutionContext, AdapterExecutionOutput,
+    ArtifactStore, DeliveryDestination, ExecutionBackend, PlanNodeExecutor,
+    ARTIFACT_VERIFIED_CAPABILITY, STRUCTURED_PLAN_EXECUTION_CAPABILITY,
 };
 
 const STORED_ARTIFACT: &str = "stored-artifact";
+const DELIVERY_DIRECTORY_KEY: &str = "delivery_directory";
 
 pub struct LocalExecutionBackend {
     descriptor: AdapterDescriptor,
@@ -237,22 +238,14 @@ impl AdapterContract for LocalDirectoryDestination {
         node: &PlanNode,
         context: &AdapterExecutionContext<'_>,
     ) -> Result<AdapterExecutionOutput, PublishError> {
-        if action_name(node)? == "stage_local_directory" {
-            return Ok(AdapterExecutionOutput::default());
-        }
-        require_action(node, "publish_local_directory")?;
         let manifest = context
             .manifest
             .ok_or(PublishError::MissingArtifactManifest)?;
-        let delivery_root = PathBuf::from(
-            node.settings
-                .string("directory", &self.descriptor.identity().display_name())?,
-        );
-        let attempt_directory = format!(
-            "attempt-{}",
-            &sha256_hex(context.attempt_id.as_bytes())[..24]
-        );
-        let directory = delivery_root.join(attempt_directory);
+        if action_name(node)? == "stage_local_directory" {
+            return self.stage_envelope(node, context, manifest);
+        }
+        require_action(node, "publish_local_directory")?;
+        let directory = staged_delivery_directory(node, context)?;
         create_directory(&directory)?;
 
         for artifact in &manifest.artifacts {
@@ -283,28 +276,58 @@ impl AdapterContract for LocalDirectoryDestination {
     }
 }
 
+impl LocalDirectoryDestination {
+    /// Staging 从封存 Manifest、发布输入和路线设置派生路线专属交付目录，
+    /// 并把它作为 Delivery Envelope 记录；它不改写共享产物（ADR-0055）。
+    fn stage_envelope(
+        &self,
+        node: &PlanNode,
+        context: &AdapterExecutionContext<'_>,
+        manifest: &ArtifactManifest,
+    ) -> Result<AdapterExecutionOutput, PublishError> {
+        let delivery_root = PathBuf::from(
+            node.settings
+                .string("directory", &self.descriptor.identity().display_name())?,
+        );
+        let attempt_directory = format!(
+            "attempt-{}",
+            &sha256_hex(context.attempt_id.as_bytes())[..24]
+        );
+        let directory = delivery_root.join(attempt_directory);
+        Ok(AdapterExecutionOutput {
+            envelopes: vec![DeliveryEnvelope::new(
+                node.binding_id.clone(),
+                manifest.digest.clone(),
+            )
+            .with_content(
+                DELIVERY_DIRECTORY_KEY,
+                Value::String(directory.to_string_lossy().to_string()),
+            )],
+            ..AdapterExecutionOutput::default()
+        })
+    }
+}
+
+fn staged_delivery_directory(
+    node: &PlanNode,
+    context: &AdapterExecutionContext<'_>,
+) -> Result<PathBuf, PublishError> {
+    context
+        .envelopes
+        .iter()
+        .find(|envelope| envelope.route_id == node.binding_id)
+        .and_then(|envelope| envelope.content.get(DELIVERY_DIRECTORY_KEY))
+        .and_then(Value::as_str)
+        .map(PathBuf::from)
+        .ok_or_else(|| {
+            PublishError::Execution(format!(
+                "route {} has no staged delivery envelope with a delivery directory",
+                node.binding_id
+            ))
+        })
+}
+
 impl DeliveryDestination for LocalDirectoryDestination {}
-
-fn action_name(node: &PlanNode) -> Result<&str, PublishError> {
-    match &node.operation {
-        publish_domain::PlanOperation::AdapterAction { action, .. } => Ok(action),
-        _ => Err(PublishError::Execution(format!(
-            "node {} is not an adapter action",
-            node.id
-        ))),
-    }
-}
-
-fn require_action(node: &PlanNode, expected: &str) -> Result<(), PublishError> {
-    let actual = action_name(node)?;
-    if actual != expected {
-        return Err(PublishError::Execution(format!(
-            "node {} expected action {expected}, got {actual}",
-            node.id
-        )));
-    }
-    Ok(())
-}
 
 fn create_directory(path: &Path) -> Result<(), PublishError> {
     fs::create_dir_all(path).map_err(|error| PublishError::Io {

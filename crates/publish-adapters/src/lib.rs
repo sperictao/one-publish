@@ -3,17 +3,23 @@ use std::sync::Arc;
 
 use publish_domain::{
     AdapterDescriptor, AdapterIdentity, AdapterKind, AdapterSettings, ArtifactCandidate,
-    ArtifactManifest, AutomationBindingProjection, AutomationProjectionBundle, DeliveryReceipt,
-    PlanNode, PlanNodeTemplate, PlanOperation, PlanningInputSnapshot, ProjectCandidate,
-    PublishError, PublishPlan, ADAPTER_CONTRACT_VERSION,
+    ArtifactManifest, AutomationBindingProjection, AutomationProjectionBundle, DeliveryEnvelope,
+    DeliveryReceipt, PlanNode, PlanNodeTemplate, PlanOperation, PlanStage, PlanningInputSnapshot,
+    ProjectCandidate, PublishError, PublishPlan, ADAPTER_CONTRACT_VERSION,
 };
+use serde_json::Value;
 
 mod fake;
 mod local;
+mod processors;
 pub mod tauri;
 
 pub use fake::{FakeAutomationBackend, FAKE_AUTOMATION_BACKEND_ID};
 pub use local::{LocalDirectoryDestination, LocalExecutionBackend, TemporaryArtifactStore};
+pub use processors::{
+    ChecksumProcessor, CustomCommandProcessor, CHECKSUM_MANIFEST_ROLE, CHECKSUM_PROCESSOR_ID,
+    CUSTOM_COMMAND_GATE_CAPABILITY, CUSTOM_COMMAND_PROCESSOR_ID,
+};
 pub use tauri::{
     TauriBuildDriver, TauriProjectInspection, TauriProjectProvider, TauriVersionSource,
     TauriVersionSourceKind, VersionMirror, VersionMirrorKind, TAURI_INSPECT_ACTION,
@@ -22,7 +28,29 @@ pub use tauri::{
 
 pub const AUTOMATION_PROJECTION_CAPABILITY: &str = "automation-projection";
 pub const STRUCTURED_PLAN_EXECUTION_CAPABILITY: &str = "structured-plan-execution";
+pub const ARTIFACT_CANDIDATE_CAPABILITY: &str = "artifact-candidate";
 pub const ARTIFACT_VERIFIED_CAPABILITY: &str = "artifact-verified";
+
+pub(crate) fn action_name(node: &PlanNode) -> Result<&str, PublishError> {
+    match &node.operation {
+        PlanOperation::AdapterAction { action, .. } => Ok(action),
+        _ => Err(PublishError::Execution(format!(
+            "node {} is not an adapter action",
+            node.id
+        ))),
+    }
+}
+
+pub(crate) fn require_action(node: &PlanNode, expected: &str) -> Result<(), PublishError> {
+    let actual = action_name(node)?;
+    if actual != expected {
+        return Err(PublishError::Execution(format!(
+            "node {} expected action {expected}, got {actual}",
+            node.id
+        )));
+    }
+    Ok(())
+}
 
 #[derive(Debug)]
 pub struct AdapterExecutionContext<'a> {
@@ -31,6 +59,7 @@ pub struct AdapterExecutionContext<'a> {
     pub snapshot_digest: &'a str,
     pub artifacts: &'a [ArtifactCandidate],
     pub manifest: Option<&'a ArtifactManifest>,
+    pub envelopes: &'a [DeliveryEnvelope],
     pub receipts: &'a [DeliveryReceipt],
 }
 
@@ -38,6 +67,7 @@ pub struct AdapterExecutionContext<'a> {
 pub struct AdapterExecutionOutput {
     pub artifacts: Vec<ArtifactCandidate>,
     pub manifest: Option<ArtifactManifest>,
+    pub envelopes: Vec<DeliveryEnvelope>,
     pub receipts: Vec<DeliveryReceipt>,
 }
 
@@ -515,6 +545,16 @@ fn validate_descriptor(
             message: "allowed programs must be namespaced opaque executable ids".to_string(),
         });
     }
+    if descriptor.kind == AdapterKind::ArtifactProcessor
+        && (descriptor.capabilities.provides.is_empty()
+            || descriptor.capabilities.requires.is_empty())
+    {
+        return Err(PublishError::InvalidAdapter {
+            adapter: descriptor.identity().display_name(),
+            message: "artifact processors must declare input and output publishing capabilities"
+                .to_string(),
+        });
+    }
     Ok(())
 }
 
@@ -546,6 +586,9 @@ fn validate_fragment(
             });
         }
         validate_operation(descriptor, &node.operation)?;
+        if descriptor.kind == AdapterKind::ArtifactProcessor {
+            validate_processor_node(descriptor, node)?;
+        }
     }
 
     let serialized = serde_json::to_string(&(settings, nodes)).map_err(|error| {
@@ -578,6 +621,40 @@ fn validate_operation(
                 message: format!("program {program} is not declared by the adapter"),
             });
         }
+    }
+    Ok(())
+}
+
+/// 处理器节点的可复用合同：只在 ProcessArtifacts 阶段运行、显式声明输入角色，
+/// 且输出角色必须精确（通配输出会让未声明产物进入计划，ADR-0035/ADR-0049）。
+fn validate_processor_node(
+    descriptor: &AdapterDescriptor,
+    node: &PlanNodeTemplate,
+) -> Result<(), PublishError> {
+    if node.stage != PlanStage::ProcessArtifacts {
+        return Err(PublishError::InvalidAdapter {
+            adapter: descriptor.identity().display_name(),
+            message: "artifact processor plan nodes must run in the process_artifacts stage"
+                .to_string(),
+        });
+    }
+    if node.artifact_inputs.is_empty() {
+        return Err(PublishError::InvalidAdapter {
+            adapter: descriptor.identity().display_name(),
+            message: "artifact processor plan nodes must declare their artifact role inputs"
+                .to_string(),
+        });
+    }
+    if node
+        .artifact_outputs
+        .iter()
+        .any(|role| publish_domain::is_artifact_role_wildcard(role))
+    {
+        return Err(PublishError::InvalidAdapter {
+            adapter: descriptor.identity().display_name(),
+            message: "artifact processor plan nodes must declare exact artifact role outputs"
+                .to_string(),
+        });
     }
     Ok(())
 }
@@ -620,6 +697,9 @@ fn validate_settings_against_schema(
             publish_domain::AdapterSchemaValueType::String => value.is_string(),
             publish_domain::AdapterSchemaValueType::Boolean => value.is_boolean(),
             publish_domain::AdapterSchemaValueType::Number => value.is_number(),
+            publish_domain::AdapterSchemaValueType::StringList => value
+                .as_array()
+                .is_some_and(|values| values.iter().all(Value::is_string)),
         };
         if !valid {
             return Err(PublishError::InvalidAdapterSettings {

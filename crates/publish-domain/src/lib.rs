@@ -156,6 +156,17 @@ impl AdapterSchema {
         );
         self
     }
+
+    pub fn with_required_string_list(mut self, key: impl Into<String>) -> Self {
+        self.fields.insert(
+            key.into(),
+            AdapterSchemaField {
+                value_type: AdapterSchemaValueType::StringList,
+                required: true,
+            },
+        );
+        self
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -170,6 +181,7 @@ pub enum AdapterSchemaValueType {
     String,
     Boolean,
     Number,
+    StringList,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -319,6 +331,22 @@ impl AdapterSettings {
                 message: format!("{key} must be a string"),
             }
         })
+    }
+
+    pub fn string_list(&self, key: &str, adapter: &str) -> Result<Vec<String>, PublishError> {
+        self.values
+            .get(key)
+            .and_then(Value::as_array)
+            .and_then(|values| {
+                values
+                    .iter()
+                    .map(|value| value.as_str().map(str::to_string))
+                    .collect::<Option<Vec<_>>>()
+            })
+            .ok_or_else(|| PublishError::InvalidAdapterSettings {
+                adapter: adapter.to_string(),
+                message: format!("{key} must be a list of strings"),
+            })
     }
 }
 
@@ -704,6 +732,7 @@ impl ArtifactManifest {
                 "cannot seal an empty artifact manifest".to_string(),
             ));
         }
+        validate_unique_file_names(&artifacts)?;
         for artifact in &artifacts {
             artifact.validate()?;
         }
@@ -744,6 +773,7 @@ impl ArtifactManifest {
                 "artifact manifest cannot be empty".to_string(),
             ));
         }
+        validate_unique_file_names(&self.artifacts)?;
         for artifact in &self.artifacts {
             artifact.validate()?;
         }
@@ -783,6 +813,20 @@ impl ArtifactManifestEntry {
     }
 }
 
+fn validate_unique_file_names(artifacts: &[ArtifactManifestEntry]) -> Result<(), PublishError> {
+    let mut file_names = BTreeSet::new();
+    for artifact in artifacts {
+        if !file_names.insert(artifact.file_name.as_str()) {
+            return Err(PublishError::InvalidArtifact {
+                artifact: artifact.file_name.clone(),
+                message: "one artifact set cannot carry conflicting entries for one file name"
+                    .to_string(),
+            });
+        }
+    }
+    Ok(())
+}
+
 fn validate_artifact_metadata(
     file_name: &str,
     role: &str,
@@ -819,6 +863,20 @@ pub fn is_safe_portable_relative_path(path: &str) -> bool {
             .all(|component| !component.is_empty() && component != "." && component != "..")
 }
 
+/// 声明的 Artifact Role 是否覆盖某个具体角色：精确条目逐一匹配；`:*` 结尾的
+/// 通配条目表示声明方接受任意角色，仅用于构建发现式输出（例如 Provider 的
+/// `provider-output:*`），处理器输出禁止使用通配（ADR-0035）。
+pub fn declares_artifact_role(declared: &[String], role: &str) -> bool {
+    declared
+        .iter()
+        .any(|entry| entry == role || is_artifact_role_wildcard(entry))
+}
+
+/// 通配角色声明的唯一判定，供计划校验与运行时准入共用。
+pub fn is_artifact_role_wildcard(entry: &str) -> bool {
+    entry.ends_with(":*")
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum DeliveryStatus {
@@ -841,6 +899,39 @@ pub struct DeliveryReceipt {
     pub manifest_digest: String,
     pub status: DeliveryStatus,
     pub external_reference: String,
+}
+
+/// 路线专属交付封装：交付目标在 staging 阶段从封存 Manifest、发布输入和路线设置
+/// 派生的目标原生元数据；它只属于一条路线，不能修改共享产物或替换 Manifest（ADR-0055）。
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct DeliveryEnvelope {
+    pub route_id: String,
+    pub manifest_digest: String,
+    pub content: BTreeMap<String, Value>,
+}
+
+impl DeliveryEnvelope {
+    pub fn new(route_id: impl Into<String>, manifest_digest: impl Into<String>) -> Self {
+        Self {
+            route_id: route_id.into(),
+            manifest_digest: manifest_digest.into(),
+            content: BTreeMap::new(),
+        }
+    }
+
+    pub fn with_content(mut self, key: impl Into<String>, value: Value) -> Self {
+        self.content.insert(key.into(), value);
+        self
+    }
+
+    pub fn validate(&self) -> Result<(), PublishError> {
+        if self.route_id.trim().is_empty() || self.manifest_digest.trim().is_empty() {
+            return Err(PublishError::Execution(
+                "delivery envelopes require a route id and a sealed manifest digest".to_string(),
+            ));
+        }
+        Ok(())
+    }
 }
 
 impl DeliveryReceipt {

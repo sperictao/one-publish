@@ -3499,6 +3499,7 @@ mod tests {
             snapshot_digest: "snapshot-digest",
             artifacts: &[],
             manifest: None,
+            envelopes: &[],
             receipts: &[],
         };
 
