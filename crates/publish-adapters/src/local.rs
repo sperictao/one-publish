@@ -12,11 +12,10 @@ use serde_json::Value;
 
 use crate::{
     AdapterContract, AdapterExecutionContext, AdapterExecutionOutput, ArtifactStore,
-    DeliveryDestination, ExecutionBackend, PlanNodeExecutor,
+    DeliveryDestination, ExecutionBackend, PlanNodeExecutor, ARTIFACT_VERIFIED_CAPABILITY,
+    STRUCTURED_PLAN_EXECUTION_CAPABILITY,
 };
 
-const STRUCTURED_PLAN_EXECUTION: &str = "structured-plan-execution";
-const ARTIFACT_VERIFIED: &str = "artifact-verified";
 const STORED_ARTIFACT: &str = "stored-artifact";
 
 pub struct LocalExecutionBackend {
@@ -32,7 +31,7 @@ impl LocalExecutionBackend {
                 1,
                 AdapterSchema::new(1),
                 PublishingCapability {
-                    provides: vec![Capability::new(STRUCTURED_PLAN_EXECUTION, 1)],
+                    provides: vec![Capability::new(STRUCTURED_PLAN_EXECUTION_CAPABILITY, 1)],
                     requires: vec![],
                 },
             ),
@@ -92,7 +91,10 @@ impl TemporaryArtifactStore {
                 AdapterSchema::new(1).with_required_string("root_directory"),
                 PublishingCapability {
                     provides: vec![Capability::new(STORED_ARTIFACT, 1)],
-                    requires: vec![CapabilityRequirement::exact(ARTIFACT_VERIFIED, 1)],
+                    requires: vec![CapabilityRequirement::exact(
+                        ARTIFACT_VERIFIED_CAPABILITY,
+                        1,
+                    )],
                 },
             ),
             default_root: default_root.as_ref().to_string_lossy().to_string(),

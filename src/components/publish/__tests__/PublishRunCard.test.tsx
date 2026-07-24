@@ -389,6 +389,109 @@ describe("PublishRunCard", () => {
     expect(screen.getByTestId("publish-execute-btn")).toBeDisabled();
   });
 
+  it("选中 Tauri 配置时右侧用通用计划展示 Provider 阶段与驱动命令", () => {
+    render(
+      <PublishRunCard
+        outputLog=""
+        publishResult={null}
+        appT={{ outputLogTitle: "执行发布", noOutput: "无输出" }}
+        preparedRuntime={{
+          configurationId: "configuration-tauri",
+          configurationRevisionId: "revision-tauri",
+          command: {
+            program: "pnpm",
+            args: ["tauri", "build"],
+            working_dir: "/repo",
+            display_command: "pnpm tauri build",
+            env: [],
+          },
+          plan: {
+            version: 1,
+            digest: "plan-digest-tauri",
+            snapshotDigest: "snapshot-digest-tauri",
+            executionBackend: "local-execution",
+            nodes: [
+              {
+                id: "project.inspect",
+                stage: "inspect_source",
+                adapterId: "tauri",
+                operation: "inspect_tauri_project",
+                irreversible: false,
+              },
+              {
+                id: "project.build",
+                stage: "build",
+                adapterId: "tauri",
+                operation: "tauri-driver:pnpm",
+                irreversible: false,
+              },
+            ],
+          },
+          blockedReason: null,
+          runtimeToken: "runtime-token-tauri",
+        }}
+        publishActions={{
+          publishCommand: "pnpm tauri build",
+          publishCommandLabel: "将执行的命令:",
+          isPublishing: false,
+          isCancellingPublish: false,
+          startDisabled: false,
+          onStartPublish: vi.fn(),
+          onCancelPublish: vi.fn(),
+        }}
+      />
+    );
+
+    const plan = screen.getByTestId("publish-runtime-plan");
+    expect(plan).toHaveTextContent("inspect_source");
+    expect(plan).toHaveTextContent("build");
+    expect(screen.getByText("pnpm tauri build")).toBeInTheDocument();
+    expect(screen.getByTestId("publish-execute-btn")).toBeEnabled();
+  });
+
+  it("Tauri 检测阻断时展示阻断原因、空计划并禁止执行", () => {
+    render(
+      <PublishRunCard
+        outputLog=""
+        publishResult={null}
+        appT={{ outputLogTitle: "执行发布", noOutput: "无输出" }}
+        preparedRuntime={{
+          configurationId: "configuration-tauri",
+          configurationRevisionId: "revision-tauri",
+          command: {
+            program: "",
+            args: [],
+            working_dir: null,
+            display_command: "",
+            env: [],
+          },
+          plan: {
+            version: 0,
+            digest: "",
+            snapshotDigest: "",
+            executionBackend: "",
+            nodes: [],
+          },
+          blockedReason:
+            "tauri_build_driver_conflict: conflicting Tauri package-manager lockfiles: pnpm, yarn",
+          runtimeToken: "",
+        }}
+        publishActions={{
+          isPublishing: false,
+          isCancellingPublish: false,
+          startDisabled: true,
+          onStartPublish: vi.fn(),
+          onCancelPublish: vi.fn(),
+        }}
+      />
+    );
+
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "tauri_build_driver_conflict"
+    );
+    expect(screen.getByTestId("publish-execute-btn")).toBeDisabled();
+  });
+
   it("展示 Manifest、稳定 Receipt ID 与最终 Delivery Lifecycle", () => {
     render(
       <PublishRunCard

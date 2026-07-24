@@ -93,6 +93,8 @@ pub enum PublishError {
     IncompletePlanExecution { missing: Vec<String> },
     #[error("publish attempt {attempt_id} has already started")]
     AttemptAlreadyStarted { attempt_id: String },
+    #[error("project inspection failed: {code}: {message}")]
+    ProjectInspection { code: String, message: String },
     #[error("adapter execution failed: {0}")]
     Execution(String),
     #[error("I/O operation {operation} failed: {message}")]
@@ -369,6 +371,22 @@ pub struct SourceSnapshot {
     pub dirty: bool,
     pub captured_at: String,
     pub reproducible: bool,
+}
+
+/// 项目发现记录的检测依据：哪个仓库内文件以何种理由标识了候选。
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ProjectDetectionEvidence {
+    pub path: String,
+    pub detail: String,
+}
+
+/// Repository 中发现的可发布项目入口；候选身份稳定且可移植，绑定由发布配置显式建立（ADR-0044）。
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ProjectCandidate {
+    pub identity: String,
+    pub provider_id: String,
+    pub project_root: String,
+    pub evidence: Vec<ProjectDetectionEvidence>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

@@ -4,17 +4,25 @@ use std::sync::Arc;
 use publish_domain::{
     AdapterDescriptor, AdapterIdentity, AdapterKind, AdapterSettings, ArtifactCandidate,
     ArtifactManifest, AutomationBindingProjection, AutomationProjectionBundle, DeliveryReceipt,
-    PlanNode, PlanNodeTemplate, PlanOperation, PlanningInputSnapshot, PublishError, PublishPlan,
-    ADAPTER_CONTRACT_VERSION,
+    PlanNode, PlanNodeTemplate, PlanOperation, PlanningInputSnapshot, ProjectCandidate,
+    PublishError, PublishPlan, ADAPTER_CONTRACT_VERSION,
 };
 
 mod fake;
 mod local;
+pub mod tauri;
 
 pub use fake::{FakeAutomationBackend, FAKE_AUTOMATION_BACKEND_ID};
 pub use local::{LocalDirectoryDestination, LocalExecutionBackend, TemporaryArtifactStore};
+pub use tauri::{
+    TauriBuildDriver, TauriProjectInspection, TauriProjectProvider, TauriVersionSource,
+    TauriVersionSourceKind, VersionMirror, VersionMirrorKind, TAURI_INSPECT_ACTION,
+    TAURI_PROVIDER_ID,
+};
 
 pub const AUTOMATION_PROJECTION_CAPABILITY: &str = "automation-projection";
+pub const STRUCTURED_PLAN_EXECUTION_CAPABILITY: &str = "structured-plan-execution";
+pub const ARTIFACT_VERIFIED_CAPABILITY: &str = "artifact-verified";
 
 #[derive(Debug)]
 pub struct AdapterExecutionContext<'a> {
@@ -94,7 +102,15 @@ pub trait AdapterContract: Send + Sync {
     }
 }
 
-pub trait ProjectProvider: AdapterContract {}
+pub trait ProjectProvider: AdapterContract {
+    /// 在 Repository 中发现项目候选；发现结果只报告候选与依据，不建立或覆盖绑定（ADR-0044）。
+    fn discover_candidates(
+        &self,
+        _repository_root: &std::path::Path,
+    ) -> Result<Vec<ProjectCandidate>, PublishError> {
+        Ok(Vec::new())
+    }
+}
 pub trait ArtifactProcessor: AdapterContract {}
 
 pub trait ExecutionBackend: AdapterContract {

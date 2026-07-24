@@ -7,3 +7,10 @@ rust-version.workspace = true
 [dependencies]
 publish-domain = { path = "../publish-domain" }
 serde_json.workspace = true
+json5.workspace = true
+semver.workspace = true
+serde.workspace = true
+toml_edit.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true

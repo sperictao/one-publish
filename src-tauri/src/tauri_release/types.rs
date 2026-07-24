@@ -18,16 +18,6 @@ pub enum TauriBuildDriver {
 }
 
 impl TauriBuildDriver {
-    pub(crate) fn command(self) -> (&'static str, &'static [&'static str]) {
-        match self {
-            Self::Pnpm => ("pnpm", &["tauri", "build"]),
-            Self::Npm => ("npm", &["run", "tauri", "--", "build"]),
-            Self::Yarn => ("yarn", &["tauri", "build"]),
-            Self::Bun => ("bun", &["tauri", "build"]),
-            Self::Cargo => ("cargo", &["tauri", "build"]),
-        }
-    }
-
     pub(crate) fn name(self) -> &'static str {
         match self {
             Self::Pnpm => "pnpm",
@@ -35,6 +25,18 @@ impl TauriBuildDriver {
             Self::Yarn => "yarn",
             Self::Bun => "bun",
             Self::Cargo => "cargo",
+        }
+    }
+}
+
+impl From<publish_adapters::TauriBuildDriver> for TauriBuildDriver {
+    fn from(driver: publish_adapters::TauriBuildDriver) -> Self {
+        match driver {
+            publish_adapters::TauriBuildDriver::Pnpm => Self::Pnpm,
+            publish_adapters::TauriBuildDriver::Npm => Self::Npm,
+            publish_adapters::TauriBuildDriver::Yarn => Self::Yarn,
+            publish_adapters::TauriBuildDriver::Bun => Self::Bun,
+            publish_adapters::TauriBuildDriver::Cargo => Self::Cargo,
         }
     }
 }

@@ -3575,8 +3575,12 @@ dependencies = [
 name = "publish-adapters"
 version = "0.1.0"
 dependencies = [
+ "json5",
  "publish-domain",
+ "semver",
+ "serde",
  "serde_json",
+ "toml_edit 0.23.10+spec-1.0.0",
 ]
 
 [[package]]

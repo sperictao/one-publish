@@ -161,7 +161,7 @@ impl Provider for BuiltInProvider {
     fn resolve_working_dir(&self, spec: &PublishSpec) -> Option<PathBuf> {
         let path = PathBuf::from(&spec.project_path);
         match self.kind {
-            BuiltInProviderKind::Tauri => super::providers::tauri::resolve_app_root(&path),
+            BuiltInProviderKind::Tauri => publish_adapters::tauri::resolve_app_root(&path),
             BuiltInProviderKind::Dotnet => path.parent().map(Path::to_path_buf),
             BuiltInProviderKind::Cargo => resolve_provider_project_dir(path, &["Cargo.toml"]),
             BuiltInProviderKind::Go => resolve_provider_project_dir(path, &["go.mod"]),
