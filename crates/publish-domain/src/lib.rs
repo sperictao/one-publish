@@ -19,6 +19,14 @@ pub enum PublishError {
     UnsupportedSnapshotVersion { actual: u32, expected: u32 },
     #[error("unsupported publish plan version {actual}; expected {expected}")]
     UnsupportedPlanVersion { actual: u32, expected: u32 },
+    #[error("unsupported publish event version {actual}; expected {expected}")]
+    UnsupportedEventVersion { actual: u32, expected: u32 },
+    #[error("unsupported release attempt version {actual}; expected {expected}")]
+    UnsupportedAttemptVersion { actual: u32, expected: u32 },
+    #[error(
+        "publish event history has unexplained sequence gaps; missing ranges {missing:?} must be requested explicitly before the state can advance"
+    )]
+    EventSequenceGap { missing: Vec<(u64, u64)> },
     #[error("unsupported adapter contract version {actual}; expected {expected}")]
     UnsupportedAdapterContractVersion { actual: u32, expected: u32 },
     #[error("adapter {kind:?}/{id}@{version} is not registered")]
@@ -1159,6 +1167,14 @@ pub enum PublishAttemptStatus {
     Failed,
 }
 
+/// 事件历史观察到的计划节点状态；被跳过的节点不产生事件，因此不出现（ADR-0057）。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum PlanNodeExecutionState {
+    Completed,
+    Failed,
+}
+
 /// 单条交付路线的聚合结果：状态、外部引用与错误按路线呈现，
 /// 只有 Published 满足 Required Route（ADR-0039）。
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -1191,7 +1207,12 @@ pub struct PublishAttemptView {
     pub status: PublishAttemptStatus,
     pub manifest: Option<ArtifactManifest>,
     pub events: Vec<PublishEvent>,
+    /// 每个 Receipt 的当前修订；完整修订历史在 receipt_history 里（ADR-0057）。
     pub receipts: Vec<DeliveryReceipt>,
+    /// 同一 Receipt ID 下的全部不可变修订，按因果归约顺序排列。
+    pub receipt_history: Vec<DeliveryReceipt>,
+    /// 事件历史观察到的计划节点状态，重启后据此识别已执行节点。
+    pub node_states: BTreeMap<String, PlanNodeExecutionState>,
     pub routes: Vec<RouteDeliveryView>,
     /// 不影响聚合成功的可见警告，例如 Optional Route 失败（ADR-0022）。
     pub warnings: Vec<String>,

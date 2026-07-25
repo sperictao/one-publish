@@ -7,10 +7,10 @@ use publish_adapters::{
 use publish_domain::{
     declares_artifact_role, sha256_hex, AdapterBinding, AdapterIdentity, AdapterKind,
     ArtifactCandidate, ArtifactManifest, DeliveryEnvelope, DeliveryReceipt, DeliveryStatus,
-    PlanNode, PlanRoute, PlanStage, PlanningInputSnapshot, PublishAttemptStatus,
-    PublishAttemptView, PublishError, PublishEvent, PublishOutcome, PublishPlan, ReleaseAttempt,
-    ReleaseIdentity, RouteDeliveryView, DELIVERY_RECEIPT_VERSION, PUBLISH_EVENT_VERSION,
-    PUBLISH_PLAN_VERSION, RELEASE_ATTEMPT_VERSION,
+    PlanNode, PlanNodeExecutionState, PlanRoute, PlanStage, PlanningInputSnapshot,
+    PublishAttemptStatus, PublishAttemptView, PublishError, PublishEvent, PublishOutcome,
+    PublishPlan, ReleaseAttempt, ReleaseIdentity, RouteDeliveryView, DELIVERY_RECEIPT_VERSION,
+    PUBLISH_EVENT_VERSION, PUBLISH_PLAN_VERSION, RELEASE_ATTEMPT_VERSION,
 };
 use publish_planner::PublishPlanner;
 use serde::{Deserialize, Serialize};
@@ -26,7 +26,11 @@ pub struct PreparedPublishPlan {
 pub struct ReducedPublishEvents {
     pub status: PublishAttemptStatus,
     pub manifest_digest: Option<String>,
+    /// 每个 Receipt 的当前修订；完整不可变修订历史在 receipt_history 里。
     pub receipts: Vec<DeliveryReceipt>,
+    pub receipt_history: Vec<DeliveryReceipt>,
+    /// 事件历史观察到的计划节点状态（ADR-0057）。
+    pub node_states: BTreeMap<String, PlanNodeExecutionState>,
     pub routes: Vec<RouteDeliveryView>,
     pub warnings: Vec<String>,
     pub error: Option<String>,
@@ -38,6 +42,8 @@ pub fn reduce_publish_events(
 ) -> Result<ReducedPublishEvents, PublishError> {
     let mut manifest_digest = None;
     let mut receipts = BTreeMap::<String, DeliveryReceipt>::new();
+    let mut receipt_history = Vec::new();
+    let mut node_states = BTreeMap::new();
     let mut route_failures = BTreeMap::<String, String>::new();
     let mut failure = None;
     let mut event_identity: Option<(String, String, String)> = None;
@@ -48,10 +54,10 @@ pub fn reduce_publish_events(
 
     for (index, event) in events.iter().enumerate() {
         if event.version != PUBLISH_EVENT_VERSION {
-            return Err(PublishError::Execution(format!(
-                "unsupported publish event version {}; expected {}",
-                event.version, PUBLISH_EVENT_VERSION
-            )));
+            return Err(PublishError::UnsupportedEventVersion {
+                actual: event.version,
+                expected: PUBLISH_EVENT_VERSION,
+            });
         }
         let expected_sequence = index as u64 + 1;
         if event.sequence != expected_sequence {
@@ -126,10 +132,12 @@ pub fn reduce_publish_events(
                     }
                     Some(existing) => {
                         validate_receipt_transition(existing, &receipt)?;
+                        receipt_history.push(receipt.clone());
                         receipts.insert(receipt.receipt_id.clone(), receipt);
                     }
                     _ => {
                         validate_initial_receipt_revision(&receipt)?;
+                        receipt_history.push(receipt.clone());
                         receipts.insert(receipt.receipt_id.clone(), receipt);
                     }
                 }
@@ -158,8 +166,16 @@ pub fn reduce_publish_events(
                     .map(str::to_string)
                     .unwrap_or_else(|| format!("delivery route {route_id} failed"));
                 route_failures.entry(route_id.to_string()).or_insert(error);
+                node_states.insert(event.plan_node_id.clone(), PlanNodeExecutionState::Failed);
+            }
+            "plan_node_completed" => {
+                node_states.insert(
+                    event.plan_node_id.clone(),
+                    PlanNodeExecutionState::Completed,
+                );
             }
             "plan_node_failed" => {
+                node_states.insert(event.plan_node_id.clone(), PlanNodeExecutionState::Failed);
                 if failure.is_none() {
                     failure = Some(
                         event
@@ -196,6 +212,8 @@ pub fn reduce_publish_events(
         status: aggregate.status,
         manifest_digest,
         receipts: receipts.into_values().collect(),
+        receipt_history,
+        node_states,
         routes: route_views,
         warnings: aggregate.warnings,
         error: failure.or(aggregate.error),
@@ -422,6 +440,216 @@ fn failed_receipt_message(receipt: &DeliveryReceipt) -> String {
         receipt.receipt_id,
         delivery_status_name(receipt.status)
     )
+}
+
+/// 控制面事件账本：以版本化、追加且可去重的 Publish Event 作为一次发布尝试
+/// 的唯一状态事实。乱序批次按因果序号归位，重复事件被吸收，同一序号的冲突
+/// 证据被拒绝而不是 last-write-wins 覆盖；无法解释的缺口阻断状态归约并按
+/// 范围报告，供控制面显式请求缺失区间（ADR-0057）。
+pub struct AttemptEventLog {
+    attempt_id: String,
+    backend_run_id: String,
+    plan_digest: String,
+    events: BTreeMap<u64, PublishEvent>,
+    sequences_by_event_id: BTreeMap<String, u64>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct EventSyncReport {
+    pub accepted: usize,
+    pub duplicates: usize,
+    /// 同步后仍无法解释的序号缺口（闭区间）；非空时归约保持阻断。
+    pub missing: Vec<(u64, u64)>,
+}
+
+impl AttemptEventLog {
+    pub fn new(attempt: &ReleaseAttempt) -> Result<Self, PublishError> {
+        if attempt.version != RELEASE_ATTEMPT_VERSION {
+            return Err(PublishError::UnsupportedAttemptVersion {
+                actual: attempt.version,
+                expected: RELEASE_ATTEMPT_VERSION,
+            });
+        }
+        Ok(Self {
+            attempt_id: attempt.attempt_id.clone(),
+            backend_run_id: attempt.backend_run_id.clone(),
+            plan_digest: attempt.plan_digest.clone(),
+            events: BTreeMap::new(),
+            sequences_by_event_id: BTreeMap::new(),
+        })
+    }
+
+    /// 原子同步一批本地或远端事件：整批验证通过后才提交，被拒绝的批次不留痕迹。
+    pub fn sync(&mut self, incoming: &[PublishEvent]) -> Result<EventSyncReport, PublishError> {
+        let mut staged = BTreeMap::<u64, PublishEvent>::new();
+        let mut duplicates = 0usize;
+        for event in incoming {
+            self.validate_event(event)?;
+            match self
+                .events
+                .get(&event.sequence)
+                .or_else(|| staged.get(&event.sequence))
+            {
+                Some(existing) if existing == event => duplicates += 1,
+                Some(_) => {
+                    return Err(PublishError::Execution(format!(
+                        "publish event sequence {} carries conflicting evidence for attempt {}",
+                        event.sequence, self.attempt_id
+                    )));
+                }
+                None => {
+                    let known_sequence =
+                        self.sequences_by_event_id.get(&event.event_id).or_else(|| {
+                            staged
+                                .values()
+                                .find(|staged_event| staged_event.event_id == event.event_id)
+                                .map(|staged_event| &staged_event.sequence)
+                        });
+                    if known_sequence.is_some() {
+                        return Err(PublishError::Execution(format!(
+                            "publish event {} appears under conflicting sequences",
+                            event.event_id
+                        )));
+                    }
+                    staged.insert(event.sequence, event.clone());
+                }
+            }
+        }
+
+        let accepted = staged.len();
+        for (sequence, event) in staged {
+            self.sequences_by_event_id
+                .insert(event.event_id.clone(), sequence);
+            self.events.insert(sequence, event);
+        }
+        Ok(EventSyncReport {
+            accepted,
+            duplicates,
+            missing: self.missing_ranges(),
+        })
+    }
+
+    fn validate_event(&self, event: &PublishEvent) -> Result<(), PublishError> {
+        if event.version != PUBLISH_EVENT_VERSION {
+            return Err(PublishError::UnsupportedEventVersion {
+                actual: event.version,
+                expected: PUBLISH_EVENT_VERSION,
+            });
+        }
+        if event.attempt_id != self.attempt_id
+            || event.backend_run_id != self.backend_run_id
+            || event.plan_digest != self.plan_digest
+        {
+            return Err(PublishError::Execution(format!(
+                "publish event {} does not belong to attempt {} (backend run {}, plan {})",
+                event.event_id, self.attempt_id, self.backend_run_id, self.plan_digest
+            )));
+        }
+        if event.sequence == 0 || event.event_id.trim().is_empty() {
+            return Err(PublishError::Execution(format!(
+                "publish events require a stable event id and a positive causal sequence, got {} at {}",
+                event.event_id, event.sequence
+            )));
+        }
+        Ok(())
+    }
+
+    /// 已知最大序号之下仍未收到的序号闭区间；因果序列从 1 开始。
+    pub fn missing_ranges(&self) -> Vec<(u64, u64)> {
+        let mut missing = Vec::new();
+        let mut expected = 1u64;
+        for &sequence in self.events.keys() {
+            if sequence > expected {
+                missing.push((expected, sequence - 1));
+            }
+            expected = sequence + 1;
+        }
+        missing
+    }
+
+    /// 以外部声明的最高序号为界报告缺口：尾部截断只有对照后端或远端存储
+    /// 声明的高水位才可检测，报告结果供控制面显式请求缺失范围（ADR-0057）。
+    pub fn missing_ranges_through(&self, last_known_sequence: u64) -> Vec<(u64, u64)> {
+        let mut missing = self.missing_ranges();
+        let next = self
+            .events
+            .keys()
+            .next_back()
+            .map_or(1, |sequence| sequence + 1);
+        if next <= last_known_sequence {
+            missing.push((next, last_known_sequence));
+        }
+        missing
+    }
+
+    /// 去重后的因果序列，按序号升序。
+    pub fn events(&self) -> Vec<PublishEvent> {
+        self.events.values().cloned().collect()
+    }
+
+    /// 确定性归约当前状态；存在无法解释的缺口时阻断并报告缺失范围。
+    pub fn reduce(&self, routes: &[PlanRoute]) -> Result<ReducedPublishEvents, PublishError> {
+        let missing = self.missing_ranges();
+        if !missing.is_empty() {
+            return Err(PublishError::EventSequenceGap { missing });
+        }
+        reduce_publish_events(&self.events(), routes)
+    }
+}
+
+/// 控制面重启后仅凭持久化的 Attempt 记录与事件历史重建当前状态。Attempt
+/// 身份保持稳定（ADR-0040）；Manifest 本体不随事件传输，恢复出的 digest 由
+/// 产物存储另行验证（ADR-0057），因此视图的 manifest 字段为空。
+pub fn recover_attempt_view(
+    attempt: &ReleaseAttempt,
+    routes: &[PlanRoute],
+    events: &[PublishEvent],
+) -> Result<PublishAttemptView, PublishError> {
+    let mut log = AttemptEventLog::new(attempt)?;
+    log.sync(events)?;
+    let projection = log.reduce(routes)?;
+
+    let mut recovered = attempt.clone();
+    // Manifest 绑定只能写入一次：既有绑定与事件归约不一致就是身份冲突（ADR-0040）。
+    match (
+        recovered.manifest_digest.as_deref(),
+        projection.manifest_digest.as_deref(),
+    ) {
+        (Some(bound), Some(reduced)) if bound != reduced => {
+            return Err(PublishError::Execution(format!(
+                "release attempt {} is bound to artifact manifest {bound}, but its events reduce to {reduced}",
+                recovered.attempt_id
+            )));
+        }
+        (None, Some(_)) => recovered.manifest_digest = projection.manifest_digest.clone(),
+        _ => {}
+    }
+    // 推广的尝试可以只带交付观察：Receipt 引用的 Manifest 摘要必须与最终绑定一致。
+    if let Some(bound) = recovered.manifest_digest.as_deref() {
+        if let Some(receipt) = projection
+            .receipts
+            .iter()
+            .find(|receipt| receipt.manifest_digest != bound)
+        {
+            return Err(PublishError::Execution(format!(
+                "delivery receipt {} references manifest {}, but attempt {} is bound to {bound}",
+                receipt.receipt_id, receipt.manifest_digest, recovered.attempt_id
+            )));
+        }
+    }
+
+    Ok(PublishAttemptView {
+        attempt: recovered,
+        status: projection.status,
+        manifest: None,
+        events: log.events(),
+        receipts: projection.receipts,
+        receipt_history: projection.receipt_history,
+        node_states: projection.node_states,
+        routes: projection.routes,
+        warnings: projection.warnings,
+        error: projection.error,
+    })
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -828,6 +1056,8 @@ impl<'a> RuntimeNodeExecutor<'a> {
             manifest: self.manifest.take(),
             events: self.events,
             receipts: projection.receipts,
+            receipt_history: projection.receipt_history,
+            node_states: projection.node_states,
             routes: projection.routes,
             warnings: projection.warnings,
             error: projection.error,
@@ -855,6 +1085,8 @@ impl<'a> RuntimeNodeExecutor<'a> {
             manifest: self.manifest,
             events: self.events,
             receipts: projection.receipts,
+            receipt_history: projection.receipt_history,
+            node_states: projection.node_states,
             routes: projection.routes,
             warnings: projection.warnings,
             error: projection.error.or(Some(message)),
