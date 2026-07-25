@@ -9,12 +9,16 @@ use publish_domain::{
 };
 use serde_json::Value;
 
+mod credentials;
 mod fake;
 mod local;
 mod processors;
 pub mod tauri;
 
-pub use fake::{FakeAutomationBackend, FAKE_AUTOMATION_BACKEND_ID};
+pub use credentials::{CredentialResolveFailure, CredentialSource, StaticCredentialSource};
+pub use fake::{
+    FakeAutomationBackend, FakeRemoteBackend, FAKE_AUTOMATION_BACKEND_ID, FAKE_REMOTE_BACKEND_ID,
+};
 pub use local::{LocalDirectoryDestination, LocalExecutionBackend, TemporaryArtifactStore};
 pub use processors::{
     ChecksumProcessor, CustomCommandProcessor, CHECKSUM_MANIFEST_ROLE, CHECKSUM_PROCESSOR_ID,
@@ -61,6 +65,9 @@ pub struct AdapterExecutionContext<'a> {
     pub manifest: Option<&'a ArtifactManifest>,
     pub envelopes: &'a [DeliveryEnvelope],
     pub receipts: &'a [DeliveryReceipt],
+    /// 当前节点 Adapter 的 schema 声明并由执行后端解析的凭据；只在执行边界存在，
+    /// 不进入任何序列化面（ADR-0029）。
+    pub credentials: &'a BTreeMap<String, publish_domain::ResolvedCredential>,
 }
 
 #[derive(Debug, Default)]
@@ -153,6 +160,14 @@ pub trait ExecutionBackend: AdapterContract {
             consumer: self.descriptor().identity().display_name(),
             capability: AUTOMATION_PROJECTION_CAPABILITY.to_string(),
         })
+    }
+
+    /// 在执行边界从后端受支持的 Secret Store 解析一个非秘密引用（ADR-0029）。
+    fn resolve_credential(
+        &self,
+        _reference: &str,
+    ) -> Result<publish_domain::ResolvedCredential, CredentialResolveFailure> {
+        Err(CredentialResolveFailure::Missing)
     }
 }
 
@@ -349,6 +364,105 @@ impl AdapterRegistry {
         Ok(())
     }
 
+    /// 静态校验一个绑定的凭据引用：schema 未声明的名字被拒绝，
+    /// 声明的每项要求都必须绑定一个非秘密引用（ADR-0029/0030）。
+    pub fn validate_credential_bindings(
+        &self,
+        binding: &publish_domain::AdapterBinding,
+    ) -> Result<(), PublishError> {
+        let descriptor = self.descriptor(&binding.adapter)?;
+        let adapter = descriptor.identity().display_name();
+        if let Some(name) = binding
+            .credentials
+            .keys()
+            .find(|name| !descriptor.schema.credentials.contains_key(*name))
+        {
+            return Err(PublishError::CredentialNotDeclared {
+                adapter,
+                name: name.clone(),
+            });
+        }
+        if let Some(requirement) = descriptor
+            .schema
+            .credentials
+            .keys()
+            .find(|requirement| !binding.credentials.contains_key(*requirement))
+        {
+            return Err(PublishError::CredentialNotBound {
+                adapter,
+                requirement: requirement.clone(),
+            });
+        }
+        Ok(())
+    }
+
+    /// 通过当前 Execution Backend 解析一个绑定声明的全部凭据要求。
+    /// 只返回 schema 声明的凭据，并统一校验类型；诊断只包含引用，从不包含解析值。
+    pub fn resolve_binding_credentials(
+        &self,
+        backend: &AdapterIdentity,
+        binding: &publish_domain::AdapterBinding,
+    ) -> Result<BTreeMap<String, publish_domain::ResolvedCredential>, PublishError> {
+        self.validate_credential_bindings(binding)?;
+        let descriptor = self.descriptor(&binding.adapter)?;
+        let adapter = descriptor.identity().display_name();
+        let backend_adapter = self.execution_backend(backend)?;
+
+        let mut resolved = BTreeMap::new();
+        for (requirement, declared) in &descriptor.schema.credentials {
+            let reference = binding.credentials.get(requirement).ok_or_else(|| {
+                PublishError::CredentialNotBound {
+                    adapter: adapter.clone(),
+                    requirement: requirement.clone(),
+                }
+            })?;
+            let credential = backend_adapter
+                .resolve_credential(reference)
+                .map_err(|failure| match failure {
+                    CredentialResolveFailure::Missing => PublishError::CredentialReferenceMissing {
+                        adapter: adapter.clone(),
+                        requirement: requirement.clone(),
+                        reference: reference.clone(),
+                    },
+                    CredentialResolveFailure::AccessDenied => {
+                        PublishError::CredentialAccessDenied {
+                            adapter: adapter.clone(),
+                            requirement: requirement.clone(),
+                            reference: reference.clone(),
+                        }
+                    }
+                })?;
+            if credential.kind != declared.kind {
+                return Err(PublishError::CredentialKindMismatch {
+                    adapter: adapter.clone(),
+                    requirement: requirement.clone(),
+                    reference: reference.clone(),
+                    expected: declared.kind,
+                    actual: credential.kind,
+                });
+            }
+            resolved.insert(requirement.clone(), credential);
+        }
+        Ok(resolved)
+    }
+
+    fn execution_backend(
+        &self,
+        identity: &AdapterIdentity,
+    ) -> Result<&dyn ExecutionBackend, PublishError> {
+        if identity.kind != AdapterKind::ExecutionBackend {
+            return Err(PublishError::AdapterKindMismatch {
+                id: identity.id.clone(),
+                expected: AdapterKind::ExecutionBackend,
+                actual: identity.kind,
+            });
+        }
+        self.execution_backends
+            .get(&(identity.id.clone(), identity.version))
+            .map(Arc::as_ref)
+            .ok_or_else(|| self.unresolved_adapter(identity))
+    }
+
     fn resolve(&self, identity: &AdapterIdentity) -> Result<AdapterRef<'_>, PublishError> {
         let key = (identity.id.clone(), identity.version);
         let adapter = match identity.kind {
@@ -543,6 +657,17 @@ fn validate_descriptor(
         return Err(PublishError::InvalidAdapter {
             adapter: descriptor.identity().display_name(),
             message: "allowed programs must be namespaced opaque executable ids".to_string(),
+        });
+    }
+    if descriptor
+        .schema
+        .credentials
+        .iter()
+        .any(|(name, requirement)| name.trim().is_empty() || requirement.purpose.trim().is_empty())
+    {
+        return Err(PublishError::InvalidAdapter {
+            adapter: descriptor.identity().display_name(),
+            message: "credential requirements must declare a name and a purpose".to_string(),
         });
     }
     if descriptor.kind == AdapterKind::ArtifactProcessor

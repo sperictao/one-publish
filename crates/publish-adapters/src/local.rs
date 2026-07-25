@@ -21,10 +21,17 @@ const DELIVERY_DIRECTORY_KEY: &str = "delivery_directory";
 
 pub struct LocalExecutionBackend {
     descriptor: AdapterDescriptor,
+    credential_source: std::sync::Arc<dyn crate::CredentialSource>,
 }
 
 impl LocalExecutionBackend {
+    /// 未注入来源时使用空来源：所有引用解析为 Missing，无需特例分支。
     pub fn new() -> Self {
+        Self::with_credential_source(std::sync::Arc::new(crate::StaticCredentialSource::new()))
+    }
+
+    /// 注入本机解析方式（钥匙串、环境等）；后端本身不保存任何秘密值（ADR-0004）。
+    pub fn with_credential_source(source: std::sync::Arc<dyn crate::CredentialSource>) -> Self {
         Self {
             descriptor: AdapterDescriptor::new(
                 AdapterKind::ExecutionBackend,
@@ -36,6 +43,7 @@ impl LocalExecutionBackend {
                     requires: vec![],
                 },
             ),
+            credential_source: source,
         }
     }
 }
@@ -75,7 +83,14 @@ impl AdapterContract for LocalExecutionBackend {
     }
 }
 
-impl ExecutionBackend for LocalExecutionBackend {}
+impl ExecutionBackend for LocalExecutionBackend {
+    fn resolve_credential(
+        &self,
+        reference: &str,
+    ) -> Result<publish_domain::ResolvedCredential, crate::CredentialResolveFailure> {
+        self.credential_source.resolve(reference)
+    }
+}
 
 pub struct TemporaryArtifactStore {
     descriptor: AdapterDescriptor,

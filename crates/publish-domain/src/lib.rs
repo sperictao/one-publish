@@ -58,6 +58,41 @@ pub enum PublishError {
     InvalidAdapter { adapter: String, message: String },
     #[error("invalid settings for adapter {adapter}: {message}")]
     InvalidAdapterSettings { adapter: String, message: String },
+    #[error(
+        "adapter {adapter} requires credential {requirement}, but the configuration binds no reference"
+    )]
+    CredentialNotBound {
+        adapter: String,
+        requirement: String,
+    },
+    #[error("adapter {adapter} does not declare credential {name} in its settings schema")]
+    CredentialNotDeclared { adapter: String, name: String },
+    #[error(
+        "credential reference {reference} for {adapter}/{requirement} is not available in the execution backend"
+    )]
+    CredentialReferenceMissing {
+        adapter: String,
+        requirement: String,
+        reference: String,
+    },
+    #[error(
+        "credential reference {reference} for {adapter}/{requirement} cannot be accessed by the execution backend"
+    )]
+    CredentialAccessDenied {
+        adapter: String,
+        requirement: String,
+        reference: String,
+    },
+    #[error(
+        "credential reference {reference} for {adapter}/{requirement} resolved to a {actual:?} credential, expected {expected:?}"
+    )]
+    CredentialKindMismatch {
+        adapter: String,
+        requirement: String,
+        reference: String,
+        expected: CredentialKind,
+        actual: CredentialKind,
+    },
     #[error("adapter {consumer} requires missing capability {capability}")]
     MissingCapability {
         consumer: String,
@@ -136,6 +171,9 @@ impl AdapterIdentity {
 pub struct AdapterSchema {
     pub version: u32,
     pub fields: BTreeMap<String, AdapterSchemaField>,
+    /// Schema 声明的 Credential Requirement：发布配置只能把它们绑定为
+    /// 非秘密引用，Adapter 也只会收到这里声明的凭据（ADR-0029/0030）。
+    pub credentials: BTreeMap<String, CredentialRequirement>,
 }
 
 impl AdapterSchema {
@@ -143,7 +181,24 @@ impl AdapterSchema {
         Self {
             version,
             fields: BTreeMap::new(),
+            credentials: BTreeMap::new(),
         }
+    }
+
+    pub fn with_credential(
+        mut self,
+        name: impl Into<String>,
+        kind: CredentialKind,
+        purpose: impl Into<String>,
+    ) -> Self {
+        self.credentials.insert(
+            name.into(),
+            CredentialRequirement {
+                kind,
+                purpose: purpose.into(),
+            },
+        );
+        self
     }
 
     pub fn with_required_string(mut self, key: impl Into<String>) -> Self {
@@ -182,6 +237,49 @@ pub enum AdapterSchemaValueType {
     Boolean,
     Number,
     StringList,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum CredentialKind {
+    Token,
+    SigningKey,
+}
+
+/// Adapter 对一项逻辑凭据的声明：类型与用途说明。用途随配置导出保留，
+/// 秘密值从不进入任何可序列化结构。
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct CredentialRequirement {
+    pub kind: CredentialKind,
+    pub purpose: String,
+}
+
+/// 已解析的秘密值。刻意不实现 Serialize/Deserialize，Debug 输出脱敏，
+/// 让秘密无法进入计划、事件、清单、日志或备份等序列化面（ADR-0004/0029）。
+#[derive(Clone)]
+pub struct CredentialValue(String);
+
+impl CredentialValue {
+    pub fn new(value: impl Into<String>) -> Self {
+        Self(value.into())
+    }
+
+    pub fn expose(&self) -> &str {
+        &self.0
+    }
+}
+
+impl std::fmt::Debug for CredentialValue {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter.write_str("CredentialValue([redacted])")
+    }
+}
+
+/// Execution Backend 在执行边界解析一个引用得到的凭据；类型匹配由运行时统一校验。
+#[derive(Debug, Clone)]
+pub struct ResolvedCredential {
+    pub kind: CredentialKind,
+    pub value: CredentialValue,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -355,6 +453,8 @@ pub struct AdapterBinding {
     pub binding_id: String,
     pub adapter: AdapterIdentity,
     pub settings: AdapterSettings,
+    /// 凭据要求名到当前 Execution Backend 引用的绑定；只保存非秘密引用（ADR-0029）。
+    pub credentials: BTreeMap<String, String>,
 }
 
 impl AdapterBinding {
@@ -367,7 +467,18 @@ impl AdapterBinding {
             binding_id: binding_id.into(),
             adapter,
             settings,
+            credentials: BTreeMap::new(),
         }
+    }
+
+    pub fn with_credential(
+        mut self,
+        requirement: impl Into<String>,
+        reference: impl Into<String>,
+    ) -> Self {
+        self.credentials
+            .insert(requirement.into(), reference.into());
+        self
     }
 }
 

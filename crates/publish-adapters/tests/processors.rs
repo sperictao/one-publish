@@ -402,6 +402,8 @@ fn checksum_node(processor: &ChecksumProcessor) -> PlanNode {
     }
 }
 
+static EMPTY_CREDENTIALS: BTreeMap<String, publish_domain::ResolvedCredential> = BTreeMap::new();
+
 fn execution_context<'a>(
     artifacts: &'a [ArtifactCandidate],
     manifest: Option<&'a publish_domain::ArtifactManifest>,
@@ -414,6 +416,7 @@ fn execution_context<'a>(
         manifest,
         envelopes: &[],
         receipts: &[],
+        credentials: &EMPTY_CREDENTIALS,
     }
 }
 

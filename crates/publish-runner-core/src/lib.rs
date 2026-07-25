@@ -5,11 +5,11 @@ use publish_adapters::{
     AdapterExecutionContext, AdapterExecutionOutput, AdapterRegistry, PlanNodeExecutor,
 };
 use publish_domain::{
-    declares_artifact_role, sha256_hex, AdapterKind, ArtifactCandidate, ArtifactManifest,
-    DeliveryEnvelope, DeliveryReceipt, DeliveryStatus, PlanNode, PlanStage, PlanningInputSnapshot,
-    PublishAttemptStatus, PublishAttemptView, PublishError, PublishEvent, PublishOutcome,
-    PublishPlan, ReleaseAttempt, ReleaseIdentity, DELIVERY_RECEIPT_VERSION, PUBLISH_EVENT_VERSION,
-    PUBLISH_PLAN_VERSION, RELEASE_ATTEMPT_VERSION,
+    declares_artifact_role, sha256_hex, AdapterBinding, AdapterIdentity, AdapterKind,
+    ArtifactCandidate, ArtifactManifest, DeliveryEnvelope, DeliveryReceipt, DeliveryStatus,
+    PlanNode, PlanStage, PlanningInputSnapshot, PublishAttemptStatus, PublishAttemptView,
+    PublishError, PublishEvent, PublishOutcome, PublishPlan, ReleaseAttempt, ReleaseIdentity,
+    DELIVERY_RECEIPT_VERSION, PUBLISH_EVENT_VERSION, PUBLISH_PLAN_VERSION, RELEASE_ATTEMPT_VERSION,
 };
 use publish_planner::PublishPlanner;
 use serde::{Deserialize, Serialize};
@@ -360,6 +360,9 @@ impl PublishRuntime {
         let backend_run_id = attempt.backend_run_id.clone();
         let mut executor =
             RuntimeNodeExecutor::new(&self.registry, &prepared.plan, &attempt_id, &backend_run_id);
+        if let Err(error) = verify_plan_credentials(&self.registry, &prepared.plan) {
+            return executor.finish_failed_attempt(attempt, error);
+        }
         match self.registry.execute_plan(
             &prepared.plan.execution_backend,
             &prepared.plan,
@@ -386,6 +389,7 @@ impl PublishRuntime {
     ) -> Result<PublishOutcome, PublishError> {
         validate_plan(plan)?;
         preflight_adapter_contracts(&self.registry, plan)?;
+        verify_plan_credentials(&self.registry, plan)?;
         if attempt_id.trim().is_empty() {
             return Err(PublishError::Execution(
                 "publish attempt id cannot be empty".to_string(),
@@ -459,6 +463,18 @@ fn preflight_adapter_contracts(
     Ok(())
 }
 
+/// 凭据预检：在任何副作用前，通过当前执行后端解析计划里每个绑定声明的
+/// 凭据要求；解析值立即丢弃，只留下可用性结论（ADR-0029、Issue T08）。
+fn verify_plan_credentials(
+    registry: &AdapterRegistry,
+    plan: &PublishPlan,
+) -> Result<(), PublishError> {
+    for binding in &plan.adapters {
+        registry.resolve_binding_credentials(&plan.execution_backend, binding)?;
+    }
+    Ok(())
+}
+
 fn validate_plan(plan: &PublishPlan) -> Result<(), PublishError> {
     if plan.version != PUBLISH_PLAN_VERSION {
         return Err(PublishError::UnsupportedPlanVersion {
@@ -501,6 +517,8 @@ struct RuntimeNodeExecutor<'a> {
     backend_run_id: &'a str,
     plan_digest: &'a str,
     snapshot_digest: &'a str,
+    execution_backend: &'a AdapterIdentity,
+    bindings: BTreeMap<&'a str, &'a AdapterBinding>,
     artifacts: Vec<ArtifactCandidate>,
     manifest: Option<ArtifactManifest>,
     envelopes: Vec<DeliveryEnvelope>,
@@ -523,6 +541,12 @@ impl<'a> RuntimeNodeExecutor<'a> {
             backend_run_id,
             plan_digest: &plan.digest,
             snapshot_digest: &plan.snapshot_digest,
+            execution_backend: &plan.execution_backend,
+            bindings: plan
+                .adapters
+                .iter()
+                .map(|binding| (binding.binding_id.as_str(), binding))
+                .collect(),
             artifacts: Vec::new(),
             manifest: None,
             envelopes: Vec::new(),
@@ -818,6 +842,22 @@ impl PlanNodeExecutor for RuntimeNodeExecutor<'_> {
             )));
         }
 
+        let Some(&binding) = self.bindings.get(node.binding_id.as_str()) else {
+            return Err(PublishError::InvalidPlan(format!(
+                "plan node {} references unknown binding {}",
+                node.id, node.binding_id
+            )));
+        };
+        let credentials = match self
+            .registry
+            .resolve_binding_credentials(self.execution_backend, binding)
+        {
+            Ok(credentials) => credentials,
+            Err(error) => {
+                self.append_failure_event(&node.id, Some(&node.adapter), &error.to_string());
+                return Err(error);
+            }
+        };
         let context = AdapterExecutionContext {
             attempt_id: self.attempt_id,
             plan_digest: self.plan_digest,
@@ -826,6 +866,7 @@ impl PlanNodeExecutor for RuntimeNodeExecutor<'_> {
             manifest: self.manifest.as_ref(),
             envelopes: &self.envelopes,
             receipts: &self.receipts,
+            credentials: &credentials,
         };
         let output = match self.registry.execute_node(node, &context) {
             Ok(output) => output,
