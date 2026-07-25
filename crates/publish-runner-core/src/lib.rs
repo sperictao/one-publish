@@ -2,15 +2,17 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Mutex;
 
 use publish_adapters::{
-    AdapterExecutionContext, AdapterExecutionOutput, AdapterRegistry, PlanNodeExecutor,
+    AdapterExecutionContext, AdapterExecutionOutput, AdapterRegistry, DeliveryProbe,
+    PlanNodeExecutor,
 };
 use publish_domain::{
     declares_artifact_role, sha256_hex, AdapterBinding, AdapterIdentity, AdapterKind,
-    ArtifactCandidate, ArtifactManifest, DeliveryEnvelope, DeliveryReceipt, DeliveryStatus,
-    PlanNode, PlanNodeExecutionState, PlanRoute, PlanStage, PlanningInputSnapshot,
-    PublishAttemptStatus, PublishAttemptView, PublishError, PublishEvent, PublishOutcome,
-    PublishPlan, ReleaseAttempt, ReleaseIdentity, RouteDeliveryView, DELIVERY_RECEIPT_VERSION,
-    PUBLISH_EVENT_VERSION, PUBLISH_PLAN_VERSION, RELEASE_ATTEMPT_VERSION,
+    ArtifactCandidate, ArtifactManifest, DeliveryEnvelope, DeliveryIdempotencyIdentity,
+    DeliveryReceipt, DeliveryStatus, PlanNode, PlanNodeExecutionState, PlanRoute, PlanStage,
+    PlanningInputSnapshot, PublishAttemptStatus, PublishAttemptView, PublishError, PublishEvent,
+    PublishFailure, PublishOutcome, PublishPlan, ReleaseAttempt, ReleaseIdentity,
+    RouteDeliveryView, DELIVERY_RECEIPT_VERSION, PUBLISH_EVENT_VERSION, PUBLISH_FAILURE_VERSION,
+    PUBLISH_PLAN_VERSION, RELEASE_ATTEMPT_VERSION,
 };
 use publish_planner::PublishPlanner;
 use serde::{Deserialize, Serialize};
@@ -36,6 +38,13 @@ pub struct ReducedPublishEvents {
     pub error: Option<String>,
 }
 
+/// 路线失败的事件证据：可见错误加上可选的结构化 Publish Failure Classification。
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct RouteFailureEvidence {
+    error: String,
+    failure: Option<PublishFailure>,
+}
+
 pub fn reduce_publish_events(
     events: &[PublishEvent],
     routes: &[PlanRoute],
@@ -44,7 +53,7 @@ pub fn reduce_publish_events(
     let mut receipts = BTreeMap::<String, DeliveryReceipt>::new();
     let mut receipt_history = Vec::new();
     let mut node_states = BTreeMap::new();
-    let mut route_failures = BTreeMap::<String, String>::new();
+    let mut route_failures = BTreeMap::<String, RouteFailureEvidence>::new();
     let mut failure = None;
     let mut event_identity: Option<(String, String, String)> = None;
     let known_routes = routes
@@ -115,6 +124,8 @@ pub fn reduce_publish_events(
                         receipt.receipt_id, receipt.route_id
                     )));
                 }
+                // 之后的交付观察取代先前的路线失败：安全重试成功让路线离开失败状态。
+                route_failures.remove(receipt.route_id.as_str());
                 match receipts.get(&receipt.receipt_id) {
                     Some(existing) if receipt.revision < existing.revision => {
                         return Err(PublishError::Execution(format!(
@@ -165,7 +176,33 @@ pub fn reduce_publish_events(
                     .and_then(Value::as_str)
                     .map(str::to_string)
                     .unwrap_or_else(|| format!("delivery route {route_id} failed"));
-                route_failures.entry(route_id.to_string()).or_insert(error);
+                // 结构化分类只从事件证据反序列化，绝不从错误字符串推断；畸形或
+                // 版本不符的分类证据是损坏的历史，必须显式报错而不是静默降级（ADR-0056）。
+                let failure = event
+                    .payload
+                    .get("failure")
+                    .map(|value| {
+                        let failure: PublishFailure = serde_json::from_value(value.clone())
+                            .map_err(|error| {
+                                PublishError::Execution(format!(
+                                    "publish event {} carries an invalid failure classification: {error}",
+                                    event.event_id
+                                ))
+                            })?;
+                        if failure.version != PUBLISH_FAILURE_VERSION {
+                            return Err(PublishError::UnsupportedFailureVersion {
+                                actual: failure.version,
+                                expected: PUBLISH_FAILURE_VERSION,
+                            });
+                        }
+                        Ok(failure)
+                    })
+                    .transpose()?;
+                // 最新失败证据覆盖旧值：重试再次失败时呈现当前原因。
+                route_failures.insert(
+                    route_id.to_string(),
+                    RouteFailureEvidence { error, failure },
+                );
                 node_states.insert(event.plan_node_id.clone(), PlanNodeExecutionState::Failed);
             }
             "plan_node_completed" => {
@@ -224,7 +261,7 @@ pub fn reduce_publish_events(
 fn project_route_views(
     routes: &[PlanRoute],
     receipts: &BTreeMap<String, DeliveryReceipt>,
-    route_failures: &BTreeMap<String, String>,
+    route_failures: &BTreeMap<String, RouteFailureEvidence>,
 ) -> Vec<RouteDeliveryView> {
     routes
         .iter()
@@ -235,6 +272,7 @@ fn project_route_views(
                 status: DeliveryStatus::Pending,
                 external_reference: None,
                 error: None,
+                failure: None,
             };
             let route_receipts = receipts
                 .values()
@@ -258,8 +296,9 @@ fn project_route_views(
                     view.status = least_advanced;
                 }
             }
-            if let Some(error) = route_failures.get(&route.route_id) {
-                view.error = Some(error.clone());
+            if let Some(evidence) = route_failures.get(&route.route_id) {
+                view.error = Some(evidence.error.clone());
+                view.failure = evidence.failure.clone();
                 if !is_failed_delivery_status(view.status) {
                     view.status = DeliveryStatus::Failed;
                 }
@@ -673,9 +712,61 @@ impl StartPublishAttempt {
     }
 }
 
+/// 一次续传请求对失败路线的完整处置：重试、复用远端一致交付或带原因阻断。
+#[derive(Default)]
+struct RouteRetryDecisions {
+    retry_routes: BTreeSet<String>,
+    reused_deliveries: Vec<ReusedDelivery>,
+    blocked: Vec<String>,
+}
+
+/// 幂等探测确认远端摘要一致后可直接复用的交付：路线、其交付节点与外部引用。
+struct ReusedDelivery {
+    route_id: String,
+    publish_node_id: String,
+    external_reference: String,
+}
+
+/// 续传互斥占位：构造时登记尝试，Drop 时释放，让并发 resume 显式失败
+/// 而不是重复执行外部副作用。
+struct ResumeSlot<'a> {
+    attempts: &'a Mutex<BTreeSet<String>>,
+    attempt_id: String,
+}
+
+impl<'a> ResumeSlot<'a> {
+    fn acquire(
+        attempts: &'a Mutex<BTreeSet<String>>,
+        attempt_id: &str,
+    ) -> Result<Self, PublishError> {
+        let mut resuming = attempts.lock().map_err(|_| {
+            PublishError::Execution("publish attempt registry lock is poisoned".to_string())
+        })?;
+        if !resuming.insert(attempt_id.to_string()) {
+            return Err(PublishError::Execution(format!(
+                "publish attempt {attempt_id} is already being resumed"
+            )));
+        }
+        Ok(Self {
+            attempts,
+            attempt_id: attempt_id.to_string(),
+        })
+    }
+}
+
+impl Drop for ResumeSlot<'_> {
+    fn drop(&mut self) {
+        if let Ok(mut resuming) = self.attempts.lock() {
+            resuming.remove(&self.attempt_id);
+        }
+    }
+}
+
 pub struct PublishRuntime {
     registry: AdapterRegistry,
     started_attempts: Mutex<BTreeSet<String>>,
+    /// 正在续传的尝试：阻止同一尝试的并发 resume 重复执行外部副作用。
+    resuming_attempts: Mutex<BTreeSet<String>>,
 }
 
 impl PublishRuntime {
@@ -683,6 +774,7 @@ impl PublishRuntime {
         Self {
             registry,
             started_attempts: Mutex::new(BTreeSet::new()),
+            resuming_attempts: Mutex::new(BTreeSet::new()),
         }
     }
 
@@ -754,6 +846,225 @@ impl PublishRuntime {
             Ok(()) => executor.finish_attempt(&prepared.plan, attempt),
             Err(error) => executor.finish_failed_attempt(attempt, error),
         }
+    }
+
+    /// 安全续传一次失败或部分交付的发布尝试：只有分类允许自动重试且幂等探测
+    /// 确认安全的失败路线才重新交付；共享构建、处理、封存与成功路线一律不再
+    /// 执行（ADR-0022/0040/0051/0056）。
+    pub fn resume_attempt(
+        &self,
+        prepared: &PreparedPublishPlan,
+        view: &PublishAttemptView,
+    ) -> Result<PublishAttemptView, PublishError> {
+        let current_plan = self.prepare(&prepared.snapshot)?;
+        if current_plan != prepared.plan {
+            return Err(PublishError::InvalidPlan(
+                "prepared publish plan no longer matches its planning input snapshot".to_string(),
+            ));
+        }
+        let attempt = &view.attempt;
+        if attempt.version != RELEASE_ATTEMPT_VERSION {
+            return Err(PublishError::UnsupportedAttemptVersion {
+                actual: attempt.version,
+                expected: RELEASE_ATTEMPT_VERSION,
+            });
+        }
+        // 续传不得改变尝试身份：视图必须属于这份封存计划（ADR-0040）。
+        if attempt.plan_digest != prepared.plan.digest
+            || attempt.planning_snapshot_digest != prepared.plan.snapshot_digest
+            || attempt.plan_version != prepared.plan.version
+            || attempt.execution_backend != prepared.plan.execution_backend
+            || attempt.configuration_revision != prepared.snapshot.configuration_revision
+            || attempt.runtime_revision != prepared.snapshot.runtime_revision
+        {
+            return Err(PublishError::InvalidPlan(
+                "resume must keep the publish attempt identity stable; the view belongs to a different plan"
+                    .to_string(),
+            ));
+        }
+        let manifest = view
+            .manifest
+            .clone()
+            .ok_or(PublishError::MissingArtifactManifest)?;
+        if attempt.manifest_digest.as_deref() != Some(manifest.digest.as_str()) {
+            return Err(PublishError::Execution(format!(
+                "resume manifest {} does not match the attempt's sealed manifest binding",
+                manifest.digest
+            )));
+        }
+
+        // 同一尝试同一时刻只允许一次续传：并发 resume 会重复执行外部副作用。
+        let _resume_slot = ResumeSlot::acquire(&self.resuming_attempts, &attempt.attempt_id)?;
+
+        // 路线状态只从追加事件历史确定性归约，不信任调用者预先算好的视图（ADR-0057）。
+        let projection = reduce_publish_events(&view.events, &prepared.plan.routes)?;
+        if projection.manifest_digest.as_deref() != Some(manifest.digest.as_str()) {
+            return Err(PublishError::Execution(
+                "the attempt's events did not bind the manifest offered for resume".to_string(),
+            ));
+        }
+
+        let decisions = self.evaluate_failed_routes(prepared, attempt, &manifest, &projection)?;
+        if decisions.retry_routes.is_empty() && decisions.reused_deliveries.is_empty() {
+            let reasons = if decisions.blocked.is_empty() {
+                vec!["the attempt has no failed delivery route".to_string()]
+            } else {
+                decisions.blocked
+            };
+            return Err(PublishError::AutomaticRetryBlocked { reasons });
+        }
+
+        let mut executor = RuntimeNodeExecutor::new(
+            &self.registry,
+            &prepared.plan,
+            &attempt.attempt_id,
+            &attempt.backend_run_id,
+        );
+        executor.events = view.events.clone();
+        executor.manifest = Some(manifest.clone());
+        executor.receipts = view.receipt_history.clone();
+        let reused_route_ids = decisions
+            .reused_deliveries
+            .iter()
+            .map(|reused| reused.route_id.clone())
+            .collect::<BTreeSet<_>>();
+        for route in &projection.routes {
+            let Some(error) = &route.error else { continue };
+            if !decisions.retry_routes.contains(&route.route_id)
+                && !reused_route_ids.contains(&route.route_id)
+            {
+                executor
+                    .failed_routes
+                    .insert(route.route_id.clone(), error.clone());
+            }
+        }
+        for node in &prepared.plan.nodes {
+            if decisions.retry_routes.contains(&node.binding_id)
+                || executor.failed_routes.contains_key(&node.binding_id)
+            {
+                continue;
+            }
+            if reused_route_ids.contains(&node.binding_id)
+                || projection.node_states.get(&node.id) == Some(&PlanNodeExecutionState::Completed)
+            {
+                executor.resume_completed.insert(node.id.clone());
+                continue;
+            }
+            return Err(PublishError::Execution(format!(
+                "plan node {} has no completed evidence in the attempt history; it cannot be resumed safely",
+                node.id
+            )));
+        }
+        for reused in decisions.reused_deliveries {
+            executor.reuse_receipt(&reused, &manifest.digest)?;
+        }
+
+        let attempt = attempt.clone();
+        match self.registry.execute_plan(
+            &prepared.plan.execution_backend,
+            &prepared.plan,
+            &mut executor,
+        ) {
+            Ok(()) => executor.finish_attempt(&prepared.plan, attempt),
+            Err(error) => executor.finish_failed_attempt(attempt, error),
+        }
+    }
+
+    /// 逐条评估失败路线的自动重试资格：先看结构化分类，再做幂等探测；
+    /// 四种探测结果分别对应重试、复用、冲突阻断与不可探测阻断（ADR-0051/0056）。
+    fn evaluate_failed_routes(
+        &self,
+        prepared: &PreparedPublishPlan,
+        attempt: &ReleaseAttempt,
+        manifest: &ArtifactManifest,
+        projection: &ReducedPublishEvents,
+    ) -> Result<RouteRetryDecisions, PublishError> {
+        let mut decisions = RouteRetryDecisions::default();
+        for route in &projection.routes {
+            let Some(error) = &route.error else { continue };
+            let route_id = route.route_id.as_str();
+            let eligible = route
+                .failure
+                .as_ref()
+                .is_some_and(|failure| failure.category.allows_automatic_retry());
+            if !eligible {
+                let category = route
+                    .failure
+                    .as_ref()
+                    .map_or("unclassified", |failure| failure.category.name());
+                decisions.blocked.push(format!(
+                    "route {route_id} is blocked: {category} failures are not eligible for automatic retry ({error})"
+                ));
+                continue;
+            }
+
+            let binding = prepared
+                .plan
+                .adapters
+                .iter()
+                .find(|binding| binding.binding_id == route_id)
+                .ok_or_else(|| {
+                    PublishError::InvalidPlan(format!(
+                        "plan route {route_id} does not reference a delivery destination binding"
+                    ))
+                })?;
+            let publish_node_id = prepared
+                .plan
+                .nodes
+                .iter()
+                .find(|node| node.binding_id == route_id && node.stage == PlanStage::PublishRoutes)
+                .map(|node| node.id.clone())
+                .ok_or_else(|| {
+                    PublishError::InvalidPlan(format!(
+                        "plan route {route_id} has no publish_routes node to probe"
+                    ))
+                })?;
+            let identity = DeliveryIdempotencyIdentity {
+                attempt_id: attempt.attempt_id.clone(),
+                plan_node_id: publish_node_id.clone(),
+                release_identity: attempt.release_identity.clone(),
+                manifest_digest: manifest.digest.clone(),
+                route_id: route_id.to_string(),
+            };
+            // 探测错误按路线隔离：一条路线探测不到不阻断其他路线的评估（ADR-0022）。
+            let probe =
+                match self
+                    .registry
+                    .probe_delivery(&binding.adapter, &binding.settings, &identity)
+                {
+                    Ok(probe) => probe,
+                    Err(error) => {
+                        decisions.blocked.push(format!(
+                            "route {route_id} is blocked: the idempotency probe failed ({error})"
+                        ));
+                        continue;
+                    }
+                };
+            match probe {
+                DeliveryProbe::Absent => {
+                    decisions.retry_routes.insert(route_id.to_string());
+                }
+                DeliveryProbe::Matching { external_reference } => {
+                    decisions.reused_deliveries.push(ReusedDelivery {
+                        route_id: route_id.to_string(),
+                        publish_node_id,
+                        external_reference,
+                    });
+                }
+                DeliveryProbe::Conflicting { external_reference } => {
+                    decisions.blocked.push(format!(
+                        "route {route_id} is blocked: remote state at {external_reference} conflicts with manifest {}; resuming would overwrite another release",
+                        manifest.digest
+                    ));
+                }
+                DeliveryProbe::Unprobeable { reason } => {
+                    decisions.blocked.push(format!(
+                        "route {route_id} is blocked: remote state cannot be probed ({reason})"
+                    ));
+                }
+            }
+        }
+        Ok(decisions)
     }
 
     pub fn start(
@@ -934,6 +1245,9 @@ struct RuntimeNodeExecutor<'a> {
     /// 已失败路线：路线内后续节点被跳过，失败不阻断其他路线（ADR-0022）。
     failed_routes: BTreeMap<String, String>,
     skipped_nodes: BTreeSet<String>,
+    /// 续传时依据既往事件证据直接视为已完成的节点：共享阶段与成功路线
+    /// 不重新执行（ADR-0040、Issue T12）。
+    resume_completed: BTreeSet<String>,
     expected_nodes: BTreeMap<&'a str, &'a PlanNode>,
 }
 
@@ -965,6 +1279,7 @@ impl<'a> RuntimeNodeExecutor<'a> {
             executed_nodes: BTreeSet::new(),
             failed_routes: BTreeMap::new(),
             skipped_nodes: BTreeSet::new(),
+            resume_completed: BTreeSet::new(),
             expected_nodes: plan
                 .nodes
                 .iter()
@@ -1223,23 +1538,96 @@ impl<'a> RuntimeNodeExecutor<'a> {
     }
 
     /// 路线节点失败：记录 route_failed 事件并隔离本路线，不再返回错误给执行后端。
-    fn fail_route(&mut self, node: &PlanNode, error: String) {
+    /// Classified 错误的结构化分类随事件持久化，供重试资格评估使用（ADR-0056）。
+    fn fail_route(&mut self, node: &PlanNode, error: &PublishError) {
+        let message = error.to_string();
+        let mut payload = BTreeMap::from([
+            (
+                "route_id".to_string(),
+                Value::String(node.binding_id.clone()),
+            ),
+            ("error".to_string(), Value::String(message.clone())),
+            (
+                "adapter".to_string(),
+                Value::String(node.adapter.display_name()),
+            ),
+        ]);
+        if let PublishError::Classified { failure } = error {
+            // PublishFailure 是纯数据，序列化不会失败；万一失败，事件退化为
+            // 未分类证据，读取端按 Unknown 阻断自动重试——降级方向是安全的。
+            if let Ok(value) = serde_json::to_value(failure) {
+                payload.insert("failure".to_string(), value);
+            }
+        }
+        self.append_event(&node.id, "route_failed", payload);
+        self.failed_routes.insert(node.binding_id.clone(), message);
+    }
+
+    /// 幂等探测确认远端摘要一致时复用既有交付：不重新执行副作用，把探测确认
+    /// 的远端事实观察为 Published Receipt 修订追加进事件证据（ADR-0051）。
+    fn reuse_receipt(
+        &mut self,
+        reused: &ReusedDelivery,
+        manifest_digest: &str,
+    ) -> Result<(), PublishError> {
+        let ReusedDelivery {
+            route_id,
+            publish_node_id,
+            external_reference,
+        } = reused;
+        let previous = self
+            .receipts
+            .iter()
+            .rev()
+            .find(|receipt| &receipt.route_id == route_id)
+            .cloned();
+        let receipt = match previous {
+            Some(previous) => {
+                if &previous.external_reference != external_reference {
+                    return Err(PublishError::Execution(format!(
+                        "route {route_id} cannot reuse remote delivery {external_reference}; its receipt is bound to {}",
+                        previous.external_reference
+                    )));
+                }
+                DeliveryReceipt {
+                    revision: previous.revision.checked_add(1).ok_or_else(|| {
+                        PublishError::Execution(format!(
+                            "delivery receipt {} exhausted its revision range",
+                            previous.receipt_id
+                        ))
+                    })?,
+                    status: DeliveryStatus::Published,
+                    ..previous
+                }
+            }
+            None => DeliveryReceipt {
+                version: DELIVERY_RECEIPT_VERSION,
+                receipt_id: sha256_hex(
+                    format!(
+                        "{}:{publish_node_id}:{route_id}:{manifest_digest}",
+                        self.attempt_id
+                    )
+                    .as_bytes(),
+                ),
+                revision: 1,
+                route_id: route_id.to_string(),
+                manifest_digest: manifest_digest.to_string(),
+                status: DeliveryStatus::Published,
+                external_reference: external_reference.clone(),
+            },
+        };
+        self.receipts.push(receipt.clone());
+        let value = serde_json::to_value(receipt).map_err(|error| {
+            PublishError::Execution(format!(
+                "failed to serialize delivery receipt event: {error}"
+            ))
+        })?;
         self.append_event(
-            &node.id,
-            "route_failed",
-            BTreeMap::from([
-                (
-                    "route_id".to_string(),
-                    Value::String(node.binding_id.clone()),
-                ),
-                ("error".to_string(), Value::String(error.clone())),
-                (
-                    "adapter".to_string(),
-                    Value::String(node.adapter.display_name()),
-                ),
-            ]),
+            publish_node_id,
+            "delivery_receipt_observed",
+            BTreeMap::from([("receipt".to_string(), value)]),
         );
-        self.failed_routes.insert(node.binding_id.clone(), error);
+        Ok(())
     }
 
     fn append_failure_event(
@@ -1298,6 +1686,11 @@ impl PlanNodeExecutor for RuntimeNodeExecutor<'_> {
                 node.id
             )));
         }
+        // 续传时既有事件证据已覆盖的节点直接视为完成：不重新构建、处理或交付。
+        if self.resume_completed.contains(&node.id) {
+            self.executed_nodes.insert(node.id.clone());
+            return Ok(());
+        }
         if self.failed_routes.contains_key(&node.binding_id) {
             self.skipped_nodes.insert(node.id.clone());
             return Ok(());
@@ -1320,7 +1713,7 @@ impl PlanNodeExecutor for RuntimeNodeExecutor<'_> {
             }
             Err(error) if self.is_route_node(node) => {
                 // 路线失败被隔离为可观察的路线级结果；其余路线继续执行（ADR-0022）。
-                self.fail_route(node, error.to_string());
+                self.fail_route(node, &error);
                 Ok(())
             }
             Err(error) => {

@@ -4,8 +4,9 @@ use std::sync::Arc;
 use publish_domain::{
     AdapterDescriptor, AdapterIdentity, AdapterKind, AdapterSettings, ArtifactCandidate,
     ArtifactManifest, AutomationBindingProjection, AutomationProjectionBundle, DeliveryEnvelope,
-    DeliveryReceipt, PlanNode, PlanNodeTemplate, PlanOperation, PlanStage, PlanningInputSnapshot,
-    ProjectCandidate, PublishError, PublishPlan, ADAPTER_CONTRACT_VERSION,
+    DeliveryIdempotencyIdentity, DeliveryReceipt, PlanNode, PlanNodeTemplate, PlanOperation,
+    PlanStage, PlanningInputSnapshot, ProjectCandidate, PublishError, PublishPlan,
+    ADAPTER_CONTRACT_VERSION,
 };
 use serde_json::Value;
 
@@ -229,7 +230,36 @@ pub struct RemovedArtifactSet {
     pub removed_artifacts: Vec<String>,
 }
 
-pub trait DeliveryDestination: AdapterContract {}
+pub trait DeliveryDestination: AdapterContract {
+    /// 自动重试前按 Delivery Idempotency Identity 探测远端状态（ADR-0051）。
+    /// 默认无法探测：不可查询的副作用被显式标记为不可自动重试。
+    fn probe_delivery(
+        &self,
+        _settings: &AdapterSettings,
+        _identity: &DeliveryIdempotencyIdentity,
+    ) -> Result<DeliveryProbe, PublishError> {
+        Ok(DeliveryProbe::Unprobeable {
+            reason: format!(
+                "destination {} does not support idempotency probes",
+                self.descriptor().identity().display_name()
+            ),
+        })
+    }
+}
+
+/// 幂等探测的四种可能结果（ADR-0051）：只有 Absent 允许重新执行副作用，
+/// Matching 复用既有交付，Conflicting 与 Unprobeable 都阻断自动重试。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum DeliveryProbe {
+    /// 远端不存在此幂等身份的交付；重新执行是安全的。
+    Absent,
+    /// 远端存在且产物摘要一致；携带可直接复用的外部引用。
+    Matching { external_reference: String },
+    /// 远端存在同名交付但摘要不一致；继续执行会覆盖另一份发布产物。
+    Conflicting { external_reference: String },
+    /// 目标不支持探测或当前无法完成探测。
+    Unprobeable { reason: String },
+}
 
 #[derive(Debug, Clone)]
 pub struct AdapterConformanceFixture {
@@ -518,6 +548,27 @@ impl AdapterRegistry {
             .get(&(identity.id.clone(), identity.version))
             .map(Arc::as_ref)
             .ok_or_else(|| self.unresolved_adapter(identity))
+    }
+
+    /// 按交付幂等身份探测一条路线的远端状态（ADR-0051）。
+    pub fn probe_delivery(
+        &self,
+        destination: &AdapterIdentity,
+        settings: &AdapterSettings,
+        identity: &DeliveryIdempotencyIdentity,
+    ) -> Result<DeliveryProbe, PublishError> {
+        if destination.kind != AdapterKind::DeliveryDestination {
+            return Err(PublishError::AdapterKindMismatch {
+                id: destination.id.clone(),
+                expected: AdapterKind::DeliveryDestination,
+                actual: destination.kind,
+            });
+        }
+        self.delivery_destinations
+            .get(&(destination.id.clone(), destination.version))
+            .map(Arc::as_ref)
+            .ok_or_else(|| self.unresolved_adapter(destination))?
+            .probe_delivery(settings, identity)
     }
 
     fn resolve(&self, identity: &AdapterIdentity) -> Result<AdapterRef<'_>, PublishError> {

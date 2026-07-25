@@ -10,6 +10,7 @@ pub const ADAPTER_CONTRACT_VERSION: u32 = 1;
 pub const ARTIFACT_MANIFEST_VERSION: u32 = 1;
 pub const PUBLISH_EVENT_VERSION: u32 = 1;
 pub const DELIVERY_RECEIPT_VERSION: u32 = 1;
+pub const PUBLISH_FAILURE_VERSION: u32 = 1;
 pub const RELEASE_ATTEMPT_VERSION: u32 = 1;
 pub const AUTOMATION_PROJECTION_BUNDLE_VERSION: u32 = 1;
 
@@ -23,6 +24,12 @@ pub enum PublishError {
     UnsupportedEventVersion { actual: u32, expected: u32 },
     #[error("unsupported release attempt version {actual}; expected {expected}")]
     UnsupportedAttemptVersion { actual: u32, expected: u32 },
+    #[error("unsupported publish failure classification version {actual}; expected {expected}")]
+    UnsupportedFailureVersion { actual: u32, expected: u32 },
+    #[error(
+        "automatic retry is blocked: {}", reasons.join("; ")
+    )]
+    AutomaticRetryBlocked { reasons: Vec<String> },
     #[error(
         "publish event history has unexplained sequence gaps; missing ranges {missing:?} must be requested explicitly before the state can advance"
     )]
@@ -145,6 +152,15 @@ pub enum PublishError {
     },
     #[error("project inspection failed: {code}: {message}")]
     ProjectInspection { code: String, message: String },
+    #[error(
+        "delivery failed with {} failure {}: {} (retry_safe: {}, retry_after_seconds: {:?})",
+        failure.category.name(),
+        failure.native_code,
+        failure.message,
+        failure.retry_safe,
+        failure.retry_after_seconds
+    )]
+    Classified { failure: PublishFailure },
     #[error("adapter execution failed: {0}")]
     Execution(String),
     #[error("I/O operation {operation} failed: {message}")]
@@ -1068,6 +1084,71 @@ pub fn is_artifact_role_wildcard(entry: &str) -> bool {
     entry.ends_with(":*")
 }
 
+/// 发布失败分类的封闭集合（ADR-0056）：只有明确的瞬时或限流失败有资格自动重试，
+/// 其余分类（含未分类的 Unknown）都成为显式阻断状态。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum PublishFailureCategory {
+    Transient,
+    RateLimited,
+    Authentication,
+    Authorization,
+    Validation,
+    Conflict,
+    Policy,
+    Unsupported,
+    Rejected,
+    Unknown,
+}
+
+impl PublishFailureCategory {
+    /// 分类资格只是自动重试的必要条件；执行前还必须通过幂等探测（ADR-0051）。
+    pub fn allows_automatic_retry(self) -> bool {
+        matches!(self, Self::Transient | Self::RateLimited)
+    }
+
+    pub fn name(self) -> &'static str {
+        match self {
+            Self::Transient => "transient",
+            Self::RateLimited => "rate_limited",
+            Self::Authentication => "authentication",
+            Self::Authorization => "authorization",
+            Self::Validation => "validation",
+            Self::Conflict => "conflict",
+            Self::Policy => "policy",
+            Self::Unsupported => "unsupported",
+            Self::Rejected => "rejected",
+            Self::Unknown => "unknown",
+        }
+    }
+}
+
+/// Adapter 返回的版本化结构失败描述：分类、原始错误码、副作用是否确定未发生
+/// 和可选 retry-after；Runner 不解析错误字符串（ADR-0056）。
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PublishFailure {
+    pub version: u32,
+    pub category: PublishFailureCategory,
+    pub native_code: String,
+    pub message: String,
+    /// true 表示失败时外部副作用确定未发生，false 表示结果不确定。这个字段
+    /// 供控制面呈现与审计使用；自动重试不因 true 而跳过幂等探测——任何
+    /// 可重试副作用都必须先探测远端状态（ADR-0051）。
+    pub retry_safe: bool,
+    pub retry_after_seconds: Option<u64>,
+}
+
+/// 交付幂等身份（ADR-0051）：由发布尝试、计划节点、发布身份、产物清单摘要和
+/// 交付路线共同确定的外部副作用身份；目标状态必须可探测且摘要一致才能安全复用。
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct DeliveryIdempotencyIdentity {
+    pub attempt_id: String,
+    pub plan_node_id: String,
+    pub release_identity: ReleaseIdentity,
+    pub manifest_digest: String,
+    pub route_id: String,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum DeliveryStatus {
@@ -1184,6 +1265,9 @@ pub struct RouteDeliveryView {
     pub status: DeliveryStatus,
     pub external_reference: Option<String>,
     pub error: Option<String>,
+    /// route_failed 事件携带的结构化 Publish Failure Classification；
+    /// 自动重试资格只依据这里的分类，从不解析 error 字符串（ADR-0056）。
+    pub failure: Option<PublishFailure>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
