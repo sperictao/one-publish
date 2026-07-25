@@ -519,6 +519,16 @@ describe("PublishRunCard", () => {
                 externalReference: "/repo/publish-output",
               },
             ],
+            routes: [
+              {
+                routeId: "local-delivery",
+                required: true,
+                status: "published",
+                externalReference: "/repo/publish-output",
+                error: null,
+              },
+            ],
+            warnings: [],
             events: [
               {
                 eventId: "event-receipt-A",
@@ -552,5 +562,198 @@ describe("PublishRunCard", () => {
     expect(result).toHaveTextContent("2");
     expect(result).toHaveTextContent("receipt-stable-A");
     expect(result).toHaveTextContent("published");
+  });
+
+  it("按路线展示状态、外部引用与错误，并以部分交付状态呈现 Required 失败", () => {
+    render(
+      <PublishRunCard
+        outputLog="partial"
+        publishResult={null}
+        appT={{ outputLogTitle: "执行发布", noOutput: "无输出" }}
+        runtimeResult={{
+          attempt: {
+            attemptId: "attempt-partial",
+            backendRunId: "backend-run-partial",
+            configurationRevisionId: "revision-A",
+            planDigest: "plan-digest-A",
+            executionBackend: "local-execution",
+            status: "partial_delivery",
+            manifestDigest: "manifest-digest-A",
+            manifest: { digest: "manifest-digest-A", artifactCount: 2 },
+            receipts: [
+              {
+                version: 1,
+                receiptId: "receipt-mirror",
+                revision: 1,
+                routeId: "mirror",
+                manifestDigest: "manifest-digest-A",
+                status: "published",
+                externalReference: "/mirror/publish-output",
+              },
+            ],
+            routes: [
+              {
+                routeId: "primary",
+                required: true,
+                status: "failed",
+                externalReference: null,
+                error: "simulated delivery failure at primary.stage",
+              },
+              {
+                routeId: "mirror",
+                required: false,
+                status: "published",
+                externalReference: "/mirror/publish-output",
+                error: null,
+              },
+            ],
+            warnings: [],
+            events: [],
+            error:
+              "required delivery route primary failed: simulated delivery failure at primary.stage",
+          },
+          publishResult: null,
+        }}
+        publishActions={null}
+      />
+    );
+
+    expect(screen.getByTestId("publish-status-panel")).toHaveTextContent(
+      "部分交付"
+    );
+    const failedRoute = screen.getByTestId("publish-route-primary");
+    expect(failedRoute).toHaveTextContent("primary");
+    expect(failedRoute).toHaveTextContent("必需");
+    expect(failedRoute).toHaveTextContent("failed");
+    expect(failedRoute).toHaveTextContent(
+      "simulated delivery failure at primary.stage"
+    );
+    const publishedRoute = screen.getByTestId("publish-route-mirror");
+    expect(publishedRoute).toHaveTextContent("可选");
+    expect(publishedRoute).toHaveTextContent("published");
+    expect(publishedRoute).toHaveTextContent("/mirror/publish-output");
+  });
+
+  it("Optional 路线失败只显示警告，不否定已发布状态", () => {
+    render(
+      <PublishRunCard
+        outputLog="published"
+        publishResult={null}
+        appT={{ outputLogTitle: "执行发布", noOutput: "无输出" }}
+        runtimeResult={{
+          attempt: {
+            attemptId: "attempt-optional-warning",
+            backendRunId: "backend-run-warning",
+            configurationRevisionId: "revision-A",
+            planDigest: "plan-digest-A",
+            executionBackend: "local-execution",
+            status: "published",
+            manifestDigest: "manifest-digest-A",
+            manifest: { digest: "manifest-digest-A", artifactCount: 1 },
+            receipts: [
+              {
+                version: 1,
+                receiptId: "receipt-primary",
+                revision: 1,
+                routeId: "primary",
+                manifestDigest: "manifest-digest-A",
+                status: "published",
+                externalReference: "/repo/publish-output",
+              },
+            ],
+            routes: [
+              {
+                routeId: "primary",
+                required: true,
+                status: "published",
+                externalReference: "/repo/publish-output",
+                error: null,
+              },
+              {
+                routeId: "mirror",
+                required: false,
+                status: "failed",
+                externalReference: null,
+                error: "simulated delivery failure at mirror.stage",
+              },
+            ],
+            warnings: [
+              "optional delivery route mirror failed: simulated delivery failure at mirror.stage",
+            ],
+            events: [],
+            error: null,
+          },
+          publishResult: null,
+        }}
+        publishActions={null}
+      />
+    );
+
+    expect(screen.getByTestId("publish-status-panel")).toHaveTextContent(
+      "成功"
+    );
+    expect(
+      screen.getByText(/optional delivery route mirror failed/)
+    ).toBeInTheDocument();
+    expect(screen.getByTestId("publish-route-mirror")).toHaveTextContent(
+      "failed"
+    );
+  });
+
+  it("全部路线失败时聚合为失败，并逐路线展示错误", () => {
+    render(
+      <PublishRunCard
+        outputLog="failed"
+        publishResult={null}
+        appT={{ outputLogTitle: "执行发布", noOutput: "无输出" }}
+        runtimeResult={{
+          attempt: {
+            attemptId: "attempt-all-failed",
+            backendRunId: "backend-run-all-failed",
+            configurationRevisionId: "revision-A",
+            planDigest: "plan-digest-A",
+            executionBackend: "local-execution",
+            status: "failed",
+            manifestDigest: "manifest-digest-A",
+            manifest: { digest: "manifest-digest-A", artifactCount: 1 },
+            receipts: [],
+            routes: [
+              {
+                routeId: "primary",
+                required: true,
+                status: "failed",
+                externalReference: null,
+                error: "simulated delivery failure at primary.stage",
+              },
+              {
+                routeId: "mirror",
+                required: false,
+                status: "failed",
+                externalReference: null,
+                error: "simulated delivery failure at mirror.stage",
+              },
+            ],
+            warnings: [
+              "optional delivery route mirror failed: simulated delivery failure at mirror.stage",
+            ],
+            events: [],
+            error:
+              "required delivery route primary failed: simulated delivery failure at primary.stage",
+          },
+          publishResult: null,
+        }}
+        publishActions={null}
+      />
+    );
+
+    expect(screen.getByTestId("publish-status-panel")).toHaveTextContent(
+      "失败"
+    );
+    expect(screen.getByTestId("publish-route-primary")).toHaveTextContent(
+      "simulated delivery failure at primary.stage"
+    );
+    expect(screen.getByTestId("publish-route-mirror")).toHaveTextContent(
+      "simulated delivery failure at mirror.stage"
+    );
   });
 });

@@ -11,7 +11,7 @@ use publish_adapters::{
 use publish_domain::{
     sha256_hex, AdapterBinding, AdapterDescriptor, AdapterIdentity, AdapterKind, AdapterSchema,
     AdapterSelection, AdapterSettings, ArtifactCandidate, Capability, CapabilityRequirement,
-    CredentialKind, PlanNode, PlanNodeTemplate, PlanStage, PlanningInputSnapshot,
+    CredentialKind, DeliveryRoute, PlanNode, PlanNodeTemplate, PlanStage, PlanningInputSnapshot,
     PublishAttemptStatus, PublishError, PublishingCapability, ReleaseIdentity, SourceSnapshot,
     PLANNING_INPUT_SNAPSHOT_VERSION,
 };
@@ -579,12 +579,12 @@ fn fixture_snapshot(
                 AdapterSettings::new(1)
                     .with_value("root_directory", Value::String(store_directory.to_string())),
             ),
-            delivery_destinations: vec![AdapterBinding::new(
+            delivery_routes: vec![DeliveryRoute::required(AdapterBinding::new(
                 "destination",
                 AdapterIdentity::new(AdapterKind::DeliveryDestination, "local-directory", 1),
                 AdapterSettings::new(1)
                     .with_value("directory", Value::String(delivery_directory.to_string())),
-            )],
+            ))],
         },
     }
 }

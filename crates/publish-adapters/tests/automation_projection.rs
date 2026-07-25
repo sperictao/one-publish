@@ -7,7 +7,7 @@ use publish_adapters::{
 };
 use publish_domain::{
     AdapterBinding, AdapterIdentity, AdapterKind, AdapterSelection, AdapterSettings,
-    AutomationBindingProjection, AutomationProjection, AutomationTriggerPolicy,
+    AutomationBindingProjection, AutomationProjection, AutomationTriggerPolicy, DeliveryRoute,
     PlanningInputSnapshot, PublishError, SourceSnapshot, AUTOMATION_PROJECTION_BUNDLE_VERSION,
     PLANNING_INPUT_SNAPSHOT_VERSION,
 };
@@ -141,11 +141,11 @@ fn fixture_snapshot() -> PlanningInputSnapshot {
                 AdapterIdentity::new(AdapterKind::ArtifactStore, "store", 1),
                 empty.clone(),
             ),
-            delivery_destinations: vec![AdapterBinding::new(
+            delivery_routes: vec![DeliveryRoute::required(AdapterBinding::new(
                 "destination",
                 AdapterIdentity::new(AdapterKind::DeliveryDestination, "destination", 1),
                 empty,
-            )],
+            ))],
         },
     }
 }

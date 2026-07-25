@@ -61,7 +61,7 @@ export interface PublishRunCardProps {
 }
 
 type PublishVisualState =
-  "idle" | "running" | "success" | "cancelled" | "failed";
+  "idle" | "running" | "success" | "partial" | "cancelled" | "failed";
 
 export const PublishRunCard = memo(function PublishRunCard({
   outputLog: currentOutputLog,
@@ -166,17 +166,19 @@ export const PublishRunCard = memo(function PublishRunCard({
     ? "running"
     : runtimeResult?.attempt.status === "published"
       ? "success"
-      : runtimeResult?.attempt.status === "failed"
-        ? runtimeResult.publishResult?.cancelled
-          ? "cancelled"
-          : "failed"
-        : publishResult
-          ? publishResult.success
-            ? "success"
-            : publishResult.cancelled
-              ? "cancelled"
-              : "failed"
-          : "idle";
+      : runtimeResult?.attempt.status === "partial_delivery"
+        ? "partial"
+        : runtimeResult?.attempt.status === "failed"
+          ? runtimeResult.publishResult?.cancelled
+            ? "cancelled"
+            : "failed"
+          : publishResult
+            ? publishResult.success
+              ? "success"
+              : publishResult.cancelled
+                ? "cancelled"
+                : "failed"
+            : "idle";
 
   const statusMeta =
     publishVisualState === "running"
@@ -206,44 +208,57 @@ export const PublishRunCard = memo(function PublishRunCard({
             iconClassName: "",
             icon: CheckCircle2,
           }
-        : publishVisualState === "cancelled"
+        : publishVisualState === "partial"
           ? {
-              label: appT.statusCancelled || "已取消",
+              label: appT.statusPartialDelivery || "部分交付",
               description:
-                appT.publishStatusCancelledDetail ||
-                "当前执行已停止，可调整参数后重新发起发布。",
-              badgeClassName: "status-cancelled",
+                appT.publishStatusPartialDeliveryDetail ||
+                "部分必需路线交付失败，已发布路线的结果保持有效；请查看各路线的状态与错误。",
+              badgeClassName: "border-warning/20 bg-warning/10 text-warning",
               panelClassName: "border-warning/20 bg-card",
               iconWrapClassName:
                 "bg-warning/10 text-warning ring-1 ring-warning/15",
               iconClassName: "",
-              icon: Square,
+              icon: AlertTriangle,
             }
-          : publishVisualState === "failed"
+          : publishVisualState === "cancelled"
             ? {
-                label: appT.statusFailed || "失败",
+                label: appT.statusCancelled || "已取消",
                 description:
-                  appT.publishStatusFailedDetail ||
-                  "发布命令已退出，结合下方日志定位失败原因。",
-                badgeClassName: "status-failed",
-                panelClassName: "border-destructive/20 bg-card",
+                  appT.publishStatusCancelledDetail ||
+                  "当前执行已停止，可调整参数后重新发起发布。",
+                badgeClassName: "status-cancelled",
+                panelClassName: "border-warning/20 bg-card",
                 iconWrapClassName:
-                  "bg-destructive/10 text-destructive ring-1 ring-destructive/15",
+                  "bg-warning/10 text-warning ring-1 ring-warning/15",
                 iconClassName: "",
-                icon: XCircle,
+                icon: Square,
               }
-            : {
-                label: appT.publishStatusIdle || "待执行",
-                description:
-                  appT.publishStatusIdleDetail ||
-                  "命令与参数准备完成，可以开始本次发布。",
-                badgeClassName: "border-border bg-muted text-foreground",
-                panelClassName: "border-border bg-card",
-                iconWrapClassName:
-                  "bg-muted text-muted-foreground ring-1 ring-border",
-                iconClassName: "",
-                icon: Clock3,
-              };
+            : publishVisualState === "failed"
+              ? {
+                  label: appT.statusFailed || "失败",
+                  description:
+                    appT.publishStatusFailedDetail ||
+                    "发布命令已退出，结合下方日志定位失败原因。",
+                  badgeClassName: "status-failed",
+                  panelClassName: "border-destructive/20 bg-card",
+                  iconWrapClassName:
+                    "bg-destructive/10 text-destructive ring-1 ring-destructive/15",
+                  iconClassName: "",
+                  icon: XCircle,
+                }
+              : {
+                  label: appT.publishStatusIdle || "待执行",
+                  description:
+                    appT.publishStatusIdleDetail ||
+                    "命令与参数准备完成，可以开始本次发布。",
+                  badgeClassName: "border-border bg-muted text-foreground",
+                  panelClassName: "border-border bg-card",
+                  iconWrapClassName:
+                    "bg-muted text-muted-foreground ring-1 ring-border",
+                  iconClassName: "",
+                  icon: Clock3,
+                };
 
   const StatusIcon = statusMeta.icon;
   const successFileCount =
@@ -265,7 +280,7 @@ export const PublishRunCard = memo(function PublishRunCard({
   }
   const statusFact = statusFacts.length > 0 ? statusFacts.join(" · ") : null;
   const failureMessage =
-    publishVisualState === "failed"
+    publishVisualState === "failed" || publishVisualState === "partial"
       ? runtimeResult?.attempt.error?.trim() || publishResult?.error?.trim()
       : null;
 
@@ -284,8 +299,10 @@ export const PublishRunCard = memo(function PublishRunCard({
   const isSuccessState = publishVisualState === "success";
   const canOpenOutputDir =
     isSuccessState && !!publishResult?.output_dir?.trim();
-  const publishWarnings =
-    publishResult?.warnings?.filter((w) => w.trim().length > 0) ?? [];
+  const publishWarnings = [
+    ...(runtimeResult?.attempt.warnings ?? []),
+    ...(publishResult?.warnings ?? []),
+  ].filter((w) => w.trim().length > 0);
 
   return (
     <Card
@@ -604,6 +621,53 @@ export const PublishRunCard = memo(function PublishRunCard({
                   <dd>{runtimeResult.attempt.manifest?.artifactCount ?? 0}</dd>
                 </div>
               </dl>
+              {runtimeResult.attempt.routes.length > 0 ? (
+                <div className="mt-2" data-testid="publish-route-results">
+                  <SectionLabel as="div">
+                    {appT.publishRuntimeRoutesLabel || "交付路线"}
+                  </SectionLabel>
+                  <ul className="mt-1">
+                    {runtimeResult.attempt.routes.map((route) => (
+                      <li
+                        key={route.routeId}
+                        data-testid={`publish-route-${route.routeId}`}
+                        className="border-t border-border py-2 text-label-12"
+                      >
+                        <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
+                          <span className="font-mono">{route.routeId}</span>
+                          <span className="rounded-full border border-border px-2 py-0.5 text-muted-foreground">
+                            {route.required
+                              ? appT.publishRouteRequiredLabel || "必需"
+                              : appT.publishRouteOptionalLabel || "可选"}
+                          </span>
+                          <span
+                            className={cn(
+                              "font-semibold",
+                              route.status === "published"
+                                ? "text-success"
+                                : route.error
+                                  ? "text-destructive"
+                                  : "text-muted-foreground"
+                            )}
+                          >
+                            {route.status}
+                          </span>
+                        </div>
+                        {route.externalReference ? (
+                          <div className="mt-1 truncate font-mono text-muted-foreground">
+                            {route.externalReference}
+                          </div>
+                        ) : null}
+                        {route.error ? (
+                          <div className="mt-1 break-words text-destructive">
+                            {route.error}
+                          </div>
+                        ) : null}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ) : null}
               {runtimeResult.attempt.receipts.map((receipt) => (
                 <div
                   key={receipt.receiptId}

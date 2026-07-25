@@ -1,8 +1,8 @@
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 
 use publish_adapters::AdapterRegistry;
 use publish_domain::{
-    AdapterBinding, AdapterSettings, PlanNode, PlanNodeTemplate, PlanningInputSnapshot,
+    AdapterBinding, AdapterSettings, PlanNode, PlanNodeTemplate, PlanRoute, PlanningInputSnapshot,
     PublishError, PublishPlan, PLANNING_INPUT_SNAPSHOT_VERSION,
 };
 
@@ -22,16 +22,25 @@ impl<'a> PublishPlanner<'a> {
                 expected: PLANNING_INPUT_SNAPSHOT_VERSION,
             });
         }
-        if snapshot.adapters.delivery_destinations.is_empty() {
+        if snapshot.adapters.delivery_routes.is_empty() {
             return Err(PublishError::InvalidPlan(
-                "at least one delivery destination is required".to_string(),
+                "at least one delivery route is required".to_string(),
             ));
         }
+        let routes = snapshot
+            .adapters
+            .delivery_routes
+            .iter()
+            .map(|route| PlanRoute {
+                route_id: route.route_id().to_string(),
+                required: route.required,
+            })
+            .collect::<Vec<_>>();
 
         let prepared = self.prepare_bindings(snapshot)?;
         self.registry
             .validate_capabilities(prepared.iter().map(|binding| &binding.binding.adapter))?;
-        let nodes = self.compose_nodes(snapshot, &prepared)?;
+        let nodes = self.compose_nodes(snapshot, &prepared, &routes)?;
         let adapters = prepared
             .iter()
             .map(|prepared| AdapterBinding {
@@ -45,6 +54,7 @@ impl<'a> PublishPlanner<'a> {
             snapshot.digest()?,
             adapters,
             snapshot.adapters.execution_backend.adapter.clone(),
+            routes,
             nodes,
         )
     }
@@ -71,6 +81,7 @@ impl<'a> PublishPlanner<'a> {
         &self,
         snapshot: &PlanningInputSnapshot,
         prepared: &[PreparedBinding<'_>],
+        routes: &[PlanRoute],
     ) -> Result<Vec<PlanNode>, PublishError> {
         let mut templates = Vec::new();
         for (binding_order, prepared_binding) in prepared.iter().enumerate() {
@@ -87,18 +98,39 @@ impl<'a> PublishPlanner<'a> {
             (template.stage, *binding_order, *fragment_order)
         });
 
+        // 路线节点只链接同一路线内的前驱与共享前缀的最后一个节点；共享节点保持
+        // 线性链。这样一条路线的失败不会通过依赖阻断其他路线（ADR-0022）。
+        let route_ids = routes
+            .iter()
+            .map(|route| route.route_id.as_str())
+            .collect::<BTreeSet<_>>();
         let mut ids = BTreeSet::new();
-        let mut previous_id: Option<String> = None;
+        let mut previous_shared: Option<String> = None;
+        let mut previous_by_route: BTreeMap<String, String> = BTreeMap::new();
         templates
             .into_iter()
             .map(|(_, _, prepared_binding, template)| {
-                make_plan_node(
+                let binding_id = prepared_binding.binding.binding_id.as_str();
+                let previous = if route_ids.contains(binding_id) {
+                    previous_by_route
+                        .get(binding_id)
+                        .or(previous_shared.as_ref())
+                } else {
+                    previous_shared.as_ref()
+                };
+                let node = make_plan_node(
                     prepared_binding.binding,
                     &prepared_binding.settings,
                     template,
                     &mut ids,
-                    &mut previous_id,
-                )
+                    previous.cloned(),
+                )?;
+                if route_ids.contains(binding_id) {
+                    previous_by_route.insert(binding_id.to_string(), node.id.clone());
+                } else {
+                    previous_shared = Some(node.id.clone());
+                }
+                Ok(node)
             })
             .collect()
     }
@@ -114,7 +146,7 @@ fn make_plan_node(
     settings: &AdapterSettings,
     template: PlanNodeTemplate,
     ids: &mut BTreeSet<String>,
-    previous_id: &mut Option<String>,
+    previous_id: Option<String>,
 ) -> Result<PlanNode, PublishError> {
     template.operation.validate()?;
     let id = format!("{}.{}", binding.binding_id, template.local_id);
@@ -123,8 +155,6 @@ fn make_plan_node(
             "plan node id {id} is not unique"
         )));
     }
-    let depends_on = previous_id.iter().cloned().collect();
-    *previous_id = Some(id.clone());
     Ok(PlanNode {
         id,
         stage: template.stage,
@@ -132,7 +162,7 @@ fn make_plan_node(
         binding_id: binding.binding_id.clone(),
         settings: settings.clone(),
         operation: template.operation,
-        depends_on,
+        depends_on: previous_id.into_iter().collect(),
         artifact_inputs: template.artifact_inputs,
         artifact_outputs: template.artifact_outputs,
         side_effects: template.side_effects,

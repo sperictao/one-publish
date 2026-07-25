@@ -7,9 +7,9 @@ use publish_adapters::{
 };
 use publish_domain::{
     AdapterBinding, AdapterDescriptor, AdapterIdentity, AdapterKind, AdapterSchema,
-    AdapterSelection, AdapterSettings, Capability, CapabilityRequirement, PlanNodeTemplate,
-    PlanOperation, PlanStage, PlanningInputSnapshot, PublishingCapability, SourceSnapshot,
-    PLANNING_INPUT_SNAPSHOT_VERSION,
+    AdapterSelection, AdapterSettings, Capability, CapabilityRequirement, DeliveryRoute,
+    PlanNodeTemplate, PlanOperation, PlanStage, PlanningInputSnapshot, PublishingCapability,
+    SourceSnapshot, PLANNING_INPUT_SNAPSHOT_VERSION,
 };
 use publish_planner::PublishPlanner;
 
@@ -217,11 +217,11 @@ fn fixture_snapshot() -> PlanningInputSnapshot {
                 AdapterIdentity::new(AdapterKind::ArtifactStore, "temporary-store", 1),
                 settings.clone(),
             ),
-            delivery_destinations: vec![AdapterBinding::new(
+            delivery_routes: vec![DeliveryRoute::required(AdapterBinding::new(
                 "destination",
                 AdapterIdentity::new(AdapterKind::DeliveryDestination, "local-directory", 1),
                 settings,
-            )],
+            ))],
         },
     }
 }

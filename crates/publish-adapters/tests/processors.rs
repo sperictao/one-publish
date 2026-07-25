@@ -9,7 +9,7 @@ use publish_adapters::{
 use publish_domain::{
     sha256_hex, AdapterBinding, AdapterDescriptor, AdapterIdentity, AdapterKind, AdapterSchema,
     AdapterSelection, AdapterSettings, ArtifactCandidate, Capability, CapabilityRequirement,
-    PlanNode, PlanNodeTemplate, PlanStage, PlanningInputSnapshot, PublishError,
+    DeliveryRoute, PlanNode, PlanNodeTemplate, PlanStage, PlanningInputSnapshot, PublishError,
     PublishingCapability, SourceSnapshot, PLANNING_INPUT_SNAPSHOT_VERSION,
 };
 use serde_json::{json, Value};
@@ -452,11 +452,11 @@ fn fixture_snapshot() -> PlanningInputSnapshot {
                 AdapterIdentity::new(AdapterKind::ArtifactStore, "fixture-store", 1),
                 empty.clone(),
             ),
-            delivery_destinations: vec![AdapterBinding::new(
+            delivery_routes: vec![DeliveryRoute::required(AdapterBinding::new(
                 "destination",
                 AdapterIdentity::new(AdapterKind::DeliveryDestination, "fixture-destination", 1),
                 empty,
-            )],
+            ))],
         },
     }
 }

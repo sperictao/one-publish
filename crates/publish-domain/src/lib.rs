@@ -482,13 +482,41 @@ impl AdapterBinding {
     }
 }
 
+/// 有序交付路线：一个 Delivery Destination 绑定加上 Required/Optional 语义；
+/// 全部路线消费同一封存 Manifest，Required 决定聚合结果而不是执行顺序（ADR-0022）。
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct DeliveryRoute {
+    pub binding: AdapterBinding,
+    pub required: bool,
+}
+
+impl DeliveryRoute {
+    pub fn required(binding: AdapterBinding) -> Self {
+        Self {
+            binding,
+            required: true,
+        }
+    }
+
+    pub fn optional(binding: AdapterBinding) -> Self {
+        Self {
+            binding,
+            required: false,
+        }
+    }
+
+    pub fn route_id(&self) -> &str {
+        &self.binding.binding_id
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct AdapterSelection {
     pub project_provider: AdapterBinding,
     pub artifact_processors: Vec<AdapterBinding>,
     pub execution_backend: AdapterBinding,
     pub artifact_store: AdapterBinding,
-    pub delivery_destinations: Vec<AdapterBinding>,
+    pub delivery_routes: Vec<DeliveryRoute>,
 }
 
 impl AdapterSelection {
@@ -498,7 +526,7 @@ impl AdapterSelection {
         bindings.extend(self.artifact_processors.iter());
         bindings.push(&self.execution_backend);
         bindings.push(&self.artifact_store);
-        bindings.extend(self.delivery_destinations.iter());
+        bindings.extend(self.delivery_routes.iter().map(|route| &route.binding));
         bindings
     }
 }
@@ -749,12 +777,21 @@ pub struct PlanNode {
     pub irreversible: bool,
 }
 
+/// 封存进计划的路线合同：路线身份与 Required 语义随计划摘要固定，
+/// 运行时据此聚合交付结果而不回读配置（ADR-0022/0026）。
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PlanRoute {
+    pub route_id: String,
+    pub required: bool,
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct PublishPlan {
     pub version: u32,
     pub snapshot_digest: String,
     pub adapters: Vec<AdapterBinding>,
     pub execution_backend: AdapterIdentity,
+    pub routes: Vec<PlanRoute>,
     pub nodes: Vec<PlanNode>,
     pub digest: String,
 }
@@ -1082,7 +1119,20 @@ pub struct PublishEvent {
 pub enum PublishAttemptStatus {
     Running,
     Published,
+    /// Required Route 失败但至少一条路线已 Published；已发布的不可变交付不被否定（ADR-0022）。
+    PartialDelivery,
     Failed,
+}
+
+/// 单条交付路线的聚合结果：状态、外部引用与错误按路线呈现，
+/// 只有 Published 满足 Required Route（ADR-0039）。
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RouteDeliveryView {
+    pub route_id: String,
+    pub required: bool,
+    pub status: DeliveryStatus,
+    pub external_reference: Option<String>,
+    pub error: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -1107,6 +1157,9 @@ pub struct PublishAttemptView {
     pub manifest: Option<ArtifactManifest>,
     pub events: Vec<PublishEvent>,
     pub receipts: Vec<DeliveryReceipt>,
+    pub routes: Vec<RouteDeliveryView>,
+    /// 不影响聚合成功的可见警告，例如 Optional Route 失败（ADR-0022）。
+    pub warnings: Vec<String>,
     pub error: Option<String>,
 }
 
@@ -1283,6 +1336,7 @@ impl PublishPlan {
         snapshot_digest: String,
         adapters: Vec<AdapterBinding>,
         execution_backend: AdapterIdentity,
+        routes: Vec<PlanRoute>,
         nodes: Vec<PlanNode>,
     ) -> Result<Self, PublishError> {
         let mut plan = Self {
@@ -1290,6 +1344,7 @@ impl PublishPlan {
             snapshot_digest,
             adapters,
             execution_backend,
+            routes,
             nodes,
             digest: String::new(),
         };
@@ -1304,6 +1359,7 @@ impl PublishPlan {
             snapshot_digest: &'a str,
             adapters: &'a [AdapterBinding],
             execution_backend: &'a AdapterIdentity,
+            routes: &'a [PlanRoute],
             nodes: &'a [PlanNode],
         }
 
@@ -1312,6 +1368,7 @@ impl PublishPlan {
             snapshot_digest: &self.snapshot_digest,
             adapters: &self.adapters,
             execution_backend: &self.execution_backend,
+            routes: &self.routes,
             nodes: &self.nodes,
         })
     }

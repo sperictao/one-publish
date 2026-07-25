@@ -7,9 +7,10 @@ use publish_adapters::{
 use publish_domain::{
     declares_artifact_role, sha256_hex, AdapterBinding, AdapterIdentity, AdapterKind,
     ArtifactCandidate, ArtifactManifest, DeliveryEnvelope, DeliveryReceipt, DeliveryStatus,
-    PlanNode, PlanStage, PlanningInputSnapshot, PublishAttemptStatus, PublishAttemptView,
-    PublishError, PublishEvent, PublishOutcome, PublishPlan, ReleaseAttempt, ReleaseIdentity,
-    DELIVERY_RECEIPT_VERSION, PUBLISH_EVENT_VERSION, PUBLISH_PLAN_VERSION, RELEASE_ATTEMPT_VERSION,
+    PlanNode, PlanRoute, PlanStage, PlanningInputSnapshot, PublishAttemptStatus,
+    PublishAttemptView, PublishError, PublishEvent, PublishOutcome, PublishPlan, ReleaseAttempt,
+    ReleaseIdentity, RouteDeliveryView, DELIVERY_RECEIPT_VERSION, PUBLISH_EVENT_VERSION,
+    PUBLISH_PLAN_VERSION, RELEASE_ATTEMPT_VERSION,
 };
 use publish_planner::PublishPlanner;
 use serde::{Deserialize, Serialize};
@@ -26,16 +27,24 @@ pub struct ReducedPublishEvents {
     pub status: PublishAttemptStatus,
     pub manifest_digest: Option<String>,
     pub receipts: Vec<DeliveryReceipt>,
+    pub routes: Vec<RouteDeliveryView>,
+    pub warnings: Vec<String>,
     pub error: Option<String>,
 }
 
 pub fn reduce_publish_events(
     events: &[PublishEvent],
+    routes: &[PlanRoute],
 ) -> Result<ReducedPublishEvents, PublishError> {
     let mut manifest_digest = None;
     let mut receipts = BTreeMap::<String, DeliveryReceipt>::new();
+    let mut route_failures = BTreeMap::<String, String>::new();
     let mut failure = None;
     let mut event_identity: Option<(String, String, String)> = None;
+    let known_routes = routes
+        .iter()
+        .map(|route| route.route_id.as_str())
+        .collect::<BTreeSet<_>>();
 
     for (index, event) in events.iter().enumerate() {
         if event.version != PUBLISH_EVENT_VERSION {
@@ -94,6 +103,12 @@ pub fn reduce_publish_events(
                         ))
                     })?;
                 validate_receipt_revision(&receipt)?;
+                if !known_routes.contains(receipt.route_id.as_str()) {
+                    return Err(PublishError::Execution(format!(
+                        "delivery receipt {} references unknown route {}",
+                        receipt.receipt_id, receipt.route_id
+                    )));
+                }
                 match receipts.get(&receipt.receipt_id) {
                     Some(existing) if receipt.revision < existing.revision => {
                         return Err(PublishError::Execution(format!(
@@ -118,6 +133,31 @@ pub fn reduce_publish_events(
                         receipts.insert(receipt.receipt_id.clone(), receipt);
                     }
                 }
+            }
+            "route_failed" => {
+                let route_id = event
+                    .payload
+                    .get("route_id")
+                    .and_then(Value::as_str)
+                    .ok_or_else(|| {
+                        PublishError::Execution(format!(
+                            "publish event {} is missing its failed route id",
+                            event.event_id
+                        ))
+                    })?;
+                if !known_routes.contains(route_id) {
+                    return Err(PublishError::Execution(format!(
+                        "publish event {} references unknown route {route_id}",
+                        event.event_id
+                    )));
+                }
+                let error = event
+                    .payload
+                    .get("error")
+                    .and_then(Value::as_str)
+                    .map(str::to_string)
+                    .unwrap_or_else(|| format!("delivery route {route_id} failed"));
+                route_failures.entry(route_id.to_string()).or_insert(error);
             }
             "plan_node_failed" => {
                 if failure.is_none() {
@@ -149,37 +189,144 @@ pub fn reduce_publish_events(
         }
     }
 
-    if failure.is_none() {
-        if let Some(receipt) = receipts
-            .values()
-            .find(|receipt| is_failed_delivery_status(receipt.status))
-        {
-            failure = Some(format!(
-                "delivery receipt {} is {}",
-                receipt.receipt_id,
-                delivery_status_name(receipt.status)
-            ));
-        }
-    }
+    let route_views = project_route_views(routes, &receipts, &route_failures);
+    let aggregate = aggregate_route_status(&route_views, failure.as_deref());
 
-    let status = if failure.is_some() {
+    Ok(ReducedPublishEvents {
+        status: aggregate.status,
+        manifest_digest,
+        receipts: receipts.into_values().collect(),
+        routes: route_views,
+        warnings: aggregate.warnings,
+        error: failure.or(aggregate.error),
+    })
+}
+
+/// 把最终 Receipt 与路线失败证据投影为逐路线视图；无任何证据的路线保持 Pending。
+fn project_route_views(
+    routes: &[PlanRoute],
+    receipts: &BTreeMap<String, DeliveryReceipt>,
+    route_failures: &BTreeMap<String, String>,
+) -> Vec<RouteDeliveryView> {
+    routes
+        .iter()
+        .map(|route| {
+            let mut view = RouteDeliveryView {
+                route_id: route.route_id.clone(),
+                required: route.required,
+                status: DeliveryStatus::Pending,
+                external_reference: None,
+                error: None,
+            };
+            let route_receipts = receipts
+                .values()
+                .filter(|receipt| receipt.route_id == route.route_id)
+                .collect::<Vec<_>>();
+            for receipt in &route_receipts {
+                view.external_reference = Some(receipt.external_reference.clone());
+                if is_failed_delivery_status(receipt.status) && view.error.is_none() {
+                    view.status = receipt.status;
+                    view.error = Some(failed_receipt_message(receipt));
+                }
+            }
+            // 路线状态取全部 Receipt 中最落后的生命周期阶段：只有全部 Published
+            // 才呈现 Published，上传或 Staged 不等同于成功（ADR-0039）。
+            if view.error.is_none() {
+                if let Some(least_advanced) = route_receipts
+                    .iter()
+                    .map(|receipt| receipt.status)
+                    .min_by_key(|status| delivery_status_rank(*status))
+                {
+                    view.status = least_advanced;
+                }
+            }
+            if let Some(error) = route_failures.get(&route.route_id) {
+                view.error = Some(error.clone());
+                if !is_failed_delivery_status(view.status) {
+                    view.status = DeliveryStatus::Failed;
+                }
+            }
+            view
+        })
+        .collect()
+}
+
+struct AggregatedRouteStatus {
+    status: PublishAttemptStatus,
+    warnings: Vec<String>,
+    error: Option<String>,
+}
+
+/// 聚合规则（ADR-0022/0039）：只有 Published 满足 Required Route；Required 失败且
+/// 至少一条路线成功进入 Partial Delivery；Optional 失败只产生警告，Optional 未完结
+/// 也不阻止已满足的 Required 结果聚合为 Published。
+fn aggregate_route_status(
+    routes: &[RouteDeliveryView],
+    global_failure: Option<&str>,
+) -> AggregatedRouteStatus {
+    let failed = |view: &RouteDeliveryView| view.error.is_some();
+    let published = |view: &RouteDeliveryView| view.status == DeliveryStatus::Published;
+    let describe_failure = |prefix: &str, view: &RouteDeliveryView| {
+        format!(
+            "{prefix}delivery route {} failed: {}",
+            view.route_id,
+            view.error.as_deref().unwrap_or("unknown failure")
+        )
+    };
+
+    let warnings = routes
+        .iter()
+        .filter(|view| !view.required && failed(view))
+        .map(|view| describe_failure("optional ", view))
+        .collect::<Vec<_>>();
+    let required_failures = routes
+        .iter()
+        .filter(|view| view.required && failed(view))
+        .map(|view| describe_failure("required ", view))
+        .collect::<Vec<_>>();
+
+    if global_failure.is_some() {
+        return AggregatedRouteStatus {
+            status: PublishAttemptStatus::Failed,
+            warnings,
+            error: None,
+        };
+    }
+    let status = if !routes.is_empty() && routes.iter().all(failed) {
         PublishAttemptStatus::Failed
-    } else if !receipts.is_empty()
-        && receipts
-            .values()
-            .all(|receipt| receipt.status == DeliveryStatus::Published)
+    } else if !required_failures.is_empty() {
+        if routes.iter().any(published) {
+            PublishAttemptStatus::PartialDelivery
+        } else {
+            PublishAttemptStatus::Failed
+        }
+    } else if routes.iter().any(published)
+        && routes.iter().filter(|view| view.required).all(published)
     {
         PublishAttemptStatus::Published
     } else {
         PublishAttemptStatus::Running
     };
-
-    Ok(ReducedPublishEvents {
+    let error = match status {
+        PublishAttemptStatus::Failed | PublishAttemptStatus::PartialDelivery => {
+            let failures = if required_failures.is_empty() {
+                routes
+                    .iter()
+                    .filter(|view| failed(view))
+                    .map(|view| describe_failure("", view))
+                    .collect::<Vec<_>>()
+            } else {
+                required_failures
+            };
+            (!failures.is_empty()).then(|| failures.join("; "))
+        }
+        _ => None,
+    };
+    AggregatedRouteStatus {
         status,
-        manifest_digest,
-        receipts: receipts.into_values().collect(),
-        error: failure,
-    })
+        warnings,
+        error,
+    }
 }
 
 fn validate_receipt_revision(receipt: &DeliveryReceipt) -> Result<(), PublishError> {
@@ -266,6 +413,14 @@ fn is_failed_delivery_status(status: DeliveryStatus) -> bool {
             | DeliveryStatus::Rejected
             | DeliveryStatus::Cancelled
             | DeliveryStatus::Expired
+    )
+}
+
+fn failed_receipt_message(receipt: &DeliveryReceipt) -> String {
+    format!(
+        "delivery receipt {} is {}",
+        receipt.receipt_id,
+        delivery_status_name(receipt.status)
     )
 }
 
@@ -489,6 +644,28 @@ fn validate_plan(plan: &PublishPlan) -> Result<(), PublishError> {
             actual,
         });
     }
+    let mut route_ids = BTreeSet::new();
+    if plan.routes.is_empty() {
+        return Err(PublishError::InvalidPlan(
+            "sealed publish plans require at least one delivery route".to_string(),
+        ));
+    }
+    for route in &plan.routes {
+        if route.route_id.trim().is_empty() || !route_ids.insert(route.route_id.as_str()) {
+            return Err(PublishError::InvalidPlan(
+                "plan route ids must be non-empty and unique".to_string(),
+            ));
+        }
+        if !plan.adapters.iter().any(|binding| {
+            binding.binding_id == route.route_id
+                && binding.adapter.kind == AdapterKind::DeliveryDestination
+        }) {
+            return Err(PublishError::InvalidPlan(format!(
+                "plan route {} does not reference a delivery destination binding",
+                route.route_id
+            )));
+        }
+    }
     let mut seen = BTreeSet::new();
     for node in &plan.nodes {
         if node.id.trim().is_empty() || !seen.insert(node.id.clone()) {
@@ -519,12 +696,16 @@ struct RuntimeNodeExecutor<'a> {
     snapshot_digest: &'a str,
     execution_backend: &'a AdapterIdentity,
     bindings: BTreeMap<&'a str, &'a AdapterBinding>,
+    routes: &'a [PlanRoute],
     artifacts: Vec<ArtifactCandidate>,
     manifest: Option<ArtifactManifest>,
     envelopes: Vec<DeliveryEnvelope>,
     receipts: Vec<DeliveryReceipt>,
     events: Vec<PublishEvent>,
     executed_nodes: BTreeSet<String>,
+    /// 已失败路线：路线内后续节点被跳过，失败不阻断其他路线（ADR-0022）。
+    failed_routes: BTreeMap<String, String>,
+    skipped_nodes: BTreeSet<String>,
     expected_nodes: BTreeMap<&'a str, &'a PlanNode>,
 }
 
@@ -547,18 +728,27 @@ impl<'a> RuntimeNodeExecutor<'a> {
                 .iter()
                 .map(|binding| (binding.binding_id.as_str(), binding))
                 .collect(),
+            routes: &plan.routes,
             artifacts: Vec::new(),
             manifest: None,
             envelopes: Vec::new(),
             receipts: Vec::new(),
             events: Vec::new(),
             executed_nodes: BTreeSet::new(),
+            failed_routes: BTreeMap::new(),
+            skipped_nodes: BTreeSet::new(),
             expected_nodes: plan
                 .nodes
                 .iter()
                 .map(|node| (node.id.as_str(), node))
                 .collect(),
         }
+    }
+
+    fn is_route_node(&self, node: &PlanNode) -> bool {
+        self.routes
+            .iter()
+            .any(|route| route.route_id == node.binding_id)
     }
 
     fn finish(self, plan: &PublishPlan) -> Result<PublishOutcome, PublishError> {
@@ -570,7 +760,10 @@ impl<'a> RuntimeNodeExecutor<'a> {
         let missing = plan
             .nodes
             .iter()
-            .filter(|node| !self.executed_nodes.contains(&node.id))
+            .filter(|node| {
+                !self.executed_nodes.contains(&node.id)
+                    && !self.failed_routes.contains_key(&node.binding_id)
+            })
             .map(|node| node.id.clone())
             .collect::<Vec<_>>();
         if !missing.is_empty() {
@@ -581,8 +774,15 @@ impl<'a> RuntimeNodeExecutor<'a> {
             .manifest
             .as_ref()
             .ok_or(PublishError::MissingArtifactManifest)?;
-        if self.receipts.is_empty() {
-            return Err(PublishError::MissingDeliveryReceipt);
+        for route in self.routes {
+            if !self.failed_routes.contains_key(&route.route_id)
+                && !self
+                    .receipts
+                    .iter()
+                    .any(|receipt| receipt.route_id == route.route_id)
+            {
+                return Err(PublishError::MissingDeliveryReceipt);
+            }
         }
         if let Some(receipt) = self
             .receipts
@@ -599,7 +799,7 @@ impl<'a> RuntimeNodeExecutor<'a> {
     }
 
     fn into_outcome(self) -> Result<PublishOutcome, PublishError> {
-        let projection = reduce_publish_events(&self.events)?;
+        let projection = reduce_publish_events(&self.events, self.routes)?;
         self.validate_event_projection(&projection)?;
         Ok(PublishOutcome {
             manifest: self.manifest.ok_or(PublishError::MissingArtifactManifest)?,
@@ -617,7 +817,7 @@ impl<'a> RuntimeNodeExecutor<'a> {
             return self.finish_failed_attempt(attempt, error);
         }
 
-        let projection = reduce_publish_events(&self.events)?;
+        let projection = reduce_publish_events(&self.events, self.routes)?;
         if let Err(error) = self.validate_event_projection(&projection) {
             return self.finish_failed_attempt(attempt, error);
         }
@@ -628,6 +828,8 @@ impl<'a> RuntimeNodeExecutor<'a> {
             manifest: self.manifest.take(),
             events: self.events,
             receipts: projection.receipts,
+            routes: projection.routes,
+            warnings: projection.warnings,
             error: projection.error,
         })
     }
@@ -645,7 +847,7 @@ impl<'a> RuntimeNodeExecutor<'a> {
         {
             self.append_failure_event("runtime", None, &message);
         }
-        let projection = reduce_publish_events(&self.events)?;
+        let projection = reduce_publish_events(&self.events, self.routes)?;
         attempt.manifest_digest = projection.manifest_digest.clone();
         Ok(PublishAttemptView {
             attempt,
@@ -653,6 +855,8 @@ impl<'a> RuntimeNodeExecutor<'a> {
             manifest: self.manifest,
             events: self.events,
             receipts: projection.receipts,
+            routes: projection.routes,
+            warnings: projection.warnings,
             error: projection.error.or(Some(message)),
         })
     }
@@ -670,7 +874,12 @@ impl<'a> RuntimeNodeExecutor<'a> {
                 "publish events did not bind the sealed artifact manifest".to_string(),
             ));
         }
-        if projection.receipts.is_empty() {
+        // 每条路线要么已失败（可见错误），要么必须交出至少一份 Receipt。
+        if projection
+            .routes
+            .iter()
+            .any(|view| view.error.is_none() && view.status == DeliveryStatus::Pending)
+        {
             return Err(PublishError::MissingDeliveryReceipt);
         }
         Ok(())
@@ -761,6 +970,12 @@ impl<'a> RuntimeNodeExecutor<'a> {
         self.receipts.extend(receipts.iter().cloned());
         self.append_event(&node.id, "plan_node_completed", payload);
         for receipt in receipts {
+            // 终态失败的 Receipt 让本路线失败并跳过其后续节点；证据本身保留。
+            if is_failed_delivery_status(receipt.status) {
+                self.failed_routes
+                    .entry(receipt.route_id.clone())
+                    .or_insert_with(|| failed_receipt_message(&receipt));
+            }
             let receipt = serde_json::to_value(receipt).map_err(|error| {
                 PublishError::Execution(format!(
                     "failed to serialize delivery receipt event: {error}"
@@ -773,6 +988,26 @@ impl<'a> RuntimeNodeExecutor<'a> {
             );
         }
         Ok(())
+    }
+
+    /// 路线节点失败：记录 route_failed 事件并隔离本路线，不再返回错误给执行后端。
+    fn fail_route(&mut self, node: &PlanNode, error: String) {
+        self.append_event(
+            &node.id,
+            "route_failed",
+            BTreeMap::from([
+                (
+                    "route_id".to_string(),
+                    Value::String(node.binding_id.clone()),
+                ),
+                ("error".to_string(), Value::String(error.clone())),
+                (
+                    "adapter".to_string(),
+                    Value::String(node.adapter.display_name()),
+                ),
+            ]),
+        );
+        self.failed_routes.insert(node.binding_id.clone(), error);
     }
 
     fn append_failure_event(
@@ -825,11 +1060,15 @@ impl PlanNodeExecutor for RuntimeNodeExecutor<'_> {
                 node.id
             )));
         }
-        if self.executed_nodes.contains(&node.id) {
+        if self.executed_nodes.contains(&node.id) || self.skipped_nodes.contains(&node.id) {
             return Err(PublishError::Execution(format!(
                 "plan node {} executed more than once",
                 node.id
             )));
+        }
+        if self.failed_routes.contains_key(&node.binding_id) {
+            self.skipped_nodes.insert(node.id.clone());
+            return Ok(());
         }
         if let Some(missing_dependency) = node
             .depends_on
@@ -842,22 +1081,35 @@ impl PlanNodeExecutor for RuntimeNodeExecutor<'_> {
             )));
         }
 
+        match self.run_node(node) {
+            Ok(()) => {
+                self.executed_nodes.insert(node.id.clone());
+                Ok(())
+            }
+            Err(error) if self.is_route_node(node) => {
+                // 路线失败被隔离为可观察的路线级结果；其余路线继续执行（ADR-0022）。
+                self.fail_route(node, error.to_string());
+                Ok(())
+            }
+            Err(error) => {
+                self.append_failure_event(&node.id, Some(&node.adapter), &error.to_string());
+                Err(error)
+            }
+        }
+    }
+}
+
+impl RuntimeNodeExecutor<'_> {
+    fn run_node(&mut self, node: &PlanNode) -> Result<(), PublishError> {
         let Some(&binding) = self.bindings.get(node.binding_id.as_str()) else {
             return Err(PublishError::InvalidPlan(format!(
                 "plan node {} references unknown binding {}",
                 node.id, node.binding_id
             )));
         };
-        let credentials = match self
+        let credentials = self
             .registry
-            .resolve_binding_credentials(self.execution_backend, binding)
-        {
-            Ok(credentials) => credentials,
-            Err(error) => {
-                self.append_failure_event(&node.id, Some(&node.adapter), &error.to_string());
-                return Err(error);
-            }
-        };
+            .resolve_binding_credentials(self.execution_backend, binding)?;
         let context = AdapterExecutionContext {
             attempt_id: self.attempt_id,
             plan_digest: self.plan_digest,
@@ -868,19 +1120,8 @@ impl PlanNodeExecutor for RuntimeNodeExecutor<'_> {
             receipts: &self.receipts,
             credentials: &credentials,
         };
-        let output = match self.registry.execute_node(node, &context) {
-            Ok(output) => output,
-            Err(error) => {
-                self.append_failure_event(&node.id, Some(&node.adapter), &error.to_string());
-                return Err(error);
-            }
-        };
-        if let Err(error) = self.merge_output(node, output) {
-            self.append_failure_event(&node.id, Some(&node.adapter), &error.to_string());
-            return Err(error);
-        }
-        self.executed_nodes.insert(node.id.clone());
-        Ok(())
+        let output = self.registry.execute_node(node, &context)?;
+        self.merge_output(node, output)
     }
 }
 
@@ -978,5 +1219,19 @@ fn delivery_status_name(status: DeliveryStatus) -> &'static str {
         DeliveryStatus::Rejected => "rejected",
         DeliveryStatus::Cancelled => "cancelled",
         DeliveryStatus::Expired => "expired",
+    }
+}
+
+/// 生命周期推进程度，仅用于在多个 Receipt 之间取最落后阶段；终态失败不参与排序。
+fn delivery_status_rank(status: DeliveryStatus) -> u8 {
+    match status {
+        DeliveryStatus::Pending => 0,
+        DeliveryStatus::Staged => 1,
+        DeliveryStatus::Submitted => 2,
+        DeliveryStatus::Published => 3,
+        DeliveryStatus::Failed
+        | DeliveryStatus::Rejected
+        | DeliveryStatus::Cancelled
+        | DeliveryStatus::Expired => 0,
     }
 }

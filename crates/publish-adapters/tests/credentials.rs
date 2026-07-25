@@ -8,8 +8,9 @@ use publish_adapters::{
 };
 use publish_domain::{
     AdapterBinding, AdapterDescriptor, AdapterIdentity, AdapterKind, AdapterSchema,
-    AdapterSelection, AdapterSettings, CredentialKind, PlanNodeTemplate, PlanningInputSnapshot,
-    PublishError, PublishingCapability, SourceSnapshot, PLANNING_INPUT_SNAPSHOT_VERSION,
+    AdapterSelection, AdapterSettings, CredentialKind, DeliveryRoute, PlanNodeTemplate,
+    PlanningInputSnapshot, PublishError, PublishingCapability, SourceSnapshot,
+    PLANNING_INPUT_SNAPSHOT_VERSION,
 };
 
 const TOKEN_REFERENCE: &str = "keychain://one-publish/release-token";
@@ -295,11 +296,11 @@ fn fixture_snapshot() -> PlanningInputSnapshot {
                 AdapterIdentity::new(AdapterKind::ArtifactStore, "temporary-artifact-store", 1),
                 empty.clone(),
             ),
-            delivery_destinations: vec![AdapterBinding::new(
+            delivery_routes: vec![DeliveryRoute::required(AdapterBinding::new(
                 "destination",
                 AdapterIdentity::new(AdapterKind::DeliveryDestination, "local-directory", 1),
                 empty,
-            )],
+            ))],
         },
     }
 }

@@ -59,7 +59,7 @@ export type PreparedPublishRuntime = { configurationId: string, configurationRev
 
 export type StartPublishRuntimeRequest = { runtimeToken: string, };
 
-export type RuntimeAttemptStatus = "running" | "published" | "failed";
+export type RuntimeAttemptStatus = "running" | "published" | "partial_delivery" | "failed";
 
 export type RuntimeArtifactManifestSummary = { digest: string, artifactCount: number, };
 
@@ -69,7 +69,9 @@ export type RuntimeDeliveryReceiptSummary = { version: number, receiptId: string
 
 export type RuntimePublishEventSummary = { eventId: string, planNodeId: string, kind: string, manifestDigest: string | null, receiptId: string | null, deliveryStatus: string | null, receipt: RuntimeDeliveryReceiptSummary | null, error: string | null, };
 
-export type RuntimeAttemptResult = { attemptId: string, backendRunId: string, configurationRevisionId: string, planDigest: string, executionBackend: string, status: RuntimeAttemptStatus, manifestDigest: string | null, manifest: RuntimeArtifactManifestSummary | null, receipts: Array<RuntimeDeliveryReceiptSummary>, events: Array<RuntimePublishEventSummary>, error: string | null, };
+export type RuntimeRouteSummary = { routeId: string, required: boolean, status: RuntimeDeliveryStatus, externalReference: string | null, error: string | null, };
+
+export type RuntimeAttemptResult = { attemptId: string, backendRunId: string, configurationRevisionId: string, planDigest: string, executionBackend: string, status: RuntimeAttemptStatus, manifestDigest: string | null, manifest: RuntimeArtifactManifestSummary | null, receipts: Array<RuntimeDeliveryReceiptSummary>, routes: Array<RuntimeRouteSummary>, warnings: Array<string>, events: Array<RuntimePublishEventSummary>, error: string | null, };
 
 export type PublishRuntimeResult = { attempt: RuntimeAttemptResult, publishResult: PublishResult | null, };
 

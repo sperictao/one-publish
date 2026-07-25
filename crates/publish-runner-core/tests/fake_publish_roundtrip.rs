@@ -10,13 +10,24 @@ use publish_adapters::{
 use publish_domain::{
     sha256_hex, AdapterBinding, AdapterDescriptor, AdapterIdentity, AdapterKind, AdapterSchema,
     AdapterSelection, AdapterSettings, ArtifactCandidate, Capability, CapabilityRequirement,
-    DeliveryReceipt, DeliveryStatus, PlanNode, PlanNodeTemplate, PlanOperation, PlanSideEffect,
-    PlanStage, PlanningInputSnapshot, PublishAttemptStatus, PublishError, PublishEvent,
-    PublishPlan, PublishingCapability, ReleaseIdentity, SourceSnapshot, ARTIFACT_MANIFEST_VERSION,
-    DELIVERY_RECEIPT_VERSION, PLANNING_INPUT_SNAPSHOT_VERSION, PUBLISH_EVENT_VERSION,
+    DeliveryReceipt, DeliveryRoute, DeliveryStatus, PlanNode, PlanNodeTemplate, PlanOperation,
+    PlanRoute, PlanSideEffect, PlanStage, PlanningInputSnapshot, PublishAttemptStatus,
+    PublishError, PublishEvent, PublishPlan, PublishingCapability, ReleaseIdentity, SourceSnapshot,
+    ARTIFACT_MANIFEST_VERSION, DELIVERY_RECEIPT_VERSION, PLANNING_INPUT_SNAPSHOT_VERSION,
+    PUBLISH_EVENT_VERSION,
 };
 use publish_runner_core::{reduce_publish_events, PublishRuntime, StartPublishAttempt};
 use serde_json::Value;
+
+fn required_routes(route_ids: &[&str]) -> Vec<PlanRoute> {
+    route_ids
+        .iter()
+        .map(|route_id| PlanRoute {
+            route_id: route_id.to_string(),
+            required: true,
+        })
+        .collect()
+}
 
 const ARTIFACT_BYTES: &[u8] = b"one-publish fake artifact\n";
 
@@ -422,7 +433,8 @@ fn event_reducer_projects_every_receipt_revision_and_terminal_failure() {
         ),
     ];
 
-    let projection = reduce_publish_events(&events).expect("reduce standard publish events");
+    let projection = reduce_publish_events(&events, &required_routes(&["route-a", "route-b"]))
+        .expect("reduce standard publish events");
 
     assert_eq!(
         projection.manifest_digest.as_deref(),
@@ -434,11 +446,20 @@ fn event_reducer_projects_every_receipt_revision_and_terminal_failure() {
     assert_eq!(projection.receipts[0].status, DeliveryStatus::Published);
     assert_eq!(projection.receipts[1].receipt_id, "receipt-b");
     assert_eq!(projection.receipts[1].status, DeliveryStatus::Rejected);
-    assert_eq!(projection.status, PublishAttemptStatus::Failed);
+    // Required Route 终态失败，但 route-a 已发布：聚合为 Partial Delivery（ADR-0022）。
+    assert_eq!(projection.status, PublishAttemptStatus::PartialDelivery);
     assert!(projection
         .error
         .as_deref()
         .is_some_and(|error| error.contains("receipt-b") && error.contains("rejected")));
+    assert_eq!(projection.routes.len(), 2);
+    assert_eq!(projection.routes[0].status, DeliveryStatus::Published);
+    assert!(projection.routes[0].error.is_none());
+    assert_eq!(projection.routes[1].status, DeliveryStatus::Rejected);
+    assert!(projection.routes[1]
+        .error
+        .as_deref()
+        .is_some_and(|error| error.contains("receipt-b")));
 }
 
 #[test]
@@ -502,19 +523,20 @@ fn event_reducer_rejects_invalid_receipt_revision_transitions() {
         receipt_event(3, 2, "route-a", DeliveryStatus::Pending),
     ];
 
-    assert!(reduce_publish_events(&revision_gap)
+    let routes = required_routes(&["route-a", "route-b"]);
+    assert!(reduce_publish_events(&revision_gap, &routes)
         .expect_err("receipt revisions must be continuous")
         .to_string()
         .contains("revision"));
-    assert!(reduce_publish_events(&invalid_initial_revision)
+    assert!(reduce_publish_events(&invalid_initial_revision, &routes)
         .expect_err("receipt evidence must start at revision one")
         .to_string()
         .contains("start at revision 1"));
-    assert!(reduce_publish_events(&route_change)
+    assert!(reduce_publish_events(&route_change, &routes)
         .expect_err("receipt route identity must be stable")
         .to_string()
         .contains("identity"));
-    assert!(reduce_publish_events(&terminal_regression)
+    assert!(reduce_publish_events(&terminal_regression, &routes)
         .expect_err("terminal receipt lifecycle cannot regress")
         .to_string()
         .contains("lifecycle"));
@@ -627,18 +649,24 @@ fn runtime_preserves_a_failed_attempt_after_the_manifest_is_sealed() {
             .map(|manifest| manifest.digest.as_str())
     );
     assert!(attempt.receipts.is_empty());
+    // 唯一 Required Route 失败被隔离为 route_failed 证据，聚合结果仍是 Failed。
     assert_eq!(
         attempt.events.last().map(|event| event.kind.as_str()),
-        Some("plan_node_failed")
+        Some("route_failed")
     );
-    assert_eq!(
-        attempt
-            .events
-            .last()
-            .and_then(|event| event.payload.get("error"))
-            .and_then(Value::as_str),
-        attempt.error.as_deref()
-    );
+    assert!(attempt
+        .events
+        .last()
+        .and_then(|event| event.payload.get("error"))
+        .and_then(Value::as_str)
+        .is_some_and(|error| error.contains("create directory")));
+    assert_eq!(attempt.routes.len(), 1);
+    assert_eq!(attempt.routes[0].route_id, "destination");
+    assert_eq!(attempt.routes[0].status, DeliveryStatus::Failed);
+    assert!(attempt.routes[0]
+        .error
+        .as_deref()
+        .is_some_and(|error| error.contains("create directory")));
 }
 
 #[test]
@@ -682,9 +710,10 @@ fn malformed_receipt_is_reduced_to_a_failed_attempt_without_invalid_evidence() {
         .events
         .iter()
         .any(|event| event.kind == "delivery_receipt_observed"));
+    // 无效证据让本路线失败；证据校验错误保留在 route_failed 事件里。
     assert_eq!(
         attempt.events.last().map(|event| event.kind.as_str()),
-        Some("plan_node_failed")
+        Some("route_failed")
     );
 }
 
@@ -1192,12 +1221,12 @@ fn fixture_snapshot(store_directory: &str, delivery_directory: &str) -> Planning
                 AdapterSettings::new(1)
                     .with_value("root_directory", Value::String(store_directory.to_string())),
             ),
-            delivery_destinations: vec![AdapterBinding::new(
+            delivery_routes: vec![DeliveryRoute::required(AdapterBinding::new(
                 "destination",
                 AdapterIdentity::new(AdapterKind::DeliveryDestination, "local-directory", 1),
                 AdapterSettings::new(1)
                     .with_value("directory", Value::String(delivery_directory.to_string())),
-            )],
+            ))],
         },
     }
 }

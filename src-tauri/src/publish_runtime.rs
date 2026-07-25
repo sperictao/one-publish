@@ -16,9 +16,9 @@ use publish_adapters::{
 use publish_domain::{
     AdapterBinding, AdapterDescriptor, AdapterIdentity, AdapterKind, AdapterSchema,
     AdapterSelection, AdapterSettings, ArtifactCandidate, Capability, CapabilityRequirement,
-    DeliveryStatus, PlanNode, PlanNodeTemplate, PlanOperation, PlanStage, PlanningInputSnapshot,
-    PublishAttemptStatus, PublishAttemptView, PublishError, PublishingCapability, ReleaseIdentity,
-    SourceSnapshot, PLANNING_INPUT_SNAPSHOT_VERSION,
+    DeliveryRoute, DeliveryStatus, PlanNode, PlanNodeTemplate, PlanOperation, PlanStage,
+    PlanningInputSnapshot, PublishAttemptStatus, PublishAttemptView, PublishError,
+    PublishingCapability, ReleaseIdentity, SourceSnapshot, PLANNING_INPUT_SNAPSHOT_VERSION,
 };
 use publish_runner_core::{PreparedPublishPlan, PublishRuntime, StartPublishAttempt};
 use serde::{Deserialize, Serialize};
@@ -128,6 +128,7 @@ pub struct StartPublishRuntimeRequest {
 pub enum RuntimeAttemptStatus {
     Running,
     Published,
+    PartialDelivery,
     Failed,
 }
 
@@ -180,6 +181,18 @@ pub struct RuntimePublishEventSummary {
     pub error: Option<String>,
 }
 
+/// 单条 Delivery Route 的聚合结果：状态、外部引用与错误逐路线呈现（Issue T09）。
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(rename_all = "camelCase")]
+pub struct RuntimeRouteSummary {
+    pub route_id: String,
+    pub required: bool,
+    pub status: RuntimeDeliveryStatus,
+    pub external_reference: Option<String>,
+    pub error: Option<String>,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
 #[serde(rename_all = "camelCase")]
 #[ts(rename_all = "camelCase")]
@@ -193,6 +206,8 @@ pub struct RuntimeAttemptResult {
     pub manifest_digest: Option<String>,
     pub manifest: Option<RuntimeArtifactManifestSummary>,
     pub receipts: Vec<RuntimeDeliveryReceiptSummary>,
+    pub routes: Vec<RuntimeRouteSummary>,
+    pub warnings: Vec<String>,
     pub events: Vec<RuntimePublishEventSummary>,
     pub error: Option<String>,
 }
@@ -1005,7 +1020,7 @@ pub(crate) fn start_runtime_with_port(
     let delivery_directory = prepared
         .snapshot
         .adapters
-        .delivery_destinations
+        .delivery_routes
         .first()
         .ok_or_else(|| {
             AppError::publish_with_code(
@@ -1013,6 +1028,7 @@ pub(crate) fn start_runtime_with_port(
                 "publish_runtime_destination_missing",
             )
         })?
+        .binding
         .settings
         .string("directory", LOCAL_DESTINATION_ID)
         .map_err(runtime_error)?
@@ -1196,12 +1212,12 @@ fn build_snapshot(
                     Value::String(artifact_store_root().to_string_lossy().to_string()),
                 ),
             ),
-            delivery_destinations: vec![AdapterBinding::new(
+            delivery_routes: vec![DeliveryRoute::required(AdapterBinding::new(
                 "local-delivery",
                 AdapterIdentity::new(AdapterKind::DeliveryDestination, LOCAL_DESTINATION_ID, 1),
                 AdapterSettings::new(1)
                     .with_value("directory", Value::String(delivery_directory.to_string())),
-            )],
+            ))],
         },
     })
 }
@@ -1501,6 +1517,7 @@ fn summarize_attempt(view: PublishAttemptView) -> RuntimeAttemptResult {
         status: match view.status {
             PublishAttemptStatus::Running => RuntimeAttemptStatus::Running,
             PublishAttemptStatus::Published => RuntimeAttemptStatus::Published,
+            PublishAttemptStatus::PartialDelivery => RuntimeAttemptStatus::PartialDelivery,
             PublishAttemptStatus::Failed => RuntimeAttemptStatus::Failed,
         },
         manifest_digest: view.attempt.manifest_digest,
@@ -1523,6 +1540,18 @@ fn summarize_attempt(view: PublishAttemptView) -> RuntimeAttemptResult {
                 external_reference: receipt.external_reference,
             })
             .collect(),
+        routes: view
+            .routes
+            .into_iter()
+            .map(|route| RuntimeRouteSummary {
+                route_id: route.route_id,
+                required: route.required,
+                status: runtime_delivery_status(route.status),
+                external_reference: route.external_reference,
+                error: route.error,
+            })
+            .collect(),
+        warnings: view.warnings,
         events: view
             .events
             .into_iter()

@@ -49,6 +49,7 @@ pub fn generate_tauri_contracts() -> String {
     push_contract::<crate::publish_runtime::RuntimeDeliveryStatus>(&mut declarations);
     push_contract::<crate::publish_runtime::RuntimeDeliveryReceiptSummary>(&mut declarations);
     push_contract::<crate::publish_runtime::RuntimePublishEventSummary>(&mut declarations);
+    push_contract::<crate::publish_runtime::RuntimeRouteSummary>(&mut declarations);
     push_contract::<crate::publish_runtime::RuntimeAttemptResult>(&mut declarations);
     push_contract::<crate::publish_runtime::PublishRuntimeResult>(&mut declarations);
     push_contract::<crate::commands::ProjectScanCandidates>(&mut declarations);
