@@ -3,17 +3,27 @@ use std::sync::Arc;
 
 use publish_domain::{
     AdapterDescriptor, AdapterIdentity, AdapterKind, AdapterSettings, ArtifactCandidate,
-    ArtifactManifest, AutomationBindingProjection, AutomationProjectionBundle, DeliveryReceipt,
-    PlanNode, PlanNodeTemplate, PlanOperation, PlanningInputSnapshot, ProjectCandidate,
-    PublishError, PublishPlan, ADAPTER_CONTRACT_VERSION,
+    ArtifactManifest, AutomationBindingProjection, AutomationProjectionBundle, DeliveryEnvelope,
+    DeliveryReceipt, PlanNode, PlanNodeTemplate, PlanOperation, PlanStage, PlanningInputSnapshot,
+    ProjectCandidate, PublishError, PublishPlan, ADAPTER_CONTRACT_VERSION,
 };
+use serde_json::Value;
 
+mod credentials;
 mod fake;
 mod local;
+mod processors;
 pub mod tauri;
 
-pub use fake::{FakeAutomationBackend, FAKE_AUTOMATION_BACKEND_ID};
+pub use credentials::{CredentialResolveFailure, CredentialSource, StaticCredentialSource};
+pub use fake::{
+    FakeAutomationBackend, FakeRemoteBackend, FAKE_AUTOMATION_BACKEND_ID, FAKE_REMOTE_BACKEND_ID,
+};
 pub use local::{LocalDirectoryDestination, LocalExecutionBackend, TemporaryArtifactStore};
+pub use processors::{
+    ChecksumProcessor, CustomCommandProcessor, CHECKSUM_MANIFEST_ROLE, CHECKSUM_PROCESSOR_ID,
+    CUSTOM_COMMAND_GATE_CAPABILITY, CUSTOM_COMMAND_PROCESSOR_ID,
+};
 pub use tauri::{
     TauriBuildDriver, TauriProjectInspection, TauriProjectProvider, TauriVersionSource,
     TauriVersionSourceKind, VersionMirror, VersionMirrorKind, TAURI_INSPECT_ACTION,
@@ -22,7 +32,29 @@ pub use tauri::{
 
 pub const AUTOMATION_PROJECTION_CAPABILITY: &str = "automation-projection";
 pub const STRUCTURED_PLAN_EXECUTION_CAPABILITY: &str = "structured-plan-execution";
+pub const ARTIFACT_CANDIDATE_CAPABILITY: &str = "artifact-candidate";
 pub const ARTIFACT_VERIFIED_CAPABILITY: &str = "artifact-verified";
+
+pub(crate) fn action_name(node: &PlanNode) -> Result<&str, PublishError> {
+    match &node.operation {
+        PlanOperation::AdapterAction { action, .. } => Ok(action),
+        _ => Err(PublishError::Execution(format!(
+            "node {} is not an adapter action",
+            node.id
+        ))),
+    }
+}
+
+pub(crate) fn require_action(node: &PlanNode, expected: &str) -> Result<(), PublishError> {
+    let actual = action_name(node)?;
+    if actual != expected {
+        return Err(PublishError::Execution(format!(
+            "node {} expected action {expected}, got {actual}",
+            node.id
+        )));
+    }
+    Ok(())
+}
 
 #[derive(Debug)]
 pub struct AdapterExecutionContext<'a> {
@@ -31,13 +63,18 @@ pub struct AdapterExecutionContext<'a> {
     pub snapshot_digest: &'a str,
     pub artifacts: &'a [ArtifactCandidate],
     pub manifest: Option<&'a ArtifactManifest>,
+    pub envelopes: &'a [DeliveryEnvelope],
     pub receipts: &'a [DeliveryReceipt],
+    /// 当前节点 Adapter 的 schema 声明并由执行后端解析的凭据；只在执行边界存在，
+    /// 不进入任何序列化面（ADR-0029）。
+    pub credentials: &'a BTreeMap<String, publish_domain::ResolvedCredential>,
 }
 
 #[derive(Debug, Default)]
 pub struct AdapterExecutionOutput {
     pub artifacts: Vec<ArtifactCandidate>,
     pub manifest: Option<ArtifactManifest>,
+    pub envelopes: Vec<DeliveryEnvelope>,
     pub receipts: Vec<DeliveryReceipt>,
 }
 
@@ -123,6 +160,14 @@ pub trait ExecutionBackend: AdapterContract {
             consumer: self.descriptor().identity().display_name(),
             capability: AUTOMATION_PROJECTION_CAPABILITY.to_string(),
         })
+    }
+
+    /// 在执行边界从后端受支持的 Secret Store 解析一个非秘密引用（ADR-0029）。
+    fn resolve_credential(
+        &self,
+        _reference: &str,
+    ) -> Result<publish_domain::ResolvedCredential, CredentialResolveFailure> {
+        Err(CredentialResolveFailure::Missing)
     }
 }
 
@@ -317,6 +362,105 @@ impl AdapterRegistry {
             }
         }
         Ok(())
+    }
+
+    /// 静态校验一个绑定的凭据引用：schema 未声明的名字被拒绝，
+    /// 声明的每项要求都必须绑定一个非秘密引用（ADR-0029/0030）。
+    pub fn validate_credential_bindings(
+        &self,
+        binding: &publish_domain::AdapterBinding,
+    ) -> Result<(), PublishError> {
+        let descriptor = self.descriptor(&binding.adapter)?;
+        let adapter = descriptor.identity().display_name();
+        if let Some(name) = binding
+            .credentials
+            .keys()
+            .find(|name| !descriptor.schema.credentials.contains_key(*name))
+        {
+            return Err(PublishError::CredentialNotDeclared {
+                adapter,
+                name: name.clone(),
+            });
+        }
+        if let Some(requirement) = descriptor
+            .schema
+            .credentials
+            .keys()
+            .find(|requirement| !binding.credentials.contains_key(*requirement))
+        {
+            return Err(PublishError::CredentialNotBound {
+                adapter,
+                requirement: requirement.clone(),
+            });
+        }
+        Ok(())
+    }
+
+    /// 通过当前 Execution Backend 解析一个绑定声明的全部凭据要求。
+    /// 只返回 schema 声明的凭据，并统一校验类型；诊断只包含引用，从不包含解析值。
+    pub fn resolve_binding_credentials(
+        &self,
+        backend: &AdapterIdentity,
+        binding: &publish_domain::AdapterBinding,
+    ) -> Result<BTreeMap<String, publish_domain::ResolvedCredential>, PublishError> {
+        self.validate_credential_bindings(binding)?;
+        let descriptor = self.descriptor(&binding.adapter)?;
+        let adapter = descriptor.identity().display_name();
+        let backend_adapter = self.execution_backend(backend)?;
+
+        let mut resolved = BTreeMap::new();
+        for (requirement, declared) in &descriptor.schema.credentials {
+            let reference = binding.credentials.get(requirement).ok_or_else(|| {
+                PublishError::CredentialNotBound {
+                    adapter: adapter.clone(),
+                    requirement: requirement.clone(),
+                }
+            })?;
+            let credential = backend_adapter
+                .resolve_credential(reference)
+                .map_err(|failure| match failure {
+                    CredentialResolveFailure::Missing => PublishError::CredentialReferenceMissing {
+                        adapter: adapter.clone(),
+                        requirement: requirement.clone(),
+                        reference: reference.clone(),
+                    },
+                    CredentialResolveFailure::AccessDenied => {
+                        PublishError::CredentialAccessDenied {
+                            adapter: adapter.clone(),
+                            requirement: requirement.clone(),
+                            reference: reference.clone(),
+                        }
+                    }
+                })?;
+            if credential.kind != declared.kind {
+                return Err(PublishError::CredentialKindMismatch {
+                    adapter: adapter.clone(),
+                    requirement: requirement.clone(),
+                    reference: reference.clone(),
+                    expected: declared.kind,
+                    actual: credential.kind,
+                });
+            }
+            resolved.insert(requirement.clone(), credential);
+        }
+        Ok(resolved)
+    }
+
+    fn execution_backend(
+        &self,
+        identity: &AdapterIdentity,
+    ) -> Result<&dyn ExecutionBackend, PublishError> {
+        if identity.kind != AdapterKind::ExecutionBackend {
+            return Err(PublishError::AdapterKindMismatch {
+                id: identity.id.clone(),
+                expected: AdapterKind::ExecutionBackend,
+                actual: identity.kind,
+            });
+        }
+        self.execution_backends
+            .get(&(identity.id.clone(), identity.version))
+            .map(Arc::as_ref)
+            .ok_or_else(|| self.unresolved_adapter(identity))
     }
 
     fn resolve(&self, identity: &AdapterIdentity) -> Result<AdapterRef<'_>, PublishError> {
@@ -515,6 +659,27 @@ fn validate_descriptor(
             message: "allowed programs must be namespaced opaque executable ids".to_string(),
         });
     }
+    if descriptor
+        .schema
+        .credentials
+        .iter()
+        .any(|(name, requirement)| name.trim().is_empty() || requirement.purpose.trim().is_empty())
+    {
+        return Err(PublishError::InvalidAdapter {
+            adapter: descriptor.identity().display_name(),
+            message: "credential requirements must declare a name and a purpose".to_string(),
+        });
+    }
+    if descriptor.kind == AdapterKind::ArtifactProcessor
+        && (descriptor.capabilities.provides.is_empty()
+            || descriptor.capabilities.requires.is_empty())
+    {
+        return Err(PublishError::InvalidAdapter {
+            adapter: descriptor.identity().display_name(),
+            message: "artifact processors must declare input and output publishing capabilities"
+                .to_string(),
+        });
+    }
     Ok(())
 }
 
@@ -546,6 +711,9 @@ fn validate_fragment(
             });
         }
         validate_operation(descriptor, &node.operation)?;
+        if descriptor.kind == AdapterKind::ArtifactProcessor {
+            validate_processor_node(descriptor, node)?;
+        }
     }
 
     let serialized = serde_json::to_string(&(settings, nodes)).map_err(|error| {
@@ -578,6 +746,40 @@ fn validate_operation(
                 message: format!("program {program} is not declared by the adapter"),
             });
         }
+    }
+    Ok(())
+}
+
+/// 处理器节点的可复用合同：只在 ProcessArtifacts 阶段运行、显式声明输入角色，
+/// 且输出角色必须精确（通配输出会让未声明产物进入计划，ADR-0035/ADR-0049）。
+fn validate_processor_node(
+    descriptor: &AdapterDescriptor,
+    node: &PlanNodeTemplate,
+) -> Result<(), PublishError> {
+    if node.stage != PlanStage::ProcessArtifacts {
+        return Err(PublishError::InvalidAdapter {
+            adapter: descriptor.identity().display_name(),
+            message: "artifact processor plan nodes must run in the process_artifacts stage"
+                .to_string(),
+        });
+    }
+    if node.artifact_inputs.is_empty() {
+        return Err(PublishError::InvalidAdapter {
+            adapter: descriptor.identity().display_name(),
+            message: "artifact processor plan nodes must declare their artifact role inputs"
+                .to_string(),
+        });
+    }
+    if node
+        .artifact_outputs
+        .iter()
+        .any(|role| publish_domain::is_artifact_role_wildcard(role))
+    {
+        return Err(PublishError::InvalidAdapter {
+            adapter: descriptor.identity().display_name(),
+            message: "artifact processor plan nodes must declare exact artifact role outputs"
+                .to_string(),
+        });
     }
     Ok(())
 }
@@ -620,6 +822,9 @@ fn validate_settings_against_schema(
             publish_domain::AdapterSchemaValueType::String => value.is_string(),
             publish_domain::AdapterSchemaValueType::Boolean => value.is_boolean(),
             publish_domain::AdapterSchemaValueType::Number => value.is_number(),
+            publish_domain::AdapterSchemaValueType::StringList => value
+                .as_array()
+                .is_some_and(|values| values.iter().all(Value::is_string)),
         };
         if !valid {
             return Err(PublishError::InvalidAdapterSettings {

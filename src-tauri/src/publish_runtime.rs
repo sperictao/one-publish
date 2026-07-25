@@ -3493,13 +3493,16 @@ mod tests {
             side_effects: Vec::new(),
             irreversible: false,
         };
+        let credentials = BTreeMap::new();
         let context = AdapterExecutionContext {
             attempt_id: "attempt-drift",
             plan_digest: "plan-digest",
             snapshot_digest: "snapshot-digest",
             artifacts: &[],
             manifest: None,
+            envelopes: &[],
             receipts: &[],
+            credentials: &credentials,
         };
 
         let error = publish_adapters::AdapterContract::execute_node(&provider, &drifted, &context)

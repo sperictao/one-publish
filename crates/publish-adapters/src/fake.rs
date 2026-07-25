@@ -1,12 +1,16 @@
 use std::collections::BTreeMap;
+use std::sync::Arc;
 
 use publish_domain::{
     AdapterDescriptor, AdapterKind, AdapterSchema, AdapterSettings, AutomationBindingProjection,
     AutomationBundleFile, AutomationProjectionBundle, Capability, PlanNodeTemplate,
-    PlanningInputSnapshot, PublishError, PublishingCapability,
+    PlanningInputSnapshot, PublishError, PublishPlan, PublishingCapability, ResolvedCredential,
 };
 
-use crate::{AdapterContract, ExecutionBackend, AUTOMATION_PROJECTION_CAPABILITY};
+use crate::{
+    AdapterContract, CredentialResolveFailure, CredentialSource, ExecutionBackend,
+    PlanNodeExecutor, AUTOMATION_PROJECTION_CAPABILITY, STRUCTURED_PLAN_EXECUTION_CAPABILITY,
+};
 
 pub const FAKE_AUTOMATION_BACKEND_ID: &str = "fake-automation";
 const BUNDLE_ROOT: &str = "one-publish/automation";
@@ -104,6 +108,72 @@ impl ExecutionBackend for FakeAutomationBackend {
         );
 
         AutomationProjectionBundle::seal(self.descriptor.identity(), files)
+    }
+}
+
+pub const FAKE_REMOTE_BACKEND_ID: &str = "fake-remote";
+
+/// 纵向验证用远端执行后端：模拟远端环境按顺序执行封存计划，
+/// 并从自己的 Secret Store（例如受保护变量映射）解析凭据引用，
+/// 用于证明与本地后端等价的解析合同（ADR-0029、Issue T08）。
+pub struct FakeRemoteBackend {
+    descriptor: AdapterDescriptor,
+    credential_source: Arc<dyn CredentialSource>,
+}
+
+impl FakeRemoteBackend {
+    pub fn new(credential_source: Arc<dyn CredentialSource>) -> Self {
+        Self {
+            descriptor: AdapterDescriptor::new(
+                AdapterKind::ExecutionBackend,
+                FAKE_REMOTE_BACKEND_ID,
+                1,
+                AdapterSchema::new(1),
+                PublishingCapability {
+                    provides: vec![Capability::new(STRUCTURED_PLAN_EXECUTION_CAPABILITY, 1)],
+                    requires: vec![],
+                },
+            ),
+            credential_source,
+        }
+    }
+}
+
+impl AdapterContract for FakeRemoteBackend {
+    fn descriptor(&self) -> &AdapterDescriptor {
+        &self.descriptor
+    }
+
+    fn default_settings(&self) -> AdapterSettings {
+        AdapterSettings::new(1)
+    }
+
+    fn plan_fragment(
+        &self,
+        _snapshot: &PlanningInputSnapshot,
+        _settings: &AdapterSettings,
+    ) -> Result<Vec<PlanNodeTemplate>, PublishError> {
+        Ok(vec![])
+    }
+
+    fn execute_plan(
+        &self,
+        plan: &PublishPlan,
+        executor: &mut dyn PlanNodeExecutor,
+    ) -> Result<(), PublishError> {
+        for node in &plan.nodes {
+            executor.execute_node(node)?;
+        }
+        Ok(())
+    }
+}
+
+impl ExecutionBackend for FakeRemoteBackend {
+    fn resolve_credential(
+        &self,
+        reference: &str,
+    ) -> Result<ResolvedCredential, CredentialResolveFailure> {
+        self.credential_source.resolve(reference)
     }
 }
 

@@ -34,12 +34,11 @@ impl<'a> PublishPlanner<'a> {
         let nodes = self.compose_nodes(snapshot, &prepared)?;
         let adapters = prepared
             .iter()
-            .map(|prepared| {
-                AdapterBinding::new(
-                    prepared.binding.binding_id.clone(),
-                    prepared.binding.adapter.clone(),
-                    prepared.settings.clone(),
-                )
+            .map(|prepared| AdapterBinding {
+                binding_id: prepared.binding.binding_id.clone(),
+                adapter: prepared.binding.adapter.clone(),
+                settings: prepared.settings.clone(),
+                credentials: prepared.binding.credentials.clone(),
             })
             .collect();
         PublishPlan::seal(
@@ -62,6 +61,7 @@ impl<'a> PublishPlanner<'a> {
                 let settings = self
                     .registry
                     .migrate_and_validate_settings(&binding.adapter, &binding.settings)?;
+                self.registry.validate_credential_bindings(binding)?;
                 Ok(PreparedBinding { binding, settings })
             })
             .collect()

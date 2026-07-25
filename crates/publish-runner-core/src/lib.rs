@@ -5,7 +5,8 @@ use publish_adapters::{
     AdapterExecutionContext, AdapterExecutionOutput, AdapterRegistry, PlanNodeExecutor,
 };
 use publish_domain::{
-    sha256_hex, AdapterKind, ArtifactCandidate, ArtifactManifest, DeliveryReceipt, DeliveryStatus,
+    declares_artifact_role, sha256_hex, AdapterBinding, AdapterIdentity, AdapterKind,
+    ArtifactCandidate, ArtifactManifest, DeliveryEnvelope, DeliveryReceipt, DeliveryStatus,
     PlanNode, PlanStage, PlanningInputSnapshot, PublishAttemptStatus, PublishAttemptView,
     PublishError, PublishEvent, PublishOutcome, PublishPlan, ReleaseAttempt, ReleaseIdentity,
     DELIVERY_RECEIPT_VERSION, PUBLISH_EVENT_VERSION, PUBLISH_PLAN_VERSION, RELEASE_ATTEMPT_VERSION,
@@ -359,6 +360,9 @@ impl PublishRuntime {
         let backend_run_id = attempt.backend_run_id.clone();
         let mut executor =
             RuntimeNodeExecutor::new(&self.registry, &prepared.plan, &attempt_id, &backend_run_id);
+        if let Err(error) = verify_plan_credentials(&self.registry, &prepared.plan) {
+            return executor.finish_failed_attempt(attempt, error);
+        }
         match self.registry.execute_plan(
             &prepared.plan.execution_backend,
             &prepared.plan,
@@ -385,6 +389,7 @@ impl PublishRuntime {
     ) -> Result<PublishOutcome, PublishError> {
         validate_plan(plan)?;
         preflight_adapter_contracts(&self.registry, plan)?;
+        verify_plan_credentials(&self.registry, plan)?;
         if attempt_id.trim().is_empty() {
             return Err(PublishError::Execution(
                 "publish attempt id cannot be empty".to_string(),
@@ -458,6 +463,18 @@ fn preflight_adapter_contracts(
     Ok(())
 }
 
+/// 凭据预检：在任何副作用前，通过当前执行后端解析计划里每个绑定声明的
+/// 凭据要求；解析值立即丢弃，只留下可用性结论（ADR-0029、Issue T08）。
+fn verify_plan_credentials(
+    registry: &AdapterRegistry,
+    plan: &PublishPlan,
+) -> Result<(), PublishError> {
+    for binding in &plan.adapters {
+        registry.resolve_binding_credentials(&plan.execution_backend, binding)?;
+    }
+    Ok(())
+}
+
 fn validate_plan(plan: &PublishPlan) -> Result<(), PublishError> {
     if plan.version != PUBLISH_PLAN_VERSION {
         return Err(PublishError::UnsupportedPlanVersion {
@@ -500,8 +517,11 @@ struct RuntimeNodeExecutor<'a> {
     backend_run_id: &'a str,
     plan_digest: &'a str,
     snapshot_digest: &'a str,
+    execution_backend: &'a AdapterIdentity,
+    bindings: BTreeMap<&'a str, &'a AdapterBinding>,
     artifacts: Vec<ArtifactCandidate>,
     manifest: Option<ArtifactManifest>,
+    envelopes: Vec<DeliveryEnvelope>,
     receipts: Vec<DeliveryReceipt>,
     events: Vec<PublishEvent>,
     executed_nodes: BTreeSet<String>,
@@ -521,8 +541,15 @@ impl<'a> RuntimeNodeExecutor<'a> {
             backend_run_id,
             plan_digest: &plan.digest,
             snapshot_digest: &plan.snapshot_digest,
+            execution_backend: &plan.execution_backend,
+            bindings: plan
+                .adapters
+                .iter()
+                .map(|binding| (binding.binding_id.as_str(), binding))
+                .collect(),
             artifacts: Vec::new(),
             manifest: None,
+            envelopes: Vec::new(),
             receipts: Vec::new(),
             events: Vec::new(),
             executed_nodes: BTreeSet::new(),
@@ -654,11 +681,7 @@ impl<'a> RuntimeNodeExecutor<'a> {
         node: &PlanNode,
         output: AdapterExecutionOutput,
     ) -> Result<(), PublishError> {
-        if output.manifest.is_some() && self.manifest.is_some() {
-            return Err(PublishError::Execution(
-                "artifact manifest can only be sealed once".to_string(),
-            ));
-        }
+        validate_output_admission(node, &output, self.manifest.as_ref())?;
         if let Some(manifest) = output.manifest.as_ref() {
             manifest.validate()?;
         }
@@ -675,14 +698,6 @@ impl<'a> RuntimeNodeExecutor<'a> {
         let mut validated_receipts = self.receipts.clone();
         for receipt in &output.receipts {
             validate_receipt_revision(receipt)?;
-            if node.adapter.kind != AdapterKind::DeliveryDestination
-                || node.stage != PlanStage::PublishRoutes
-            {
-                return Err(PublishError::Execution(format!(
-                    "plan node {} cannot emit delivery receipt {}",
-                    node.id, receipt.receipt_id
-                )));
-            }
             if receipt.route_id != node.binding_id {
                 return Err(PublishError::Execution(format!(
                     "delivery receipt {} references route {}, expected {}",
@@ -741,6 +756,7 @@ impl<'a> RuntimeNodeExecutor<'a> {
         if let Some(manifest) = output.manifest {
             self.manifest = Some(manifest);
         }
+        self.envelopes.extend(output.envelopes);
         let receipts = output.receipts;
         self.receipts.extend(receipts.iter().cloned());
         self.append_event(&node.id, "plan_node_completed", payload);
@@ -826,13 +842,31 @@ impl PlanNodeExecutor for RuntimeNodeExecutor<'_> {
             )));
         }
 
+        let Some(&binding) = self.bindings.get(node.binding_id.as_str()) else {
+            return Err(PublishError::InvalidPlan(format!(
+                "plan node {} references unknown binding {}",
+                node.id, node.binding_id
+            )));
+        };
+        let credentials = match self
+            .registry
+            .resolve_binding_credentials(self.execution_backend, binding)
+        {
+            Ok(credentials) => credentials,
+            Err(error) => {
+                self.append_failure_event(&node.id, Some(&node.adapter), &error.to_string());
+                return Err(error);
+            }
+        };
         let context = AdapterExecutionContext {
             attempt_id: self.attempt_id,
             plan_digest: self.plan_digest,
             snapshot_digest: self.snapshot_digest,
             artifacts: &self.artifacts,
             manifest: self.manifest.as_ref(),
+            envelopes: &self.envelopes,
             receipts: &self.receipts,
+            credentials: &credentials,
         };
         let output = match self.registry.execute_node(node, &context) {
             Ok(output) => output,
@@ -848,6 +882,90 @@ impl PlanNodeExecutor for RuntimeNodeExecutor<'_> {
         self.executed_nodes.insert(node.id.clone());
         Ok(())
     }
+}
+
+/// 输出准入：每类执行输出只被其所属阶段与 Adapter 类别接受，产物角色必须
+/// 出现在节点声明中。这让"处理→封存→路线"的边界由数据规则而不是各 Adapter
+/// 的自觉来保证（ADR-0027/0035/0055）。
+fn validate_output_admission(
+    node: &PlanNode,
+    output: &AdapterExecutionOutput,
+    sealed_manifest: Option<&ArtifactManifest>,
+) -> Result<(), PublishError> {
+    if !output.artifacts.is_empty() {
+        if !matches!(
+            node.stage,
+            PlanStage::Build | PlanStage::CollectArtifacts | PlanStage::ProcessArtifacts
+        ) {
+            return Err(PublishError::Execution(format!(
+                "plan node {} cannot modify the artifact set in the {:?} stage; artifact sets are sealed by the persist_manifest stage",
+                node.id, node.stage
+            )));
+        }
+        for artifact in &output.artifacts {
+            if !declares_artifact_role(&node.artifact_outputs, &artifact.role) {
+                return Err(PublishError::Execution(format!(
+                    "plan node {} produced artifact {} with undeclared role {}",
+                    node.id, artifact.file_name, artifact.role
+                )));
+            }
+        }
+    }
+
+    if output.manifest.is_some() {
+        if node.adapter.kind != AdapterKind::ArtifactStore
+            || node.stage != PlanStage::PersistManifest
+        {
+            return Err(PublishError::Execution(format!(
+                "plan node {} cannot seal the artifact manifest; only the artifact store seals it in the persist_manifest stage",
+                node.id
+            )));
+        }
+        if sealed_manifest.is_some() {
+            return Err(PublishError::Execution(
+                "artifact manifest can only be sealed once".to_string(),
+            ));
+        }
+    }
+
+    if !output.envelopes.is_empty() {
+        if node.adapter.kind != AdapterKind::DeliveryDestination
+            || node.stage != PlanStage::StageRoutes
+        {
+            return Err(PublishError::Execution(format!(
+                "plan node {} cannot stage delivery envelopes",
+                node.id
+            )));
+        }
+        let manifest = sealed_manifest.ok_or(PublishError::MissingArtifactManifest)?;
+        for envelope in &output.envelopes {
+            envelope.validate()?;
+            if envelope.route_id != node.binding_id {
+                return Err(PublishError::Execution(format!(
+                    "delivery envelope from node {} references route {}, expected {}",
+                    node.id, envelope.route_id, node.binding_id
+                )));
+            }
+            if envelope.manifest_digest != manifest.digest {
+                return Err(PublishError::Execution(format!(
+                    "delivery envelope for route {} references manifest {}, expected {}",
+                    envelope.route_id, envelope.manifest_digest, manifest.digest
+                )));
+            }
+        }
+    }
+
+    if !output.receipts.is_empty()
+        && (node.adapter.kind != AdapterKind::DeliveryDestination
+            || node.stage != PlanStage::PublishRoutes)
+    {
+        return Err(PublishError::Execution(format!(
+            "plan node {} cannot emit delivery receipts",
+            node.id
+        )));
+    }
+
+    Ok(())
 }
 
 fn delivery_status_name(status: DeliveryStatus) -> &'static str {

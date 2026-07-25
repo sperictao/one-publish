@@ -58,6 +58,41 @@ pub enum PublishError {
     InvalidAdapter { adapter: String, message: String },
     #[error("invalid settings for adapter {adapter}: {message}")]
     InvalidAdapterSettings { adapter: String, message: String },
+    #[error(
+        "adapter {adapter} requires credential {requirement}, but the configuration binds no reference"
+    )]
+    CredentialNotBound {
+        adapter: String,
+        requirement: String,
+    },
+    #[error("adapter {adapter} does not declare credential {name} in its settings schema")]
+    CredentialNotDeclared { adapter: String, name: String },
+    #[error(
+        "credential reference {reference} for {adapter}/{requirement} is not available in the execution backend"
+    )]
+    CredentialReferenceMissing {
+        adapter: String,
+        requirement: String,
+        reference: String,
+    },
+    #[error(
+        "credential reference {reference} for {adapter}/{requirement} cannot be accessed by the execution backend"
+    )]
+    CredentialAccessDenied {
+        adapter: String,
+        requirement: String,
+        reference: String,
+    },
+    #[error(
+        "credential reference {reference} for {adapter}/{requirement} resolved to a {actual:?} credential, expected {expected:?}"
+    )]
+    CredentialKindMismatch {
+        adapter: String,
+        requirement: String,
+        reference: String,
+        expected: CredentialKind,
+        actual: CredentialKind,
+    },
     #[error("adapter {consumer} requires missing capability {capability}")]
     MissingCapability {
         consumer: String,
@@ -136,6 +171,9 @@ impl AdapterIdentity {
 pub struct AdapterSchema {
     pub version: u32,
     pub fields: BTreeMap<String, AdapterSchemaField>,
+    /// Schema 声明的 Credential Requirement：发布配置只能把它们绑定为
+    /// 非秘密引用，Adapter 也只会收到这里声明的凭据（ADR-0029/0030）。
+    pub credentials: BTreeMap<String, CredentialRequirement>,
 }
 
 impl AdapterSchema {
@@ -143,7 +181,24 @@ impl AdapterSchema {
         Self {
             version,
             fields: BTreeMap::new(),
+            credentials: BTreeMap::new(),
         }
+    }
+
+    pub fn with_credential(
+        mut self,
+        name: impl Into<String>,
+        kind: CredentialKind,
+        purpose: impl Into<String>,
+    ) -> Self {
+        self.credentials.insert(
+            name.into(),
+            CredentialRequirement {
+                kind,
+                purpose: purpose.into(),
+            },
+        );
+        self
     }
 
     pub fn with_required_string(mut self, key: impl Into<String>) -> Self {
@@ -151,6 +206,17 @@ impl AdapterSchema {
             key.into(),
             AdapterSchemaField {
                 value_type: AdapterSchemaValueType::String,
+                required: true,
+            },
+        );
+        self
+    }
+
+    pub fn with_required_string_list(mut self, key: impl Into<String>) -> Self {
+        self.fields.insert(
+            key.into(),
+            AdapterSchemaField {
+                value_type: AdapterSchemaValueType::StringList,
                 required: true,
             },
         );
@@ -170,6 +236,50 @@ pub enum AdapterSchemaValueType {
     String,
     Boolean,
     Number,
+    StringList,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum CredentialKind {
+    Token,
+    SigningKey,
+}
+
+/// Adapter 对一项逻辑凭据的声明：类型与用途说明。用途随配置导出保留，
+/// 秘密值从不进入任何可序列化结构。
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct CredentialRequirement {
+    pub kind: CredentialKind,
+    pub purpose: String,
+}
+
+/// 已解析的秘密值。刻意不实现 Serialize/Deserialize，Debug 输出脱敏，
+/// 让秘密无法进入计划、事件、清单、日志或备份等序列化面（ADR-0004/0029）。
+#[derive(Clone)]
+pub struct CredentialValue(String);
+
+impl CredentialValue {
+    pub fn new(value: impl Into<String>) -> Self {
+        Self(value.into())
+    }
+
+    pub fn expose(&self) -> &str {
+        &self.0
+    }
+}
+
+impl std::fmt::Debug for CredentialValue {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter.write_str("CredentialValue([redacted])")
+    }
+}
+
+/// Execution Backend 在执行边界解析一个引用得到的凭据；类型匹配由运行时统一校验。
+#[derive(Debug, Clone)]
+pub struct ResolvedCredential {
+    pub kind: CredentialKind,
+    pub value: CredentialValue,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -320,6 +430,22 @@ impl AdapterSettings {
             }
         })
     }
+
+    pub fn string_list(&self, key: &str, adapter: &str) -> Result<Vec<String>, PublishError> {
+        self.values
+            .get(key)
+            .and_then(Value::as_array)
+            .and_then(|values| {
+                values
+                    .iter()
+                    .map(|value| value.as_str().map(str::to_string))
+                    .collect::<Option<Vec<_>>>()
+            })
+            .ok_or_else(|| PublishError::InvalidAdapterSettings {
+                adapter: adapter.to_string(),
+                message: format!("{key} must be a list of strings"),
+            })
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -327,6 +453,8 @@ pub struct AdapterBinding {
     pub binding_id: String,
     pub adapter: AdapterIdentity,
     pub settings: AdapterSettings,
+    /// 凭据要求名到当前 Execution Backend 引用的绑定；只保存非秘密引用（ADR-0029）。
+    pub credentials: BTreeMap<String, String>,
 }
 
 impl AdapterBinding {
@@ -339,7 +467,18 @@ impl AdapterBinding {
             binding_id: binding_id.into(),
             adapter,
             settings,
+            credentials: BTreeMap::new(),
         }
+    }
+
+    pub fn with_credential(
+        mut self,
+        requirement: impl Into<String>,
+        reference: impl Into<String>,
+    ) -> Self {
+        self.credentials
+            .insert(requirement.into(), reference.into());
+        self
     }
 }
 
@@ -704,6 +843,7 @@ impl ArtifactManifest {
                 "cannot seal an empty artifact manifest".to_string(),
             ));
         }
+        validate_unique_file_names(&artifacts)?;
         for artifact in &artifacts {
             artifact.validate()?;
         }
@@ -744,6 +884,7 @@ impl ArtifactManifest {
                 "artifact manifest cannot be empty".to_string(),
             ));
         }
+        validate_unique_file_names(&self.artifacts)?;
         for artifact in &self.artifacts {
             artifact.validate()?;
         }
@@ -783,6 +924,20 @@ impl ArtifactManifestEntry {
     }
 }
 
+fn validate_unique_file_names(artifacts: &[ArtifactManifestEntry]) -> Result<(), PublishError> {
+    let mut file_names = BTreeSet::new();
+    for artifact in artifacts {
+        if !file_names.insert(artifact.file_name.as_str()) {
+            return Err(PublishError::InvalidArtifact {
+                artifact: artifact.file_name.clone(),
+                message: "one artifact set cannot carry conflicting entries for one file name"
+                    .to_string(),
+            });
+        }
+    }
+    Ok(())
+}
+
 fn validate_artifact_metadata(
     file_name: &str,
     role: &str,
@@ -819,6 +974,20 @@ pub fn is_safe_portable_relative_path(path: &str) -> bool {
             .all(|component| !component.is_empty() && component != "." && component != "..")
 }
 
+/// 声明的 Artifact Role 是否覆盖某个具体角色：精确条目逐一匹配；`:*` 结尾的
+/// 通配条目表示声明方接受任意角色，仅用于构建发现式输出（例如 Provider 的
+/// `provider-output:*`），处理器输出禁止使用通配（ADR-0035）。
+pub fn declares_artifact_role(declared: &[String], role: &str) -> bool {
+    declared
+        .iter()
+        .any(|entry| entry == role || is_artifact_role_wildcard(entry))
+}
+
+/// 通配角色声明的唯一判定，供计划校验与运行时准入共用。
+pub fn is_artifact_role_wildcard(entry: &str) -> bool {
+    entry.ends_with(":*")
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum DeliveryStatus {
@@ -841,6 +1010,39 @@ pub struct DeliveryReceipt {
     pub manifest_digest: String,
     pub status: DeliveryStatus,
     pub external_reference: String,
+}
+
+/// 路线专属交付封装：交付目标在 staging 阶段从封存 Manifest、发布输入和路线设置
+/// 派生的目标原生元数据；它只属于一条路线，不能修改共享产物或替换 Manifest（ADR-0055）。
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct DeliveryEnvelope {
+    pub route_id: String,
+    pub manifest_digest: String,
+    pub content: BTreeMap<String, Value>,
+}
+
+impl DeliveryEnvelope {
+    pub fn new(route_id: impl Into<String>, manifest_digest: impl Into<String>) -> Self {
+        Self {
+            route_id: route_id.into(),
+            manifest_digest: manifest_digest.into(),
+            content: BTreeMap::new(),
+        }
+    }
+
+    pub fn with_content(mut self, key: impl Into<String>, value: Value) -> Self {
+        self.content.insert(key.into(), value);
+        self
+    }
+
+    pub fn validate(&self) -> Result<(), PublishError> {
+        if self.route_id.trim().is_empty() || self.manifest_digest.trim().is_empty() {
+            return Err(PublishError::Execution(
+                "delivery envelopes require a route id and a sealed manifest digest".to_string(),
+            ));
+        }
+        Ok(())
+    }
 }
 
 impl DeliveryReceipt {
