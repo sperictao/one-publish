@@ -25,6 +25,7 @@ fn test_binding(configuration_id: &str, configuration_revision_id: &str) -> Auto
         trigger_policy: AutomationTriggerPolicy::TagPush {
             tag_prefix: "v".to_string(),
         },
+        backend_projection: serde_json::Value::Null,
         runtime_revision: "plan-v1.adapter-v1.fake-automation@1".to_string(),
         external_identity: "one-publish/automation/binding-1.json".to_string(),
         created_at: "2026-07-21T10:00:00Z".to_string(),

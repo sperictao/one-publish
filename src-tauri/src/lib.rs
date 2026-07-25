@@ -9,6 +9,7 @@ pub mod config_export;
 pub mod contracts;
 pub mod environment;
 pub mod errors;
+pub(crate) mod github_actions_backend;
 pub mod output_target;
 pub mod parameter;
 pub mod plan;

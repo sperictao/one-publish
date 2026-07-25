@@ -21,12 +21,15 @@ use serde_json::Value;
 use ts_rs::TS;
 
 use crate::errors::AppError;
+use crate::github_actions_backend::{GitHubActionsAutomationBackend, GITHUB_ACTIONS_BACKEND_ID};
 use crate::store::{
     new_configuration_identity, AppliedProjectionBundle, AutomationBinding,
     AutomationTriggerPolicy, RepoPublishConfig,
 };
 
 pub const AUTOMATION_DRIFT_BLOCKED_REASON: &str = "automation_projection_drift";
+const AUTOMATION_COMMIT_SUBJECT: &str =
+    "chore(release): apply One Publish automation projection";
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[serde(tag = "kind", rename_all = "camelCase")]
@@ -39,6 +42,8 @@ pub enum AutomationChangeRequest {
         /// 由预览归一化填充；应用必须回传同一身份，否则确认摘要无法匹配。
         #[serde(default)]
         binding_id: Option<String>,
+        #[serde(default)]
+        confirmed_conflict_paths: Vec<String>,
     },
     #[serde(rename_all = "camelCase")]
     UpgradeRevision {
@@ -60,6 +65,7 @@ impl AutomationChangeRequest {
                 execution_backend_id,
                 trigger_policy,
                 binding_id,
+                confirmed_conflict_paths,
             } => Self::Install {
                 configuration_id: configuration_id.clone(),
                 execution_backend_id: execution_backend_id.clone(),
@@ -69,6 +75,7 @@ impl AutomationChangeRequest {
                         .clone()
                         .unwrap_or_else(|| new_configuration_identity("automation-binding")),
                 ),
+                confirmed_conflict_paths: confirmed_conflict_paths.clone(),
             },
             other => other.clone(),
         }
@@ -91,6 +98,8 @@ pub struct AutomationFileChangeView {
     pub kind: AutomationFileChangeKindView,
     pub current_content: Option<String>,
     pub expected_content: Option<String>,
+    pub conflict_release_namespace: Option<String>,
+    pub conflict_delivery_destination_namespace: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
@@ -143,20 +152,50 @@ pub(crate) struct AutomationPreviewOutcome {
     pub targets: Vec<AutomationBinding>,
     pub expected: ExpectedProjection,
     pub changes: Vec<AutomationBundleFileChange>,
+    pub conflicts: BTreeMap<String, AutomationNamespaceConflict>,
     /// 同时覆盖期望投影与呈现给使用者的差异；仓库或配置任何一方变化都会使其失效。
     pub confirmation_digest: String,
 }
 
-/// T04 过渡实现：配置修订尚未携带 Adapter 选择，Install 暂以显式参数指定后端；
-/// 配置迁入通用 Adapter 选择后，此处必须改为从固定修订解析（ADR-0032）。
-/// 发布命名空间冲突检测（ADR-0034）同样待触发策略映射到 Release Identity 后实现。
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub(crate) struct AutomationNamespaceConflict {
+    pub release_namespace: String,
+    pub delivery_destination_namespace: String,
+}
+
 fn automation_backend(backend_id: &str) -> Result<Arc<dyn ExecutionBackend>, AppError> {
     match backend_id {
         FAKE_AUTOMATION_BACKEND_ID => Ok(Arc::new(FakeAutomationBackend::new())),
+        GITHUB_ACTIONS_BACKEND_ID => Ok(Arc::new(GitHubActionsAutomationBackend::new())),
         other => Err(AppError::validation_with_code(
             format!("执行后端 {other} 不支持自动化投影"),
             "automation_backend_unsupported",
         )),
+    }
+}
+
+/// 配置迁入通用 Adapter schema 前，只在安装或显式升级时捕获旧 Tauri 配置。
+/// 捕获值随 Binding 固定，后续查看与漂移协调只能消费该快照。
+fn fixed_backend_projection(
+    backend_id: &str,
+    tauri_release_config: Option<&crate::tauri_release::TauriReleaseConfig>,
+) -> Result<Value, AppError> {
+    match backend_id {
+        GITHUB_ACTIONS_BACKEND_ID => serde_json::to_value(
+            tauri_release_config.ok_or_else(|| {
+                AppError::config_with_code(
+                    "GitHub Actions 自动化需要现有 Tauri 发布配置",
+                    "github_actions_release_config_missing",
+                )
+            })?,
+        )
+        .map_err(|error| {
+            AppError::config_with_code(
+                format!("无法固定 GitHub Actions 投影输入: {error}"),
+                "github_actions_projection_snapshot_failed",
+            )
+        }),
+        _ => Ok(Value::Null),
     }
 }
 
@@ -206,6 +245,7 @@ fn resolve_target_bindings(
     config: &RepoPublishConfig,
     change: &AutomationChangeRequest,
     now: &str,
+    tauri_release_config: Option<&crate::tauri_release::TauriReleaseConfig>,
 ) -> Result<Vec<AutomationBinding>, AppError> {
     let mut bindings = config.bindings.clone();
     match change {
@@ -214,6 +254,7 @@ fn resolve_target_bindings(
             execution_backend_id,
             trigger_policy,
             binding_id,
+            ..
         } => {
             let profile = active_profile(config, configuration_id)?;
             ensure_unblocked(profile)?;
@@ -230,6 +271,10 @@ fn resolve_target_bindings(
                 configuration_revision_id: profile.current_revision_id.clone(),
                 execution_backend_id: execution_backend_id.clone(),
                 trigger_policy: trigger_policy.clone(),
+                backend_projection: fixed_backend_projection(
+                    execution_backend_id,
+                    tauri_release_config,
+                )?,
                 runtime_revision: automation_runtime_revision(backend.as_ref()),
                 external_identity: String::new(),
                 created_at: now.to_string(),
@@ -245,6 +290,8 @@ fn resolve_target_bindings(
             ensure_unblocked(profile)?;
             let backend = automation_backend(&binding.execution_backend_id)?;
             binding.configuration_revision_id = profile.current_revision_id.clone();
+            binding.backend_projection =
+                fixed_backend_projection(&binding.execution_backend_id, tauri_release_config)?;
             binding.runtime_revision = automation_runtime_revision(backend.as_ref());
             binding.updated_at = now.to_string();
         }
@@ -297,6 +344,11 @@ fn binding_projection(
         configuration_id: binding.configuration_id.clone(),
         configuration_revision_id: binding.configuration_revision_id.clone(),
         trigger_policy: domain_trigger(&binding.trigger_policy),
+        release_namespace: release_namespace(binding),
+        delivery_destination_namespaces: delivery_destination_namespace(binding)
+            .into_iter()
+            .map(str::to_string)
+            .collect(),
         runtime_revision: binding.runtime_revision.clone(),
         projection: AutomationProjection {
             public_settings: BTreeMap::from([
@@ -309,6 +361,10 @@ fn binding_projection(
                     Value::from(revision.settings_version),
                 ),
                 ("parameters".to_string(), revision.parameters.clone()),
+                (
+                    "backendProjection".to_string(),
+                    binding.backend_projection.clone(),
+                ),
             ]),
             protected_variables: BTreeMap::new(),
             secret_references: BTreeMap::new(),
@@ -409,14 +465,325 @@ fn read_repository_files(
     Ok(files)
 }
 
+fn release_namespace(binding: &AutomationBinding) -> String {
+    match &binding.trigger_policy {
+        AutomationTriggerPolicy::TagPush { tag_prefix } => format!("tag:{tag_prefix}*"),
+        AutomationTriggerPolicy::Manual => "manual".to_string(),
+    }
+}
+
+fn delivery_destination_namespace(binding: &AutomationBinding) -> Option<&'static str> {
+    (binding.execution_backend_id == GITHUB_ACTIONS_BACKEND_ID)
+        .then_some("github-release:repository")
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+struct AutomationConflictKey {
+    release_namespace: String,
+    delivery_destination_namespace: String,
+}
+
+impl AutomationConflictKey {
+    fn for_binding(binding: &AutomationBinding) -> Option<Self> {
+        delivery_destination_namespace(binding).map(|destination| Self {
+            release_namespace: release_namespace(binding),
+            delivery_destination_namespace: destination.to_string(),
+        })
+    }
+
+    fn overlaps(&self, other: &Self) -> bool {
+        self.delivery_destination_namespace == other.delivery_destination_namespace
+            && release_namespaces_overlap(
+                &self.release_namespace,
+                &other.release_namespace,
+            )
+    }
+}
+
+fn release_namespaces_overlap(left: &str, right: &str) -> bool {
+    match (
+        left.strip_prefix("tag:")
+            .and_then(|value| value.strip_suffix('*')),
+        right
+            .strip_prefix("tag:")
+            .and_then(|value| value.strip_suffix('*')),
+    ) {
+        (Some(left_prefix), Some(right_prefix)) => {
+            left_prefix.starts_with(right_prefix) || right_prefix.starts_with(left_prefix)
+        }
+        _ => left == right,
+    }
+}
+
+fn validate_binding_namespaces(targets: &[AutomationBinding]) -> Result<(), AppError> {
+    let mut occupied = Vec::<(AutomationConflictKey, &str)>::new();
+    let mut binding_ids = BTreeSet::new();
+    for binding in targets {
+        if !binding_ids.insert(binding.id.as_str()) {
+            return Err(AppError::validation_with_code(
+                format!("自动化绑定身份重复: {}", binding.id),
+                "automation_binding_identity_conflict",
+            ));
+        }
+        let Some(key) = AutomationConflictKey::for_binding(binding) else {
+            continue;
+        };
+        if let Some((_, existing)) = occupied
+            .iter()
+            .find(|(candidate, _)| candidate.overlaps(&key))
+        {
+            return Err(AppError::validation_with_code(
+                format!(
+                    "自动化绑定 {existing} 与 {} 争用发布命名空间 {} 和交付目标命名空间 {}",
+                    binding.id, key.release_namespace, key.delivery_destination_namespace
+                ),
+                "automation_namespace_conflict",
+            ));
+        }
+        occupied.push((key, binding.id.as_str()));
+    }
+    Ok(())
+}
+
+#[derive(Debug, PartialEq, Eq)]
+struct WorkflowInspection {
+    release_namespaces: Vec<String>,
+    has_tag_trigger: bool,
+    can_write_contents: bool,
+}
+
+fn inspect_workflow(content: &str) -> Result<WorkflowInspection, yaml_serde::Error> {
+    fn tag_namespace(pattern: &str) -> Option<String> {
+        let normalized = pattern
+            .trim()
+            .trim_matches(|character| matches!(character, '\'' | '"' | '[' | ']' | ','));
+        let prefix = normalized
+            .split(['*', '?', '[', '{', '$', '!'])
+            .next()
+            .unwrap_or_default()
+            .trim();
+        (!prefix.is_empty()).then(|| format!("tag:{prefix}*"))
+    }
+
+    fn mapping_value<'a>(
+        value: &'a yaml_serde::Value,
+        key: &str,
+    ) -> Option<&'a yaml_serde::Value> {
+        value
+            .as_mapping()?
+            .get(yaml_serde::Value::String(key.to_string()))
+    }
+
+    let document = yaml_serde::from_str::<yaml_serde::Value>(content)?;
+    let permission_writes_contents = |permissions: &yaml_serde::Value| {
+        permissions.as_str() == Some("write-all")
+            || mapping_value(permissions, "contents").and_then(yaml_serde::Value::as_str)
+                == Some("write")
+    };
+    let can_write_contents = mapping_value(&document, "permissions")
+        .is_some_and(permission_writes_contents)
+        || mapping_value(&document, "jobs")
+            .and_then(yaml_serde::Value::as_mapping)
+            .is_some_and(|jobs| {
+                jobs.values().any(|job| {
+                    mapping_value(job, "permissions").is_some_and(permission_writes_contents)
+                })
+            });
+    let Some(push) =
+        mapping_value(&document, "on").and_then(|events| mapping_value(events, "push"))
+    else {
+        return Ok(WorkflowInspection {
+            release_namespaces: Vec::new(),
+            has_tag_trigger: false,
+            can_write_contents,
+        });
+    };
+    let Some(tags) = mapping_value(push, "tags") else {
+        return Ok(WorkflowInspection {
+            release_namespaces: Vec::new(),
+            has_tag_trigger: false,
+            can_write_contents,
+        });
+    };
+
+    let mut namespaces = BTreeSet::new();
+    match tags {
+        yaml_serde::Value::String(pattern) => {
+            if let Some(namespace) = tag_namespace(pattern) {
+                namespaces.insert(namespace);
+            }
+        }
+        yaml_serde::Value::Sequence(patterns) => {
+            for pattern in patterns {
+                if let Some(pattern) = pattern.as_str() {
+                    if let Some(namespace) = tag_namespace(pattern) {
+                        namespaces.insert(namespace);
+                    }
+                }
+            }
+        }
+        _ => {}
+    }
+
+    Ok(WorkflowInspection {
+        release_namespaces: namespaces.into_iter().collect(),
+        has_tag_trigger: true,
+        can_write_contents,
+    })
+}
+
+fn workflow_delivery_destination_namespace(
+    path: &str,
+    content: &str,
+    has_tag_trigger: bool,
+    can_write_contents: bool,
+) -> Result<Option<&'static str>, AppError> {
+    let creates_github_release = content.contains("gh release create")
+        || content.contains("softprops/action-gh-release")
+        || content.contains("ncipollo/release-action")
+        || content.contains("marvinpinto/action-automatic-releases")
+        || content.contains("/repos/${{ github.repository }}/releases")
+        || (content.contains("tauri-apps/tauri-action")
+            && (content.contains("tagName:") || content.contains("releaseName:")));
+    if creates_github_release {
+        return Ok(Some("github-release:repository"));
+    }
+
+    if has_tag_trigger && can_write_contents {
+        return Err(AppError::validation_with_code(
+            format!("标签触发的 workflow {path} 具有 contents: write 权限，但无法确定交付目标命名空间"),
+            "automation_workflow_namespace_ambiguous",
+        ));
+    }
+    Ok(None)
+}
+
+fn discover_initial_takeover_conflicts(
+    repo_root: &Path,
+    config: &RepoPublishConfig,
+    change: &AutomationChangeRequest,
+    targets: &[AutomationBinding],
+    expected_paths: &BTreeSet<String>,
+) -> Result<BTreeMap<String, AutomationNamespaceConflict>, AppError> {
+    let is_initial_github_install = matches!(
+        change,
+        AutomationChangeRequest::Install {
+            execution_backend_id,
+            ..
+        } if execution_backend_id == GITHUB_ACTIONS_BACKEND_ID
+    ) && !config
+        .applied_bundles
+        .iter()
+        .any(|bundle| bundle.backend_id == GITHUB_ACTIONS_BACKEND_ID);
+    if !is_initial_github_install {
+        return Ok(BTreeMap::new());
+    }
+
+    let target_namespaces = targets
+        .iter()
+        .filter_map(AutomationConflictKey::for_binding)
+        .collect::<BTreeSet<_>>();
+    let workflow_dir = repo_root.join(".github/workflows");
+    if !workflow_dir.is_dir() {
+        return Ok(BTreeMap::new());
+    }
+
+    let mut conflicts = BTreeMap::new();
+    for entry in std::fs::read_dir(&workflow_dir).map_err(|error| {
+        AppError::repository_with_code(
+            format!("无法读取 {}: {error}", workflow_dir.display()),
+            "automation_workflow_scan_failed",
+        )
+    })? {
+        let path = entry
+            .map_err(|error| {
+                AppError::repository_with_code(
+                    format!("无法读取 workflow 目录项: {error}"),
+                    "automation_workflow_scan_failed",
+                )
+            })?
+            .path();
+        if !matches!(
+            path.extension().and_then(|extension| extension.to_str()),
+            Some("yml" | "yaml")
+        ) {
+            continue;
+        }
+        let relative = path
+            .strip_prefix(repo_root)
+            .unwrap_or(&path)
+            .to_string_lossy()
+            .replace('\\', "/");
+        if expected_paths.contains(&relative) {
+            continue;
+        }
+        let content = std::fs::read_to_string(&path).map_err(|error| {
+            AppError::repository_with_code(
+                format!("无法读取 workflow {relative}: {error}"),
+                "automation_workflow_read_failed",
+            )
+        })?;
+        let inspection = inspect_workflow(&content).map_err(|error| {
+            AppError::validation_with_code(
+                format!("无法解析 workflow {relative}: {error}"),
+                "automation_workflow_parse_failed",
+            )
+        })?;
+        let Some(destination) = workflow_delivery_destination_namespace(
+            &relative,
+            &content,
+            inspection.has_tag_trigger,
+            inspection.can_write_contents,
+        )?
+        else {
+            continue;
+        };
+        if inspection.release_namespaces.is_empty() {
+            return Err(AppError::validation_with_code(
+                format!("workflow {relative} 会写入 GitHub Release，但无法确定 Release Namespace"),
+                "automation_workflow_namespace_ambiguous",
+            ));
+        }
+        let conflict = inspection.release_namespaces.into_iter().find(|release| {
+            let key = AutomationConflictKey {
+                release_namespace: release.clone(),
+                delivery_destination_namespace: destination.to_string(),
+            };
+            target_namespaces.iter().any(|target| target.overlaps(&key))
+        });
+        if let Some(release) = conflict {
+            conflicts.insert(
+                relative,
+                AutomationNamespaceConflict {
+                    release_namespace: release,
+                    delivery_destination_namespace: destination.to_string(),
+                },
+            );
+        }
+    }
+    Ok(conflicts)
+}
+
+#[cfg(test)]
 pub(crate) fn preview_change(
     repo_root: &Path,
     config: &RepoPublishConfig,
     change: &AutomationChangeRequest,
     now: &str,
 ) -> Result<AutomationPreviewOutcome, AppError> {
-    let normalized_change = change.normalized();
-    let targets = resolve_target_bindings(config, &normalized_change, now)?;
+    preview_change_with_tauri_config(repo_root, config, change, now, None)
+}
+
+pub(crate) fn preview_change_with_tauri_config(
+    repo_root: &Path,
+    config: &RepoPublishConfig,
+    change: &AutomationChangeRequest,
+    now: &str,
+    tauri_release_config: Option<&crate::tauri_release::TauriReleaseConfig>,
+) -> Result<AutomationPreviewOutcome, AppError> {
+    let mut normalized_change = change.normalized();
+    let targets = resolve_target_bindings(config, &normalized_change, now, tauri_release_config)?;
+    validate_binding_namespaces(&targets)?;
     let expected = render_expected(config, &targets, now)?;
     let previously_owned = previously_owned_paths(config)?;
     let candidates = expected
@@ -426,14 +793,72 @@ pub(crate) fn preview_change(
         .chain(previously_owned.iter().cloned())
         .collect::<BTreeSet<_>>();
     let actual = read_repository_files(repo_root, &candidates)?;
-    let changes = diff_automation_files(&expected.files, &actual, &previously_owned);
+    let mut changes = diff_automation_files(&expected.files, &actual, &previously_owned);
+    let expected_paths = expected.files.keys().cloned().collect::<BTreeSet<_>>();
+    let conflicts = discover_initial_takeover_conflicts(
+        repo_root,
+        config,
+        &normalized_change,
+        &targets,
+        &expected_paths,
+    )?;
+    if let AutomationChangeRequest::Install {
+        confirmed_conflict_paths,
+        ..
+    } = &mut normalized_change
+    {
+        if confirmed_conflict_paths
+            .iter()
+            .any(|path| !is_safe_portable_relative_path(path))
+        {
+            return Err(AppError::validation_with_code(
+                "接管确认包含不可移植的资源路径",
+                "automation_takeover_conflict_path_invalid",
+            ));
+        }
+        let discovered = conflicts.keys().cloned().collect::<Vec<_>>();
+        if confirmed_conflict_paths.is_empty() {
+            *confirmed_conflict_paths = discovered;
+        } else {
+            let confirmed_still_present = confirmed_conflict_paths
+                .iter()
+                .filter(|path| repo_root.join(path).is_file())
+                .cloned()
+                .collect::<Vec<_>>();
+            if confirmed_still_present == discovered {
+                // 已确认但已不存在的路径只能来自上次未推送成功的本地接入提交。
+            } else {
+            return Err(AppError::validation_with_code(
+                "接管冲突资源与预览时不一致，请重新查看完整差异并确认",
+                "automation_takeover_conflicts_changed",
+            ));
+            }
+        }
+    }
+    for path in conflicts.keys() {
+        let content = std::fs::read_to_string(repo_root.join(path)).map_err(|error| {
+            AppError::repository_with_code(
+                format!("无法读取冲突 workflow {path}: {error}"),
+                "automation_workflow_read_failed",
+            )
+        })?;
+        changes.push(AutomationBundleFileChange {
+            path: path.clone(),
+            kind: AutomationFileChangeKind::Removed,
+            current_content: Some(content),
+            expected_content: None,
+        });
+    }
+    changes.sort_by(|left, right| left.path.cmp(&right.path));
     let confirmation_digest =
-        canonical_digest(&(&expected.files, &changes)).map_err(render_error)?;
+        canonical_digest(&(&normalized_change, &expected.files, &changes, &conflicts))
+            .map_err(render_error)?;
     Ok(AutomationPreviewOutcome {
         normalized_change,
         targets,
         expected,
         changes,
+        conflicts,
         confirmation_digest,
     })
 }
@@ -457,6 +882,7 @@ fn assign_external_identities(
     Ok(())
 }
 
+#[cfg(test)]
 pub(crate) fn apply_change(
     repo_root: &Path,
     config: &mut RepoPublishConfig,
@@ -464,7 +890,19 @@ pub(crate) fn apply_change(
     confirmed_digest: &str,
     now: &str,
 ) -> Result<AutomationApplyResult, AppError> {
-    let outcome = preview_change(repo_root, config, change, now)?;
+    apply_change_with_tauri_config(repo_root, config, change, confirmed_digest, now, None)
+}
+
+pub(crate) fn apply_change_with_tauri_config(
+    repo_root: &Path,
+    config: &mut RepoPublishConfig,
+    change: &AutomationChangeRequest,
+    confirmed_digest: &str,
+    now: &str,
+    tauri_release_config: Option<&crate::tauri_release::TauriReleaseConfig>,
+) -> Result<AutomationApplyResult, AppError> {
+    let outcome =
+        preview_change_with_tauri_config(repo_root, config, change, now, tauri_release_config)?;
     if outcome.confirmation_digest != confirmed_digest {
         return Err(AppError::validation_with_code(
             "投影差异与预览时不一致，请重新预览并确认",
@@ -472,16 +910,32 @@ pub(crate) fn apply_change(
         ));
     }
 
-    let mut targets = outcome.targets;
+    let mut targets = outcome.targets.clone();
     assign_external_identities(&mut targets, &outcome.expected.files)?;
 
     if outcome.changes.is_empty() {
-        // 仓库已与期望投影一致：不产生接入提交，但绑定与归属边界仍要落到本地状态。
+        ensure_clean(repo_root)?;
+        let branch = current_branch(repo_root)?;
+        let expected_branch = default_branch(repo_root)?;
+        if branch != expected_branch {
+            return Err(AppError::repository_with_code(
+                format!(
+                    "自动化接入必须在 origin 默认分支 '{expected_branch}' 上执行，当前分支是 '{branch}'"
+                ),
+                "automation_default_branch_required",
+            ));
+        }
+        let pending_commit = retry_pending_projection_push(
+            repo_root,
+            &expected_branch,
+            config,
+            &outcome,
+        )?;
         config.bindings = targets;
         config.applied_bundles = outcome.expected.bundles;
         return Ok(AutomationApplyResult {
-            commit_sha: None,
-            pushed_branch: None,
+            commit_sha: pending_commit.clone(),
+            pushed_branch: pending_commit.map(|_| expected_branch),
             bindings: config.bindings.clone(),
         });
     }
@@ -539,11 +993,7 @@ pub(crate) fn apply_change(
     successful_git(repo_root, &add_args)?;
     successful_git(
         repo_root,
-        &[
-            "commit",
-            "-m",
-            "chore(release): apply One Publish automation projection",
-        ],
+        &["commit", "-m", AUTOMATION_COMMIT_SUBJECT],
     )?;
     let commit_sha = successful_git(repo_root, &["rev-parse", "HEAD"])?;
     successful_git(
@@ -560,13 +1010,33 @@ pub(crate) fn apply_change(
     })
 }
 
+#[cfg(test)]
 pub(crate) fn bindings_view(
     repo_root: &Path,
     config: &RepoPublishConfig,
     now: &str,
 ) -> Result<AutomationBindingsView, AppError> {
-    let outcome = preview_change(repo_root, config, &AutomationChangeRequest::Reconcile, now)?;
-    let drift = outcome.changes.iter().map(change_view).collect::<Vec<_>>();
+    bindings_view_with_tauri_config(repo_root, config, now, None)
+}
+
+pub(crate) fn bindings_view_with_tauri_config(
+    repo_root: &Path,
+    config: &RepoPublishConfig,
+    now: &str,
+    tauri_release_config: Option<&crate::tauri_release::TauriReleaseConfig>,
+) -> Result<AutomationBindingsView, AppError> {
+    let outcome = preview_change_with_tauri_config(
+        repo_root,
+        config,
+        &AutomationChangeRequest::Reconcile,
+        now,
+        tauri_release_config,
+    )?;
+    let drift = outcome
+        .changes
+        .iter()
+        .map(|change| change_view(change, outcome.conflicts.get(&change.path)))
+        .collect::<Vec<_>>();
 
     // 漂移按资源归属定位到具体绑定；共享资源（如 Bundle 清单）或失去归属的
     // 文件漂移会影响整个投影包，此时所有绑定都进入阻断状态。
@@ -604,7 +1074,10 @@ pub(crate) fn bindings_view(
     Ok(AutomationBindingsView { bindings, drift })
 }
 
-fn change_view(change: &AutomationBundleFileChange) -> AutomationFileChangeView {
+fn change_view(
+    change: &AutomationBundleFileChange,
+    conflict: Option<&AutomationNamespaceConflict>,
+) -> AutomationFileChangeView {
     AutomationFileChangeView {
         path: change.path.clone(),
         kind: match change.kind {
@@ -614,6 +1087,9 @@ fn change_view(change: &AutomationBundleFileChange) -> AutomationFileChangeView 
         },
         current_content: change.current_content.clone(),
         expected_content: change.expected_content.clone(),
+        conflict_release_namespace: conflict.map(|value| value.release_namespace.clone()),
+        conflict_delivery_destination_namespace: conflict
+            .map(|value| value.delivery_destination_namespace.clone()),
     }
 }
 
@@ -722,6 +1198,188 @@ fn ensure_synced_default_branch(
     ))
 }
 
+fn retry_pending_projection_push(
+    repository_root: &Path,
+    default_branch: &str,
+    config: &RepoPublishConfig,
+    outcome: &AutomationPreviewOutcome,
+) -> Result<Option<String>, AppError> {
+    successful_git(repository_root, &["fetch", "origin", default_branch])?;
+    let counts = successful_git(
+        repository_root,
+        &[
+            "rev-list",
+            "--left-right",
+            "--count",
+            &format!("HEAD...origin/{default_branch}"),
+        ],
+    )?;
+    let parsed = counts
+        .split_whitespace()
+        .map(str::parse::<usize>)
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|error| {
+            AppError::repository_with_code(
+                format!("无法解析默认分支同步状态 '{counts}': {error}"),
+                "automation_branch_sync_state_invalid",
+            )
+        })?;
+    match parsed.as_slice() {
+        [0, 0] => Ok(None),
+        [1, 0] => {
+            let subject = successful_git(repository_root, &["show", "-s", "--format=%s", "HEAD"])?;
+            let changed_paths = successful_git(
+                repository_root,
+                &["diff-tree", "--no-commit-id", "--name-only", "-r", "HEAD"],
+            )?;
+            let paths = changed_paths
+                .lines()
+                .map(str::trim)
+                .filter(|path| !path.is_empty())
+                .collect::<Vec<_>>();
+            if subject != AUTOMATION_COMMIT_SUBJECT || paths.is_empty() {
+                return Err(AppError::repository_with_code(
+                    "默认分支包含无法验证的本地提交，拒绝作为自动化投影重试推送",
+                    "automation_pending_commit_unverified",
+                ));
+            }
+            validate_pending_projection_commit(
+                repository_root,
+                default_branch,
+                config,
+                outcome,
+                &paths,
+            )?;
+            let commit_sha = successful_git(repository_root, &["rev-parse", "HEAD"])?;
+            successful_git(
+                repository_root,
+                &["push", "origin", &format!("HEAD:{default_branch}")],
+            )?;
+            Ok(Some(commit_sha))
+        }
+        _ => Err(AppError::repository_with_code(
+            format!("默认分支与 origin/{default_branch} 不同步: {counts}"),
+            "automation_branch_not_synced",
+        )),
+    }
+}
+
+fn git_file_at(
+    repository_root: &Path,
+    revision: &str,
+    path: &str,
+) -> Result<Option<String>, AppError> {
+    let object = format!("{revision}:{path}");
+    let exists = git(repository_root, &["cat-file", "-e", &object])?;
+    if !exists.status.success() {
+        return Ok(None);
+    }
+    let output = git(repository_root, &["show", &object])?;
+    if output.status.success() {
+        Ok(Some(String::from_utf8_lossy(&output.stdout).into_owned()))
+    } else {
+        Err(AppError::repository_with_code(
+            format!("无法读取 Git 对象 {object}"),
+            "automation_pending_commit_unverified",
+        ))
+    }
+}
+
+fn validate_pending_projection_commit(
+    repository_root: &Path,
+    default_branch: &str,
+    config: &RepoPublishConfig,
+    outcome: &AutomationPreviewOutcome,
+    changed_paths: &[&str],
+) -> Result<(), AppError> {
+    let previous_owned = previously_owned_paths(config)?;
+    let confirmed_conflicts = match &outcome.normalized_change {
+        AutomationChangeRequest::Install {
+            confirmed_conflict_paths,
+            ..
+        } => confirmed_conflict_paths.iter().cloned().collect::<BTreeSet<_>>(),
+        _ => BTreeSet::new(),
+    };
+    let target_namespaces = outcome
+        .targets
+        .iter()
+        .filter_map(AutomationConflictKey::for_binding)
+        .collect::<BTreeSet<_>>();
+    let remote_revision = format!("origin/{default_branch}");
+
+    for path in changed_paths {
+        if let Some(expected) = outcome.expected.files.get(*path) {
+            let actual = git_file_at(repository_root, "HEAD", path)?;
+            if actual.as_deref() != Some(expected.content.as_str()) {
+                return Err(AppError::repository_with_code(
+                    format!("待重试提交中的 Bundle 内容与固定投影不一致: {path}"),
+                    "automation_pending_commit_unverified",
+                ));
+            }
+            continue;
+        }
+        if previous_owned.contains(*path) {
+            if git_file_at(repository_root, "HEAD", path)?.is_some()
+                || git_file_at(repository_root, &remote_revision, path)?.is_none()
+            {
+                return Err(AppError::repository_with_code(
+                    format!("待重试提交没有按 Bundle 所有权移除资源: {path}"),
+                    "automation_pending_commit_unverified",
+                ));
+            }
+            continue;
+        }
+        if confirmed_conflicts.contains(*path) {
+            let is_workflow = path.starts_with(".github/workflows/")
+                && matches!(
+                    Path::new(path).extension().and_then(|value| value.to_str()),
+                    Some("yml" | "yaml")
+                );
+            let original = git_file_at(repository_root, &remote_revision, path)?;
+            let conflict_is_valid = if let Some(content) = original {
+                let inspection = inspect_workflow(&content).map_err(|error| {
+                    AppError::repository_with_code(
+                        format!("无法解析待重试提交中的 workflow {path}: {error}"),
+                        "automation_pending_commit_unverified",
+                    )
+                })?;
+                let destination = workflow_delivery_destination_namespace(
+                    path,
+                    &content,
+                    inspection.has_tag_trigger,
+                    inspection.can_write_contents,
+                )?;
+                destination.is_some_and(|destination| {
+                    inspection.release_namespaces.into_iter().any(|release| {
+                        let key = AutomationConflictKey {
+                            release_namespace: release,
+                            delivery_destination_namespace: destination.to_string(),
+                        };
+                        target_namespaces.iter().any(|target| target.overlaps(&key))
+                    })
+                })
+            } else {
+                false
+            };
+            if !is_workflow
+                || !conflict_is_valid
+                || git_file_at(repository_root, "HEAD", path)?.is_some()
+            {
+                return Err(AppError::repository_with_code(
+                    format!("待重试提交移除了未经语义确认的资源: {path}"),
+                    "automation_pending_commit_unverified",
+                ));
+            }
+            continue;
+        }
+        return Err(AppError::repository_with_code(
+            format!("待重试提交触碰了 Bundle 之外的资源: {path}"),
+            "automation_pending_commit_unverified",
+        ));
+    }
+    Ok(())
+}
+
 fn repository_root_from_path(path: &str) -> Result<&Path, AppError> {
     let root = Path::new(path.trim());
     if path.trim().is_empty() || !root.is_dir() {
@@ -740,10 +1398,12 @@ pub async fn list_automation_bindings(repo_id: String) -> Result<AutomationBindi
     let state = crate::store::get_state();
     let repo = crate::store::find_repository(&state.repositories, &repo_id)?;
     let now = chrono::Utc::now().to_rfc3339();
-    bindings_view(
+    let tauri_release_config = crate::tauri_release::stored_release_config(&repo_id)?;
+    bindings_view_with_tauri_config(
         repository_root_from_path(&repo.path)?,
         &repo.publish_config,
         &now,
+        tauri_release_config.as_ref(),
     )
 }
 
@@ -757,16 +1417,22 @@ pub async fn preview_automation_change(
     let state = crate::store::get_state();
     let repo = crate::store::find_repository(&state.repositories, &repo_id)?;
     let now = chrono::Utc::now().to_rfc3339();
-    let outcome = preview_change(
+    let tauri_release_config = crate::tauri_release::stored_release_config(&repo_id)?;
+    let outcome = preview_change_with_tauri_config(
         repository_root_from_path(&repo.path)?,
         &repo.publish_config,
         &change,
         &now,
+        tauri_release_config.as_ref(),
     )?;
     Ok(AutomationProjectionPreview {
         change: outcome.normalized_change,
         confirmation_digest: outcome.confirmation_digest,
-        changes: outcome.changes.iter().map(change_view).collect(),
+        changes: outcome
+            .changes
+            .iter()
+            .map(|change| change_view(change, outcome.conflicts.get(&change.path)))
+            .collect(),
     })
 }
 
@@ -779,16 +1445,18 @@ pub async fn apply_automation_change(
 ) -> Result<AutomationApplyResult, AppError> {
     let _timer =
         crate::commands::middleware::CommandTimer::new("automation::apply_automation_change");
+    let tauri_release_config = crate::tauri_release::stored_release_config(&repo_id)?;
     let mut state = crate::store::get_state();
     let repo = crate::store::find_repository_mut(&mut state.repositories, &repo_id)?;
     let repo_path = repo.path.clone();
     let now = chrono::Utc::now().to_rfc3339();
-    let result = apply_change(
+    let result = apply_change_with_tauri_config(
         repository_root_from_path(&repo_path)?,
         &mut repo.publish_config,
         &change,
         &confirmed_digest,
         &now,
+        tauri_release_config.as_ref(),
     )?;
     crate::store::persist_state_and_refresh_tray(&app, state).await?;
     Ok(result)
@@ -797,6 +1465,7 @@ pub async fn apply_automation_change(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::tauri_release::{TauriReleaseConfig, MANAGED_WORKFLOW_PATH};
     use std::path::PathBuf;
     use std::process::Command;
 
@@ -862,11 +1531,15 @@ mod tests {
     }
 
     fn fixture_config(name: &str) -> (RepoPublishConfig, String) {
+        fixture_config_for_provider(name, "dotnet")
+    }
+
+    fn fixture_config_for_provider(name: &str, provider_id: &str) -> (RepoPublishConfig, String) {
         let mut config = RepoPublishConfig::default();
         let profile = config
             .create_profile(
                 name.to_string(),
-                "dotnet".to_string(),
+                provider_id.to_string(),
                 serde_json::json!({ "configuration": "Release" }),
                 None,
                 "2026-07-21T10:00:00Z".to_string(),
@@ -884,6 +1557,32 @@ mod tests {
                 tag_prefix: "v".to_string(),
             },
             binding_id: None,
+            confirmed_conflict_paths: Vec::new(),
+        }
+    }
+
+    fn github_actions_install_request(
+        profile_id: &str,
+        binding_id: &str,
+        tag_prefix: &str,
+    ) -> AutomationChangeRequest {
+        AutomationChangeRequest::Install {
+            configuration_id: profile_id.to_string(),
+            execution_backend_id: crate::github_actions_backend::GITHUB_ACTIONS_BACKEND_ID
+                .to_string(),
+            trigger_policy: AutomationTriggerPolicy::TagPush {
+                tag_prefix: tag_prefix.to_string(),
+            },
+            binding_id: Some(binding_id.to_string()),
+            confirmed_conflict_paths: Vec::new(),
+        }
+    }
+
+    fn github_actions_config() -> TauriReleaseConfig {
+        TauriReleaseConfig {
+            app_name: "Fixture".to_string(),
+            allow_unsigned_release: true,
+            ..TauriReleaseConfig::default()
         }
     }
 
@@ -927,6 +1626,641 @@ mod tests {
         assert!(config.bindings.is_empty());
         assert!(config.applied_bundles.is_empty());
         assert_eq!(outcome.targets.len(), 1);
+    }
+
+    #[test]
+    fn github_actions_takeover_previews_and_applies_the_complete_confirmed_diff() {
+        let (temp, work) = fixture_repository();
+        let (mut config, profile_id) = fixture_config_for_provider("Stable", "tauri");
+        let workflow_dir = work.join(".github/workflows");
+        std::fs::create_dir_all(&workflow_dir).expect("create workflow directory");
+        let managed_path = work.join(MANAGED_WORKFLOW_PATH);
+        std::fs::write(&managed_path, "name: drifted managed workflow\n")
+            .expect("write drifted managed workflow");
+        let legacy_path = workflow_dir.join("legacy-release.yml");
+        std::fs::write(
+            &legacy_path,
+            "on:\n  push:\n    tags: ['v*']\nsteps:\n  - run: gh release create\n",
+        )
+        .expect("write conflicting legacy workflow");
+        let quality_path = workflow_dir.join("quality.yml");
+        std::fs::write(&quality_path, "on: [push]\nsteps:\n  - run: cargo test\n")
+            .expect("write unrelated workflow");
+        commit_all(&work, "seed workflow takeover");
+        run_git(&work, &["push", "--quiet", "origin", "main"]);
+        let before = run_git(&work, &["rev-parse", "HEAD"]);
+
+        let change = github_actions_install_request(&profile_id, "binding-stable", "v");
+        let release_config = github_actions_config();
+        let preview =
+            preview_change_with_tauri_config(&work, &config, &change, NOW, Some(&release_config))
+                .expect("preview GitHub Actions takeover");
+
+        let described = preview
+            .changes
+            .iter()
+            .map(|change| (change.path.as_str(), change.kind))
+            .collect::<Vec<_>>();
+        assert!(described.contains(&(
+            ".one-publish/automation/github-actions.json",
+            AutomationFileChangeKind::Added
+        )));
+        assert!(described.contains(&(MANAGED_WORKFLOW_PATH, AutomationFileChangeKind::Updated)));
+        assert!(described.contains(&(
+            ".github/workflows/legacy-release.yml",
+            AutomationFileChangeKind::Removed
+        )));
+        let conflict = preview
+            .conflicts
+            .get(".github/workflows/legacy-release.yml")
+            .expect("semantic namespace conflict");
+        assert_eq!(conflict.release_namespace, "tag:v*");
+        assert_eq!(
+            conflict.delivery_destination_namespace,
+            "github-release:repository"
+        );
+        match &preview.normalized_change {
+            AutomationChangeRequest::Install {
+                confirmed_conflict_paths,
+                ..
+            } => assert_eq!(
+                confirmed_conflict_paths,
+                &vec![".github/workflows/legacy-release.yml".to_string()]
+            ),
+            other => panic!("expected normalized install request, got {other:?}"),
+        }
+        assert!(quality_path.is_file());
+        assert_eq!(run_git(&work, &["rev-parse", "HEAD"]), before);
+        assert!(config.bindings.is_empty());
+
+        let result = apply_change_with_tauri_config(
+            &work,
+            &mut config,
+            &preview.normalized_change,
+            &preview.confirmation_digest,
+            NOW,
+            Some(&release_config),
+        )
+        .expect("apply confirmed GitHub Actions takeover");
+
+        let commit_sha = result.commit_sha.expect("single onboarding commit");
+        assert_eq!(result.pushed_branch.as_deref(), Some("main"));
+        assert_eq!(
+            run_git(&work, &["rev-list", "--count", &format!("{before}..HEAD")]),
+            "1"
+        );
+        assert_eq!(
+            run_git(&temp.path().join("origin.git"), &["rev-parse", "main"]),
+            commit_sha
+        );
+        assert!(work.join(MANAGED_WORKFLOW_PATH).is_file());
+        assert!(!legacy_path.exists());
+        assert!(quality_path.is_file());
+        assert_eq!(config.bindings.len(), 1);
+        assert_eq!(
+            config.bindings[0].execution_backend_id,
+            crate::github_actions_backend::GITHUB_ACTIONS_BACKEND_ID
+        );
+    }
+
+    #[test]
+    fn github_actions_conflicts_use_release_and_destination_namespaces() {
+        let (_temp, work) = fixture_repository();
+        let (mut config, stable_id) = fixture_config_for_provider("Stable", "tauri");
+        let nightly = config
+            .create_profile(
+                "Nightly".to_string(),
+                "tauri".to_string(),
+                serde_json::json!({ "configuration": "Release" }),
+                None,
+                "2026-07-22T10:05:00Z".to_string(),
+            )
+            .expect("create nightly profile")
+            .clone();
+        let release_config = github_actions_config();
+        let stable = github_actions_install_request(&stable_id, "binding-stable", "v");
+        let stable_preview =
+            preview_change_with_tauri_config(&work, &config, &stable, NOW, Some(&release_config))
+                .expect("preview stable binding");
+        apply_change_with_tauri_config(
+            &work,
+            &mut config,
+            &stable_preview.normalized_change,
+            &stable_preview.confirmation_digest,
+            NOW,
+            Some(&release_config),
+        )
+        .expect("apply stable binding");
+
+        let duplicate = github_actions_install_request(&nightly.id, "binding-duplicate", "v1");
+        let error = preview_change_with_tauri_config(
+            &work,
+            &config,
+            &duplicate,
+            NOW,
+            Some(&release_config),
+        )
+        .expect_err("the same release and destination namespace must conflict");
+        assert_eq!(error.code.as_deref(), Some("automation_namespace_conflict"));
+
+        let non_overlapping =
+            github_actions_install_request(&nightly.id, "binding-nightly", "nightly-");
+        let preview = preview_change_with_tauri_config(
+            &work,
+            &config,
+            &non_overlapping,
+            NOW,
+            Some(&release_config),
+        )
+        .expect("different release namespaces may coexist");
+        assert!(preview
+            .changes
+            .iter()
+            .any(|change| change.path.contains("binding-nightly")));
+
+        let duplicate_identity =
+            github_actions_install_request(&nightly.id, "binding-stable", "nightly-");
+        let error = preview_change_with_tauri_config(
+            &work,
+            &config,
+            &duplicate_identity,
+            NOW,
+            Some(&release_config),
+        )
+        .expect_err("binding identities must be unique");
+        assert_eq!(
+            error.code.as_deref(),
+            Some("automation_binding_identity_conflict")
+        );
+    }
+
+    #[test]
+    fn takeover_scans_every_tag_namespace_and_blocks_ambiguous_release_writers() {
+        let (_temp, work) = fixture_repository();
+        let (config, profile_id) = fixture_config_for_provider("Stable", "tauri");
+        let workflow_dir = work.join(".github/workflows");
+        std::fs::create_dir_all(&workflow_dir).expect("create workflow directory");
+        let multi_tag = workflow_dir.join("multi-tag-release.yml");
+        std::fs::write(
+            &multi_tag,
+            "on:\n  push:\n    tags: ['nightly-*', 'v1*']\nsteps:\n  - uses: ncipollo/release-action@0123456789012345678901234567890123456789\n",
+        )
+        .expect("write multi-tag release workflow");
+        commit_all(&work, "seed multi-tag workflow");
+        run_git(&work, &["push", "--quiet", "origin", "main"]);
+
+        let release_config = github_actions_config();
+        let install = github_actions_install_request(&profile_id, "binding-stable", "v");
+        let preview =
+            preview_change_with_tauri_config(&work, &config, &install, NOW, Some(&release_config))
+                .expect("second tag namespace still conflicts");
+        assert_eq!(
+            preview
+                .conflicts
+                .get(".github/workflows/multi-tag-release.yml")
+                .map(|conflict| conflict.release_namespace.as_str()),
+            Some("tag:v1*")
+        );
+
+        std::fs::remove_file(&multi_tag).expect("replace with ambiguous workflow");
+        std::fs::write(
+            workflow_dir.join("custom-release.yml"),
+            "on:\n  push:\n    tags:\n      - '*'\npermissions:\n  contents: write\nsteps:\n  - uses: example/publish@0123456789012345678901234567890123456789\n",
+        )
+        .expect("write ambiguous catch-all tag workflow");
+        commit_all(&work, "replace with ambiguous release writer");
+        run_git(&work, &["push", "--quiet", "origin", "main"]);
+
+        let error =
+            preview_change_with_tauri_config(&work, &config, &install, NOW, Some(&release_config))
+                .expect_err("unknown release writer must not be silently skipped");
+        assert_eq!(
+            error.code.as_deref(),
+            Some("automation_workflow_namespace_ambiguous")
+        );
+    }
+
+    #[test]
+    fn workflow_inspection_reads_only_trigger_and_permissions_paths() {
+        let flow_style = "on: { push: { tags: ['v*'] } }\npermissions: { contents: write }\n";
+        let inspection = inspect_workflow(flow_style).expect("parse flow-style workflow");
+        assert!(inspection.has_tag_trigger);
+        assert!(inspection.can_write_contents);
+        assert_eq!(
+            inspection.release_namespaces,
+            vec!["tag:v*".to_string()]
+        );
+        assert_eq!(
+            workflow_delivery_destination_namespace(
+                "flow-style.yml",
+                flow_style,
+                inspection.has_tag_trigger,
+                inspection.can_write_contents,
+            )
+            .expect_err("flow-style unknown writer must be blocked")
+            .code
+            .as_deref(),
+            Some("automation_workflow_namespace_ambiguous")
+        );
+
+        let step_input =
+            "on: [workflow_dispatch]\nsteps:\n  - uses: example/action@v1\n    with:\n      tags: v*\n";
+        let inspection = inspect_workflow(step_input).expect("parse workflow input tags");
+        assert!(!inspection.has_tag_trigger);
+        assert!(!inspection.can_write_contents);
+        assert!(inspection.release_namespaces.is_empty());
+
+        let write_all =
+            "on: { push: { tags: ['v*'] } }\npermissions: write-all\njobs: { publish: { runs-on: ubuntu-latest } }\n";
+        let inspection = inspect_workflow(write_all).expect("parse write-all workflow");
+        assert!(inspection.can_write_contents);
+
+        let job_permission = "on: { push: { tags: ['v*'] } }\njobs:\n  publish:\n    permissions: { contents: write }\n";
+        let inspection = inspect_workflow(job_permission).expect("parse job permissions");
+        assert!(inspection.can_write_contents);
+    }
+
+    #[test]
+    fn github_actions_takeover_deletes_only_the_exact_conflicts_confirmed_in_preview() {
+        let (_temp, work) = fixture_repository();
+        let (mut config, profile_id) = fixture_config_for_provider("Stable", "tauri");
+        let workflow_dir = work.join(".github/workflows");
+        std::fs::create_dir_all(&workflow_dir).expect("create workflow directory");
+        let first = workflow_dir.join("legacy-first.yml");
+        std::fs::write(
+            &first,
+            "on:\n  push:\n    tags: ['v*']\nsteps:\n  - run: gh release create\n",
+        )
+        .expect("write first conflict");
+        commit_all(&work, "seed first conflict");
+        run_git(&work, &["push", "--quiet", "origin", "main"]);
+
+        let release_config = github_actions_config();
+        let install = github_actions_install_request(&profile_id, "binding-stable", "v");
+        let preview =
+            preview_change_with_tauri_config(&work, &config, &install, NOW, Some(&release_config))
+                .expect("preview exact takeover conflicts");
+
+        let second = workflow_dir.join("legacy-second.yml");
+        std::fs::write(
+            &second,
+            "on:\n  push:\n    tags: ['v1*']\nsteps:\n  - run: gh release create\n",
+        )
+        .expect("add a new overlapping conflict after preview");
+        let error = apply_change_with_tauri_config(
+            &work,
+            &mut config,
+            &preview.normalized_change,
+            &preview.confirmation_digest,
+            NOW,
+            Some(&release_config),
+        )
+        .expect_err("a changed conflict set requires a new explicit confirmation");
+
+        assert_eq!(
+            error.code.as_deref(),
+            Some("automation_takeover_conflicts_changed")
+        );
+        assert!(first.is_file());
+        assert!(second.is_file());
+        assert!(config.bindings.is_empty());
+        assert!(config.applied_bundles.is_empty());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn failed_github_push_keeps_binding_incomplete_and_retries_the_same_onboarding_commit() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let (temp, work) = fixture_repository();
+        let (mut config, profile_id) = fixture_config_for_provider("Stable", "tauri");
+        let hook = temp.path().join("origin.git/hooks/pre-receive");
+        std::fs::write(&hook, "#!/bin/sh\nexit 1\n").expect("write rejecting hook");
+        let mut permissions = std::fs::metadata(&hook)
+            .expect("read hook metadata")
+            .permissions();
+        permissions.set_mode(0o755);
+        std::fs::set_permissions(&hook, permissions).expect("make hook executable");
+
+        let change = github_actions_install_request(&profile_id, "binding-stable", "v");
+        let release_config = github_actions_config();
+        let preview =
+            preview_change_with_tauri_config(&work, &config, &change, NOW, Some(&release_config))
+                .expect("preview install");
+        let error = apply_change_with_tauri_config(
+            &work,
+            &mut config,
+            &preview.normalized_change,
+            &preview.confirmation_digest,
+            NOW,
+            Some(&release_config),
+        )
+        .expect_err("fake GitHub rejects the onboarding push");
+        assert_eq!(error.code.as_deref(), Some("automation_git_failed"));
+        assert!(config.bindings.is_empty());
+        assert!(config.applied_bundles.is_empty());
+        let pending_commit = run_git(&work, &["rev-parse", "HEAD"]);
+        std::fs::remove_file(&hook).expect("repair fake GitHub push boundary");
+
+        let retry = preview_change_with_tauri_config(
+            &work,
+            &config,
+            &preview.normalized_change,
+            NOW,
+            Some(&release_config),
+        )
+        .expect("retry preview sees the local onboarding commit");
+        assert!(retry.changes.is_empty());
+        let retried = apply_change_with_tauri_config(
+            &work,
+            &mut config,
+            &retry.normalized_change,
+            &retry.confirmation_digest,
+            NOW,
+            Some(&release_config),
+        )
+        .expect("repaired boundary pushes the original onboarding commit");
+        assert_eq!(retried.commit_sha.as_deref(), Some(pending_commit.as_str()));
+        assert_eq!(retried.pushed_branch.as_deref(), Some("main"));
+        assert_eq!(
+            run_git(&temp.path().join("origin.git"), &["rev-parse", "main"]),
+            pending_commit
+        );
+        assert_eq!(config.bindings.len(), 1);
+        assert_eq!(config.applied_bundles.len(), 1);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn failed_push_retry_rejects_a_commit_that_deletes_an_unowned_file() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let (temp, work) = fixture_repository();
+        let quality_path = work.join(".github/workflows/quality.yml");
+        std::fs::create_dir_all(quality_path.parent().expect("workflow parent"))
+            .expect("create workflow directory");
+        std::fs::write(
+            &quality_path,
+            "on: [push]\nsteps:\n  - run: cargo test\n",
+        )
+        .expect("write quality workflow");
+        commit_all(&work, "seed unowned quality workflow");
+        run_git(&work, &["push", "--quiet", "origin", "main"]);
+
+        let (mut config, profile_id) = fixture_config_for_provider("Stable", "tauri");
+        let hook = temp.path().join("origin.git/hooks/pre-receive");
+        std::fs::write(&hook, "#!/bin/sh\nexit 1\n").expect("write rejecting hook");
+        let mut permissions = std::fs::metadata(&hook)
+            .expect("read hook metadata")
+            .permissions();
+        permissions.set_mode(0o755);
+        std::fs::set_permissions(&hook, permissions).expect("make hook executable");
+
+        let release_config = github_actions_config();
+        let install = github_actions_install_request(&profile_id, "binding-stable", "v");
+        let preview =
+            preview_change_with_tauri_config(&work, &config, &install, NOW, Some(&release_config))
+                .expect("preview install");
+        apply_change_with_tauri_config(
+            &work,
+            &mut config,
+            &preview.normalized_change,
+            &preview.confirmation_digest,
+            NOW,
+            Some(&release_config),
+        )
+        .expect_err("fake GitHub rejects the push");
+
+        std::fs::remove_file(&quality_path).expect("maliciously delete unowned workflow");
+        run_git(&work, &["add", "--", ".github/workflows/quality.yml"]);
+        run_git(&work, &["commit", "--amend", "--no-edit"]);
+        std::fs::remove_file(&hook).expect("repair fake GitHub");
+        let mut malicious_change = preview.normalized_change;
+        let AutomationChangeRequest::Install {
+            confirmed_conflict_paths,
+            ..
+        } = &mut malicious_change
+        else {
+            panic!("expected install request");
+        };
+        confirmed_conflict_paths.push(".github/workflows/quality.yml".to_string());
+        let retry = preview_change_with_tauri_config(
+            &work,
+            &config,
+            &malicious_change,
+            NOW,
+            Some(&release_config),
+        )
+        .expect("retry preview cannot trust missing client-supplied paths");
+        let error = apply_change_with_tauri_config(
+            &work,
+            &mut config,
+            &retry.normalized_change,
+            &retry.confirmation_digest,
+            NOW,
+            Some(&release_config),
+        )
+        .expect_err("unowned deletion must not be pushed");
+        assert_eq!(
+            error.code.as_deref(),
+            Some("automation_pending_commit_unverified")
+        );
+        assert!(config.bindings.is_empty());
+        assert_ne!(
+            run_git(&temp.path().join("origin.git"), &["rev-parse", "main"]),
+            run_git(&work, &["rev-parse", "HEAD"])
+        );
+    }
+
+    #[test]
+    fn github_actions_drift_update_and_detach_preserve_unowned_history() {
+        let (_temp, work) = fixture_repository();
+        let (mut config, profile_id) = fixture_config_for_provider("Stable", "tauri");
+        let release_config = github_actions_config();
+        let install = github_actions_install_request(&profile_id, "binding-stable", "v");
+        let preview =
+            preview_change_with_tauri_config(&work, &config, &install, NOW, Some(&release_config))
+                .expect("preview install");
+        let installed = apply_change_with_tauri_config(
+            &work,
+            &mut config,
+            &preview.normalized_change,
+            &preview.confirmation_digest,
+            NOW,
+            Some(&release_config),
+        )
+        .expect("apply install");
+        let onboarding_commit = installed.commit_sha.expect("onboarding commit");
+        let binding = config.bindings[0].clone();
+
+        let history_dir = work.join("history");
+        std::fs::create_dir_all(&history_dir).expect("create history fixtures");
+        std::fs::write(history_dir.join("attempt.json"), "{\"attempt\":\"kept\"}\n")
+            .expect("write attempt sentinel");
+        std::fs::write(history_dir.join("receipt.json"), "{\"receipt\":\"kept\"}\n")
+            .expect("write receipt sentinel");
+        std::fs::write(
+            work.join(&binding.external_identity),
+            "name: manually drifted\n",
+        )
+        .expect("drift managed workflow");
+        commit_all(&work, "record history and drift workflow");
+        run_git(&work, &["tag", "v0.1.0"]);
+        run_git(&work, &["push", "--quiet", "origin", "main", "v0.1.0"]);
+
+        let view = bindings_view_with_tauri_config(&work, &config, NOW, Some(&release_config))
+            .expect("view drift");
+        assert_eq!(view.drift.len(), 1);
+        assert_eq!(
+            view.bindings[0].blocked_reason.as_deref(),
+            Some(AUTOMATION_DRIFT_BLOCKED_REASON)
+        );
+
+        let reconcile = preview_change_with_tauri_config(
+            &work,
+            &config,
+            &AutomationChangeRequest::Reconcile,
+            NOW,
+            Some(&release_config),
+        )
+        .expect("preview drift update");
+        apply_change_with_tauri_config(
+            &work,
+            &mut config,
+            &reconcile.normalized_change,
+            &reconcile.confirmation_digest,
+            NOW,
+            Some(&release_config),
+        )
+        .expect("apply drift update");
+
+        let detach = AutomationChangeRequest::Detach {
+            binding_id: binding.id,
+        };
+        let detach_preview =
+            preview_change_with_tauri_config(&work, &config, &detach, NOW, Some(&release_config))
+                .expect("preview detach");
+        apply_change_with_tauri_config(
+            &work,
+            &mut config,
+            &detach_preview.normalized_change,
+            &detach_preview.confirmation_digest,
+            NOW,
+            Some(&release_config),
+        )
+        .expect("apply detach");
+
+        assert!(config.bindings.is_empty());
+        assert!(config.applied_bundles.is_empty());
+        assert!(config.profile(&profile_id).is_some());
+        assert!(!config
+            .profile(&profile_id)
+            .expect("configuration retained")
+            .revisions
+            .is_empty());
+        assert!(history_dir.join("attempt.json").is_file());
+        assert!(history_dir.join("receipt.json").is_file());
+        assert_eq!(
+            run_git(&work, &["rev-parse", "refs/tags/v0.1.0"]),
+            run_git(&work, &["rev-parse", "v0.1.0"])
+        );
+        assert_eq!(
+            run_git(&work, &["cat-file", "-t", &onboarding_commit]),
+            "commit"
+        );
+    }
+
+    #[test]
+    fn github_actions_upgrade_changes_only_the_pinned_bundle_projection() {
+        let (_temp, work) = fixture_repository();
+        let (mut config, profile_id) = fixture_config_for_provider("Stable", "tauri");
+        let release_config = github_actions_config();
+        let install = github_actions_install_request(&profile_id, "binding-stable", "v");
+        let install_preview =
+            preview_change_with_tauri_config(&work, &config, &install, NOW, Some(&release_config))
+                .expect("preview install");
+        apply_change_with_tauri_config(
+            &work,
+            &mut config,
+            &install_preview.normalized_change,
+            &install_preview.confirmation_digest,
+            NOW,
+            Some(&release_config),
+        )
+        .expect("apply install");
+        let pinned_revision = config.bindings[0].configuration_revision_id.clone();
+
+        config
+            .update_profile(
+                &profile_id,
+                "Stable".to_string(),
+                "tauri".to_string(),
+                serde_json::json!({ "configuration": "Debug" }),
+                None,
+                "2026-07-22T11:00:00Z".to_string(),
+            )
+            .expect("save new configuration revision");
+        let current_revision = config
+            .profile(&profile_id)
+            .expect("profile")
+            .current_revision_id
+            .clone();
+        assert_ne!(pinned_revision, current_revision);
+        assert_eq!(
+            config.bindings[0].configuration_revision_id,
+            pinned_revision
+        );
+
+        let mut changed_release_config = release_config.clone();
+        changed_release_config.app_config_path =
+            "desktop/src-tauri/tauri.conf.json".to_string();
+        let unchanged = bindings_view_with_tauri_config(
+            &work,
+            &config,
+            NOW,
+            Some(&changed_release_config),
+        )
+        .expect("mutable local release config cannot change the fixed projection");
+        assert!(unchanged.drift.is_empty());
+
+        let upgrade = AutomationChangeRequest::UpgradeRevision {
+            binding_id: config.bindings[0].id.clone(),
+        };
+        let preview = preview_change_with_tauri_config(
+            &work,
+            &config,
+            &upgrade,
+            NOW,
+            Some(&changed_release_config),
+        )
+        .expect("preview explicit revision and backend snapshot upgrade");
+        assert!(preview.changes.iter().any(|change| {
+            change.path == ".one-publish/automation/github-actions.json"
+                && change.kind == AutomationFileChangeKind::Updated
+        }));
+        assert!(preview.changes.iter().any(|change| {
+            change.path == MANAGED_WORKFLOW_PATH
+                && change.kind == AutomationFileChangeKind::Updated
+        }));
+
+        apply_change_with_tauri_config(
+            &work,
+            &mut config,
+            &preview.normalized_change,
+            &preview.confirmation_digest,
+            NOW,
+            Some(&changed_release_config),
+        )
+        .expect("apply explicit revision upgrade");
+        assert_eq!(
+            config.bindings[0].configuration_revision_id,
+            current_revision
+        );
+        assert!(
+            std::fs::read_to_string(work.join(".one-publish/automation/github-actions.json"))
+                .expect("read bundle manifest")
+                .contains(&current_revision)
+        );
     }
 
     #[test]
@@ -1254,6 +2588,7 @@ mod tests {
                 execution_backend_id: "local-execution".to_string(),
                 trigger_policy: AutomationTriggerPolicy::Manual,
                 binding_id: None,
+                confirmed_conflict_paths: Vec::new(),
             },
             NOW,
         )
@@ -1271,6 +2606,7 @@ mod tests {
                 execution_backend_id: FAKE_AUTOMATION_BACKEND_ID.to_string(),
                 trigger_policy: AutomationTriggerPolicy::Manual,
                 binding_id: None,
+                confirmed_conflict_paths: Vec::new(),
             },
             NOW,
         )

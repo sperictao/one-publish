@@ -661,6 +661,7 @@ mod tests {
             configuration_revision_id: profile.current_revision_id.clone(),
             execution_backend_id: "fake-automation".to_string(),
             trigger_policy: AutomationTriggerPolicy::Manual,
+            backend_projection: serde_json::Value::Null,
             runtime_revision: "plan-v1.adapter-v1.fake-automation@1".to_string(),
             external_identity: "one-publish/automation/binding-1.json".to_string(),
             created_at: "2026-07-21T10:00:00Z".to_string(),

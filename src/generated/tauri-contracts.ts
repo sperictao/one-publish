@@ -135,7 +135,7 @@ export type AutomationApplyResult = {
  */
 commitSha: string | null, pushedBranch: string | null, bindings: Array<AutomationBinding>, };
 
-export type AutomationBinding = { id: string, configurationId: string, configurationRevisionId: string, executionBackendId: string, triggerPolicy: AutomationTriggerPolicy, runtimeRevision: string, externalIdentity: string, createdAt: string, updatedAt: string, };
+export type AutomationBinding = { id: string, configurationId: string, configurationRevisionId: string, executionBackendId: string, triggerPolicy: AutomationTriggerPolicy, backendProjection: JsonValue, runtimeRevision: string, externalIdentity: string, createdAt: string, updatedAt: string, };
 
 export type AutomationBindingView = { binding: AutomationBinding, configurationName: string | null, blockedReason: string | null, };
 
@@ -145,11 +145,11 @@ export type AutomationChangeRequest = { "kind": "install", configurationId: stri
 /**
  * 由预览归一化填充；应用必须回传同一身份，否则确认摘要无法匹配。
  */
-bindingId: string | null, } | { "kind": "upgradeRevision", bindingId: string, } | { "kind": "reconcile" } | { "kind": "detach", bindingId: string, };
+bindingId: string | null, confirmedConflictPaths: Array<string>, } | { "kind": "upgradeRevision", bindingId: string, } | { "kind": "reconcile" } | { "kind": "detach", bindingId: string, };
 
 export type AutomationFileChangeKindView = "added" | "updated" | "removed";
 
-export type AutomationFileChangeView = { path: string, kind: AutomationFileChangeKindView, currentContent: string | null, expectedContent: string | null, };
+export type AutomationFileChangeView = { path: string, kind: AutomationFileChangeKindView, currentContent: string | null, expectedContent: string | null, conflictReleaseNamespace: string | null, conflictDeliveryDestinationNamespace: string | null, };
 
 export type AutomationProjectionPreview = { 
 /**

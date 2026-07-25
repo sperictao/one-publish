@@ -1436,6 +1436,10 @@ pub struct AutomationBindingProjection {
     pub configuration_id: String,
     pub configuration_revision_id: String,
     pub trigger_policy: AutomationTriggerPolicy,
+    /// Binding 可产生的 Release Identity 范围；冲突判断使用该事实，不读取文件名或 Provider 类型。
+    pub release_namespace: String,
+    /// Binding 会写入的目标范围；与 Release Namespace 共同构成自动化冲突键。
+    pub delivery_destination_namespaces: Vec<String>,
     pub runtime_revision: String,
     pub projection: AutomationProjection,
 }

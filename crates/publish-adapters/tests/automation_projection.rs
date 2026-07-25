@@ -21,6 +21,8 @@ fn binding_projection(binding_id: &str, revision_id: &str) -> AutomationBindingP
         trigger_policy: AutomationTriggerPolicy::TagPush {
             tag_prefix: "v".to_string(),
         },
+        release_namespace: "tag:v*".to_string(),
+        delivery_destination_namespaces: vec!["github-release:repository".to_string()],
         runtime_revision: "plan-v1.adapter-v1.fake-automation@1".to_string(),
         projection: AutomationProjection {
             public_settings: BTreeMap::from([(

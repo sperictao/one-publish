@@ -24,11 +24,13 @@ import type { ProviderPublishSpec } from "@/features/publish/publishRuntime";
 import type { ParameterValue, ParameterSchema } from "@/types/parameters";
 import type { ResourceState } from "@/features/provider/useProviderRuntime";
 import type {
+  ConfigProfile,
   ProviderManifest,
   Repository,
   ProjectInfo,
   ExecutionRecord,
 } from "@/lib/store/types";
+import { usePublishStore } from "@/stores/publishStore";
 
 const SPEC_VERSION = 1;
 const EMPTY_STRING_LIST: string[] = [];
@@ -130,6 +132,9 @@ interface UsePublishBootParams {
 }
 
 export function usePublishBoot(params: UsePublishBootParams) {
+  const setTauriReleaseOpen = usePublishStore(
+    (state) => state.setTauriReleaseOpen
+  );
   // Provider presentation
   const {
     activeProviderLabel,
@@ -241,6 +246,21 @@ export function usePublishBoot(params: UsePublishBootParams) {
     handleReorderProfiles,
     profileManagement,
   } = profilesState;
+  const handleEditProfileFromPanel = useCallback(
+    (profile: ConfigProfile) => {
+      if (profile.providerId === "tauri") {
+        handleSelectProfileFromPanel(profile);
+        setTauriReleaseOpen(true);
+        return;
+      }
+      openQuickEditProfileDialog(profile);
+    },
+    [
+      handleSelectProfileFromPanel,
+      openQuickEditProfileDialog,
+      setTauriReleaseOpen,
+    ]
+  );
 
   const selectedConfiguration = useMemo(() => {
     if (!params.isCustomMode) {
@@ -378,7 +398,7 @@ export function usePublishBoot(params: UsePublishBootParams) {
     activeProfileName,
     onSelectProfile: handleSelectProfileFromPanel,
     onCreateProfile: openQuickCreateProfileDialog,
-    onEditProfile: openQuickEditProfileDialog,
+    onEditProfile: handleEditProfileFromPanel,
     onRefreshProfiles: loadProfiles,
     onOpenConfigDialog: () => params.handleConfigDialogOpenChange(true),
     onDeleteProfile: handleDeleteProfileFromPanel,

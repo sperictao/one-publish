@@ -187,6 +187,8 @@ pub struct AutomationBinding {
     pub configuration_revision_id: String,
     pub execution_backend_id: String,
     pub trigger_policy: AutomationTriggerPolicy,
+    #[serde(default)]
+    pub backend_projection: serde_json::Value,
     pub runtime_revision: String,
     pub external_identity: String,
     pub created_at: String,

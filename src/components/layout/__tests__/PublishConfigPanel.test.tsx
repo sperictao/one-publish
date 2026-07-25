@@ -241,6 +241,12 @@ describe("PublishConfigPanel", () => {
       externalBindingIds: ["binding-3"],
       blockedReason: "provider_version_unsupported:7",
     });
+    const driftedTauri = createProfile("Tauri Stable", undefined, {
+      id: "profile-tauri",
+      providerId: "tauri",
+      externalBindingIds: ["binding-tauri"],
+      blockedReason: "automation_projection_drift",
+    });
     const onSelectProfile = vi.fn();
     const onEditProfile = vi.fn();
     const onDeleteProfile = vi.fn();
@@ -248,7 +254,7 @@ describe("PublishConfigPanel", () => {
       <PublishConfigPanel
         selectedPreset="userprofile:profile-42"
         isCustomMode
-        profiles={[editable, bound, boundCargo]}
+        profiles={[editable, bound, boundCargo, driftedTauri]}
         activeProfileName="Alpha"
         onSelectProfile={onSelectProfile}
         onCreateProfile={() => {}}
@@ -329,6 +335,18 @@ describe("PublishConfigPanel", () => {
     expect(onSelectProfile).not.toHaveBeenCalledWith(boundCargo);
     expect(onEditProfile).not.toHaveBeenCalledWith(boundCargo);
     expect(onDeleteProfile).not.toHaveBeenCalledWith("profile-cargo");
+    fireEvent.keyDown(document, { key: "Escape", code: "Escape" });
+
+    const tauriRow = container.querySelector<HTMLElement>(
+      '[data-list-item-id="userprofile:profile-tauri"]'
+    );
+    const tauriTrigger = within(tauriRow!).getByRole("button", {
+      name: "更多操作: Tauri Stable",
+    });
+    fireEvent.pointerDown(tauriTrigger, { button: 0, ctrlKey: false });
+    fireEvent.click(tauriTrigger);
+    fireEvent.click(await screen.findByRole("menuitem", { name: "更新配置" }));
+    expect(onEditProfile).toHaveBeenCalledWith(driftedTauri);
   });
 
   it("重命名后选中、收藏和最近使用继续引用同一 profile ID", async () => {

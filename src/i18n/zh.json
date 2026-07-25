@@ -840,13 +840,17 @@
     "automationDriftBlocked": "托管投影与仓库不一致，自动发布已阻断",
     "automationDriftBadge": "漂移阻断",
     "automationReconcile": "协调漂移",
+    "automationUpdate": "更新配置",
     "automationUpgrade": "升级修订",
     "automationDetach": "解除绑定",
     "automationUnknownConfiguration": "未知配置",
     "automationRevisionPrefix": "修订",
     "automationChangeAdded": "新增",
     "automationChangeUpdated": "更新",
-    "automationChangeRemoved": "移除"
+    "automationChangeRemoved": "移除",
+    "automationChangeConflict": "冲突",
+    "automationCurrentContent": "当前内容",
+    "automationExpectedContent": "期望内容"
   },
   "tauriRelease": {
     "title": "Tauri 发布中心",

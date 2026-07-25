@@ -947,7 +947,8 @@ export const PublishConfigPanel = memo(function PublishConfigPanel({
                     onEdit={() => onEditProfile(profile)}
                     canEdit={
                       !profile.isSystemDefault &&
-                      profile.providerId === "dotnet"
+                      (profile.providerId === "dotnet" ||
+                        profile.providerId === "tauri")
                     }
                     viewTitle={viewConfigLabel}
                     editTitle={editConfigLabel}

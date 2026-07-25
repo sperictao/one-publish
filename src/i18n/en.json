@@ -840,13 +840,17 @@
     "automationDriftBlocked": "The managed projection drifted from the repository; automated publishing is blocked",
     "automationDriftBadge": "Drift blocked",
     "automationReconcile": "Reconcile drift",
+    "automationUpdate": "Update profile",
     "automationUpgrade": "Upgrade revision",
     "automationDetach": "Detach binding",
     "automationUnknownConfiguration": "Unknown configuration",
     "automationRevisionPrefix": "Revision",
     "automationChangeAdded": "Add",
     "automationChangeUpdated": "Update",
-    "automationChangeRemoved": "Remove"
+    "automationChangeRemoved": "Remove",
+    "automationChangeConflict": "Conflict",
+    "automationCurrentContent": "Current content",
+    "automationExpectedContent": "Expected content"
   },
   "tauriRelease": {
     "title": "Tauri Release Center",

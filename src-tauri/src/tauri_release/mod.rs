@@ -8,7 +8,7 @@ mod takeover;
 mod transaction;
 mod types;
 mod versioning;
-mod workflow;
+pub(crate) mod workflow;
 
 pub use types::*;
 

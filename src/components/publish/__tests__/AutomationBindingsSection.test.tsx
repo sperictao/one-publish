@@ -33,7 +33,7 @@ function createProfile(id: string, name: string): ConfigProfile {
     id,
     revisionId: `${id}-revision-1`,
     name,
-    providerId: "dotnet",
+    providerId: "tauri",
     parameters: { configuration: "Release" },
     profileGroup: null,
     createdAt: "2026-07-21T10:00:00Z",
@@ -55,10 +55,11 @@ function boundView(blockedReason: string | null): AutomationBindingsView {
           id: "binding-1",
           configurationId: "profile-1",
           configurationRevisionId: "profile-1-revision-1",
-          executionBackendId: "fake-automation",
+          executionBackendId: "github-actions",
           triggerPolicy: { type: "tagPush", tagPrefix: "v" },
-          runtimeRevision: "plan-v1.adapter-v1.fake-automation@1",
-          externalIdentity: "one-publish/automation/binding-1.json",
+          backendProjection: null,
+          runtimeRevision: "plan-v1.adapter-v1.github-actions@1",
+          externalIdentity: ".github/workflows/one-publish-tauri-release.yml",
           createdAt: "2026-07-22T10:00:00Z",
           updatedAt: "2026-07-22T10:00:00Z",
         },
@@ -69,10 +70,12 @@ function boundView(blockedReason: string | null): AutomationBindingsView {
     drift: blockedReason
       ? [
           {
-            path: "one-publish/automation/binding-1.json",
+            path: ".github/workflows/one-publish-tauri-release.yml",
             kind: "updated",
             currentContent: "tampered",
             expectedContent: "expected",
+            conflictReleaseNamespace: null,
+            conflictDeliveryDestinationNamespace: null,
           },
         ]
       : [],
@@ -84,23 +87,36 @@ function installPreview(): AutomationProjectionPreview {
     change: {
       kind: "install",
       configurationId: "profile-1",
-      executionBackendId: "fake-automation",
+      executionBackendId: "github-actions",
       triggerPolicy: { type: "tagPush", tagPrefix: "v" },
       bindingId: "binding-1",
+      confirmedConflictPaths: [".github/workflows/legacy-release.yml"],
     },
     confirmationDigest: "digest-install-1",
     changes: [
       {
-        path: "one-publish/automation/binding-1.json",
-        kind: "added",
-        currentContent: null,
+        path: ".github/workflows/one-publish-tauri-release.yml",
+        kind: "updated",
+        currentContent: "name: drifted managed workflow\n",
         expectedContent: '{\n  "revision": "profile-1-revision-1"\n}',
+        conflictReleaseNamespace: null,
+        conflictDeliveryDestinationNamespace: null,
       },
       {
-        path: "one-publish/automation/bundle.json",
+        path: ".one-publish/automation/github-actions.json",
         kind: "added",
         currentContent: null,
         expectedContent: '{\n  "bindings": {}\n}',
+        conflictReleaseNamespace: null,
+        conflictDeliveryDestinationNamespace: null,
+      },
+      {
+        path: ".github/workflows/legacy-release.yml",
+        kind: "removed",
+        currentContent: "on:\n  push:\n    tags: ['v*']\n",
+        expectedContent: null,
+        conflictReleaseNamespace: "tag:v*",
+        conflictDeliveryDestinationNamespace: "github-release:repository",
       },
     ],
   };
@@ -145,19 +161,25 @@ describe("AutomationBindingsSection", () => {
       expect(previewAutomationChangeMock).toHaveBeenCalledWith("repo-1", {
         kind: "install",
         configurationId: "profile-1",
-        executionBackendId: "fake-automation",
+        executionBackendId: "github-actions",
         triggerPolicy: { type: "tagPush", tagPrefix: "v" },
         bindingId: null,
+        confirmedConflictPaths: [],
       })
     );
 
     const diffList = await screen.findByTestId("automation-preview-changes");
     expect(diffList.textContent).toContain(
-      "one-publish/automation/binding-1.json"
+      ".github/workflows/one-publish-tauri-release.yml"
     );
+    expect(diffList.textContent).toContain("name: drifted managed workflow");
     expect(diffList.textContent).toContain(
-      "one-publish/automation/bundle.json"
+      ".one-publish/automation/github-actions.json"
     );
+    expect(diffList.textContent).toContain("冲突");
+    expect(diffList.textContent).toContain("tag:v*");
+    expect(diffList.textContent).toContain("github-release:repository");
+    expect(diffList.textContent).toContain("tags: ['v*']");
     expect(applyAutomationChangeMock).not.toHaveBeenCalled();
 
     listAutomationBindingsMock.mockResolvedValue(boundView(null));
@@ -189,6 +211,8 @@ describe("AutomationBindingsSection", () => {
           kind: "updated",
           currentContent: "tampered",
           expectedContent: "expected",
+          conflictReleaseNamespace: null,
+          conflictDeliveryDestinationNamespace: null,
         },
       ],
     });
@@ -200,13 +224,13 @@ describe("AutomationBindingsSection", () => {
       "托管投影与仓库不一致，自动发布已阻断"
     );
     expect(banner.textContent).toContain(
-      "one-publish/automation/binding-1.json"
+      ".github/workflows/one-publish-tauri-release.yml"
     );
     expect(
       screen.getByTestId("automation-binding-blocked-binding-1").textContent
     ).toContain("漂移阻断");
 
-    fireEvent.click(screen.getByRole("button", { name: "协调漂移" }));
+    fireEvent.click(screen.getByRole("button", { name: "更新配置" }));
     await waitFor(() =>
       expect(previewAutomationChangeMock).toHaveBeenCalledWith("repo-1", {
         kind: "reconcile",

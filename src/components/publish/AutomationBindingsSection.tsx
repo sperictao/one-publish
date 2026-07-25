@@ -39,7 +39,7 @@ import {
 } from "@/lib/automationBindings";
 import type { ConfigProfile } from "@/lib/store/types";
 
-const FAKE_AUTOMATION_BACKEND_ID = "fake-automation";
+const GITHUB_ACTIONS_BACKEND_ID = "github-actions";
 const DEFAULT_TAG_PREFIX = "v";
 
 export interface AutomationBindingsSectionProps {
@@ -62,15 +62,14 @@ export function AutomationBindingsSection({
   const [loading, setLoading] = useState(false);
   const [installOpen, setInstallOpen] = useState(false);
   const [installProfileId, setInstallProfileId] = useState<string>("");
-  const [installTrigger, setInstallTrigger] = useState<"tagPush" | "manual">(
-    "tagPush"
-  );
   const [installTagPrefix, setInstallTagPrefix] =
     useState<string>(DEFAULT_TAG_PREFIX);
   const [pending, setPending] = useState<PendingPreview | null>(null);
 
-  // 面板传入的 profiles 已经过滤掉墓碑配置，这里直接使用。
-  const activeProfiles = profiles;
+  // #63 只迁移现有 Tauri workflow；第二 Provider 的远端投影由后续 Ticket 扩展。
+  const activeProfiles = profiles.filter(
+    (profile) => profile.providerId === "tauri"
+  );
 
   const refresh = useCallback(async () => {
     if (!repoId) {
@@ -138,17 +137,15 @@ export function AutomationBindingsSection({
     void requestPreview({
       kind: "install",
       configurationId: installProfileId,
-      executionBackendId: FAKE_AUTOMATION_BACKEND_ID,
-      triggerPolicy:
-        installTrigger === "tagPush"
-          ? {
-              type: "tagPush",
-              tagPrefix: installTagPrefix || DEFAULT_TAG_PREFIX,
-            }
-          : { type: "manual" },
+      executionBackendId: GITHUB_ACTIONS_BACKEND_ID,
+      triggerPolicy: {
+        type: "tagPush",
+        tagPrefix: installTagPrefix || DEFAULT_TAG_PREFIX,
+      },
       bindingId: null,
+      confirmedConflictPaths: [],
     });
-  }, [installProfileId, installTagPrefix, installTrigger, requestPreview]);
+  }, [installProfileId, installTagPrefix, requestPreview]);
 
   if (!repoId) {
     return null;
@@ -189,7 +186,6 @@ export function AutomationBindingsSection({
             className="h-7 px-2 text-label-12"
             onClick={() => {
               setInstallProfileId(activeProfiles[0]?.id ?? "");
-              setInstallTrigger("tagPush");
               setInstallTagPrefix(DEFAULT_TAG_PREFIX);
               setInstallOpen(true);
             }}
@@ -225,7 +221,7 @@ export function AutomationBindingsSection({
             className="mt-2 h-7 px-2 text-label-12"
             onClick={() => void requestPreview({ kind: "reconcile" })}
           >
-            {configPanelT.automationReconcile || "协调漂移"}
+            {configPanelT.automationUpdate || "更新配置"}
           </Button>
         </div>
       ) : null}
@@ -356,49 +352,18 @@ export function AutomationBindingsSection({
             </div>
             <div>
               <Label
-                htmlFor="automation-install-trigger"
+                htmlFor="automation-install-tag-prefix"
                 className="mb-1 inline-block text-label-12 font-semibold text-muted-foreground"
               >
-                {configPanelT.automationTriggerLabel || "触发策略"}
+                {configPanelT.automationTagPrefixLabel || "标签前缀"}
               </Label>
-              <Select
-                value={installTrigger}
-                onValueChange={(value) =>
-                  setInstallTrigger(value === "manual" ? "manual" : "tagPush")
-                }
-              >
-                <SelectTrigger
-                  id="automation-install-trigger"
-                  className="h-8 text-label-12"
-                >
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="tagPush" className="text-label-12">
-                    {configPanelT.automationTriggerTagPush || "标签推送"}
-                  </SelectItem>
-                  <SelectItem value="manual" className="text-label-12">
-                    {configPanelT.automationTriggerManual || "手动触发"}
-                  </SelectItem>
-                </SelectContent>
-              </Select>
+              <Input
+                id="automation-install-tag-prefix"
+                value={installTagPrefix}
+                onChange={(event) => setInstallTagPrefix(event.target.value)}
+                className="h-8 text-label-12"
+              />
             </div>
-            {installTrigger === "tagPush" ? (
-              <div>
-                <Label
-                  htmlFor="automation-install-tag-prefix"
-                  className="mb-1 inline-block text-label-12 font-semibold text-muted-foreground"
-                >
-                  {configPanelT.automationTagPrefixLabel || "标签前缀"}
-                </Label>
-                <Input
-                  id="automation-install-tag-prefix"
-                  value={installTagPrefix}
-                  onChange={(event) => setInstallTagPrefix(event.target.value)}
-                  className="h-8 text-label-12"
-                />
-              </div>
-            ) : null}
           </div>
           <DialogFooter>
             <Button
@@ -456,16 +421,40 @@ export function AutomationBindingsSection({
                   >
                     <div className="flex items-center gap-2 text-label-12">
                       <span className="font-semibold text-foreground">
-                        {changeKindLabel(change.kind)}
+                        {change.conflictReleaseNamespace
+                          ? configPanelT.automationChangeConflict || "冲突"
+                          : changeKindLabel(change.kind)}
                       </span>
                       <span className="truncate text-muted-foreground">
                         {change.path}
                       </span>
                     </div>
+                    {change.conflictReleaseNamespace &&
+                    change.conflictDeliveryDestinationNamespace ? (
+                      <p className="mt-1 text-label-12 text-amber-700 dark:text-amber-400">
+                        {change.conflictReleaseNamespace} ·{" "}
+                        {change.conflictDeliveryDestinationNamespace}
+                      </p>
+                    ) : null}
+                    {change.currentContent ? (
+                      <div className="mt-1">
+                        <span className="text-label-12 font-medium text-muted-foreground">
+                          {configPanelT.automationCurrentContent || "当前内容"}
+                        </span>
+                        <pre className="mt-0.5 max-h-24 overflow-auto rounded-sm bg-muted px-2 py-1 text-label-12 text-muted-foreground">
+                          {change.currentContent}
+                        </pre>
+                      </div>
+                    ) : null}
                     {change.expectedContent ? (
-                      <pre className="mt-1 max-h-24 overflow-auto rounded-sm bg-muted px-2 py-1 text-label-12 text-muted-foreground">
-                        {change.expectedContent}
-                      </pre>
+                      <div className="mt-1">
+                        <span className="text-label-12 font-medium text-muted-foreground">
+                          {configPanelT.automationExpectedContent || "期望内容"}
+                        </span>
+                        <pre className="mt-0.5 max-h-24 overflow-auto rounded-sm bg-muted px-2 py-1 text-label-12 text-muted-foreground">
+                          {change.expectedContent}
+                        </pre>
+                      </div>
                     ) : null}
                   </li>
                 ))}
