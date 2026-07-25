@@ -1,6 +1,7 @@
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::time::{SystemTime, UNIX_EPOCH};
 
 use publish_domain::{
     sha256_hex, AdapterDescriptor, AdapterKind, AdapterSchema, AdapterSettings, ArtifactManifest,
@@ -8,16 +9,22 @@ use publish_domain::{
     PlanNode, PlanNodeTemplate, PlanSideEffect, PlanStage, PlanningInputSnapshot, PublishError,
     PublishPlan, PublishingCapability,
 };
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use crate::{
     action_name, require_action, AdapterContract, AdapterExecutionContext, AdapterExecutionOutput,
-    ArtifactStore, DeliveryDestination, ExecutionBackend, PlanNodeExecutor,
-    ARTIFACT_VERIFIED_CAPABILITY, STRUCTURED_PLAN_EXECUTION_CAPABILITY,
+    ArtifactStore, DeliveryDestination, ExecutionBackend, PlanNodeExecutor, RemovedArtifactSet,
+    RetainedArtifactSet, RetentionHold, RetentionSweepReport, ARTIFACT_VERIFIED_CAPABILITY,
+    STRUCTURED_PLAN_EXECUTION_CAPABILITY,
 };
 
 const STORED_ARTIFACT: &str = "stored-artifact";
 const DELIVERY_DIRECTORY_KEY: &str = "delivery_directory";
+const SET_RECORD_DIRECTORY: &str = "manifests";
+const LEASE_DIRECTORY: &str = "leases";
+const DEFAULT_RETENTION_SECONDS: u64 = 604_800;
+const BIND_PROMOTED_MANIFEST_ACTION: &str = "bind_promoted_manifest";
 
 pub struct LocalExecutionBackend {
     descriptor: AdapterDescriptor,
@@ -104,7 +111,9 @@ impl TemporaryArtifactStore {
                 AdapterKind::ArtifactStore,
                 "temporary-artifact-store",
                 1,
-                AdapterSchema::new(1).with_required_string("root_directory"),
+                AdapterSchema::new(1)
+                    .with_required_string("root_directory")
+                    .with_required_number("retention_seconds"),
                 PublishingCapability {
                     provides: vec![Capability::new(STORED_ARTIFACT, 1)],
                     requires: vec![CapabilityRequirement::exact(
@@ -116,6 +125,69 @@ impl TemporaryArtifactStore {
             default_root: default_root.as_ref().to_string_lossy().to_string(),
         }
     }
+
+    fn root_directory(&self, settings: &AdapterSettings) -> Result<PathBuf, PublishError> {
+        Ok(PathBuf::from(settings.string(
+            "root_directory",
+            &self.descriptor.identity().display_name(),
+        )?))
+    }
+
+    /// Artifact Promotion 的封存绑定：验证既有集合的记录与每个产物字节仍然可用，
+    /// 然后原样输出同一 Manifest。任何失效都进入 Unresumable Delivery——要求新的
+    /// 构建尝试，这里没有任何重建路径（ADR-0038/0040）。
+    fn bind_promoted_manifest(
+        &self,
+        node: &PlanNode,
+    ) -> Result<AdapterExecutionOutput, PublishError> {
+        let publish_domain::PlanOperation::AdapterAction { inputs, .. } = &node.operation else {
+            return Err(PublishError::Execution(format!(
+                "node {} is not an adapter action",
+                node.id
+            )));
+        };
+        let digest = inputs
+            .get("manifest_digest")
+            .and_then(Value::as_str)
+            .ok_or_else(|| {
+                PublishError::Execution(format!(
+                    "node {} does not declare the promoted manifest digest",
+                    node.id
+                ))
+            })?;
+        let unresumable = |reason: String| PublishError::UnresumableDelivery {
+            manifest_digest: digest.to_string(),
+            reason,
+        };
+
+        let root = self.root_directory(&node.settings)?;
+        let record_path = set_record_path(&root, digest);
+        if !record_path.exists() {
+            return Err(unresumable(
+                "the artifact set record is no longer stored".to_string(),
+            ));
+        }
+        let record: StoredArtifactSetRecord =
+            read_json(&record_path).map_err(|error| unresumable(error.to_string()))?;
+        record
+            .manifest
+            .validate()
+            .map_err(|error| unresumable(error.to_string()))?;
+        if record.manifest.digest != digest {
+            return Err(unresumable(format!(
+                "the stored record seals a different artifact set {}",
+                record.manifest.digest
+            )));
+        }
+        for entry in &record.manifest.artifacts {
+            verify_file(Path::new(&entry.locator), &entry.digest)
+                .map_err(|error| unresumable(error.to_string()))?;
+        }
+        Ok(AdapterExecutionOutput {
+            manifest: Some(record.manifest),
+            ..AdapterExecutionOutput::default()
+        })
+    }
 }
 
 impl AdapterContract for TemporaryArtifactStore {
@@ -126,13 +198,25 @@ impl AdapterContract for TemporaryArtifactStore {
     fn default_settings(&self) -> AdapterSettings {
         AdapterSettings::new(1)
             .with_value("root_directory", Value::String(self.default_root.clone()))
+            .with_value("retention_seconds", Value::from(DEFAULT_RETENTION_SECONDS))
     }
 
     fn plan_fragment(
         &self,
-        _snapshot: &PlanningInputSnapshot,
+        snapshot: &PlanningInputSnapshot,
         _settings: &AdapterSettings,
     ) -> Result<Vec<PlanNodeTemplate>, PublishError> {
+        // Promotion 在同一 PersistManifest 阶段绑定既有集合而不是重新封存：
+        // 下游路线消费 Manifest 的数据流保持不变（ADR-0038/0040）。
+        if let Some(digest) = &snapshot.promoted_manifest_digest {
+            return Ok(vec![PlanNodeTemplate::adapter_action(
+                "bind",
+                PlanStage::PersistManifest,
+                BIND_PROMOTED_MANIFEST_ACTION,
+                BTreeMap::from([("manifest_digest".to_string(), Value::String(digest.clone()))]),
+            )
+            .with_artifact_io(vec![], vec!["artifact-manifest".to_string()])]);
+        }
         Ok(vec![PlanNodeTemplate::adapter_action(
             "persist",
             PlanStage::PersistManifest,
@@ -151,11 +235,15 @@ impl AdapterContract for TemporaryArtifactStore {
         node: &PlanNode,
         context: &AdapterExecutionContext<'_>,
     ) -> Result<AdapterExecutionOutput, PublishError> {
+        if action_name(node)? == BIND_PROMOTED_MANIFEST_ACTION {
+            return self.bind_promoted_manifest(node);
+        }
         require_action(node, "persist_manifest")?;
-        let root = PathBuf::from(
-            node.settings
-                .string("root_directory", &self.descriptor.identity().display_name())?,
-        );
+        let adapter = self.descriptor.identity().display_name();
+        let root = self.root_directory(&node.settings)?;
+        let retention_seconds = node
+            .settings
+            .unsigned_number("retention_seconds", &adapter)?;
         create_directory(&root)?;
 
         let mut entries = Vec::with_capacity(context.artifacts.len());
@@ -177,18 +265,145 @@ impl AdapterContract for TemporaryArtifactStore {
                 size: artifact.size,
                 digest: artifact.digest.clone(),
                 locator: stored_path.to_string_lossy().to_string(),
-                retention: "temporary".to_string(),
+                retention: format!("{retention_seconds}s"),
             });
         }
 
+        let manifest = ArtifactManifest::seal(context.snapshot_digest, entries)?;
+        persist_set_record(&root, &manifest, retention_seconds)?;
         Ok(AdapterExecutionOutput {
-            manifest: Some(ArtifactManifest::seal(context.snapshot_digest, entries)?),
+            manifest: Some(manifest),
             ..AdapterExecutionOutput::default()
         })
     }
 }
 
-impl ArtifactStore for TemporaryArtifactStore {}
+impl ArtifactStore for TemporaryArtifactStore {
+    fn acquire_artifact_set_lease(
+        &self,
+        settings: &AdapterSettings,
+        attempt_id: &str,
+        manifest_digest: &str,
+        valid_until: &str,
+    ) -> Result<(), PublishError> {
+        if attempt_id.trim().is_empty() {
+            return Err(PublishError::Execution(
+                "artifact set leases require a publish attempt id".to_string(),
+            ));
+        }
+        parse_rfc3339_utc_seconds(valid_until)?;
+        let root = self.root_directory(settings)?;
+        if !set_record_path(&root, manifest_digest).exists() {
+            return Err(PublishError::Execution(format!(
+                "artifact set {manifest_digest} is not stored here; only stored sets can be leased"
+            )));
+        }
+        let directory = root.join(LEASE_DIRECTORY);
+        create_directory(&directory)?;
+        let lease = StoredArtifactSetLease {
+            attempt_id: attempt_id.to_string(),
+            manifest_digest: manifest_digest.to_string(),
+            valid_until: valid_until.to_string(),
+        };
+        write_json(&lease_path(&root, attempt_id), &lease)
+    }
+
+    fn release_artifact_set_lease(
+        &self,
+        settings: &AdapterSettings,
+        attempt_id: &str,
+    ) -> Result<(), PublishError> {
+        let path = lease_path(&self.root_directory(settings)?, attempt_id);
+        match fs::remove_file(&path) {
+            Ok(()) => Ok(()),
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
+            Err(error) => Err(PublishError::Io {
+                operation: format!("release artifact set lease {}", path.display()),
+                message: error.to_string(),
+            }),
+        }
+    }
+
+    fn enforce_retention(
+        &self,
+        settings: &AdapterSettings,
+        now: &str,
+    ) -> Result<RetentionSweepReport, PublishError> {
+        let root = self.root_directory(settings)?;
+        let now_seconds = parse_rfc3339_utc_seconds(now)?;
+
+        let mut active_leases = BTreeMap::new();
+        for (path, lease) in
+            read_json_directory::<StoredArtifactSetLease>(&root.join(LEASE_DIRECTORY))?
+        {
+            if parse_rfc3339_utc_seconds(&lease.valid_until)? >= now_seconds {
+                active_leases
+                    .entry(lease.manifest_digest.clone())
+                    .or_insert(lease);
+            } else {
+                remove_file(&path)?;
+            }
+        }
+
+        let mut retained = Vec::new();
+        let mut kept_artifacts = BTreeSet::new();
+        let mut expired = Vec::new();
+        for (path, record) in
+            read_json_directory::<StoredArtifactSetRecord>(&root.join(SET_RECORD_DIRECTORY))?
+        {
+            let digest = record.manifest.digest.clone();
+            let hold = if let Some(lease) = active_leases.get(&digest) {
+                Some(RetentionHold::LeasedByAttempt {
+                    attempt_id: lease.attempt_id.clone(),
+                    valid_until: lease.valid_until.clone(),
+                })
+            } else if parse_rfc3339_utc_seconds(&record.retain_until)? > now_seconds {
+                Some(RetentionHold::WithinRetention {
+                    retain_until: record.retain_until.clone(),
+                })
+            } else {
+                None
+            };
+            match hold {
+                Some(reason) => {
+                    kept_artifacts.extend(
+                        record
+                            .manifest
+                            .artifacts
+                            .iter()
+                            .map(|entry| entry.digest.clone()),
+                    );
+                    retained.push(RetainedArtifactSet {
+                        manifest_digest: digest,
+                        reason,
+                    });
+                }
+                None => expired.push((path, record)),
+            }
+        }
+
+        let mut removed = Vec::new();
+        let mut deleted_artifacts = BTreeSet::new();
+        for (path, record) in &expired {
+            let mut removed_artifacts = Vec::new();
+            for entry in &record.manifest.artifacts {
+                if !kept_artifacts.contains(&entry.digest)
+                    && deleted_artifacts.insert(entry.digest.clone())
+                {
+                    remove_directory(&root.join(&entry.digest))?;
+                    removed_artifacts.push(entry.digest.clone());
+                }
+            }
+            remove_file(path)?;
+            removed.push(RemovedArtifactSet {
+                manifest_digest: record.manifest.digest.clone(),
+                removed_artifacts,
+            });
+        }
+
+        Ok(RetentionSweepReport { retained, removed })
+    }
+}
 
 pub struct LocalDirectoryDestination {
     descriptor: AdapterDescriptor,
@@ -396,4 +611,220 @@ fn verify_file(path: &Path, expected_digest: &str) -> Result<(), PublishError> {
         });
     }
     Ok(())
+}
+
+/// 按 Manifest digest 保存的产物集合记录：保留期限与集合内容一起可观察（ADR-0038）。
+#[derive(Debug, Serialize, Deserialize)]
+struct StoredArtifactSetRecord {
+    manifest: ArtifactManifest,
+    stored_at: String,
+    retain_until: String,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+struct StoredArtifactSetLease {
+    attempt_id: String,
+    manifest_digest: String,
+    valid_until: String,
+}
+
+fn set_record_path(root: &Path, manifest_digest: &str) -> PathBuf {
+    root.join(SET_RECORD_DIRECTORY)
+        .join(format!("{manifest_digest}.json"))
+}
+
+/// 租约文件名使用 attempt id 的内容摘要，避免把外部标识拼进文件系统路径。
+fn lease_path(root: &Path, attempt_id: &str) -> PathBuf {
+    root.join(LEASE_DIRECTORY)
+        .join(format!("{}.json", sha256_hex(attempt_id.as_bytes())))
+}
+
+/// 幂等保存产物集合记录：相同 digest 复用既有记录，内容不一致必须拒绝而不是覆盖。
+fn persist_set_record(
+    root: &Path,
+    manifest: &ArtifactManifest,
+    retention_seconds: u64,
+) -> Result<(), PublishError> {
+    let path = set_record_path(root, &manifest.digest);
+    if path.exists() {
+        let existing: StoredArtifactSetRecord = read_json(&path)?;
+        if existing.manifest != *manifest {
+            return Err(PublishError::Execution(format!(
+                "artifact set record {} does not match the sealed manifest; refusing to overwrite the stored set",
+                path.display()
+            )));
+        }
+        return Ok(());
+    }
+    if let Some(parent) = path.parent() {
+        create_directory(parent)?;
+    }
+    let stored_at = current_epoch_seconds()?;
+    let deadline_error = || {
+        PublishError::Execution(format!(
+            "retention window of {retention_seconds} seconds exceeds the representable retention deadline"
+        ))
+    };
+    let deadline = i64::try_from(retention_seconds)
+        .ok()
+        .and_then(|seconds| stored_at.checked_add(seconds))
+        .ok_or_else(deadline_error)?;
+    let retain_until = format_rfc3339_utc_seconds(deadline);
+    parse_rfc3339_utc_seconds(&retain_until).map_err(|_| deadline_error())?;
+    write_json(
+        &path,
+        &StoredArtifactSetRecord {
+            manifest: manifest.clone(),
+            stored_at: format_rfc3339_utc_seconds(stored_at),
+            retain_until,
+        },
+    )
+}
+
+fn read_json<T: serde::de::DeserializeOwned>(path: &Path) -> Result<T, PublishError> {
+    let content = fs::read_to_string(path).map_err(|error| PublishError::Io {
+        operation: format!("read {}", path.display()),
+        message: error.to_string(),
+    })?;
+    serde_json::from_str(&content).map_err(|error| {
+        PublishError::Execution(format!(
+            "stored artifact store state {} is not readable: {error}",
+            path.display()
+        ))
+    })
+}
+
+fn write_json<T: Serialize>(path: &Path, value: &T) -> Result<(), PublishError> {
+    let content = serde_json::to_string_pretty(value).map_err(|error| {
+        PublishError::Execution(format!("cannot serialize artifact store state: {error}"))
+    })?;
+    fs::write(path, content).map_err(|error| PublishError::Io {
+        operation: format!("write {}", path.display()),
+        message: error.to_string(),
+    })
+}
+
+/// 读取目录内全部 JSON 状态文件，按文件名排序保证确定性；目录不存在视为空。
+fn read_json_directory<T: serde::de::DeserializeOwned>(
+    directory: &Path,
+) -> Result<Vec<(PathBuf, T)>, PublishError> {
+    let entries = match fs::read_dir(directory) {
+        Ok(entries) => entries,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(Vec::new()),
+        Err(error) => {
+            return Err(PublishError::Io {
+                operation: format!("list {}", directory.display()),
+                message: error.to_string(),
+            })
+        }
+    };
+    let mut paths = entries
+        .filter_map(|entry| entry.ok().map(|entry| entry.path()))
+        .filter(|path| {
+            path.extension()
+                .is_some_and(|extension| extension == "json")
+        })
+        .collect::<Vec<_>>();
+    paths.sort();
+    paths
+        .into_iter()
+        .map(|path| Ok((path.clone(), read_json(&path)?)))
+        .collect()
+}
+
+fn remove_file(path: &Path) -> Result<(), PublishError> {
+    fs::remove_file(path).map_err(|error| PublishError::Io {
+        operation: format!("remove {}", path.display()),
+        message: error.to_string(),
+    })
+}
+
+fn remove_directory(path: &Path) -> Result<(), PublishError> {
+    match fs::remove_dir_all(path) {
+        Ok(()) => Ok(()),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
+        Err(error) => Err(PublishError::Io {
+            operation: format!("remove {}", path.display()),
+            message: error.to_string(),
+        }),
+    }
+}
+
+fn current_epoch_seconds() -> Result<i64, PublishError> {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|duration| duration.as_secs() as i64)
+        .map_err(|error| PublishError::Execution(format!("system clock is unavailable: {error}")))
+}
+
+/// 解析严格 UTC RFC 3339 时刻（YYYY-MM-DDTHH:MM:SSZ）。解析后重新格式化并比对，
+/// 用一条规则同时拒绝越界日期、闰日错误与其他变体写法。
+fn parse_rfc3339_utc_seconds(value: &str) -> Result<i64, PublishError> {
+    let invalid = || {
+        PublishError::Execution(format!(
+            "timestamp {value} must use the strict UTC RFC 3339 form YYYY-MM-DDTHH:MM:SSZ"
+        ))
+    };
+    let bytes = value.as_bytes();
+    if bytes.len() != 20
+        || bytes[4] != b'-'
+        || bytes[7] != b'-'
+        || bytes[10] != b'T'
+        || bytes[13] != b':'
+        || bytes[16] != b':'
+        || bytes[19] != b'Z'
+    {
+        return Err(invalid());
+    }
+    let field = |range: std::ops::Range<usize>| -> Result<i64, PublishError> {
+        let digits = &value[range];
+        if !digits.bytes().all(|byte| byte.is_ascii_digit()) {
+            return Err(invalid());
+        }
+        digits.parse::<i64>().map_err(|_| invalid())
+    };
+    let (year, month, day) = (field(0..4)?, field(5..7)?, field(8..10)?);
+    let (hour, minute, second) = (field(11..13)?, field(14..16)?, field(17..19)?);
+
+    // Howard Hinnant 的 days_from_civil：公历日期到 epoch 天数的封闭算法。
+    let years = if month <= 2 { year - 1 } else { year };
+    let era = if years >= 0 { years } else { years - 399 } / 400;
+    let year_of_era = years - era * 400;
+    let month_index = if month > 2 { month - 3 } else { month + 9 };
+    let day_of_year = (153 * month_index + 2) / 5 + day - 1;
+    let day_of_era = year_of_era * 365 + year_of_era / 4 - year_of_era / 100 + day_of_year;
+    let days = era * 146_097 + day_of_era - 719_468;
+    let seconds = days * 86_400 + hour * 3_600 + minute * 60 + second;
+
+    if format_rfc3339_utc_seconds(seconds) != value {
+        return Err(invalid());
+    }
+    Ok(seconds)
+}
+
+/// 把 Unix epoch 秒格式化为严格 UTC RFC 3339（civil_from_days 的逆运算）。
+fn format_rfc3339_utc_seconds(seconds: i64) -> String {
+    let days = seconds.div_euclid(86_400);
+    let time = seconds.rem_euclid(86_400);
+    let z = days + 719_468;
+    let era = if z >= 0 { z } else { z - 146_096 } / 146_097;
+    let day_of_era = z - era * 146_097;
+    let year_of_era =
+        (day_of_era - day_of_era / 1_460 + day_of_era / 36_524 - day_of_era / 146_096) / 365;
+    let year = year_of_era + era * 400;
+    let day_of_year = day_of_era - (365 * year_of_era + year_of_era / 4 - year_of_era / 100);
+    let month_index = (5 * day_of_year + 2) / 153;
+    let day = day_of_year - (153 * month_index + 2) / 5 + 1;
+    let month = if month_index < 10 {
+        month_index + 3
+    } else {
+        month_index - 9
+    };
+    let year = if month <= 2 { year + 1 } else { year };
+    format!(
+        "{year:04}-{month:02}-{day:02}T{:02}:{:02}:{:02}Z",
+        time / 3_600,
+        (time % 3_600) / 60,
+        time % 60
+    )
 }

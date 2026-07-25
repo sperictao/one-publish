@@ -1199,6 +1199,7 @@ fn fixture_snapshot(store_directory: &str, delivery_directory: &str) -> Planning
             reproducible: true,
         },
         external_preconditions: BTreeMap::new(),
+        promoted_manifest_digest: None,
         adapters: AdapterSelection {
             project_provider: AdapterBinding::new(
                 "project",
@@ -1219,7 +1220,8 @@ fn fixture_snapshot(store_directory: &str, delivery_directory: &str) -> Planning
                 "store",
                 AdapterIdentity::new(AdapterKind::ArtifactStore, "temporary-artifact-store", 1),
                 AdapterSettings::new(1)
-                    .with_value("root_directory", Value::String(store_directory.to_string())),
+                    .with_value("root_directory", Value::String(store_directory.to_string()))
+                    .with_value("retention_seconds", Value::from(604_800u64)),
             ),
             delivery_routes: vec![DeliveryRoute::required(AdapterBinding::new(
                 "destination",

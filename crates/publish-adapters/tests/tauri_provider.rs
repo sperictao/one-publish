@@ -426,6 +426,7 @@ fn fixture_snapshot() -> PlanningInputSnapshot {
             reproducible: true,
         },
         external_preconditions: BTreeMap::new(),
+        promoted_manifest_digest: None,
         adapters: AdapterSelection {
             project_provider: AdapterBinding::new(
                 "project",

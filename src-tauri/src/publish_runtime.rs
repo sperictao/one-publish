@@ -39,6 +39,8 @@ const SELECTED_PROVIDER_ID: &str = "selected-project-provider";
 const SELECTED_PROVIDER_PROGRAM: &str = "selected-project-provider:publish";
 const LOCAL_BACKEND_ID: &str = "local-execution";
 const TEMPORARY_STORE_ID: &str = "temporary-artifact-store";
+/// 桌面端产物存储的明确保留期限：7 天（ADR-0038）。
+const ARTIFACT_RETENTION_SECONDS: u64 = 604_800;
 const LOCAL_DESTINATION_ID: &str = "local-directory";
 const STRUCTURED_PLAN_EXECUTION: &str = "structured-plan-execution";
 const ARTIFACT_VERIFIED: &str = "artifact-verified";
@@ -1196,6 +1198,7 @@ fn build_snapshot(
         release_input,
         source,
         external_preconditions: BTreeMap::new(),
+        promoted_manifest_digest: None,
         adapters: AdapterSelection {
             project_provider,
             artifact_processors: Vec::new(),
@@ -1207,10 +1210,12 @@ fn build_snapshot(
             artifact_store: AdapterBinding::new(
                 "store",
                 AdapterIdentity::new(AdapterKind::ArtifactStore, TEMPORARY_STORE_ID, 1),
-                AdapterSettings::new(1).with_value(
-                    "root_directory",
-                    Value::String(artifact_store_root().to_string_lossy().to_string()),
-                ),
+                AdapterSettings::new(1)
+                    .with_value(
+                        "root_directory",
+                        Value::String(artifact_store_root().to_string_lossy().to_string()),
+                    )
+                    .with_value("retention_seconds", Value::from(ARTIFACT_RETENTION_SECONDS)),
             ),
             delivery_routes: vec![DeliveryRoute::required(AdapterBinding::new(
                 "local-delivery",

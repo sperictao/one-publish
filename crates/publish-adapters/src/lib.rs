@@ -171,7 +171,64 @@ pub trait ExecutionBackend: AdapterContract {
     }
 }
 
-pub trait ArtifactStore: AdapterContract {}
+pub trait ArtifactStore: AdapterContract {
+    /// 为发布尝试取得产物集合租约：保留期限过后，有效租约仍阻止清理（ADR-0038/0040）。
+    fn acquire_artifact_set_lease(
+        &self,
+        settings: &AdapterSettings,
+        attempt_id: &str,
+        manifest_digest: &str,
+        valid_until: &str,
+    ) -> Result<(), PublishError>;
+
+    /// 释放发布尝试持有的租约；不存在的租约视为已释放。
+    fn release_artifact_set_lease(
+        &self,
+        settings: &AdapterSettings,
+        attempt_id: &str,
+    ) -> Result<(), PublishError>;
+
+    /// 按保留期限清理产物集合并返回可观察报告；被有效租约引用或与保留集合
+    /// 共享的产物不被删除（ADR-0038）。
+    fn enforce_retention(
+        &self,
+        settings: &AdapterSettings,
+        now: &str,
+    ) -> Result<RetentionSweepReport, PublishError>;
+}
+
+/// 保留清理的可观察结果：每个产物集合要么带原因保留，要么带删除明细移除。
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct RetentionSweepReport {
+    pub retained: Vec<RetainedArtifactSet>,
+    pub removed: Vec<RemovedArtifactSet>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct RetainedArtifactSet {
+    pub manifest_digest: String,
+    pub reason: RetentionHold,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum RetentionHold {
+    WithinRetention {
+        retain_until: String,
+    },
+    LeasedByAttempt {
+        attempt_id: String,
+        valid_until: String,
+    },
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct RemovedArtifactSet {
+    pub manifest_digest: String,
+    /// 随本集合一并删除的产物内容摘要；被保留集合共享的产物不出现在这里。
+    pub removed_artifacts: Vec<String>,
+}
+
 pub trait DeliveryDestination: AdapterContract {}
 
 #[derive(Debug, Clone)]

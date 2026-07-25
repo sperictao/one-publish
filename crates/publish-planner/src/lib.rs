@@ -2,8 +2,8 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use publish_adapters::AdapterRegistry;
 use publish_domain::{
-    AdapterBinding, AdapterSettings, PlanNode, PlanNodeTemplate, PlanRoute, PlanningInputSnapshot,
-    PublishError, PublishPlan, PLANNING_INPUT_SNAPSHOT_VERSION,
+    AdapterBinding, AdapterKind, AdapterSettings, PlanNode, PlanNodeTemplate, PlanRoute,
+    PlanningInputSnapshot, PublishError, PublishPlan, PLANNING_INPUT_SNAPSHOT_VERSION,
 };
 
 pub struct PublishPlanner<'a> {
@@ -21,6 +21,13 @@ impl<'a> PublishPlanner<'a> {
                 actual: snapshot.version,
                 expected: PLANNING_INPUT_SNAPSHOT_VERSION,
             });
+        }
+        if let Some(digest) = &snapshot.promoted_manifest_digest {
+            if !publish_domain::is_sha256_digest(digest) {
+                return Err(PublishError::InvalidPlan(
+                    "promoted manifest digest must be a 64-character SHA-256 value".to_string(),
+                ));
+            }
         }
         if snapshot.adapters.delivery_routes.is_empty() {
             return Err(PublishError::InvalidPlan(
@@ -85,6 +92,16 @@ impl<'a> PublishPlanner<'a> {
     ) -> Result<Vec<PlanNode>, PublishError> {
         let mut templates = Vec::new();
         for (binding_order, prepared_binding) in prepared.iter().enumerate() {
+            // Promotion 在创建时绑定既有 Manifest：Provider 构建与全部会改变产物的
+            // 处理器不贡献节点，能力与设置校验仍覆盖完整选择（ADR-0040）。
+            if snapshot.promoted_manifest_digest.is_some()
+                && matches!(
+                    prepared_binding.binding.adapter.kind,
+                    AdapterKind::ProjectProvider | AdapterKind::ArtifactProcessor
+                )
+            {
+                continue;
+            }
             let fragment = self.registry.plan_fragment(
                 &prepared_binding.binding.adapter,
                 snapshot,

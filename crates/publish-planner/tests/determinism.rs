@@ -71,7 +71,42 @@ delegate_contract!(FixtureDeliveryDestination);
 
 impl ProjectProvider for FixtureProjectProvider {}
 impl ExecutionBackend for FixtureExecutionBackend {}
-impl ArtifactStore for FixtureArtifactStore {}
+
+/// 计划确定性 fixture 不落盘：保留与租约操作在这里不可达。
+impl ArtifactStore for FixtureArtifactStore {
+    fn acquire_artifact_set_lease(
+        &self,
+        _settings: &AdapterSettings,
+        _attempt_id: &str,
+        _manifest_digest: &str,
+        _valid_until: &str,
+    ) -> Result<(), publish_domain::PublishError> {
+        Err(publish_domain::PublishError::Execution(
+            "fixture artifact store does not manage leases".to_string(),
+        ))
+    }
+
+    fn release_artifact_set_lease(
+        &self,
+        _settings: &AdapterSettings,
+        _attempt_id: &str,
+    ) -> Result<(), publish_domain::PublishError> {
+        Err(publish_domain::PublishError::Execution(
+            "fixture artifact store does not manage leases".to_string(),
+        ))
+    }
+
+    fn enforce_retention(
+        &self,
+        _settings: &AdapterSettings,
+        _now: &str,
+    ) -> Result<publish_adapters::RetentionSweepReport, publish_domain::PublishError> {
+        Err(publish_domain::PublishError::Execution(
+            "fixture artifact store does not manage retention".to_string(),
+        ))
+    }
+}
+
 impl DeliveryDestination for FixtureDeliveryDestination {}
 
 #[test]
@@ -200,6 +235,7 @@ fn fixture_snapshot() -> PlanningInputSnapshot {
             reproducible: true,
         },
         external_preconditions: BTreeMap::new(),
+        promoted_manifest_digest: None,
         adapters: AdapterSelection {
             project_provider: AdapterBinding::new(
                 "project",

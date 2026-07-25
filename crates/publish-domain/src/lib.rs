@@ -128,6 +128,13 @@ pub enum PublishError {
     IncompletePlanExecution { missing: Vec<String> },
     #[error("publish attempt {attempt_id} has already started")]
     AttemptAlreadyStarted { attempt_id: String },
+    #[error(
+        "artifact set {manifest_digest} is no longer available from the artifact store ({reason}); the delivery is unresumable and a new build attempt is required"
+    )]
+    UnresumableDelivery {
+        manifest_digest: String,
+        reason: String,
+    },
     #[error("project inspection failed: {code}: {message}")]
     ProjectInspection { code: String, message: String },
     #[error("adapter execution failed: {0}")]
@@ -206,6 +213,17 @@ impl AdapterSchema {
             key.into(),
             AdapterSchemaField {
                 value_type: AdapterSchemaValueType::String,
+                required: true,
+            },
+        );
+        self
+    }
+
+    pub fn with_required_number(mut self, key: impl Into<String>) -> Self {
+        self.fields.insert(
+            key.into(),
+            AdapterSchemaField {
+                value_type: AdapterSchemaValueType::Number,
                 required: true,
             },
         );
@@ -431,6 +449,15 @@ impl AdapterSettings {
         })
     }
 
+    pub fn unsigned_number(&self, key: &str, adapter: &str) -> Result<u64, PublishError> {
+        self.values.get(key).and_then(Value::as_u64).ok_or_else(|| {
+            PublishError::InvalidAdapterSettings {
+                adapter: adapter.to_string(),
+                message: format!("{key} must be an unsigned number"),
+            }
+        })
+    }
+
     pub fn string_list(&self, key: &str, adapter: &str) -> Result<Vec<String>, PublishError> {
         self.values
             .get(key)
@@ -598,6 +625,9 @@ pub struct PlanningInputSnapshot {
     pub release_input: BTreeMap<String, Value>,
     pub source: SourceSnapshot,
     pub external_preconditions: BTreeMap<String, ExternalPrecondition>,
+    /// Artifact Promotion 输入：既有产物集合的 Manifest digest。存在时计划跳过
+    /// 构建与产物处理，交付在创建时绑定同一 Manifest（ADR-0040）。
+    pub promoted_manifest_digest: Option<String>,
     pub adapters: AdapterSelection,
 }
 
@@ -951,7 +981,7 @@ impl ArtifactManifestEntry {
                 message: "store locator and retention are required".to_string(),
             });
         }
-        if self.digest.len() != 64 || !self.digest.bytes().all(|byte| byte.is_ascii_hexdigit()) {
+        if !is_sha256_digest(&self.digest) {
             return Err(PublishError::InvalidArtifact {
                 artifact: self.file_name.clone(),
                 message: "content digest must be a 64-character SHA-256 value".to_string(),
@@ -959,6 +989,11 @@ impl ArtifactManifestEntry {
         }
         Ok(())
     }
+}
+
+/// 内容摘要的统一形状判定：64 位十六进制 SHA-256，供清单校验与推广输入共用。
+pub fn is_sha256_digest(value: &str) -> bool {
+    value.len() == 64 && value.bytes().all(|byte| byte.is_ascii_hexdigit())
 }
 
 fn validate_unique_file_names(artifacts: &[ArtifactManifestEntry]) -> Result<(), PublishError> {

@@ -301,6 +301,7 @@ fn multi_route_fixture(routes: &[(&str, &str, bool)]) -> MultiRouteFixture {
             reproducible: true,
         },
         external_preconditions: BTreeMap::new(),
+        promoted_manifest_digest: None,
         adapters: AdapterSelection {
             project_provider: AdapterBinding::new(
                 "project",
@@ -320,10 +321,12 @@ fn multi_route_fixture(routes: &[(&str, &str, bool)]) -> MultiRouteFixture {
             artifact_store: AdapterBinding::new(
                 "store",
                 AdapterIdentity::new(AdapterKind::ArtifactStore, "temporary-artifact-store", 1),
-                AdapterSettings::new(1).with_value(
-                    "root_directory",
-                    Value::String(store_dir.path().to_string_lossy().to_string()),
-                ),
+                AdapterSettings::new(1)
+                    .with_value(
+                        "root_directory",
+                        Value::String(store_dir.path().to_string_lossy().to_string()),
+                    )
+                    .with_value("retention_seconds", Value::from(604_800u64)),
             ),
             delivery_routes,
         },
