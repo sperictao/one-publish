@@ -14,7 +14,7 @@ use publish_domain::{
     PublishAttemptStatus, PublishError, ReleaseIdentity, SourceSnapshot,
     PLANNING_INPUT_SNAPSHOT_VERSION,
 };
-use publish_runner_core::{PublishRuntime, StartPublishAttempt};
+use publish_runner_core::{AttemptExecutionContext, PublishRuntime, StartPublishAttempt};
 use serde_json::Value;
 
 const ARTIFACT_BYTES: &[u8] = b"one-publish multi-route artifact\n";
@@ -400,6 +400,7 @@ fn start_fixture_attempt(
                     None,
                 ),
             ),
+            &AttemptExecutionContext::at(0),
         )
         .expect("start multi-route attempt")
 }

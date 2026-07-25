@@ -13,6 +13,7 @@ pub const DELIVERY_RECEIPT_VERSION: u32 = 1;
 pub const PUBLISH_FAILURE_VERSION: u32 = 1;
 pub const RELEASE_ATTEMPT_VERSION: u32 = 1;
 pub const AUTOMATION_PROJECTION_BUNDLE_VERSION: u32 = 1;
+pub const PUBLISH_RESOURCE_LEASE_VERSION: u32 = 1;
 
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum PublishError {
@@ -143,6 +144,18 @@ pub enum PublishError {
     IncompletePlanExecution { missing: Vec<String> },
     #[error("publish attempt {attempt_id} has already started")]
     AttemptAlreadyStarted { attempt_id: String },
+    #[error("unsupported publish resource lease version {actual}; expected {expected}")]
+    UnsupportedLeaseVersion { actual: u32, expected: u32 },
+    #[error("publish attempt {requester} is blocked: {resource} is leased by attempt {holder}")]
+    LeaseResourceConflict {
+        requester: String,
+        holder: String,
+        resource: String,
+    },
+    #[error(
+        "publish attempt {attempt_id} lost its resource lease ({reason}); execution must fail instead of continuing with uncertain ownership"
+    )]
+    LeaseLost { attempt_id: String, reason: String },
     #[error(
         "artifact set {manifest_digest} is no longer available from the artifact store ({reason}); the delivery is unresumable and a new build attempt is required"
     )]
@@ -1246,6 +1259,9 @@ pub enum PublishAttemptStatus {
     /// Required Route 失败但至少一条路线已 Published；已发布的不可变交付不被否定（ADR-0022）。
     PartialDelivery,
     Failed,
+    /// 尚无任何交付时被取消的尝试；已 Published 的路线存在时按路线聚合，
+    /// 不会整体呈现为 Cancelled（ADR-0041）。
+    Cancelled,
 }
 
 /// 事件历史观察到的计划节点状态；被跳过的节点不产生事件，因此不出现（ADR-0057）。
@@ -1283,6 +1299,95 @@ pub struct ReleaseAttempt {
     pub runtime_revision: String,
     pub backend_run_id: String,
     pub manifest_digest: Option<String>,
+}
+
+/// 租约保护的真实共享资源种类（ADR-0042）：仓库写入、发布命名空间、
+/// 产物身份与目标命名空间。冲突判定只看种类与 key，不含目标特例。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum PublishResourceKind {
+    RepositoryWrite,
+    ReleaseNamespace,
+    ArtifactIdentity,
+    DestinationNamespace,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+pub struct PublishResource {
+    pub kind: PublishResourceKind,
+    pub key: String,
+}
+
+impl PublishResource {
+    pub fn new(kind: PublishResourceKind, key: impl Into<String>) -> Self {
+        Self {
+            kind,
+            key: key.into(),
+        }
+    }
+
+    pub fn display_name(&self) -> String {
+        format!("{:?}({})", self.kind, self.key)
+    }
+}
+
+/// 一次续租的不可变记录：续租时间与新期限。
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct LeaseRenewal {
+    pub renewed_at_seconds: u64,
+    pub expires_at_seconds: u64,
+}
+
+/// 发布资源租约（ADR-0042）：发布尝试在执行前取得的限时资源所有权，
+/// 具有所有者、范围、期限与续租记录；时间是显式输入，核心不读系统时钟。
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PublishResourceLease {
+    pub version: u32,
+    pub lease_id: String,
+    pub owner_attempt_id: String,
+    pub resources: BTreeSet<PublishResource>,
+    pub acquired_at_seconds: u64,
+    pub expires_at_seconds: u64,
+    pub renewals: Vec<LeaseRenewal>,
+}
+
+impl PublishResourceLease {
+    /// 到期时刻本身即失效：所有权不确定时不得继续外部写入。
+    pub fn is_expired(&self, now_seconds: u64) -> bool {
+        now_seconds >= self.expires_at_seconds
+    }
+
+    pub fn validate(&self) -> Result<(), PublishError> {
+        if self.version != PUBLISH_RESOURCE_LEASE_VERSION {
+            return Err(PublishError::UnsupportedLeaseVersion {
+                actual: self.version,
+                expected: PUBLISH_RESOURCE_LEASE_VERSION,
+            });
+        }
+        if self.lease_id.trim().is_empty() || self.owner_attempt_id.trim().is_empty() {
+            return Err(PublishError::Execution(
+                "publish resource leases require a lease id and an owner attempt id".to_string(),
+            ));
+        }
+        if self.resources.is_empty()
+            || self
+                .resources
+                .iter()
+                .any(|resource| resource.key.trim().is_empty())
+        {
+            return Err(PublishError::Execution(format!(
+                "publish resource lease {} must scope at least one concrete resource with a non-empty key",
+                self.lease_id
+            )));
+        }
+        if self.expires_at_seconds <= self.acquired_at_seconds {
+            return Err(PublishError::Execution(format!(
+                "publish resource lease {} must expire after it is acquired",
+                self.lease_id
+            )));
+        }
+        Ok(())
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

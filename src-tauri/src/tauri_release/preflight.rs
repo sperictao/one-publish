@@ -213,6 +213,8 @@ pub fn prepare(
     config: &TauriReleaseConfig,
     requested_version: &str,
 ) -> Result<TauriReleasePreflight, AppError> {
+    // Legacy 仓库级互斥：仅服务旧 Tauri GitHub 发布路径，随 T19（#68）整体
+    // 移除。新发布核心的并发唯一权威是 Publish Resource Lease（#62、ADR-0042）。
     if storage::list_attempts(Some(repository_id))?
         .iter()
         .any(|attempt| !attempt.stage.is_terminal())

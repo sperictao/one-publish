@@ -59,7 +59,7 @@ export type PreparedPublishRuntime = { configurationId: string, configurationRev
 
 export type StartPublishRuntimeRequest = { runtimeToken: string, };
 
-export type RuntimeAttemptStatus = "running" | "published" | "partial_delivery" | "failed";
+export type RuntimeAttemptStatus = "running" | "published" | "partial_delivery" | "failed" | "cancelled";
 
 export type RuntimeArtifactManifestSummary = { digest: string, artifactCount: number, };
 

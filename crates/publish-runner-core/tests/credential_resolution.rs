@@ -15,7 +15,7 @@ use publish_domain::{
     PublishAttemptStatus, PublishError, PublishingCapability, ReleaseIdentity, SourceSnapshot,
     PLANNING_INPUT_SNAPSHOT_VERSION,
 };
-use publish_runner_core::{PublishRuntime, StartPublishAttempt};
+use publish_runner_core::{AttemptExecutionContext, PublishRuntime, StartPublishAttempt};
 use serde_json::Value;
 
 const ARTIFACT_BYTES: &[u8] = b"one-publish credentialed artifact\n";
@@ -224,6 +224,7 @@ fn a_credentialed_processor_publishes_while_every_surface_keeps_references_only(
         .start_attempt(
             &prepared,
             StartPublishAttempt::new("attempt-signed", "run-signed", release_identity(&snapshot)),
+            &AttemptExecutionContext::at(0),
         )
         .expect("run credentialed pipeline");
 
@@ -345,6 +346,7 @@ fn unresolvable_references_block_the_attempt_before_any_side_effect() {
                     "run-blocked",
                     release_identity(&snapshot),
                 ),
+                &AttemptExecutionContext::at(0),
             )
             .expect("credential failures stay inspectable attempts");
 
@@ -428,6 +430,7 @@ fn local_and_remote_backends_resolve_the_same_logical_credential_equivalently() 
                 "run-local",
                 release_identity(&local_snapshot),
             ),
+            &AttemptExecutionContext::at(0),
         )
         .expect("publish through the local backend");
     let remote_attempt = remote_runtime
@@ -440,6 +443,7 @@ fn local_and_remote_backends_resolve_the_same_logical_credential_equivalently() 
                 "run-remote",
                 release_identity(&remote_snapshot),
             ),
+            &AttemptExecutionContext::at(0),
         )
         .expect("publish through the fake remote backend");
 

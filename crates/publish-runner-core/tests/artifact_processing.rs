@@ -16,7 +16,7 @@ use publish_domain::{
     PlanStage, PlanningInputSnapshot, PublishAttemptStatus, PublishError, PublishingCapability,
     ReleaseIdentity, SourceSnapshot, PLANNING_INPUT_SNAPSHOT_VERSION,
 };
-use publish_runner_core::{PublishRuntime, StartPublishAttempt};
+use publish_runner_core::{AttemptExecutionContext, PublishRuntime, StartPublishAttempt};
 use serde_json::Value;
 
 const ARTIFACT_BYTES: &[u8] = b"one-publish processed artifact\n";
@@ -340,6 +340,7 @@ fn processors_run_in_configured_order_and_seal_derived_roles_into_one_manifest()
         .start_attempt(
             &prepared,
             StartPublishAttempt::new("attempt-order", "run-order", release_identity(&snapshot)),
+            &AttemptExecutionContext::at(0),
         )
         .expect("run ordered processors");
 
@@ -392,6 +393,7 @@ fn processor_failure_blocks_every_route_and_leaves_no_sealed_manifest() {
                 "run-processor-failure",
                 release_identity(&snapshot),
             ),
+            &AttemptExecutionContext::at(0),
         )
         .expect("processor failures stay inspectable attempts");
 
@@ -442,6 +444,7 @@ fn undeclared_processor_outputs_never_reach_the_manifest() {
                 "run-undeclared-output",
                 release_identity(&snapshot),
             ),
+            &AttemptExecutionContext::at(0),
         )
         .expect("undeclared outputs stay inspectable attempts");
 
@@ -475,6 +478,7 @@ fn only_the_artifact_store_seals_the_manifest_after_processing() {
                 "run-processor-seal",
                 release_identity(&snapshot),
             ),
+            &AttemptExecutionContext::at(0),
         )
         .expect("premature seals stay inspectable attempts");
 
@@ -506,6 +510,7 @@ fn processors_cannot_emit_delivery_envelopes_or_receipts() {
             .start_attempt(
                 &prepared,
                 StartPublishAttempt::new(attempt_id, attempt_id, release_identity(&snapshot)),
+                &AttemptExecutionContext::at(0),
             )
             .expect("delivering processors stay inspectable attempts");
 
@@ -614,6 +619,7 @@ fn staged_routes_cannot_rewrite_the_sealed_manifest_or_shared_artifacts() {
             .start_attempt(
                 &prepared,
                 StartPublishAttempt::new(attempt_id, attempt_id, release_identity(&snapshot)),
+                &AttemptExecutionContext::at(0),
             )
             .expect("rewriting destinations stay inspectable attempts");
 
@@ -652,6 +658,7 @@ fn checksum_processor_derives_a_sealed_checksum_manifest_end_to_end() {
                 "run-checksum",
                 release_identity(&snapshot),
             ),
+            &AttemptExecutionContext::at(0),
         )
         .expect("run checksum pipeline");
 

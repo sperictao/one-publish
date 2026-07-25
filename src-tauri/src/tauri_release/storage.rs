@@ -184,6 +184,8 @@ pub(crate) fn get_attempt(attempt_id: &str) -> Result<Option<ReleaseAttempt>, Ap
 
 pub(crate) fn begin_attempt(attempt: ReleaseAttempt) -> Result<ReleaseAttempt, AppError> {
     with_state(|state| {
+        // Legacy 仓库级互斥：仅服务旧 Tauri GitHub 发布路径，随 T19（#68）整体
+        // 移除。新发布核心的并发唯一权威是 Publish Resource Lease（#62、ADR-0042）。
         let has_active = state.attempts.iter().any(|existing| {
             existing.repository_id == attempt.repository_id && !existing.stage.is_terminal()
         });

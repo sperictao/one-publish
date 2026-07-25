@@ -16,7 +16,7 @@ use publish_domain::{
     PublishAttemptStatus, PublishError, PublishingCapability, ReleaseIdentity, SourceSnapshot,
     PLANNING_INPUT_SNAPSHOT_VERSION,
 };
-use publish_runner_core::{PublishRuntime, StartPublishAttempt};
+use publish_runner_core::{AttemptExecutionContext, PublishRuntime, StartPublishAttempt};
 use serde_json::Value;
 
 const ARTIFACT_BYTES: &[u8] = b"one-publish promoted artifact\n";
@@ -345,6 +345,7 @@ impl PromotionFixture {
                     "run-build",
                     self.release_identity("stable"),
                 ),
+                &AttemptExecutionContext::at(0),
             )
             .expect("start build attempt")
     }
@@ -410,6 +411,7 @@ fn promotion_reuses_the_stored_manifest_without_rebuilding() {
                 "run-promo",
                 fixture.release_identity("promo"),
             ),
+            &AttemptExecutionContext::at(0),
         )
         .expect("start promotion attempt");
 
@@ -494,6 +496,7 @@ fn invalidated_artifacts_make_promotion_unresumable_without_rebuilding() {
                 "run-promo-invalid",
                 fixture.release_identity("promo"),
             ),
+            &AttemptExecutionContext::at(0),
         )
         .expect("attempt view is returned even when binding fails");
 
@@ -532,6 +535,7 @@ fn promoting_an_unknown_artifact_set_is_unresumable() {
                 "run-promo-unknown",
                 fixture.release_identity("promo"),
             ),
+            &AttemptExecutionContext::at(0),
         )
         .expect("attempt view is returned even when binding fails");
 

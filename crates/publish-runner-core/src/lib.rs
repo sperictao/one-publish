@@ -1,5 +1,6 @@
 use std::collections::{BTreeMap, BTreeSet};
-use std::sync::Mutex;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, Mutex};
 
 use publish_adapters::{
     AdapterExecutionContext, AdapterExecutionOutput, AdapterRegistry, DeliveryProbe,
@@ -8,11 +9,12 @@ use publish_adapters::{
 use publish_domain::{
     declares_artifact_role, sha256_hex, AdapterBinding, AdapterIdentity, AdapterKind,
     ArtifactCandidate, ArtifactManifest, DeliveryEnvelope, DeliveryIdempotencyIdentity,
-    DeliveryReceipt, DeliveryStatus, PlanNode, PlanNodeExecutionState, PlanRoute, PlanStage,
-    PlanningInputSnapshot, PublishAttemptStatus, PublishAttemptView, PublishError, PublishEvent,
-    PublishFailure, PublishOutcome, PublishPlan, ReleaseAttempt, ReleaseIdentity,
-    RouteDeliveryView, DELIVERY_RECEIPT_VERSION, PUBLISH_EVENT_VERSION, PUBLISH_FAILURE_VERSION,
-    PUBLISH_PLAN_VERSION, RELEASE_ATTEMPT_VERSION,
+    DeliveryReceipt, DeliveryStatus, LeaseRenewal, PlanNode, PlanNodeExecutionState, PlanRoute,
+    PlanStage, PlanningInputSnapshot, PublishAttemptStatus, PublishAttemptView, PublishError,
+    PublishEvent, PublishFailure, PublishOutcome, PublishPlan, PublishResource,
+    PublishResourceLease, ReleaseAttempt, ReleaseIdentity, RouteDeliveryView,
+    DELIVERY_RECEIPT_VERSION, PUBLISH_EVENT_VERSION, PUBLISH_FAILURE_VERSION, PUBLISH_PLAN_VERSION,
+    PUBLISH_RESOURCE_LEASE_VERSION, RELEASE_ATTEMPT_VERSION,
 };
 use publish_planner::PublishPlanner;
 use serde::{Deserialize, Serialize};
@@ -38,10 +40,12 @@ pub struct ReducedPublishEvents {
     pub error: Option<String>,
 }
 
-/// 路线失败的事件证据：可见错误加上可选的结构化 Publish Failure Classification。
+/// 路线失败或取消的事件证据：可见错误、终态（Failed 或 Cancelled）与
+/// 可选的结构化 Publish Failure Classification。
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct RouteFailureEvidence {
     error: String,
+    status: DeliveryStatus,
     failure: Option<PublishFailure>,
 }
 
@@ -201,9 +205,48 @@ pub fn reduce_publish_events(
                 // 最新失败证据覆盖旧值：重试再次失败时呈现当前原因。
                 route_failures.insert(
                     route_id.to_string(),
-                    RouteFailureEvidence { error, failure },
+                    RouteFailureEvidence {
+                        error,
+                        status: DeliveryStatus::Failed,
+                        failure,
+                    },
                 );
                 node_states.insert(event.plan_node_id.clone(), PlanNodeExecutionState::Failed);
+            }
+            // 取消只作用于尚未开始的工作：被取消的节点没有执行，因此只留下
+            // 路线级取消证据，不产生节点执行状态；之后同步到的交付观察会像
+            // 覆盖失败一样覆盖取消——不可逆边界后的真实副作用赢（ADR-0011/0041）。
+            "route_cancelled" => {
+                let route_id = event
+                    .payload
+                    .get("route_id")
+                    .and_then(Value::as_str)
+                    .ok_or_else(|| {
+                        PublishError::Execution(format!(
+                            "publish event {} is missing its cancelled route id",
+                            event.event_id
+                        ))
+                    })?;
+                if !known_routes.contains(route_id) {
+                    return Err(PublishError::Execution(format!(
+                        "publish event {} references unknown route {route_id}",
+                        event.event_id
+                    )));
+                }
+                let error = event
+                    .payload
+                    .get("error")
+                    .and_then(Value::as_str)
+                    .map(str::to_string)
+                    .unwrap_or_else(|| format!("delivery route {route_id} was cancelled"));
+                route_failures.insert(
+                    route_id.to_string(),
+                    RouteFailureEvidence {
+                        error,
+                        status: DeliveryStatus::Cancelled,
+                        failure: None,
+                    },
+                );
             }
             "plan_node_completed" => {
                 node_states.insert(
@@ -300,7 +343,7 @@ fn project_route_views(
                 view.error = Some(evidence.error.clone());
                 view.failure = evidence.failure.clone();
                 if !is_failed_delivery_status(view.status) {
-                    view.status = DeliveryStatus::Failed;
+                    view.status = evidence.status;
                 }
             }
             view
@@ -314,9 +357,10 @@ struct AggregatedRouteStatus {
     error: Option<String>,
 }
 
-/// 聚合规则（ADR-0022/0039）：只有 Published 满足 Required Route；Required 失败且
-/// 至少一条路线成功进入 Partial Delivery；Optional 失败只产生警告，Optional 未完结
-/// 也不阻止已满足的 Required 结果聚合为 Published。
+/// 聚合规则（ADR-0022/0039/0041）：只有 Published 满足 Required Route；Required
+/// 失败且至少一条路线成功进入 Partial Delivery；Optional 失败只产生警告，
+/// Optional 未完结也不阻止已满足的 Required 结果聚合为 Published。尚无任何
+/// 交付且全部未完成路线都被取消时，尝试是 Cancelled 而不是 Failed。
 fn aggregate_route_status(
     routes: &[RouteDeliveryView],
     global_failure: Option<&str>,
@@ -330,6 +374,12 @@ fn aggregate_route_status(
             view.error.as_deref().unwrap_or("unknown failure")
         )
     };
+    // 未完成路线全部来自取消（而不是真实失败）时，无交付的结果是 Cancelled。
+    let only_cancelled = routes.iter().any(failed)
+        && routes
+            .iter()
+            .filter(|view| failed(view))
+            .all(|view| view.status == DeliveryStatus::Cancelled);
 
     let warnings = routes
         .iter()
@@ -350,10 +400,16 @@ fn aggregate_route_status(
         };
     }
     let status = if !routes.is_empty() && routes.iter().all(failed) {
-        PublishAttemptStatus::Failed
+        if only_cancelled {
+            PublishAttemptStatus::Cancelled
+        } else {
+            PublishAttemptStatus::Failed
+        }
     } else if !required_failures.is_empty() {
         if routes.iter().any(published) {
             PublishAttemptStatus::PartialDelivery
+        } else if only_cancelled {
+            PublishAttemptStatus::Cancelled
         } else {
             PublishAttemptStatus::Failed
         }
@@ -691,6 +747,265 @@ pub fn recover_attempt_view(
     })
 }
 
+/// 发布资源租约协调器（ADR-0042）：以资源集合的交集判定冲突，取代仓库级
+/// 全局互斥。租约记录在释放前一直保留——过期不删除，让失去所有权的
+/// Attempt 在校验时得到明确的 LeaseLost，而不是被误判为"无需租约"。
+/// 时间是显式输入，协调器不读系统时钟；持久化与恢复由控制面通过
+/// `leases`/`restore` 完成。
+pub struct PublishLeaseCoordinator {
+    leases: Mutex<BTreeMap<String, PublishResourceLease>>,
+}
+
+impl Default for PublishLeaseCoordinator {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl PublishLeaseCoordinator {
+    pub fn new() -> Self {
+        Self {
+            leases: Mutex::new(BTreeMap::new()),
+        }
+    }
+
+    /// 异常退出后凭持久化租约记录重建协调器；互相冲突的活跃记录是
+    /// 损坏的状态，必须显式报错而不是静默择一。
+    pub fn restore(leases: Vec<PublishResourceLease>) -> Result<Self, PublishError> {
+        let coordinator = Self::new();
+        {
+            let mut held = coordinator.lock_leases()?;
+            for lease in leases {
+                lease.validate()?;
+                for existing in held.values() {
+                    if let Some(resource) = conflicting_resource(existing, &lease.resources) {
+                        return Err(PublishError::LeaseResourceConflict {
+                            requester: lease.owner_attempt_id.clone(),
+                            holder: existing.owner_attempt_id.clone(),
+                            resource,
+                        });
+                    }
+                }
+                if held.insert(lease.owner_attempt_id.clone(), lease).is_some() {
+                    return Err(PublishError::Execution(
+                        "persisted lease records carry conflicting evidence for one attempt"
+                            .to_string(),
+                    ));
+                }
+            }
+        }
+        Ok(coordinator)
+    }
+
+    /// 为一次发布尝试取得资源租约：任一资源被未过期租约持有即明确阻断；
+    /// 过期租约让位（含同一 owner 的过期租约，即崩溃后的恢复规则）。
+    pub fn acquire(
+        &self,
+        owner_attempt_id: &str,
+        resources: BTreeSet<PublishResource>,
+        now_seconds: u64,
+        ttl_seconds: u64,
+    ) -> Result<PublishResourceLease, PublishError> {
+        validate_lease_ttl(ttl_seconds)?;
+        let mut held = self.lock_leases()?;
+        if let Some(existing) = held.get(owner_attempt_id) {
+            if !existing.is_expired(now_seconds) {
+                return Err(PublishError::Execution(format!(
+                    "publish attempt {owner_attempt_id} already holds an active lease; ownership is maintained through renewal"
+                )));
+            }
+        }
+        for existing in held.values() {
+            if existing.owner_attempt_id == owner_attempt_id || existing.is_expired(now_seconds) {
+                continue;
+            }
+            if let Some(resource) = conflicting_resource(existing, &resources) {
+                return Err(PublishError::LeaseResourceConflict {
+                    requester: owner_attempt_id.to_string(),
+                    holder: existing.owner_attempt_id.clone(),
+                    resource,
+                });
+            }
+        }
+        let mut lease_identity = format!("{owner_attempt_id}:{now_seconds}");
+        for resource in &resources {
+            lease_identity.push(':');
+            lease_identity.push_str(&resource.display_name());
+        }
+        let lease = PublishResourceLease {
+            version: PUBLISH_RESOURCE_LEASE_VERSION,
+            lease_id: sha256_hex(lease_identity.as_bytes()),
+            owner_attempt_id: owner_attempt_id.to_string(),
+            resources,
+            acquired_at_seconds: now_seconds,
+            expires_at_seconds: now_seconds + ttl_seconds,
+            renewals: Vec::new(),
+        };
+        lease.validate()?;
+        held.insert(owner_attempt_id.to_string(), lease.clone());
+        Ok(lease)
+    }
+
+    /// 续租延长期限并记录续租历史；过期租约不能续租，必须重新获取。
+    pub fn renew(
+        &self,
+        owner_attempt_id: &str,
+        now_seconds: u64,
+        ttl_seconds: u64,
+    ) -> Result<PublishResourceLease, PublishError> {
+        validate_lease_ttl(ttl_seconds)?;
+        let mut held = self.lock_leases()?;
+        let lease = held
+            .get_mut(owner_attempt_id)
+            .ok_or_else(|| lease_not_held(owner_attempt_id))?;
+        if lease.is_expired(now_seconds) {
+            return Err(PublishError::LeaseLost {
+                attempt_id: owner_attempt_id.to_string(),
+                reason: format!(
+                    "the lease expired at {} and cannot be renewed",
+                    lease.expires_at_seconds
+                ),
+            });
+        }
+        lease.expires_at_seconds = now_seconds + ttl_seconds;
+        lease.renewals.push(LeaseRenewal {
+            renewed_at_seconds: now_seconds,
+            expires_at_seconds: lease.expires_at_seconds,
+        });
+        Ok(lease.clone())
+    }
+
+    /// 正常完成或取消后释放租约；释放未持有的租约是调用方错误。
+    pub fn release(&self, owner_attempt_id: &str) -> Result<(), PublishError> {
+        let mut held = self.lock_leases()?;
+        held.remove(owner_attempt_id)
+            .map(|_| ())
+            .ok_or_else(|| lease_not_held(owner_attempt_id))
+    }
+
+    /// 所有权校验：该 Attempt 持有且未过期的租约；否则显式 LeaseLost。
+    pub fn active_lease(
+        &self,
+        owner_attempt_id: &str,
+        now_seconds: u64,
+    ) -> Result<PublishResourceLease, PublishError> {
+        let held = self.lock_leases()?;
+        let lease = held
+            .get(owner_attempt_id)
+            .ok_or_else(|| lease_not_held(owner_attempt_id))?;
+        if lease.is_expired(now_seconds) {
+            return Err(PublishError::LeaseLost {
+                attempt_id: owner_attempt_id.to_string(),
+                reason: format!("the lease expired at {}", lease.expires_at_seconds),
+            });
+        }
+        Ok(lease.clone())
+    }
+
+    /// 执行前的所有权门槛（单次取锁）：留有租约记录的尝试必须未过期——
+    /// 过期记录在释放前一直保留，让失去所有权的执行得到 LeaseLost；
+    /// 无记录的尝试不受限（计划未声明共享资源，ADR-0042）。
+    pub fn verify_ownership(
+        &self,
+        owner_attempt_id: &str,
+        now_seconds: u64,
+    ) -> Result<(), PublishError> {
+        let held = self.lock_leases()?;
+        match held.get(owner_attempt_id) {
+            Some(lease) if lease.is_expired(now_seconds) => Err(PublishError::LeaseLost {
+                attempt_id: owner_attempt_id.to_string(),
+                reason: format!("the lease expired at {}", lease.expires_at_seconds),
+            }),
+            _ => Ok(()),
+        }
+    }
+
+    /// 当前全部租约记录（含已过期未释放的），供控制面持久化。
+    pub fn leases(&self) -> Vec<PublishResourceLease> {
+        self.leases
+            .lock()
+            .map(|held| held.values().cloned().collect())
+            .unwrap_or_default()
+    }
+
+    fn lock_leases(
+        &self,
+    ) -> Result<std::sync::MutexGuard<'_, BTreeMap<String, PublishResourceLease>>, PublishError>
+    {
+        self.leases.lock().map_err(|_| {
+            PublishError::Execution("publish lease registry lock is poisoned".to_string())
+        })
+    }
+}
+
+/// 冲突判定的唯一实现：两份资源集合按种类与 key 的交集判定，无目标特例。
+fn conflicting_resource(
+    existing: &PublishResourceLease,
+    requested: &BTreeSet<PublishResource>,
+) -> Option<String> {
+    existing
+        .resources
+        .intersection(requested)
+        .next()
+        .map(PublishResource::display_name)
+}
+
+fn lease_not_held(attempt_id: &str) -> PublishError {
+    PublishError::LeaseLost {
+        attempt_id: attempt_id.to_string(),
+        reason: "no lease is held for this attempt".to_string(),
+    }
+}
+
+fn validate_lease_ttl(ttl_seconds: u64) -> Result<(), PublishError> {
+    if ttl_seconds == 0 {
+        return Err(PublishError::Execution(
+            "publish resource leases require a positive time-to-live".to_string(),
+        ));
+    }
+    Ok(())
+}
+
+/// 协作取消信号（ADR-0041）：只表达"请求停止尚未开始的工作"。已开始的
+/// 节点不被中断，已 Published 的路线与既有 Receipt 保持不变。
+#[derive(Clone, Default)]
+pub struct CancellationSignal(Arc<AtomicBool>);
+
+impl CancellationSignal {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    pub fn request(&self) {
+        self.0.store(true, Ordering::SeqCst);
+    }
+
+    pub fn is_requested(&self) -> bool {
+        self.0.load(Ordering::SeqCst)
+    }
+}
+
+/// 一次尝试执行的显式环境：时间与取消信号都由调用方注入，
+/// 运行核心不读系统时钟，也不隐藏取消状态。
+pub struct AttemptExecutionContext {
+    pub now_seconds: u64,
+    pub cancellation: CancellationSignal,
+}
+
+impl AttemptExecutionContext {
+    pub fn at(now_seconds: u64) -> Self {
+        Self {
+            now_seconds,
+            cancellation: CancellationSignal::default(),
+        }
+    }
+
+    pub fn with_cancellation(mut self, cancellation: CancellationSignal) -> Self {
+        self.cancellation = cancellation;
+        self
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct StartPublishAttempt {
     pub attempt_id: String,
@@ -764,6 +1079,9 @@ impl Drop for ResumeSlot<'_> {
 
 pub struct PublishRuntime {
     registry: AdapterRegistry,
+    /// 并发的唯一权威（ADR-0042）：按计划声明的具体资源协调，不设仓库级互斥。
+    /// 可通过 with_lease_coordinator 与其他运行时实例共享同一权威。
+    leases: Arc<PublishLeaseCoordinator>,
     started_attempts: Mutex<BTreeSet<String>>,
     /// 正在续传的尝试：阻止同一尝试的并发 resume 重复执行外部副作用。
     resuming_attempts: Mutex<BTreeSet<String>>,
@@ -771,11 +1089,32 @@ pub struct PublishRuntime {
 
 impl PublishRuntime {
     pub fn new(registry: AdapterRegistry) -> Self {
+        Self::with_lease_coordinator(registry, Arc::new(PublishLeaseCoordinator::new()))
+    }
+
+    pub fn with_lease_coordinator(
+        registry: AdapterRegistry,
+        leases: Arc<PublishLeaseCoordinator>,
+    ) -> Self {
         Self {
             registry,
+            leases,
             started_attempts: Mutex::new(BTreeSet::new()),
             resuming_attempts: Mutex::new(BTreeSet::new()),
         }
+    }
+
+    pub fn leases(&self) -> &PublishLeaseCoordinator {
+        self.leases.as_ref()
+    }
+
+    /// 所有权门槛：委托租约协调器单锁校验（ADR-0042）。
+    fn verify_attempt_ownership(
+        &self,
+        attempt_id: &str,
+        now_seconds: u64,
+    ) -> Result<(), PublishError> {
+        self.leases.verify_ownership(attempt_id, now_seconds)
     }
 
     pub fn prepare(&self, snapshot: &PlanningInputSnapshot) -> Result<PublishPlan, PublishError> {
@@ -796,6 +1135,7 @@ impl PublishRuntime {
         &self,
         prepared: &PreparedPublishPlan,
         request: StartPublishAttempt,
+        context: &AttemptExecutionContext,
     ) -> Result<PublishAttemptView, PublishError> {
         if request.attempt_id.trim().is_empty() || request.backend_run_id.trim().is_empty() {
             return Err(PublishError::Execution(
@@ -808,6 +1148,8 @@ impl PublishRuntime {
                 "prepared publish plan no longer matches its planning input snapshot".to_string(),
             ));
         }
+        // 任何副作用之前先确认资源所有权（ADR-0042）。
+        self.verify_attempt_ownership(&request.attempt_id, context.now_seconds)?;
         let mut started_attempts = self.started_attempts.lock().map_err(|_| {
             PublishError::Execution("publish attempt registry lock is poisoned".to_string())
         })?;
@@ -834,7 +1176,8 @@ impl PublishRuntime {
         let attempt_id = attempt.attempt_id.clone();
         let backend_run_id = attempt.backend_run_id.clone();
         let mut executor =
-            RuntimeNodeExecutor::new(&self.registry, &prepared.plan, &attempt_id, &backend_run_id);
+            RuntimeNodeExecutor::new(&self.registry, &prepared.plan, &attempt_id, &backend_run_id)
+                .with_cancellation(context.cancellation.clone());
         if let Err(error) = verify_plan_credentials(&self.registry, &prepared.plan) {
             return executor.finish_failed_attempt(attempt, error);
         }
@@ -855,6 +1198,7 @@ impl PublishRuntime {
         &self,
         prepared: &PreparedPublishPlan,
         view: &PublishAttemptView,
+        context: &AttemptExecutionContext,
     ) -> Result<PublishAttemptView, PublishError> {
         let current_plan = self.prepare(&prepared.snapshot)?;
         if current_plan != prepared.plan {
@@ -896,6 +1240,9 @@ impl PublishRuntime {
         // 同一尝试同一时刻只允许一次续传：并发 resume 会重复执行外部副作用。
         let _resume_slot = ResumeSlot::acquire(&self.resuming_attempts, &attempt.attempt_id)?;
 
+        // 续传同样先确认资源所有权，再评估或触碰任何远端状态（ADR-0042）。
+        self.verify_attempt_ownership(&attempt.attempt_id, context.now_seconds)?;
+
         // 路线状态只从追加事件历史确定性归约，不信任调用者预先算好的视图（ADR-0057）。
         let projection = reduce_publish_events(&view.events, &prepared.plan.routes)?;
         if projection.manifest_digest.as_deref() != Some(manifest.digest.as_str()) {
@@ -919,7 +1266,8 @@ impl PublishRuntime {
             &prepared.plan,
             &attempt.attempt_id,
             &attempt.backend_run_id,
-        );
+        )
+        .with_cancellation(context.cancellation.clone());
         executor.events = view.events.clone();
         executor.manifest = Some(manifest.clone());
         executor.receipts = view.receipt_history.clone();
@@ -1249,6 +1597,8 @@ struct RuntimeNodeExecutor<'a> {
     /// 不重新执行（ADR-0040、Issue T12）。
     resume_completed: BTreeSet<String>,
     expected_nodes: BTreeMap<&'a str, &'a PlanNode>,
+    /// 协作取消：置位后未开始的节点不再执行（ADR-0041）。
+    cancellation: CancellationSignal,
 }
 
 impl<'a> RuntimeNodeExecutor<'a> {
@@ -1285,7 +1635,13 @@ impl<'a> RuntimeNodeExecutor<'a> {
                 .iter()
                 .map(|node| (node.id.as_str(), node))
                 .collect(),
+            cancellation: CancellationSignal::default(),
         }
+    }
+
+    fn with_cancellation(mut self, cancellation: CancellationSignal) -> Self {
+        self.cancellation = cancellation;
+        self
     }
 
     fn is_route_node(&self, node: &PlanNode) -> bool {
@@ -1356,6 +1712,9 @@ impl<'a> RuntimeNodeExecutor<'a> {
         plan: &PublishPlan,
         mut attempt: ReleaseAttempt,
     ) -> Result<PublishAttemptView, PublishError> {
+        if self.cancellation.is_requested() {
+            return self.finish_cancelled_attempt(plan, attempt);
+        }
         if let Err(error) = self.validate_completion(plan) {
             return self.finish_failed_attempt(attempt, error);
         }
@@ -1537,6 +1896,62 @@ impl<'a> RuntimeNodeExecutor<'a> {
         Ok(())
     }
 
+    /// 取消尚未解决的路线：路线还没有任何 Published Receipt 也没有失败证据时，
+    /// 记录 route_cancelled 事件。已 Published 的路线与既有 Receipt 不被触碰。
+    fn cancel_route_if_unresolved(&mut self, route_id: &str, plan_node_id: &str) {
+        if self.failed_routes.contains_key(route_id)
+            || self.receipts.iter().any(|receipt| {
+                receipt.route_id == route_id && receipt.status == DeliveryStatus::Published
+            })
+        {
+            return;
+        }
+        let message = format!("delivery route {route_id} was cancelled before delivery");
+        self.append_event(
+            plan_node_id,
+            "route_cancelled",
+            BTreeMap::from([
+                ("route_id".to_string(), Value::String(route_id.to_string())),
+                ("error".to_string(), Value::String(message.clone())),
+            ]),
+        );
+        self.failed_routes.insert(route_id.to_string(), message);
+    }
+
+    /// 取消后的收尾：执行后端未提交给 executor 的路线节点在这里兜底记为取消，
+    /// 随后一切状态由事件归约确定——已 Published 的路线保持 Published，
+    /// Required 路线被取消而其他路线已成功时是 Partial Delivery，尚无任何
+    /// 交付时是 Cancelled（ADR-0041）。
+    fn finish_cancelled_attempt(
+        mut self,
+        plan: &PublishPlan,
+        mut attempt: ReleaseAttempt,
+    ) -> Result<PublishAttemptView, PublishError> {
+        for route in &plan.routes {
+            let plan_node_id = plan
+                .nodes
+                .iter()
+                .find(|node| node.binding_id == route.route_id)
+                .map(|node| node.id.clone())
+                .unwrap_or_else(|| "runtime".to_string());
+            self.cancel_route_if_unresolved(&route.route_id, &plan_node_id);
+        }
+        let projection = reduce_publish_events(&self.events, self.routes)?;
+        attempt.manifest_digest = projection.manifest_digest.clone();
+        Ok(PublishAttemptView {
+            attempt,
+            status: projection.status,
+            manifest: self.manifest.take(),
+            events: self.events,
+            receipts: projection.receipts,
+            receipt_history: projection.receipt_history,
+            node_states: projection.node_states,
+            routes: projection.routes,
+            warnings: projection.warnings,
+            error: projection.error,
+        })
+    }
+
     /// 路线节点失败：记录 route_failed 事件并隔离本路线，不再返回错误给执行后端。
     /// Classified 错误的结构化分类随事件持久化，供重试资格评估使用（ADR-0056）。
     fn fail_route(&mut self, node: &PlanNode, error: &PublishError) {
@@ -1685,6 +2100,15 @@ impl PlanNodeExecutor for RuntimeNodeExecutor<'_> {
                 "plan node {} executed more than once",
                 node.id
             )));
+        }
+        // 取消只停止尚未开始的工作：本节点不再执行；所属路线若尚无交付
+        // 证据则记为取消，已 Published 的路线与既有 Receipt 保持不变（ADR-0041）。
+        if self.cancellation.is_requested() {
+            self.skipped_nodes.insert(node.id.clone());
+            if self.is_route_node(node) {
+                self.cancel_route_if_unresolved(&node.binding_id, &node.id);
+            }
+            return Ok(());
         }
         // 续传时既有事件证据已覆盖的节点直接视为完成：不重新构建、处理或交付。
         if self.resume_completed.contains(&node.id) {

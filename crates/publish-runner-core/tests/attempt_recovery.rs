@@ -16,7 +16,8 @@ use publish_domain::{
     PUBLISH_PLAN_VERSION, RELEASE_ATTEMPT_VERSION,
 };
 use publish_runner_core::{
-    recover_attempt_view, AttemptEventLog, PublishRuntime, StartPublishAttempt,
+    recover_attempt_view, AttemptEventLog, AttemptExecutionContext, PublishRuntime,
+    StartPublishAttempt,
 };
 use serde_json::Value;
 
@@ -851,6 +852,7 @@ fn run_and_recover(
                     None,
                 ),
             ),
+            &AttemptExecutionContext::at(0),
         )
         .expect("start recovery attempt");
 

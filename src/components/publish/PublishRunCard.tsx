@@ -162,23 +162,34 @@ export const PublishRunCard = memo(function PublishRunCard({
     return null;
   }
 
+  // 运行时终态映射：running 返回 null，交由后备的命令级结果判定。
+  const runtimeVisualState = (
+    result: PublishRuntimeResult
+  ): PublishVisualState | null => {
+    switch (result.attempt.status) {
+      case "published":
+        return "success";
+      case "partial_delivery":
+        return "partial";
+      case "cancelled":
+        return "cancelled";
+      case "failed":
+        return result.publishResult?.cancelled ? "cancelled" : "failed";
+      default:
+        return null;
+    }
+  };
+
   const publishVisualState: PublishVisualState = publishActions?.isPublishing
     ? "running"
-    : runtimeResult?.attempt.status === "published"
-      ? "success"
-      : runtimeResult?.attempt.status === "partial_delivery"
-        ? "partial"
-        : runtimeResult?.attempt.status === "failed"
-          ? runtimeResult.publishResult?.cancelled
+    : ((runtimeResult && runtimeVisualState(runtimeResult)) ??
+      (publishResult
+        ? publishResult.success
+          ? "success"
+          : publishResult.cancelled
             ? "cancelled"
             : "failed"
-          : publishResult
-            ? publishResult.success
-              ? "success"
-              : publishResult.cancelled
-                ? "cancelled"
-                : "failed"
-            : "idle";
+        : "idle"));
 
   const statusMeta =
     publishVisualState === "running"

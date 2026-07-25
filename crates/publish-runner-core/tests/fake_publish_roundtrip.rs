@@ -16,7 +16,9 @@ use publish_domain::{
     ARTIFACT_MANIFEST_VERSION, DELIVERY_RECEIPT_VERSION, PLANNING_INPUT_SNAPSHOT_VERSION,
     PUBLISH_EVENT_VERSION,
 };
-use publish_runner_core::{reduce_publish_events, PublishRuntime, StartPublishAttempt};
+use publish_runner_core::{
+    reduce_publish_events, AttemptExecutionContext, PublishRuntime, StartPublishAttempt,
+};
 use serde_json::Value;
 
 fn required_routes(route_ids: &[&str]) -> Vec<PlanRoute> {
@@ -566,6 +568,7 @@ fn runtime_freezes_a_successful_local_attempt_and_reduces_its_published_result()
         .start_attempt(
             &prepared,
             StartPublishAttempt::new("attempt-001", "local-run-001", release_identity.clone()),
+            &AttemptExecutionContext::at(0),
         )
         .expect("start publish attempt");
 
@@ -632,6 +635,7 @@ fn runtime_preserves_a_failed_attempt_after_the_manifest_is_sealed() {
                     None,
                 ),
             ),
+            &AttemptExecutionContext::at(0),
         )
         .expect("started failures are returned as attempt state");
 
@@ -696,6 +700,7 @@ fn malformed_receipt_is_reduced_to_a_failed_attempt_without_invalid_evidence() {
                     None,
                 ),
             ),
+            &AttemptExecutionContext::at(0),
         )
         .expect("invalid adapter evidence must remain an inspectable failed attempt");
 
@@ -746,6 +751,7 @@ fn receipt_from_the_wrong_route_is_reduced_to_a_failed_attempt() {
                     None,
                 ),
             ),
+            &AttemptExecutionContext::at(0),
         )
         .expect("wrong-route evidence must remain an inspectable failed attempt");
 
@@ -796,6 +802,7 @@ fn runtime_does_not_restart_an_attempt_with_a_reselected_configuration() {
                     None,
                 ),
             ),
+            &AttemptExecutionContext::at(0),
         )
         .expect("start revision A");
 
@@ -812,6 +819,7 @@ fn runtime_does_not_restart_an_attempt_with_a_reselected_configuration() {
                 None,
             ),
         ),
+        &AttemptExecutionContext::at(0),
     );
 
     assert!(matches!(

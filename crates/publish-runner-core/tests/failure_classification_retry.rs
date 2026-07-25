@@ -15,7 +15,7 @@ use publish_domain::{
     PublishFailure, PublishFailureCategory, ReleaseIdentity, SourceSnapshot,
     PLANNING_INPUT_SNAPSHOT_VERSION, PUBLISH_FAILURE_VERSION,
 };
-use publish_runner_core::{PublishRuntime, StartPublishAttempt};
+use publish_runner_core::{AttemptExecutionContext, PublishRuntime, StartPublishAttempt};
 use serde_json::Value;
 
 const ARTIFACT_BYTES: &[u8] = b"one-publish classified retry artifact\n";
@@ -518,6 +518,7 @@ fn start_attempt(
                     None,
                 ),
             ),
+            &AttemptExecutionContext::at(0),
         )
         .expect("start attempt");
     (prepared, view)
@@ -610,7 +611,7 @@ fn transient_and_rate_limited_failures_retry_only_after_probe_confirms_absent_re
             .set_probe("primary", DeliveryProbe::Absent);
         let resumed = fixture
             .runtime
-            .resume_attempt(&prepared, &view)
+            .resume_attempt(&prepared, &view, &AttemptExecutionContext::at(0))
             .expect("resume eligible failure");
 
         assert_eq!(resumed.status, PublishAttemptStatus::Published);
@@ -677,7 +678,7 @@ fn blocking_categories_and_unclassified_failures_never_retry_automatically() {
 
         let error = fixture
             .runtime
-            .resume_attempt(&prepared, &view)
+            .resume_attempt(&prepared, &view, &AttemptExecutionContext::at(0))
             .expect_err("blocking categories must not retry automatically");
         assert!(
             error.to_string().contains("blocked"),
@@ -701,7 +702,7 @@ fn blocking_categories_and_unclassified_failures_never_retry_automatically() {
 
     let error = fixture
         .runtime
-        .resume_attempt(&prepared, &view)
+        .resume_attempt(&prepared, &view, &AttemptExecutionContext::at(0))
         .expect_err("unclassified failures must stay blocked");
     assert!(error.to_string().contains("blocked"));
     assert_eq!(fixture.destination.publish_calls("primary"), 1);
@@ -728,7 +729,7 @@ fn uncertain_outcome_with_matching_remote_reuses_the_receipt_without_reexecution
     );
     let resumed = fixture
         .runtime
-        .resume_attempt(&prepared, &view)
+        .resume_attempt(&prepared, &view, &AttemptExecutionContext::at(0))
         .expect("resume with matching remote state");
 
     assert_eq!(resumed.status, PublishAttemptStatus::Published);
@@ -767,7 +768,7 @@ fn conflicting_remote_state_blocks_resume_instead_of_overwriting() {
     );
     let error = fixture
         .runtime
-        .resume_attempt(&prepared, &view)
+        .resume_attempt(&prepared, &view, &AttemptExecutionContext::at(0))
         .expect_err("conflicting remote state must block resume");
 
     assert!(error.to_string().contains("conflict"));
@@ -794,7 +795,7 @@ fn unprobeable_remote_state_blocks_automatic_retry() {
     );
     let error = fixture
         .runtime
-        .resume_attempt(&prepared, &view)
+        .resume_attempt(&prepared, &view, &AttemptExecutionContext::at(0))
         .expect_err("unprobeable remote state must block automatic retry");
 
     assert!(error.to_string().contains("blocked"));
@@ -832,7 +833,7 @@ fn partial_delivery_resume_executes_only_the_failed_route() {
         .set_probe("primary", DeliveryProbe::Absent);
     let resumed = fixture
         .runtime
-        .resume_attempt(&prepared, &view)
+        .resume_attempt(&prepared, &view, &AttemptExecutionContext::at(0))
         .expect("resume the failed route");
 
     assert_eq!(resumed.status, PublishAttemptStatus::Published);
@@ -889,7 +890,7 @@ fn resume_rejects_views_that_belong_to_a_different_plan() {
 
     let error = fixture
         .runtime
-        .resume_attempt(&other_prepared, &view)
+        .resume_attempt(&other_prepared, &view, &AttemptExecutionContext::at(0))
         .expect_err("resume must keep the attempt identity stable");
     assert!(error.to_string().contains("identity"));
     assert_eq!(fixture.destination.publish_calls("primary"), 1);
@@ -912,7 +913,7 @@ fn resume_requires_the_sealed_manifest_of_the_attempt() {
     view.manifest = None;
     let error = fixture
         .runtime
-        .resume_attempt(&prepared, &view)
+        .resume_attempt(&prepared, &view, &AttemptExecutionContext::at(0))
         .expect_err("resume requires the sealed artifact manifest");
     assert_eq!(error, PublishError::MissingArtifactManifest);
 }
@@ -942,7 +943,7 @@ fn probe_transport_errors_block_only_their_own_route() {
 
     let resumed = fixture
         .runtime
-        .resume_attempt(&prepared, &view)
+        .resume_attempt(&prepared, &view, &AttemptExecutionContext::at(0))
         .expect("resume must continue with the probeable route");
 
     assert_eq!(resumed.status, PublishAttemptStatus::PartialDelivery);

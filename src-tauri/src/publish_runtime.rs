@@ -18,9 +18,13 @@ use publish_domain::{
     AdapterSelection, AdapterSettings, ArtifactCandidate, Capability, CapabilityRequirement,
     DeliveryRoute, DeliveryStatus, PlanNode, PlanNodeTemplate, PlanOperation, PlanStage,
     PlanningInputSnapshot, PublishAttemptStatus, PublishAttemptView, PublishError,
-    PublishingCapability, ReleaseIdentity, SourceSnapshot, PLANNING_INPUT_SNAPSHOT_VERSION,
+    PublishResource, PublishResourceKind, PublishingCapability, ReleaseIdentity, SourceSnapshot,
+    PLANNING_INPUT_SNAPSHOT_VERSION,
 };
-use publish_runner_core::{PreparedPublishPlan, PublishRuntime, StartPublishAttempt};
+use publish_runner_core::{
+    AttemptExecutionContext, PreparedPublishPlan, PublishLeaseCoordinator, PublishRuntime,
+    StartPublishAttempt,
+};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use sha2::{Digest, Sha256};
@@ -132,6 +136,7 @@ pub enum RuntimeAttemptStatus {
     Published,
     PartialDelivery,
     Failed,
+    Cancelled,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
@@ -991,6 +996,30 @@ pub async fn start_publish_runtime(
         })?
 }
 
+/// 本地发布租约期限：本机执行是同步的，租约只需覆盖单次执行；
+/// 进程异常退出时租约随进程消失，不会遗留仓库级死锁。
+const LOCAL_LEASE_TTL_SECONDS: u64 = 3_600;
+
+/// 进程级发布资源租约权威（ADR-0042）：本地并发发布按仓库写入、发布命名
+/// 空间与目标命名空间协调，取代旧的仓库级发布互斥；资源不相交的发布可并行。
+fn lease_coordinator() -> Arc<PublishLeaseCoordinator> {
+    static COORDINATOR: std::sync::OnceLock<Arc<PublishLeaseCoordinator>> =
+        std::sync::OnceLock::new();
+    Arc::clone(COORDINATOR.get_or_init(|| Arc::new(PublishLeaseCoordinator::new())))
+}
+
+fn unix_now_seconds() -> Result<u64, AppError> {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|duration| duration.as_secs())
+        .map_err(|error| {
+            AppError::publish_with_code(
+                format!("system clock is before the unix epoch: {error}"),
+                "publish_runtime_clock_invalid",
+            )
+        })
+}
+
 pub(crate) fn start_runtime_with_port(
     request: StartPublishRuntimeRequest,
     execution_port: Arc<dyn ProviderExecutionPort>,
@@ -1036,6 +1065,7 @@ pub(crate) fn start_runtime_with_port(
         .map_err(runtime_error)?
         .to_string();
     let result = Arc::new(Mutex::new(None));
+    let repository_path = source_guard.repository.to_string_lossy().to_string();
     let registry = build_execution_registry(
         &prepared.snapshot,
         &provider_output_directory,
@@ -1045,16 +1075,57 @@ pub(crate) fn start_runtime_with_port(
         Arc::clone(&result),
     )?;
     let release_identity = release_identity(&prepared.snapshot)?;
-    let view = PublishRuntime::new(registry)
+
+    // 单一并发规则：按本次发布触碰的具体资源取得租约（ADR-0042）。
+    // 资源不相交的发布可并行；竞争同一仓库写入、发布命名空间或目标
+    // 命名空间的发布在这里被明确阻断。新构建的产物身份在封存时才诞生，
+    // 无法预先声明；产物推广固定既有 Manifest，则作为 Artifact Identity
+    // 资源参与竞争。
+    let mut lease_resources = BTreeSet::from([
+        PublishResource::new(PublishResourceKind::RepositoryWrite, &repository_path),
+        PublishResource::new(
+            PublishResourceKind::ReleaseNamespace,
+            format!(
+                "{}/{}/{}",
+                release_identity.project_identity,
+                release_identity.channel,
+                release_identity.version
+            ),
+        ),
+        PublishResource::new(
+            PublishResourceKind::DestinationNamespace,
+            format!("{LOCAL_DESTINATION_ID}:{delivery_directory}"),
+        ),
+    ]);
+    if let Some(digest) = &prepared.snapshot.promoted_manifest_digest {
+        lease_resources.insert(PublishResource::new(
+            PublishResourceKind::ArtifactIdentity,
+            digest,
+        ));
+    }
+    let leases = lease_coordinator();
+    let now_seconds = unix_now_seconds()?;
+    leases
+        .acquire(
+            &identity.attempt_id,
+            lease_resources,
+            now_seconds,
+            LOCAL_LEASE_TTL_SECONDS,
+        )
+        .map_err(runtime_error)?;
+    let view_result = PublishRuntime::with_lease_coordinator(registry, Arc::clone(&leases))
         .start_attempt(
             &prepared,
             StartPublishAttempt::new(
-                identity.attempt_id,
+                identity.attempt_id.clone(),
                 identity.backend_run_id,
                 release_identity,
             ),
-        )
-        .map_err(runtime_error)?;
+            &AttemptExecutionContext::at(now_seconds),
+        );
+    let release_result = leases.release(&identity.attempt_id);
+    let view = view_result.map_err(runtime_error)?;
+    release_result.map_err(runtime_error)?;
     let publish_result = result
         .lock()
         .map_err(|_| {
@@ -1524,6 +1595,7 @@ fn summarize_attempt(view: PublishAttemptView) -> RuntimeAttemptResult {
             PublishAttemptStatus::Published => RuntimeAttemptStatus::Published,
             PublishAttemptStatus::PartialDelivery => RuntimeAttemptStatus::PartialDelivery,
             PublishAttemptStatus::Failed => RuntimeAttemptStatus::Failed,
+            PublishAttemptStatus::Cancelled => RuntimeAttemptStatus::Cancelled,
         },
         manifest_digest: view.attempt.manifest_digest,
         manifest: view
@@ -3335,6 +3407,7 @@ mod tests {
                     "run-roles",
                     super::release_identity(&sealed.snapshot).expect("release identity"),
                 ),
+                &publish_runner_core::AttemptExecutionContext::at(0),
             )
             .expect("run tauri attempt");
 
