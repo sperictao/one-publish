@@ -1374,20 +1374,29 @@ impl PublishRuntime {
                 manifest_digest: manifest.digest.clone(),
                 route_id: route_id.to_string(),
             };
+            // 探测使用与执行一致的凭据边界：由本次尝试的 Execution Backend 解析
+            // 路线声明的引用，不建立第二条凭据通道（ADR-0029/0051）。
+            let probe = self
+                .registry
+                .resolve_binding_credentials(&prepared.plan.execution_backend, binding)
+                .and_then(|credentials| {
+                    self.registry.probe_delivery(
+                        &binding.adapter,
+                        &binding.settings,
+                        &identity,
+                        &credentials,
+                    )
+                });
             // 探测错误按路线隔离：一条路线探测不到不阻断其他路线的评估（ADR-0022）。
-            let probe =
-                match self
-                    .registry
-                    .probe_delivery(&binding.adapter, &binding.settings, &identity)
-                {
-                    Ok(probe) => probe,
-                    Err(error) => {
-                        decisions.blocked.push(format!(
-                            "route {route_id} is blocked: the idempotency probe failed ({error})"
-                        ));
-                        continue;
-                    }
-                };
+            let probe = match probe {
+                Ok(probe) => probe,
+                Err(error) => {
+                    decisions.blocked.push(format!(
+                        "route {route_id} is blocked: the idempotency probe failed ({error})"
+                    ));
+                    continue;
+                }
+            };
             match probe {
                 DeliveryProbe::Absent => {
                     decisions.retry_routes.insert(route_id.to_string());
@@ -2245,9 +2254,14 @@ fn validate_output_admission(
         }
     }
 
+    // 交付凭证只能由交付目标在 publish_routes 交出首个修订，或在 observe_routes
+    // 阶段以远端观察到的状态追加修订（ADR-0039）。
     if !output.receipts.is_empty()
         && (node.adapter.kind != AdapterKind::DeliveryDestination
-            || node.stage != PlanStage::PublishRoutes)
+            || !matches!(
+                node.stage,
+                PlanStage::PublishRoutes | PlanStage::ObserveRoutes
+            ))
     {
         return Err(PublishError::Execution(format!(
             "plan node {} cannot emit delivery receipts",

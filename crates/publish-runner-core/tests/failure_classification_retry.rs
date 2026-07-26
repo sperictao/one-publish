@@ -213,6 +213,7 @@ impl DeliveryDestination for ClassifiedDestination {
         &self,
         _settings: &AdapterSettings,
         identity: &DeliveryIdempotencyIdentity,
+        _credentials: &BTreeMap<String, publish_domain::ResolvedCredential>,
     ) -> Result<DeliveryProbe, PublishError> {
         record_call(&self.state.probe_calls, &identity.route_id);
         self.state

@@ -13,6 +13,7 @@ use serde_json::Value;
 mod credentials;
 mod fake;
 mod github_actions;
+mod github_release;
 mod local;
 mod processors;
 pub mod tauri;
@@ -23,6 +24,13 @@ pub use fake::{
     FAKE_GITHUB_ACTIONS_BACKEND_ID, FAKE_REMOTE_BACKEND_ID,
 };
 pub use github_actions::{GitHubActionsExecutionBackend, GITHUB_ACTIONS_EXECUTION_BACKEND_ID};
+pub use github_release::{
+    classify_github_failure, parse_gh_cli_failure, parse_release_list, FakeGitHubReleaseApi,
+    GhCliGitHubReleaseApi, GitHubApiFailure, GitHubReleaseApi, GitHubReleaseDestination,
+    NewGitHubRelease, RemoteGitHubAsset, RemoteGitHubRelease, FAKE_OPERATION_CREATE,
+    FAKE_OPERATION_DELETE_ASSET, FAKE_OPERATION_FIND, FAKE_OPERATION_PUBLISH,
+    FAKE_OPERATION_UPLOAD, GITHUB_RELEASE_DESTINATION_ID,
+};
 pub use local::{LocalDirectoryDestination, LocalExecutionBackend, TemporaryArtifactStore};
 pub use processors::{
     ChecksumProcessor, CustomCommandProcessor, CHECKSUM_MANIFEST_ROLE, CHECKSUM_PROCESSOR_ID,
@@ -247,11 +255,13 @@ pub struct RemovedArtifactSet {
 
 pub trait DeliveryDestination: AdapterContract {
     /// 自动重试前按 Delivery Idempotency Identity 探测远端状态（ADR-0051）。
+    /// 凭据与执行边界一致，由当前 Execution Backend 解析后传入（ADR-0029）。
     /// 默认无法探测：不可查询的副作用被显式标记为不可自动重试。
     fn probe_delivery(
         &self,
         _settings: &AdapterSettings,
         _identity: &DeliveryIdempotencyIdentity,
+        _credentials: &BTreeMap<String, publish_domain::ResolvedCredential>,
     ) -> Result<DeliveryProbe, PublishError> {
         Ok(DeliveryProbe::Unprobeable {
             reason: format!(
@@ -565,12 +575,14 @@ impl AdapterRegistry {
             .ok_or_else(|| self.unresolved_adapter(identity))
     }
 
-    /// 按交付幂等身份探测一条路线的远端状态（ADR-0051）。
+    /// 按交付幂等身份探测一条路线的远端状态（ADR-0051）；凭据由调用方
+    /// 通过当前 Execution Backend 解析后传入，探测不建立第二条凭据通道。
     pub fn probe_delivery(
         &self,
         destination: &AdapterIdentity,
         settings: &AdapterSettings,
         identity: &DeliveryIdempotencyIdentity,
+        credentials: &BTreeMap<String, publish_domain::ResolvedCredential>,
     ) -> Result<DeliveryProbe, PublishError> {
         if destination.kind != AdapterKind::DeliveryDestination {
             return Err(PublishError::AdapterKindMismatch {
@@ -583,7 +595,7 @@ impl AdapterRegistry {
             .get(&(destination.id.clone(), destination.version))
             .map(Arc::as_ref)
             .ok_or_else(|| self.unresolved_adapter(destination))?
-            .probe_delivery(settings, identity)
+            .probe_delivery(settings, identity, credentials)
     }
 
     fn resolve(&self, identity: &AdapterIdentity) -> Result<AdapterRef<'_>, PublishError> {
@@ -907,7 +919,7 @@ fn validate_processor_node(
     Ok(())
 }
 
-fn validate_settings_against_schema(
+pub(crate) fn validate_settings_against_schema(
     descriptor: &AdapterDescriptor,
     settings: &AdapterSettings,
 ) -> Result<(), PublishError> {

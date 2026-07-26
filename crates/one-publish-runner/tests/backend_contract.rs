@@ -7,21 +7,23 @@ use one_publish_runner::{
 };
 use publish_adapters::{
     AdapterConformanceFixture, AdapterContract, AdapterExecutionContext, AdapterExecutionOutput,
-    AdapterRegistry, ExecutionBackend, FakeGitHubActionsBackend, LocalDirectoryDestination,
-    LocalExecutionBackend, ProjectProvider, StaticCredentialSource, TemporaryArtifactStore,
-    ARTIFACT_CANDIDATE_CAPABILITY, ARTIFACT_VERIFIED_CAPABILITY,
-    STRUCTURED_PLAN_EXECUTION_CAPABILITY,
+    AdapterRegistry, ExecutionBackend, FakeGitHubActionsBackend, FakeGitHubReleaseApi,
+    GitHubReleaseDestination, LocalDirectoryDestination, LocalExecutionBackend, ProjectProvider,
+    StaticCredentialSource, TemporaryArtifactStore, ARTIFACT_CANDIDATE_CAPABILITY,
+    ARTIFACT_VERIFIED_CAPABILITY, STRUCTURED_PLAN_EXECUTION_CAPABILITY,
 };
 use publish_domain::{
     sha256_hex, AdapterBinding, AdapterDescriptor, AdapterIdentity, AdapterKind, AdapterSchema,
     AdapterSelection, AdapterSettings, ArtifactCandidate, AutomationRuntimeRevision, Capability,
-    CapabilityRequirement, DeliveryRoute, PlanNode, PlanNodeTemplate, PlanStage,
-    PlanningInputSnapshot, PublishOutcome, PublishingCapability, SourceSnapshot,
-    PLANNING_INPUT_SNAPSHOT_VERSION,
+    CapabilityRequirement, CredentialKind, DeliveryRoute, DeliveryStatus, PlanNode,
+    PlanNodeTemplate, PlanStage, PlanningInputSnapshot, PublishOutcome, PublishingCapability,
+    SourceSnapshot, PLANNING_INPUT_SNAPSHOT_VERSION,
 };
 use serde_json::Value;
 
 const ARTIFACT_BYTES: &[u8] = b"same runner output";
+const GITHUB_TOKEN_REFERENCE: &str = "ci-github-token";
+const GITHUB_TOKEN_VALUE: &str = "contract-token-value";
 
 struct ContractProjectProvider {
     descriptor: AdapterDescriptor,
@@ -70,10 +72,7 @@ impl AdapterContract for ContractProjectProvider {
             "build_contract_artifact",
             BTreeMap::new(),
         )
-        .with_artifact_io(
-            vec![],
-            vec!["desktop-installer".to_string()],
-        )])
+        .with_artifact_io(vec![], vec!["installer".to_string()])])
     }
 
     fn execute_node(
@@ -83,11 +82,11 @@ impl AdapterContract for ContractProjectProvider {
     ) -> Result<AdapterExecutionOutput, publish_domain::PublishError> {
         Ok(AdapterExecutionOutput {
             artifacts: vec![ArtifactCandidate::new(
-                "desktop-installer",
+                "installer",
                 "app.bin",
                 "application/octet-stream",
-                "test-os",
-                "test-arch",
+                "linux",
+                "x86_64",
                 ARTIFACT_BYTES.to_vec(),
             )],
             ..AdapterExecutionOutput::default()
@@ -277,6 +276,141 @@ fn runner_rejects_missing_or_digest_mismatched_runtime_before_execution() {
     assert!(foreign_error
         .to_string()
         .contains("installed runner provides"));
+}
+
+/// Issue T16 验收：Local 与 GitHub Actions Backend 使用同一配置修订向 GitHub
+/// Release Route 交付，共享同一目标语义——节点合同、事件合同、Receipt 生命周期
+///（Submitted 后由远端观察确认 Published）与远端最终状态完全一致。
+#[test]
+fn local_and_fake_github_actions_deliver_the_same_github_release_route() {
+    let local_root = tempfile::tempdir().expect("local fixture root");
+    let github_root = tempfile::tempdir().expect("GitHub fixture root");
+    let credentials = || {
+        Arc::new(StaticCredentialSource::new().with_secret(
+            GITHUB_TOKEN_REFERENCE,
+            CredentialKind::Token,
+            GITHUB_TOKEN_VALUE,
+        ))
+    };
+    let local_api = Arc::new(FakeGitHubReleaseApi::new());
+    let github_api = Arc::new(FakeGitHubReleaseApi::new());
+    let (local_runner, local_snapshot) = github_release_fixture_runner(
+        Arc::new(LocalExecutionBackend::with_credential_source(credentials())),
+        "local-execution",
+        local_root.path(),
+        local_api.clone(),
+    );
+    let (github_runner, github_snapshot) = github_release_fixture_runner(
+        Arc::new(FakeGitHubActionsBackend::new(credentials())),
+        "fake-github-actions",
+        github_root.path(),
+        github_api.clone(),
+    );
+    // 同一配置修订驱动两个后端：GitHub Release 路线绑定（设置与凭据引用）
+    // 逐字一致，只有执行后端与本地存储位置属于后端环境。
+    assert_eq!(
+        local_snapshot.configuration_revision,
+        github_snapshot.configuration_revision
+    );
+    assert_eq!(
+        local_snapshot.adapters.delivery_routes,
+        github_snapshot.adapters.delivery_routes
+    );
+
+    let local_projection = local_runner
+        .prepare_projection(&local_snapshot)
+        .expect("prepare local projection");
+    let github_projection = github_runner
+        .prepare_projection(&github_snapshot)
+        .expect("prepare fake GitHub Actions projection");
+    let local = local_runner
+        .execute(&local_projection, "attempt-github-contract")
+        .expect("deliver the github release locally");
+    let github = github_runner
+        .execute(&github_projection, "attempt-github-contract")
+        .expect("deliver the github release through fake GitHub Actions");
+
+    assert_compatible_outcomes(&local, &github);
+    for (outcome, api) in [(&local, &local_api), (&github, &github_api)] {
+        // 只有远端观察为 Published 的 Receipt 修订满足 Required Route。
+        let last = outcome.receipts.last().expect("observed receipt");
+        assert_eq!(last.status, DeliveryStatus::Published);
+        assert_eq!(last.revision, 2);
+        let release = api.release("v1.0.0").expect("remote release");
+        assert!(!release.draft);
+        let names: Vec<&str> = release
+            .assets
+            .iter()
+            .map(|asset| asset.name.as_str())
+            .collect();
+        assert_eq!(names, vec!["app.bin"]);
+        assert_eq!(release.assets[0].digest, sha256_hex(ARTIFACT_BYTES));
+    }
+}
+
+/// 除执行后端外的完整 Adapter 选择：两个后端必须消费同一份配置修订内容。
+fn github_release_fixture_runner(
+    backend: Arc<dyn ExecutionBackend>,
+    backend_id: &str,
+    root: &std::path::Path,
+    api: Arc<FakeGitHubReleaseApi>,
+) -> (StandaloneRunner, PlanningInputSnapshot) {
+    let store = root.join("store");
+    let mut snapshot = fixture_snapshot(
+        backend_id,
+        store.to_string_lossy().as_ref(),
+        "unused-delivery-directory",
+    );
+    snapshot.release_input.insert(
+        "platform_code_signing".to_string(),
+        Value::String("signed".to_string()),
+    );
+    snapshot.adapters.delivery_routes = vec![DeliveryRoute::required(
+        AdapterBinding::new(
+            "github-release-route",
+            AdapterIdentity::new(AdapterKind::DeliveryDestination, "github-release", 1),
+            github_release_settings(),
+        )
+        .with_credential("github_token", GITHUB_TOKEN_REFERENCE),
+    )];
+    let revision = runtime_revision(&snapshot);
+    snapshot.runtime_revision = revision.identifier();
+
+    let fixture = AdapterConformanceFixture::new(snapshot.clone());
+    let mut registry = AdapterRegistry::new();
+    registry
+        .register_project_provider(Arc::new(ContractProjectProvider::new()), &fixture)
+        .expect("register contract provider");
+    registry
+        .register_execution_backend(backend, &fixture)
+        .expect("register execution backend");
+    registry
+        .register_artifact_store(Arc::new(TemporaryArtifactStore::new(&store)), &fixture)
+        .expect("register artifact store");
+    registry
+        .register_delivery_destination(Arc::new(GitHubReleaseDestination::new(api)), &fixture)
+        .expect("register github release destination");
+    (
+        StandaloneRunner::new(registry, revision).expect("create runner"),
+        snapshot,
+    )
+}
+
+fn github_release_settings() -> AdapterSettings {
+    AdapterSettings::new(1)
+        .with_value("repository", Value::String("acme/demo".to_string()))
+        .with_value("visibility", Value::String("public".to_string()))
+        .with_value("tag_prefix", Value::String("v".to_string()))
+        .with_value(
+            "allowed_asset_roles",
+            Value::Array(vec![Value::String("installer".to_string())]),
+        )
+        .with_value("updater_enabled", Value::Bool(false))
+        .with_value(
+            "enabled_platforms",
+            Value::Array(vec![Value::String("linux-x86_64".to_string())]),
+        )
+        .with_value("unsigned_release_override", Value::Bool(false))
 }
 
 fn fixture_runner(

@@ -8,10 +8,11 @@ use std::sync::Arc;
 
 use publish_adapters::{
     AdapterConformanceFixture, AdapterRegistry, ChecksumProcessor, CustomCommandProcessor,
-    FakeGitHubActionsBackend, GitHubActionsExecutionBackend, LocalDirectoryDestination,
-    LocalExecutionBackend, StaticCredentialSource, TauriProjectProvider, TemporaryArtifactStore,
-    CHECKSUM_PROCESSOR_ID, CUSTOM_COMMAND_PROCESSOR_ID, FAKE_GITHUB_ACTIONS_BACKEND_ID,
-    GITHUB_ACTIONS_EXECUTION_BACKEND_ID, TAURI_PROVIDER_ID,
+    FakeGitHubActionsBackend, GhCliGitHubReleaseApi, GitHubActionsExecutionBackend,
+    GitHubReleaseDestination, LocalDirectoryDestination, LocalExecutionBackend,
+    StaticCredentialSource, TauriProjectProvider, TemporaryArtifactStore, CHECKSUM_PROCESSOR_ID,
+    CUSTOM_COMMAND_PROCESSOR_ID, FAKE_GITHUB_ACTIONS_BACKEND_ID,
+    GITHUB_ACTIONS_EXECUTION_BACKEND_ID, GITHUB_RELEASE_DESTINATION_ID, TAURI_PROVIDER_ID,
 };
 use publish_domain::{
     AdapterIdentity, AdapterKind, AutomationRuntimeRevision, PlanningInputSnapshot, PublishError,
@@ -332,6 +333,14 @@ fn register_destinations(
                     })?;
                 registry.register_delivery_destination(
                     Arc::new(LocalDirectoryDestination::new(directory)),
+                    fixture,
+                )?;
+            }
+            (GITHUB_RELEASE_DESTINATION_ID, 1) => {
+                registry.register_delivery_destination(
+                    Arc::new(GitHubReleaseDestination::new(Arc::new(
+                        GhCliGitHubReleaseApi::new(),
+                    ))),
                     fixture,
                 )?;
             }

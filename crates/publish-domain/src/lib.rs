@@ -270,6 +270,17 @@ impl AdapterSchema {
         self
     }
 
+    pub fn with_required_boolean(mut self, key: impl Into<String>) -> Self {
+        self.fields.insert(
+            key.into(),
+            AdapterSchemaField {
+                value_type: AdapterSchemaValueType::Boolean,
+                required: true,
+            },
+        );
+        self
+    }
+
     pub fn with_required_string_list(mut self, key: impl Into<String>) -> Self {
         self.fields.insert(
             key.into(),
@@ -496,6 +507,16 @@ impl AdapterSettings {
                 message: format!("{key} must be an unsigned number"),
             }
         })
+    }
+
+    pub fn boolean(&self, key: &str, adapter: &str) -> Result<bool, PublishError> {
+        self.values
+            .get(key)
+            .and_then(Value::as_bool)
+            .ok_or_else(|| PublishError::InvalidAdapterSettings {
+                adapter: adapter.to_string(),
+                message: format!("{key} must be a boolean"),
+            })
     }
 
     pub fn string_list(&self, key: &str, adapter: &str) -> Result<Vec<String>, PublishError> {
