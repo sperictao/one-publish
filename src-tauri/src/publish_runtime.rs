@@ -986,7 +986,9 @@ pub async fn start_publish_runtime(
         app,
         runtime: tokio::runtime::Handle::current(),
     });
-    tokio::task::spawn_blocking(move || start_runtime_with_port(request, port, identity))
+    tokio::task::spawn_blocking(move || {
+        start_runtime_with_port(request, port, identity, lease_coordinator())
+    })
         .await
         .map_err(|error| {
             AppError::publish_with_code(
@@ -1024,6 +1026,7 @@ pub(crate) fn start_runtime_with_port(
     request: StartPublishRuntimeRequest,
     execution_port: Arc<dyn ProviderExecutionPort>,
     identity: AttemptIdentity,
+    leases: Arc<PublishLeaseCoordinator>,
 ) -> Result<PublishRuntimeResult, AppError> {
     if request.runtime_token.trim().is_empty() {
         return Err(AppError::validation_with_code(
@@ -1103,7 +1106,6 @@ pub(crate) fn start_runtime_with_port(
             digest,
         ));
     }
-    let leases = lease_coordinator();
     let now_seconds = unix_now_seconds()?;
     leases
         .acquire(
@@ -2542,11 +2544,25 @@ mod tests {
     use crate::tauri_release::{ReleaseGate, TauriReleaseConfig};
 
     use super::{
-        capture_source_snapshot, normalize_remote_namespace, project_identity,
-        start_runtime_with_port, AttemptIdentity, PreparePublishRuntimeRequest,
-        ProviderExecutionPort, ResolvedPublishConfiguration, RuntimeAttemptStatus,
-        RuntimePlanStage, StartPublishRuntimeRequest,
+        capture_source_snapshot, normalize_remote_namespace, project_identity, AttemptIdentity,
+        PreparePublishRuntimeRequest, ProviderExecutionPort, ResolvedPublishConfiguration,
+        RuntimeAttemptStatus, RuntimePlanStage, StartPublishRuntimeRequest,
     };
+
+    /// 测试隔离：每次调用使用独立的租约协调器，避免并行测试因相同内容
+    /// 摘要（相同 ReleaseNamespace）在进程级单例上互相阻断。
+    fn start_runtime_with_port(
+        request: StartPublishRuntimeRequest,
+        execution_port: Arc<dyn ProviderExecutionPort>,
+        identity: AttemptIdentity,
+    ) -> Result<super::PublishRuntimeResult, crate::errors::AppError> {
+        super::start_runtime_with_port(
+            request,
+            execution_port,
+            identity,
+            Arc::new(publish_runner_core::PublishLeaseCoordinator::new()),
+        )
+    }
 
     /// 非 Tauri 场景不涉及 Tauri 发布配置；测试沿用两参形式。
     fn prepare_runtime(
