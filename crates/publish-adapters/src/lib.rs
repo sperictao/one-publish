@@ -12,6 +12,7 @@ use serde_json::Value;
 
 mod credentials;
 mod fake;
+pub mod fixture;
 mod github_actions;
 mod github_release;
 mod local;
@@ -23,6 +24,10 @@ pub use credentials::{CredentialResolveFailure, CredentialSource, StaticCredenti
 pub use fake::{
     FakeAutomationBackend, FakeGitHubActionsBackend, FakeRemoteBackend, FAKE_AUTOMATION_BACKEND_ID,
     FAKE_GITHUB_ACTIONS_BACKEND_ID, FAKE_REMOTE_BACKEND_ID,
+};
+pub use fixture::{
+    fixture_candidate_identity, FixtureAppInspection, FixtureAppProvider, FIXTURE_BUILD_PROGRAM,
+    FIXTURE_BUNDLE_ROLE, FIXTURE_INSPECT_ACTION, FIXTURE_MANIFEST_FILE_NAME, FIXTURE_PROVIDER_ID,
 };
 pub use github_actions::{GitHubActionsExecutionBackend, GITHUB_ACTIONS_EXECUTION_BACKEND_ID};
 pub use github_release::{
