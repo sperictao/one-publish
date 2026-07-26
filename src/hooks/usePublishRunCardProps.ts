@@ -5,8 +5,6 @@ import type {
   PreparedPublishRuntime,
   PublishRuntimeResult,
 } from "@/generated/tauri-contracts";
-import { usePublishStore } from "@/stores/publishStore";
-
 type TranslationMap = Record<string, string | undefined>;
 
 interface UsePublishRunCardPropsParams {
@@ -18,7 +16,6 @@ interface UsePublishRunCardPropsParams {
   configT: TranslationMap;
   isRefreshing: boolean;
   selectedRepo: Repository | null;
-  activeProviderId: string;
   activeProviderRequiresProjectBinding: boolean;
   projectInfo: ProjectInfo | null;
   publishPreviewCommand: string | null;
@@ -36,9 +33,6 @@ interface UsePublishRunCardPropsParams {
 export function usePublishRunCardProps(
   params: UsePublishRunCardPropsParams
 ): PublishRunCardProps {
-  const setTauriReleaseOpen = usePublishStore(
-    (state) => state.setTauriReleaseOpen
-  );
   return useMemo(
     () => ({
       outputLog: params.outputLog,
@@ -72,20 +66,11 @@ export function usePublishRunCardProps(
                     !params.preparedRuntime.runtimeToken)),
               onStartPublish: params.startPublish,
               onCancelPublish: params.cancelPublish,
-              managementLabel:
-                params.activeProviderId === "tauri"
-                  ? params.appT.tauriReleaseManagement || "Tauri 发布中心"
-                  : undefined,
-              onOpenManagement:
-                params.activeProviderId === "tauri"
-                  ? () => setTauriReleaseOpen(true)
-                  : undefined,
             }
           : null,
     }),
     [
       params.activeProviderRequiresProjectBinding,
-      params.activeProviderId,
       params.activeRuntime,
       params.appT,
       params.cancelPublish,
@@ -106,7 +91,6 @@ export function usePublishRunCardProps(
       params.publishT.command,
       params.selectedRepo,
       params.startPublish,
-      setTauriReleaseOpen,
     ]
   );
 }

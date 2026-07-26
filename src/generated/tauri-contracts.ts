@@ -177,50 +177,16 @@ export type RepoPublishConfig = { selectedPreset: string, isCustomMode: boolean,
 
 export type Repository = { id: string, name: string, path: string, projectFile: string | null, currentBranch: string, branches: Array<Branch>, isMain: boolean, providerId: string | null, publishConfig: RepoPublishConfig, };
 
-export type ReleaseAttempt = { id: string, repositoryId: string, repositoryIdentity: string, appConfigPath: string, version: string, tag: string, releaseCommitSha: string | null, stage: ReleaseAttemptStage, workflowRunId: string | null, actionsUrl: string | null, releaseUrl: string | null, releaseAssetNames: Array<string>, signingSummary: string, updaterSummary: string, retryReason: string | null, createdAt: string, updatedAt: string, };
-
-export type ReleaseAttemptStage = "preparing" | "running_gates" | "ready_to_push" | "monitoring_workflow" | "published" | "failed" | "cancelled";
-
 export type ReleaseGate = { program: string, args: Array<string>, };
-
-export type GitHubRepositoryIdentity = { owner: string, name: string, nameWithOwner: string, originUrl: string, defaultBranch: string, visibility: GitHubRepositoryVisibility, };
-
-export type GitHubRepositoryVisibility = "public" | "private";
-
-export type ManagedWorkflowPreview = { previewId: string, path: string, status: ManagedWorkflowStatus, expectedContent: string, currentContent: string | null, diff: string, conflicts: Array<WorkflowConflict>, };
-
-export type ManagedWorkflowStatus = "missing" | "current" | "drifted";
-
-export type PlatformSigningStatus = "not_required" | "unverified";
-
-export type TauriAppInspection = { configPath: string, appRoot: string, appName: string, buildDriver: TauriBuildDriver, versionSource: TauriVersionSource, updaterEnabled: boolean, suggestedVersionMirrors: Array<VersionMirror>, };
 
 export type TauriBuildDriver = "pnpm" | "npm" | "yarn" | "bun" | "cargo";
 
-export type TauriLocalBuildResult = { publish: PublishResult, deliveryDir: string, assets: Array<string>, gitHead: string, worktreeDirty: boolean, reproducible: boolean, platform: string, architecture: string, platformSigning: PlatformSigningStatus, distributionReady: boolean, };
-
 export type TauriDesktopTarget = "windows_x64" | "linux_x64" | "macos_x64" | "macos_arm64" | "macos_universal";
-
-export type TauriReleaseBackup = { version: number, exportedAt: string, config: TauriReleaseConfig, };
 
 export type TauriReleaseConfig = { appConfigPath: string, appName: string, buildDriver: TauriBuildDriver, enabledTargets: Array<TauriDesktopTarget>, releaseAssetPatterns: Array<string>, updater: TauriUpdaterSettings, allowUnsignedRelease: boolean, requiredActionsSecretNames: Array<string>, actionsSecretEnvironment: { [key: string]: string }, tagPrefix: string, releaseGates: Array<ReleaseGate>, localDeliveryDir: string, versionMirrors: Array<VersionMirror>, managedWorkflowVersion: number, };
 
-export type TauriReleasePreflight = { preflightId: string, repositoryId: string, repositoryIdentity: GitHubRepositoryIdentity, headSha: string, currentBranch: string, currentVersion: string, version: string, tag: string, previousTag: string | null, releaseNotes: string, workflowStatus: ManagedWorkflowStatus, missingSecretNames: Array<string>, warnings: Array<string>, };
-
-export type TauriRepositoryInspection = { repositoryPath: string, apps: Array<TauriAppInspection>, };
-
 export type TauriUpdaterSettings = { enabled: boolean, endpoint: string | null, publicKey: string | null, privateKeySecretName: string | null, };
-
-export type TauriVersionSource = { kind: TauriVersionSourceKind, path: string, selector: string, version: string, };
-
-export type TauriVersionSourceKind = "tauri_config" | "referenced_package_json" | "cargo_toml";
 
 export type VersionMirror = { path: string, kind: VersionMirrorKind, selector: string, };
 
 export type VersionMirrorKind = "json_pointer" | "toml_key" | "cargo_lock_package";
-
-export type StartTauriGithubReleaseRequest = { repositoryId: string, preflightId: string, version: string, releaseNotes: string, confirmUnsignedRelease: boolean, };
-
-export type WorkflowConflict = { path: string, reason: string, };
-
-export type WorkflowTakeoverResult = { workflowPath: string, removedConflicts: Array<string>, commitSha: string, pushedBranch: string, };

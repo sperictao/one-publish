@@ -37,7 +37,7 @@ use crate::commands::{
 use crate::errors::AppError;
 use crate::provider::{registry::provider_registry, ProviderSourceInputKind};
 use crate::spec::PublishSpec;
-use crate::tauri_release::{ReleaseGate, TauriReleaseConfig};
+use crate::tauri_release::ReleaseGate;
 
 const SELECTED_PROVIDER_ID: &str = "selected-project-provider";
 const SELECTED_PROVIDER_PROGRAM: &str = "selected-project-provider:publish";
@@ -637,9 +637,19 @@ impl ProjectProvider for TauriRuntimeProvider {
 pub(crate) fn prepare_runtime(
     request: PreparePublishRuntimeRequest,
     resolved: ResolvedPublishConfiguration,
-    tauri_release: Option<TauriReleaseConfig>,
 ) -> Result<PreparedPublishRuntime, AppError> {
     validate_prepare_request(&request)?;
+    // 发布设置只有一个来源：所选配置修订的保留参数键（ADR-0058）。
+    let tauri_release = if resolved.provider_id == TAURI_PROVIDER_ID {
+        match crate::tauri_release::release_settings_from_parameters(&resolved.parameters) {
+            Ok(settings) => settings,
+            Err(error) => {
+                return Ok(blocked_prepared_runtime(request, error.to_string()));
+            }
+        }
+    } else {
+        None
+    };
     let tauri_binding = if request.spec.provider_id == TAURI_PROVIDER_ID {
         match prepare_tauri_binding(&request.repository_path, &request.spec)? {
             TauriBindingCheck::Bound(binding) => Some(binding),
@@ -859,7 +869,19 @@ fn blocked_prepared_runtime(
     }
 }
 
+/// 修订参数中的保留键（如 `releaseSettings`）承载发布设置而不是命令参数，
+/// 匹配只针对真正进入命令渲染的参数进行。
+fn command_parameters(parameters: &Value) -> Value {
+    let mut parameters = parameters.clone();
+    if let Some(object) = parameters.as_object_mut() {
+        object.remove(crate::tauri_release::RELEASE_SETTINGS_PARAMETER);
+    }
+    parameters
+}
+
 fn configuration_parameters_match(provider_id: &str, expected: &Value, actual: &Value) -> bool {
+    let expected = &command_parameters(expected);
+    let actual = &command_parameters(actual);
     if expected == actual {
         return true;
     }
@@ -937,11 +959,6 @@ pub fn prepare_publish_runtime(
     let blocked_reason = (configuration.current_revision_id != revision.id)
         .then(|| "selected publish configuration revision is no longer current".to_string())
         .or_else(|| configuration.blocked_reason.clone());
-    let tauri_release = if revision.provider_id == TAURI_PROVIDER_ID {
-        crate::tauri_release::stored_release_config(&request.repository_id)?
-    } else {
-        None
-    };
     prepare_runtime(
         request,
         ResolvedPublishConfiguration {
@@ -949,7 +966,6 @@ pub fn prepare_publish_runtime(
             parameters: revision.parameters.clone(),
             blocked_reason,
         },
-        tauri_release,
     )
 }
 
@@ -989,13 +1005,13 @@ pub async fn start_publish_runtime(
     tokio::task::spawn_blocking(move || {
         start_runtime_with_port(request, port, identity, lease_coordinator())
     })
-        .await
-        .map_err(|error| {
-            AppError::publish_with_code(
-                format!("publish runtime task failed: {error}"),
-                "publish_runtime_task_failed",
-            )
-        })?
+    .await
+    .map_err(|error| {
+        AppError::publish_with_code(
+            format!("publish runtime task failed: {error}"),
+            "publish_runtime_task_failed",
+        )
+    })?
 }
 
 /// 本地发布租约期限：本机执行是同步的，租约只需覆盖单次执行；
@@ -2564,14 +2580,6 @@ mod tests {
         )
     }
 
-    /// 非 Tauri 场景不涉及 Tauri 发布配置；测试沿用两参形式。
-    fn prepare_runtime(
-        request: PreparePublishRuntimeRequest,
-        resolved: ResolvedPublishConfiguration,
-    ) -> Result<super::PreparedPublishRuntime, crate::errors::AppError> {
-        super::prepare_runtime(request, resolved, None)
-    }
-
     struct FakeProviderExecution {
         output_directory: std::path::PathBuf,
         output_is_file: bool,
@@ -2778,7 +2786,7 @@ mod tests {
             blocked_reason: None,
         };
 
-        let prepared = prepare_runtime(
+        let prepared = super::prepare_runtime(
             PreparePublishRuntimeRequest {
                 repository_id: "repository-A".to_string(),
                 repository_path: repository.path().to_string_lossy().to_string(),
@@ -2839,7 +2847,7 @@ mod tests {
             blocked_reason: None,
         };
 
-        let prepared = prepare_runtime(
+        let prepared = super::prepare_runtime(
             PreparePublishRuntimeRequest {
                 repository_id: "repository-A".to_string(),
                 repository_path: repository.path().to_string_lossy().to_string(),
@@ -2889,7 +2897,7 @@ mod tests {
             blocked_reason: None,
         };
 
-        let prepared = prepare_runtime(
+        let prepared = super::prepare_runtime(
             PreparePublishRuntimeRequest {
                 repository_id: "repository-A".to_string(),
                 repository_path: repository.path().to_string_lossy().to_string(),
@@ -2924,7 +2932,7 @@ mod tests {
             parameters: BTreeMap::new(),
         };
 
-        let prepared = prepare_runtime(
+        let prepared = super::prepare_runtime(
             PreparePublishRuntimeRequest {
                 repository_id: "repository-A".to_string(),
                 repository_path: repository.path().to_string_lossy().to_string(),
@@ -3006,7 +3014,8 @@ mod tests {
             &repository.path().join("src-tauri/tauri.conf.json"),
         );
 
-        let prepared = prepare_runtime(request, resolved).expect("prepare tauri configuration");
+        let prepared =
+            super::prepare_runtime(request, resolved).expect("prepare tauri configuration");
 
         assert!(prepared.blocked_reason.is_none());
         assert!(!prepared.runtime_token.is_empty());
@@ -3041,8 +3050,8 @@ mod tests {
             &repository.path().join("src-tauri/tauri.conf.json"),
         );
 
-        let prepared =
-            prepare_runtime(request, resolved).expect("missing config still prepares a view");
+        let prepared = super::prepare_runtime(request, resolved)
+            .expect("missing config still prepares a view");
 
         assert!(prepared
             .blocked_reason
@@ -3065,7 +3074,7 @@ mod tests {
         );
 
         let prepared =
-            prepare_runtime(request, resolved).expect("stale binding still prepares a view");
+            super::prepare_runtime(request, resolved).expect("stale binding still prepares a view");
 
         assert!(prepared
             .blocked_reason
@@ -3097,7 +3106,7 @@ mod tests {
             &kiosk_root.join("src-tauri/tauri.conf.json"),
         );
 
-        let prepared = prepare_runtime(request, resolved).expect("prepare bound candidate");
+        let prepared = super::prepare_runtime(request, resolved).expect("prepare bound candidate");
 
         assert!(prepared.blocked_reason.is_none());
         let build_node = prepared
@@ -3120,8 +3129,8 @@ mod tests {
             &repository.path().join("src-tauri/tauri.conf.json"),
         );
 
-        let prepared =
-            prepare_runtime(request, resolved).expect("driver conflict still prepares a view");
+        let prepared = super::prepare_runtime(request, resolved)
+            .expect("driver conflict still prepares a view");
 
         assert!(prepared
             .blocked_reason
@@ -3136,6 +3145,15 @@ mod tests {
             release_gates: gates,
             ..TauriReleaseConfig::default()
         }
+    }
+
+    fn with_release_settings(
+        mut resolved: ResolvedPublishConfiguration,
+        config: TauriReleaseConfig,
+    ) -> ResolvedPublishConfiguration {
+        resolved.parameters[crate::tauri_release::RELEASE_SETTINGS_PARAMETER] =
+            serde_json::to_value(config).expect("serialize release settings");
+        resolved
     }
 
     fn gate(program: &str, args: &[&str]) -> ReleaseGate {
@@ -3158,6 +3176,59 @@ mod tests {
     }
 
     #[test]
+    fn tauri_revision_release_settings_drive_gates_without_blocking_parameter_match() {
+        let repository = tempfile::tempdir().expect("create repository");
+        write_tauri_app(repository.path(), ".", "1.2.3");
+        initialize_git_repository(repository.path());
+        let (request, mut resolved) = tauri_prepare_request(
+            repository.path(),
+            &repository.path().join("src-tauri/tauri.conf.json"),
+        );
+        resolved.parameters[crate::tauri_release::RELEASE_SETTINGS_PARAMETER] =
+            serde_json::to_value(tauri_release_config(vec![gate(
+                "git",
+                &["rev-parse", "HEAD"],
+            )]))
+            .expect("serialize release settings");
+
+        let prepared = super::prepare_runtime(request, resolved)
+            .expect("prepare tauri configuration from revision release settings");
+
+        assert!(
+            prepared.blocked_reason.is_none(),
+            "release settings are not command parameters and must not read as drift: {:?}",
+            prepared.blocked_reason
+        );
+        assert!(prepared
+            .plan
+            .nodes
+            .iter()
+            .any(|node| node.operation == "run_release_gate"));
+    }
+
+    #[test]
+    fn corrupt_revision_release_settings_block_the_prepared_runtime() {
+        let repository = tempfile::tempdir().expect("create repository");
+        write_tauri_app(repository.path(), ".", "1.2.3");
+        initialize_git_repository(repository.path());
+        let (request, mut resolved) = tauri_prepare_request(
+            repository.path(),
+            &repository.path().join("src-tauri/tauri.conf.json"),
+        );
+        resolved.parameters[crate::tauri_release::RELEASE_SETTINGS_PARAMETER] =
+            serde_json::json!({ "enabledTargets": "not-an-array" });
+
+        let prepared = super::prepare_runtime(request, resolved)
+            .expect("corrupt settings still prepare a blocked view");
+
+        assert!(prepared
+            .blocked_reason
+            .as_deref()
+            .is_some_and(|reason| reason.contains("tauri_release_settings_invalid")));
+        assert!(prepared.runtime_token.is_empty());
+    }
+
+    #[test]
     fn tauri_plan_seals_release_gates_between_inspect_and_build() {
         let repository = tempfile::tempdir().expect("create repository");
         write_tauri_app(repository.path(), ".", "1.2.3");
@@ -3169,11 +3240,13 @@ mod tests {
 
         let prepared = super::prepare_runtime(
             request,
-            resolved,
-            Some(tauri_release_config(vec![
-                gate("git", &["rev-parse", "HEAD"]),
-                gate("git", &["status", "--porcelain"]),
-            ])),
+            with_release_settings(
+                resolved,
+                tauri_release_config(vec![
+                    gate("git", &["rev-parse", "HEAD"]),
+                    gate("git", &["status", "--porcelain"]),
+                ]),
+            ),
         )
         .expect("prepare tauri configuration with release gates");
 
@@ -3218,7 +3291,7 @@ mod tests {
         let mut config = tauri_release_config(vec![gate("git", &["rev-parse", "HEAD"])]);
         config.app_config_path = "./src-tauri/tauri.conf.json".to_string();
 
-        let prepared = super::prepare_runtime(request, resolved, Some(config))
+        let prepared = super::prepare_runtime(request, with_release_settings(resolved, config))
             .expect("prepare tauri configuration");
 
         assert_eq!(
@@ -3245,7 +3318,7 @@ mod tests {
         let mut config = tauri_release_config(vec![gate("git", &["rev-parse", "HEAD"])]);
         config.app_config_path = "apps/other/src-tauri/tauri.conf.json".to_string();
 
-        let prepared = super::prepare_runtime(request, resolved, Some(config))
+        let prepared = super::prepare_runtime(request, with_release_settings(resolved, config))
             .expect("prepare tauri configuration");
 
         assert!(prepared
@@ -3266,11 +3339,13 @@ mod tests {
         );
         let prepared = super::prepare_runtime(
             request,
-            resolved,
-            Some(tauri_release_config(vec![gate(
-                "git",
-                &["rev-parse", "--verify", "one-publish-missing-gate-ref"],
-            )])),
+            with_release_settings(
+                resolved,
+                tauri_release_config(vec![gate(
+                    "git",
+                    &["rev-parse", "--verify", "one-publish-missing-gate-ref"],
+                )]),
+            ),
         )
         .expect("prepare tauri configuration with a failing gate");
         let bundle_directory = tauri_bundle_directory(repository.path());
@@ -3318,11 +3393,10 @@ mod tests {
         );
         let prepared = super::prepare_runtime(
             request,
-            resolved,
-            Some(tauri_release_config(vec![gate(
-                "git",
-                &["rev-parse", "HEAD"],
-            )])),
+            with_release_settings(
+                resolved,
+                tauri_release_config(vec![gate("git", &["rev-parse", "HEAD"])]),
+            ),
         )
         .expect("prepare tauri configuration");
         let bundle_directory = tauri_bundle_directory(repository.path());
@@ -3391,7 +3465,7 @@ mod tests {
             &repository.path().join("src-tauri/tauri.conf.json"),
         );
         let prepared =
-            super::prepare_runtime(request, resolved, None).expect("prepare tauri configuration");
+            super::prepare_runtime(request, resolved).expect("prepare tauri configuration");
         let sealed = decoded_runtime_token(&prepared);
         let release_value = |key: &str| {
             sealed
@@ -3476,7 +3550,7 @@ mod tests {
             &repository.path().join("src-tauri/tauri.conf.json"),
         );
         let prepared =
-            super::prepare_runtime(request, resolved, None).expect("prepare tauri configuration");
+            super::prepare_runtime(request, resolved).expect("prepare tauri configuration");
         let bundle_directory = tauri_bundle_directory(repository.path());
         let build = Arc::new(FakeTauriBuild::failing(
             bundle_directory,
@@ -3521,10 +3595,9 @@ mod tests {
         };
 
         let (request, resolved) = request_pair();
-        let first =
-            super::prepare_runtime(request, resolved, None).expect("prepare workspace build");
+        let first = super::prepare_runtime(request, resolved).expect("prepare workspace build");
         let (request, resolved) = request_pair();
-        let second = super::prepare_runtime(request, resolved, None)
+        let second = super::prepare_runtime(request, resolved)
             .expect("re-prepare unchanged workspace build");
 
         let first_source = decoded_runtime_token(&first).snapshot.source;
@@ -3673,7 +3746,7 @@ mod tests {
             blocked_reason: None,
         };
 
-        let error = prepare_runtime(
+        let error = super::prepare_runtime(
             PreparePublishRuntimeRequest {
                 repository_id: "repository-A".to_string(),
                 repository_path: repository.to_string_lossy().to_string(),
@@ -4015,7 +4088,7 @@ mod tests {
             blocked_reason: None,
         };
 
-        let error = prepare_runtime(
+        let error = super::prepare_runtime(
             PreparePublishRuntimeRequest {
                 repository_id: "repository-A".to_string(),
                 repository_path: repository.path().to_string_lossy().to_string(),
@@ -4164,7 +4237,7 @@ mod tests {
                 SpecValue::String(output_file.to_string_lossy().to_string()),
             )]),
         };
-        let prepared = prepare_runtime(
+        let prepared = super::prepare_runtime(
             PreparePublishRuntimeRequest {
                 repository_id: "repository-A".to_string(),
                 repository_path: repository.path().to_string_lossy().to_string(),
@@ -4355,7 +4428,7 @@ mod tests {
             parameters: serde_json::to_value(&spec.parameters).expect("serialize parameters"),
             blocked_reason: None,
         };
-        prepare_runtime(
+        super::prepare_runtime(
             PreparePublishRuntimeRequest {
                 repository_id: "repository-A".to_string(),
                 repository_path: repository.to_string_lossy().to_string(),

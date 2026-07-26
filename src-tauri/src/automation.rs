@@ -176,21 +176,24 @@ fn automation_backend(backend_id: &str) -> Result<Arc<dyn ExecutionBackend>, App
     }
 }
 
-/// 配置迁入通用 Adapter schema 前，只在安装或显式升级时捕获旧 Tauri 配置。
+/// 安装或显式升级时从绑定目标修订的 `releaseSettings` 固化后端投影输入。
 /// 捕获值随 Binding 固定，后续查看与漂移协调只能消费该快照。
 fn fixed_backend_projection(
     backend_id: &str,
-    tauri_release_config: Option<&crate::tauri_release::TauriReleaseConfig>,
+    revision: &crate::store::PublishConfigurationRevision,
 ) -> Result<Value, AppError> {
     match backend_id {
         GITHUB_ACTIONS_BACKEND_ID => {
-            serde_json::to_value(tauri_release_config.ok_or_else(|| {
-                AppError::config_with_code(
-                    "GitHub Actions 自动化需要现有 Tauri 发布配置",
-                    "github_actions_release_config_missing",
-                )
-            })?)
-            .map_err(|error| {
+            let release_config =
+                crate::tauri_release::release_settings_from_parameters(&revision.parameters)?
+                    .ok_or_else(|| {
+                        AppError::config_with_code(
+                            "GitHub Actions 自动化需要修订中的 Tauri 发布设置",
+                            "github_actions_release_config_missing",
+                        )
+                    })?;
+            crate::tauri_release::validate_release_config(&release_config)?;
+            serde_json::to_value(release_config).map_err(|error| {
                 AppError::config_with_code(
                     format!("无法固定 GitHub Actions 投影输入: {error}"),
                     "github_actions_projection_snapshot_failed",
@@ -259,7 +262,6 @@ fn resolve_target_bindings(
     config: &RepoPublishConfig,
     change: &AutomationChangeRequest,
     now: &str,
-    tauri_release_config: Option<&crate::tauri_release::TauriReleaseConfig>,
 ) -> Result<Vec<AutomationBinding>, AppError> {
     let mut bindings = config.bindings.clone();
     match change {
@@ -291,10 +293,7 @@ fn resolve_target_bindings(
                 configuration_revision_id: profile.current_revision_id.clone(),
                 execution_backend_id: execution_backend_id.clone(),
                 trigger_policy: trigger_policy.clone(),
-                backend_projection: fixed_backend_projection(
-                    execution_backend_id,
-                    tauri_release_config,
-                )?,
+                backend_projection: fixed_backend_projection(execution_backend_id, revision)?,
                 runtime_revision: automation_runtime_revision(backend.as_ref(), revision)?.into(),
                 external_identity: String::new(),
                 created_at: now.to_string(),
@@ -317,7 +316,7 @@ fn resolve_target_bindings(
             let backend = automation_backend(&binding.execution_backend_id)?;
             binding.configuration_revision_id = profile.current_revision_id.clone();
             binding.backend_projection =
-                fixed_backend_projection(&binding.execution_backend_id, tauri_release_config)?;
+                fixed_backend_projection(&binding.execution_backend_id, revision)?;
             binding.runtime_revision =
                 automation_runtime_revision(backend.as_ref(), revision)?.into();
             binding.updated_at = now.to_string();
@@ -791,25 +790,14 @@ fn discover_initial_takeover_conflicts(
     Ok(conflicts)
 }
 
-#[cfg(test)]
 pub(crate) fn preview_change(
     repo_root: &Path,
     config: &RepoPublishConfig,
     change: &AutomationChangeRequest,
     now: &str,
 ) -> Result<AutomationPreviewOutcome, AppError> {
-    preview_change_with_tauri_config(repo_root, config, change, now, None)
-}
-
-pub(crate) fn preview_change_with_tauri_config(
-    repo_root: &Path,
-    config: &RepoPublishConfig,
-    change: &AutomationChangeRequest,
-    now: &str,
-    tauri_release_config: Option<&crate::tauri_release::TauriReleaseConfig>,
-) -> Result<AutomationPreviewOutcome, AppError> {
     let mut normalized_change = change.normalized();
-    let targets = resolve_target_bindings(config, &normalized_change, now, tauri_release_config)?;
+    let targets = resolve_target_bindings(config, &normalized_change, now)?;
     validate_binding_namespaces(&targets)?;
     let expected = render_expected(config, &targets, now)?;
     let previously_owned = previously_owned_paths(config)?;
@@ -909,7 +897,6 @@ fn assign_external_identities(
     Ok(())
 }
 
-#[cfg(test)]
 pub(crate) fn apply_change(
     repo_root: &Path,
     config: &mut RepoPublishConfig,
@@ -917,19 +904,7 @@ pub(crate) fn apply_change(
     confirmed_digest: &str,
     now: &str,
 ) -> Result<AutomationApplyResult, AppError> {
-    apply_change_with_tauri_config(repo_root, config, change, confirmed_digest, now, None)
-}
-
-pub(crate) fn apply_change_with_tauri_config(
-    repo_root: &Path,
-    config: &mut RepoPublishConfig,
-    change: &AutomationChangeRequest,
-    confirmed_digest: &str,
-    now: &str,
-    tauri_release_config: Option<&crate::tauri_release::TauriReleaseConfig>,
-) -> Result<AutomationApplyResult, AppError> {
-    let outcome =
-        preview_change_with_tauri_config(repo_root, config, change, now, tauri_release_config)?;
+    let outcome = preview_change(repo_root, config, change, now)?;
     if outcome.confirmation_digest != confirmed_digest {
         return Err(AppError::validation_with_code(
             "投影差异与预览时不一致，请重新预览并确认",
@@ -1030,28 +1005,12 @@ pub(crate) fn apply_change_with_tauri_config(
     })
 }
 
-#[cfg(test)]
 pub(crate) fn bindings_view(
     repo_root: &Path,
     config: &RepoPublishConfig,
     now: &str,
 ) -> Result<AutomationBindingsView, AppError> {
-    bindings_view_with_tauri_config(repo_root, config, now, None)
-}
-
-pub(crate) fn bindings_view_with_tauri_config(
-    repo_root: &Path,
-    config: &RepoPublishConfig,
-    now: &str,
-    tauri_release_config: Option<&crate::tauri_release::TauriReleaseConfig>,
-) -> Result<AutomationBindingsView, AppError> {
-    let outcome = preview_change_with_tauri_config(
-        repo_root,
-        config,
-        &AutomationChangeRequest::Reconcile,
-        now,
-        tauri_release_config,
-    )?;
+    let outcome = preview_change(repo_root, config, &AutomationChangeRequest::Reconcile, now)?;
     let drift = outcome
         .changes
         .iter()
@@ -1437,12 +1396,10 @@ pub async fn list_automation_bindings(repo_id: String) -> Result<AutomationBindi
     let state = crate::store::get_state();
     let repo = crate::store::find_repository(&state.repositories, &repo_id)?;
     let now = chrono::Utc::now().to_rfc3339();
-    let tauri_release_config = crate::tauri_release::stored_release_config(&repo_id)?;
-    bindings_view_with_tauri_config(
+    bindings_view(
         repository_root_from_path(&repo.path)?,
         &repo.publish_config,
         &now,
-        tauri_release_config.as_ref(),
     )
 }
 
@@ -1456,13 +1413,11 @@ pub async fn preview_automation_change(
     let state = crate::store::get_state();
     let repo = crate::store::find_repository(&state.repositories, &repo_id)?;
     let now = chrono::Utc::now().to_rfc3339();
-    let tauri_release_config = crate::tauri_release::stored_release_config(&repo_id)?;
-    let outcome = preview_change_with_tauri_config(
+    let outcome = preview_change(
         repository_root_from_path(&repo.path)?,
         &repo.publish_config,
         &change,
         &now,
-        tauri_release_config.as_ref(),
     )?;
     Ok(AutomationProjectionPreview {
         change: outcome.normalized_change,
@@ -1484,18 +1439,16 @@ pub async fn apply_automation_change(
 ) -> Result<AutomationApplyResult, AppError> {
     let _timer =
         crate::commands::middleware::CommandTimer::new("automation::apply_automation_change");
-    let tauri_release_config = crate::tauri_release::stored_release_config(&repo_id)?;
     let mut state = crate::store::get_state();
     let repo = crate::store::find_repository_mut(&mut state.repositories, &repo_id)?;
     let repo_path = repo.path.clone();
     let now = chrono::Utc::now().to_rfc3339();
-    let result = apply_change_with_tauri_config(
+    let result = apply_change(
         repository_root_from_path(&repo_path)?,
         &mut repo.publish_config,
         &change,
         &confirmed_digest,
         &now,
-        tauri_release_config.as_ref(),
     )?;
     crate::store::persist_state_and_refresh_tray(&app, state).await?;
     Ok(result)
@@ -1617,6 +1570,25 @@ mod tests {
         }
     }
 
+    fn fixture_tauri_config(name: &str) -> (RepoPublishConfig, String) {
+        let mut config = RepoPublishConfig::default();
+        let release_settings =
+            serde_json::to_value(github_actions_config()).expect("serialize release settings");
+        let profile = config
+            .create_profile(
+                name.to_string(),
+                "tauri".to_string(),
+                serde_json::json!({
+                    crate::tauri_release::RELEASE_SETTINGS_PARAMETER: release_settings
+                }),
+                None,
+                "2026-07-21T10:00:00Z".to_string(),
+            )
+            .expect("create fixture profile")
+            .clone();
+        (config, profile.id)
+    }
+
     fn github_actions_config() -> TauriReleaseConfig {
         TauriReleaseConfig {
             app_name: "Fixture".to_string(),
@@ -1668,9 +1640,59 @@ mod tests {
     }
 
     #[test]
+    fn github_actions_install_seals_the_projection_from_the_revision_release_settings() {
+        let (_temp, work) = fixture_repository();
+        let mut config = RepoPublishConfig::default();
+        let release_settings =
+            serde_json::to_value(github_actions_config()).expect("serialize release settings");
+        let profile = config
+            .create_profile(
+                "Stable".to_string(),
+                "tauri".to_string(),
+                serde_json::json!({
+                    crate::tauri_release::RELEASE_SETTINGS_PARAMETER: release_settings.clone()
+                }),
+                None,
+                "2026-07-21T10:00:00Z".to_string(),
+            )
+            .expect("create fixture profile")
+            .clone();
+
+        let outcome = preview_change(
+            &work,
+            &config,
+            &github_actions_install_request(&profile.id, "binding-stable", "v"),
+            NOW,
+        )
+        .expect("preview GitHub Actions install from catalog settings");
+
+        assert_eq!(outcome.targets.len(), 1);
+        assert_eq!(outcome.targets[0].backend_projection, release_settings);
+    }
+
+    #[test]
+    fn github_actions_install_without_revision_release_settings_is_rejected() {
+        let (_temp, work) = fixture_repository();
+        let (config, profile_id) = fixture_config_for_provider("Stable", "tauri");
+
+        let error = preview_change(
+            &work,
+            &config,
+            &github_actions_install_request(&profile_id, "binding-stable", "v"),
+            NOW,
+        )
+        .expect_err("install without release settings must fail");
+
+        assert_eq!(
+            error.code.as_deref(),
+            Some("github_actions_release_config_missing")
+        );
+    }
+
+    #[test]
     fn github_actions_takeover_previews_and_applies_the_complete_confirmed_diff() {
         let (temp, work) = fixture_repository();
-        let (mut config, profile_id) = fixture_config_for_provider("Stable", "tauri");
+        let (mut config, profile_id) = fixture_tauri_config("Stable");
         let workflow_dir = work.join(".github/workflows");
         std::fs::create_dir_all(&workflow_dir).expect("create workflow directory");
         let managed_path = work.join(MANAGED_WORKFLOW_PATH);
@@ -1690,10 +1712,8 @@ mod tests {
         let before = run_git(&work, &["rev-parse", "HEAD"]);
 
         let change = github_actions_install_request(&profile_id, "binding-stable", "v");
-        let release_config = github_actions_config();
         let preview =
-            preview_change_with_tauri_config(&work, &config, &change, NOW, Some(&release_config))
-                .expect("preview GitHub Actions takeover");
+            preview_change(&work, &config, &change, NOW).expect("preview GitHub Actions takeover");
 
         let described = preview
             .changes
@@ -1732,13 +1752,12 @@ mod tests {
         assert_eq!(run_git(&work, &["rev-parse", "HEAD"]), before);
         assert!(config.bindings.is_empty());
 
-        let result = apply_change_with_tauri_config(
+        let result = apply_change(
             &work,
             &mut config,
             &preview.normalized_change,
             &preview.confirmation_digest,
             NOW,
-            Some(&release_config),
         )
         .expect("apply confirmed GitHub Actions takeover");
 
@@ -1765,53 +1784,42 @@ mod tests {
     #[test]
     fn github_actions_conflicts_use_release_and_destination_namespaces() {
         let (_temp, work) = fixture_repository();
-        let (mut config, stable_id) = fixture_config_for_provider("Stable", "tauri");
+        let (mut config, stable_id) = fixture_tauri_config("Stable");
         let nightly = config
             .create_profile(
                 "Nightly".to_string(),
                 "tauri".to_string(),
-                serde_json::json!({ "configuration": "Release" }),
+                serde_json::json!({
+                    crate::tauri_release::RELEASE_SETTINGS_PARAMETER:
+                        serde_json::to_value(github_actions_config())
+                            .expect("serialize release settings")
+                }),
                 None,
                 "2026-07-22T10:05:00Z".to_string(),
             )
             .expect("create nightly profile")
             .clone();
-        let release_config = github_actions_config();
         let stable = github_actions_install_request(&stable_id, "binding-stable", "v");
         let stable_preview =
-            preview_change_with_tauri_config(&work, &config, &stable, NOW, Some(&release_config))
-                .expect("preview stable binding");
-        apply_change_with_tauri_config(
+            preview_change(&work, &config, &stable, NOW).expect("preview stable binding");
+        apply_change(
             &work,
             &mut config,
             &stable_preview.normalized_change,
             &stable_preview.confirmation_digest,
             NOW,
-            Some(&release_config),
         )
         .expect("apply stable binding");
 
         let duplicate = github_actions_install_request(&nightly.id, "binding-duplicate", "v1");
-        let error = preview_change_with_tauri_config(
-            &work,
-            &config,
-            &duplicate,
-            NOW,
-            Some(&release_config),
-        )
-        .expect_err("the same release and destination namespace must conflict");
+        let error = preview_change(&work, &config, &duplicate, NOW)
+            .expect_err("the same release and destination namespace must conflict");
         assert_eq!(error.code.as_deref(), Some("automation_namespace_conflict"));
 
         let non_overlapping =
             github_actions_install_request(&nightly.id, "binding-nightly", "nightly-");
-        let preview = preview_change_with_tauri_config(
-            &work,
-            &config,
-            &non_overlapping,
-            NOW,
-            Some(&release_config),
-        )
-        .expect("different release namespaces may coexist");
+        let preview = preview_change(&work, &config, &non_overlapping, NOW)
+            .expect("different release namespaces may coexist");
         assert!(preview
             .changes
             .iter()
@@ -1819,14 +1827,8 @@ mod tests {
 
         let duplicate_identity =
             github_actions_install_request(&nightly.id, "binding-stable", "nightly-");
-        let error = preview_change_with_tauri_config(
-            &work,
-            &config,
-            &duplicate_identity,
-            NOW,
-            Some(&release_config),
-        )
-        .expect_err("binding identities must be unique");
+        let error = preview_change(&work, &config, &duplicate_identity, NOW)
+            .expect_err("binding identities must be unique");
         assert_eq!(
             error.code.as_deref(),
             Some("automation_binding_identity_conflict")
@@ -1836,7 +1838,7 @@ mod tests {
     #[test]
     fn takeover_scans_every_tag_namespace_and_blocks_ambiguous_release_writers() {
         let (_temp, work) = fixture_repository();
-        let (config, profile_id) = fixture_config_for_provider("Stable", "tauri");
+        let (config, profile_id) = fixture_tauri_config("Stable");
         let workflow_dir = work.join(".github/workflows");
         std::fs::create_dir_all(&workflow_dir).expect("create workflow directory");
         let multi_tag = workflow_dir.join("multi-tag-release.yml");
@@ -1848,11 +1850,9 @@ mod tests {
         commit_all(&work, "seed multi-tag workflow");
         run_git(&work, &["push", "--quiet", "origin", "main"]);
 
-        let release_config = github_actions_config();
         let install = github_actions_install_request(&profile_id, "binding-stable", "v");
-        let preview =
-            preview_change_with_tauri_config(&work, &config, &install, NOW, Some(&release_config))
-                .expect("second tag namespace still conflicts");
+        let preview = preview_change(&work, &config, &install, NOW)
+            .expect("second tag namespace still conflicts");
         assert_eq!(
             preview
                 .conflicts
@@ -1870,9 +1870,8 @@ mod tests {
         commit_all(&work, "replace with ambiguous release writer");
         run_git(&work, &["push", "--quiet", "origin", "main"]);
 
-        let error =
-            preview_change_with_tauri_config(&work, &config, &install, NOW, Some(&release_config))
-                .expect_err("unknown release writer must not be silently skipped");
+        let error = preview_change(&work, &config, &install, NOW)
+            .expect_err("unknown release writer must not be silently skipped");
         assert_eq!(
             error.code.as_deref(),
             Some("automation_workflow_namespace_ambiguous")
@@ -1919,7 +1918,7 @@ mod tests {
     #[test]
     fn github_actions_takeover_deletes_only_the_exact_conflicts_confirmed_in_preview() {
         let (_temp, work) = fixture_repository();
-        let (mut config, profile_id) = fixture_config_for_provider("Stable", "tauri");
+        let (mut config, profile_id) = fixture_tauri_config("Stable");
         let workflow_dir = work.join(".github/workflows");
         std::fs::create_dir_all(&workflow_dir).expect("create workflow directory");
         let first = workflow_dir.join("legacy-first.yml");
@@ -1931,11 +1930,9 @@ mod tests {
         commit_all(&work, "seed first conflict");
         run_git(&work, &["push", "--quiet", "origin", "main"]);
 
-        let release_config = github_actions_config();
         let install = github_actions_install_request(&profile_id, "binding-stable", "v");
-        let preview =
-            preview_change_with_tauri_config(&work, &config, &install, NOW, Some(&release_config))
-                .expect("preview exact takeover conflicts");
+        let preview = preview_change(&work, &config, &install, NOW)
+            .expect("preview exact takeover conflicts");
 
         let second = workflow_dir.join("legacy-second.yml");
         std::fs::write(
@@ -1943,13 +1940,12 @@ mod tests {
             "on:\n  push:\n    tags: ['v1*']\nsteps:\n  - run: gh release create\n",
         )
         .expect("add a new overlapping conflict after preview");
-        let error = apply_change_with_tauri_config(
+        let error = apply_change(
             &work,
             &mut config,
             &preview.normalized_change,
             &preview.confirmation_digest,
             NOW,
-            Some(&release_config),
         )
         .expect_err("a changed conflict set requires a new explicit confirmation");
 
@@ -1969,7 +1965,7 @@ mod tests {
         use std::os::unix::fs::PermissionsExt;
 
         let (temp, work) = fixture_repository();
-        let (mut config, profile_id) = fixture_config_for_provider("Stable", "tauri");
+        let (mut config, profile_id) = fixture_tauri_config("Stable");
         let hook = temp.path().join("origin.git/hooks/pre-receive");
         std::fs::write(&hook, "#!/bin/sh\nexit 1\n").expect("write rejecting hook");
         let mut permissions = std::fs::metadata(&hook)
@@ -1979,17 +1975,13 @@ mod tests {
         std::fs::set_permissions(&hook, permissions).expect("make hook executable");
 
         let change = github_actions_install_request(&profile_id, "binding-stable", "v");
-        let release_config = github_actions_config();
-        let preview =
-            preview_change_with_tauri_config(&work, &config, &change, NOW, Some(&release_config))
-                .expect("preview install");
-        let error = apply_change_with_tauri_config(
+        let preview = preview_change(&work, &config, &change, NOW).expect("preview install");
+        let error = apply_change(
             &work,
             &mut config,
             &preview.normalized_change,
             &preview.confirmation_digest,
             NOW,
-            Some(&release_config),
         )
         .expect_err("fake GitHub rejects the onboarding push");
         assert_eq!(error.code.as_deref(), Some("automation_git_failed"));
@@ -1998,22 +1990,15 @@ mod tests {
         let pending_commit = run_git(&work, &["rev-parse", "HEAD"]);
         std::fs::remove_file(&hook).expect("repair fake GitHub push boundary");
 
-        let retry = preview_change_with_tauri_config(
-            &work,
-            &config,
-            &preview.normalized_change,
-            NOW,
-            Some(&release_config),
-        )
-        .expect("retry preview sees the local onboarding commit");
+        let retry = preview_change(&work, &config, &preview.normalized_change, NOW)
+            .expect("retry preview sees the local onboarding commit");
         assert!(retry.changes.is_empty());
-        let retried = apply_change_with_tauri_config(
+        let retried = apply_change(
             &work,
             &mut config,
             &retry.normalized_change,
             &retry.confirmation_digest,
             NOW,
-            Some(&release_config),
         )
         .expect("repaired boundary pushes the original onboarding commit");
         assert_eq!(retried.commit_sha.as_deref(), Some(pending_commit.as_str()));
@@ -2040,7 +2025,7 @@ mod tests {
         commit_all(&work, "seed unowned quality workflow");
         run_git(&work, &["push", "--quiet", "origin", "main"]);
 
-        let (mut config, profile_id) = fixture_config_for_provider("Stable", "tauri");
+        let (mut config, profile_id) = fixture_tauri_config("Stable");
         let hook = temp.path().join("origin.git/hooks/pre-receive");
         std::fs::write(&hook, "#!/bin/sh\nexit 1\n").expect("write rejecting hook");
         let mut permissions = std::fs::metadata(&hook)
@@ -2049,18 +2034,14 @@ mod tests {
         permissions.set_mode(0o755);
         std::fs::set_permissions(&hook, permissions).expect("make hook executable");
 
-        let release_config = github_actions_config();
         let install = github_actions_install_request(&profile_id, "binding-stable", "v");
-        let preview =
-            preview_change_with_tauri_config(&work, &config, &install, NOW, Some(&release_config))
-                .expect("preview install");
-        apply_change_with_tauri_config(
+        let preview = preview_change(&work, &config, &install, NOW).expect("preview install");
+        apply_change(
             &work,
             &mut config,
             &preview.normalized_change,
             &preview.confirmation_digest,
             NOW,
-            Some(&release_config),
         )
         .expect_err("fake GitHub rejects the push");
 
@@ -2077,21 +2058,14 @@ mod tests {
             panic!("expected install request");
         };
         confirmed_conflict_paths.push(".github/workflows/quality.yml".to_string());
-        let retry = preview_change_with_tauri_config(
-            &work,
-            &config,
-            &malicious_change,
-            NOW,
-            Some(&release_config),
-        )
-        .expect("retry preview cannot trust missing client-supplied paths");
-        let error = apply_change_with_tauri_config(
+        let retry = preview_change(&work, &config, &malicious_change, NOW)
+            .expect("retry preview cannot trust missing client-supplied paths");
+        let error = apply_change(
             &work,
             &mut config,
             &retry.normalized_change,
             &retry.confirmation_digest,
             NOW,
-            Some(&release_config),
         )
         .expect_err("unowned deletion must not be pushed");
         assert_eq!(
@@ -2108,19 +2082,15 @@ mod tests {
     #[test]
     fn github_actions_drift_update_and_detach_preserve_unowned_history() {
         let (_temp, work) = fixture_repository();
-        let (mut config, profile_id) = fixture_config_for_provider("Stable", "tauri");
-        let release_config = github_actions_config();
+        let (mut config, profile_id) = fixture_tauri_config("Stable");
         let install = github_actions_install_request(&profile_id, "binding-stable", "v");
-        let preview =
-            preview_change_with_tauri_config(&work, &config, &install, NOW, Some(&release_config))
-                .expect("preview install");
-        let installed = apply_change_with_tauri_config(
+        let preview = preview_change(&work, &config, &install, NOW).expect("preview install");
+        let installed = apply_change(
             &work,
             &mut config,
             &preview.normalized_change,
             &preview.confirmation_digest,
             NOW,
-            Some(&release_config),
         )
         .expect("apply install");
         let onboarding_commit = installed.commit_sha.expect("onboarding commit");
@@ -2141,45 +2111,34 @@ mod tests {
         run_git(&work, &["tag", "v0.1.0"]);
         run_git(&work, &["push", "--quiet", "origin", "main", "v0.1.0"]);
 
-        let view = bindings_view_with_tauri_config(&work, &config, NOW, Some(&release_config))
-            .expect("view drift");
+        let view = bindings_view(&work, &config, NOW).expect("view drift");
         assert_eq!(view.drift.len(), 1);
         assert_eq!(
             view.bindings[0].blocked_reason.as_deref(),
             Some(AUTOMATION_DRIFT_BLOCKED_REASON)
         );
 
-        let reconcile = preview_change_with_tauri_config(
-            &work,
-            &config,
-            &AutomationChangeRequest::Reconcile,
-            NOW,
-            Some(&release_config),
-        )
-        .expect("preview drift update");
-        apply_change_with_tauri_config(
+        let reconcile = preview_change(&work, &config, &AutomationChangeRequest::Reconcile, NOW)
+            .expect("preview drift update");
+        apply_change(
             &work,
             &mut config,
             &reconcile.normalized_change,
             &reconcile.confirmation_digest,
             NOW,
-            Some(&release_config),
         )
         .expect("apply drift update");
 
         let detach = AutomationChangeRequest::Detach {
             binding_id: binding.id,
         };
-        let detach_preview =
-            preview_change_with_tauri_config(&work, &config, &detach, NOW, Some(&release_config))
-                .expect("preview detach");
-        apply_change_with_tauri_config(
+        let detach_preview = preview_change(&work, &config, &detach, NOW).expect("preview detach");
+        apply_change(
             &work,
             &mut config,
             &detach_preview.normalized_change,
             &detach_preview.confirmation_digest,
             NOW,
-            Some(&release_config),
         )
         .expect("apply detach");
 
@@ -2206,29 +2165,32 @@ mod tests {
     #[test]
     fn github_actions_upgrade_changes_only_the_pinned_bundle_projection() {
         let (_temp, work) = fixture_repository();
-        let (mut config, profile_id) = fixture_config_for_provider("Stable", "tauri");
-        let release_config = github_actions_config();
+        let (mut config, profile_id) = fixture_tauri_config("Stable");
         let install = github_actions_install_request(&profile_id, "binding-stable", "v");
         let install_preview =
-            preview_change_with_tauri_config(&work, &config, &install, NOW, Some(&release_config))
-                .expect("preview install");
-        apply_change_with_tauri_config(
+            preview_change(&work, &config, &install, NOW).expect("preview install");
+        apply_change(
             &work,
             &mut config,
             &install_preview.normalized_change,
             &install_preview.confirmation_digest,
             NOW,
-            Some(&release_config),
         )
         .expect("apply install");
         let pinned_revision = config.bindings[0].configuration_revision_id.clone();
 
+        let mut changed_release_config = github_actions_config();
+        changed_release_config.app_config_path = "desktop/src-tauri/tauri.conf.json".to_string();
         config
             .update_profile(
                 &profile_id,
                 "Stable".to_string(),
                 "tauri".to_string(),
-                serde_json::json!({ "configuration": "Debug" }),
+                serde_json::json!({
+                    crate::tauri_release::RELEASE_SETTINGS_PARAMETER:
+                        serde_json::to_value(&changed_release_config)
+                            .expect("serialize changed release settings")
+                }),
                 None,
                 "2026-07-22T11:00:00Z".to_string(),
             )
@@ -2244,24 +2206,15 @@ mod tests {
             pinned_revision
         );
 
-        let mut changed_release_config = release_config.clone();
-        changed_release_config.app_config_path = "desktop/src-tauri/tauri.conf.json".to_string();
-        let unchanged =
-            bindings_view_with_tauri_config(&work, &config, NOW, Some(&changed_release_config))
-                .expect("mutable local release config cannot change the fixed projection");
+        let unchanged = bindings_view(&work, &config, NOW)
+            .expect("a newer local revision cannot change the fixed projection");
         assert!(unchanged.drift.is_empty());
 
         let upgrade = AutomationChangeRequest::UpgradeRevision {
             binding_id: config.bindings[0].id.clone(),
         };
-        let preview = preview_change_with_tauri_config(
-            &work,
-            &config,
-            &upgrade,
-            NOW,
-            Some(&changed_release_config),
-        )
-        .expect("preview explicit revision and backend snapshot upgrade");
+        let preview = preview_change(&work, &config, &upgrade, NOW)
+            .expect("preview explicit revision and backend snapshot upgrade");
         assert!(preview.changes.iter().any(|change| {
             change.path == ".one-publish/automation/github-actions.json"
                 && change.kind == AutomationFileChangeKind::Updated
@@ -2270,13 +2223,12 @@ mod tests {
             change.path == MANAGED_WORKFLOW_PATH && change.kind == AutomationFileChangeKind::Updated
         }));
 
-        apply_change_with_tauri_config(
+        apply_change(
             &work,
             &mut config,
             &preview.normalized_change,
             &preview.confirmation_digest,
             NOW,
-            Some(&changed_release_config),
         )
         .expect("apply explicit revision upgrade");
         assert_eq!(

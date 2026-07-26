@@ -1089,3 +1089,353 @@ fn apply_selected_repo_id_update_supports_clearing_selection() {
     apply_selected_repo_id_update(&mut state, Some("repo-2".to_string()), false);
     assert_eq!(state.selected_repo_id, Some("repo-2".to_string()));
 }
+
+fn stored_state_with_repositories(repositories: serde_json::Value) -> serde_json::Value {
+    serde_json::json!({
+        "schemaVersion": 3,
+        "repositories": repositories,
+        "leftPanelWidth": 220,
+        "middlePanelWidth": 280,
+        "panelWidthsCustomized": false,
+        "minimizeToTrayOnClose": true,
+        "language": "zh",
+        "defaultOutputDir": "",
+        "theme": "auto",
+        "executionHistoryLimit": 20,
+        "environmentProviderIds": ["dotnet"],
+        "recentRepoIds": [],
+        "recentConfigKeysByRepo": {},
+        "executionHistory": []
+    })
+}
+
+fn stored_repo(id: &str, profiles: serde_json::Value) -> serde_json::Value {
+    serde_json::json!({
+        "id": id,
+        "name": id,
+        "path": format!("/{id}"),
+        "currentBranch": "main",
+        "branches": [],
+        "isMain": true,
+        "providerId": "tauri",
+        "publishConfig": {
+            "selectedPreset": "release-fd",
+            "isCustomMode": false,
+            "customConfig": PublishConfigStore::default(),
+            "profiles": profiles
+        }
+    })
+}
+
+fn legacy_tauri_release_config(tag_prefix: &str) -> serde_json::Value {
+    serde_json::json!({
+        "appConfigPath": "src-tauri/tauri.conf.json",
+        "appName": "Demo App",
+        "buildDriver": "pnpm",
+        "enabledTargets": ["linux_x64"],
+        "releaseAssetPatterns": ["*.AppImage"],
+        "updater": {
+            "enabled": false,
+            "endpoint": null,
+            "publicKey": null,
+            "privateKeySecretName": null
+        },
+        "allowUnsignedRelease": true,
+        "requiredActionsSecretNames": [],
+        "actionsSecretEnvironment": {},
+        "tagPrefix": tag_prefix,
+        "releaseGates": [{ "program": "git", "args": ["status"] }],
+        "localDeliveryDir": "dist/one-publish",
+        "versionMirrors": [],
+        "managedWorkflowVersion": 1
+    })
+}
+
+#[test]
+fn load_from_path_migrates_tauri_release_settings_into_the_catalog_once() {
+    let temp_dir = TempDir::new().expect("temp dir");
+    let config_path = temp_dir.path().join("config.json");
+    let legacy_release_path = temp_dir.path().join("tauri-release.json");
+
+    let existing_profile = serde_json::json!({
+        "id": "configuration-existing",
+        "name": "Desktop Build",
+        "createdAt": "2026-05-01T10:00:00Z",
+        "isSystemDefault": false,
+        "currentRevisionId": "revision-existing",
+        "revisions": [
+            {
+                "id": "revision-existing",
+                "sequence": 1,
+                "createdAt": "2026-05-01T10:00:00Z",
+                "contractVersion": 1,
+                "providerId": "tauri",
+                "providerVersion": "1",
+                "settingsVersion": 1,
+                "parameters": { "target": "x86_64-unknown-linux-gnu" }
+            }
+        ]
+    });
+    fs::write(
+        &config_path,
+        serde_json::to_vec_pretty(&stored_state_with_repositories(serde_json::json!([
+            stored_repo("repo-1", serde_json::json!([existing_profile])),
+            stored_repo("repo-2", serde_json::json!([])),
+        ])))
+        .expect("serialize stored state"),
+    )
+    .expect("write stored config");
+    fs::write(
+        &legacy_release_path,
+        serde_json::to_vec_pretty(&serde_json::json!({
+            "version": 1,
+            "configs": {
+                "repo-1": legacy_tauri_release_config("app-v"),
+                "repo-2": legacy_tauri_release_config("v"),
+                "repo-gone": legacy_tauri_release_config("orphan-v")
+            },
+            "attempts": [
+                {
+                    "id": "attempt-1",
+                    "repositoryId": "repo-1",
+                    "version": "1.2.3",
+                    "tag": "app-v1.2.3",
+                    "stage": "failed",
+                    "createdAt": "2026-06-01T10:00:00Z",
+                    "updatedAt": "2026-06-01T10:05:00Z"
+                }
+            ]
+        }))
+        .expect("serialize legacy tauri release state"),
+    )
+    .expect("write legacy tauri release state");
+
+    let state = load_from_path(&config_path);
+
+    // repo-1：已有 Tauri 配置获得携带 releaseSettings 的新修订，旧修订保持不可变。
+    let migrated = state.repositories[0]
+        .publish_config
+        .profile("configuration-existing")
+        .expect("existing profile survives migration");
+    assert_eq!(migrated.revisions.len(), 2);
+    let original = &migrated.revisions[0];
+    assert_eq!(original.parameters["target"], "x86_64-unknown-linux-gnu");
+    assert!(original.parameters.get("releaseSettings").is_none());
+    let current = migrated.current_revision().expect("current revision");
+    assert_eq!(current.sequence, 2);
+    assert_eq!(current.parameters["target"], "x86_64-unknown-linux-gnu");
+    assert_eq!(current.parameters["releaseSettings"]["tagPrefix"], "app-v");
+    assert_eq!(
+        current.parameters["releaseSettings"]["releaseGates"][0]["program"],
+        "git"
+    );
+
+    // repo-2：没有 Tauri 配置时迁移创建一份新配置。
+    let created = state.repositories[1]
+        .publish_config
+        .active_profiles()
+        .into_iter()
+        .find(|profile| {
+            profile
+                .current_revision()
+                .is_some_and(|revision| revision.provider_id == "tauri")
+        })
+        .expect("migration creates a tauri profile")
+        .clone();
+    assert_eq!(created.name, "Demo App");
+    let created_revision = created.current_revision().expect("created revision");
+    assert_eq!(
+        created_revision.parameters["releaseSettings"]["tagPrefix"],
+        "v"
+    );
+
+    // 迁移是一次性的：旧存储文件被移除，重新加载不再追加修订。
+    assert!(!legacy_release_path.exists());
+    let second = load_from_path(&config_path);
+    let reloaded = second.repositories[0]
+        .publish_config
+        .profile("configuration-existing")
+        .expect("profile persists");
+    assert_eq!(reloaded.revisions.len(), 2);
+}
+
+#[test]
+fn load_from_path_removes_an_unreadable_legacy_tauri_release_file_after_backup() {
+    let temp_dir = TempDir::new().expect("temp dir");
+    let config_path = temp_dir.path().join("config.json");
+    let legacy_release_path = temp_dir.path().join("tauri-release.json");
+    fs::write(
+        &config_path,
+        serde_json::to_vec_pretty(&stored_state_with_repositories(serde_json::json!([])))
+            .expect("serialize stored state"),
+    )
+    .expect("write stored config");
+    fs::write(&legacy_release_path, "not-json").expect("write invalid legacy state");
+
+    let state = load_from_path(&config_path);
+
+    assert!(state.repositories.is_empty());
+    assert!(!legacy_release_path.exists());
+    let preserved = fs::read_dir(temp_dir.path())
+        .expect("read temp dir")
+        .flatten()
+        .filter(|entry| {
+            entry
+                .file_name()
+                .to_string_lossy()
+                .starts_with("tauri-release.invalid.")
+        })
+        .count();
+    assert_eq!(preserved, 1);
+}
+
+#[test]
+fn update_profile_inherits_release_settings_when_the_editor_omits_them() {
+    let mut config = RepoPublishConfig::default();
+    let release_settings = serde_json::json!({ "tagPrefix": "v", "appName": "Demo" });
+    let profile = config
+        .create_profile(
+            "Desktop".to_string(),
+            "tauri".to_string(),
+            serde_json::json!({
+                "target": "x86_64-unknown-linux-gnu",
+                "releaseSettings": release_settings.clone()
+            }),
+            None,
+            "2026-07-21T10:00:00Z".to_string(),
+        )
+        .expect("create profile")
+        .clone();
+
+    // 参数面板只管理 schema 声明的命令参数；保存不得清除发布设置。
+    config
+        .update_profile(
+            &profile.id,
+            "Desktop".to_string(),
+            "tauri".to_string(),
+            serde_json::json!({ "target": "aarch64-apple-darwin" }),
+            None,
+            "2026-07-22T10:00:00Z".to_string(),
+        )
+        .expect("update profile");
+
+    let updated = config.profile(&profile.id).expect("profile");
+    assert_eq!(updated.revisions.len(), 2);
+    let current = updated.current_revision().expect("current revision");
+    assert_eq!(current.parameters["target"], "aarch64-apple-darwin");
+    assert_eq!(current.parameters["releaseSettings"], release_settings);
+
+    // 显式携带发布设置的更新（例如迁移或未来的设置编辑器）按传入值生效。
+    let changed_settings = serde_json::json!({ "tagPrefix": "app-v" });
+    config
+        .update_profile(
+            &profile.id,
+            "Desktop".to_string(),
+            "tauri".to_string(),
+            serde_json::json!({ "releaseSettings": changed_settings.clone() }),
+            None,
+            "2026-07-23T10:00:00Z".to_string(),
+        )
+        .expect("update profile with explicit settings");
+    let explicit = config
+        .profile(&profile.id)
+        .expect("profile")
+        .current_revision()
+        .expect("current revision")
+        .clone();
+    assert_eq!(explicit.parameters["releaseSettings"], changed_settings);
+    assert!(explicit.parameters.get("target").is_none());
+}
+
+#[test]
+fn update_profile_does_not_carry_release_settings_across_providers() {
+    let mut config = RepoPublishConfig::default();
+    let profile = config
+        .create_profile(
+            "Desktop".to_string(),
+            "tauri".to_string(),
+            serde_json::json!({ "releaseSettings": { "tagPrefix": "v" } }),
+            None,
+            "2026-07-21T10:00:00Z".to_string(),
+        )
+        .expect("create profile")
+        .clone();
+
+    // 发布设置属于原 Provider；切换 Provider 的修订不得携带它们。
+    config
+        .update_profile(
+            &profile.id,
+            "Desktop".to_string(),
+            "cargo".to_string(),
+            serde_json::json!({ "release": true }),
+            None,
+            "2026-07-22T10:00:00Z".to_string(),
+        )
+        .expect("switch provider");
+
+    let current = config
+        .profile(&profile.id)
+        .expect("profile")
+        .current_revision()
+        .expect("current revision")
+        .clone();
+    assert_eq!(current.provider_id, "cargo");
+    assert!(current.parameters.get("releaseSettings").is_none());
+}
+
+#[test]
+fn a_failed_release_settings_merge_keeps_the_legacy_file_for_retry() {
+    let temp_dir = TempDir::new().expect("temp dir");
+    let config_path = temp_dir.path().join("config.json");
+    let legacy_release_path = temp_dir.path().join("tauri-release.json");
+
+    // 系统默认配置不可更新，迁移并入必然失败。
+    let immutable_profile = serde_json::json!({
+        "id": "configuration-immutable",
+        "name": "Desktop Build",
+        "createdAt": "2026-05-01T10:00:00Z",
+        "isSystemDefault": true,
+        "currentRevisionId": "revision-immutable",
+        "revisions": [
+            {
+                "id": "revision-immutable",
+                "sequence": 1,
+                "createdAt": "2026-05-01T10:00:00Z",
+                "contractVersion": 1,
+                "providerId": "tauri",
+                "providerVersion": "1",
+                "settingsVersion": 1,
+                "parameters": {}
+            }
+        ]
+    });
+    fs::write(
+        &config_path,
+        serde_json::to_vec_pretty(&stored_state_with_repositories(serde_json::json!([
+            stored_repo("repo-1", serde_json::json!([immutable_profile])),
+        ])))
+        .expect("serialize stored state"),
+    )
+    .expect("write stored config");
+    fs::write(
+        &legacy_release_path,
+        serde_json::to_vec_pretty(&serde_json::json!({
+            "version": 1,
+            "configs": { "repo-1": legacy_tauri_release_config("v") }
+        }))
+        .expect("serialize legacy tauri release state"),
+    )
+    .expect("write legacy tauri release state");
+
+    let state = load_from_path(&config_path);
+
+    let profile = state.repositories[0]
+        .publish_config
+        .profile("configuration-immutable")
+        .expect("profile survives");
+    assert_eq!(profile.revisions.len(), 1);
+    assert!(
+        legacy_release_path.exists(),
+        "an unmerged legacy config must stay on disk for the next startup"
+    );
+}

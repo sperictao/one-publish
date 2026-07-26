@@ -11,7 +11,6 @@ import {
   Clock3,
   FolderOpen,
   Loader2,
-  PackageOpen,
   Play,
   Square,
   Terminal,
@@ -43,8 +42,6 @@ export interface PublishRunCardActions {
   startDisabled: boolean;
   onStartPublish: () => void;
   onCancelPublish: () => void;
-  managementLabel?: string;
-  onOpenManagement?: () => void;
 }
 
 export interface PublishRunCardProps {
@@ -503,18 +500,6 @@ export const PublishRunCard = memo(function PublishRunCard({
             )}
           </div>
         )}
-
-        {publishActions?.onOpenManagement && !publishActions.isPublishing ? (
-          <Button
-            type="button"
-            variant="outline"
-            className="w-full"
-            onClick={publishActions.onOpenManagement}
-          >
-            <PackageOpen className="mr-2 size-4" />
-            {publishActions.managementLabel || "Tauri 发布中心"}
-          </Button>
-        ) : null}
 
         {/* ③ 发布结果摘要：状态 + 文件数 + 输出目录三合一 */}
         <div className="min-w-0 space-y-2">

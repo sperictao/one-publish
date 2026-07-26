@@ -2,7 +2,6 @@ use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use ts_rs::TS;
 
-pub const RELEASE_STATE_VERSION: u32 = 1;
 pub const MANAGED_WORKFLOW_VERSION: u32 = 1;
 pub const MANAGED_WORKFLOW_PATH: &str = ".github/workflows/one-publish-tauri-release.yml";
 
@@ -15,30 +14,6 @@ pub enum TauriBuildDriver {
     Yarn,
     Bun,
     Cargo,
-}
-
-impl TauriBuildDriver {
-    pub(crate) fn name(self) -> &'static str {
-        match self {
-            Self::Pnpm => "pnpm",
-            Self::Npm => "npm",
-            Self::Yarn => "yarn",
-            Self::Bun => "bun",
-            Self::Cargo => "cargo",
-        }
-    }
-}
-
-impl From<publish_adapters::TauriBuildDriver> for TauriBuildDriver {
-    fn from(driver: publish_adapters::TauriBuildDriver) -> Self {
-        match driver {
-            publish_adapters::TauriBuildDriver::Pnpm => Self::Pnpm,
-            publish_adapters::TauriBuildDriver::Npm => Self::Npm,
-            publish_adapters::TauriBuildDriver::Yarn => Self::Yarn,
-            publish_adapters::TauriBuildDriver::Bun => Self::Bun,
-            publish_adapters::TauriBuildDriver::Cargo => Self::Cargo,
-        }
-    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, TS)]
@@ -68,46 +43,6 @@ pub enum VersionMirrorKind {
     JsonPointer,
     TomlKey,
     CargoLockPackage,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
-#[serde(rename_all = "snake_case")]
-#[ts(rename_all = "snake_case")]
-pub enum TauriVersionSourceKind {
-    TauriConfig,
-    ReferencedPackageJson,
-    CargoToml,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
-#[serde(rename_all = "camelCase")]
-#[ts(rename_all = "camelCase")]
-pub struct TauriVersionSource {
-    pub kind: TauriVersionSourceKind,
-    pub path: String,
-    pub selector: String,
-    pub version: String,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
-#[serde(rename_all = "camelCase")]
-#[ts(rename_all = "camelCase")]
-pub struct TauriAppInspection {
-    pub config_path: String,
-    pub app_root: String,
-    pub app_name: String,
-    pub build_driver: TauriBuildDriver,
-    pub version_source: TauriVersionSource,
-    pub updater_enabled: bool,
-    pub suggested_version_mirrors: Vec<VersionMirror>,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
-#[serde(rename_all = "camelCase")]
-#[ts(rename_all = "camelCase")]
-pub struct TauriRepositoryInspection {
-    pub repository_path: String,
-    pub apps: Vec<TauriAppInspection>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
@@ -181,170 +116,4 @@ impl Default for TauriReleaseConfig {
             managed_workflow_version: MANAGED_WORKFLOW_VERSION,
         }
     }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
-#[serde(rename_all = "snake_case")]
-#[ts(rename_all = "snake_case")]
-pub enum ManagedWorkflowStatus {
-    Missing,
-    Current,
-    Drifted,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
-#[serde(rename_all = "camelCase")]
-#[ts(rename_all = "camelCase")]
-pub struct WorkflowConflict {
-    pub path: String,
-    pub reason: String,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
-#[serde(rename_all = "camelCase")]
-#[ts(rename_all = "camelCase")]
-pub struct ManagedWorkflowPreview {
-    pub preview_id: String,
-    pub path: String,
-    pub status: ManagedWorkflowStatus,
-    pub expected_content: String,
-    pub current_content: Option<String>,
-    pub diff: String,
-    pub conflicts: Vec<WorkflowConflict>,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
-#[serde(rename_all = "camelCase")]
-#[ts(rename_all = "camelCase")]
-pub struct WorkflowTakeoverResult {
-    pub workflow_path: String,
-    pub removed_conflicts: Vec<String>,
-    pub commit_sha: String,
-    pub pushed_branch: String,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
-#[serde(rename_all = "snake_case")]
-#[ts(rename_all = "snake_case")]
-pub enum PlatformSigningStatus {
-    NotRequired,
-    Unverified,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, TS)]
-#[serde(rename_all = "camelCase")]
-#[ts(rename_all = "camelCase")]
-pub struct TauriLocalBuildResult {
-    pub publish: crate::commands::PublishResult,
-    pub delivery_dir: String,
-    pub assets: Vec<String>,
-    pub git_head: String,
-    pub worktree_dirty: bool,
-    pub reproducible: bool,
-    pub platform: String,
-    pub architecture: String,
-    pub platform_signing: PlatformSigningStatus,
-    pub distribution_ready: bool,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
-#[serde(rename_all = "snake_case")]
-#[ts(rename_all = "snake_case")]
-pub enum GitHubRepositoryVisibility {
-    Public,
-    Private,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
-#[serde(rename_all = "camelCase")]
-#[ts(rename_all = "camelCase")]
-pub struct GitHubRepositoryIdentity {
-    pub owner: String,
-    pub name: String,
-    pub name_with_owner: String,
-    pub origin_url: String,
-    pub default_branch: String,
-    pub visibility: GitHubRepositoryVisibility,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
-#[serde(rename_all = "camelCase")]
-#[ts(rename_all = "camelCase")]
-pub struct TauriReleasePreflight {
-    pub preflight_id: String,
-    pub repository_id: String,
-    pub repository_identity: GitHubRepositoryIdentity,
-    pub head_sha: String,
-    pub current_branch: String,
-    pub current_version: String,
-    pub version: String,
-    pub tag: String,
-    pub previous_tag: Option<String>,
-    pub release_notes: String,
-    pub workflow_status: ManagedWorkflowStatus,
-    pub missing_secret_names: Vec<String>,
-    pub warnings: Vec<String>,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
-#[serde(rename_all = "camelCase")]
-#[ts(rename_all = "camelCase")]
-pub struct StartTauriGithubReleaseRequest {
-    pub repository_id: String,
-    pub preflight_id: String,
-    pub version: String,
-    pub release_notes: String,
-    pub confirm_unsigned_release: bool,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
-#[serde(rename_all = "snake_case")]
-#[ts(rename_all = "snake_case")]
-pub enum ReleaseAttemptStage {
-    Preparing,
-    RunningGates,
-    ReadyToPush,
-    MonitoringWorkflow,
-    Published,
-    Failed,
-    Cancelled,
-}
-
-impl ReleaseAttemptStage {
-    pub fn is_terminal(self) -> bool {
-        matches!(self, Self::Published | Self::Failed | Self::Cancelled)
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
-#[serde(rename_all = "camelCase")]
-#[ts(rename_all = "camelCase")]
-pub struct ReleaseAttempt {
-    pub id: String,
-    pub repository_id: String,
-    pub repository_identity: String,
-    pub app_config_path: String,
-    pub version: String,
-    pub tag: String,
-    pub release_commit_sha: Option<String>,
-    pub stage: ReleaseAttemptStage,
-    pub workflow_run_id: Option<String>,
-    pub actions_url: Option<String>,
-    pub release_url: Option<String>,
-    #[serde(default)]
-    pub release_asset_names: Vec<String>,
-    pub signing_summary: String,
-    pub updater_summary: String,
-    pub retry_reason: Option<String>,
-    pub created_at: String,
-    pub updated_at: String,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
-#[serde(rename_all = "camelCase")]
-#[ts(rename_all = "camelCase")]
-pub struct TauriReleaseBackup {
-    pub version: u32,
-    pub exported_at: String,
-    pub config: TauriReleaseConfig,
 }

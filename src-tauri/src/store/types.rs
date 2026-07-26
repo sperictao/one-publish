@@ -682,10 +682,31 @@ impl RepoPublishConfig {
         profile_id: &str,
         name: String,
         provider_id: String,
-        parameters: serde_json::Value,
+        mut parameters: serde_json::Value,
         profile_group: Option<String>,
         updated_at: String,
     ) -> Result<(), crate::errors::AppError> {
+        // 参数编辑器只管理 schema 声明的命令参数；未显式携带 `releaseSettings`
+        // 的更新从当前修订继承发布设置，保存不得静默清除它们。发布设置属于
+        // 原 Provider，切换 Provider 的修订不再携带；显式传 null 表示清除。
+        if let Some(settings) = self.profile(profile_id).and_then(|profile| {
+            profile
+                .current_revision()
+                .filter(|revision| revision.provider_id == provider_id)
+                .and_then(|revision| {
+                    revision
+                        .parameters
+                        .get(crate::tauri_release::RELEASE_SETTINGS_PARAMETER)
+                })
+                .cloned()
+        }) {
+            if let Some(object) = parameters.as_object_mut() {
+                object
+                    .entry(crate::tauri_release::RELEASE_SETTINGS_PARAMETER)
+                    .or_insert(settings);
+            }
+        }
+
         if self.profiles.iter().any(|profile| {
             profile.deleted_at.is_none() && profile.id != profile_id && profile.name == name
         }) {

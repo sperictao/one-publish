@@ -1,13 +1,10 @@
-mod github;
-mod local_build;
-mod monitor;
-mod preflight;
-mod project;
-mod storage;
-mod takeover;
-mod transaction;
+//! Tauri 发布设置与托管 workflow 渲染。
+//!
+//! 发布设置的唯一权威是通用 Configuration Catalog 中所选修订的
+//! `releaseSettings` 保留参数键（ADR-0058）；本模块只保留其类型、
+//! 校验与 GitHub Actions 执行后端复用的 workflow 渲染。
+
 mod types;
-mod versioning;
 pub(crate) mod workflow;
 
 pub use types::*;
@@ -16,173 +13,29 @@ use crate::errors::AppError;
 use std::collections::BTreeSet;
 use std::path::{Component, Path};
 
-/// 供通用 PublishRuntime 读取仓库的 Tauri 发布配置（例如 Release Gate）；
-/// 配置缺失不是错误，由调用方决定语义。
-pub(crate) fn stored_release_config(
-    repository_id: &str,
+/// 通用配置修订中承载 Provider 发布设置的保留参数键；它不属于命令参数，
+/// 不参与命令渲染或参数匹配。当前唯一内容形状是 Tauri 的 `TauriReleaseConfig`。
+pub const RELEASE_SETTINGS_PARAMETER: &str = "releaseSettings";
+
+/// 从通用配置修订参数中提取 Tauri 发布设置；键缺失或显式 null（已清除）
+/// 不是错误，形状损坏（无法反序列化）必须显式失败而不是静默忽略。
+pub(crate) fn release_settings_from_parameters(
+    parameters: &serde_json::Value,
 ) -> Result<Option<TauriReleaseConfig>, AppError> {
-    storage::get_config(repository_id)
-}
-
-#[tauri::command]
-pub fn inspect_tauri_repository(
-    repository_path: String,
-) -> Result<TauriRepositoryInspection, AppError> {
-    project::inspect_repository(Path::new(&repository_path))
-}
-
-#[tauri::command]
-pub fn prepare_tauri_github_release(
-    repository_id: String,
-    version: String,
-) -> Result<TauriReleasePreflight, AppError> {
-    let state = crate::store::get_state();
-    let repository = state
-        .repositories
-        .iter()
-        .find(|repository| repository.id == repository_id)
-        .ok_or_else(|| {
-            AppError::validation_with_code(
-                format!("repository not found: {repository_id}"),
-                "repository_not_found",
+    let Some(settings) = parameters
+        .get(RELEASE_SETTINGS_PARAMETER)
+        .filter(|settings| !settings.is_null())
+    else {
+        return Ok(None);
+    };
+    serde_json::from_value(settings.clone())
+        .map(Some)
+        .map_err(|error| {
+            AppError::config_with_code(
+                format!("tauri_release_settings_invalid: {error}"),
+                "tauri_release_settings_invalid",
             )
-        })?;
-    let config = storage::get_config(&repository_id)?.ok_or_else(|| {
-        AppError::config_with_code(
-            format!("Tauri release config not found: {repository_id}"),
-            "tauri_release_config_not_found",
-        )
-    })?;
-    validate_release_config(&config)?;
-    preflight::prepare(
-        &repository_id,
-        Path::new(&repository.path),
-        &config,
-        &version,
-    )
-}
-
-#[tauri::command]
-pub async fn start_tauri_github_release(
-    request: StartTauriGithubReleaseRequest,
-) -> Result<ReleaseAttempt, AppError> {
-    let repository_id = request.repository_id.clone();
-    let state = crate::store::get_state();
-    let repository = state
-        .repositories
-        .iter()
-        .find(|repository| repository.id == repository_id)
-        .ok_or_else(|| {
-            AppError::validation_with_code(
-                format!("repository not found: {repository_id}"),
-                "repository_not_found",
-            )
-        })?;
-    let config = storage::get_config(&repository_id)?.ok_or_else(|| {
-        AppError::config_with_code(
-            format!("Tauri release config not found: {repository_id}"),
-            "tauri_release_config_not_found",
-        )
-    })?;
-    validate_release_config(&config)?;
-    transaction::start(
-        &repository_id,
-        Path::new(&repository.path),
-        &config,
-        request,
-    )
-    .await
-}
-
-#[tauri::command]
-pub async fn execute_tauri_local_build(
-    app: tauri::AppHandle,
-    repository_id: String,
-) -> Result<TauriLocalBuildResult, AppError> {
-    let state = crate::store::get_state();
-    let repository = state
-        .repositories
-        .iter()
-        .find(|repository| repository.id == repository_id)
-        .ok_or_else(|| {
-            AppError::validation_with_code(
-                format!("repository not found: {repository_id}"),
-                "repository_not_found",
-            )
-        })?;
-    let config = storage::get_config(&repository_id)?.ok_or_else(|| {
-        AppError::config_with_code(
-            format!("Tauri release config not found: {repository_id}"),
-            "tauri_release_config_not_found",
-        )
-    })?;
-    validate_release_config(&config)?;
-    local_build::execute(&app, Path::new(&repository.path), &config).await
-}
-
-#[tauri::command]
-pub fn preview_tauri_managed_workflow(
-    repository_id: String,
-) -> Result<ManagedWorkflowPreview, AppError> {
-    let state = crate::store::get_state();
-    let repository = state
-        .repositories
-        .iter()
-        .find(|repository| repository.id == repository_id)
-        .ok_or_else(|| {
-            AppError::validation_with_code(
-                format!("repository not found: {repository_id}"),
-                "repository_not_found",
-            )
-        })?;
-    let config = storage::get_config(&repository_id)?.ok_or_else(|| {
-        AppError::config_with_code(
-            format!("Tauri release config not found: {repository_id}"),
-            "tauri_release_config_not_found",
-        )
-    })?;
-    validate_release_config(&config)?;
-    workflow::preview(Path::new(&repository.path), &config)
-}
-
-#[tauri::command]
-pub fn apply_tauri_workflow_takeover(
-    repository_id: String,
-    preview_id: String,
-    confirmed: bool,
-) -> Result<WorkflowTakeoverResult, AppError> {
-    if !confirmed {
-        return Err(AppError::validation_with_code(
-            "workflow takeover requires explicit confirmation",
-            "tauri_workflow_confirmation_required",
-        ));
-    }
-    let state = crate::store::get_state();
-    let repository = state
-        .repositories
-        .iter()
-        .find(|repository| repository.id == repository_id)
-        .ok_or_else(|| {
-            AppError::validation_with_code(
-                format!("repository not found: {repository_id}"),
-                "repository_not_found",
-            )
-        })?;
-    let config = storage::get_config(&repository_id)?.ok_or_else(|| {
-        AppError::config_with_code(
-            format!("Tauri release config not found: {repository_id}"),
-            "tauri_release_config_not_found",
-        )
-    })?;
-    validate_release_config(&config)?;
-    let preview = workflow::preview(Path::new(&repository.path), &config)?;
-    if preview.preview_id != preview_id {
-        return Err(AppError::validation_with_code(
-            "workflow files changed after preview; refresh the diff before takeover",
-            "tauri_workflow_preview_stale",
-        ));
-    }
-    takeover::apply(Path::new(&repository.path), &preview)
+        })
 }
 
 fn validate_relative_path(path: &str, field: &str) -> Result<(), AppError> {
@@ -368,121 +221,6 @@ pub fn validate_release_config(config: &TauriReleaseConfig) -> Result<(), AppErr
     Ok(())
 }
 
-#[tauri::command]
-pub fn get_tauri_release_config(
-    repository_id: String,
-) -> Result<Option<TauriReleaseConfig>, AppError> {
-    storage::get_config(&repository_id)
-}
-
-#[tauri::command]
-pub fn save_tauri_release_config(
-    repository_id: String,
-    config: TauriReleaseConfig,
-) -> Result<TauriReleaseConfig, AppError> {
-    validate_release_config(&config)?;
-    if !crate::store::get_state()
-        .repositories
-        .iter()
-        .any(|repository| repository.id == repository_id)
-    {
-        return Err(AppError::validation_with_code(
-            format!("repository not found: {repository_id}"),
-            "repository_not_found",
-        ));
-    }
-    storage::save_config(&repository_id, config)
-}
-
-#[tauri::command]
-pub fn list_tauri_release_attempts(
-    repository_id: Option<String>,
-) -> Result<Vec<ReleaseAttempt>, AppError> {
-    storage::list_attempts(repository_id.as_deref())
-}
-
-#[tauri::command]
-pub fn refresh_tauri_release_attempt(attempt_id: String) -> Result<ReleaseAttempt, AppError> {
-    monitor::refresh(&attempt_id)
-}
-
-#[tauri::command]
-pub fn cancel_tauri_release_attempt(attempt_id: String) -> Result<ReleaseAttempt, AppError> {
-    monitor::cancel(&attempt_id)
-}
-
-#[tauri::command]
-pub fn retry_tauri_release_attempt(attempt_id: String) -> Result<ReleaseAttempt, AppError> {
-    monitor::retry(&attempt_id)
-}
-
-#[tauri::command]
-pub fn export_tauri_release_config(
-    repository_id: String,
-    file_path: String,
-) -> Result<String, AppError> {
-    let config = storage::get_config(&repository_id)?.ok_or_else(|| {
-        AppError::config_with_code(
-            format!("Tauri release config not found: {repository_id}"),
-            "tauri_release_config_not_found",
-        )
-    })?;
-    let backup = storage::export_backup(config);
-    let json = serde_json::to_string_pretty(&backup).map_err(|error| {
-        AppError::config_with_code(
-            format!("failed to serialize Tauri release config: {error}"),
-            "tauri_release_export_serialize_failed",
-        )
-    })?;
-    crate::security::write_private_text_file(Path::new(&file_path), &json).map_err(|error| {
-        AppError::config_with_code(
-            format!("failed to export Tauri release config: {error}"),
-            "tauri_release_export_write_failed",
-        )
-    })?;
-    Ok(file_path)
-}
-
-#[tauri::command]
-pub fn import_tauri_release_config(
-    repository_id: String,
-    file_path: String,
-) -> Result<TauriReleaseConfig, AppError> {
-    if !crate::store::get_state()
-        .repositories
-        .iter()
-        .any(|repository| repository.id == repository_id)
-    {
-        return Err(AppError::validation_with_code(
-            format!("repository not found: {repository_id}"),
-            "repository_not_found",
-        ));
-    }
-    let content = std::fs::read_to_string(&file_path).map_err(|error| {
-        AppError::config_with_code(
-            format!("failed to read Tauri release config: {error}"),
-            "tauri_release_import_read_failed",
-        )
-    })?;
-    let backup: TauriReleaseBackup = serde_json::from_str(&content).map_err(|error| {
-        AppError::config_with_code(
-            format!("failed to parse Tauri release config: {error}"),
-            "tauri_release_import_parse_failed",
-        )
-    })?;
-    if backup.version > RELEASE_STATE_VERSION {
-        return Err(AppError::config_with_code(
-            format!(
-                "unsupported Tauri release config version: {}",
-                backup.version
-            ),
-            "tauri_release_import_version_unsupported",
-        ));
-    }
-    validate_release_config(&backup.config)?;
-    storage::save_config(&repository_id, backup.config)
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -558,5 +296,39 @@ mod tests {
         };
         let error = validate_release_config(&outside_mirror).expect_err("outside mirror");
         assert_eq!(error.code.as_deref(), Some("tauri_release_path_invalid"));
+    }
+
+    #[test]
+    fn an_explicit_null_reads_as_cleared_release_settings() {
+        let cleared = serde_json::json!({ RELEASE_SETTINGS_PARAMETER: serde_json::Value::Null });
+        assert!(release_settings_from_parameters(&cleared)
+            .expect("null clears the settings instead of failing")
+            .is_none());
+    }
+
+    #[test]
+    fn release_settings_extraction_distinguishes_missing_from_corrupt() {
+        let missing = serde_json::json!({ "target": "x86_64-unknown-linux-gnu" });
+        assert!(release_settings_from_parameters(&missing)
+            .expect("missing settings are not an error")
+            .is_none());
+
+        let valid = serde_json::json!({
+            RELEASE_SETTINGS_PARAMETER:
+                serde_json::to_value(TauriReleaseConfig::default()).expect("serialize settings")
+        });
+        let extracted = release_settings_from_parameters(&valid)
+            .expect("valid settings parse")
+            .expect("settings are present");
+        assert_eq!(extracted, TauriReleaseConfig::default());
+
+        let corrupt = serde_json::json!({
+            RELEASE_SETTINGS_PARAMETER: { "enabledTargets": "not-an-array" }
+        });
+        let error = release_settings_from_parameters(&corrupt).expect_err("corrupt settings fail");
+        assert_eq!(
+            error.code.as_deref(),
+            Some("tauri_release_settings_invalid")
+        );
     }
 }

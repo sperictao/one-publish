@@ -1,6 +1,6 @@
 use super::migration::{
-    migrate_legacy_state, sanitize_stored_state, LegacyStoredAppState, StoredAppState,
-    CURRENT_STORE_SCHEMA_VERSION,
+    migrate_legacy_state, migrate_legacy_tauri_release_settings, sanitize_stored_state,
+    LegacyStoredAppState, StoredAppState, CURRENT_STORE_SCHEMA_VERSION,
 };
 use super::types::AppState;
 use std::fs::{self};
@@ -72,6 +72,26 @@ fn backup_corrupt_file(path: &Path) -> Option<PathBuf> {
     }
 }
 
+/// 正常加载成功后的收尾：执行旧 Tauri 发布状态的一次性迁移，仅在持久化
+/// 成功后才移除旧文件，保证迁移不会丢失尚未写盘的数据。
+fn finalize_loaded_state(mut state: AppState, path: &Path, mut needs_save: bool) -> AppState {
+    let legacy_tauri_release_path = path.with_file_name("tauri-release.json");
+    let migration = migrate_legacy_tauri_release_settings(&mut state, &legacy_tauri_release_path);
+    needs_save |= migration.changed;
+    if needs_save {
+        if let Err(error) = save_to_path(&state, path) {
+            log::warn!(
+                "写回迁移后的配置失败。路径: {}, 错误: {}",
+                path.display(),
+                error
+            );
+            return state;
+        }
+    }
+    migration.cleanup();
+    state
+}
+
 pub(crate) fn load_from_path(path: &Path) -> AppState {
     let content = match fs::read_to_string(path) {
         Ok(content) => content,
@@ -98,28 +118,12 @@ pub(crate) fn load_from_path(path: &Path) -> AppState {
     if is_legacy_schema {
         if let Ok(legacy_state) = serde_json::from_str::<LegacyStoredAppState>(&content) {
             let state = migrate_legacy_state(legacy_state);
-            if let Err(error) = save_to_path(&state, path) {
-                log::warn!(
-                    "写回迁移后的配置失败。路径: {}, 错误: {}",
-                    path.display(),
-                    error
-                );
-            }
-            return state;
+            return finalize_loaded_state(state, path, true);
         }
     } else if let Ok(stored_state) = serde_json::from_str::<StoredAppState>(&content) {
         let schema_changed = stored_state.schema_version != CURRENT_STORE_SCHEMA_VERSION;
         let (state, profiles_migrated) = sanitize_stored_state(stored_state.into());
-        if schema_changed || profiles_migrated {
-            if let Err(error) = save_to_path(&state, path) {
-                log::warn!(
-                    "写回迁移后的配置失败。路径: {}, 错误: {}",
-                    path.display(),
-                    error
-                );
-            }
-        }
-        return state;
+        return finalize_loaded_state(state, path, schema_changed || profiles_migrated);
     }
 
     let mut fallback_state = AppState::default();

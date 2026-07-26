@@ -1,9 +1,4 @@
-use super::{
-    ManagedWorkflowPreview, ManagedWorkflowStatus, TauriBuildDriver, TauriDesktopTarget,
-    TauriReleaseConfig, WorkflowConflict, MANAGED_WORKFLOW_PATH,
-};
-use crate::errors::AppError;
-use sha2::{Digest, Sha256};
+use super::{TauriBuildDriver, TauriDesktopTarget, TauriReleaseConfig};
 use std::path::Path;
 
 const CHECKOUT_ACTION: &str = "actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2";
@@ -316,138 +311,6 @@ pub fn render(config: &TauriReleaseConfig) -> String {
     )
 }
 
-fn workflow_conflicts(repository_root: &Path) -> Result<Vec<WorkflowConflict>, AppError> {
-    let workflow_dir = repository_root.join(".github/workflows");
-    if !workflow_dir.is_dir() {
-        return Ok(Vec::new());
-    }
-    let mut conflicts = Vec::new();
-    for entry in std::fs::read_dir(&workflow_dir).map_err(|error| {
-        AppError::repository_with_code(
-            format!("failed to read {}: {error}", workflow_dir.display()),
-            "tauri_workflow_scan_failed",
-        )
-    })? {
-        let path = entry
-            .map_err(|error| {
-                AppError::repository_with_code(
-                    format!("failed to read workflow entry: {error}"),
-                    "tauri_workflow_scan_failed",
-                )
-            })?
-            .path();
-        let relative = path
-            .strip_prefix(repository_root)
-            .unwrap_or(&path)
-            .to_string_lossy()
-            .replace('\\', "/");
-        if relative == MANAGED_WORKFLOW_PATH
-            || !matches!(
-                path.extension().and_then(|ext| ext.to_str()),
-                Some("yml" | "yaml")
-            )
-        {
-            continue;
-        }
-        let content = std::fs::read_to_string(&path).map_err(|error| {
-            AppError::repository_with_code(
-                format!("failed to read workflow {}: {error}", path.display()),
-                "tauri_workflow_read_failed",
-            )
-        })?;
-        let handles_tags = content.contains("tags:") || content.contains("github.ref_name");
-        let creates_release = content.contains("gh release create")
-            || content.contains("softprops/action-gh-release")
-            || (content.contains("tauri-apps/tauri-action")
-                && (content.contains("tagName:") || content.contains("releaseName:")));
-        if handles_tags && creates_release {
-            conflicts.push(WorkflowConflict {
-                path: relative,
-                reason: "responds to tags and creates or updates a GitHub Release".to_string(),
-            });
-        }
-    }
-    conflicts.sort_by(|left, right| left.path.cmp(&right.path));
-    Ok(conflicts)
-}
-
-fn full_replacement_diff(current: Option<&str>, expected: &str) -> String {
-    let mut diff = String::from("--- current\n+++ managed\n");
-    if let Some(current) = current {
-        for line in current.lines() {
-            diff.push('-');
-            diff.push_str(line);
-            diff.push('\n');
-        }
-    }
-    for line in expected.lines() {
-        diff.push('+');
-        diff.push_str(line);
-        diff.push('\n');
-    }
-    diff
-}
-
-pub fn preview(
-    repository_root: &Path,
-    config: &TauriReleaseConfig,
-) -> Result<ManagedWorkflowPreview, AppError> {
-    let expected_content = render(config);
-    let workflow_path = repository_root.join(MANAGED_WORKFLOW_PATH);
-    let current_content = match std::fs::read_to_string(&workflow_path) {
-        Ok(content) => Some(content),
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => None,
-        Err(error) => {
-            return Err(AppError::repository_with_code(
-                format!(
-                    "failed to read managed workflow {}: {error}",
-                    workflow_path.display()
-                ),
-                "tauri_workflow_read_failed",
-            ));
-        }
-    };
-    let status = match current_content.as_deref() {
-        None => ManagedWorkflowStatus::Missing,
-        Some(current) if current == expected_content => ManagedWorkflowStatus::Current,
-        Some(_) => ManagedWorkflowStatus::Drifted,
-    };
-    let diff = if status == ManagedWorkflowStatus::Current {
-        String::new()
-    } else {
-        full_replacement_diff(current_content.as_deref(), &expected_content)
-    };
-
-    let conflicts = workflow_conflicts(repository_root)?;
-    let mut identity = Sha256::new();
-    identity.update(expected_content.as_bytes());
-    identity.update(current_content.as_deref().unwrap_or("").as_bytes());
-    for conflict in &conflicts {
-        identity.update(conflict.path.as_bytes());
-        let conflict_path = repository_root.join(&conflict.path);
-        let content = std::fs::read(&conflict_path).map_err(|error| {
-            AppError::repository_with_code(
-                format!(
-                    "failed to hash conflicting workflow {}: {error}",
-                    conflict_path.display()
-                ),
-                "tauri_workflow_read_failed",
-            )
-        })?;
-        identity.update(content);
-    }
-
-    Ok(ManagedWorkflowPreview {
-        preview_id: hex::encode(identity.finalize()),
-        path: MANAGED_WORKFLOW_PATH.to_string(),
-        status,
-        expected_content,
-        current_content,
-        diff,
-        conflicts,
-    })
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -513,29 +376,5 @@ mod tests {
         assert!(workflow.contains("TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_PRIVATE_KEY }}"));
         assert!(workflow.contains("release-assets/latest.json"));
         assert!(workflow.contains("*.sig"));
-    }
-
-    #[test]
-    fn preview_detects_drift_and_conflicting_legacy_release_workflow() {
-        let temp_dir = tempfile::tempdir().expect("temp dir");
-        let workflow_dir = temp_dir.path().join(".github/workflows");
-        std::fs::create_dir_all(&workflow_dir).expect("create workflows");
-        std::fs::write(
-            workflow_dir.join("one-publish-tauri-release.yml"),
-            "name: manually changed\n",
-        )
-        .expect("write managed workflow");
-        std::fs::write(
-            workflow_dir.join("legacy.yml"),
-            "on:\n  push:\n    tags: ['v*']\nsteps:\n  - run: gh release create\n",
-        )
-        .expect("write legacy workflow");
-
-        let preview = preview(temp_dir.path(), &test_config()).expect("preview");
-
-        assert_eq!(preview.status, ManagedWorkflowStatus::Drifted);
-        assert_eq!(preview.conflicts.len(), 1);
-        assert_eq!(preview.conflicts[0].path, ".github/workflows/legacy.yml");
-        assert!(preview.diff.contains("-name: manually changed"));
     }
 }

@@ -6,8 +6,11 @@ use super::types::{
     trim_execution_history, AppState, ConfigProfile, ExecutionRecord, PublishConfigStore,
     RepoPublishConfig, Repository,
 };
+use crate::tauri_release::{TauriReleaseConfig, RELEASE_SETTINGS_PARAMETER};
+use publish_adapters::TAURI_PROVIDER_ID;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
+use std::path::{Path, PathBuf};
 
 pub(crate) const CURRENT_STORE_SCHEMA_VERSION: u32 = 3;
 
@@ -273,4 +276,198 @@ pub(crate) fn migrate_legacy_state(legacy: LegacyStoredAppState) -> AppState {
     }
 
     sanitize_state(state)
+}
+
+/// 旧独立 Tauri 发布中心的专用状态文件（T19 Contract 后不再有任何运行时消费者）。
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct LegacyTauriReleaseState {
+    #[serde(default)]
+    configs: BTreeMap<String, TauriReleaseConfig>,
+}
+
+/// 迁移结果：`changed` 表示 AppState 被修改需要持久化；`cleanup` 在
+/// 持久化成功后调用，负责移除已被并入的旧状态文件。
+pub(crate) struct LegacyTauriReleaseMigration {
+    pub(crate) changed: bool,
+    cleanup_path: Option<PathBuf>,
+}
+
+impl LegacyTauriReleaseMigration {
+    fn untouched() -> Self {
+        Self {
+            changed: false,
+            cleanup_path: None,
+        }
+    }
+
+    pub(crate) fn cleanup(self) {
+        let Some(path) = self.cleanup_path else {
+            return;
+        };
+        if let Err(error) = std::fs::remove_file(&path) {
+            log::warn!(
+                "移除已迁移的 Tauri 发布状态失败，下次启动会重新尝试。路径: {}, 错误: {}",
+                path.display(),
+                error
+            );
+        }
+    }
+}
+
+/// 一次性把旧 `tauri-release.json` 中的仓库级 Tauri 发布设置并入通用
+/// Configuration Catalog：已有 Tauri 配置获得携带 `releaseSettings` 的新修订，
+/// 没有的仓库得到一份新配置；不属于任何已知仓库的条目直接丢弃。
+pub(crate) fn migrate_legacy_tauri_release_settings(
+    state: &mut AppState,
+    legacy_path: &Path,
+) -> LegacyTauriReleaseMigration {
+    let content = match std::fs::read_to_string(legacy_path) {
+        Ok(content) => content,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+            return LegacyTauriReleaseMigration::untouched();
+        }
+        Err(error) => {
+            log::warn!(
+                "读取旧 Tauri 发布状态失败，下次启动会重新尝试迁移。路径: {}, 错误: {}",
+                legacy_path.display(),
+                error
+            );
+            return LegacyTauriReleaseMigration::untouched();
+        }
+    };
+
+    let legacy: LegacyTauriReleaseState = match serde_json::from_str(&content) {
+        Ok(legacy) => legacy,
+        Err(error) => {
+            preserve_unreadable_tauri_release_state(legacy_path, &error);
+            return LegacyTauriReleaseMigration::untouched();
+        }
+    };
+
+    let now = chrono::Utc::now().to_rfc3339();
+    let mut changed = false;
+    let mut all_merged = true;
+    for (repository_id, release) in legacy.configs {
+        let Some(repository) = state
+            .repositories
+            .iter_mut()
+            .find(|repository| repository.id == repository_id)
+        else {
+            log::info!("丢弃未知仓库 {repository_id} 的旧 Tauri 发布设置");
+            continue;
+        };
+        match merge_tauri_release_settings(&mut repository.publish_config, release, &now) {
+            Some(merged) => changed |= merged,
+            None => all_merged = false,
+        }
+    }
+
+    LegacyTauriReleaseMigration {
+        changed,
+        // 任何一条并入失败都保留旧文件，等待下次启动重试；成功并入或
+        // 有意丢弃（未知仓库）后旧文件才能移除。
+        cleanup_path: all_merged.then(|| legacy_path.to_path_buf()),
+    }
+}
+
+fn preserve_unreadable_tauri_release_state(path: &Path, error: &serde_json::Error) {
+    let timestamp = chrono::Utc::now().format("%Y%m%d%H%M%S%3f");
+    let backup_path = path.with_file_name(format!("tauri-release.invalid.{timestamp}.json"));
+    match std::fs::rename(path, &backup_path) {
+        Ok(()) => {
+            let _ = crate::security::harden_private_path(&backup_path);
+            log::error!(
+                "旧 Tauri 发布状态无法解析（{error}），已保留到 {}",
+                backup_path.display()
+            );
+        }
+        Err(rename_error) => {
+            log::error!("旧 Tauri 发布状态无法解析（{error}），备份也失败: {rename_error}");
+        }
+    }
+}
+
+fn active_tauri_profile(config: &RepoPublishConfig) -> Option<&ConfigProfile> {
+    config.active_profiles().into_iter().find(|profile| {
+        profile
+            .current_revision()
+            .is_some_and(|revision| revision.provider_id == TAURI_PROVIDER_ID)
+    })
+}
+
+/// 返回 `Some(changed)` 表示条目已并入（或无需变化），`None` 表示并入失败。
+fn merge_tauri_release_settings(
+    config: &mut RepoPublishConfig,
+    release: TauriReleaseConfig,
+    now: &str,
+) -> Option<bool> {
+    let settings = match serde_json::to_value(&release) {
+        Ok(settings) => settings,
+        Err(error) => {
+            log::error!("序列化旧 Tauri 发布设置失败，跳过迁移: {error}");
+            return None;
+        }
+    };
+
+    let Some(profile) = active_tauri_profile(config) else {
+        let base_name = if release.app_name.trim().is_empty() {
+            "Tauri Release".to_string()
+        } else {
+            release.app_name.trim().to_string()
+        };
+        let taken = config
+            .active_profiles()
+            .into_iter()
+            .map(|profile| profile.name.clone())
+            .collect::<Vec<_>>();
+        let name = std::iter::once(base_name.clone())
+            .chain((2..).map(|counter| format!("{base_name} {counter}")))
+            .find(|candidate| !taken.contains(candidate))
+            .expect("a fresh profile name always exists");
+        let created = config.create_profile(
+            name,
+            TAURI_PROVIDER_ID.to_string(),
+            serde_json::json!({ RELEASE_SETTINGS_PARAMETER: settings }),
+            None,
+            now.to_string(),
+        );
+        if let Err(error) = created {
+            log::error!("迁移旧 Tauri 发布设置失败: {}", error.message);
+            return None;
+        }
+        return Some(true);
+    };
+
+    let revision = profile.current_revision()?;
+    if revision
+        .parameters
+        .get(RELEASE_SETTINGS_PARAMETER)
+        .is_some()
+    {
+        return Some(false);
+    }
+
+    let mut parameters = revision.parameters.clone();
+    if !parameters.is_object() {
+        parameters = serde_json::Value::Object(serde_json::Map::new());
+    }
+    parameters[RELEASE_SETTINGS_PARAMETER] = settings;
+    let profile_id = profile.id.clone();
+    let name = profile.name.clone();
+    let profile_group = profile.profile_group.clone();
+    match config.update_profile(
+        &profile_id,
+        name,
+        TAURI_PROVIDER_ID.to_string(),
+        parameters,
+        profile_group,
+        now.to_string(),
+    ) {
+        Ok(()) => Some(true),
+        Err(error) => {
+            log::error!("迁移旧 Tauri 发布设置失败: {}", error.message);
+            None
+        }
+    }
 }

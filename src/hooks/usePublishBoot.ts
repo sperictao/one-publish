@@ -30,7 +30,6 @@ import type {
   ProjectInfo,
   ExecutionRecord,
 } from "@/lib/store/types";
-import { usePublishStore } from "@/stores/publishStore";
 
 const SPEC_VERSION = 1;
 const EMPTY_STRING_LIST: string[] = [];
@@ -132,9 +131,6 @@ interface UsePublishBootParams {
 }
 
 export function usePublishBoot(params: UsePublishBootParams) {
-  const setTauriReleaseOpen = usePublishStore(
-    (state) => state.setTauriReleaseOpen
-  );
   // Provider presentation
   const {
     activeProviderLabel,
@@ -248,18 +244,9 @@ export function usePublishBoot(params: UsePublishBootParams) {
   } = profilesState;
   const handleEditProfileFromPanel = useCallback(
     (profile: ConfigProfile) => {
-      if (profile.providerId === "tauri") {
-        handleSelectProfileFromPanel(profile);
-        setTauriReleaseOpen(true);
-        return;
-      }
       openQuickEditProfileDialog(profile);
     },
-    [
-      handleSelectProfileFromPanel,
-      openQuickEditProfileDialog,
-      setTauriReleaseOpen,
-    ]
+    [openQuickEditProfileDialog]
   );
 
   const selectedConfiguration = useMemo(() => {
@@ -335,7 +322,6 @@ export function usePublishBoot(params: UsePublishBootParams) {
     configT: params.configT,
     isRefreshing: isPublishRunCardRefreshing,
     selectedRepo: params.selectedRepo,
-    activeProviderId: params.activeProviderId,
     activeProviderRequiresProjectBinding,
     projectInfo: params.projectInfo,
     publishPreviewCommand,
