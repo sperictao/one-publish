@@ -1,0 +1,3 @@
+# Cancel pending work without promising distributed rollback
+
+Cancellation stops unscheduled plan nodes and requests cancellation or owned-staging cleanup only where an adapter explicitly supports it. Published immutable versions and external submissions remain recorded, and the attempt still uses normal route aggregation: an unfinished required route after another success is partial delivery, cancelled optional routes after all required routes publish produce success with warnings, and cancellation before any delivery remains cancelled. Unrelated destinations are never presented as atomically rolled back.

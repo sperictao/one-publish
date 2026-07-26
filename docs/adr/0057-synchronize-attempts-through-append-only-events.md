@@ -1,0 +1,3 @@
+# Synchronize attempts through append-only events
+
+Local and remote runners emit versioned append-only Publish Events identified by attempt, plan node, backend run, stable event ID, and causal sequence. Delivery observations create immutable revisions under a stable receipt ID and attach them as event evidence rather than maintaining a second mutable status store. The control plane deduplicates events, derives attempt and current receipt state through deterministic reducers, requests missing ranges explicitly, and validates referenced manifests and receipt revisions separately, avoiding last-write-wins status updates when automation continues while the desktop app is offline.

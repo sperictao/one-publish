@@ -1,0 +1,3 @@
+# Keep publish-attempt identity stable across resume
+
+Manual and automated publishing share one attempt model fixed to a configuration revision, plan contract version and digest, release identity, execution backend, and runtime revision. A fresh build starts with an empty Artifact Manifest binding that becomes immutable when the persist stage writes its first digest; promotion binds an existing manifest at creation. Resuming failed delivery or external review appends execution and receipt changes to that attempt, while any configuration, identity, plan, or bound artifact-content change creates a new attempt rather than masquerading as retry.

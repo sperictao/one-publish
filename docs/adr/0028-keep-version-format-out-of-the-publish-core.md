@@ -1,0 +1,3 @@
+# Keep version format out of the publish core
+
+The publish core identifies a release by portable project-candidate identity, source revision, the provider-resolved version value, channel, and optional build sequence without requiring stable Semantic Versioning. Local configuration IDs and adapter implementation versions belong to configuration, plan, and runtime records rather than release identity. Providers read and write project versions, while release policies and delivery destinations validate their own formats, allowing stable desktop releases, prereleases, nightly builds, store build numbers, package versions, and OCI tags to share one model.

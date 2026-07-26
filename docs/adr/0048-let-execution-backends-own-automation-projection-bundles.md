@@ -1,0 +1,3 @@
+# Let execution backends own automation projection bundles
+
+An execution backend renders the complete set of repository bindings into one owned automation projection bundle, deciding internally whether that requires one or many workflow files. Binding changes regenerate and diff the bundle, generated resources retain binding identities for health reporting, and normal reconciliation or detachment touches only resources explicitly owned by that bundle. Initial takeover may additionally remove exact conflicting resources outside the bundle only when the user selects them in the reviewed full diff; it never grants permission for later repository-wide cleanup.

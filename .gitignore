@@ -6,6 +6,7 @@ dist/
 dist-ssr/
 release-assets/
 /src-tauri/target/
+/target/
 
 # Logs
 logs/
@@ -75,7 +76,6 @@ src-tauri/tauri.conf.updater.prod.json
 /.pnpm-store/
 /plans/
 /scratch/
-/AGENTS.md
 /CLAUDE.md
 /branch-title.json
 

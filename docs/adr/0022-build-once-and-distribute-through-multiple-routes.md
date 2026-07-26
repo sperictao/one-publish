@@ -1,0 +1,3 @@
+# Build once and distribute through multiple routes
+
+A publish configuration combines one project provider, one execution backend, one artifact store, ordered artifact processors, and one or more ordered delivery routes. Every route consumes the same verified artifact set, allowing releases to reach GitHub, internal servers, object storage, stores, or mirrors without rebuilding different binaries for each destination. Routes are required or optional, and each returns its own receipt so partial delivery is explicit and retries resume failed routes without rebuilding or undoing immutable successful deliveries.
