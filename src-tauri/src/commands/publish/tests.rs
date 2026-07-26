@@ -292,10 +292,7 @@ fn render_with_provider_schema(
 #[test]
 fn go_schema_renders_target_arch_as_env_and_work_as_boolean_flag() {
     let mut parameters = BTreeMap::new();
-    parameters.insert(
-        "target".to_string(),
-        SpecValue::String("linux".to_string()),
-    );
+    parameters.insert("target".to_string(), SpecValue::String("linux".to_string()));
     parameters.insert("arch".to_string(), SpecValue::String("amd64".to_string()));
     parameters.insert("work".to_string(), SpecValue::Bool(true));
 

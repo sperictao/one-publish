@@ -268,7 +268,10 @@ where
                     continue;
                 }
 
-                return Err(DownloadFailure { error, attempts: attempt });
+                return Err(DownloadFailure {
+                    error,
+                    attempts: attempt,
+                });
             }
         }
     }
@@ -283,7 +286,14 @@ async fn download_update_with_retry(
     let attempt_download = |attempt: u32| async move {
         emit_update_download_progress(
             app,
-            build_progress_payload("downloading", &update.version, 0, None, attempt as usize, None),
+            build_progress_payload(
+                "downloading",
+                &update.version,
+                0,
+                None,
+                attempt as usize,
+                None,
+            ),
         );
 
         let app_handle = app.clone();
@@ -738,7 +748,10 @@ mod tests {
 
     #[test]
     fn normalize_expected_version_none_for_whitespace_only() {
-        assert_eq!(normalize_expected_version(Some("   \t  ".to_string())), None);
+        assert_eq!(
+            normalize_expected_version(Some("   \t  ".to_string())),
+            None
+        );
     }
 
     #[test]
@@ -751,9 +764,7 @@ mod tests {
 
     fn network_failure(attempts: usize, status: u16) -> DownloadFailure {
         DownloadFailure {
-            error: UpdaterError::Network(format!(
-                "Download request failed with status: {status}"
-            )),
+            error: UpdaterError::Network(format!("Download request failed with status: {status}")),
             attempts,
         }
     }
@@ -788,9 +799,12 @@ mod tests {
     /// 单次下载尝试的结果（测试 fake 闭包序列元素）。
     type AttemptOutcome = Result<Vec<u8>, UpdaterError>;
     /// fake 闭包返回的 boxed future，避免 async closure 的生命周期问题。
-    type AttemptFuture = std::pin::Pin<Box<dyn std::future::Future<Output = AttemptOutcome> + Send>>;
+    type AttemptFuture =
+        std::pin::Pin<Box<dyn std::future::Future<Output = AttemptOutcome> + Send>>;
 
-    fn sequence_attempt_download(sequence: Vec<AttemptOutcome>) -> impl FnMut(u32) -> AttemptFuture {
+    fn sequence_attempt_download(
+        sequence: Vec<AttemptOutcome>,
+    ) -> impl FnMut(u32) -> AttemptFuture {
         use std::collections::VecDeque;
         use std::sync::{Arc, Mutex};
         let queue: Arc<Mutex<VecDeque<AttemptOutcome>>> =
@@ -800,7 +814,10 @@ mod tests {
             Box::pin(async move {
                 match queue.lock().expect("sequence queue poisoned").pop_front() {
                     Some(result) => result,
-                    None => panic!("attempt_download 被调用次数超过序列长度（attempt {}）", attempt),
+                    None => panic!(
+                        "attempt_download 被调用次数超过序列长度（attempt {}）",
+                        attempt
+                    ),
                 }
             })
         }
@@ -815,7 +832,8 @@ mod tests {
             Ok(vec![1, 2, 3]),
         ];
 
-        let result = download_with_retry(sequence_attempt_download(sequence), |_| Duration::ZERO).await;
+        let result =
+            download_with_retry(sequence_attempt_download(sequence), |_| Duration::ZERO).await;
 
         let (bytes, retries) = result.expect("应在两次重试后成功");
         assert_eq!(retries, 2);
@@ -831,7 +849,8 @@ mod tests {
             Err(retryable_network_error()),
         ];
 
-        let result = download_with_retry(sequence_attempt_download(sequence), |_| Duration::ZERO).await;
+        let result =
+            download_with_retry(sequence_attempt_download(sequence), |_| Duration::ZERO).await;
 
         let failure = result.expect_err("持续可重试错误应耗尽重试后失败");
         assert_eq!(failure.attempts, UPDATE_DOWNLOAD_MAX_ATTEMPTS);
@@ -843,7 +862,8 @@ mod tests {
         // [Err(fatal)] -> 立即 Err，attempts=1
         let sequence = vec![Err(fatal_network_error())];
 
-        let result = download_with_retry(sequence_attempt_download(sequence), |_| Duration::ZERO).await;
+        let result =
+            download_with_retry(sequence_attempt_download(sequence), |_| Duration::ZERO).await;
 
         let failure = result.expect_err("致命错误应立即失败");
         assert_eq!(failure.attempts, 1);
@@ -855,7 +875,8 @@ mod tests {
         // [Err(retryable), Err(fatal)] -> 第二次即停（attempts=2）
         let sequence = vec![Err(retryable_network_error()), Err(fatal_network_error())];
 
-        let result = download_with_retry(sequence_attempt_download(sequence), |_| Duration::ZERO).await;
+        let result =
+            download_with_retry(sequence_attempt_download(sequence), |_| Duration::ZERO).await;
 
         let failure = result.expect_err("重试后遇到致命错误应停止");
         assert_eq!(failure.attempts, 2);
@@ -873,7 +894,11 @@ mod tests {
     //   - 两 seam 的 None / Err 路径 + fetch 调用计数（覆盖缓存 miss -> fetch 的状态机分支）。
     // `Some(Update)` 命中分支由生产代码 `install_update` 集成覆盖。
 
-    fn metadata(version: &'static str, url: &'static str, signature: &'static str) -> UpdateMetadata<'static> {
+    fn metadata(
+        version: &'static str,
+        url: &'static str,
+        signature: &'static str,
+    ) -> UpdateMetadata<'static> {
         UpdateMetadata {
             version,
             download_url: url,
@@ -915,7 +940,9 @@ mod tests {
         Box<dyn std::future::Future<Output = Result<Option<Update>, AppError>> + Send>,
     >;
 
-    fn recording_fetch(outcome: Result<Option<Update>, AppError>) -> (Arc<Mutex<bool>>, impl FnOnce() -> BoxedFetchFut) {
+    fn recording_fetch(
+        outcome: Result<Option<Update>, AppError>,
+    ) -> (Arc<Mutex<bool>>, impl FnOnce() -> BoxedFetchFut) {
         let called = Arc::new(Mutex::new(false));
         let called_for_closure = called.clone();
         let fetch = move || {

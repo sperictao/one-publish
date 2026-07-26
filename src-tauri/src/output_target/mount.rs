@@ -61,7 +61,11 @@ mod tests {
         let target = detect_with_prefixes("/Volumes/build-share/publish", &["/Volumes/"])
             .expect("mounted remote");
         match target {
-            OutputTarget::MountedRemote { kind, path, fs_type } => {
+            OutputTarget::MountedRemote {
+                kind,
+                path,
+                fs_type,
+            } => {
                 assert_eq!(kind, MountKind::Mounted);
                 assert_eq!(path.to_string_lossy(), "/Volumes/build-share/publish");
                 assert!(fs_type.is_none());

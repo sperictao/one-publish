@@ -26,7 +26,7 @@
 // construction stays with each provider.
 
 use crate::environment::types::{
-    compare_versions, command_path, parse_semver, EnvironmentIssue, ProviderStatus,
+    command_path, compare_versions, parse_semver, EnvironmentIssue, ProviderStatus,
 };
 use std::time::Duration;
 
@@ -274,7 +274,8 @@ mod tests {
     fn parse_output_reads_stderr_when_configured() {
         fn parse_java_like(output: &[u8]) -> Option<String> {
             let s = String::from_utf8_lossy(output);
-            s.lines().find_map(|l| l.split('"').nth(1).map(|v| v.to_string()))
+            s.lines()
+                .find_map(|l| l.split('"').nth(1).map(|v| v.to_string()))
         }
         // Build an Output whose stderr carries the version line.
         #[cfg(windows)]

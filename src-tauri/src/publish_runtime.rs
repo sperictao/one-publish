@@ -17,8 +17,8 @@ use publish_domain::{
     AdapterBinding, AdapterDescriptor, AdapterIdentity, AdapterKind, AdapterSchema,
     AdapterSelection, AdapterSettings, ArtifactCandidate, Capability, CapabilityRequirement,
     DeliveryRoute, DeliveryStatus, PlanNode, PlanNodeTemplate, PlanOperation, PlanStage,
-    PlanningInputSnapshot, PublishAttemptStatus, PublishAttemptView, PublishError,
-    PublishResource, PublishResourceKind, PublishingCapability, ReleaseIdentity, SourceSnapshot,
+    PlanningInputSnapshot, PublishAttemptStatus, PublishAttemptView, PublishError, PublishResource,
+    PublishResourceKind, PublishingCapability, ReleaseIdentity, SourceSnapshot,
     PLANNING_INPUT_SNAPSHOT_VERSION,
 };
 use publish_runner_core::{

@@ -284,10 +284,7 @@ fn find_latest_snapshot_in_output_dir(
 
     latest.map(|(_, path)| path).ok_or_else(|| {
         export_error(
-            format!(
-                "未在输出目录找到执行快照: {}",
-                dir.to_string_lossy()
-            ),
+            format!("未在输出目录找到执行快照: {}", dir.to_string_lossy()),
             "snapshot_not_found_in_output_dir",
         )
     })
@@ -306,10 +303,7 @@ pub async fn open_execution_snapshot(
             if let Some(output_dir) = output_dir {
                 find_latest_snapshot_in_output_dir(&output_dir)?
             } else {
-                return Err(export_error(
-                    "记录中没有快照路径",
-                    "snapshot_path_missing",
-                ));
+                return Err(export_error("记录中没有快照路径", "snapshot_path_missing"));
             }
         } else {
             let candidate = PathBuf::from(trimmed);

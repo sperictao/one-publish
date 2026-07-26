@@ -493,7 +493,11 @@ mod tests {
         assert!(result.args.contains(&"--define=FOO=bar".to_string()));
     }
 
-    fn string_definition(flag: &str, prefix: Option<&str>, env: Option<&str>) -> ParameterDefinition {
+    fn string_definition(
+        flag: &str,
+        prefix: Option<&str>,
+        env: Option<&str>,
+    ) -> ParameterDefinition {
         ParameterDefinition {
             param_type: ParameterType::String,
             flag: flag.to_string(),
@@ -556,10 +560,7 @@ mod tests {
 
         let result = renderer.render(&params).expect("render");
         assert!(result.args.is_empty());
-        assert_eq!(
-            result.env,
-            vec![("GOOS".to_string(), "linux".to_string())]
-        );
+        assert_eq!(result.env, vec![("GOOS".to_string(), "linux".to_string())]);
     }
 
     #[test]

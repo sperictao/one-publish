@@ -199,8 +199,7 @@ pub(crate) fn sanitize_secrets_in_text(text: &str) -> String {
         if ch.is_whitespace() {
             if !token.is_empty() {
                 output.push_str(
-                    &sanitize_secret_assignment_token(&token)
-                        .unwrap_or_else(|| token.clone()),
+                    &sanitize_secret_assignment_token(&token).unwrap_or_else(|| token.clone()),
                 );
                 token.clear();
             }
@@ -211,9 +210,7 @@ pub(crate) fn sanitize_secrets_in_text(text: &str) -> String {
     }
 
     if !token.is_empty() {
-        output.push_str(
-            &sanitize_secret_assignment_token(&token).unwrap_or_else(|| token.clone()),
-        );
+        output.push_str(&sanitize_secret_assignment_token(&token).unwrap_or_else(|| token.clone()));
     }
 
     output

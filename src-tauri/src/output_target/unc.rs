@@ -7,8 +7,8 @@ pub(super) fn try_parse_unc(raw: &str) -> Option<PathBuf> {
     }
 
     let bytes = trimmed.as_bytes();
-    let starts_with_double_separator = (bytes[0] == b'\\' && bytes[1] == b'\\')
-        || (bytes[0] == b'/' && bytes[1] == b'/');
+    let starts_with_double_separator =
+        (bytes[0] == b'\\' && bytes[1] == b'\\') || (bytes[0] == b'/' && bytes[1] == b'/');
     if !starts_with_double_separator {
         return None;
     }
@@ -24,9 +24,7 @@ pub(super) fn try_parse_unc(raw: &str) -> Option<PathBuf> {
         return None;
     }
 
-    let share_end = after_server
-        .find(['\\', '/'])
-        .unwrap_or(after_server.len());
+    let share_end = after_server.find(['\\', '/']).unwrap_or(after_server.len());
     if share_end == 0 {
         return None;
     }

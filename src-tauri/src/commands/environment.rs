@@ -133,14 +133,13 @@ fn validate_and_parse_fix_command(
                 ));
             }
             for arg in &args[1..] {
-                let looks_like_formula_path = arg.contains('/')
-                    || arg.contains('\\')
-                    || arg.ends_with(".rb");
+                let looks_like_formula_path =
+                    arg.contains('/') || arg.contains('\\') || arg.ends_with(".rb");
                 let valid_formula_name = !arg.is_empty()
                     && !arg.starts_with('-')
-                    && arg
-                        .chars()
-                        .all(|ch| ch.is_ascii_alphanumeric() || matches!(ch, '@' | '.' | '_' | '+' | '-'));
+                    && arg.chars().all(|ch| {
+                        ch.is_ascii_alphanumeric() || matches!(ch, '@' | '.' | '_' | '+' | '-')
+                    });
                 if looks_like_formula_path || !valid_formula_name {
                     return Err(crate::errors::AppError::validation_with_code(
                         format!("unsupported brew formula argument: {}", arg),

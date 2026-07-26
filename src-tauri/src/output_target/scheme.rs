@@ -125,12 +125,15 @@ mod tests {
 
     #[test]
     fn parses_s3_with_query() {
-        let uri = try_parse_remote("s3://bucket/prefix?region=ap-southeast-1")
-            .expect("valid s3 uri");
+        let uri =
+            try_parse_remote("s3://bucket/prefix?region=ap-southeast-1").expect("valid s3 uri");
         assert_eq!(uri.scheme, "s3");
         assert_eq!(uri.host, "bucket");
         assert_eq!(uri.path, "/prefix");
-        assert_eq!(uri.query.get("region").map(String::as_str), Some("ap-southeast-1"));
+        assert_eq!(
+            uri.query.get("region").map(String::as_str),
+            Some("ap-southeast-1")
+        );
     }
 
     #[test]

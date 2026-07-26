@@ -20,9 +20,7 @@ const CARGO_PROBE: ToolProbe = ToolProbe {
 /// match, preserving the prior fallback that reported `installed: true`
 /// with `version: "unknown"` on a successful-but-unparseable run.
 fn parse_cargo_version(output: &[u8]) -> Option<String> {
-    Some(
-        parse_version(output, "cargo").unwrap_or_else(|| "unknown".to_string()),
-    )
+    Some(parse_version(output, "cargo").unwrap_or_else(|| "unknown".to_string()))
 }
 
 /// Check Rust/Cargo installation

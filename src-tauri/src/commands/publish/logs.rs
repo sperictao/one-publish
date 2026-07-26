@@ -23,10 +23,7 @@ pub(crate) fn emit_publish_session_started(app: &AppHandle, session_id: &str) {
         session_id: session_id.to_string(),
     };
     if let Err(error) = app.emit("provider-publish-session-started", payload) {
-        log::warn!(
-            "failed to emit provider-publish-session-started: {}",
-            error
-        );
+        log::warn!("failed to emit provider-publish-session-started: {}", error);
     }
 }
 
@@ -148,7 +145,8 @@ mod tests {
     #[test]
     fn warning_collector_matches_msbuild_warning_lines() {
         let mut collector = WarningCollector::new();
-        collector.scan("Main.cs(17,20): warning CS0168: The variable 'x' is declared but never used\n");
+        collector
+            .scan("Main.cs(17,20): warning CS0168: The variable 'x' is declared but never used\n");
 
         assert_eq!(collector.warnings.len(), 1);
         assert!(collector.warnings[0].contains("warning CS0168"));
@@ -157,7 +155,9 @@ mod tests {
     #[test]
     fn warning_collector_matches_nuget_security_warning_on_stderr() {
         let mut collector = WarningCollector::new();
-        collector.scan("[stderr] warning NU1903: Package 'Foo' has a known high severity vulnerability\n");
+        collector.scan(
+            "[stderr] warning NU1903: Package 'Foo' has a known high severity vulnerability\n",
+        );
 
         assert_eq!(collector.warnings.len(), 1);
         assert!(collector.warnings[0].contains("warning NU1903"));
@@ -166,7 +166,9 @@ mod tests {
     #[test]
     fn warning_collector_ignores_error_lines() {
         let mut collector = WarningCollector::new();
-        collector.scan("[stderr] CS0246: error CS0246: The type or namespace 'Foo' could not be found\n");
+        collector.scan(
+            "[stderr] CS0246: error CS0246: The type or namespace 'Foo' could not be found\n",
+        );
 
         assert_eq!(collector.warnings.len(), 0, "error 行不应被分类为 warning");
     }
@@ -176,7 +178,11 @@ mod tests {
         let mut collector = WarningCollector::new();
         collector.scan("Build succeeded.\n 0 Warning(s)\n 0 Error(s)\n");
 
-        assert_eq!(collector.warnings.len(), 0, "含 warning 单词但非诊断格式的行不应被收录");
+        assert_eq!(
+            collector.warnings.len(),
+            0,
+            "含 warning 单词但非诊断格式的行不应被收录"
+        );
     }
 
     #[test]

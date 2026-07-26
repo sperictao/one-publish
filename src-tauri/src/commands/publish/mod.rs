@@ -12,7 +12,7 @@ mod preflight;
 mod session;
 
 pub use contracts::{
-    PublishLogChunkEvent, PublishResult, RenderedPublishCommand, PublishSessionStartedEvent,
+    PublishLogChunkEvent, PublishResult, PublishSessionStartedEvent, RenderedPublishCommand,
 };
 pub use preflight::{
     ProtectedDirectoryLocation, PublishOutputAccess, PublishOutputAccessStatus,
@@ -77,9 +77,7 @@ pub fn preflight_publish_output(spec: PublishSpec) -> PublishOutputPreflightResu
 }
 
 #[tauri::command]
-pub fn describe_publish_output_target(
-    raw: String,
-) -> crate::output_target::OutputTargetDescriptor {
+pub fn describe_publish_output_target(raw: String) -> crate::output_target::OutputTargetDescriptor {
     let _timer = crate::commands::middleware::CommandTimer::new(
         "commands::publish::mod::describe_publish_output_target",
     );

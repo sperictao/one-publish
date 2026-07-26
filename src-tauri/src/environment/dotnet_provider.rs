@@ -22,9 +22,7 @@ const DOTNET_PROBE: ToolProbe = ToolProbe {
 /// empty prefix matches any first whitespace-delimited token, matching
 /// the prior `parse_version(&output.stdout, "")` call.
 fn parse_dotnet_version(output: &[u8]) -> Option<String> {
-    Some(
-        parse_version(output, "").unwrap_or_else(|| "unknown".to_string()),
-    )
+    Some(parse_version(output, "").unwrap_or_else(|| "unknown".to_string()))
 }
 
 /// Check .NET SDK installation

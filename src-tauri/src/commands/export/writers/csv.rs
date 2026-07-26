@@ -13,7 +13,11 @@ fn csv_escape(value: &str) -> String {
     } else {
         value.to_string()
     };
-    if guarded.contains(',') || guarded.contains('"') || guarded.contains('\n') || guarded.contains('\r') {
+    if guarded.contains(',')
+        || guarded.contains('"')
+        || guarded.contains('\n')
+        || guarded.contains('\r')
+    {
         format!("\"{}\"", guarded.replace('"', "\"\""))
     } else {
         guarded
