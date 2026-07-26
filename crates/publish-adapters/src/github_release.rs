@@ -11,8 +11,8 @@ use publish_domain::{
 use serde_json::Value;
 
 use crate::{
-    AdapterContract, AdapterExecutionContext, AdapterExecutionOutput, DeliveryDestination,
-    DeliveryProbe,
+    conflict_failure, sealed_inputs, transient_failure, validation_failure, AdapterContract,
+    AdapterExecutionContext, AdapterExecutionOutput, DeliveryDestination, DeliveryProbe,
 };
 
 pub const GITHUB_RELEASE_DESTINATION_ID: &str = "github-release";
@@ -298,45 +298,6 @@ fn sealed_release_inputs(
     ]))
 }
 
-fn validation_failure(native_code: &str, message: String) -> PublishError {
-    PublishError::Classified {
-        failure: PublishFailure {
-            version: PUBLISH_FAILURE_VERSION,
-            category: PublishFailureCategory::Validation,
-            native_code: native_code.to_string(),
-            message,
-            retry_safe: true,
-            retry_after_seconds: None,
-        },
-    }
-}
-
-fn conflict_failure(native_code: &str, message: String) -> PublishError {
-    PublishError::Classified {
-        failure: PublishFailure {
-            version: PUBLISH_FAILURE_VERSION,
-            category: PublishFailureCategory::Conflict,
-            native_code: native_code.to_string(),
-            message,
-            retry_safe: true,
-            retry_after_seconds: None,
-        },
-    }
-}
-
-fn transient_failure(native_code: &str, message: String) -> PublishError {
-    PublishError::Classified {
-        failure: PublishFailure {
-            version: PUBLISH_FAILURE_VERSION,
-            category: PublishFailureCategory::Transient,
-            native_code: native_code.to_string(),
-            message,
-            retry_safe: true,
-            retry_after_seconds: None,
-        },
-    }
-}
-
 fn api_failure(failure: GitHubApiFailure) -> PublishError {
     PublishError::Classified {
         failure: classify_github_failure(&failure),
@@ -355,16 +316,6 @@ fn sealed_string<'a>(
             node.id
         ))
     })
-}
-
-fn sealed_inputs(node: &PlanNode) -> Result<&BTreeMap<String, Value>, PublishError> {
-    match &node.operation {
-        publish_domain::PlanOperation::AdapterAction { inputs, .. } => Ok(inputs),
-        _ => Err(PublishError::Execution(format!(
-            "node {} is not an adapter action",
-            node.id
-        ))),
-    }
 }
 
 /// 启用平台键 `<platform>-<architecture>`（桌面发布矩阵词汇），

@@ -8,9 +8,10 @@ use one_publish_runner::{
 use publish_adapters::{
     AdapterConformanceFixture, AdapterContract, AdapterExecutionContext, AdapterExecutionOutput,
     AdapterRegistry, ExecutionBackend, FakeGitHubActionsBackend, FakeGitHubReleaseApi,
-    GitHubReleaseDestination, LocalDirectoryDestination, LocalExecutionBackend, ProjectProvider,
-    StaticCredentialSource, TemporaryArtifactStore, ARTIFACT_CANDIDATE_CAPABILITY,
-    ARTIFACT_VERIFIED_CAPABILITY, STRUCTURED_PLAN_EXECUTION_CAPABILITY,
+    FakeSftpServer, GitHubReleaseDestination, LocalDirectoryDestination, LocalExecutionBackend,
+    ProjectProvider, SftpDeliveryDestination, StaticCredentialSource, TemporaryArtifactStore,
+    ARTIFACT_CANDIDATE_CAPABILITY, ARTIFACT_VERIFIED_CAPABILITY, SFTP_DELIVERY_RECORD_NAME,
+    STRUCTURED_PLAN_EXECUTION_CAPABILITY,
 };
 use publish_domain::{
     sha256_hex, AdapterBinding, AdapterDescriptor, AdapterIdentity, AdapterKind, AdapterSchema,
@@ -24,6 +25,9 @@ use serde_json::Value;
 const ARTIFACT_BYTES: &[u8] = b"same runner output";
 const GITHUB_TOKEN_REFERENCE: &str = "ci-github-token";
 const GITHUB_TOKEN_VALUE: &str = "contract-token-value";
+const SFTP_KEY_REFERENCE: &str = "ci-sftp-key";
+const SFTP_KEY_VALUE: &str =
+    "-----BEGIN OPENSSH PRIVATE KEY-----\ncontract-key\n-----END OPENSSH PRIVATE KEY-----";
 
 struct ContractProjectProvider {
     descriptor: AdapterDescriptor,
@@ -346,6 +350,142 @@ fn local_and_fake_github_actions_deliver_the_same_github_release_route() {
         assert_eq!(names, vec!["app.bin"]);
         assert_eq!(release.assets[0].digest, sha256_hex(ARTIFACT_BYTES));
     }
+}
+
+/// Issue T17 验收：Local 与 GitHub Actions Backend 通过 PublishRuntime 使用
+/// 同一配置修订向同一 SFTP 路线交付——节点合同、事件合同、Receipt 生命周期
+/// （Submitted 后由远端观察确认 Published）与远端最终状态完全一致。
+#[test]
+fn local_and_fake_github_actions_deliver_the_same_sftp_route() {
+    let local_root = tempfile::tempdir().expect("local fixture root");
+    let github_root = tempfile::tempdir().expect("GitHub fixture root");
+    let credentials = || {
+        Arc::new(StaticCredentialSource::new().with_secret(
+            SFTP_KEY_REFERENCE,
+            CredentialKind::SshPrivateKey,
+            SFTP_KEY_VALUE,
+        ))
+    };
+    let local_server = Arc::new(FakeSftpServer::new());
+    let github_server = Arc::new(FakeSftpServer::new());
+    let (local_runner, local_snapshot) = sftp_fixture_runner(
+        Arc::new(LocalExecutionBackend::with_credential_source(credentials())),
+        "local-execution",
+        local_root.path(),
+        local_server.clone(),
+    );
+    let (github_runner, github_snapshot) = sftp_fixture_runner(
+        Arc::new(FakeGitHubActionsBackend::new(credentials())),
+        "fake-github-actions",
+        github_root.path(),
+        github_server.clone(),
+    );
+    // 同一配置修订驱动两个后端：SFTP 路线绑定（设置与凭据引用）逐字一致，
+    // 只有执行后端与本地存储位置属于后端环境。
+    assert_eq!(
+        local_snapshot.configuration_revision,
+        github_snapshot.configuration_revision
+    );
+    assert_eq!(
+        local_snapshot.adapters.delivery_routes,
+        github_snapshot.adapters.delivery_routes
+    );
+
+    let local_projection = local_runner
+        .prepare_projection(&local_snapshot)
+        .expect("prepare local projection");
+    let github_projection = github_runner
+        .prepare_projection(&github_snapshot)
+        .expect("prepare fake GitHub Actions projection");
+    let local = local_runner
+        .execute(&local_projection, "attempt-sftp-contract")
+        .expect("deliver the sftp route locally");
+    let github = github_runner
+        .execute(&github_projection, "attempt-sftp-contract")
+        .expect("deliver the sftp route through fake GitHub Actions");
+
+    assert_compatible_outcomes(&local, &github);
+    for (outcome, server) in [(&local, &local_server), (&github, &github_server)] {
+        // 只有远端观察为 Published 的 Receipt 修订满足 Required Route。
+        let last = outcome.receipts.last().expect("observed receipt");
+        assert_eq!(last.status, DeliveryStatus::Published);
+        assert_eq!(last.revision, 2);
+        assert_eq!(
+            last.external_reference,
+            "sftp://deploy@files.example.com:22/srv/releases/1.0.0"
+        );
+        assert_eq!(
+            server.file("srv/releases/1.0.0/app.bin"),
+            Some(ARTIFACT_BYTES.to_vec())
+        );
+        let record: Value = serde_json::from_slice(
+            &server
+                .file(&format!("srv/releases/1.0.0/{SFTP_DELIVERY_RECORD_NAME}"))
+                .expect("committed delivery record"),
+        )
+        .expect("parse the delivery record");
+        assert_eq!(
+            record.get("manifest_digest").and_then(Value::as_str),
+            Some(outcome.manifest.digest.as_str())
+        );
+        assert!(server.paths().iter().all(|path| !path.ends_with(".part")));
+    }
+}
+
+/// 除执行后端外的完整 Adapter 选择：两个后端必须消费同一份配置修订内容。
+fn sftp_fixture_runner(
+    backend: Arc<dyn ExecutionBackend>,
+    backend_id: &str,
+    root: &std::path::Path,
+    server: Arc<FakeSftpServer>,
+) -> (StandaloneRunner, PlanningInputSnapshot) {
+    let store = root.join("store");
+    let mut snapshot = fixture_snapshot(
+        backend_id,
+        store.to_string_lossy().as_ref(),
+        "unused-delivery-directory",
+    );
+    snapshot.adapters.delivery_routes = vec![DeliveryRoute::required(
+        AdapterBinding::new(
+            "sftp-release-route",
+            AdapterIdentity::new(AdapterKind::DeliveryDestination, "sftp", 1),
+            sftp_settings(),
+        )
+        .with_credential("ssh_private_key", SFTP_KEY_REFERENCE),
+    )];
+    let revision = runtime_revision(&snapshot);
+    snapshot.runtime_revision = revision.identifier();
+
+    let fixture = AdapterConformanceFixture::new(snapshot.clone());
+    let mut registry = AdapterRegistry::new();
+    registry
+        .register_project_provider(Arc::new(ContractProjectProvider::new()), &fixture)
+        .expect("register contract provider");
+    registry
+        .register_execution_backend(backend, &fixture)
+        .expect("register execution backend");
+    registry
+        .register_artifact_store(Arc::new(TemporaryArtifactStore::new(&store)), &fixture)
+        .expect("register artifact store");
+    registry
+        .register_delivery_destination(Arc::new(SftpDeliveryDestination::new(server)), &fixture)
+        .expect("register sftp destination");
+    (
+        StandaloneRunner::new(registry, revision).expect("create runner"),
+        snapshot,
+    )
+}
+
+fn sftp_settings() -> AdapterSettings {
+    AdapterSettings::new(1)
+        .with_value("host", Value::String("files.example.com".to_string()))
+        .with_value("port", Value::from(22u64))
+        .with_value("username", Value::String("deploy".to_string()))
+        .with_value("remote_path", Value::String("/srv/releases".to_string()))
+        .with_value(
+            "artifact_roles",
+            Value::Array(vec![Value::String("installer".to_string())]),
+        )
 }
 
 /// 除执行后端外的完整 Adapter 选择：两个后端必须消费同一份配置修订内容。

@@ -313,6 +313,7 @@ pub enum AdapterSchemaValueType {
 pub enum CredentialKind {
     Token,
     SigningKey,
+    SshPrivateKey,
 }
 
 /// Adapter 对一项逻辑凭据的声明：类型与用途说明。用途随配置导出保留，

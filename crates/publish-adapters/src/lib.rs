@@ -16,6 +16,7 @@ mod github_actions;
 mod github_release;
 mod local;
 mod processors;
+mod sftp;
 pub mod tauri;
 
 pub use credentials::{CredentialResolveFailure, CredentialSource, StaticCredentialSource};
@@ -35,6 +36,13 @@ pub use local::{LocalDirectoryDestination, LocalExecutionBackend, TemporaryArtif
 pub use processors::{
     ChecksumProcessor, CustomCommandProcessor, CHECKSUM_MANIFEST_ROLE, CHECKSUM_PROCESSOR_ID,
     CUSTOM_COMMAND_GATE_CAPABILITY, CUSTOM_COMMAND_PROCESSOR_ID,
+};
+pub use sftp::{
+    classify_sftp_failure, parse_sftp_cli_failure, FakeSftpServer, OpenSshSftpTransport,
+    SftpDeliveryDestination, SftpEndpoint, SftpTransport, SftpTransportFailure,
+    FAKE_SFTP_OPERATION_EXISTS, FAKE_SFTP_OPERATION_MKDIR, FAKE_SFTP_OPERATION_READ,
+    FAKE_SFTP_OPERATION_REMOVE, FAKE_SFTP_OPERATION_RENAME, FAKE_SFTP_OPERATION_WRITE,
+    SFTP_DELIVERY_RECORD_NAME, SFTP_DESTINATION_ID,
 };
 pub use tauri::{
     TauriBuildDriver, TauriProjectInspection, TauriProjectProvider, TauriVersionSource,
@@ -66,6 +74,62 @@ pub(crate) fn require_action(node: &PlanNode, expected: &str) -> Result<(), Publ
         )));
     }
     Ok(())
+}
+
+/// 密封在 Adapter Action 节点里的单次发布输入；缺失代表计划被篡改而不是可选默认。
+pub(crate) fn sealed_inputs(
+    node: &PlanNode,
+) -> Result<&BTreeMap<String, serde_json::Value>, PublishError> {
+    match &node.operation {
+        PlanOperation::AdapterAction { inputs, .. } => Ok(inputs),
+        _ => Err(PublishError::Execution(format!(
+            "node {} is not an adapter action",
+            node.id
+        ))),
+    }
+}
+
+/// 交付目标共用的分类失败构造器（ADR-0056）：三种交付前/交付中的确定性
+/// 失败形状，副作用确定未发生（retry_safe=true），retry-after 不适用。
+pub(crate) fn classified_failure(
+    category: publish_domain::PublishFailureCategory,
+    native_code: &str,
+    message: String,
+) -> PublishError {
+    PublishError::Classified {
+        failure: publish_domain::PublishFailure {
+            version: publish_domain::PUBLISH_FAILURE_VERSION,
+            category,
+            native_code: native_code.to_string(),
+            message,
+            retry_safe: true,
+            retry_after_seconds: None,
+        },
+    }
+}
+
+pub(crate) fn validation_failure(native_code: &str, message: String) -> PublishError {
+    classified_failure(
+        publish_domain::PublishFailureCategory::Validation,
+        native_code,
+        message,
+    )
+}
+
+pub(crate) fn conflict_failure(native_code: &str, message: String) -> PublishError {
+    classified_failure(
+        publish_domain::PublishFailureCategory::Conflict,
+        native_code,
+        message,
+    )
+}
+
+pub(crate) fn transient_failure(native_code: &str, message: String) -> PublishError {
+    classified_failure(
+        publish_domain::PublishFailureCategory::Transient,
+        native_code,
+        message,
+    )
 }
 
 /// Thin execution backends share the same ordered Publish Plan interpreter; backend-specific
