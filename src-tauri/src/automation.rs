@@ -1481,19 +1481,7 @@ mod tests {
 
     fn commit_all(work: &Path, message: &str) {
         run_git(work, &["add", "--all"]);
-        run_git(
-            work,
-            &[
-                "-c",
-                "user.name=One Publish Tests",
-                "-c",
-                "user.email=tests@one-publish.invalid",
-                "commit",
-                "--quiet",
-                "-m",
-                message,
-            ],
-        );
+        run_git(work, &["commit", "--quiet", "-m", message]);
     }
 
     fn fixture_repository() -> (tempfile::TempDir, PathBuf) {
@@ -1506,6 +1494,11 @@ mod tests {
             &["init", "--bare", "--quiet", "-b", "main", "origin.git"],
         );
         run_git(&work, &["init", "--quiet", "-b", "main"]);
+        run_git(&work, &["config", "user.name", "One Publish Tests"]);
+        run_git(
+            &work,
+            &["config", "user.email", "tests@one-publish.invalid"],
+        );
         std::fs::write(work.join("README.md"), "fixture\n").expect("write readme");
         commit_all(&work, "fixture");
         run_git(
