@@ -5,19 +5,22 @@ use std::sync::Arc;
 
 use publish_adapters::{
     fixture_candidate_identity, AdapterConformanceFixture, AdapterRegistry, ChecksumProcessor,
-    FixtureAppProvider, LocalDirectoryDestination, LocalExecutionBackend, ProjectProvider,
-    TemporaryArtifactStore, CHECKSUM_MANIFEST_ROLE, CHECKSUM_PROCESSOR_ID, FIXTURE_BUNDLE_ROLE,
-    FIXTURE_PROVIDER_ID,
+    FakeSftpServer, FixtureAppProvider, LocalDirectoryDestination, LocalExecutionBackend,
+    ProjectProvider, SftpDeliveryDestination, StaticCredentialSource, TemporaryArtifactStore,
+    CHECKSUM_MANIFEST_ROLE, CHECKSUM_PROCESSOR_ID, FIXTURE_BUNDLE_ROLE, FIXTURE_PROVIDER_ID,
 };
 use publish_domain::{
-    AdapterBinding, AdapterIdentity, AdapterKind, AdapterSelection, AdapterSettings, DeliveryRoute,
-    DeliveryStatus, PlanningInputSnapshot, PublishAttemptStatus, ReleaseIdentity, SourceSnapshot,
-    PLANNING_INPUT_SNAPSHOT_VERSION,
+    AdapterBinding, AdapterIdentity, AdapterKind, AdapterSelection, AdapterSettings,
+    CredentialKind, DeliveryRoute, DeliveryStatus, PlanningInputSnapshot, PublishAttemptStatus,
+    ReleaseIdentity, SourceSnapshot, PLANNING_INPUT_SNAPSHOT_VERSION,
 };
 use publish_runner_core::{AttemptExecutionContext, PublishRuntime, StartPublishAttempt};
 use serde_json::Value;
 
 const MANIFEST_RELATIVE_PATH: &str = "apps/desktop/fixture-app.json";
+const SFTP_KEY_REFERENCE: &str = "fixture-server-key";
+const SFTP_KEY_VALUE: &str =
+    "-----BEGIN OPENSSH PRIVATE KEY-----\nfixture-key\n-----END OPENSSH PRIVATE KEY-----";
 
 /// Issue T18 主验收缝：第二 Project Provider Fixture 只通过既有注册与
 /// PublishRuntime 合同完成本地发布；Processor、Backend、Store 与 Destination
@@ -136,6 +139,22 @@ fn fixture_runtime(
     store_directory: &Path,
     delivery_directory: &Path,
 ) -> PublishRuntime {
+    fixture_runtime_with_sftp(
+        snapshot,
+        repository_root,
+        store_directory,
+        delivery_directory,
+        Arc::new(FakeSftpServer::new()),
+    )
+}
+
+fn fixture_runtime_with_sftp(
+    snapshot: &PlanningInputSnapshot,
+    repository_root: &Path,
+    store_directory: &Path,
+    delivery_directory: &Path,
+    sftp: Arc<FakeSftpServer>,
+) -> PublishRuntime {
     let fixture = AdapterConformanceFixture::new(snapshot.clone());
     let mut registry = AdapterRegistry::new();
     registry
@@ -145,7 +164,16 @@ fn fixture_runtime(
         .register_artifact_processor(Arc::new(ChecksumProcessor::new()), &fixture)
         .expect("register checksum processor");
     registry
-        .register_execution_backend(Arc::new(LocalExecutionBackend::new()), &fixture)
+        .register_execution_backend(
+            Arc::new(LocalExecutionBackend::with_credential_source(Arc::new(
+                StaticCredentialSource::new().with_secret(
+                    SFTP_KEY_REFERENCE,
+                    CredentialKind::SshPrivateKey,
+                    SFTP_KEY_VALUE,
+                ),
+            ))),
+            &fixture,
+        )
         .expect("register local backend");
     registry
         .register_artifact_store(
@@ -159,6 +187,9 @@ fn fixture_runtime(
             &fixture,
         )
         .expect("register local directory destination");
+    registry
+        .register_delivery_destination(Arc::new(SftpDeliveryDestination::new(sftp)), &fixture)
+        .expect("register sftp destination");
     PublishRuntime::new(registry)
 }
 
@@ -221,4 +252,123 @@ fn fixture_snapshot(
             ))],
         },
     }
+}
+
+/// Issue T20 验收缝：第二 Provider Fixture 组合与 Tauri 场景相同的通用能力
+/// ——多条 Delivery Route 消费同一封存 Manifest、Checksum 处理器管道与
+/// SFTP 受控边界——全程不修改发布核心或任何共享 Adapter，证明最终实现
+/// 没有回归为 Tauri 特例（ADR-0022/0024/0055）。
+///
+/// GitHub Release 路线不参与本组合：该 Destination 要求每个启用平台都有
+/// `installer` 角色的产物，这是它对任何 Provider 一视同仁的交付策略，
+/// 而 Fixture 的产物角色是 `fixture-bundle`——角色不匹配由能力与设置
+/// 校验显式报告，不构成 Provider 特例分支。
+#[test]
+fn fixture_provider_composes_the_same_multi_route_delivery_capabilities() {
+    let repository = tempfile::tempdir().expect("create fixture repository");
+    let manifest_absolute = repository.path().join(MANIFEST_RELATIVE_PATH);
+    fs::create_dir_all(manifest_absolute.parent().expect("manifest parent"))
+        .expect("create project directory");
+    fs::write(
+        &manifest_absolute,
+        r#"{"name":"demo-app","version":"2.0.0"}"#,
+    )
+    .expect("write fixture manifest");
+    let store_dir = tempfile::tempdir().expect("create temporary store");
+    let delivery_dir = tempfile::tempdir().expect("create local delivery directory");
+    let sftp = Arc::new(FakeSftpServer::new());
+    sftp.require_credentials("deploy", SFTP_KEY_VALUE);
+
+    let mut snapshot = fixture_snapshot(
+        MANIFEST_RELATIVE_PATH,
+        store_dir.path(),
+        delivery_dir.path(),
+    );
+    snapshot
+        .release_input
+        .insert("version".to_string(), Value::String("2.0.0".to_string()));
+    snapshot
+        .adapters
+        .delivery_routes
+        .push(DeliveryRoute::required(
+            AdapterBinding::new(
+                "sftp-route",
+                AdapterIdentity::new(AdapterKind::DeliveryDestination, "sftp", 1),
+                AdapterSettings::new(1)
+                    .with_value("host", Value::String("files.example.com".to_string()))
+                    .with_value("port", Value::from(22u64))
+                    .with_value("username", Value::String("deploy".to_string()))
+                    .with_value("remote_path", Value::String("/srv/fixture".to_string()))
+                    .with_value(
+                        "artifact_roles",
+                        Value::Array(vec![
+                            Value::String(FIXTURE_BUNDLE_ROLE.to_string()),
+                            Value::String(CHECKSUM_MANIFEST_ROLE.to_string()),
+                        ]),
+                    ),
+            )
+            .with_credential("ssh_private_key", SFTP_KEY_REFERENCE),
+        ));
+    let runtime = fixture_runtime_with_sftp(
+        &snapshot,
+        repository.path(),
+        store_dir.path(),
+        delivery_dir.path(),
+        sftp.clone(),
+    );
+
+    let prepared = runtime
+        .prepare_attempt(&snapshot)
+        .expect("prepare the multi-route fixture attempt");
+    let attempt = runtime
+        .start_attempt(
+            &prepared,
+            StartPublishAttempt::new(
+                "attempt-fixture-multi-route",
+                "local-run-fixture-multi-route",
+                ReleaseIdentity::new(
+                    fixture_candidate_identity(MANIFEST_RELATIVE_PATH),
+                    snapshot.source.clone(),
+                    "2.0.0",
+                    "stable",
+                    None,
+                ),
+            ),
+            &AttemptExecutionContext::at(0),
+        )
+        .expect("start the multi-route fixture attempt");
+
+    assert_eq!(attempt.status, PublishAttemptStatus::Published);
+    let manifest = attempt.manifest.as_ref().expect("sealed artifact manifest");
+    let bundle = &manifest.artifacts[0];
+    assert_eq!(bundle.role, FIXTURE_BUNDLE_ROLE);
+
+    // 两条路线各交出 Published Receipt，且都绑定同一封存 Manifest 摘要。
+    assert_eq!(attempt.receipts.len(), 2);
+    for route_id in ["local-route", "sftp-route"] {
+        let receipt = attempt
+            .receipts
+            .iter()
+            .find(|receipt| receipt.route_id == route_id)
+            .unwrap_or_else(|| panic!("route {route_id} has no delivery receipt"));
+        assert_eq!(receipt.status, DeliveryStatus::Published);
+        assert_eq!(receipt.manifest_digest, manifest.digest);
+    }
+
+    // SFTP 与本地目录收到的都是同一次构建的字节。
+    let expected_bundle = br#"{"name":"demo-app","version":"2.0.0"}"#.to_vec();
+    assert_eq!(
+        sftp.file(&format!("srv/fixture/2.0.0/{}", bundle.file_name)),
+        Some(expected_bundle.clone())
+    );
+    let local_receipt = attempt
+        .receipts
+        .iter()
+        .find(|receipt| receipt.route_id == "local-route")
+        .expect("local delivery receipt");
+    let delivered_root = Path::new(local_receipt.external_reference.as_str());
+    assert_eq!(
+        fs::read(delivered_root.join(&bundle.file_name)).expect("read delivered fixture bundle"),
+        expected_bundle
+    );
 }

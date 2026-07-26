@@ -144,7 +144,9 @@ impl TauriProjectProvider {
                 .with_required_string(CONFIG_PATH_SETTING)
                 .with_required_string(BUILD_DRIVER_SETTING),
             PublishingCapability {
-                provides: vec![Capability::new(crate::ARTIFACT_VERIFIED_CAPABILITY, 1)],
+                // 构建产物是未验证候选；摘要验证由 Artifact Processor 提供，
+                // Provider 不得越权声明已验证能力（ADR-0035、Issue T20）。
+                provides: vec![Capability::new(crate::ARTIFACT_CANDIDATE_CAPABILITY, 1)],
                 requires: vec![CapabilityRequirement::exact(
                     crate::STRUCTURED_PLAN_EXECUTION_CAPABILITY,
                     1,

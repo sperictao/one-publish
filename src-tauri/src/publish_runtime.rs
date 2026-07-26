@@ -9,9 +9,9 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use publish_adapters::{
     AdapterConformanceFixture, AdapterContract, AdapterExecutionContext, AdapterExecutionOutput,
-    AdapterRegistry, LocalDirectoryDestination, LocalExecutionBackend, ProjectProvider,
-    TauriBuildDriver, TauriProjectProvider, TemporaryArtifactStore, TAURI_INSPECT_ACTION,
-    TAURI_PROVIDER_ID,
+    AdapterRegistry, ChecksumProcessor, LocalDirectoryDestination, LocalExecutionBackend,
+    ProjectProvider, TauriBuildDriver, TauriProjectProvider, TemporaryArtifactStore,
+    CHECKSUM_PROCESSOR_ID, TAURI_INSPECT_ACTION, TAURI_PROVIDER_ID,
 };
 use publish_domain::{
     AdapterBinding, AdapterDescriptor, AdapterIdentity, AdapterKind, AdapterSchema,
@@ -1248,7 +1248,7 @@ fn build_snapshot(
         ),
     ]);
     let empty_settings = AdapterSettings::new(1);
-    let project_provider = match tauri_binding {
+    let (project_provider, artifact_processors) = match tauri_binding {
         Some(binding) => {
             // Tauri 发布身份使用 Provider 按版本来源语义解析的版本；
             // Release Gate 密封进发布输入，保持 Tauri adapter 的 (tauri, v1) 设置合同唯一。
@@ -1262,21 +1262,34 @@ fn build_snapshot(
                     serde_json::to_value(release_gates).map_err(runtime_serialization_error)?,
                 );
             }
-            AdapterBinding::new(
-                "project",
-                AdapterIdentity::new(AdapterKind::ProjectProvider, TAURI_PROVIDER_ID, 1),
-                AdapterSettings::new(1)
-                    .with_value("config_path", Value::String(binding.config_path.clone()))
-                    .with_value(
-                        "build_driver",
-                        Value::String(binding.build_driver.name().to_string()),
-                    ),
+            (
+                AdapterBinding::new(
+                    "project",
+                    AdapterIdentity::new(AdapterKind::ProjectProvider, TAURI_PROVIDER_ID, 1),
+                    AdapterSettings::new(1)
+                        .with_value("config_path", Value::String(binding.config_path.clone()))
+                        .with_value(
+                            "build_driver",
+                            Value::String(binding.build_driver.name().to_string()),
+                        ),
+                ),
+                // Tauri 构建产物是未验证候选：计划固定绑定校验和处理器提供
+                // 摘要验证与 SHA256SUMS 派生（ADR-0035、Issue T20）。
+                vec![AdapterBinding::new(
+                    "checksums",
+                    AdapterIdentity::new(AdapterKind::ArtifactProcessor, CHECKSUM_PROCESSOR_ID, 1),
+                    AdapterSettings::new(1),
+                )],
             )
         }
-        None => AdapterBinding::new(
-            "project",
-            AdapterIdentity::new(AdapterKind::ProjectProvider, SELECTED_PROVIDER_ID, 1),
-            AdapterSettings::new(1).with_value("spec_json", Value::String(spec_json)),
+        // 遗留 Selected Provider 桥接自行声明已验证产物，不经处理器管道。
+        None => (
+            AdapterBinding::new(
+                "project",
+                AdapterIdentity::new(AdapterKind::ProjectProvider, SELECTED_PROVIDER_ID, 1),
+                AdapterSettings::new(1).with_value("spec_json", Value::String(spec_json)),
+            ),
+            Vec::new(),
         ),
     };
 
@@ -1290,7 +1303,7 @@ fn build_snapshot(
         promoted_manifest_digest: None,
         adapters: AdapterSelection {
             project_provider,
-            artifact_processors: Vec::new(),
+            artifact_processors,
             execution_backend: AdapterBinding::new(
                 "backend",
                 AdapterIdentity::new(AdapterKind::ExecutionBackend, LOCAL_BACKEND_ID, 1),
@@ -1323,6 +1336,9 @@ fn build_registry(
     let fixture = AdapterConformanceFixture::new(snapshot.clone());
     let mut registry = AdapterRegistry::new();
     register_project_provider(&mut registry, snapshot, None, &fixture)?;
+    registry
+        .register_artifact_processor(Arc::new(ChecksumProcessor::new()), &fixture)
+        .map_err(runtime_error)?;
     registry
         .register_execution_backend(Arc::new(LocalExecutionBackend::new()), &fixture)
         .map_err(runtime_error)?;
@@ -1362,6 +1378,9 @@ fn build_execution_registry(
         }),
         &fixture,
     )?;
+    registry
+        .register_artifact_processor(Arc::new(ChecksumProcessor::new()), &fixture)
+        .map_err(runtime_error)?;
     registry
         .register_execution_backend(Arc::new(LocalExecutionBackend::new()), &fixture)
         .map_err(runtime_error)?;
@@ -3439,7 +3458,7 @@ mod tests {
                 .manifest
                 .as_ref()
                 .map(|manifest| manifest.artifact_count),
-            Some(3)
+            Some(4)
         );
         assert_eq!(result.attempt.receipts.len(), 1);
         let delivery_directory =
@@ -3527,11 +3546,18 @@ mod tests {
                     "updater-signature",
                     "application/octet-stream"
                 ),
+                ("SHA256SUMS", "checksum-manifest", "text/plain"),
             ]
         );
         for entry in &manifest.artifacts {
-            assert_eq!(entry.platform, std::env::consts::OS);
-            assert_eq!(entry.architecture, std::env::consts::ARCH);
+            // 校验和清单覆盖全部平台，其余产物携带构建主机的平台与架构。
+            if entry.role == "checksum-manifest" {
+                assert_eq!(entry.platform, "any");
+                assert_eq!(entry.architecture, "any");
+            } else {
+                assert_eq!(entry.platform, std::env::consts::OS);
+                assert_eq!(entry.architecture, std::env::consts::ARCH);
+            }
             assert!(
                 std::path::Path::new(&entry.locator).is_file(),
                 "manifest locator must point at the stored artifact: {}",

@@ -185,6 +185,18 @@ fn fixed_projection_executes_after_the_control_plane_is_removed() {
         tauri.descriptor().identity(),
         tauri.default_settings(),
     );
+    // Tauri 构建产物是未验证候选；已安装配置与生产快照一样固定绑定校验和
+    // 处理器提供 artifact-verified 能力（ADR-0035、Issue T20）。Promotion
+    // 不执行处理器节点，但能力协商仍覆盖完整选择。
+    installed_snapshot.adapters.artifact_processors = vec![AdapterBinding::new(
+        "checksums",
+        AdapterIdentity::new(
+            AdapterKind::ArtifactProcessor,
+            publish_adapters::CHECKSUM_PROCESSOR_ID,
+            1,
+        ),
+        AdapterSettings::new(1),
+    )];
     installed_snapshot.promoted_manifest_digest = Some(seed.manifest.digest);
     let revision = runtime_revision(&installed_snapshot);
     installed_snapshot.runtime_revision = revision.identifier();
