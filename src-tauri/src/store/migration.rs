@@ -9,7 +9,7 @@ use super::types::{
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 
-pub(crate) const CURRENT_STORE_SCHEMA_VERSION: u32 = 2;
+pub(crate) const CURRENT_STORE_SCHEMA_VERSION: u32 = 3;
 
 fn legacy_store_schema_version() -> u32 {
     0

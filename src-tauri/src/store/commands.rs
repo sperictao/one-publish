@@ -662,7 +662,15 @@ mod tests {
             execution_backend_id: "fake-automation".to_string(),
             trigger_policy: AutomationTriggerPolicy::Manual,
             backend_projection: serde_json::Value::Null,
-            runtime_revision: "plan-v1.adapter-v1.fake-automation@1".to_string(),
+            runtime_revision: one_publish_runner::current_runtime_revision([
+                publish_domain::AdapterIdentity::new(
+                    publish_domain::AdapterKind::ExecutionBackend,
+                    "fake-automation",
+                    1,
+                ),
+            ])
+            .expect("seal test runtime revision")
+            .into(),
             external_identity: "one-publish/automation/binding-1.json".to_string(),
             created_at: "2026-07-21T10:00:00Z".to_string(),
             updated_at: "2026-07-21T10:00:00Z".to_string(),

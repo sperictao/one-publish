@@ -2,14 +2,15 @@ use std::collections::BTreeMap;
 use std::sync::Arc;
 
 use publish_adapters::{
-    AdapterConformanceFixture, AdapterRegistry, ExecutionBackend, FakeAutomationBackend,
-    LocalExecutionBackend,
+    AdapterConformanceFixture, AdapterContract, AdapterRegistry, ExecutionBackend,
+    FakeAutomationBackend, FakeGitHubActionsBackend, LocalExecutionBackend, StaticCredentialSource,
 };
 use publish_domain::{
-    AdapterBinding, AdapterIdentity, AdapterKind, AdapterSelection, AdapterSettings,
-    AutomationBindingProjection, AutomationProjection, AutomationTriggerPolicy, DeliveryRoute,
-    PlanningInputSnapshot, PublishError, SourceSnapshot, AUTOMATION_PROJECTION_BUNDLE_VERSION,
-    PLANNING_INPUT_SNAPSHOT_VERSION,
+    sha256_hex, AdapterBinding, AdapterIdentity, AdapterKind, AdapterSelection, AdapterSettings,
+    AutomationBindingProjection, AutomationProjection, AutomationRuntimeRevision,
+    AutomationTriggerPolicy, DeliveryRoute, PlanningInputSnapshot, PublishError,
+    RuntimeAdapterRevision, RuntimeComponentRevision, SourceSnapshot,
+    AUTOMATION_PROJECTION_BUNDLE_VERSION, PLANNING_INPUT_SNAPSHOT_VERSION,
 };
 use serde_json::Value;
 
@@ -23,7 +24,7 @@ fn binding_projection(binding_id: &str, revision_id: &str) -> AutomationBindingP
         },
         release_namespace: "tag:v*".to_string(),
         delivery_destination_namespaces: vec!["github-release:repository".to_string()],
-        runtime_revision: "plan-v1.adapter-v1.fake-automation@1".to_string(),
+        runtime_revision: runtime_revision().into(),
         projection: AutomationProjection {
             public_settings: BTreeMap::from([(
                 "configuration".to_string(),
@@ -36,6 +37,18 @@ fn binding_projection(binding_id: &str, revision_id: &str) -> AutomationBindingP
             )]),
         },
     }
+}
+
+fn runtime_revision() -> AutomationRuntimeRevision {
+    AutomationRuntimeRevision::seal(
+        RuntimeComponentRevision::new("0.1.0", sha256_hex(b"runner")),
+        RuntimeComponentRevision::new("1", sha256_hex(b"plan")),
+        vec![RuntimeAdapterRevision::new(
+            AdapterIdentity::new(AdapterKind::ExecutionBackend, "fake-automation", 1),
+            sha256_hex(b"adapter"),
+        )],
+    )
+    .expect("seal fixture runtime")
 }
 
 #[test]
@@ -85,6 +98,25 @@ fn fake_backend_rejects_rendering_an_empty_binding_set() {
         backend.render_automation_bundle(&[]),
         Err(PublishError::Execution(message)) if message.contains("binding")
     ));
+}
+
+#[test]
+fn fake_github_actions_backend_projects_and_executes_the_shared_runner_contract() {
+    let backend = FakeGitHubActionsBackend::new(Arc::new(StaticCredentialSource::new()));
+    let bundle = backend
+        .render_automation_bundle(&[binding_projection("binding-stable", "revision-1")])
+        .expect("render fake GitHub Actions projection");
+
+    assert_eq!(bundle.backend.id, "fake-github-actions");
+    assert!(bundle
+        .files
+        .contains_key("one-publish/automation/binding-stable.json"));
+    assert!(backend
+        .descriptor()
+        .capabilities
+        .provides
+        .iter()
+        .any(|capability| capability.id == "structured-plan-execution"));
 }
 
 #[test]

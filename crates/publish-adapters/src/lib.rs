@@ -12,14 +12,17 @@ use serde_json::Value;
 
 mod credentials;
 mod fake;
+mod github_actions;
 mod local;
 mod processors;
 pub mod tauri;
 
 pub use credentials::{CredentialResolveFailure, CredentialSource, StaticCredentialSource};
 pub use fake::{
-    FakeAutomationBackend, FakeRemoteBackend, FAKE_AUTOMATION_BACKEND_ID, FAKE_REMOTE_BACKEND_ID,
+    FakeAutomationBackend, FakeGitHubActionsBackend, FakeRemoteBackend, FAKE_AUTOMATION_BACKEND_ID,
+    FAKE_GITHUB_ACTIONS_BACKEND_ID, FAKE_REMOTE_BACKEND_ID,
 };
+pub use github_actions::{GitHubActionsExecutionBackend, GITHUB_ACTIONS_EXECUTION_BACKEND_ID};
 pub use local::{LocalDirectoryDestination, LocalExecutionBackend, TemporaryArtifactStore};
 pub use processors::{
     ChecksumProcessor, CustomCommandProcessor, CHECKSUM_MANIFEST_ROLE, CHECKSUM_PROCESSOR_ID,
@@ -53,6 +56,18 @@ pub(crate) fn require_action(node: &PlanNode, expected: &str) -> Result<(), Publ
             "node {} expected action {expected}, got {actual}",
             node.id
         )));
+    }
+    Ok(())
+}
+
+/// Thin execution backends share the same ordered Publish Plan interpreter; backend-specific
+/// wrappers contribute topology and credentials, not a second copy of node semantics.
+pub fn execute_plan_in_order(
+    plan: &PublishPlan,
+    executor: &mut dyn PlanNodeExecutor,
+) -> Result<(), PublishError> {
+    for node in &plan.nodes {
+        executor.execute_node(node)?;
     }
     Ok(())
 }

@@ -16,6 +16,15 @@ use std::collections::BTreeMap;
 use std::fs;
 use tempfile::TempDir;
 
+fn test_runtime_revision() -> publish_domain::AutomationRuntimeRevision {
+    one_publish_runner::current_runtime_revision([publish_domain::AdapterIdentity::new(
+        publish_domain::AdapterKind::ExecutionBackend,
+        "fake-automation",
+        1,
+    )])
+    .expect("seal test runtime revision")
+}
+
 fn test_binding(configuration_id: &str, configuration_revision_id: &str) -> AutomationBinding {
     AutomationBinding {
         id: "binding-1".to_string(),
@@ -26,7 +35,7 @@ fn test_binding(configuration_id: &str, configuration_revision_id: &str) -> Auto
             tag_prefix: "v".to_string(),
         },
         backend_projection: serde_json::Value::Null,
-        runtime_revision: "plan-v1.adapter-v1.fake-automation@1".to_string(),
+        runtime_revision: test_runtime_revision().into(),
         external_identity: "one-publish/automation/binding-1.json".to_string(),
         created_at: "2026-07-21T10:00:00Z".to_string(),
         updated_at: "2026-07-21T10:00:00Z".to_string(),
@@ -784,7 +793,7 @@ fn load_from_path_migrates_name_based_profiles_once_and_writes_versioned_schema(
     let persisted = fs::read_to_string(&config_path).expect("read migrated config");
     let persisted_json: serde_json::Value =
         serde_json::from_str(&persisted).expect("parse migrated config");
-    assert_eq!(persisted_json["schemaVersion"], 2);
+    assert_eq!(persisted_json["schemaVersion"], 3);
     assert!(
         persisted_json["repositories"][0]["publishConfig"]["profiles"][0]
             .get("providerId")
@@ -797,6 +806,50 @@ fn load_from_path_migrates_name_based_profiles_once_and_writes_versioned_schema(
     assert_eq!(second_profiles[0].revisions, alpha.revisions);
     assert_eq!(second_profiles[1].id, beta.id);
     assert_eq!(second_profiles[1].revisions, beta.revisions);
+}
+
+#[test]
+fn load_from_path_preserves_schema_two_runtime_pins_until_explicit_upgrade() {
+    let temp = TempDir::new().expect("temp dir");
+    let config_path = temp.path().join("config.json");
+    let mut repo = test_repo("repo-1");
+    repo.publish_config
+        .bindings
+        .push(test_binding("configuration-1", "revision-1"));
+    let state = AppState {
+        repositories: vec![repo],
+        ..AppState::default()
+    };
+    save_to_path(&state, &config_path).expect("save current state");
+
+    let mut payload: serde_json::Value =
+        serde_json::from_slice(&fs::read(&config_path).expect("read state")).expect("parse state");
+    payload["schemaVersion"] = serde_json::Value::from(2);
+    payload["repositories"][0]["publishConfig"]["bindings"][0]["runtimeRevision"] =
+        serde_json::Value::String("plan-v1.adapter-v1.fake-automation@1".to_string());
+    fs::write(
+        &config_path,
+        serde_json::to_vec_pretty(&payload).expect("serialize schema two state"),
+    )
+    .expect("write schema two state");
+
+    let loaded = load_from_path(&config_path);
+    let pin = &loaded.repositories[0].publish_config.bindings[0].runtime_revision;
+    assert_eq!(
+        pin,
+        &publish_domain::PinnedAutomationRuntimeRevision::Legacy(
+            "plan-v1.adapter-v1.fake-automation@1".to_string()
+        )
+    );
+
+    let persisted: serde_json::Value =
+        serde_json::from_slice(&fs::read(&config_path).expect("read migrated state"))
+            .expect("parse migrated state");
+    assert_eq!(persisted["schemaVersion"], 3);
+    assert_eq!(
+        persisted["repositories"][0]["publishConfig"]["bindings"][0]["runtimeRevision"],
+        "plan-v1.adapter-v1.fake-automation@1"
+    );
 }
 
 #[test]

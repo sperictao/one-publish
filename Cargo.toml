@@ -4,6 +4,7 @@ members = [
   "crates/publish-adapters",
   "crates/publish-planner",
   "crates/publish-runner-core",
+  "crates/one-publish-runner",
 ]
 exclude = ["src-tauri"]
 resolver = "2"

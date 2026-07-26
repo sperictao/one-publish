@@ -47,7 +47,11 @@ function emptyView(): AutomationBindingsView {
   return { bindings: [], drift: [] };
 }
 
-function boundView(blockedReason: string | null): AutomationBindingsView {
+function boundView(
+  blockedReason: string | null,
+  runtimeRevision = "runtime-v1-current",
+  expectedRuntimeRevision = runtimeRevision
+): AutomationBindingsView {
   return {
     bindings: [
       {
@@ -58,13 +62,16 @@ function boundView(blockedReason: string | null): AutomationBindingsView {
           executionBackendId: "github-actions",
           triggerPolicy: { type: "tagPush", tagPrefix: "v" },
           backendProjection: null,
-          runtimeRevision: "plan-v1.adapter-v1.github-actions@1",
+          runtimeRevision: {},
           externalIdentity: ".github/workflows/one-publish-tauri-release.yml",
           createdAt: "2026-07-22T10:00:00Z",
           updatedAt: "2026-07-22T10:00:00Z",
         },
         configurationName: "Stable",
         blockedReason,
+        currentRuntimeRevision: runtimeRevision,
+        expectedRuntimeRevision,
+        runtimeUpgradeAvailable: runtimeRevision !== expectedRuntimeRevision,
       },
     ],
     drift: blockedReason
@@ -248,16 +255,30 @@ describe("AutomationBindingsSection", () => {
     );
   });
 
-  it("previews upgrade and detach changes for an existing binding", async () => {
-    listAutomationBindingsMock.mockResolvedValue(boundView(null));
+  it("shows runtime revision status and switches only after the projection diff is confirmed", async () => {
+    listAutomationBindingsMock.mockResolvedValue(
+      boundView(null, "runtime-v1-installed", "runtime-v1-expected")
+    );
     previewAutomationChangeMock.mockResolvedValue({
       change: { kind: "upgradeRevision", bindingId: "binding-1" },
       confirmationDigest: "digest-upgrade-1",
-      changes: [],
+      changes: [
+        {
+          path: ".one-publish/automation/github-actions.json",
+          kind: "updated",
+          currentContent: '{"runtimeRevision":"runtime-v1-installed"}',
+          expectedContent: '{"runtimeRevision":"runtime-v1-expected"}',
+          conflictReleaseNamespace: null,
+          conflictDeliveryDestinationNamespace: null,
+        },
+      ],
     });
 
     renderSection();
-    await screen.findByTestId("automation-binding-binding-1");
+    const binding = await screen.findByTestId("automation-binding-binding-1");
+    expect(binding.textContent).toContain("当前 Runtime：runtime-v1-installed");
+    expect(binding.textContent).toContain("期望 Runtime：runtime-v1-expected");
+    expect(binding.textContent).toContain("可升级");
 
     fireEvent.click(screen.getByRole("button", { name: "升级修订" }));
     await waitFor(() =>
@@ -266,16 +287,47 @@ describe("AutomationBindingsSection", () => {
         bindingId: "binding-1",
       })
     );
-    expect(await screen.findByTestId("automation-preview-empty")).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: "取消" }));
+    const diff = await screen.findByTestId("automation-preview-changes");
+    expect(diff.textContent).toContain("runtime-v1-installed");
+    expect(diff.textContent).toContain("runtime-v1-expected");
+    expect(applyAutomationChangeMock).not.toHaveBeenCalled();
 
+    listAutomationBindingsMock.mockResolvedValue(
+      boundView(null, "runtime-v1-expected")
+    );
+    fireEvent.click(screen.getByTestId("automation-confirm-apply"));
+    await waitFor(() =>
+      expect(applyAutomationChangeMock).toHaveBeenCalledWith(
+        "repo-1",
+        { kind: "upgradeRevision", bindingId: "binding-1" },
+        "digest-upgrade-1"
+      )
+    );
+    const upgraded = await screen.findByTestId("automation-binding-binding-1");
+    await waitFor(() =>
+      expect(upgraded.textContent).toContain("Runtime 已是最新")
+    );
+  });
+
+  it("previews detach without applying it implicitly", async () => {
+    listAutomationBindingsMock.mockResolvedValue(boundView(null));
+    previewAutomationChangeMock.mockResolvedValue({
+      change: { kind: "detach", bindingId: "binding-1" },
+      confirmationDigest: "digest-detach-1",
+      changes: [],
+    });
+
+    renderSection();
+    await screen.findByTestId("automation-binding-binding-1");
     fireEvent.click(screen.getByRole("button", { name: "解除绑定" }));
+
     await waitFor(() =>
       expect(previewAutomationChangeMock).toHaveBeenCalledWith("repo-1", {
         kind: "detach",
         bindingId: "binding-1",
       })
     );
+    expect(await screen.findByTestId("automation-preview-empty")).toBeTruthy();
     expect(applyAutomationChangeMock).not.toHaveBeenCalled();
   });
 });

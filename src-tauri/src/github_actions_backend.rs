@@ -1,10 +1,13 @@
 use std::collections::{BTreeMap, BTreeSet};
 
-use publish_adapters::{AdapterContract, ExecutionBackend, AUTOMATION_PROJECTION_CAPABILITY};
+use publish_adapters::{
+    execute_plan_in_order, AdapterContract, ExecutionBackend, PlanNodeExecutor,
+    AUTOMATION_PROJECTION_CAPABILITY, STRUCTURED_PLAN_EXECUTION_CAPABILITY,
+};
 use publish_domain::{
     AdapterDescriptor, AdapterKind, AdapterSchema, AdapterSettings, AutomationBindingProjection,
     AutomationBundleFile, AutomationProjectionBundle, AutomationTriggerPolicy, Capability,
-    PlanNodeTemplate, PlanningInputSnapshot, PublishError, PublishingCapability,
+    PlanNodeTemplate, PlanningInputSnapshot, PublishError, PublishPlan, PublishingCapability,
 };
 
 use crate::tauri_release::TauriReleaseConfig;
@@ -25,7 +28,10 @@ impl GitHubActionsAutomationBackend {
                 1,
                 AdapterSchema::new(1),
                 PublishingCapability {
-                    provides: vec![Capability::new(AUTOMATION_PROJECTION_CAPABILITY, 1)],
+                    provides: vec![
+                        Capability::new(AUTOMATION_PROJECTION_CAPABILITY, 1),
+                        Capability::new(STRUCTURED_PLAN_EXECUTION_CAPABILITY, 1),
+                    ],
                     requires: vec![],
                 },
             ),
@@ -49,6 +55,14 @@ impl AdapterContract for GitHubActionsAutomationBackend {
     ) -> Result<Vec<PlanNodeTemplate>, PublishError> {
         Ok(Vec::new())
     }
+
+    fn execute_plan(
+        &self,
+        plan: &PublishPlan,
+        executor: &mut dyn PlanNodeExecutor,
+    ) -> Result<(), PublishError> {
+        execute_plan_in_order(plan, executor)
+    }
 }
 
 impl ExecutionBackend for GitHubActionsAutomationBackend {
@@ -66,6 +80,7 @@ impl ExecutionBackend for GitHubActionsAutomationBackend {
         let mut manifest_bindings = BTreeMap::new();
         let mut binding_ids = BTreeSet::new();
         for binding in bindings {
+            binding.runtime_revision.validate_for_projection()?;
             if !binding_ids.insert(binding.binding_id.as_str()) {
                 return Err(PublishError::Execution(format!(
                     "GitHub Actions automation projection contains duplicate binding identity {}",
@@ -125,6 +140,19 @@ impl ExecutionBackend for GitHubActionsAutomationBackend {
                     binding_id: Some(binding.binding_id.clone()),
                 },
             );
+            let runtime_path = format!(
+                ".one-publish/automation/runtime/{}.json",
+                binding.binding_id
+            );
+            files.insert(
+                runtime_path.clone(),
+                AutomationBundleFile {
+                    content: serde_json::to_string_pretty(binding)
+                        .map_err(|error| PublishError::Execution(error.to_string()))?
+                        + "\n",
+                    binding_id: Some(binding.binding_id.clone()),
+                },
+            );
             manifest_bindings.insert(
                 binding.binding_id.clone(),
                 serde_json::json!({
@@ -132,8 +160,9 @@ impl ExecutionBackend for GitHubActionsAutomationBackend {
                     "configurationRevisionId": binding.configuration_revision_id,
                     "releaseNamespace": binding.release_namespace,
                     "deliveryDestinationNamespaces": binding.delivery_destination_namespaces,
-                    "runtimeRevision": binding.runtime_revision,
-                    "ownedResources": [path],
+                    "runtimeRevision": binding.runtime_revision.identifier(),
+                    "runtime": binding.runtime_revision,
+                    "ownedResources": [path, runtime_path],
                 }),
             );
         }
@@ -160,7 +189,20 @@ impl ExecutionBackend for GitHubActionsAutomationBackend {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use publish_domain::{AutomationProjection, AUTOMATION_PROJECTION_BUNDLE_VERSION};
+    use publish_domain::{
+        AdapterIdentity, AutomationProjection, AutomationRuntimeRevision,
+        AUTOMATION_PROJECTION_BUNDLE_VERSION,
+    };
+
+    fn runtime_revision() -> AutomationRuntimeRevision {
+        one_publish_runner::current_runtime_revision([
+            GitHubActionsAutomationBackend::new()
+                .descriptor()
+                .identity(),
+            AdapterIdentity::new(AdapterKind::ProjectProvider, "tauri", 1),
+        ])
+        .expect("seal runtime revision")
+    }
 
     fn binding(id: &str, prefix: &str, revision: &str) -> AutomationBindingProjection {
         let release_config =
@@ -174,7 +216,7 @@ mod tests {
             },
             release_namespace: format!("tag:{prefix}*"),
             delivery_destination_namespaces: vec!["github-release:repository".to_string()],
-            runtime_revision: "plan-v1.adapter-v1.github-actions@1".to_string(),
+            runtime_revision: runtime_revision().into(),
             projection: AutomationProjection {
                 public_settings: BTreeMap::from([
                     (
@@ -234,9 +276,12 @@ mod tests {
             .expect("bundle ownership manifest");
         assert_eq!(manifest.binding_id, None);
         assert!(manifest.content.contains("revision-stable"));
-        assert!(manifest
-            .content
-            .contains("plan-v1.adapter-v1.github-actions@1"));
+        assert!(manifest.content.contains(
+            &binding("stable", "v", "revision-stable")
+                .runtime_revision
+                .identifier()
+        ));
+        assert!(manifest.content.contains("\"runner\""));
         assert!(manifest.content.contains("github-release:repository"));
 
         let error = backend
@@ -246,5 +291,30 @@ mod tests {
             ])
             .expect_err("duplicate binding identity must be rejected");
         assert!(error.to_string().contains("duplicate binding identity"));
+    }
+
+    #[test]
+    fn bundle_rejects_missing_or_floating_runtime_revisions() {
+        let backend = GitHubActionsAutomationBackend::new();
+        for case in ["missing", "floating", "digest-mismatch"] {
+            let mut projection = binding("stable", "v", "revision-stable");
+            let runtime = match &mut projection.runtime_revision {
+                publish_domain::PinnedAutomationRuntimeRevision::Exact(runtime) => runtime,
+                publish_domain::PinnedAutomationRuntimeRevision::Legacy(_) => unreachable!(),
+            };
+            match case {
+                "missing" => runtime.runner.digest.clear(),
+                "floating" => runtime.runner.version = "latest".to_string(),
+                "digest-mismatch" => runtime.digest = "0".repeat(64),
+                _ => unreachable!(),
+            }
+            let error = backend
+                .render_automation_bundle(&[projection])
+                .expect_err("runtime revision must be exact");
+            assert!(
+                error.to_string().contains("runtime revision"),
+                "unexpected error for {case}: {error}"
+            );
+        }
     }
 }

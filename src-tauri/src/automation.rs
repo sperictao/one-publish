@@ -11,10 +11,10 @@ use std::sync::Arc;
 
 use publish_adapters::{ExecutionBackend, FakeAutomationBackend, FAKE_AUTOMATION_BACKEND_ID};
 use publish_domain::{
-    canonical_digest, diff_automation_files, is_safe_portable_relative_path,
-    AutomationBindingProjection, AutomationBundleFile, AutomationBundleFileChange,
-    AutomationFileChangeKind, AutomationProjection, AutomationTriggerPolicy as DomainTriggerPolicy,
-    PublishError, ADAPTER_CONTRACT_VERSION, PUBLISH_PLAN_VERSION,
+    canonical_digest, diff_automation_files, is_safe_portable_relative_path, AdapterIdentity,
+    AdapterKind, AutomationBindingProjection, AutomationBundleFile, AutomationBundleFileChange,
+    AutomationFileChangeKind, AutomationProjection, AutomationRuntimeRevision,
+    AutomationTriggerPolicy as DomainTriggerPolicy, PublishError,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -28,8 +28,7 @@ use crate::store::{
 };
 
 pub const AUTOMATION_DRIFT_BLOCKED_REASON: &str = "automation_projection_drift";
-const AUTOMATION_COMMIT_SUBJECT: &str =
-    "chore(release): apply One Publish automation projection";
+const AUTOMATION_COMMIT_SUBJECT: &str = "chore(release): apply One Publish automation projection";
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[serde(tag = "kind", rename_all = "camelCase")]
@@ -120,6 +119,9 @@ pub struct AutomationBindingView {
     pub binding: AutomationBinding,
     pub configuration_name: Option<String>,
     pub blocked_reason: Option<String>,
+    pub current_runtime_revision: String,
+    pub expected_runtime_revision: String,
+    pub runtime_upgrade_available: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
@@ -181,30 +183,42 @@ fn fixed_backend_projection(
     tauri_release_config: Option<&crate::tauri_release::TauriReleaseConfig>,
 ) -> Result<Value, AppError> {
     match backend_id {
-        GITHUB_ACTIONS_BACKEND_ID => serde_json::to_value(
-            tauri_release_config.ok_or_else(|| {
+        GITHUB_ACTIONS_BACKEND_ID => {
+            serde_json::to_value(tauri_release_config.ok_or_else(|| {
                 AppError::config_with_code(
                     "GitHub Actions 自动化需要现有 Tauri 发布配置",
                     "github_actions_release_config_missing",
                 )
-            })?,
-        )
-        .map_err(|error| {
-            AppError::config_with_code(
-                format!("无法固定 GitHub Actions 投影输入: {error}"),
-                "github_actions_projection_snapshot_failed",
-            )
-        }),
+            })?)
+            .map_err(|error| {
+                AppError::config_with_code(
+                    format!("无法固定 GitHub Actions 投影输入: {error}"),
+                    "github_actions_projection_snapshot_failed",
+                )
+            })
+        }
         _ => Ok(Value::Null),
     }
 }
 
-fn automation_runtime_revision(backend: &dyn ExecutionBackend) -> String {
-    let identity = backend.descriptor().identity();
-    format!(
-        "plan-v{PUBLISH_PLAN_VERSION}.adapter-v{ADAPTER_CONTRACT_VERSION}.{}@{}",
-        identity.id, identity.version
-    )
+fn automation_runtime_revision(
+    backend: &dyn ExecutionBackend,
+    revision: &crate::store::PublishConfigurationRevision,
+) -> Result<AutomationRuntimeRevision, AppError> {
+    one_publish_runner::current_runtime_revision([
+        backend.descriptor().identity(),
+        AdapterIdentity::new(
+            AdapterKind::ProjectProvider,
+            revision.provider_id.clone(),
+            1,
+        ),
+    ])
+    .map_err(|error| {
+        AppError::publish_with_code(
+            format!("无法封存自动化运行时修订: {error}"),
+            "automation_runtime_revision_invalid",
+        )
+    })
 }
 
 fn domain_trigger(policy: &AutomationTriggerPolicy) -> DomainTriggerPolicy {
@@ -258,6 +272,12 @@ fn resolve_target_bindings(
         } => {
             let profile = active_profile(config, configuration_id)?;
             ensure_unblocked(profile)?;
+            let revision = profile.current_revision().ok_or_else(|| {
+                AppError::validation_with_code(
+                    format!("配置 {} 缺少当前修订", profile.id),
+                    "automation_configuration_revision_missing",
+                )
+            })?;
             let backend = automation_backend(execution_backend_id)?;
             let binding_id = binding_id.clone().ok_or_else(|| {
                 AppError::validation_with_code(
@@ -275,7 +295,7 @@ fn resolve_target_bindings(
                     execution_backend_id,
                     tauri_release_config,
                 )?,
-                runtime_revision: automation_runtime_revision(backend.as_ref()),
+                runtime_revision: automation_runtime_revision(backend.as_ref(), revision)?.into(),
                 external_identity: String::new(),
                 created_at: now.to_string(),
                 updated_at: now.to_string(),
@@ -288,11 +308,18 @@ fn resolve_target_bindings(
                 .ok_or_else(|| binding_not_found(binding_id))?;
             let profile = active_profile(config, &binding.configuration_id)?;
             ensure_unblocked(profile)?;
+            let revision = profile.current_revision().ok_or_else(|| {
+                AppError::validation_with_code(
+                    format!("配置 {} 缺少当前修订", profile.id),
+                    "automation_configuration_revision_missing",
+                )
+            })?;
             let backend = automation_backend(&binding.execution_backend_id)?;
             binding.configuration_revision_id = profile.current_revision_id.clone();
             binding.backend_projection =
                 fixed_backend_projection(&binding.execution_backend_id, tauri_release_config)?;
-            binding.runtime_revision = automation_runtime_revision(backend.as_ref());
+            binding.runtime_revision =
+                automation_runtime_revision(backend.as_ref(), revision)?.into();
             binding.updated_at = now.to_string();
         }
         AutomationChangeRequest::Reconcile => {}
@@ -319,6 +346,10 @@ fn binding_projection(
     config: &RepoPublishConfig,
     binding: &AutomationBinding,
 ) -> Result<AutomationBindingProjection, AppError> {
+    binding
+        .runtime_revision
+        .validate_for_projection()
+        .map_err(render_error)?;
     let profile = config.profile(&binding.configuration_id).ok_or_else(|| {
         AppError::validation_with_code(
             format!("未找到配置文件: {}", binding.configuration_id),
@@ -493,10 +524,7 @@ impl AutomationConflictKey {
 
     fn overlaps(&self, other: &Self) -> bool {
         self.delivery_destination_namespace == other.delivery_destination_namespace
-            && release_namespaces_overlap(
-                &self.release_namespace,
-                &other.release_namespace,
-            )
+            && release_namespaces_overlap(&self.release_namespace, &other.release_namespace)
     }
 }
 
@@ -565,10 +593,7 @@ fn inspect_workflow(content: &str) -> Result<WorkflowInspection, yaml_serde::Err
         (!prefix.is_empty()).then(|| format!("tag:{prefix}*"))
     }
 
-    fn mapping_value<'a>(
-        value: &'a yaml_serde::Value,
-        key: &str,
-    ) -> Option<&'a yaml_serde::Value> {
+    fn mapping_value<'a>(value: &'a yaml_serde::Value, key: &str) -> Option<&'a yaml_serde::Value> {
         value
             .as_mapping()?
             .get(yaml_serde::Value::String(key.to_string()))
@@ -651,7 +676,9 @@ fn workflow_delivery_destination_namespace(
 
     if has_tag_trigger && can_write_contents {
         return Err(AppError::validation_with_code(
-            format!("标签触发的 workflow {path} 具有 contents: write 权限，但无法确定交付目标命名空间"),
+            format!(
+                "标签触发的 workflow {path} 具有 contents: write 权限，但无法确定交付目标命名空间"
+            ),
             "automation_workflow_namespace_ambiguous",
         ));
     }
@@ -828,10 +855,10 @@ pub(crate) fn preview_change_with_tauri_config(
             if confirmed_still_present == discovered {
                 // 已确认但已不存在的路径只能来自上次未推送成功的本地接入提交。
             } else {
-            return Err(AppError::validation_with_code(
-                "接管冲突资源与预览时不一致，请重新查看完整差异并确认",
-                "automation_takeover_conflicts_changed",
-            ));
+                return Err(AppError::validation_with_code(
+                    "接管冲突资源与预览时不一致，请重新查看完整差异并确认",
+                    "automation_takeover_conflicts_changed",
+                ));
             }
         }
     }
@@ -925,12 +952,8 @@ pub(crate) fn apply_change_with_tauri_config(
                 "automation_default_branch_required",
             ));
         }
-        let pending_commit = retry_pending_projection_push(
-            repo_root,
-            &expected_branch,
-            config,
-            &outcome,
-        )?;
+        let pending_commit =
+            retry_pending_projection_push(repo_root, &expected_branch, config, &outcome)?;
         config.bindings = targets;
         config.applied_bundles = outcome.expected.bundles;
         return Ok(AutomationApplyResult {
@@ -991,10 +1014,7 @@ pub(crate) fn apply_change_with_tauri_config(
     let mut add_args = vec!["add", "--"];
     add_args.extend(touched.iter().map(String::as_str));
     successful_git(repo_root, &add_args)?;
-    successful_git(
-        repo_root,
-        &["commit", "-m", AUTOMATION_COMMIT_SUBJECT],
-    )?;
+    successful_git(repo_root, &["commit", "-m", AUTOMATION_COMMIT_SUBJECT])?;
     let commit_sha = successful_git(repo_root, &["rev-parse", "HEAD"])?;
     successful_git(
         repo_root,
@@ -1061,15 +1081,31 @@ pub(crate) fn bindings_view_with_tauri_config(
         .iter()
         .map(|binding| {
             let blocked = shared_drift || drifted_bindings.contains(&binding.id);
-            AutomationBindingView {
+            let backend = automation_backend(&binding.execution_backend_id)?;
+            let profile = active_profile(config, &binding.configuration_id)?;
+            let revision = profile.current_revision().ok_or_else(|| {
+                AppError::validation_with_code(
+                    format!("配置 {} 缺少当前修订", profile.id),
+                    "automation_configuration_revision_missing",
+                )
+            })?;
+            let expected_runtime_revision =
+                automation_runtime_revision(backend.as_ref(), revision)?;
+            let current_runtime_revision = binding.runtime_revision.identifier();
+            let expected_runtime_revision_id = expected_runtime_revision.identifier();
+            Ok(AutomationBindingView {
                 binding: binding.clone(),
                 configuration_name: config
                     .profile(&binding.configuration_id)
                     .map(|profile| profile.name.clone()),
                 blocked_reason: blocked.then(|| AUTOMATION_DRIFT_BLOCKED_REASON.to_string()),
-            }
+                runtime_upgrade_available: binding.runtime_revision
+                    != expected_runtime_revision.clone().into(),
+                current_runtime_revision,
+                expected_runtime_revision: expected_runtime_revision_id,
+            })
         })
-        .collect();
+        .collect::<Result<Vec<_>, AppError>>()?;
 
     Ok(AutomationBindingsView { bindings, drift })
 }
@@ -1297,7 +1333,10 @@ fn validate_pending_projection_commit(
         AutomationChangeRequest::Install {
             confirmed_conflict_paths,
             ..
-        } => confirmed_conflict_paths.iter().cloned().collect::<BTreeSet<_>>(),
+        } => confirmed_conflict_paths
+            .iter()
+            .cloned()
+            .collect::<BTreeSet<_>>(),
         _ => BTreeSet::new(),
     };
     let target_namespaces = outcome
@@ -1846,10 +1885,7 @@ mod tests {
         let inspection = inspect_workflow(flow_style).expect("parse flow-style workflow");
         assert!(inspection.has_tag_trigger);
         assert!(inspection.can_write_contents);
-        assert_eq!(
-            inspection.release_namespaces,
-            vec!["tag:v*".to_string()]
-        );
+        assert_eq!(inspection.release_namespaces, vec!["tag:v*".to_string()]);
         assert_eq!(
             workflow_delivery_destination_namespace(
                 "flow-style.yml",
@@ -1999,11 +2035,8 @@ mod tests {
         let quality_path = work.join(".github/workflows/quality.yml");
         std::fs::create_dir_all(quality_path.parent().expect("workflow parent"))
             .expect("create workflow directory");
-        std::fs::write(
-            &quality_path,
-            "on: [push]\nsteps:\n  - run: cargo test\n",
-        )
-        .expect("write quality workflow");
+        std::fs::write(&quality_path, "on: [push]\nsteps:\n  - run: cargo test\n")
+            .expect("write quality workflow");
         commit_all(&work, "seed unowned quality workflow");
         run_git(&work, &["push", "--quiet", "origin", "main"]);
 
@@ -2212,15 +2245,10 @@ mod tests {
         );
 
         let mut changed_release_config = release_config.clone();
-        changed_release_config.app_config_path =
-            "desktop/src-tauri/tauri.conf.json".to_string();
-        let unchanged = bindings_view_with_tauri_config(
-            &work,
-            &config,
-            NOW,
-            Some(&changed_release_config),
-        )
-        .expect("mutable local release config cannot change the fixed projection");
+        changed_release_config.app_config_path = "desktop/src-tauri/tauri.conf.json".to_string();
+        let unchanged =
+            bindings_view_with_tauri_config(&work, &config, NOW, Some(&changed_release_config))
+                .expect("mutable local release config cannot change the fixed projection");
         assert!(unchanged.drift.is_empty());
 
         let upgrade = AutomationChangeRequest::UpgradeRevision {
@@ -2239,8 +2267,7 @@ mod tests {
                 && change.kind == AutomationFileChangeKind::Updated
         }));
         assert!(preview.changes.iter().any(|change| {
-            change.path == MANAGED_WORKFLOW_PATH
-                && change.kind == AutomationFileChangeKind::Updated
+            change.path == MANAGED_WORKFLOW_PATH && change.kind == AutomationFileChangeKind::Updated
         }));
 
         apply_change_with_tauri_config(
@@ -2386,6 +2413,72 @@ mod tests {
             .expect("view after upgrade")
             .drift
             .is_empty());
+    }
+
+    #[test]
+    fn bindings_report_pinned_and_expected_runtime_until_explicit_upgrade() {
+        let (_temp, work) = fixture_repository();
+        let (mut config, profile_id) = fixture_config("Stable");
+        preview_then_apply(&work, &mut config, &install_request(&profile_id));
+        let binding_id = config.bindings[0].id.clone();
+        let expected_runtime = config.bindings[0]
+            .runtime_revision
+            .exact()
+            .expect("new binding pins an exact runtime")
+            .clone();
+        let pinned_runtime = publish_domain::PinnedAutomationRuntimeRevision::Legacy(
+            "plan-v1.adapter-v1.fake-automation@1".to_string(),
+        );
+        let pinned_runtime_id = pinned_runtime.identifier();
+        let expected_runtime_id = expected_runtime.identifier();
+        config.bindings[0].runtime_revision = pinned_runtime.clone();
+
+        // 模拟已安装自动化仍固定旧 Runner；协调只恢复该固定投影，不能隐式升级。
+        preview_then_apply(&work, &mut config, &AutomationChangeRequest::Reconcile);
+        let before_upgrade = bindings_view(&work, &config, NOW).expect("view pinned runtime");
+        assert!(before_upgrade.drift.is_empty());
+        assert_eq!(
+            before_upgrade.bindings[0].current_runtime_revision,
+            pinned_runtime_id
+        );
+        assert_eq!(
+            before_upgrade.bindings[0].expected_runtime_revision,
+            expected_runtime_id
+        );
+        assert!(before_upgrade.bindings[0].runtime_upgrade_available);
+        assert_eq!(config.bindings[0].runtime_revision, pinned_runtime);
+
+        let upgrade = AutomationChangeRequest::UpgradeRevision {
+            binding_id: binding_id.clone(),
+        };
+        let preview =
+            preview_change(&work, &config, &upgrade, NOW).expect("preview runtime upgrade");
+        assert!(preview.changes.iter().any(|change| {
+            change
+                .current_content
+                .as_deref()
+                .is_some_and(|content| content.contains(&pinned_runtime_id))
+                && change
+                    .expected_content
+                    .as_deref()
+                    .is_some_and(|content| content.contains(&expected_runtime.runner.version))
+        }));
+        assert_eq!(
+            config.bindings[0].runtime_revision, pinned_runtime,
+            "preview must not upgrade the binding"
+        );
+
+        preview_then_apply(&work, &mut config, &upgrade);
+        let upgraded = bindings_view(&work, &config, NOW).expect("view upgraded runtime");
+        assert_eq!(
+            upgraded.bindings[0].current_runtime_revision,
+            expected_runtime_id
+        );
+        assert_eq!(
+            upgraded.bindings[0].expected_runtime_revision,
+            expected_runtime_id
+        );
+        assert!(!upgraded.bindings[0].runtime_upgrade_available);
     }
 
     #[test]

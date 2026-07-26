@@ -3039,6 +3039,7 @@ dependencies = [
  "hex",
  "json5",
  "log",
+ "one-publish-runner",
  "open",
  "publish-adapters",
  "publish-domain",
@@ -3067,6 +3068,19 @@ dependencies = [
  "windows-sys 0.59.0",
  "yaml_serde",
  "zip 8.6.0",
+]
+
+[[package]]
+name = "one-publish-runner"
+version = "0.1.0"
+dependencies = [
+ "hex",
+ "publish-adapters",
+ "publish-domain",
+ "publish-runner-core",
+ "serde",
+ "serde_json",
+ "sha2 0.10.9",
 ]
 
 [[package]]

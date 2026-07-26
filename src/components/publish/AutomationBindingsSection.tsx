@@ -266,6 +266,28 @@ export function AutomationBindingsSection({
                     {configPanelT.automationRevisionPrefix || "修订"}{" "}
                     {item.binding.configurationRevisionId.slice(-8)}
                   </p>
+                  <p className="break-all text-label-12 text-muted-foreground">
+                    {configPanelT.automationCurrentRuntime || "当前 Runtime："}
+                    {item.currentRuntimeRevision}
+                  </p>
+                  <p className="break-all text-label-12 text-muted-foreground">
+                    {configPanelT.automationExpectedRuntime || "期望 Runtime："}
+                    {item.expectedRuntimeRevision}
+                  </p>
+                  <span
+                    className={
+                      item.runtimeUpgradeAvailable
+                        ? "inline-flex rounded-sm bg-amber-500/15 px-1.5 py-0.5 text-label-12 font-medium text-amber-700 dark:text-amber-400"
+                        : "inline-flex rounded-sm bg-emerald-500/15 px-1.5 py-0.5 text-label-12 font-medium text-emerald-700 dark:text-emerald-400"
+                    }
+                    data-testid={`automation-runtime-status-${item.binding.id}`}
+                  >
+                    {item.runtimeUpgradeAvailable
+                      ? configPanelT.automationRuntimeUpgradeAvailable ||
+                        "可升级"
+                      : configPanelT.automationRuntimeCurrent ||
+                        "Runtime 已是最新"}
+                  </span>
                 </div>
                 <div className="flex shrink-0 items-center gap-1">
                   <Button

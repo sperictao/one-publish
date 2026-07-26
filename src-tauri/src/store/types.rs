@@ -1,3 +1,4 @@
+use publish_domain::PinnedAutomationRuntimeRevision;
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, HashMap};
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -189,7 +190,8 @@ pub struct AutomationBinding {
     pub trigger_policy: AutomationTriggerPolicy,
     #[serde(default)]
     pub backend_projection: serde_json::Value,
-    pub runtime_revision: String,
+    #[ts(type = "JsonValue")]
+    pub runtime_revision: PinnedAutomationRuntimeRevision,
     pub external_identity: String,
     pub created_at: String,
     pub updated_at: String,

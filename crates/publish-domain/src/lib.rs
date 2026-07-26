@@ -13,6 +13,7 @@ pub const DELIVERY_RECEIPT_VERSION: u32 = 1;
 pub const PUBLISH_FAILURE_VERSION: u32 = 1;
 pub const RELEASE_ATTEMPT_VERSION: u32 = 1;
 pub const AUTOMATION_PROJECTION_BUNDLE_VERSION: u32 = 1;
+pub const AUTOMATION_RUNTIME_REVISION_VERSION: u32 = 1;
 pub const PUBLISH_RESOURCE_LEASE_VERSION: u32 = 1;
 
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
@@ -128,6 +129,8 @@ pub enum PublishError {
     InvalidPlan(String),
     #[error("publish plan digest mismatch: expected {expected}, got {actual}")]
     PlanDigestMismatch { expected: String, actual: String },
+    #[error("invalid automation runtime revision: {0}")]
+    InvalidRuntimeRevision(String),
     #[error("artifact digest mismatch for {artifact}: expected {expected}, got {actual}")]
     ArtifactDigestMismatch {
         artifact: String,
@@ -1440,8 +1443,234 @@ pub struct AutomationBindingProjection {
     pub release_namespace: String,
     /// Binding 会写入的目标范围；与 Release Namespace 共同构成自动化冲突键。
     pub delivery_destination_namespaces: Vec<String>,
-    pub runtime_revision: String,
+    pub runtime_revision: PinnedAutomationRuntimeRevision,
     pub projection: AutomationProjection,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RuntimeComponentRevision {
+    pub version: String,
+    pub digest: String,
+}
+
+impl RuntimeComponentRevision {
+    pub fn new(version: impl Into<String>, digest: impl Into<String>) -> Self {
+        Self {
+            version: version.into(),
+            digest: digest.into(),
+        }
+    }
+
+    fn validate(&self, name: &str) -> Result<(), PublishError> {
+        let version = self.version.trim();
+        if version.is_empty() {
+            return Err(PublishError::InvalidRuntimeRevision(format!(
+                "{name} version is required"
+            )));
+        }
+        if matches!(
+            version.to_ascii_lowercase().as_str(),
+            "latest" | "stable" | "main" | "master" | "nightly"
+        ) {
+            return Err(PublishError::InvalidRuntimeRevision(format!(
+                "{name} version {version} is floating"
+            )));
+        }
+        if !is_sha256_digest(&self.digest) {
+            return Err(PublishError::InvalidRuntimeRevision(format!(
+                "{name} digest must be a lowercase SHA-256 digest"
+            )));
+        }
+        Ok(())
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RuntimeAdapterRevision {
+    pub adapter: AdapterIdentity,
+    pub digest: String,
+}
+
+impl RuntimeAdapterRevision {
+    pub fn new(adapter: AdapterIdentity, digest: impl Into<String>) -> Self {
+        Self {
+            adapter,
+            digest: digest.into(),
+        }
+    }
+
+    fn validate(&self) -> Result<(), PublishError> {
+        if !is_sha256_digest(&self.digest) {
+            return Err(PublishError::InvalidRuntimeRevision(format!(
+                "adapter {} digest must be a lowercase SHA-256 digest",
+                self.adapter.display_name()
+            )));
+        }
+        Ok(())
+    }
+}
+
+/// 自动化安装所固定的完整 Runner 合同身份。顶层摘要封存 Runner、Publish
+/// Plan 合同和全部内置 Adapter 的精确版本与内容摘要（ADR-0046）。
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AutomationRuntimeRevision {
+    pub version: u32,
+    pub runner: RuntimeComponentRevision,
+    pub plan_contract: RuntimeComponentRevision,
+    pub adapters: Vec<RuntimeAdapterRevision>,
+    pub digest: String,
+}
+
+/// 持久化 Binding 的 runtime pin。`Legacy` 只用于无损承接 schema v2
+/// 已安装自动化；新安装和显式升级始终写入可验证的 `Exact` 修订。
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum PinnedAutomationRuntimeRevision {
+    Exact(AutomationRuntimeRevision),
+    Legacy(String),
+}
+
+impl PinnedAutomationRuntimeRevision {
+    pub fn identifier(&self) -> String {
+        match self {
+            Self::Exact(revision) => revision.identifier(),
+            Self::Legacy(identifier) => identifier.clone(),
+        }
+    }
+
+    pub fn validate_for_projection(&self) -> Result<(), PublishError> {
+        match self {
+            Self::Exact(revision) => revision.validate(),
+            Self::Legacy(identifier) => {
+                let identifier = identifier.trim();
+                if identifier.is_empty()
+                    || matches!(
+                        identifier.to_ascii_lowercase().as_str(),
+                        "latest" | "stable" | "main" | "master" | "nightly"
+                    )
+                {
+                    return Err(PublishError::InvalidRuntimeRevision(
+                        "legacy runtime revision must be a fixed non-empty identifier".to_string(),
+                    ));
+                }
+                Ok(())
+            }
+        }
+    }
+
+    pub fn exact(&self) -> Result<&AutomationRuntimeRevision, PublishError> {
+        match self {
+            Self::Exact(revision) => Ok(revision),
+            Self::Legacy(identifier) => Err(PublishError::InvalidRuntimeRevision(format!(
+                "legacy runtime revision {identifier} must be explicitly upgraded before shared Runner execution"
+            ))),
+        }
+    }
+}
+
+impl From<AutomationRuntimeRevision> for PinnedAutomationRuntimeRevision {
+    fn from(value: AutomationRuntimeRevision) -> Self {
+        Self::Exact(value)
+    }
+}
+
+impl AutomationRuntimeRevision {
+    pub fn seal(
+        runner: RuntimeComponentRevision,
+        plan_contract: RuntimeComponentRevision,
+        mut adapters: Vec<RuntimeAdapterRevision>,
+    ) -> Result<Self, PublishError> {
+        adapters.sort_by(|left, right| left.adapter.cmp(&right.adapter));
+        let mut revision = Self {
+            version: AUTOMATION_RUNTIME_REVISION_VERSION,
+            runner,
+            plan_contract,
+            adapters,
+            digest: String::new(),
+        };
+        revision.validate_components()?;
+        revision.digest = revision.recomputed_digest()?;
+        Ok(revision)
+    }
+
+    pub fn identifier(&self) -> String {
+        format!("runtime-v{}-{}", self.version, self.digest)
+    }
+
+    pub fn validate(&self) -> Result<(), PublishError> {
+        if self.version != AUTOMATION_RUNTIME_REVISION_VERSION {
+            return Err(PublishError::InvalidRuntimeRevision(format!(
+                "unsupported contract version {}; expected {}",
+                self.version, AUTOMATION_RUNTIME_REVISION_VERSION
+            )));
+        }
+        self.validate_components()?;
+        let actual = self.recomputed_digest()?;
+        if self.digest != actual {
+            return Err(PublishError::InvalidRuntimeRevision(format!(
+                "digest mismatch: expected {}, got {}",
+                self.digest, actual
+            )));
+        }
+        Ok(())
+    }
+
+    fn validate_components(&self) -> Result<(), PublishError> {
+        self.runner.validate("runner")?;
+        self.plan_contract.validate("publish plan contract")?;
+        if self.adapters.is_empty() {
+            return Err(PublishError::InvalidRuntimeRevision(
+                "at least one adapter revision is required".to_string(),
+            ));
+        }
+        let mut previous: Option<&AdapterIdentity> = None;
+        for adapter in &self.adapters {
+            adapter.validate()?;
+            if let Some(previous) = previous {
+                if previous >= &adapter.adapter {
+                    return Err(PublishError::InvalidRuntimeRevision(
+                        "adapter revisions must be unique and sorted by identity".to_string(),
+                    ));
+                }
+            }
+            previous = Some(&adapter.adapter);
+        }
+        Ok(())
+    }
+
+    fn recomputed_digest(&self) -> Result<String, PublishError> {
+        #[derive(Serialize)]
+        struct DigestInput<'a> {
+            version: u32,
+            runner: &'a RuntimeComponentRevision,
+            plan_contract: &'a RuntimeComponentRevision,
+            adapters: &'a [RuntimeAdapterRevision],
+        }
+
+        canonical_digest(&DigestInput {
+            version: self.version,
+            runner: &self.runner,
+            plan_contract: &self.plan_contract,
+            adapters: &self.adapters,
+        })
+    }
+}
+
+pub fn validate_automation_runtime_revision_identifier(
+    identifier: &str,
+) -> Result<(), PublishError> {
+    let prefix = format!("runtime-v{AUTOMATION_RUNTIME_REVISION_VERSION}-");
+    let digest = identifier.strip_prefix(&prefix).ok_or_else(|| {
+        PublishError::InvalidRuntimeRevision(format!(
+            "runtime revision identifier must start with {prefix}"
+        ))
+    })?;
+    if !is_sha256_digest(digest) {
+        return Err(PublishError::InvalidRuntimeRevision(
+            "runtime revision identifier must end with a lowercase SHA-256 digest".to_string(),
+        ));
+    }
+    Ok(())
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

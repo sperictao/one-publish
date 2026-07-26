@@ -13,10 +13,10 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use crate::{
-    action_name, require_action, AdapterContract, AdapterExecutionContext, AdapterExecutionOutput,
-    ArtifactStore, DeliveryDestination, ExecutionBackend, PlanNodeExecutor, RemovedArtifactSet,
-    RetainedArtifactSet, RetentionHold, RetentionSweepReport, ARTIFACT_VERIFIED_CAPABILITY,
-    STRUCTURED_PLAN_EXECUTION_CAPABILITY,
+    action_name, execute_plan_in_order, require_action, AdapterContract, AdapterExecutionContext,
+    AdapterExecutionOutput, ArtifactStore, DeliveryDestination, ExecutionBackend, PlanNodeExecutor,
+    RemovedArtifactSet, RetainedArtifactSet, RetentionHold, RetentionSweepReport,
+    ARTIFACT_VERIFIED_CAPABILITY, STRUCTURED_PLAN_EXECUTION_CAPABILITY,
 };
 
 const STORED_ARTIFACT: &str = "stored-artifact";
@@ -83,10 +83,7 @@ impl AdapterContract for LocalExecutionBackend {
         plan: &PublishPlan,
         executor: &mut dyn PlanNodeExecutor,
     ) -> Result<(), PublishError> {
-        for node in &plan.nodes {
-            executor.execute_node(node)?;
-        }
-        Ok(())
+        execute_plan_in_order(plan, executor)
     }
 }
 
