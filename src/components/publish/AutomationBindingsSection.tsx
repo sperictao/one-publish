@@ -278,7 +278,7 @@ export function AutomationBindingsSection({
                     className={
                       item.runtimeUpgradeAvailable
                         ? "inline-flex rounded-sm bg-amber-500/15 px-1.5 py-0.5 text-label-12 font-medium text-amber-700 dark:text-amber-400"
-                        : "inline-flex rounded-sm bg-emerald-500/15 px-1.5 py-0.5 text-label-12 font-medium text-emerald-700 dark:text-emerald-400"
+                        : "inline-flex rounded-sm bg-success/10 px-1.5 py-0.5 text-label-12 font-medium text-success"
                     }
                     data-testid={`automation-runtime-status-${item.binding.id}`}
                   >

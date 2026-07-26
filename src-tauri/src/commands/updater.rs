@@ -441,13 +441,8 @@ where
         return None;
     };
 
-    maybe_update.and_then(|update| {
-        if update_metadata_changed(previous_metadata, &update_metadata_from(&update)) {
-            Some(update)
-        } else {
-            None
-        }
-    })
+    maybe_update
+        .filter(|update| update_metadata_changed(previous_metadata, &update_metadata_from(update)))
 }
 
 /// `Update` 中参与「是否需要重新下载」判定的关键字段快照。
