@@ -74,6 +74,40 @@ function createConfigProfile(
         providerVersion: "1",
         settingsVersion: 1,
         parameters: {},
+        composition: {
+          executionBackend: {
+            adapterId: "local-execution",
+            settingsVersion: 1,
+            settings: {},
+            credentials: {},
+          },
+          artifactStore: {
+            adapterId: "temporary-artifact-store",
+            settingsVersion: 1,
+            settings: {},
+            credentials: {},
+          },
+          artifactProcessors: [
+            {
+              adapterId: "checksum",
+              settingsVersion: 1,
+              settings: {},
+              credentials: {},
+            },
+          ],
+          deliveryRoutes: [
+            {
+              routeId: "local-delivery",
+              required: true,
+              destination: {
+                adapterId: "local-directory",
+                settingsVersion: 1,
+                settings: {},
+                credentials: {},
+              },
+            },
+          ],
+        },
       },
     ],
     deletedAt: null,

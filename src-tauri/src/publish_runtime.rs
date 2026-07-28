@@ -9,9 +9,11 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use publish_adapters::{
     AdapterConformanceFixture, AdapterContract, AdapterExecutionContext, AdapterExecutionOutput,
-    AdapterRegistry, ChecksumProcessor, LocalDirectoryDestination, LocalExecutionBackend,
-    ProjectProvider, TauriBuildDriver, TauriProjectProvider, TemporaryArtifactStore,
-    CHECKSUM_PROCESSOR_ID, TAURI_INSPECT_ACTION, TAURI_PROVIDER_ID,
+    AdapterRegistry, ChecksumProcessor, GhCliGitHubReleaseApi, GitHubReleaseDestination,
+    LocalDirectoryDestination, LocalExecutionBackend, OpenSshSftpTransport, ProjectProvider,
+    SftpDeliveryDestination, TauriBuildDriver, TauriProjectProvider, TemporaryArtifactStore,
+    CHECKSUM_PROCESSOR_ID, GITHUB_RELEASE_DESTINATION_ID, SFTP_DESTINATION_ID,
+    TAURI_INSPECT_ACTION, TAURI_PROVIDER_ID,
 };
 use publish_domain::{
     AdapterBinding, AdapterDescriptor, AdapterIdentity, AdapterKind, AdapterSchema,
@@ -41,11 +43,12 @@ use crate::tauri_release::ReleaseGate;
 
 const SELECTED_PROVIDER_ID: &str = "selected-project-provider";
 const SELECTED_PROVIDER_PROGRAM: &str = "selected-project-provider:publish";
-const LOCAL_BACKEND_ID: &str = "local-execution";
-const TEMPORARY_STORE_ID: &str = "temporary-artifact-store";
+use crate::store::{
+    PublishComposition, RevisionAdapterBinding, LOCAL_BACKEND_ID, LOCAL_DESTINATION_ID,
+    TEMPORARY_STORE_ID,
+};
 /// 桌面端产物存储的明确保留期限：7 天（ADR-0038）。
 const ARTIFACT_RETENTION_SECONDS: u64 = 604_800;
-const LOCAL_DESTINATION_ID: &str = "local-directory";
 const STRUCTURED_PLAN_EXECUTION: &str = "structured-plan-execution";
 const ARTIFACT_VERIFIED: &str = "artifact-verified";
 const RUNTIME_REVISION: &str = "one-publish-runtime-v1";
@@ -53,6 +56,83 @@ const RUNTIME_REVISION: &str = "one-publish-runtime-v1";
 const TAURI_RELEASE_GATE_ACTION: &str = "run_release_gate";
 const RELEASE_GATES_INPUT: &str = "release_gates";
 static ATTEMPT_SEQUENCE: AtomicU64 = AtomicU64::new(0);
+
+/// 进行中 Attempt 的取消信号注册表：键是密封运行令牌的摘要——控制面在
+/// start 阻塞期间唯一可预知的取消句柄（attempt 身份在执行内部才诞生）。
+static ACTIVE_ATTEMPT_CANCELLATIONS: Mutex<
+    BTreeMap<String, Vec<(u64, publish_runner_core::CancellationSignal)>>,
+> = Mutex::new(BTreeMap::new());
+static CANCELLATION_SLOT_SEQUENCE: AtomicU64 = AtomicU64::new(0);
+
+/// 一次执行在取消注册表中的占位；Drop 时自行注销，执行失败也不遗留悬空信号。
+struct RegisteredCancellation {
+    token_digest: String,
+    slot_id: u64,
+    signal: publish_runner_core::CancellationSignal,
+}
+
+impl RegisteredCancellation {
+    fn register(runtime_token: &str) -> Result<Self, AppError> {
+        let token_digest = publish_domain::sha256_hex(runtime_token.as_bytes());
+        let slot_id = CANCELLATION_SLOT_SEQUENCE.fetch_add(1, Ordering::Relaxed);
+        let signal = publish_runner_core::CancellationSignal::new();
+        ACTIVE_ATTEMPT_CANCELLATIONS
+            .lock()
+            .map_err(|_| cancellation_registry_poisoned())?
+            .entry(token_digest.clone())
+            .or_default()
+            .push((slot_id, signal.clone()));
+        Ok(Self {
+            token_digest,
+            slot_id,
+            signal,
+        })
+    }
+}
+
+impl Drop for RegisteredCancellation {
+    fn drop(&mut self) {
+        if let Ok(mut registry) = ACTIVE_ATTEMPT_CANCELLATIONS.lock() {
+            if let Some(slots) = registry.get_mut(&self.token_digest) {
+                slots.retain(|(slot_id, _)| *slot_id != self.slot_id);
+                if slots.is_empty() {
+                    registry.remove(&self.token_digest);
+                }
+            }
+        }
+    }
+}
+
+fn cancellation_registry_poisoned() -> AppError {
+    AppError::publish_with_code(
+        "publish cancellation registry lock is poisoned",
+        "publish_runtime_cancellation_poisoned",
+    )
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(rename_all = "camelCase")]
+pub struct CancelPublishRuntimeRequest {
+    pub runtime_token: String,
+}
+
+/// 请求协作取消该密封令牌下所有进行中的 Attempt（ADR-0041）：已开始的节点
+/// 不被中断，已 Published 的路线保持不变。返回是否存在被请求的执行。
+#[tauri::command]
+pub fn cancel_publish_runtime(request: CancelPublishRuntimeRequest) -> Result<bool, AppError> {
+    let token_digest = publish_domain::sha256_hex(request.runtime_token.as_bytes());
+    let registry = ACTIVE_ATTEMPT_CANCELLATIONS
+        .lock()
+        .map_err(|_| cancellation_registry_poisoned())?;
+    let Some(slots) = registry.get(&token_digest) else {
+        return Ok(false);
+    };
+    for (_, signal) in slots {
+        signal.request();
+    }
+    Ok(!slots.is_empty())
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
 #[serde(rename_all = "camelCase")]
@@ -63,12 +143,17 @@ pub struct PreparePublishRuntimeRequest {
     pub configuration_id: String,
     pub configuration_revision_id: String,
     pub spec: PublishSpec,
+    /// Artifact Promotion：复用既有封存 Manifest 的新 Attempt 输入；普通构建为空。
+    #[serde(default)]
+    #[ts(optional)]
+    pub promoted_manifest_digest: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) struct ResolvedPublishConfiguration {
     pub provider_id: String,
     pub parameters: Value,
+    pub composition: PublishComposition,
     pub blocked_reason: Option<String>,
 }
 
@@ -711,8 +796,9 @@ pub(crate) fn prepare_runtime(
         &delivery_directory,
         tauri_binding.as_ref(),
         &release_gates,
+        &resolved.composition,
     )?;
-    let registry = build_registry(&snapshot, &delivery_directory)?;
+    let registry = build_registry(&snapshot, &delivery_directory, None)?;
     let prepared = PublishRuntime::new(registry)
         .prepare_attempt(&snapshot)
         .map_err(runtime_error)?;
@@ -964,6 +1050,7 @@ pub fn prepare_publish_runtime(
         ResolvedPublishConfiguration {
             provider_id: revision.provider_id.clone(),
             parameters: revision.parameters.clone(),
+            composition: revision.composition.clone(),
             blocked_reason,
         },
     )
@@ -1052,6 +1139,8 @@ pub(crate) fn start_runtime_with_port(
     }
     let prepared: PreparedPublishPlan =
         serde_json::from_str(&request.runtime_token).map_err(runtime_serialization_error)?;
+    // 从执行一开始就可被 cancel 命令寻址；占位随函数返回自动注销。
+    let cancellation = RegisteredCancellation::register(&request.runtime_token)?;
     let source_guard = PreparedSourceGuard::from_snapshot(&prepared.snapshot)?;
     source_guard.validate()?;
     let provider_output_directory = prepared
@@ -1085,13 +1174,15 @@ pub(crate) fn start_runtime_with_port(
         .to_string();
     let result = Arc::new(Mutex::new(None));
     let repository_path = source_guard.repository.to_string_lossy().to_string();
-    let registry = build_execution_registry(
+    let registry = build_registry(
         &prepared.snapshot,
-        &provider_output_directory,
         &delivery_directory,
-        source_guard,
-        execution_port,
-        Arc::clone(&result),
+        Some(SelectedProviderExecution {
+            port: execution_port,
+            result: Arc::clone(&result),
+            output_directory: PathBuf::from(&provider_output_directory),
+            source_guard,
+        }),
     )?;
     let release_identity = release_identity(&prepared.snapshot)?;
 
@@ -1139,7 +1230,8 @@ pub(crate) fn start_runtime_with_port(
                 identity.backend_run_id,
                 release_identity,
             ),
-            &AttemptExecutionContext::at(now_seconds),
+            &AttemptExecutionContext::at(now_seconds)
+                .with_cancellation(cancellation.signal.clone()),
         );
     let release_result = leases.release(&identity.attempt_id);
     let view = view_result.map_err(runtime_error)?;
@@ -1181,6 +1273,7 @@ fn build_snapshot(
     delivery_directory: &str,
     tauri_binding: Option<&ResolvedTauriSettings>,
     release_gates: &[ReleaseGate],
+    composition: &PublishComposition,
 ) -> Result<PlanningInputSnapshot, AppError> {
     let project_identity = project_identity(&request.repository_path, &request.spec)?;
     let repository = canonical_repository(Path::new(&request.repository_path))?;
@@ -1247,8 +1340,7 @@ fn build_snapshot(
             Value::String(project_identity),
         ),
     ]);
-    let empty_settings = AdapterSettings::new(1);
-    let (project_provider, artifact_processors) = match tauri_binding {
+    let (project_provider, provider_uses_composition_processors) = match tauri_binding {
         Some(binding) => {
             // Tauri 发布身份使用 Provider 按版本来源语义解析的版本；
             // Release Gate 密封进发布输入，保持 Tauri adapter 的 (tauri, v1) 设置合同唯一。
@@ -1273,13 +1365,7 @@ fn build_snapshot(
                             Value::String(binding.build_driver.name().to_string()),
                         ),
                 ),
-                // Tauri 构建产物是未验证候选：计划固定绑定校验和处理器提供
-                // 摘要验证与 SHA256SUMS 派生（ADR-0035、Issue T20）。
-                vec![AdapterBinding::new(
-                    "checksums",
-                    AdapterIdentity::new(AdapterKind::ArtifactProcessor, CHECKSUM_PROCESSOR_ID, 1),
-                    AdapterSettings::new(1),
-                )],
+                true,
             )
         }
         // 遗留 Selected Provider 桥接自行声明已验证产物，不经处理器管道。
@@ -1289,9 +1375,15 @@ fn build_snapshot(
                 AdapterIdentity::new(AdapterKind::ProjectProvider, SELECTED_PROVIDER_ID, 1),
                 AdapterSettings::new(1).with_value("spec_json", Value::String(spec_json)),
             ),
-            Vec::new(),
+            false,
         ),
     };
+    let adapters = composition_selection(
+        composition,
+        project_provider,
+        provider_uses_composition_processors,
+        delivery_directory,
+    )?;
 
     Ok(PlanningInputSnapshot {
         version: PLANNING_INPUT_SNAPSHOT_VERSION,
@@ -1300,103 +1392,208 @@ fn build_snapshot(
         release_input,
         source,
         external_preconditions: BTreeMap::new(),
-        promoted_manifest_digest: None,
-        adapters: AdapterSelection {
-            project_provider,
-            artifact_processors,
-            execution_backend: AdapterBinding::new(
-                "backend",
-                AdapterIdentity::new(AdapterKind::ExecutionBackend, LOCAL_BACKEND_ID, 1),
-                empty_settings,
-            ),
-            artifact_store: AdapterBinding::new(
-                "store",
-                AdapterIdentity::new(AdapterKind::ArtifactStore, TEMPORARY_STORE_ID, 1),
-                AdapterSettings::new(1)
-                    .with_value(
-                        "root_directory",
-                        Value::String(artifact_store_root().to_string_lossy().to_string()),
-                    )
-                    .with_value("retention_seconds", Value::from(ARTIFACT_RETENTION_SECONDS)),
-            ),
-            delivery_routes: vec![DeliveryRoute::required(AdapterBinding::new(
-                "local-delivery",
-                AdapterIdentity::new(AdapterKind::DeliveryDestination, LOCAL_DESTINATION_ID, 1),
-                AdapterSettings::new(1)
-                    .with_value("directory", Value::String(delivery_directory.to_string())),
-            ))],
-        },
+        promoted_manifest_digest: request.promoted_manifest_digest.clone(),
+        adapters,
     })
+}
+
+/// 把修订组合物化为计划输入的 Adapter 选择。修订是 Backend、Store、Processor
+/// 与 Delivery Route 的唯一事实来源；桌面运行时事实（临时存储根目录、保留期
+/// 与本地交付目录）不由修订携带，在此处补全缺省键。
+fn composition_selection(
+    composition: &PublishComposition,
+    project_provider: AdapterBinding,
+    include_processors: bool,
+    delivery_directory: &str,
+) -> Result<AdapterSelection, AppError> {
+    let artifact_processors = if include_processors {
+        composition
+            .artifact_processors
+            .iter()
+            .enumerate()
+            .map(|(index, binding)| {
+                composition_binding(
+                    &format!("processor-{}", index + 1),
+                    AdapterKind::ArtifactProcessor,
+                    binding,
+                )
+            })
+            .collect::<Result<Vec<_>, _>>()?
+    } else {
+        Vec::new()
+    };
+
+    let execution_backend = composition_binding(
+        "backend",
+        AdapterKind::ExecutionBackend,
+        &composition.execution_backend,
+    )?;
+
+    let mut artifact_store = composition_binding(
+        "store",
+        AdapterKind::ArtifactStore,
+        &composition.artifact_store,
+    )?;
+    if artifact_store.adapter.id == TEMPORARY_STORE_ID {
+        artifact_store
+            .settings
+            .values
+            .entry("root_directory".to_string())
+            .or_insert_with(|| Value::String(artifact_store_root().to_string_lossy().to_string()));
+        artifact_store
+            .settings
+            .values
+            .entry("retention_seconds".to_string())
+            .or_insert_with(|| Value::from(ARTIFACT_RETENTION_SECONDS));
+    }
+
+    if composition.delivery_routes.is_empty() {
+        return Err(AppError::validation_with_code(
+            "publish composition requires at least one delivery route",
+            "publish_runtime_composition_routes_missing",
+        ));
+    }
+    let mut delivery_routes = Vec::with_capacity(composition.delivery_routes.len());
+    for route in &composition.delivery_routes {
+        let mut binding = composition_binding(
+            route.route_id.as_str(),
+            AdapterKind::DeliveryDestination,
+            &route.destination,
+        )?;
+        if binding.adapter.id == LOCAL_DESTINATION_ID {
+            binding
+                .settings
+                .values
+                .entry("directory".to_string())
+                .or_insert_with(|| Value::String(delivery_directory.to_string()));
+        }
+        delivery_routes.push(if route.required {
+            DeliveryRoute::required(binding)
+        } else {
+            DeliveryRoute::optional(binding)
+        });
+    }
+
+    Ok(AdapterSelection {
+        project_provider,
+        artifact_processors,
+        execution_backend,
+        artifact_store,
+        delivery_routes,
+    })
+}
+
+/// 修订内 Adapter 绑定 → 计划输入绑定；settings 必须是非秘密 JSON 对象。
+fn composition_binding(
+    binding_id: &str,
+    kind: AdapterKind,
+    revision: &RevisionAdapterBinding,
+) -> Result<AdapterBinding, AppError> {
+    let Value::Object(values) = &revision.settings else {
+        return Err(AppError::validation_with_code(
+            format!(
+                "adapter {} settings must be a JSON object",
+                revision.adapter_id
+            ),
+            "publish_runtime_composition_settings_invalid",
+        ));
+    };
+    let mut settings = AdapterSettings::new(revision.settings_version);
+    for (key, value) in values {
+        settings = settings.with_value(key.as_str(), value.clone());
+    }
+    let mut binding = AdapterBinding::new(
+        binding_id,
+        AdapterIdentity::new(kind, &revision.adapter_id, 1),
+        settings,
+    );
+    for (requirement, reference) in &revision.credentials {
+        binding = binding.with_credential(requirement, reference);
+    }
+    Ok(binding)
 }
 
 fn build_registry(
     snapshot: &PlanningInputSnapshot,
     delivery_directory: &str,
+    execution: Option<SelectedProviderExecution>,
 ) -> Result<AdapterRegistry, AppError> {
     let fixture = AdapterConformanceFixture::new(snapshot.clone());
     let mut registry = AdapterRegistry::new();
-    register_project_provider(&mut registry, snapshot, None, &fixture)?;
-    registry
-        .register_artifact_processor(Arc::new(ChecksumProcessor::new()), &fixture)
-        .map_err(runtime_error)?;
-    registry
-        .register_execution_backend(Arc::new(LocalExecutionBackend::new()), &fixture)
-        .map_err(runtime_error)?;
-    registry
-        .register_artifact_store(
-            Arc::new(TemporaryArtifactStore::new(artifact_store_root())),
-            &fixture,
-        )
-        .map_err(runtime_error)?;
-    registry
-        .register_delivery_destination(
-            Arc::new(LocalDirectoryDestination::new(delivery_directory)),
-            &fixture,
-        )
-        .map_err(runtime_error)?;
+    register_project_provider(&mut registry, snapshot, execution, &fixture)?;
+
+    let mut processors = BTreeSet::new();
+    for binding in &snapshot.adapters.artifact_processors {
+        if !processors.insert(binding.adapter.id.clone()) {
+            continue;
+        }
+        match binding.adapter.id.as_str() {
+            CHECKSUM_PROCESSOR_ID => registry
+                .register_artifact_processor(Arc::new(ChecksumProcessor::new()), &fixture)
+                .map_err(runtime_error)?,
+            other => return Err(unsupported_adapter("artifact processor", other)),
+        }
+    }
+
+    match snapshot.adapters.execution_backend.adapter.id.as_str() {
+        LOCAL_BACKEND_ID => registry
+            .register_execution_backend(Arc::new(LocalExecutionBackend::new()), &fixture)
+            .map_err(runtime_error)?,
+        other => return Err(unsupported_adapter("execution backend", other)),
+    }
+
+    match snapshot.adapters.artifact_store.adapter.id.as_str() {
+        TEMPORARY_STORE_ID => registry
+            .register_artifact_store(
+                Arc::new(TemporaryArtifactStore::new(artifact_store_root())),
+                &fixture,
+            )
+            .map_err(runtime_error)?,
+        other => return Err(unsupported_adapter("artifact store", other)),
+    }
+
+    let mut destinations = BTreeSet::new();
+    for route in &snapshot.adapters.delivery_routes {
+        let destination_id = route.binding.adapter.id.as_str();
+        if !destinations.insert(destination_id.to_string()) {
+            continue;
+        }
+        match destination_id {
+            LOCAL_DESTINATION_ID => registry
+                .register_delivery_destination(
+                    Arc::new(LocalDirectoryDestination::new(delivery_directory)),
+                    &fixture,
+                )
+                .map_err(runtime_error)?,
+            SFTP_DESTINATION_ID => registry
+                .register_delivery_destination(
+                    Arc::new(SftpDeliveryDestination::new(Arc::new(
+                        OpenSshSftpTransport::new(),
+                    ))),
+                    &fixture,
+                )
+                .map_err(runtime_error)?,
+            GITHUB_RELEASE_DESTINATION_ID => registry
+                .register_delivery_destination(
+                    Arc::new(GitHubReleaseDestination::new(Arc::new(
+                        GhCliGitHubReleaseApi::new(),
+                    ))),
+                    &fixture,
+                )
+                .map_err(runtime_error)?,
+            other => return Err(unsupported_adapter("delivery destination", other)),
+        }
+    }
     Ok(registry)
 }
 
-fn build_execution_registry(
-    snapshot: &PlanningInputSnapshot,
-    provider_output_directory: &str,
-    delivery_directory: &str,
-    source_guard: PreparedSourceGuard,
-    port: Arc<dyn ProviderExecutionPort>,
-    result: Arc<Mutex<Option<crate::commands::PublishResult>>>,
-) -> Result<AdapterRegistry, AppError> {
-    let fixture = AdapterConformanceFixture::new(snapshot.clone());
-    let mut registry = AdapterRegistry::new();
-    register_project_provider(
-        &mut registry,
-        snapshot,
-        Some(SelectedProviderExecution {
-            port,
-            result,
-            output_directory: PathBuf::from(provider_output_directory),
-            source_guard,
-        }),
-        &fixture,
-    )?;
-    registry
-        .register_artifact_processor(Arc::new(ChecksumProcessor::new()), &fixture)
-        .map_err(runtime_error)?;
-    registry
-        .register_execution_backend(Arc::new(LocalExecutionBackend::new()), &fixture)
-        .map_err(runtime_error)?;
-    registry
-        .register_artifact_store(
-            Arc::new(TemporaryArtifactStore::new(artifact_store_root())),
-            &fixture,
-        )
-        .map_err(runtime_error)?;
-    registry
-        .register_delivery_destination(
-            Arc::new(LocalDirectoryDestination::new(delivery_directory)),
-            &fixture,
-        )
-        .map_err(runtime_error)?;
-    Ok(registry)
+/// 能力协商语义：组合引用了本运行时未内置的 Adapter 时报告具体缺失，
+/// 不静默替换实现、跳过步骤或降低目标集合。
+fn unsupported_adapter(kind: &str, adapter_id: &str) -> AppError {
+    AppError::validation_with_code(
+        format!("publish composition requires {kind} adapter {adapter_id}, which is not built into this runtime"),
+        "publish_runtime_adapter_unavailable",
+    )
 }
 
 /// 按快照声明的 Project Provider 身份注册对应实现；快照是唯一的选择事实来源。
@@ -2228,7 +2425,8 @@ fn capture_source_snapshot(
         workspace_digest,
         dirty,
         captured_at: chrono::Utc::now().to_rfc3339(),
-        reproducible: false,
+        // clean 快照引用不可变 VCS revision，可复现；dirty 快照依赖工作区内容，不可复现。
+        reproducible: !dirty,
     })
 }
 
@@ -2800,6 +2998,7 @@ mod tests {
             ]),
         };
         let resolved = ResolvedPublishConfiguration {
+            composition: crate::store::PublishComposition::local_default(),
             provider_id: "dotnet".to_string(),
             parameters: serde_json::to_value(&spec.parameters).expect("serialize parameters"),
             blocked_reason: None,
@@ -2807,6 +3006,7 @@ mod tests {
 
         let prepared = super::prepare_runtime(
             PreparePublishRuntimeRequest {
+                promoted_manifest_digest: None,
                 repository_id: "repository-A".to_string(),
                 repository_path: repository.path().to_string_lossy().to_string(),
                 configuration_id: "configuration-A".to_string(),
@@ -2861,6 +3061,7 @@ mod tests {
             ]),
         };
         let resolved = ResolvedPublishConfiguration {
+            composition: crate::store::PublishComposition::local_default(),
             provider_id: "dotnet".to_string(),
             parameters: serde_json::json!({ "configuration": "Release" }),
             blocked_reason: None,
@@ -2868,6 +3069,7 @@ mod tests {
 
         let prepared = super::prepare_runtime(
             PreparePublishRuntimeRequest {
+                promoted_manifest_digest: None,
                 repository_id: "repository-A".to_string(),
                 repository_path: repository.path().to_string_lossy().to_string(),
                 configuration_id: "configuration-A".to_string(),
@@ -2911,6 +3113,7 @@ mod tests {
             ]),
         };
         let resolved = ResolvedPublishConfiguration {
+            composition: crate::store::PublishComposition::local_default(),
             provider_id: "dotnet".to_string(),
             parameters: serde_json::to_value(&spec.parameters).expect("serialize parameters"),
             blocked_reason: None,
@@ -2918,6 +3121,7 @@ mod tests {
 
         let prepared = super::prepare_runtime(
             PreparePublishRuntimeRequest {
+                promoted_manifest_digest: None,
                 repository_id: "repository-A".to_string(),
                 repository_path: repository.path().to_string_lossy().to_string(),
                 configuration_id: "configuration-A".to_string(),
@@ -2953,6 +3157,7 @@ mod tests {
 
         let prepared = super::prepare_runtime(
             PreparePublishRuntimeRequest {
+                promoted_manifest_digest: None,
                 repository_id: "repository-A".to_string(),
                 repository_path: repository.path().to_string_lossy().to_string(),
                 configuration_id: "configuration-A".to_string(),
@@ -2960,6 +3165,7 @@ mod tests {
                 spec,
             },
             ResolvedPublishConfiguration {
+                composition: crate::store::PublishComposition::local_default(),
                 provider_id: "go".to_string(),
                 parameters: serde_json::json!({}),
                 blocked_reason: None,
@@ -3009,6 +3215,7 @@ mod tests {
         };
         (
             PreparePublishRuntimeRequest {
+                promoted_manifest_digest: None,
                 repository_id: "repository-A".to_string(),
                 repository_path: repository.to_string_lossy().to_string(),
                 configuration_id: "configuration-A".to_string(),
@@ -3016,6 +3223,7 @@ mod tests {
                 spec: spec.clone(),
             },
             ResolvedPublishConfiguration {
+                composition: crate::store::PublishComposition::local_default(),
                 provider_id: "tauri".to_string(),
                 parameters: serde_json::to_value(&spec.parameters).expect("serialize parameters"),
                 blocked_reason: None,
@@ -3498,13 +3706,17 @@ mod tests {
         let bundle_directory = tauri_bundle_directory(repository.path());
         let source_guard = super::PreparedSourceGuard::from_snapshot(&sealed.snapshot)
             .expect("restore source guard");
-        let registry = super::build_execution_registry(
+        let registry = super::build_registry(
             &sealed.snapshot,
-            &release_value("provider_output_directory"),
             &release_value("delivery_directory"),
-            source_guard,
-            Arc::new(FakeTauriBuild::new(bundle_directory)),
-            Arc::new(Mutex::new(None)),
+            Some(super::SelectedProviderExecution {
+                port: Arc::new(FakeTauriBuild::new(bundle_directory)),
+                result: Arc::new(Mutex::new(None)),
+                output_directory: std::path::PathBuf::from(release_value(
+                    "provider_output_directory",
+                )),
+                source_guard,
+            }),
         )
         .expect("build execution registry");
 
@@ -3767,6 +3979,7 @@ mod tests {
             ]),
         };
         let resolved = ResolvedPublishConfiguration {
+            composition: crate::store::PublishComposition::local_default(),
             provider_id: "dotnet".to_string(),
             parameters: serde_json::to_value(&spec.parameters).expect("serialize parameters"),
             blocked_reason: None,
@@ -3774,6 +3987,7 @@ mod tests {
 
         let error = super::prepare_runtime(
             PreparePublishRuntimeRequest {
+                promoted_manifest_digest: None,
                 repository_id: "repository-A".to_string(),
                 repository_path: repository.to_string_lossy().to_string(),
                 configuration_id: "configuration-A".to_string(),
@@ -3985,7 +4199,7 @@ mod tests {
 
         assert!(!snapshot.dirty);
         assert!(snapshot.workspace_digest.is_none());
-        assert!(!snapshot.reproducible);
+        assert!(snapshot.reproducible);
     }
 
     #[test]
@@ -4109,6 +4323,7 @@ mod tests {
             ]),
         };
         let resolved = ResolvedPublishConfiguration {
+            composition: crate::store::PublishComposition::local_default(),
             provider_id: "dotnet".to_string(),
             parameters: serde_json::to_value(&spec.parameters).expect("serialize parameters"),
             blocked_reason: None,
@@ -4116,6 +4331,7 @@ mod tests {
 
         let error = super::prepare_runtime(
             PreparePublishRuntimeRequest {
+                promoted_manifest_digest: None,
                 repository_id: "repository-A".to_string(),
                 repository_path: repository.path().to_string_lossy().to_string(),
                 configuration_id: "configuration-A".to_string(),
@@ -4153,7 +4369,188 @@ mod tests {
 
         assert!(!snapshot.dirty);
         assert!(snapshot.workspace_digest.is_none());
-        assert!(!snapshot.reproducible);
+        assert!(snapshot.reproducible);
+    }
+
+    #[test]
+    fn legacy_revision_without_composition_materializes_the_local_default() {
+        let revision: crate::store::PublishConfigurationRevision = serde_json::from_value(
+            serde_json::json!({
+                "id": "revision-legacy",
+                "sequence": 1,
+                "createdAt": "2026-01-01T00:00:00Z",
+                "providerId": "dotnet",
+                "parameters": {}
+            }),
+        )
+        .expect("deserialize a pre-composition revision");
+
+        assert_eq!(
+            revision.composition,
+            crate::store::PublishComposition::local_default()
+        );
+    }
+
+    #[test]
+    fn composition_selection_carries_routes_backend_store_and_credentials() {
+        let mut composition = crate::store::PublishComposition::local_default();
+        composition
+            .delivery_routes
+            .push(crate::store::RevisionDeliveryRoute {
+                route_id: "sftp-mirror".to_string(),
+                required: false,
+                destination: crate::store::RevisionAdapterBinding {
+                    adapter_id: super::SFTP_DESTINATION_ID.to_string(),
+                    settings_version: 1,
+                    settings: serde_json::json!({
+                        "host": "mirror.example.invalid",
+                        "port": 22,
+                        "username": "publisher",
+                        "remote_path": "/srv/releases",
+                        "artifact_roles": ["provider-output:*"]
+                    }),
+                    credentials: BTreeMap::from([(
+                        "ssh_private_key".to_string(),
+                        "keychain:one-publish/sftp-mirror".to_string(),
+                    )]),
+                },
+            });
+
+        let selection = super::composition_selection(
+            &composition,
+            super::AdapterBinding::new(
+                "project",
+                super::AdapterIdentity::new(
+                    super::AdapterKind::ProjectProvider,
+                    super::TAURI_PROVIDER_ID,
+                    1,
+                ),
+                super::AdapterSettings::new(1),
+            ),
+            true,
+            "/tmp/delivery-root",
+        )
+        .expect("materialize the revision composition");
+
+        assert_eq!(
+            selection.execution_backend.adapter.id,
+            super::LOCAL_BACKEND_ID
+        );
+        assert_eq!(
+            selection.artifact_store.adapter.id,
+            super::TEMPORARY_STORE_ID
+        );
+        assert_eq!(
+            selection
+                .artifact_processors
+                .iter()
+                .map(|binding| binding.adapter.id.as_str())
+                .collect::<Vec<_>>(),
+            vec![super::CHECKSUM_PROCESSOR_ID]
+        );
+        assert_eq!(
+            selection
+                .delivery_routes
+                .iter()
+                .map(|route| (
+                    route.route_id(),
+                    route.binding.adapter.id.as_str(),
+                    route.required
+                ))
+                .collect::<Vec<_>>(),
+            vec![
+                ("local-delivery", super::LOCAL_DESTINATION_ID, true),
+                ("sftp-mirror", super::SFTP_DESTINATION_ID, false),
+            ]
+        );
+        // 本地路线目录缺省时由运行时补全；凭据引用随绑定进入计划输入。
+        assert_eq!(
+            selection.delivery_routes[0]
+                .binding
+                .settings
+                .string("directory", "local")
+                .expect("local route directory"),
+            "/tmp/delivery-root"
+        );
+        assert_eq!(
+            selection.delivery_routes[1]
+                .binding
+                .credentials
+                .get("ssh_private_key")
+                .map(String::as_str),
+            Some("keychain:one-publish/sftp-mirror")
+        );
+    }
+
+    #[test]
+    fn unknown_composition_adapter_is_a_specific_registry_error() {
+        let mut composition = crate::store::PublishComposition::local_default();
+        composition.execution_backend.adapter_id = "jenkins".to_string();
+        let selection = super::composition_selection(
+            &composition,
+            super::AdapterBinding::new(
+                "project",
+                super::AdapterIdentity::new(
+                    super::AdapterKind::ProjectProvider,
+                    super::SELECTED_PROVIDER_ID,
+                    1,
+                ),
+                super::AdapterSettings::new(1)
+                    .with_value("spec_json", serde_json::Value::String("{}".to_string())),
+            ),
+            false,
+            "/tmp/delivery-root",
+        )
+        .expect("selection does not gate adapter availability");
+
+        let snapshot = super::PlanningInputSnapshot {
+            version: super::PLANNING_INPUT_SNAPSHOT_VERSION,
+            configuration_revision: "revision-test".to_string(),
+            runtime_revision: super::RUNTIME_REVISION.to_string(),
+            release_input: BTreeMap::new(),
+            source: super::SourceSnapshot {
+                revision: "0000000000000000000000000000000000000000".to_string(),
+                workspace_digest: None,
+                dirty: false,
+                captured_at: "2026-01-01T00:00:00Z".to_string(),
+                reproducible: true,
+            },
+            external_preconditions: BTreeMap::new(),
+            promoted_manifest_digest: None,
+            adapters: selection,
+        };
+
+        let error = match super::build_registry(&snapshot, "/tmp/delivery-root", None) {
+            Ok(_) => panic!("unknown backend must be a specific capability error"),
+            Err(error) => error,
+        };
+        assert!(error.to_string().contains("jenkins"));
+    }
+
+    #[test]
+    fn cancel_requests_every_attempt_registered_for_a_token_and_slots_unregister() {
+        let token = "sealed-token-cancel-fixture";
+        let first = super::RegisteredCancellation::register(token).expect("register first slot");
+        let second = super::RegisteredCancellation::register(token).expect("register second slot");
+        assert!(!first.signal.is_requested());
+
+        let requested =
+            super::cancel_publish_runtime(super::CancelPublishRuntimeRequest {
+                runtime_token: token.to_string(),
+            })
+            .expect("cancel a registered token");
+        assert!(requested);
+        assert!(first.signal.is_requested());
+        assert!(second.signal.is_requested());
+
+        drop(first);
+        drop(second);
+        let requested =
+            super::cancel_publish_runtime(super::CancelPublishRuntimeRequest {
+                runtime_token: token.to_string(),
+            })
+            .expect("cancel after every slot unregistered");
+        assert!(!requested, "dropped executions must leave no cancellation slot");
     }
 
     #[test]
@@ -4265,6 +4662,7 @@ mod tests {
         };
         let prepared = super::prepare_runtime(
             PreparePublishRuntimeRequest {
+                promoted_manifest_digest: None,
                 repository_id: "repository-A".to_string(),
                 repository_path: repository.path().to_string_lossy().to_string(),
                 configuration_id: "configuration-go".to_string(),
@@ -4272,6 +4670,7 @@ mod tests {
                 spec: spec.clone(),
             },
             ResolvedPublishConfiguration {
+                composition: crate::store::PublishComposition::local_default(),
                 provider_id: "go".to_string(),
                 parameters: serde_json::to_value(&spec.parameters).expect("serialize parameters"),
                 blocked_reason: None,
@@ -4450,12 +4849,14 @@ mod tests {
             ]),
         };
         let resolved = ResolvedPublishConfiguration {
+            composition: crate::store::PublishComposition::local_default(),
             provider_id: "dotnet".to_string(),
             parameters: serde_json::to_value(&spec.parameters).expect("serialize parameters"),
             blocked_reason: None,
         };
         super::prepare_runtime(
             PreparePublishRuntimeRequest {
+                promoted_manifest_digest: None,
                 repository_id: "repository-A".to_string(),
                 repository_path: repository.to_string_lossy().to_string(),
                 configuration_id: "configuration-A".to_string(),

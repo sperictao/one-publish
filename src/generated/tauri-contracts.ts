@@ -47,7 +47,11 @@ export type RenderedPublishCommand = { program: string, args: Array<string>, wor
 
 export type PublishResult = { provider_id: string, success: boolean, cancelled: boolean, error: string | null, command: RenderedPublishCommand, output_log: string, output_dir: string, file_count: number, warnings: Array<string> | null, };
 
-export type PreparePublishRuntimeRequest = { repositoryId: string, repositoryPath: string, configurationId: string, configurationRevisionId: string, spec: PublishSpec, };
+export type PreparePublishRuntimeRequest = { repositoryId: string, repositoryPath: string, configurationId: string, configurationRevisionId: string, spec: PublishSpec, 
+/**
+ * Artifact Promotion：复用既有封存 Manifest 的新 Attempt 输入；普通构建为空。
+ */
+promotedManifestDigest?: string, };
 
 export type RuntimePlanStage = "inspect_source" | "prepare_identity" | "build" | "collect_artifacts" | "process_artifacts" | "persist_manifest" | "stage_routes" | "publish_routes" | "observe_routes";
 
@@ -169,13 +173,21 @@ export type ConfigProfile = { id: string, name: string, profileGroup: string | n
 
 export type ExecutionRecord = { id: string, repoId: string | null, configurationId: string | null, configurationRevisionId: string | null, providerId: string, projectPath: string, startedAt: string, finishedAt: string, success: boolean, cancelled: boolean, outputDir: string | null, error: string | null, commandLine: string | null, snapshotPath: string | null, failureSignature: string | null, outputExcerpt: string | null, spec: JsonValue | null, fileCount: number, warnings: Array<string> | null, };
 
+export type CancelPublishRuntimeRequest = { runtimeToken: string, };
+
+export type PublishComposition = { executionBackend: RevisionAdapterBinding, artifactStore: RevisionAdapterBinding, artifactProcessors: Array<RevisionAdapterBinding>, deliveryRoutes: Array<RevisionDeliveryRoute>, };
+
 export type PublishConfigStore = { configuration: string, runtime: string, framework: string, selfContained: boolean, outputDir: string, noBuild: boolean, noRestore: boolean, verbosity: string, noLogo: boolean, deleteExistingFiles: boolean, properties: { [key: string]: string }, useProfile: boolean, profileName: string, };
 
-export type PublishConfigurationRevision = { id: string, sequence: number, createdAt: string, contractVersion: number, providerId: string, providerVersion: string, settingsVersion: number, parameters: JsonValue, };
+export type PublishConfigurationRevision = { id: string, sequence: number, createdAt: string, contractVersion: number, providerId: string, providerVersion: string, settingsVersion: number, parameters: JsonValue, composition: PublishComposition, };
 
 export type RepoPublishConfig = { selectedPreset: string, isCustomMode: boolean, customConfig: PublishConfigStore, profiles: Array<ConfigProfile>, bindings: Array<AutomationBinding>, appliedBundles: Array<AppliedProjectionBundle>, };
 
 export type Repository = { id: string, name: string, path: string, projectFile: string | null, currentBranch: string, branches: Array<Branch>, isMain: boolean, providerId: string | null, publishConfig: RepoPublishConfig, };
+
+export type RevisionAdapterBinding = { adapterId: string, settingsVersion: number, settings: JsonValue, credentials: { [key: string]: string }, };
+
+export type RevisionDeliveryRoute = { routeId: string, required: boolean, destination: RevisionAdapterBinding, };
 
 export type ReleaseGate = { program: string, args: Array<string>, };
 

@@ -349,25 +349,7 @@ fn binding_projection(
         .runtime_revision
         .validate_for_projection()
         .map_err(render_error)?;
-    let profile = config.profile(&binding.configuration_id).ok_or_else(|| {
-        AppError::validation_with_code(
-            format!("未找到配置文件: {}", binding.configuration_id),
-            "profile_not_found",
-        )
-    })?;
-    let revision = profile
-        .revisions
-        .iter()
-        .find(|revision| revision.id == binding.configuration_revision_id)
-        .ok_or_else(|| {
-            AppError::validation_with_code(
-                format!(
-                    "绑定引用的配置修订不存在: {}",
-                    binding.configuration_revision_id
-                ),
-                "automation_bound_revision_missing",
-            )
-        })?;
+    let revision = bound_revision(config, binding)?;
 
     Ok(AutomationBindingProjection {
         binding_id: binding.id.clone(),
@@ -375,9 +357,8 @@ fn binding_projection(
         configuration_revision_id: binding.configuration_revision_id.clone(),
         trigger_policy: domain_trigger(&binding.trigger_policy),
         release_namespace: release_namespace(binding),
-        delivery_destination_namespaces: delivery_destination_namespace(binding)
+        delivery_destination_namespaces: delivery_destination_namespaces(config, binding)?
             .into_iter()
-            .map(str::to_string)
             .collect(),
         runtime_revision: binding.runtime_revision.clone(),
         projection: AutomationProjection {
@@ -502,28 +483,111 @@ fn release_namespace(binding: &AutomationBinding) -> String {
     }
 }
 
-fn delivery_destination_namespace(binding: &AutomationBinding) -> Option<&'static str> {
-    (binding.execution_backend_id == GITHUB_ACTIONS_BACKEND_ID)
-        .then_some("github-release:repository")
+/// 绑定引用的固定配置修订；投影与冲突判断共用同一份事实来源。
+fn bound_revision<'a>(
+    config: &'a RepoPublishConfig,
+    binding: &AutomationBinding,
+) -> Result<&'a crate::store::PublishConfigurationRevision, AppError> {
+    let profile = config.profile(&binding.configuration_id).ok_or_else(|| {
+        AppError::validation_with_code(
+            format!("未找到配置文件: {}", binding.configuration_id),
+            "profile_not_found",
+        )
+    })?;
+    profile
+        .revisions
+        .iter()
+        .find(|revision| revision.id == binding.configuration_revision_id)
+        .ok_or_else(|| {
+            AppError::validation_with_code(
+                format!(
+                    "绑定引用的配置修订不存在: {}",
+                    binding.configuration_revision_id
+                ),
+                "automation_bound_revision_missing",
+            )
+        })
+}
+
+/// Delivery 冲突命名空间来自绑定固定修订的 Delivery Routes；
+/// Execution Backend 只描述在哪执行，不是交付目标的事实来源（Issue #49）。
+fn delivery_destination_namespaces(
+    config: &RepoPublishConfig,
+    binding: &AutomationBinding,
+) -> Result<BTreeSet<String>, AppError> {
+    let mut namespaces: BTreeSet<String> = bound_revision(config, binding)?
+        .composition
+        .delivery_routes
+        .iter()
+        .filter_map(|route| route_delivery_namespace(&route.destination))
+        .collect();
+    // 过渡事实：遗留 GitHub Actions 渲染器仍无条件在 workflow 内交付 GitHub
+    // Release（github_actions_backend.rs）。在渲染改为执行封存 Runner Projection
+    // 之前，该副作用并入冲突命名空间，避免初始 takeover 扫描漏报外部冲突。
+    if binding.execution_backend_id == GITHUB_ACTIONS_BACKEND_ID {
+        namespaces.insert(format!(
+            "{}:repository",
+            publish_adapters::GITHUB_RELEASE_DESTINATION_ID
+        ));
+    }
+    Ok(namespaces)
+}
+
+/// 目标命名空间 = 交付协议 + 目标定位符；相同命名空间意味着两个绑定可能写入同一
+/// 外部位置。定位符为空（例如目录由运行时派生的本地路线）或 Adapter 未知时没有
+/// 可判定的外部位置，不构成交付冲突命名空间。
+///
+/// 过渡实现：定位符知识本应由 Delivery Destination 声明（架构文档 §4"目标命名
+/// 空间"归 Destination 负责），待 Destination 合同提供命名空间能力后此处收敛为
+/// 纯转发；内置目录期间集中在本函数一处。
+fn route_delivery_namespace(destination: &crate::store::RevisionAdapterBinding) -> Option<String> {
+    let text = |key: &str| {
+        destination
+            .settings
+            .as_object()
+            .and_then(|values| values.get(key))
+            .and_then(Value::as_str)
+            .unwrap_or_default()
+            .to_string()
+    };
+    let locator = match destination.adapter_id.as_str() {
+        // GitHub Release 的目标范围是当前仓库的 Release 区。
+        publish_adapters::GITHUB_RELEASE_DESTINATION_ID => "repository".to_string(),
+        publish_adapters::SFTP_DESTINATION_ID => {
+            format!("{}:{}", text("host"), text("remote_path"))
+        }
+        crate::store::LOCAL_DESTINATION_ID => text("directory"),
+        // 未知 Adapter 不静默猜测定位符；其可用性由注册表在执行前明确拒绝。
+        _ => return None,
+    };
+    (!locator.trim_matches(':').is_empty())
+        .then(|| format!("{}:{locator}", destination.adapter_id))
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 struct AutomationConflictKey {
     release_namespace: String,
-    delivery_destination_namespace: String,
+    delivery_destination_namespaces: BTreeSet<String>,
 }
 
 impl AutomationConflictKey {
-    fn for_binding(binding: &AutomationBinding) -> Option<Self> {
-        delivery_destination_namespace(binding).map(|destination| Self {
+    fn for_binding(
+        config: &RepoPublishConfig,
+        binding: &AutomationBinding,
+    ) -> Result<Self, AppError> {
+        Ok(Self {
             release_namespace: release_namespace(binding),
-            delivery_destination_namespace: destination.to_string(),
+            delivery_destination_namespaces: delivery_destination_namespaces(config, binding)?,
         })
     }
 
     fn overlaps(&self, other: &Self) -> bool {
-        self.delivery_destination_namespace == other.delivery_destination_namespace
-            && release_namespaces_overlap(&self.release_namespace, &other.release_namespace)
+        release_namespaces_overlap(&self.release_namespace, &other.release_namespace)
+            && self
+                .delivery_destination_namespaces
+                .intersection(&other.delivery_destination_namespaces)
+                .next()
+                .is_some()
     }
 }
 
@@ -542,7 +606,10 @@ fn release_namespaces_overlap(left: &str, right: &str) -> bool {
     }
 }
 
-fn validate_binding_namespaces(targets: &[AutomationBinding]) -> Result<(), AppError> {
+fn validate_binding_namespaces(
+    config: &RepoPublishConfig,
+    targets: &[AutomationBinding],
+) -> Result<(), AppError> {
     let mut occupied = Vec::<(AutomationConflictKey, &str)>::new();
     let mut binding_ids = BTreeSet::new();
     for binding in targets {
@@ -552,9 +619,7 @@ fn validate_binding_namespaces(targets: &[AutomationBinding]) -> Result<(), AppE
                 "automation_binding_identity_conflict",
             ));
         }
-        let Some(key) = AutomationConflictKey::for_binding(binding) else {
-            continue;
-        };
+        let key = AutomationConflictKey::for_binding(config, binding)?;
         if let Some((_, existing)) = occupied
             .iter()
             .find(|(candidate, _)| candidate.overlaps(&key))
@@ -562,7 +627,13 @@ fn validate_binding_namespaces(targets: &[AutomationBinding]) -> Result<(), AppE
             return Err(AppError::validation_with_code(
                 format!(
                     "自动化绑定 {existing} 与 {} 争用发布命名空间 {} 和交付目标命名空间 {}",
-                    binding.id, key.release_namespace, key.delivery_destination_namespace
+                    binding.id,
+                    key.release_namespace,
+                    key.delivery_destination_namespaces
+                        .iter()
+                        .cloned()
+                        .collect::<Vec<_>>()
+                        .join(", ")
                 ),
                 "automation_namespace_conflict",
             ));
@@ -707,8 +778,8 @@ fn discover_initial_takeover_conflicts(
 
     let target_namespaces = targets
         .iter()
-        .filter_map(AutomationConflictKey::for_binding)
-        .collect::<BTreeSet<_>>();
+        .map(|binding| AutomationConflictKey::for_binding(config, binding))
+        .collect::<Result<BTreeSet<_>, _>>()?;
     let workflow_dir = repo_root.join(".github/workflows");
     if !workflow_dir.is_dir() {
         return Ok(BTreeMap::new());
@@ -773,7 +844,7 @@ fn discover_initial_takeover_conflicts(
         let conflict = inspection.release_namespaces.into_iter().find(|release| {
             let key = AutomationConflictKey {
                 release_namespace: release.clone(),
-                delivery_destination_namespace: destination.to_string(),
+                delivery_destination_namespaces: BTreeSet::from([destination.to_string()]),
             };
             target_namespaces.iter().any(|target| target.overlaps(&key))
         });
@@ -798,7 +869,7 @@ pub(crate) fn preview_change(
 ) -> Result<AutomationPreviewOutcome, AppError> {
     let mut normalized_change = change.normalized();
     let targets = resolve_target_bindings(config, &normalized_change, now)?;
-    validate_binding_namespaces(&targets)?;
+    validate_binding_namespaces(config, &targets)?;
     let expected = render_expected(config, &targets, now)?;
     let previously_owned = previously_owned_paths(config)?;
     let candidates = expected
@@ -1301,8 +1372,8 @@ fn validate_pending_projection_commit(
     let target_namespaces = outcome
         .targets
         .iter()
-        .filter_map(AutomationConflictKey::for_binding)
-        .collect::<BTreeSet<_>>();
+        .map(|binding| AutomationConflictKey::for_binding(config, binding))
+        .collect::<Result<BTreeSet<_>, _>>()?;
     let remote_revision = format!("origin/{default_branch}");
 
     for path in changed_paths {
@@ -1351,7 +1422,9 @@ fn validate_pending_projection_commit(
                     inspection.release_namespaces.into_iter().any(|release| {
                         let key = AutomationConflictKey {
                             release_namespace: release,
-                            delivery_destination_namespace: destination.to_string(),
+                            delivery_destination_namespaces: BTreeSet::from([
+                                destination.to_string()
+                            ]),
                         };
                         target_namespaces.iter().any(|target| target.overlaps(&key))
                     })
@@ -1906,6 +1979,101 @@ mod tests {
         let job_permission = "on: { push: { tags: ['v*'] } }\njobs:\n  publish:\n    permissions: { contents: write }\n";
         let inspection = inspect_workflow(job_permission).expect("parse job permissions");
         assert!(inspection.can_write_contents);
+    }
+
+    #[test]
+    fn delivery_conflicts_come_from_the_bound_revision_routes() {
+        let (mut config, first_profile) = fixture_config("Stable");
+        let second_profile = config
+            .create_profile(
+                "Nightly".to_string(),
+                "dotnet".to_string(),
+                serde_json::json!({ "configuration": "Release" }),
+                None,
+                NOW.to_string(),
+            )
+            .expect("create second fixture profile")
+            .id
+            .clone();
+
+        let sftp_route = |host: &str| crate::store::RevisionDeliveryRoute {
+            route_id: "mirror".to_string(),
+            required: true,
+            destination: crate::store::RevisionAdapterBinding {
+                adapter_id: publish_adapters::SFTP_DESTINATION_ID.to_string(),
+                settings_version: 1,
+                settings: serde_json::json!({
+                    "host": host,
+                    "remote_path": "/srv/releases"
+                }),
+                credentials: BTreeMap::new(),
+            },
+        };
+        for (profile_id, host) in [
+            (&first_profile, "mirror.example.invalid"),
+            (&second_profile, "mirror.example.invalid"),
+        ] {
+            let profile = config
+                .profiles
+                .iter_mut()
+                .find(|profile| &profile.id == profile_id)
+                .expect("fixture profile");
+            let revision = profile.revisions.first_mut().expect("fixture revision");
+            revision.composition.delivery_routes.push(sftp_route(host));
+        }
+
+        let binding = |id: &str, profile_id: &str, tag_prefix: &str, config: &RepoPublishConfig| {
+            let profile = config
+                .profiles
+                .iter()
+                .find(|profile| profile.id == profile_id)
+                .expect("fixture profile");
+            let revision = profile.current_revision().expect("fixture revision");
+            let backend =
+                automation_backend(FAKE_AUTOMATION_BACKEND_ID).expect("fixture backend");
+            AutomationBinding {
+                id: id.to_string(),
+                configuration_id: profile.id.clone(),
+                configuration_revision_id: revision.id.clone(),
+                execution_backend_id: FAKE_AUTOMATION_BACKEND_ID.to_string(),
+                trigger_policy: AutomationTriggerPolicy::TagPush {
+                    tag_prefix: tag_prefix.to_string(),
+                },
+                backend_projection: Value::Null,
+                runtime_revision: automation_runtime_revision(backend.as_ref(), revision)
+                    .expect("fixture runtime revision")
+                    .into(),
+                external_identity: String::new(),
+                created_at: NOW.to_string(),
+                updated_at: NOW.to_string(),
+            }
+        };
+
+        // 两个修订的路线写同一 SFTP 位置且发布命名空间重叠：互斥。
+        let stable = binding("binding-stable", &first_profile, "v", &config);
+        let nightly = binding("binding-nightly", &second_profile, "v1", &config);
+        let error = validate_binding_namespaces(&config, &[stable.clone(), nightly.clone()])
+            .expect_err("same sftp location with overlapping tags must conflict");
+        assert_eq!(error.code.as_deref(), Some("automation_namespace_conflict"));
+        assert!(error
+            .message
+            .contains("sftp:mirror.example.invalid:/srv/releases"));
+
+        // 改写第二修订的 SFTP 目标位置：路线不同即可共存，Backend 类型不参与判断。
+        let profile = config
+            .profiles
+            .iter_mut()
+            .find(|profile| profile.id == second_profile)
+            .expect("fixture profile");
+        let revision = profile.revisions.first_mut().expect("fixture revision");
+        revision.composition.delivery_routes.pop();
+        revision
+            .composition
+            .delivery_routes
+            .push(sftp_route("other.example.invalid"));
+
+        validate_binding_namespaces(&config, &[stable, nightly])
+            .expect("distinct sftp locations must not conflict");
     }
 
     #[test]

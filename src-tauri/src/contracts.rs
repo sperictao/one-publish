@@ -91,10 +91,14 @@ pub fn generate_tauri_contracts() -> String {
     push_contract::<crate::store::Branch>(&mut declarations);
     push_contract::<crate::store::ConfigProfile>(&mut declarations);
     push_contract::<crate::store::ExecutionRecord>(&mut declarations);
+    push_contract::<crate::publish_runtime::CancelPublishRuntimeRequest>(&mut declarations);
+    push_contract::<crate::store::PublishComposition>(&mut declarations);
     push_contract::<crate::store::PublishConfigStore>(&mut declarations);
     push_contract::<crate::store::PublishConfigurationRevision>(&mut declarations);
     push_contract::<crate::store::RepoPublishConfig>(&mut declarations);
     push_contract::<crate::store::Repository>(&mut declarations);
+    push_contract::<crate::store::RevisionAdapterBinding>(&mut declarations);
+    push_contract::<crate::store::RevisionDeliveryRoute>(&mut declarations);
     push_contract::<crate::tauri_release::ReleaseGate>(&mut declarations);
     push_contract::<crate::tauri_release::TauriBuildDriver>(&mut declarations);
     push_contract::<crate::tauri_release::TauriDesktopTarget>(&mut declarations);

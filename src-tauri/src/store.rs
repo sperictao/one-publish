@@ -32,10 +32,11 @@ pub(crate) use types::new_configuration_identity;
 pub(crate) use types::ConfigurationImport;
 pub use types::{
     AppState, AppliedProjectionBundle, AutomationBinding, AutomationTriggerPolicy, Branch,
-    ConfigProfile, ExecutionRecord, PublishConfigStore, PublishConfigurationRevision,
-    RepoPublishConfig, Repository, CURRENT_SETTINGS_VERSION,
-    PUBLISH_CONFIGURATION_CONTRACT_VERSION,
+    ConfigProfile, ExecutionRecord, PublishComposition, PublishConfigStore,
+    PublishConfigurationRevision, RepoPublishConfig, Repository, RevisionAdapterBinding,
+    RevisionDeliveryRoute, CURRENT_SETTINGS_VERSION, PUBLISH_CONFIGURATION_CONTRACT_VERSION,
 };
+pub(crate) use types::{LOCAL_BACKEND_ID, LOCAL_DESTINATION_ID, TEMPORARY_STORE_ID};
 
 #[cfg(test)]
 mod tests;

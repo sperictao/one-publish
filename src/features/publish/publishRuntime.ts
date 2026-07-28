@@ -1,6 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 
 import type {
+  CancelPublishRuntimeRequest,
   PreparedPublishRuntime,
   PreparePublishRuntimeRequest,
   PublishOutputPreflightResult,
@@ -14,6 +15,7 @@ import type {
 export type ProviderPublishSpec = TauriPublishSpec;
 export type PublishResult = TauriPublishResult;
 export type {
+  CancelPublishRuntimeRequest,
   PreparedPublishRuntime,
   PreparePublishRuntimeRequest,
   PublishOutputPreflightResult,
@@ -48,6 +50,12 @@ export async function startPublishRuntime(
   return await invoke<PublishRuntimeResult>("start_publish_runtime", {
     request,
   });
+}
+
+export async function cancelPublishRuntime(
+  request: CancelPublishRuntimeRequest
+): Promise<boolean> {
+  return await invoke<boolean>("cancel_publish_runtime", { request });
 }
 
 export async function cancelProviderPublish(): Promise<boolean> {

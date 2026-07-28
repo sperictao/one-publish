@@ -95,6 +95,84 @@ pub struct ConfigProfile {
     pub(crate) legacy_parameters: Option<serde_json::Value>,
 }
 
+/// 首期内置 Adapter 的稳定标识；发布组合只允许绑定注册表内的内置实现。
+pub(crate) const LOCAL_BACKEND_ID: &str = "local-execution";
+pub(crate) const TEMPORARY_STORE_ID: &str = "temporary-artifact-store";
+pub(crate) const LOCAL_DESTINATION_ID: &str = "local-directory";
+
+/// 修订内对一个 Adapter 的选择与设置绑定；settings 是该 Adapter Schema 的非秘密
+/// JSON 对象，credentials 把 Adapter 声明的凭据要求绑定到非秘密引用，
+/// 值由 Execution Backend 在执行边界解析（ADR-0029）。
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(rename_all = "camelCase")]
+pub struct RevisionAdapterBinding {
+    pub adapter_id: String,
+    #[serde(default = "default_settings_version")]
+    pub settings_version: u32,
+    #[serde(default = "empty_settings_object")]
+    pub settings: serde_json::Value,
+    #[serde(default)]
+    pub credentials: BTreeMap<String, String>,
+}
+
+impl RevisionAdapterBinding {
+    fn new(adapter_id: &str) -> Self {
+        Self {
+            adapter_id: adapter_id.to_string(),
+            settings_version: CURRENT_SETTINGS_VERSION,
+            settings: empty_settings_object(),
+            credentials: BTreeMap::new(),
+        }
+    }
+}
+
+/// 一条交付路线：稳定 ID、Required/Optional 语义与 Destination 绑定。
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(rename_all = "camelCase")]
+pub struct RevisionDeliveryRoute {
+    pub route_id: String,
+    pub required: bool,
+    pub destination: RevisionAdapterBinding,
+}
+
+/// 修订固定的完整发布组合：Backend、Store、有序 Processor、有序 Delivery Route；
+/// 凭据引用按 Adapter 绑定携带（Issue #49）。
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(rename_all = "camelCase")]
+pub struct PublishComposition {
+    pub execution_backend: RevisionAdapterBinding,
+    pub artifact_store: RevisionAdapterBinding,
+    #[serde(default)]
+    pub artifact_processors: Vec<RevisionAdapterBinding>,
+    pub delivery_routes: Vec<RevisionDeliveryRoute>,
+}
+
+impl PublishComposition {
+    /// 迁移默认组合：与历史硬编码行为等价（本机执行、临时存储、校验和处理、
+    /// 单一 Required 本地目录路线）。存量修订缺失组合时按此物化。
+    pub(crate) fn local_default() -> Self {
+        Self {
+            execution_backend: RevisionAdapterBinding::new(LOCAL_BACKEND_ID),
+            artifact_store: RevisionAdapterBinding::new(TEMPORARY_STORE_ID),
+            artifact_processors: vec![RevisionAdapterBinding::new(
+                publish_adapters::CHECKSUM_PROCESSOR_ID,
+            )],
+            delivery_routes: vec![RevisionDeliveryRoute {
+                route_id: "local-delivery".to_string(),
+                required: true,
+                destination: RevisionAdapterBinding::new(LOCAL_DESTINATION_ID),
+            }],
+        }
+    }
+}
+
+fn empty_settings_object() -> serde_json::Value {
+    serde_json::Value::Object(serde_json::Map::new())
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
 #[serde(rename_all = "camelCase")]
 #[ts(rename_all = "camelCase")]
@@ -110,6 +188,8 @@ pub struct PublishConfigurationRevision {
     #[serde(default = "default_settings_version")]
     pub settings_version: u32,
     pub parameters: serde_json::Value,
+    #[serde(default = "PublishComposition::local_default")]
+    pub composition: PublishComposition,
 }
 
 impl PublishConfigurationRevision {
@@ -133,6 +213,7 @@ impl PublishConfigurationRevision {
             provider_version,
             settings_version: CURRENT_SETTINGS_VERSION,
             parameters,
+            composition: PublishComposition::local_default(),
         }
     }
 
@@ -153,6 +234,7 @@ impl PublishConfigurationRevision {
             provider_version,
             settings_version,
             parameters,
+            composition: PublishComposition::local_default(),
         }
     }
 }
