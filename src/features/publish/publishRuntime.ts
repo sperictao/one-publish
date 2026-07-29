@@ -7,9 +7,12 @@ import type {
   PublishOutputPreflightResult,
   PublishResult as TauriPublishResult,
   PublishRuntimeResult,
+  ResumePublishRuntimeRequest,
   PublishSpec as TauriPublishSpec,
   RenderedPublishCommand,
   StartPublishRuntimeRequest,
+  SynchronizePublishRuntimeRequest,
+  SynchronizePublishRuntimeResult,
 } from "@/generated/tauri-contracts";
 
 export type ProviderPublishSpec = TauriPublishSpec;
@@ -20,8 +23,11 @@ export type {
   PreparePublishRuntimeRequest,
   PublishOutputPreflightResult,
   PublishRuntimeResult,
+  ResumePublishRuntimeRequest,
   RenderedPublishCommand,
   StartPublishRuntimeRequest,
+  SynchronizePublishRuntimeRequest,
+  SynchronizePublishRuntimeResult,
 };
 
 export interface ImportProviderPublishSpecFromCommandParams {
@@ -50,6 +56,23 @@ export async function startPublishRuntime(
   return await invoke<PublishRuntimeResult>("start_publish_runtime", {
     request,
   });
+}
+
+export async function resumePublishRuntime(
+  request: ResumePublishRuntimeRequest
+): Promise<PublishRuntimeResult> {
+  return await invoke<PublishRuntimeResult>("resume_publish_runtime", {
+    request,
+  });
+}
+
+export async function synchronizePublishRuntime(
+  request: SynchronizePublishRuntimeRequest
+): Promise<SynchronizePublishRuntimeResult> {
+  return await invoke<SynchronizePublishRuntimeResult>(
+    "synchronize_publish_runtime",
+    { request }
+  );
 }
 
 export async function cancelPublishRuntime(

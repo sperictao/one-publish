@@ -140,6 +140,8 @@ pub fn run() {
             commands::describe_publish_output_target,
             publish_runtime::prepare_publish_runtime,
             publish_runtime::start_publish_runtime,
+            publish_runtime::resume_publish_runtime,
+            publish_runtime::synchronize_publish_runtime,
             publish_runtime::cancel_publish_runtime,
             automation::list_automation_bindings,
             automation::preview_automation_change,

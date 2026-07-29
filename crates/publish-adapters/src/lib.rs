@@ -323,6 +323,32 @@ pub struct RemovedArtifactSet {
 }
 
 pub trait DeliveryDestination: AdapterContract {
+    /// Validate that synchronized staging evidence is exactly the deterministic
+    /// envelope this Destination derives from the sealed node, Attempt and
+    /// Manifest. The default is fail-closed: a Destination that cannot rederive
+    /// its envelope cannot safely resume externally supplied event history.
+    fn validate_staged_envelope(
+        &self,
+        _node: &PlanNode,
+        _context: &AdapterExecutionContext<'_>,
+        _envelope: &DeliveryEnvelope,
+    ) -> Result<(), PublishError> {
+        Err(PublishError::InvalidAdapter {
+            adapter: self.descriptor().identity().display_name(),
+            message: "does not validate synchronized delivery envelope evidence".to_string(),
+        })
+    }
+
+    /// 协作取消时清理由该 Destination 明确拥有、且尚未越过 Submitted
+    /// 边界的 staging。默认不声明清理能力；调用方不得据此承诺通用回滚。
+    fn cleanup_owned_staging(
+        &self,
+        _node: &PlanNode,
+        _context: &AdapterExecutionContext<'_>,
+    ) -> Result<bool, PublishError> {
+        Ok(false)
+    }
+
     /// 自动重试前按 Delivery Idempotency Identity 探测远端状态（ADR-0051）。
     /// 凭据与执行边界一致，由当前 Execution Backend 解析后传入（ADR-0029）。
     /// 默认无法探测：不可查询的副作用被显式标记为不可自动重试。
@@ -665,6 +691,47 @@ impl AdapterRegistry {
             .map(Arc::as_ref)
             .ok_or_else(|| self.unresolved_adapter(destination))?
             .probe_delivery(settings, identity, credentials)
+    }
+
+    /// 仅把 staging 清理委托给绑定的 Delivery Destination；返回 false 表示
+    /// Adapter 未声明此能力，不能伪装成已经回滚。
+    pub fn cleanup_owned_staging(
+        &self,
+        node: &PlanNode,
+        context: &AdapterExecutionContext<'_>,
+    ) -> Result<bool, PublishError> {
+        if node.adapter.kind != AdapterKind::DeliveryDestination {
+            return Err(PublishError::AdapterKindMismatch {
+                id: node.adapter.id.clone(),
+                expected: AdapterKind::DeliveryDestination,
+                actual: node.adapter.kind,
+            });
+        }
+        self.delivery_destinations
+            .get(&(node.adapter.id.clone(), node.adapter.version))
+            .map(Arc::as_ref)
+            .ok_or_else(|| self.unresolved_adapter(&node.adapter))?
+            .cleanup_owned_staging(node, context)
+    }
+
+    pub fn validate_staged_envelope(
+        &self,
+        node: &PlanNode,
+        context: &AdapterExecutionContext<'_>,
+        envelope: &DeliveryEnvelope,
+    ) -> Result<(), PublishError> {
+        if node.adapter.kind != AdapterKind::DeliveryDestination {
+            return Err(PublishError::AdapterKindMismatch {
+                id: node.adapter.id.clone(),
+                expected: AdapterKind::DeliveryDestination,
+                actual: node.adapter.kind,
+            });
+        }
+        self.delivery_destinations
+            .get(&(node.adapter.id.clone(), node.adapter.version))
+            .map(Arc::as_ref)
+            .ok_or_else(|| self.unresolved_adapter(&node.adapter))?
+            .validate_staged_envelope(node, context, envelope)
     }
 
     fn resolve(&self, identity: &AdapterIdentity) -> Result<AdapterRef<'_>, PublishError> {

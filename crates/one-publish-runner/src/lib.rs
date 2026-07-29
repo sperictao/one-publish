@@ -133,7 +133,8 @@ impl StandaloneRunner {
                     .to_string(),
             ));
         }
-        self.runtime.start(&projection.prepared.plan, attempt_id)
+        self.runtime
+            .start_prepared(&projection.prepared, attempt_id)
     }
 
     fn ensure_runtime_identifier(&self, identifier: &str) -> Result<(), PublishError> {

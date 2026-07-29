@@ -883,6 +883,25 @@ fn file_bytes(
 }
 
 impl DeliveryDestination for SftpDeliveryDestination {
+    fn validate_staged_envelope(
+        &self,
+        node: &publish_domain::PlanNode,
+        context: &crate::AdapterExecutionContext<'_>,
+        envelope: &publish_domain::DeliveryEnvelope,
+    ) -> Result<(), PublishError> {
+        let manifest = context
+            .manifest
+            .ok_or(PublishError::MissingArtifactManifest)?;
+        let expected = self.stage(node, manifest)?.envelopes;
+        if expected.len() != 1 || expected.first() != Some(envelope) {
+            return Err(PublishError::Execution(format!(
+                "synchronized delivery envelope for route {} does not match its sealed SFTP settings",
+                node.binding_id
+            )));
+        }
+        Ok(())
+    }
+
     /// 自动重试前按交付幂等身份探测远端（ADR-0051）：没有交付记录或我方
     /// 未完成的交付允许重新执行，记录与全部文件都一致时复用既有交付，
     /// 其余一律冲突。

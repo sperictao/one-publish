@@ -1,30 +1,34 @@
 use std::collections::{BTreeMap, BTreeSet};
-use std::fs;
+use std::fs::{self, OpenOptions};
+use std::io::Write;
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use publish_domain::{
     sha256_hex, AdapterDescriptor, AdapterKind, AdapterSchema, AdapterSettings, ArtifactManifest,
-    ArtifactManifestEntry, Capability, CapabilityRequirement, DeliveryEnvelope, DeliveryReceipt,
-    PlanNode, PlanNodeTemplate, PlanSideEffect, PlanStage, PlanningInputSnapshot, PublishError,
-    PublishPlan, PublishingCapability,
+    ArtifactManifestEntry, Capability, CapabilityRequirement, DeliveryEnvelope,
+    DeliveryIdempotencyIdentity, DeliveryReceipt, PlanNode, PlanNodeTemplate, PlanSideEffect,
+    PlanStage, PlanningInputSnapshot, PublishError, PublishPlan, PublishingCapability,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use crate::{
     action_name, execute_plan_in_order, require_action, AdapterContract, AdapterExecutionContext,
-    AdapterExecutionOutput, ArtifactStore, DeliveryDestination, ExecutionBackend, PlanNodeExecutor,
-    RemovedArtifactSet, RetainedArtifactSet, RetentionHold, RetentionSweepReport,
+    AdapterExecutionOutput, ArtifactStore, DeliveryDestination, DeliveryProbe, ExecutionBackend,
+    PlanNodeExecutor, RemovedArtifactSet, RetainedArtifactSet, RetentionHold, RetentionSweepReport,
     ARTIFACT_VERIFIED_CAPABILITY, STRUCTURED_PLAN_EXECUTION_CAPABILITY,
 };
 
 const STORED_ARTIFACT: &str = "stored-artifact";
 const DELIVERY_DIRECTORY_KEY: &str = "delivery_directory";
+const DELIVERY_MANIFEST_MARKER: &str = ".one-publish-manifest-digest";
 const SET_RECORD_DIRECTORY: &str = "manifests";
 const LEASE_DIRECTORY: &str = "leases";
 const DEFAULT_RETENTION_SECONDS: u64 = 604_800;
 const BIND_PROMOTED_MANIFEST_ACTION: &str = "bind_promoted_manifest";
+static CONTENT_TEMP_SEQUENCE: AtomicU64 = AtomicU64::new(0);
 
 pub struct LocalExecutionBackend {
     descriptor: AdapterDescriptor,
@@ -483,6 +487,14 @@ impl AdapterContract for LocalDirectoryDestination {
             }
             copy_verified(source, &destination, &artifact.digest)?;
         }
+        fs::write(
+            directory.join(DELIVERY_MANIFEST_MARKER),
+            manifest.digest.as_bytes(),
+        )
+        .map_err(|error| PublishError::Io {
+            operation: format!("write local delivery marker {}", directory.display()),
+            message: error.to_string(),
+        })?;
 
         let receipt_id = sha256_hex(
             format!(
@@ -512,15 +524,11 @@ impl LocalDirectoryDestination {
         context: &AdapterExecutionContext<'_>,
         manifest: &ArtifactManifest,
     ) -> Result<AdapterExecutionOutput, PublishError> {
-        let delivery_root = PathBuf::from(
-            node.settings
-                .string("directory", &self.descriptor.identity().display_name())?,
-        );
-        let attempt_directory = format!(
-            "attempt-{}",
-            &sha256_hex(context.attempt_id.as_bytes())[..24]
-        );
-        let directory = delivery_root.join(attempt_directory);
+        let directory = local_attempt_directory(
+            &node.settings,
+            context.attempt_id,
+            &self.descriptor.identity().display_name(),
+        )?;
         Ok(AdapterExecutionOutput {
             envelopes: vec![DeliveryEnvelope::new(
                 node.binding_id.clone(),
@@ -554,7 +562,79 @@ fn staged_delivery_directory(
         })
 }
 
-impl DeliveryDestination for LocalDirectoryDestination {}
+impl DeliveryDestination for LocalDirectoryDestination {
+    fn validate_staged_envelope(
+        &self,
+        node: &PlanNode,
+        context: &AdapterExecutionContext<'_>,
+        envelope: &DeliveryEnvelope,
+    ) -> Result<(), PublishError> {
+        let manifest = context
+            .manifest
+            .ok_or(PublishError::MissingArtifactManifest)?;
+        let expected = self.stage_envelope(node, context, manifest)?.envelopes;
+        if expected.len() != 1 || expected.first() != Some(envelope) {
+            return Err(PublishError::Execution(format!(
+                "synchronized delivery envelope for route {} does not match its sealed local-directory settings",
+                node.binding_id
+            )));
+        }
+        Ok(())
+    }
+
+    fn probe_delivery(
+        &self,
+        settings: &AdapterSettings,
+        identity: &DeliveryIdempotencyIdentity,
+        _credentials: &BTreeMap<String, publish_domain::ResolvedCredential>,
+    ) -> Result<DeliveryProbe, PublishError> {
+        let directory = local_attempt_directory(
+            settings,
+            &identity.attempt_id,
+            &self.descriptor.identity().display_name(),
+        )?;
+        if !directory.try_exists().map_err(|error| PublishError::Io {
+            operation: format!("inspect local delivery {}", directory.display()),
+            message: error.to_string(),
+        })? {
+            return Ok(DeliveryProbe::Absent);
+        }
+        let marker = directory.join(DELIVERY_MANIFEST_MARKER);
+        let persisted_digest = match fs::read_to_string(&marker) {
+            Ok(digest) => digest,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+                return Ok(DeliveryProbe::Conflicting {
+                    external_reference: directory.to_string_lossy().to_string(),
+                });
+            }
+            Err(error) => {
+                return Err(PublishError::Io {
+                    operation: format!("read local delivery marker {}", marker.display()),
+                    message: error.to_string(),
+                });
+            }
+        };
+        if persisted_digest == identity.manifest_digest {
+            Ok(DeliveryProbe::Matching {
+                external_reference: directory.to_string_lossy().to_string(),
+            })
+        } else {
+            Ok(DeliveryProbe::Conflicting {
+                external_reference: directory.to_string_lossy().to_string(),
+            })
+        }
+    }
+}
+
+fn local_attempt_directory(
+    settings: &AdapterSettings,
+    attempt_id: &str,
+    adapter: &str,
+) -> Result<PathBuf, PublishError> {
+    let delivery_root = PathBuf::from(settings.string("directory", adapter)?);
+    let attempt_directory = format!("attempt-{}", &sha256_hex(attempt_id.as_bytes())[..24]);
+    Ok(delivery_root.join(attempt_directory))
+}
 
 fn create_directory(path: &Path) -> Result<(), PublishError> {
     fs::create_dir_all(path).map_err(|error| PublishError::Io {
@@ -568,11 +648,60 @@ fn persist_content_addressed(
     bytes: &[u8],
     expected_digest: &str,
 ) -> Result<(), PublishError> {
+    let actual_digest = sha256_hex(bytes);
+    if actual_digest != expected_digest {
+        return Err(PublishError::ArtifactDigestMismatch {
+            artifact: path.display().to_string(),
+            expected: expected_digest.to_string(),
+            actual: actual_digest,
+        });
+    }
     if path.exists() {
         return verify_file(path, expected_digest);
     }
-    fs::write(path, bytes).map_err(|error| PublishError::Io {
-        operation: format!("write artifact {}", path.display()),
+
+    let sequence = CONTENT_TEMP_SEQUENCE.fetch_add(1, Ordering::Relaxed);
+    let file_name = path
+        .file_name()
+        .and_then(|name| name.to_str())
+        .unwrap_or("artifact");
+    let entropy = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_nanos();
+    let temporary = path.with_file_name(format!(
+        ".{file_name}.tmp-{}-{entropy}-{sequence}",
+        std::process::id(),
+    ));
+    let mut file = OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(&temporary)
+        .map_err(|error| PublishError::Io {
+            operation: format!("create temporary artifact {}", temporary.display()),
+            message: error.to_string(),
+        })?;
+    let write_result = file.write_all(bytes).and_then(|_| file.sync_all());
+    drop(file);
+    if let Err(error) = write_result {
+        let _ = fs::remove_file(&temporary);
+        return Err(PublishError::Io {
+            operation: format!("write temporary artifact {}", temporary.display()),
+            message: error.to_string(),
+        });
+    }
+    let publish_result = match fs::hard_link(&temporary, path) {
+        Ok(()) => Ok(()),
+        Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => Ok(()),
+        Err(error) => Err(PublishError::Io {
+            operation: format!("publish artifact {}", path.display()),
+            message: error.to_string(),
+        }),
+    };
+    let cleanup_result = fs::remove_file(&temporary);
+    publish_result?;
+    cleanup_result.map_err(|error| PublishError::Io {
+        operation: format!("remove temporary artifact {}", temporary.display()),
         message: error.to_string(),
     })?;
     verify_file(path, expected_digest)

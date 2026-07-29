@@ -398,6 +398,8 @@ fn checksum_node(processor: &ChecksumProcessor) -> PlanNode {
         artifact_inputs: template.artifact_inputs,
         artifact_outputs: template.artifact_outputs,
         side_effects: template.side_effects,
+        cancellable: template.cancellable,
+        cleanup_owned_staging: template.cleanup_owned_staging,
         irreversible: template.irreversible,
     }
 }

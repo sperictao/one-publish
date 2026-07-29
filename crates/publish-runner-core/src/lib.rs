@@ -1,6 +1,7 @@
 use std::collections::{BTreeMap, BTreeSet};
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
+use std::time::{SystemTime, UNIX_EPOCH};
 
 use publish_adapters::{
     AdapterExecutionContext, AdapterExecutionOutput, AdapterRegistry, DeliveryProbe,
@@ -24,6 +25,42 @@ use serde_json::Value;
 pub struct PreparedPublishPlan {
     pub snapshot: PlanningInputSnapshot,
     pub plan: PublishPlan,
+}
+
+/// A newly sealed manifest belongs to the exact planning snapshot that produced
+/// it. Promotion is the only exception: it must bind the exact manifest digest
+/// selected in the sealed planning input, never another self-consistent set.
+pub fn validate_manifest_provenance(
+    prepared: &PreparedPublishPlan,
+    manifest: &ArtifactManifest,
+) -> Result<(), PublishError> {
+    validate_manifest_binding(
+        &prepared.plan.snapshot_digest,
+        prepared.snapshot.promoted_manifest_digest.as_deref(),
+        manifest,
+    )
+}
+
+fn validate_manifest_binding(
+    planning_snapshot_digest: &str,
+    promoted_manifest_digest: Option<&str>,
+    manifest: &ArtifactManifest,
+) -> Result<(), PublishError> {
+    manifest.validate()?;
+    match promoted_manifest_digest {
+        Some(expected) if manifest.digest != expected => Err(PublishError::Execution(format!(
+            "promoted artifact manifest {} does not match the sealed promotion digest {expected}",
+            manifest.digest
+        ))),
+        Some(_) => Ok(()),
+        None if manifest.planning_snapshot_digest != planning_snapshot_digest => {
+            Err(PublishError::Execution(format!(
+                "artifact manifest {} belongs to planning snapshot {}, expected {planning_snapshot_digest}",
+                manifest.digest, manifest.planning_snapshot_digest
+            )))
+        }
+        None => Ok(()),
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -247,6 +284,9 @@ pub fn reduce_publish_events(
                         failure: None,
                     },
                 );
+            }
+            "plan_node_started" => {
+                node_states.insert(event.plan_node_id.clone(), PlanNodeExecutionState::Started);
             }
             "plan_node_completed" => {
                 node_states.insert(
@@ -557,6 +597,16 @@ pub struct EventSyncReport {
     pub missing: Vec<(u64, u64)>,
 }
 
+#[derive(Debug, Clone, PartialEq)]
+pub struct AttemptSynchronization {
+    pub report: EventSyncReport,
+    /// Complete de-duplicated causal history when `report.missing` is empty.
+    /// Callers must not persist candidate events while a gap remains.
+    pub events: Vec<PublishEvent>,
+    /// Deterministically recovered view; absent until the causal history is complete.
+    pub view: Option<PublishAttemptView>,
+}
+
 impl AttemptEventLog {
     pub fn new(attempt: &ReleaseAttempt) -> Result<Self, PublishError> {
         if attempt.version != RELEASE_ATTEMPT_VERSION {
@@ -756,6 +806,8 @@ pub struct PublishLeaseCoordinator {
     leases: Mutex<BTreeMap<String, PublishResourceLease>>,
 }
 
+static LEASE_ID_SEQUENCE: AtomicU64 = AtomicU64::new(0);
+
 impl Default for PublishLeaseCoordinator {
     fn default() -> Self {
         Self::new()
@@ -797,6 +849,42 @@ impl PublishLeaseCoordinator {
         Ok(coordinator)
     }
 
+    /// 把控制面 Journal 中仍有效的单份租约幂等恢复到现有协调器。相同
+    /// lease_id 的较新续租覆盖旧快照；不同租约或资源冲突保持显式失败。
+    pub fn restore_active_lease(&self, lease: PublishResourceLease) -> Result<(), PublishError> {
+        lease.validate()?;
+        let mut held = self.lock_leases()?;
+        if let Some(existing) = held.get(&lease.owner_attempt_id) {
+            if existing.lease_id != lease.lease_id {
+                return Err(PublishError::Execution(format!(
+                    "publish attempt {} carries conflicting active lease identities",
+                    lease.owner_attempt_id
+                )));
+            }
+            if existing.resources != lease.resources {
+                return Err(PublishError::Execution(format!(
+                    "publish attempt {} changed its leased resources",
+                    lease.owner_attempt_id
+                )));
+            }
+            if lease.expires_at_seconds > existing.expires_at_seconds {
+                held.insert(lease.owner_attempt_id.clone(), lease);
+            }
+            return Ok(());
+        }
+        for existing in held.values() {
+            if let Some(resource) = conflicting_resource(existing, &lease.resources) {
+                return Err(PublishError::LeaseResourceConflict {
+                    requester: lease.owner_attempt_id.clone(),
+                    holder: existing.owner_attempt_id.clone(),
+                    resource,
+                });
+            }
+        }
+        held.insert(lease.owner_attempt_id.clone(), lease);
+        Ok(())
+    }
+
     /// 为一次发布尝试取得资源租约：任一资源被未过期租约持有即明确阻断；
     /// 过期租约让位（含同一 owner 的过期租约，即崩溃后的恢复规则）。
     pub fn acquire(
@@ -827,7 +915,19 @@ impl PublishLeaseCoordinator {
                 });
             }
         }
-        let mut lease_identity = format!("{owner_attempt_id}:{now_seconds}");
+        // Expiry semantics use the caller-injected clock. Lease identity additionally
+        // carries process-local monotonic and high-resolution entropy so a release and
+        // reacquire in the same semantic second can never revive an already released
+        // journal epoch.
+        let entropy = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_nanos();
+        let sequence = LEASE_ID_SEQUENCE.fetch_add(1, Ordering::Relaxed);
+        let mut lease_identity = format!(
+            "{owner_attempt_id}:{now_seconds}:{}:{entropy}:{sequence}",
+            std::process::id()
+        );
         for resource in &resources {
             lease_identity.push(':');
             lease_identity.push_str(&resource.display_name());
@@ -881,6 +981,12 @@ impl PublishLeaseCoordinator {
         held.remove(owner_attempt_id)
             .map(|_| ())
             .ok_or_else(|| lease_not_held(owner_attempt_id))
+    }
+
+    /// Reconciliation is idempotent across process restarts: durable ownership may
+    /// need releasing even when this process has not restored the in-memory lease.
+    pub fn release_if_held(&self, owner_attempt_id: &str) -> Result<bool, PublishError> {
+        Ok(self.lock_leases()?.remove(owner_attempt_id).is_some())
     }
 
     /// 所有权校验：该 Attempt 持有且未过期的租约；否则显式 LeaseLost。
@@ -967,7 +1073,7 @@ fn validate_lease_ttl(ttl_seconds: u64) -> Result<(), PublishError> {
 }
 
 /// 协作取消信号（ADR-0041）：只表达"请求停止尚未开始的工作"。已开始的
-/// 节点不被中断，已 Published 的路线与既有 Receipt 保持不变。
+/// 节点不被中断，Submitted/Published 路线与既有 Receipt 保持不变。
 #[derive(Clone, Default)]
 pub struct CancellationSignal(Arc<AtomicBool>);
 
@@ -985,11 +1091,33 @@ impl CancellationSignal {
     }
 }
 
+/// Attempt durability boundary. Implementations must make the initial attempt,
+/// sealed manifest, and every event durable before returning success. When an
+/// event binds a manifest, both pieces of evidence must become visible atomically.
+pub trait AttemptPersistencePort: Send + Sync {
+    fn begin_attempt(&self, attempt: &ReleaseAttempt) -> Result<(), PublishError>;
+
+    fn append_events(
+        &self,
+        events: &[PublishEvent],
+        manifest: Option<&ArtifactManifest>,
+    ) -> Result<(), PublishError>;
+}
+
+/// Execution-time lease maintenance boundary. Control planes inject their real
+/// clock, renewal and durable lease update here; the core calls it immediately
+/// before and after every adapter side effect.
+pub trait AttemptLeaseMaintenancePort: Send + Sync {
+    fn maintain(&self, attempt_id: &str) -> Result<(), PublishError>;
+}
+
 /// 一次尝试执行的显式环境：时间与取消信号都由调用方注入，
-/// 运行核心不读系统时钟，也不隐藏取消状态。
+/// 运行核心不读系统时钟，也不隐藏取消或持久化边界。
 pub struct AttemptExecutionContext {
     pub now_seconds: u64,
     pub cancellation: CancellationSignal,
+    persistence: Option<Arc<dyn AttemptPersistencePort>>,
+    lease_maintenance: Option<Arc<dyn AttemptLeaseMaintenancePort>>,
 }
 
 impl AttemptExecutionContext {
@@ -997,11 +1125,26 @@ impl AttemptExecutionContext {
         Self {
             now_seconds,
             cancellation: CancellationSignal::default(),
+            persistence: None,
+            lease_maintenance: None,
         }
     }
 
     pub fn with_cancellation(mut self, cancellation: CancellationSignal) -> Self {
         self.cancellation = cancellation;
+        self
+    }
+
+    pub fn with_persistence(mut self, persistence: Arc<dyn AttemptPersistencePort>) -> Self {
+        self.persistence = Some(persistence);
+        self
+    }
+
+    pub fn with_lease_maintenance(
+        mut self,
+        lease_maintenance: Arc<dyn AttemptLeaseMaintenancePort>,
+    ) -> Self {
+        self.lease_maintenance = Some(lease_maintenance);
         self
     }
 }
@@ -1027,9 +1170,36 @@ impl StartPublishAttempt {
     }
 }
 
-/// 一次续传请求对失败路线的完整处置：重试、复用远端一致交付或带原因阻断。
+fn validate_attempt_plan_identity(
+    prepared: &PreparedPublishPlan,
+    attempt: &ReleaseAttempt,
+    operation: &str,
+) -> Result<(), PublishError> {
+    if attempt.version != RELEASE_ATTEMPT_VERSION {
+        return Err(PublishError::UnsupportedAttemptVersion {
+            actual: attempt.version,
+            expected: RELEASE_ATTEMPT_VERSION,
+        });
+    }
+    if attempt.plan_digest != prepared.plan.digest
+        || attempt.planning_snapshot_digest != prepared.plan.snapshot_digest
+        || attempt.plan_version != prepared.plan.version
+        || attempt.execution_backend != prepared.plan.execution_backend
+        || attempt.configuration_revision != prepared.snapshot.configuration_revision
+        || attempt.runtime_revision != prepared.snapshot.runtime_revision
+    {
+        return Err(PublishError::InvalidPlan(format!(
+            "{operation} must keep the publish attempt identity stable; the attempt belongs to a different plan"
+        )));
+    }
+    Ok(())
+}
+
+/// 一次续传请求对路线的完整处置：继续观察 Submitted、重试失败路线、
+/// 复用远端一致交付，或带原因阻断。
 #[derive(Default)]
 struct RouteRetryDecisions {
+    observe_routes: BTreeSet<String>,
     retry_routes: BTreeSet<String>,
     reused_deliveries: Vec<ReusedDelivery>,
     blocked: Vec<String>,
@@ -1175,9 +1345,27 @@ impl PublishRuntime {
         };
         let attempt_id = attempt.attempt_id.clone();
         let backend_run_id = attempt.backend_run_id.clone();
+        if let Some(persistence) = &context.persistence {
+            if let Err(error) = persistence.begin_attempt(&attempt) {
+                self.started_attempts
+                    .lock()
+                    .map_err(|_| {
+                        PublishError::Execution(
+                            "publish attempt registry lock is poisoned".to_string(),
+                        )
+                    })?
+                    .remove(&attempt_id);
+                return Err(error);
+            }
+        }
         let mut executor =
             RuntimeNodeExecutor::new(&self.registry, &prepared.plan, &attempt_id, &backend_run_id)
-                .with_cancellation(context.cancellation.clone());
+                .with_promoted_manifest_digest(
+                    prepared.snapshot.promoted_manifest_digest.as_deref(),
+                )
+                .with_cancellation(context.cancellation.clone())
+                .with_persistence(context.persistence.clone())
+                .with_lease_maintenance(context.lease_maintenance.clone());
         if let Err(error) = verify_plan_credentials(&self.registry, &prepared.plan) {
             return executor.finish_failed_attempt(attempt, error);
         }
@@ -1187,13 +1375,14 @@ impl PublishRuntime {
             &mut executor,
         ) {
             Ok(()) => executor.finish_attempt(&prepared.plan, attempt),
+            Err(error @ PublishError::AttemptStateUncertain { .. }) => Err(error),
             Err(error) => executor.finish_failed_attempt(attempt, error),
         }
     }
 
-    /// 安全续传一次失败或部分交付的发布尝试：只有分类允许自动重试且幂等探测
-    /// 确认安全的失败路线才重新交付；共享构建、处理、封存与成功路线一律不再
-    /// 执行（ADR-0022/0040/0051/0056）。
+    /// 安全续传一次非终态、失败或部分交付的发布尝试：Submitted 路线只继续
+    /// Observe；只有分类允许自动重试且幂等探测确认安全的失败路线才重新交付；
+    /// 共享构建、处理、封存与成功路线一律不再执行（ADR-0022/0040/0051/0056）。
     pub fn resume_attempt(
         &self,
         prepared: &PreparedPublishPlan,
@@ -1207,29 +1396,13 @@ impl PublishRuntime {
             ));
         }
         let attempt = &view.attempt;
-        if attempt.version != RELEASE_ATTEMPT_VERSION {
-            return Err(PublishError::UnsupportedAttemptVersion {
-                actual: attempt.version,
-                expected: RELEASE_ATTEMPT_VERSION,
-            });
-        }
         // 续传不得改变尝试身份：视图必须属于这份封存计划（ADR-0040）。
-        if attempt.plan_digest != prepared.plan.digest
-            || attempt.planning_snapshot_digest != prepared.plan.snapshot_digest
-            || attempt.plan_version != prepared.plan.version
-            || attempt.execution_backend != prepared.plan.execution_backend
-            || attempt.configuration_revision != prepared.snapshot.configuration_revision
-            || attempt.runtime_revision != prepared.snapshot.runtime_revision
-        {
-            return Err(PublishError::InvalidPlan(
-                "resume must keep the publish attempt identity stable; the view belongs to a different plan"
-                    .to_string(),
-            ));
-        }
+        validate_attempt_plan_identity(prepared, attempt, "resume")?;
         let manifest = view
             .manifest
             .clone()
             .ok_or(PublishError::MissingArtifactManifest)?;
+        validate_manifest_provenance(prepared, &manifest)?;
         if attempt.manifest_digest.as_deref() != Some(manifest.digest.as_str()) {
             return Err(PublishError::Execution(format!(
                 "resume manifest {} does not match the attempt's sealed manifest binding",
@@ -1251,10 +1424,19 @@ impl PublishRuntime {
             ));
         }
 
-        let decisions = self.evaluate_failed_routes(prepared, attempt, &manifest, &projection)?;
-        if decisions.retry_routes.is_empty() && decisions.reused_deliveries.is_empty() {
+        let decisions = self.evaluate_failed_routes(
+            prepared,
+            attempt,
+            &manifest,
+            &projection,
+            context.cancellation.is_requested(),
+        )?;
+        if decisions.observe_routes.is_empty()
+            && decisions.retry_routes.is_empty()
+            && decisions.reused_deliveries.is_empty()
+        {
             let reasons = if decisions.blocked.is_empty() {
-                vec!["the attempt has no failed delivery route".to_string()]
+                vec!["the attempt has no resumable delivery route".to_string()]
             } else {
                 decisions.blocked
             };
@@ -1267,9 +1449,18 @@ impl PublishRuntime {
             &attempt.attempt_id,
             &attempt.backend_run_id,
         )
-        .with_cancellation(context.cancellation.clone());
+        .with_promoted_manifest_digest(prepared.snapshot.promoted_manifest_digest.as_deref())
+        .with_cancellation(context.cancellation.clone())
+        .with_persistence(context.persistence.clone())
+        .with_lease_maintenance(context.lease_maintenance.clone());
         executor.events = view.events.clone();
         executor.manifest = Some(manifest.clone());
+        executor.envelopes = self.validate_synchronized_delivery_envelopes(
+            &view.events,
+            prepared,
+            attempt,
+            &manifest,
+        )?;
         executor.receipts = view.receipt_history.clone();
         let reused_route_ids = decisions
             .reused_deliveries
@@ -1287,14 +1478,21 @@ impl PublishRuntime {
             }
         }
         for node in &prepared.plan.nodes {
+            if decisions.observe_routes.contains(&node.binding_id)
+                && node.stage == PlanStage::ObserveRoutes
+            {
+                continue;
+            }
+            if projection.node_states.get(&node.id) == Some(&PlanNodeExecutionState::Completed) {
+                executor.resume_completed.insert(node.id.clone());
+                continue;
+            }
             if decisions.retry_routes.contains(&node.binding_id)
                 || executor.failed_routes.contains_key(&node.binding_id)
             {
                 continue;
             }
-            if reused_route_ids.contains(&node.binding_id)
-                || projection.node_states.get(&node.id) == Some(&PlanNodeExecutionState::Completed)
-            {
+            if reused_route_ids.contains(&node.binding_id) {
                 executor.resume_completed.insert(node.id.clone());
                 continue;
             }
@@ -1314,8 +1512,128 @@ impl PublishRuntime {
             &mut executor,
         ) {
             Ok(()) => executor.finish_attempt(&prepared.plan, attempt),
+            Err(error @ PublishError::AttemptStateUncertain { .. }) => Err(error),
             Err(error) => executor.finish_failed_attempt(attempt, error),
         }
+    }
+
+    /// Merge remote or restarted control-plane facts through the same Publish Runtime
+    /// seam used for execution. A causal gap keeps the candidate history observable
+    /// to the caller but prevents state recovery and durable acceptance.
+    pub fn synchronize_attempt(
+        &self,
+        prepared: &PreparedPublishPlan,
+        attempt: &ReleaseAttempt,
+        existing_events: &[PublishEvent],
+        incoming_events: &[PublishEvent],
+        last_known_sequence: Option<u64>,
+    ) -> Result<AttemptSynchronization, PublishError> {
+        let current_plan = self.prepare(&prepared.snapshot)?;
+        if current_plan != prepared.plan {
+            return Err(PublishError::InvalidPlan(
+                "prepared publish plan no longer matches its planning input snapshot".to_string(),
+            ));
+        }
+        validate_attempt_plan_identity(prepared, attempt, "synchronize")?;
+
+        let mut log = AttemptEventLog::new(attempt)?;
+        log.sync(existing_events)?;
+        let mut report = log.sync(incoming_events)?;
+        let high_water = last_known_sequence.unwrap_or(0).max(
+            existing_events
+                .iter()
+                .chain(incoming_events)
+                .map(|event| event.sequence)
+                .max()
+                .unwrap_or(0),
+        );
+        report.missing = log.missing_ranges_through(high_water);
+        let events = log.events();
+        let view = if report.missing.is_empty() {
+            Some(recover_attempt_view(
+                attempt,
+                &prepared.plan.routes,
+                &events,
+            )?)
+        } else {
+            None
+        };
+        Ok(AttemptSynchronization {
+            report,
+            events,
+            view,
+        })
+    }
+
+    pub fn validate_synchronized_delivery_envelopes(
+        &self,
+        events: &[PublishEvent],
+        prepared: &PreparedPublishPlan,
+        attempt: &ReleaseAttempt,
+        manifest: &ArtifactManifest,
+    ) -> Result<Vec<DeliveryEnvelope>, PublishError> {
+        validate_recovered_delivery_envelopes(
+            &self.registry,
+            events,
+            &prepared.plan,
+            attempt,
+            manifest,
+        )
+    }
+
+    /// Request cooperative cancellation and resume the durable Attempt through the
+    /// normal recovery path. Published or Submitted evidence remains authoritative;
+    /// only work that has not crossed its cancellation boundary can be stopped.
+    pub fn cancel_attempt(
+        &self,
+        prepared: &PreparedPublishPlan,
+        view: &PublishAttemptView,
+        context: &AttemptExecutionContext,
+    ) -> Result<PublishAttemptView, PublishError> {
+        context.cancellation.request();
+        if view.manifest.is_some() {
+            return self.resume_attempt(prepared, view, context);
+        }
+
+        let current_plan = self.prepare(&prepared.snapshot)?;
+        if current_plan != prepared.plan {
+            return Err(PublishError::InvalidPlan(
+                "prepared publish plan no longer matches its planning input snapshot".to_string(),
+            ));
+        }
+        let attempt = &view.attempt;
+        validate_attempt_plan_identity(prepared, attempt, "cancel")?;
+        let _resume_slot = ResumeSlot::acquire(&self.resuming_attempts, &attempt.attempt_id)?;
+        self.verify_attempt_ownership(&attempt.attempt_id, context.now_seconds)?;
+
+        let projection = reduce_publish_events(&view.events, &prepared.plan.routes)?;
+        if attempt.manifest_digest.is_some()
+            || projection.manifest_digest.is_some()
+            || !projection.receipts.is_empty()
+            || view
+                .events
+                .iter()
+                .any(|event| event.payload.contains_key("delivery_envelopes"))
+        {
+            return Err(PublishError::MissingArtifactManifest);
+        }
+
+        let mut executor = RuntimeNodeExecutor::new(
+            &self.registry,
+            &prepared.plan,
+            &attempt.attempt_id,
+            &attempt.backend_run_id,
+        )
+        .with_cancellation(context.cancellation.clone())
+        .with_persistence(context.persistence.clone())
+        .with_lease_maintenance(context.lease_maintenance.clone());
+        executor.events = view.events.clone();
+        for route in projection.routes {
+            if let Some(error) = route.error {
+                executor.failed_routes.insert(route.route_id, error);
+            }
+        }
+        executor.finish_cancelled_attempt(&prepared.plan, attempt.clone())
     }
 
     /// 逐条评估失败路线的自动重试资格：先看结构化分类，再做幂等探测；
@@ -1326,22 +1644,79 @@ impl PublishRuntime {
         attempt: &ReleaseAttempt,
         manifest: &ArtifactManifest,
         projection: &ReducedPublishEvents,
+        cancellation_requested: bool,
     ) -> Result<RouteRetryDecisions, PublishError> {
         let mut decisions = RouteRetryDecisions::default();
         for route in &projection.routes {
-            let Some(error) = &route.error else { continue };
+            let uncertain_publish = prepared
+                .plan
+                .nodes
+                .iter()
+                .find(|node| {
+                    node.binding_id == route.route_id && node.stage == PlanStage::PublishRoutes
+                })
+                .is_some_and(|node| {
+                    projection.node_states.get(&node.id) == Some(&PlanNodeExecutionState::Started)
+                });
+            let uncertain_stage = prepared
+                .plan
+                .nodes
+                .iter()
+                .find(|node| {
+                    node.binding_id == route.route_id && node.stage == PlanStage::StageRoutes
+                })
+                .is_some_and(|node| {
+                    (node.cleanup_owned_staging || !node.side_effects.is_empty())
+                        && projection.node_states.get(&node.id)
+                            == Some(&PlanNodeExecutionState::Started)
+                });
+            let error = match route.error.as_deref() {
+                Some(error) => Some(error),
+                None => {
+                    if route.status == DeliveryStatus::Submitted {
+                        decisions.observe_routes.insert(route.route_id.clone());
+                        continue;
+                    }
+                    if route.status == DeliveryStatus::Pending && cancellation_requested {
+                        decisions.retry_routes.insert(route.route_id.clone());
+                        continue;
+                    }
+                    if uncertain_stage {
+                        decisions.blocked.push(format!(
+                            "route {} is blocked: staging started without durable completion evidence; cancel the attempt to clean adapter-owned staging",
+                            route.route_id
+                        ));
+                        continue;
+                    }
+                    if route.status == DeliveryStatus::Pending && !uncertain_publish {
+                        // Intent is durable before every adapter call. No started publish
+                        // evidence therefore proves the external publish boundary was not entered.
+                        decisions.retry_routes.insert(route.route_id.clone());
+                        continue;
+                    }
+                    if !uncertain_publish {
+                        continue;
+                    }
+                    // A durable intent without completion evidence means the adapter may
+                    // already have crossed its external boundary. Probe that identity
+                    // before deciding whether to retry or reuse it.
+                    None
+                }
+            };
             let route_id = route.route_id.as_str();
-            let eligible = route
-                .failure
-                .as_ref()
-                .is_some_and(|failure| failure.category.allows_automatic_retry());
+            let eligible = uncertain_publish
+                || route
+                    .failure
+                    .as_ref()
+                    .is_some_and(|failure| failure.category.allows_automatic_retry());
             if !eligible {
                 let category = route
                     .failure
                     .as_ref()
                     .map_or("unclassified", |failure| failure.category.name());
                 decisions.blocked.push(format!(
-                    "route {route_id} is blocked: {category} failures are not eligible for automatic retry ({error})"
+                    "route {route_id} is blocked: {category} failures are not eligible for automatic retry ({})",
+                    error.unwrap_or("the route has no durable completion evidence")
                 ));
                 continue;
             }
@@ -1429,7 +1804,26 @@ impl PublishRuntime {
         plan: &PublishPlan,
         attempt_id: &str,
     ) -> Result<PublishOutcome, PublishError> {
-        self.execute(plan, attempt_id, attempt_id)
+        self.execute(plan, attempt_id, attempt_id, None)
+    }
+
+    pub fn start_prepared(
+        &self,
+        prepared: &PreparedPublishPlan,
+        attempt_id: &str,
+    ) -> Result<PublishOutcome, PublishError> {
+        let current_plan = self.prepare(&prepared.snapshot)?;
+        if current_plan != prepared.plan {
+            return Err(PublishError::InvalidPlan(
+                "prepared publish plan no longer matches its planning input snapshot".to_string(),
+            ));
+        }
+        self.execute(
+            &prepared.plan,
+            attempt_id,
+            attempt_id,
+            prepared.snapshot.promoted_manifest_digest.as_deref(),
+        )
     }
 
     fn execute(
@@ -1437,6 +1831,7 @@ impl PublishRuntime {
         plan: &PublishPlan,
         attempt_id: &str,
         backend_run_id: &str,
+        promoted_manifest_digest: Option<&str>,
     ) -> Result<PublishOutcome, PublishError> {
         validate_plan(plan)?;
         preflight_adapter_contracts(&self.registry, plan)?;
@@ -1448,7 +1843,8 @@ impl PublishRuntime {
         }
 
         let mut executor =
-            RuntimeNodeExecutor::new(&self.registry, plan, attempt_id, backend_run_id);
+            RuntimeNodeExecutor::new(&self.registry, plan, attempt_id, backend_run_id)
+                .with_promoted_manifest_digest(promoted_manifest_digest);
         self.registry
             .execute_plan(&plan.execution_backend, plan, &mut executor)?;
         executor.finish(plan)
@@ -1570,6 +1966,16 @@ fn validate_plan(plan: &PublishPlan) -> Result<(), PublishError> {
             ));
         }
         node.operation.validate()?;
+        if node.cleanup_owned_staging
+            && (node.adapter.kind != AdapterKind::DeliveryDestination
+                || node.stage != PlanStage::StageRoutes
+                || !node.cancellable)
+        {
+            return Err(PublishError::InvalidPlan(format!(
+                "plan node {} may declare owned-staging cleanup only for a cancellable delivery StageRoutes node",
+                node.id
+            )));
+        }
         if let Some(unknown_dependency) = node
             .depends_on
             .iter()
@@ -1590,6 +1996,7 @@ struct RuntimeNodeExecutor<'a> {
     backend_run_id: &'a str,
     plan_digest: &'a str,
     snapshot_digest: &'a str,
+    promoted_manifest_digest: Option<&'a str>,
     execution_backend: &'a AdapterIdentity,
     bindings: BTreeMap<&'a str, &'a AdapterBinding>,
     routes: &'a [PlanRoute],
@@ -1608,6 +2015,15 @@ struct RuntimeNodeExecutor<'a> {
     expected_nodes: BTreeMap<&'a str, &'a PlanNode>,
     /// 协作取消：置位后未开始的节点不再执行（ADR-0041）。
     cancellation: CancellationSignal,
+    /// 可选的追加持久化边界；生产控制面注入，纯核心调用可保持内存执行。
+    persistence: Option<Arc<dyn AttemptPersistencePort>>,
+    lease_maintenance: Option<Arc<dyn AttemptLeaseMaintenancePort>>,
+}
+
+enum NodeRunError {
+    Adapter(PublishError),
+    SafeRuntime(PublishError),
+    UncertainRuntime(PublishError),
 }
 
 impl<'a> RuntimeNodeExecutor<'a> {
@@ -1623,6 +2039,7 @@ impl<'a> RuntimeNodeExecutor<'a> {
             backend_run_id,
             plan_digest: &plan.digest,
             snapshot_digest: &plan.snapshot_digest,
+            promoted_manifest_digest: None,
             execution_backend: &plan.execution_backend,
             bindings: plan
                 .adapters
@@ -1645,12 +2062,39 @@ impl<'a> RuntimeNodeExecutor<'a> {
                 .map(|node| (node.id.as_str(), node))
                 .collect(),
             cancellation: CancellationSignal::default(),
+            persistence: None,
+            lease_maintenance: None,
         }
     }
 
     fn with_cancellation(mut self, cancellation: CancellationSignal) -> Self {
         self.cancellation = cancellation;
         self
+    }
+
+    fn with_promoted_manifest_digest(mut self, manifest_digest: Option<&'a str>) -> Self {
+        self.promoted_manifest_digest = manifest_digest;
+        self
+    }
+
+    fn with_persistence(mut self, persistence: Option<Arc<dyn AttemptPersistencePort>>) -> Self {
+        self.persistence = persistence;
+        self
+    }
+
+    fn with_lease_maintenance(
+        mut self,
+        lease_maintenance: Option<Arc<dyn AttemptLeaseMaintenancePort>>,
+    ) -> Self {
+        self.lease_maintenance = lease_maintenance;
+        self
+    }
+
+    fn maintain_lease(&self) -> Result<(), PublishError> {
+        if let Some(maintenance) = &self.lease_maintenance {
+            maintenance.maintain(self.attempt_id)?;
+        }
+        Ok(())
     }
 
     fn is_route_node(&self, node: &PlanNode) -> bool {
@@ -1758,7 +2202,7 @@ impl<'a> RuntimeNodeExecutor<'a> {
             .last()
             .is_some_and(|event| event.kind == "plan_node_failed")
         {
-            self.append_failure_event("runtime", None, &message);
+            self.append_failure_event("runtime", None, &message)?;
         }
         let projection = reduce_publish_events(&self.events, self.routes)?;
         attempt.manifest_digest = projection.manifest_digest.clone();
@@ -1807,7 +2251,11 @@ impl<'a> RuntimeNodeExecutor<'a> {
     ) -> Result<(), PublishError> {
         validate_output_admission(node, &output, self.manifest.as_ref())?;
         if let Some(manifest) = output.manifest.as_ref() {
-            manifest.validate()?;
+            validate_manifest_binding(
+                self.snapshot_digest,
+                self.promoted_manifest_digest,
+                manifest,
+            )?;
         }
 
         let manifest_digest = output
@@ -1876,6 +2324,43 @@ impl<'a> RuntimeNodeExecutor<'a> {
                 Value::String(manifest.digest.clone()),
             );
         }
+        if !output.envelopes.is_empty() {
+            payload.insert(
+                "delivery_envelopes".to_string(),
+                serde_json::to_value(&output.envelopes).map_err(|error| {
+                    PublishError::Execution(format!(
+                        "failed to serialize delivery envelope evidence: {error}"
+                    ))
+                })?,
+            );
+        }
+        let receipt_events = output
+            .receipts
+            .iter()
+            .map(|receipt| {
+                serde_json::to_value(receipt).map_err(|error| {
+                    PublishError::Execution(format!(
+                        "failed to serialize delivery receipt event: {error}"
+                    ))
+                })
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+        let mut committed_events = Vec::with_capacity(receipt_events.len() + 1);
+        committed_events.push(self.build_event(
+            &node.id,
+            "plan_node_completed",
+            payload,
+            committed_events.len(),
+        ));
+        for receipt_event in &receipt_events {
+            committed_events.push(self.build_event(
+                &node.id,
+                "delivery_receipt_observed",
+                BTreeMap::from([("receipt".to_string(), receipt_event.clone())]),
+                committed_events.len(),
+            ));
+        }
+        self.commit_events(committed_events, output.manifest.as_ref())?;
         self.artifacts.extend(output.artifacts);
         if let Some(manifest) = output.manifest {
             self.manifest = Some(manifest);
@@ -1883,7 +2368,6 @@ impl<'a> RuntimeNodeExecutor<'a> {
         self.envelopes.extend(output.envelopes);
         let receipts = output.receipts;
         self.receipts.extend(receipts.iter().cloned());
-        self.append_event(&node.id, "plan_node_completed", payload);
         for receipt in receipts {
             // 终态失败的 Receipt 让本路线失败并跳过其后续节点；证据本身保留。
             if is_failed_delivery_status(receipt.status) {
@@ -1891,29 +2375,28 @@ impl<'a> RuntimeNodeExecutor<'a> {
                     .entry(receipt.route_id.clone())
                     .or_insert_with(|| failed_receipt_message(&receipt));
             }
-            let receipt = serde_json::to_value(receipt).map_err(|error| {
-                PublishError::Execution(format!(
-                    "failed to serialize delivery receipt event: {error}"
-                ))
-            })?;
-            self.append_event(
-                &node.id,
-                "delivery_receipt_observed",
-                BTreeMap::from([("receipt".to_string(), receipt)]),
-            );
         }
         Ok(())
     }
 
-    /// 取消尚未解决的路线：路线还没有任何 Published Receipt 也没有失败证据时，
-    /// 记录 route_cancelled 事件。已 Published 的路线与既有 Receipt 不被触碰。
-    fn cancel_route_if_unresolved(&mut self, route_id: &str, plan_node_id: &str) {
+    /// 取消尚未解决的路线：路线还没有越过外部提交边界也没有失败证据时，
+    /// 记录 route_cancelled 事件。Submitted 与 Published Receipt 都是不能由
+    /// 通用取消覆盖的外部事实（ADR-0041）。
+    fn cancel_route_if_unresolved(
+        &mut self,
+        route_id: &str,
+        plan_node_id: &str,
+    ) -> Result<(), PublishError> {
         if self.failed_routes.contains_key(route_id)
             || self.receipts.iter().any(|receipt| {
-                receipt.route_id == route_id && receipt.status == DeliveryStatus::Published
+                receipt.route_id == route_id
+                    && matches!(
+                        receipt.status,
+                        DeliveryStatus::Submitted | DeliveryStatus::Published
+                    )
             })
         {
-            return;
+            return Ok(());
         }
         let message = format!("delivery route {route_id} was cancelled before delivery");
         self.append_event(
@@ -1923,8 +2406,91 @@ impl<'a> RuntimeNodeExecutor<'a> {
                 ("route_id".to_string(), Value::String(route_id.to_string())),
                 ("error".to_string(), Value::String(message.clone())),
             ]),
-        );
+        )?;
         self.failed_routes.insert(route_id.to_string(), message);
+        Ok(())
+    }
+
+    /// 只把已有 Envelope、尚未 Submitted/Published 的路线交给 Adapter 清理；
+    /// Staged Receipt 仍在 Adapter-owned staging 边界内。未知 Destination 的
+    /// 默认实现明确返回未清理。
+    fn cleanup_staged_routes(&mut self, plan: &PublishPlan) -> Result<(), PublishError> {
+        let mut staged_route_ids = self
+            .envelopes
+            .iter()
+            .map(|envelope| envelope.route_id.clone())
+            .collect::<BTreeSet<_>>();
+        staged_route_ids.extend(
+            plan.nodes
+                .iter()
+                .filter(|node| {
+                    node.stage == PlanStage::StageRoutes
+                        && node.cleanup_owned_staging
+                        && self.events.iter().any(|event| {
+                            event.plan_node_id == node.id
+                                && matches!(
+                                    event.kind.as_str(),
+                                    "plan_node_started" | "plan_node_completed"
+                                )
+                        })
+                })
+                .map(|node| node.binding_id.clone()),
+        );
+        for route_id in staged_route_ids {
+            if self.receipts.iter().any(|receipt| {
+                receipt.route_id == route_id
+                    && matches!(
+                        receipt.status,
+                        DeliveryStatus::Submitted | DeliveryStatus::Published
+                    )
+            }) {
+                continue;
+            }
+            let node = plan.nodes.iter().find(|node| {
+                node.binding_id == route_id
+                    && node.stage == PlanStage::StageRoutes
+                    && node.cleanup_owned_staging
+            });
+            let Some(node) = node else { continue };
+            self.maintain_lease().map_err(attempt_state_uncertain)?;
+            let binding = self
+                .bindings
+                .get(node.binding_id.as_str())
+                .copied()
+                .ok_or_else(|| {
+                    PublishError::InvalidPlan(format!(
+                        "plan node {} references unknown binding {}",
+                        node.id, node.binding_id
+                    ))
+                })?;
+            let credentials = self
+                .registry
+                .resolve_binding_credentials(self.execution_backend, binding)?;
+            let context = AdapterExecutionContext {
+                attempt_id: self.attempt_id,
+                plan_digest: self.plan_digest,
+                snapshot_digest: self.snapshot_digest,
+                artifacts: &self.artifacts,
+                manifest: self.manifest.as_ref(),
+                envelopes: &self.envelopes,
+                receipts: &self.receipts,
+                credentials: &credentials,
+            };
+            let cleaned = self.registry.cleanup_owned_staging(node, &context)?;
+            self.maintain_lease().map_err(attempt_state_uncertain)?;
+            if !cleaned {
+                return Err(PublishError::Execution(format!(
+                    "delivery destination {} did not honor the sealed owned-staging cleanup capability",
+                    node.adapter.display_name()
+                )));
+            }
+            self.append_event(
+                &node.id,
+                "route_staging_cleaned",
+                BTreeMap::from([("route_id".to_string(), Value::String(route_id))]),
+            )?;
+        }
+        Ok(())
     }
 
     /// 取消后的收尾：执行后端未提交给 executor 的路线节点在这里兜底记为取消，
@@ -1936,6 +2502,7 @@ impl<'a> RuntimeNodeExecutor<'a> {
         plan: &PublishPlan,
         mut attempt: ReleaseAttempt,
     ) -> Result<PublishAttemptView, PublishError> {
+        self.cleanup_staged_routes(plan)?;
         for route in &plan.routes {
             let plan_node_id = plan
                 .nodes
@@ -1943,7 +2510,7 @@ impl<'a> RuntimeNodeExecutor<'a> {
                 .find(|node| node.binding_id == route.route_id)
                 .map(|node| node.id.clone())
                 .unwrap_or_else(|| "runtime".to_string());
-            self.cancel_route_if_unresolved(&route.route_id, &plan_node_id);
+            self.cancel_route_if_unresolved(&route.route_id, &plan_node_id)?;
         }
         let projection = reduce_publish_events(&self.events, self.routes)?;
         attempt.manifest_digest = projection.manifest_digest.clone();
@@ -1963,7 +2530,7 @@ impl<'a> RuntimeNodeExecutor<'a> {
 
     /// 路线节点失败：记录 route_failed 事件并隔离本路线，不再返回错误给执行后端。
     /// Classified 错误的结构化分类随事件持久化，供重试资格评估使用（ADR-0056）。
-    fn fail_route(&mut self, node: &PlanNode, error: &PublishError) {
+    fn fail_route(&mut self, node: &PlanNode, error: &PublishError) -> Result<(), PublishError> {
         let message = error.to_string();
         let mut payload = BTreeMap::from([
             (
@@ -1983,8 +2550,9 @@ impl<'a> RuntimeNodeExecutor<'a> {
                 payload.insert("failure".to_string(), value);
             }
         }
-        self.append_event(&node.id, "route_failed", payload);
+        self.append_event(&node.id, "route_failed", payload)?;
         self.failed_routes.insert(node.binding_id.clone(), message);
+        Ok(())
     }
 
     /// 幂等探测确认远端摘要一致时复用既有交付：不重新执行副作用，把探测确认
@@ -2050,7 +2618,7 @@ impl<'a> RuntimeNodeExecutor<'a> {
             publish_node_id,
             "delivery_receipt_observed",
             BTreeMap::from([("receipt".to_string(), value)]),
-        );
+        )?;
         Ok(())
     }
 
@@ -2059,16 +2627,42 @@ impl<'a> RuntimeNodeExecutor<'a> {
         plan_node_id: &str,
         adapter: Option<&publish_domain::AdapterIdentity>,
         error: &str,
-    ) {
+    ) -> Result<(), PublishError> {
         let mut payload = BTreeMap::from([("error".to_string(), Value::String(error.to_string()))]);
         if let Some(adapter) = adapter {
             payload.insert("adapter".to_string(), Value::String(adapter.display_name()));
         }
-        self.append_event(plan_node_id, "plan_node_failed", payload);
+        self.append_event(plan_node_id, "plan_node_failed", payload)
     }
 
-    fn append_event(&mut self, plan_node_id: &str, kind: &str, payload: BTreeMap<String, Value>) {
-        let sequence = self.events.len() as u64 + 1;
+    fn append_event(
+        &mut self,
+        plan_node_id: &str,
+        kind: &str,
+        payload: BTreeMap<String, Value>,
+    ) -> Result<(), PublishError> {
+        self.append_event_with_manifest(plan_node_id, kind, payload, None)
+    }
+
+    fn append_event_with_manifest(
+        &mut self,
+        plan_node_id: &str,
+        kind: &str,
+        payload: BTreeMap<String, Value>,
+        manifest: Option<&ArtifactManifest>,
+    ) -> Result<(), PublishError> {
+        let event = self.build_event(plan_node_id, kind, payload, 0);
+        self.commit_events(vec![event], manifest)
+    }
+
+    fn build_event(
+        &self,
+        plan_node_id: &str,
+        kind: &str,
+        payload: BTreeMap<String, Value>,
+        offset: usize,
+    ) -> PublishEvent {
+        let sequence = self.events.len() as u64 + offset as u64 + 1;
         let event_id = sha256_hex(
             format!(
                 "{}:{}:{}:{}",
@@ -2076,7 +2670,7 @@ impl<'a> RuntimeNodeExecutor<'a> {
             )
             .as_bytes(),
         );
-        self.events.push(PublishEvent {
+        PublishEvent {
             version: PUBLISH_EVENT_VERSION,
             event_id,
             attempt_id: self.attempt_id.to_string(),
@@ -2086,7 +2680,19 @@ impl<'a> RuntimeNodeExecutor<'a> {
             plan_node_id: plan_node_id.to_string(),
             kind: kind.to_string(),
             payload,
-        });
+        }
+    }
+
+    fn commit_events(
+        &mut self,
+        events: Vec<PublishEvent>,
+        manifest: Option<&ArtifactManifest>,
+    ) -> Result<(), PublishError> {
+        if let Some(persistence) = &self.persistence {
+            persistence.append_events(&events, manifest)?;
+        }
+        self.events.extend(events);
+        Ok(())
     }
 }
 
@@ -2111,11 +2717,11 @@ impl PlanNodeExecutor for RuntimeNodeExecutor<'_> {
             )));
         }
         // 取消只停止尚未开始的工作：本节点不再执行；所属路线若尚无交付
-        // 证据则记为取消，已 Published 的路线与既有 Receipt 保持不变（ADR-0041）。
-        if self.cancellation.is_requested() {
+        // 证据则记为取消，Submitted/Published 路线与既有 Receipt 保持不变（ADR-0041）。
+        if self.cancellation.is_requested() && node.cancellable {
             self.skipped_nodes.insert(node.id.clone());
             if self.is_route_node(node) {
-                self.cancel_route_if_unresolved(&node.binding_id, &node.id);
+                self.cancel_route_if_unresolved(&node.binding_id, &node.id)?;
             }
             return Ok(());
         }
@@ -2139,35 +2745,70 @@ impl PlanNodeExecutor for RuntimeNodeExecutor<'_> {
             )));
         }
 
+        self.maintain_lease().map_err(attempt_state_uncertain)?;
+        self.append_event(
+            &node.id,
+            "plan_node_started",
+            BTreeMap::from([(
+                "adapter".to_string(),
+                Value::String(node.adapter.display_name()),
+            )]),
+        )?;
         match self.run_node(node) {
             Ok(()) => {
                 self.executed_nodes.insert(node.id.clone());
                 Ok(())
             }
-            Err(error) if self.is_route_node(node) => {
+            Err(NodeRunError::Adapter(error)) if self.is_route_node(node) => {
                 // 路线失败被隔离为可观察的路线级结果；其余路线继续执行（ADR-0022）。
-                self.fail_route(node, &error);
+                self.fail_route(node, &error)
+                    .map_err(attempt_state_uncertain)?;
                 Ok(())
             }
-            Err(error) => {
-                self.append_failure_event(&node.id, Some(&node.adapter), &error.to_string());
+            Err(NodeRunError::Adapter(error)) => {
+                self.append_failure_event(&node.id, Some(&node.adapter), &error.to_string())
+                    .map_err(attempt_state_uncertain)?;
                 Err(error)
+            }
+            Err(NodeRunError::SafeRuntime(error)) => {
+                self.append_failure_event(&node.id, Some(&node.adapter), &error.to_string())
+                    .map_err(attempt_state_uncertain)?;
+                Err(error)
+            }
+            // 声明了外部副作用的 Adapter 返回后，输出准入、序列化或事件
+            // 持久化失败意味着结果不确定；不能伪装成普通失败并释放保护租约。
+            Err(NodeRunError::UncertainRuntime(error)) => {
+                Err(PublishError::AttemptStateUncertain {
+                    reason: error.to_string(),
+                })
             }
         }
     }
 }
 
+fn attempt_state_uncertain(error: PublishError) -> PublishError {
+    match error {
+        error @ PublishError::AttemptStateUncertain { .. } => error,
+        error => PublishError::AttemptStateUncertain {
+            reason: error.to_string(),
+        },
+    }
+}
+
 impl RuntimeNodeExecutor<'_> {
-    fn run_node(&mut self, node: &PlanNode) -> Result<(), PublishError> {
+    fn run_node(&mut self, node: &PlanNode) -> Result<(), NodeRunError> {
         let Some(&binding) = self.bindings.get(node.binding_id.as_str()) else {
-            return Err(PublishError::InvalidPlan(format!(
-                "plan node {} references unknown binding {}",
-                node.id, node.binding_id
+            return Err(NodeRunError::SafeRuntime(PublishError::InvalidPlan(
+                format!(
+                    "plan node {} references unknown binding {}",
+                    node.id, node.binding_id
+                ),
             )));
         };
         let credentials = self
             .registry
-            .resolve_binding_credentials(self.execution_backend, binding)?;
+            .resolve_binding_credentials(self.execution_backend, binding)
+            .map_err(NodeRunError::SafeRuntime)?;
         let context = AdapterExecutionContext {
             attempt_id: self.attempt_id,
             plan_digest: self.plan_digest,
@@ -2178,9 +2819,129 @@ impl RuntimeNodeExecutor<'_> {
             receipts: &self.receipts,
             credentials: &credentials,
         };
-        let output = self.registry.execute_node(node, &context)?;
-        self.merge_output(node, output)
+        let output = self
+            .registry
+            .execute_node(node, &context)
+            .map_err(NodeRunError::Adapter)?;
+        self.maintain_lease()
+            .map_err(NodeRunError::UncertainRuntime)?;
+        self.merge_output(node, output).map_err(|error| {
+            if node.cleanup_owned_staging || !node.side_effects.is_empty() {
+                NodeRunError::UncertainRuntime(error)
+            } else {
+                NodeRunError::SafeRuntime(error)
+            }
+        })
     }
+}
+
+pub fn recover_delivery_envelopes(
+    events: &[PublishEvent],
+    plan: &PublishPlan,
+    manifest_digest: &str,
+) -> Result<Vec<DeliveryEnvelope>, PublishError> {
+    let mut envelopes = BTreeMap::<String, DeliveryEnvelope>::new();
+    for event in events {
+        let Some(value) = event.payload.get("delivery_envelopes") else {
+            continue;
+        };
+        if event.kind != "plan_node_completed" {
+            return Err(PublishError::Execution(format!(
+                "publish event {} attaches delivery envelope evidence before node completion",
+                event.event_id
+            )));
+        }
+        let node = plan
+            .nodes
+            .iter()
+            .find(|node| node.id == event.plan_node_id)
+            .filter(|node| {
+                node.stage == PlanStage::StageRoutes
+                    && node.adapter.kind == AdapterKind::DeliveryDestination
+            })
+            .ok_or_else(|| {
+                PublishError::Execution(format!(
+                    "publish event {} attaches delivery envelope evidence to a non-staging plan node",
+                    event.event_id
+                ))
+            })?;
+        let recovered =
+            serde_json::from_value::<Vec<DeliveryEnvelope>>(value.clone()).map_err(|error| {
+                PublishError::Execution(format!(
+                    "publish event {} contains invalid delivery envelope evidence: {error}",
+                    event.event_id
+                ))
+            })?;
+        for envelope in recovered {
+            envelope.validate()?;
+            if envelope.route_id != node.binding_id || envelope.manifest_digest != manifest_digest {
+                return Err(PublishError::Execution(format!(
+                    "publish event {} carries delivery envelope evidence outside its sealed route or manifest",
+                    event.event_id
+                )));
+            }
+            match envelopes.get(&envelope.route_id) {
+                Some(existing) if existing != &envelope => {
+                    return Err(PublishError::Execution(format!(
+                        "publish attempt carries conflicting delivery envelope evidence for route {}",
+                        envelope.route_id
+                    )));
+                }
+                None => {
+                    envelopes.insert(envelope.route_id.clone(), envelope);
+                }
+                _ => {}
+            }
+        }
+    }
+    Ok(envelopes.into_values().collect())
+}
+
+/// Revalidate synchronized Envelope evidence through the sealed Destination
+/// contract before it can become resumable executable input. Route/Manifest
+/// binding alone is insufficient because Destination-native paths and URLs are
+/// later consumed as side-effect targets.
+pub fn validate_recovered_delivery_envelopes(
+    registry: &AdapterRegistry,
+    events: &[PublishEvent],
+    plan: &PublishPlan,
+    attempt: &ReleaseAttempt,
+    manifest: &ArtifactManifest,
+) -> Result<Vec<DeliveryEnvelope>, PublishError> {
+    let envelopes = recover_delivery_envelopes(events, plan, &manifest.digest)?;
+    let empty_artifacts = Vec::new();
+    let empty_envelopes = Vec::new();
+    let empty_receipts = Vec::new();
+    let empty_credentials = BTreeMap::new();
+    for envelope in &envelopes {
+        let node = plan
+            .nodes
+            .iter()
+            .find(|node| {
+                node.binding_id == envelope.route_id && node.stage == PlanStage::StageRoutes
+            })
+            .ok_or_else(|| {
+                PublishError::InvalidPlan(format!(
+                    "route {} has no sealed staging node",
+                    envelope.route_id
+                ))
+            })?;
+        registry.validate_staged_envelope(
+            node,
+            &AdapterExecutionContext {
+                attempt_id: &attempt.attempt_id,
+                plan_digest: &plan.digest,
+                snapshot_digest: &plan.snapshot_digest,
+                artifacts: &empty_artifacts,
+                manifest: Some(manifest),
+                envelopes: &empty_envelopes,
+                receipts: &empty_receipts,
+                credentials: &empty_credentials,
+            },
+            envelope,
+        )?;
+    }
+    Ok(envelopes)
 }
 
 /// 输出准入：每类执行输出只被其所属阶段与 Adapter 类别接受，产物角色必须

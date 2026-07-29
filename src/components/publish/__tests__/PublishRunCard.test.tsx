@@ -329,6 +329,8 @@ describe("PublishRunCard", () => {
                 stage: "build",
                 adapterId: "selected-project-provider",
                 operation: "selected-project-provider:publish",
+                cancellable: true,
+                cleanupOwnedStaging: false,
                 irreversible: false,
               },
               {
@@ -336,6 +338,8 @@ describe("PublishRunCard", () => {
                 stage: "persist_manifest",
                 adapterId: "temporary-artifact-store",
                 operation: "persist_manifest",
+                cancellable: true,
+                cleanupOwnedStaging: false,
                 irreversible: false,
               },
             ],
@@ -392,6 +396,8 @@ describe("PublishRunCard", () => {
                 stage: "inspect_source",
                 adapterId: "tauri",
                 operation: "inspect_tauri_project",
+                cancellable: true,
+                cleanupOwnedStaging: false,
                 irreversible: false,
               },
               {
@@ -399,6 +405,8 @@ describe("PublishRunCard", () => {
                 stage: "build",
                 adapterId: "tauri",
                 operation: "tauri-driver:pnpm",
+                cancellable: true,
+                cleanupOwnedStaging: false,
                 irreversible: false,
               },
             ],
@@ -529,7 +537,13 @@ describe("PublishRunCard", () => {
           },
           publishResult: null,
         }}
-        publishActions={null}
+        publishActions={{
+          isPublishing: false,
+          isCancellingPublish: false,
+          startDisabled: false,
+          onStartPublish: vi.fn(),
+          onCancelPublish: vi.fn(),
+        }}
       />
     );
 
@@ -538,6 +552,75 @@ describe("PublishRunCard", () => {
     expect(result).toHaveTextContent("2");
     expect(result).toHaveTextContent("receipt-stable-A");
     expect(result).toHaveTextContent("published");
+  });
+
+  it("Submitted Receipt 保持运行态，不回退为命令级成功或失败", () => {
+    render(
+      <PublishRunCard
+        outputLog="submitted"
+        publishResult={null}
+        appT={{
+          outputLogTitle: "执行发布",
+          noOutput: "无输出",
+          publishingLabel: "发布中…",
+        }}
+        runtimeResult={{
+          attempt: {
+            attemptId: "attempt-submitted",
+            backendRunId: "backend-run-submitted",
+            configurationRevisionId: "revision-A",
+            planDigest: "plan-digest-A",
+            executionBackend: "local-execution",
+            status: "running",
+            manifestDigest: "manifest-digest-A",
+            manifest: { digest: "manifest-digest-A", artifactCount: 1 },
+            receipts: [
+              {
+                version: 1,
+                receiptId: "receipt-submitted",
+                revision: 1,
+                routeId: "primary",
+                manifestDigest: "manifest-digest-A",
+                status: "submitted",
+                externalReference: "delivery://submitted",
+              },
+            ],
+            routes: [
+              {
+                routeId: "primary",
+                required: true,
+                status: "submitted",
+                externalReference: "delivery://submitted",
+                error: null,
+              },
+            ],
+            warnings: [],
+            events: [],
+            error: null,
+          },
+          publishResult: null,
+        }}
+        publishActions={{
+          isPublishing: false,
+          isCancellingPublish: false,
+          startDisabled: false,
+          onStartPublish: vi.fn(),
+          onCancelPublish: vi.fn(),
+        }}
+      />
+    );
+
+    expect(screen.getByTestId("publish-status-panel")).toHaveTextContent(
+      "发布中…"
+    );
+    expect(screen.getByTestId("publish-route-primary")).toHaveTextContent(
+      "submitted"
+    );
+    expect(screen.getByTestId("publish-execute-btn")).toBeEnabled();
+    expect(screen.getByTestId("publish-execute-btn")).toHaveTextContent(
+      "继续发布"
+    );
+    expect(screen.getByRole("button", { name: "取消发布" })).toBeEnabled();
   });
 
   it("按路线展示状态、外部引用与错误，并以部分交付状态呈现 Required 失败", () => {

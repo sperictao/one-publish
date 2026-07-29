@@ -4,8 +4,9 @@ use std::io::Read;
 use std::path::{Component, Path, PathBuf};
 use std::process::Command;
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::{Arc, Mutex};
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::sync::{Arc, Condvar, Mutex};
+use std::thread::{self, JoinHandle};
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use publish_adapters::{
     AdapterConformanceFixture, AdapterContract, AdapterExecutionContext, AdapterExecutionOutput,
@@ -17,15 +18,15 @@ use publish_adapters::{
 };
 use publish_domain::{
     AdapterBinding, AdapterDescriptor, AdapterIdentity, AdapterKind, AdapterSchema,
-    AdapterSelection, AdapterSettings, ArtifactCandidate, Capability, CapabilityRequirement,
-    DeliveryRoute, DeliveryStatus, PlanNode, PlanNodeTemplate, PlanOperation, PlanStage,
-    PlanningInputSnapshot, PublishAttemptStatus, PublishAttemptView, PublishError, PublishResource,
-    PublishResourceKind, PublishingCapability, ReleaseIdentity, SourceSnapshot,
-    PLANNING_INPUT_SNAPSHOT_VERSION,
+    AdapterSelection, AdapterSettings, ArtifactCandidate, ArtifactManifest, ArtifactManifestEntry,
+    Capability, CapabilityRequirement, DeliveryRoute, DeliveryStatus, PlanNode, PlanNodeTemplate,
+    PlanOperation, PlanStage, PlanningInputSnapshot, PublishAttemptStatus, PublishAttemptView,
+    PublishError, PublishEvent, PublishResource, PublishResourceKind, PublishResourceLease,
+    PublishingCapability, ReleaseIdentity, SourceSnapshot, PLANNING_INPUT_SNAPSHOT_VERSION,
 };
 use publish_runner_core::{
-    AttemptExecutionContext, PreparedPublishPlan, PublishLeaseCoordinator, PublishRuntime,
-    StartPublishAttempt,
+    AttemptExecutionContext, AttemptLeaseMaintenancePort, PreparedPublishPlan,
+    PublishLeaseCoordinator, PublishRuntime, StartPublishAttempt,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -47,22 +48,26 @@ use crate::store::{
     PublishComposition, RevisionAdapterBinding, LOCAL_BACKEND_ID, LOCAL_DESTINATION_ID,
     TEMPORARY_STORE_ID,
 };
+
+mod journal;
+
 /// 桌面端产物存储的明确保留期限：7 天（ADR-0038）。
 const ARTIFACT_RETENTION_SECONDS: u64 = 604_800;
 const STRUCTURED_PLAN_EXECUTION: &str = "structured-plan-execution";
 const ARTIFACT_VERIFIED: &str = "artifact-verified";
-const RUNTIME_REVISION: &str = "one-publish-runtime-v1";
+const RUNTIME_REVISION: &str = "one-publish-runtime-v2";
 /// Tauri 配置的 Release Gate 计划节点动作；门禁位于构建与交付副作用之前（ADR-0014）。
 const TAURI_RELEASE_GATE_ACTION: &str = "run_release_gate";
 const RELEASE_GATES_INPUT: &str = "release_gates";
 static ATTEMPT_SEQUENCE: AtomicU64 = AtomicU64::new(0);
 
-/// 进行中 Attempt 的取消信号注册表：键是密封运行令牌的摘要——控制面在
-/// start 阻塞期间唯一可预知的取消句柄（attempt 身份在执行内部才诞生）。
+/// 进行中 Attempt 的取消信号注册表：start 以密封运行令牌寻址，resume 以
+/// 已持久化的 Attempt ID 寻址；带类型前缀的摘要避免两种选择器碰撞。
 static ACTIVE_ATTEMPT_CANCELLATIONS: Mutex<
     BTreeMap<String, Vec<(u64, publish_runner_core::CancellationSignal)>>,
 > = Mutex::new(BTreeMap::new());
 static CANCELLATION_SLOT_SEQUENCE: AtomicU64 = AtomicU64::new(0);
+static ACTIVE_ATTEMPT_OPERATIONS: Mutex<BTreeSet<String>> = Mutex::new(BTreeSet::new());
 
 /// 一次执行在取消注册表中的占位；Drop 时自行注销，执行失败也不遗留悬空信号。
 struct RegisteredCancellation {
@@ -72,8 +77,8 @@ struct RegisteredCancellation {
 }
 
 impl RegisteredCancellation {
-    fn register(runtime_token: &str) -> Result<Self, AppError> {
-        let token_digest = publish_domain::sha256_hex(runtime_token.as_bytes());
+    fn register(selector: &str, value: &str) -> Result<Self, AppError> {
+        let token_digest = publish_domain::sha256_hex(format!("{selector}:{value}").as_bytes());
         let slot_id = CANCELLATION_SLOT_SEQUENCE.fetch_add(1, Ordering::Relaxed);
         let signal = publish_runner_core::CancellationSignal::new();
         ACTIVE_ATTEMPT_CANCELLATIONS
@@ -87,6 +92,14 @@ impl RegisteredCancellation {
             slot_id,
             signal,
         })
+    }
+
+    fn register_runtime(runtime_token: &str) -> Result<Self, AppError> {
+        Self::register("runtime", runtime_token)
+    }
+
+    fn register_attempt(attempt_id: &str) -> Result<Self, AppError> {
+        Self::register("attempt", attempt_id)
     }
 }
 
@@ -103,6 +116,207 @@ impl Drop for RegisteredCancellation {
     }
 }
 
+struct RegisteredAttemptOperation {
+    attempt_id: String,
+}
+
+impl RegisteredAttemptOperation {
+    fn acquire(attempt_id: &str) -> Result<Self, AppError> {
+        let mut active = ACTIVE_ATTEMPT_OPERATIONS.lock().map_err(|_| {
+            AppError::publish_with_code(
+                "publish attempt operation registry lock is poisoned",
+                "publish_runtime_attempt_operation_poisoned",
+            )
+        })?;
+        if !active.insert(attempt_id.to_string()) {
+            return Err(AppError::publish_with_code(
+                format!("publish attempt {attempt_id} already has an active operation"),
+                "publish_runtime_attempt_busy",
+            ));
+        }
+        Ok(Self {
+            attempt_id: attempt_id.to_string(),
+        })
+    }
+}
+
+impl Drop for RegisteredAttemptOperation {
+    fn drop(&mut self) {
+        if let Ok(mut active) = ACTIVE_ATTEMPT_OPERATIONS.lock() {
+            active.remove(&self.attempt_id);
+        }
+    }
+}
+
+struct JournalLeaseMaintenance {
+    repository: journal::AttemptJournalRepository,
+    leases: Arc<PublishLeaseCoordinator>,
+    attempt_id: String,
+    ttl_seconds: u64,
+    stop: Arc<(Mutex<bool>, Condvar)>,
+    failure: Arc<Mutex<Option<PublishError>>>,
+    heartbeat: Mutex<Option<JoinHandle<()>>>,
+}
+
+impl JournalLeaseMaintenance {
+    fn new(
+        repository: journal::AttemptJournalRepository,
+        leases: Arc<PublishLeaseCoordinator>,
+        attempt_id: impl Into<String>,
+        ttl_seconds: u64,
+    ) -> Self {
+        Self {
+            repository,
+            leases,
+            attempt_id: attempt_id.into(),
+            ttl_seconds,
+            stop: Arc::new((Mutex::new(false), Condvar::new())),
+            failure: Arc::new(Mutex::new(None)),
+            heartbeat: Mutex::new(None),
+        }
+    }
+
+    fn recorded_failure(&self) -> Result<(), PublishError> {
+        let failure = self.failure.lock().map_err(|_| {
+            PublishError::Execution("publish lease heartbeat failure lock is poisoned".to_string())
+        })?;
+        match failure.as_ref() {
+            Some(error) => Err(error.clone()),
+            None => Ok(()),
+        }
+    }
+
+    fn ensure_heartbeat(&self) -> Result<(), PublishError> {
+        let mut heartbeat = self.heartbeat.lock().map_err(|_| {
+            PublishError::Execution("publish lease heartbeat handle lock is poisoned".to_string())
+        })?;
+        if heartbeat.is_some() {
+            return Ok(());
+        }
+        let repository = self.repository.clone();
+        let leases = Arc::clone(&self.leases);
+        let attempt_id = self.attempt_id.clone();
+        let ttl_seconds = self.ttl_seconds;
+        let stop = Arc::clone(&self.stop);
+        let failure = Arc::clone(&self.failure);
+        let interval = Duration::from_secs((ttl_seconds / 3).max(1));
+        let handle = thread::Builder::new()
+            .name(format!("publish-lease-{}", self.attempt_id))
+            .spawn(move || loop {
+                let (stop_lock, wake) = &*stop;
+                let stopped = match stop_lock.lock() {
+                    Ok(stopped) => stopped,
+                    Err(_) => {
+                        record_lease_heartbeat_failure(
+                            &failure,
+                            PublishError::Execution(
+                                "publish lease heartbeat stop lock is poisoned".to_string(),
+                            ),
+                        );
+                        break;
+                    }
+                };
+                let (stopped, _) = match wake.wait_timeout(stopped, interval) {
+                    Ok(result) => result,
+                    Err(_) => {
+                        record_lease_heartbeat_failure(
+                            &failure,
+                            PublishError::Execution(
+                                "publish lease heartbeat wait lock is poisoned".to_string(),
+                            ),
+                        );
+                        break;
+                    }
+                };
+                if *stopped {
+                    break;
+                }
+                drop(stopped);
+                if let Err(error) =
+                    renew_persisted_lease(&repository, &leases, &attempt_id, ttl_seconds, false)
+                {
+                    record_lease_heartbeat_failure(&failure, error);
+                    break;
+                }
+            })
+            .map_err(|error| {
+                PublishError::Execution(format!("failed to start publish lease heartbeat: {error}"))
+            })?;
+        *heartbeat = Some(handle);
+        Ok(())
+    }
+
+    fn stop(&self) -> Result<(), PublishError> {
+        let (stop_lock, wake) = &*self.stop;
+        *stop_lock.lock().map_err(|_| {
+            PublishError::Execution("publish lease heartbeat stop lock is poisoned".to_string())
+        })? = true;
+        wake.notify_all();
+        if let Some(handle) = self
+            .heartbeat
+            .lock()
+            .map_err(|_| {
+                PublishError::Execution(
+                    "publish lease heartbeat handle lock is poisoned".to_string(),
+                )
+            })?
+            .take()
+        {
+            handle.join().map_err(|_| {
+                PublishError::Execution("publish lease heartbeat thread panicked".to_string())
+            })?;
+        }
+        self.recorded_failure()
+    }
+}
+
+impl AttemptLeaseMaintenancePort for JournalLeaseMaintenance {
+    fn maintain(&self, attempt_id: &str) -> Result<(), PublishError> {
+        if attempt_id != self.attempt_id {
+            return Err(PublishError::Execution(format!(
+                "lease maintenance for {} cannot serve attempt {attempt_id}",
+                self.attempt_id
+            )));
+        }
+        self.recorded_failure()?;
+        renew_persisted_lease(
+            &self.repository,
+            &self.leases,
+            attempt_id,
+            self.ttl_seconds,
+            false,
+        )?;
+        self.ensure_heartbeat()?;
+        self.recorded_failure()
+    }
+}
+
+fn record_lease_heartbeat_failure(failure: &Arc<Mutex<Option<PublishError>>>, error: PublishError) {
+    if let Ok(mut recorded) = failure.lock() {
+        if recorded.is_none() {
+            *recorded = Some(error);
+        }
+    }
+}
+
+fn renew_persisted_lease(
+    repository: &journal::AttemptJournalRepository,
+    leases: &PublishLeaseCoordinator,
+    attempt_id: &str,
+    ttl_seconds: u64,
+    force: bool,
+) -> Result<(), PublishError> {
+    let now_seconds = publish_unix_now_seconds()?;
+    let current = leases.active_lease(attempt_id, now_seconds)?;
+    if !force
+        && current.expires_at_seconds.saturating_sub(now_seconds) > ttl_seconds.saturating_div(2)
+    {
+        return Ok(());
+    }
+    let renewed = leases.renew(attempt_id, now_seconds, ttl_seconds)?;
+    repository.update_lease(attempt_id, &renewed, now_seconds)
+}
+
 fn cancellation_registry_poisoned() -> AppError {
     AppError::publish_with_code(
         "publish cancellation registry lock is poisoned",
@@ -114,24 +328,77 @@ fn cancellation_registry_poisoned() -> AppError {
 #[serde(rename_all = "camelCase")]
 #[ts(rename_all = "camelCase")]
 pub struct CancelPublishRuntimeRequest {
-    pub runtime_token: String,
+    #[serde(default)]
+    #[ts(optional)]
+    pub runtime_token: Option<String>,
+    #[serde(default)]
+    #[ts(optional)]
+    pub attempt_id: Option<String>,
 }
 
-/// 请求协作取消该密封令牌下所有进行中的 Attempt（ADR-0041）：已开始的节点
-/// 不被中断，已 Published 的路线保持不变。返回是否存在被请求的执行。
+/// 按密封令牌或 Attempt ID 请求协作取消（ADR-0041）：已开始的节点不被
+/// 中断，Submitted/Published 路线保持不变。返回是否存在被请求的执行。
 #[tauri::command]
 pub fn cancel_publish_runtime(request: CancelPublishRuntimeRequest) -> Result<bool, AppError> {
-    let token_digest = publish_domain::sha256_hex(request.runtime_token.as_bytes());
-    let registry = ACTIVE_ATTEMPT_CANCELLATIONS
-        .lock()
-        .map_err(|_| cancellation_registry_poisoned())?;
-    let Some(slots) = registry.get(&token_digest) else {
-        return Ok(false);
+    let runtime_token = request
+        .runtime_token
+        .as_deref()
+        .filter(|value| !value.trim().is_empty());
+    let attempt_id = request
+        .attempt_id
+        .as_deref()
+        .filter(|value| !value.trim().is_empty());
+    let (selector, value) = match (runtime_token, attempt_id) {
+        (Some(value), None) => ("runtime", value),
+        (None, Some(value)) => ("attempt", value),
+        _ => {
+            return Err(AppError::validation_with_code(
+                "publish cancellation requires exactly one runtime token or attempt id",
+                "publish_runtime_cancellation_selector_invalid",
+            ));
+        }
     };
-    for (_, signal) in slots {
-        signal.request();
+    let token_digest = publish_domain::sha256_hex(format!("{selector}:{value}").as_bytes());
+    let requested_active = {
+        let registry = ACTIVE_ATTEMPT_CANCELLATIONS
+            .lock()
+            .map_err(|_| cancellation_registry_poisoned())?;
+        if let Some(slots) = registry.get(&token_digest) {
+            for (_, signal) in slots {
+                signal.request();
+            }
+            !slots.is_empty()
+        } else {
+            false
+        }
+    };
+    if requested_active {
+        return Ok(true);
     }
-    Ok(!slots.is_empty())
+    if selector == "attempt" {
+        let repository =
+            journal::AttemptJournalRepository::for_current_user().map_err(runtime_error)?;
+        if !repository
+            .has_published_header(value)
+            .map_err(runtime_error)?
+        {
+            return Ok(false);
+        }
+        let loaded = repository.load_attempt(value).map_err(runtime_error)?;
+        if loaded.view.status != PublishAttemptStatus::Running {
+            return Ok(false);
+        }
+        resume_runtime_with_repository_and_cancellation(
+            ResumePublishRuntimeRequest {
+                attempt_id: value.to_string(),
+            },
+            repository,
+            lease_coordinator(),
+            true,
+        )?;
+        return Ok(true);
+    }
+    Ok(false)
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
@@ -180,6 +447,8 @@ pub struct RuntimePlanNodeSummary {
     pub stage: RuntimePlanStage,
     pub adapter_id: String,
     pub operation: String,
+    pub cancellable: bool,
+    pub cleanup_owned_staging: bool,
     pub irreversible: bool,
 }
 
@@ -211,6 +480,156 @@ pub struct PreparedPublishRuntime {
 #[ts(rename_all = "camelCase")]
 pub struct StartPublishRuntimeRequest {
     pub runtime_token: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(rename_all = "camelCase")]
+pub struct ResumePublishRuntimeRequest {
+    pub attempt_id: String,
+}
+
+/// 同步边界使用完整、版本化的事件证据；UI 摘要仍只暴露已归约的安全字段。
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(rename_all = "camelCase")]
+pub struct RuntimePublishEvent {
+    pub version: u32,
+    pub event_id: String,
+    pub attempt_id: String,
+    pub backend_run_id: String,
+    #[ts(type = "number")]
+    pub sequence: u64,
+    pub plan_digest: String,
+    pub plan_node_id: String,
+    pub kind: String,
+    pub payload: BTreeMap<String, Value>,
+}
+
+impl From<RuntimePublishEvent> for PublishEvent {
+    fn from(event: RuntimePublishEvent) -> Self {
+        Self {
+            version: event.version,
+            event_id: event.event_id,
+            attempt_id: event.attempt_id,
+            backend_run_id: event.backend_run_id,
+            sequence: event.sequence,
+            plan_digest: event.plan_digest,
+            plan_node_id: event.plan_node_id,
+            kind: event.kind,
+            payload: event.payload,
+        }
+    }
+}
+
+impl From<PublishEvent> for RuntimePublishEvent {
+    fn from(event: PublishEvent) -> Self {
+        Self {
+            version: event.version,
+            event_id: event.event_id,
+            attempt_id: event.attempt_id,
+            backend_run_id: event.backend_run_id,
+            sequence: event.sequence,
+            plan_digest: event.plan_digest,
+            plan_node_id: event.plan_node_id,
+            kind: event.kind,
+            payload: event.payload,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(rename_all = "camelCase")]
+pub struct RuntimeArtifactManifestEntry {
+    pub role: String,
+    pub file_name: String,
+    pub media_type: String,
+    pub platform: String,
+    pub architecture: String,
+    #[ts(type = "number")]
+    pub size: u64,
+    pub digest: String,
+    pub locator: String,
+    pub retention: String,
+}
+
+impl From<RuntimeArtifactManifestEntry> for ArtifactManifestEntry {
+    fn from(entry: RuntimeArtifactManifestEntry) -> Self {
+        Self {
+            role: entry.role,
+            file_name: entry.file_name,
+            media_type: entry.media_type,
+            platform: entry.platform,
+            architecture: entry.architecture,
+            size: entry.size,
+            digest: entry.digest,
+            locator: entry.locator,
+            retention: entry.retention,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(rename_all = "camelCase")]
+pub struct RuntimeArtifactManifest {
+    pub version: u32,
+    pub planning_snapshot_digest: String,
+    pub artifacts: Vec<RuntimeArtifactManifestEntry>,
+    pub digest: String,
+}
+
+impl From<RuntimeArtifactManifest> for ArtifactManifest {
+    fn from(manifest: RuntimeArtifactManifest) -> Self {
+        Self {
+            version: manifest.version,
+            planning_snapshot_digest: manifest.planning_snapshot_digest,
+            artifacts: manifest.artifacts.into_iter().map(Into::into).collect(),
+            digest: manifest.digest,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(rename_all = "camelCase")]
+pub struct SynchronizePublishRuntimeRequest {
+    pub repository_path: String,
+    pub configuration_revision_id: String,
+    #[serde(default)]
+    #[ts(optional)]
+    pub attempt_id: Option<String>,
+    #[serde(default)]
+    pub events: Vec<RuntimePublishEvent>,
+    #[serde(default)]
+    #[ts(optional)]
+    pub manifest: Option<RuntimeArtifactManifest>,
+    #[serde(default)]
+    #[ts(optional)]
+    #[ts(type = "number")]
+    pub last_known_sequence: Option<u64>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(rename_all = "camelCase")]
+pub struct RuntimeEventSequenceRange {
+    #[ts(type = "number")]
+    pub start: u64,
+    #[ts(type = "number")]
+    pub end: u64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(rename_all = "camelCase")]
+pub struct SynchronizePublishRuntimeResult {
+    pub attempt_id: String,
+    pub accepted_events: usize,
+    pub duplicate_events: usize,
+    pub missing_ranges: Vec<RuntimeEventSequenceRange>,
+    pub result: Option<PublishRuntimeResult>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
@@ -304,7 +723,7 @@ pub struct RuntimeAttemptResult {
     pub error: Option<String>,
 }
 
-#[derive(Debug, Clone, Serialize, TS)]
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
 #[serde(rename_all = "camelCase")]
 #[ts(rename_all = "camelCase")]
 pub struct PublishRuntimeResult {
@@ -1113,10 +1532,57 @@ fn lease_coordinator() -> Arc<PublishLeaseCoordinator> {
     Arc::clone(COORDINATOR.get_or_init(|| Arc::new(PublishLeaseCoordinator::new())))
 }
 
+fn restore_persisted_attempt_leases(
+    repository: &journal::AttemptJournalRepository,
+    leases: &PublishLeaseCoordinator,
+    now_seconds: u64,
+    relevant_resources: &BTreeSet<PublishResource>,
+) -> Result<(), AppError> {
+    for lease in repository
+        .active_leases(now_seconds, relevant_resources)
+        .map_err(runtime_error)?
+    {
+        leases.restore_active_lease(lease).map_err(runtime_error)?;
+    }
+    Ok(())
+}
+
+fn release_terminal_attempt_lease(
+    repository: &journal::AttemptJournalRepository,
+    leases: &PublishLeaseCoordinator,
+    attempt_id: &str,
+    lease_id: &str,
+    status: PublishAttemptStatus,
+    now_seconds: u64,
+) -> Result<(), AppError> {
+    if status == PublishAttemptStatus::Running {
+        return Ok(());
+    }
+    repository
+        .release_lease(attempt_id, lease_id, now_seconds)
+        .map_err(runtime_error)?;
+    leases
+        .release_if_held(attempt_id)
+        .map(|_| ())
+        .map_err(runtime_error)
+}
+
 fn unix_now_seconds() -> Result<u64, AppError> {
+    Ok(unix_now_duration()?.as_secs())
+}
+
+fn publish_unix_now_seconds() -> Result<u64, PublishError> {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .map(|duration| duration.as_secs())
+        .map_err(|error| {
+            PublishError::Execution(format!("system clock is before the unix epoch: {error}"))
+        })
+}
+
+fn unix_now_duration() -> Result<std::time::Duration, AppError> {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
         .map_err(|error| {
             AppError::publish_with_code(
                 format!("system clock is before the unix epoch: {error}"),
@@ -1131,6 +1597,22 @@ pub(crate) fn start_runtime_with_port(
     identity: AttemptIdentity,
     leases: Arc<PublishLeaseCoordinator>,
 ) -> Result<PublishRuntimeResult, AppError> {
+    start_runtime_with_repository(
+        request,
+        execution_port,
+        identity,
+        leases,
+        journal::AttemptJournalRepository::for_current_user().map_err(runtime_error)?,
+    )
+}
+
+fn start_runtime_with_repository(
+    request: StartPublishRuntimeRequest,
+    execution_port: Arc<dyn ProviderExecutionPort>,
+    identity: AttemptIdentity,
+    leases: Arc<PublishLeaseCoordinator>,
+    journal_repository: journal::AttemptJournalRepository,
+) -> Result<PublishRuntimeResult, AppError> {
     if request.runtime_token.trim().is_empty() {
         return Err(AppError::validation_with_code(
             "prepared publish runtime token is required",
@@ -1139,8 +1621,9 @@ pub(crate) fn start_runtime_with_port(
     }
     let prepared: PreparedPublishPlan =
         serde_json::from_str(&request.runtime_token).map_err(runtime_serialization_error)?;
+    let _operation = RegisteredAttemptOperation::acquire(&identity.attempt_id)?;
     // 从执行一开始就可被 cancel 命令寻址；占位随函数返回自动注销。
-    let cancellation = RegisteredCancellation::register(&request.runtime_token)?;
+    let cancellation = RegisteredCancellation::register_runtime(&request.runtime_token)?;
     let source_guard = PreparedSourceGuard::from_snapshot(&prepared.snapshot)?;
     source_guard.validate()?;
     let provider_output_directory = prepared
@@ -1156,22 +1639,7 @@ pub(crate) fn start_runtime_with_port(
             )
         })?
         .to_string();
-    let delivery_directory = prepared
-        .snapshot
-        .adapters
-        .delivery_routes
-        .first()
-        .ok_or_else(|| {
-            AppError::publish_with_code(
-                "prepared runtime has no delivery destination",
-                "publish_runtime_destination_missing",
-            )
-        })?
-        .binding
-        .settings
-        .string("directory", LOCAL_DESTINATION_ID)
-        .map_err(runtime_error)?
-        .to_string();
+    let delivery_directory = prepared_release_input(&prepared, "delivery_directory")?;
     let result = Arc::new(Mutex::new(None));
     let repository_path = source_guard.repository.to_string_lossy().to_string();
     let registry = build_registry(
@@ -1191,8 +1659,127 @@ pub(crate) fn start_runtime_with_port(
     // 命名空间的发布在这里被明确阻断。新构建的产物身份在封存时才诞生，
     // 无法预先声明；产物推广固定既有 Manifest，则作为 Artifact Identity
     // 资源参与竞争。
-    let mut lease_resources = BTreeSet::from([
-        PublishResource::new(PublishResourceKind::RepositoryWrite, &repository_path),
+    let now = unix_now_duration()?;
+    let now_seconds = now.as_secs();
+    let lease_resources = publish_lease_resources(
+        &prepared,
+        &repository_path,
+        &delivery_directory,
+        &release_identity,
+    );
+    restore_persisted_attempt_leases(&journal_repository, &leases, now_seconds, &lease_resources)?;
+    let lease = leases
+        .acquire(
+            &identity.attempt_id,
+            lease_resources,
+            now_seconds,
+            LOCAL_LEASE_TTL_SECONDS,
+        )
+        .map_err(runtime_error)?;
+    let persistence = Arc::new(journal::AttemptJournalPersistence::new(
+        journal_repository.clone(),
+        prepared.clone(),
+        repository_path,
+        now.as_nanos(),
+        lease.clone(),
+    ));
+    let lease_maintenance = Arc::new(JournalLeaseMaintenance::new(
+        journal_repository.clone(),
+        Arc::clone(&leases),
+        identity.attempt_id.clone(),
+        LOCAL_LEASE_TTL_SECONDS,
+    ));
+    let view_result = PublishRuntime::with_lease_coordinator(registry, Arc::clone(&leases))
+        .start_attempt(
+            &prepared,
+            StartPublishAttempt::new(
+                identity.attempt_id.clone(),
+                identity.backend_run_id,
+                release_identity,
+            ),
+            &AttemptExecutionContext::at(now_seconds)
+                .with_cancellation(cancellation.signal.clone())
+                .with_persistence(persistence)
+                .with_lease_maintenance(lease_maintenance.clone()),
+        );
+    let maintenance_error = lease_maintenance.stop().err();
+    let view = match view_result {
+        Ok(view) => view,
+        Err(error) => {
+            // Header 是 Attempt 已开始的原子边界。边界前失败尚未产生执行
+            // 证据，可以释放租约；边界后任何错误都可能发生在外部副作用之后，
+            // 必须保留租约直至恢复流程确认终态或租约自然过期。
+            match journal_repository.has_published_header(&identity.attempt_id) {
+                Ok(false) => {
+                    let _ = leases.release(&identity.attempt_id);
+                    return Err(runtime_error(error));
+                }
+                Ok(true) | Err(_) => {
+                    return Err(runtime_attempt_uncertain_error(&identity.attempt_id, error));
+                }
+            }
+        }
+    };
+    if let Some(error) = maintenance_error {
+        if view.status == PublishAttemptStatus::Running {
+            return Err(runtime_attempt_uncertain_error(
+                &identity.attempt_id,
+                PublishError::AttemptStateUncertain {
+                    reason: error.to_string(),
+                },
+            ));
+        }
+        log::warn!(
+            "publish attempt {} reached terminal state after its lease heartbeat failed: {error}",
+            identity.attempt_id
+        );
+    }
+    release_terminal_attempt_lease(
+        &journal_repository,
+        &leases,
+        &identity.attempt_id,
+        &lease.lease_id,
+        view.status,
+        now_seconds,
+    )
+    .map_err(|error| runtime_attempt_uncertain_error(&identity.attempt_id, error))?;
+    let publish_result = result
+        .lock()
+        .map_err(|_| {
+            runtime_attempt_uncertain_error(&identity.attempt_id, "publish result lock is poisoned")
+        })?
+        .clone();
+
+    Ok(PublishRuntimeResult {
+        attempt: summarize_attempt(view),
+        publish_result,
+    })
+}
+
+fn prepared_release_input(prepared: &PreparedPublishPlan, key: &str) -> Result<String, AppError> {
+    prepared
+        .snapshot
+        .release_input
+        .get(key)
+        .and_then(Value::as_str)
+        .filter(|value| !value.trim().is_empty())
+        .map(ToString::to_string)
+        .ok_or_else(|| {
+            AppError::publish_with_code(
+                format!("prepared runtime has no {key}"),
+                "publish_runtime_release_input_missing",
+            )
+        })
+}
+
+fn publish_lease_resources(
+    prepared: &PreparedPublishPlan,
+    repository_path: &str,
+    delivery_directory: &str,
+    release_identity: &ReleaseIdentity,
+) -> BTreeSet<PublishResource> {
+    let mut resources = BTreeSet::from([
+        PublishResource::new(PublishResourceKind::RepositoryWrite, repository_path),
         PublishResource::new(
             PublishResourceKind::ReleaseNamespace,
             format!(
@@ -1208,47 +1795,273 @@ pub(crate) fn start_runtime_with_port(
         ),
     ]);
     if let Some(digest) = &prepared.snapshot.promoted_manifest_digest {
-        lease_resources.insert(PublishResource::new(
+        resources.insert(PublishResource::new(
             PublishResourceKind::ArtifactIdentity,
             digest,
         ));
     }
-    let now_seconds = unix_now_seconds()?;
-    leases
-        .acquire(
-            &identity.attempt_id,
-            lease_resources,
-            now_seconds,
-            LOCAL_LEASE_TTL_SECONDS,
-        )
-        .map_err(runtime_error)?;
-    let view_result = PublishRuntime::with_lease_coordinator(registry, Arc::clone(&leases))
-        .start_attempt(
-            &prepared,
-            StartPublishAttempt::new(
-                identity.attempt_id.clone(),
-                identity.backend_run_id,
-                release_identity,
-            ),
-            &AttemptExecutionContext::at(now_seconds)
-                .with_cancellation(cancellation.signal.clone()),
-        );
-    let release_result = leases.release(&identity.attempt_id);
-    let view = view_result.map_err(runtime_error)?;
-    release_result.map_err(runtime_error)?;
-    let publish_result = result
-        .lock()
-        .map_err(|_| {
-            AppError::publish_with_code(
-                "publish result lock is poisoned",
-                "publish_runtime_result_unavailable",
-            )
-        })?
-        .clone();
+    resources
+}
 
+fn acquire_or_renew_attempt_lease(
+    repository: &journal::AttemptJournalRepository,
+    leases: &PublishLeaseCoordinator,
+    loaded: &journal::LoadedAttempt,
+    now_seconds: u64,
+) -> Result<PublishResourceLease, AppError> {
+    let attempt_id = &loaded.view.attempt.attempt_id;
+    let delivery_directory = prepared_release_input(&loaded.prepared, "delivery_directory")?;
+    let resources = publish_lease_resources(
+        &loaded.prepared,
+        &loaded.repository_path,
+        &delivery_directory,
+        &loaded.view.attempt.release_identity,
+    );
+    restore_persisted_attempt_leases(repository, leases, now_seconds, &resources)?;
+    let lease = if repository
+        .active_lease(attempt_id, now_seconds)
+        .map_err(runtime_error)?
+        .is_some()
+    {
+        leases
+            .renew(attempt_id, now_seconds, LOCAL_LEASE_TTL_SECONDS)
+            .map_err(runtime_error)?
+    } else {
+        leases
+            .acquire(attempt_id, resources, now_seconds, LOCAL_LEASE_TTL_SECONDS)
+            .map_err(runtime_error)?
+    };
+    repository
+        .update_lease(attempt_id, &lease, now_seconds)
+        .map_err(runtime_error)?;
+    Ok(lease)
+}
+
+#[tauri::command]
+pub async fn resume_publish_runtime(
+    request: ResumePublishRuntimeRequest,
+) -> Result<PublishRuntimeResult, AppError> {
+    tokio::task::spawn_blocking(move || {
+        resume_runtime_with_repository(
+            request,
+            journal::AttemptJournalRepository::for_current_user().map_err(runtime_error)?,
+            lease_coordinator(),
+        )
+    })
+    .await
+    .map_err(|error| {
+        AppError::publish_with_code(
+            format!("publish runtime resume task failed: {error}"),
+            "publish_runtime_resume_task_failed",
+        )
+    })?
+}
+
+fn resume_runtime_with_repository(
+    request: ResumePublishRuntimeRequest,
+    repository: journal::AttemptJournalRepository,
+    leases: Arc<PublishLeaseCoordinator>,
+) -> Result<PublishRuntimeResult, AppError> {
+    resume_runtime_with_repository_and_cancellation(request, repository, leases, false)
+}
+
+fn resume_runtime_with_repository_and_cancellation(
+    request: ResumePublishRuntimeRequest,
+    repository: journal::AttemptJournalRepository,
+    leases: Arc<PublishLeaseCoordinator>,
+    cancellation_requested: bool,
+) -> Result<PublishRuntimeResult, AppError> {
+    if request.attempt_id.trim().is_empty() {
+        return Err(AppError::validation_with_code(
+            "publish attempt id is required for resume",
+            "publish_runtime_attempt_missing",
+        ));
+    }
+    let _operation = RegisteredAttemptOperation::acquire(&request.attempt_id)?;
+    let loaded = repository
+        .load_attempt(&request.attempt_id)
+        .map_err(runtime_error)?;
+    let delivery_directory = prepared_release_input(&loaded.prepared, "delivery_directory")?;
+    let registry = build_registry(&loaded.prepared.snapshot, &delivery_directory, None)?;
+    let now_seconds = unix_now_seconds()?;
+    let cancellation = RegisteredCancellation::register_attempt(&request.attempt_id)?;
+    let lease = acquire_or_renew_attempt_lease(&repository, leases.as_ref(), &loaded, now_seconds)?;
+    let persistence = Arc::new(journal::AttemptJournalPersistence::for_existing(
+        repository.clone(),
+        loaded.prepared.clone(),
+        loaded.repository_path,
+        request.attempt_id.clone(),
+    ));
+    let lease_maintenance = Arc::new(JournalLeaseMaintenance::new(
+        repository.clone(),
+        Arc::clone(&leases),
+        request.attempt_id.clone(),
+        LOCAL_LEASE_TTL_SECONDS,
+    ));
+    let runtime = PublishRuntime::with_lease_coordinator(registry, Arc::clone(&leases));
+    let context = AttemptExecutionContext::at(now_seconds)
+        .with_cancellation(cancellation.signal.clone())
+        .with_persistence(persistence)
+        .with_lease_maintenance(lease_maintenance.clone());
+    let view_result = if cancellation_requested {
+        runtime.cancel_attempt(&loaded.prepared, &loaded.view, &context)
+    } else {
+        runtime.resume_attempt(&loaded.prepared, &loaded.view, &context)
+    };
+    let maintenance_error = lease_maintenance.stop().err();
+    let view = match view_result {
+        Ok(view) => view,
+        // resume may fail after a retry/observe adapter crossed an external boundary.
+        // Without durable terminal evidence, retain the lease conservatively.
+        Err(error) => return Err(runtime_error(error)),
+    };
+    if let Some(error) = maintenance_error {
+        if view.status == PublishAttemptStatus::Running {
+            return Err(runtime_error(PublishError::AttemptStateUncertain {
+                reason: error.to_string(),
+            }));
+        }
+        log::warn!(
+            "publish attempt {} reached terminal state after its lease heartbeat failed: {error}",
+            request.attempt_id
+        );
+    }
+    release_terminal_attempt_lease(
+        &repository,
+        &leases,
+        &request.attempt_id,
+        &lease.lease_id,
+        view.status,
+        now_seconds,
+    )?;
     Ok(PublishRuntimeResult {
         attempt: summarize_attempt(view),
-        publish_result,
+        publish_result: None,
+    })
+}
+
+#[tauri::command]
+pub fn synchronize_publish_runtime(
+    request: SynchronizePublishRuntimeRequest,
+) -> Result<SynchronizePublishRuntimeResult, AppError> {
+    synchronize_runtime_with_repository(
+        request,
+        journal::AttemptJournalRepository::for_current_user().map_err(runtime_error)?,
+        lease_coordinator(),
+    )
+}
+
+fn synchronize_runtime_with_repository(
+    request: SynchronizePublishRuntimeRequest,
+    repository: journal::AttemptJournalRepository,
+    leases: Arc<PublishLeaseCoordinator>,
+) -> Result<SynchronizePublishRuntimeResult, AppError> {
+    if request.repository_path.trim().is_empty()
+        || request.configuration_revision_id.trim().is_empty()
+    {
+        return Err(AppError::validation_with_code(
+            "repository path and configuration revision are required for synchronization",
+            "publish_runtime_synchronization_scope_missing",
+        ));
+    }
+    let requested_repository_path = canonical_repository(Path::new(&request.repository_path))?
+        .to_string_lossy()
+        .to_string();
+    let now_seconds = unix_now_seconds()?;
+    let attempt_id = match request
+        .attempt_id
+        .filter(|attempt_id| !attempt_id.trim().is_empty())
+    {
+        Some(attempt_id) => attempt_id,
+        None => repository
+            .find_latest_attempt(
+                &requested_repository_path,
+                &request.configuration_revision_id,
+            )
+            .map_err(runtime_error)?
+            .ok_or_else(|| {
+                AppError::publish_with_code(
+                    "no persisted publish attempt matches the synchronization scope",
+                    "publish_runtime_attempt_not_found",
+                )
+            })?,
+    };
+    let _operation = RegisteredAttemptOperation::acquire(&attempt_id)?;
+    let (stored_repository_path, configuration_revision_id) = repository
+        .attempt_scope(&attempt_id)
+        .map_err(runtime_error)?;
+    if stored_repository_path != requested_repository_path
+        || configuration_revision_id != request.configuration_revision_id
+    {
+        return Err(AppError::validation_with_code(
+            "publish attempt does not belong to the requested synchronization scope",
+            "publish_runtime_synchronization_scope_mismatch",
+        ));
+    }
+    let pre_sync = repository
+        .load_attempt(&attempt_id)
+        .map_err(runtime_error)?;
+    let delivery_directory = prepared_release_input(&pre_sync.prepared, "delivery_directory")?;
+    let registry = build_registry(&pre_sync.prepared.snapshot, &delivery_directory, None)?;
+    let runtime = PublishRuntime::with_lease_coordinator(registry, Arc::clone(&leases));
+    let report = repository
+        .synchronize(
+            &runtime,
+            &attempt_id,
+            request.events.into_iter().map(PublishEvent::from).collect(),
+            request.manifest.map(ArtifactManifest::from),
+            request.last_known_sequence,
+        )
+        .map_err(runtime_error)?;
+    let missing_ranges = report
+        .missing
+        .iter()
+        .map(|(start, end)| RuntimeEventSequenceRange {
+            start: *start,
+            end: *end,
+        })
+        .collect::<Vec<_>>();
+    let result = if missing_ranges.is_empty() {
+        let loaded = repository
+            .load_attempt(&attempt_id)
+            .map_err(runtime_error)?;
+        if loaded.repository_path != requested_repository_path
+            || loaded.view.attempt.configuration_revision != request.configuration_revision_id
+        {
+            return Err(AppError::validation_with_code(
+                "publish attempt does not belong to the requested synchronization scope",
+                "publish_runtime_synchronization_scope_mismatch",
+            ));
+        }
+        let status = loaded.view.status;
+        if status != PublishAttemptStatus::Running {
+            if let Some(lease) = repository
+                .active_lease(&attempt_id, now_seconds)
+                .map_err(runtime_error)?
+            {
+                release_terminal_attempt_lease(
+                    &repository,
+                    &leases,
+                    &attempt_id,
+                    &lease.lease_id,
+                    status,
+                    now_seconds,
+                )?;
+            }
+        }
+        Some(PublishRuntimeResult {
+            attempt: summarize_attempt(loaded.view),
+            publish_result: None,
+        })
+    } else {
+        None
+    };
+    Ok(SynchronizePublishRuntimeResult {
+        attempt_id,
+        accepted_events: report.accepted,
+        duplicate_events: report.duplicates,
+        missing_ranges,
+        result,
     })
 }
 
@@ -1859,10 +2672,16 @@ fn summarize_attempt(view: PublishAttemptView) -> RuntimeAttemptResult {
                 required: route.required,
                 status: runtime_delivery_status(route.status),
                 external_reference: route.external_reference,
-                error: route.error,
+                error: route
+                    .error
+                    .map(|error| crate::security::sanitize_freeform_text(&error)),
             })
             .collect(),
-        warnings: view.warnings,
+        warnings: view
+            .warnings
+            .into_iter()
+            .map(|warning| crate::security::sanitize_freeform_text(&warning))
+            .collect(),
         events: view
             .events
             .into_iter()
@@ -1909,11 +2728,13 @@ fn summarize_attempt(view: PublishAttemptView) -> RuntimeAttemptResult {
                         .payload
                         .get("error")
                         .and_then(Value::as_str)
-                        .map(ToString::to_string),
+                        .map(crate::security::sanitize_freeform_text),
                 }
             })
             .collect(),
-        error: view.error,
+        error: view
+            .error
+            .map(|error| crate::security::sanitize_freeform_text(&error)),
     }
 }
 
@@ -1961,6 +2782,8 @@ fn summarize_plan(prepared: &PreparedPublishPlan) -> RuntimePlanSummary {
                     publish_domain::PlanOperation::RunProgram { program, .. } => program.clone(),
                     publish_domain::PlanOperation::AdapterAction { action, .. } => action.clone(),
                 },
+                cancellable: node.cancellable,
+                cleanup_owned_staging: node.cleanup_owned_staging,
                 irreversible: node.irreversible,
             })
             .collect(),
@@ -2757,6 +3580,15 @@ fn runtime_error(error: PublishError) -> AppError {
     AppError::publish_with_code(error.to_string(), "publish_runtime_error")
 }
 
+fn runtime_attempt_uncertain_error(attempt_id: &str, error: impl std::fmt::Display) -> AppError {
+    let mut app_error = AppError::publish_with_code(
+        format!("publish attempt {attempt_id} requires recovery: {error}"),
+        "publish_runtime_attempt_uncertain",
+    );
+    app_error.details = Some(attempt_id.to_string());
+    app_error
+}
+
 fn runtime_serialization_error(error: serde_json::Error) -> AppError {
     AppError::publish_with_code(
         format!("failed to serialize publish runtime contract: {error}"),
@@ -2770,7 +3602,10 @@ mod tests {
     use std::process::Command;
     use std::sync::{Arc, Mutex};
 
-    use publish_runner_core::{PreparedPublishPlan, PublishRuntime, StartPublishAttempt};
+    use publish_runner_core::{
+        AttemptLeaseMaintenancePort, AttemptPersistencePort, PreparedPublishPlan, PublishRuntime,
+        StartPublishAttempt,
+    };
 
     use crate::commands::{PublishResult, RenderedPublishCommand, SealedBuildCommand};
     use crate::spec::{PublishSpec, SpecValue, SPEC_VERSION};
@@ -2789,11 +3624,13 @@ mod tests {
         execution_port: Arc<dyn ProviderExecutionPort>,
         identity: AttemptIdentity,
     ) -> Result<super::PublishRuntimeResult, crate::errors::AppError> {
-        super::start_runtime_with_port(
+        let journal = tempfile::tempdir().expect("create isolated attempt journal");
+        super::start_runtime_with_repository(
             request,
             execution_port,
             identity,
             Arc::new(publish_runner_core::PublishLeaseCoordinator::new()),
+            super::journal::AttemptJournalRepository::new(journal.path().to_path_buf()),
         )
     }
 
@@ -2874,6 +3711,32 @@ mod tests {
                 "non-tauri providers must not execute sealed build commands: {}",
                 request.program
             );
+        }
+    }
+
+    struct JournalBreakingProviderExecution {
+        delegate: FakeProviderExecution,
+        events_directory: std::path::PathBuf,
+    }
+
+    impl ProviderExecutionPort for JournalBreakingProviderExecution {
+        fn execute(&self, spec: PublishSpec) -> Result<PublishResult, crate::errors::AppError> {
+            let result = self.delegate.execute(spec)?;
+            let displaced = self
+                .events_directory
+                .with_file_name("events-before-persistence-failure");
+            std::fs::rename(&self.events_directory, displaced)
+                .expect("displace the append-only event directory after the side effect");
+            std::fs::write(&self.events_directory, b"not a directory")
+                .expect("block the next event persistence");
+            Ok(result)
+        }
+
+        fn execute_build(
+            &self,
+            request: SealedBuildCommand,
+        ) -> Result<PublishResult, crate::errors::AppError> {
+            self.delegate.execute_build(request)
         }
     }
 
@@ -3925,6 +4788,8 @@ mod tests {
             artifact_inputs: Vec::new(),
             artifact_outputs: Vec::new(),
             side_effects: Vec::new(),
+            cancellable: true,
+            cleanup_owned_staging: false,
             irreversible: false,
         };
         let credentials = BTreeMap::new();
@@ -4374,16 +5239,15 @@ mod tests {
 
     #[test]
     fn legacy_revision_without_composition_materializes_the_local_default() {
-        let revision: crate::store::PublishConfigurationRevision = serde_json::from_value(
-            serde_json::json!({
+        let revision: crate::store::PublishConfigurationRevision =
+            serde_json::from_value(serde_json::json!({
                 "id": "revision-legacy",
                 "sequence": 1,
                 "createdAt": "2026-01-01T00:00:00Z",
                 "providerId": "dotnet",
                 "parameters": {}
-            }),
-        )
-        .expect("deserialize a pre-composition revision");
+            }))
+            .expect("deserialize a pre-composition revision");
 
         assert_eq!(
             revision.composition,
@@ -4530,27 +5394,1315 @@ mod tests {
     #[test]
     fn cancel_requests_every_attempt_registered_for_a_token_and_slots_unregister() {
         let token = "sealed-token-cancel-fixture";
-        let first = super::RegisteredCancellation::register(token).expect("register first slot");
-        let second = super::RegisteredCancellation::register(token).expect("register second slot");
+        let first =
+            super::RegisteredCancellation::register_runtime(token).expect("register first slot");
+        let second =
+            super::RegisteredCancellation::register_runtime(token).expect("register second slot");
         assert!(!first.signal.is_requested());
 
-        let requested =
-            super::cancel_publish_runtime(super::CancelPublishRuntimeRequest {
-                runtime_token: token.to_string(),
-            })
-            .expect("cancel a registered token");
+        let requested = super::cancel_publish_runtime(super::CancelPublishRuntimeRequest {
+            runtime_token: Some(token.to_string()),
+            attempt_id: None,
+        })
+        .expect("cancel a registered token");
         assert!(requested);
         assert!(first.signal.is_requested());
         assert!(second.signal.is_requested());
 
         drop(first);
         drop(second);
-        let requested =
+        let requested = super::cancel_publish_runtime(super::CancelPublishRuntimeRequest {
+            runtime_token: Some(token.to_string()),
+            attempt_id: None,
+        })
+        .expect("cancel after every slot unregistered");
+        assert!(
+            !requested,
+            "dropped executions must leave no cancellation slot"
+        );
+    }
+
+    #[test]
+    fn cancel_selectors_address_runtime_start_and_resume_without_colliding() {
+        let value = "shared-selector-value";
+        let runtime = super::RegisteredCancellation::register_runtime(value)
+            .expect("register runtime selector");
+        let resumed = super::RegisteredCancellation::register_attempt(value)
+            .expect("register attempt selector");
+
+        assert!(
             super::cancel_publish_runtime(super::CancelPublishRuntimeRequest {
-                runtime_token: token.to_string(),
+                runtime_token: Some(value.to_string()),
+                attempt_id: None,
             })
-            .expect("cancel after every slot unregistered");
-        assert!(!requested, "dropped executions must leave no cancellation slot");
+            .expect("cancel runtime selector")
+        );
+        assert!(runtime.signal.is_requested());
+        assert!(!resumed.signal.is_requested());
+
+        assert!(
+            super::cancel_publish_runtime(super::CancelPublishRuntimeRequest {
+                runtime_token: None,
+                attempt_id: Some(value.to_string()),
+            })
+            .expect("cancel attempt selector")
+        );
+        assert!(resumed.signal.is_requested());
+
+        assert!(
+            super::cancel_publish_runtime(super::CancelPublishRuntimeRequest {
+                runtime_token: Some(value.to_string()),
+                attempt_id: Some(value.to_string()),
+            })
+            .is_err()
+        );
+    }
+
+    #[test]
+    fn runtime_lifecycle_contracts_round_trip_with_camel_case_fields() {
+        let request = super::SynchronizePublishRuntimeRequest {
+            repository_path: "/workspace/repository".to_string(),
+            configuration_revision_id: "revision-A".to_string(),
+            attempt_id: Some("attempt-A".to_string()),
+            events: vec![super::RuntimePublishEvent {
+                version: 1,
+                event_id: "event-A".to_string(),
+                attempt_id: "attempt-A".to_string(),
+                backend_run_id: "run-A".to_string(),
+                sequence: 7,
+                plan_digest: "plan-A".to_string(),
+                plan_node_id: "observe-A".to_string(),
+                kind: "remote_observation".to_string(),
+                payload: BTreeMap::new(),
+            }],
+            manifest: None,
+            last_known_sequence: Some(9),
+        };
+        let json = serde_json::to_value(&request).expect("serialize synchronize request");
+        assert_eq!(json["repositoryPath"], "/workspace/repository");
+        assert_eq!(json["configurationRevisionId"], "revision-A");
+        assert_eq!(json["lastKnownSequence"], 9);
+        assert!(json.get("repository_path").is_none());
+        let decoded: super::SynchronizePublishRuntimeRequest =
+            serde_json::from_value(json).expect("deserialize synchronize request");
+        assert_eq!(decoded.attempt_id.as_deref(), Some("attempt-A"));
+        assert_eq!(decoded.events[0].sequence, 7);
+
+        let resume: super::ResumePublishRuntimeRequest = serde_json::from_value(
+            serde_json::to_value(super::ResumePublishRuntimeRequest {
+                attempt_id: "attempt-A".to_string(),
+            })
+            .expect("serialize resume request"),
+        )
+        .expect("deserialize resume request");
+        assert_eq!(resume.attempt_id, "attempt-A");
+
+        let cancel: super::CancelPublishRuntimeRequest = serde_json::from_value(
+            serde_json::to_value(super::CancelPublishRuntimeRequest {
+                runtime_token: None,
+                attempt_id: Some("attempt-A".to_string()),
+            })
+            .expect("serialize cancel request"),
+        )
+        .expect("deserialize cancel request");
+        assert_eq!(cancel.attempt_id.as_deref(), Some("attempt-A"));
+    }
+
+    #[test]
+    fn remote_manifest_binding_is_committed_atomically_with_its_event() {
+        let repository = tempfile::tempdir().expect("create repository");
+        let delivery = tempfile::tempdir().expect("create delivery parent");
+        let journal_directory = tempfile::tempdir().expect("create attempt journal");
+        let output_directory = delivery.path().join("publish-output");
+        let prepared_runtime = prepare_test_runtime(repository.path(), &output_directory);
+        let prepared: PreparedPublishPlan =
+            serde_json::from_str(&prepared_runtime.runtime_token).expect("decode prepared plan");
+        let attempt_id = "attempt-remote-manifest".to_string();
+        let backend_run_id = "backend-remote-manifest".to_string();
+        let lease = publish_runner_core::PublishLeaseCoordinator::new()
+            .acquire(
+                &attempt_id,
+                std::collections::BTreeSet::from([publish_domain::PublishResource::new(
+                    publish_domain::PublishResourceKind::RepositoryWrite,
+                    repository.path().to_string_lossy(),
+                )]),
+                100,
+                super::LOCAL_LEASE_TTL_SECONDS,
+            )
+            .expect("acquire attempt lease");
+        let attempt = publish_domain::ReleaseAttempt {
+            version: publish_domain::RELEASE_ATTEMPT_VERSION,
+            attempt_id: attempt_id.clone(),
+            configuration_revision: prepared.snapshot.configuration_revision.clone(),
+            planning_snapshot_digest: prepared.plan.snapshot_digest.clone(),
+            plan_version: prepared.plan.version,
+            plan_digest: prepared.plan.digest.clone(),
+            release_identity: super::release_identity(&prepared.snapshot)
+                .expect("derive release identity"),
+            execution_backend: prepared.plan.execution_backend.clone(),
+            runtime_revision: prepared.snapshot.runtime_revision.clone(),
+            backend_run_id: backend_run_id.clone(),
+            manifest_digest: None,
+        };
+        let journals =
+            super::journal::AttemptJournalRepository::new(journal_directory.path().to_path_buf());
+        let persistence = super::journal::AttemptJournalPersistence::new(
+            journals.clone(),
+            prepared.clone(),
+            repository.path().to_string_lossy().to_string(),
+            1,
+            lease,
+        );
+        publish_runner_core::AttemptPersistencePort::begin_attempt(&persistence, &attempt)
+            .expect("persist attempt header");
+        let delivery_directory = super::prepared_release_input(&prepared, "delivery_directory")
+            .expect("prepared delivery directory");
+        let registry = super::build_registry(&prepared.snapshot, &delivery_directory, None)
+            .expect("rebuild sealed adapter registry");
+        let runtime = publish_runner_core::PublishRuntime::new(registry);
+
+        let artifact_path = output_directory.join("app.bin");
+        std::fs::create_dir_all(&output_directory).expect("create artifact directory");
+        std::fs::write(&artifact_path, b"remote artifact").expect("write remote artifact");
+        let manifest = publish_domain::ArtifactManifest::seal(
+            prepared.plan.snapshot_digest.clone(),
+            vec![publish_domain::ArtifactManifestEntry {
+                role: "application".to_string(),
+                file_name: "app.bin".to_string(),
+                media_type: "application/octet-stream".to_string(),
+                platform: "test-os".to_string(),
+                architecture: "test-arch".to_string(),
+                size: 15,
+                digest: publish_domain::sha256_hex(b"remote artifact"),
+                locator: artifact_path.to_string_lossy().to_string(),
+                retention: "604800s".to_string(),
+            }],
+        )
+        .expect("seal remote manifest");
+        let persist_node = prepared
+            .plan
+            .nodes
+            .iter()
+            .find(|node| node.stage == publish_domain::PlanStage::PersistManifest)
+            .expect("persist manifest node");
+        let binding_event = publish_domain::PublishEvent {
+            version: publish_domain::PUBLISH_EVENT_VERSION,
+            event_id: "event-remote-manifest-binding".to_string(),
+            attempt_id: attempt_id.clone(),
+            backend_run_id,
+            sequence: 1,
+            plan_digest: prepared.plan.digest.clone(),
+            plan_node_id: persist_node.id.clone(),
+            kind: "plan_node_completed".to_string(),
+            payload: BTreeMap::from([(
+                "manifest_digest".to_string(),
+                serde_json::Value::String(manifest.digest.clone()),
+            )]),
+        };
+
+        let missing_manifest = journals.synchronize(
+            &runtime,
+            &attempt_id,
+            vec![binding_event.clone()],
+            None,
+            Some(1),
+        );
+        assert!(matches!(
+            missing_manifest,
+            Err(publish_domain::PublishError::MissingArtifactManifest)
+        ));
+        let unchanged = journals
+            .load_attempt(&attempt_id)
+            .expect("failed batch leaves the header loadable");
+        assert!(unchanged.view.events.is_empty());
+        assert!(unchanged.view.manifest.is_none());
+
+        let foreign_manifest = publish_domain::ArtifactManifest::seal(
+            "foreign-planning-snapshot",
+            manifest.artifacts.clone(),
+        )
+        .expect("seal self-consistent foreign manifest");
+        let mut foreign_binding = binding_event.clone();
+        foreign_binding.event_id = "event-foreign-manifest-binding".to_string();
+        foreign_binding.payload.insert(
+            "manifest_digest".to_string(),
+            serde_json::Value::String(foreign_manifest.digest.clone()),
+        );
+        assert!(journals
+            .synchronize(
+                &runtime,
+                &attempt_id,
+                vec![foreign_binding],
+                Some(foreign_manifest),
+                Some(1),
+            )
+            .is_err());
+
+        let synchronized = journals
+            .synchronize(
+                &runtime,
+                &attempt_id,
+                vec![binding_event],
+                Some(manifest.clone()),
+                Some(1),
+            )
+            .expect("commit manifest and binding event in one batch");
+        assert_eq!(synchronized.accepted, 1);
+        let loaded = journals
+            .load_attempt(&attempt_id)
+            .expect("load atomically bound manifest");
+        assert_eq!(loaded.view.manifest, Some(manifest.clone()));
+        assert_eq!(loaded.view.events.len(), 1);
+
+        let stage_node = prepared
+            .plan
+            .nodes
+            .iter()
+            .find(|node| node.stage == publish_domain::PlanStage::StageRoutes)
+            .expect("stage route node");
+        let envelope = serde_json::json!([{
+            "route_id": stage_node.binding_id,
+            "manifest_digest": manifest.digest,
+            "content": {
+                "delivery_directory": delivery.path().join("absolute-target")
+            }
+        }]);
+        let envelope_event =
+            |plan_node_id: String, evidence: serde_json::Value| publish_domain::PublishEvent {
+                version: publish_domain::PUBLISH_EVENT_VERSION,
+                event_id: format!("event-envelope-{plan_node_id}"),
+                attempt_id: attempt_id.clone(),
+                backend_run_id: attempt.backend_run_id.clone(),
+                sequence: 2,
+                plan_digest: prepared.plan.digest.clone(),
+                plan_node_id,
+                kind: "plan_node_completed".to_string(),
+                payload: BTreeMap::from([("delivery_envelopes".to_string(), evidence)]),
+            };
+
+        let forged = journals.synchronize(
+            &runtime,
+            &attempt_id,
+            vec![envelope_event(persist_node.id.clone(), envelope.clone())],
+            None,
+            Some(2),
+        );
+        assert!(forged.is_err());
+        assert_eq!(
+            journals
+                .load_attempt(&attempt_id)
+                .expect("forged envelope leaves journal unchanged")
+                .view
+                .events
+                .len(),
+            1
+        );
+
+        let sensitive = serde_json::json!([{
+            "route_id": stage_node.binding_id,
+            "manifest_digest": manifest.digest,
+            "content": {
+                "headers": {
+                    "Authorization": "Bearer must-not-persist",
+                    "Cookie": "session=must-not-persist"
+                }
+            }
+        }]);
+        assert!(journals
+            .synchronize(
+                &runtime,
+                &attempt_id,
+                vec![envelope_event(stage_node.id.clone(), sensitive)],
+                None,
+                Some(2),
+            )
+            .is_err());
+
+        let wrong_target = journals.synchronize(
+            &runtime,
+            &attempt_id,
+            vec![envelope_event(stage_node.id.clone(), envelope)],
+            None,
+            Some(2),
+        );
+        assert!(wrong_target.is_err());
+        assert_eq!(
+            journals
+                .load_attempt(&attempt_id)
+                .expect("wrong target leaves journal unchanged")
+                .view
+                .events
+                .len(),
+            1
+        );
+
+        let expected_directory = std::path::PathBuf::from(delivery_directory).join(format!(
+            "attempt-{}",
+            &publish_domain::sha256_hex(attempt_id.as_bytes())[..24]
+        ));
+        let expected_envelope = serde_json::json!([{
+            "route_id": stage_node.binding_id,
+            "manifest_digest": manifest.digest,
+            "content": {
+                "delivery_directory": expected_directory
+            }
+        }]);
+        let accepted = journals
+            .synchronize(
+                &runtime,
+                &attempt_id,
+                vec![envelope_event(stage_node.id.clone(), expected_envelope)],
+                None,
+                Some(2),
+            )
+            .expect("persist a validated executable envelope");
+        assert_eq!(accepted.accepted, 1);
+        let loaded = journals
+            .load_attempt(&attempt_id)
+            .expect("load envelope evidence");
+        let envelopes = publish_runner_core::recover_delivery_envelopes(
+            &loaded.view.events,
+            &prepared.plan,
+            &manifest.digest,
+        )
+        .expect("recover validated envelope");
+        assert_eq!(
+            envelopes[0]
+                .content
+                .get("delivery_directory")
+                .and_then(serde_json::Value::as_str),
+            Some(expected_directory.to_string_lossy().as_ref())
+        );
+    }
+
+    #[test]
+    fn start_releases_lease_only_before_the_attempt_header_is_published() {
+        let repository = tempfile::tempdir().expect("create repository");
+        let delivery = tempfile::tempdir().expect("create delivery parent");
+        let journal_directory = tempfile::tempdir().expect("create attempt journal");
+        let output_directory = delivery.path().join("publish-output");
+        let prepared = prepare_test_runtime(repository.path(), &output_directory);
+        let mut tampered: PreparedPublishPlan =
+            serde_json::from_str(&prepared.runtime_token).expect("decode prepared runtime");
+        tampered.plan.digest = "0".repeat(64);
+        let identity = AttemptIdentity {
+            attempt_id: "attempt-pre-header-failure".to_string(),
+            backend_run_id: "backend-pre-header-failure".to_string(),
+        };
+        let leases = Arc::new(publish_runner_core::PublishLeaseCoordinator::new());
+        let journals =
+            super::journal::AttemptJournalRepository::new(journal_directory.path().to_path_buf());
+
+        let result = super::start_runtime_with_repository(
+            StartPublishRuntimeRequest {
+                runtime_token: serde_json::to_string(&tampered)
+                    .expect("encode tampered prepared runtime"),
+            },
+            Arc::new(FakeProviderExecution {
+                output_directory,
+                output_is_file: false,
+                failure: None,
+                source_change: None,
+            }),
+            identity.clone(),
+            Arc::clone(&leases),
+            journals.clone(),
+        );
+
+        assert!(result.is_err());
+        assert!(!journals
+            .has_published_header(&identity.attempt_id)
+            .expect("inspect absent attempt header"));
+        assert!(leases
+            .active_lease(
+                &identity.attempt_id,
+                super::unix_now_seconds().expect("current time"),
+            )
+            .is_err());
+    }
+
+    #[test]
+    fn one_attempt_allows_only_one_control_plane_operation_at_a_time() {
+        let attempt_id = format!(
+            "attempt-operation-{}",
+            super::ATTEMPT_SEQUENCE.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
+        );
+        let first = super::RegisteredAttemptOperation::acquire(&attempt_id)
+            .expect("acquire first attempt operation");
+        let error = match super::RegisteredAttemptOperation::acquire(&attempt_id) {
+            Ok(_) => panic!("a concurrent operation must be rejected"),
+            Err(error) => error,
+        };
+        assert_eq!(error.code.as_deref(), Some("publish_runtime_attempt_busy"));
+        drop(first);
+        super::RegisteredAttemptOperation::acquire(&attempt_id)
+            .expect("released operation slot can be reacquired");
+    }
+
+    #[test]
+    fn running_attempt_heartbeat_renews_and_persists_its_lease() {
+        let repository = tempfile::tempdir().expect("create repository");
+        let delivery = tempfile::tempdir().expect("create delivery parent");
+        let journal_directory = tempfile::tempdir().expect("create attempt journal");
+        let output_directory = delivery.path().join("publish-output");
+        let prepared = prepare_test_runtime(repository.path(), &output_directory);
+        let prepared: PreparedPublishPlan =
+            serde_json::from_str(&prepared.runtime_token).expect("decode prepared runtime");
+        let attempt_id = "attempt-heartbeat";
+        let backend_run_id = "backend-heartbeat";
+        let repository_path = repository.path().to_string_lossy().to_string();
+        let delivery_directory = super::prepared_release_input(&prepared, "delivery_directory")
+            .expect("prepared delivery directory");
+        let release_identity =
+            super::release_identity(&prepared.snapshot).expect("prepared release identity");
+        let now_seconds = super::publish_unix_now_seconds().expect("current time");
+        let leases = Arc::new(publish_runner_core::PublishLeaseCoordinator::new());
+        let lease = leases
+            .acquire(
+                attempt_id,
+                super::publish_lease_resources(
+                    &prepared,
+                    &repository_path,
+                    &delivery_directory,
+                    &release_identity,
+                ),
+                now_seconds,
+                4,
+            )
+            .expect("acquire short test lease");
+        let journals =
+            super::journal::AttemptJournalRepository::new(journal_directory.path().to_path_buf());
+        let persistence = super::journal::AttemptJournalPersistence::new(
+            journals.clone(),
+            prepared.clone(),
+            repository_path,
+            1,
+            lease.clone(),
+        );
+        let attempt = publish_domain::ReleaseAttempt {
+            version: publish_domain::RELEASE_ATTEMPT_VERSION,
+            attempt_id: attempt_id.to_string(),
+            configuration_revision: prepared.snapshot.configuration_revision.clone(),
+            planning_snapshot_digest: prepared.plan.snapshot_digest.clone(),
+            plan_version: prepared.plan.version,
+            plan_digest: prepared.plan.digest.clone(),
+            release_identity,
+            execution_backend: prepared.plan.execution_backend.clone(),
+            runtime_revision: prepared.snapshot.runtime_revision.clone(),
+            backend_run_id: backend_run_id.to_string(),
+            manifest_digest: None,
+        };
+        persistence
+            .begin_attempt(&attempt)
+            .expect("persist Running attempt header");
+        let maintenance =
+            super::JournalLeaseMaintenance::new(journals.clone(), leases, attempt_id, 4);
+
+        maintenance
+            .maintain(attempt_id)
+            .expect("start lease heartbeat");
+        std::thread::sleep(std::time::Duration::from_millis(2_600));
+        maintenance.stop().expect("stop healthy lease heartbeat");
+
+        let renewed = journals
+            .active_lease(
+                attempt_id,
+                super::publish_unix_now_seconds().expect("current time after heartbeat"),
+            )
+            .expect("load persisted heartbeat lease")
+            .expect("Running lease remains active");
+        assert_eq!(renewed.lease_id, lease.lease_id);
+        assert!(
+            !renewed.renewals.is_empty(),
+            "heartbeat must durably extend a long-running attempt lease"
+        );
+        journals
+            .release_lease(
+                attempt_id,
+                &renewed.lease_id,
+                super::publish_unix_now_seconds().expect("release time"),
+            )
+            .expect("release test lease");
+    }
+
+    #[test]
+    fn synchronize_accepts_running_attempt_facts_after_its_lease_expires() {
+        let repository = tempfile::tempdir().expect("create repository");
+        let delivery = tempfile::tempdir().expect("create delivery parent");
+        let journal_directory = tempfile::tempdir().expect("create attempt journal");
+        let output_directory = delivery.path().join("publish-output");
+        let prepared = prepare_test_runtime(repository.path(), &output_directory);
+        let prepared: PreparedPublishPlan =
+            serde_json::from_str(&prepared.runtime_token).expect("decode prepared runtime");
+        let attempt_id = "attempt-expired-lease-sync";
+        let backend_run_id = "backend-expired-lease-sync";
+        let repository_path = super::canonical_repository(repository.path())
+            .expect("canonical repository")
+            .to_string_lossy()
+            .to_string();
+        let delivery_directory = super::prepared_release_input(&prepared, "delivery_directory")
+            .expect("prepared delivery directory");
+        let release_identity =
+            super::release_identity(&prepared.snapshot).expect("prepared release identity");
+        let expired_leases = Arc::new(publish_runner_core::PublishLeaseCoordinator::new());
+        let expired = expired_leases
+            .acquire(
+                attempt_id,
+                super::publish_lease_resources(
+                    &prepared,
+                    &repository_path,
+                    &delivery_directory,
+                    &release_identity,
+                ),
+                1,
+                1,
+            )
+            .expect("acquire lease that will be expired after restart");
+        let journals =
+            super::journal::AttemptJournalRepository::new(journal_directory.path().to_path_buf());
+        let persistence = super::journal::AttemptJournalPersistence::new(
+            journals.clone(),
+            prepared.clone(),
+            repository_path.clone(),
+            1,
+            expired,
+        );
+        persistence
+            .begin_attempt(&publish_domain::ReleaseAttempt {
+                version: publish_domain::RELEASE_ATTEMPT_VERSION,
+                attempt_id: attempt_id.to_string(),
+                configuration_revision: prepared.snapshot.configuration_revision.clone(),
+                planning_snapshot_digest: prepared.plan.snapshot_digest.clone(),
+                plan_version: prepared.plan.version,
+                plan_digest: prepared.plan.digest.clone(),
+                release_identity,
+                execution_backend: prepared.plan.execution_backend.clone(),
+                runtime_revision: prepared.snapshot.runtime_revision.clone(),
+                backend_run_id: backend_run_id.to_string(),
+                manifest_digest: None,
+            })
+            .expect("persist Running attempt with expired lease");
+        drop(expired_leases);
+
+        let synchronized = super::synchronize_runtime_with_repository(
+            super::SynchronizePublishRuntimeRequest {
+                repository_path,
+                configuration_revision_id: prepared.snapshot.configuration_revision.clone(),
+                attempt_id: Some(attempt_id.to_string()),
+                events: vec![],
+                manifest: None,
+                last_known_sequence: None,
+            },
+            journals.clone(),
+            Arc::new(publish_runner_core::PublishLeaseCoordinator::new()),
+        )
+        .expect("synchronize Running attempt after its persisted lease expired");
+
+        assert_eq!(
+            synchronized
+                .result
+                .expect("Running attempt remains observable")
+                .attempt
+                .status,
+            RuntimeAttemptStatus::Running
+        );
+        assert!(journals
+            .active_lease(attempt_id, super::unix_now_seconds().expect("current time"),)
+            .expect("inspect expired lease")
+            .is_none());
+    }
+
+    #[test]
+    fn implicit_synchronization_prefers_an_older_running_attempt_over_a_newer_terminal_one() {
+        let repository = tempfile::tempdir().expect("create repository");
+        let delivery = tempfile::tempdir().expect("create delivery parent");
+        let journal_directory = tempfile::tempdir().expect("create attempt journal");
+        let output_directory = delivery.path().join("publish-output");
+        let prepared_runtime = prepare_test_runtime(repository.path(), &output_directory);
+        let prepared: PreparedPublishPlan =
+            serde_json::from_str(&prepared_runtime.runtime_token).expect("decode prepared runtime");
+        let repository_path = super::canonical_repository(repository.path())
+            .expect("canonical repository")
+            .to_string_lossy()
+            .to_string();
+        let delivery_directory = super::prepared_release_input(&prepared, "delivery_directory")
+            .expect("prepared delivery directory");
+        let release_identity =
+            super::release_identity(&prepared.snapshot).expect("prepared release identity");
+        let running_attempt_id = "attempt-running-before-terminal";
+        let leases = publish_runner_core::PublishLeaseCoordinator::new();
+        let expired = leases
+            .acquire(
+                running_attempt_id,
+                super::publish_lease_resources(
+                    &prepared,
+                    &repository_path,
+                    &delivery_directory,
+                    &release_identity,
+                ),
+                1,
+                1,
+            )
+            .expect("acquire expired Running lease");
+        let journals =
+            super::journal::AttemptJournalRepository::new(journal_directory.path().to_path_buf());
+        let persistence = super::journal::AttemptJournalPersistence::new(
+            journals.clone(),
+            prepared.clone(),
+            repository_path.clone(),
+            1,
+            expired,
+        );
+        persistence
+            .begin_attempt(&publish_domain::ReleaseAttempt {
+                version: publish_domain::RELEASE_ATTEMPT_VERSION,
+                attempt_id: running_attempt_id.to_string(),
+                configuration_revision: prepared.snapshot.configuration_revision.clone(),
+                planning_snapshot_digest: prepared.plan.snapshot_digest.clone(),
+                plan_version: prepared.plan.version,
+                plan_digest: prepared.plan.digest.clone(),
+                release_identity,
+                execution_backend: prepared.plan.execution_backend.clone(),
+                runtime_revision: prepared.snapshot.runtime_revision.clone(),
+                backend_run_id: "run-running-before-terminal".to_string(),
+                manifest_digest: None,
+            })
+            .expect("persist older Running attempt");
+
+        let terminal_attempt_id = "attempt-newer-terminal";
+        let terminal = super::start_runtime_with_repository(
+            StartPublishRuntimeRequest {
+                runtime_token: prepared_runtime.runtime_token,
+            },
+            Arc::new(FakeProviderExecution {
+                output_directory,
+                output_is_file: false,
+                failure: None,
+                source_change: None,
+            }),
+            AttemptIdentity {
+                attempt_id: terminal_attempt_id.to_string(),
+                backend_run_id: "run-newer-terminal".to_string(),
+            },
+            Arc::new(publish_runner_core::PublishLeaseCoordinator::new()),
+            journals.clone(),
+        )
+        .expect("complete newer terminal attempt");
+        assert_eq!(terminal.attempt.status, RuntimeAttemptStatus::Published);
+
+        assert_eq!(
+            journals
+                .find_latest_attempt(&repository_path, &prepared.snapshot.configuration_revision,)
+                .expect("discover restart candidate")
+                .as_deref(),
+            Some(running_attempt_id)
+        );
+        let synchronized = super::synchronize_runtime_with_repository(
+            super::SynchronizePublishRuntimeRequest {
+                repository_path,
+                configuration_revision_id: prepared.snapshot.configuration_revision,
+                attempt_id: None,
+                events: vec![],
+                manifest: None,
+                last_known_sequence: None,
+            },
+            journals,
+            Arc::new(publish_runner_core::PublishLeaseCoordinator::new()),
+        )
+        .expect("recover the Running attempt implicitly");
+        assert_eq!(synchronized.attempt_id, running_attempt_id);
+        assert_eq!(
+            synchronized
+                .result
+                .expect("Running attempt result")
+                .attempt
+                .status,
+            RuntimeAttemptStatus::Running
+        );
+    }
+
+    #[test]
+    fn unrelated_corrupt_journals_do_not_block_disjoint_start_or_discovery() {
+        let repository_a = tempfile::tempdir().expect("create first repository");
+        let repository_b = tempfile::tempdir().expect("create second repository");
+        std::fs::write(
+            repository_b.path().join("different-root.txt"),
+            "different history",
+        )
+        .expect("differentiate repository identity");
+        let delivery_a = tempfile::tempdir().expect("create first delivery parent");
+        let delivery_b = tempfile::tempdir().expect("create second delivery parent");
+        let journal_directory = tempfile::tempdir().expect("create attempt journal");
+        let output_a = delivery_a.path().join("publish-output");
+        let output_b = delivery_b.path().join("publish-output");
+        let prepared_a_runtime = prepare_test_runtime(repository_a.path(), &output_a);
+        let prepared_b_runtime = prepare_test_runtime(repository_b.path(), &output_b);
+        let prepared_a: PreparedPublishPlan =
+            serde_json::from_str(&prepared_a_runtime.runtime_token)
+                .expect("decode first prepared runtime");
+        let prepared_b: PreparedPublishPlan =
+            serde_json::from_str(&prepared_b_runtime.runtime_token)
+                .expect("decode second prepared runtime");
+        let repository_a_path = super::canonical_repository(repository_a.path())
+            .expect("canonical first repository")
+            .to_string_lossy()
+            .to_string();
+        let delivery_a_path = super::prepared_release_input(&prepared_a, "delivery_directory")
+            .expect("first delivery directory");
+        let release_a =
+            super::release_identity(&prepared_a.snapshot).expect("first release identity");
+        let now_seconds = super::unix_now_seconds().expect("current time");
+        let corrupt_attempt_id = "attempt-corrupt-disjoint";
+        let lease = publish_runner_core::PublishLeaseCoordinator::new()
+            .acquire(
+                corrupt_attempt_id,
+                super::publish_lease_resources(
+                    &prepared_a,
+                    &repository_a_path,
+                    &delivery_a_path,
+                    &release_a,
+                ),
+                now_seconds,
+                super::LOCAL_LEASE_TTL_SECONDS,
+            )
+            .expect("acquire first attempt lease");
+        let journals =
+            super::journal::AttemptJournalRepository::new(journal_directory.path().to_path_buf());
+        super::journal::AttemptJournalPersistence::new(
+            journals.clone(),
+            prepared_a.clone(),
+            repository_a_path,
+            1,
+            lease,
+        )
+        .begin_attempt(&publish_domain::ReleaseAttempt {
+            version: publish_domain::RELEASE_ATTEMPT_VERSION,
+            attempt_id: corrupt_attempt_id.to_string(),
+            configuration_revision: prepared_a.snapshot.configuration_revision.clone(),
+            planning_snapshot_digest: prepared_a.plan.snapshot_digest.clone(),
+            plan_version: prepared_a.plan.version,
+            plan_digest: prepared_a.plan.digest.clone(),
+            release_identity: release_a,
+            execution_backend: prepared_a.plan.execution_backend.clone(),
+            runtime_revision: prepared_a.snapshot.runtime_revision.clone(),
+            backend_run_id: "run-corrupt-disjoint".to_string(),
+            manifest_digest: None,
+        })
+        .expect("persist disjoint Running attempt");
+        let corrupt_bytes = b"{not-json";
+        let corrupt_events = journal_directory
+            .path()
+            .join(publish_domain::sha256_hex(corrupt_attempt_id.as_bytes()))
+            .join("events");
+        std::fs::create_dir_all(&corrupt_events).expect("create corrupt event directory");
+        std::fs::write(
+            corrupt_events.join(format!(
+                "batch-{}.json",
+                publish_domain::sha256_hex(corrupt_bytes)
+            )),
+            corrupt_bytes,
+        )
+        .expect("write corrupt event batch");
+        let malformed = journal_directory.path().join("malformed-unrelated");
+        std::fs::create_dir_all(&malformed).expect("create malformed journal");
+        std::fs::write(malformed.join("attempt.json"), b"{malformed")
+            .expect("write malformed header");
+
+        let terminal_attempt_id = "attempt-disjoint-terminal";
+        let terminal = super::start_runtime_with_repository(
+            StartPublishRuntimeRequest {
+                runtime_token: prepared_b_runtime.runtime_token,
+            },
+            Arc::new(FakeProviderExecution {
+                output_directory: output_b,
+                output_is_file: false,
+                failure: None,
+                source_change: None,
+            }),
+            AttemptIdentity {
+                attempt_id: terminal_attempt_id.to_string(),
+                backend_run_id: "run-disjoint-terminal".to_string(),
+            },
+            Arc::new(publish_runner_core::PublishLeaseCoordinator::new()),
+            journals.clone(),
+        )
+        .expect("start disjoint attempt despite unrelated corrupt journals");
+        assert_eq!(terminal.attempt.status, RuntimeAttemptStatus::Published);
+
+        let repository_b_path = super::canonical_repository(repository_b.path())
+            .expect("canonical second repository")
+            .to_string_lossy()
+            .to_string();
+        assert_eq!(
+            journals
+                .find_latest_attempt(
+                    &repository_b_path,
+                    &prepared_b.snapshot.configuration_revision,
+                )
+                .expect("discover valid attempt beside corrupt journals")
+                .as_deref(),
+            Some(terminal_attempt_id)
+        );
+    }
+
+    #[test]
+    fn start_keeps_lease_when_side_effect_succeeds_but_event_persistence_fails() {
+        let repository = tempfile::tempdir().expect("create repository");
+        let delivery = tempfile::tempdir().expect("create delivery parent");
+        let journal_directory = tempfile::tempdir().expect("create attempt journal");
+        let output_directory = delivery.path().join("publish-output");
+        let prepared = prepare_test_runtime(repository.path(), &output_directory);
+        let identity = AttemptIdentity {
+            attempt_id: "attempt-post-side-effect-failure".to_string(),
+            backend_run_id: "backend-post-side-effect-failure".to_string(),
+        };
+        let attempt_directory = journal_directory
+            .path()
+            .join(publish_domain::sha256_hex(identity.attempt_id.as_bytes()));
+        let leases = Arc::new(publish_runner_core::PublishLeaseCoordinator::new());
+        let journals =
+            super::journal::AttemptJournalRepository::new(journal_directory.path().to_path_buf());
+
+        let result = super::start_runtime_with_repository(
+            StartPublishRuntimeRequest {
+                runtime_token: prepared.runtime_token,
+            },
+            Arc::new(JournalBreakingProviderExecution {
+                delegate: FakeProviderExecution {
+                    output_directory: output_directory.clone(),
+                    output_is_file: false,
+                    failure: None,
+                    source_change: None,
+                },
+                events_directory: attempt_directory.join("events"),
+            }),
+            identity.clone(),
+            Arc::clone(&leases),
+            journals.clone(),
+        );
+
+        let error = result.expect_err("post-header failure must expose recovery identity");
+        assert_eq!(
+            error.code.as_deref(),
+            Some("publish_runtime_attempt_uncertain")
+        );
+        assert_eq!(error.details.as_deref(), Some(identity.attempt_id.as_str()));
+        assert!(
+            output_directory.join("app.bin").is_file(),
+            "the external build side effect must precede the persistence failure"
+        );
+        assert!(journals
+            .has_published_header(&identity.attempt_id)
+            .expect("inspect published attempt header"));
+        assert!(leases
+            .active_lease(
+                &identity.attempt_id,
+                super::unix_now_seconds().expect("current time"),
+            )
+            .is_ok());
+    }
+
+    #[test]
+    fn persisted_attempt_synchronizes_across_restart_without_duplicate_or_secret_evidence() {
+        let repository = tempfile::tempdir().expect("create repository");
+        let delivery = tempfile::tempdir().expect("create delivery parent");
+        let journal_directory = tempfile::tempdir().expect("create attempt journal");
+        let journal_root = journal_directory.path().to_path_buf();
+        let output_directory = delivery.path().join("publish-output");
+        let prepared = prepare_test_runtime(repository.path(), &output_directory);
+        let identity = AttemptIdentity {
+            attempt_id: "attempt-persisted-sync".to_string(),
+            backend_run_id: "backend-persisted-sync".to_string(),
+        };
+        let result = super::start_runtime_with_repository(
+            StartPublishRuntimeRequest {
+                runtime_token: prepared.runtime_token,
+            },
+            Arc::new(FakeProviderExecution {
+                output_directory,
+                output_is_file: false,
+                failure: None,
+                source_change: None,
+            }),
+            identity.clone(),
+            Arc::new(publish_runner_core::PublishLeaseCoordinator::new()),
+            super::journal::AttemptJournalRepository::new(journal_root.clone()),
+        )
+        .expect("start persisted attempt");
+        assert_eq!(result.attempt.status, RuntimeAttemptStatus::Published);
+        let round_tripped: super::PublishRuntimeResult = serde_json::from_value(
+            serde_json::to_value(&result).expect("serialize publish runtime result"),
+        )
+        .expect("deserialize publish runtime result");
+        assert_eq!(round_tripped.attempt.attempt_id, result.attempt.attempt_id);
+        assert_eq!(
+            round_tripped.attempt.receipts[0].external_reference,
+            result.attempt.receipts[0].external_reference
+        );
+
+        // 新 Repository 实例模拟控制面重启；恢复不依赖进程内 runtimeResult。
+        let restarted = super::journal::AttemptJournalRepository::new(journal_root.clone());
+        let synchronized_leases = Arc::new(publish_runner_core::PublishLeaseCoordinator::new());
+        let loaded = restarted
+            .load_attempt(&identity.attempt_id)
+            .expect("recover persisted attempt");
+        assert_eq!(
+            loaded.view.status,
+            publish_domain::PublishAttemptStatus::Published
+        );
+        assert_eq!(
+            loaded.view.attempt.manifest_digest,
+            loaded
+                .view
+                .manifest
+                .as_ref()
+                .map(|manifest| manifest.digest.clone())
+        );
+
+        let scope_path = loaded.repository_path.clone();
+        let revision = loaded.view.attempt.configuration_revision.clone();
+        let duplicate_events = loaded
+            .view
+            .events
+            .clone()
+            .into_iter()
+            .map(super::RuntimePublishEvent::from)
+            .collect();
+        let duplicate = super::synchronize_runtime_with_repository(
+            super::SynchronizePublishRuntimeRequest {
+                repository_path: scope_path.clone(),
+                configuration_revision_id: revision.clone(),
+                attempt_id: None,
+                events: duplicate_events,
+                manifest: None,
+                last_known_sequence: loaded.view.events.last().map(|event| event.sequence),
+            },
+            restarted.clone(),
+            synchronized_leases.clone(),
+        )
+        .expect("deduplicate restarted event history");
+        assert_eq!(duplicate.accepted_events, 0);
+        assert_eq!(duplicate.duplicate_events, loaded.view.events.len());
+        assert!(duplicate.missing_ranges.is_empty());
+        assert_eq!(
+            duplicate
+                .result
+                .as_ref()
+                .map(|result| result.attempt.status),
+            Some(RuntimeAttemptStatus::Published)
+        );
+
+        let last = loaded.view.events.last().expect("last persisted event");
+        let mut future = last.clone();
+        future.sequence += 2;
+        future.event_id = "remote-future-event".to_string();
+        future.plan_node_id = "remote-observer".to_string();
+        future.kind = "remote_observation".to_string();
+        future.payload = BTreeMap::from([
+            (
+                "apiToken".to_string(),
+                serde_json::Value::String("very-secret".to_string()),
+            ),
+            (
+                "error".to_string(),
+                serde_json::Value::String(
+                    "remote failed ApiToken=very-secret at /tmp/private".to_string(),
+                ),
+            ),
+        ]);
+        let gap = super::synchronize_runtime_with_repository(
+            super::SynchronizePublishRuntimeRequest {
+                repository_path: scope_path.clone(),
+                configuration_revision_id: revision.clone(),
+                attempt_id: Some(identity.attempt_id.clone()),
+                events: vec![super::RuntimePublishEvent::from(future.clone())],
+                manifest: None,
+                last_known_sequence: Some(future.sequence),
+            },
+            restarted.clone(),
+            synchronized_leases.clone(),
+        )
+        .expect("persist out-of-order event and report its gap");
+        assert_eq!(
+            gap.accepted_events, 0,
+            "future events stay non-authoritative until the caller resends a complete history"
+        );
+        assert_eq!(
+            gap.missing_ranges,
+            vec![super::RuntimeEventSequenceRange {
+                start: future.sequence - 1,
+                end: future.sequence - 1,
+            }]
+        );
+        assert!(gap.result.is_none());
+
+        let mut missing = future.clone();
+        missing.sequence -= 1;
+        missing.event_id = "remote-missing-event".to_string();
+        missing.payload.clear();
+        let restarted = super::journal::AttemptJournalRepository::new(journal_root.clone());
+        let filler_only = super::synchronize_runtime_with_repository(
+            super::SynchronizePublishRuntimeRequest {
+                repository_path: scope_path.clone(),
+                configuration_revision_id: revision.clone(),
+                attempt_id: Some(identity.attempt_id.clone()),
+                events: vec![super::RuntimePublishEvent::from(missing.clone())],
+                manifest: None,
+                last_known_sequence: Some(future.sequence),
+            },
+            restarted,
+            synchronized_leases.clone(),
+        )
+        .expect("report the still-missing future event after restart");
+        assert_eq!(filler_only.accepted_events, 0);
+        assert_eq!(
+            filler_only.missing_ranges,
+            vec![super::RuntimeEventSequenceRange {
+                start: future.sequence,
+                end: future.sequence,
+            }]
+        );
+
+        let restarted = super::journal::AttemptJournalRepository::new(journal_root.clone());
+        let completed = super::synchronize_runtime_with_repository(
+            super::SynchronizePublishRuntimeRequest {
+                repository_path: scope_path.clone(),
+                configuration_revision_id: revision.clone(),
+                attempt_id: Some(identity.attempt_id.clone()),
+                events: vec![
+                    super::RuntimePublishEvent::from(future.clone()),
+                    super::RuntimePublishEvent::from(missing.clone()),
+                ],
+                manifest: None,
+                last_known_sequence: Some(future.sequence),
+            },
+            restarted.clone(),
+            synchronized_leases.clone(),
+        )
+        .expect("resend the complete out-of-order batch after restart");
+        assert_eq!(completed.accepted_events, 2);
+        assert!(completed.missing_ranges.is_empty());
+        assert_eq!(
+            completed.result.map(|result| result.attempt.status),
+            Some(RuntimeAttemptStatus::Published)
+        );
+
+        let events_before_duplicate = restarted
+            .load_attempt(&identity.attempt_id)
+            .expect("load event history before duplicate")
+            .view
+            .events;
+        let repeated = super::synchronize_runtime_with_repository(
+            super::SynchronizePublishRuntimeRequest {
+                repository_path: scope_path.clone(),
+                configuration_revision_id: revision.clone(),
+                attempt_id: Some(identity.attempt_id.clone()),
+                events: vec![super::RuntimePublishEvent::from(missing)],
+                manifest: None,
+                last_known_sequence: Some(future.sequence),
+            },
+            restarted.clone(),
+            synchronized_leases.clone(),
+        )
+        .expect("repeat synchronized event");
+        assert_eq!(repeated.accepted_events, 0);
+        assert_eq!(repeated.duplicate_events, 1);
+
+        let reloaded = restarted
+            .load_attempt(&identity.attempt_id)
+            .expect("reload synchronized attempt");
+        assert_eq!(
+            reloaded.view.events, events_before_duplicate,
+            "duplicate synchronization must not change observable event evidence"
+        );
+        let sanitized = reloaded
+            .view
+            .events
+            .iter()
+            .find(|event| event.event_id == future.event_id)
+            .expect("sanitized remote event");
+        assert_eq!(
+            sanitized.payload.get("apiToken"),
+            Some(&serde_json::Value::String(
+                crate::security::REDACTED_VALUE.to_string()
+            ))
+        );
+        assert!(!sanitized
+            .payload
+            .get("error")
+            .and_then(serde_json::Value::as_str)
+            .expect("sanitized error")
+            .contains("very-secret"));
+
+        // 同一 Receipt revision 的冲突引用必须在写盘前被拒绝。
+        let receipt = reloaded.view.receipts.first().expect("published receipt");
+        let mut conflicting_receipt = receipt.clone();
+        conflicting_receipt.external_reference = "conflicting://reference".to_string();
+        let mut conflict = future.clone();
+        conflict.sequence += 1;
+        conflict.event_id = "remote-conflicting-receipt".to_string();
+        conflict.kind = "delivery_receipt_observed".to_string();
+        conflict.payload = BTreeMap::from([(
+            "receipt".to_string(),
+            serde_json::to_value(conflicting_receipt).expect("serialize conflicting receipt"),
+        )]);
+        let events_before_conflict = reloaded.view.events.clone();
+        assert!(super::synchronize_runtime_with_repository(
+            super::SynchronizePublishRuntimeRequest {
+                repository_path: scope_path.clone(),
+                configuration_revision_id: revision.clone(),
+                attempt_id: Some(identity.attempt_id.clone()),
+                events: vec![super::RuntimePublishEvent::from(conflict.clone())],
+                manifest: None,
+                last_known_sequence: Some(conflict.sequence),
+            },
+            restarted.clone(),
+            synchronized_leases.clone(),
+        )
+        .is_err());
+        assert_eq!(
+            restarted
+                .load_attempt(&identity.attempt_id)
+                .expect("reload after rejected receipt")
+                .view
+                .events,
+            events_before_conflict,
+            "rejected receipt evidence must not change the synchronized attempt"
+        );
+
+        // 同样的畸形 Receipt 即使先以未来序号到达，也不能进入权威
+        // Journal，更不能阻止同序号的正确事件在补齐缺口后提交。
+        let mut poisoned_future = conflict;
+        poisoned_future.sequence += 1;
+        poisoned_future.event_id = "remote-poisoned-future-receipt".to_string();
+        let poisoned = super::synchronize_runtime_with_repository(
+            super::SynchronizePublishRuntimeRequest {
+                repository_path: scope_path.clone(),
+                configuration_revision_id: revision.clone(),
+                attempt_id: Some(identity.attempt_id.clone()),
+                events: vec![super::RuntimePublishEvent::from(poisoned_future.clone())],
+                manifest: None,
+                last_known_sequence: Some(poisoned_future.sequence),
+            },
+            restarted.clone(),
+            synchronized_leases.clone(),
+        )
+        .expect("quarantine a future event behind a gap");
+        assert_eq!(poisoned.accepted_events, 0);
+        assert_eq!(
+            poisoned.missing_ranges,
+            vec![super::RuntimeEventSequenceRange {
+                start: poisoned_future.sequence - 1,
+                end: poisoned_future.sequence - 1,
+            }]
+        );
+
+        let mut filler = future.clone();
+        filler.sequence = poisoned_future.sequence - 1;
+        filler.event_id = "remote-gap-filler".to_string();
+        filler.kind = "remote_observation".to_string();
+        filler.payload.clear();
+        let mut corrected_future = future;
+        corrected_future.sequence = poisoned_future.sequence;
+        corrected_future.event_id = "remote-corrected-future".to_string();
+        corrected_future.kind = "remote_observation".to_string();
+        corrected_future.payload.clear();
+        let corrected = super::synchronize_runtime_with_repository(
+            super::SynchronizePublishRuntimeRequest {
+                repository_path: scope_path.clone(),
+                configuration_revision_id: revision.clone(),
+                attempt_id: Some(identity.attempt_id.clone()),
+                events: vec![
+                    super::RuntimePublishEvent::from(corrected_future),
+                    super::RuntimePublishEvent::from(filler),
+                ],
+                manifest: None,
+                last_known_sequence: Some(poisoned_future.sequence),
+            },
+            restarted.clone(),
+            synchronized_leases.clone(),
+        )
+        .expect("commit the corrected complete history");
+        assert_eq!(corrected.accepted_events, 2);
+        assert!(corrected.missing_ranges.is_empty());
+        assert_eq!(
+            corrected.result.map(|result| result.attempt.status),
+            Some(RuntimeAttemptStatus::Published)
+        );
+
+        let delivery_directory =
+            super::prepared_release_input(&loaded.prepared, "delivery_directory")
+                .expect("persisted delivery directory");
+        let resources = super::publish_lease_resources(
+            &loaded.prepared,
+            &scope_path,
+            &delivery_directory,
+            &loaded.view.attempt.release_identity,
+        );
+        let running_leases = Arc::new(publish_runner_core::PublishLeaseCoordinator::new());
+        let running_lease = running_leases
+            .acquire(
+                &identity.attempt_id,
+                resources.clone(),
+                10_000,
+                super::LOCAL_LEASE_TTL_SECONDS,
+            )
+            .expect("acquire simulated Running lease");
+        restarted
+            .update_lease(&identity.attempt_id, &running_lease, 10_000)
+            .expect("persist Running lease");
+        super::release_terminal_attempt_lease(
+            &restarted,
+            &running_leases,
+            &identity.attempt_id,
+            &running_lease.lease_id,
+            publish_domain::PublishAttemptStatus::Running,
+            10_000,
+        )
+        .expect("Running attempts retain their lease");
+        assert!(restarted
+            .active_lease(&identity.attempt_id, 10_001)
+            .expect("load Running lease")
+            .is_some());
+        drop(running_leases);
+
+        let restored_leases = Arc::new(publish_runner_core::PublishLeaseCoordinator::new());
+        super::restore_persisted_attempt_leases(&restarted, &restored_leases, 10_001, &resources)
+            .expect("reconcile terminal attempt lease after restart");
+        assert!(restarted
+            .active_lease(&identity.attempt_id, 10_001)
+            .expect("load reconciled terminal lease")
+            .is_none());
+        restored_leases
+            .acquire(
+                "attempt-competing",
+                resources,
+                10_001,
+                super::LOCAL_LEASE_TTL_SECONDS,
+            )
+            .expect("terminal reconciliation frees conflicting resources");
+
+        let events_directory = journal_root
+            .join(publish_domain::sha256_hex(identity.attempt_id.as_bytes()))
+            .join("events");
+        let batch_path = std::fs::read_dir(events_directory)
+            .expect("list event batches")
+            .map(|entry| entry.expect("event batch entry").path())
+            .find(|path| {
+                path.file_name()
+                    .and_then(|name| name.to_str())
+                    .is_some_and(|name| name.starts_with("batch-"))
+            })
+            .expect("persisted event batch");
+        let mut tampered = std::fs::read(&batch_path).expect("read event batch");
+        tampered.push(b' ');
+        std::fs::write(&batch_path, tampered).expect("tamper batch with valid JSON whitespace");
+        let tampered_repository = super::journal::AttemptJournalRepository::new(journal_root);
+        let error = match tampered_repository.load_attempt(&identity.attempt_id) {
+            Ok(_) => panic!("content-addressed event batches must reject valid JSON tampering"),
+            Err(error) => error,
+        };
+        assert!(error.to_string().contains("content digest"));
     }
 
     #[test]

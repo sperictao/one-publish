@@ -119,6 +119,7 @@ export const PublishRunCard = memo(function PublishRunCard({
     ? frozenDisplayRef.current.runtimePreparationError
     : currentRuntimePreparationError;
   const publishResult = legacyPublishResult ?? runtimeResult?.publishResult;
+  const isRuntimePending = runtimeResult?.attempt.status === "running";
 
   const handleOpenOutputDir = useCallback(async () => {
     const outputDir = publishResult?.output_dir?.trim();
@@ -143,7 +144,7 @@ export const PublishRunCard = memo(function PublishRunCard({
 
   // 运行耗时：必须在任何早退之前调用（hooks 规则）。running 时实时累加，
   // 完成后组件不卸载故 elapsedMs 保留最后值。
-  const isRunning = Boolean(publishActions?.isPublishing);
+  const isRunning = Boolean(publishActions?.isPublishing || isRuntimePending);
   const elapsedMs = useElapsedTimer(isRunning);
 
   if (
@@ -159,11 +160,14 @@ export const PublishRunCard = memo(function PublishRunCard({
     return null;
   }
 
-  // 运行时终态映射：running 返回 null，交由后备的命令级结果判定。
+  // Attempt reducer 是 Runtime 状态的单一事实源；Submitted 等非终态不能
+  // 回退到命令级结果并被误报为成功或失败。
   const runtimeVisualState = (
     result: PublishRuntimeResult
   ): PublishVisualState | null => {
     switch (result.attempt.status) {
+      case "running":
+        return "running";
       case "published":
         return "success";
       case "partial_delivery":
@@ -187,7 +191,6 @@ export const PublishRunCard = memo(function PublishRunCard({
             ? "cancelled"
             : "failed"
         : "idle"));
-
   const statusMeta =
     publishVisualState === "running"
       ? {
@@ -455,7 +458,8 @@ export const PublishRunCard = memo(function PublishRunCard({
                   size="lg"
                   onClick={publishActions.onStartPublish}
                   disabled={
-                    publishActions.startDisabled || publishActions.isPublishing
+                    publishActions.isPublishing ||
+                    (!isRuntimePending && publishActions.startDisabled)
                   }
                 >
                   {publishActions.isPublishing ? (
@@ -465,6 +469,11 @@ export const PublishRunCard = memo(function PublishRunCard({
                       </span>
                       {publishActions.publishingLabel || "发布中…"}
                     </>
+                  ) : isRuntimePending ? (
+                    <>
+                      <Play className="size-5 mr-2" />
+                      {appT.resumePublishLabel || "继续发布"}
+                    </>
                   ) : (
                     <>
                       <Play className="size-5 mr-2" />
@@ -472,7 +481,7 @@ export const PublishRunCard = memo(function PublishRunCard({
                     </>
                   )}
                 </Button>
-                {publishActions.isPublishing && (
+                {(publishActions.isPublishing || isRuntimePending) && (
                   <Button
                     type="button"
                     variant="outline"

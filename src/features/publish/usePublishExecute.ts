@@ -10,8 +10,11 @@ import { createPublishExecutionRecord } from "@/features/history/publishExecutio
 import { exportExecutionSnapshot } from "@/features/history/executionSnapshot";
 import { normalizePublishResult } from "@/features/history/publishFailure";
 import {
+  cancelPublishRuntime,
   cancelProviderPublish,
+  resumePublishRuntime,
   startPublishRuntime,
+  synchronizePublishRuntime,
   type PreparedPublishRuntime,
   type ProviderPublishSpec,
   type PublishResult,
@@ -40,6 +43,7 @@ export interface UsePublishExecuteParams {
   appT: TranslationMap;
   publishT: TranslationMap;
   selectedRepoId: string | null;
+  selectedRepoPath: string | null;
   pushRecentConfig: (key: string, repoId?: string | null) => void;
   beginLogCapture: () => void;
   hideLogCapture: () => void;
@@ -67,12 +71,15 @@ type ActivePublishRun = {
   revision: number;
   phase: "preflight" | "running";
   cancelled: boolean;
+  runtimeToken?: string;
+  attemptId?: string;
 };
 
 export function usePublishExecute({
   appT,
   publishT,
   selectedRepoId,
+  selectedRepoPath,
   pushRecentConfig,
   beginLogCapture,
   hideLogCapture,
@@ -157,7 +164,67 @@ export function usePublishExecute({
   // Reset presentation state when publish scope changes
   useEffect(() => {
     resetPublishPresentation();
+    if (!usePublishStore.getState().isPublishing) {
+      // Scope changes must synchronously retire stale local runtime state before
+      // the recovery effect can expose the new scope's persisted Attempt.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setActiveRuntime(null);
+      setRuntimeResult(null);
+      activeRunRef.current = null;
+    }
   }, [validate.publishPresentationScopeKey, resetPublishPresentation]);
+
+  useEffect(() => {
+    if (!selectedRepoPath || !currentConfigurationRevisionId) {
+      return;
+    }
+    let disposed = false;
+    void synchronizePublishRuntime({
+      repositoryPath: selectedRepoPath,
+      configurationRevisionId: currentConfigurationRevisionId,
+      events: [],
+    })
+      .then((report) => {
+        const recovered = report.result;
+        if (
+          disposed ||
+          activeRunRef.current ||
+          !recovered ||
+          recovered.attempt.status !== "running"
+        ) {
+          return;
+        }
+        setActiveRuntime(null);
+        setRuntimeResult(recovered);
+        activeRunRef.current = {
+          revision: presentationRevisionRef.current,
+          phase: "running",
+          cancelled: false,
+          attemptId: recovered.attempt.attemptId,
+        };
+        setIsPublishing(false);
+      })
+      .catch(async (error) => {
+        const { extractInvokeErrorCode, extractInvokeErrorMessage } =
+          await loadInvokeErrors();
+        if (
+          !disposed &&
+          extractInvokeErrorCode(error) !== "publish_runtime_attempt_not_found"
+        ) {
+          toast.error(appT.publishRuntimeRecoveryFailed || "恢复发布状态失败", {
+            description: extractInvokeErrorMessage(error),
+          });
+        }
+      });
+    return () => {
+      disposed = true;
+    };
+  }, [
+    appT.publishRuntimeRecoveryFailed,
+    currentConfigurationRevisionId,
+    selectedRepoPath,
+    setIsPublishing,
+  ]);
 
   const runPublishSpec = useCallback(
     async (
@@ -205,6 +272,7 @@ export function usePublishExecute({
         return;
       }
       activeRun.phase = "running";
+      activeRun.runtimeToken = preparedRuntime?.runtimeToken;
 
       setActiveRuntime(preparedRuntime ?? null);
       setRuntimeResult(null);
@@ -214,6 +282,7 @@ export function usePublishExecute({
       }
 
       let runtimeAccepted = false;
+      let runtimeRemainsPending = false;
       try {
         if (shouldRecordRecentConfig(transaction)) {
           pushRecentConfig(transaction.recentConfigKey!, transaction.repoId);
@@ -226,24 +295,48 @@ export function usePublishExecute({
           });
           runtimeAccepted = true;
           setRuntimeResult(completedRuntime);
+          if (completedRuntime.attempt.status === "running") {
+            // Submitted 等外部事实仍是非终态；等待 synchronize/resume 继续归约，
+            // 不从命令级结果伪造 finishedAt、失败历史或终态事件。
+            activeRun.attemptId = completedRuntime.attempt.attemptId;
+            runtimeRemainsPending = true;
+            return;
+          }
           const providerResult = completedRuntime.publishResult;
           if (!providerResult) {
-            throw new Error(
-              completedRuntime.attempt.error ||
-                "PublishRuntime completed without a provider result"
-            );
+            if (completedRuntime.attempt.status !== "cancelled") {
+              throw new Error(
+                completedRuntime.attempt.error ||
+                  "PublishRuntime completed without a provider result"
+              );
+            }
+            result = {
+              provider_id: spec.provider_id,
+              success: false,
+              cancelled: true,
+              error: completedRuntime.attempt.error,
+              command: preparedRuntime.command,
+              output_log: "",
+              output_dir: "",
+              file_count: 0,
+              warnings: completedRuntime.attempt.warnings,
+            };
+          } else {
+            result =
+              completedRuntime.attempt.status === "published"
+                ? providerResult
+                : {
+                    ...providerResult,
+                    success: false,
+                    cancelled:
+                      completedRuntime.attempt.status === "cancelled" ||
+                      providerResult.cancelled,
+                    error:
+                      completedRuntime.attempt.error ||
+                      providerResult.error ||
+                      "PublishRuntime failed",
+                  };
           }
-          result =
-            completedRuntime.attempt.status === "published"
-              ? providerResult
-              : {
-                  ...providerResult,
-                  success: false,
-                  error:
-                    completedRuntime.attempt.error ||
-                    providerResult.error ||
-                    "PublishRuntime failed",
-                };
         } else {
           result =
             await validate.executePublishWithProtectedAccessRecovery(spec);
@@ -314,6 +407,53 @@ export function usePublishExecute({
           });
         }
       } catch (err) {
+        const [
+          {
+            analyzePublishExecutionFailure,
+            extractInvokeErrorCode,
+            extractInvokeErrorDetails,
+            extractInvokeErrorMessage,
+          },
+          { getPublishFailureFeedback },
+        ] = await Promise.all([
+          loadInvokeErrors(),
+          loadPublishFailureFeedback(),
+        ]);
+        if (
+          preparedRuntime &&
+          !runtimeAccepted &&
+          extractInvokeErrorCode(err) === "publish_runtime_attempt_uncertain" &&
+          selectedRepoPath &&
+          currentConfigurationRevisionId
+        ) {
+          try {
+            const synchronized = await synchronizePublishRuntime({
+              repositoryPath: selectedRepoPath,
+              configurationRevisionId: currentConfigurationRevisionId,
+              attemptId: extractInvokeErrorDetails(err) || undefined,
+              events: [],
+            });
+            if (
+              synchronized.result &&
+              activeRunRef.current?.revision === runRevision
+            ) {
+              runtimeAccepted = true;
+              setRuntimeResult(synchronized.result);
+              if (synchronized.result.attempt.status === "running") {
+                activeRun.attemptId = synchronized.result.attempt.attemptId;
+                runtimeRemainsPending = true;
+              }
+              return;
+            }
+          } catch (recoveryError) {
+            toast.error(
+              appT.publishRuntimeRecoveryFailed || "恢复发布状态失败",
+              {
+                description: extractInvokeErrorMessage(recoveryError),
+              }
+            );
+          }
+        }
         if (
           preparedRuntime &&
           !runtimeAccepted &&
@@ -322,13 +462,6 @@ export function usePublishExecute({
           setActiveRuntime(null);
           setRuntimeResult(null);
         }
-        const [
-          { analyzePublishExecutionFailure, extractInvokeErrorMessage },
-          { getPublishFailureFeedback },
-        ] = await Promise.all([
-          loadInvokeErrors(),
-          loadPublishFailureFeedback(),
-        ]);
         const rawErrorMessage = extractInvokeErrorMessage(err);
         const failureReason = analyzePublishExecutionFailure(err);
         const outputLogSnapshot = await waitForOutputLogSnapshot();
@@ -380,7 +513,9 @@ export function usePublishExecute({
         });
       } finally {
         if (activeRunRef.current?.revision === runRevision) {
-          activeRunRef.current = null;
+          if (!runtimeRemainsPending) {
+            activeRunRef.current = null;
+          }
           setIsPublishing(false);
           setIsCancellingPublish(false);
         }
@@ -393,6 +528,8 @@ export function usePublishExecute({
       pushRecentConfig,
       validate,
       selectedRepoId,
+      selectedRepoPath,
+      currentConfigurationRevisionId,
       setIsCancellingPublish,
       setIsPublishing,
       setLastPublishSpec,
@@ -404,7 +541,43 @@ export function usePublishExecute({
     ]
   );
 
+  const resumePendingPublish = useCallback(async () => {
+    const attemptId =
+      runtimeResult?.attempt.status === "running"
+        ? runtimeResult.attempt.attemptId
+        : activeRunRef.current?.attemptId;
+    if (!attemptId || usePublishStore.getState().isPublishing) {
+      return;
+    }
+    setIsPublishing(true);
+    try {
+      const resumed = await resumePublishRuntime({ attemptId });
+      setRuntimeResult(resumed);
+      if (resumed.attempt.status === "running") {
+        activeRunRef.current = {
+          revision: presentationRevisionRef.current,
+          phase: "running",
+          cancelled: false,
+          attemptId,
+        };
+      } else {
+        activeRunRef.current = null;
+      }
+    } catch (error) {
+      const { extractInvokeErrorMessage } = await loadInvokeErrors();
+      toast.error(appT.publishRuntimeRecoveryFailed || "继续发布失败", {
+        description: extractInvokeErrorMessage(error),
+      });
+    } finally {
+      setIsPublishing(false);
+    }
+  }, [appT.publishRuntimeRecoveryFailed, runtimeResult, setIsPublishing]);
+
   const startPublish = useCallback(async () => {
+    if (runtimeResult?.attempt.status === "running") {
+      await resumePendingPublish();
+      return;
+    }
     if (currentConfigurationBlockedReason) {
       toast.error(publishT.configurationBlocked || "当前发布配置不可执行", {
         description: currentConfigurationBlockedReason,
@@ -465,19 +638,25 @@ export function usePublishExecute({
     currentConfigurationId,
     currentConfigurationRevisionId,
     publishT.configurationBlocked,
+    resumePendingPublish,
     runPublishSpec,
+    runtimeResult,
     selectedRepoId,
     validate,
   ]);
 
   const cancelPublish = useCallback(async () => {
     const { isPublishing, isCancellingPublish } = usePublishStore.getState();
-    if (!isPublishing || isCancellingPublish) {
+    const activeRun = activeRunRef.current;
+    const attemptId =
+      runtimeResult?.attempt.status === "running"
+        ? runtimeResult.attempt.attemptId
+        : activeRun?.attemptId;
+    if ((!isPublishing && !attemptId) || isCancellingPublish) {
       return;
     }
 
     setIsCancellingPublish(true);
-    const activeRun = activeRunRef.current;
     if (activeRun?.phase === "preflight") {
       activeRun.cancelled = true;
       resetPublishPresentation();
@@ -489,9 +668,27 @@ export function usePublishExecute({
       return;
     }
     try {
-      const cancelled = await cancelProviderPublish();
+      const cancelled = attemptId
+        ? await cancelPublishRuntime({ attemptId })
+        : activeRun?.runtimeToken
+          ? await cancelPublishRuntime({ runtimeToken: activeRun.runtimeToken })
+          : await cancelProviderPublish();
       if (cancelled) {
         toast.message(appT.cancellingPublish || "正在取消发布...");
+        if (attemptId && selectedRepoPath && currentConfigurationRevisionId) {
+          const synchronized = await synchronizePublishRuntime({
+            repositoryPath: selectedRepoPath,
+            configurationRevisionId: currentConfigurationRevisionId,
+            attemptId,
+            events: [],
+          });
+          if (synchronized.result) {
+            setRuntimeResult(synchronized.result);
+            if (synchronized.result.attempt.status !== "running") {
+              activeRunRef.current = null;
+            }
+          }
+        }
       } else {
         toast.message(appT.noRunningPublishTask || "当前没有运行中的发布任务");
       }
@@ -512,7 +709,15 @@ export function usePublishExecute({
     } finally {
       setIsCancellingPublish(false);
     }
-  }, [appT, resetPublishPresentation, setIsCancellingPublish, setIsPublishing]);
+  }, [
+    appT,
+    currentConfigurationRevisionId,
+    resetPublishPresentation,
+    runtimeResult,
+    selectedRepoPath,
+    setIsCancellingPublish,
+    setIsPublishing,
+  ]);
 
   return {
     startPublish,

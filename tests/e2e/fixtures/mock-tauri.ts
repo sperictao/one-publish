@@ -762,6 +762,16 @@ export async function installMockTauri(
                       externalReference: "/tmp/publish-output",
                     },
                   ],
+                  routes: [
+                    {
+                      routeId: "local-delivery",
+                      required: true,
+                      status: "published",
+                      externalReference: "/tmp/publish-output",
+                      error: null,
+                    },
+                  ],
+                  warnings: [],
                   events: [
                     {
                       eventId: `event-${revision}`,
@@ -802,6 +812,46 @@ export async function installMockTauri(
                   file_count: 12,
                   warnings: null,
                 },
+              };
+            }
+
+            case "resume_publish_runtime": {
+              const attemptId =
+                (args?.request as { attemptId?: string } | undefined)
+                  ?.attemptId || "attempt-mock-revision";
+              const revision = attemptId.replace("attempt-", "");
+              return {
+                attempt: {
+                  attemptId,
+                  backendRunId: `backend-${revision}`,
+                  configurationRevisionId: revision,
+                  planDigest: `plan-${revision}`,
+                  executionBackend: "local-execution",
+                  status: "published",
+                  manifestDigest: `manifest-${revision}`,
+                  manifest: {
+                    digest: `manifest-${revision}`,
+                    artifactCount: 12,
+                  },
+                  receipts: [],
+                  routes: [],
+                  warnings: [],
+                  events: [],
+                  error: null,
+                },
+                publishResult: null,
+              };
+            }
+
+            case "synchronize_publish_runtime": {
+              const request = args?.request as
+                { attemptId?: string; events?: unknown[] } | undefined;
+              return {
+                attemptId: request?.attemptId || "attempt-mock-revision",
+                acceptedEvents: request?.events?.length || 0,
+                duplicateEvents: 0,
+                missingRanges: [],
+                result: null,
               };
             }
 
@@ -877,6 +927,7 @@ export async function installMockTauri(
             }
 
             case "cancel_provider_publish":
+            case "cancel_publish_runtime":
               return true;
 
             // ── Environment ──

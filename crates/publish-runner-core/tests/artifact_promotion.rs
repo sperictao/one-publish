@@ -11,12 +11,14 @@ use publish_adapters::{
 };
 use publish_domain::{
     AdapterBinding, AdapterDescriptor, AdapterIdentity, AdapterKind, AdapterSchema,
-    AdapterSelection, AdapterSettings, ArtifactCandidate, Capability, CapabilityRequirement,
-    DeliveryRoute, DeliveryStatus, PlanNodeTemplate, PlanStage, PlanningInputSnapshot,
-    PublishAttemptStatus, PublishError, PublishingCapability, ReleaseIdentity, SourceSnapshot,
-    PLANNING_INPUT_SNAPSHOT_VERSION,
+    AdapterSelection, AdapterSettings, ArtifactCandidate, ArtifactManifest, Capability,
+    CapabilityRequirement, DeliveryRoute, DeliveryStatus, PlanNodeTemplate, PlanStage,
+    PlanningInputSnapshot, PublishAttemptStatus, PublishError, PublishingCapability,
+    ReleaseIdentity, SourceSnapshot, PLANNING_INPUT_SNAPSHOT_VERSION,
 };
-use publish_runner_core::{AttemptExecutionContext, PublishRuntime, StartPublishAttempt};
+use publish_runner_core::{
+    validate_manifest_provenance, AttemptExecutionContext, PublishRuntime, StartPublishAttempt,
+};
 use serde_json::Value;
 
 const ARTIFACT_BYTES: &[u8] = b"one-publish promoted artifact\n";
@@ -439,6 +441,38 @@ fn promotion_reuses_the_stored_manifest_without_rebuilding() {
         fs::read(&delivered).expect("promoted artifact delivered"),
         ARTIFACT_BYTES
     );
+}
+
+#[test]
+fn manifest_provenance_matches_the_build_snapshot_or_exact_promotion_digest() {
+    let fixture = promotion_fixture();
+    let build = fixture.run_build_attempt();
+    let manifest = build.manifest.expect("sealed build manifest");
+    let build_prepared = fixture
+        .runtime
+        .prepare_attempt(&fixture.build_snapshot)
+        .expect("prepare build attempt");
+    validate_manifest_provenance(&build_prepared, &manifest)
+        .expect("normal build manifest belongs to its planning snapshot");
+
+    let foreign_snapshot_manifest =
+        ArtifactManifest::seal("foreign-planning-snapshot", manifest.artifacts.clone())
+            .expect("seal self-consistent foreign manifest");
+    assert!(validate_manifest_provenance(&build_prepared, &foreign_snapshot_manifest).is_err());
+
+    let promotion_prepared = fixture
+        .runtime
+        .prepare_attempt(&fixture.promotion_snapshot(&manifest.digest))
+        .expect("prepare promotion attempt");
+    validate_manifest_provenance(&promotion_prepared, &manifest)
+        .expect("promotion accepts the exact selected manifest digest");
+
+    let mut different_entries = manifest.artifacts.clone();
+    different_entries[0].retention = "different-retention".to_string();
+    let different_manifest =
+        ArtifactManifest::seal(&manifest.planning_snapshot_digest, different_entries)
+            .expect("seal a different self-consistent manifest");
+    assert!(validate_manifest_provenance(&promotion_prepared, &different_manifest).is_err());
 }
 
 #[test]

@@ -5,7 +5,7 @@ use serde_json::Value;
 use sha2::{Digest, Sha256};
 
 pub const PLANNING_INPUT_SNAPSHOT_VERSION: u32 = 1;
-pub const PUBLISH_PLAN_VERSION: u32 = 1;
+pub const PUBLISH_PLAN_VERSION: u32 = 2;
 pub const ADAPTER_CONTRACT_VERSION: u32 = 1;
 pub const ARTIFACT_MANIFEST_VERSION: u32 = 1;
 pub const PUBLISH_EVENT_VERSION: u32 = 1;
@@ -32,6 +32,8 @@ pub enum PublishError {
         "automatic retry is blocked: {}", reasons.join("; ")
     )]
     AutomaticRetryBlocked { reasons: Vec<String> },
+    #[error("publish attempt state is uncertain: {reason}")]
+    AttemptStateUncertain { reason: String },
     #[error(
         "publish event history has unexplained sequence gaps; missing ranges {missing:?} must be requested explicitly before the state can advance"
     )]
@@ -791,7 +793,17 @@ pub struct PlanNodeTemplate {
     pub artifact_inputs: Vec<String>,
     pub artifact_outputs: Vec<String>,
     pub side_effects: Vec<PlanSideEffect>,
+    /// 协作取消可在节点尚未开始时跳过此节点。
+    #[serde(default = "default_plan_node_cancellable")]
+    pub cancellable: bool,
+    /// StageRoutes 节点声明其 Destination 能清理本次 Attempt 拥有的 staging。
+    #[serde(default)]
+    pub cleanup_owned_staging: bool,
     pub irreversible: bool,
+}
+
+fn default_plan_node_cancellable() -> bool {
+    true
 }
 
 impl PlanNodeTemplate {
@@ -813,6 +825,8 @@ impl PlanNodeTemplate {
             artifact_inputs: Vec::new(),
             artifact_outputs: Vec::new(),
             side_effects: Vec::new(),
+            cancellable: true,
+            cleanup_owned_staging: false,
             irreversible: false,
         }
     }
@@ -833,6 +847,8 @@ impl PlanNodeTemplate {
             artifact_inputs: Vec::new(),
             artifact_outputs: Vec::new(),
             side_effects: Vec::new(),
+            cancellable: true,
+            cleanup_owned_staging: false,
             irreversible: false,
         }
     }
@@ -845,6 +861,16 @@ impl PlanNodeTemplate {
 
     pub fn with_side_effects(mut self, side_effects: Vec<PlanSideEffect>) -> Self {
         self.side_effects = side_effects;
+        self
+    }
+
+    pub fn non_cancellable(mut self) -> Self {
+        self.cancellable = false;
+        self
+    }
+
+    pub fn with_owned_staging_cleanup(mut self) -> Self {
+        self.cleanup_owned_staging = true;
         self
     }
 
@@ -866,6 +892,10 @@ pub struct PlanNode {
     pub artifact_inputs: Vec<String>,
     pub artifact_outputs: Vec<String>,
     pub side_effects: Vec<PlanSideEffect>,
+    #[serde(default = "default_plan_node_cancellable")]
+    pub cancellable: bool,
+    #[serde(default)]
+    pub cleanup_owned_staging: bool,
     pub irreversible: bool,
 }
 
@@ -1293,6 +1323,7 @@ pub enum PublishAttemptStatus {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum PlanNodeExecutionState {
+    Started,
     Completed,
     Failed,
 }

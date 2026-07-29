@@ -346,7 +346,7 @@ fn fake_adapters_execute_one_plan_into_manifest_events_and_receipt() {
 
     assert_eq!(
         outcome.events.len(),
-        plan.nodes.len() + outcome.receipts.len()
+        plan.nodes.len() * 2 + outcome.receipts.len()
     );
     for (index, event) in outcome.events.iter().enumerate() {
         assert_eq!(event.version, PUBLISH_EVENT_VERSION);
@@ -356,7 +356,9 @@ fn fake_adapters_execute_one_plan_into_manifest_events_and_receipt() {
         outcome
             .events
             .iter()
-            .find(|event| event.plan_node_id == persist.id)
+            .find(|event| {
+                event.plan_node_id == persist.id && event.kind == "plan_node_completed"
+            })
             .and_then(|event| event.payload.get("manifest_digest"))
             .and_then(Value::as_str),
         Some(outcome.manifest.digest.as_str())
@@ -674,7 +676,7 @@ fn runtime_preserves_a_failed_attempt_after_the_manifest_is_sealed() {
 }
 
 #[test]
-fn malformed_receipt_is_reduced_to_a_failed_attempt_without_invalid_evidence() {
+fn malformed_receipt_after_a_delivery_boundary_keeps_the_attempt_uncertain() {
     let store_dir = tempfile::tempdir().expect("create temporary store");
     let delivery_dir = tempfile::tempdir().expect("create local delivery directory");
     let (runtime, snapshot) = fixture_runtime_with_destination(
@@ -686,7 +688,7 @@ fn malformed_receipt_is_reduced_to_a_failed_attempt_without_invalid_evidence() {
         .prepare_attempt(&snapshot)
         .expect("prepare malformed receipt attempt");
 
-    let attempt = runtime
+    let error = runtime
         .start_attempt(
             &prepared,
             StartPublishAttempt::new(
@@ -702,28 +704,17 @@ fn malformed_receipt_is_reduced_to_a_failed_attempt_without_invalid_evidence() {
             ),
             &AttemptExecutionContext::at(0),
         )
-        .expect("invalid adapter evidence must remain an inspectable failed attempt");
+        .expect_err("invalid post-delivery evidence must keep the attempt uncertain");
 
-    assert_eq!(attempt.status, PublishAttemptStatus::Failed);
-    assert!(attempt.manifest.is_some());
-    assert!(attempt.receipts.is_empty());
-    assert!(attempt
-        .error
-        .as_deref()
-        .is_some_and(|error| error.contains("invalid immutable revision evidence")));
-    assert!(!attempt
-        .events
-        .iter()
-        .any(|event| event.kind == "delivery_receipt_observed"));
-    // 无效证据让本路线失败；证据校验错误保留在 route_failed 事件里。
-    assert_eq!(
-        attempt.events.last().map(|event| event.kind.as_str()),
-        Some("route_failed")
-    );
+    assert!(matches!(
+        error,
+        PublishError::AttemptStateUncertain { ref reason }
+            if reason.contains("invalid immutable revision evidence")
+    ));
 }
 
 #[test]
-fn receipt_from_the_wrong_route_is_reduced_to_a_failed_attempt() {
+fn wrong_route_receipt_after_a_delivery_boundary_keeps_the_attempt_uncertain() {
     let store_dir = tempfile::tempdir().expect("create temporary store");
     let delivery_dir = tempfile::tempdir().expect("create local delivery directory");
     let (runtime, snapshot) = fixture_runtime_with_destination(
@@ -737,7 +728,7 @@ fn receipt_from_the_wrong_route_is_reduced_to_a_failed_attempt() {
         .prepare_attempt(&snapshot)
         .expect("prepare wrong-route receipt attempt");
 
-    let attempt = runtime
+    let error = runtime
         .start_attempt(
             &prepared,
             StartPublishAttempt::new(
@@ -753,18 +744,13 @@ fn receipt_from_the_wrong_route_is_reduced_to_a_failed_attempt() {
             ),
             &AttemptExecutionContext::at(0),
         )
-        .expect("wrong-route evidence must remain an inspectable failed attempt");
+        .expect_err("wrong-route post-delivery evidence must keep the attempt uncertain");
 
-    assert_eq!(attempt.status, PublishAttemptStatus::Failed);
-    assert!(attempt.receipts.is_empty());
-    assert!(attempt
-        .error
-        .as_deref()
-        .is_some_and(|error| error.contains("another-route") && error.contains("destination")));
-    assert!(!attempt
-        .events
-        .iter()
-        .any(|event| event.kind == "delivery_receipt_observed"));
+    assert!(matches!(
+        error,
+        PublishError::AttemptStateUncertain { ref reason }
+            if reason.contains("another-route") && reason.contains("destination")
+    ));
 }
 
 #[test]

@@ -255,6 +255,24 @@ fn released_resources_are_immediately_available() {
     assert!(coordinator.release("attempt-1").is_err());
 }
 
+#[test]
+fn release_and_reacquire_in_the_same_second_creates_a_new_lease_epoch() {
+    let coordinator = PublishLeaseCoordinator::new();
+    let first = coordinator
+        .acquire("attempt-1", resources(&[repository("acme/app")]), 100, TTL)
+        .expect("acquire first lease epoch");
+    coordinator
+        .release("attempt-1")
+        .expect("release first epoch");
+
+    let second = coordinator
+        .acquire("attempt-1", resources(&[repository("acme/app")]), 100, TTL)
+        .expect("reacquire in the same second");
+
+    assert_ne!(first.lease_id, second.lease_id);
+    assert_eq!(first.acquired_at_seconds, second.acquired_at_seconds);
+}
+
 /// 租约必须限定至少一项具体资源且期限为正：空范围的"全局锁"不被接受。
 #[test]
 fn acquire_rejects_empty_scope_and_zero_ttl() {

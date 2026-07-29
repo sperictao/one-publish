@@ -1,5 +1,5 @@
 use std::collections::{BTreeMap, VecDeque};
-use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 
 use publish_adapters::{
@@ -9,13 +9,17 @@ use publish_adapters::{
 };
 use publish_domain::{
     sha256_hex, AdapterBinding, AdapterDescriptor, AdapterIdentity, AdapterKind, AdapterSchema,
-    AdapterSelection, AdapterSettings, ArtifactCandidate, Capability, CapabilityRequirement,
-    DeliveryEnvelope, DeliveryIdempotencyIdentity, DeliveryReceipt, DeliveryRoute, DeliveryStatus,
-    PlanNodeTemplate, PlanStage, PlanningInputSnapshot, PublishAttemptStatus, PublishError,
-    PublishFailure, PublishFailureCategory, ReleaseIdentity, SourceSnapshot,
+    AdapterSelection, AdapterSettings, ArtifactCandidate, ArtifactManifest, Capability,
+    CapabilityRequirement, DeliveryEnvelope, DeliveryIdempotencyIdentity, DeliveryReceipt,
+    DeliveryRoute, DeliveryStatus, PlanNodeTemplate, PlanSideEffect, PlanStage,
+    PlanningInputSnapshot, PublishAttemptStatus, PublishError, PublishEvent, PublishFailure,
+    PublishFailureCategory, ReleaseAttempt, ReleaseIdentity, SourceSnapshot,
     PLANNING_INPUT_SNAPSHOT_VERSION, PUBLISH_FAILURE_VERSION,
 };
-use publish_runner_core::{AttemptExecutionContext, PublishRuntime, StartPublishAttempt};
+use publish_runner_core::{
+    recover_attempt_view, AttemptExecutionContext, AttemptPersistencePort, PublishRuntime,
+    StartPublishAttempt,
+};
 use serde_json::Value;
 
 const ARTIFACT_BYTES: &[u8] = b"one-publish classified retry artifact\n";
@@ -153,7 +157,9 @@ impl AdapterContract for ClassifiedDestination {
                 "publish_classified",
                 BTreeMap::new(),
             )
-            .with_artifact_io(vec!["artifact-manifest".to_string()], vec![]),
+            .with_artifact_io(vec!["artifact-manifest".to_string()], vec![])
+            .with_side_effects(vec![PlanSideEffect::Network])
+            .irreversible(),
         ])
     }
 
@@ -209,6 +215,25 @@ impl AdapterContract for ClassifiedDestination {
 }
 
 impl DeliveryDestination for ClassifiedDestination {
+    fn validate_staged_envelope(
+        &self,
+        node: &publish_domain::PlanNode,
+        context: &AdapterExecutionContext<'_>,
+        envelope: &DeliveryEnvelope,
+    ) -> Result<(), PublishError> {
+        let manifest = context
+            .manifest
+            .ok_or(PublishError::MissingArtifactManifest)?;
+        let expected = DeliveryEnvelope::new(node.binding_id.clone(), manifest.digest.clone());
+        if envelope != &expected {
+            return Err(PublishError::Execution(format!(
+                "route {} carries a forged classified fixture envelope",
+                node.binding_id
+            )));
+        }
+        Ok(())
+    }
+
     fn probe_delivery(
         &self,
         _settings: &AdapterSettings,
@@ -535,6 +560,179 @@ fn route_view<'a>(
         .unwrap_or_else(|| panic!("route view {route_id} missing"))
 }
 
+#[derive(Default)]
+struct InMemoryAttemptJournal {
+    attempt: Mutex<Option<ReleaseAttempt>>,
+    manifest: Mutex<Option<ArtifactManifest>>,
+    events: Mutex<Vec<PublishEvent>>,
+}
+
+impl AttemptPersistencePort for InMemoryAttemptJournal {
+    fn begin_attempt(&self, attempt: &ReleaseAttempt) -> Result<(), PublishError> {
+        *self.attempt.lock().expect("attempt journal") = Some(attempt.clone());
+        Ok(())
+    }
+
+    fn append_events(
+        &self,
+        events: &[PublishEvent],
+        manifest: Option<&ArtifactManifest>,
+    ) -> Result<(), PublishError> {
+        if let Some(manifest) = manifest {
+            *self.manifest.lock().expect("manifest journal") = Some(manifest.clone());
+        }
+        self.events
+            .lock()
+            .expect("event journal")
+            .extend(events.iter().cloned());
+        Ok(())
+    }
+}
+
+#[derive(Default)]
+struct CrashAfterPublishSideEffectJournal {
+    attempt: Mutex<Option<ReleaseAttempt>>,
+    manifest: Mutex<Option<ArtifactManifest>>,
+    events: Mutex<Vec<PublishEvent>>,
+    failed_completion: AtomicBool,
+}
+
+impl AttemptPersistencePort for CrashAfterPublishSideEffectJournal {
+    fn begin_attempt(&self, attempt: &ReleaseAttempt) -> Result<(), PublishError> {
+        *self.attempt.lock().expect("attempt journal") = Some(attempt.clone());
+        Ok(())
+    }
+
+    fn append_events(
+        &self,
+        events: &[PublishEvent],
+        manifest: Option<&ArtifactManifest>,
+    ) -> Result<(), PublishError> {
+        if let Some(manifest) = manifest {
+            *self.manifest.lock().expect("manifest journal") = Some(manifest.clone());
+        }
+        if events.iter().any(|event| {
+            event.plan_node_id.ends_with(".publish") && event.kind == "plan_node_completed"
+        }) && !self.failed_completion.swap(true, Ordering::SeqCst)
+        {
+            return Err(PublishError::Execution(
+                "simulated crash after delivery side effect".to_string(),
+            ));
+        }
+        self.events
+            .lock()
+            .expect("event journal")
+            .extend(events.iter().cloned());
+        Ok(())
+    }
+}
+
+#[test]
+fn public_runtime_seam_drives_prepare_start_synchronize_resume_and_cancel() {
+    let fixture = retry_fixture(&[("primary", true)]);
+    fixture.destination.push_publish_error(
+        "primary",
+        PublishError::Classified {
+            failure: classified(
+                PublishFailureCategory::Transient,
+                "E-SEAM-TRANSIENT",
+                true,
+                None,
+            ),
+        },
+    );
+    let prepared = fixture
+        .runtime
+        .prepare_attempt(&fixture.snapshot)
+        .expect("prepare through the public runtime");
+    let journal = Arc::new(InMemoryAttemptJournal::default());
+    let view = fixture
+        .runtime
+        .start_attempt(
+            &prepared,
+            StartPublishAttempt::new(
+                "attempt-public-seam",
+                "run-public-seam",
+                ReleaseIdentity::new(
+                    "counting-project:app",
+                    fixture.snapshot.source.clone(),
+                    "1.0.0",
+                    "stable",
+                    None,
+                ),
+            ),
+            &AttemptExecutionContext::at(0).with_persistence(journal.clone()),
+        )
+        .expect("start through the public runtime");
+    assert_eq!(view.status, PublishAttemptStatus::Failed);
+
+    let persisted_attempt = journal
+        .attempt
+        .lock()
+        .expect("attempt journal")
+        .clone()
+        .expect("persisted attempt");
+    let persisted_events = journal.events.lock().expect("event journal").clone();
+    let synchronized = fixture
+        .runtime
+        .synchronize_attempt(
+            &prepared,
+            &persisted_attempt,
+            &[],
+            &persisted_events,
+            persisted_events.last().map(|event| event.sequence),
+        )
+        .expect("synchronize persisted events through the public runtime");
+    assert_eq!(synchronized.report.accepted, persisted_events.len());
+    let replay = fixture
+        .runtime
+        .synchronize_attempt(
+            &prepared,
+            &persisted_attempt,
+            &synchronized.events,
+            &persisted_events,
+            persisted_events.last().map(|event| event.sequence),
+        )
+        .expect("deduplicate synchronized events through the public runtime");
+    assert_eq!(replay.report.accepted, 0);
+    assert_eq!(replay.report.duplicates, persisted_events.len());
+
+    fixture
+        .destination
+        .set_probe("primary", DeliveryProbe::Absent);
+    let cancelled_journal = Arc::new(InMemoryAttemptJournal::default());
+    let cancelled = fixture
+        .runtime
+        .cancel_attempt(
+            &prepared,
+            &view,
+            &AttemptExecutionContext::at(0).with_persistence(cancelled_journal),
+        )
+        .expect("cancel through the public runtime");
+    assert_eq!(cancelled.status, PublishAttemptStatus::Cancelled);
+
+    let resumed = fixture
+        .runtime
+        .resume_attempt(
+            &prepared,
+            &view,
+            &AttemptExecutionContext::at(0).with_persistence(journal.clone()),
+        )
+        .expect("resume through the public runtime");
+    assert_eq!(resumed.status, PublishAttemptStatus::Published);
+    assert_eq!(
+        journal.events.lock().expect("event journal").as_slice(),
+        resumed.events.as_slice()
+    );
+    assert_eq!(fixture.build_executions.load(Ordering::SeqCst), 1);
+    assert_eq!(fixture.processor_executions.load(Ordering::SeqCst), 1);
+    assert_eq!(
+        fixture.build_executions.load(Ordering::SeqCst),
+        1,
+        "cancel and resume must not start a second build"
+    );
+}
+
 #[test]
 fn classified_failures_surface_category_native_code_retry_safety_and_retry_after() {
     let categories = [
@@ -751,6 +949,78 @@ fn uncertain_outcome_with_matching_remote_reuses_the_receipt_without_reexecution
 }
 
 #[test]
+fn crash_after_delivery_side_effect_recovers_by_probing_the_durable_intent() {
+    let fixture = retry_fixture(&[("primary", true)]);
+    let prepared = fixture
+        .runtime
+        .prepare_attempt(&fixture.snapshot)
+        .expect("prepare crash recovery attempt");
+    let journal = Arc::new(CrashAfterPublishSideEffectJournal::default());
+
+    let error = fixture
+        .runtime
+        .start_attempt(
+            &prepared,
+            StartPublishAttempt::new(
+                "attempt-crash-after-delivery",
+                "run-crash-after-delivery",
+                ReleaseIdentity::new(
+                    "counting-project:app",
+                    fixture.snapshot.source.clone(),
+                    "1.0.0",
+                    "stable",
+                    None,
+                ),
+            ),
+            &AttemptExecutionContext::at(0).with_persistence(journal.clone()),
+        )
+        .expect_err("the missing completion event leaves the attempt uncertain");
+    assert!(matches!(error, PublishError::AttemptStateUncertain { .. }));
+    assert_eq!(fixture.destination.publish_calls("primary"), 1);
+
+    let attempt = journal
+        .attempt
+        .lock()
+        .expect("attempt journal")
+        .clone()
+        .expect("persisted attempt header");
+    let manifest = journal
+        .manifest
+        .lock()
+        .expect("manifest journal")
+        .clone()
+        .expect("persisted manifest");
+    let events = journal.events.lock().expect("event journal").clone();
+    let mut recovered = recover_attempt_view(&attempt, &prepared.plan.routes, &events)
+        .expect("recover the uncertain attempt");
+    recovered.manifest = Some(manifest);
+    assert_eq!(recovered.status, PublishAttemptStatus::Running);
+    assert_eq!(
+        recovered.node_states.get("primary.publish"),
+        Some(&publish_domain::PlanNodeExecutionState::Started)
+    );
+
+    fixture.destination.set_probe(
+        "primary",
+        DeliveryProbe::Matching {
+            external_reference: "fake://primary/recovered".to_string(),
+        },
+    );
+    let resumed = fixture
+        .runtime
+        .resume_attempt(&prepared, &recovered, &AttemptExecutionContext::at(1))
+        .expect("reuse matching delivery after restart");
+
+    assert_eq!(resumed.status, PublishAttemptStatus::Published);
+    assert_eq!(fixture.destination.probe_calls("primary"), 1);
+    assert_eq!(
+        fixture.destination.publish_calls("primary"),
+        1,
+        "matching remote evidence must prevent duplicate delivery"
+    );
+}
+
+#[test]
 fn conflicting_remote_state_blocks_resume_instead_of_overwriting() {
     let fixture = retry_fixture(&[("primary", true)]);
     fixture.destination.push_publish_error(
@@ -855,7 +1125,7 @@ fn partial_delivery_resume_executes_only_the_failed_route() {
     assert_eq!(fixture.destination.stage_calls("mirror"), 1);
     assert_eq!(fixture.destination.publish_calls("mirror"), 1);
     assert_eq!(fixture.destination.publish_calls("primary"), 2);
-    assert_eq!(fixture.destination.stage_calls("primary"), 2);
+    assert_eq!(fixture.destination.stage_calls("primary"), 1);
 
     // 成功路线的不可变 Receipt 原样保留；事件历史按因果顺序延续同一尝试。
     assert!(resumed.receipts.contains(&mirror_receipt));

@@ -104,6 +104,7 @@ export function usePublishRunner({
     appT,
     publishT,
     selectedRepoId,
+    selectedRepoPath: selectedRepo?.path ?? null,
     pushRecentConfig,
     beginLogCapture,
     hideLogCapture,

@@ -788,8 +788,18 @@ fn a_disjoint_attempt_runs_in_parallel_while_conflicting_resources_are_lease_blo
         )
     });
 
-    assert_eq!(stable.status, PublishAttemptStatus::Published);
-    assert_eq!(nightly.status, PublishAttemptStatus::Published);
+    assert_eq!(
+        stable.status,
+        PublishAttemptStatus::Published,
+        "stable attempt failed: {:?}",
+        stable.error
+    );
+    assert_eq!(
+        nightly.status,
+        PublishAttemptStatus::Published,
+        "nightly attempt failed: {:?}",
+        nightly.error
+    );
     let nightly_release = harness
         .github
         .release("v1.0.0-nightly.20260726")

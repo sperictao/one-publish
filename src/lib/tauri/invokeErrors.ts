@@ -91,6 +91,42 @@ export function extractInvokeErrorCode(error: unknown): string | null {
   return extractCodeFromObject(error);
 }
 
+export function extractInvokeErrorDetails(error: unknown): string | null {
+  const extractDetailsFromObject = (value: unknown): string | null => {
+    if (!value || typeof value !== "object") {
+      return null;
+    }
+    const payload = value as { details?: unknown; data?: unknown };
+    if (
+      typeof payload.details === "string" &&
+      payload.details.trim().length > 0
+    ) {
+      return payload.details.trim();
+    }
+    if (payload.data && typeof payload.data === "object") {
+      const details = (payload.data as { details?: unknown }).details;
+      if (typeof details === "string" && details.trim().length > 0) {
+        return details.trim();
+      }
+    }
+    return null;
+  };
+
+  if (typeof error === "string") {
+    const trimmed = error.trim();
+    if (trimmed.startsWith("{") && trimmed.endsWith("}")) {
+      try {
+        return extractDetailsFromObject(JSON.parse(trimmed));
+      } catch {
+        return null;
+      }
+    }
+    return null;
+  }
+
+  return extractDetailsFromObject(error);
+}
+
 export function analyzeBranchRefreshFailure(
   error: unknown
 ): BranchRefreshFailureReason {

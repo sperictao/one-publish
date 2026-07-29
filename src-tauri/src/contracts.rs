@@ -44,6 +44,12 @@ pub fn generate_tauri_contracts() -> String {
     push_contract::<crate::publish_runtime::RuntimePlanSummary>(&mut declarations);
     push_contract::<crate::publish_runtime::PreparedPublishRuntime>(&mut declarations);
     push_contract::<crate::publish_runtime::StartPublishRuntimeRequest>(&mut declarations);
+    push_contract::<crate::publish_runtime::ResumePublishRuntimeRequest>(&mut declarations);
+    push_contract::<crate::publish_runtime::RuntimePublishEvent>(&mut declarations);
+    push_contract::<crate::publish_runtime::RuntimeArtifactManifestEntry>(&mut declarations);
+    push_contract::<crate::publish_runtime::RuntimeArtifactManifest>(&mut declarations);
+    push_contract::<crate::publish_runtime::SynchronizePublishRuntimeRequest>(&mut declarations);
+    push_contract::<crate::publish_runtime::RuntimeEventSequenceRange>(&mut declarations);
     push_contract::<crate::publish_runtime::RuntimeAttemptStatus>(&mut declarations);
     push_contract::<crate::publish_runtime::RuntimeArtifactManifestSummary>(&mut declarations);
     push_contract::<crate::publish_runtime::RuntimeDeliveryStatus>(&mut declarations);
@@ -52,6 +58,7 @@ pub fn generate_tauri_contracts() -> String {
     push_contract::<crate::publish_runtime::RuntimeRouteSummary>(&mut declarations);
     push_contract::<crate::publish_runtime::RuntimeAttemptResult>(&mut declarations);
     push_contract::<crate::publish_runtime::PublishRuntimeResult>(&mut declarations);
+    push_contract::<crate::publish_runtime::SynchronizePublishRuntimeResult>(&mut declarations);
     push_contract::<crate::commands::ProjectScanCandidates>(&mut declarations);
     push_contract::<crate::commands::RepositoryBranchConnectivityResult>(&mut declarations);
     push_contract::<crate::commands::RepositoryBranchScanResult>(&mut declarations);

@@ -771,5 +771,71 @@ fn normalized_event_payload(payload: &BTreeMap<String, Value>) -> BTreeMap<Strin
             }
         }
     }
+    if let Some(envelopes) = payload.get_mut("delivery_envelopes") {
+        normalize_delivery_envelopes(envelopes);
+    }
     payload
+}
+
+fn normalize_delivery_envelopes(value: &mut Value) {
+    match value {
+        Value::Array(values) => {
+            for value in values {
+                normalize_delivery_envelopes(value);
+            }
+        }
+        Value::Object(fields) => {
+            if fields
+                .get("source")
+                .and_then(Value::as_str)
+                .is_some_and(|source| source == "record")
+            {
+                fields.insert(
+                    "digest".to_string(),
+                    Value::String("<record_digest>".to_string()),
+                );
+            }
+            for (key, value) in fields {
+                match key.as_str() {
+                    "manifest_digest" => {
+                        *value = Value::String("<manifest>".to_string());
+                    }
+                    "delivery_directory" => {
+                        if let Some(directory) = value.as_str() {
+                            *value = Value::String(
+                                std::path::Path::new(directory).file_name().map_or_else(
+                                    || "<delivery_directory>".to_string(),
+                                    |name| name.to_string_lossy().to_string(),
+                                ),
+                            );
+                        }
+                    }
+                    "body" => {
+                        if let Some(body) = value.as_str() {
+                            *value = Value::String(normalize_manifest_marker(body));
+                        }
+                    }
+                    _ => normalize_delivery_envelopes(value),
+                }
+            }
+        }
+        _ => {}
+    }
+}
+
+fn normalize_manifest_marker(value: &str) -> String {
+    const PREFIX: &str = "<!-- one-publish-manifest:";
+    let Some(start) = value.find(PREFIX) else {
+        return value.to_string();
+    };
+    let digest_start = start + PREFIX.len();
+    let Some(end_offset) = value[digest_start..].find(" -->") else {
+        return value.to_string();
+    };
+    let digest_end = digest_start + end_offset;
+    format!(
+        "{}<manifest>{}",
+        &value[..digest_start],
+        &value[digest_end..]
+    )
 }

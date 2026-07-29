@@ -7,13 +7,16 @@ vi.mock("@tauri-apps/api/core", () => ({
 }));
 
 import {
+  cancelPublishRuntime,
   cancelProviderPublish,
   executeProviderPublish,
   importProviderPublishSpecFromCommand,
   preparePublishRuntime,
   preflightProviderPublishOutput,
   renderProviderPublish,
+  resumePublishRuntime,
   startPublishRuntime,
+  synchronizePublishRuntime,
   type ProviderPublishSpec,
 } from "@/features/publish/publishRuntime";
 
@@ -159,6 +162,56 @@ describe("publishRuntime", () => {
       request: prepareRequest,
     });
     expect(invokeMock).toHaveBeenNthCalledWith(2, "start_publish_runtime", {
+      request: { runtimeToken: "sealed-runtime-A" },
+    });
+  });
+
+  it("routes resume, synchronize, and runtime cancellation through their public commands", async () => {
+    const resumed = {
+      attempt: { attemptId: "attempt-A" },
+      publishResult: null,
+    };
+    const synchronized = {
+      attemptId: "attempt-A",
+      acceptedEvents: 0,
+      duplicateEvents: 0,
+      missingRanges: [],
+      result: resumed,
+    };
+    invokeMock
+      .mockResolvedValueOnce(resumed)
+      .mockResolvedValueOnce(synchronized)
+      .mockResolvedValueOnce(true);
+
+    await expect(
+      resumePublishRuntime({ attemptId: "attempt-A" })
+    ).resolves.toBe(resumed);
+    await expect(
+      synchronizePublishRuntime({
+        repositoryPath: "/repo",
+        configurationRevisionId: "revision-A",
+        events: [],
+      })
+    ).resolves.toBe(synchronized);
+    await expect(
+      cancelPublishRuntime({ runtimeToken: "sealed-runtime-A" })
+    ).resolves.toBe(true);
+
+    expect(invokeMock).toHaveBeenNthCalledWith(1, "resume_publish_runtime", {
+      request: { attemptId: "attempt-A" },
+    });
+    expect(invokeMock).toHaveBeenNthCalledWith(
+      2,
+      "synchronize_publish_runtime",
+      {
+        request: {
+          repositoryPath: "/repo",
+          configurationRevisionId: "revision-A",
+          events: [],
+        },
+      }
+    );
+    expect(invokeMock).toHaveBeenNthCalledWith(3, "cancel_publish_runtime", {
       request: { runtimeToken: "sealed-runtime-A" },
     });
   });

@@ -1,5 +1,6 @@
 use std::collections::BTreeMap;
-use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, Mutex};
 
 use publish_adapters::{
     AdapterConformanceFixture, AdapterContract, AdapterExecutionContext, AdapterExecutionOutput,
@@ -8,16 +9,16 @@ use publish_adapters::{
 };
 use publish_domain::{
     AdapterBinding, AdapterDescriptor, AdapterIdentity, AdapterKind, AdapterSchema,
-    AdapterSelection, AdapterSettings, ArtifactCandidate, Capability, CapabilityRequirement,
-    DeliveryRoute, DeliveryStatus, PlanNode, PlanNodeExecutionState, PlanNodeTemplate, PlanRoute,
-    PlanStage, PlanningInputSnapshot, PublishAttemptStatus, PublishError, PublishEvent,
-    PublishingCapability, ReleaseAttempt, ReleaseIdentity, SourceSnapshot,
-    DELIVERY_RECEIPT_VERSION, PLANNING_INPUT_SNAPSHOT_VERSION, PUBLISH_EVENT_VERSION,
-    PUBLISH_PLAN_VERSION, RELEASE_ATTEMPT_VERSION,
+    AdapterSelection, AdapterSettings, ArtifactCandidate, ArtifactManifest, Capability,
+    CapabilityRequirement, DeliveryRoute, DeliveryStatus, PlanNode, PlanNodeExecutionState,
+    PlanNodeTemplate, PlanRoute, PlanStage, PlanningInputSnapshot, PublishAttemptStatus,
+    PublishError, PublishEvent, PublishingCapability, ReleaseAttempt, ReleaseIdentity,
+    SourceSnapshot, DELIVERY_RECEIPT_VERSION, PLANNING_INPUT_SNAPSHOT_VERSION,
+    PUBLISH_EVENT_VERSION, PUBLISH_PLAN_VERSION, RELEASE_ATTEMPT_VERSION,
 };
 use publish_runner_core::{
-    recover_attempt_view, AttemptEventLog, AttemptExecutionContext, PublishRuntime,
-    StartPublishAttempt,
+    recover_attempt_view, AttemptEventLog, AttemptExecutionContext, AttemptPersistencePort,
+    PublishRuntime, StartPublishAttempt,
 };
 use serde_json::Value;
 
@@ -941,4 +942,377 @@ fn control_plane_restart_recovers_partial_delivery_from_events() {
         .error
         .as_deref()
         .is_some_and(|error| error.contains("simulated delivery failure")));
+}
+
+#[derive(Default)]
+struct RecordingAttemptPersistence {
+    attempt: Mutex<Option<ReleaseAttempt>>,
+    commits: Mutex<Vec<(PublishEvent, Option<ArtifactManifest>)>>,
+    batches: Mutex<Vec<Vec<PublishEvent>>>,
+}
+
+impl AttemptPersistencePort for RecordingAttemptPersistence {
+    fn begin_attempt(&self, attempt: &ReleaseAttempt) -> Result<(), PublishError> {
+        *self.attempt.lock().expect("attempt persistence lock") = Some(attempt.clone());
+        Ok(())
+    }
+
+    fn append_events(
+        &self,
+        events: &[PublishEvent],
+        manifest: Option<&ArtifactManifest>,
+    ) -> Result<(), PublishError> {
+        self.batches
+            .lock()
+            .expect("attempt batch persistence lock")
+            .push(events.to_vec());
+        self.commits
+            .lock()
+            .expect("attempt commit persistence lock")
+            .extend(events.iter().enumerate().map(|(index, event)| {
+                (
+                    event.clone(),
+                    (index == 0).then(|| manifest.cloned()).flatten(),
+                )
+            }));
+        Ok(())
+    }
+}
+
+struct FailingAttemptHeader;
+
+impl AttemptPersistencePort for FailingAttemptHeader {
+    fn begin_attempt(&self, _attempt: &ReleaseAttempt) -> Result<(), PublishError> {
+        Err(PublishError::Execution(
+            "simulated attempt header failure".to_string(),
+        ))
+    }
+
+    fn append_events(
+        &self,
+        _events: &[PublishEvent],
+        _manifest: Option<&ArtifactManifest>,
+    ) -> Result<(), PublishError> {
+        panic!("event persistence must not run after header failure");
+    }
+}
+
+#[derive(Default)]
+struct FailPublishCompletionOnce {
+    failed: AtomicBool,
+    attempt: Mutex<Option<ReleaseAttempt>>,
+    manifest: Mutex<Option<ArtifactManifest>>,
+    committed: Mutex<Vec<PublishEvent>>,
+}
+
+#[derive(Default)]
+struct FailRouteFailureOnce {
+    failed: AtomicBool,
+    committed: Mutex<Vec<PublishEvent>>,
+}
+
+impl AttemptPersistencePort for FailRouteFailureOnce {
+    fn begin_attempt(&self, _attempt: &ReleaseAttempt) -> Result<(), PublishError> {
+        Ok(())
+    }
+
+    fn append_events(
+        &self,
+        events: &[PublishEvent],
+        _manifest: Option<&ArtifactManifest>,
+    ) -> Result<(), PublishError> {
+        if events.iter().any(|event| event.kind == "route_failed")
+            && !self.failed.swap(true, Ordering::SeqCst)
+        {
+            return Err(PublishError::Execution(
+                "simulated route failure persistence outage".to_string(),
+            ));
+        }
+        self.committed
+            .lock()
+            .expect("route failure commits lock")
+            .extend(events.iter().cloned());
+        Ok(())
+    }
+}
+
+impl AttemptPersistencePort for FailPublishCompletionOnce {
+    fn begin_attempt(&self, attempt: &ReleaseAttempt) -> Result<(), PublishError> {
+        *self.attempt.lock().expect("attempt persistence lock") = Some(attempt.clone());
+        Ok(())
+    }
+
+    fn append_events(
+        &self,
+        events: &[PublishEvent],
+        manifest: Option<&ArtifactManifest>,
+    ) -> Result<(), PublishError> {
+        if let Some(manifest) = manifest {
+            *self.manifest.lock().expect("manifest persistence lock") = Some(manifest.clone());
+        }
+        if events.iter().any(|event| {
+            event.plan_node_id.ends_with(".publish") && event.kind == "plan_node_completed"
+        }) && !self.failed.swap(true, Ordering::SeqCst)
+        {
+            return Err(PublishError::Execution(
+                "simulated post-delivery persistence failure".to_string(),
+            ));
+        }
+        self.committed
+            .lock()
+            .expect("persistence commits lock")
+            .extend(events.iter().cloned());
+        Ok(())
+    }
+}
+
+#[test]
+fn attempt_header_failure_precedes_side_effects_and_does_not_poison_the_attempt_id() {
+    let fixture = recovery_fixture(&[("primary", "local-directory", true)]);
+    let prepared = fixture
+        .runtime
+        .prepare_attempt(&fixture.snapshot)
+        .expect("prepare header failure attempt");
+    let request = || {
+        StartPublishAttempt::new(
+            "attempt-header-retry",
+            "run-header-retry",
+            ReleaseIdentity::new(
+                "recovery-project:app",
+                fixture.snapshot.source.clone(),
+                "1.0.0",
+                "stable",
+                None,
+            ),
+        )
+    };
+
+    let error = fixture
+        .runtime
+        .start_attempt(
+            &prepared,
+            request(),
+            &AttemptExecutionContext::at(0).with_persistence(Arc::new(FailingAttemptHeader)),
+        )
+        .expect_err("header failure must stop the attempt");
+    assert!(error
+        .to_string()
+        .contains("simulated attempt header failure"));
+
+    let retried = fixture
+        .runtime
+        .start_attempt(&prepared, request(), &AttemptExecutionContext::at(0))
+        .expect("the same attempt id remains available after a pre-side-effect failure");
+    assert_eq!(retried.status, PublishAttemptStatus::Published);
+}
+
+#[test]
+fn post_adapter_persistence_failure_is_not_reduced_to_a_route_failure() {
+    let fixture = recovery_fixture(&[("primary", "local-directory", true)]);
+    let prepared = fixture
+        .runtime
+        .prepare_attempt(&fixture.snapshot)
+        .expect("prepare persistence failure attempt");
+    let persistence = Arc::new(FailPublishCompletionOnce::default());
+
+    let error = fixture
+        .runtime
+        .start_attempt(
+            &prepared,
+            StartPublishAttempt::new(
+                "attempt-uncertain-delivery",
+                "run-uncertain-delivery",
+                ReleaseIdentity::new(
+                    "recovery-project:app",
+                    fixture.snapshot.source.clone(),
+                    "1.0.0",
+                    "stable",
+                    None,
+                ),
+            ),
+            &AttemptExecutionContext::at(0).with_persistence(persistence.clone()),
+        )
+        .expect_err("post-delivery persistence failure must escape the route reducer");
+
+    assert!(error
+        .to_string()
+        .contains("simulated post-delivery persistence failure"));
+    let delivery_root = fixture._delivery_dir.path().join("primary");
+    assert!(
+        std::fs::read_dir(delivery_root)
+            .expect("delivery side effect directory")
+            .next()
+            .is_some(),
+        "the adapter side effect must have succeeded before persistence failed"
+    );
+    let committed = persistence
+        .committed
+        .lock()
+        .expect("persistence commits lock");
+    assert!(committed.iter().any(|event| {
+        event.plan_node_id.ends_with(".publish") && event.kind == "plan_node_started"
+    }));
+    assert!(!committed.iter().any(|event| event.kind == "route_failed"));
+    let events = committed.clone();
+    drop(committed);
+    let attempt = persistence
+        .attempt
+        .lock()
+        .expect("attempt persistence lock")
+        .clone()
+        .expect("persisted attempt");
+    let manifest = persistence
+        .manifest
+        .lock()
+        .expect("manifest persistence lock")
+        .clone()
+        .expect("persisted manifest");
+    let mut recovered = recover_attempt_view(&attempt, &prepared.plan.routes, &events)
+        .expect("recover uncertain local delivery");
+    recovered.manifest = Some(manifest);
+
+    let resumed = fixture
+        .runtime
+        .resume_attempt(&prepared, &recovered, &AttemptExecutionContext::at(1))
+        .expect("probe and reuse the completed local delivery");
+    assert_eq!(resumed.status, PublishAttemptStatus::Published);
+    assert_eq!(resumed.receipts.len(), 1);
+}
+
+#[test]
+fn route_failure_persistence_outage_keeps_the_attempt_uncertain() {
+    let fixture = recovery_fixture(&[("primary", FAILING_DESTINATION_ID, true)]);
+    let prepared = fixture
+        .runtime
+        .prepare_attempt(&fixture.snapshot)
+        .expect("prepare route persistence failure attempt");
+    let persistence = Arc::new(FailRouteFailureOnce::default());
+
+    let error = fixture
+        .runtime
+        .start_attempt(
+            &prepared,
+            StartPublishAttempt::new(
+                "attempt-route-failure-outage",
+                "run-route-failure-outage",
+                ReleaseIdentity::new(
+                    "recovery-project:app",
+                    fixture.snapshot.source.clone(),
+                    "1.0.0",
+                    "stable",
+                    None,
+                ),
+            ),
+            &AttemptExecutionContext::at(0).with_persistence(persistence.clone()),
+        )
+        .expect_err("failed route evidence cannot be downgraded to a global failure");
+
+    assert!(matches!(error, PublishError::AttemptStateUncertain { .. }));
+    let committed = persistence
+        .committed
+        .lock()
+        .expect("route failure commits lock");
+    assert!(!committed.iter().any(|event| event.kind == "route_failed"));
+    assert!(!committed
+        .iter()
+        .any(|event| event.kind == "plan_node_failed"));
+}
+
+#[test]
+fn runtime_persists_attempt_manifest_and_events_before_returning_the_view() {
+    let fixture = recovery_fixture(&[("primary", "local-directory", true)]);
+    let prepared = fixture
+        .runtime
+        .prepare_attempt(&fixture.snapshot)
+        .expect("prepare persisted attempt");
+    let persistence = Arc::new(RecordingAttemptPersistence::default());
+
+    let view = fixture
+        .runtime
+        .start_attempt(
+            &prepared,
+            StartPublishAttempt::new(
+                "attempt-persisted",
+                "run-persisted",
+                ReleaseIdentity::new(
+                    "recovery-project:app",
+                    fixture.snapshot.source.clone(),
+                    "1.0.0",
+                    "stable",
+                    None,
+                ),
+            ),
+            &AttemptExecutionContext::at(0).with_persistence(persistence.clone()),
+        )
+        .expect("start persisted attempt");
+
+    let persisted_attempt = persistence
+        .attempt
+        .lock()
+        .expect("attempt persistence lock")
+        .clone()
+        .expect("initial attempt persisted");
+    assert!(
+        persisted_attempt.manifest_digest.is_none(),
+        "the write-once header must precede manifest binding"
+    );
+    let persisted_commits = persistence
+        .commits
+        .lock()
+        .expect("attempt commit persistence lock")
+        .clone();
+    let manifest_commits = persisted_commits
+        .iter()
+        .filter(|(_, manifest)| manifest.is_some())
+        .collect::<Vec<_>>();
+    assert_eq!(
+        manifest_commits.len(),
+        1,
+        "the sealed manifest must be committed with exactly one binding event"
+    );
+    let (manifest_event, persisted_manifest) = manifest_commits[0];
+    let persisted_manifest = persisted_manifest
+        .clone()
+        .expect("manifest evidence persisted");
+    assert_eq!(
+        manifest_event
+            .payload
+            .get("manifest_digest")
+            .and_then(serde_json::Value::as_str),
+        Some(persisted_manifest.digest.as_str())
+    );
+    assert_eq!(Some(&persisted_manifest), view.manifest.as_ref());
+    let persisted_events = persisted_commits
+        .into_iter()
+        .map(|(event, _)| event)
+        .collect::<Vec<_>>();
+    assert_eq!(persisted_events, view.events);
+    let batches = persistence
+        .batches
+        .lock()
+        .expect("attempt batch persistence lock");
+    let delivery_batch = batches
+        .iter()
+        .find(|batch| {
+            batch
+                .iter()
+                .any(|event| event.kind == "delivery_receipt_observed")
+        })
+        .expect("delivery evidence batch");
+    assert!(delivery_batch
+        .iter()
+        .any(|event| event.kind == "plan_node_completed"));
+    assert!(delivery_batch
+        .iter()
+        .any(|event| event.kind == "delivery_receipt_observed"));
+
+    let mut recovered =
+        recover_attempt_view(&persisted_attempt, &prepared.plan.routes, &persisted_events)
+            .expect("recover persisted attempt");
+    persisted_manifest
+        .validate()
+        .expect("revalidate persisted manifest");
+    assert_recovered_matches(&view, &recovered);
+    recovered.manifest = Some(persisted_manifest);
+    assert_eq!(recovered.manifest, view.manifest);
 }

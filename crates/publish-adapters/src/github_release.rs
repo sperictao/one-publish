@@ -950,6 +950,25 @@ fn require_matching_assets(
 }
 
 impl DeliveryDestination for GitHubReleaseDestination {
+    fn validate_staged_envelope(
+        &self,
+        node: &PlanNode,
+        context: &AdapterExecutionContext<'_>,
+        envelope: &DeliveryEnvelope,
+    ) -> Result<(), PublishError> {
+        let manifest = context
+            .manifest
+            .ok_or(PublishError::MissingArtifactManifest)?;
+        let expected = self.stage(node, manifest)?.envelopes;
+        if expected.len() != 1 || expected.first() != Some(envelope) {
+            return Err(PublishError::Execution(format!(
+                "synchronized delivery envelope for route {} does not match its sealed GitHub Release settings",
+                node.binding_id
+            )));
+        }
+        Ok(())
+    }
+
     /// 自动重试前按交付幂等身份探测远端（ADR-0051）：标签缺失或我方未完成的
     /// Draft 允许重新执行，摘要一致的 Published 复用既有交付，其余一律冲突。
     fn probe_delivery(

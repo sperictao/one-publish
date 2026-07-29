@@ -47,6 +47,8 @@ fn persist_node(settings: AdapterSettings) -> PlanNode {
         artifact_inputs: vec!["artifact:*".to_string()],
         artifact_outputs: vec!["artifact-manifest".to_string()],
         side_effects: vec![],
+        cancellable: true,
+        cleanup_owned_staging: false,
         irreversible: false,
     }
 }

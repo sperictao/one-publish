@@ -55,13 +55,25 @@ promotedManifestDigest?: string, };
 
 export type RuntimePlanStage = "inspect_source" | "prepare_identity" | "build" | "collect_artifacts" | "process_artifacts" | "persist_manifest" | "stage_routes" | "publish_routes" | "observe_routes";
 
-export type RuntimePlanNodeSummary = { id: string, stage: RuntimePlanStage, adapterId: string, operation: string, irreversible: boolean, };
+export type RuntimePlanNodeSummary = { id: string, stage: RuntimePlanStage, adapterId: string, operation: string, cancellable: boolean, cleanupOwnedStaging: boolean, irreversible: boolean, };
 
 export type RuntimePlanSummary = { version: number, digest: string, snapshotDigest: string, executionBackend: string, nodes: Array<RuntimePlanNodeSummary>, };
 
 export type PreparedPublishRuntime = { configurationId: string, configurationRevisionId: string, command: RenderedPublishCommand, plan: RuntimePlanSummary, blockedReason: string | null, runtimeToken: string, };
 
 export type StartPublishRuntimeRequest = { runtimeToken: string, };
+
+export type ResumePublishRuntimeRequest = { attemptId: string, };
+
+export type RuntimePublishEvent = { version: number, eventId: string, attemptId: string, backendRunId: string, sequence: number, planDigest: string, planNodeId: string, kind: string, payload: { [key: string]: JsonValue }, };
+
+export type RuntimeArtifactManifestEntry = { role: string, fileName: string, mediaType: string, platform: string, architecture: string, size: number, digest: string, locator: string, retention: string, };
+
+export type RuntimeArtifactManifest = { version: number, planningSnapshotDigest: string, artifacts: Array<RuntimeArtifactManifestEntry>, digest: string, };
+
+export type SynchronizePublishRuntimeRequest = { repositoryPath: string, configurationRevisionId: string, attemptId?: string, events: Array<RuntimePublishEvent>, manifest?: RuntimeArtifactManifest, lastKnownSequence?: number, };
+
+export type RuntimeEventSequenceRange = { start: number, end: number, };
 
 export type RuntimeAttemptStatus = "running" | "published" | "partial_delivery" | "failed" | "cancelled";
 
@@ -78,6 +90,8 @@ export type RuntimeRouteSummary = { routeId: string, required: boolean, status: 
 export type RuntimeAttemptResult = { attemptId: string, backendRunId: string, configurationRevisionId: string, planDigest: string, executionBackend: string, status: RuntimeAttemptStatus, manifestDigest: string | null, manifest: RuntimeArtifactManifestSummary | null, receipts: Array<RuntimeDeliveryReceiptSummary>, routes: Array<RuntimeRouteSummary>, warnings: Array<string>, events: Array<RuntimePublishEventSummary>, error: string | null, };
 
 export type PublishRuntimeResult = { attempt: RuntimeAttemptResult, publishResult: PublishResult | null, };
+
+export type SynchronizePublishRuntimeResult = { attemptId: string, acceptedEvents: number, duplicateEvents: number, missingRanges: Array<RuntimeEventSequenceRange>, result: PublishRuntimeResult | null, };
 
 export type ProjectScanCandidates = { rootPath: string, solutionFiles: Array<string>, projectFiles: Array<string>, recommendedProjectFile: string | null, };
 
@@ -173,7 +187,7 @@ export type ConfigProfile = { id: string, name: string, profileGroup: string | n
 
 export type ExecutionRecord = { id: string, repoId: string | null, configurationId: string | null, configurationRevisionId: string | null, providerId: string, projectPath: string, startedAt: string, finishedAt: string, success: boolean, cancelled: boolean, outputDir: string | null, error: string | null, commandLine: string | null, snapshotPath: string | null, failureSignature: string | null, outputExcerpt: string | null, spec: JsonValue | null, fileCount: number, warnings: Array<string> | null, };
 
-export type CancelPublishRuntimeRequest = { runtimeToken: string, };
+export type CancelPublishRuntimeRequest = { runtimeToken?: string, attemptId?: string, };
 
 export type PublishComposition = { executionBackend: RevisionAdapterBinding, artifactStore: RevisionAdapterBinding, artifactProcessors: Array<RevisionAdapterBinding>, deliveryRoutes: Array<RevisionDeliveryRoute>, };
 

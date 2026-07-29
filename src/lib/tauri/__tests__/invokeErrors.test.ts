@@ -6,6 +6,7 @@ import {
   analyzeProjectScanFailure,
   analyzePublishExecutionFailure,
   extractInvokeErrorCode,
+  extractInvokeErrorDetails,
   extractInvokeErrorMessage,
   type BranchRefreshFailureReason,
   type ProjectScanFailureReason,
@@ -108,6 +109,49 @@ describe("extractInvokeErrorCode", () => {
     expect(extractInvokeErrorCode(null)).toBeNull();
     expect(extractInvokeErrorCode(undefined)).toBeNull();
     expect(extractInvokeErrorCode(1)).toBeNull();
+  });
+});
+
+describe("extractInvokeErrorDetails", () => {
+  it("extracts a top-level attempt identifier", () => {
+    expect(
+      extractInvokeErrorDetails({
+        code: "publish_runtime_attempt_uncertain",
+        details: "attempt-123",
+      })
+    ).toBe("attempt-123");
+  });
+
+  it("supports details nested under data", () => {
+    expect(
+      extractInvokeErrorDetails({
+        data: { details: "attempt-456" },
+      })
+    ).toBe("attempt-456");
+  });
+
+  it("prefers top-level details and trims whitespace", () => {
+    expect(
+      extractInvokeErrorDetails({
+        details: "  attempt-top  ",
+        data: { details: "attempt-nested" },
+      })
+    ).toBe("attempt-top");
+  });
+
+  it("extracts details from a serialized invoke error", () => {
+    expect(
+      extractInvokeErrorDetails(
+        '{"code":"publish_runtime_attempt_uncertain","details":"attempt-789"}'
+      )
+    ).toBe("attempt-789");
+  });
+
+  it("returns null for missing, empty, or malformed details", () => {
+    expect(extractInvokeErrorDetails({ details: "   " })).toBeNull();
+    expect(extractInvokeErrorDetails("{not valid json}")).toBeNull();
+    expect(extractInvokeErrorDetails("plain failure")).toBeNull();
+    expect(extractInvokeErrorDetails(null)).toBeNull();
   });
 });
 
