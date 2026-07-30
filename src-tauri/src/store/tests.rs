@@ -1249,14 +1249,77 @@ fn load_from_path_migrates_tauri_release_settings_into_the_catalog_once() {
         "v"
     );
 
-    // 迁移是一次性的：旧存储文件被移除，重新加载不再追加修订。
+    // 迁移是一次性的：旧存储文件被处置，重新加载不再追加修订。
     assert!(!legacy_release_path.exists());
+    // 历史 Attempt 是不可再生证据：含 Attempt 的旧文件按原文归档而不是删除。
+    let archive_path = fs::read_dir(temp_dir.path())
+        .expect("read temp dir")
+        .flatten()
+        .map(|entry| entry.path())
+        .find(|path| {
+            path.file_name()
+                .map(|name| {
+                    name.to_string_lossy()
+                        .starts_with("tauri-release.attempts.")
+                })
+                .unwrap_or(false)
+        })
+        .expect("legacy attempts are archived");
+    let archived: serde_json::Value =
+        serde_json::from_str(&fs::read_to_string(&archive_path).expect("read archive"))
+            .expect("archive stays valid JSON");
+    assert_eq!(archived["attempts"][0]["id"], "attempt-1");
+    assert_eq!(archived["attempts"][0]["tag"], "app-v1.2.3");
     let second = load_from_path(&config_path);
     let reloaded = second.repositories[0]
         .publish_config
         .profile("configuration-existing")
         .expect("profile persists");
     assert_eq!(reloaded.revisions.len(), 2);
+}
+
+#[test]
+fn load_from_path_removes_a_legacy_tauri_release_file_without_attempts() {
+    let temp_dir = TempDir::new().expect("temp dir");
+    let config_path = temp_dir.path().join("config.json");
+    let legacy_release_path = temp_dir.path().join("tauri-release.json");
+    fs::write(
+        &config_path,
+        serde_json::to_vec_pretty(&stored_state_with_repositories(serde_json::json!([
+            stored_repo("repo-1", serde_json::json!([])),
+        ])))
+        .expect("serialize stored state"),
+    )
+    .expect("write stored config");
+    fs::write(
+        &legacy_release_path,
+        serde_json::to_vec_pretty(&serde_json::json!({
+            "version": 1,
+            "configs": { "repo-1": legacy_tauri_release_config("v") }
+        }))
+        .expect("serialize legacy tauri release state"),
+    )
+    .expect("write legacy tauri release state");
+
+    let state = load_from_path(&config_path);
+
+    // 设置已并入新事实源；没有 Attempt 证据时不留归档，旧文件直接移除。
+    assert!(!state.repositories[0]
+        .publish_config
+        .active_profiles()
+        .is_empty());
+    assert!(!legacy_release_path.exists());
+    let archives = fs::read_dir(temp_dir.path())
+        .expect("read temp dir")
+        .flatten()
+        .filter(|entry| {
+            entry
+                .file_name()
+                .to_string_lossy()
+                .starts_with("tauri-release.attempts.")
+        })
+        .count();
+    assert_eq!(archives, 0);
 }
 
 #[test]

@@ -284,33 +284,67 @@ pub(crate) fn migrate_legacy_state(legacy: LegacyStoredAppState) -> AppState {
 struct LegacyTauriReleaseState {
     #[serde(default)]
     configs: BTreeMap<String, TauriReleaseConfig>,
+    /// 历史 Attempt 是不可再生的发布证据，按 JSON 原文保留，不复活旧类型
+    /// （Issue #49 迁移验收：历史 Attempt 不丢失）。
+    #[serde(default)]
+    attempts: Vec<serde_json::Value>,
 }
 
 /// 迁移结果：`changed` 表示 AppState 被修改需要持久化；`cleanup` 在
-/// 持久化成功后调用，负责移除已被并入的旧状态文件。
+/// 持久化成功后调用，负责处置已被并入的旧状态文件。
 pub(crate) struct LegacyTauriReleaseMigration {
     pub(crate) changed: bool,
-    cleanup_path: Option<PathBuf>,
+    cleanup: Option<LegacyStateCleanup>,
+}
+
+/// 旧文件的处置方式：不含历史 Attempt 时移除；仍承载 Attempt 证据时原子
+/// 改名归档，数据零加工保留，改名后不再被迁移读取。
+enum LegacyStateCleanup {
+    Remove(PathBuf),
+    Archive(PathBuf),
 }
 
 impl LegacyTauriReleaseMigration {
     fn untouched() -> Self {
         Self {
             changed: false,
-            cleanup_path: None,
+            cleanup: None,
         }
     }
 
     pub(crate) fn cleanup(self) {
-        let Some(path) = self.cleanup_path else {
-            return;
-        };
-        if let Err(error) = std::fs::remove_file(&path) {
-            log::warn!(
-                "移除已迁移的 Tauri 发布状态失败，下次启动会重新尝试。路径: {}, 错误: {}",
-                path.display(),
-                error
-            );
+        match self.cleanup {
+            None => {}
+            Some(LegacyStateCleanup::Remove(path)) => {
+                if let Err(error) = std::fs::remove_file(&path) {
+                    log::warn!(
+                        "移除已迁移的 Tauri 发布状态失败，下次启动会重新尝试。路径: {}, 错误: {}",
+                        path.display(),
+                        error
+                    );
+                }
+            }
+            Some(LegacyStateCleanup::Archive(path)) => {
+                let timestamp = chrono::Utc::now().format("%Y%m%d%H%M%S%3f");
+                let archive_path =
+                    path.with_file_name(format!("tauri-release.attempts.{timestamp}.json"));
+                match std::fs::rename(&path, &archive_path) {
+                    Ok(()) => {
+                        let _ = crate::security::harden_private_path(&archive_path);
+                        log::info!(
+                            "旧 Tauri 发布状态仍含历史 Attempt，已归档到 {}",
+                            archive_path.display()
+                        );
+                    }
+                    Err(error) => {
+                        log::warn!(
+                            "归档旧 Tauri 发布 Attempt 失败，下次启动会重新尝试。路径: {}, 错误: {}",
+                            path.display(),
+                            error
+                        );
+                    }
+                }
+            }
         }
     }
 }
@@ -348,7 +382,8 @@ pub(crate) fn migrate_legacy_tauri_release_settings(
     let now = chrono::Utc::now().to_rfc3339();
     let mut changed = false;
     let mut all_merged = true;
-    for (repository_id, release) in legacy.configs {
+    let LegacyTauriReleaseState { configs, attempts } = legacy;
+    for (repository_id, release) in configs {
         let Some(repository) = state
             .repositories
             .iter_mut()
@@ -365,9 +400,15 @@ pub(crate) fn migrate_legacy_tauri_release_settings(
 
     LegacyTauriReleaseMigration {
         changed,
-        // 任何一条并入失败都保留旧文件，等待下次启动重试；成功并入或
-        // 有意丢弃（未知仓库）后旧文件才能移除。
-        cleanup_path: all_merged.then(|| legacy_path.to_path_buf()),
+        // 任何一条并入失败都保留旧文件，等待下次启动重试；成功并入或有意
+        // 丢弃（未知仓库）后才处置旧文件：无 Attempt 移除，有 Attempt 归档。
+        cleanup: all_merged.then(|| {
+            if attempts.is_empty() {
+                LegacyStateCleanup::Remove(legacy_path.to_path_buf())
+            } else {
+                LegacyStateCleanup::Archive(legacy_path.to_path_buf())
+            }
+        }),
     }
 }
 
@@ -462,6 +503,7 @@ fn merge_tauri_release_settings(
         TAURI_PROVIDER_ID.to_string(),
         parameters,
         profile_group,
+        None,
         now.to_string(),
     ) {
         Ok(()) => Some(true),
