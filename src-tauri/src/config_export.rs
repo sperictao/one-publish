@@ -20,6 +20,9 @@ pub struct ConfigProfile {
     #[serde(default = "default_settings_version")]
     pub settings_version: u32,
     pub parameters: BTreeMap<String, serde_json::Value>,
+    /// 修订组合是配置的一部分；缺失（旧备份）时导入方按本地默认组合物化。
+    #[serde(default)]
+    pub composition: Option<crate::store::PublishComposition>,
     #[serde(default)]
     pub profile_group: Option<String>,
     pub created_at: DateTime<Utc>,
@@ -35,6 +38,7 @@ impl Default for ConfigProfile {
             provider_version: default_provider_version(),
             settings_version: default_settings_version(),
             parameters: BTreeMap::new(),
+            composition: None,
             profile_group: None,
             created_at: Utc::now(),
             is_system_default: false,
@@ -165,6 +169,7 @@ pub fn build_config_export(
                 provider_version: revision.provider_version.clone(),
                 settings_version: revision.settings_version,
                 parameters,
+                composition: Some(revision.composition.clone()),
                 profile_group: profile.profile_group.clone(),
                 created_at,
                 is_system_default: profile.is_system_default,
@@ -335,6 +340,7 @@ mod tests {
                     }
                 }),
                 Some("Production".to_string()),
+                None,
                 "2026-07-21T11:00:00Z".to_string(),
             )
             .expect("update profile");

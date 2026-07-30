@@ -107,6 +107,10 @@ pub(crate) fn merge_imported_profiles(
                 provider_version: profile.provider_version,
                 settings_version: profile.settings_version,
                 parameters,
+                // 旧备份没有组合字段：按迁移默认组合物化，与存量修订一致。
+                composition: profile
+                    .composition
+                    .unwrap_or_else(crate::store::PublishComposition::local_default),
                 profile_group: profile.profile_group,
                 created_at: profile.created_at.to_rfc3339(),
                 is_system_default: profile.is_system_default,

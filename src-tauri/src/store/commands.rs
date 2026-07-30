@@ -319,6 +319,7 @@ pub async fn save_profile(
 }
 
 #[tauri::command]
+#[allow(clippy::too_many_arguments)]
 pub async fn update_profile(
     app: tauri::AppHandle,
     repo_id: String,
@@ -327,6 +328,7 @@ pub async fn update_profile(
     provider_id: String,
     parameters: serde_json::Value,
     profile_group: Option<String>,
+    composition: Option<crate::store::PublishComposition>,
 ) -> Result<AppState, AppError> {
     let _timer = crate::commands::middleware::CommandTimer::new("store::commands::update_profile");
     let mut state = get_state();
@@ -338,6 +340,7 @@ pub async fn update_profile(
         provider_id,
         parameters,
         profile_group,
+        composition,
         chrono::Utc::now().to_rfc3339(),
     )?;
 

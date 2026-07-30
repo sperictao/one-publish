@@ -109,7 +109,11 @@ export type UpdaterHelpPaths = { docsPath: string, templatePath: string, };
 
 export type ConfigExport = { version: number, exported_at: string, profiles: Array<ConfigExportProfile>, };
 
-export type ConfigExportProfile = { name: string, provider_id: string, contract_version: number, provider_version: string, settings_version: number, parameters: { [key: string]: JsonValue }, profile_group: string | null, created_at: string, is_system_default: boolean, };
+export type ConfigExportProfile = { name: string, provider_id: string, contract_version: number, provider_version: string, settings_version: number, parameters: { [key: string]: JsonValue }, 
+/**
+ * 修订组合是配置的一部分；缺失（旧备份）时导入方按本地默认组合物化。
+ */
+composition: PublishComposition | null, profile_group: string | null, created_at: string, is_system_default: boolean, };
 
 export type EnvironmentCheckResult = { is_ready: boolean, providers: Array<ProviderStatus>, issues: Array<EnvironmentIssue>, checked_at: string, };
 

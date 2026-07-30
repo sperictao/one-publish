@@ -10,6 +10,7 @@ import type {
   ProjectPublishProfileFile,
   ProjectScanCandidates as TauriProjectScanCandidates,
   ProviderProjectPathKind,
+  PublishComposition,
   PublishConfigStore,
   Repository as TauriRepository,
   RepositoryBranchConnectivityResult,
@@ -78,6 +79,8 @@ export interface ConfigProfile {
   name: string;
   providerId: string;
   parameters: ConfigParameters;
+  /** 当前修订的发布组合；随修订往返，导入预览中可能缺失（旧备份）。 */
+  composition?: PublishComposition | null;
   profileGroup?: string | null;
   createdAt: string;
   isSystemDefault: boolean;
@@ -184,6 +187,7 @@ export function normalizeConfigProfile(
     name: profile.name,
     providerId: currentRevision.providerId,
     parameters: normalizeConfigParameters(currentRevision.parameters),
+    composition: currentRevision.composition,
     profileGroup: profile.profileGroup,
     createdAt: profile.createdAt,
     isSystemDefault: profile.isSystemDefault,
@@ -204,6 +208,7 @@ export function normalizeImportedConfigProfile(
     providerVersion: profile.provider_version,
     settingsVersion: profile.settings_version,
     parameters: normalizeConfigParameters(profile.parameters),
+    composition: profile.composition,
     profileGroup: profile.profile_group,
     createdAt: profile.created_at,
     isSystemDefault: profile.is_system_default,
@@ -230,6 +235,7 @@ export function toExportConfigProfile(
     provider_version: profile.providerVersion,
     settings_version: profile.settingsVersion,
     parameters: profile.parameters,
+    composition: profile.composition ?? null,
     profile_group: profile.profileGroup ?? null,
     created_at: profile.createdAt,
     is_system_default: profile.isSystemDefault,

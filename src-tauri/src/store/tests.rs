@@ -111,6 +111,7 @@ fn repo_publish_config_content_update_appends_revision_without_moving_binding() 
             "dotnet".to_string(),
             serde_json::json!({ "configuration": "Debug" }),
             None,
+            None,
             "2026-07-21T11:00:00Z".to_string(),
         )
         .expect("update profile");
@@ -231,6 +232,7 @@ fn repo_publish_config_selection_and_identity_references_survive_rename() {
             "dotnet".to_string(),
             serde_json::json!({ "configuration": "Release" }),
             Some("Renamed Group".to_string()),
+            None,
             "2026-07-21T11:00:00Z".to_string(),
         )
         .expect("rename profile");
@@ -336,6 +338,7 @@ fn repo_publish_config_import_creates_unselected_identity_and_skips_duplicate_na
             provider_version: "1".to_string(),
             settings_version: 1,
             parameters: serde_json::json!({ "configuration": "Debug" }),
+            composition: super::PublishComposition::local_default(),
             profile_group: Some("Should Not Replace".to_string()),
             created_at: "2026-07-21T11:00:00Z".to_string(),
             is_system_default: false,
@@ -360,6 +363,7 @@ fn repo_publish_config_import_creates_unselected_identity_and_skips_duplicate_na
             provider_version: "7".to_string(),
             settings_version: 3,
             parameters: serde_json::json!({ "futureSetting": true }),
+            composition: super::PublishComposition::local_default(),
             profile_group: None,
             created_at: "2026-07-21T12:00:00Z".to_string(),
             is_system_default: false,
@@ -1353,6 +1357,74 @@ fn load_from_path_removes_an_unreadable_legacy_tauri_release_file_after_backup()
 }
 
 #[test]
+fn update_profile_carries_composition_as_revision_content() {
+    let mut config = RepoPublishConfig::default();
+    let profile = config
+        .create_profile(
+            "Desktop".to_string(),
+            "tauri".to_string(),
+            serde_json::json!({ "target": "x86_64-unknown-linux-gnu" }),
+            None,
+            "2026-07-21T10:00:00Z".to_string(),
+        )
+        .expect("create profile")
+        .clone();
+
+    // 显式携带组合的更新创建携带该组合的新修订：修订是组合的唯一事实源。
+    let mut custom = super::PublishComposition::local_default();
+    custom.delivery_routes.push(super::RevisionDeliveryRoute {
+        route_id: "sftp-mirror".to_string(),
+        required: false,
+        destination: super::RevisionAdapterBinding {
+            adapter_id: "sftp".to_string(),
+            settings_version: 1,
+            settings: serde_json::json!({
+                "host": "mirror.example.invalid",
+                "remote_path": "/srv"
+            }),
+            credentials: BTreeMap::new(),
+        },
+    });
+    config
+        .update_profile(
+            &profile.id,
+            "Desktop".to_string(),
+            "tauri".to_string(),
+            serde_json::json!({ "target": "x86_64-unknown-linux-gnu" }),
+            None,
+            Some(custom.clone()),
+            "2026-07-22T10:00:00Z".to_string(),
+        )
+        .expect("update profile with explicit composition");
+    let with_custom = config.profile(&profile.id).expect("profile");
+    assert_eq!(with_custom.revisions.len(), 2, "组合变化必须产生新修订");
+    assert_eq!(
+        with_custom.current_revision().expect("current").composition,
+        custom
+    );
+
+    // 未携带组合的更新从当前修订继承，保存不得重置回默认组合。
+    config
+        .update_profile(
+            &profile.id,
+            "Desktop".to_string(),
+            "tauri".to_string(),
+            serde_json::json!({ "target": "aarch64-apple-darwin" }),
+            None,
+            None,
+            "2026-07-23T10:00:00Z".to_string(),
+        )
+        .expect("update profile without composition");
+    let inherited = config.profile(&profile.id).expect("profile");
+    assert_eq!(inherited.revisions.len(), 3);
+    assert_eq!(
+        inherited.current_revision().expect("current").composition,
+        custom,
+        "未显式携带组合的编辑必须继承而不是重置"
+    );
+}
+
+#[test]
 fn update_profile_inherits_release_settings_when_the_editor_omits_them() {
     let mut config = RepoPublishConfig::default();
     let release_settings = serde_json::json!({ "tagPrefix": "v", "appName": "Demo" });
@@ -1378,6 +1450,7 @@ fn update_profile_inherits_release_settings_when_the_editor_omits_them() {
             "tauri".to_string(),
             serde_json::json!({ "target": "aarch64-apple-darwin" }),
             None,
+            None,
             "2026-07-22T10:00:00Z".to_string(),
         )
         .expect("update profile");
@@ -1396,6 +1469,7 @@ fn update_profile_inherits_release_settings_when_the_editor_omits_them() {
             "Desktop".to_string(),
             "tauri".to_string(),
             serde_json::json!({ "releaseSettings": changed_settings.clone() }),
+            None,
             None,
             "2026-07-23T10:00:00Z".to_string(),
         )
@@ -1431,6 +1505,7 @@ fn update_profile_does_not_carry_release_settings_across_providers() {
             "Desktop".to_string(),
             "cargo".to_string(),
             serde_json::json!({ "release": true }),
+            None,
             None,
             "2026-07-22T10:00:00Z".to_string(),
         )

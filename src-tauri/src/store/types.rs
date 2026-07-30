@@ -198,6 +198,7 @@ impl PublishConfigurationRevision {
         parameters: serde_json::Value,
         created_at: String,
         sequence: u32,
+        composition: PublishComposition,
     ) -> Self {
         let provider_version = crate::provider::registry::ProviderRegistry::new()
             .get(&provider_id)
@@ -213,7 +214,7 @@ impl PublishConfigurationRevision {
             provider_version,
             settings_version: CURRENT_SETTINGS_VERSION,
             parameters,
-            composition: PublishComposition::local_default(),
+            composition,
         }
     }
 
@@ -224,6 +225,7 @@ impl PublishConfigurationRevision {
         contract_version: u32,
         provider_version: String,
         settings_version: u32,
+        composition: PublishComposition,
     ) -> Self {
         Self {
             id: new_configuration_identity("configuration-revision"),
@@ -234,7 +236,7 @@ impl PublishConfigurationRevision {
             provider_version,
             settings_version,
             parameters,
-            composition: PublishComposition::local_default(),
+            composition,
         }
     }
 }
@@ -297,6 +299,7 @@ pub(crate) struct ConfigurationImport {
     pub provider_version: String,
     pub settings_version: u32,
     pub parameters: serde_json::Value,
+    pub composition: PublishComposition,
     pub profile_group: Option<String>,
     pub created_at: String,
     pub is_system_default: bool,
@@ -348,6 +351,7 @@ impl ConfigProfile {
             parameters,
             created_at.clone(),
             1,
+            PublishComposition::local_default(),
         );
         let revision_id = revision.id.clone();
         let blocked_reason = Self::revision_blocked_reason(&revision);
@@ -420,6 +424,7 @@ impl ConfigProfile {
                 parameters,
                 self.created_at.clone(),
                 1,
+                PublishComposition::local_default(),
             );
             self.current_revision_id = revision.id.clone();
             self.blocked_reason = Self::revision_blocked_reason(&revision);
@@ -624,6 +629,7 @@ impl RepoPublishConfig {
             import.contract_version,
             import.provider_version,
             import.settings_version,
+            import.composition,
         );
         let profile = ConfigProfile::new_imported(
             import.name,
@@ -759,6 +765,7 @@ impl RepoPublishConfig {
         Ok(())
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub fn update_profile(
         &mut self,
         profile_id: &str,
@@ -766,6 +773,7 @@ impl RepoPublishConfig {
         provider_id: String,
         mut parameters: serde_json::Value,
         profile_group: Option<String>,
+        composition: Option<PublishComposition>,
         updated_at: String,
     ) -> Result<(), crate::errors::AppError> {
         // 参数编辑器只管理 schema 声明的命令参数；未显式携带 `releaseSettings`
@@ -822,8 +830,12 @@ impl RepoPublishConfig {
                 "profile_revision_not_found",
             )
         })?;
+        // 组合与参数一样属于修订：未显式携带的更新从当前修订继承，保存不得
+        // 把 Backend、Store、Processor 或 Delivery Route 静默重置回默认组合。
+        let composition = composition.unwrap_or_else(|| current_revision.composition.clone());
         let content_changed = current_revision.provider_id != provider_id
-            || current_revision.parameters != parameters;
+            || current_revision.parameters != parameters
+            || current_revision.composition != composition;
 
         profile.name = name;
         profile.profile_group = profile_group
@@ -843,6 +855,7 @@ impl RepoPublishConfig {
                 parameters,
                 updated_at,
                 sequence,
+                composition,
             );
             profile.current_revision_id = revision.id.clone();
             profile.blocked_reason = ConfigProfile::revision_blocked_reason(&revision);
