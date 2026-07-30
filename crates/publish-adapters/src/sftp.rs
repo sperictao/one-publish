@@ -16,6 +16,17 @@ use crate::{
 
 pub const SFTP_DESTINATION_ID: &str = "sftp";
 
+/// SFTP 目标定位符：主机 + 远端根路径唯一确定一个外部交付位置。
+pub(crate) fn delivery_locator(settings: &Value) -> String {
+    let text = |key: &str| {
+        settings
+            .get(key)
+            .and_then(Value::as_str)
+            .unwrap_or_default()
+    };
+    format!("{}:{}", text("host"), text("remote_path"))
+}
+
 /// 远端交付记录文件：随产物一起交付的路线专属清单，先于所有产物提交。
 /// 它让每个远端交付携带自己的 Manifest digest——幂等探测据此区分
 /// "同一份发布"与"占用同一路径的另一份内容"（ADR-0051）。

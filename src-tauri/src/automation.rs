@@ -533,35 +533,15 @@ fn delivery_destination_namespaces(
     Ok(namespaces)
 }
 
-/// 目标命名空间 = 交付协议 + 目标定位符；相同命名空间意味着两个绑定可能写入同一
-/// 外部位置。定位符为空（例如目录由运行时派生的本地路线）或 Adapter 未知时没有
-/// 可判定的外部位置，不构成交付冲突命名空间。
-///
-/// 过渡实现：定位符知识本应由 Delivery Destination 声明（架构文档 §4"目标命名
-/// 空间"归 Destination 负责），待 Destination 合同提供命名空间能力后此处收敛为
-/// 纯转发；内置目录期间集中在本函数一处。
+/// 目标命名空间由 Delivery Destination 自己声明（publish-adapters），控制面
+/// 只转发、不识别 Adapter 类型。自动化冲突域是单仓库配置，仓库范围的
+/// Destination 以字面 "repository" 为定位符。
 fn route_delivery_namespace(destination: &crate::store::RevisionAdapterBinding) -> Option<String> {
-    let text = |key: &str| {
-        destination
-            .settings
-            .as_object()
-            .and_then(|values| values.get(key))
-            .and_then(Value::as_str)
-            .unwrap_or_default()
-            .to_string()
-    };
-    let locator = match destination.adapter_id.as_str() {
-        // GitHub Release 的目标范围是当前仓库的 Release 区。
-        publish_adapters::GITHUB_RELEASE_DESTINATION_ID => "repository".to_string(),
-        publish_adapters::SFTP_DESTINATION_ID => {
-            format!("{}:{}", text("host"), text("remote_path"))
-        }
-        crate::store::LOCAL_DESTINATION_ID => text("directory"),
-        // 未知 Adapter 不静默猜测定位符；其可用性由注册表在执行前明确拒绝。
-        _ => return None,
-    };
-    (!locator.trim_matches(':').is_empty())
-        .then(|| format!("{}:{locator}", destination.adapter_id))
+    publish_adapters::builtin_delivery_namespace(
+        &destination.adapter_id,
+        &destination.settings,
+        "repository",
+    )
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
@@ -2029,8 +2009,7 @@ mod tests {
                 .find(|profile| profile.id == profile_id)
                 .expect("fixture profile");
             let revision = profile.current_revision().expect("fixture revision");
-            let backend =
-                automation_backend(FAKE_AUTOMATION_BACKEND_ID).expect("fixture backend");
+            let backend = automation_backend(FAKE_AUTOMATION_BACKEND_ID).expect("fixture backend");
             AutomationBinding {
                 id: id.to_string(),
                 configuration_id: profile.id.clone(),
@@ -2353,6 +2332,7 @@ mod tests {
                             .expect("serialize changed release settings")
                 }),
                 None,
+                None,
                 "2026-07-22T11:00:00Z".to_string(),
             )
             .expect("save new configuration revision");
@@ -2482,6 +2462,7 @@ mod tests {
                 "Stable".to_string(),
                 "dotnet".to_string(),
                 serde_json::json!({ "configuration": "Debug" }),
+                None,
                 None,
                 "2026-07-22T11:00:00Z".to_string(),
             )

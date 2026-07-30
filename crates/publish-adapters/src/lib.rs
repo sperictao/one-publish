@@ -37,7 +37,9 @@ pub use github_release::{
     FAKE_OPERATION_DELETE_ASSET, FAKE_OPERATION_FIND, FAKE_OPERATION_PUBLISH,
     FAKE_OPERATION_UPLOAD, GITHUB_RELEASE_DESTINATION_ID,
 };
-pub use local::{LocalDirectoryDestination, LocalExecutionBackend, TemporaryArtifactStore};
+pub use local::{
+    LocalDirectoryDestination, LocalExecutionBackend, TemporaryArtifactStore, LOCAL_DESTINATION_ID,
+};
 pub use processors::{
     ChecksumProcessor, CustomCommandProcessor, CHECKSUM_MANIFEST_ROLE, CHECKSUM_PROCESSOR_ID,
     CUSTOM_COMMAND_GATE_CAPABILITY, CUSTOM_COMMAND_PROCESSOR_ID,
@@ -59,6 +61,26 @@ pub const AUTOMATION_PROJECTION_CAPABILITY: &str = "automation-projection";
 pub const STRUCTURED_PLAN_EXECUTION_CAPABILITY: &str = "structured-plan-execution";
 pub const ARTIFACT_CANDIDATE_CAPABILITY: &str = "artifact-candidate";
 pub const ARTIFACT_VERIFIED_CAPABILITY: &str = "artifact-verified";
+
+/// 目标命名空间 = 交付协议 + 目标定位符；相同命名空间意味着两次发布可能
+/// 写入同一外部位置。定位符知识由各 Delivery Destination 在本 crate 内声明，
+/// 控制面与运行时只转发，不识别 Adapter 类型（架构 §4）。`repository` 是
+/// 调用方坐标系里的当前仓库身份，仅仓库范围的 Destination 使用。定位符为空
+/// （例如目录由运行时派生的本地路线）时没有可判定的外部位置；未知 Adapter
+/// 不静默猜测定位符，其可用性由注册表在执行前明确拒绝。
+pub fn builtin_delivery_namespace(
+    adapter_id: &str,
+    settings: &serde_json::Value,
+    repository: &str,
+) -> Option<String> {
+    let locator = match adapter_id {
+        GITHUB_RELEASE_DESTINATION_ID => github_release::delivery_locator(repository),
+        SFTP_DESTINATION_ID => sftp::delivery_locator(settings),
+        LOCAL_DESTINATION_ID => local::delivery_locator(settings),
+        _ => return None,
+    };
+    (!locator.trim_matches(':').is_empty()).then(|| format!("{adapter_id}:{locator}"))
+}
 
 pub(crate) fn action_name(node: &PlanNode) -> Result<&str, PublishError> {
     match &node.operation {
@@ -1129,4 +1151,58 @@ fn available_versions<T: ?Sized>(adapters: &BTreeMap<(String, u32), Arc<T>>, id:
         .keys()
         .filter_map(|(adapter_id, version)| (adapter_id == id).then_some(*version))
         .collect()
+}
+
+#[cfg(test)]
+mod delivery_namespace_tests {
+    use super::*;
+
+    #[test]
+    fn builtin_delivery_namespace_is_declared_per_destination() {
+        assert_eq!(
+            builtin_delivery_namespace(
+                GITHUB_RELEASE_DESTINATION_ID,
+                &serde_json::json!({}),
+                "/repo/a"
+            ),
+            Some("github-release:/repo/a".to_string())
+        );
+        assert_eq!(
+            builtin_delivery_namespace(
+                SFTP_DESTINATION_ID,
+                &serde_json::json!({
+                    "host": "mirror.example.invalid",
+                    "remote_path": "/srv/releases"
+                }),
+                "/repo/a"
+            ),
+            Some("sftp:mirror.example.invalid:/srv/releases".to_string())
+        );
+        assert_eq!(
+            builtin_delivery_namespace(
+                LOCAL_DESTINATION_ID,
+                &serde_json::json!({ "directory": "/tmp/out" }),
+                "/repo/a"
+            ),
+            Some("local-directory:/tmp/out".to_string())
+        );
+    }
+
+    #[test]
+    fn destinations_without_a_determinable_location_declare_no_namespace() {
+        // 目录由运行时派生的本地路线、未填写目标的 SFTP、未知 Adapter 都没有
+        // 可判定的外部位置，不构成命名空间。
+        assert_eq!(
+            builtin_delivery_namespace(LOCAL_DESTINATION_ID, &serde_json::json!({}), "/repo/a"),
+            None
+        );
+        assert_eq!(
+            builtin_delivery_namespace(SFTP_DESTINATION_ID, &serde_json::json!({}), "/repo/a"),
+            None
+        );
+        assert_eq!(
+            builtin_delivery_namespace("unknown-destination", &serde_json::json!({}), "/repo/a"),
+            None
+        );
+    }
 }

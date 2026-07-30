@@ -17,6 +17,12 @@ use crate::{
 
 pub const GITHUB_RELEASE_DESTINATION_ID: &str = "github-release";
 
+/// GitHub Release 的目标范围是交付仓库的 Release 区：定位符即调用方坐标系
+/// 里的仓库身份（自动化冲突域为字面 "repository"，进程级租约为仓库路径）。
+pub(crate) fn delivery_locator(repository: &str) -> String {
+    repository.to_string()
+}
+
 const STAGE_ACTION: &str = "stage_github_release";
 const PUBLISH_ACTION: &str = "publish_github_release";
 const OBSERVE_ACTION: &str = "observe_github_release";

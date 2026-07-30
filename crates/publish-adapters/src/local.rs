@@ -406,6 +406,17 @@ impl ArtifactStore for TemporaryArtifactStore {
     }
 }
 
+pub const LOCAL_DESTINATION_ID: &str = "local-directory";
+
+/// 本地目录定位符：封存设置中的交付目录；目录未封存（由运行时派生）时为空。
+pub(crate) fn delivery_locator(settings: &serde_json::Value) -> String {
+    settings
+        .get("directory")
+        .and_then(serde_json::Value::as_str)
+        .unwrap_or_default()
+        .to_string()
+}
+
 pub struct LocalDirectoryDestination {
     descriptor: AdapterDescriptor,
     default_directory: String,
@@ -416,7 +427,7 @@ impl LocalDirectoryDestination {
         Self {
             descriptor: AdapterDescriptor::new(
                 AdapterKind::DeliveryDestination,
-                "local-directory",
+                LOCAL_DESTINATION_ID,
                 1,
                 AdapterSchema::new(1).with_required_string("directory"),
                 PublishingCapability {

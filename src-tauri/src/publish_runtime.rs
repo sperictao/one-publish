@@ -1661,12 +1661,7 @@ fn start_runtime_with_repository(
     // 资源参与竞争。
     let now = unix_now_duration()?;
     let now_seconds = now.as_secs();
-    let lease_resources = publish_lease_resources(
-        &prepared,
-        &repository_path,
-        &delivery_directory,
-        &release_identity,
-    );
+    let lease_resources = publish_lease_resources(&prepared, &repository_path, &release_identity);
     restore_persisted_attempt_leases(&journal_repository, &leases, now_seconds, &lease_resources)?;
     let lease = leases
         .acquire(
@@ -1775,9 +1770,10 @@ fn prepared_release_input(prepared: &PreparedPublishPlan, key: &str) -> Result<S
 fn publish_lease_resources(
     prepared: &PreparedPublishPlan,
     repository_path: &str,
-    delivery_directory: &str,
     release_identity: &ReleaseIdentity,
 ) -> BTreeSet<PublishResource> {
+    // 就地构建会修改仓库工作区（构建产物、Release Gate），整仓写租约反映
+    // 这一真实共享资源；构建获得隔离源快照后可收窄为计划声明的源变更。
     let mut resources = BTreeSet::from([
         PublishResource::new(PublishResourceKind::RepositoryWrite, repository_path),
         PublishResource::new(
@@ -1789,11 +1785,23 @@ fn publish_lease_resources(
                 release_identity.version
             ),
         ),
-        PublishResource::new(
-            PublishResourceKind::DestinationNamespace,
-            format!("{LOCAL_DESTINATION_ID}:{delivery_directory}"),
-        ),
     ]);
+    // 目标命名空间从计划封存的交付路线推导（ADR-0042），定位符由 Destination
+    // 声明；租约坐标系是进程级的，仓库范围的 Destination 以仓库路径为定位符。
+    // 无可判定外部位置的路线不产生租约资源。
+    for route in &prepared.snapshot.adapters.delivery_routes {
+        let settings = Value::Object(route.binding.settings.values.clone().into_iter().collect());
+        if let Some(namespace) = publish_adapters::builtin_delivery_namespace(
+            &route.binding.adapter.id,
+            &settings,
+            repository_path,
+        ) {
+            resources.insert(PublishResource::new(
+                PublishResourceKind::DestinationNamespace,
+                namespace,
+            ));
+        }
+    }
     if let Some(digest) = &prepared.snapshot.promoted_manifest_digest {
         resources.insert(PublishResource::new(
             PublishResourceKind::ArtifactIdentity,
@@ -1810,11 +1818,9 @@ fn acquire_or_renew_attempt_lease(
     now_seconds: u64,
 ) -> Result<PublishResourceLease, AppError> {
     let attempt_id = &loaded.view.attempt.attempt_id;
-    let delivery_directory = prepared_release_input(&loaded.prepared, "delivery_directory")?;
     let resources = publish_lease_resources(
         &loaded.prepared,
         &loaded.repository_path,
-        &delivery_directory,
         &loaded.view.attempt.release_identity,
     );
     restore_persisted_attempt_leases(repository, leases, now_seconds, &resources)?;
@@ -5840,6 +5846,35 @@ mod tests {
     }
 
     #[test]
+    fn lease_resources_derive_destination_namespaces_from_sealed_routes() {
+        let repository = tempfile::tempdir().expect("create repository");
+        let delivery = tempfile::tempdir().expect("create delivery parent");
+        let output_directory = delivery.path().join("publish-output");
+        let prepared = prepare_test_runtime(repository.path(), &output_directory);
+        let prepared: PreparedPublishPlan =
+            serde_json::from_str(&prepared.runtime_token).expect("decode prepared runtime");
+        let release_identity =
+            super::release_identity(&prepared.snapshot).expect("prepared release identity");
+        let repository_path = repository.path().to_string_lossy().to_string();
+        let delivery_directory = super::prepared_release_input(&prepared, "delivery_directory")
+            .expect("prepared delivery directory");
+
+        let resources =
+            super::publish_lease_resources(&prepared, &repository_path, &release_identity);
+
+        // 本地路线的目录在封存时物化进路线设置；目标命名空间由 Destination
+        // 声明并从封存路线推导，而不是固定写死 local 目录。
+        assert!(resources.contains(&publish_domain::PublishResource::new(
+            publish_domain::PublishResourceKind::RepositoryWrite,
+            &repository_path
+        )));
+        assert!(resources.contains(&publish_domain::PublishResource::new(
+            publish_domain::PublishResourceKind::DestinationNamespace,
+            format!("local-directory:{delivery_directory}")
+        )));
+    }
+
+    #[test]
     fn running_attempt_heartbeat_renews_and_persists_its_lease() {
         let repository = tempfile::tempdir().expect("create repository");
         let delivery = tempfile::tempdir().expect("create delivery parent");
@@ -5851,8 +5886,6 @@ mod tests {
         let attempt_id = "attempt-heartbeat";
         let backend_run_id = "backend-heartbeat";
         let repository_path = repository.path().to_string_lossy().to_string();
-        let delivery_directory = super::prepared_release_input(&prepared, "delivery_directory")
-            .expect("prepared delivery directory");
         let release_identity =
             super::release_identity(&prepared.snapshot).expect("prepared release identity");
         let now_seconds = super::publish_unix_now_seconds().expect("current time");
@@ -5860,12 +5893,7 @@ mod tests {
         let lease = leases
             .acquire(
                 attempt_id,
-                super::publish_lease_resources(
-                    &prepared,
-                    &repository_path,
-                    &delivery_directory,
-                    &release_identity,
-                ),
+                super::publish_lease_resources(&prepared, &repository_path, &release_identity),
                 now_seconds,
                 4,
             )
@@ -5940,20 +5968,13 @@ mod tests {
             .expect("canonical repository")
             .to_string_lossy()
             .to_string();
-        let delivery_directory = super::prepared_release_input(&prepared, "delivery_directory")
-            .expect("prepared delivery directory");
         let release_identity =
             super::release_identity(&prepared.snapshot).expect("prepared release identity");
         let expired_leases = Arc::new(publish_runner_core::PublishLeaseCoordinator::new());
         let expired = expired_leases
             .acquire(
                 attempt_id,
-                super::publish_lease_resources(
-                    &prepared,
-                    &repository_path,
-                    &delivery_directory,
-                    &release_identity,
-                ),
+                super::publish_lease_resources(&prepared, &repository_path, &release_identity),
                 1,
                 1,
             )
@@ -6025,8 +6046,6 @@ mod tests {
             .expect("canonical repository")
             .to_string_lossy()
             .to_string();
-        let delivery_directory = super::prepared_release_input(&prepared, "delivery_directory")
-            .expect("prepared delivery directory");
         let release_identity =
             super::release_identity(&prepared.snapshot).expect("prepared release identity");
         let running_attempt_id = "attempt-running-before-terminal";
@@ -6034,12 +6053,7 @@ mod tests {
         let expired = leases
             .acquire(
                 running_attempt_id,
-                super::publish_lease_resources(
-                    &prepared,
-                    &repository_path,
-                    &delivery_directory,
-                    &release_identity,
-                ),
+                super::publish_lease_resources(&prepared, &repository_path, &release_identity),
                 1,
                 1,
             )
@@ -6147,8 +6161,6 @@ mod tests {
             .expect("canonical first repository")
             .to_string_lossy()
             .to_string();
-        let delivery_a_path = super::prepared_release_input(&prepared_a, "delivery_directory")
-            .expect("first delivery directory");
         let release_a =
             super::release_identity(&prepared_a.snapshot).expect("first release identity");
         let now_seconds = super::unix_now_seconds().expect("current time");
@@ -6156,12 +6168,7 @@ mod tests {
         let lease = publish_runner_core::PublishLeaseCoordinator::new()
             .acquire(
                 corrupt_attempt_id,
-                super::publish_lease_resources(
-                    &prepared_a,
-                    &repository_a_path,
-                    &delivery_a_path,
-                    &release_a,
-                ),
+                super::publish_lease_resources(&prepared_a, &repository_a_path, &release_a),
                 now_seconds,
                 super::LOCAL_LEASE_TTL_SECONDS,
             )
@@ -6630,13 +6637,9 @@ mod tests {
             Some(RuntimeAttemptStatus::Published)
         );
 
-        let delivery_directory =
-            super::prepared_release_input(&loaded.prepared, "delivery_directory")
-                .expect("persisted delivery directory");
         let resources = super::publish_lease_resources(
             &loaded.prepared,
             &scope_path,
-            &delivery_directory,
             &loaded.view.attempt.release_identity,
         );
         let running_leases = Arc::new(publish_runner_core::PublishLeaseCoordinator::new());

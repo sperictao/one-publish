@@ -98,7 +98,7 @@ pub struct ConfigProfile {
 /// 首期内置 Adapter 的稳定标识；发布组合只允许绑定注册表内的内置实现。
 pub(crate) const LOCAL_BACKEND_ID: &str = "local-execution";
 pub(crate) const TEMPORARY_STORE_ID: &str = "temporary-artifact-store";
-pub(crate) const LOCAL_DESTINATION_ID: &str = "local-directory";
+pub(crate) use publish_adapters::LOCAL_DESTINATION_ID;
 
 /// 修订内对一个 Adapter 的选择与设置绑定；settings 是该 Adapter Schema 的非秘密
 /// JSON 对象，credentials 把 Adapter 声明的凭据要求绑定到非秘密引用，
