@@ -13,8 +13,8 @@ use publish_adapters::{
     AdapterRegistry, ChecksumProcessor, GhCliGitHubReleaseApi, GitHubReleaseDestination,
     LocalDirectoryDestination, LocalExecutionBackend, OpenSshSftpTransport, ProjectProvider,
     SftpDeliveryDestination, TauriBuildDriver, TauriProjectProvider, TemporaryArtifactStore,
-    CHECKSUM_PROCESSOR_ID, GITHUB_RELEASE_DESTINATION_ID, SFTP_DESTINATION_ID,
-    TAURI_INSPECT_ACTION, TAURI_PROVIDER_ID,
+    ARTIFACT_CANDIDATE_CAPABILITY, CHECKSUM_PROCESSOR_ID, GITHUB_RELEASE_DESTINATION_ID,
+    SFTP_DESTINATION_ID, TAURI_INSPECT_ACTION, TAURI_PROVIDER_ID,
 };
 use publish_domain::{
     AdapterBinding, AdapterDescriptor, AdapterIdentity, AdapterKind, AdapterSchema,
@@ -54,7 +54,6 @@ mod journal;
 /// 桌面端产物存储的明确保留期限：7 天（ADR-0038）。
 const ARTIFACT_RETENTION_SECONDS: u64 = 604_800;
 const STRUCTURED_PLAN_EXECUTION: &str = "structured-plan-execution";
-const ARTIFACT_VERIFIED: &str = "artifact-verified";
 const RUNTIME_REVISION: &str = "one-publish-runtime-v2";
 /// Tauri 配置的 Release Gate 计划节点动作；门禁位于构建与交付副作用之前（ADR-0014）。
 const TAURI_RELEASE_GATE_ACTION: &str = "run_release_gate";
@@ -769,7 +768,9 @@ impl SelectedProjectProvider {
                 1,
                 AdapterSchema::new(1).with_required_string("spec_json"),
                 PublishingCapability {
-                    provides: vec![Capability::new(ARTIFACT_VERIFIED, 1)],
+                    // 构建产物是未验证候选；摘要验证与所有 Provider 一致，
+                    // 由修订组合声明的 Artifact Processor 提供（ADR-0024）。
+                    provides: vec![Capability::new(ARTIFACT_CANDIDATE_CAPABILITY, 1)],
                     requires: vec![CapabilityRequirement::exact(STRUCTURED_PLAN_EXECUTION, 1)],
                 },
             )
@@ -2159,7 +2160,7 @@ fn build_snapshot(
             Value::String(project_identity),
         ),
     ]);
-    let (project_provider, provider_uses_composition_processors) = match tauri_binding {
+    let project_provider = match tauri_binding {
         Some(binding) => {
             // Tauri 发布身份使用 Provider 按版本来源语义解析的版本；
             // Release Gate 密封进发布输入，保持 Tauri adapter 的 (tauri, v1) 设置合同唯一。
@@ -2173,36 +2174,24 @@ fn build_snapshot(
                     serde_json::to_value(release_gates).map_err(runtime_serialization_error)?,
                 );
             }
-            (
-                AdapterBinding::new(
-                    "project",
-                    AdapterIdentity::new(AdapterKind::ProjectProvider, TAURI_PROVIDER_ID, 1),
-                    AdapterSettings::new(1)
-                        .with_value("config_path", Value::String(binding.config_path.clone()))
-                        .with_value(
-                            "build_driver",
-                            Value::String(binding.build_driver.name().to_string()),
-                        ),
-                ),
-                true,
-            )
-        }
-        // 遗留 Selected Provider 桥接自行声明已验证产物，不经处理器管道。
-        None => (
             AdapterBinding::new(
                 "project",
-                AdapterIdentity::new(AdapterKind::ProjectProvider, SELECTED_PROVIDER_ID, 1),
-                AdapterSettings::new(1).with_value("spec_json", Value::String(spec_json)),
-            ),
-            false,
+                AdapterIdentity::new(AdapterKind::ProjectProvider, TAURI_PROVIDER_ID, 1),
+                AdapterSettings::new(1)
+                    .with_value("config_path", Value::String(binding.config_path.clone()))
+                    .with_value(
+                        "build_driver",
+                        Value::String(binding.build_driver.name().to_string()),
+                    ),
+            )
+        }
+        None => AdapterBinding::new(
+            "project",
+            AdapterIdentity::new(AdapterKind::ProjectProvider, SELECTED_PROVIDER_ID, 1),
+            AdapterSettings::new(1).with_value("spec_json", Value::String(spec_json)),
         ),
     };
-    let adapters = composition_selection(
-        composition,
-        project_provider,
-        provider_uses_composition_processors,
-        delivery_directory,
-    )?;
+    let adapters = composition_selection(composition, project_provider, delivery_directory)?;
 
     Ok(PlanningInputSnapshot {
         version: PLANNING_INPUT_SNAPSHOT_VERSION,
@@ -2222,25 +2211,20 @@ fn build_snapshot(
 fn composition_selection(
     composition: &PublishComposition,
     project_provider: AdapterBinding,
-    include_processors: bool,
     delivery_directory: &str,
 ) -> Result<AdapterSelection, AppError> {
-    let artifact_processors = if include_processors {
-        composition
-            .artifact_processors
-            .iter()
-            .enumerate()
-            .map(|(index, binding)| {
-                composition_binding(
-                    &format!("processor-{}", index + 1),
-                    AdapterKind::ArtifactProcessor,
-                    binding,
-                )
-            })
-            .collect::<Result<Vec<_>, _>>()?
-    } else {
-        Vec::new()
-    };
+    let artifact_processors = composition
+        .artifact_processors
+        .iter()
+        .enumerate()
+        .map(|(index, binding)| {
+            composition_binding(
+                &format!("processor-{}", index + 1),
+                AdapterKind::ArtifactProcessor,
+                binding,
+            )
+        })
+        .collect::<Result<Vec<_>, _>>()?;
 
     let execution_backend = composition_binding(
         "backend",
@@ -3898,6 +3882,7 @@ mod tests {
                 .collect::<Vec<_>>(),
             vec![
                 RuntimePlanStage::Build,
+                RuntimePlanStage::ProcessArtifacts,
                 RuntimePlanStage::PersistManifest,
                 RuntimePlanStage::StageRoutes,
                 RuntimePlanStage::PublishRoutes,
@@ -5297,7 +5282,6 @@ mod tests {
                 ),
                 super::AdapterSettings::new(1),
             ),
-            true,
             "/tmp/delivery-root",
         )
         .expect("materialize the revision composition");
@@ -5368,7 +5352,6 @@ mod tests {
                 super::AdapterSettings::new(1)
                     .with_value("spec_json", serde_json::Value::String("{}".to_string())),
             ),
-            false,
             "/tmp/delivery-root",
         )
         .expect("selection does not gate adapter availability");
@@ -6740,7 +6723,8 @@ mod tests {
 
         assert_eq!(first.attempt.status, RuntimeAttemptStatus::Published);
         let manifest = first.attempt.manifest.expect("sealed manifest");
-        assert_eq!(manifest.artifact_count, 2);
+        // 两份 Provider 输出加上校验和处理器派生的 SHA256SUMS 清单。
+        assert_eq!(manifest.artifact_count, 3);
         assert_eq!(
             first.attempt.manifest_digest.as_deref(),
             Some(manifest.digest.as_str())
@@ -6796,7 +6780,7 @@ mod tests {
     }
 
     #[test]
-    fn go_file_output_seals_and_delivers_one_artifact() {
+    fn go_file_output_seals_and_delivers_the_file_with_derived_checksums() {
         let repository = tempfile::tempdir().expect("create repository");
         let delivery = tempfile::tempdir().expect("create delivery parent");
         let output_file = delivery.path().join("one-publish-app");
@@ -6851,13 +6835,14 @@ mod tests {
         .expect("run Go file output runtime");
 
         assert_eq!(result.attempt.status, RuntimeAttemptStatus::Published);
+        // 单文件 Provider 输出加上校验和处理器派生的 SHA256SUMS 清单。
         assert_eq!(
             result
                 .attempt
                 .manifest
                 .as_ref()
                 .map(|manifest| manifest.artifact_count),
-            Some(1)
+            Some(2)
         );
         assert_eq!(result.attempt.receipts.len(), 1);
         let delivered = std::path::PathBuf::from(&result.attempt.receipts[0].external_reference)
