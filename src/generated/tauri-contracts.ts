@@ -113,7 +113,12 @@ export type ConfigExportProfile = { name: string, provider_id: string, contract_
 /**
  * 修订组合是配置的一部分；缺失（旧备份）时导入方按本地默认组合物化。
  */
-composition: PublishComposition | null, profile_group: string | null, created_at: string, is_system_default: boolean, };
+composition: PublishComposition | null, 
+/**
+ * 修订绑定的 Project Candidate（仓库相对、可移植）；旧备份缺失时按
+ * 存量宽限导入为未绑定（决议 #78）。
+ */
+project_binding: string | null, profile_group: string | null, created_at: string, is_system_default: boolean, };
 
 export type EnvironmentCheckResult = { is_ready: boolean, providers: Array<ProviderStatus>, issues: Array<EnvironmentIssue>, checked_at: string, };
 
@@ -197,7 +202,13 @@ export type PublishComposition = { executionBackend: RevisionAdapterBinding, art
 
 export type PublishConfigStore = { configuration: string, runtime: string, framework: string, selfContained: boolean, outputDir: string, noBuild: boolean, noRestore: boolean, verbosity: string, noLogo: boolean, deleteExistingFiles: boolean, properties: { [key: string]: string }, useProfile: boolean, profileName: string, };
 
-export type PublishConfigurationRevision = { id: string, sequence: number, createdAt: string, contractVersion: number, providerId: string, providerVersion: string, settingsVersion: number, parameters: JsonValue, composition: PublishComposition, };
+export type PublishConfigurationRevision = { id: string, sequence: number, createdAt: string, contractVersion: number, providerId: string, providerVersion: string, settingsVersion: number, parameters: JsonValue, composition: PublishComposition, 
+/**
+ * 修订绑定的 Project Candidate 身份（`{provider}:{仓库相对选择子}`）。
+ * 创建时固化、更新时继承，换绑是显式动作；存量修订为 None 时 prepare
+ * 跳过候选校验，下次保存修订自然补固化（Issue #49，决议 #78）。
+ */
+projectBinding?: string, };
 
 export type RepoPublishConfig = { selectedPreset: string, isCustomMode: boolean, customConfig: PublishConfigStore, profiles: Array<ConfigProfile>, bindings: Array<AutomationBinding>, appliedBundles: Array<AppliedProjectionBundle>, };
 

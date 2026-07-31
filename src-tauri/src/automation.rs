@@ -1580,6 +1580,7 @@ mod tests {
                 provider_id.to_string(),
                 serde_json::json!({ "configuration": "Release" }),
                 None,
+                None,
                 "2026-07-21T10:00:00Z".to_string(),
             )
             .expect("create fixture profile")
@@ -1627,6 +1628,7 @@ mod tests {
                 serde_json::json!({
                     crate::tauri_release::RELEASE_SETTINGS_PARAMETER: release_settings
                 }),
+                None,
                 None,
                 "2026-07-21T10:00:00Z".to_string(),
             )
@@ -1698,6 +1700,7 @@ mod tests {
                 serde_json::json!({
                     crate::tauri_release::RELEASE_SETTINGS_PARAMETER: release_settings.clone()
                 }),
+                None,
                 None,
                 "2026-07-21T10:00:00Z".to_string(),
             )
@@ -1841,6 +1844,7 @@ mod tests {
                             .expect("serialize release settings")
                 }),
                 None,
+                None,
                 "2026-07-22T10:05:00Z".to_string(),
             )
             .expect("create nightly profile")
@@ -1969,6 +1973,7 @@ mod tests {
                 "Nightly".to_string(),
                 "dotnet".to_string(),
                 serde_json::json!({ "configuration": "Release" }),
+                None,
                 None,
                 NOW.to_string(),
             )
@@ -2333,6 +2338,7 @@ mod tests {
                 }),
                 None,
                 None,
+                None,
                 "2026-07-22T11:00:00Z".to_string(),
             )
             .expect("save new configuration revision");
@@ -2464,6 +2470,7 @@ mod tests {
                 serde_json::json!({ "configuration": "Debug" }),
                 None,
                 None,
+                None,
                 "2026-07-22T11:00:00Z".to_string(),
             )
             .expect("save new revision");
@@ -2585,6 +2592,7 @@ mod tests {
                 "dotnet".to_string(),
                 serde_json::json!({ "configuration": "Debug" }),
                 None,
+                None,
                 "2026-07-21T10:05:00Z".to_string(),
             )
             .expect("create nightly profile")
@@ -2662,6 +2670,7 @@ mod tests {
                 "Nightly".to_string(),
                 "dotnet".to_string(),
                 serde_json::json!({ "configuration": "Debug" }),
+                None,
                 None,
                 "2026-07-21T10:05:00Z".to_string(),
             )

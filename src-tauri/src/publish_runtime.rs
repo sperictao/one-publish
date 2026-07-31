@@ -420,6 +420,7 @@ pub(crate) struct ResolvedPublishConfiguration {
     pub provider_id: String,
     pub parameters: Value,
     pub composition: PublishComposition,
+    pub project_binding: Option<String>,
     pub blocked_reason: Option<String>,
 }
 
@@ -1191,6 +1192,23 @@ pub(crate) fn prepare_runtime(
             "selected configuration revision no longer matches the publish inputs".to_string(),
         );
     }
+    // 修订固化的候选绑定 vs 本次发布输入解析出的实际候选：失配显式阻断，
+    // 换绑走显式动作；存量未绑定修订（None）宽限跳过（决议 #78）。
+    if blocked_reason.is_none() {
+        if let Some(bound) = &resolved.project_binding {
+            let actual = resolve_project_binding(
+                &request.repository_path,
+                &request.spec.provider_id,
+                &request.spec.project_path,
+            );
+            if actual.as_deref() != Some(bound.as_str()) {
+                blocked_reason = Some(format!(
+                    "selected configuration revision is bound to {bound}, but the publish inputs resolve to {}",
+                    actual.as_deref().unwrap_or("no project candidate")
+                ));
+            }
+        }
+    }
     if blocked_reason.is_none() {
         blocked_reason = preflight_blocked_reason(&preflight);
     }
@@ -1317,6 +1335,38 @@ fn prepare_tauri_binding(
 }
 
 /// 把绑定的配置入口换算成仓库相对路径；字面前缀优先，符号链接差异回退到 canonical 比较。
+/// 修订 Project Binding 的候选身份（决议 #78）：`{provider}:{仓库相对选择子}`。
+/// tauri 的选择子是解析出的配置入口（唯一格式属 `candidate_identity`）；其余
+/// Provider 是仓库相对项目引用，仓库根为 `.`（与发布 spec 的 project_path
+/// 构造规则同源）。无法解析时返回 None：捕获端宽限降级、校验端跳过，
+/// 失配只在 prepare 以 blocked_reason 显式呈现。
+pub(crate) fn resolve_project_binding(
+    repository_path: &str,
+    provider_id: &str,
+    project_reference: &str,
+) -> Option<String> {
+    let raw_repository = Path::new(repository_path);
+    let repository = canonical_repository(raw_repository).ok()?;
+    if provider_id == TAURI_PROVIDER_ID {
+        let config = repository_relative_config(raw_repository, &repository, project_reference)?;
+        return Some(publish_adapters::tauri::candidate_identity(&config));
+    }
+    let project = Path::new(project_reference);
+    let project = if project.is_absolute() {
+        project.to_path_buf()
+    } else {
+        repository.join(project)
+    };
+    let project = fs::canonicalize(&project).ok()?;
+    let relative = project.strip_prefix(&repository).ok()?;
+    let selector = if relative.as_os_str().is_empty() {
+        ".".to_string()
+    } else {
+        relative.to_string_lossy().replace('\\', "/")
+    };
+    Some(format!("{provider_id}:{selector}"))
+}
+
 fn repository_relative_config(
     raw_repository: &Path,
     canonical_repository: &Path,
@@ -1471,6 +1521,7 @@ pub fn prepare_publish_runtime(
             provider_id: revision.provider_id.clone(),
             parameters: revision.parameters.clone(),
             composition: revision.composition.clone(),
+            project_binding: revision.project_binding.clone(),
             blocked_reason,
         },
     )
@@ -3854,6 +3905,7 @@ mod tests {
             composition: crate::store::PublishComposition::local_default(),
             provider_id: "dotnet".to_string(),
             parameters: serde_json::to_value(&spec.parameters).expect("serialize parameters"),
+            project_binding: None,
             blocked_reason: None,
         };
 
@@ -3918,6 +3970,7 @@ mod tests {
             composition: crate::store::PublishComposition::local_default(),
             provider_id: "dotnet".to_string(),
             parameters: serde_json::json!({ "configuration": "Release" }),
+            project_binding: None,
             blocked_reason: None,
         };
 
@@ -3936,6 +3989,105 @@ mod tests {
 
         assert!(prepared.blocked_reason.is_none());
         assert!(!prepared.runtime_token.is_empty());
+    }
+
+    #[test]
+    fn resolve_project_binding_uses_repository_relative_selectors() {
+        let repository = tempfile::tempdir().expect("create repository");
+        std::fs::create_dir_all(repository.path().join("src/App")).expect("create project dir");
+        std::fs::write(repository.path().join("src/App/App.csproj"), "<Project />")
+            .expect("write project file");
+        std::fs::create_dir_all(repository.path().join("src-tauri")).expect("create tauri dir");
+        std::fs::write(repository.path().join("src-tauri/tauri.conf.json"), "{}")
+            .expect("write tauri config");
+        let repo = repository.path().to_string_lossy().to_string();
+
+        assert_eq!(
+            super::resolve_project_binding(
+                &repo,
+                "dotnet",
+                &repository
+                    .path()
+                    .join("src/App/App.csproj")
+                    .to_string_lossy(),
+            ),
+            Some("dotnet:src/App/App.csproj".to_string())
+        );
+        // 仓库根目录型 Provider 的选择子是 `.`。
+        assert_eq!(
+            super::resolve_project_binding(&repo, "go", &repo),
+            Some("go:.".to_string())
+        );
+        // tauri 的选择子是解析出的配置入口，唯一格式属 candidate_identity。
+        assert_eq!(
+            super::resolve_project_binding(
+                &repo,
+                "tauri",
+                &repository
+                    .path()
+                    .join("src-tauri/tauri.conf.json")
+                    .to_string_lossy(),
+            ),
+            Some("tauri:src-tauri/tauri.conf.json".to_string())
+        );
+        // 仓库外引用没有可判定候选：宽限为 None，而不是猜测。
+        let elsewhere = tempfile::tempdir().expect("create outside dir");
+        std::fs::write(elsewhere.path().join("App.csproj"), "<Project />")
+            .expect("write outside project");
+        assert_eq!(
+            super::resolve_project_binding(
+                &repo,
+                "dotnet",
+                &elsewhere.path().join("App.csproj").to_string_lossy(),
+            ),
+            None
+        );
+    }
+
+    #[test]
+    fn revision_project_binding_mismatch_blocks_the_prepared_runtime() {
+        let repository = tempfile::tempdir().expect("create repository");
+        let project_path = repository.path().join("App.csproj");
+        std::fs::write(&project_path, "<Project />").expect("write project file");
+        initialize_git_repository(repository.path());
+        let spec = PublishSpec {
+            version: SPEC_VERSION,
+            provider_id: "dotnet".to_string(),
+            project_path: project_path.to_string_lossy().to_string(),
+            parameters: BTreeMap::from([(
+                "configuration".to_string(),
+                SpecValue::String("Release".to_string()),
+            )]),
+        };
+        let request = PreparePublishRuntimeRequest {
+            promoted_manifest_digest: None,
+            repository_id: "repository-A".to_string(),
+            repository_path: repository.path().to_string_lossy().to_string(),
+            configuration_id: "configuration-A".to_string(),
+            configuration_revision_id: "revision-A".to_string(),
+            spec,
+        };
+        let resolved = |project_binding: Option<&str>| ResolvedPublishConfiguration {
+            composition: crate::store::PublishComposition::local_default(),
+            provider_id: "dotnet".to_string(),
+            parameters: serde_json::json!({ "configuration": "Release" }),
+            project_binding: project_binding.map(ToString::to_string),
+            blocked_reason: None,
+        };
+
+        // 绑定指向另一个候选：显式阻断，换绑必须走显式动作。
+        let blocked = super::prepare_runtime(
+            request.clone(),
+            resolved(Some("dotnet:Other/App.csproj")),
+        )
+        .expect("prepare mismatched binding");
+        let reason = blocked.blocked_reason.expect("mismatch blocks the runtime");
+        assert!(reason.contains("is bound to dotnet:Other/App.csproj"), "{reason}");
+
+        // 绑定与发布输入解析出的候选一致：正常放行。
+        let matched = super::prepare_runtime(request, resolved(Some("dotnet:App.csproj")))
+            .expect("prepare matching binding");
+        assert!(matched.blocked_reason.is_none());
     }
 
     #[test]
@@ -3970,6 +4122,7 @@ mod tests {
             composition: crate::store::PublishComposition::local_default(),
             provider_id: "dotnet".to_string(),
             parameters: serde_json::to_value(&spec.parameters).expect("serialize parameters"),
+            project_binding: None,
             blocked_reason: None,
         };
 
@@ -4022,6 +4175,7 @@ mod tests {
                 composition: crate::store::PublishComposition::local_default(),
                 provider_id: "go".to_string(),
                 parameters: serde_json::json!({}),
+                project_binding: None,
                 blocked_reason: None,
             },
         )
@@ -4080,6 +4234,7 @@ mod tests {
                 composition: crate::store::PublishComposition::local_default(),
                 provider_id: "tauri".to_string(),
                 parameters: serde_json::to_value(&spec.parameters).expect("serialize parameters"),
+                project_binding: None,
                 blocked_reason: None,
             },
         )
@@ -4838,6 +4993,7 @@ mod tests {
             composition: crate::store::PublishComposition::local_default(),
             provider_id: "dotnet".to_string(),
             parameters: serde_json::to_value(&spec.parameters).expect("serialize parameters"),
+            project_binding: None,
             blocked_reason: None,
         };
 
@@ -5182,6 +5338,7 @@ mod tests {
             composition: crate::store::PublishComposition::local_default(),
             provider_id: "dotnet".to_string(),
             parameters: serde_json::to_value(&spec.parameters).expect("serialize parameters"),
+            project_binding: None,
             blocked_reason: None,
         };
 
@@ -6812,6 +6969,7 @@ mod tests {
                 composition: crate::store::PublishComposition::local_default(),
                 provider_id: "go".to_string(),
                 parameters: serde_json::to_value(&spec.parameters).expect("serialize parameters"),
+                project_binding: None,
                 blocked_reason: None,
             },
         )
@@ -6992,6 +7150,7 @@ mod tests {
             composition: crate::store::PublishComposition::local_default(),
             provider_id: "dotnet".to_string(),
             parameters: serde_json::to_value(&spec.parameters).expect("serialize parameters"),
+            project_binding: None,
             blocked_reason: None,
         };
         super::prepare_runtime(

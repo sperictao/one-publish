@@ -471,6 +471,7 @@ fn merge_tauri_release_settings(
             TAURI_PROVIDER_ID.to_string(),
             serde_json::json!({ RELEASE_SETTINGS_PARAMETER: settings }),
             None,
+            None,
             now.to_string(),
         );
         if let Err(error) = created {
@@ -503,6 +504,7 @@ fn merge_tauri_release_settings(
         TAURI_PROVIDER_ID.to_string(),
         parameters,
         profile_group,
+        None,
         None,
         now.to_string(),
     ) {

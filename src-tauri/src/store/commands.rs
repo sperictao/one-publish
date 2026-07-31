@@ -293,6 +293,28 @@ pub async fn get_profiles(repo_id: String) -> Result<Vec<ConfigProfile>, AppErro
     })
 }
 
+/// 保存修订时解析仓库当前的 Project Candidate 并固化进修订（决议 #78）。
+/// 引用与发布 spec 的构造规则一致：使用项目文件的 Provider 用仓库绑定的
+/// project_file，其余用仓库根；无法解析时宽限为 None，失配由 prepare 阻断。
+fn repository_project_binding(
+    repo: &crate::store::Repository,
+    provider_id: &str,
+) -> Option<String> {
+    let kind = crate::provider::registry::provider_registry()
+        .get(provider_id)
+        .ok()?
+        .capabilities()
+        .project_path_kind;
+    let reference = match kind {
+        crate::provider::ProviderProjectPathKind::ProjectFile => repo
+            .project_file
+            .clone()
+            .filter(|file| !file.trim().is_empty())?,
+        crate::provider::ProviderProjectPathKind::RepositoryRoot => repo.path.clone(),
+    };
+    crate::publish_runtime::resolve_project_binding(&repo.path, provider_id, &reference)
+}
+
 #[tauri::command]
 pub async fn save_profile(
     app: tauri::AppHandle,
@@ -306,11 +328,13 @@ pub async fn save_profile(
     let mut state = get_state();
     let repo = find_repository_mut(&mut state.repositories, &repo_id)?;
 
+    let project_binding = repository_project_binding(repo, &provider_id);
     repo.publish_config.create_profile(
         name,
         provider_id,
         parameters,
         profile_group,
+        project_binding,
         chrono::Utc::now().to_rfc3339(),
     )?;
     let response = state.clone();
@@ -334,6 +358,7 @@ pub async fn update_profile(
     let mut state = get_state();
     let repo = find_repository_mut(&mut state.repositories, &repo_id)?;
 
+    let project_binding = repository_project_binding(repo, &provider_id);
     repo.publish_config.update_profile(
         &profile_id,
         name,
@@ -341,6 +366,7 @@ pub async fn update_profile(
         parameters,
         profile_group,
         composition,
+        project_binding,
         chrono::Utc::now().to_rfc3339(),
     )?;
 
@@ -641,6 +667,7 @@ mod tests {
                 "dotnet".to_string(),
                 serde_json::json!({ "configuration": "Release" }),
                 None,
+                None,
                 "2026-07-21T10:00:00Z".to_string(),
             )
             .expect("create profile")
@@ -650,6 +677,7 @@ mod tests {
                 "Deleted".to_string(),
                 "dotnet".to_string(),
                 serde_json::json!({ "configuration": "Debug" }),
+                None,
                 None,
                 "2026-07-21T09:00:00Z".to_string(),
             )

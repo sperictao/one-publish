@@ -663,6 +663,7 @@ mod tests {
                             "dotnet".to_string(),
                             serde_json::json!({}),
                             None,
+                            None,
                             "2026-04-02T10:00:00Z".to_string(),
                             false,
                         );

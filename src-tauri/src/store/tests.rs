@@ -66,6 +66,7 @@ fn repo_publish_config_create_profile_assigns_identity_and_initial_revision() {
             "dotnet".to_string(),
             serde_json::json!({ "configuration": "Release" }),
             Some("Production".to_string()),
+            None,
             "2026-07-21T10:00:00Z".to_string(),
         )
         .expect("create profile");
@@ -95,6 +96,7 @@ fn repo_publish_config_content_update_appends_revision_without_moving_binding() 
             "dotnet".to_string(),
             serde_json::json!({ "configuration": "Release" }),
             None,
+            None,
             "2026-07-21T10:00:00Z".to_string(),
         )
         .expect("create profile")
@@ -110,6 +112,7 @@ fn repo_publish_config_content_update_appends_revision_without_moving_binding() 
             "Release".to_string(),
             "dotnet".to_string(),
             serde_json::json!({ "configuration": "Debug" }),
+            None,
             None,
             None,
             "2026-07-21T11:00:00Z".to_string(),
@@ -140,6 +143,7 @@ fn switching_the_current_configuration_never_touches_automation_bindings() {
             "dotnet".to_string(),
             serde_json::json!({ "configuration": "Release" }),
             None,
+            None,
             "2026-07-21T10:00:00Z".to_string(),
         )
         .expect("create bound profile")
@@ -149,6 +153,7 @@ fn switching_the_current_configuration_never_touches_automation_bindings() {
             "Nightly".to_string(),
             "dotnet".to_string(),
             serde_json::json!({ "configuration": "Debug" }),
+            None,
             None,
             "2026-07-21T10:05:00Z".to_string(),
         )
@@ -180,6 +185,7 @@ fn repo_publish_config_selection_and_identity_references_survive_rename() {
             "Before".to_string(),
             "dotnet".to_string(),
             serde_json::json!({ "configuration": "Release" }),
+            None,
             None,
             "2026-07-21T10:00:00Z".to_string(),
         )
@@ -233,6 +239,7 @@ fn repo_publish_config_selection_and_identity_references_survive_rename() {
             serde_json::json!({ "configuration": "Release" }),
             Some("Renamed Group".to_string()),
             None,
+            None,
             "2026-07-21T11:00:00Z".to_string(),
         )
         .expect("rename profile");
@@ -273,6 +280,7 @@ fn repo_publish_config_delete_is_blocked_by_binding_then_tombstones_history() {
             "Release".to_string(),
             "dotnet".to_string(),
             serde_json::json!({ "configuration": "Release" }),
+            None,
             None,
             "2026-07-21T10:00:00Z".to_string(),
         )
@@ -319,6 +327,7 @@ fn repo_publish_config_import_creates_unselected_identity_and_skips_duplicate_na
             "dotnet".to_string(),
             serde_json::json!({ "configuration": "Release" }),
             None,
+            None,
             "2026-07-21T10:00:00Z".to_string(),
         )
         .expect("create selected profile")
@@ -339,6 +348,7 @@ fn repo_publish_config_import_creates_unselected_identity_and_skips_duplicate_na
             settings_version: 1,
             parameters: serde_json::json!({ "configuration": "Debug" }),
             composition: super::PublishComposition::local_default(),
+            project_binding: None,
             profile_group: Some("Should Not Replace".to_string()),
             created_at: "2026-07-21T11:00:00Z".to_string(),
             is_system_default: false,
@@ -364,6 +374,7 @@ fn repo_publish_config_import_creates_unselected_identity_and_skips_duplicate_na
             settings_version: 3,
             parameters: serde_json::json!({ "futureSetting": true }),
             composition: super::PublishComposition::local_default(),
+            project_binding: None,
             profile_group: None,
             created_at: "2026-07-21T12:00:00Z".to_string(),
             is_system_default: false,
@@ -402,6 +413,7 @@ fn repo_publish_config_reorders_active_profiles_by_id_without_new_revisions() {
             "dotnet".to_string(),
             serde_json::json!({}),
             None,
+            None,
             "2026-07-21T10:00:00Z".to_string(),
         )
         .expect("create alpha")
@@ -411,6 +423,7 @@ fn repo_publish_config_reorders_active_profiles_by_id_without_new_revisions() {
             "Beta".to_string(),
             "cargo".to_string(),
             serde_json::json!({}),
+            None,
             None,
             "2026-07-21T11:00:00Z".to_string(),
         )
@@ -516,6 +529,7 @@ fn bootstrap_state_exposes_only_active_profiles_while_storage_keeps_tombstones()
             "dotnet".to_string(),
             serde_json::json!({}),
             None,
+            None,
             "2026-07-21T10:00:00Z".to_string(),
         )
         .expect("create deleted profile")
@@ -525,6 +539,7 @@ fn bootstrap_state_exposes_only_active_profiles_while_storage_keeps_tombstones()
             "Active".to_string(),
             "dotnet".to_string(),
             serde_json::json!({}),
+            None,
             None,
             "2026-07-21T11:00:00Z".to_string(),
         )
@@ -1365,6 +1380,7 @@ fn update_profile_carries_composition_as_revision_content() {
             "tauri".to_string(),
             serde_json::json!({ "target": "x86_64-unknown-linux-gnu" }),
             None,
+            None,
             "2026-07-21T10:00:00Z".to_string(),
         )
         .expect("create profile")
@@ -1393,6 +1409,7 @@ fn update_profile_carries_composition_as_revision_content() {
             serde_json::json!({ "target": "x86_64-unknown-linux-gnu" }),
             None,
             Some(custom.clone()),
+            None,
             "2026-07-22T10:00:00Z".to_string(),
         )
         .expect("update profile with explicit composition");
@@ -1412,6 +1429,7 @@ fn update_profile_carries_composition_as_revision_content() {
             serde_json::json!({ "target": "aarch64-apple-darwin" }),
             None,
             None,
+            None,
             "2026-07-23T10:00:00Z".to_string(),
         )
         .expect("update profile without composition");
@@ -1421,6 +1439,97 @@ fn update_profile_carries_composition_as_revision_content() {
         inherited.current_revision().expect("current").composition,
         custom,
         "未显式携带组合的编辑必须继承而不是重置"
+    );
+}
+
+#[test]
+fn update_profile_inherits_and_backfills_the_project_binding() {
+    let mut config = RepoPublishConfig::default();
+    // 创建时固化的绑定：更新继承，不随调用方传入的当前解析值漂移。
+    let bound = config
+        .create_profile(
+            "Bound".to_string(),
+            "dotnet".to_string(),
+            serde_json::json!({ "configuration": "Release" }),
+            None,
+            Some("dotnet:src/App/App.csproj".to_string()),
+            "2026-07-21T10:00:00Z".to_string(),
+        )
+        .expect("create bound profile")
+        .clone();
+    config
+        .update_profile(
+            &bound.id,
+            "Bound".to_string(),
+            "dotnet".to_string(),
+            serde_json::json!({ "configuration": "Debug" }),
+            None,
+            None,
+            Some("dotnet:src/Other/Other.csproj".to_string()),
+            "2026-07-22T10:00:00Z".to_string(),
+        )
+        .expect("update bound profile");
+    let updated = config.profile(&bound.id).expect("bound profile");
+    assert_eq!(updated.revisions.len(), 2);
+    assert_eq!(
+        updated
+            .current_revision()
+            .expect("current revision")
+            .project_binding
+            .as_deref(),
+        Some("dotnet:src/App/App.csproj")
+    );
+
+    // 存量修订没有绑定：下次保存修订时用当前解析值补固化。
+    let legacy = config
+        .create_profile(
+            "Legacy".to_string(),
+            "dotnet".to_string(),
+            serde_json::json!({ "configuration": "Release" }),
+            None,
+            None,
+            "2026-07-21T11:00:00Z".to_string(),
+        )
+        .expect("create legacy profile")
+        .clone();
+    config
+        .update_profile(
+            &legacy.id,
+            "Legacy".to_string(),
+            "dotnet".to_string(),
+            serde_json::json!({ "configuration": "Debug" }),
+            None,
+            None,
+            Some("dotnet:src/App/App.csproj".to_string()),
+            "2026-07-22T11:00:00Z".to_string(),
+        )
+        .expect("backfill legacy profile");
+    let backfilled = config.profile(&legacy.id).expect("legacy profile");
+    assert_eq!(
+        backfilled
+            .current_revision()
+            .expect("current revision")
+            .project_binding
+            .as_deref(),
+        Some("dotnet:src/App/App.csproj")
+    );
+
+    // 仅改名不产新修订，也不触发补固化。
+    config
+        .update_profile(
+            &bound.id,
+            "Bound Renamed".to_string(),
+            "dotnet".to_string(),
+            serde_json::json!({ "configuration": "Debug" }),
+            None,
+            None,
+            Some("dotnet:src/Other/Other.csproj".to_string()),
+            "2026-07-23T10:00:00Z".to_string(),
+        )
+        .expect("rename bound profile");
+    assert_eq!(
+        config.profile(&bound.id).expect("bound profile").revisions.len(),
+        2
     );
 }
 
@@ -1437,6 +1546,7 @@ fn update_profile_inherits_release_settings_when_the_editor_omits_them() {
                 "releaseSettings": release_settings.clone()
             }),
             None,
+            None,
             "2026-07-21T10:00:00Z".to_string(),
         )
         .expect("create profile")
@@ -1449,6 +1559,7 @@ fn update_profile_inherits_release_settings_when_the_editor_omits_them() {
             "Desktop".to_string(),
             "tauri".to_string(),
             serde_json::json!({ "target": "aarch64-apple-darwin" }),
+            None,
             None,
             None,
             "2026-07-22T10:00:00Z".to_string(),
@@ -1469,6 +1580,7 @@ fn update_profile_inherits_release_settings_when_the_editor_omits_them() {
             "Desktop".to_string(),
             "tauri".to_string(),
             serde_json::json!({ "releaseSettings": changed_settings.clone() }),
+            None,
             None,
             None,
             "2026-07-23T10:00:00Z".to_string(),
@@ -1493,6 +1605,7 @@ fn update_profile_does_not_carry_release_settings_across_providers() {
             "tauri".to_string(),
             serde_json::json!({ "releaseSettings": { "tagPrefix": "v" } }),
             None,
+            None,
             "2026-07-21T10:00:00Z".to_string(),
         )
         .expect("create profile")
@@ -1505,6 +1618,7 @@ fn update_profile_does_not_carry_release_settings_across_providers() {
             "Desktop".to_string(),
             "cargo".to_string(),
             serde_json::json!({ "release": true }),
+            None,
             None,
             None,
             "2026-07-22T10:00:00Z".to_string(),

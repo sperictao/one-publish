@@ -23,6 +23,10 @@ pub struct ConfigProfile {
     /// 修订组合是配置的一部分；缺失（旧备份）时导入方按本地默认组合物化。
     #[serde(default)]
     pub composition: Option<crate::store::PublishComposition>,
+    /// 修订绑定的 Project Candidate（仓库相对、可移植）；旧备份缺失时按
+    /// 存量宽限导入为未绑定（决议 #78）。
+    #[serde(default)]
+    pub project_binding: Option<String>,
     #[serde(default)]
     pub profile_group: Option<String>,
     pub created_at: DateTime<Utc>,
@@ -39,6 +43,7 @@ impl Default for ConfigProfile {
             settings_version: default_settings_version(),
             parameters: BTreeMap::new(),
             composition: None,
+            project_binding: None,
             profile_group: None,
             created_at: Utc::now(),
             is_system_default: false,
@@ -170,6 +175,7 @@ pub fn build_config_export(
                 settings_version: revision.settings_version,
                 parameters,
                 composition: Some(revision.composition.clone()),
+                project_binding: revision.project_binding.clone(),
                 profile_group: profile.profile_group.clone(),
                 created_at,
                 is_system_default: profile.is_system_default,
@@ -320,6 +326,7 @@ mod tests {
                     "apiToken": "old-secret"
                 }),
                 Some("Production".to_string()),
+                None,
                 "2026-07-21T10:00:00Z".to_string(),
             )
             .expect("create profile")
@@ -340,6 +347,7 @@ mod tests {
                     }
                 }),
                 Some("Production".to_string()),
+                None,
                 None,
                 "2026-07-21T11:00:00Z".to_string(),
             )

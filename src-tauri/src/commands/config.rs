@@ -111,6 +111,7 @@ pub(crate) fn merge_imported_profiles(
                 composition: profile
                     .composition
                     .unwrap_or_else(crate::store::PublishComposition::local_default),
+                project_binding: profile.project_binding,
                 profile_group: profile.profile_group,
                 created_at: profile.created_at.to_rfc3339(),
                 is_system_default: profile.is_system_default,
@@ -298,6 +299,7 @@ mod tests {
                 "original".to_string(),
                 serde_json::Value::Null,
                 Some("original-group".to_string()),
+                None,
                 "2026-01-01T00:00:00+00:00".to_string(),
                 true,
             ));
@@ -351,6 +353,7 @@ mod tests {
                 "dotnet".to_string(),
                 serde_json::Value::Object(serde_json::Map::new()),
                 None,
+                None,
                 "2026-01-01T00:00:00+00:00".to_string(),
                 false,
             ));
@@ -378,6 +381,7 @@ mod tests {
                 "existing".to_string(),
                 "dotnet".to_string(),
                 serde_json::Value::Object(serde_json::Map::new()),
+                None,
                 None,
                 "2026-01-01T00:00:00+00:00".to_string(),
                 false,

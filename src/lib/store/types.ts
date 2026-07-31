@@ -81,6 +81,8 @@ export interface ConfigProfile {
   parameters: ConfigParameters;
   /** 当前修订的发布组合；随修订往返，导入预览中可能缺失（旧备份）。 */
   composition?: PublishComposition | null;
+  /** 当前修订绑定的 Project Candidate；随修订往返，存量数据可能缺失。 */
+  projectBinding?: string | null;
   profileGroup?: string | null;
   createdAt: string;
   isSystemDefault: boolean;
@@ -188,6 +190,7 @@ export function normalizeConfigProfile(
     providerId: currentRevision.providerId,
     parameters: normalizeConfigParameters(currentRevision.parameters),
     composition: currentRevision.composition,
+    projectBinding: currentRevision.projectBinding,
     profileGroup: profile.profileGroup,
     createdAt: profile.createdAt,
     isSystemDefault: profile.isSystemDefault,
@@ -209,6 +212,7 @@ export function normalizeImportedConfigProfile(
     settingsVersion: profile.settings_version,
     parameters: normalizeConfigParameters(profile.parameters),
     composition: profile.composition,
+    projectBinding: profile.project_binding,
     profileGroup: profile.profile_group,
     createdAt: profile.created_at,
     isSystemDefault: profile.is_system_default,
@@ -236,6 +240,7 @@ export function toExportConfigProfile(
     settings_version: profile.settingsVersion,
     parameters: profile.parameters,
     composition: profile.composition ?? null,
+    project_binding: profile.projectBinding ?? null,
     profile_group: profile.profileGroup ?? null,
     created_at: profile.createdAt,
     is_system_default: profile.isSystemDefault,
