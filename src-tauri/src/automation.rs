@@ -564,10 +564,47 @@ fn binding_projection(
             "shardPlatforms".to_string(),
             Value::Array(
                 shard_platforms
-                    .into_iter()
-                    .map(|platform| Value::String(platform.to_string()))
+                    .iter()
+                    .map(|platform| Value::String((*platform).to_string()))
                     .collect(),
             ),
+        );
+        // 工具链渲染输入（S1 闭环）：build job 按驱动准备构建环境，rust
+        // targets 按族聚合（universal 需要双架构）。
+        let release_config =
+            crate::tauri_release::release_settings_from_parameters(&revision.parameters)?
+                .ok_or_else(|| {
+                    AppError::config_with_code(
+                        "GitHub Actions 自动化需要修订中的 Tauri 发布设置",
+                        "github_actions_release_config_missing",
+                    )
+                })?;
+        let mut rust_targets: BTreeMap<&str, BTreeSet<&str>> = BTreeMap::new();
+        for target in &release_config.enabled_targets {
+            let family = publish_runner_core::platform_segment_name(
+                publish_adapters::tauri::platform_for_build_target(target.build_target_triple()),
+            );
+            rust_targets
+                .entry(family)
+                .or_default()
+                .extend(target.rust_target_triples());
+        }
+        public_settings.insert(
+            "shardToolchain".to_string(),
+            serde_json::json!({
+                "driver": projection_value(&release_config.build_driver, "构建驱动")?,
+                "rustTargets": rust_targets
+                    .into_iter()
+                    .map(|(family, triples)| {
+                        (
+                            family.to_string(),
+                            Value::String(
+                                triples.into_iter().collect::<Vec<_>>().join(","),
+                            ),
+                        )
+                    })
+                    .collect::<serde_json::Map<_, _>>(),
+            }),
         );
         public_settings.insert(
             "runnerProjection".to_string(),

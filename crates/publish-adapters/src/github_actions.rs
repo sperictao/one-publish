@@ -23,6 +23,12 @@ const UPLOAD_ARTIFACT_ACTION: &str =
     "actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2";
 const DOWNLOAD_ARTIFACT_ACTION: &str =
     "actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0";
+const SETUP_NODE_ACTION: &str =
+    "actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0";
+const SETUP_BUN_ACTION: &str =
+    "oven-sh/setup-bun@735343b667d3e6f658f44d0eca948eb6282f2b76 # v2.0.2";
+const RUST_TOOLCHAIN_ACTION: &str =
+    "dtolnay/rust-toolchain@2c7215f132e9ebf062739d9130488b56d53c060c # master 2026-07-20";
 
 /// 单一 GitHub Actions Backend（决议 #81）：同一 adapter 身份的两个面——
 /// 投影面把绑定渲染为薄外壳 workflow（下载钉住的 runner、离线校验摘要、
@@ -268,6 +274,31 @@ fn render_thin_shell_workflow(
             ))
         })?;
 
+    let toolchain = public_setting(binding, "shardToolchain")?;
+    let build_driver = toolchain
+        .get("driver")
+        .and_then(Value::as_str)
+        .filter(|driver| !driver.trim().is_empty())
+        .ok_or_else(|| {
+            PublishError::Execution(format!(
+                "GitHub Actions binding {} declares no build driver toolchain",
+                binding.binding_id
+            ))
+        })?;
+    let rust_targets_for = |platform: &str| {
+        toolchain
+            .get("rustTargets")
+            .and_then(|targets| targets.get(platform))
+            .and_then(Value::as_str)
+            .filter(|targets| !targets.trim().is_empty())
+            .ok_or_else(|| {
+                PublishError::Execution(format!(
+                    "GitHub Actions binding {} declares no rust targets for the {platform} shard",
+                    binding.binding_id
+                ))
+            })
+    };
+
     let mut secret_env = trigger_env;
     for secret_name in binding.projection.secret_references.values() {
         secret_env.push_str(&format!(
@@ -328,6 +359,98 @@ fn render_thin_shell_workflow(
         )
     };
 
+    // 构建工具链（S1 闭环）：runner 直执行密封构建命令，环境准备是外壳
+    // 拓扑职责——Rust 目标按族安装，node 系驱动经 corepack/包管理器就位。
+    let toolchain_steps = |platform: &str| -> Result<String, PublishError> {
+        let mut steps = format!(
+            r#"      - name: Install Rust toolchain
+        uses: {RUST_TOOLCHAIN_ACTION}
+        with:
+          toolchain: stable
+          targets: {targets}
+"#,
+            targets = rust_targets_for(platform)?,
+        );
+        if platform == "linux" {
+            steps.push_str(
+                "      - name: Install Linux system dependencies
+        run: sudo apt-get update && sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
+",
+            );
+        }
+        match build_driver {
+            "pnpm" => steps.push_str(&format!(
+                "      - name: Setup Node
+        uses: {SETUP_NODE_ACTION}
+        with:
+          node-version: '20'
+      - name: Enable pnpm
+        run: corepack enable pnpm
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+"
+            )),
+            "npm" => steps.push_str(&format!(
+                "      - name: Setup Node
+        uses: {SETUP_NODE_ACTION}
+        with:
+          node-version: '20'
+      - name: Install dependencies
+        run: npm ci
+"
+            )),
+            "yarn" => steps.push_str(&format!(
+                "      - name: Setup Node
+        uses: {SETUP_NODE_ACTION}
+        with:
+          node-version: '20'
+      - name: Enable Yarn
+        run: corepack enable yarn
+      - name: Install dependencies
+        run: yarn install --immutable
+"
+            )),
+            "bun" => steps.push_str(&format!(
+                "      - name: Setup Bun
+        uses: {SETUP_BUN_ACTION}
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+"
+            )),
+            "cargo" => steps.push_str(
+                "      - name: Install Tauri CLI
+        run: cargo install tauri-cli --locked
+",
+            ),
+            other => {
+                return Err(PublishError::Execution(format!(
+                    "unsupported build driver toolchain {other}"
+                )))
+            }
+        }
+        Ok(steps)
+    };
+    let staging_handoff = |affinity: &str| {
+        format!(
+            r#"      - name: Pack the {affinity} staging area
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -d .one-publish-work/staged ]; then
+            tar -cf "one-publish-staging-{affinity}.tar" -C .one-publish-work/staged .
+          fi
+      - name: Upload the {affinity} staging area
+        if: always()
+        uses: {UPLOAD_ARTIFACT_ACTION}
+        with:
+          name: one-publish-staging-${{{{ github.run_id }}}}-${{{{ github.run_attempt }}}}-{affinity}
+          path: one-publish-staging-{affinity}.tar
+          if-no-files-found: ignore
+"#
+        )
+    };
+
     let mut jobs = String::new();
     for platform in &shard_platforms {
         let (runs_on, _, binary) = shard_runner(platform);
@@ -337,9 +460,11 @@ fn render_thin_shell_workflow(
     steps:
       - name: Checkout the triggering tag
         uses: {CHECKOUT_ACTION}
-{install}{shard}"#,
+{toolchain}{install}{shard}{staging}"#,
+            toolchain = toolchain_steps(platform)?,
             install = install_step(platform)?,
             shard = shard_step(platform, binary),
+            staging = staging_handoff(platform),
         ));
     }
     let needs = shard_platforms
@@ -359,6 +484,22 @@ fn render_thin_shell_workflow(
         with:
           pattern: one-publish-events-${{{{ github.run_id }}}}-${{{{ github.run_attempt }}}}-*
           path: .one-publish-work/segments
+      - name: Download staged build artifacts
+        uses: {DOWNLOAD_ARTIFACT_ACTION}
+        with:
+          pattern: one-publish-staging-${{{{ github.run_id }}}}-${{{{ github.run_attempt }}}}-*
+          path: .one-publish-work/staging-tars
+      - name: Unpack the staging areas
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p .one-publish-work/staged
+          if [ -d .one-publish-work/staging-tars ]; then
+            find .one-publish-work/staging-tars -name '*.tar' -print0 |
+              while IFS= read -r -d '' tarball; do
+                tar -xf "$tarball" -C .one-publish-work/staged
+              done
+          fi
 {shard}"#,
         install = install_step("linux")?,
         shard = shard_step("any", "one-publish-runner"),
@@ -447,6 +588,17 @@ mod tests {
                         "shardPlatforms".to_string(),
                         serde_json::json!(["linux", "macos", "windows"]),
                     ),
+                    (
+                        "shardToolchain".to_string(),
+                        serde_json::json!({
+                            "driver": "pnpm",
+                            "rustTargets": {
+                                "linux": "x86_64-unknown-linux-gnu",
+                                "macos": "aarch64-apple-darwin,x86_64-apple-darwin",
+                                "windows": "x86_64-pc-windows-msvc",
+                            },
+                        }),
+                    ),
                 ]),
                 protected_variables: BTreeMap::new(),
                 secret_references: BTreeMap::from([(
@@ -500,6 +652,16 @@ mod tests {
             .content
             .contains("one-publish-prepared-${{ github.run_id }}-${{ github.run_attempt }}-any"));
         assert!(workflow.content.contains("Download build shard segments"));
+        // S1 闭环：工具链就位 + 产物暂存经 artifacts 交接（tar 保执行位）。
+        assert!(workflow
+            .content
+            .contains("targets: aarch64-apple-darwin,x86_64-apple-darwin"));
+        assert!(workflow.content.contains("corepack enable pnpm"));
+        assert!(workflow.content.contains("Install Linux system dependencies"));
+        assert!(workflow.content.contains(
+            "one-publish-staging-${{ github.run_id }}-${{ github.run_attempt }}-windows"
+        ));
+        assert!(workflow.content.contains("Unpack the staging areas"));
         assert!(workflow.content.contains("./one-publish-runner.exe verify"));
         assert!(workflow.content.contains("sha256sum -c -"));
         assert!(workflow.content.contains(

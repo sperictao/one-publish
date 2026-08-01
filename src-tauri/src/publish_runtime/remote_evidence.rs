@@ -914,6 +914,7 @@ mod tests {
         ShardOutcome {
             events: vec![event(1, "plan_node_started"), event(2, "plan_node_completed")],
             manifest: None,
+            artifacts: Vec::new(),
         }
     }
 

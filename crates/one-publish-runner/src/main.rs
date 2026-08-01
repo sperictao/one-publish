@@ -70,8 +70,28 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
                 }
                 Some(platform) => {
                     let platform = parse_platform(platform)?;
-                    let segment =
-                        installed_runner(&attempt)?.execute_shard(&attempt, &attempt_id, platform)?;
+                    let staging_root =
+                        std::path::Path::new(one_publish_runner::SHARD_STAGING_DIRECTORY);
+                    // 产物交接（决议 #85）：汇聚段导入 build 段暂存的候选，
+                    // build 段把本段候选落盘供外壳上传；段 JSON 只含证据。
+                    let staged = if platform == publish_domain::PlanNodePlatform::Any {
+                        one_publish_runner::load_staged_artifacts(staging_root)?
+                    } else {
+                        Vec::new()
+                    };
+                    let segment = installed_runner(&attempt)?.execute_shard(
+                        &attempt,
+                        &attempt_id,
+                        platform,
+                        staged,
+                    )?;
+                    if platform != publish_domain::PlanNodePlatform::Any {
+                        one_publish_runner::stage_shard_artifacts(
+                            staging_root,
+                            publish_runner_core::platform_segment_name(platform),
+                            &segment.artifacts,
+                        )?;
+                    }
                     println!("{}", serde_json::to_string(&segment)?);
                 }
             }

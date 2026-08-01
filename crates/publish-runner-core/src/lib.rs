@@ -29,10 +29,14 @@ pub struct PreparedPublishPlan {
 
 /// 分片段的自足证据（决议 #88）：本段事件流 + 汇聚段密封的完整 Manifest。
 /// 段 artifact 只作传输层，控制面归档 journal 后才是持久证据。
+/// 本段产出的候选字节不进段 JSON——产物交接走外壳 artifacts 暂存层
+/// （决议 #85），由 CLI 落盘、汇聚段执行前导入。
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ShardOutcome {
     pub events: Vec<PublishEvent>,
     pub manifest: Option<ArtifactManifest>,
+    #[serde(skip)]
+    pub artifacts: Vec<ArtifactCandidate>,
 }
 
 /// A newly sealed manifest belongs to the exact planning snapshot that produced
@@ -1861,6 +1865,7 @@ impl PublishRuntime {
         prepared: &PreparedPublishPlan,
         attempt_id: &str,
         platform: PlanNodePlatform,
+        staged_artifacts: Vec<ArtifactCandidate>,
     ) -> Result<ShardOutcome, PublishError> {
         let current_plan = self.prepare(&prepared.snapshot)?;
         if current_plan != prepared.plan {
@@ -1883,12 +1888,14 @@ impl PublishRuntime {
         let mut executor =
             RuntimeNodeExecutor::new(&self.registry, plan, attempt_id, &backend_run_id)
                 .with_promoted_manifest_digest(prepared.snapshot.promoted_manifest_digest.as_deref())
-                .with_assigned_platform(platform);
+                .with_assigned_platform(platform)
+                .with_staged_artifacts(staged_artifacts);
         self.registry
             .execute_plan(&plan.execution_backend, plan, &mut executor)?;
         Ok(ShardOutcome {
             events: executor.events,
             manifest: executor.manifest,
+            artifacts: executor.artifacts,
         })
     }
 
@@ -2168,6 +2175,13 @@ impl<'a> RuntimeNodeExecutor<'a> {
 
     fn with_assigned_platform(mut self, platform: PlanNodePlatform) -> Self {
         self.assigned_platform = Some(platform);
+        self
+    }
+
+    /// 汇聚段的候选导入（决议 #85）：build 段的产物经外壳暂存层交接，
+    /// 执行前预填充候选集，与 build 节点本机产出同一消费面。
+    fn with_staged_artifacts(mut self, artifacts: Vec<ArtifactCandidate>) -> Self {
+        self.artifacts = artifacts;
         self
     }
 

@@ -38,6 +38,17 @@ impl TauriDesktopTarget {
             Self::MacosUniversal => "universal-apple-darwin",
         }
     }
+
+    /// 构建该目标需要安装的 Rust target triples；macOS universal 需要双架构。
+    pub fn rust_target_triples(self) -> &'static [&'static str] {
+        match self {
+            Self::WindowsX64 => &["x86_64-pc-windows-msvc"],
+            Self::LinuxX64 => &["x86_64-unknown-linux-gnu"],
+            Self::MacosX64 => &["x86_64-apple-darwin"],
+            Self::MacosArm64 => &["aarch64-apple-darwin"],
+            Self::MacosUniversal => &["aarch64-apple-darwin", "x86_64-apple-darwin"],
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]

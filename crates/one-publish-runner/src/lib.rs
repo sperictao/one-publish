@@ -7,7 +7,9 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
 
 mod prepare;
+mod staging;
 pub use prepare::{prepare_from_projection, TriggerContext, TriggerInput};
+pub use staging::{load_staged_artifacts, stage_shard_artifacts, SHARD_STAGING_DIRECTORY};
 
 use publish_adapters::{
     AdapterConformanceFixture, AdapterRegistry, ChecksumProcessor, CustomCommandProcessor,
@@ -180,10 +182,11 @@ impl StandaloneRunner {
         attempt: &PreparedAttempt,
         attempt_id: &str,
         platform: publish_domain::PlanNodePlatform,
+        staged_artifacts: Vec<publish_domain::ArtifactCandidate>,
     ) -> Result<publish_runner_core::ShardOutcome, PublishError> {
         self.ensure_serviceable_attempt(attempt)?;
         self.runtime
-            .start_prepared_shard(&attempt.prepared, attempt_id, platform)
+            .start_prepared_shard(&attempt.prepared, attempt_id, platform, staged_artifacts)
     }
 
     fn ensure_serviceable_attempt(&self, attempt: &PreparedAttempt) -> Result<(), PublishError> {
