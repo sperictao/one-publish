@@ -275,12 +275,20 @@ fn render_thin_shell_workflow(
           ./{binary} verify "{runtime_path}"
           ./{binary} prepare-from-projection "{runtime_path}" . "${{GITHUB_REF_NAME}}" > prepared-attempt.json
           ./{binary} execute prepared-attempt.json "gh-${{GITHUB_RUN_ID}}-${{GITHUB_RUN_ATTEMPT}}" {affinity} > "one-publish-events-{affinity}.json"
+      - name: Upload the {affinity} prepared attempt
+        if: always()
+        uses: {UPLOAD_ARTIFACT_ACTION}
+        with:
+          name: one-publish-prepared-${{{{ github.run_id }}}}-${{{{ github.run_attempt }}}}-{affinity}
+          path: prepared-attempt.json
+          if-no-files-found: ignore
       - name: Upload the {affinity} event segment
+        if: always()
         uses: {UPLOAD_ARTIFACT_ACTION}
         with:
           name: one-publish-events-${{{{ github.run_id }}}}-${{{{ github.run_attempt }}}}-{affinity}
           path: one-publish-events-{affinity}.json
-          if-no-files-found: error
+          if-no-files-found: ignore
 "#
         )
     };
@@ -456,6 +464,9 @@ mod tests {
         assert!(workflow
             .content
             .contains("one-publish-events-${{ github.run_id }}-${{ github.run_attempt }}-macos"));
+        assert!(workflow
+            .content
+            .contains("one-publish-prepared-${{ github.run_id }}-${{ github.run_attempt }}-any"));
         assert!(workflow.content.contains("Download build shard segments"));
         assert!(workflow.content.contains("./one-publish-runner.exe verify"));
         assert!(workflow.content.contains("sha256sum -c -"));

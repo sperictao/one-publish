@@ -27,6 +27,14 @@ pub struct PreparedPublishPlan {
     pub plan: PublishPlan,
 }
 
+/// 分片段的自足证据（决议 #88）：本段事件流 + 汇聚段密封的完整 Manifest。
+/// 段 artifact 只作传输层，控制面归档 journal 后才是持久证据。
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ShardOutcome {
+    pub events: Vec<PublishEvent>,
+    pub manifest: Option<ArtifactManifest>,
+}
+
 /// A newly sealed manifest belongs to the exact planning snapshot that produced
 /// it. Promotion is the only exception: it must bind the exact manifest digest
 /// selected in the sealed planning input, never another self-consistent set.
@@ -1844,15 +1852,16 @@ impl PublishRuntime {
     }
 
     /// 分片执行（决议 #85）：只执行分配给指定平台亲和的节点子集，未分配
-    /// 节点跳过而非失败；产出本段事件流（决议 #88 的传输单元）。Manifest
-    /// 与 Receipt 的完整性判定发生在全部事件段归约处，本段不做全计划完成
+    /// 节点跳过而非失败；产出本段事件流与（汇聚段的）完整 Manifest——段
+    /// artifact 是自足的远端证据（决议 #88 的传输单元）。Manifest 与
+    /// Receipt 的完整性判定发生在全部事件段归约处，本段不做全计划完成
     /// 校验；凭据也只在本段涉及的绑定上解析（Secrets 按段注入）。
     pub fn start_prepared_shard(
         &self,
         prepared: &PreparedPublishPlan,
         attempt_id: &str,
         platform: PlanNodePlatform,
-    ) -> Result<Vec<PublishEvent>, PublishError> {
+    ) -> Result<ShardOutcome, PublishError> {
         let current_plan = self.prepare(&prepared.snapshot)?;
         if current_plan != prepared.plan {
             return Err(PublishError::InvalidPlan(
@@ -1877,7 +1886,10 @@ impl PublishRuntime {
                 .with_assigned_platform(platform);
         self.registry
             .execute_plan(&plan.execution_backend, plan, &mut executor)?;
-        Ok(executor.events)
+        Ok(ShardOutcome {
+            events: executor.events,
+            manifest: executor.manifest,
+        })
     }
 
     fn execute(

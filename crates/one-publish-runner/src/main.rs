@@ -67,9 +67,9 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
                 }
                 Some(platform) => {
                     let platform = parse_platform(platform)?;
-                    let events =
+                    let segment =
                         installed_runner(&attempt)?.execute_shard(&attempt, &attempt_id, platform)?;
-                    println!("{}", serde_json::to_string(&events)?);
+                    println!("{}", serde_json::to_string(&segment)?);
                 }
             }
         }

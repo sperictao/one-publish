@@ -174,13 +174,13 @@ impl StandaloneRunner {
     }
 
     /// 分片执行（决议 #85）：只执行分配给指定平台亲和的节点子集，输出本段
-    /// 事件流（决议 #88 的传输单元）。
+    /// 自足证据（事件流 + 汇聚段的 Manifest，决议 #88 的传输单元）。
     pub fn execute_shard(
         &self,
         attempt: &PreparedAttempt,
         attempt_id: &str,
         platform: publish_domain::PlanNodePlatform,
-    ) -> Result<Vec<publish_domain::PublishEvent>, PublishError> {
+    ) -> Result<publish_runner_core::ShardOutcome, PublishError> {
         self.ensure_serviceable_attempt(attempt)?;
         self.runtime
             .start_prepared_shard(&attempt.prepared, attempt_id, platform)
