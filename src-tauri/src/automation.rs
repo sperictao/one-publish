@@ -1575,6 +1575,11 @@ fn current_branch(repository_root: &Path) -> Result<String, AppError> {
     })
 }
 
+/// 远端 dispatch 需要显式 ref；复用自动化接入的默认分支解析（决议 #89）。
+pub(crate) fn repository_default_branch(repository_root: &Path) -> Result<String, AppError> {
+    default_branch(repository_root)
+}
+
 fn default_branch(repository_root: &Path) -> Result<String, AppError> {
     let symbolic = git(
         repository_root,

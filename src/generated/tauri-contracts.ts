@@ -196,6 +196,8 @@ export type RemoteEvidenceState = { "kind": "archived", status: RemoteArchivedSt
 
 export type RemoteArchivedStatus = "running" | "published" | "partial_delivery" | "failed" | "cancelled";
 
+export type ManualDispatchResult = { attemptId: string, runId: number | null, };
+
 export type AutomationTriggerPolicy = { "type": "tagPush", tagPrefix: string, } | { "type": "manual" };
 
 export type Branch = { name: string, isMain: boolean, isCurrent: boolean, path: string, commitCount: number | null, };

@@ -141,6 +141,33 @@ fn manifest_evidence_merges_consistently_across_segments() {
 }
 
 #[test]
+fn truncated_segments_from_a_hard_cancel_still_reduce() {
+    // 强取消（决议 #89）：runner 协作清理不保证、事件段可能截尾。段内连续
+    // 前缀仍是合法证据——未完结节点保持 Started，归约不失败。
+    let mut events = build_segment();
+    events.push(segment_event(
+        "attempt-shard/any",
+        1,
+        "store.persist",
+        "plan_node_started",
+    ));
+    let projection =
+        reduce_publish_events(&events, &routes()).expect("truncated segments reduce");
+    assert_eq!(
+        projection.node_states.get("store.persist"),
+        Some(&PlanNodeExecutionState::Started)
+    );
+    assert_eq!(
+        projection.node_states.get("project.build-x86_64"),
+        Some(&PlanNodeExecutionState::Completed)
+    );
+    assert_eq!(
+        projection.status,
+        publish_domain::PublishAttemptStatus::Running
+    );
+}
+
+#[test]
 fn segment_names_are_stable_per_affinity() {
     for (platform, name) in [
         (PlanNodePlatform::Any, "any"),

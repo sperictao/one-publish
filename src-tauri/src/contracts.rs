@@ -104,6 +104,9 @@ pub fn generate_tauri_contracts() -> String {
     push_contract::<crate::publish_runtime::remote_evidence::RemoteArchivedStatus>(
         &mut declarations,
     );
+    push_contract::<crate::publish_runtime::remote_evidence::ManualDispatchResult>(
+        &mut declarations,
+    );
     push_contract::<crate::store::AutomationTriggerPolicy>(&mut declarations);
     push_contract::<crate::store::Branch>(&mut declarations);
     push_contract::<crate::store::ConfigProfile>(&mut declarations);

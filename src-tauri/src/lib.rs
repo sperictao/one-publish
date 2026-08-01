@@ -142,6 +142,8 @@ pub fn run() {
             publish_runtime::resume_publish_runtime,
             publish_runtime::synchronize_publish_runtime,
             publish_runtime::remote_evidence::synchronize_remote_publish_evidence,
+            publish_runtime::remote_evidence::dispatch_manual_publish_run,
+            publish_runtime::remote_evidence::cancel_remote_publish_run,
             publish_runtime::cancel_publish_runtime,
             publish_runtime::list_publish_adapter_catalog,
             automation::list_automation_bindings,

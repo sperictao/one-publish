@@ -155,7 +155,176 @@ fn remote_error(message: String) -> AppError {
     )
 }
 
-/// 独立归档区：`~/.one-publish/publish-attempts/remote/<attempt>/`。
+/// 手动 dispatch 与强取消端口（决议 #89/#84）：dispatch 经 workflow
+/// dispatches API 并以 `return_run_details` 直取 run id；取消经 cancel run
+/// API——语义限定为强取消，runner 协作清理不保证、事件段可能截尾。
+pub(crate) trait RemoteDispatchPort {
+    fn dispatch(
+        &self,
+        repo_root: &Path,
+        workflow_file: &str,
+        reference: &str,
+        inputs: &BTreeMap<String, String>,
+    ) -> Result<Option<u64>, AppError>;
+    fn cancel(&self, repo_root: &Path, run_id: u64) -> Result<(), AppError>;
+}
+
+pub(crate) struct GhCliRemoteDispatchPort;
+
+impl RemoteDispatchPort for GhCliRemoteDispatchPort {
+    fn dispatch(
+        &self,
+        repo_root: &Path,
+        workflow_file: &str,
+        reference: &str,
+        inputs: &BTreeMap<String, String>,
+    ) -> Result<Option<u64>, AppError> {
+        let mut command = crate::process_utils::new_std_command("gh");
+        command.current_dir(repo_root).args([
+            "api",
+            &format!(
+                "repos/{{owner}}/{{repo}}/actions/workflows/{workflow_file}/dispatches"
+            ),
+            "-X",
+            "POST",
+            "-f",
+            &format!("ref={reference}"),
+            "-F",
+            "return_run_details=true",
+        ]);
+        for (key, value) in inputs {
+            command.args(["-f", &format!("inputs[{key}]={value}")]);
+        }
+        let output = command
+            .output()
+            .map_err(|error| remote_error(format!("无法运行 gh api dispatch: {error}")))?;
+        if !output.status.success() {
+            return Err(remote_error(format!(
+                "workflow dispatch 失败: {}",
+                String::from_utf8_lossy(&output.stderr).trim()
+            )));
+        }
+        let payload: Option<serde_json::Value> = serde_json::from_slice(&output.stdout).ok();
+        Ok(payload.and_then(|value| {
+            value
+                .get("run_id")
+                .or_else(|| value.get("id"))
+                .and_then(serde_json::Value::as_u64)
+        }))
+    }
+
+    fn cancel(&self, repo_root: &Path, run_id: u64) -> Result<(), AppError> {
+        let output = crate::process_utils::new_std_command("gh")
+            .current_dir(repo_root)
+            .args([
+                "api",
+                &format!("repos/{{owner}}/{{repo}}/actions/runs/{run_id}/cancel"),
+                "-X",
+                "POST",
+            ])
+            .output()
+            .map_err(|error| remote_error(format!("无法运行 gh api cancel: {error}")))?;
+        if !output.status.success() {
+            return Err(remote_error(format!(
+                "取消 run {run_id} 失败: {}",
+                String::from_utf8_lossy(&output.stderr).trim()
+            )));
+        }
+        Ok(())
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(rename_all = "camelCase")]
+pub struct ManualDispatchResult {
+    pub attempt_id: String,
+    #[ts(type = "number | null")]
+    pub run_id: Option<u64>,
+}
+
+/// 手动语义（决议 #89）：经已安装的 workflow_dispatch 投影触发远端 Attempt。
+/// attempt id 本地预生成并随 inputs 传入（run-name 回显）；dispatch 前预写
+/// 占位、触发失败显式清理，不留半悬状态。
+pub(crate) fn dispatch_manual_publish(
+    repo_root: &Path,
+    config: &RepoPublishConfig,
+    binding_id: &str,
+    version: &str,
+    reference: &str,
+    port: &dyn RemoteDispatchPort,
+    archive: &RemoteEvidenceArchive,
+) -> Result<ManualDispatchResult, AppError> {
+    let binding = config
+        .bindings
+        .iter()
+        .find(|binding| binding.id == binding_id)
+        .ok_or_else(|| {
+            AppError::validation_with_code(
+                format!("未找到自动化绑定: {binding_id}"),
+                "automation_binding_not_found",
+            )
+        })?;
+    if binding.execution_backend_id != publish_adapters::GITHUB_ACTIONS_BACKEND_ID {
+        return Err(AppError::validation_with_code(
+            format!("绑定 {binding_id} 不是 GitHub Actions 远端绑定"),
+            "remote_dispatch_backend_unsupported",
+        ));
+    }
+    if !matches!(
+        binding.trigger_policy,
+        crate::store::AutomationTriggerPolicy::Manual
+    ) {
+        return Err(AppError::validation_with_code(
+            format!("绑定 {binding_id} 不是手动触发，请通过推送 tag 发布"),
+            "remote_dispatch_trigger_mismatch",
+        ));
+    }
+    let workflow_file = Path::new(&binding.external_identity)
+        .file_name()
+        .and_then(|name| name.to_str())
+        .filter(|name| !name.is_empty())
+        .ok_or_else(|| {
+            AppError::validation_with_code(
+                format!("绑定 {binding_id} 尚未安装远端投影，请先应用自动化投影"),
+                "remote_dispatch_projection_not_installed",
+            )
+        })?;
+    let version = version.trim();
+    if version.is_empty() {
+        return Err(AppError::validation_with_code(
+            "手动发布需要显式版本",
+            "remote_dispatch_version_missing",
+        ));
+    }
+
+    let attempt_id = crate::store::new_configuration_identity("manual-attempt");
+    let pending_path = archive.pending_path(&attempt_id)?;
+    archive.write(
+        &pending_path,
+        serde_json::json!({
+            "bindingId": binding.id,
+            "version": version,
+            "dispatchedAt": chrono::Utc::now().to_rfc3339(),
+        })
+        .to_string()
+        .as_bytes(),
+    )?;
+    let inputs = BTreeMap::from([
+        ("attempt-id".to_string(), attempt_id.clone()),
+        ("version".to_string(), version.to_string()),
+    ]);
+    match port.dispatch(repo_root, workflow_file, reference, &inputs) {
+        Ok(run_id) => Ok(ManualDispatchResult { attempt_id, run_id }),
+        Err(error) => {
+            // 触发失败显式清理占位，不留半悬状态（决议 #89）。
+            let _ = std::fs::remove_file(&pending_path);
+            Err(error)
+        }
+    }
+}
+
+/// 独立归档区：`~/.one-publish/publish-attempts/remote/<run>/`。
 /// 段与 prepared 一经写入不再改写（append-only）；重复同步只补缺。
 pub(crate) struct RemoteEvidenceArchive {
     root: PathBuf,
@@ -196,6 +365,15 @@ impl RemoteEvidenceArchive {
 
     fn prepared_path(&self, attempt_id: &str) -> Result<PathBuf, AppError> {
         Ok(self.attempt_dir(attempt_id)?.join("prepared.json"))
+    }
+
+    fn pending_path(&self, attempt_id: &str) -> Result<PathBuf, AppError> {
+        if !publish_domain::is_safe_portable_relative_path(attempt_id) {
+            return Err(remote_error(format!(
+                "manual attempt id {attempt_id} is not a safe archive path"
+            )));
+        }
+        Ok(self.root.join("pending").join(format!("{attempt_id}.json")))
     }
 
     fn write(&self, path: &Path, bytes: &[u8]) -> Result<(), AppError> {
@@ -376,11 +554,13 @@ fn synchronize_run(
     source: &dyn RemoteEvidenceSource,
     archive: &RemoteEvidenceArchive,
 ) -> Result<RemoteAttemptEvidenceView, AppError> {
-    let attempt_id = format!("gh-{}-{}", run.run_id, run.run_attempt);
+    // 归档目录以 run 定位；attempt 身份从段事件读取——tag 外壳按 run 推导，
+    // 手动 dispatch 的 attempt id 由桌面预生成并经 inputs 传入（决议 #89）。
+    let archive_key = format!("gh-{}-{}", run.run_id, run.run_attempt);
     let missing_segments = |archive: &RemoteEvidenceArchive| -> Result<Vec<String>, AppError> {
         let mut missing = Vec::new();
         for segment in expected_segments {
-            if !archive.segment_path(&attempt_id, segment)?.is_file() {
+            if !archive.segment_path(&archive_key, segment)?.is_file() {
                 missing.push(segment.clone());
             }
         }
@@ -388,7 +568,7 @@ fn synchronize_run(
     };
 
     let mut missing = missing_segments(archive)?;
-    let prepared_missing = archive.prepared_path(&attempt_id)?.is_file().eq(&false);
+    let prepared_missing = archive.prepared_path(&archive_key)?.is_file().eq(&false);
     let mut expired = Vec::new();
     if !missing.is_empty() || prepared_missing {
         let artifacts = source.run_artifacts(repo_root, run.run_id)?;
@@ -404,21 +584,11 @@ fn synchronize_run(
                     let bytes = source.download_artifact(repo_root, artifact.id)?;
                     verify_artifact_digest(artifact, &bytes)?;
                     let payload = unzip_single_json(&bytes)?;
-                    // 归档前校验形状与归属：段必须能解析且属于本 attempt。
-                    let segment_outcome: ShardOutcome = serde_json::from_slice(&payload)
-                        .map_err(|error| {
-                            remote_error(format!("段 {name} 无法解析: {error}"))
-                        })?;
-                    if segment_outcome
-                        .events
-                        .iter()
-                        .any(|event| event.attempt_id != attempt_id)
-                    {
-                        return Err(remote_error(format!(
-                            "段 {name} 携带其它 attempt 的事件证据"
-                        )));
-                    }
-                    archive.write(&archive.segment_path(&attempt_id, &segment)?, &payload)?;
+                    // 归档前校验形状：段必须能解析为分片证据。
+                    let _: ShardOutcome = serde_json::from_slice(&payload).map_err(|error| {
+                        remote_error(format!("段 {name} 无法解析: {error}"))
+                    })?;
+                    archive.write(&archive.segment_path(&archive_key, &segment)?, &payload)?;
                 }
                 None => {}
             }
@@ -442,7 +612,7 @@ fn synchronize_run(
                     validate_prepared_attempt(&prepared).map_err(|error| {
                         remote_error(format!("prepared attempt 校验失败: {error}"))
                     })?;
-                    archive.write(&archive.prepared_path(&attempt_id)?, &payload)?;
+                    archive.write(&archive.prepared_path(&archive_key)?, &payload)?;
                 }
             }
         }
@@ -450,11 +620,11 @@ fn synchronize_run(
     }
 
     let prepared: Option<PreparedAttempt> =
-        archive.read_json(&archive.prepared_path(&attempt_id)?)?;
-    let state = if missing.is_empty() {
+        archive.read_json(&archive.prepared_path(&archive_key)?)?;
+    let (state, attempt_id) = if missing.is_empty() {
         let Some(prepared) = prepared else {
             return Ok(RemoteAttemptEvidenceView {
-                attempt_id,
+                attempt_id: archive_key,
                 binding_id: binding.id.clone(),
                 run_id: run.run_id,
                 state: RemoteEvidenceState::MissingSegments {
@@ -462,45 +632,56 @@ fn synchronize_run(
                 },
             });
         };
-        reduce_archived_attempt(archive, &attempt_id, expected_segments, &prepared)?
+        reduce_archived_attempt(archive, &archive_key, expected_segments, &prepared)?
     } else if !expired.is_empty() {
-        RemoteEvidenceState::Expired { missing }
+        (RemoteEvidenceState::Expired { missing }, None)
     } else {
-        RemoteEvidenceState::MissingSegments { missing }
+        (RemoteEvidenceState::MissingSegments { missing }, None)
     };
     Ok(RemoteAttemptEvidenceView {
-        attempt_id,
+        attempt_id: attempt_id.unwrap_or(archive_key),
         binding_id: binding.id.clone(),
         run_id: run.run_id,
         state,
     })
 }
 
-/// 全段归档后的归约：段事件必须钉住 prepared 的 plan digest，多段合并语义
-/// 复用 #85 的 reducer；汇聚段的 Manifest 与归约出的绑定摘要互验。
+/// 全段归档后的归约：段事件必须钉住 prepared 的 plan digest 且段间归属同一
+/// attempt，多段合并语义复用 #85 的 reducer；汇聚段的 Manifest 与归约出的
+/// 绑定摘要互验。返回归约状态与事件承载的 attempt 身份。
 fn reduce_archived_attempt(
     archive: &RemoteEvidenceArchive,
-    attempt_id: &str,
+    archive_key: &str,
     expected_segments: &[String],
     prepared: &PreparedAttempt,
-) -> Result<RemoteEvidenceState, AppError> {
+) -> Result<(RemoteEvidenceState, Option<String>), AppError> {
     let mut events: Vec<PublishEvent> = Vec::new();
     let mut manifests = BTreeMap::new();
     for segment in expected_segments {
         let outcome: ShardOutcome = archive
-            .read_json(&archive.segment_path(attempt_id, segment)?)?
+            .read_json(&archive.segment_path(archive_key, segment)?)?
             .ok_or_else(|| remote_error(format!("段 {segment} 归档缺失")))?;
         if let Some(manifest) = outcome.manifest {
             manifests.insert(segment.clone(), manifest);
         }
         events.extend(outcome.events);
     }
+    let mut attempt_id: Option<String> = None;
     for event in &events {
         if event.plan_digest != prepared.prepared.plan.digest {
             return Err(remote_error(format!(
                 "段事件 {} 未钉住 prepared plan digest",
                 event.event_id
             )));
+        }
+        match &attempt_id {
+            Some(existing) if existing != &event.attempt_id => {
+                return Err(remote_error(format!(
+                    "run {archive_key} 的段携带互相冲突的 attempt 身份"
+                )));
+            }
+            Some(_) => {}
+            None => attempt_id = Some(event.attempt_id.clone()),
         }
     }
     let projection = reduce_publish_events(&events, &prepared.prepared.plan.routes)
@@ -517,10 +698,13 @@ fn reduce_archived_attempt(
             }
         }
     }
-    Ok(RemoteEvidenceState::Archived {
-        status: projection.status.into(),
-        error: projection.error,
-    })
+    Ok((
+        RemoteEvidenceState::Archived {
+            status: projection.status.into(),
+            error: projection.error,
+        },
+        attempt_id,
+    ))
 }
 
 #[tauri::command]
@@ -532,19 +716,59 @@ pub async fn synchronize_remote_publish_evidence(
     );
     let state = crate::store::get_state();
     let repo = crate::store::find_repository(&state.repositories, &repo_id)?;
-    let repo_root = Path::new(&repo.path);
-    if repo.path.trim().is_empty() || !repo_root.is_dir() {
-        return Err(AppError::repository_with_code(
-            format!("仓库路径不可用: {}", repo.path),
-            "remote_evidence_repository_unavailable",
-        ));
-    }
+    let repo_root = repository_root(&repo.path)?;
     synchronize_remote_evidence(
-        repo_root,
+        &repo_root,
         &repo.publish_config,
         &GhCliRemoteEvidenceSource,
         &RemoteEvidenceArchive::for_current_user()?,
     )
+}
+
+#[tauri::command]
+pub async fn dispatch_manual_publish_run(
+    repo_id: String,
+    binding_id: String,
+    version: String,
+) -> Result<ManualDispatchResult, AppError> {
+    let _timer = crate::commands::middleware::CommandTimer::new(
+        "publish_runtime::dispatch_manual_publish_run",
+    );
+    let state = crate::store::get_state();
+    let repo = crate::store::find_repository(&state.repositories, &repo_id)?;
+    let repo_root = repository_root(&repo.path)?;
+    let reference = crate::automation::repository_default_branch(&repo_root)?;
+    dispatch_manual_publish(
+        &repo_root,
+        &repo.publish_config,
+        &binding_id,
+        &version,
+        &reference,
+        &GhCliRemoteDispatchPort,
+        &RemoteEvidenceArchive::for_current_user()?,
+    )
+}
+
+#[tauri::command]
+pub async fn cancel_remote_publish_run(repo_id: String, run_id: u64) -> Result<(), AppError> {
+    let _timer = crate::commands::middleware::CommandTimer::new(
+        "publish_runtime::cancel_remote_publish_run",
+    );
+    let state = crate::store::get_state();
+    let repo = crate::store::find_repository(&state.repositories, &repo_id)?;
+    let repo_root = repository_root(&repo.path)?;
+    GhCliRemoteDispatchPort.cancel(&repo_root, run_id)
+}
+
+fn repository_root(path: &str) -> Result<PathBuf, AppError> {
+    let root = Path::new(path.trim());
+    if path.trim().is_empty() || !root.is_dir() {
+        return Err(AppError::repository_with_code(
+            format!("仓库路径不可用: {path}"),
+            "remote_evidence_repository_unavailable",
+        ));
+    }
+    Ok(root.to_path_buf())
 }
 
 #[cfg(test)]
@@ -929,4 +1153,144 @@ mod tests {
         .expect_err("digest mismatches must fail loudly");
         assert!(error.message.contains("digest 不匹配"));
     }
+
+    type DispatchedRecord = (String, String, BTreeMap<String, String>);
+
+    #[derive(Default)]
+    struct FakeDispatchPort {
+        fail: bool,
+        dispatched: RefCell<Vec<DispatchedRecord>>,
+        cancelled: RefCell<Vec<u64>>,
+    }
+
+    impl RemoteDispatchPort for FakeDispatchPort {
+        fn dispatch(
+            &self,
+            _repo_root: &Path,
+            workflow_file: &str,
+            reference: &str,
+            inputs: &BTreeMap<String, String>,
+        ) -> Result<Option<u64>, AppError> {
+            if self.fail {
+                return Err(remote_error("dispatch rejected".to_string()));
+            }
+            self.dispatched.borrow_mut().push((
+                workflow_file.to_string(),
+                reference.to_string(),
+                inputs.clone(),
+            ));
+            Ok(Some(42))
+        }
+
+        fn cancel(&self, _repo_root: &Path, run_id: u64) -> Result<(), AppError> {
+            self.cancelled.borrow_mut().push(run_id);
+            Ok(())
+        }
+    }
+
+    fn manual_config() -> RepoPublishConfig {
+        let mut config = fixture_config();
+        config.bindings[0].trigger_policy = crate::store::AutomationTriggerPolicy::Manual;
+        config
+    }
+
+    #[test]
+    fn manual_dispatch_sends_inputs_and_cleans_up_the_placeholder_on_failure() {
+        let checkout = fixture_checkout();
+        let archive_root = tempfile::tempdir().expect("archive root");
+        let archive = RemoteEvidenceArchive::new(archive_root.path().to_path_buf());
+        let config = manual_config();
+        let port = FakeDispatchPort::default();
+
+        let result = dispatch_manual_publish(
+            checkout.path(),
+            &config,
+            "binding-stable",
+            "1.2.3",
+            "main",
+            &port,
+            &archive,
+        )
+        .expect("dispatch the manual attempt");
+        assert!(result.attempt_id.starts_with("manual-attempt"));
+        assert_eq!(result.run_id, Some(42));
+        // 占位随 dispatch 成功保留为审计痕迹；inputs 携带预生成 attempt id。
+        assert!(archive
+            .pending_path(&result.attempt_id)
+            .expect("pending path")
+            .is_file());
+        let dispatched = port.dispatched.borrow();
+        let (workflow, reference, inputs) = &dispatched[0];
+        assert_eq!(workflow, "one-publish-binding-stable-release.yml");
+        assert_eq!(reference, "main");
+        assert_eq!(inputs.get("attempt-id"), Some(&result.attempt_id));
+        assert_eq!(inputs.get("version"), Some(&"1.2.3".to_string()));
+
+        // 触发失败：占位显式清理，不留半悬状态（决议 #89）。
+        let failing = FakeDispatchPort {
+            fail: true,
+            ..FakeDispatchPort::default()
+        };
+        let error = dispatch_manual_publish(
+            checkout.path(),
+            &config,
+            "binding-stable",
+            "1.2.3",
+            "main",
+            &failing,
+            &archive,
+        )
+        .expect_err("dispatch failure surfaces");
+        assert!(error.message.contains("dispatch rejected"));
+        let pending_dir = archive_root.path().join("pending");
+        let leftovers = std::fs::read_dir(&pending_dir)
+            .map(|entries| entries.count())
+            .unwrap_or(0);
+        assert_eq!(leftovers, 1, "only the successful dispatch keeps its placeholder");
+    }
+
+    #[test]
+    fn manual_dispatch_blocks_without_an_installed_projection_or_manual_policy() {
+        let checkout = fixture_checkout();
+        let archive_root = tempfile::tempdir().expect("archive root");
+        let archive = RemoteEvidenceArchive::new(archive_root.path().to_path_buf());
+        let port = FakeDispatchPort::default();
+
+        // 未安装投影：显式 blocked 并引导先安装（决议 #89）。
+        let mut uninstalled = manual_config();
+        uninstalled.bindings[0].external_identity = String::new();
+        let error = dispatch_manual_publish(
+            checkout.path(),
+            &uninstalled,
+            "binding-stable",
+            "1.2.3",
+            "main",
+            &port,
+            &archive,
+        )
+        .expect_err("an uninstalled projection must block dispatch");
+        assert_eq!(
+            error.code.as_deref(),
+            Some("remote_dispatch_projection_not_installed")
+        );
+
+        // tag 绑定不能手动 dispatch：发布路径由触发策略决定。
+        let tag_bound = fixture_config();
+        let error = dispatch_manual_publish(
+            checkout.path(),
+            &tag_bound,
+            "binding-stable",
+            "1.2.3",
+            "main",
+            &port,
+            &archive,
+        )
+        .expect_err("tag bindings must not dispatch manually");
+        assert_eq!(
+            error.code.as_deref(),
+            Some("remote_dispatch_trigger_mismatch")
+        );
+        assert!(port.dispatched.borrow().is_empty());
+    }
 }
+
