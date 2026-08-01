@@ -2,7 +2,8 @@ use std::collections::BTreeMap;
 use std::sync::Arc;
 
 use one_publish_runner::{
-    current_runtime_revision, installed_registry, installed_runner, RunnerProjection,
+    current_runtime_revision, installed_registry, installed_runner, RunnerPorts,
+    RunnerProjection,
     StandaloneRunner,
 };
 use publish_adapters::{
@@ -201,7 +202,8 @@ fn fixed_projection_executes_after_the_control_plane_is_removed() {
     let revision = runtime_revision(&installed_snapshot);
     installed_snapshot.runtime_revision = revision.identifier();
     let installed_control_plane = StandaloneRunner::new(
-        installed_registry(&installed_snapshot).expect("assemble installed adapter host"),
+        installed_registry(&installed_snapshot, RunnerPorts::default())
+            .expect("assemble installed adapter host"),
         revision,
     )
     .expect("create installed runner");

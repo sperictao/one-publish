@@ -9,12 +9,9 @@ use std::thread::{self, JoinHandle};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use publish_adapters::{
-    tauri::RELEASE_GATES_INPUT, AdapterConformanceFixture, AdapterRegistry, ChecksumProcessor,
-    GhCliGitHubReleaseApi, GitHubReleaseDestination, LocalDirectoryDestination,
-    LocalExecutionBackend, OpenSshSftpTransport, ProjectProvider, ProviderExecution,
-    ProviderExecutionOutcome, ProviderExecutionPort, SelectedProjectProvider,
-    SftpDeliveryDestination, TauriBuildDriver, TauriProjectProvider, TauriRuntimeProvider,
-    TemporaryArtifactStore, CHECKSUM_PROCESSOR_ID, GITHUB_RELEASE_DESTINATION_ID,
+    tauri::RELEASE_GATES_INPUT, AdapterRegistry, ProjectProvider, ProviderExecution,
+    ProviderExecutionOutcome, ProviderExecutionPort, TauriBuildDriver, TauriProjectProvider,
+    CHECKSUM_PROCESSOR_ID, GITHUB_RELEASE_DESTINATION_ID,
     SELECTED_PROVIDER_ID, SFTP_DESTINATION_ID, TAURI_PROVIDER_ID,
 };
 use publish_domain::{
@@ -829,7 +826,7 @@ pub(crate) fn prepare_runtime(
         &release_gates,
         &resolved.composition,
     )?;
-    let registry = build_registry(&snapshot, &delivery_directory, None)?;
+    let registry = build_registry(&snapshot, None)?;
     let prepared = PublishRuntime::new(registry)
         .prepare_attempt(&snapshot)
         .map_err(runtime_error)?;
@@ -1326,11 +1323,9 @@ fn start_runtime_with_repository(
             )
         })?
         .to_string();
-    let delivery_directory = prepared_release_input(&prepared, "delivery_directory")?;
     let repository_path = source_guard.repository.to_string_lossy().to_string();
     let registry = build_registry(
         &prepared.snapshot,
-        &delivery_directory,
         Some(ProviderExecution {
             port: execution_port,
             output_directory: PathBuf::from(&provider_output_directory),
@@ -1436,6 +1431,7 @@ fn start_runtime_with_repository(
     })
 }
 
+#[cfg(test)]
 fn prepared_release_input(prepared: &PreparedPublishPlan, key: &str) -> Result<String, AppError> {
     prepared
         .snapshot
@@ -1572,8 +1568,7 @@ fn resume_runtime_with_repository_and_cancellation(
     let loaded = repository
         .load_attempt(&request.attempt_id)
         .map_err(runtime_error)?;
-    let delivery_directory = prepared_release_input(&loaded.prepared, "delivery_directory")?;
-    let registry = build_registry(&loaded.prepared.snapshot, &delivery_directory, None)?;
+    let registry = build_registry(&loaded.prepared.snapshot, None)?;
     let now_seconds = unix_now_seconds()?;
     let cancellation = RegisteredCancellation::register_attempt(&request.attempt_id)?;
     let lease = acquire_or_renew_attempt_lease(&repository, leases.as_ref(), &loaded, now_seconds)?;
@@ -1692,8 +1687,7 @@ fn synchronize_runtime_with_repository(
     let pre_sync = repository
         .load_attempt(&attempt_id)
         .map_err(runtime_error)?;
-    let delivery_directory = prepared_release_input(&pre_sync.prepared, "delivery_directory")?;
-    let registry = build_registry(&pre_sync.prepared.snapshot, &delivery_directory, None)?;
+    let registry = build_registry(&pre_sync.prepared.snapshot, None)?;
     let runtime = PublishRuntime::with_lease_coordinator(registry, Arc::clone(&leases));
     let report = repository
         .synchronize(
@@ -2031,78 +2025,39 @@ pub fn list_publish_adapter_catalog() -> PublishAdapterCatalog {
     builtin_adapter_catalog()
 }
 
+/// 桌面本机注册表 = 共享 runner 注册表 ∩ 桌面执行策略（决议 #80/#89）：
+/// 注册表唯一构造点在 one-publish-runner；远端 Backend 组合在 dispatch 流
+/// 落地前不本机执行，按既有 unavailable 语义显式阻断。
 fn build_registry(
     snapshot: &PlanningInputSnapshot,
-    delivery_directory: &str,
     execution: Option<ProviderExecution>,
 ) -> Result<AdapterRegistry, AppError> {
-    let fixture = AdapterConformanceFixture::new(snapshot.clone());
-    let mut registry = AdapterRegistry::new();
-    register_project_provider(&mut registry, snapshot, execution, &fixture)?;
-
-    let mut processors = BTreeSet::new();
-    for binding in &snapshot.adapters.artifact_processors {
-        if !processors.insert(binding.adapter.id.clone()) {
-            continue;
-        }
-        match binding.adapter.id.as_str() {
-            CHECKSUM_PROCESSOR_ID => registry
-                .register_artifact_processor(Arc::new(ChecksumProcessor::new()), &fixture)
-                .map_err(runtime_error)?,
-            other => return Err(unsupported_adapter("artifact processor", other)),
-        }
+    let backend = &snapshot.adapters.execution_backend.adapter;
+    if backend.id != LOCAL_BACKEND_ID {
+        return Err(unsupported_adapter("execution backend", &backend.id));
     }
-
-    match snapshot.adapters.execution_backend.adapter.id.as_str() {
-        LOCAL_BACKEND_ID => registry
-            .register_execution_backend(Arc::new(LocalExecutionBackend::new()), &fixture)
-            .map_err(runtime_error)?,
-        other => return Err(unsupported_adapter("execution backend", other)),
-    }
-
-    match snapshot.adapters.artifact_store.adapter.id.as_str() {
-        TEMPORARY_STORE_ID => registry
-            .register_artifact_store(
-                Arc::new(TemporaryArtifactStore::new(artifact_store_root())),
-                &fixture,
-            )
-            .map_err(runtime_error)?,
-        other => return Err(unsupported_adapter("artifact store", other)),
-    }
-
-    let mut destinations = BTreeSet::new();
-    for route in &snapshot.adapters.delivery_routes {
-        let destination_id = route.binding.adapter.id.as_str();
-        if !destinations.insert(destination_id.to_string()) {
-            continue;
+    one_publish_runner::installed_registry(
+        snapshot,
+        one_publish_runner::RunnerPorts {
+            provider_execution: execution,
+        },
+    )
+    .map_err(|error| match error {
+        PublishError::AdapterNotRegistered { kind, id, .. } => {
+            unsupported_adapter(adapter_kind_label(kind), &id)
         }
-        match destination_id {
-            LOCAL_DESTINATION_ID => registry
-                .register_delivery_destination(
-                    Arc::new(LocalDirectoryDestination::new(delivery_directory)),
-                    &fixture,
-                )
-                .map_err(runtime_error)?,
-            SFTP_DESTINATION_ID => registry
-                .register_delivery_destination(
-                    Arc::new(SftpDeliveryDestination::new(Arc::new(
-                        OpenSshSftpTransport::new(),
-                    ))),
-                    &fixture,
-                )
-                .map_err(runtime_error)?,
-            GITHUB_RELEASE_DESTINATION_ID => registry
-                .register_delivery_destination(
-                    Arc::new(GitHubReleaseDestination::new(Arc::new(
-                        GhCliGitHubReleaseApi::new(),
-                    ))),
-                    &fixture,
-                )
-                .map_err(runtime_error)?,
-            other => return Err(unsupported_adapter("delivery destination", other)),
-        }
+        other => runtime_error(other),
+    })
+}
+
+fn adapter_kind_label(kind: AdapterKind) -> &'static str {
+    match kind {
+        AdapterKind::ProjectProvider => "project provider",
+        AdapterKind::ArtifactProcessor => "artifact processor",
+        AdapterKind::ExecutionBackend => "execution backend",
+        AdapterKind::ArtifactStore => "artifact store",
+        AdapterKind::DeliveryDestination => "delivery destination",
     }
-    Ok(registry)
 }
 
 /// 能力协商语义：组合引用了本运行时未内置的 Adapter 时报告具体缺失，
@@ -2112,65 +2067,6 @@ fn unsupported_adapter(kind: &str, adapter_id: &str) -> AppError {
         format!("publish composition requires {kind} adapter {adapter_id}, which is not built into this runtime"),
         "publish_runtime_adapter_unavailable",
     )
-}
-
-/// 按快照声明的 Project Provider 身份注册对应实现；快照是唯一的选择事实来源。
-fn register_project_provider(
-    registry: &mut AdapterRegistry,
-    snapshot: &PlanningInputSnapshot,
-    execution: Option<ProviderExecution>,
-    fixture: &AdapterConformanceFixture,
-) -> Result<(), AppError> {
-    let binding = &snapshot.adapters.project_provider;
-    let adapter_name = binding.adapter.display_name();
-    if binding.adapter.id == TAURI_PROVIDER_ID {
-        let config_path = binding
-            .settings
-            .string("config_path", &adapter_name)
-            .map_err(runtime_error)?
-            .to_string();
-        let build_driver = binding
-            .settings
-            .string("build_driver", &adapter_name)
-            .map_err(runtime_error)?
-            .to_string();
-        let repository_root = snapshot
-            .release_input
-            .get("repository_path")
-            .and_then(Value::as_str)
-            .ok_or_else(|| {
-                AppError::publish_with_code(
-                    "prepared runtime has no repository path",
-                    "publish_runtime_repository_missing",
-                )
-            })?;
-        registry
-            .register_project_provider(
-                Arc::new(TauriRuntimeProvider::new(
-                    config_path,
-                    build_driver,
-                    PathBuf::from(repository_root),
-                    execution,
-                )),
-                fixture,
-            )
-            .map_err(runtime_error)?;
-    } else {
-        let spec_json = binding
-            .settings
-            .string("spec_json", &adapter_name)
-            .map_err(runtime_error)?
-            .to_string();
-        registry
-            .register_project_provider(
-                Arc::new(SelectedProjectProvider::with_execution(
-                    spec_json, execution,
-                )),
-                fixture,
-            )
-            .map_err(runtime_error)?;
-    }
-    Ok(())
 }
 
 fn release_identity(snapshot: &PlanningInputSnapshot) -> Result<ReleaseIdentity, AppError> {
@@ -4226,7 +4122,6 @@ mod tests {
             .expect("restore source guard");
         let registry = super::build_registry(
             &sealed.snapshot,
-            &release_value("delivery_directory"),
             Some(super::ProviderExecution {
                 port: Arc::new(FakeTauriBuild::new(bundle_directory)),
                 output_directory: std::path::PathBuf::from(release_value(
@@ -4403,7 +4298,7 @@ mod tests {
 
         let repository = tempfile::tempdir().expect("create repository");
         write_tauri_app(repository.path(), ".", "1.2.3");
-        let provider = super::TauriRuntimeProvider::new(
+        let provider = publish_adapters::TauriRuntimeProvider::new(
             "src-tauri/tauri.conf.json".to_string(),
             "pnpm".to_string(),
             repository.path().to_path_buf(),
@@ -5039,7 +4934,7 @@ mod tests {
             adapters: selection,
         };
 
-        let error = match super::build_registry(&snapshot, "/tmp/delivery-root", None) {
+        let error = match super::build_registry(&snapshot, None) {
             Ok(_) => panic!("unknown backend must be a specific capability error"),
             Err(error) => error,
         };
@@ -5212,7 +5107,7 @@ mod tests {
             .expect("persist attempt header");
         let delivery_directory = super::prepared_release_input(&prepared, "delivery_directory")
             .expect("prepared delivery directory");
-        let registry = super::build_registry(&prepared.snapshot, &delivery_directory, None)
+        let registry = super::build_registry(&prepared.snapshot, None)
             .expect("rebuild sealed adapter registry");
         let runtime = publish_runner_core::PublishRuntime::new(registry);
 

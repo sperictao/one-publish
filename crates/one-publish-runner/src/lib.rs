@@ -10,7 +10,7 @@ use publish_adapters::{
     AdapterConformanceFixture, AdapterRegistry, ChecksumProcessor, CustomCommandProcessor,
     FakeGitHubActionsBackend, GhCliGitHubReleaseApi, GitHubActionsExecutionBackend,
     GitHubReleaseDestination, LocalDirectoryDestination, LocalExecutionBackend,
-    OpenSshSftpTransport, SftpDeliveryDestination, StaticCredentialSource, TauriProjectProvider,
+    OpenSshSftpTransport, SftpDeliveryDestination, StaticCredentialSource,
     TemporaryArtifactStore, CHECKSUM_PROCESSOR_ID, CUSTOM_COMMAND_PROCESSOR_ID,
     FAKE_GITHUB_ACTIONS_BACKEND_ID, GITHUB_ACTIONS_EXECUTION_BACKEND_ID,
     GITHUB_RELEASE_DESTINATION_ID, SFTP_DESTINATION_ID, TAURI_PROVIDER_ID,
@@ -208,17 +208,25 @@ pub fn installed_runner(projection: &RunnerProjection) -> Result<StandaloneRunne
             installed_revision.identifier()
         )));
     }
-    let registry = installed_registry(&projection.prepared.snapshot)?;
+    let registry = installed_registry(&projection.prepared.snapshot, RunnerPorts::default())?;
     StandaloneRunner::new(registry, installed_revision)
+}
+
+/// 环境注入集合（决议 #80）：桌面注入 Tauri 执行端口，headless 环境用缺省
+/// （无端口，构建节点显式失败直至默认直执行实现落地）。
+#[derive(Default)]
+pub struct RunnerPorts {
+    pub provider_execution: Option<publish_adapters::ProviderExecution>,
 }
 
 pub fn installed_registry(
     snapshot: &PlanningInputSnapshot,
+    mut ports: RunnerPorts,
 ) -> Result<AdapterRegistry, PublishError> {
     let fixture = AdapterConformanceFixture::new(snapshot.clone());
     let mut registry = AdapterRegistry::new();
 
-    register_project_provider(&mut registry, &fixture, snapshot)?;
+    register_project_provider(&mut registry, &fixture, snapshot, &mut ports)?;
     register_processors(&mut registry, &fixture, snapshot)?;
     register_execution_backend(&mut registry, &fixture, snapshot)?;
     register_artifact_store(&mut registry, &fixture, snapshot)?;
@@ -231,12 +239,47 @@ fn register_project_provider(
     registry: &mut AdapterRegistry,
     fixture: &AdapterConformanceFixture,
     snapshot: &PlanningInputSnapshot,
+    ports: &mut RunnerPorts,
 ) -> Result<(), PublishError> {
-    let identity = &snapshot.adapters.project_provider.adapter;
+    let binding = &snapshot.adapters.project_provider;
+    let identity = &binding.adapter;
+    let setting = |key: &str| {
+        binding
+            .settings
+            .values
+            .get(key)
+            .and_then(serde_json::Value::as_str)
+            .map(str::to_string)
+            .ok_or_else(|| PublishError::InvalidAdapterSettings {
+                adapter: identity.display_name(),
+                message: format!("{key} is required"),
+            })
+    };
     match (identity.id.as_str(), identity.version) {
         (TAURI_PROVIDER_ID, 1) => {
-            registry.register_project_provider(Arc::new(TauriProjectProvider::new()), fixture)
+            // 仓库根只在节点执行时消费；无桌面准备上下文的校验快照不携带。
+            let repository_root = snapshot
+                .release_input
+                .get("repository_path")
+                .and_then(serde_json::Value::as_str)
+                .unwrap_or(".");
+            registry.register_project_provider(
+                Arc::new(publish_adapters::TauriRuntimeProvider::new(
+                    setting("config_path")?,
+                    setting("build_driver")?,
+                    std::path::PathBuf::from(repository_root),
+                    ports.provider_execution.take(),
+                )),
+                fixture,
+            )
         }
+        (publish_adapters::SELECTED_PROVIDER_ID, 1) => registry.register_project_provider(
+            Arc::new(publish_adapters::SelectedProjectProvider::with_execution(
+                setting("spec_json")?,
+                ports.provider_execution.take(),
+            )),
+            fixture,
+        ),
         _ => Err(unsupported_installed_adapter(identity)),
     }
 }
