@@ -11,10 +11,11 @@ use std::sync::Arc;
 
 use publish_adapters::{ExecutionBackend, FakeAutomationBackend, FAKE_AUTOMATION_BACKEND_ID};
 use publish_domain::{
-    canonical_digest, diff_automation_files, is_safe_portable_relative_path, AdapterIdentity,
-    AdapterKind, AutomationBindingProjection, AutomationBundleFile, AutomationBundleFileChange,
-    AutomationFileChangeKind, AutomationProjection, AutomationRuntimeRevision,
-    AutomationTriggerPolicy as DomainTriggerPolicy, PublishError,
+    canonical_digest, diff_automation_files, is_safe_portable_relative_path, AdapterBinding,
+    AdapterIdentity, AdapterKind, AdapterSelection, AdapterSettings, AutomationBindingProjection,
+    AutomationBundleFile, AutomationBundleFileChange, AutomationFileChangeKind,
+    AutomationProjection, AutomationRuntimeRevision,
+    AutomationTriggerPolicy as DomainTriggerPolicy, DeliveryRoute, PublishError,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -341,6 +342,8 @@ fn binding_not_found(binding_id: &str) -> AppError {
 }
 
 /// 投影固定引用绑定所钉住的修订，而不是配置的当前修订。
+/// 决议 #87：投影完整携带修订组合与凭据引用→Secret 名映射表；远端投影
+/// 后端另获得 runner 规划输入模板。受保护变量层首期不启用（决议 #87）。
 fn binding_projection(
     config: &RepoPublishConfig,
     binding: &AutomationBinding,
@@ -350,6 +353,33 @@ fn binding_projection(
         .validate_for_projection()
         .map_err(render_error)?;
     let revision = bound_revision(config, binding)?;
+
+    let mut public_settings = BTreeMap::from([
+        (
+            "providerId".to_string(),
+            Value::String(revision.provider_id.clone()),
+        ),
+        (
+            "settingsVersion".to_string(),
+            Value::from(revision.settings_version),
+        ),
+        ("parameters".to_string(), revision.parameters.clone()),
+        (
+            "composition".to_string(),
+            projection_value(&revision.composition, "组合")?,
+        ),
+        (
+            "backendProjection".to_string(),
+            binding.backend_projection.clone(),
+        ),
+    ]);
+    // 远端投影后端消费 runner 模板；Fake 后端是本机测试语义，没有远端 runner。
+    if binding.execution_backend_id == GITHUB_ACTIONS_BACKEND_ID {
+        public_settings.insert(
+            "runnerProjection".to_string(),
+            projection_value(&runner_projection(binding, revision)?, "runner 模板")?,
+        );
+    }
 
     Ok(AutomationBindingProjection {
         binding_id: binding.id.clone(),
@@ -362,25 +392,202 @@ fn binding_projection(
             .collect(),
         runtime_revision: binding.runtime_revision.clone(),
         projection: AutomationProjection {
-            public_settings: BTreeMap::from([
-                (
-                    "providerId".to_string(),
-                    Value::String(revision.provider_id.clone()),
-                ),
-                (
-                    "settingsVersion".to_string(),
-                    Value::from(revision.settings_version),
-                ),
-                ("parameters".to_string(), revision.parameters.clone()),
-                (
-                    "backendProjection".to_string(),
-                    binding.backend_projection.clone(),
-                ),
-            ]),
+            public_settings,
             protected_variables: BTreeMap::new(),
-            secret_references: BTreeMap::new(),
+            secret_references: secret_bindings(&revision.composition),
         },
     })
+}
+
+fn projection_value<T: serde::Serialize>(value: &T, what: &str) -> Result<Value, AppError> {
+    serde_json::to_value(value).map_err(|error| {
+        AppError::publish_with_code(
+            format!("无法序列化自动化投影{what}: {error}"),
+            "automation_projection_render_failed",
+        )
+    })
+}
+
+/// 决议 #87：把绑定钉住的修订物化为远端 runner 的规划输入模板。模板只携带
+/// 静态规划输入与物化 Adapter 选择；触发事实（版本、源快照、运行时目录）
+/// 由 runner 现场补全，Attempt 身份在触发时形成。Tauri 是当前唯一支持远端
+/// 现场规划的 Provider。
+fn runner_projection(
+    binding: &AutomationBinding,
+    revision: &crate::store::PublishConfigurationRevision,
+) -> Result<one_publish_runner::RunnerProjection, AppError> {
+    if revision.provider_id != publish_adapters::TAURI_PROVIDER_ID {
+        return Err(AppError::validation_with_code(
+            format!("Provider {} 不支持远端现场规划", revision.provider_id),
+            "automation_remote_provider_unsupported",
+        ));
+    }
+    let release_config =
+        crate::tauri_release::release_settings_from_parameters(&revision.parameters)?.ok_or_else(
+            || {
+                AppError::config_with_code(
+                    "GitHub Actions 自动化需要修订中的 Tauri 发布设置",
+                    "github_actions_release_config_missing",
+                )
+            },
+        )?;
+
+    let composition = &revision.composition;
+    let project_provider = AdapterBinding::new(
+        "project",
+        AdapterIdentity::new(
+            AdapterKind::ProjectProvider,
+            publish_adapters::TAURI_PROVIDER_ID,
+            1,
+        ),
+        AdapterSettings::new(1)
+            .with_value(
+                "config_path",
+                Value::String(release_config.app_config_path.clone()),
+            )
+            .with_value(
+                "build_driver",
+                projection_value(&release_config.build_driver, "构建驱动")?,
+            ),
+    );
+    let artifact_processors = composition
+        .artifact_processors
+        .iter()
+        .enumerate()
+        .map(|(index, processor)| {
+            crate::publish_runtime::composition_binding(
+                &format!("processor-{}", index + 1),
+                AdapterKind::ArtifactProcessor,
+                processor,
+            )
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+    let delivery_routes = composition
+        .delivery_routes
+        .iter()
+        .map(|route| {
+            crate::publish_runtime::composition_binding(
+                route.route_id.as_str(),
+                AdapterKind::DeliveryDestination,
+                &route.destination,
+            )
+            .map(|destination| {
+                if route.required {
+                    DeliveryRoute::required(destination)
+                } else {
+                    DeliveryRoute::optional(destination)
+                }
+            })
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+    let adapters = AdapterSelection {
+        project_provider,
+        artifact_processors,
+        execution_backend: crate::publish_runtime::composition_binding(
+            "backend",
+            AdapterKind::ExecutionBackend,
+            &composition.execution_backend,
+        )?,
+        artifact_store: crate::publish_runtime::composition_binding(
+            "store",
+            AdapterKind::ArtifactStore,
+            &composition.artifact_store,
+        )?,
+        delivery_routes,
+    };
+
+    let mut release_input = BTreeMap::from([(
+        "channel".to_string(),
+        Value::String("stable".to_string()),
+    )]);
+    if !release_config.release_gates.is_empty() {
+        release_input.insert(
+            publish_adapters::tauri::RELEASE_GATES_INPUT.to_string(),
+            projection_value(&release_config.release_gates, "发布门禁")?,
+        );
+    }
+
+    // 模板钉住服务它所需的精确 runner 运行时（以物化选择计算）；绑定级修订
+    // 另含自动化后端身份，两者在 #81 Backend 合并后收敛为同一封存。
+    let runtime_revision = one_publish_runner::current_runtime_revision(
+        adapters
+            .ordered_bindings()
+            .into_iter()
+            .map(|binding| binding.adapter.clone()),
+    )
+    .map_err(|error| {
+        AppError::publish_with_code(
+            format!("无法封存模板运行时修订: {error}"),
+            "automation_runtime_revision_invalid",
+        )
+    })?;
+
+    Ok(one_publish_runner::RunnerProjection {
+        version: one_publish_runner::RUNNER_PROJECTION_VERSION,
+        binding_id: binding.id.clone(),
+        configuration_id: binding.configuration_id.clone(),
+        configuration_revision_id: binding.configuration_revision_id.clone(),
+        trigger_policy: domain_trigger(&binding.trigger_policy),
+        runtime_revision,
+        release_input,
+        adapters,
+        secret_bindings: secret_bindings(&revision.composition),
+    })
+}
+
+/// 决议 #87：凭据引用确定性规范化为执行环境 Secret 名（`ONE_PUBLISH_<slug>`）。
+/// 名字非秘密，进投影公开部分；不同引用折叠出同一 slug 时以引用摘要后缀
+/// 消歧，保证映射可重放、diff 可预览。
+fn secret_bindings(
+    composition: &crate::store::PublishComposition,
+) -> BTreeMap<String, String> {
+    let mut by_slug: BTreeMap<String, BTreeSet<&str>> = BTreeMap::new();
+    let bindings = std::iter::once(&composition.execution_backend)
+        .chain(std::iter::once(&composition.artifact_store))
+        .chain(composition.artifact_processors.iter())
+        .chain(
+            composition
+                .delivery_routes
+                .iter()
+                .map(|route| &route.destination),
+        );
+    for binding in bindings {
+        for reference in binding.credentials.values() {
+            by_slug
+                .entry(secret_slug(reference))
+                .or_default()
+                .insert(reference);
+        }
+    }
+    let mut secret_names = BTreeMap::new();
+    for (slug, references) in by_slug {
+        for reference in &references {
+            let name = if references.len() == 1 {
+                format!("ONE_PUBLISH_{slug}")
+            } else {
+                let digest = publish_domain::sha256_hex(reference.as_bytes());
+                format!(
+                    "ONE_PUBLISH_{slug}_{}",
+                    digest[..8].to_ascii_uppercase()
+                )
+            };
+            secret_names.insert((*reference).to_string(), name);
+        }
+    }
+    secret_names
+}
+
+fn secret_slug(reference: &str) -> String {
+    reference
+        .chars()
+        .map(|character| {
+            if character.is_ascii_alphanumeric() {
+                character.to_ascii_uppercase()
+            } else {
+                '_'
+            }
+        })
+        .collect()
 }
 
 fn render_error(error: PublishError) -> AppError {
@@ -1659,6 +1866,112 @@ mod tests {
             NOW,
         )
         .expect("apply change")
+    }
+
+    #[test]
+    fn github_actions_runtime_projection_is_a_verifiable_planning_template() {
+        let (_temp, work) = fixture_repository();
+        let (mut config, profile_id) = fixture_tauri_config("Stable");
+        {
+            let profile = config
+                .profiles
+                .iter_mut()
+                .find(|profile| profile.id == profile_id)
+                .expect("fixture profile");
+            let revision = profile.revisions.first_mut().expect("fixture revision");
+            revision
+                .composition
+                .delivery_routes
+                .push(crate::store::RevisionDeliveryRoute {
+                    route_id: "github-release".to_string(),
+                    required: true,
+                    destination: crate::store::RevisionAdapterBinding {
+                        adapter_id: publish_adapters::GITHUB_RELEASE_DESTINATION_ID.to_string(),
+                        settings_version: 1,
+                        settings: serde_json::json!({ "repository": "acme/demo" }),
+                        credentials: BTreeMap::from([(
+                            "github_token".to_string(),
+                            "ci github-token".to_string(),
+                        )]),
+                    },
+                });
+        }
+
+        let outcome = preview_change(
+            &work,
+            &config,
+            &github_actions_install_request(&profile_id, "binding-stable", "v"),
+            NOW,
+        )
+        .expect("preview GitHub Actions install");
+
+        let runtime_file = outcome
+            .expected
+            .files
+            .get(".one-publish/automation/runtime/binding-stable.json")
+            .expect("binding runtime projection file");
+        let projection: one_publish_runner::RunnerProjection =
+            serde_json::from_str(&runtime_file.content)
+                .expect("runtime file is the runner planning template");
+        one_publish_runner::verify_installed_projection(&projection)
+            .expect("the companion runner serves the installed template");
+
+        assert_eq!(projection.binding_id, "binding-stable");
+        // 版本与源快照是触发事实：模板只携带静态规划输入。
+        assert!(!projection.release_input.contains_key("version"));
+        assert_eq!(
+            projection.release_input.get("channel"),
+            Some(&Value::String("stable".to_string()))
+        );
+        // 桌面运行时缺省键（存储根、本地交付目录）不进入可移植模板。
+        assert!(!projection
+            .adapters
+            .artifact_store
+            .settings
+            .values
+            .contains_key("root_directory"));
+        assert_eq!(
+            projection.secret_bindings.get("ci github-token"),
+            Some(&"ONE_PUBLISH_CI_GITHUB_TOKEN".to_string())
+        );
+        // 分层投影契约把同一映射表呈现为"需在仓库配置的 Secrets"清单。
+        let binding_projection = binding_projection(&config, &outcome.targets[0])
+            .expect("render binding projection");
+        assert_eq!(
+            binding_projection.projection.secret_references,
+            projection.secret_bindings
+        );
+        assert!(binding_projection
+            .projection
+            .public_settings
+            .contains_key("composition"));
+    }
+
+    #[test]
+    fn secret_bindings_normalize_references_and_disambiguate_slug_collisions() {
+        let mut composition = crate::store::PublishComposition::local_default();
+        composition.execution_backend.credentials = BTreeMap::from([
+            ("token".to_string(), "ci token".to_string()),
+            ("fallback_token".to_string(), "ci-token".to_string()),
+        ]);
+        composition.artifact_store.credentials =
+            BTreeMap::from([("key".to_string(), "deploy-key".to_string())]);
+
+        let bindings = secret_bindings(&composition);
+
+        assert_eq!(
+            bindings.get("deploy-key"),
+            Some(&"ONE_PUBLISH_DEPLOY_KEY".to_string())
+        );
+        let first = bindings.get("ci token").expect("collided reference");
+        let second = bindings.get("ci-token").expect("collided reference");
+        assert_ne!(first, second);
+        for name in [first, second] {
+            assert!(name.starts_with("ONE_PUBLISH_CI_TOKEN_"));
+            assert_eq!(name.len(), "ONE_PUBLISH_CI_TOKEN_".len() + 8);
+        }
+        // 映射确定性：同一组合重放产出同一张表。
+        assert_eq!(bindings, secret_bindings(&composition));
     }
 
     #[test]

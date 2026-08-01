@@ -1965,7 +1965,7 @@ fn composition_selection(
 }
 
 /// 修订内 Adapter 绑定 → 计划输入绑定；settings 必须是非秘密 JSON 对象。
-fn composition_binding(
+pub(crate) fn composition_binding(
     binding_id: &str,
     kind: AdapterKind,
     revision: &RevisionAdapterBinding,

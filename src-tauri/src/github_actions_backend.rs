@@ -144,10 +144,22 @@ impl ExecutionBackend for GitHubActionsAutomationBackend {
                 ".one-publish/automation/runtime/{}.json",
                 binding.binding_id
             );
+            // 决议 #87：runtime 文件即远端 runner 消费的规划输入模板，
+            // 内容由控制面构造、runner crate 的 RunnerProjection 定义格式。
+            let runner_projection = binding
+                .projection
+                .public_settings
+                .get("runnerProjection")
+                .ok_or_else(|| {
+                    PublishError::Execution(
+                        "GitHub Actions binding is missing its runner projection template"
+                            .to_string(),
+                    )
+                })?;
             files.insert(
                 runtime_path.clone(),
                 AutomationBundleFile {
-                    content: serde_json::to_string_pretty(binding)
+                    content: serde_json::to_string_pretty(runner_projection)
                         .map_err(|error| PublishError::Execution(error.to_string()))?
                         + "\n",
                     binding_id: Some(binding.binding_id.clone()),
@@ -224,6 +236,10 @@ mod tests {
                         serde_json::Value::String("tauri".to_string()),
                     ),
                     ("backendProjection".to_string(), release_config),
+                    (
+                        "runnerProjection".to_string(),
+                        serde_json::json!({ "binding_id": id }),
+                    ),
                 ]),
                 protected_variables: BTreeMap::new(),
                 secret_references: BTreeMap::new(),
