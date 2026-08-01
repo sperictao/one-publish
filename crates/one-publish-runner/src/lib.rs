@@ -36,18 +36,32 @@ pub const RUNNER_SOURCE_DIGEST: &str = env!("ONE_PUBLISH_RUNNER_SOURCE_DIGEST");
 pub fn runner_release_tag() -> String {
     format!("runner-v{RUNNER_VERSION}")
 }
+
+/// 分发仓库（决议 #86：runner 二进制随主仓库 Release 发布）。
+pub const RUNNER_DISTRIBUTION_REPOSITORY: &str = "sperictao/one-publish";
+
 pub const PLAN_CONTRACT_SOURCE_DIGEST: &str = env!("ONE_PUBLISH_PLAN_SOURCE_DIGEST");
 pub const ADAPTERS_SOURCE_DIGEST: &str = env!("ONE_PUBLISH_ADAPTERS_SOURCE_DIGEST");
 
 pub fn current_runtime_revision(
     adapters: impl IntoIterator<Item = AdapterIdentity>,
 ) -> Result<AutomationRuntimeRevision, PublishError> {
+    current_runtime_revision_with_binary_digests(adapters, BTreeMap::new())
+}
+
+/// 带分发资产摘要的封存（决议 #86）：控制面固化时经 REST 拉取 per-target
+/// 摘要后钉入 runner 组件；本机自证与离线检测用无摘要归一形态。
+pub fn current_runtime_revision_with_binary_digests(
+    adapters: impl IntoIterator<Item = AdapterIdentity>,
+    binary_digests: BTreeMap<String, String>,
+) -> Result<AutomationRuntimeRevision, PublishError> {
     let adapters = built_in_adapter_identities()
         .into_iter()
         .chain(adapters)
         .collect::<BTreeSet<_>>();
     AutomationRuntimeRevision::seal(
-        RuntimeComponentRevision::new(RUNNER_VERSION, RUNNER_SOURCE_DIGEST),
+        RuntimeComponentRevision::new(RUNNER_VERSION, RUNNER_SOURCE_DIGEST)
+            .with_binary_digests(binary_digests),
         RuntimeComponentRevision::new(
             PUBLISH_PLAN_VERSION.to_string(),
             PLAN_CONTRACT_SOURCE_DIGEST,
@@ -207,7 +221,8 @@ pub fn validate_projection(projection: &RunnerProjection) -> Result<(), PublishE
 }
 
 /// 已安装 runner 能否服务该模板投影：结构校验 + 投影钉住的运行时修订与本机
-/// 封存完全一致（Adapter 集合以投影的物化选择为准）。
+/// 封存一致（Adapter 集合以投影的物化选择为准）。分发资产摘要是控制面 TOFU
+/// 固化的事实、由 workflow 下载校验消费，runner 无法自证——以归一形态比较。
 pub fn verify_installed_projection(projection: &RunnerProjection) -> Result<(), PublishError> {
     validate_projection(projection)?;
     let installed = current_runtime_revision(
@@ -217,7 +232,7 @@ pub fn verify_installed_projection(projection: &RunnerProjection) -> Result<(), 
             .into_iter()
             .map(|binding| binding.adapter.clone()),
     )?;
-    if projection.runtime_revision != installed {
+    if projection.runtime_revision.without_binary_digests()? != installed {
         return Err(PublishError::InvalidRuntimeRevision(format!(
             "projection pins {}, but the installed runner provides {}",
             projection.runtime_revision.identifier(),
@@ -275,7 +290,9 @@ pub fn installed_runner(attempt: &PreparedAttempt) -> Result<StandaloneRunner, P
             .into_iter()
             .map(|binding| binding.adapter.clone()),
     )?;
-    if attempt.runtime_revision != installed_revision {
+    // 分发资产摘要由控制面 TOFU 固化、workflow 下载校验消费；本机自证以
+    // 归一形态比较，随后沿用 attempt 钉住的完整修订保持身份贯通。
+    if attempt.runtime_revision.without_binary_digests()? != installed_revision {
         return Err(PublishError::InvalidRuntimeRevision(format!(
             "prepared attempt pins {}, but the installed runner provides {}",
             attempt.runtime_revision.identifier(),
@@ -283,7 +300,7 @@ pub fn installed_runner(attempt: &PreparedAttempt) -> Result<StandaloneRunner, P
         )));
     }
     let registry = installed_registry(&attempt.prepared.snapshot, RunnerPorts::default())?;
-    StandaloneRunner::new(registry, installed_revision)
+    StandaloneRunner::new(registry, attempt.runtime_revision.clone())
 }
 
 /// 环境注入集合（决议 #80）：桌面注入 Tauri 执行端口，headless 环境用缺省

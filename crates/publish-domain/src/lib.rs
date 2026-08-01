@@ -1614,23 +1614,23 @@ impl PinnedAutomationRuntimeRevision {
         }
     }
 
+    /// 投影渲染要求 runner 分发资产摘要已固化（决议 #86）：Exact 且摘要表
+    /// 非空。Legacy 修订没有资产摘要，必须显式升级后才能渲染。
     pub fn validate_for_projection(&self) -> Result<(), PublishError> {
         match self {
-            Self::Exact(revision) => revision.validate(),
-            Self::Legacy(identifier) => {
-                let identifier = identifier.trim();
-                if identifier.is_empty()
-                    || matches!(
-                        identifier.to_ascii_lowercase().as_str(),
-                        "latest" | "stable" | "main" | "master" | "nightly"
-                    )
-                {
+            Self::Exact(revision) => {
+                revision.validate()?;
+                if revision.runner.binary_digests.is_empty() {
                     return Err(PublishError::InvalidRuntimeRevision(
-                        "legacy runtime revision must be a fixed non-empty identifier".to_string(),
+                        "runner binary digests must be pinned before projection rendering"
+                            .to_string(),
                     ));
                 }
                 Ok(())
             }
+            Self::Legacy(identifier) => Err(PublishError::InvalidRuntimeRevision(format!(
+                "legacy runtime revision {identifier} must be explicitly upgraded before projection rendering"
+            ))),
         }
     }
 
@@ -1671,6 +1671,17 @@ impl AutomationRuntimeRevision {
 
     pub fn identifier(&self) -> String {
         format!("runtime-v{}-{}", self.version, self.digest)
+    }
+
+    /// 去除 runner 分发资产摘要后的归一修订。资产摘要只有控制面固化时经
+    /// REST 可得（TOFU，决议 #86）；离线升级检测与 runner 现场自证都以
+    /// 归一形态比较，摘要表由 workflow 下载校验独立消费。
+    pub fn without_binary_digests(&self) -> Result<Self, PublishError> {
+        Self::seal(
+            RuntimeComponentRevision::new(self.runner.version.clone(), self.runner.digest.clone()),
+            self.plan_contract.clone(),
+            self.adapters.clone(),
+        )
     }
 
     pub fn validate(&self) -> Result<(), PublishError> {

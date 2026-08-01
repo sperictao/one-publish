@@ -41,7 +41,13 @@ fn binding_projection(binding_id: &str, revision_id: &str) -> AutomationBindingP
 
 fn runtime_revision() -> AutomationRuntimeRevision {
     AutomationRuntimeRevision::seal(
-        RuntimeComponentRevision::new("0.1.0", sha256_hex(b"runner")),
+        // 决议 #86：投影渲染要求分发资产摘要已固化。
+        RuntimeComponentRevision::new("0.1.0", sha256_hex(b"runner")).with_binary_digests(
+            std::collections::BTreeMap::from([(
+                "x86_64-unknown-linux-gnu".to_string(),
+                sha256_hex(b"runner-binary"),
+            )]),
+        ),
         RuntimeComponentRevision::new("1", sha256_hex(b"plan")),
         vec![RuntimeAdapterRevision::new(
             AdapterIdentity::new(AdapterKind::ExecutionBackend, "fake-automation", 1),

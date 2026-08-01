@@ -177,6 +177,85 @@ fn automation_backend(backend_id: &str) -> Result<Arc<dyn ExecutionBackend>, App
     }
 }
 
+/// 决议 #86：安装/升级固化时经 GH REST asset digest 拉取配套 runner 的
+/// per-target 资产摘要（TOFU 一次，Immutable Releases 加固信任）；此后投影
+/// 与 workflow 全程离线校验。固化失败必须显式报错，不留半固化状态。
+pub(crate) trait RunnerAssetDigestSource {
+    fn binary_digests(&self, release_tag: &str) -> Result<BTreeMap<String, String>, AppError>;
+}
+
+pub(crate) struct GhCliRunnerAssetDigestSource;
+
+impl RunnerAssetDigestSource for GhCliRunnerAssetDigestSource {
+    fn binary_digests(&self, release_tag: &str) -> Result<BTreeMap<String, String>, AppError> {
+        let output = crate::process_utils::new_std_command("gh")
+            .args([
+                "api",
+                &format!(
+                    "repos/{}/releases/tags/{release_tag}",
+                    one_publish_runner::RUNNER_DISTRIBUTION_REPOSITORY
+                ),
+            ])
+            .output()
+            .map_err(|error| runner_digest_error(format!("无法运行 gh api: {error}")))?;
+        if !output.status.success() {
+            return Err(runner_digest_error(format!(
+                "runner 分发 release {release_tag} 不可用: {}",
+                String::from_utf8_lossy(&output.stderr).trim()
+            )));
+        }
+        parse_runner_asset_digests(&output.stdout, release_tag)
+    }
+}
+
+fn runner_digest_error(message: String) -> AppError {
+    AppError::publish_with_code(
+        format!("无法固化 runner 资产摘要: {message}"),
+        "automation_runner_digest_unavailable",
+    )
+}
+
+/// 从 release REST 载荷提取 `one-publish-runner-<target>.tar.gz` 资产的
+/// sha256 摘要表（runner-release.yml 的资产命名合同）。
+fn parse_runner_asset_digests(
+    payload: &[u8],
+    release_tag: &str,
+) -> Result<BTreeMap<String, String>, AppError> {
+    let release: Value = serde_json::from_slice(payload)
+        .map_err(|error| runner_digest_error(format!("release 载荷无法解析: {error}")))?;
+    let assets = release
+        .get("assets")
+        .and_then(Value::as_array)
+        .ok_or_else(|| runner_digest_error("release 载荷缺少资产列表".to_string()))?;
+    let mut digests = BTreeMap::new();
+    for asset in assets {
+        let name = asset
+            .get("name")
+            .and_then(Value::as_str)
+            .unwrap_or_default();
+        let Some(target) = name
+            .strip_prefix("one-publish-runner-")
+            .and_then(|name| name.strip_suffix(".tar.gz"))
+        else {
+            continue;
+        };
+        let digest = asset
+            .get("digest")
+            .and_then(Value::as_str)
+            .and_then(|digest| digest.strip_prefix("sha256:"))
+            .ok_or_else(|| {
+                runner_digest_error(format!("runner 资产 {name} 缺少 sha256 digest"))
+            })?;
+        digests.insert(target.to_string(), digest.to_string());
+    }
+    if digests.is_empty() {
+        return Err(runner_digest_error(format!(
+            "release {release_tag} 没有任何 runner 二进制资产"
+        )));
+    }
+    Ok(digests)
+}
+
 /// 安装或显式升级时从绑定目标修订的 `releaseSettings` 固化后端投影输入。
 /// 捕获值随 Binding 固定，后续查看与漂移协调只能消费该快照。
 fn fixed_backend_projection(
@@ -205,7 +284,36 @@ fn fixed_backend_projection(
     }
 }
 
+/// 绑定固化的运行时修订：配套 runner 版本 + TOFU 拉取的分发资产摘要 +
+/// 自动化后端与 Provider 身份（决议 #86）。
 fn automation_runtime_revision(
+    backend: &dyn ExecutionBackend,
+    revision: &crate::store::PublishConfigurationRevision,
+    digests: &dyn RunnerAssetDigestSource,
+) -> Result<AutomationRuntimeRevision, AppError> {
+    let binary_digests = digests.binary_digests(&one_publish_runner::runner_release_tag())?;
+    one_publish_runner::current_runtime_revision_with_binary_digests(
+        [
+            backend.descriptor().identity(),
+            AdapterIdentity::new(
+                AdapterKind::ProjectProvider,
+                revision.provider_id.clone(),
+                1,
+            ),
+        ],
+        binary_digests,
+    )
+    .map_err(|error| {
+        AppError::publish_with_code(
+            format!("无法封存自动化运行时修订: {error}"),
+            "automation_runtime_revision_invalid",
+        )
+    })
+}
+
+/// 升级检测的期望修订（离线读路径）：无资产摘要的归一封存。分发摘要按
+/// 版本不变（Immutable Releases），不构成升级信号，比较时双方都归一。
+fn expected_runtime_revision(
     backend: &dyn ExecutionBackend,
     revision: &crate::store::PublishConfigurationRevision,
 ) -> Result<AutomationRuntimeRevision, AppError> {
@@ -263,6 +371,7 @@ fn resolve_target_bindings(
     config: &RepoPublishConfig,
     change: &AutomationChangeRequest,
     now: &str,
+    digests: &dyn RunnerAssetDigestSource,
 ) -> Result<Vec<AutomationBinding>, AppError> {
     let mut bindings = config.bindings.clone();
     match change {
@@ -295,7 +404,8 @@ fn resolve_target_bindings(
                 execution_backend_id: execution_backend_id.clone(),
                 trigger_policy: trigger_policy.clone(),
                 backend_projection: fixed_backend_projection(execution_backend_id, revision)?,
-                runtime_revision: automation_runtime_revision(backend.as_ref(), revision)?.into(),
+                runtime_revision: automation_runtime_revision(backend.as_ref(), revision, digests)?
+                    .into(),
                 external_identity: String::new(),
                 created_at: now.to_string(),
                 updated_at: now.to_string(),
@@ -319,7 +429,7 @@ fn resolve_target_bindings(
             binding.backend_projection =
                 fixed_backend_projection(&binding.execution_backend_id, revision)?;
             binding.runtime_revision =
-                automation_runtime_revision(backend.as_ref(), revision)?.into();
+                automation_runtime_revision(backend.as_ref(), revision, digests)?.into();
             binding.updated_at = now.to_string();
         }
         AutomationChangeRequest::Reconcile => {}
@@ -507,13 +617,16 @@ fn runner_projection(
         );
     }
 
-    // 模板钉住服务它所需的精确 runner 运行时（以物化选择计算）；绑定级修订
-    // 另含自动化后端身份，两者在 #81 Backend 合并后收敛为同一封存。
-    let runtime_revision = one_publish_runner::current_runtime_revision(
+    // 模板钉住服务它所需的精确 runner 运行时（以物化选择计算），并携带
+    // 绑定固化的分发资产摘要供 workflow 下载校验；绑定级修订另含自动化
+    // 后端身份，两者在 #81 Backend 合并后收敛为同一封存。
+    let pinned = binding.runtime_revision.exact().map_err(render_error)?;
+    let runtime_revision = one_publish_runner::current_runtime_revision_with_binary_digests(
         adapters
             .ordered_bindings()
             .into_iter()
             .map(|binding| binding.adapter.clone()),
+        pinned.runner.binary_digests.clone(),
     )
     .map_err(|error| {
         AppError::publish_with_code(
@@ -1053,9 +1166,10 @@ pub(crate) fn preview_change(
     config: &RepoPublishConfig,
     change: &AutomationChangeRequest,
     now: &str,
+    digests: &dyn RunnerAssetDigestSource,
 ) -> Result<AutomationPreviewOutcome, AppError> {
     let mut normalized_change = change.normalized();
-    let targets = resolve_target_bindings(config, &normalized_change, now)?;
+    let targets = resolve_target_bindings(config, &normalized_change, now, digests)?;
     validate_binding_namespaces(config, &targets)?;
     let expected = render_expected(config, &targets, now)?;
     let previously_owned = previously_owned_paths(config)?;
@@ -1161,8 +1275,9 @@ pub(crate) fn apply_change(
     change: &AutomationChangeRequest,
     confirmed_digest: &str,
     now: &str,
+    digests: &dyn RunnerAssetDigestSource,
 ) -> Result<AutomationApplyResult, AppError> {
-    let outcome = preview_change(repo_root, config, change, now)?;
+    let outcome = preview_change(repo_root, config, change, now, digests)?;
     if outcome.confirmation_digest != confirmed_digest {
         return Err(AppError::validation_with_code(
             "投影差异与预览时不一致，请重新预览并确认",
@@ -1267,8 +1382,15 @@ pub(crate) fn bindings_view(
     repo_root: &Path,
     config: &RepoPublishConfig,
     now: &str,
+    digests: &dyn RunnerAssetDigestSource,
 ) -> Result<AutomationBindingsView, AppError> {
-    let outcome = preview_change(repo_root, config, &AutomationChangeRequest::Reconcile, now)?;
+    let outcome = preview_change(
+        repo_root,
+        config,
+        &AutomationChangeRequest::Reconcile,
+        now,
+        digests,
+    )?;
     let drift = outcome
         .changes
         .iter()
@@ -1306,18 +1428,26 @@ pub(crate) fn bindings_view(
                     "automation_configuration_revision_missing",
                 )
             })?;
-            let expected_runtime_revision =
-                automation_runtime_revision(backend.as_ref(), revision)?;
+            let expected_runtime_revision = expected_runtime_revision(backend.as_ref(), revision)?;
             let current_runtime_revision = binding.runtime_revision.identifier();
             let expected_runtime_revision_id = expected_runtime_revision.identifier();
+            // 升级检测以归一形态比较（离线读路径）：分发摘要按版本不变
+            //（Immutable Releases），有无摘要不构成升级信号；Legacy 修订
+            // 没有可归一的封存，一律视为有升级可用。
+            let runtime_upgrade_available = match &binding.runtime_revision {
+                publish_domain::PinnedAutomationRuntimeRevision::Exact(pinned) => {
+                    pinned.without_binary_digests().map_err(render_error)?
+                        != expected_runtime_revision
+                }
+                publish_domain::PinnedAutomationRuntimeRevision::Legacy(_) => true,
+            };
             Ok(AutomationBindingView {
                 binding: binding.clone(),
                 configuration_name: config
                     .profile(&binding.configuration_id)
                     .map(|profile| profile.name.clone()),
                 blocked_reason: blocked.then(|| AUTOMATION_DRIFT_BLOCKED_REASON.to_string()),
-                runtime_upgrade_available: binding.runtime_revision
-                    != expected_runtime_revision.clone().into(),
+                runtime_upgrade_available,
                 current_runtime_revision,
                 expected_runtime_revision: expected_runtime_revision_id,
             })
@@ -1660,6 +1790,7 @@ pub async fn list_automation_bindings(repo_id: String) -> Result<AutomationBindi
         repository_root_from_path(&repo.path)?,
         &repo.publish_config,
         &now,
+        &GhCliRunnerAssetDigestSource,
     )
 }
 
@@ -1678,6 +1809,7 @@ pub async fn preview_automation_change(
         &repo.publish_config,
         &change,
         &now,
+        &GhCliRunnerAssetDigestSource,
     )?;
     Ok(AutomationProjectionPreview {
         change: outcome.normalized_change,
@@ -1709,6 +1841,7 @@ pub async fn apply_automation_change(
         &change,
         &confirmed_digest,
         &now,
+        &GhCliRunnerAssetDigestSource,
     )?;
     crate::store::persist_state_and_refresh_tray(&app, state).await?;
     Ok(result)
@@ -1722,6 +1855,64 @@ mod tests {
     use std::process::Command;
 
     const NOW: &str = "2026-07-22T10:00:00Z";
+
+    /// 测试注入的固定资产摘要（决议 #86 的 TOFU 端口）；本地定义 shadow
+    /// glob 导入，测试调用点无需逐一穿参。
+    struct FakeRunnerDigests;
+
+    impl RunnerAssetDigestSource for FakeRunnerDigests {
+        fn binary_digests(&self, _release_tag: &str) -> Result<BTreeMap<String, String>, AppError> {
+            Ok(fake_binary_digests())
+        }
+    }
+
+    fn fake_binary_digests() -> BTreeMap<String, String> {
+        BTreeMap::from([
+            ("x86_64-unknown-linux-gnu".to_string(), "a".repeat(64)),
+            ("aarch64-apple-darwin".to_string(), "b".repeat(64)),
+        ])
+    }
+
+    fn preview_change(
+        repo_root: &Path,
+        config: &RepoPublishConfig,
+        change: &AutomationChangeRequest,
+        now: &str,
+    ) -> Result<AutomationPreviewOutcome, AppError> {
+        super::preview_change(repo_root, config, change, now, &FakeRunnerDigests)
+    }
+
+    fn apply_change(
+        repo_root: &Path,
+        config: &mut RepoPublishConfig,
+        change: &AutomationChangeRequest,
+        confirmed_digest: &str,
+        now: &str,
+    ) -> Result<AutomationApplyResult, AppError> {
+        super::apply_change(
+            repo_root,
+            config,
+            change,
+            confirmed_digest,
+            now,
+            &FakeRunnerDigests,
+        )
+    }
+
+    fn bindings_view(
+        repo_root: &Path,
+        config: &RepoPublishConfig,
+        now: &str,
+    ) -> Result<AutomationBindingsView, AppError> {
+        super::bindings_view(repo_root, config, now, &FakeRunnerDigests)
+    }
+
+    fn automation_runtime_revision(
+        backend: &dyn ExecutionBackend,
+        revision: &crate::store::PublishConfigurationRevision,
+    ) -> Result<AutomationRuntimeRevision, AppError> {
+        super::automation_runtime_revision(backend, revision, &FakeRunnerDigests)
+    }
 
     fn run_git(dir: &Path, args: &[&str]) -> String {
         let output = Command::new("git")
@@ -1972,6 +2163,66 @@ mod tests {
         }
         // 映射确定性：同一组合重放产出同一张表。
         assert_eq!(bindings, secret_bindings(&composition));
+    }
+
+    #[test]
+    fn runner_digest_sealing_fails_loudly_and_parses_rest_assets_by_target() {
+        // 固化失败（离线/资产缺失）显式报错，不留半固化状态（决议 #86）。
+        struct UnavailableDigests;
+        impl RunnerAssetDigestSource for UnavailableDigests {
+            fn binary_digests(
+                &self,
+                release_tag: &str,
+            ) -> Result<BTreeMap<String, String>, AppError> {
+                Err(runner_digest_error(format!("{release_tag} 不可达")))
+            }
+        }
+        let (_temp, work) = fixture_repository();
+        let (config, profile_id) = fixture_config("Stable");
+        let error = super::preview_change(
+            &work,
+            &config,
+            &install_request(&profile_id),
+            NOW,
+            &UnavailableDigests,
+        )
+        .expect_err("install without reachable runner assets must fail");
+        assert_eq!(
+            error.code.as_deref(),
+            Some("automation_runner_digest_unavailable")
+        );
+
+        let payload = serde_json::json!({
+            "assets": [
+                { "name": "one-publish-runner-x86_64-unknown-linux-gnu.tar.gz",
+                  "digest": format!("sha256:{}", "c".repeat(64)) },
+                { "name": "one-publish-runner-x86_64-unknown-linux-gnu.tar.gz.sha256",
+                  "digest": format!("sha256:{}", "d".repeat(64)) },
+                { "name": "unrelated.txt", "digest": "sha256:ff" },
+            ]
+        });
+        let digests =
+            parse_runner_asset_digests(payload.to_string().as_bytes(), "runner-v0.1.0")
+                .expect("parse per-target digests");
+        assert_eq!(
+            digests,
+            BTreeMap::from([(
+                "x86_64-unknown-linux-gnu".to_string(),
+                "c".repeat(64)
+            )])
+        );
+
+        let missing_digest = serde_json::json!({
+            "assets": [{ "name": "one-publish-runner-x86_64-unknown-linux-gnu.tar.gz" }]
+        });
+        let error =
+            parse_runner_asset_digests(missing_digest.to_string().as_bytes(), "runner-v0.1.0")
+                .expect_err("assets without a REST digest cannot be sealed");
+        assert!(error.message.contains("sha256"));
+
+        let empty = serde_json::json!({ "assets": [{ "name": "unrelated.txt" }] });
+        parse_runner_asset_digests(empty.to_string().as_bytes(), "runner-v0.1.0")
+            .expect_err("a release without runner binaries cannot be sealed");
     }
 
     #[test]
@@ -2840,47 +3091,46 @@ mod tests {
             .exact()
             .expect("new binding pins an exact runtime")
             .clone();
+        let expected_runtime_id = expected_runtime.identifier();
+        // 展示的期望修订是无摘要归一封存（离线读路径，决议 #86）。
+        let expected_display_id = expected_runtime
+            .without_binary_digests()
+            .expect("normalize expected runtime")
+            .identifier();
+
+        // 固化态与配套 runner 同版本：分发摘要不构成升级信号。
+        let fresh = bindings_view(&work, &config, NOW).expect("view fresh binding");
+        assert!(!fresh.bindings[0].runtime_upgrade_available);
+        assert_eq!(
+            fresh.bindings[0].expected_runtime_revision,
+            expected_display_id
+        );
+
         let pinned_runtime = publish_domain::PinnedAutomationRuntimeRevision::Legacy(
             "plan-v1.adapter-v1.fake-automation@1".to_string(),
         );
-        let pinned_runtime_id = pinned_runtime.identifier();
-        let expected_runtime_id = expected_runtime.identifier();
         config.bindings[0].runtime_revision = pinned_runtime.clone();
 
-        // 模拟已安装自动化仍固定旧 Runner；协调只恢复该固定投影，不能隐式升级。
-        preview_then_apply(&work, &mut config, &AutomationChangeRequest::Reconcile);
-        let before_upgrade = bindings_view(&work, &config, NOW).expect("view pinned runtime");
-        assert!(before_upgrade.drift.is_empty());
+        // 决议 #86：Legacy 修订没有固化的分发资产摘要，协调不能恢复其投影，
+        // 必须显式升级——隐式升级依旧被禁止（预览不落地）。
+        let blocked = preview_change(&work, &config, &AutomationChangeRequest::Reconcile, NOW)
+            .expect_err("legacy runtime must not render a projection");
         assert_eq!(
-            before_upgrade.bindings[0].current_runtime_revision,
-            pinned_runtime_id
+            blocked.code.as_deref(),
+            Some("automation_projection_render_failed")
         );
-        assert_eq!(
-            before_upgrade.bindings[0].expected_runtime_revision,
-            expected_runtime_id
-        );
-        assert!(before_upgrade.bindings[0].runtime_upgrade_available);
-        assert_eq!(config.bindings[0].runtime_revision, pinned_runtime);
+        assert!(blocked.message.contains("explicitly upgraded"));
 
         let upgrade = AutomationChangeRequest::UpgradeRevision {
             binding_id: binding_id.clone(),
         };
         let preview =
             preview_change(&work, &config, &upgrade, NOW).expect("preview runtime upgrade");
-        assert!(preview.changes.iter().any(|change| {
-            change
-                .current_content
-                .as_deref()
-                .is_some_and(|content| content.contains(&pinned_runtime_id))
-                && change
-                    .expected_content
-                    .as_deref()
-                    .is_some_and(|content| content.contains(&expected_runtime.runner.version))
-        }));
         assert_eq!(
             config.bindings[0].runtime_revision, pinned_runtime,
             "preview must not upgrade the binding"
         );
+        drop(preview);
 
         preview_then_apply(&work, &mut config, &upgrade);
         let upgraded = bindings_view(&work, &config, NOW).expect("view upgraded runtime");
@@ -2890,7 +3140,7 @@ mod tests {
         );
         assert_eq!(
             upgraded.bindings[0].expected_runtime_revision,
-            expected_runtime_id
+            expected_display_id
         );
         assert!(!upgraded.bindings[0].runtime_upgrade_available);
     }

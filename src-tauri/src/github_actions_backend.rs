@@ -207,12 +207,15 @@ mod tests {
     };
 
     fn runtime_revision() -> AutomationRuntimeRevision {
-        one_publish_runner::current_runtime_revision([
-            GitHubActionsAutomationBackend::new()
-                .descriptor()
-                .identity(),
-            AdapterIdentity::new(AdapterKind::ProjectProvider, "tauri", 1),
-        ])
+        one_publish_runner::current_runtime_revision_with_binary_digests(
+            [
+                GitHubActionsAutomationBackend::new()
+                    .descriptor()
+                    .identity(),
+                AdapterIdentity::new(AdapterKind::ProjectProvider, "tauri", 1),
+            ],
+            BTreeMap::from([("x86_64-unknown-linux-gnu".to_string(), "a".repeat(64))]),
+        )
         .expect("seal runtime revision")
     }
 
@@ -312,17 +315,36 @@ mod tests {
     #[test]
     fn bundle_rejects_missing_or_floating_runtime_revisions() {
         let backend = GitHubActionsAutomationBackend::new();
-        for case in ["missing", "floating", "digest-mismatch"] {
+        for case in ["missing", "floating", "digest-mismatch", "no-binaries"] {
             let mut projection = binding("stable", "v", "revision-stable");
-            let runtime = match &mut projection.runtime_revision {
-                publish_domain::PinnedAutomationRuntimeRevision::Exact(runtime) => runtime,
-                publish_domain::PinnedAutomationRuntimeRevision::Legacy(_) => unreachable!(),
-            };
             match case {
-                "missing" => runtime.runner.digest.clear(),
-                "floating" => runtime.runner.version = "latest".to_string(),
-                "digest-mismatch" => runtime.digest = "0".repeat(64),
-                _ => unreachable!(),
+                // 决议 #86：分发资产摘要未固化的修订不得进入投影渲染。
+                "no-binaries" => {
+                    let runtime = match &projection.runtime_revision {
+                        publish_domain::PinnedAutomationRuntimeRevision::Exact(runtime) => runtime,
+                        publish_domain::PinnedAutomationRuntimeRevision::Legacy(_) => {
+                            unreachable!()
+                        }
+                    };
+                    projection.runtime_revision = runtime
+                        .without_binary_digests()
+                        .expect("reseal without binary digests")
+                        .into();
+                }
+                _ => {
+                    let runtime = match &mut projection.runtime_revision {
+                        publish_domain::PinnedAutomationRuntimeRevision::Exact(runtime) => runtime,
+                        publish_domain::PinnedAutomationRuntimeRevision::Legacy(_) => {
+                            unreachable!()
+                        }
+                    };
+                    match case {
+                        "missing" => runtime.runner.digest.clear(),
+                        "floating" => runtime.runner.version = "latest".to_string(),
+                        "digest-mismatch" => runtime.digest = "0".repeat(64),
+                        _ => unreachable!(),
+                    }
+                }
             }
             let error = backend
                 .render_automation_bundle(&[projection])
