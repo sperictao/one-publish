@@ -363,7 +363,7 @@ fn enabled_build_targets(
 }
 
 /// build target triple → 平台族亲和；macOS universal 也归 macOS 族。
-fn platform_for_build_target(target: &str) -> PlanNodePlatform {
+pub fn platform_for_build_target(target: &str) -> PlanNodePlatform {
     if target.ends_with("apple-darwin") {
         PlanNodePlatform::Macos
     } else if target.contains("windows") {

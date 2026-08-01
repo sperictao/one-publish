@@ -491,9 +491,36 @@ fn binding_projection(
     ]);
     // 远端投影后端消费 runner 模板与分发源；Fake 后端是本机测试语义，没有远端 runner。
     if binding.execution_backend_id == GITHUB_ACTIONS_BACKEND_ID {
+        let projection = runner_projection(binding, revision)?;
+        // 分片拓扑（决议 #85）：从展开节点的平台亲和推导 matrix 平台族。
+        let shard_platforms = projection
+            .adapters
+            .project_provider
+            .settings
+            .values
+            .get(publish_adapters::tauri::ENABLED_TARGETS_SETTING)
+            .and_then(Value::as_array)
+            .into_iter()
+            .flatten()
+            .filter_map(Value::as_str)
+            .map(|target| {
+                publish_runner_core::platform_segment_name(
+                    publish_adapters::tauri::platform_for_build_target(target),
+                )
+            })
+            .collect::<BTreeSet<_>>();
+        public_settings.insert(
+            "shardPlatforms".to_string(),
+            Value::Array(
+                shard_platforms
+                    .into_iter()
+                    .map(|platform| Value::String(platform.to_string()))
+                    .collect(),
+            ),
+        );
         public_settings.insert(
             "runnerProjection".to_string(),
-            projection_value(&runner_projection(binding, revision)?, "runner 模板")?,
+            projection_value(&projection, "runner 模板")?,
         );
         public_settings.insert(
             "runnerDistribution".to_string(),
@@ -1892,6 +1919,7 @@ mod tests {
         BTreeMap::from([
             ("x86_64-unknown-linux-gnu".to_string(), "a".repeat(64)),
             ("aarch64-apple-darwin".to_string(), "b".repeat(64)),
+            ("x86_64-pc-windows-msvc".to_string(), "c".repeat(64)),
         ])
     }
 

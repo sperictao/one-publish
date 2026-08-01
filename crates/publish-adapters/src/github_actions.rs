@@ -19,8 +19,10 @@ pub const GITHUB_ACTIONS_BACKEND_ID: &str = "github-actions";
 
 const BUNDLE_MANIFEST_PATH: &str = ".one-publish/automation/github-actions.json";
 const CHECKOUT_ACTION: &str = "actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2";
-/// 薄外壳首期单 job 执行（决议 #81）；平台分片拓扑随 #85 引入矩阵。
-const WORKFLOW_RUNNER_TARGET: &str = "x86_64-unknown-linux-gnu";
+const UPLOAD_ARTIFACT_ACTION: &str =
+    "actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2";
+const DOWNLOAD_ARTIFACT_ACTION: &str =
+    "actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0";
 
 /// 单一 GitHub Actions Backend（决议 #81）：同一 adapter 身份的两个面——
 /// 投影面把绑定渲染为薄外壳 workflow（下载钉住的 runner、离线校验摘要、
@@ -180,9 +182,10 @@ fn public_setting<'a>(
     })
 }
 
-/// 薄外壳 workflow：checkout 触发 tag → 下载控制面钉住的 runner 资产并离线
-/// 校验 sha256 → 注入映射表声明的 Secrets → verify / prepare-from-projection /
-/// execute。业务语义全部在安装的投影模板与共享 Runner 内，workflow 零决策。
+/// 薄外壳分片 workflow（决议 #85/#81）：每个平台族一个 build job + 一个
+/// 汇聚 job。每个 job 下载控制面钉住的 runner 资产并离线校验 sha256，
+/// 现场规划后只执行分配给本段亲和的节点子集，段结束上传事件段 artifact
+///（决议 #88 的传输层）。业务语义全部在安装的投影模板与共享 Runner 内。
 fn render_thin_shell_workflow(
     binding: &AutomationBindingProjection,
     runtime_path: &str,
@@ -208,18 +211,27 @@ fn render_thin_shell_workflow(
     let repository = distribution_field("repository")?;
     let release_tag = distribution_field("releaseTag")?;
     let runtime = binding.runtime_revision.exact()?;
-    let digest = runtime
-        .runner
-        .binary_digests
-        .get(WORKFLOW_RUNNER_TARGET)
+    let shard_platforms = public_setting(binding, "shardPlatforms")?
+        .as_array()
+        .map(|values| {
+            values
+                .iter()
+                .filter_map(Value::as_str)
+                .map(str::to_string)
+                .collect::<Vec<_>>()
+        })
+        .filter(|platforms| {
+            !platforms.is_empty()
+                && platforms
+                    .iter()
+                    .all(|platform| matches!(platform.as_str(), "linux" | "macos" | "windows"))
+        })
         .ok_or_else(|| {
             PublishError::Execution(format!(
-                "runner distribution digest for {WORKFLOW_RUNNER_TARGET} is not pinned"
+                "GitHub Actions binding {} declares no valid shard platforms",
+                binding.binding_id
             ))
         })?;
-    let asset = format!("one-publish-runner-{WORKFLOW_RUNNER_TARGET}.tar.gz");
-    let download_url =
-        format!("https://github.com/{repository}/releases/download/{release_tag}/{asset}");
 
     let mut secret_env = String::new();
     for secret_name in binding.projection.secret_references.values() {
@@ -233,6 +245,82 @@ fn render_thin_shell_workflow(
         format!("        env:\n{secret_env}")
     };
 
+    let install_step = |platform: &str| -> Result<String, PublishError> {
+        let (_, triple, _) = shard_runner(platform);
+        let digest = runtime.runner.binary_digests.get(triple).ok_or_else(|| {
+            PublishError::Execution(format!(
+                "runner distribution digest for {triple} is not pinned"
+            ))
+        })?;
+        let asset = format!("one-publish-runner-{triple}.tar.gz");
+        let url =
+            format!("https://github.com/{repository}/releases/download/{release_tag}/{asset}");
+        Ok(format!(
+            r#"      - name: Install the pinned One Publish runner
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fL --retry 3 -o "{asset}" "{url}"
+          echo "{digest}  {asset}" | sha256sum -c -
+          tar -xzf "{asset}"
+"#
+        ))
+    };
+    let shard_step = |affinity: &str, binary: &str| {
+        format!(
+            r#"      - name: Execute the {affinity} shard
+        shell: bash
+{env_block}        run: |
+          set -euo pipefail
+          ./{binary} verify "{runtime_path}"
+          ./{binary} prepare-from-projection "{runtime_path}" . "${{GITHUB_REF_NAME}}" > prepared-attempt.json
+          ./{binary} execute prepared-attempt.json "gh-${{GITHUB_RUN_ID}}-${{GITHUB_RUN_ATTEMPT}}" {affinity} > "one-publish-events-{affinity}.json"
+      - name: Upload the {affinity} event segment
+        uses: {UPLOAD_ARTIFACT_ACTION}
+        with:
+          name: one-publish-events-${{{{ github.run_id }}}}-${{{{ github.run_attempt }}}}-{affinity}
+          path: one-publish-events-{affinity}.json
+          if-no-files-found: error
+"#
+        )
+    };
+
+    let mut jobs = String::new();
+    for platform in &shard_platforms {
+        let (runs_on, _, binary) = shard_runner(platform);
+        jobs.push_str(&format!(
+            r#"  build-{platform}:
+    runs-on: {runs_on}
+    steps:
+      - name: Checkout the triggering tag
+        uses: {CHECKOUT_ACTION}
+{install}{shard}"#,
+            install = install_step(platform)?,
+            shard = shard_step(platform, binary),
+        ));
+    }
+    let needs = shard_platforms
+        .iter()
+        .map(|platform| format!("build-{platform}"))
+        .collect::<Vec<_>>()
+        .join(", ");
+    jobs.push_str(&format!(
+        r#"  aggregate:
+    needs: [{needs}]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout the triggering tag
+        uses: {CHECKOUT_ACTION}
+{install}      - name: Download build shard segments
+        uses: {DOWNLOAD_ARTIFACT_ACTION}
+        with:
+          pattern: one-publish-events-${{{{ github.run_id }}}}-${{{{ github.run_attempt }}}}-*
+          path: .one-publish-work/segments
+{shard}"#,
+        install = install_step("linux")?,
+        shard = shard_step("any", "one-publish-runner"),
+    ));
+
     Ok(format!(
         r#"# Generated by One Publish. Do not edit: this workflow is the thin shell of
 # automation binding {binding_id}; it is reconciled from the desktop app.
@@ -244,28 +332,26 @@ on:
 permissions:
   contents: write
 jobs:
-  publish:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout the triggering tag
-        uses: {CHECKOUT_ACTION}
-      - name: Install the pinned One Publish runner
-        shell: bash
-        run: |
-          set -euo pipefail
-          curl -fL --retry 3 -o "{asset}" "{download_url}"
-          echo "{digest}  {asset}" | sha256sum -c -
-          tar -xzf "{asset}"
-      - name: Publish from the installed projection
-        shell: bash
-{env_block}        run: |
-          set -euo pipefail
-          ./one-publish-runner verify "{runtime_path}"
-          ./one-publish-runner prepare-from-projection "{runtime_path}" . "${{GITHUB_REF_NAME}}" > prepared-attempt.json
-          ./one-publish-runner execute prepared-attempt.json "gh-${{GITHUB_RUN_ID}}-${{GITHUB_RUN_ATTEMPT}}"
-"#,
+{jobs}"#,
         binding_id = binding.binding_id,
     ))
+}
+
+/// 分片族 → (matrix runner、runner 资产 target triple、二进制名)。
+fn shard_runner(platform: &str) -> (&'static str, &'static str, &'static str) {
+    match platform {
+        "macos" => ("macos-latest", "aarch64-apple-darwin", "one-publish-runner"),
+        "windows" => (
+            "windows-latest",
+            "x86_64-pc-windows-msvc",
+            "one-publish-runner.exe",
+        ),
+        _ => (
+            "ubuntu-latest",
+            "x86_64-unknown-linux-gnu",
+            "one-publish-runner",
+        ),
+    }
 }
 
 #[cfg(test)]
@@ -279,10 +365,11 @@ mod tests {
     fn runtime_revision() -> AutomationRuntimeRevision {
         AutomationRuntimeRevision::seal(
             RuntimeComponentRevision::new("0.1.0", publish_domain::sha256_hex(b"runner"))
-                .with_binary_digests(BTreeMap::from([(
-                    WORKFLOW_RUNNER_TARGET.to_string(),
-                    "a".repeat(64),
-                )])),
+                .with_binary_digests(BTreeMap::from([
+                    ("x86_64-unknown-linux-gnu".to_string(), "a".repeat(64)),
+                    ("aarch64-apple-darwin".to_string(), "b".repeat(64)),
+                    ("x86_64-pc-windows-msvc".to_string(), "c".repeat(64)),
+                ])),
             RuntimeComponentRevision::new("1", publish_domain::sha256_hex(b"plan")),
             vec![RuntimeAdapterRevision::new(
                 AdapterIdentity::new(AdapterKind::ExecutionBackend, GITHUB_ACTIONS_BACKEND_ID, 1),
@@ -316,6 +403,10 @@ mod tests {
                             "releaseTag": "runner-v0.1.0",
                         }),
                     ),
+                    (
+                        "shardPlatforms".to_string(),
+                        serde_json::json!(["linux", "macos", "windows"]),
+                    ),
                 ]),
                 protected_variables: BTreeMap::new(),
                 secret_references: BTreeMap::from([(
@@ -343,12 +434,30 @@ mod tests {
             .expect("binding-owned workflow");
         assert_eq!(workflow.binding_id.as_deref(), Some("stable"));
         assert!(workflow.content.contains("'v[0-9]*.[0-9]*.[0-9]*'"));
-        assert!(workflow.content.contains(
-            "https://github.com/sperictao/one-publish/releases/download/runner-v0.1.0/one-publish-runner-x86_64-unknown-linux-gnu.tar.gz"
-        ));
+        // 分片拓扑（决议 #85）：每个平台族一个 build job + 汇聚 job。
+        for (job, triple, digest) in [
+            ("build-linux:", "x86_64-unknown-linux-gnu", "a"),
+            ("build-macos:", "aarch64-apple-darwin", "b"),
+            ("build-windows:", "x86_64-pc-windows-msvc", "c"),
+        ] {
+            assert!(workflow.content.contains(job), "missing job {job}");
+            assert!(workflow.content.contains(&format!(
+                "https://github.com/sperictao/one-publish/releases/download/runner-v0.1.0/one-publish-runner-{triple}.tar.gz"
+            )));
+            assert!(workflow
+                .content
+                .contains(&format!("{}  one-publish-runner-{triple}", digest.repeat(64))));
+        }
         assert!(workflow
             .content
-            .contains(&format!("{}  one-publish-runner-", "a".repeat(64))));
+            .contains("needs: [build-linux, build-macos, build-windows]"));
+        assert!(workflow.content.contains("execute prepared-attempt.json \"gh-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}\" windows"));
+        assert!(workflow.content.contains("execute prepared-attempt.json \"gh-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}\" any"));
+        assert!(workflow
+            .content
+            .contains("one-publish-events-${{ github.run_id }}-${{ github.run_attempt }}-macos"));
+        assert!(workflow.content.contains("Download build shard segments"));
+        assert!(workflow.content.contains("./one-publish-runner.exe verify"));
         assert!(workflow.content.contains("sha256sum -c -"));
         assert!(workflow.content.contains(
             "ONE_PUBLISH_CI_GITHUB_TOKEN: ${{ secrets.ONE_PUBLISH_CI_GITHUB_TOKEN }}"
@@ -359,9 +468,6 @@ mod tests {
         assert!(workflow.content.contains(
             "prepare-from-projection \".one-publish/automation/runtime/stable.json\" . \"${GITHUB_REF_NAME}\""
         ));
-        assert!(workflow
-            .content
-            .contains("execute prepared-attempt.json \"gh-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}\""));
         for line in workflow
             .content
             .lines()
@@ -429,6 +535,16 @@ mod tests {
             .render_automation_bundle(&[missing_distribution])
             .expect_err("the runner distribution source is required");
         assert!(error.to_string().contains("runnerDistribution"));
+
+        let mut missing_shards = binding("stable", "v", "revision-stable");
+        missing_shards
+            .projection
+            .public_settings
+            .insert("shardPlatforms".to_string(), serde_json::json!([]));
+        let error = backend
+            .render_automation_bundle(&[missing_shards])
+            .expect_err("empty shard platforms cannot render a matrix");
+        assert!(error.to_string().contains("shard platforms"));
 
         let mut unpinned = binding("stable", "v", "revision-stable");
         let runtime = match &unpinned.runtime_revision {
