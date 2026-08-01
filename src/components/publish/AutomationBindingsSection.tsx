@@ -33,14 +33,34 @@ import {
   applyAutomationChange,
   listAutomationBindings,
   previewAutomationChange,
+  synchronizeRemoteEvidence,
   type AutomationBindingsView,
   type AutomationChangeRequest,
   type AutomationProjectionPreview,
+  type RemoteAttemptEvidenceView,
 } from "@/lib/automationBindings";
 import type { ConfigProfile } from "@/lib/store/types";
 
 const GITHUB_ACTIONS_BACKEND_ID = "github-actions";
 const DEFAULT_TAG_PREFIX = "v";
+
+function remoteStatusLabel(
+  status: string,
+  configPanelT: Record<string, string | undefined>
+): string {
+  switch (status) {
+    case "published":
+      return configPanelT.automationRemotePublished || "已发布";
+    case "partial_delivery":
+      return configPanelT.automationRemotePartial || "部分交付";
+    case "failed":
+      return configPanelT.automationRemoteFailed || "失败";
+    case "cancelled":
+      return configPanelT.automationRemoteCancelled || "已取消";
+    default:
+      return configPanelT.automationRemoteRunning || "进行中";
+  }
+}
 
 export interface AutomationBindingsSectionProps {
   repoId: string | null;
@@ -65,6 +85,10 @@ export function AutomationBindingsSection({
   const [installTagPrefix, setInstallTagPrefix] =
     useState<string>(DEFAULT_TAG_PREFIX);
   const [pending, setPending] = useState<PendingPreview | null>(null);
+  const [remoteEvidence, setRemoteEvidence] = useState<
+    RemoteAttemptEvidenceView[] | null
+  >(null);
+  const [syncingRemote, setSyncingRemote] = useState(false);
 
   // #63 只迁移现有 Tauri workflow；第二 Provider 的远端投影由后续 Ticket 扩展。
   const activeProfiles = profiles.filter(
@@ -131,6 +155,21 @@ export function AutomationBindingsSection({
       });
     }
   }, [pending, refresh, repoId, configPanelT]);
+
+  const syncRemoteEvidence = useCallback(async () => {
+    if (!repoId) return;
+    setSyncingRemote(true);
+    try {
+      setRemoteEvidence(await synchronizeRemoteEvidence(repoId));
+    } catch (error) {
+      toast.error(
+        configPanelT.automationRemoteSyncFailed || "远端发布记录同步失败",
+        { description: extractInvokeErrorMessage(error) }
+      );
+    } finally {
+      setSyncingRemote(false);
+    }
+  }, [repoId, configPanelT]);
 
   const startInstallPreview = useCallback(() => {
     if (!installProfileId) return;
@@ -324,6 +363,79 @@ export function AutomationBindingsSection({
           })}
         </ul>
       )}
+
+      {bindings.length > 0 ? (
+        <div className="mt-3" data-testid="automation-remote-evidence">
+          <div className="flex items-center justify-between">
+            <span className="text-label-12 font-medium text-muted-foreground">
+              {configPanelT.automationRemoteEvidence || "远端发布记录"}
+            </span>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-7 px-2 text-label-12"
+              onClick={() => void syncRemoteEvidence()}
+              disabled={syncingRemote}
+            >
+              {syncingRemote ? (
+                <Loader2 className="mr-1 size-3.5 animate-spin" />
+              ) : (
+                <RefreshCw className="mr-1 size-3.5" />
+              )}
+              {configPanelT.automationRemoteSync || "同步远端证据"}
+            </Button>
+          </div>
+          {remoteEvidence === null ? (
+            <p className="mt-1 text-label-12 text-muted-foreground">
+              {configPanelT.automationRemoteHint ||
+                "同步后展示远端发布的归档证据。"}
+            </p>
+          ) : remoteEvidence.length === 0 ? (
+            <p className="mt-1 text-label-12 text-muted-foreground">
+              {configPanelT.automationRemoteEmpty || "尚无远端发布记录"}
+            </p>
+          ) : (
+            <ul className="mt-1 space-y-1">
+              {remoteEvidence.map((attempt) => (
+                <li
+                  key={attempt.attemptId}
+                  className="flex items-center justify-between gap-2 rounded-sm border border-border px-2 py-1"
+                  data-testid={`automation-remote-attempt-${attempt.attemptId}`}
+                >
+                  <span className="truncate text-label-12 text-foreground">
+                    {attempt.attemptId}
+                  </span>
+                  {attempt.state.kind === "archived" ? (
+                    <span
+                      className={
+                        attempt.state.status === "published"
+                          ? "rounded-sm bg-success/10 px-1.5 py-0.5 text-label-12 font-medium text-success"
+                          : "rounded-sm bg-muted px-1.5 py-0.5 text-label-12 font-medium text-muted-foreground"
+                      }
+                      title={attempt.state.error ?? undefined}
+                    >
+                      {remoteStatusLabel(attempt.state.status, configPanelT)}
+                    </span>
+                  ) : attempt.state.kind === "expired" ? (
+                    <span
+                      className="rounded-sm bg-red-500/15 px-1.5 py-0.5 text-label-12 font-medium text-red-700 dark:text-red-400"
+                      data-testid={`automation-remote-expired-${attempt.attemptId}`}
+                    >
+                      {configPanelT.automationRemoteExpired || "远端证据已过期"}
+                    </span>
+                  ) : (
+                    <span className="rounded-sm bg-amber-500/15 px-1.5 py-0.5 text-label-12 font-medium text-amber-700 dark:text-amber-400">
+                      {(configPanelT.automationRemoteMissing || "证据缺失") +
+                        ": " +
+                        attempt.state.missing.join(", ")}
+                    </span>
+                  )}
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      ) : null}
 
       <Dialog
         open={installOpen && !pending}

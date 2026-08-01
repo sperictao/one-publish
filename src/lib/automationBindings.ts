@@ -5,6 +5,7 @@ import type {
   AutomationBindingsView,
   AutomationChangeRequest,
   AutomationProjectionPreview,
+  RemoteAttemptEvidenceView,
 } from "@/generated/tauri-contracts";
 
 export type {
@@ -12,6 +13,7 @@ export type {
   AutomationBindingsView,
   AutomationChangeRequest,
   AutomationProjectionPreview,
+  RemoteAttemptEvidenceView,
 } from "@/generated/tauri-contracts";
 
 export async function listAutomationBindings(
@@ -40,4 +42,13 @@ export async function applyAutomationChange(
     change,
     confirmedDigest,
   });
+}
+
+export async function synchronizeRemoteEvidence(
+  repoId: string
+): Promise<RemoteAttemptEvidenceView[]> {
+  return invoke<RemoteAttemptEvidenceView[]>(
+    "synchronize_remote_publish_evidence",
+    { repoId }
+  );
 }

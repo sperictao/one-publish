@@ -12,16 +12,19 @@ const {
   listAutomationBindingsMock,
   previewAutomationChangeMock,
   applyAutomationChangeMock,
+  synchronizeRemoteEvidenceMock,
 } = vi.hoisted(() => ({
   listAutomationBindingsMock: vi.fn(),
   previewAutomationChangeMock: vi.fn(),
   applyAutomationChangeMock: vi.fn(),
+  synchronizeRemoteEvidenceMock: vi.fn(),
 }));
 
 vi.mock("@/lib/automationBindings", () => ({
   listAutomationBindings: listAutomationBindingsMock,
   previewAutomationChange: previewAutomationChangeMock,
   applyAutomationChange: applyAutomationChangeMock,
+  synchronizeRemoteEvidence: synchronizeRemoteEvidenceMock,
 }));
 
 vi.mock("sonner", () => ({
@@ -329,5 +332,47 @@ describe("AutomationBindingsSection", () => {
     );
     expect(await screen.findByTestId("automation-preview-empty")).toBeTruthy();
     expect(applyAutomationChangeMock).not.toHaveBeenCalled();
+  });
+
+  it("synchronizes remote evidence and surfaces expired attempts explicitly", async () => {
+    listAutomationBindingsMock.mockResolvedValue(boundView(null));
+    synchronizeRemoteEvidenceMock.mockResolvedValue([
+      {
+        attemptId: "gh-7-1",
+        bindingId: "binding-1",
+        runId: 7,
+        state: { kind: "archived", status: "published", error: null },
+      },
+      {
+        attemptId: "gh-8-1",
+        bindingId: "binding-1",
+        runId: 8,
+        state: { kind: "missingSegments", missing: ["windows"] },
+      },
+      {
+        attemptId: "gh-9-1",
+        bindingId: "binding-1",
+        runId: 9,
+        state: { kind: "expired", missing: ["macos"] },
+      },
+    ]);
+
+    renderSection();
+    await screen.findByTestId("automation-remote-evidence");
+    fireEvent.click(screen.getByRole("button", { name: /同步远端证据/ }));
+
+    await waitFor(() =>
+      expect(synchronizeRemoteEvidenceMock).toHaveBeenCalledWith("repo-1")
+    );
+    expect(
+      await screen.findByTestId("automation-remote-attempt-gh-7-1")
+    ).toHaveTextContent("已发布");
+    expect(
+      screen.getByTestId("automation-remote-attempt-gh-8-1")
+    ).toHaveTextContent("证据缺失: windows");
+    // 决议 #88：保留期内未同步且 artifact 过期，必须显式呈现而不是静默缺段。
+    expect(
+      screen.getByTestId("automation-remote-expired-gh-9-1")
+    ).toHaveTextContent("远端证据已过期");
   });
 });
