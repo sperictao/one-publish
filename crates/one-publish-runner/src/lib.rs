@@ -131,7 +131,6 @@ pub struct RunnerProjection {
 pub struct PreparedAttempt {
     pub runtime_revision: AutomationRuntimeRevision,
     pub prepared: PreparedPublishPlan,
-    #[serde(default)]
     pub secret_bindings: BTreeMap<String, String>,
 }
 

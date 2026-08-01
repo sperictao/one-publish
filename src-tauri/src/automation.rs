@@ -604,6 +604,24 @@ fn binding_projection(
                         )
                     })
                     .collect::<serde_json::Map<_, _>>(),
+                // Provider 声明的构建环境事实（§4/§5：Backend 只按数据渲染）：
+                // Tauri Linux 构建的系统依赖；cargo 驱动需要独立的 tauri-cli。
+                "systemPackages": {
+                    "linux": [
+                        "libwebkit2gtk-4.1-dev",
+                        "libappindicator3-dev",
+                        "librsvg2-dev",
+                        "patchelf",
+                    ],
+                },
+                "cargoTools": if matches!(
+                    release_config.build_driver,
+                    crate::tauri_release::TauriBuildDriver::Cargo
+                ) {
+                    serde_json::json!(["tauri-cli"])
+                } else {
+                    serde_json::json!([])
+                },
             }),
         );
         public_settings.insert(

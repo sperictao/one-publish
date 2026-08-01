@@ -943,20 +943,13 @@ impl TauriRuntimeProvider {
 }
 
 /// 把驱动的目标 bundle 输出物化进暂存目录：源布局与桌面推导同构
-/// （`<app_root>/src-tauri/target/<triple>/release/bundle`）。端口实现
-/// 已自行物化（暂存目录非空）时不重复拷贝。
+/// （`<app_root>/src-tauri/target/<triple>/release/bundle`）。暂存目录每次
+/// 清空重建——重放不消费陈旧产物。
 fn materialize_target_bundle(
     app_root: &Path,
     target: &str,
     staged: &Path,
 ) -> Result<(), PublishError> {
-    let already_staged = staged
-        .read_dir()
-        .map(|mut entries| entries.next().is_some())
-        .unwrap_or(false);
-    if already_staged {
-        return Ok(());
-    }
     let bundle_root = app_root
         .join("src-tauri")
         .join("target")
@@ -968,6 +961,12 @@ fn materialize_target_bundle(
             "sealed build for {target} produced no bundle output at {}",
             bundle_root.display()
         )));
+    }
+    if staged.is_dir() {
+        std::fs::remove_dir_all(staged).map_err(|error| PublishError::Io {
+            operation: format!("reset staged output {}", staged.display()),
+            message: error.to_string(),
+        })?;
     }
     copy_directory_contents(&bundle_root, staged)
 }
@@ -1455,11 +1454,13 @@ mod shard_materialization_tests {
             b"installer bytes"
         );
 
-        // 暂存已非空（端口自行物化或重放）时不重复拷贝。
+        // 重放清空重建：暂存永远反映本次构建输出，不消费陈旧产物。
         std::fs::write(bundle.join("late.dmg"), b"late").expect("write late artifact");
+        std::fs::write(staged.join("stale.dmg"), b"stale").expect("write stale staged file");
         materialize_target_bundle(&app_root, "aarch64-apple-darwin", &staged)
-            .expect("an already staged directory is left as-is");
-        assert!(!staged.join("dmg/late.dmg").exists());
+            .expect("replays rebuild the staged directory");
+        assert!(staged.join("dmg/late.dmg").exists());
+        assert!(!staged.join("stale.dmg").exists());
 
         let error = materialize_target_bundle(&app_root, "x86_64-unknown-linux-gnu", &staged.join("missing"))
             .expect_err("a missing bundle root must fail loudly");

@@ -299,16 +299,22 @@ fn render_thin_shell_workflow(
             })
     };
 
-    let mut secret_env = trigger_env;
-    for secret_name in binding.projection.secret_references.values() {
-        secret_env.push_str(&format!(
-            "          {secret_name}: ${{{{ secrets.{secret_name} }}}}\n"
-        ));
-    }
-    let env_block = if secret_env.is_empty() {
-        String::new()
-    } else {
-        format!("        env:\n{secret_env}")
+    // 凭据暴露面（ADR-0029/§6）：交付 Secrets 只注入汇聚 job——build 段
+    // 运行使用者的构建与门禁程序，不得读到交付 token；触发 env 两类 job 都要。
+    let env_block_for = |with_secrets: bool| {
+        let mut lines = trigger_env.clone();
+        if with_secrets {
+            for secret_name in binding.projection.secret_references.values() {
+                lines.push_str(&format!(
+                    "          {secret_name}: ${{{{ secrets.{secret_name} }}}}\n"
+                ));
+            }
+        }
+        if lines.is_empty() {
+            String::new()
+        } else {
+            format!("        env:\n{lines}")
+        }
     };
 
     let install_step = |platform: &str| -> Result<String, PublishError> {
@@ -333,6 +339,7 @@ fn render_thin_shell_workflow(
         ))
     };
     let shard_step = |affinity: &str, binary: &str| {
+        let env_block = env_block_for(affinity == "any");
         format!(
             r#"      - name: Execute the {affinity} shard
         shell: bash
@@ -371,12 +378,24 @@ fn render_thin_shell_workflow(
 "#,
             targets = rust_targets_for(platform)?,
         );
-        if platform == "linux" {
-            steps.push_str(
-                "      - name: Install Linux system dependencies
-        run: sudo apt-get update && sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
-",
-            );
+        // 系统包由 Provider 声明经投影注入（§4/§5：Backend 不携带 Provider
+        // 特例），此处只按数据渲染到本族 job。
+        if let Some(packages) = toolchain
+            .get("systemPackages")
+            .and_then(|value| value.get(platform))
+            .and_then(Value::as_array)
+            .map(|values| {
+                values
+                    .iter()
+                    .filter_map(Value::as_str)
+                    .collect::<Vec<_>>()
+                    .join(" ")
+            })
+            .filter(|joined| !joined.is_empty())
+        {
+            steps.push_str(&format!(
+                "      - name: Install system dependencies\n        run: sudo apt-get update && sudo apt-get install -y {packages}\n"
+            ));
         }
         match build_driver {
             "pnpm" => steps.push_str(&format!(
@@ -417,15 +436,19 @@ fn render_thin_shell_workflow(
         run: bun install --frozen-lockfile
 "
             )),
-            "cargo" => steps.push_str(
-                "      - name: Install Tauri CLI
-        run: cargo install tauri-cli --locked
-",
-            ),
+            "cargo" => {}
             other => {
                 return Err(PublishError::Execution(format!(
                     "unsupported build driver toolchain {other}"
                 )))
+            }
+        }
+        // 附加 cargo 工具由 Provider 声明注入（如 tauri-cli），按数据渲染。
+        if let Some(tools) = toolchain.get("cargoTools").and_then(Value::as_array) {
+            for tool in tools.iter().filter_map(Value::as_str) {
+                steps.push_str(&format!(
+                    "      - name: Install {tool}\n        run: cargo install {tool} --locked\n"
+                ));
             }
         }
         Ok(steps)
@@ -597,6 +620,8 @@ mod tests {
                                 "macos": "aarch64-apple-darwin,x86_64-apple-darwin",
                                 "windows": "x86_64-pc-windows-msvc",
                             },
+                            "systemPackages": { "linux": ["libwebkit2gtk-4.1-dev", "patchelf"] },
+                            "cargoTools": [],
                         }),
                     ),
                 ]),
@@ -657,7 +682,18 @@ mod tests {
             .content
             .contains("targets: aarch64-apple-darwin,x86_64-apple-darwin"));
         assert!(workflow.content.contains("corepack enable pnpm"));
-        assert!(workflow.content.contains("Install Linux system dependencies"));
+        assert!(workflow
+            .content
+            .contains("apt-get install -y libwebkit2gtk-4.1-dev patchelf"));
+        // 交付 Secrets 只注入汇聚 job：build 段不得读到交付 token（ADR-0029）。
+        let secret_line = "ONE_PUBLISH_CI_GITHUB_TOKEN: ${{ secrets.ONE_PUBLISH_CI_GITHUB_TOKEN }}";
+        assert_eq!(workflow.content.matches(secret_line).count(), 1);
+        let aggregate_section = workflow
+            .content
+            .split("  aggregate:")
+            .nth(1)
+            .expect("aggregate job section");
+        assert!(aggregate_section.contains(secret_line));
         assert!(workflow.content.contains(
             "one-publish-staging-${{ github.run_id }}-${{ github.run_attempt }}-windows"
         ));

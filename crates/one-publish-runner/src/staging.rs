@@ -40,8 +40,22 @@ pub fn stage_shard_artifacts(
         .map_err(|error| staging_io_error(format!("create staging {affinity}"), error))?;
     let mut records = Vec::with_capacity(artifacts.len());
     for (index, artifact) in artifacts.iter().enumerate() {
+        // 候选 file_name 可含产物子目录（如 "dmg/app.dmg"）：写侧与读侧
+        // 使用同一路径安全校验，落盘前物化父目录。
+        if !publish_domain::is_safe_portable_relative_path(&artifact.file_name) {
+            return Err(PublishError::Execution(format!(
+                "staged candidate file name {} is not portable",
+                artifact.file_name
+            )));
+        }
         let relative = format!("files/{index}-{}", artifact.file_name);
-        std::fs::write(segment_root.join(&relative), &artifact.bytes)
+        let absolute = segment_root.join(&relative);
+        if let Some(parent) = absolute.parent() {
+            std::fs::create_dir_all(parent).map_err(|error| {
+                staging_io_error(format!("create staging parent for {relative}"), error)
+            })?;
+        }
+        std::fs::write(&absolute, &artifact.bytes)
             .map_err(|error| staging_io_error(format!("stage {}", artifact.file_name), error))?;
         records.push(StagedCandidateRecord {
             role: artifact.role.clone(),
@@ -113,6 +127,38 @@ pub fn load_staged_artifacts(root: &Path) -> Result<Vec<ArtifactCandidate>, Publ
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn nested_candidate_file_names_stage_and_load_round_trip() {
+        // 复现：tauri 收集的候选 file_name 形如 "dmg/app.dmg"（bundle 子目录），
+        // 落盘必须建父目录，读侧路径校验对称。
+        let temp = tempfile::tempdir().expect("staging root");
+        let nested = ArtifactCandidate::new(
+            "installer",
+            "dmg/app.dmg",
+            "application/octet-stream",
+            "macos",
+            "aarch64",
+            b"nested bytes".to_vec(),
+        );
+        stage_shard_artifacts(temp.path(), "macos", std::slice::from_ref(&nested))
+            .expect("stage a nested candidate");
+        assert_eq!(
+            load_staged_artifacts(temp.path()).expect("load nested candidate"),
+            vec![nested]
+        );
+
+        let escaping = ArtifactCandidate::new(
+            "installer",
+            "../escape.dmg",
+            "application/octet-stream",
+            "macos",
+            "aarch64",
+            b"escape".to_vec(),
+        );
+        stage_shard_artifacts(temp.path(), "macos", std::slice::from_ref(&escaping))
+            .expect_err("path-escaping file names must be rejected at stage time");
+    }
 
     #[test]
     fn staged_candidates_round_trip_across_segments_with_recomputed_digests() {
