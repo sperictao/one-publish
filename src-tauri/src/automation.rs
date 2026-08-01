@@ -9,7 +9,10 @@ use std::path::Path;
 use std::process::Output;
 use std::sync::Arc;
 
-use publish_adapters::{ExecutionBackend, FakeAutomationBackend, FAKE_AUTOMATION_BACKEND_ID};
+use publish_adapters::{
+    ExecutionBackend, FakeAutomationBackend, GitHubActionsBackend, StaticCredentialSource,
+    FAKE_AUTOMATION_BACKEND_ID, GITHUB_ACTIONS_BACKEND_ID,
+};
 use publish_domain::{
     canonical_digest, diff_automation_files, is_safe_portable_relative_path, AdapterBinding,
     AdapterIdentity, AdapterKind, AdapterSelection, AdapterSettings, AutomationBindingProjection,
@@ -22,7 +25,6 @@ use serde_json::Value;
 use ts_rs::TS;
 
 use crate::errors::AppError;
-use crate::github_actions_backend::{GitHubActionsAutomationBackend, GITHUB_ACTIONS_BACKEND_ID};
 use crate::store::{
     new_configuration_identity, AppliedProjectionBundle, AutomationBinding,
     AutomationTriggerPolicy, RepoPublishConfig,
@@ -166,10 +168,14 @@ pub(crate) struct AutomationNamespaceConflict {
     pub delivery_destination_namespace: String,
 }
 
+/// 自动化后端目录：全部由 publish-adapters 提供（决议 #81 单一 Backend）。
+/// 控制面只消费投影渲染面；执行面的凭据解析发生在远端 runner 进程内。
 fn automation_backend(backend_id: &str) -> Result<Arc<dyn ExecutionBackend>, AppError> {
     match backend_id {
         FAKE_AUTOMATION_BACKEND_ID => Ok(Arc::new(FakeAutomationBackend::new())),
-        GITHUB_ACTIONS_BACKEND_ID => Ok(Arc::new(GitHubActionsAutomationBackend::new())),
+        GITHUB_ACTIONS_BACKEND_ID => Ok(Arc::new(GitHubActionsBackend::new(Arc::new(
+            StaticCredentialSource::new(),
+        )))),
         other => Err(AppError::validation_with_code(
             format!("执行后端 {other} 不支持自动化投影"),
             "automation_backend_unsupported",
@@ -483,11 +489,18 @@ fn binding_projection(
             binding.backend_projection.clone(),
         ),
     ]);
-    // 远端投影后端消费 runner 模板；Fake 后端是本机测试语义，没有远端 runner。
+    // 远端投影后端消费 runner 模板与分发源；Fake 后端是本机测试语义，没有远端 runner。
     if binding.execution_backend_id == GITHUB_ACTIONS_BACKEND_ID {
         public_settings.insert(
             "runnerProjection".to_string(),
             projection_value(&runner_projection(binding, revision)?, "runner 模板")?,
+        );
+        public_settings.insert(
+            "runnerDistribution".to_string(),
+            serde_json::json!({
+                "repository": one_publish_runner::RUNNER_DISTRIBUTION_REPOSITORY,
+                "releaseTag": one_publish_runner::runner_release_tag(),
+            }),
         );
     }
 
@@ -835,22 +848,12 @@ fn delivery_destination_namespaces(
     config: &RepoPublishConfig,
     binding: &AutomationBinding,
 ) -> Result<BTreeSet<String>, AppError> {
-    let mut namespaces: BTreeSet<String> = bound_revision(config, binding)?
+    Ok(bound_revision(config, binding)?
         .composition
         .delivery_routes
         .iter()
         .filter_map(|route| route_delivery_namespace(&route.destination))
-        .collect();
-    // 过渡事实：遗留 GitHub Actions 渲染器仍无条件在 workflow 内交付 GitHub
-    // Release（github_actions_backend.rs）。在渲染改为执行封存 Runner Projection
-    // 之前，该副作用并入冲突命名空间，避免初始 takeover 扫描漏报外部冲突。
-    if binding.execution_backend_id == GITHUB_ACTIONS_BACKEND_ID {
-        namespaces.insert(format!(
-            "{}:repository",
-            publish_adapters::GITHUB_RELEASE_DESTINATION_ID
-        ));
-    }
-    Ok(namespaces)
+        .collect())
 }
 
 /// 目标命名空间由 Delivery Destination 自己声明（publish-adapters），控制面
@@ -1850,7 +1853,11 @@ pub async fn apply_automation_change(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::tauri_release::{TauriReleaseConfig, MANAGED_WORKFLOW_PATH};
+    use crate::tauri_release::TauriReleaseConfig;
+
+    /// 决议 #81：workflow 路径统一按绑定身份命名，旧 stable 特判路径已删除。
+    const STABLE_BINDING_WORKFLOW_PATH: &str =
+        ".github/workflows/one-publish-binding-stable-release.yml";
     use std::path::PathBuf;
     use std::process::Command;
 
@@ -2005,7 +2012,7 @@ mod tests {
     ) -> AutomationChangeRequest {
         AutomationChangeRequest::Install {
             configuration_id: profile_id.to_string(),
-            execution_backend_id: crate::github_actions_backend::GITHUB_ACTIONS_BACKEND_ID
+            execution_backend_id: GITHUB_ACTIONS_BACKEND_ID
                 .to_string(),
             trigger_policy: AutomationTriggerPolicy::TagPush {
                 tag_prefix: tag_prefix.to_string(),
@@ -2032,7 +2039,38 @@ mod tests {
             )
             .expect("create fixture profile")
             .clone();
-        (config, profile.id)
+        let profile_id = profile.id;
+        push_github_release_route(&mut config, &profile_id);
+        (config, profile_id)
+    }
+
+    /// 过渡特判删除后（决议 #81），GitHub Release 交付是修订路线的显式
+    /// 事实：自动化冲突命名空间只来自绑定修订的 Delivery Routes。
+    fn push_github_release_route(config: &mut RepoPublishConfig, profile_id: &str) {
+        let revision = config
+            .profiles
+            .iter_mut()
+            .find(|profile| profile.id == profile_id)
+            .expect("fixture profile")
+            .revisions
+            .first_mut()
+            .expect("fixture revision");
+        revision
+            .composition
+            .delivery_routes
+            .push(crate::store::RevisionDeliveryRoute {
+                route_id: "github-release".to_string(),
+                required: true,
+                destination: crate::store::RevisionAdapterBinding {
+                    adapter_id: publish_adapters::GITHUB_RELEASE_DESTINATION_ID.to_string(),
+                    settings_version: 1,
+                    settings: serde_json::json!({ "repository": "acme/demo" }),
+                    credentials: BTreeMap::from([(
+                        "github_token".to_string(),
+                        "ci github-token".to_string(),
+                    )]),
+                },
+            });
     }
 
     fn github_actions_config() -> TauriReleaseConfig {
@@ -2062,31 +2100,7 @@ mod tests {
     #[test]
     fn github_actions_runtime_projection_is_a_verifiable_planning_template() {
         let (_temp, work) = fixture_repository();
-        let (mut config, profile_id) = fixture_tauri_config("Stable");
-        {
-            let profile = config
-                .profiles
-                .iter_mut()
-                .find(|profile| profile.id == profile_id)
-                .expect("fixture profile");
-            let revision = profile.revisions.first_mut().expect("fixture revision");
-            revision
-                .composition
-                .delivery_routes
-                .push(crate::store::RevisionDeliveryRoute {
-                    route_id: "github-release".to_string(),
-                    required: true,
-                    destination: crate::store::RevisionAdapterBinding {
-                        adapter_id: publish_adapters::GITHUB_RELEASE_DESTINATION_ID.to_string(),
-                        settings_version: 1,
-                        settings: serde_json::json!({ "repository": "acme/demo" }),
-                        credentials: BTreeMap::from([(
-                            "github_token".to_string(),
-                            "ci github-token".to_string(),
-                        )]),
-                    },
-                });
-        }
+        let (config, profile_id) = fixture_tauri_config("Stable");
 
         let outcome = preview_change(
             &work,
@@ -2308,9 +2322,6 @@ mod tests {
         let (mut config, profile_id) = fixture_tauri_config("Stable");
         let workflow_dir = work.join(".github/workflows");
         std::fs::create_dir_all(&workflow_dir).expect("create workflow directory");
-        let managed_path = work.join(MANAGED_WORKFLOW_PATH);
-        std::fs::write(&managed_path, "name: drifted managed workflow\n")
-            .expect("write drifted managed workflow");
         let legacy_path = workflow_dir.join("legacy-release.yml");
         std::fs::write(
             &legacy_path,
@@ -2337,7 +2348,10 @@ mod tests {
             ".one-publish/automation/github-actions.json",
             AutomationFileChangeKind::Added
         )));
-        assert!(described.contains(&(MANAGED_WORKFLOW_PATH, AutomationFileChangeKind::Updated)));
+        assert!(described.contains(&(
+            STABLE_BINDING_WORKFLOW_PATH,
+            AutomationFileChangeKind::Added
+        )));
         assert!(described.contains(&(
             ".github/workflows/legacy-release.yml",
             AutomationFileChangeKind::Removed
@@ -2384,13 +2398,13 @@ mod tests {
             run_git(&temp.path().join("origin.git"), &["rev-parse", "main"]),
             commit_sha
         );
-        assert!(work.join(MANAGED_WORKFLOW_PATH).is_file());
+        assert!(work.join(STABLE_BINDING_WORKFLOW_PATH).is_file());
         assert!(!legacy_path.exists());
         assert!(quality_path.is_file());
         assert_eq!(config.bindings.len(), 1);
         assert_eq!(
             config.bindings[0].execution_backend_id,
-            crate::github_actions_backend::GITHUB_ACTIONS_BACKEND_ID
+            GITHUB_ACTIONS_BACKEND_ID
         );
     }
 
@@ -2413,6 +2427,7 @@ mod tests {
             )
             .expect("create nightly profile")
             .clone();
+        push_github_release_route(&mut config, &nightly.id);
         let stable = github_actions_install_request(&stable_id, "binding-stable", "v");
         let stable_preview =
             preview_change(&work, &config, &stable, NOW).expect("preview stable binding");
@@ -2930,8 +2945,10 @@ mod tests {
             change.path == ".one-publish/automation/github-actions.json"
                 && change.kind == AutomationFileChangeKind::Updated
         }));
+        // 升级换绑的修订只改规划输入模板；薄外壳 workflow 与修订内容解耦。
         assert!(preview.changes.iter().any(|change| {
-            change.path == MANAGED_WORKFLOW_PATH && change.kind == AutomationFileChangeKind::Updated
+            change.path == ".one-publish/automation/runtime/binding-stable.json"
+                && change.kind == AutomationFileChangeKind::Updated
         }));
 
         apply_change(

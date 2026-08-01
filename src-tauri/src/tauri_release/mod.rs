@@ -5,7 +5,6 @@
 //! 校验与 GitHub Actions 执行后端复用的 workflow 渲染。
 
 mod types;
-pub(crate) mod workflow;
 
 pub use types::*;
 

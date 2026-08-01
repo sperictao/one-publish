@@ -3,7 +3,6 @@ use std::collections::BTreeMap;
 use ts_rs::TS;
 
 pub const MANAGED_WORKFLOW_VERSION: u32 = 1;
-pub const MANAGED_WORKFLOW_PATH: &str = ".github/workflows/one-publish-tauri-release.yml";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[serde(rename_all = "snake_case")]
