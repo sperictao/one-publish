@@ -743,3 +743,303 @@ pub fn resolve_build_driver(app_root: &Path) -> Result<TauriBuildDriver, Publish
         ),
     ))
 }
+
+// ===== 运行时包装（决议 #80：Provider 下沉，shell 不再定义 Provider）=====
+
+pub const TAURI_RELEASE_GATE_ACTION: &str = "run_release_gate";
+pub const RELEASE_GATES_INPUT: &str = "release_gates";
+
+/// 密封进计划输入的 Release Gate 形状；与控制面 ReleaseGate 的序列化兼容，
+/// 由 seal/decode 测试锁定。
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SealedReleaseGate {
+    pub program: String,
+    #[serde(default)]
+    pub args: Vec<String>,
+}
+
+/// Tauri 配置的运行时包装：发现、检查与计划委托内置 Tauri Provider（合同不变），
+/// 并补充 Release Gate 节点；构建按密封计划节点直接经执行端口运行，
+/// 不桥接旧的发布规格管道。
+pub struct TauriRuntimeProvider {
+    provider: TauriProjectProvider,
+    default_settings: AdapterSettings,
+    repository_root: PathBuf,
+    execution: Option<crate::bridge::ProviderExecution>,
+}
+
+impl TauriRuntimeProvider {
+    pub fn new(
+        config_path: String,
+        build_driver: String,
+        repository_root: PathBuf,
+        execution: Option<crate::bridge::ProviderExecution>,
+    ) -> Self {
+        let default_settings = AdapterSettings::new(1)
+            .with_value(CONFIG_PATH_SETTING, Value::String(config_path))
+            .with_value(BUILD_DRIVER_SETTING, Value::String(build_driver));
+        Self {
+            provider: TauriProjectProvider::new(),
+            default_settings,
+            repository_root,
+            execution,
+        }
+    }
+
+    /// 执行密封的 Tauri 构建节点：程序与参数只能来自计划节点固定的构建驱动，
+    /// 配置入口在执行时物化为绝对路径，工作目录为应用根（与驱动命令语义一致）。
+    fn run_sealed_build(
+        &self,
+        node: &publish_domain::PlanNode,
+        config_path: &str,
+        driver: TauriBuildDriver,
+    ) -> Result<crate::AdapterExecutionOutput, PublishError> {
+        let execution = self.execution.as_ref().ok_or_else(|| {
+            PublishError::Execution(
+                "tauri execution port is unavailable for this runtime".to_string(),
+            )
+        })?;
+        let absolute_config = self.repository_root.join(config_path);
+        let app_root = resolve_app_root(&absolute_config).ok_or_else(|| {
+            PublishError::Execution(format!(
+                "cannot resolve Tauri app root from {config_path} for node {}",
+                node.id
+            ))
+        })?;
+        let mut args = driver
+            .build_args()
+            .iter()
+            .map(|arg| (*arg).to_string())
+            .collect::<Vec<_>>();
+        args.push("--config".to_string());
+        args.push(absolute_config.to_string_lossy().to_string());
+        let outcome = execution
+            .port
+            .execute_build(crate::bridge::SealedBuildCommand {
+                provider_id: TAURI_PROVIDER_ID.to_string(),
+                program: driver.name().to_string(),
+                args,
+                working_directory: app_root,
+                output_directory: execution.output_directory.clone(),
+            })
+            .map_err(|error| PublishError::Execution(error.to_string()))?;
+        crate::bridge::finish_provider_execution(execution, outcome, classify_tauri_artifact)
+    }
+}
+
+impl AdapterContract for TauriRuntimeProvider {
+    fn descriptor(&self) -> &AdapterDescriptor {
+        self.provider.descriptor()
+    }
+
+    fn default_settings(&self) -> AdapterSettings {
+        self.default_settings.clone()
+    }
+
+    fn plan_fragment(
+        &self,
+        snapshot: &PlanningInputSnapshot,
+        settings: &AdapterSettings,
+    ) -> Result<Vec<PlanNodeTemplate>, PublishError> {
+        let mut templates = self.provider.plan_fragment(snapshot, settings)?;
+        for (index, gate) in release_gates_from_snapshot(snapshot)?.iter().enumerate() {
+            if gate.program.trim().is_empty() {
+                return Err(PublishError::InvalidPlan(
+                    "release gate program cannot be empty".to_string(),
+                ));
+            }
+            templates.push(PlanNodeTemplate::adapter_action(
+                format!("gate-{index}"),
+                PlanStage::PrepareIdentity,
+                TAURI_RELEASE_GATE_ACTION,
+                release_gate_inputs(gate)?,
+            ));
+        }
+        Ok(templates)
+    }
+
+    fn execute_node(
+        &self,
+        node: &publish_domain::PlanNode,
+        _context: &crate::AdapterExecutionContext<'_>,
+    ) -> Result<crate::AdapterExecutionOutput, PublishError> {
+        let adapter = self.provider.descriptor().identity().display_name();
+        let config_path = node.settings.string(CONFIG_PATH_SETTING, &adapter)?;
+        let build_driver = node.settings.string(BUILD_DRIVER_SETTING, &adapter)?;
+
+        match &node.operation {
+            publish_domain::PlanOperation::AdapterAction { action, .. }
+                if action == TAURI_INSPECT_ACTION =>
+            {
+                let inspection = self.provider.inspect(&self.repository_root, config_path)?;
+                if inspection.build_driver.name() != build_driver {
+                    return Err(PublishError::Execution(format!(
+                        "tauri build driver drifted from {build_driver} to {}; re-prepare the publish plan",
+                        inspection.build_driver.name()
+                    )));
+                }
+                Ok(crate::AdapterExecutionOutput::default())
+            }
+            publish_domain::PlanOperation::AdapterAction { action, inputs }
+                if action == TAURI_RELEASE_GATE_ACTION =>
+            {
+                run_release_gate(&self.repository_root, node, inputs)
+            }
+            publish_domain::PlanOperation::RunProgram {
+                program,
+                args,
+                working_directory,
+                environment_references,
+            } => {
+                let driver = TauriBuildDriver::parse(build_driver).ok_or_else(|| {
+                    PublishError::Execution(format!("unknown tauri build driver {build_driver}"))
+                })?;
+                // 工作目录与环境引用由本 Provider 在执行时确定；密封节点携带任何
+                // 额外执行输入都视为篡改，而不是被静默丢弃。
+                if *program != driver.program_id()
+                    || *args != driver.build_command_args(config_path)
+                    || working_directory.is_some()
+                    || !environment_references.is_empty()
+                {
+                    return Err(PublishError::InvalidPlan(format!(
+                        "node {} is not the sealed tauri build operation",
+                        node.id
+                    )));
+                }
+                self.run_sealed_build(node, config_path, driver)
+            }
+            _ => Err(PublishError::Execution(format!(
+                "node {} is not a tauri provider operation",
+                node.id
+            ))),
+        }
+    }
+}
+
+impl ProjectProvider for TauriRuntimeProvider {
+    fn discover_candidates(
+        &self,
+        repository_root: &Path,
+    ) -> Result<Vec<ProjectCandidate>, PublishError> {
+        self.provider.discover_candidates(repository_root)
+    }
+}
+
+/// 从密封快照读取 Release Gate；缺失键代表没有配置门禁。
+fn release_gates_from_snapshot(
+    snapshot: &PlanningInputSnapshot,
+) -> Result<Vec<SealedReleaseGate>, PublishError> {
+    match snapshot.release_input.get(RELEASE_GATES_INPUT) {
+        None => Ok(Vec::new()),
+        Some(value) => serde_json::from_value(value.clone()).map_err(|error| {
+            PublishError::InvalidPlan(format!("sealed release gates cannot be decoded: {error}"))
+        }),
+    }
+}
+
+/// 门禁节点输入直接使用 SealedReleaseGate 的序列化形状；密封与解码共享一个字段来源。
+fn release_gate_inputs(gate: &SealedReleaseGate) -> Result<BTreeMap<String, Value>, PublishError> {
+    match serde_json::to_value(gate) {
+        Ok(Value::Object(fields)) => Ok(fields.into_iter().collect()),
+        _ => Err(PublishError::InvalidPlan(
+            "release gate cannot be sealed into plan node inputs".to_string(),
+        )),
+    }
+}
+
+/// 在仓库根执行一个结构化门禁命令；任何非零退出都终止后续节点并保留完整输出根因。
+fn run_release_gate(
+    repository_root: &Path,
+    node: &publish_domain::PlanNode,
+    inputs: &BTreeMap<String, Value>,
+) -> Result<crate::AdapterExecutionOutput, PublishError> {
+    let gate: SealedReleaseGate =
+        serde_json::from_value(Value::Object(inputs.clone().into_iter().collect())).map_err(
+            |error| {
+                PublishError::InvalidPlan(format!(
+                    "node {} has invalid sealed release gate inputs: {error}",
+                    node.id
+                ))
+            },
+        )?;
+    if gate.program.trim().is_empty() {
+        return Err(PublishError::InvalidPlan(format!(
+            "node {} has no sealed release gate program",
+            node.id
+        )));
+    }
+
+    let output = background_command(&gate.program)
+        .args(&gate.args)
+        .current_dir(repository_root)
+        .output()
+        .map_err(|error| {
+            PublishError::Execution(format!(
+                "failed to start release gate '{}': {error}",
+                gate.program
+            ))
+        })?;
+    if output.status.success() {
+        return Ok(crate::AdapterExecutionOutput::default());
+    }
+    Err(PublishError::Execution(format!(
+        "release gate failed: {} {}\n{}{}",
+        gate.program,
+        gate.args.join(" "),
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr),
+    )))
+}
+
+/// 桌面环境下门禁进程不得弹出控制台窗口；与 shell 的进程卫生保持一致。
+#[cfg(windows)]
+fn background_command(program: &str) -> std::process::Command {
+    use std::os::windows::process::CommandExt;
+    const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+    let mut command = std::process::Command::new(program);
+    command.creation_flags(CREATE_NO_WINDOW);
+    command
+}
+
+#[cfg(not(windows))]
+fn background_command(program: &str) -> std::process::Command {
+    std::process::Command::new(program)
+}
+
+/// Tauri bundle 输出按逻辑角色与媒体类型进入 Artifact Manifest：
+/// 安装包、Updater 归档与 Updater 签名可被交付路线按角色选择，其余为构建支撑文件。
+fn classify_tauri_artifact(relative: &Path) -> (&'static str, &'static str) {
+    let name = relative
+        .file_name()
+        .and_then(|name| name.to_str())
+        .unwrap_or_default()
+        .to_ascii_lowercase();
+    if name.ends_with(".sig") {
+        return ("updater-signature", "application/octet-stream");
+    }
+    if name.ends_with(".app.tar.gz") {
+        return ("updater-archive", "application/gzip");
+    }
+    if name.ends_with(".nsis.zip") || name.ends_with(".msi.zip") {
+        return ("updater-archive", "application/zip");
+    }
+    if name.ends_with(".dmg") {
+        return ("installer", "application/x-apple-diskimage");
+    }
+    if name.ends_with(".msi") {
+        return ("installer", "application/x-msi");
+    }
+    if name.ends_with(".exe") {
+        return ("installer", "application/vnd.microsoft.portable-executable");
+    }
+    if name.ends_with(".appimage") {
+        return ("installer", "application/vnd.appimage");
+    }
+    if name.ends_with(".deb") {
+        return ("installer", "application/vnd.debian.binary-package");
+    }
+    if name.ends_with(".rpm") {
+        return ("installer", "application/x-rpm");
+    }
+    ("build-support", "application/octet-stream")
+}

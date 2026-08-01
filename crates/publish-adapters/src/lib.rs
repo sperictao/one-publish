@@ -11,6 +11,7 @@ use publish_domain::{
 use serde_json::Value;
 
 mod credentials;
+pub mod bridge;
 mod fake;
 pub mod fixture;
 mod github_actions;
@@ -28,6 +29,11 @@ pub use fake::{
 pub use fixture::{
     fixture_candidate_identity, FixtureAppInspection, FixtureAppProvider, FIXTURE_BUILD_PROGRAM,
     FIXTURE_BUNDLE_ROLE, FIXTURE_INSPECT_ACTION, FIXTURE_MANIFEST_FILE_NAME, FIXTURE_PROVIDER_ID,
+};
+pub use bridge::{
+    ExecutionSourceGuard, ProviderExecution, ProviderExecutionOutcome, ProviderExecutionPort,
+    SealedBuildCommand, SelectedProjectProvider, SELECTED_PROVIDER_ID,
+    SELECTED_PROVIDER_PROGRAM,
 };
 pub use github_actions::{GitHubActionsExecutionBackend, GITHUB_ACTIONS_EXECUTION_BACKEND_ID};
 pub use github_release::{
@@ -52,7 +58,8 @@ pub use sftp::{
     SFTP_DELIVERY_RECORD_NAME, SFTP_DESTINATION_ID,
 };
 pub use tauri::{
-    TauriBuildDriver, TauriProjectInspection, TauriProjectProvider, TauriVersionSource,
+    SealedReleaseGate, TauriBuildDriver, TauriProjectInspection, TauriProjectProvider,
+    TauriRuntimeProvider, TauriVersionSource,
     TauriVersionSourceKind, VersionMirror, VersionMirrorKind, TAURI_INSPECT_ACTION,
     TAURI_PROVIDER_ID,
 };

@@ -9,20 +9,21 @@ use std::thread::{self, JoinHandle};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use publish_adapters::{
-    AdapterConformanceFixture, AdapterContract, AdapterExecutionContext, AdapterExecutionOutput,
-    AdapterRegistry, ChecksumProcessor, GhCliGitHubReleaseApi, GitHubReleaseDestination,
-    LocalDirectoryDestination, LocalExecutionBackend, OpenSshSftpTransport, ProjectProvider,
-    SftpDeliveryDestination, TauriBuildDriver, TauriProjectProvider, TemporaryArtifactStore,
-    ARTIFACT_CANDIDATE_CAPABILITY, CHECKSUM_PROCESSOR_ID, GITHUB_RELEASE_DESTINATION_ID,
-    SFTP_DESTINATION_ID, TAURI_INSPECT_ACTION, TAURI_PROVIDER_ID,
+    tauri::RELEASE_GATES_INPUT, AdapterConformanceFixture, AdapterRegistry, ChecksumProcessor,
+    GhCliGitHubReleaseApi, GitHubReleaseDestination, LocalDirectoryDestination,
+    LocalExecutionBackend, OpenSshSftpTransport, ProjectProvider, ProviderExecution,
+    ProviderExecutionOutcome, ProviderExecutionPort, SelectedProjectProvider,
+    SftpDeliveryDestination, TauriBuildDriver, TauriProjectProvider, TauriRuntimeProvider,
+    TemporaryArtifactStore, CHECKSUM_PROCESSOR_ID, GITHUB_RELEASE_DESTINATION_ID,
+    SELECTED_PROVIDER_ID, SFTP_DESTINATION_ID, TAURI_PROVIDER_ID,
 };
 use publish_domain::{
-    AdapterBinding, AdapterDescriptor, AdapterIdentity, AdapterKind, AdapterSchema,
-    AdapterSelection, AdapterSettings, ArtifactCandidate, ArtifactManifest, ArtifactManifestEntry,
-    Capability, CapabilityRequirement, DeliveryRoute, DeliveryStatus, PlanNode, PlanNodeTemplate,
-    PlanOperation, PlanStage, PlanningInputSnapshot, PublishAttemptStatus, PublishAttemptView,
+    AdapterBinding, AdapterIdentity, AdapterKind, 
+    AdapterSelection, AdapterSettings, ArtifactManifest, ArtifactManifestEntry,
+    DeliveryRoute, DeliveryStatus,
+    PlanStage, PlanningInputSnapshot, PublishAttemptStatus, PublishAttemptView,
     PublishError, PublishEvent, PublishResource, PublishResourceKind, PublishResourceLease,
-    PublishingCapability, ReleaseIdentity, SourceSnapshot, PLANNING_INPUT_SNAPSHOT_VERSION,
+     ReleaseIdentity, SourceSnapshot, PLANNING_INPUT_SNAPSHOT_VERSION,
 };
 use publish_runner_core::{
     AttemptExecutionContext, AttemptLeaseMaintenancePort, PreparedPublishPlan,
@@ -42,8 +43,6 @@ use crate::provider::{registry::provider_registry, ProviderSourceInputKind};
 use crate::spec::PublishSpec;
 use crate::tauri_release::ReleaseGate;
 
-const SELECTED_PROVIDER_ID: &str = "selected-project-provider";
-const SELECTED_PROVIDER_PROGRAM: &str = "selected-project-provider:publish";
 use crate::store::{
     PublishComposition, RevisionAdapterBinding, LOCAL_BACKEND_ID, LOCAL_DESTINATION_ID,
     TEMPORARY_STORE_ID,
@@ -53,11 +52,8 @@ mod journal;
 
 /// 桌面端产物存储的明确保留期限：7 天（ADR-0038）。
 const ARTIFACT_RETENTION_SECONDS: u64 = 604_800;
-const STRUCTURED_PLAN_EXECUTION: &str = "structured-plan-execution";
 const RUNTIME_REVISION: &str = "one-publish-runtime-v2";
 /// Tauri 配置的 Release Gate 计划节点动作；门禁位于构建与交付副作用之前（ADR-0014）。
-const TAURI_RELEASE_GATE_ACTION: &str = "run_release_gate";
-const RELEASE_GATES_INPUT: &str = "release_gates";
 static ATTEMPT_SEQUENCE: AtomicU64 = AtomicU64::new(0);
 
 /// 进行中 Attempt 的取消信号注册表：start 以密封运行令牌寻址，resume 以
@@ -731,413 +727,10 @@ pub struct PublishRuntimeResult {
     pub publish_result: Option<crate::commands::PublishResult>,
 }
 
-pub(crate) trait ProviderExecutionPort: Send + Sync {
-    fn execute(&self, spec: PublishSpec) -> Result<crate::commands::PublishResult, AppError>;
-
-    /// 运行密封计划节点物化出的结构化构建命令；执行层不得重新推导或替换命令。
-    fn execute_build(
-        &self,
-        request: SealedBuildCommand,
-    ) -> Result<crate::commands::PublishResult, AppError>;
-}
-
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct AttemptIdentity {
     pub attempt_id: String,
     pub backend_run_id: String,
-}
-
-struct SelectedProviderExecution {
-    port: Arc<dyn ProviderExecutionPort>,
-    result: Arc<Mutex<Option<crate::commands::PublishResult>>>,
-    output_directory: PathBuf,
-    source_guard: PreparedSourceGuard,
-}
-
-struct SelectedProjectProvider {
-    descriptor: AdapterDescriptor,
-    spec_json: String,
-    execution: Option<SelectedProviderExecution>,
-}
-
-impl SelectedProjectProvider {
-    fn with_execution(spec_json: String, execution: Option<SelectedProviderExecution>) -> Self {
-        Self {
-            descriptor: AdapterDescriptor::new(
-                AdapterKind::ProjectProvider,
-                SELECTED_PROVIDER_ID,
-                1,
-                AdapterSchema::new(1).with_required_string("spec_json"),
-                PublishingCapability {
-                    // 构建产物是未验证候选；摘要验证与所有 Provider 一致，
-                    // 由修订组合声明的 Artifact Processor 提供（ADR-0024）。
-                    provides: vec![Capability::new(ARTIFACT_CANDIDATE_CAPABILITY, 1)],
-                    requires: vec![CapabilityRequirement::exact(STRUCTURED_PLAN_EXECUTION, 1)],
-                },
-            )
-            .with_allowed_program(SELECTED_PROVIDER_PROGRAM),
-            spec_json,
-            execution,
-        }
-    }
-}
-
-impl AdapterContract for SelectedProjectProvider {
-    fn descriptor(&self) -> &AdapterDescriptor {
-        &self.descriptor
-    }
-
-    fn default_settings(&self) -> AdapterSettings {
-        AdapterSettings::new(1).with_value("spec_json", Value::String(self.spec_json.clone()))
-    }
-
-    fn plan_fragment(
-        &self,
-        _snapshot: &PlanningInputSnapshot,
-        settings: &AdapterSettings,
-    ) -> Result<Vec<PlanNodeTemplate>, PublishError> {
-        settings.string("spec_json", &self.descriptor.identity().display_name())?;
-        Ok(vec![PlanNodeTemplate::command(
-            "build",
-            PlanStage::Build,
-            SELECTED_PROVIDER_PROGRAM,
-            Vec::new(),
-        )
-        .with_artifact_io(
-            Vec::new(),
-            vec!["provider-output:*".to_string()],
-        )])
-    }
-
-    fn execute_node(
-        &self,
-        node: &PlanNode,
-        _context: &AdapterExecutionContext<'_>,
-    ) -> Result<AdapterExecutionOutput, PublishError> {
-        match &node.operation {
-            PlanOperation::RunProgram {
-                program,
-                args,
-                working_directory,
-                environment_references,
-            } if program == SELECTED_PROVIDER_PROGRAM
-                && args.is_empty()
-                && working_directory.is_none()
-                && environment_references.is_empty() => {}
-            _ => {
-                return Err(PublishError::Execution(format!(
-                    "node {} is not the sealed selected-provider operation",
-                    node.id
-                )))
-            }
-        }
-
-        let planned_spec = node
-            .settings
-            .string("spec_json", &self.descriptor.identity().display_name())?;
-        if planned_spec != self.spec_json {
-            return Err(PublishError::InvalidPlan(
-                "selected-provider node changed its sealed publish spec".to_string(),
-            ));
-        }
-        let execution = self.execution.as_ref().ok_or_else(|| {
-            PublishError::Execution(
-                "selected-provider execution port is unavailable for this runtime".to_string(),
-            )
-        })?;
-        run_bridged_execution(execution, planned_spec)
-    }
-}
-
-impl ProjectProvider for SelectedProjectProvider {}
-
-/// 通过既有 Provider 执行管道运行密封的发布规格并收集产物；
-/// 非 Tauri Provider 的构建执行迁移属于后续 Ticket，这里只保证计划与执行共享一个事实来源。
-fn run_bridged_execution(
-    execution: &SelectedProviderExecution,
-    spec_json: &str,
-) -> Result<AdapterExecutionOutput, PublishError> {
-    let spec: PublishSpec = serde_json::from_str(spec_json).map_err(|error| {
-        PublishError::Execution(format!("cannot decode sealed publish spec: {error}"))
-    })?;
-    let result = execution
-        .port
-        .execute(spec)
-        .map_err(|error| PublishError::Execution(error.to_string()))?;
-    finish_provider_execution(execution, result, classify_generic_artifact)
-}
-
-/// 校验 Provider 执行结果并从其原生输出目录收集产物；失败保留根因并阻止后续副作用。
-fn finish_provider_execution(
-    execution: &SelectedProviderExecution,
-    result: crate::commands::PublishResult,
-    classify: fn(&Path) -> (&'static str, &'static str),
-) -> Result<AdapterExecutionOutput, PublishError> {
-    execution
-        .result
-        .lock()
-        .map_err(|_| PublishError::Execution("publish result lock is poisoned".to_string()))?
-        .replace(result.clone());
-
-    if result.cancelled {
-        return Err(PublishError::Execution(
-            result
-                .error
-                .unwrap_or_else(|| "provider execution was cancelled".to_string()),
-        ));
-    }
-    if !result.success {
-        return Err(PublishError::Execution(
-            result
-                .error
-                .unwrap_or_else(|| "provider execution failed".to_string()),
-        ));
-    }
-    if Path::new(&result.output_dir) != execution.output_directory {
-        return Err(PublishError::Execution(format!(
-            "provider returned output directory {}, expected {}",
-            result.output_dir,
-            execution.output_directory.display()
-        )));
-    }
-    execution.source_guard.validate_for_execution()?;
-
-    Ok(AdapterExecutionOutput {
-        artifacts: collect_artifacts_with(&execution.output_directory, classify)?,
-        ..AdapterExecutionOutput::default()
-    })
-}
-
-/// Tauri 配置的运行时包装：发现、检查与计划委托内置 Tauri Provider（合同不变），
-/// 并补充 Release Gate 节点；构建按密封计划节点直接经执行端口运行（T06），
-/// 不再桥接旧的发布规格管道。
-struct TauriRuntimeProvider {
-    provider: TauriProjectProvider,
-    default_settings: AdapterSettings,
-    repository_root: PathBuf,
-    execution: Option<SelectedProviderExecution>,
-}
-
-impl TauriRuntimeProvider {
-    fn new(
-        config_path: String,
-        build_driver: String,
-        repository_root: PathBuf,
-        execution: Option<SelectedProviderExecution>,
-    ) -> Self {
-        let default_settings = AdapterSettings::new(1)
-            .with_value("config_path", Value::String(config_path))
-            .with_value("build_driver", Value::String(build_driver));
-        Self {
-            provider: TauriProjectProvider::new(),
-            default_settings,
-            repository_root,
-            execution,
-        }
-    }
-
-    /// 执行密封的 Tauri 构建节点：程序与参数只能来自计划节点固定的构建驱动，
-    /// 配置入口在执行时物化为绝对路径，工作目录为应用根（与驱动命令语义一致）。
-    fn run_sealed_build(
-        &self,
-        node: &PlanNode,
-        config_path: &str,
-        driver: TauriBuildDriver,
-    ) -> Result<AdapterExecutionOutput, PublishError> {
-        let execution = self.execution.as_ref().ok_or_else(|| {
-            PublishError::Execution(
-                "tauri execution port is unavailable for this runtime".to_string(),
-            )
-        })?;
-        let absolute_config = self.repository_root.join(config_path);
-        let app_root =
-            publish_adapters::tauri::resolve_app_root(&absolute_config).ok_or_else(|| {
-                PublishError::Execution(format!(
-                    "cannot resolve Tauri app root from {config_path} for node {}",
-                    node.id
-                ))
-            })?;
-        let mut args = driver
-            .build_args()
-            .iter()
-            .map(|arg| (*arg).to_string())
-            .collect::<Vec<_>>();
-        args.push("--config".to_string());
-        args.push(absolute_config.to_string_lossy().to_string());
-        let result = execution
-            .port
-            .execute_build(SealedBuildCommand {
-                provider_id: TAURI_PROVIDER_ID.to_string(),
-                program: driver.name().to_string(),
-                args,
-                working_directory: app_root,
-                output_directory: execution.output_directory.clone(),
-            })
-            .map_err(|error| PublishError::Execution(error.to_string()))?;
-        finish_provider_execution(execution, result, classify_tauri_artifact)
-    }
-}
-
-impl AdapterContract for TauriRuntimeProvider {
-    fn descriptor(&self) -> &AdapterDescriptor {
-        self.provider.descriptor()
-    }
-
-    fn default_settings(&self) -> AdapterSettings {
-        self.default_settings.clone()
-    }
-
-    fn plan_fragment(
-        &self,
-        snapshot: &PlanningInputSnapshot,
-        settings: &AdapterSettings,
-    ) -> Result<Vec<PlanNodeTemplate>, PublishError> {
-        let mut templates = self.provider.plan_fragment(snapshot, settings)?;
-        for (index, gate) in release_gates_from_snapshot(snapshot)?.iter().enumerate() {
-            if gate.program.trim().is_empty() {
-                return Err(PublishError::InvalidPlan(
-                    "release gate program cannot be empty".to_string(),
-                ));
-            }
-            templates.push(PlanNodeTemplate::adapter_action(
-                format!("gate-{index}"),
-                PlanStage::PrepareIdentity,
-                TAURI_RELEASE_GATE_ACTION,
-                release_gate_inputs(gate)?,
-            ));
-        }
-        Ok(templates)
-    }
-
-    fn execute_node(
-        &self,
-        node: &PlanNode,
-        _context: &AdapterExecutionContext<'_>,
-    ) -> Result<AdapterExecutionOutput, PublishError> {
-        let adapter = self.provider.descriptor().identity().display_name();
-        let config_path = node.settings.string("config_path", &adapter)?;
-        let build_driver = node.settings.string("build_driver", &adapter)?;
-
-        match &node.operation {
-            PlanOperation::AdapterAction { action, .. } if action == TAURI_INSPECT_ACTION => {
-                let inspection = self.provider.inspect(&self.repository_root, config_path)?;
-                if inspection.build_driver.name() != build_driver {
-                    return Err(PublishError::Execution(format!(
-                        "tauri build driver drifted from {build_driver} to {}; re-prepare the publish plan",
-                        inspection.build_driver.name()
-                    )));
-                }
-                Ok(AdapterExecutionOutput::default())
-            }
-            PlanOperation::AdapterAction { action, inputs }
-                if action == TAURI_RELEASE_GATE_ACTION =>
-            {
-                run_release_gate(&self.repository_root, node, inputs)
-            }
-            PlanOperation::RunProgram {
-                program,
-                args,
-                working_directory,
-                environment_references,
-            } => {
-                let driver = TauriBuildDriver::parse(build_driver).ok_or_else(|| {
-                    PublishError::Execution(format!("unknown tauri build driver {build_driver}"))
-                })?;
-                // 工作目录与环境引用由本 Provider 在执行时确定；密封节点携带任何
-                // 额外执行输入都视为篡改，而不是被静默丢弃。
-                if *program != driver.program_id()
-                    || *args != driver.build_command_args(config_path)
-                    || working_directory.is_some()
-                    || !environment_references.is_empty()
-                {
-                    return Err(PublishError::InvalidPlan(format!(
-                        "node {} is not the sealed tauri build operation",
-                        node.id
-                    )));
-                }
-                self.run_sealed_build(node, config_path, driver)
-            }
-            _ => Err(PublishError::Execution(format!(
-                "node {} is not a tauri provider operation",
-                node.id
-            ))),
-        }
-    }
-}
-
-/// 从密封快照读取 Release Gate；缺失键代表没有配置门禁。
-fn release_gates_from_snapshot(
-    snapshot: &PlanningInputSnapshot,
-) -> Result<Vec<ReleaseGate>, PublishError> {
-    match snapshot.release_input.get(RELEASE_GATES_INPUT) {
-        None => Ok(Vec::new()),
-        Some(value) => serde_json::from_value(value.clone()).map_err(|error| {
-            PublishError::InvalidPlan(format!("sealed release gates cannot be decoded: {error}"))
-        }),
-    }
-}
-
-/// 门禁节点输入直接使用 ReleaseGate 的序列化形状；密封与解码共享一个字段来源。
-fn release_gate_inputs(gate: &ReleaseGate) -> Result<BTreeMap<String, Value>, PublishError> {
-    match serde_json::to_value(gate) {
-        Ok(Value::Object(fields)) => Ok(fields.into_iter().collect()),
-        _ => Err(PublishError::InvalidPlan(
-            "release gate cannot be sealed into plan node inputs".to_string(),
-        )),
-    }
-}
-
-/// 在仓库根执行一个结构化门禁命令；任何非零退出都终止后续节点并保留完整输出根因。
-fn run_release_gate(
-    repository_root: &Path,
-    node: &PlanNode,
-    inputs: &BTreeMap<String, Value>,
-) -> Result<AdapterExecutionOutput, PublishError> {
-    let gate: ReleaseGate = serde_json::from_value(Value::Object(
-        inputs.clone().into_iter().collect(),
-    ))
-    .map_err(|error| {
-        PublishError::InvalidPlan(format!(
-            "node {} has invalid sealed release gate inputs: {error}",
-            node.id
-        ))
-    })?;
-    if gate.program.trim().is_empty() {
-        return Err(PublishError::InvalidPlan(format!(
-            "node {} has no sealed release gate program",
-            node.id
-        )));
-    }
-
-    let output = crate::process_utils::new_std_command(&gate.program)
-        .args(&gate.args)
-        .current_dir(repository_root)
-        .output()
-        .map_err(|error| {
-            PublishError::Execution(format!(
-                "failed to start release gate '{}': {error}",
-                gate.program
-            ))
-        })?;
-    if output.status.success() {
-        return Ok(AdapterExecutionOutput::default());
-    }
-    Err(PublishError::Execution(format!(
-        "release gate failed: {} {}\n{}{}",
-        gate.program,
-        gate.args.join(" "),
-        String::from_utf8_lossy(&output.stdout),
-        String::from_utf8_lossy(&output.stderr),
-    )))
-}
-
-impl ProjectProvider for TauriRuntimeProvider {
-    fn discover_candidates(
-        &self,
-        repository_root: &Path,
-    ) -> Result<Vec<publish_domain::ProjectCandidate>, PublishError> {
-        self.provider.discover_candidates(repository_root)
-    }
 }
 
 pub(crate) fn prepare_runtime(
@@ -1527,26 +1120,63 @@ pub fn prepare_publish_runtime(
     )
 }
 
+/// 桌面执行端口：经 Tauri 命令面运行（保 UI 流式输出与取消），并保留
+/// 完整执行记录供界面消费；核心契约只携带最小结果（决议 #80）。
 struct TauriProviderExecutionPort {
     app: tauri::AppHandle,
     runtime: tokio::runtime::Handle,
+    captured: Arc<Mutex<Option<crate::commands::PublishResult>>>,
+}
+
+impl TauriProviderExecutionPort {
+    fn capture(
+        &self,
+        result: Result<crate::commands::PublishResult, AppError>,
+    ) -> Result<ProviderExecutionOutcome, PublishError> {
+        let result = result.map_err(|error| PublishError::Execution(error.to_string()))?;
+        let outcome = ProviderExecutionOutcome {
+            success: result.success,
+            cancelled: result.cancelled,
+            error: result.error.clone(),
+            output_dir: result.output_dir.clone(),
+        };
+        self.captured
+            .lock()
+            .map_err(|_| PublishError::Execution("publish result lock is poisoned".to_string()))?
+            .replace(result);
+        Ok(outcome)
+    }
 }
 
 impl ProviderExecutionPort for TauriProviderExecutionPort {
-    fn execute(&self, spec: PublishSpec) -> Result<crate::commands::PublishResult, AppError> {
-        self.runtime
-            .block_on(crate::commands::execute_provider_publish(
-                self.app.clone(),
-                spec,
-            ))
+    fn execute_spec(&self, spec_json: &str) -> Result<ProviderExecutionOutcome, PublishError> {
+        let spec: PublishSpec = serde_json::from_str(spec_json).map_err(|error| {
+            PublishError::Execution(format!("cannot decode sealed publish spec: {error}"))
+        })?;
+        self.capture(
+            self.runtime
+                .block_on(crate::commands::execute_provider_publish(
+                    self.app.clone(),
+                    spec,
+                )),
+        )
     }
 
     fn execute_build(
         &self,
-        request: SealedBuildCommand,
-    ) -> Result<crate::commands::PublishResult, AppError> {
-        self.runtime
-            .block_on(crate::commands::execute_sealed_build(&self.app, &request))
+        request: publish_adapters::SealedBuildCommand,
+    ) -> Result<ProviderExecutionOutcome, PublishError> {
+        let request = SealedBuildCommand {
+            provider_id: request.provider_id,
+            program: request.program,
+            args: request.args,
+            working_directory: request.working_directory,
+            output_directory: request.output_directory,
+        };
+        self.capture(
+            self.runtime
+                .block_on(crate::commands::execute_sealed_build(&self.app, &request)),
+        )
     }
 }
 
@@ -1556,12 +1186,14 @@ pub async fn start_publish_runtime(
     request: StartPublishRuntimeRequest,
 ) -> Result<PublishRuntimeResult, AppError> {
     let identity = new_attempt_identity(&request.runtime_token);
+    let captured = Arc::new(Mutex::new(None));
     let port = Arc::new(TauriProviderExecutionPort {
         app,
         runtime: tokio::runtime::Handle::current(),
+        captured: Arc::clone(&captured),
     });
     tokio::task::spawn_blocking(move || {
-        start_runtime_with_port(request, port, identity, lease_coordinator())
+        start_runtime_with_port(request, port, captured, identity, lease_coordinator())
     })
     .await
     .map_err(|error| {
@@ -1646,12 +1278,14 @@ fn unix_now_duration() -> Result<std::time::Duration, AppError> {
 pub(crate) fn start_runtime_with_port(
     request: StartPublishRuntimeRequest,
     execution_port: Arc<dyn ProviderExecutionPort>,
+    captured_result: Arc<Mutex<Option<crate::commands::PublishResult>>>,
     identity: AttemptIdentity,
     leases: Arc<PublishLeaseCoordinator>,
 ) -> Result<PublishRuntimeResult, AppError> {
     start_runtime_with_repository(
         request,
         execution_port,
+        captured_result,
         identity,
         leases,
         journal::AttemptJournalRepository::for_current_user().map_err(runtime_error)?,
@@ -1661,6 +1295,7 @@ pub(crate) fn start_runtime_with_port(
 fn start_runtime_with_repository(
     request: StartPublishRuntimeRequest,
     execution_port: Arc<dyn ProviderExecutionPort>,
+    captured_result: Arc<Mutex<Option<crate::commands::PublishResult>>>,
     identity: AttemptIdentity,
     leases: Arc<PublishLeaseCoordinator>,
     journal_repository: journal::AttemptJournalRepository,
@@ -1692,16 +1327,14 @@ fn start_runtime_with_repository(
         })?
         .to_string();
     let delivery_directory = prepared_release_input(&prepared, "delivery_directory")?;
-    let result = Arc::new(Mutex::new(None));
     let repository_path = source_guard.repository.to_string_lossy().to_string();
     let registry = build_registry(
         &prepared.snapshot,
         &delivery_directory,
-        Some(SelectedProviderExecution {
+        Some(ProviderExecution {
             port: execution_port,
-            result: Arc::clone(&result),
             output_directory: PathBuf::from(&provider_output_directory),
-            source_guard,
+            source_guard: Arc::new(source_guard),
         }),
     )?;
     let release_identity = release_identity(&prepared.snapshot)?;
@@ -1790,7 +1423,7 @@ fn start_runtime_with_repository(
         now_seconds,
     )
     .map_err(|error| runtime_attempt_uncertain_error(&identity.attempt_id, error))?;
-    let publish_result = result
+    let publish_result = captured_result
         .lock()
         .map_err(|_| {
             runtime_attempt_uncertain_error(&identity.attempt_id, "publish result lock is poisoned")
@@ -2401,7 +2034,7 @@ pub fn list_publish_adapter_catalog() -> PublishAdapterCatalog {
 fn build_registry(
     snapshot: &PlanningInputSnapshot,
     delivery_directory: &str,
-    execution: Option<SelectedProviderExecution>,
+    execution: Option<ProviderExecution>,
 ) -> Result<AdapterRegistry, AppError> {
     let fixture = AdapterConformanceFixture::new(snapshot.clone());
     let mut registry = AdapterRegistry::new();
@@ -2485,7 +2118,7 @@ fn unsupported_adapter(kind: &str, adapter_id: &str) -> AppError {
 fn register_project_provider(
     registry: &mut AdapterRegistry,
     snapshot: &PlanningInputSnapshot,
-    execution: Option<SelectedProviderExecution>,
+    execution: Option<ProviderExecution>,
     fixture: &AdapterConformanceFixture,
 ) -> Result<(), AppError> {
     let binding = &snapshot.adapters.project_provider;
@@ -2538,141 +2171,6 @@ fn register_project_provider(
             .map_err(runtime_error)?;
     }
     Ok(())
-}
-
-/// 非 Tauri Provider 的产物暂以统一角色进入清单；逐 Provider 的角色分类属于后续 Ticket。
-fn classify_generic_artifact(_relative: &Path) -> (&'static str, &'static str) {
-    ("provider-output", "application/octet-stream")
-}
-
-/// Tauri bundle 输出按逻辑角色与媒体类型进入 Artifact Manifest：
-/// 安装包、Updater 归档与 Updater 签名可被交付路线按角色选择，其余为构建支撑文件。
-fn classify_tauri_artifact(relative: &Path) -> (&'static str, &'static str) {
-    let name = relative
-        .file_name()
-        .and_then(|name| name.to_str())
-        .unwrap_or_default()
-        .to_ascii_lowercase();
-    if name.ends_with(".sig") {
-        return ("updater-signature", "application/octet-stream");
-    }
-    if name.ends_with(".app.tar.gz") {
-        return ("updater-archive", "application/gzip");
-    }
-    if name.ends_with(".nsis.zip") || name.ends_with(".msi.zip") {
-        return ("updater-archive", "application/zip");
-    }
-    if name.ends_with(".dmg") {
-        return ("installer", "application/x-apple-diskimage");
-    }
-    if name.ends_with(".msi") {
-        return ("installer", "application/x-msi");
-    }
-    if name.ends_with(".exe") {
-        return ("installer", "application/vnd.microsoft.portable-executable");
-    }
-    if name.ends_with(".appimage") {
-        return ("installer", "application/vnd.appimage");
-    }
-    if name.ends_with(".deb") {
-        return ("installer", "application/vnd.debian.binary-package");
-    }
-    if name.ends_with(".rpm") {
-        return ("installer", "application/x-rpm");
-    }
-    ("build-support", "application/octet-stream")
-}
-
-fn collect_artifacts_with(
-    root: &Path,
-    classify: fn(&Path) -> (&'static str, &'static str),
-) -> Result<Vec<ArtifactCandidate>, PublishError> {
-    let metadata = fs::symlink_metadata(root).map_err(|error| PublishError::Io {
-        operation: format!("inspect provider output {}", root.display()),
-        message: error.to_string(),
-    })?;
-    if metadata.file_type().is_symlink() {
-        return Err(PublishError::Execution(format!(
-            "provider output cannot be a symbolic link: {}",
-            root.display()
-        )));
-    }
-    let (artifact_root, mut files) = if metadata.is_file() {
-        let parent = root.parent().ok_or_else(|| {
-            PublishError::Execution(format!(
-                "provider output file has no parent directory: {}",
-                root.display()
-            ))
-        })?;
-        (parent.to_path_buf(), vec![root.to_path_buf()])
-    } else if metadata.is_dir() {
-        let mut pending = vec![root.to_path_buf()];
-        let mut files = Vec::new();
-        while let Some(directory) = pending.pop() {
-            let entries = fs::read_dir(&directory).map_err(|error| PublishError::Io {
-                operation: format!("read provider output directory {}", directory.display()),
-                message: error.to_string(),
-            })?;
-            for entry in entries {
-                let entry = entry.map_err(|error| PublishError::Io {
-                    operation: format!("read provider output entry in {}", directory.display()),
-                    message: error.to_string(),
-                })?;
-                let file_type = entry.file_type().map_err(|error| PublishError::Io {
-                    operation: format!("inspect provider output {}", entry.path().display()),
-                    message: error.to_string(),
-                })?;
-                if file_type.is_symlink() {
-                    return Err(PublishError::Execution(format!(
-                        "provider output cannot contain symbolic links: {}",
-                        entry.path().display()
-                    )));
-                }
-                if file_type.is_dir() {
-                    pending.push(entry.path());
-                } else if file_type.is_file() {
-                    files.push(entry.path());
-                }
-            }
-        }
-        (root.to_path_buf(), files)
-    } else {
-        return Err(PublishError::Execution(format!(
-            "provider output is not a file or directory: {}",
-            root.display()
-        )));
-    };
-    files.sort();
-    if files.is_empty() {
-        return Err(PublishError::Execution(
-            "provider execution produced no artifacts".to_string(),
-        ));
-    }
-
-    files
-        .into_iter()
-        .map(|path| {
-            let relative = path.strip_prefix(&artifact_root).map_err(|_| {
-                PublishError::Execution(format!(
-                    "provider output escaped its root: {}",
-                    path.display()
-                ))
-            })?;
-            let bytes = fs::read(&path).map_err(|error| PublishError::Io {
-                operation: format!("read provider artifact {}", path.display()),
-                message: error.to_string(),
-            })?;
-            let (role, media_type) = classify(relative);
-            Ok(ArtifactCandidate::new(
-                role,
-                relative.to_string_lossy().replace('\\', "/"),
-                media_type,
-                std::env::consts::OS,
-                std::env::consts::ARCH,
-                bytes,
-            ))
-        })
-        .collect()
 }
 
 fn release_identity(snapshot: &PlanningInputSnapshot) -> Result<ReleaseIdentity, AppError> {
@@ -3151,6 +2649,12 @@ struct PreparedSourceGuard {
     provider_id: String,
     excluded_roots: Vec<PathBuf>,
     expected: SourceSnapshot,
+}
+
+impl publish_adapters::ExecutionSourceGuard for PreparedSourceGuard {
+    fn validate_for_execution(&self) -> Result<(), PublishError> {
+        PreparedSourceGuard::validate_for_execution(self)
+    }
 }
 
 impl PreparedSourceGuard {
@@ -3679,7 +3183,6 @@ mod tests {
         StartPublishAttempt,
     };
 
-    use crate::commands::{PublishResult, RenderedPublishCommand, SealedBuildCommand};
     use crate::spec::{PublishSpec, SpecValue, SPEC_VERSION};
     use crate::tauri_release::{ReleaseGate, TauriReleaseConfig};
 
@@ -3700,6 +3203,7 @@ mod tests {
         super::start_runtime_with_repository(
             request,
             execution_port,
+            Arc::new(Mutex::new(None)),
             identity,
             Arc::new(publish_runner_core::PublishLeaseCoordinator::new()),
             super::journal::AttemptJournalRepository::new(journal.path().to_path_buf()),
@@ -3714,25 +3218,18 @@ mod tests {
     }
 
     impl ProviderExecutionPort for FakeProviderExecution {
-        fn execute(&self, spec: PublishSpec) -> Result<PublishResult, crate::errors::AppError> {
-            let command = RenderedPublishCommand {
-                program: "fake-publisher".to_string(),
-                args: Vec::new(),
-                working_dir: None,
-                display_command: "fake-publisher".to_string(),
-                env: Vec::new(),
-            };
+        fn execute_spec(
+            &self,
+            spec_json: &str,
+        ) -> Result<super::ProviderExecutionOutcome, publish_domain::PublishError> {
+            let _spec: PublishSpec =
+                serde_json::from_str(spec_json).expect("decode sealed publish spec");
             if let Some(error) = &self.failure {
-                return Ok(PublishResult {
-                    provider_id: spec.provider_id,
+                return Ok(super::ProviderExecutionOutcome {
                     success: false,
                     cancelled: false,
                     error: Some(error.clone()),
-                    command,
-                    output_log: error.clone(),
                     output_dir: self.output_directory.to_string_lossy().to_string(),
-                    file_count: 0,
-                    warnings: None,
                 });
             }
 
@@ -3740,7 +3237,7 @@ mod tests {
                 std::fs::write(path, contents).expect("change source during provider execution");
             }
 
-            let file_count = if self.output_is_file {
+            if self.output_is_file {
                 std::fs::create_dir_all(
                     self.output_directory
                         .parent()
@@ -3749,7 +3246,6 @@ mod tests {
                 .expect("create fake provider output parent");
                 std::fs::write(&self.output_directory, b"application")
                     .expect("write fake provider output file");
-                1
             } else {
                 std::fs::create_dir_all(self.output_directory.join("nested"))
                     .expect("create fake provider output");
@@ -3760,25 +3256,19 @@ mod tests {
                     br#"{"version":1}"#,
                 )
                 .expect("write nested artifact");
-                2
-            };
-            Ok(PublishResult {
-                provider_id: spec.provider_id,
+            }
+            Ok(super::ProviderExecutionOutcome {
                 success: true,
                 cancelled: false,
                 error: None,
-                command,
-                output_log: "published".to_string(),
                 output_dir: self.output_directory.to_string_lossy().to_string(),
-                file_count,
-                warnings: None,
             })
         }
 
         fn execute_build(
             &self,
-            request: SealedBuildCommand,
-        ) -> Result<PublishResult, crate::errors::AppError> {
+            request: publish_adapters::SealedBuildCommand,
+        ) -> Result<super::ProviderExecutionOutcome, publish_domain::PublishError> {
             panic!(
                 "non-tauri providers must not execute sealed build commands: {}",
                 request.program
@@ -3792,8 +3282,11 @@ mod tests {
     }
 
     impl ProviderExecutionPort for JournalBreakingProviderExecution {
-        fn execute(&self, spec: PublishSpec) -> Result<PublishResult, crate::errors::AppError> {
-            let result = self.delegate.execute(spec)?;
+        fn execute_spec(
+            &self,
+            spec_json: &str,
+        ) -> Result<super::ProviderExecutionOutcome, publish_domain::PublishError> {
+            let outcome = self.delegate.execute_spec(spec_json)?;
             let displaced = self
                 .events_directory
                 .with_file_name("events-before-persistence-failure");
@@ -3801,13 +3294,13 @@ mod tests {
                 .expect("displace the append-only event directory after the side effect");
             std::fs::write(&self.events_directory, b"not a directory")
                 .expect("block the next event persistence");
-            Ok(result)
+            Ok(outcome)
         }
 
         fn execute_build(
             &self,
-            request: SealedBuildCommand,
-        ) -> Result<PublishResult, crate::errors::AppError> {
+            request: publish_adapters::SealedBuildCommand,
+        ) -> Result<super::ProviderExecutionOutcome, publish_domain::PublishError> {
             self.delegate.execute_build(request)
         }
     }
@@ -3817,7 +3310,7 @@ mod tests {
     struct FakeTauriBuild {
         output_directory: std::path::PathBuf,
         failure: Option<String>,
-        requests: Mutex<Vec<SealedBuildCommand>>,
+        requests: Mutex<Vec<publish_adapters::SealedBuildCommand>>,
     }
 
     impl FakeTauriBuild {
@@ -3836,42 +3329,33 @@ mod tests {
             }
         }
 
-        fn requests(&self) -> Vec<SealedBuildCommand> {
+        fn requests(&self) -> Vec<publish_adapters::SealedBuildCommand> {
             self.requests.lock().expect("fake build requests").clone()
         }
     }
 
     impl ProviderExecutionPort for FakeTauriBuild {
-        fn execute(&self, _spec: PublishSpec) -> Result<PublishResult, crate::errors::AppError> {
+        fn execute_spec(
+            &self,
+            _spec_json: &str,
+        ) -> Result<super::ProviderExecutionOutcome, publish_domain::PublishError> {
             panic!("tauri runtime must not fall back to the legacy publish spec pipeline");
         }
 
         fn execute_build(
             &self,
-            request: SealedBuildCommand,
-        ) -> Result<PublishResult, crate::errors::AppError> {
+            request: publish_adapters::SealedBuildCommand,
+        ) -> Result<super::ProviderExecutionOutcome, publish_domain::PublishError> {
             self.requests
                 .lock()
                 .expect("fake build requests")
                 .push(request.clone());
-            let command = RenderedPublishCommand {
-                program: request.program.clone(),
-                args: request.args.clone(),
-                working_dir: Some(request.working_directory.to_string_lossy().to_string()),
-                display_command: format!("{} {}", request.program, request.args.join(" ")),
-                env: Vec::new(),
-            };
             if let Some(error) = &self.failure {
-                return Ok(PublishResult {
-                    provider_id: request.provider_id,
+                return Ok(super::ProviderExecutionOutcome {
                     success: false,
                     cancelled: false,
                     error: Some(error.clone()),
-                    command,
-                    output_log: error.clone(),
                     output_dir: self.output_directory.to_string_lossy().to_string(),
-                    file_count: 0,
-                    warnings: None,
                 });
             }
 
@@ -3896,16 +3380,11 @@ mod tests {
                 b"updater-signature",
             )
             .expect("write updater signature");
-            Ok(PublishResult {
-                provider_id: request.provider_id,
+            Ok(super::ProviderExecutionOutcome {
                 success: true,
                 cancelled: false,
                 error: None,
-                command,
-                output_log: "built".to_string(),
                 output_dir: self.output_directory.to_string_lossy().to_string(),
-                file_count: 3,
-                warnings: None,
             })
         }
     }
@@ -4716,10 +4195,9 @@ mod tests {
             bundle_directory.join("dmg").join("Demo.dmg").is_file(),
             "delivery must not replace or clean the provider-native bundle output"
         );
-        assert!(result
-            .publish_result
-            .as_ref()
-            .is_some_and(|publish| publish.success));
+        // 完整执行记录由桌面端口捕获（S6 端口上移）；运行时结果只在真实端口路径回带。
+        assert!(result.publish_result.is_none());
+        assert_eq!(result.attempt.status, RuntimeAttemptStatus::Published);
     }
 
     #[test]
@@ -4749,13 +4227,12 @@ mod tests {
         let registry = super::build_registry(
             &sealed.snapshot,
             &release_value("delivery_directory"),
-            Some(super::SelectedProviderExecution {
+            Some(super::ProviderExecution {
                 port: Arc::new(FakeTauriBuild::new(bundle_directory)),
-                result: Arc::new(Mutex::new(None)),
                 output_directory: std::path::PathBuf::from(release_value(
                     "provider_output_directory",
                 )),
-                source_guard,
+                source_guard: Arc::new(source_guard),
             }),
         )
         .expect("build execution registry");
@@ -4855,7 +4332,8 @@ mod tests {
             .error
             .as_deref()
             .is_some_and(|error| error.contains("tauri build exited with code 101")));
-        assert!(!result.publish_result.expect("failed build result").success);
+        // 完整执行记录由桌面端口捕获（S6 端口上移）；运行时结果只在真实端口路径回带。
+        assert!(result.publish_result.is_none());
     }
 
     #[test]
@@ -5981,6 +5459,7 @@ mod tests {
                 failure: None,
                 source_change: None,
             }),
+            Arc::new(Mutex::new(None)),
             identity.clone(),
             Arc::clone(&leases),
             journals.clone(),
@@ -6265,6 +5744,7 @@ mod tests {
                 failure: None,
                 source_change: None,
             }),
+            Arc::new(Mutex::new(None)),
             AttemptIdentity {
                 attempt_id: terminal_attempt_id.to_string(),
                 backend_run_id: "run-newer-terminal".to_string(),
@@ -6397,6 +5877,7 @@ mod tests {
                 failure: None,
                 source_change: None,
             }),
+            Arc::new(Mutex::new(None)),
             AttemptIdentity {
                 attempt_id: terminal_attempt_id.to_string(),
                 backend_run_id: "run-disjoint-terminal".to_string(),
@@ -6454,6 +5935,7 @@ mod tests {
                 },
                 events_directory: attempt_directory.join("events"),
             }),
+            Arc::new(Mutex::new(None)),
             identity.clone(),
             Arc::clone(&leases),
             journals.clone(),
@@ -6502,6 +5984,7 @@ mod tests {
                 failure: None,
                 source_change: None,
             }),
+            Arc::new(Mutex::new(None)),
             identity.clone(),
             Arc::new(publish_runner_core::PublishLeaseCoordinator::new()),
             super::journal::AttemptJournalRepository::new(journal_root.clone()),
@@ -6964,7 +6447,8 @@ mod tests {
                 .map(|receipt| receipt.receipt_id.as_str()),
             Some(first.attempt.receipts[0].receipt_id.as_str())
         );
-        assert_eq!(first.publish_result.expect("provider result").file_count, 2);
+        // 完整执行记录由桌面端口捕获（S6 端口上移）；运行时结果只在真实端口路径回带。
+        assert!(first.publish_result.is_none());
     }
 
     #[test]
@@ -7074,12 +6558,8 @@ mod tests {
             .error
             .as_deref()
             .is_some_and(|error| error.contains("provider exited with code 17")));
-        assert!(
-            !failed
-                .publish_result
-                .expect("failed provider result")
-                .success
-        );
+        // 完整执行记录由桌面端口捕获（S6 端口上移）；运行时结果只在真实端口路径回带。
+        assert!(failed.publish_result.is_none());
     }
 
     #[test]
