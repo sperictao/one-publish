@@ -3,7 +3,7 @@
 //! 控制面只负责生成封存投影；Runner 只消费投影并复用 `publish-runner-core`
 //! 执行，不读取桌面状态，也不重新选择 Adapter。
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
 
 use publish_adapters::{
@@ -16,12 +16,14 @@ use publish_adapters::{
     GITHUB_RELEASE_DESTINATION_ID, SFTP_DESTINATION_ID, TAURI_PROVIDER_ID,
 };
 use publish_domain::{
-    AdapterIdentity, AdapterKind, AutomationRuntimeRevision, PlanningInputSnapshot, PublishError,
-    PublishOutcome, RuntimeAdapterRevision, RuntimeComponentRevision,
-    PLANNING_INPUT_SNAPSHOT_VERSION, PUBLISH_PLAN_VERSION,
+    AdapterIdentity, AdapterKind, AdapterSelection, AutomationRuntimeRevision,
+    AutomationTriggerPolicy, PlanningInputSnapshot, PublishError, PublishOutcome,
+    RuntimeAdapterRevision, RuntimeComponentRevision, PLANNING_INPUT_SNAPSHOT_VERSION,
+    PUBLISH_PLAN_VERSION,
 };
 use publish_runner_core::{PreparedPublishPlan, PublishRuntime};
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 
 pub const RUNNER_VERSION: &str = env!("CARGO_PKG_VERSION");
 pub const RUNNER_SOURCE_DIGEST: &str = env!("ONE_PUBLISH_RUNNER_SOURCE_DIGEST");
@@ -81,8 +83,32 @@ fn built_in_adapter_identities() -> BTreeSet<AdapterIdentity> {
     .collect()
 }
 
+pub const RUNNER_PROJECTION_VERSION: u32 = 1;
+
+/// 安装进仓库的规划输入模板（决议 #87）：携带修订固化的静态规划输入、物化
+/// Adapter 选择、Runtime Revision 与凭据引用→Secret 名映射表。刻意不携带
+/// 密封计划——触发事实（版本、源快照、运行时目录）由 runner 现场补全后
+/// 规划，Attempt 身份（snapshot/plan 摘要）在触发时形成。
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct RunnerProjection {
+    pub version: u32,
+    pub binding_id: String,
+    pub configuration_id: String,
+    pub configuration_revision_id: String,
+    pub trigger_policy: AutomationTriggerPolicy,
+    pub runtime_revision: AutomationRuntimeRevision,
+    /// 修订固化的静态规划输入；触发事实由 prepare-from-projection 补全。
+    pub release_input: BTreeMap<String, Value>,
+    /// 物化的 Adapter 选择；桌面运行时缺省键（存储根、本地交付目录）不携带。
+    pub adapters: AdapterSelection,
+    /// 凭据引用 → 执行环境 Secret 名的公开映射表（名字非秘密，ADR-0029）。
+    pub secret_bindings: BTreeMap<String, String>,
+}
+
+/// prepare-from-projection 的密封产物：触发时形成的完整规划输入与计划；
+/// execute 消费前重放规划并逐字比对。
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct PreparedAttempt {
     pub runtime_revision: AutomationRuntimeRevision,
     pub prepared: PreparedPublishPlan,
 }
@@ -104,12 +130,12 @@ impl StandaloneRunner {
         })
     }
 
-    pub fn prepare_projection(
+    pub fn prepare_attempt(
         &self,
         snapshot: &publish_domain::PlanningInputSnapshot,
-    ) -> Result<RunnerProjection, PublishError> {
+    ) -> Result<PreparedAttempt, PublishError> {
         self.ensure_runtime_identifier(&snapshot.runtime_revision)?;
-        Ok(RunnerProjection {
+        Ok(PreparedAttempt {
             runtime_revision: self.runtime_revision.clone(),
             prepared: self.runtime.prepare_attempt(snapshot)?,
         })
@@ -117,30 +143,26 @@ impl StandaloneRunner {
 
     pub fn execute(
         &self,
-        projection: &RunnerProjection,
+        attempt: &PreparedAttempt,
         attempt_id: &str,
     ) -> Result<PublishOutcome, PublishError> {
         self.runtime_revision.validate()?;
-        projection.runtime_revision.validate()?;
-        if projection.runtime_revision != self.runtime_revision {
+        attempt.runtime_revision.validate()?;
+        if attempt.runtime_revision != self.runtime_revision {
             return Err(PublishError::InvalidRuntimeRevision(format!(
-                "installed projection pins {}, but this runner provides {}",
-                projection.runtime_revision.identifier(),
+                "prepared attempt pins {}, but this runner provides {}",
+                attempt.runtime_revision.identifier(),
                 self.runtime_revision.identifier()
             )));
         }
-        self.ensure_runtime_identifier(&projection.prepared.snapshot.runtime_revision)?;
-        let prepared = self
-            .runtime
-            .prepare_attempt(&projection.prepared.snapshot)?;
-        if prepared != projection.prepared {
+        self.ensure_runtime_identifier(&attempt.prepared.snapshot.runtime_revision)?;
+        let prepared = self.runtime.prepare_attempt(&attempt.prepared.snapshot)?;
+        if prepared != attempt.prepared {
             return Err(PublishError::InvalidPlan(
-                "installed runner projection no longer matches its sealed planning input"
-                    .to_string(),
+                "prepared attempt no longer matches its sealed planning input".to_string(),
             ));
         }
-        self.runtime
-            .start_prepared(&projection.prepared, attempt_id)
+        self.runtime.start_prepared(&attempt.prepared, attempt_id)
     }
 
     fn ensure_runtime_identifier(&self, identifier: &str) -> Result<(), PublishError> {
@@ -159,47 +181,90 @@ impl StandaloneRunner {
     }
 }
 
+/// 模板投影的结构校验：版本受支持、绑定身份齐全、Runtime Revision 封存自洽。
 pub fn validate_projection(projection: &RunnerProjection) -> Result<(), PublishError> {
-    projection.runtime_revision.validate()?;
-    let expected = projection.runtime_revision.identifier();
-    if projection.prepared.snapshot.runtime_revision != expected {
-        return Err(PublishError::InvalidRuntimeRevision(format!(
-            "sealed planning input pins {}, but projection provides {expected}",
-            projection.prepared.snapshot.runtime_revision
+    if projection.version != RUNNER_PROJECTION_VERSION {
+        return Err(PublishError::InvalidPlan(format!(
+            "runner projection version {} is not supported, expected {RUNNER_PROJECTION_VERSION}",
+            projection.version
         )));
     }
-    if projection.prepared.snapshot.version != PLANNING_INPUT_SNAPSHOT_VERSION {
+    for (name, value) in [
+        ("binding", &projection.binding_id),
+        ("configuration", &projection.configuration_id),
+        ("configuration revision", &projection.configuration_revision_id),
+    ] {
+        if value.trim().is_empty() {
+            return Err(PublishError::InvalidPlan(format!(
+                "runner projection is missing its {name} identity"
+            )));
+        }
+    }
+    projection.runtime_revision.validate()
+}
+
+/// 已安装 runner 能否服务该模板投影：结构校验 + 投影钉住的运行时修订与本机
+/// 封存完全一致（Adapter 集合以投影的物化选择为准）。
+pub fn verify_installed_projection(projection: &RunnerProjection) -> Result<(), PublishError> {
+    validate_projection(projection)?;
+    let installed = current_runtime_revision(
+        projection
+            .adapters
+            .ordered_bindings()
+            .into_iter()
+            .map(|binding| binding.adapter.clone()),
+    )?;
+    if projection.runtime_revision != installed {
+        return Err(PublishError::InvalidRuntimeRevision(format!(
+            "projection pins {}, but the installed runner provides {}",
+            projection.runtime_revision.identifier(),
+            installed.identifier()
+        )));
+    }
+    Ok(())
+}
+
+pub fn validate_prepared_attempt(attempt: &PreparedAttempt) -> Result<(), PublishError> {
+    attempt.runtime_revision.validate()?;
+    let expected = attempt.runtime_revision.identifier();
+    if attempt.prepared.snapshot.runtime_revision != expected {
+        return Err(PublishError::InvalidRuntimeRevision(format!(
+            "sealed planning input pins {}, but the prepared attempt provides {expected}",
+            attempt.prepared.snapshot.runtime_revision
+        )));
+    }
+    if attempt.prepared.snapshot.version != PLANNING_INPUT_SNAPSHOT_VERSION {
         return Err(PublishError::UnsupportedSnapshotVersion {
-            actual: projection.prepared.snapshot.version,
+            actual: attempt.prepared.snapshot.version,
             expected: PLANNING_INPUT_SNAPSHOT_VERSION,
         });
     }
-    let snapshot_digest = projection.prepared.snapshot.digest()?;
-    if projection.prepared.plan.snapshot_digest != snapshot_digest {
+    let snapshot_digest = attempt.prepared.snapshot.digest()?;
+    if attempt.prepared.plan.snapshot_digest != snapshot_digest {
         return Err(PublishError::InvalidPlan(
-            "sealed plan does not reference the installed planning input".to_string(),
+            "sealed plan does not reference the prepared planning input".to_string(),
         ));
     }
-    if projection.prepared.plan.version != PUBLISH_PLAN_VERSION {
+    if attempt.prepared.plan.version != PUBLISH_PLAN_VERSION {
         return Err(PublishError::UnsupportedPlanVersion {
-            actual: projection.prepared.plan.version,
+            actual: attempt.prepared.plan.version,
             expected: PUBLISH_PLAN_VERSION,
         });
     }
-    let plan_digest = projection.prepared.plan.recomputed_digest()?;
-    if projection.prepared.plan.digest != plan_digest {
+    let plan_digest = attempt.prepared.plan.recomputed_digest()?;
+    if attempt.prepared.plan.digest != plan_digest {
         return Err(PublishError::PlanDigestMismatch {
-            expected: projection.prepared.plan.digest.clone(),
+            expected: attempt.prepared.plan.digest.clone(),
             actual: plan_digest,
         });
     }
     Ok(())
 }
 
-pub fn installed_runner(projection: &RunnerProjection) -> Result<StandaloneRunner, PublishError> {
-    validate_projection(projection)?;
+pub fn installed_runner(attempt: &PreparedAttempt) -> Result<StandaloneRunner, PublishError> {
+    validate_prepared_attempt(attempt)?;
     let installed_revision = current_runtime_revision(
-        projection
+        attempt
             .prepared
             .snapshot
             .adapters
@@ -207,14 +272,14 @@ pub fn installed_runner(projection: &RunnerProjection) -> Result<StandaloneRunne
             .into_iter()
             .map(|binding| binding.adapter.clone()),
     )?;
-    if projection.runtime_revision != installed_revision {
+    if attempt.runtime_revision != installed_revision {
         return Err(PublishError::InvalidRuntimeRevision(format!(
-            "projection pins {}, but the installed runner provides {}",
-            projection.runtime_revision.identifier(),
+            "prepared attempt pins {}, but the installed runner provides {}",
+            attempt.runtime_revision.identifier(),
             installed_revision.identifier()
         )));
     }
-    let registry = installed_registry(&projection.prepared.snapshot, RunnerPorts::default())?;
+    let registry = installed_registry(&attempt.prepared.snapshot, RunnerPorts::default())?;
     StandaloneRunner::new(registry, installed_revision)
 }
 
@@ -414,6 +479,135 @@ fn unsupported_installed_adapter(identity: &AdapterIdentity) -> PublishError {
         kind: identity.kind,
         id: identity.id.clone(),
         version: identity.version,
+    }
+}
+
+#[cfg(test)]
+mod projection_template_tests {
+    use std::collections::BTreeMap;
+
+    use publish_domain::{
+        AdapterBinding, AdapterIdentity, AdapterKind, AdapterSelection, AdapterSettings,
+        AutomationTriggerPolicy, DeliveryRoute, RuntimeComponentRevision,
+    };
+    use serde_json::Value;
+
+    use super::{
+        current_runtime_revision, validate_projection, verify_installed_projection,
+        RunnerProjection, RUNNER_PROJECTION_VERSION,
+    };
+
+    fn fixture_projection() -> RunnerProjection {
+        let adapters = AdapterSelection {
+            project_provider: AdapterBinding::new(
+                "project",
+                AdapterIdentity::new(
+                    AdapterKind::ProjectProvider,
+                    publish_adapters::TAURI_PROVIDER_ID,
+                    1,
+                ),
+                AdapterSettings::new(1)
+                    .with_value(
+                        "config_path",
+                        Value::String("src-tauri/tauri.conf.json".to_string()),
+                    )
+                    .with_value("build_driver", Value::String("pnpm".to_string())),
+            ),
+            artifact_processors: vec![AdapterBinding::new(
+                "checksums",
+                AdapterIdentity::new(
+                    AdapterKind::ArtifactProcessor,
+                    publish_adapters::CHECKSUM_PROCESSOR_ID,
+                    1,
+                ),
+                AdapterSettings::new(1),
+            )],
+            execution_backend: AdapterBinding::new(
+                "backend",
+                AdapterIdentity::new(
+                    AdapterKind::ExecutionBackend,
+                    publish_adapters::GITHUB_ACTIONS_EXECUTION_BACKEND_ID,
+                    1,
+                ),
+                AdapterSettings::new(1),
+            ),
+            artifact_store: AdapterBinding::new(
+                "store",
+                AdapterIdentity::new(AdapterKind::ArtifactStore, "temporary-artifact-store", 1),
+                AdapterSettings::new(1),
+            ),
+            delivery_routes: vec![DeliveryRoute::required(AdapterBinding::new(
+                "github-release-route",
+                AdapterIdentity::new(
+                    AdapterKind::DeliveryDestination,
+                    publish_adapters::GITHUB_RELEASE_DESTINATION_ID,
+                    1,
+                ),
+                AdapterSettings::new(1),
+            ))],
+        };
+        let runtime_revision = current_runtime_revision(
+            adapters
+                .ordered_bindings()
+                .into_iter()
+                .map(|binding| binding.adapter.clone()),
+        )
+        .expect("seal fixture runtime revision");
+        RunnerProjection {
+            version: RUNNER_PROJECTION_VERSION,
+            binding_id: "binding-stable".to_string(),
+            configuration_id: "configuration-1".to_string(),
+            configuration_revision_id: "configuration-revision-1".to_string(),
+            trigger_policy: AutomationTriggerPolicy::TagPush {
+                tag_prefix: "v".to_string(),
+            },
+            runtime_revision,
+            release_input: BTreeMap::from([(
+                "channel".to_string(),
+                Value::String("stable".to_string()),
+            )]),
+            adapters,
+            secret_bindings: BTreeMap::from([(
+                "ci-github-token".to_string(),
+                "ONE_PUBLISH_CI_GITHUB_TOKEN".to_string(),
+            )]),
+        }
+    }
+
+    #[test]
+    fn installed_template_projection_round_trips_and_verifies() {
+        let projection = fixture_projection();
+        let serialized = serde_json::to_string(&projection).expect("serialize template");
+        let decoded: RunnerProjection =
+            serde_json::from_str(&serialized).expect("decode template");
+        assert_eq!(decoded, projection);
+        verify_installed_projection(&decoded).expect("installed runner serves the template");
+    }
+
+    #[test]
+    fn template_projection_rejects_missing_identities_and_foreign_versions() {
+        let mut missing_binding = fixture_projection();
+        missing_binding.binding_id = " ".to_string();
+        let error = validate_projection(&missing_binding)
+            .expect_err("blank binding identity must be rejected");
+        assert!(error.to_string().contains("binding identity"));
+
+        let mut unsupported = fixture_projection();
+        unsupported.version = RUNNER_PROJECTION_VERSION + 1;
+        let error = validate_projection(&unsupported)
+            .expect_err("unknown projection version must be rejected");
+        assert!(error.to_string().contains("not supported"));
+
+        let mut foreign = fixture_projection();
+        foreign.runtime_revision = publish_domain::AutomationRuntimeRevision::seal(
+            RuntimeComponentRevision::new("9.9.9", foreign.runtime_revision.runner.digest.clone()),
+            foreign.runtime_revision.plan_contract.clone(),
+            foreign.runtime_revision.adapters.clone(),
+        )
+        .expect("seal self-consistent foreign runtime");
+        let error = verify_installed_projection(&foreign)
+            .expect_err("a different self-consistent runtime must be rejected");
+        assert!(error.to_string().contains("installed runner provides"));
     }
 }
 

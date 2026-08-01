@@ -2,8 +2,7 @@ use std::collections::BTreeMap;
 use std::sync::Arc;
 
 use one_publish_runner::{
-    current_runtime_revision, installed_registry, installed_runner, RunnerPorts,
-    RunnerProjection,
+    current_runtime_revision, installed_registry, installed_runner, PreparedAttempt, RunnerPorts,
     StandaloneRunner,
 };
 use publish_adapters::{
@@ -119,10 +118,10 @@ fn local_and_fake_github_actions_share_runner_contract_semantics() {
     );
 
     let local_projection = local_runner
-        .prepare_projection(&local_snapshot)
+        .prepare_attempt(&local_snapshot)
         .expect("prepare local projection");
     let github_projection = github_runner
-        .prepare_projection(&github_snapshot)
+        .prepare_attempt(&github_snapshot)
         .expect("prepare fake GitHub Actions projection");
     let local = local_runner
         .execute(&local_projection, "attempt-contract")
@@ -131,7 +130,7 @@ fn local_and_fake_github_actions_share_runner_contract_semantics() {
         .execute(&github_projection, "attempt-contract")
         .expect("execute through fake GitHub Actions");
 
-    let node_contract = |projection: &RunnerProjection| {
+    let node_contract = |projection: &PreparedAttempt| {
         projection
             .prepared
             .plan
@@ -167,7 +166,7 @@ fn fixed_projection_executes_after_the_control_plane_is_removed() {
         installed_root.path(),
     );
     let seed_projection = control_plane_runner
-        .prepare_projection(&snapshot)
+        .prepare_attempt(&snapshot)
         .expect("prepare seed projection");
     let seed = control_plane_runner
         .execute(&seed_projection, "attempt-seed")
@@ -208,7 +207,7 @@ fn fixed_projection_executes_after_the_control_plane_is_removed() {
     )
     .expect("create installed runner");
     let projection = installed_control_plane
-        .prepare_projection(&installed_snapshot)
+        .prepare_attempt(&installed_snapshot)
         .expect("seal installed projection");
     let projection_path = installed_root.path().join("runner-projection.json");
     std::fs::write(
@@ -256,12 +255,12 @@ fn runner_rejects_missing_or_digest_mismatched_runtime_before_execution() {
     let mut missing = snapshot.clone();
     missing.runtime_revision.clear();
     let missing_error = runner
-        .prepare_projection(&missing)
+        .prepare_attempt(&missing)
         .expect_err("missing runtime pin must be rejected");
     assert!(missing_error.to_string().contains("missing"));
 
     let mut tampered = runner
-        .prepare_projection(&snapshot)
+        .prepare_attempt(&snapshot)
         .expect("prepare sealed projection");
     tampered.runtime_revision.digest = "0".repeat(64);
     let mismatch = runner
@@ -285,7 +284,7 @@ fn runner_rejects_missing_or_digest_mismatched_runtime_before_execution() {
     );
     let foreign_projection = StandaloneRunner::new(foreign_registry, foreign)
         .expect("create foreign runner fixture")
-        .prepare_projection(&foreign_snapshot)
+        .prepare_attempt(&foreign_snapshot)
         .expect("prepare self-consistent foreign projection");
     let foreign_error = match installed_runner(&foreign_projection) {
         Ok(_) => panic!("installed binary must reject a different self-consistent runtime"),
@@ -336,10 +335,10 @@ fn local_and_fake_github_actions_deliver_the_same_github_release_route() {
     );
 
     let local_projection = local_runner
-        .prepare_projection(&local_snapshot)
+        .prepare_attempt(&local_snapshot)
         .expect("prepare local projection");
     let github_projection = github_runner
-        .prepare_projection(&github_snapshot)
+        .prepare_attempt(&github_snapshot)
         .expect("prepare fake GitHub Actions projection");
     let local = local_runner
         .execute(&local_projection, "attempt-github-contract")
@@ -406,10 +405,10 @@ fn local_and_fake_github_actions_deliver_the_same_sftp_route() {
     );
 
     let local_projection = local_runner
-        .prepare_projection(&local_snapshot)
+        .prepare_attempt(&local_snapshot)
         .expect("prepare local projection");
     let github_projection = github_runner
-        .prepare_projection(&github_snapshot)
+        .prepare_attempt(&github_snapshot)
         .expect("prepare fake GitHub Actions projection");
     let local = local_runner
         .execute(&local_projection, "attempt-sftp-contract")
