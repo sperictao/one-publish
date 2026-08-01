@@ -11,11 +11,11 @@ pub use prepare::{prepare_from_projection, TriggerContext};
 
 use publish_adapters::{
     AdapterConformanceFixture, AdapterRegistry, ChecksumProcessor, CustomCommandProcessor,
-    FakeGitHubActionsBackend, GhCliGitHubReleaseApi, GitHubActionsExecutionBackend,
+    FakeGitHubActionsBackend, GhCliGitHubReleaseApi, GitHubActionsBackend,
     GitHubReleaseDestination, LocalDirectoryDestination, LocalExecutionBackend,
     OpenSshSftpTransport, SftpDeliveryDestination, StaticCredentialSource,
     TemporaryArtifactStore, CHECKSUM_PROCESSOR_ID, CUSTOM_COMMAND_PROCESSOR_ID,
-    FAKE_GITHUB_ACTIONS_BACKEND_ID, GITHUB_ACTIONS_EXECUTION_BACKEND_ID,
+    FAKE_GITHUB_ACTIONS_BACKEND_ID, GITHUB_ACTIONS_BACKEND_ID,
     GITHUB_RELEASE_DESTINATION_ID, SFTP_DESTINATION_ID, TAURI_PROVIDER_ID,
 };
 use publish_domain::{
@@ -85,7 +85,7 @@ fn built_in_adapter_identities() -> BTreeSet<AdapterIdentity> {
         AdapterIdentity::new(AdapterKind::ExecutionBackend, "local-execution", 1),
         AdapterIdentity::new(
             AdapterKind::ExecutionBackend,
-            GITHUB_ACTIONS_EXECUTION_BACKEND_ID,
+            GITHUB_ACTIONS_BACKEND_ID,
             1,
         ),
         AdapterIdentity::new(
@@ -414,8 +414,8 @@ fn register_execution_backend(
         ("local-execution", 1) => {
             registry.register_execution_backend(Arc::new(LocalExecutionBackend::new()), fixture)
         }
-        (GITHUB_ACTIONS_EXECUTION_BACKEND_ID, 1) => registry.register_execution_backend(
-            Arc::new(GitHubActionsExecutionBackend::new(credentials)),
+        (GITHUB_ACTIONS_BACKEND_ID, 1) => registry.register_execution_backend(
+            Arc::new(GitHubActionsBackend::new(credentials)),
             fixture,
         ),
         (FAKE_GITHUB_ACTIONS_BACKEND_ID, 1) => registry.register_execution_backend(
@@ -546,7 +546,7 @@ mod projection_template_tests {
                 "backend",
                 AdapterIdentity::new(
                     AdapterKind::ExecutionBackend,
-                    publish_adapters::GITHUB_ACTIONS_EXECUTION_BACKEND_ID,
+                    publish_adapters::GITHUB_ACTIONS_BACKEND_ID,
                     1,
                 ),
                 AdapterSettings::new(1),

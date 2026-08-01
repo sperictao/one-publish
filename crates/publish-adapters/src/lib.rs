@@ -35,7 +35,7 @@ pub use bridge::{
     SealedBuildCommand, SelectedProjectProvider, SELECTED_PROVIDER_ID,
     SELECTED_PROVIDER_PROGRAM,
 };
-pub use github_actions::{GitHubActionsExecutionBackend, GITHUB_ACTIONS_EXECUTION_BACKEND_ID};
+pub use github_actions::{GitHubActionsBackend, GITHUB_ACTIONS_BACKEND_ID};
 pub use github_release::{
     classify_github_failure, parse_gh_cli_failure, parse_release_list, FakeGitHubReleaseApi,
     GhCliGitHubReleaseApi, GitHubApiFailure, GitHubReleaseApi, GitHubReleaseDestination,

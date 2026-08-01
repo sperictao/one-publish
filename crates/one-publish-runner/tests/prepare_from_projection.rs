@@ -75,7 +75,7 @@ fn fixture_projection() -> RunnerProjection {
             "backend",
             AdapterIdentity::new(
                 AdapterKind::ExecutionBackend,
-                publish_adapters::GITHUB_ACTIONS_EXECUTION_BACKEND_ID,
+                publish_adapters::GITHUB_ACTIONS_BACKEND_ID,
                 1,
             ),
             AdapterSettings::new(1),
