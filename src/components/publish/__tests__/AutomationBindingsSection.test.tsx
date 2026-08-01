@@ -97,7 +97,6 @@ function installPreview(): AutomationProjectionPreview {
     change: {
       kind: "install",
       configurationId: "profile-1",
-      executionBackendId: "github-actions",
       triggerPolicy: { type: "tagPush", tagPrefix: "v" },
       bindingId: "binding-1",
       confirmedConflictPaths: [".github/workflows/legacy-release.yml"],
@@ -171,7 +170,6 @@ describe("AutomationBindingsSection", () => {
       expect(previewAutomationChangeMock).toHaveBeenCalledWith("repo-1", {
         kind: "install",
         configurationId: "profile-1",
-        executionBackendId: "github-actions",
         triggerPolicy: { type: "tagPush", tagPrefix: "v" },
         bindingId: null,
         confirmedConflictPaths: [],

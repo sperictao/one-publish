@@ -36,10 +36,11 @@ const AUTOMATION_COMMIT_SUBJECT: &str = "chore(release): apply One Publish autom
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[serde(tag = "kind", rename_all = "camelCase")]
 pub enum AutomationChangeRequest {
+    /// 决议 #90：安装不携带执行后端——Backend 完全从目标修订的
+    /// `composition.execution_backend` 推导，消除第二事实源。
     #[serde(rename_all = "camelCase")]
     Install {
         configuration_id: String,
-        execution_backend_id: String,
         trigger_policy: AutomationTriggerPolicy,
         /// 由预览归一化填充；应用必须回传同一身份，否则确认摘要无法匹配。
         #[serde(default)]
@@ -64,13 +65,11 @@ impl AutomationChangeRequest {
         match self {
             Self::Install {
                 configuration_id,
-                execution_backend_id,
                 trigger_policy,
                 binding_id,
                 confirmed_conflict_paths,
             } => Self::Install {
                 configuration_id: configuration_id.clone(),
-                execution_backend_id: execution_backend_id.clone(),
                 trigger_policy: trigger_policy.clone(),
                 binding_id: Some(
                     binding_id
@@ -383,7 +382,6 @@ fn resolve_target_bindings(
     match change {
         AutomationChangeRequest::Install {
             configuration_id,
-            execution_backend_id,
             trigger_policy,
             binding_id,
             ..
@@ -396,7 +394,9 @@ fn resolve_target_bindings(
                     "automation_configuration_revision_missing",
                 )
             })?;
-            let backend = automation_backend(execution_backend_id)?;
+            // 决议 #90：Backend 完全从目标修订的组合推导，消除第二事实源。
+            let execution_backend_id = automation_backend_for_revision(revision)?;
+            let backend = automation_backend(&execution_backend_id)?;
             let binding_id = binding_id.clone().ok_or_else(|| {
                 AppError::validation_with_code(
                     "安装请求缺少预览归一化的绑定身份，请先预览投影差异",
@@ -409,7 +409,7 @@ fn resolve_target_bindings(
                 configuration_revision_id: profile.current_revision_id.clone(),
                 execution_backend_id: execution_backend_id.clone(),
                 trigger_policy: trigger_policy.clone(),
-                backend_projection: fixed_backend_projection(execution_backend_id, revision)?,
+                backend_projection: fixed_backend_projection(&execution_backend_id, revision)?,
                 runtime_revision: automation_runtime_revision(backend.as_ref(), revision, digests)?
                     .into(),
                 external_identity: String::new(),
@@ -430,10 +430,14 @@ fn resolve_target_bindings(
                     "automation_configuration_revision_missing",
                 )
             })?;
-            let backend = automation_backend(&binding.execution_backend_id)?;
+            // 决议 #90："改 Backend = 存新修订、再经差异预览显式升级"：
+            // 升级同样从新修订推导，换 Backend 随升级生效。
+            let execution_backend_id = automation_backend_for_revision(revision)?;
+            let backend = automation_backend(&execution_backend_id)?;
+            binding.execution_backend_id = execution_backend_id.clone();
             binding.configuration_revision_id = profile.current_revision_id.clone();
             binding.backend_projection =
-                fixed_backend_projection(&binding.execution_backend_id, revision)?;
+                fixed_backend_projection(&execution_backend_id, revision)?;
             binding.runtime_revision =
                 automation_runtime_revision(backend.as_ref(), revision, digests)?.into();
             binding.updated_at = now.to_string();
@@ -455,6 +459,53 @@ fn binding_not_found(binding_id: &str) -> AppError {
         format!("未找到自动化绑定: {binding_id}"),
         "automation_binding_not_found",
     )
+}
+
+/// 决议 #90：自动化 Backend 的唯一事实源是修订组合的执行后端。修订 Backend
+/// 没有自动化投影能力（如 local-execution）时显式拒绝，引导先保存新修订。
+fn automation_backend_for_revision(
+    revision: &crate::store::PublishConfigurationRevision,
+) -> Result<String, AppError> {
+    let backend_id = revision.composition.execution_backend.adapter_id.clone();
+    automation_backend(&backend_id).map_err(|_| {
+        AppError::validation_with_code(
+            format!(
+                "修订的执行后端 {backend_id} 不支持自动化投影；请先保存 backend=github-actions 的新修订"
+            ),
+            "automation_backend_not_projectable",
+        )
+    })?;
+    Ok(backend_id)
+}
+
+pub(crate) const AUTOMATION_PENDING_CONSOLIDATION_REASON: &str =
+    "automation_backend_split_pending";
+
+/// 存量分裂绑定（决议 #90）：绑定固化的 Backend 与其钉住修订的组合推导不一致
+///（#90 之前 Backend 曾是独立请求字段）。此类绑定继续自治运行与只读同步，
+/// 写操作被拒，直到经差异预览显式升级到 backend 一致的新修订。
+fn pending_consolidation(config: &RepoPublishConfig, binding: &AutomationBinding) -> bool {
+    bound_revision(config, binding).is_ok_and(|revision| {
+        revision.composition.execution_backend.adapter_id != binding.execution_backend_id
+    })
+}
+
+fn ensure_targets_consolidated(
+    config: &RepoPublishConfig,
+    targets: &[AutomationBinding],
+) -> Result<(), AppError> {
+    for binding in targets {
+        if pending_consolidation(config, binding) {
+            return Err(AppError::validation_with_code(
+                format!(
+                    "绑定 {} 的执行后端与其钉住修订不一致（待收口）；请保存 backend 一致的新修订并显式升级，或解除绑定",
+                    binding.id
+                ),
+                AUTOMATION_PENDING_CONSOLIDATION_REASON,
+            ));
+        }
+    }
+    Ok(())
 }
 
 /// 投影固定引用绑定所钉住的修订，而不是配置的当前修订。
@@ -1107,16 +1158,16 @@ fn discover_initial_takeover_conflicts(
     targets: &[AutomationBinding],
     expected_paths: &BTreeSet<String>,
 ) -> Result<BTreeMap<String, AutomationNamespaceConflict>, AppError> {
-    let is_initial_github_install = matches!(
-        change,
-        AutomationChangeRequest::Install {
-            execution_backend_id,
-            ..
-        } if execution_backend_id == GITHUB_ACTIONS_BACKEND_ID
-    ) && !config
-        .applied_bundles
-        .iter()
-        .any(|bundle| bundle.backend_id == GITHUB_ACTIONS_BACKEND_ID);
+    // 决议 #90：Backend 从修订推导——初次接管判定看目标集的推导结果，
+    // 不再读取请求字段。
+    let is_initial_github_install = matches!(change, AutomationChangeRequest::Install { .. })
+        && targets
+            .iter()
+            .any(|binding| binding.execution_backend_id == GITHUB_ACTIONS_BACKEND_ID)
+        && !config
+            .applied_bundles
+            .iter()
+            .any(|bundle| bundle.backend_id == GITHUB_ACTIONS_BACKEND_ID);
     if !is_initial_github_install {
         return Ok(BTreeMap::new());
     }
@@ -1215,6 +1266,9 @@ pub(crate) fn preview_change(
 ) -> Result<AutomationPreviewOutcome, AppError> {
     let mut normalized_change = change.normalized();
     let targets = resolve_target_bindings(config, &normalized_change, now, digests)?;
+    // 决议 #90：目标集含待收口绑定时拒绝渲染写路径（Detach 移除后不在
+    // 目标集，天然可用）；只读列表由 bindings_view 容错呈现。
+    ensure_targets_consolidated(config, &targets)?;
     validate_binding_namespaces(config, &targets)?;
     let expected = render_expected(config, &targets, now)?;
     let previously_owned = previously_owned_paths(config)?;
@@ -1429,34 +1483,51 @@ pub(crate) fn bindings_view(
     now: &str,
     digests: &dyn RunnerAssetDigestSource,
 ) -> Result<AutomationBindingsView, AppError> {
-    let outcome = preview_change(
+    // 决议 #90：存量分裂绑定阻断 Reconcile 渲染，但只读列表必须可用——
+    // 此时降级为无漂移信息的绑定清单，分裂绑定以待收口状态呈现。
+    let outcome = match preview_change(
         repo_root,
         config,
         &AutomationChangeRequest::Reconcile,
         now,
         digests,
-    )?;
+    ) {
+        Ok(outcome) => Some(outcome),
+        Err(error)
+            if error.code.as_deref() == Some(AUTOMATION_PENDING_CONSOLIDATION_REASON) =>
+        {
+            None
+        }
+        Err(error) => return Err(error),
+    };
     let drift = outcome
-        .changes
-        .iter()
-        .map(|change| change_view(change, outcome.conflicts.get(&change.path)))
-        .collect::<Vec<_>>();
+        .as_ref()
+        .map(|outcome| {
+            outcome
+                .changes
+                .iter()
+                .map(|change| change_view(change, outcome.conflicts.get(&change.path)))
+                .collect::<Vec<_>>()
+        })
+        .unwrap_or_default();
 
     // 漂移按资源归属定位到具体绑定；共享资源（如 Bundle 清单）或失去归属的
     // 文件漂移会影响整个投影包，此时所有绑定都进入阻断状态。
     let mut drifted_bindings = BTreeSet::new();
     let mut shared_drift = false;
-    for change in &outcome.changes {
-        match outcome
-            .expected
-            .files
-            .get(&change.path)
-            .and_then(|file| file.binding_id.as_deref())
-        {
-            Some(binding_id) => {
-                drifted_bindings.insert(binding_id.to_string());
+    if let Some(outcome) = &outcome {
+        for change in &outcome.changes {
+            match outcome
+                .expected
+                .files
+                .get(&change.path)
+                .and_then(|file| file.binding_id.as_deref())
+            {
+                Some(binding_id) => {
+                    drifted_bindings.insert(binding_id.to_string());
+                }
+                None => shared_drift = true,
             }
-            None => shared_drift = true,
         }
     }
 
@@ -1464,7 +1535,13 @@ pub(crate) fn bindings_view(
         .bindings
         .iter()
         .map(|binding| {
+            let split = pending_consolidation(config, binding);
             let blocked = shared_drift || drifted_bindings.contains(&binding.id);
+            let blocked_reason = if split {
+                Some(AUTOMATION_PENDING_CONSOLIDATION_REASON.to_string())
+            } else {
+                blocked.then(|| AUTOMATION_DRIFT_BLOCKED_REASON.to_string())
+            };
             let backend = automation_backend(&binding.execution_backend_id)?;
             let profile = active_profile(config, &binding.configuration_id)?;
             let revision = profile.current_revision().ok_or_else(|| {
@@ -1491,7 +1568,7 @@ pub(crate) fn bindings_view(
                 configuration_name: config
                     .profile(&binding.configuration_id)
                     .map(|profile| profile.name.clone()),
-                blocked_reason: blocked.then(|| AUTOMATION_DRIFT_BLOCKED_REASON.to_string()),
+                blocked_reason,
                 runtime_upgrade_available,
                 current_runtime_revision,
                 expected_runtime_revision: expected_runtime_revision_id,
@@ -2038,13 +2115,27 @@ mod tests {
             )
             .expect("create fixture profile")
             .clone();
-        (config, profile.id)
+        let profile_id = profile.id;
+        // 决议 #90：Backend 从修订组合推导——测试后端进修订才可安装。
+        set_revision_backend(&mut config, &profile_id, FAKE_AUTOMATION_BACKEND_ID);
+        (config, profile_id)
+    }
+
+    fn set_revision_backend(config: &mut RepoPublishConfig, profile_id: &str, backend_id: &str) {
+        let revision = config
+            .profiles
+            .iter_mut()
+            .find(|profile| profile.id == profile_id)
+            .expect("fixture profile")
+            .revisions
+            .last_mut()
+            .expect("fixture revision");
+        revision.composition.execution_backend.adapter_id = backend_id.to_string();
     }
 
     fn install_request(profile_id: &str) -> AutomationChangeRequest {
         AutomationChangeRequest::Install {
             configuration_id: profile_id.to_string(),
-            execution_backend_id: FAKE_AUTOMATION_BACKEND_ID.to_string(),
             trigger_policy: AutomationTriggerPolicy::TagPush {
                 tag_prefix: "v".to_string(),
             },
@@ -2060,8 +2151,6 @@ mod tests {
     ) -> AutomationChangeRequest {
         AutomationChangeRequest::Install {
             configuration_id: profile_id.to_string(),
-            execution_backend_id: GITHUB_ACTIONS_BACKEND_ID
-                .to_string(),
             trigger_policy: AutomationTriggerPolicy::TagPush {
                 tag_prefix: tag_prefix.to_string(),
             },
@@ -2088,6 +2177,7 @@ mod tests {
             .expect("create fixture profile")
             .clone();
         let profile_id = profile.id;
+        set_revision_backend(&mut config, &profile_id, GITHUB_ACTIONS_BACKEND_ID);
         push_github_release_route(&mut config, &profile_id);
         (config, profile_id)
     }
@@ -2332,6 +2422,7 @@ mod tests {
             )
             .expect("create fixture profile")
             .clone();
+        set_revision_backend(&mut config, &profile.id, GITHUB_ACTIONS_BACKEND_ID);
 
         let outcome = preview_change(
             &work,
@@ -2348,7 +2439,8 @@ mod tests {
     #[test]
     fn github_actions_install_without_revision_release_settings_is_rejected() {
         let (_temp, work) = fixture_repository();
-        let (config, profile_id) = fixture_config_for_provider("Stable", "tauri");
+        let (mut config, profile_id) = fixture_config_for_provider("Stable", "tauri");
+        set_revision_backend(&mut config, &profile_id, GITHUB_ACTIONS_BACKEND_ID);
 
         let error = preview_change(
             &work,
@@ -2362,6 +2454,61 @@ mod tests {
             error.code.as_deref(),
             Some("github_actions_release_config_missing")
         );
+    }
+
+    #[test]
+    fn split_bindings_block_writes_until_an_explicit_consolidating_upgrade() {
+        let (_temp, work) = fixture_repository();
+        let (mut config, profile_id) = fixture_tauri_config("Stable");
+        let install = github_actions_install_request(&profile_id, "binding-stable", "v");
+        let preview = preview_change(&work, &config, &install, NOW).expect("preview install");
+        apply_change(
+            &work,
+            &mut config,
+            &preview.normalized_change,
+            &preview.confirmation_digest,
+            NOW,
+        )
+        .expect("apply install");
+
+        // 模拟存量分裂（决议 #90）：绑定固化 github-actions，而钉住修订的
+        // 组合推导为 local——继续只读呈现，但写操作被拒直到显式收口。
+        set_revision_backend(&mut config, &profile_id, "local-execution");
+
+        let view = bindings_view(&work, &config, NOW).expect("split bindings stay listable");
+        assert!(view.drift.is_empty());
+        assert_eq!(
+            view.bindings[0].blocked_reason.as_deref(),
+            Some(super::AUTOMATION_PENDING_CONSOLIDATION_REASON)
+        );
+
+        let error = preview_change(&work, &config, &AutomationChangeRequest::Reconcile, NOW)
+            .expect_err("split bindings must not reconcile");
+        assert_eq!(
+            error.code.as_deref(),
+            Some(super::AUTOMATION_PENDING_CONSOLIDATION_REASON)
+        );
+
+        // 升级到仍不可投影的修订同样被拒——收口必须先保存可投影的新修订。
+        let upgrade = AutomationChangeRequest::UpgradeRevision {
+            binding_id: "binding-stable".to_string(),
+        };
+        let error = preview_change(&work, &config, &upgrade, NOW)
+            .expect_err("upgrading onto a non-projectable revision must be rejected");
+        assert_eq!(
+            error.code.as_deref(),
+            Some("automation_backend_not_projectable")
+        );
+
+        // 收口 = 保存 backend 一致的修订 + 经差异预览显式升级（决议 #90）。
+        set_revision_backend(&mut config, &profile_id, GITHUB_ACTIONS_BACKEND_ID);
+        preview_then_apply(&work, &mut config, &upgrade);
+        assert_eq!(
+            config.bindings[0].execution_backend_id,
+            GITHUB_ACTIONS_BACKEND_ID
+        );
+        let view = bindings_view(&work, &config, NOW).expect("consolidated view");
+        assert!(view.bindings[0].blocked_reason.is_none());
     }
 
     #[test]
@@ -2475,6 +2622,7 @@ mod tests {
             )
             .expect("create nightly profile")
             .clone();
+        set_revision_backend(&mut config, &nightly.id, GITHUB_ACTIONS_BACKEND_ID);
         push_github_release_route(&mut config, &nightly.id);
         let stable = github_actions_install_request(&stable_id, "binding-stable", "v");
         let stable_preview =
@@ -3225,6 +3373,7 @@ mod tests {
             )
             .expect("create nightly profile")
             .clone();
+        set_revision_backend(&mut config, &nightly.id, FAKE_AUTOMATION_BACKEND_ID);
         preview_then_apply(&work, &mut config, &install_request(&profile_id));
         preview_then_apply(&work, &mut config, &install_request(&nightly.id));
         let stable_binding = config.bindings[0].clone();
@@ -3304,6 +3453,7 @@ mod tests {
             )
             .expect("create nightly profile")
             .clone();
+        set_revision_backend(&mut config, &nightly.id, FAKE_AUTOMATION_BACKEND_ID);
         let unmanaged = work.join(".github/workflows/quality.yml");
         std::fs::create_dir_all(unmanaged.parent().expect("workflows dir"))
             .expect("create workflows dir");
@@ -3402,14 +3552,16 @@ mod tests {
     #[test]
     fn unknown_backends_profiles_and_bindings_fail_with_explicit_errors() {
         let (_temp, work) = fixture_repository();
-        let (config, profile_id) = fixture_config("Stable");
+        let (mut config, profile_id) = fixture_config("Stable");
 
+        // 决议 #90：Backend 从修订组合推导；修订 Backend 无自动化投影能力
+        // （如 local-execution）时显式拒绝安装并引导先保存新修订。
+        set_revision_backend(&mut config, &profile_id, "local-execution");
         let unsupported = preview_change(
             &work,
             &config,
             &AutomationChangeRequest::Install {
-                configuration_id: profile_id,
-                execution_backend_id: "local-execution".to_string(),
+                configuration_id: profile_id.clone(),
                 trigger_policy: AutomationTriggerPolicy::Manual,
                 binding_id: None,
                 confirmed_conflict_paths: Vec::new(),
@@ -3419,15 +3571,15 @@ mod tests {
         .expect_err("non-automation backend must be rejected");
         assert_eq!(
             unsupported.code.as_deref(),
-            Some("automation_backend_unsupported")
+            Some("automation_backend_not_projectable")
         );
+        set_revision_backend(&mut config, &profile_id, FAKE_AUTOMATION_BACKEND_ID);
 
         let missing_profile = preview_change(
             &work,
             &config,
             &AutomationChangeRequest::Install {
                 configuration_id: "missing".to_string(),
-                execution_backend_id: FAKE_AUTOMATION_BACKEND_ID.to_string(),
                 trigger_policy: AutomationTriggerPolicy::Manual,
                 binding_id: None,
                 confirmed_conflict_paths: Vec::new(),

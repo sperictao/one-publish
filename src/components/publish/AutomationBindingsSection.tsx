@@ -41,7 +41,6 @@ import {
 } from "@/lib/automationBindings";
 import type { ConfigProfile } from "@/lib/store/types";
 
-const GITHUB_ACTIONS_BACKEND_ID = "github-actions";
 const DEFAULT_TAG_PREFIX = "v";
 
 function remoteStatusLabel(
@@ -176,7 +175,6 @@ export function AutomationBindingsSection({
     void requestPreview({
       kind: "install",
       configurationId: installProfileId,
-      executionBackendId: GITHUB_ACTIONS_BACKEND_ID,
       triggerPolicy: {
         type: "tagPush",
         tagPrefix: installTagPrefix || DEFAULT_TAG_PREFIX,

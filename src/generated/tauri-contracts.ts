@@ -170,7 +170,7 @@ export type AutomationBindingView = { binding: AutomationBinding, configurationN
 
 export type AutomationBindingsView = { bindings: Array<AutomationBindingView>, drift: Array<AutomationFileChangeView>, };
 
-export type AutomationChangeRequest = { "kind": "install", configurationId: string, executionBackendId: string, triggerPolicy: AutomationTriggerPolicy, 
+export type AutomationChangeRequest = { "kind": "install", configurationId: string, triggerPolicy: AutomationTriggerPolicy, 
 /**
  * 由预览归一化填充；应用必须回传同一身份，否则确认摘要无法匹配。
  */
