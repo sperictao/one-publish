@@ -25,6 +25,12 @@ use serde::{Deserialize, Serialize};
 
 pub const RUNNER_VERSION: &str = env!("CARGO_PKG_VERSION");
 pub const RUNNER_SOURCE_DIGEST: &str = env!("ONE_PUBLISH_RUNNER_SOURCE_DIGEST");
+
+/// 分发 tag（决议 #86：同仓独立 `runner-v*` 前缀）。桌面 app 编译期与 runner
+/// crate 同源，即"内嵌配套版本"；安装/升级固化时按此 tag 拉取资产摘要。
+pub fn runner_release_tag() -> String {
+    format!("runner-v{RUNNER_VERSION}")
+}
 pub const PLAN_CONTRACT_SOURCE_DIGEST: &str = env!("ONE_PUBLISH_PLAN_SOURCE_DIGEST");
 pub const ADAPTERS_SOURCE_DIGEST: &str = env!("ONE_PUBLISH_ADAPTERS_SOURCE_DIGEST");
 
@@ -408,5 +414,54 @@ fn unsupported_installed_adapter(identity: &AdapterIdentity) -> PublishError {
         kind: identity.kind,
         id: identity.id.clone(),
         version: identity.version,
+    }
+}
+
+#[cfg(test)]
+mod runtime_revision_tests {
+    use std::collections::BTreeMap;
+
+    use publish_domain::AutomationRuntimeRevision;
+
+    use super::{current_runtime_revision, runner_release_tag, RUNNER_VERSION};
+
+    #[test]
+    fn release_tag_embeds_the_companion_runner_version() {
+        assert_eq!(runner_release_tag(), format!("runner-v{RUNNER_VERSION}"));
+    }
+
+    #[test]
+    fn binary_digest_table_changes_the_sealed_runtime_identity() {
+        let sealed = current_runtime_revision([]).expect("seal current runtime revision");
+        // 空表与旧格式同一身份：序列化跳过空表，seal 摘要不变。
+        let serialized = serde_json::to_value(&sealed.runner).expect("serialize runner component");
+        assert!(serialized.get("binary_digests").is_none());
+
+        let pinned = AutomationRuntimeRevision::seal(
+            sealed.runner.clone().with_binary_digests(BTreeMap::from([(
+                "x86_64-unknown-linux-gnu".to_string(),
+                "a".repeat(64),
+            )])),
+            sealed.plan_contract.clone(),
+            sealed.adapters.clone(),
+        )
+        .expect("seal runtime revision with binary digests");
+        assert_ne!(pinned.identifier(), sealed.identifier());
+        pinned.validate().expect("pinned revision stays verifiable");
+    }
+
+    #[test]
+    fn malformed_binary_digests_are_rejected_at_seal_time() {
+        let sealed = current_runtime_revision([]).expect("seal current runtime revision");
+        let error = AutomationRuntimeRevision::seal(
+            sealed.runner.clone().with_binary_digests(BTreeMap::from([(
+                "x86_64-unknown-linux-gnu".to_string(),
+                "not-a-digest".to_string(),
+            )])),
+            sealed.plan_contract.clone(),
+            sealed.adapters.clone(),
+        )
+        .expect_err("floating or malformed binary digests must be rejected");
+        assert!(error.to_string().contains("SHA-256"));
     }
 }

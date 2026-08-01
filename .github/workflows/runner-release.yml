@@ -1,0 +1,94 @@
+# One Publish Runner 分发流水线（决议 #86）：
+# 同仓独立 `runner-v*` tag，按 target triple 发布预构建资产与 per-asset sha256；
+# Runtime Revision 固化时经 REST asset digest 录入，workflow 消费端离线校验。
+name: runner-release
+
+on:
+  push:
+    tags:
+      - "runner-v*"
+
+permissions:
+  contents: write
+
+jobs:
+  draft:
+    name: Draft the runner release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+      - name: Create draft release for the tag
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if ! gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            gh release create "$GITHUB_REF_NAME" --draft --verify-tag \
+              --title "$GITHUB_REF_NAME" \
+              --notes "One Publish Runner binaries pinned by per-target SHA-256 digests."
+          fi
+
+  build:
+    name: Build ${{ matrix.target }}
+    needs: draft
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-latest
+            target: aarch64-apple-darwin
+          - runner: macos-latest
+            target: x86_64-apple-darwin
+          - runner: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+          - runner: windows-latest
+            target: x86_64-pc-windows-msvc
+    runs-on: ${{ matrix.runner }}
+    env:
+      RUNNER_TARGET: ${{ matrix.target }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+      - name: Build runner binary
+        shell: bash
+        run: cargo build --release --locked -p one-publish-runner --target "$RUNNER_TARGET"
+      - name: Package and upload the pinned asset
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          binary="one-publish-runner"
+          if [[ "$RUNNER_TARGET" == *windows* ]]; then
+            binary="one-publish-runner.exe"
+          fi
+          asset="one-publish-runner-${RUNNER_TARGET}.tar.gz"
+          # tar 直包单文件保执行位（#83：zip 会丢失 unix 权限位）。
+          tar -C "target/${RUNNER_TARGET}/release" -czf "$asset" "$binary"
+          python3 -c "import hashlib,sys;print(hashlib.sha256(open(sys.argv[1],'rb').read()).hexdigest()+'  '+sys.argv[1])" "$asset" > "${asset}.sha256"
+          gh release upload "$GITHUB_REF_NAME" "$asset" "${asset}.sha256"
+
+  publish:
+    name: Publish the immutable release
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+      - name: Verify every target asset before publishing
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          for target in aarch64-apple-darwin x86_64-apple-darwin x86_64-unknown-linux-gnu x86_64-pc-windows-msvc; do
+            gh release view "$GITHUB_REF_NAME" --json assets \
+              --jq ".assets[].name" | grep -qx "one-publish-runner-${target}.tar.gz"
+          done
+          gh release edit "$GITHUB_REF_NAME" --draft=false

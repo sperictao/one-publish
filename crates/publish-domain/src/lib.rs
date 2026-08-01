@@ -1504,6 +1504,11 @@ pub struct AutomationBindingProjection {
 pub struct RuntimeComponentRevision {
     pub version: String,
     pub digest: String,
+    /// 分发资产的 per-target 二进制摘要（target triple → sha256 hex，决议 #86）。
+    /// 空表与旧格式同一身份（序列化跳过、不入 seal 摘要），避免无实质变化的
+    /// 升级噪音；薄外壳投影渲染落地后由渲染路径要求非空。
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub binary_digests: BTreeMap<String, String>,
 }
 
 impl RuntimeComponentRevision {
@@ -1511,7 +1516,13 @@ impl RuntimeComponentRevision {
         Self {
             version: version.into(),
             digest: digest.into(),
+            binary_digests: BTreeMap::new(),
         }
+    }
+
+    pub fn with_binary_digests(mut self, binary_digests: BTreeMap<String, String>) -> Self {
+        self.binary_digests = binary_digests;
+        self
     }
 
     fn validate(&self, name: &str) -> Result<(), PublishError> {
@@ -1533,6 +1544,18 @@ impl RuntimeComponentRevision {
             return Err(PublishError::InvalidRuntimeRevision(format!(
                 "{name} digest must be a lowercase SHA-256 digest"
             )));
+        }
+        for (target, digest) in &self.binary_digests {
+            if target.trim().is_empty() {
+                return Err(PublishError::InvalidRuntimeRevision(format!(
+                    "{name} binary digest target triple is required"
+                )));
+            }
+            if !is_sha256_digest(digest) {
+                return Err(PublishError::InvalidRuntimeRevision(format!(
+                    "{name} binary digest for {target} must be a lowercase SHA-256 digest"
+                )));
+            }
         }
         Ok(())
     }
