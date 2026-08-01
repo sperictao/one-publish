@@ -898,18 +898,115 @@ impl TauriRuntimeProvider {
             args.push("--target".to_string());
             args.push(target.to_string());
         }
-        let outcome = execution
-            .port
-            .execute_build(crate::bridge::SealedBuildCommand {
-                provider_id: TAURI_PROVIDER_ID.to_string(),
-                program: driver.name().to_string(),
-                args,
-                working_directory: app_root,
-                output_directory: execution.output_directory.clone(),
-            })
-            .map_err(|error| PublishError::Execution(error.to_string()))?;
-        crate::bridge::finish_provider_execution(execution, outcome, classify_tauri_artifact)
+        // 分片构建（决议 #85）：每个目标物化进输出目录的 per-target 子目录，
+        // 同一 job 内多目标互不重复收集；产物结构知识（bundle 布局）属本
+        // Provider，端口只负责跑命令。本地无目标路径保持桌面合同不变。
+        match build_target {
+            None => {
+                let outcome = execution
+                    .port
+                    .execute_build(crate::bridge::SealedBuildCommand {
+                        provider_id: TAURI_PROVIDER_ID.to_string(),
+                        program: driver.name().to_string(),
+                        args,
+                        working_directory: app_root,
+                        output_directory: execution.output_directory.clone(),
+                    })
+                    .map_err(|error| PublishError::Execution(error.to_string()))?;
+                crate::bridge::finish_provider_execution(execution, outcome, classify_tauri_artifact)
+            }
+            Some(target) => {
+                let staged = execution.output_directory.join(target);
+                let outcome = execution
+                    .port
+                    .execute_build(crate::bridge::SealedBuildCommand {
+                        provider_id: TAURI_PROVIDER_ID.to_string(),
+                        program: driver.name().to_string(),
+                        args,
+                        working_directory: app_root.clone(),
+                        output_directory: staged.clone(),
+                    })
+                    .map_err(|error| PublishError::Execution(error.to_string()))?;
+                crate::bridge::ensure_provider_outcome(&outcome, &staged)?;
+                materialize_target_bundle(&app_root, target, &staged)?;
+                execution.source_guard.validate_for_execution()?;
+                Ok(crate::AdapterExecutionOutput {
+                    artifacts: crate::bridge::collect_artifacts_with(
+                        &staged,
+                        classify_tauri_artifact,
+                    )?,
+                    ..crate::AdapterExecutionOutput::default()
+                })
+            }
+        }
     }
+}
+
+/// 把驱动的目标 bundle 输出物化进暂存目录：源布局与桌面推导同构
+/// （`<app_root>/src-tauri/target/<triple>/release/bundle`）。端口实现
+/// 已自行物化（暂存目录非空）时不重复拷贝。
+fn materialize_target_bundle(
+    app_root: &Path,
+    target: &str,
+    staged: &Path,
+) -> Result<(), PublishError> {
+    let already_staged = staged
+        .read_dir()
+        .map(|mut entries| entries.next().is_some())
+        .unwrap_or(false);
+    if already_staged {
+        return Ok(());
+    }
+    let bundle_root = app_root
+        .join("src-tauri")
+        .join("target")
+        .join(target)
+        .join("release")
+        .join("bundle");
+    if !bundle_root.is_dir() {
+        return Err(PublishError::Execution(format!(
+            "sealed build for {target} produced no bundle output at {}",
+            bundle_root.display()
+        )));
+    }
+    copy_directory_contents(&bundle_root, staged)
+}
+
+fn copy_directory_contents(source: &Path, destination: &Path) -> Result<(), PublishError> {
+    std::fs::create_dir_all(destination).map_err(|error| PublishError::Io {
+        operation: format!("create staged output {}", destination.display()),
+        message: error.to_string(),
+    })?;
+    for entry in std::fs::read_dir(source).map_err(|error| PublishError::Io {
+        operation: format!("read bundle output {}", source.display()),
+        message: error.to_string(),
+    })? {
+        let entry = entry.map_err(|error| PublishError::Io {
+            operation: format!("read bundle output {}", source.display()),
+            message: error.to_string(),
+        })?;
+        let from = entry.path();
+        let to = destination.join(entry.file_name());
+        let file_type = entry.file_type().map_err(|error| PublishError::Io {
+            operation: format!("inspect bundle entry {}", from.display()),
+            message: error.to_string(),
+        })?;
+        if file_type.is_symlink() {
+            return Err(PublishError::Execution(format!(
+                "bundle output cannot contain symbolic links: {}",
+                from.display()
+            )));
+        }
+        if file_type.is_dir() {
+            copy_directory_contents(&from, &to)?;
+        } else {
+            std::fs::copy(&from, &to).map_err(|error| PublishError::Io {
+                operation: format!("copy bundle artifact {}", from.display()),
+                message: error.to_string(),
+            })?;
+        }
+    }
+    Ok(())
 }
 
 impl AdapterContract for TauriRuntimeProvider {
@@ -1334,5 +1431,38 @@ mod plan_fragment_tests {
             sealed_build_target(&tampered, driver, "src-tauri/tauri.conf.json"),
             None
         );
+    }
+}
+
+#[cfg(test)]
+mod shard_materialization_tests {
+    use super::*;
+
+    #[test]
+    fn target_bundles_materialize_once_into_the_staged_directory() {
+        let temp = tempfile::tempdir().expect("temp workspace");
+        let app_root = temp.path().join("app");
+        let bundle = app_root
+            .join("src-tauri/target/aarch64-apple-darwin/release/bundle/dmg");
+        std::fs::create_dir_all(&bundle).expect("create bundle dir");
+        std::fs::write(bundle.join("app.dmg"), b"installer bytes").expect("write artifact");
+        let staged = temp.path().join("staged/aarch64-apple-darwin");
+
+        materialize_target_bundle(&app_root, "aarch64-apple-darwin", &staged)
+            .expect("materialize the target bundle");
+        assert_eq!(
+            std::fs::read(staged.join("dmg/app.dmg")).expect("staged artifact"),
+            b"installer bytes"
+        );
+
+        // 暂存已非空（端口自行物化或重放）时不重复拷贝。
+        std::fs::write(bundle.join("late.dmg"), b"late").expect("write late artifact");
+        materialize_target_bundle(&app_root, "aarch64-apple-darwin", &staged)
+            .expect("an already staged directory is left as-is");
+        assert!(!staged.join("dmg/late.dmg").exists());
+
+        let error = materialize_target_bundle(&app_root, "x86_64-unknown-linux-gnu", &staged.join("missing"))
+            .expect_err("a missing bundle root must fail loudly");
+        assert!(error.to_string().contains("no bundle output"));
     }
 }

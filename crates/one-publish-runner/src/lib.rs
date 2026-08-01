@@ -320,11 +320,22 @@ pub fn installed_runner(attempt: &PreparedAttempt) -> Result<StandaloneRunner, P
     StandaloneRunner::new(registry, attempt.runtime_revision.clone())
 }
 
-/// 环境注入集合（决议 #80）：桌面注入 Tauri 执行端口，headless 环境用缺省
-/// （无端口，构建节点显式失败直至默认直执行实现落地）。
+/// 环境注入集合（决议 #80）：桌面注入 Tauri 执行端口；headless 环境缺省
+/// 使用直执行实现（子进程直跑密封命令、bundle 产物物化到确定性相对目录、
+/// 干净检出源守卫恒真）。
 #[derive(Default)]
 pub struct RunnerPorts {
     pub provider_execution: Option<publish_adapters::ProviderExecution>,
+}
+
+/// Headless 缺省执行环境：输出目录用固定相对路径，与分片规划的运行时
+/// 目录同族（重放摘要与宿主无关）。
+fn headless_provider_execution() -> publish_adapters::ProviderExecution {
+    publish_adapters::ProviderExecution {
+        port: Arc::new(publish_adapters::DirectProviderExecutionPort),
+        output_directory: std::path::PathBuf::from(".one-publish-work/provider-output"),
+        source_guard: Arc::new(publish_adapters::CleanCheckoutGuard),
+    }
 }
 
 pub fn installed_registry(
@@ -376,7 +387,12 @@ fn register_project_provider(
                     setting("config_path")?,
                     setting("build_driver")?,
                     std::path::PathBuf::from(repository_root),
-                    ports.provider_execution.take(),
+                    Some(
+                        ports
+                            .provider_execution
+                            .take()
+                            .unwrap_or_else(headless_provider_execution),
+                    ),
                 )),
                 fixture,
             )

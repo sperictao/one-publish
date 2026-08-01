@@ -175,10 +175,25 @@ pub(crate) fn finish_provider_execution(
     outcome: ProviderExecutionOutcome,
     classify: fn(&Path) -> (&'static str, &'static str),
 ) -> Result<AdapterExecutionOutput, PublishError> {
+    ensure_provider_outcome(&outcome, &execution.output_directory)?;
+    execution.source_guard.validate_for_execution()?;
+
+    Ok(AdapterExecutionOutput {
+        artifacts: collect_artifacts_with(&execution.output_directory, classify)?,
+        ..AdapterExecutionOutput::default()
+    })
+}
+
+/// 执行结果的合同校验：未取消、成功、且产物目录与约定一致。
+pub(crate) fn ensure_provider_outcome(
+    outcome: &ProviderExecutionOutcome,
+    expected_output: &Path,
+) -> Result<(), PublishError> {
     if outcome.cancelled {
         return Err(PublishError::Execution(
             outcome
                 .error
+                .clone()
                 .unwrap_or_else(|| "provider execution was cancelled".to_string()),
         ));
     }
@@ -186,22 +201,18 @@ pub(crate) fn finish_provider_execution(
         return Err(PublishError::Execution(
             outcome
                 .error
+                .clone()
                 .unwrap_or_else(|| "provider execution failed".to_string()),
         ));
     }
-    if Path::new(&outcome.output_dir) != execution.output_directory {
+    if Path::new(&outcome.output_dir) != expected_output {
         return Err(PublishError::Execution(format!(
             "provider returned output directory {}, expected {}",
             outcome.output_dir,
-            execution.output_directory.display()
+            expected_output.display()
         )));
     }
-    execution.source_guard.validate_for_execution()?;
-
-    Ok(AdapterExecutionOutput {
-        artifacts: collect_artifacts_with(&execution.output_directory, classify)?,
-        ..AdapterExecutionOutput::default()
-    })
+    Ok(())
 }
 
 /// 非 Tauri Provider 的产物暂以统一角色进入清单；逐 Provider 的角色分类属于后续 Ticket。
@@ -299,4 +310,92 @@ pub(crate) fn collect_artifacts_with(
             ))
         })
         .collect()
+}
+
+// ===== Headless 直执行（决议 #80：headless 环境的默认执行实现）=====
+
+/// 干净检出环境的源守卫：CI checkout 由触发 ref 固定且 prepare 已强制干净
+/// 工作区，执行期无需再比对桌面式工作区快照。
+pub struct CleanCheckoutGuard;
+
+impl ExecutionSourceGuard for CleanCheckoutGuard {
+    fn validate_for_execution(&self) -> Result<(), PublishError> {
+        Ok(())
+    }
+}
+
+/// Headless 直执行端口（决议 #80）：以子进程直接运行密封构建命令，仅此
+/// 而已——产物如何出现在输出目录是 Provider 的知识，由 Provider 执行侧
+/// 物化（桌面经命令面、headless 由 Provider 从其构建输出结构收集）。
+/// 遗留 Provider 的完整发布规格桥没有 headless 语义，显式不支持。
+pub struct DirectProviderExecutionPort;
+
+impl ProviderExecutionPort for DirectProviderExecutionPort {
+    fn execute_spec(&self, _spec_json: &str) -> Result<ProviderExecutionOutcome, PublishError> {
+        Err(PublishError::Execution(
+            "legacy provider spec execution is not available in headless runners".to_string(),
+        ))
+    }
+
+    fn execute_build(
+        &self,
+        request: SealedBuildCommand,
+    ) -> Result<ProviderExecutionOutcome, PublishError> {
+        let status = std::process::Command::new(&request.program)
+            .args(&request.args)
+            .current_dir(&request.working_directory)
+            .status()
+            .map_err(|error| {
+                PublishError::Execution(format!(
+                    "failed to run sealed build {}: {error}",
+                    request.program
+                ))
+            })?;
+        Ok(ProviderExecutionOutcome {
+            success: status.success(),
+            cancelled: false,
+            error: (!status.success()).then(|| format!("sealed build exited with {status}")),
+            output_dir: request.output_directory.to_string_lossy().to_string(),
+        })
+    }
+}
+
+#[cfg(test)]
+mod direct_execution_tests {
+    use super::*;
+
+    #[cfg(unix)]
+    #[test]
+    fn direct_execution_runs_the_sealed_command_and_reports_the_outcome() {
+        let temp = tempfile::tempdir().expect("temp workspace");
+        let output = temp.path().join("provider-output");
+
+        let outcome = DirectProviderExecutionPort
+            .execute_build(SealedBuildCommand {
+                provider_id: "fixture-provider".to_string(),
+                program: "true".to_string(),
+                args: Vec::new(),
+                working_directory: temp.path().to_path_buf(),
+                output_directory: output.clone(),
+            })
+            .expect("run the sealed build directly");
+        assert!(outcome.success);
+        assert_eq!(outcome.output_dir, output.to_string_lossy());
+
+        let failed = DirectProviderExecutionPort
+            .execute_build(SealedBuildCommand {
+                provider_id: "fixture-provider".to_string(),
+                program: "false".to_string(),
+                args: Vec::new(),
+                working_directory: temp.path().to_path_buf(),
+                output_directory: output,
+            })
+            .expect("a failing build is a reported outcome, not a port error");
+        assert!(!failed.success);
+        assert!(failed.error.is_some());
+
+        DirectProviderExecutionPort
+            .execute_spec("{}")
+            .expect_err("the legacy spec bridge has no headless semantics");
+    }
 }
