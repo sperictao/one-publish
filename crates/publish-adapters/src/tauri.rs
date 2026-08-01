@@ -3,8 +3,8 @@ use std::path::{Path, PathBuf};
 
 use publish_domain::{
     is_safe_portable_relative_path, AdapterDescriptor, AdapterKind, AdapterSchema, AdapterSettings,
-    Capability, CapabilityRequirement, PlanNodeTemplate, PlanSideEffect, PlanStage,
-    PlanningInputSnapshot, ProjectCandidate, ProjectDetectionEvidence, PublishError,
+    Capability, CapabilityRequirement, PlanNodePlatform, PlanNodeTemplate, PlanSideEffect,
+    PlanStage, PlanningInputSnapshot, ProjectCandidate, ProjectDetectionEvidence, PublishError,
     PublishingCapability,
 };
 use serde::{Deserialize, Serialize};
@@ -265,6 +265,8 @@ impl AdapterContract for TauriProjectProvider {
         let adapter = self.descriptor.identity().display_name();
         let (config_path, build_driver) = bound_settings(settings, &adapter)?;
 
+        // 本地准备路径：节点全部落在宿主平台族（决议 #85）。远端分片展开
+        // 由启用平台输入驱动，不读取宿主。
         Ok(vec![
             PlanNodeTemplate::adapter_action(
                 "inspect",
@@ -280,7 +282,8 @@ impl AdapterContract for TauriProjectProvider {
                         Value::String(build_driver.name().to_string()),
                     ),
                 ]),
-            ),
+            )
+            .with_platform(PlanNodePlatform::host()),
             PlanNodeTemplate::command(
                 "build",
                 PlanStage::Build,
@@ -288,7 +291,8 @@ impl AdapterContract for TauriProjectProvider {
                 build_driver.build_command_args(&config_path),
             )
             .with_artifact_io(Vec::new(), vec!["provider-output:*".to_string()])
-            .with_side_effects(vec![PlanSideEffect::FileSystem]),
+            .with_side_effects(vec![PlanSideEffect::FileSystem])
+            .with_platform(PlanNodePlatform::host()),
         ])
     }
 }

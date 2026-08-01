@@ -78,6 +78,7 @@ impl Fixture {
                 cancellable: template.cancellable,
                 cleanup_owned_staging: template.cleanup_owned_staging,
                 irreversible: template.irreversible,
+                platform: template.platform,
             })
             .collect()
     }

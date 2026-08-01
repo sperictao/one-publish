@@ -5,7 +5,7 @@ use serde_json::Value;
 use sha2::{Digest, Sha256};
 
 pub const PLANNING_INPUT_SNAPSHOT_VERSION: u32 = 1;
-pub const PUBLISH_PLAN_VERSION: u32 = 2;
+pub const PUBLISH_PLAN_VERSION: u32 = 3;
 pub const ADAPTER_CONTRACT_VERSION: u32 = 1;
 pub const ARTIFACT_MANIFEST_VERSION: u32 = 1;
 pub const PUBLISH_EVENT_VERSION: u32 = 1;
@@ -785,6 +785,33 @@ pub enum PlanSideEffect {
     ExternalSystem,
 }
 
+/// 节点的执行平台亲和（决议 #85）：分片拓扑里每个 matrix job 只执行分配给
+/// 本平台族的节点；`Any` 是汇聚亲和（process/seal/deliver 落在汇聚 job）。
+/// 亲和必须由计划输入决定而不是执行宿主——同一触发上下文在任意 OS 上重放
+/// 都要产出同一 plan digest。
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum PlanNodePlatform {
+    #[default]
+    Any,
+    Linux,
+    Macos,
+    Windows,
+}
+
+impl PlanNodePlatform {
+    /// 当前进程宿主的平台族；只供本地准备路径标注本机构建节点。
+    pub fn host() -> Self {
+        if cfg!(target_os = "macos") {
+            Self::Macos
+        } else if cfg!(target_os = "windows") {
+            Self::Windows
+        } else {
+            Self::Linux
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct PlanNodeTemplate {
     pub local_id: String,
@@ -800,6 +827,8 @@ pub struct PlanNodeTemplate {
     #[serde(default)]
     pub cleanup_owned_staging: bool,
     pub irreversible: bool,
+    #[serde(default)]
+    pub platform: PlanNodePlatform,
 }
 
 fn default_plan_node_cancellable() -> bool {
@@ -828,6 +857,7 @@ impl PlanNodeTemplate {
             cancellable: true,
             cleanup_owned_staging: false,
             irreversible: false,
+            platform: PlanNodePlatform::Any,
         }
     }
 
@@ -850,7 +880,13 @@ impl PlanNodeTemplate {
             cancellable: true,
             cleanup_owned_staging: false,
             irreversible: false,
+            platform: PlanNodePlatform::Any,
         }
+    }
+
+    pub fn with_platform(mut self, platform: PlanNodePlatform) -> Self {
+        self.platform = platform;
+        self
     }
 
     pub fn with_artifact_io(mut self, inputs: Vec<String>, outputs: Vec<String>) -> Self {
@@ -897,6 +933,8 @@ pub struct PlanNode {
     #[serde(default)]
     pub cleanup_owned_staging: bool,
     pub irreversible: bool,
+    #[serde(default)]
+    pub platform: PlanNodePlatform,
 }
 
 /// 封存进计划的路线合同：路线身份与 Required 语义随计划摘要固定，

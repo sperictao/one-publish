@@ -50,6 +50,7 @@ fn persist_node(settings: AdapterSettings) -> PlanNode {
         cancellable: true,
         cleanup_owned_staging: false,
         irreversible: false,
+        platform: publish_domain::PlanNodePlatform::Any,
     }
 }
 

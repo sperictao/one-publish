@@ -4341,6 +4341,7 @@ mod tests {
             cancellable: true,
             cleanup_owned_staging: false,
             irreversible: false,
+            platform: publish_domain::PlanNodePlatform::host(),
         };
         let credentials = BTreeMap::new();
         let context = AdapterExecutionContext {
