@@ -53,14 +53,41 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         }
         "execute" => {
             let attempt_id = args.next().ok_or("execute requires an attempt id")?;
+            let platform = args.next();
             if args.next().is_some() {
-                return Err("execute accepts exactly one attempt id".into());
+                return Err(
+                    "execute accepts an attempt id and an optional platform affinity".into(),
+                );
             }
             let attempt: PreparedAttempt = serde_json::from_slice(&fs::read(path)?)?;
-            let outcome = installed_runner(&attempt)?.execute(&attempt, &attempt_id)?;
-            println!("{}", serde_json::to_string(&outcome)?);
+            match platform.as_deref() {
+                None => {
+                    let outcome = installed_runner(&attempt)?.execute(&attempt, &attempt_id)?;
+                    println!("{}", serde_json::to_string(&outcome)?);
+                }
+                Some(platform) => {
+                    let platform = parse_platform(platform)?;
+                    let events =
+                        installed_runner(&attempt)?.execute_shard(&attempt, &attempt_id, platform)?;
+                    println!("{}", serde_json::to_string(&events)?);
+                }
+            }
         }
         _ => return Err(format!("unsupported command {command}").into()),
     }
     Ok(())
+}
+
+/// 分片亲和参数（决议 #85）：matrix job 传本平台族，汇聚 job 传 any。
+fn parse_platform(
+    value: &str,
+) -> Result<publish_domain::PlanNodePlatform, Box<dyn std::error::Error>> {
+    use publish_domain::PlanNodePlatform;
+    Ok(match value {
+        "any" => PlanNodePlatform::Any,
+        "linux" => PlanNodePlatform::Linux,
+        "macos" => PlanNodePlatform::Macos,
+        "windows" => PlanNodePlatform::Windows,
+        other => return Err(format!("unsupported platform affinity {other}").into()),
+    })
 }

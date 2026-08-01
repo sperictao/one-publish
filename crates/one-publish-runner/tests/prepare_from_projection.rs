@@ -8,12 +8,12 @@ use std::path::Path;
 use std::process::Command;
 
 use one_publish_runner::{
-    current_runtime_revision, prepare_from_projection, validate_prepared_attempt,
-    RunnerProjection, TriggerContext, RUNNER_PROJECTION_VERSION,
+    current_runtime_revision, installed_runner, prepare_from_projection,
+    validate_prepared_attempt, RunnerProjection, TriggerContext, RUNNER_PROJECTION_VERSION,
 };
 use publish_domain::{
     AdapterBinding, AdapterIdentity, AdapterKind, AdapterSelection, AdapterSettings,
-    AutomationTriggerPolicy, DeliveryRoute,
+    AutomationTriggerPolicy, DeliveryRoute, PlanNodePlatform,
 };
 use serde_json::Value;
 
@@ -165,6 +165,33 @@ fn replaying_the_same_trigger_context_seals_identical_attempt_identities() {
         Some(&Value::String(".one-publish-work/delivery".to_string()))
     );
     assert_eq!(projection.adapters.artifact_store.settings.values.len(), 0);
+}
+
+#[test]
+fn shard_execution_skips_unassigned_nodes_instead_of_failing() {
+    let checkout = fixture_checkout();
+    let projection = fixture_projection();
+    let attempt = prepare_from_projection(
+        &projection,
+        &TriggerContext {
+            repository_root: checkout.path().to_path_buf(),
+            tag: Some("v1.2.3".to_string()),
+        },
+    )
+    .expect("plan on site");
+
+    // fixture 计划的节点都落在宿主平台族与汇聚亲和上；把段分配到一个没有
+    // 任何节点的平台族时，整段全部跳过——未分配节点不是失败（决议 #85）。
+    let absent = if cfg!(target_os = "windows") {
+        PlanNodePlatform::Macos
+    } else {
+        PlanNodePlatform::Windows
+    };
+    let events = installed_runner(&attempt)
+        .expect("assemble the installed runner")
+        .execute_shard(&attempt, "attempt-shard", absent)
+        .expect("an unassigned shard completes without executing anything");
+    assert!(events.is_empty());
 }
 
 #[test]

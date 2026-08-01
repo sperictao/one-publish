@@ -163,6 +163,30 @@ impl StandaloneRunner {
         attempt: &PreparedAttempt,
         attempt_id: &str,
     ) -> Result<PublishOutcome, PublishError> {
+        self.ensure_serviceable_attempt(attempt)?;
+        let prepared = self.runtime.prepare_attempt(&attempt.prepared.snapshot)?;
+        if prepared != attempt.prepared {
+            return Err(PublishError::InvalidPlan(
+                "prepared attempt no longer matches its sealed planning input".to_string(),
+            ));
+        }
+        self.runtime.start_prepared(&attempt.prepared, attempt_id)
+    }
+
+    /// 分片执行（决议 #85）：只执行分配给指定平台亲和的节点子集，输出本段
+    /// 事件流（决议 #88 的传输单元）。
+    pub fn execute_shard(
+        &self,
+        attempt: &PreparedAttempt,
+        attempt_id: &str,
+        platform: publish_domain::PlanNodePlatform,
+    ) -> Result<Vec<publish_domain::PublishEvent>, PublishError> {
+        self.ensure_serviceable_attempt(attempt)?;
+        self.runtime
+            .start_prepared_shard(&attempt.prepared, attempt_id, platform)
+    }
+
+    fn ensure_serviceable_attempt(&self, attempt: &PreparedAttempt) -> Result<(), PublishError> {
         self.runtime_revision.validate()?;
         attempt.runtime_revision.validate()?;
         if attempt.runtime_revision != self.runtime_revision {
@@ -172,14 +196,7 @@ impl StandaloneRunner {
                 self.runtime_revision.identifier()
             )));
         }
-        self.ensure_runtime_identifier(&attempt.prepared.snapshot.runtime_revision)?;
-        let prepared = self.runtime.prepare_attempt(&attempt.prepared.snapshot)?;
-        if prepared != attempt.prepared {
-            return Err(PublishError::InvalidPlan(
-                "prepared attempt no longer matches its sealed planning input".to_string(),
-            ));
-        }
-        self.runtime.start_prepared(&attempt.prepared, attempt_id)
+        self.ensure_runtime_identifier(&attempt.prepared.snapshot.runtime_revision)
     }
 
     fn ensure_runtime_identifier(&self, identifier: &str) -> Result<(), PublishError> {

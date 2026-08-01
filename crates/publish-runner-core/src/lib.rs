@@ -11,7 +11,7 @@ use publish_domain::{
     declares_artifact_role, sha256_hex, AdapterBinding, AdapterIdentity, AdapterKind,
     ArtifactCandidate, ArtifactManifest, DeliveryEnvelope, DeliveryIdempotencyIdentity,
     DeliveryReceipt, DeliveryStatus, LeaseRenewal, PlanNode, PlanNodeExecutionState, PlanRoute,
-    PlanStage, PlanningInputSnapshot, PublishAttemptStatus, PublishAttemptView, PublishError,
+    PlanNodePlatform, PlanStage, PlanningInputSnapshot, PublishAttemptStatus, PublishAttemptView, PublishError,
     PublishEvent, PublishFailure, PublishOutcome, PublishPlan, PublishResource,
     PublishResourceLease, ReleaseAttempt, ReleaseIdentity, RouteDeliveryView,
     DELIVERY_RECEIPT_VERSION, PUBLISH_EVENT_VERSION, PUBLISH_FAILURE_VERSION, PUBLISH_PLAN_VERSION,
@@ -96,31 +96,48 @@ pub fn reduce_publish_events(
     let mut node_states = BTreeMap::new();
     let mut route_failures = BTreeMap::<String, RouteFailureEvidence>::new();
     let mut failure = None;
-    let mut event_identity: Option<(String, String, String)> = None;
+    // 多段并行追加（决议 #85/#88）：每个 backend run（job）一个事件段，
+    // 段内 sequence 单调连续；跨段只要求同一 attempt 与 plan digest；
+    // 稳定 Event ID 去重（重复段拉取不改写证据）。
+    let mut event_identity: Option<(String, String)> = None;
+    let mut segment_sequences = BTreeMap::<String, u64>::new();
+    let mut seen_events = BTreeMap::<String, PublishEvent>::new();
     let known_routes = routes
         .iter()
         .map(|route| route.route_id.as_str())
         .collect::<BTreeSet<_>>();
 
-    for (index, event) in events.iter().enumerate() {
+    for event in events.iter() {
         if event.version != PUBLISH_EVENT_VERSION {
             return Err(PublishError::UnsupportedEventVersion {
                 actual: event.version,
                 expected: PUBLISH_EVENT_VERSION,
             });
         }
-        let expected_sequence = index as u64 + 1;
+        match seen_events.get(event.event_id.as_str()) {
+            Some(existing) if existing == event => continue,
+            Some(_) => {
+                return Err(PublishError::Execution(format!(
+                    "publish event {} appears twice with conflicting evidence",
+                    event.event_id
+                )));
+            }
+            None => {
+                seen_events.insert(event.event_id.clone(), event.clone());
+            }
+        }
+        let last_sequence = segment_sequences
+            .entry(event.backend_run_id.clone())
+            .or_insert(0);
+        let expected_sequence = *last_sequence + 1;
         if event.sequence != expected_sequence {
             return Err(PublishError::Execution(format!(
                 "publish event sequence {} is invalid; expected {expected_sequence}",
                 event.sequence
             )));
         }
-        let current_identity = (
-            event.attempt_id.clone(),
-            event.backend_run_id.clone(),
-            event.plan_digest.clone(),
-        );
+        *last_sequence = expected_sequence;
+        let current_identity = (event.attempt_id.clone(), event.plan_digest.clone());
         if let Some(expected_identity) = &event_identity {
             if expected_identity != &current_identity {
                 return Err(PublishError::Execution(
@@ -1366,7 +1383,7 @@ impl PublishRuntime {
                 .with_cancellation(context.cancellation.clone())
                 .with_persistence(context.persistence.clone())
                 .with_lease_maintenance(context.lease_maintenance.clone());
-        if let Err(error) = verify_plan_credentials(&self.registry, &prepared.plan) {
+        if let Err(error) = verify_plan_credentials(&self.registry, &prepared.plan, None) {
             return executor.finish_failed_attempt(attempt, error);
         }
         match self.registry.execute_plan(
@@ -1826,6 +1843,43 @@ impl PublishRuntime {
         )
     }
 
+    /// 分片执行（决议 #85）：只执行分配给指定平台亲和的节点子集，未分配
+    /// 节点跳过而非失败；产出本段事件流（决议 #88 的传输单元）。Manifest
+    /// 与 Receipt 的完整性判定发生在全部事件段归约处，本段不做全计划完成
+    /// 校验；凭据也只在本段涉及的绑定上解析（Secrets 按段注入）。
+    pub fn start_prepared_shard(
+        &self,
+        prepared: &PreparedPublishPlan,
+        attempt_id: &str,
+        platform: PlanNodePlatform,
+    ) -> Result<Vec<PublishEvent>, PublishError> {
+        let current_plan = self.prepare(&prepared.snapshot)?;
+        if current_plan != prepared.plan {
+            return Err(PublishError::InvalidPlan(
+                "prepared publish plan no longer matches its planning input snapshot".to_string(),
+            ));
+        }
+        if attempt_id.trim().is_empty() {
+            return Err(PublishError::Execution(
+                "publish attempt id cannot be empty".to_string(),
+            ));
+        }
+        let plan = &prepared.plan;
+        validate_plan(plan)?;
+        preflight_adapter_contracts(&self.registry, plan)?;
+        verify_plan_credentials(&self.registry, plan, Some(platform))?;
+        // 每段一个 backend run：段身份由 attempt 与亲和确定性推导，同一
+        // attempt 的各段在归约处按 backend_run_id 分段合并。
+        let backend_run_id = format!("{attempt_id}/{}", platform_segment_name(platform));
+        let mut executor =
+            RuntimeNodeExecutor::new(&self.registry, plan, attempt_id, &backend_run_id)
+                .with_promoted_manifest_digest(prepared.snapshot.promoted_manifest_digest.as_deref())
+                .with_assigned_platform(platform);
+        self.registry
+            .execute_plan(&plan.execution_backend, plan, &mut executor)?;
+        Ok(executor.events)
+    }
+
     fn execute(
         &self,
         plan: &PublishPlan,
@@ -1835,7 +1889,7 @@ impl PublishRuntime {
     ) -> Result<PublishOutcome, PublishError> {
         validate_plan(plan)?;
         preflight_adapter_contracts(&self.registry, plan)?;
-        verify_plan_credentials(&self.registry, plan)?;
+        verify_plan_credentials(&self.registry, plan, None)?;
         if attempt_id.trim().is_empty() {
             return Err(PublishError::Execution(
                 "publish attempt id cannot be empty".to_string(),
@@ -1915,11 +1969,36 @@ fn preflight_adapter_contracts(
 fn verify_plan_credentials(
     registry: &AdapterRegistry,
     plan: &PublishPlan,
+    assigned_platform: Option<PlanNodePlatform>,
 ) -> Result<(), PublishError> {
+    // 分片执行只解析本段节点涉及的绑定：Secrets 按段注入，build 段没有
+    // 交付凭据是常态而不是错误（决议 #85）。
+    let assigned_bindings = assigned_platform.map(|platform| {
+        plan.nodes
+            .iter()
+            .filter(|node| node.platform == platform)
+            .map(|node| node.binding_id.as_str())
+            .collect::<BTreeSet<_>>()
+    });
     for binding in &plan.adapters {
+        if let Some(assigned) = &assigned_bindings {
+            if !assigned.contains(binding.binding_id.as_str()) {
+                continue;
+            }
+        }
         registry.resolve_binding_credentials(&plan.execution_backend, binding)?;
     }
     Ok(())
+}
+
+/// 段名 = 平台亲和的 serde 形态；进入 backend_run_id 与段 artifact 命名。
+pub fn platform_segment_name(platform: PlanNodePlatform) -> &'static str {
+    match platform {
+        PlanNodePlatform::Any => "any",
+        PlanNodePlatform::Linux => "linux",
+        PlanNodePlatform::Macos => "macos",
+        PlanNodePlatform::Windows => "windows",
+    }
 }
 
 fn validate_plan(plan: &PublishPlan) -> Result<(), PublishError> {
@@ -2015,6 +2094,8 @@ struct RuntimeNodeExecutor<'a> {
     expected_nodes: BTreeMap<&'a str, &'a PlanNode>,
     /// 协作取消：置位后未开始的节点不再执行（ADR-0041）。
     cancellation: CancellationSignal,
+    /// 分片执行（决议 #85）：只执行分配给该平台亲和的节点，其余跳过。
+    assigned_platform: Option<PlanNodePlatform>,
     /// 可选的追加持久化边界；生产控制面注入，纯核心调用可保持内存执行。
     persistence: Option<Arc<dyn AttemptPersistencePort>>,
     lease_maintenance: Option<Arc<dyn AttemptLeaseMaintenancePort>>,
@@ -2062,6 +2143,7 @@ impl<'a> RuntimeNodeExecutor<'a> {
                 .map(|node| (node.id.as_str(), node))
                 .collect(),
             cancellation: CancellationSignal::default(),
+            assigned_platform: None,
             persistence: None,
             lease_maintenance: None,
         }
@@ -2069,6 +2151,11 @@ impl<'a> RuntimeNodeExecutor<'a> {
 
     fn with_cancellation(mut self, cancellation: CancellationSignal) -> Self {
         self.cancellation = cancellation;
+        self
+    }
+
+    fn with_assigned_platform(mut self, platform: PlanNodePlatform) -> Self {
+        self.assigned_platform = Some(platform);
         self
     }
 
@@ -2715,6 +2802,14 @@ impl PlanNodeExecutor for RuntimeNodeExecutor<'_> {
                 "plan node {} executed more than once",
                 node.id
             )));
+        }
+        // 分片执行（决议 #85）：未分配给本段平台亲和的节点视为跳过而非失败；
+        // 它们在其它段执行，事件段归约时合并。
+        if let Some(platform) = self.assigned_platform {
+            if node.platform != platform {
+                self.skipped_nodes.insert(node.id.clone());
+                return Ok(());
+            }
         }
         // 取消只停止尚未开始的工作：本节点不再执行；所属路线若尚无交付
         // 证据则记为取消，Submitted/Published 路线与既有 Receipt 保持不变（ADR-0041）。
