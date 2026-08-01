@@ -686,13 +686,15 @@ fn reduce_archived_attempt(
     }
     let projection = reduce_publish_events(&events, &prepared.prepared.plan.routes)
         .map_err(|error| remote_error(format!("事件段归约失败: {error}")))?;
-    if let Some((_, manifest)) = manifests.iter().next() {
+    // 不可变记录单独校验（架构 §10）：每个段携带的 Manifest 都要过溯源
+    // 校验，且全部段与事件归约必须指向同一 Manifest。
+    for manifest in manifests.values() {
         publish_runner_core::validate_manifest_provenance(&prepared.prepared, manifest)
             .map_err(|error| remote_error(format!("Manifest 溯源校验失败: {error}")))?;
         if let Some(reduced) = projection.manifest_digest.as_deref() {
             if manifest.digest != reduced {
                 return Err(remote_error(format!(
-                    "汇聚段 Manifest {} 与事件归约 {reduced} 不一致",
+                    "段 Manifest {} 与事件归约 {reduced} 不一致",
                     manifest.digest
                 )));
             }

@@ -933,12 +933,16 @@ impl AdapterContract for TauriRuntimeProvider {
                     "release gate program cannot be empty".to_string(),
                 ));
             }
-            templates.push(PlanNodeTemplate::adapter_action(
-                format!("gate-{index}"),
-                PlanStage::PrepareIdentity,
-                TAURI_RELEASE_GATE_ACTION,
-                release_gate_inputs(gate)?,
-            ));
+            templates.push(
+                PlanNodeTemplate::adapter_action(
+                    format!("gate-{index}"),
+                    PlanStage::PrepareIdentity,
+                    TAURI_RELEASE_GATE_ACTION,
+                    release_gate_inputs(gate)?,
+                )
+                // 门禁运行使用者配置的任意程序：副作用必须显式声明（架构 §6）。
+                .with_side_effects(vec![PlanSideEffect::FileSystem]),
+            );
         }
         Ok(templates)
     }

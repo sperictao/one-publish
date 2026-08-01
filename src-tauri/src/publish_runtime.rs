@@ -1995,9 +1995,10 @@ pub(crate) fn composition_binding(
     Ok(binding)
 }
 
-/// 本机注册表实际支持的组合 Adapter 目录（决议 #79：编辑器只呈现此清单，
-/// 未支持项隐藏，S1 落地后随注册表扩展自然出现）。与 `build_registry` 的
-/// 注册分支同源维护：注册新 Adapter 时必须同步补录。
+/// 修订组合可选的 Adapter 目录（决议 #79：编辑器只呈现此清单，未支持项
+/// 隐藏）。S1 落地后包含远端执行后端：github-actions 修订由已安装投影在
+/// 远端执行，本机 build_registry 的策略守卫依旧拒绝其本机直跑（决议 #89）。
+/// 与 runner 注册表同源维护：注册新 Adapter 时必须同步补录。
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
 #[serde(rename_all = "camelCase")]
 #[ts(rename_all = "camelCase")]
@@ -2010,7 +2011,10 @@ pub struct PublishAdapterCatalog {
 
 pub(crate) fn builtin_adapter_catalog() -> PublishAdapterCatalog {
     PublishAdapterCatalog {
-        execution_backends: vec![LOCAL_BACKEND_ID.to_string()],
+        execution_backends: vec![
+            LOCAL_BACKEND_ID.to_string(),
+            publish_adapters::GITHUB_ACTIONS_BACKEND_ID.to_string(),
+        ],
         artifact_stores: vec![TEMPORARY_STORE_ID.to_string()],
         artifact_processors: vec![CHECKSUM_PROCESSOR_ID.to_string()],
         delivery_destinations: vec![
