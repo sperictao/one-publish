@@ -229,6 +229,10 @@ export const PublishConfigPanel = memo(function PublishConfigPanel({
   const [showReorderControls, setShowReorderControls] = useState(false);
   const [compositionProfile, setCompositionProfile] =
     useState<ConfigProfile | null>(null);
+  // 决议 #91：安装向导拉起编辑器时预填 github-actions（仅表单初值）。
+  const [compositionPresetBackendId, setCompositionPresetBackendId] = useState<
+    string | null
+  >(null);
   const projectProfileViewerRef = useRef<ProjectProfileViewerHandle>(null);
   const { translations } = useI18n();
   const t = translations.configPanel || {};
@@ -1309,6 +1313,13 @@ export const PublishConfigPanel = memo(function PublishConfigPanel({
           repoId={selectedRepoScopeId}
           profiles={profiles}
           configPanelT={t}
+          onGuideComposition={(profileId) => {
+            const profile = profiles.find((entry) => entry.id === profileId);
+            if (profile) {
+              setCompositionPresetBackendId("github-actions");
+              setCompositionProfile(profile);
+            }
+          }}
         />
       </div>
 
@@ -1318,9 +1329,11 @@ export const PublishConfigPanel = memo(function PublishConfigPanel({
           onOpenChange={(open) => {
             if (!open) {
               setCompositionProfile(null);
+              setCompositionPresetBackendId(null);
             }
           }}
           profile={compositionProfile}
+          initialBackendId={compositionPresetBackendId}
           onSaveComposition={onSaveProfileComposition}
           onRebindProject={onRebindProfileProject}
         />

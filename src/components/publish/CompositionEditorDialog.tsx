@@ -156,6 +156,8 @@ interface CompositionEditorDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   profile: ConfigProfile;
+  /** 决议 #91：安装向导可预填执行后端；仅作表单初值，保存仍是显式动作。 */
+  initialBackendId?: string | null;
   onSaveComposition: (
     profile: ConfigProfile,
     composition: PublishComposition
@@ -167,6 +169,7 @@ export function CompositionEditorDialog({
   open,
   onOpenChange,
   profile,
+  initialBackendId,
   onSaveComposition,
   onRebindProject,
 }: CompositionEditorDialogProps) {
@@ -184,11 +187,17 @@ export function CompositionEditorDialog({
     if (!open) {
       return;
     }
-    setDraft(
-      profile.composition
-        ? (structuredClone(profile.composition) as PublishComposition)
-        : null
-    );
+    const draft = profile.composition
+      ? (structuredClone(profile.composition) as PublishComposition)
+      : null;
+    if (
+      draft &&
+      initialBackendId &&
+      draft.executionBackend.adapterId !== initialBackendId
+    ) {
+      draft.executionBackend = newBinding(initialBackendId);
+    }
+    setDraft(draft);
     setExpandedRouteId(null);
     let cancelled = false;
     void listPublishAdapterCatalog()
@@ -205,7 +214,7 @@ export function CompositionEditorDialog({
     return () => {
       cancelled = true;
     };
-  }, [open, profile, t.catalogFailed]);
+  }, [open, profile, initialBackendId, t.catalogFailed]);
 
   const updateDraft = useCallback(
     (mutate: (next: PublishComposition) => void) => {

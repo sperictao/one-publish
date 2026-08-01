@@ -61,10 +61,52 @@ function remoteStatusLabel(
   }
 }
 
+interface RuntimeRevisionSection {
+  runnerVersion: string;
+  identifier: string;
+  binaryDigests: Array<[string, string]>;
+}
+
+// 决议 #91：升级/安装预览对 runtime 投影文件展开 Runtime Revision 分节
+// （runner 版本、per-target 摘要表、封存摘要），不再要求用户读原始 JSON。
+function runtimeRevisionSection(change: {
+  path: string;
+  expectedContent: string | null;
+}): RuntimeRevisionSection | null {
+  if (
+    !change.path.includes("/automation/runtime/") ||
+    !change.expectedContent
+  ) {
+    return null;
+  }
+  try {
+    const template = JSON.parse(change.expectedContent) as {
+      runtime_revision?: {
+        version?: number;
+        digest?: string;
+        runner?: { version?: string; binary_digests?: Record<string, string> };
+      };
+    };
+    const revision = template.runtime_revision;
+    if (!revision?.runner?.version) {
+      return null;
+    }
+    return {
+      runnerVersion: revision.runner.version,
+      identifier: `runtime-v${revision.version ?? 1}-${revision.digest ?? ""}`,
+      binaryDigests: Object.entries(revision.runner.binary_digests ?? {}),
+    };
+  } catch {
+    return null;
+  }
+}
+
 export interface AutomationBindingsSectionProps {
   repoId: string | null;
   profiles: ConfigProfile[];
   configPanelT: Record<string, string | undefined>;
+  /** 决议 #91：修订 Backend 不可投影时引导拉起组合编辑器（预填 github-actions）。 */
+  onGuideComposition?: (profileId: string) => void;
 }
 
 interface PendingPreview {
@@ -76,6 +118,7 @@ export function AutomationBindingsSection({
   repoId,
   profiles,
   configPanelT,
+  onGuideComposition,
 }: AutomationBindingsSectionProps) {
   const [view, setView] = useState<AutomationBindingsView | null>(null);
   const [loading, setLoading] = useState(false);
@@ -190,6 +233,15 @@ export function AutomationBindingsSection({
 
   const drift = view?.drift ?? [];
   const bindings = view?.bindings ?? [];
+  // 决议 #91/#90：安装的引导判定与后端拒装判定同构——选中配置的当前修订
+  // 组合必须以 github-actions 为执行后端，否则先引导保存新修订。
+  const selectedInstallProfile = activeProfiles.find(
+    (profile) => profile.id === installProfileId
+  );
+  const needsCompositionGuide =
+    selectedInstallProfile !== undefined &&
+    selectedInstallProfile.composition?.executionBackend.adapterId !==
+      "github-actions";
   const changeKindLabel = (kind: string) =>
     kind === "added"
       ? configPanelT.automationChangeAdded || "新增"
@@ -496,6 +548,30 @@ export function AutomationBindingsSection({
                 className="h-8 text-label-12"
               />
             </div>
+            {needsCompositionGuide ? (
+              <div
+                className="rounded-sm border border-amber-600/40 bg-amber-500/10 px-3 py-2"
+                data-testid="automation-composition-guide"
+              >
+                <p className="text-label-12 text-amber-700 dark:text-amber-400">
+                  {configPanelT.automationCompositionGuide ||
+                    "该配置的当前修订以本机执行发布。远端自动化的执行后端来自修订组合：请先保存 backend=github-actions 的新修订，再回到这里安装。"}
+                </p>
+                {onGuideComposition ? (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="mt-2 h-7 px-2 text-label-12"
+                    onClick={() => {
+                      setInstallOpen(false);
+                      onGuideComposition(installProfileId);
+                    }}
+                  >
+                    {configPanelT.automationEditComposition || "去编辑发布组合"}
+                  </Button>
+                ) : null}
+              </div>
+            ) : null}
           </div>
           <DialogFooter>
             <Button
@@ -508,7 +584,7 @@ export function AutomationBindingsSection({
             <Button
               size="sm"
               onClick={startInstallPreview}
-              disabled={!installProfileId}
+              disabled={!installProfileId || needsCompositionGuide}
             >
               {configPanelT.automationPreviewDiff || "预览投影差异"}
             </Button>
@@ -546,50 +622,83 @@ export function AutomationBindingsSection({
                 className="max-h-64 space-y-1 overflow-y-auto"
                 data-testid="automation-preview-changes"
               >
-                {pending.preview.changes.map((change) => (
-                  <li
-                    key={`preview-${change.path}`}
-                    className="rounded-sm border border-border px-2 py-1.5"
-                  >
-                    <div className="flex items-center gap-2 text-label-12">
-                      <span className="font-semibold text-foreground">
-                        {change.conflictReleaseNamespace
-                          ? configPanelT.automationChangeConflict || "冲突"
-                          : changeKindLabel(change.kind)}
-                      </span>
-                      <span className="truncate text-muted-foreground">
-                        {change.path}
-                      </span>
-                    </div>
-                    {change.conflictReleaseNamespace &&
-                    change.conflictDeliveryDestinationNamespace ? (
-                      <p className="mt-1 text-label-12 text-amber-700 dark:text-amber-400">
-                        {change.conflictReleaseNamespace} ·{" "}
-                        {change.conflictDeliveryDestinationNamespace}
-                      </p>
-                    ) : null}
-                    {change.currentContent ? (
-                      <div className="mt-1">
-                        <span className="text-label-12 font-medium text-muted-foreground">
-                          {configPanelT.automationCurrentContent || "当前内容"}
+                {pending.preview.changes.map((change) => {
+                  const runtimeSection = runtimeRevisionSection(change);
+                  return (
+                    <li
+                      key={`preview-${change.path}`}
+                      className="rounded-sm border border-border px-2 py-1.5"
+                    >
+                      <div className="flex items-center gap-2 text-label-12">
+                        <span className="font-semibold text-foreground">
+                          {change.conflictReleaseNamespace
+                            ? configPanelT.automationChangeConflict || "冲突"
+                            : changeKindLabel(change.kind)}
                         </span>
-                        <pre className="mt-0.5 max-h-24 overflow-auto rounded-sm bg-muted px-2 py-1 text-label-12 text-muted-foreground">
-                          {change.currentContent}
-                        </pre>
-                      </div>
-                    ) : null}
-                    {change.expectedContent ? (
-                      <div className="mt-1">
-                        <span className="text-label-12 font-medium text-muted-foreground">
-                          {configPanelT.automationExpectedContent || "期望内容"}
+                        <span className="truncate text-muted-foreground">
+                          {change.path}
                         </span>
-                        <pre className="mt-0.5 max-h-24 overflow-auto rounded-sm bg-muted px-2 py-1 text-label-12 text-muted-foreground">
-                          {change.expectedContent}
-                        </pre>
                       </div>
-                    ) : null}
-                  </li>
-                ))}
+                      {runtimeSection ? (
+                        <div
+                          className="mt-1 rounded-sm bg-muted px-2 py-1"
+                          data-testid={`automation-runtime-section-${change.path}`}
+                        >
+                          <p className="text-label-12 font-medium text-foreground">
+                            {configPanelT.automationRuntimeSection ||
+                              "Runtime Revision"}
+                            {" · runner v"}
+                            {runtimeSection.runnerVersion}
+                          </p>
+                          <p className="break-all text-label-12 text-muted-foreground">
+                            {runtimeSection.identifier}
+                          </p>
+                          <ul className="mt-0.5 space-y-0.5">
+                            {runtimeSection.binaryDigests.map(
+                              ([target, digest]) => (
+                                <li
+                                  key={`digest-${change.path}-${target}`}
+                                  className="truncate text-label-12 text-muted-foreground"
+                                >
+                                  {target}: {digest.slice(0, 16)}…
+                                </li>
+                              )
+                            )}
+                          </ul>
+                        </div>
+                      ) : null}
+                      {change.conflictReleaseNamespace &&
+                      change.conflictDeliveryDestinationNamespace ? (
+                        <p className="mt-1 text-label-12 text-amber-700 dark:text-amber-400">
+                          {change.conflictReleaseNamespace} ·{" "}
+                          {change.conflictDeliveryDestinationNamespace}
+                        </p>
+                      ) : null}
+                      {change.currentContent ? (
+                        <div className="mt-1">
+                          <span className="text-label-12 font-medium text-muted-foreground">
+                            {configPanelT.automationCurrentContent ||
+                              "当前内容"}
+                          </span>
+                          <pre className="mt-0.5 max-h-24 overflow-auto rounded-sm bg-muted px-2 py-1 text-label-12 text-muted-foreground">
+                            {change.currentContent}
+                          </pre>
+                        </div>
+                      ) : null}
+                      {change.expectedContent ? (
+                        <div className="mt-1">
+                          <span className="text-label-12 font-medium text-muted-foreground">
+                            {configPanelT.automationExpectedContent ||
+                              "期望内容"}
+                          </span>
+                          <pre className="mt-0.5 max-h-24 overflow-auto rounded-sm bg-muted px-2 py-1 text-label-12 text-muted-foreground">
+                            {change.expectedContent}
+                          </pre>
+                        </div>
+                      ) : null}
+                    </li>
+                  );
+                })}
               </ul>
             )
           ) : null}

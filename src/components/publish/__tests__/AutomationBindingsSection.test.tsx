@@ -31,13 +31,34 @@ vi.mock("sonner", () => ({
   toast: { success: vi.fn(), error: vi.fn() },
 }));
 
-function createProfile(id: string, name: string): ConfigProfile {
+function createProfile(
+  id: string,
+  name: string,
+  executionBackendId = "github-actions"
+): ConfigProfile {
   return {
     id,
     revisionId: `${id}-revision-1`,
     name,
     providerId: "tauri",
     parameters: { configuration: "Release" },
+    // 决议 #90/#91：自动化 Backend 从修订组合推导；安装引导以此判定。
+    composition: {
+      executionBackend: {
+        adapterId: executionBackendId,
+        settingsVersion: 1,
+        settings: {},
+        credentials: {},
+      },
+      artifactStore: {
+        adapterId: "temporary-artifact-store",
+        settingsVersion: 1,
+        settings: {},
+        credentials: {},
+      },
+      artifactProcessors: [],
+      deliveryRoutes: [],
+    },
     profileGroup: null,
     createdAt: "2026-07-21T10:00:00Z",
     isSystemDefault: false,
@@ -132,13 +153,15 @@ function installPreview(): AutomationProjectionPreview {
 }
 
 function renderSection(
-  profiles: ConfigProfile[] = [createProfile("profile-1", "Stable")]
+  profiles: ConfigProfile[] = [createProfile("profile-1", "Stable")],
+  onGuideComposition?: (profileId: string) => void
 ) {
   return render(
     <AutomationBindingsSection
       repoId="repo-1"
       profiles={profiles}
       configPanelT={{}}
+      onGuideComposition={onGuideComposition}
     />
   );
 }
@@ -330,6 +353,28 @@ describe("AutomationBindingsSection", () => {
     );
     expect(await screen.findByTestId("automation-preview-empty")).toBeTruthy();
     expect(applyAutomationChangeMock).not.toHaveBeenCalled();
+  });
+
+  it("guides local-backend revisions to the composition editor before install", async () => {
+    listAutomationBindingsMock.mockResolvedValue(emptyView());
+    const onGuideComposition = vi.fn();
+
+    renderSection(
+      [createProfile("profile-1", "Stable", "local-execution")],
+      onGuideComposition
+    );
+    await screen.findByTestId("automation-bindings-section");
+    fireEvent.click(screen.getByRole("button", { name: "绑定自动化" }));
+
+    // 决议 #91：修订 Backend 不可投影时显示引导步、禁用预览，一键拉起
+    // 组合编辑器（预填 github-actions）；预览判定与后端拒装判定同构。
+    expect(
+      await screen.findByTestId("automation-composition-guide")
+    ).toBeTruthy();
+    expect(screen.getByRole("button", { name: "预览投影差异" })).toBeDisabled();
+    fireEvent.click(screen.getByRole("button", { name: "去编辑发布组合" }));
+    expect(onGuideComposition).toHaveBeenCalledWith("profile-1");
+    expect(previewAutomationChangeMock).not.toHaveBeenCalled();
   });
 
   it("synchronizes remote evidence and surfaces expired attempts explicitly", async () => {
