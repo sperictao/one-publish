@@ -26,6 +26,20 @@ pub enum TauriDesktopTarget {
     MacosUniversal,
 }
 
+impl TauriDesktopTarget {
+    /// 远端分片展开消费的构建目标 triple（决议 #85）；投影层把桌面枚举
+    /// 物化为通用 triple，适配层不感知桌面概念。
+    pub fn build_target_triple(self) -> &'static str {
+        match self {
+            Self::WindowsX64 => "x86_64-pc-windows-msvc",
+            Self::LinuxX64 => "x86_64-unknown-linux-gnu",
+            Self::MacosX64 => "x86_64-apple-darwin",
+            Self::MacosArm64 => "aarch64-apple-darwin",
+            Self::MacosUniversal => "universal-apple-darwin",
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[serde(rename_all = "camelCase")]
 #[ts(rename_all = "camelCase")]

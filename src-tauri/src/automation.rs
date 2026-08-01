@@ -556,6 +556,17 @@ fn runner_projection(
         )?;
 
     let composition = &revision.composition;
+    let enabled_targets = release_config
+        .enabled_targets
+        .iter()
+        .map(|target| Value::String(target.build_target_triple().to_string()))
+        .collect::<Vec<_>>();
+    if enabled_targets.is_empty() {
+        return Err(AppError::validation_with_code(
+            "远端现场规划需要至少一个启用的构建目标",
+            "automation_remote_targets_missing",
+        ));
+    }
     let project_provider = AdapterBinding::new(
         "project",
         AdapterIdentity::new(
@@ -571,6 +582,10 @@ fn runner_projection(
             .with_value(
                 "build_driver",
                 projection_value(&release_config.build_driver, "构建驱动")?,
+            )
+            .with_value(
+                publish_adapters::tauri::ENABLED_TARGETS_SETTING,
+                Value::Array(enabled_targets),
             ),
     );
     let artifact_processors = composition

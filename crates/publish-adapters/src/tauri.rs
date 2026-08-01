@@ -18,6 +18,8 @@ const CONFIG_FILE_NAMES: &[&str] = &["tauri.conf.json", "tauri.conf.json5", "Tau
 const DISCOVERY_SKIP_DIRS: &[&str] = &[".git", "node_modules", "target", "bin", "obj", "dist"];
 const CONFIG_PATH_SETTING: &str = "config_path";
 const BUILD_DRIVER_SETTING: &str = "build_driver";
+/// 远端分片展开的启用构建目标（决议 #85）；缺省即本地宿主单构建。
+pub const ENABLED_TARGETS_SETTING: &str = "enabled_targets";
 pub const TAURI_INSPECT_ACTION: &str = "inspect_tauri_project";
 
 /// 候选身份的唯一格式定义：由 Provider 与配置绑定共同引用，避免两处拼接漂移。
@@ -264,36 +266,110 @@ impl AdapterContract for TauriProjectProvider {
     ) -> Result<Vec<PlanNodeTemplate>, PublishError> {
         let adapter = self.descriptor.identity().display_name();
         let (config_path, build_driver) = bound_settings(settings, &adapter)?;
+        let enabled_targets = enabled_build_targets(settings, &adapter)?;
 
-        // 本地准备路径：节点全部落在宿主平台族（决议 #85）。远端分片展开
-        // 由启用平台输入驱动，不读取宿主。
-        Ok(vec![
-            PlanNodeTemplate::adapter_action(
-                "inspect",
-                PlanStage::InspectSource,
-                TAURI_INSPECT_ACTION,
-                BTreeMap::from([
-                    (
-                        CONFIG_PATH_SETTING.to_string(),
-                        Value::String(config_path.clone()),
-                    ),
-                    (
-                        BUILD_DRIVER_SETTING.to_string(),
-                        Value::String(build_driver.name().to_string()),
-                    ),
-                ]),
-            )
-            .with_platform(PlanNodePlatform::host()),
-            PlanNodeTemplate::command(
-                "build",
-                PlanStage::Build,
-                build_driver.program_id(),
-                build_driver.build_command_args(&config_path),
-            )
-            .with_artifact_io(Vec::new(), vec!["provider-output:*".to_string()])
-            .with_side_effects(vec![PlanSideEffect::FileSystem])
-            .with_platform(PlanNodePlatform::host()),
-        ])
+        if enabled_targets.is_empty() {
+            // 本地准备路径：节点全部落在宿主平台族（决议 #85）。
+            let host = PlanNodePlatform::host();
+            return Ok(vec![
+                inspect_template("inspect", &config_path, build_driver).with_platform(host),
+                build_template("build", &config_path, build_driver, None).with_platform(host),
+            ]);
+        }
+
+        // 远端分片展开（决议 #85）：按启用平台展开构建节点，亲和由启用
+        // 目标输入决定而不是执行宿主——任意 OS 上重放产出同一 plan digest。
+        let mut templates = Vec::with_capacity(enabled_targets.len() * 2);
+        for target in &enabled_targets {
+            let platform = platform_for_build_target(target);
+            templates.push(
+                inspect_template(format!("inspect-{target}"), &config_path, build_driver)
+                    .with_platform(platform),
+            );
+            templates.push(
+                build_template(
+                    format!("build-{target}"),
+                    &config_path,
+                    build_driver,
+                    Some(target),
+                )
+                .with_platform(platform),
+            );
+        }
+        Ok(templates)
+    }
+}
+
+fn inspect_template(
+    local_id: impl Into<String>,
+    config_path: &str,
+    build_driver: TauriBuildDriver,
+) -> PlanNodeTemplate {
+    PlanNodeTemplate::adapter_action(
+        local_id,
+        PlanStage::InspectSource,
+        TAURI_INSPECT_ACTION,
+        BTreeMap::from([
+            (
+                CONFIG_PATH_SETTING.to_string(),
+                Value::String(config_path.to_string()),
+            ),
+            (
+                BUILD_DRIVER_SETTING.to_string(),
+                Value::String(build_driver.name().to_string()),
+            ),
+        ]),
+    )
+}
+
+fn build_template(
+    local_id: impl Into<String>,
+    config_path: &str,
+    build_driver: TauriBuildDriver,
+    build_target: Option<&str>,
+) -> PlanNodeTemplate {
+    let mut args = build_driver.build_command_args(config_path);
+    if let Some(target) = build_target {
+        args.push("--target".to_string());
+        args.push(target.to_string());
+    }
+    PlanNodeTemplate::command(local_id, PlanStage::Build, build_driver.program_id(), args)
+        .with_artifact_io(Vec::new(), vec!["provider-output:*".to_string()])
+        .with_side_effects(vec![PlanSideEffect::FileSystem])
+}
+
+/// 可选的启用构建目标（target triple 数组）；键存在但形状非法必须显式失败。
+fn enabled_build_targets(
+    settings: &AdapterSettings,
+    adapter: &str,
+) -> Result<Vec<String>, PublishError> {
+    let Some(value) = settings.values.get(ENABLED_TARGETS_SETTING) else {
+        return Ok(Vec::new());
+    };
+    let targets = value
+        .as_array()
+        .and_then(|values| {
+            values
+                .iter()
+                .map(|value| value.as_str().map(str::to_string))
+                .collect::<Option<Vec<_>>>()
+        })
+        .filter(|targets| !targets.is_empty() && targets.iter().all(|t| !t.trim().is_empty()))
+        .ok_or_else(|| PublishError::InvalidAdapterSettings {
+            adapter: adapter.to_string(),
+            message: format!("{ENABLED_TARGETS_SETTING} must be a non-empty array of target triples"),
+        })?;
+    Ok(targets)
+}
+
+/// build target triple → 平台族亲和；macOS universal 也归 macOS 族。
+fn platform_for_build_target(target: &str) -> PlanNodePlatform {
+    if target.ends_with("apple-darwin") {
+        PlanNodePlatform::Macos
+    } else if target.contains("windows") {
+        PlanNodePlatform::Windows
+    } else {
+        PlanNodePlatform::Linux
     }
 }
 
@@ -797,6 +873,7 @@ impl TauriRuntimeProvider {
         node: &publish_domain::PlanNode,
         config_path: &str,
         driver: TauriBuildDriver,
+        build_target: Option<&str>,
     ) -> Result<crate::AdapterExecutionOutput, PublishError> {
         let execution = self.execution.as_ref().ok_or_else(|| {
             PublishError::Execution(
@@ -817,6 +894,10 @@ impl TauriRuntimeProvider {
             .collect::<Vec<_>>();
         args.push("--config".to_string());
         args.push(absolute_config.to_string_lossy().to_string());
+        if let Some(target) = build_target {
+            args.push("--target".to_string());
+            args.push(target.to_string());
+        }
         let outcome = execution
             .port
             .execute_build(crate::bridge::SealedBuildCommand {
@@ -900,8 +981,9 @@ impl AdapterContract for TauriRuntimeProvider {
                 })?;
                 // 工作目录与环境引用由本 Provider 在执行时确定；密封节点携带任何
                 // 额外执行输入都视为篡改，而不是被静默丢弃。
+                let build_target = sealed_build_target(args, driver, config_path);
                 if *program != driver.program_id()
-                    || *args != driver.build_command_args(config_path)
+                    || build_target.is_none()
                     || working_directory.is_some()
                     || !environment_references.is_empty()
                 {
@@ -910,7 +992,7 @@ impl AdapterContract for TauriRuntimeProvider {
                         node.id
                     )));
                 }
-                self.run_sealed_build(node, config_path, driver)
+                self.run_sealed_build(node, config_path, driver, build_target.flatten().as_deref())
             }
             _ => Err(PublishError::Execution(format!(
                 "node {} is not a tauri provider operation",
@@ -927,6 +1009,27 @@ impl ProjectProvider for TauriRuntimeProvider {
     ) -> Result<Vec<ProjectCandidate>, PublishError> {
         self.provider.discover_candidates(repository_root)
     }
+}
+
+/// 密封 build 参数的合法形态：驱动基础参数，或基础参数 + `--target <triple>`
+///（远端分片展开，决议 #85）。返回 None 表示参数被篡改。
+fn sealed_build_target(
+    args: &[String],
+    driver: TauriBuildDriver,
+    config_path: &str,
+) -> Option<Option<String>> {
+    let base = driver.build_command_args(config_path);
+    if args == base.as_slice() {
+        return Some(None);
+    }
+    if args.len() == base.len() + 2
+        && args[..base.len()] == base[..]
+        && args[base.len()] == "--target"
+        && !args[base.len() + 1].trim().is_empty()
+    {
+        return Some(Some(args[base.len() + 1].clone()));
+    }
+    None
 }
 
 /// 从密封快照读取 Release Gate；缺失键代表没有配置门禁。
@@ -1046,4 +1149,186 @@ fn classify_tauri_artifact(relative: &Path) -> (&'static str, &'static str) {
         return ("installer", "application/x-rpm");
     }
     ("build-support", "application/octet-stream")
+}
+
+#[cfg(test)]
+mod plan_fragment_tests {
+    use super::*;
+    use crate::AdapterContract;
+
+    fn settings(enabled_targets: Option<Value>) -> AdapterSettings {
+        let mut settings = AdapterSettings::new(1)
+            .with_value(
+                CONFIG_PATH_SETTING,
+                Value::String("src-tauri/tauri.conf.json".to_string()),
+            )
+            .with_value(BUILD_DRIVER_SETTING, Value::String("pnpm".to_string()));
+        if let Some(targets) = enabled_targets {
+            settings = settings.with_value(ENABLED_TARGETS_SETTING, targets);
+        }
+        settings
+    }
+
+    fn snapshot() -> PlanningInputSnapshot {
+        PlanningInputSnapshot {
+            version: publish_domain::PLANNING_INPUT_SNAPSHOT_VERSION,
+            configuration_revision: "configuration-revision-1".to_string(),
+            runtime_revision: "runtime".to_string(),
+            release_input: BTreeMap::new(),
+            source: publish_domain::SourceSnapshot {
+                revision: "0123456789abcdef".to_string(),
+                workspace_digest: None,
+                dirty: false,
+                captured_at: "2026-07-26T10:00:00Z".to_string(),
+                reproducible: true,
+            },
+            external_preconditions: BTreeMap::new(),
+            promoted_manifest_digest: None,
+            adapters: publish_domain::AdapterSelection {
+                project_provider: publish_domain::AdapterBinding::new(
+                    "project",
+                    publish_domain::AdapterIdentity::new(
+                        AdapterKind::ProjectProvider,
+                        TAURI_PROVIDER_ID,
+                        1,
+                    ),
+                    AdapterSettings::new(1),
+                ),
+                artifact_processors: Vec::new(),
+                execution_backend: publish_domain::AdapterBinding::new(
+                    "backend",
+                    publish_domain::AdapterIdentity::new(
+                        AdapterKind::ExecutionBackend,
+                        "local-execution",
+                        1,
+                    ),
+                    AdapterSettings::new(1),
+                ),
+                artifact_store: publish_domain::AdapterBinding::new(
+                    "store",
+                    publish_domain::AdapterIdentity::new(
+                        AdapterKind::ArtifactStore,
+                        "temporary-artifact-store",
+                        1,
+                    ),
+                    AdapterSettings::new(1),
+                ),
+                delivery_routes: Vec::new(),
+            },
+        }
+    }
+
+    #[test]
+    fn local_plans_keep_a_single_host_build_node() {
+        let provider = TauriProjectProvider::new();
+        let templates = provider
+            .plan_fragment(&snapshot(), &settings(None))
+            .expect("plan the local fragment");
+        assert_eq!(
+            templates
+                .iter()
+                .map(|template| template.local_id.as_str())
+                .collect::<Vec<_>>(),
+            vec!["inspect", "build"]
+        );
+        assert!(templates
+            .iter()
+            .all(|template| template.platform == PlanNodePlatform::host()));
+    }
+
+    #[test]
+    fn enabled_targets_expand_per_platform_build_nodes_deterministically() {
+        let provider = TauriProjectProvider::new();
+        let targets = serde_json::json!([
+            "x86_64-unknown-linux-gnu",
+            "universal-apple-darwin",
+            "x86_64-pc-windows-msvc",
+        ]);
+        let templates = provider
+            .plan_fragment(&snapshot(), &settings(Some(targets)))
+            .expect("expand the sharded fragment");
+
+        assert_eq!(templates.len(), 6);
+        let build = |target: &str| {
+            templates
+                .iter()
+                .find(|template| template.local_id == format!("build-{target}"))
+                .unwrap_or_else(|| panic!("missing build node for {target}"))
+        };
+        assert_eq!(
+            build("x86_64-unknown-linux-gnu").platform,
+            PlanNodePlatform::Linux
+        );
+        assert_eq!(
+            build("universal-apple-darwin").platform,
+            PlanNodePlatform::Macos
+        );
+        assert_eq!(
+            build("x86_64-pc-windows-msvc").platform,
+            PlanNodePlatform::Windows
+        );
+        let publish_domain::PlanOperation::RunProgram { args, .. } =
+            &build("universal-apple-darwin").operation
+        else {
+            panic!("build node must be a structured command");
+        };
+        assert_eq!(
+            args[args.len() - 2..],
+            ["--target".to_string(), "universal-apple-darwin".to_string()]
+        );
+        // 展开由输入决定，与执行宿主无关：重放产出完全相同的模板序列。
+        let replayed = provider
+            .plan_fragment(
+                &snapshot(),
+                &settings(Some(serde_json::json!([
+                    "x86_64-unknown-linux-gnu",
+                    "universal-apple-darwin",
+                    "x86_64-pc-windows-msvc",
+                ]))),
+            )
+            .expect("replay the sharded fragment");
+        assert_eq!(templates, replayed);
+    }
+
+    #[test]
+    fn malformed_enabled_targets_fail_loudly() {
+        let provider = TauriProjectProvider::new();
+        for malformed in [
+            serde_json::json!([]),
+            serde_json::json!(["  "]),
+            serde_json::json!("x86_64-unknown-linux-gnu"),
+            serde_json::json!([1, 2]),
+        ] {
+            let error = provider
+                .plan_fragment(&snapshot(), &settings(Some(malformed.clone())))
+                .expect_err("malformed enabled targets must be rejected");
+            assert!(
+                error.to_string().contains(ENABLED_TARGETS_SETTING),
+                "unexpected error for {malformed}: {error}"
+            );
+        }
+    }
+
+    #[test]
+    fn sealed_build_args_accept_only_the_optional_target_suffix() {
+        let driver = TauriBuildDriver::Pnpm;
+        let base = driver.build_command_args("src-tauri/tauri.conf.json");
+        assert_eq!(
+            sealed_build_target(&base, driver, "src-tauri/tauri.conf.json"),
+            Some(None)
+        );
+        let mut with_target = base.clone();
+        with_target.push("--target".to_string());
+        with_target.push("aarch64-apple-darwin".to_string());
+        assert_eq!(
+            sealed_build_target(&with_target, driver, "src-tauri/tauri.conf.json"),
+            Some(Some("aarch64-apple-darwin".to_string()))
+        );
+        let mut tampered = base.clone();
+        tampered.push("--dangerous".to_string());
+        assert_eq!(
+            sealed_build_target(&tampered, driver, "src-tauri/tauri.conf.json"),
+            None
+        );
+    }
 }
