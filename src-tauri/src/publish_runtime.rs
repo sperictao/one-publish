@@ -46,6 +46,7 @@ use crate::store::{
 };
 
 mod journal;
+pub mod remote_evidence;
 
 /// 桌面端产物存储的明确保留期限：7 天（ADR-0038）。
 const ARTIFACT_RETENTION_SECONDS: u64 = 604_800;

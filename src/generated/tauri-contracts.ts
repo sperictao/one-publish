@@ -190,6 +190,12 @@ change: AutomationChangeRequest,
  */
 confirmationDigest: string, changes: Array<AutomationFileChangeView>, };
 
+export type RemoteAttemptEvidenceView = { attemptId: string, bindingId: string, runId: number, state: RemoteEvidenceState, };
+
+export type RemoteEvidenceState = { "kind": "archived", status: RemoteArchivedStatus, error: string | null, } | { "kind": "missingSegments", missing: Array<string>, } | { "kind": "expired", missing: Array<string>, };
+
+export type RemoteArchivedStatus = "running" | "published" | "partial_delivery" | "failed" | "cancelled";
+
 export type AutomationTriggerPolicy = { "type": "tagPush", tagPrefix: string, } | { "type": "manual" };
 
 export type Branch = { name: string, isMain: boolean, isCurrent: boolean, path: string, commitCount: number | null, };

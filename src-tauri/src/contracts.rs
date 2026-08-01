@@ -95,6 +95,15 @@ pub fn generate_tauri_contracts() -> String {
     push_contract::<crate::automation::AutomationFileChangeKindView>(&mut declarations);
     push_contract::<crate::automation::AutomationFileChangeView>(&mut declarations);
     push_contract::<crate::automation::AutomationProjectionPreview>(&mut declarations);
+    push_contract::<crate::publish_runtime::remote_evidence::RemoteAttemptEvidenceView>(
+        &mut declarations,
+    );
+    push_contract::<crate::publish_runtime::remote_evidence::RemoteEvidenceState>(
+        &mut declarations,
+    );
+    push_contract::<crate::publish_runtime::remote_evidence::RemoteArchivedStatus>(
+        &mut declarations,
+    );
     push_contract::<crate::store::AutomationTriggerPolicy>(&mut declarations);
     push_contract::<crate::store::Branch>(&mut declarations);
     push_contract::<crate::store::ConfigProfile>(&mut declarations);
