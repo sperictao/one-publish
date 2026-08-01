@@ -125,11 +125,14 @@ pub struct RunnerProjection {
 }
 
 /// prepare-from-projection 的密封产物：触发时形成的完整规划输入与计划；
-/// execute 消费前重放规划并逐字比对。
+/// execute 消费前重放规划并逐字比对。凭据引用→Secret 名映射表随之携带
+/// （名字非秘密），执行边界据此从 env 解析凭据（决议 #87 / ADR-0029）。
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct PreparedAttempt {
     pub runtime_revision: AutomationRuntimeRevision,
     pub prepared: PreparedPublishPlan,
+    #[serde(default)]
+    pub secret_bindings: BTreeMap<String, String>,
 }
 
 pub struct StandaloneRunner {
@@ -157,6 +160,7 @@ impl StandaloneRunner {
         Ok(PreparedAttempt {
             runtime_revision: self.runtime_revision.clone(),
             prepared: self.runtime.prepare_attempt(snapshot)?,
+            secret_bindings: BTreeMap::new(),
         })
     }
 
@@ -319,7 +323,11 @@ pub fn installed_runner(attempt: &PreparedAttempt) -> Result<StandaloneRunner, P
             installed_revision.identifier()
         )));
     }
-    let registry = installed_registry(&attempt.prepared.snapshot, RunnerPorts::default())?;
+    let registry = installed_registry(
+        &attempt.prepared.snapshot,
+        RunnerPorts::default(),
+        &attempt.secret_bindings,
+    )?;
     StandaloneRunner::new(registry, attempt.runtime_revision.clone())
 }
 
@@ -344,17 +352,41 @@ fn headless_provider_execution() -> publish_adapters::ProviderExecution {
 pub fn installed_registry(
     snapshot: &PlanningInputSnapshot,
     mut ports: RunnerPorts,
+    secret_bindings: &BTreeMap<String, String>,
 ) -> Result<AdapterRegistry, PublishError> {
     let fixture = AdapterConformanceFixture::new(snapshot.clone());
     let mut registry = AdapterRegistry::new();
 
     register_project_provider(&mut registry, &fixture, snapshot, &mut ports)?;
     register_processors(&mut registry, &fixture, snapshot)?;
-    register_execution_backend(&mut registry, &fixture, snapshot)?;
+    register_execution_backend(&mut registry, &fixture, snapshot, secret_bindings)?;
     register_artifact_store(&mut registry, &fixture, snapshot)?;
     register_destinations(&mut registry, &fixture, snapshot)?;
 
     Ok(registry)
+}
+
+/// 远端执行边界的凭据源（决议 #87）：把模板映射表（引用→Secret 名）与
+/// 交付目标声明的凭据类型 join 成 env 解析条目；kind 的事实来源始终是
+/// Adapter 声明，映射表只提供环境变量名。
+fn env_credential_source(
+    snapshot: &PlanningInputSnapshot,
+    secret_bindings: &BTreeMap<String, String>,
+) -> Result<Arc<publish_adapters::EnvCredentialSource>, PublishError> {
+    let mut entries = BTreeMap::new();
+    for route in &snapshot.adapters.delivery_routes {
+        let destination = destination_instance(&route.binding)?;
+        let declarations = &destination.descriptor().schema.credentials;
+        for (requirement, reference) in &route.binding.credentials {
+            let Some(declared) = declarations.get(requirement) else {
+                continue;
+            };
+            if let Some(variable) = secret_bindings.get(reference) {
+                entries.insert(reference.clone(), (variable.clone(), declared.kind));
+            }
+        }
+    }
+    Ok(Arc::new(publish_adapters::EnvCredentialSource::new(entries)))
 }
 
 fn register_project_provider(
@@ -443,9 +475,14 @@ fn register_execution_backend(
     registry: &mut AdapterRegistry,
     fixture: &AdapterConformanceFixture,
     snapshot: &PlanningInputSnapshot,
+    secret_bindings: &BTreeMap<String, String>,
 ) -> Result<(), PublishError> {
     let identity = &snapshot.adapters.execution_backend.adapter;
-    let credentials = Arc::new(StaticCredentialSource::new());
+    let credentials: Arc<dyn publish_adapters::CredentialSource> = if secret_bindings.is_empty() {
+        Arc::new(StaticCredentialSource::new())
+    } else {
+        env_credential_source(snapshot, secret_bindings)?
+    };
     match (identity.id.as_str(), identity.version) {
         ("local-execution", 1) => {
             registry.register_execution_backend(Arc::new(LocalExecutionBackend::new()), fixture)
@@ -491,43 +528,36 @@ fn register_destinations(
     snapshot: &PlanningInputSnapshot,
 ) -> Result<(), PublishError> {
     for route in &snapshot.adapters.delivery_routes {
-        let binding = &route.binding;
-        match (binding.adapter.id.as_str(), binding.adapter.version) {
-            ("local-directory", 1) => {
-                let directory = binding
-                    .settings
-                    .values
-                    .get("directory")
-                    .and_then(serde_json::Value::as_str)
-                    .ok_or_else(|| PublishError::InvalidAdapterSettings {
-                        adapter: binding.adapter.display_name(),
-                        message: "directory is required".to_string(),
-                    })?;
-                registry.register_delivery_destination(
-                    Arc::new(LocalDirectoryDestination::new(directory)),
-                    fixture,
-                )?;
-            }
-            (GITHUB_RELEASE_DESTINATION_ID, 1) => {
-                registry.register_delivery_destination(
-                    Arc::new(GitHubReleaseDestination::new(Arc::new(
-                        GhCliGitHubReleaseApi::new(),
-                    ))),
-                    fixture,
-                )?;
-            }
-            (SFTP_DESTINATION_ID, 1) => {
-                registry.register_delivery_destination(
-                    Arc::new(SftpDeliveryDestination::new(Arc::new(
-                        OpenSshSftpTransport::new(),
-                    ))),
-                    fixture,
-                )?;
-            }
-            _ => return Err(unsupported_installed_adapter(&binding.adapter)),
-        }
+        registry.register_delivery_destination(destination_instance(&route.binding)?, fixture)?;
     }
     Ok(())
+}
+
+/// 交付目标实例的唯一构造点：注册与凭据声明收集共用同一映射。
+fn destination_instance(
+    binding: &publish_domain::AdapterBinding,
+) -> Result<Arc<dyn publish_adapters::DeliveryDestination>, PublishError> {
+    match (binding.adapter.id.as_str(), binding.adapter.version) {
+        ("local-directory", 1) => {
+            let directory = binding
+                .settings
+                .values
+                .get("directory")
+                .and_then(serde_json::Value::as_str)
+                .ok_or_else(|| PublishError::InvalidAdapterSettings {
+                    adapter: binding.adapter.display_name(),
+                    message: "directory is required".to_string(),
+                })?;
+            Ok(Arc::new(LocalDirectoryDestination::new(directory)))
+        }
+        (GITHUB_RELEASE_DESTINATION_ID, 1) => Ok(Arc::new(GitHubReleaseDestination::new(
+            Arc::new(GhCliGitHubReleaseApi::new()),
+        ))),
+        (SFTP_DESTINATION_ID, 1) => Ok(Arc::new(SftpDeliveryDestination::new(Arc::new(
+            OpenSshSftpTransport::new(),
+        )))),
+        _ => Err(unsupported_installed_adapter(&binding.adapter)),
+    }
 }
 
 fn unsupported_installed_adapter(identity: &AdapterIdentity) -> PublishError {

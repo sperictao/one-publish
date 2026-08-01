@@ -88,9 +88,15 @@ pub fn prepare_from_projection(
         promoted_manifest_digest: None,
         adapters,
     };
-    let registry = installed_registry(&snapshot, RunnerPorts::default())?;
-    StandaloneRunner::new(registry, projection.runtime_revision.clone())?
-        .prepare_attempt(&snapshot)
+    let registry = installed_registry(
+        &snapshot,
+        RunnerPorts::default(),
+        &projection.secret_bindings,
+    )?;
+    let mut attempt = StandaloneRunner::new(registry, projection.runtime_revision.clone())?
+        .prepare_attempt(&snapshot)?;
+    attempt.secret_bindings = projection.secret_bindings.clone();
+    Ok(attempt)
 }
 
 fn trigger_version(

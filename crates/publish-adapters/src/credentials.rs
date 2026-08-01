@@ -61,3 +61,61 @@ impl CredentialSource for StaticCredentialSource {
             .unwrap_or(Err(CredentialResolveFailure::Missing))
     }
 }
+
+/// 环境变量凭据源（决议 #87 / ADR-0029）：workflow 把映射表声明的 Secrets
+/// 注入 env，执行边界按非秘密引用查映射取值；凭据类型以 Adapter 声明为准，
+/// 由注册表装配时 join 进条目。秘密值只在解析瞬间离开 env。
+pub struct EnvCredentialSource {
+    entries: BTreeMap<String, (String, CredentialKind)>,
+}
+
+impl EnvCredentialSource {
+    pub fn new(entries: BTreeMap<String, (String, CredentialKind)>) -> Self {
+        Self { entries }
+    }
+}
+
+impl CredentialSource for EnvCredentialSource {
+    fn resolve(&self, reference: &str) -> Result<ResolvedCredential, CredentialResolveFailure> {
+        let (variable, kind) = self
+            .entries
+            .get(reference)
+            .ok_or(CredentialResolveFailure::Missing)?;
+        let value = std::env::var(variable).map_err(|_| CredentialResolveFailure::Missing)?;
+        Ok(ResolvedCredential {
+            kind: *kind,
+            value: CredentialValue::new(value),
+        })
+    }
+}
+
+#[cfg(test)]
+mod env_source_tests {
+    use super::*;
+
+    #[test]
+    fn env_sources_resolve_mapped_references_with_the_declared_kind() {
+        let variable = "ONE_PUBLISH_TEST_ENV_CREDENTIAL";
+        std::env::set_var(variable, "token-value");
+        let source = EnvCredentialSource::new(BTreeMap::from([(
+            "ci github-token".to_string(),
+            (variable.to_string(), CredentialKind::Token),
+        )]));
+
+        let resolved = source
+            .resolve("ci github-token")
+            .expect("resolve the mapped reference from env");
+        assert_eq!(resolved.kind, CredentialKind::Token);
+        assert_eq!(resolved.value.expose(), "token-value");
+
+        assert_eq!(
+            source.resolve("unmapped-reference").unwrap_err(),
+            CredentialResolveFailure::Missing
+        );
+        std::env::remove_var(variable);
+        assert_eq!(
+            source.resolve("ci github-token").unwrap_err(),
+            CredentialResolveFailure::Missing
+        );
+    }
+}

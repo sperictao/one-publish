@@ -21,7 +21,9 @@ mod processors;
 mod sftp;
 pub mod tauri;
 
-pub use credentials::{CredentialResolveFailure, CredentialSource, StaticCredentialSource};
+pub use credentials::{
+    CredentialResolveFailure, CredentialSource, EnvCredentialSource, StaticCredentialSource,
+};
 pub use fake::{
     FakeAutomationBackend, FakeGitHubActionsBackend, FakeRemoteBackend, FAKE_AUTOMATION_BACKEND_ID,
     FAKE_GITHUB_ACTIONS_BACKEND_ID, FAKE_REMOTE_BACKEND_ID,

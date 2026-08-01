@@ -2041,11 +2041,13 @@ fn build_registry(
     if backend.id != LOCAL_BACKEND_ID {
         return Err(unsupported_adapter("execution backend", &backend.id));
     }
+    // 本地路径不携带 Secret 映射：凭据由桌面执行边界解析（ADR-0029）。
     one_publish_runner::installed_registry(
         snapshot,
         one_publish_runner::RunnerPorts {
             provider_execution: execution,
         },
+        &std::collections::BTreeMap::new(),
     )
     .map_err(|error| match error {
         PublishError::AdapterNotRegistered { kind, id, .. } => {

@@ -201,7 +201,7 @@ fn fixed_projection_executes_after_the_control_plane_is_removed() {
     let revision = runtime_revision(&installed_snapshot);
     installed_snapshot.runtime_revision = revision.identifier();
     let installed_control_plane = StandaloneRunner::new(
-        installed_registry(&installed_snapshot, RunnerPorts::default())
+        installed_registry(&installed_snapshot, RunnerPorts::default(), &BTreeMap::new())
             .expect("assemble installed adapter host"),
         revision,
     )
