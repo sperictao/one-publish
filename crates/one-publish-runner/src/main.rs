@@ -3,7 +3,7 @@ use std::process::ExitCode;
 
 use one_publish_runner::{
     installed_runner, prepare_from_projection, verify_installed_projection, PreparedAttempt,
-    RunnerProjection, TriggerContext,
+    RunnerProjection, TriggerContext, TriggerInput,
 };
 
 fn main() -> ExitCode {
@@ -35,10 +35,13 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
             let repository_root = args
                 .next()
                 .ok_or("prepare-from-projection requires the checkout root")?;
-            let tag = args.next();
+            let trigger = args.next().ok_or(
+                "prepare-from-projection requires a trigger descriptor (tag:<tag> or version:<version>)",
+            )?;
             if args.next().is_some() {
                 return Err(
-                    "prepare-from-projection accepts a checkout root and an optional tag".into(),
+                    "prepare-from-projection accepts a checkout root and a trigger descriptor"
+                        .into(),
                 );
             }
             let projection: RunnerProjection = serde_json::from_slice(&fs::read(path)?)?;
@@ -46,7 +49,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
                 &projection,
                 &TriggerContext {
                     repository_root: repository_root.into(),
-                    tag,
+                    trigger: parse_trigger(&trigger)?,
                 },
             )?;
             println!("{}", serde_json::to_string(&attempt)?);
@@ -76,6 +79,20 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         _ => return Err(format!("unsupported command {command}").into()),
     }
     Ok(())
+}
+
+/// 触发描述符（决议 #89）：tag 推送外壳传 `tag:<完整 tag>`，手动 dispatch
+/// 外壳传 `version:<显式版本>`；形态与安装投影的触发策略在规划时互验。
+fn parse_trigger(value: &str) -> Result<TriggerInput, Box<dyn std::error::Error>> {
+    if let Some(tag) = value.strip_prefix("tag:") {
+        return Ok(TriggerInput::Tag(tag.to_string()));
+    }
+    if let Some(version) = value.strip_prefix("version:") {
+        return Ok(TriggerInput::Manual {
+            version: version.to_string(),
+        });
+    }
+    Err(format!("unsupported trigger descriptor {value}").into())
 }
 
 /// 分片亲和参数（决议 #85）：matrix job 传本平台族，汇聚 job 传 any。

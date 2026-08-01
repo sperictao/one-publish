@@ -662,7 +662,7 @@ mod tests {
             &projection,
             &one_publish_runner::TriggerContext {
                 repository_root: checkout.to_path_buf(),
-                tag: Some("v1.0.0".to_string()),
+                trigger: one_publish_runner::TriggerInput::Tag("v1.0.0".to_string()),
             },
         )
         .expect("plan the fixture attempt on site")

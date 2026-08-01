@@ -9,7 +9,8 @@ use std::process::Command;
 
 use one_publish_runner::{
     current_runtime_revision, installed_runner, prepare_from_projection,
-    validate_prepared_attempt, RunnerProjection, TriggerContext, RUNNER_PROJECTION_VERSION,
+    validate_prepared_attempt, RunnerProjection, TriggerContext, TriggerInput,
+    RUNNER_PROJECTION_VERSION,
 };
 use publish_domain::{
     AdapterBinding, AdapterIdentity, AdapterKind, AdapterSelection, AdapterSettings,
@@ -126,7 +127,7 @@ fn replaying_the_same_trigger_context_seals_identical_attempt_identities() {
     let projection = fixture_projection();
     let context = TriggerContext {
         repository_root: checkout.path().to_path_buf(),
-        tag: Some("v1.2.3".to_string()),
+        trigger: TriggerInput::Tag("v1.2.3".to_string()),
     };
 
     let first = prepare_from_projection(&projection, &context).expect("plan on site");
@@ -175,7 +176,7 @@ fn shard_execution_skips_unassigned_nodes_instead_of_failing() {
         &projection,
         &TriggerContext {
             repository_root: checkout.path().to_path_buf(),
-            tag: Some("v1.2.3".to_string()),
+            trigger: TriggerInput::Tag("v1.2.3".to_string()),
         },
     )
     .expect("plan on site");
@@ -204,7 +205,7 @@ fn dirty_checkouts_and_foreign_trigger_contexts_are_rejected() {
         &projection,
         &TriggerContext {
             repository_root: checkout.path().to_path_buf(),
-            tag: Some("nightly-1.2.3".to_string()),
+            trigger: TriggerInput::Tag("nightly-1.2.3".to_string()),
         },
     )
     .expect_err("a tag outside the bound prefix must be rejected");
@@ -214,11 +215,24 @@ fn dirty_checkouts_and_foreign_trigger_contexts_are_rejected() {
         &projection,
         &TriggerContext {
             repository_root: checkout.path().to_path_buf(),
-            tag: None,
+            trigger: TriggerInput::Tag("  ".to_string()),
         },
     )
     .expect_err("tag-push planning requires the pushed tag");
     assert!(missing_tag.to_string().contains("pushed tag"));
+
+    // 触发形态与安装策略互验（决议 #89）：tag 绑定拒绝手动输入，反之亦然。
+    let mismatched_shape = prepare_from_projection(
+        &projection,
+        &TriggerContext {
+            repository_root: checkout.path().to_path_buf(),
+            trigger: TriggerInput::Manual {
+                version: "1.2.3".to_string(),
+            },
+        },
+    )
+    .expect_err("a tag binding cannot plan from a manual input");
+    assert!(mismatched_shape.to_string().contains("manual dispatch"));
 
     let mut manual = fixture_projection();
     manual.trigger_policy = AutomationTriggerPolicy::Manual;
@@ -226,11 +240,31 @@ fn dirty_checkouts_and_foreign_trigger_contexts_are_rejected() {
         &manual,
         &TriggerContext {
             repository_root: checkout.path().to_path_buf(),
-            tag: None,
+            trigger: TriggerInput::Tag("v1.2.3".to_string()),
         },
     )
-    .expect_err("manual dispatch is not wired yet");
-    assert!(manual_error.to_string().contains("manual triggers"));
+    .expect_err("a manual binding cannot plan from a pushed tag");
+    assert!(manual_error.to_string().contains("manual binding"));
+
+    // 手动 dispatch 以显式版本现场规划，与 tag 路径同构（决议 #89）。
+    let manual_attempt = prepare_from_projection(
+        &manual,
+        &TriggerContext {
+            repository_root: checkout.path().to_path_buf(),
+            trigger: TriggerInput::Manual {
+                version: "1.2.3".to_string(),
+            },
+        },
+    )
+    .expect("manual dispatch plans on site");
+    assert_eq!(
+        manual_attempt
+            .prepared
+            .snapshot
+            .release_input
+            .get("version"),
+        Some(&serde_json::Value::String("1.2.3".to_string()))
+    );
 
     std::fs::write(checkout.path().join("uncommitted.txt"), "dirty\n")
         .expect("write uncommitted file");
@@ -238,7 +272,7 @@ fn dirty_checkouts_and_foreign_trigger_contexts_are_rejected() {
         &projection,
         &TriggerContext {
             repository_root: checkout.path().to_path_buf(),
-            tag: Some("v1.2.3".to_string()),
+            trigger: TriggerInput::Tag("v1.2.3".to_string()),
         },
     )
     .expect_err("dirty checkouts must be rejected");

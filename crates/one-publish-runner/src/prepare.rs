@@ -21,11 +21,18 @@ use crate::{
     RunnerProjection, StandaloneRunner,
 };
 
-/// 触发上下文：checkout 根与（TagPush 触发的）完整 tag 名。
+/// 触发上下文：checkout 根与触发输入。触发形态必须与安装投影的触发策略
+/// 匹配——tag 推送提供完整 tag 名，手动 dispatch 提供显式版本（决议 #89）。
 #[derive(Debug, Clone)]
 pub struct TriggerContext {
     pub repository_root: PathBuf,
-    pub tag: Option<String>,
+    pub trigger: TriggerInput,
+}
+
+#[derive(Debug, Clone)]
+pub enum TriggerInput {
+    Tag(String),
+    Manual { version: String },
 }
 
 /// Runner 运行时目录：与桌面 prepare 的组合缺省补全同构——桌面注入桌面
@@ -90,18 +97,14 @@ fn trigger_version(
     policy: &AutomationTriggerPolicy,
     context: &TriggerContext,
 ) -> Result<String, PublishError> {
-    match policy {
-        AutomationTriggerPolicy::TagPush { tag_prefix } => {
-            let tag = context
-                .tag
-                .as_deref()
-                .map(str::trim)
-                .filter(|tag| !tag.is_empty())
-                .ok_or_else(|| {
-                    PublishError::Execution(
-                        "tag-push planning requires the pushed tag name".to_string(),
-                    )
-                })?;
+    match (policy, &context.trigger) {
+        (AutomationTriggerPolicy::TagPush { tag_prefix }, TriggerInput::Tag(tag)) => {
+            let tag = tag.trim();
+            if tag.is_empty() {
+                return Err(PublishError::Execution(
+                    "tag-push planning requires the pushed tag name".to_string(),
+                ));
+            }
             let version = tag.strip_prefix(tag_prefix.as_str()).ok_or_else(|| {
                 PublishError::Execution(format!(
                     "tag {tag} does not match the bound tag prefix {tag_prefix}"
@@ -114,8 +117,22 @@ fn trigger_version(
             }
             Ok(version.to_string())
         }
-        AutomationTriggerPolicy::Manual => Err(PublishError::Execution(
-            "manual triggers are not wired to on-site planning yet".to_string(),
+        (AutomationTriggerPolicy::Manual, TriggerInput::Manual { version }) => {
+            let version = version.trim();
+            if version.is_empty() {
+                return Err(PublishError::Execution(
+                    "manual dispatch planning requires an explicit version input".to_string(),
+                ));
+            }
+            Ok(version.to_string())
+        }
+        (AutomationTriggerPolicy::TagPush { .. }, TriggerInput::Manual { .. }) => {
+            Err(PublishError::Execution(
+                "a tag-push binding cannot plan from a manual dispatch input".to_string(),
+            ))
+        }
+        (AutomationTriggerPolicy::Manual, TriggerInput::Tag(_)) => Err(PublishError::Execution(
+            "a manual binding cannot plan from a pushed tag".to_string(),
         )),
     }
 }

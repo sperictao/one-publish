@@ -7,7 +7,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
 
 mod prepare;
-pub use prepare::{prepare_from_projection, TriggerContext};
+pub use prepare::{prepare_from_projection, TriggerContext, TriggerInput};
 
 use publish_adapters::{
     AdapterConformanceFixture, AdapterRegistry, ChecksumProcessor, CustomCommandProcessor,
