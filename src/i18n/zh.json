@@ -855,7 +855,8 @@
     "automationChangeRemoved": "移除",
     "automationChangeConflict": "冲突",
     "automationCurrentContent": "当前内容",
-    "automationExpectedContent": "期望内容"
+    "automationExpectedContent": "期望内容",
+    "compositionConfig": "发布组合"
   },
   "common": {
     "close": "关闭",
@@ -875,5 +876,38 @@
     "stringParamPlaceholder": "输入 {{flag}}…",
     "paramEditorEmpty": "该 provider 未定义参数",
     "paramEditorType": "类型：{{type}}"
+  },
+  "composition": {
+    "title": "发布组合：{{name}}",
+    "description": "编辑该配置的执行环境、产物处理与交付路线；保存会产生一版新修订。",
+    "catalogFailed": "加载可用 Adapter 目录失败",
+    "credentialInvalid": "凭据引用格式无效（应形如 keychain:one-publish/xxx）: {{location}}",
+    "routesRequired": "发布组合至少需要一条交付路线",
+    "saveSuccess": "发布组合已保存为新修订",
+    "saveFailed": "保存发布组合失败",
+    "saving": "保存中…",
+    "saveAction": "保存为新修订",
+    "rebindSuccess": "已重新绑定到当前候选并产生新修订",
+    "rebindFailed": "重新绑定失败",
+    "rebindAction": "重新绑定到当前候选",
+    "projectBindingTitle": "项目绑定",
+    "projectBindingDescription": "修订固化的项目候选；换绑是显式动作，会立即产生新修订并关闭编辑器。",
+    "projectBindingMissing": "未绑定（存量修订，保存后自动固化）",
+    "executionTitle": "执行与存储",
+    "executionDescription": "只列出本机注册表实际支持的 Adapter；远端执行落地后会自动出现。",
+    "processorsTitle": "产物处理（有序）",
+    "processorsDescription": "处理器在产物封存前按顺序运行，对所有 Provider 生效。",
+    "routesTitle": "交付路线（有序）",
+    "routesDescription": "所有路线消费同一份封存产物；Required 路线全部发布才算完整成功。",
+    "requiredLabel": "必需",
+    "expandRoute": "展开路线",
+    "noRouteSettings": "该目标没有需要配置的设置；本地目录由运行时派生。",
+    "credentialHint": "凭据引用（非秘密值）",
+    "addProcessor": "添加 Processor",
+    "addRoute": "添加路线",
+    "moveUp": "上移",
+    "moveDown": "下移",
+    "remove": "移除",
+    "compositionMissing": "该配置的当前修订缺少发布组合，无法编辑。"
   }
 }

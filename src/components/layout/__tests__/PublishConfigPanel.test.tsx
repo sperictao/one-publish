@@ -259,6 +259,8 @@ describe("PublishConfigPanel", () => {
         onSelectProfile={onSelectProfile}
         onCreateProfile={() => {}}
         onEditProfile={onEditProfile}
+        onSaveProfileComposition={async () => {}}
+        onRebindProfileProject={async () => {}}
         onRefreshProfiles={() => {}}
         onOpenConfigDialog={() => {}}
         onDeleteProfile={onDeleteProfile}
@@ -358,6 +360,8 @@ describe("PublishConfigPanel", () => {
       onSelectProfile: vi.fn(),
       onCreateProfile: vi.fn(),
       onEditProfile: vi.fn(),
+      onSaveProfileComposition: async () => {},
+      onRebindProfileProject: async () => {},
       onRefreshProfiles: vi.fn(),
       onOpenConfigDialog: vi.fn(),
       onDeleteProfile: vi.fn(),
@@ -425,6 +429,8 @@ describe("PublishConfigPanel", () => {
         onSelectProfile={() => {}}
         onCreateProfile={() => {}}
         onEditProfile={() => {}}
+        onSaveProfileComposition={async () => {}}
+        onRebindProfileProject={async () => {}}
         onRefreshProfiles={() => {}}
         onOpenConfigDialog={() => {}}
         onDeleteProfile={() => {}}
@@ -461,6 +467,8 @@ describe("PublishConfigPanel", () => {
         onSelectProfile={() => {}}
         onCreateProfile={() => {}}
         onEditProfile={() => {}}
+        onSaveProfileComposition={async () => {}}
+        onRebindProfileProject={async () => {}}
         onRefreshProfiles={() => {}}
         onOpenConfigDialog={() => {}}
         onDeleteProfile={() => {}}
@@ -504,6 +512,8 @@ describe("PublishConfigPanel", () => {
         onSelectProfile={onSelectProfile}
         onCreateProfile={() => {}}
         onEditProfile={() => {}}
+        onSaveProfileComposition={async () => {}}
+        onRebindProfileProject={async () => {}}
         onRefreshProfiles={() => {}}
         onOpenConfigDialog={() => {}}
         onDeleteProfile={() => {}}
@@ -585,6 +595,8 @@ describe("PublishConfigPanel", () => {
         onSelectProfile={() => {}}
         onCreateProfile={() => {}}
         onEditProfile={() => {}}
+        onSaveProfileComposition={async () => {}}
+        onRebindProfileProject={async () => {}}
         onRefreshProfiles={() => {}}
         onOpenConfigDialog={() => {}}
         onDeleteProfile={() => {}}
@@ -637,6 +649,8 @@ describe("PublishConfigPanel", () => {
         onSelectProfile={() => {}}
         onCreateProfile={() => {}}
         onEditProfile={() => {}}
+        onSaveProfileComposition={async () => {}}
+        onRebindProfileProject={async () => {}}
         onRefreshProfiles={() => {}}
         onOpenConfigDialog={() => {}}
         onDeleteProfile={() => {}}
@@ -684,6 +698,8 @@ describe("PublishConfigPanel", () => {
           onSelectProfile={() => {}}
           onCreateProfile={() => {}}
           onEditProfile={() => {}}
+          onSaveProfileComposition={async () => {}}
+          onRebindProfileProject={async () => {}}
           onRefreshProfiles={() => {}}
           onOpenConfigDialog={() => {}}
           onDeleteProfile={() => {}}
@@ -723,6 +739,8 @@ describe("PublishConfigPanel", () => {
           onSelectProfile={() => {}}
           onCreateProfile={() => {}}
           onEditProfile={() => {}}
+          onSaveProfileComposition={async () => {}}
+          onRebindProfileProject={async () => {}}
           onRefreshProfiles={() => {}}
           onOpenConfigDialog={() => {}}
           onDeleteProfile={() => {}}
@@ -795,6 +813,8 @@ describe("PublishConfigPanel", () => {
         onSelectProfile={() => {}}
         onCreateProfile={() => {}}
         onEditProfile={() => {}}
+        onSaveProfileComposition={async () => {}}
+        onRebindProfileProject={async () => {}}
         onRefreshProfiles={() => {}}
         onOpenConfigDialog={() => {}}
         onDeleteProfile={() => {}}
@@ -833,6 +853,8 @@ describe("PublishConfigPanel", () => {
         onSelectProfile={() => {}}
         onCreateProfile={() => {}}
         onEditProfile={() => {}}
+        onSaveProfileComposition={async () => {}}
+        onRebindProfileProject={async () => {}}
         onRefreshProfiles={() => {}}
         onOpenConfigDialog={() => {}}
         onDeleteProfile={() => {}}
@@ -882,6 +904,8 @@ describe("PublishConfigPanel", () => {
         onSelectProfile={() => {}}
         onCreateProfile={() => {}}
         onEditProfile={() => {}}
+        onSaveProfileComposition={async () => {}}
+        onRebindProfileProject={async () => {}}
         onRefreshProfiles={() => {}}
         onOpenConfigDialog={() => {}}
         onDeleteProfile={() => {}}
@@ -951,6 +975,8 @@ describe("PublishConfigPanel", () => {
         onSelectProfile={() => {}}
         onCreateProfile={() => {}}
         onEditProfile={() => {}}
+        onSaveProfileComposition={async () => {}}
+        onRebindProfileProject={async () => {}}
         onRefreshProfiles={() => {}}
         onOpenConfigDialog={() => {}}
         onDeleteProfile={() => {}}
@@ -1048,6 +1074,8 @@ describe("PublishConfigPanel", () => {
         onSelectProfile={() => {}}
         onCreateProfile={() => {}}
         onEditProfile={() => {}}
+        onSaveProfileComposition={async () => {}}
+        onRebindProfileProject={async () => {}}
         onRefreshProfiles={() => {}}
         onOpenConfigDialog={() => {}}
         onDeleteProfile={() => {}}
@@ -1136,6 +1164,8 @@ describe("PublishConfigPanel", () => {
         onSelectProfile={() => {}}
         onCreateProfile={() => {}}
         onEditProfile={() => {}}
+        onSaveProfileComposition={async () => {}}
+        onRebindProfileProject={async () => {}}
         onRefreshProfiles={() => {}}
         onOpenConfigDialog={() => {}}
         onDeleteProfile={() => {}}
@@ -1301,6 +1331,8 @@ describe("PublishConfigPanel", () => {
         onSelectProfile={() => {}}
         onCreateProfile={() => {}}
         onEditProfile={() => {}}
+        onSaveProfileComposition={async () => {}}
+        onRebindProfileProject={async () => {}}
         onRefreshProfiles={() => {}}
         onOpenConfigDialog={() => {}}
         onDeleteProfile={() => {}}
@@ -1527,6 +1559,8 @@ describe("PublishConfigPanel", () => {
         onSelectProfile={() => {}}
         onCreateProfile={() => {}}
         onEditProfile={() => {}}
+        onSaveProfileComposition={async () => {}}
+        onRebindProfileProject={async () => {}}
         onRefreshProfiles={() => {}}
         onOpenConfigDialog={() => {}}
         onDeleteProfile={() => {}}
@@ -1590,6 +1624,8 @@ describe("PublishConfigPanel — preset selection state", () => {
       onSelectProfile: () => {},
       onCreateProfile: () => {},
       onEditProfile: () => {},
+      onSaveProfileComposition: async () => {},
+      onRebindProfileProject: async () => {},
       onRefreshProfiles: () => {},
       onOpenConfigDialog: () => {},
       onDeleteProfile: () => {},

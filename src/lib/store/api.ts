@@ -29,6 +29,8 @@ import type {
   ProjectPublishProfileFile,
   ProjectScanCandidates as TauriProjectScanCandidates,
   ProviderCatalogEntry as TauriProviderCatalogEntry,
+  PublishAdapterCatalog,
+  PublishComposition,
   PublishConfigStore,
   Repository as TauriRepository,
   RepositoryBranchConnectivityResult,
@@ -316,8 +318,24 @@ export async function updateProfile(params: {
   providerId: string;
   parameters: ConfigParameters;
   profileGroup?: string;
+  /** 显式携带则随修订保存；缺省时后端继承当前修订的发布组合。 */
+  composition?: PublishComposition;
 }): Promise<AppState> {
   const state = await invoke<TauriAppState>("update_profile", params);
+  return normalizeAppState(state);
+}
+
+/** 本机注册表实际支持的组合 Adapter 目录（决议 #79：未支持项隐藏）。 */
+export async function listPublishAdapterCatalog(): Promise<PublishAdapterCatalog> {
+  return invoke<PublishAdapterCatalog>("list_publish_adapter_catalog");
+}
+
+/** 显式换绑到当前仓库候选（决议 #78）：产一版新修订。 */
+export async function rebindProfileProject(params: {
+  repoId: string;
+  profileId: string;
+}): Promise<AppState> {
+  const state = await invoke<TauriAppState>("rebind_profile_project", params);
   return normalizeAppState(state);
 }
 

@@ -855,7 +855,8 @@
     "automationChangeRemoved": "Remove",
     "automationChangeConflict": "Conflict",
     "automationCurrentContent": "Current content",
-    "automationExpectedContent": "Expected content"
+    "automationExpectedContent": "Expected content",
+    "compositionConfig": "Publish composition"
   },
   "common": {
     "close": "Close",
@@ -875,5 +876,38 @@
     "stringParamPlaceholder": "Enter {{flag}}…",
     "paramEditorEmpty": "No parameters defined for this provider",
     "paramEditorType": "Type: {{type}}"
+  },
+  "composition": {
+    "title": "Publish composition: {{name}}",
+    "description": "Edit the execution environment, artifact processing, and delivery routes; saving creates a new revision.",
+    "catalogFailed": "Failed to load the available adapter catalog",
+    "credentialInvalid": "Invalid credential reference (expected keychain:one-publish/xxx): {{location}}",
+    "routesRequired": "A publish composition needs at least one delivery route",
+    "saveSuccess": "Publish composition saved as a new revision",
+    "saveFailed": "Failed to save the publish composition",
+    "saving": "Saving…",
+    "saveAction": "Save as new revision",
+    "rebindSuccess": "Rebound to the current candidate in a new revision",
+    "rebindFailed": "Failed to rebind the project",
+    "rebindAction": "Rebind to current candidate",
+    "projectBindingTitle": "Project binding",
+    "projectBindingDescription": "The project candidate sealed by this revision; rebinding is explicit and immediately creates a new revision.",
+    "projectBindingMissing": "Unbound (legacy revision; sealed on next save)",
+    "executionTitle": "Execution & storage",
+    "executionDescription": "Only adapters supported by the local registry are listed; remote execution appears once it lands.",
+    "processorsTitle": "Artifact processors (ordered)",
+    "processorsDescription": "Processors run in order before the manifest is sealed, for every provider.",
+    "routesTitle": "Delivery routes (ordered)",
+    "routesDescription": "All routes consume the same sealed artifacts; every required route must publish for full success.",
+    "requiredLabel": "Required",
+    "expandRoute": "Expand route",
+    "noRouteSettings": "This destination needs no settings; the local directory is derived at runtime.",
+    "credentialHint": "credential reference (not a secret)",
+    "addProcessor": "Add processor",
+    "addRoute": "Add route",
+    "moveUp": "Move up",
+    "moveDown": "Move down",
+    "remove": "Remove",
+    "compositionMissing": "The current revision has no publish composition to edit."
   }
 }

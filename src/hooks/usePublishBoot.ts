@@ -18,6 +18,11 @@ import {
   DOTNET_PRESETS,
 } from "@/features/config/dotnetPresets";
 import type { PublishConfigStore } from "@/lib/store/types";
+import type { PublishComposition } from "@/generated/tauri-contracts";
+import {
+  rebindProfileProject,
+  updateProfile as updateProfileInStore,
+} from "@/lib/store/api";
 import type { EnvironmentCheckSnapshot } from "@/features/environment/environment";
 import type { CommandImportResultCardProps } from "@/components/publish/CommandImportResultCard";
 import type { ProviderPublishSpec } from "@/features/publish/publishRuntime";
@@ -249,6 +254,40 @@ export function usePublishBoot(params: UsePublishBootParams) {
     [openQuickEditProfileDialog]
   );
 
+  // 发布组合保存与显式换绑：一次保存产一版新修订，成功后刷新配置列表。
+  const handleSaveProfileComposition = useCallback(
+    async (profile: ConfigProfile, composition: PublishComposition) => {
+      if (!params.selectedRepoId) {
+        return;
+      }
+      await updateProfileInStore({
+        repoId: params.selectedRepoId,
+        profileId: profile.id,
+        name: profile.name,
+        providerId: profile.providerId,
+        parameters: profile.parameters,
+        profileGroup: profile.profileGroup ?? undefined,
+        composition,
+      });
+      await loadProfiles();
+    },
+    [params.selectedRepoId, loadProfiles]
+  );
+
+  const handleRebindProfileProject = useCallback(
+    async (profile: ConfigProfile) => {
+      if (!params.selectedRepoId) {
+        return;
+      }
+      await rebindProfileProject({
+        repoId: params.selectedRepoId,
+        profileId: profile.id,
+      });
+      await loadProfiles();
+    },
+    [params.selectedRepoId, loadProfiles]
+  );
+
   const selectedConfiguration = useMemo(() => {
     if (!params.isCustomMode) {
       return null;
@@ -385,6 +424,8 @@ export function usePublishBoot(params: UsePublishBootParams) {
     onSelectProfile: handleSelectProfileFromPanel,
     onCreateProfile: openQuickCreateProfileDialog,
     onEditProfile: handleEditProfileFromPanel,
+    onSaveProfileComposition: handleSaveProfileComposition,
+    onRebindProfileProject: handleRebindProfileProject,
     onRefreshProfiles: loadProfiles,
     onOpenConfigDialog: () => params.handleConfigDialogOpenChange(true),
     onDeleteProfile: handleDeleteProfileFromPanel,

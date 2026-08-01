@@ -53,6 +53,8 @@ export type PreparePublishRuntimeRequest = { repositoryId: string, repositoryPat
  */
 promotedManifestDigest?: string, };
 
+export type PublishAdapterCatalog = { executionBackends: Array<string>, artifactStores: Array<string>, artifactProcessors: Array<string>, deliveryDestinations: Array<string>, };
+
 export type RuntimePlanStage = "inspect_source" | "prepare_identity" | "build" | "collect_artifacts" | "process_artifacts" | "persist_manifest" | "stage_routes" | "publish_routes" | "observe_routes";
 
 export type RuntimePlanNodeSummary = { id: string, stage: RuntimePlanStage, adapterId: string, operation: string, cancellable: boolean, cleanupOwnedStaging: boolean, irreversible: boolean, };

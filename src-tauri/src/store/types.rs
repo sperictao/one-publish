@@ -887,6 +887,69 @@ impl RepoPublishConfig {
 
         Ok(())
     }
+
+    /// 显式换绑（决议 #78）：内容原样带到新修订，仅候选绑定采用新解析值。
+    /// 解析不出候选时拒绝，避免"换绑成未绑定"的静默降级；绑定未变化时
+    /// 不产修订，返回 `false`。
+    pub fn rebind_profile_project(
+        &mut self,
+        profile_id: &str,
+        project_binding: Option<String>,
+        updated_at: String,
+    ) -> Result<bool, crate::errors::AppError> {
+        let Some(project_binding) = project_binding else {
+            return Err(crate::errors::AppError::validation_with_code(
+                "当前仓库没有可解析的项目候选，无法重新绑定",
+                "profile_rebind_candidate_unresolved",
+            ));
+        };
+
+        let profile = self
+            .profiles
+            .iter_mut()
+            .find(|profile| profile.id == profile_id && profile.deleted_at.is_none())
+            .ok_or_else(|| {
+                crate::errors::AppError::validation_with_code(
+                    format!("未找到配置文件: {profile_id}"),
+                    "profile_not_found",
+                )
+            })?;
+        if profile.is_system_default {
+            return Err(crate::errors::AppError::validation_with_code(
+                "不能编辑系统默认配置文件",
+                "system_profile_immutable",
+            ));
+        }
+        let current = profile.current_revision().cloned().ok_or_else(|| {
+            crate::errors::AppError::validation_with_code(
+                format!("配置文件缺少当前修订: {profile_id}"),
+                "profile_revision_not_found",
+            )
+        })?;
+        if current.project_binding.as_deref() == Some(project_binding.as_str()) {
+            return Ok(false);
+        }
+
+        let sequence = profile
+            .revisions
+            .iter()
+            .map(|revision| revision.sequence)
+            .max()
+            .unwrap_or(0)
+            + 1;
+        let revision = PublishConfigurationRevision::new_current(
+            current.provider_id.clone(),
+            current.parameters.clone(),
+            updated_at,
+            sequence,
+            current.composition.clone(),
+            Some(project_binding),
+        );
+        profile.current_revision_id = revision.id.clone();
+        profile.blocked_reason = ConfigProfile::revision_blocked_reason(&revision);
+        profile.revisions.push(revision);
+        Ok(true)
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]

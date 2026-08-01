@@ -1,6 +1,7 @@
 import { useMemo } from "react";
 import type { PublishConfigPanelProps } from "@/components/layout/PublishConfigPanel";
 import type { ConfigProfile } from "@/lib/store/types";
+import type { PublishComposition } from "@/generated/tauri-contracts";
 
 interface UsePublishConfigPanelPropsParams {
   selectedRepoId: string | null;
@@ -12,6 +13,11 @@ interface UsePublishConfigPanelPropsParams {
   onSelectProfile: (profile: ConfigProfile) => void;
   onCreateProfile: () => void;
   onEditProfile: (profile: ConfigProfile) => void;
+  onSaveProfileComposition: (
+    profile: ConfigProfile,
+    composition: PublishComposition
+  ) => Promise<void>;
+  onRebindProfileProject: (profile: ConfigProfile) => Promise<void>;
   onRefreshProfiles: () => void;
   onOpenConfigDialog: () => void;
   onDeleteProfile: (name: string) => void;
@@ -47,6 +53,8 @@ export function usePublishConfigPanelProps(
       onSelectProfile: params.onSelectProfile,
       onCreateProfile: params.onCreateProfile,
       onEditProfile: params.onEditProfile,
+      onSaveProfileComposition: params.onSaveProfileComposition,
+      onRebindProfileProject: params.onRebindProfileProject,
       onRefreshProfiles: params.onRefreshProfiles,
       onOpenConfigDialog: params.onOpenConfigDialog,
       onDeleteProfile: params.onDeleteProfile,

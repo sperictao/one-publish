@@ -1443,6 +1443,60 @@ fn update_profile_carries_composition_as_revision_content() {
 }
 
 #[test]
+fn rebind_profile_project_creates_a_revision_only_when_the_candidate_changes() {
+    let mut config = RepoPublishConfig::default();
+    let profile = config
+        .create_profile(
+            "Bound".to_string(),
+            "dotnet".to_string(),
+            serde_json::json!({ "configuration": "Release" }),
+            None,
+            Some("dotnet:src/App/App.csproj".to_string()),
+            "2026-07-21T10:00:00Z".to_string(),
+        )
+        .expect("create bound profile")
+        .clone();
+
+    // 显式换绑到另一个候选：产一版新修订，内容原样继承。
+    let changed = config
+        .rebind_profile_project(
+            &profile.id,
+            Some("dotnet:src/Other/Other.csproj".to_string()),
+            "2026-07-22T10:00:00Z".to_string(),
+        )
+        .expect("rebind to another candidate");
+    assert!(changed);
+    let rebound = config.profile(&profile.id).expect("profile");
+    assert_eq!(rebound.revisions.len(), 2);
+    let current = rebound.current_revision().expect("current revision");
+    assert_eq!(
+        current.project_binding.as_deref(),
+        Some("dotnet:src/Other/Other.csproj")
+    );
+    assert_eq!(current.parameters["configuration"], "Release");
+
+    // 候选未变化：不产修订。
+    let unchanged = config
+        .rebind_profile_project(
+            &profile.id,
+            Some("dotnet:src/Other/Other.csproj".to_string()),
+            "2026-07-23T10:00:00Z".to_string(),
+        )
+        .expect("rebind with identical candidate");
+    assert!(!unchanged);
+    assert_eq!(config.profile(&profile.id).expect("profile").revisions.len(), 2);
+
+    // 解析不出候选：显式拒绝，而不是换绑成未绑定。
+    let error = config
+        .rebind_profile_project(&profile.id, None, "2026-07-24T10:00:00Z".to_string())
+        .expect_err("unresolvable candidate is rejected");
+    assert_eq!(
+        error.code.as_deref(),
+        Some("profile_rebind_candidate_unresolved")
+    );
+}
+
+#[test]
 fn update_profile_inherits_and_backfills_the_project_binding() {
     let mut config = RepoPublishConfig::default();
     // 创建时固化的绑定：更新继承，不随调用方传入的当前解析值漂移。

@@ -2,7 +2,14 @@ import {
   type CSSProperties,
   type PointerEvent as ReactPointerEvent,
 } from "react";
-import { AlertTriangle, Eye, FileText, Pencil, Trash2 } from "lucide-react";
+import {
+  AlertTriangle,
+  Eye,
+  FileText,
+  Layers3,
+  Pencil,
+  Trash2,
+} from "lucide-react";
 import { cn } from "@/lib/utils";
 import { type ConfigProfile } from "@/lib/store/types";
 import {
@@ -25,9 +32,11 @@ export interface ProfileListItemProps {
   onToggleFavorite: (configKey: string) => void;
   onView: () => void;
   onEdit: () => void;
+  onEditComposition: () => void;
   canEdit: boolean;
   viewTitle: string;
   editTitle: string;
+  compositionTitle: string;
   updateUnavailableTitle: string;
   deleteTitle: string;
   blockedDeleteTitle: string;
@@ -67,9 +76,11 @@ export function ProfileListItem({
   onToggleFavorite,
   onView,
   onEdit,
+  onEditComposition,
   canEdit,
   viewTitle,
   editTitle,
+  compositionTitle,
   updateUnavailableTitle,
   deleteTitle,
   blockedDeleteTitle,
@@ -116,6 +127,12 @@ export function ProfileListItem({
       icon: <Pencil className="size-3.5 text-muted-foreground" />,
       onSelect: onEdit,
       disabled: !canEdit,
+    });
+    actions.push({
+      key: "composition",
+      label: compositionTitle,
+      icon: <Layers3 className="size-3.5 text-muted-foreground" />,
+      onSelect: onEditComposition,
     });
   }
 

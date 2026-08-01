@@ -38,6 +38,8 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { type ConfigProfile, type PublishConfigStore } from "@/lib/store/types";
+import type { PublishComposition } from "@/generated/tauri-contracts";
+import { CompositionEditorDialog } from "@/components/publish/CompositionEditorDialog";
 import { resolveDotnetProjectProfile } from "@/lib/dotnetProjectProfile";
 import { extractInvokeErrorMessage } from "@/lib/tauri/invokeErrors";
 import {
@@ -92,6 +94,11 @@ export interface PublishConfigPanelProps {
   onSelectProfile: (profile: ConfigProfile) => void;
   onCreateProfile: () => void;
   onEditProfile: (profile: ConfigProfile) => void;
+  onSaveProfileComposition: (
+    profile: ConfigProfile,
+    composition: PublishComposition
+  ) => Promise<void>;
+  onRebindProfileProject: (profile: ConfigProfile) => Promise<void>;
   onRefreshProfiles: () => void;
   onOpenConfigDialog: () => void;
   onDeleteProfile: (profileId: string) => void;
@@ -189,6 +196,8 @@ export const PublishConfigPanel = memo(function PublishConfigPanel({
   onSelectProfile,
   onCreateProfile,
   onEditProfile,
+  onSaveProfileComposition,
+  onRebindProfileProject,
   onRefreshProfiles,
   onOpenConfigDialog,
   onDeleteProfile,
@@ -218,6 +227,8 @@ export const PublishConfigPanel = memo(function PublishConfigPanel({
   const [preferredSelectedRenderAnchor, setPreferredSelectedRenderAnchor] =
     useState<PreferredSelectedRenderAnchor | null>(null);
   const [showReorderControls, setShowReorderControls] = useState(false);
+  const [compositionProfile, setCompositionProfile] =
+    useState<ConfigProfile | null>(null);
   const projectProfileViewerRef = useRef<ProjectProfileViewerHandle>(null);
   const { translations } = useI18n();
   const t = translations.configPanel || {};
@@ -249,6 +260,7 @@ export const PublishConfigPanel = memo(function PublishConfigPanel({
   const editConfigLabel = t.updateConfig || t.editConfig || "更新配置";
   const updateUnavailableLabel =
     t.updateUnavailable || "更新配置（当前 Provider 暂无可用编辑器）";
+  const compositionConfigLabel = t.compositionConfig || "发布组合";
   const configurationBlockedLabel =
     t.configurationBlocked || "配置不可执行：{{reason}}";
   const noConfigsLabel = t.noConfigs || "暂无配置";
@@ -945,6 +957,8 @@ export const PublishConfigPanel = memo(function PublishConfigPanel({
                     onToggleFavorite={onToggleFavoriteConfig}
                     onView={() => onSelectProfile(profile)}
                     onEdit={() => onEditProfile(profile)}
+                    onEditComposition={() => setCompositionProfile(profile)}
+                    compositionTitle={compositionConfigLabel}
                     canEdit={
                       !profile.isSystemDefault &&
                       (profile.providerId === "dotnet" ||
@@ -1075,6 +1089,7 @@ export const PublishConfigPanel = memo(function PublishConfigPanel({
     dragToReorderLabel,
     editConfigLabel,
     updateUnavailableLabel,
+    compositionConfigLabel,
     configurationBlockedLabel,
     noConfigsLabel,
     profileGroupLabel,
@@ -1296,6 +1311,20 @@ export const PublishConfigPanel = memo(function PublishConfigPanel({
           configPanelT={t}
         />
       </div>
+
+      {compositionProfile ? (
+        <CompositionEditorDialog
+          open
+          onOpenChange={(open) => {
+            if (!open) {
+              setCompositionProfile(null);
+            }
+          }}
+          profile={compositionProfile}
+          onSaveComposition={onSaveProfileComposition}
+          onRebindProject={onRebindProfileProject}
+        />
+      ) : null}
 
       <ProjectProfileViewer
         ref={projectProfileViewerRef}

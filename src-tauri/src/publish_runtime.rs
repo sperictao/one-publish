@@ -2367,6 +2367,37 @@ fn composition_binding(
     Ok(binding)
 }
 
+/// 本机注册表实际支持的组合 Adapter 目录（决议 #79：编辑器只呈现此清单，
+/// 未支持项隐藏，S1 落地后随注册表扩展自然出现）。与 `build_registry` 的
+/// 注册分支同源维护：注册新 Adapter 时必须同步补录。
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(rename_all = "camelCase")]
+pub struct PublishAdapterCatalog {
+    pub execution_backends: Vec<String>,
+    pub artifact_stores: Vec<String>,
+    pub artifact_processors: Vec<String>,
+    pub delivery_destinations: Vec<String>,
+}
+
+pub(crate) fn builtin_adapter_catalog() -> PublishAdapterCatalog {
+    PublishAdapterCatalog {
+        execution_backends: vec![LOCAL_BACKEND_ID.to_string()],
+        artifact_stores: vec![TEMPORARY_STORE_ID.to_string()],
+        artifact_processors: vec![CHECKSUM_PROCESSOR_ID.to_string()],
+        delivery_destinations: vec![
+            LOCAL_DESTINATION_ID.to_string(),
+            SFTP_DESTINATION_ID.to_string(),
+            GITHUB_RELEASE_DESTINATION_ID.to_string(),
+        ],
+    }
+}
+
+#[tauri::command]
+pub fn list_publish_adapter_catalog() -> PublishAdapterCatalog {
+    builtin_adapter_catalog()
+}
+
 fn build_registry(
     snapshot: &PlanningInputSnapshot,
     delivery_directory: &str,

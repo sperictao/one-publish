@@ -375,6 +375,43 @@ pub async fn update_profile(
     Ok(response)
 }
 
+/// 显式换绑到当前仓库候选（决议 #78）：换绑是显式动作，产一版新修订；
+/// 与更新保存的"继承绑定"语义互补。
+#[tauri::command]
+pub async fn rebind_profile_project(
+    app: tauri::AppHandle,
+    repo_id: String,
+    profile_id: String,
+) -> Result<AppState, AppError> {
+    let _timer =
+        crate::commands::middleware::CommandTimer::new("store::commands::rebind_profile_project");
+    let mut state = get_state();
+    let repo = find_repository_mut(&mut state.repositories, &repo_id)?;
+
+    let provider_id = repo
+        .publish_config
+        .profile(&profile_id)
+        .filter(|profile| profile.deleted_at.is_none())
+        .and_then(|profile| profile.current_revision())
+        .map(|revision| revision.provider_id.clone())
+        .ok_or_else(|| {
+            AppError::validation_with_code(
+                format!("未找到配置文件: {profile_id}"),
+                "profile_not_found",
+            )
+        })?;
+    let project_binding = repository_project_binding(repo, &provider_id);
+    repo.publish_config.rebind_profile_project(
+        &profile_id,
+        project_binding,
+        chrono::Utc::now().to_rfc3339(),
+    )?;
+
+    let response = state.clone();
+    persist_state_and_refresh_tray(&app, state).await?;
+    Ok(response)
+}
+
 #[tauri::command]
 pub async fn delete_profile(
     app: tauri::AppHandle,
