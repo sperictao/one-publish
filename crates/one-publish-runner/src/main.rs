@@ -2,7 +2,8 @@ use std::fs;
 use std::process::ExitCode;
 
 use one_publish_runner::{
-    installed_runner, verify_installed_projection, PreparedAttempt, RunnerProjection,
+    installed_runner, prepare_from_projection, verify_installed_projection, PreparedAttempt,
+    RunnerProjection, TriggerContext,
 };
 
 fn main() -> ExitCode {
@@ -17,9 +18,9 @@ fn main() -> ExitCode {
 
 fn run() -> Result<(), Box<dyn std::error::Error>> {
     let mut args = std::env::args().skip(1);
-    let command = args
-        .next()
-        .ok_or("usage: one-publish-runner <verify|execute> <path> [attempt-id]")?;
+    let command = args.next().ok_or(
+        "usage: one-publish-runner <verify|prepare-from-projection|execute> <path> [arguments]",
+    )?;
     let path = args.next().ok_or("projection path is required")?;
 
     match command.as_str() {
@@ -29,6 +30,26 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
             }
             let projection: RunnerProjection = serde_json::from_slice(&fs::read(path)?)?;
             verify_installed_projection(&projection)?;
+        }
+        "prepare-from-projection" => {
+            let repository_root = args
+                .next()
+                .ok_or("prepare-from-projection requires the checkout root")?;
+            let tag = args.next();
+            if args.next().is_some() {
+                return Err(
+                    "prepare-from-projection accepts a checkout root and an optional tag".into(),
+                );
+            }
+            let projection: RunnerProjection = serde_json::from_slice(&fs::read(path)?)?;
+            let attempt = prepare_from_projection(
+                &projection,
+                &TriggerContext {
+                    repository_root: repository_root.into(),
+                    tag,
+                },
+            )?;
+            println!("{}", serde_json::to_string(&attempt)?);
         }
         "execute" => {
             let attempt_id = args.next().ok_or("execute requires an attempt id")?;

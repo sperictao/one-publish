@@ -6,6 +6,9 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
 
+mod prepare;
+pub use prepare::{prepare_from_projection, TriggerContext};
+
 use publish_adapters::{
     AdapterConformanceFixture, AdapterRegistry, ChecksumProcessor, CustomCommandProcessor,
     FakeGitHubActionsBackend, GhCliGitHubReleaseApi, GitHubActionsExecutionBackend,
