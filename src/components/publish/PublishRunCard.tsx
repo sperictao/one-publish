@@ -75,6 +75,7 @@ export const PublishRunCard = memo(function PublishRunCard({
   const [isOpeningOutputDir, setIsOpeningOutputDir] = useState(false);
   const [logExpanded, setLogExpanded] = useState(false);
   const [warningExpanded, setWarningExpanded] = useState(false);
+  const [eventsExpanded, setEventsExpanded] = useState(false);
   const frozenDisplayRef = useRef({
     outputLog: currentOutputLog,
     publishResult: currentPublishResult,
@@ -203,7 +204,7 @@ export const PublishRunCard = memo(function PublishRunCard({
           panelClassName: "border-interactive/20 bg-card",
           iconWrapClassName:
             "bg-interactive/10 text-interactive ring-1 ring-interactive/15",
-          iconClassName: "animate-spin",
+          iconClassName: "",
           icon: Loader2,
         }
       : publishVisualState === "success"
@@ -673,17 +674,104 @@ export const PublishRunCard = memo(function PublishRunCard({
                   </ul>
                 </div>
               ) : null}
-              {runtimeResult.attempt.receipts.map((receipt) => (
-                <div
-                  key={receipt.receiptId}
-                  className="mt-2 grid min-w-0 gap-1 border-t border-border pt-2 text-label-12 sm:grid-cols-2"
-                >
-                  <span className="truncate font-mono">
-                    {receipt.receiptId}
-                  </span>
-                  <span className="font-semibold">{receipt.status}</span>
+              {runtimeResult.attempt.receipts.length > 0 ? (
+                <div className="mt-2" data-testid="publish-receipt-results">
+                  <SectionLabel as="div">
+                    {appT.publishRuntimeReceiptsLabel || "交付凭证"}
+                  </SectionLabel>
+                  <ul className="mt-1">
+                    {runtimeResult.attempt.receipts.map((receipt) => (
+                      <li
+                        key={receipt.receiptId}
+                        data-testid={`publish-receipt-${receipt.receiptId}`}
+                        className="border-t border-border py-2 text-label-12"
+                      >
+                        <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
+                          <span className="truncate font-mono">
+                            {receipt.receiptId}
+                          </span>
+                          <span className="text-muted-foreground">
+                            {receipt.routeId}
+                          </span>
+                          <span
+                            className={cn(
+                              "font-semibold",
+                              receipt.status === "published"
+                                ? "text-success"
+                                : receipt.status === "failed" ||
+                                    receipt.status === "rejected"
+                                  ? "text-destructive"
+                                  : "text-muted-foreground"
+                            )}
+                          >
+                            {receipt.status}
+                          </span>
+                          <span className="text-muted-foreground">
+                            {appT.publishRuntimeReceiptRevisionLabel || "修订"}{" "}
+                            {receipt.revision}
+                          </span>
+                        </div>
+                        {receipt.externalReference ? (
+                          <div className="mt-1 truncate font-mono text-muted-foreground">
+                            {receipt.externalReference}
+                          </div>
+                        ) : null}
+                      </li>
+                    ))}
+                  </ul>
                 </div>
-              ))}
+              ) : null}
+              {runtimeResult.attempt.events.length > 0 ? (
+                <div className="mt-2" data-testid="publish-event-timeline">
+                  <button
+                    type="button"
+                    onClick={() => setEventsExpanded((v) => !v)}
+                    aria-expanded={eventsExpanded}
+                    className="flex w-full items-center gap-2 rounded-sm border-t border-border px-1 pt-2 text-left text-label-12 font-medium text-muted-foreground transition-colors duration-150 ease-geist hover:text-foreground focus-ring"
+                  >
+                    <span>
+                      {appT.publishRuntimeEventsLabel || "发布事件"} ·{" "}
+                      {runtimeResult.attempt.events.length}
+                    </span>
+                    <ChevronDown
+                      className={cn(
+                        "ml-auto size-3.5 transition-transform duration-150 ease-geist",
+                        eventsExpanded && "rotate-180"
+                      )}
+                    />
+                  </button>
+                  <Collapse open={eventsExpanded}>
+                    <ul className="mt-1 max-h-48 space-y-1 overflow-auto">
+                      {runtimeResult.attempt.events.map((event) => (
+                        <li
+                          key={event.eventId}
+                          data-testid={`publish-event-${event.eventId}`}
+                          className="rounded-sm border border-border bg-background px-2 py-1 text-label-12"
+                        >
+                          <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5">
+                            <span className="font-mono font-semibold text-foreground">
+                              {event.kind}
+                            </span>
+                            <span className="truncate font-mono text-muted-foreground">
+                              {event.planNodeId}
+                            </span>
+                            {event.deliveryStatus ? (
+                              <span className="text-muted-foreground">
+                                {event.deliveryStatus}
+                              </span>
+                            ) : null}
+                          </div>
+                          {event.error ? (
+                            <div className="mt-0.5 break-words text-destructive">
+                              {event.error}
+                            </div>
+                          ) : null}
+                        </li>
+                      ))}
+                    </ul>
+                  </Collapse>
+                </div>
+              ) : null}
             </section>
           ) : null}
 

@@ -45,6 +45,8 @@ export interface ExecutionHistoryCardProps {
   historyFilterWindow: HistoryFilterWindow;
   historyFilterKeyword: string;
   isExportingHistory: boolean;
+  isExportingFailureGroups: boolean;
+  failureGroupCount: number;
   isPublishing: boolean;
   appT: Record<string, string | undefined>;
   historyT: Record<string, string | undefined>;
@@ -54,6 +56,7 @@ export interface ExecutionHistoryCardProps {
   onHistoryFilterWindowChange: (value: HistoryFilterWindow) => void;
   onHistoryFilterKeywordChange: (value: string) => void;
   onExportExecutionHistory: () => Promise<void>;
+  onExportFailureGroups: () => Promise<void>;
   onClearFilters: () => void;
   onOpenSnapshotFromRecord: (record: ExecutionRecord) => Promise<void>;
   onRerunFromHistory: (record: ExecutionRecord) => Promise<void>;
@@ -73,6 +76,8 @@ export function ExecutionHistoryCard({
   historyFilterWindow,
   historyFilterKeyword,
   isExportingHistory,
+  isExportingFailureGroups,
+  failureGroupCount,
   isPublishing,
   appT,
   historyT,
@@ -82,6 +87,7 @@ export function ExecutionHistoryCard({
   onHistoryFilterWindowChange,
   onHistoryFilterKeywordChange,
   onExportExecutionHistory,
+  onExportFailureGroups,
   onClearFilters,
   onOpenSnapshotFromRecord,
   onRerunFromHistory,
@@ -216,6 +222,24 @@ export function ExecutionHistoryCard({
                 </>
               ) : (
                 historyT.exportHistory || "导出历史"
+              )}
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="w-fit"
+              onClick={() => void onExportFailureGroups()}
+              disabled={isExportingFailureGroups || failureGroupCount === 0}
+              data-testid="export-failure-groups-btn"
+            >
+              {isExportingFailureGroups ? (
+                <>
+                  <Loader2 className="mr-1 size-3 animate-spin" />
+                  {appT.exporting || "导出中…"}
+                </>
+              ) : (
+                historyT.exportFailureGroups || "导出失败分组"
               )}
             </Button>
           </div>

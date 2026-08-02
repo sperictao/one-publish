@@ -5,6 +5,7 @@ import type {
   AutomationBindingsView,
   AutomationChangeRequest,
   AutomationProjectionPreview,
+  ManualDispatchResult,
   RemoteAttemptEvidenceView,
 } from "@/generated/tauri-contracts";
 
@@ -13,6 +14,7 @@ export type {
   AutomationBindingsView,
   AutomationChangeRequest,
   AutomationProjectionPreview,
+  ManualDispatchResult,
   RemoteAttemptEvidenceView,
 } from "@/generated/tauri-contracts";
 
@@ -51,4 +53,23 @@ export async function synchronizeRemoteEvidence(
     "synchronize_remote_publish_evidence",
     { repoId }
   );
+}
+
+export async function dispatchManualPublishRun(
+  repoId: string,
+  bindingId: string,
+  version: string
+): Promise<ManualDispatchResult> {
+  return invoke<ManualDispatchResult>("dispatch_manual_publish_run", {
+    repoId,
+    bindingId,
+    version,
+  });
+}
+
+export async function cancelRemotePublishRun(
+  repoId: string,
+  runId: number
+): Promise<void> {
+  return invoke<void>("cancel_remote_publish_run", { repoId, runId });
 }

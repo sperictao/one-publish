@@ -3,6 +3,7 @@ import { invoke } from "@tauri-apps/api/core";
 import type {
   DiagnosticsIndexPayload,
   ExecutionHistoryExportRow,
+  FailureGroupBundlePayload,
 } from "@/features/history/diagnosticsExportPayload";
 
 export async function exportExecutionHistoryFile(params: {
@@ -21,6 +22,16 @@ export async function exportDiagnosticsIndexFile(params: {
 }): Promise<string> {
   return await invoke<string>("export_diagnostics_index", {
     index: params.index,
+    filePath: params.filePath,
+  });
+}
+
+export async function exportFailureGroupBundleFile(params: {
+  bundle: FailureGroupBundlePayload;
+  filePath: string;
+}): Promise<string> {
+  return await invoke<string>("export_failure_group_bundle", {
+    bundle: params.bundle,
     filePath: params.filePath,
   });
 }

@@ -13,11 +13,15 @@ const {
   previewAutomationChangeMock,
   applyAutomationChangeMock,
   synchronizeRemoteEvidenceMock,
+  dispatchManualPublishRunMock,
+  cancelRemotePublishRunMock,
 } = vi.hoisted(() => ({
   listAutomationBindingsMock: vi.fn(),
   previewAutomationChangeMock: vi.fn(),
   applyAutomationChangeMock: vi.fn(),
   synchronizeRemoteEvidenceMock: vi.fn(),
+  dispatchManualPublishRunMock: vi.fn(),
+  cancelRemotePublishRunMock: vi.fn(),
 }));
 
 vi.mock("@/lib/automationBindings", () => ({
@@ -25,6 +29,8 @@ vi.mock("@/lib/automationBindings", () => ({
   previewAutomationChange: previewAutomationChangeMock,
   applyAutomationChange: applyAutomationChangeMock,
   synchronizeRemoteEvidence: synchronizeRemoteEvidenceMock,
+  dispatchManualPublishRun: dispatchManualPublishRunMock,
+  cancelRemotePublishRun: cancelRemotePublishRunMock,
 }));
 
 vi.mock("sonner", () => ({
@@ -417,5 +423,70 @@ describe("AutomationBindingsSection", () => {
     expect(
       screen.getByTestId("automation-remote-expired-gh-9-1")
     ).toHaveTextContent("远端证据已过期");
+  });
+
+  it("dispatches a manual remote run with the entered version and re-syncs evidence", async () => {
+    listAutomationBindingsMock.mockResolvedValue(boundView(null));
+    synchronizeRemoteEvidenceMock.mockResolvedValue([]);
+    dispatchManualPublishRunMock.mockResolvedValue({
+      attemptId: "gh-10-1",
+      runId: 10,
+    });
+
+    renderSection();
+    await screen.findByTestId("automation-binding-binding-1");
+
+    fireEvent.click(screen.getByTestId("automation-dispatch-binding-1"));
+    fireEvent.change(screen.getByLabelText("发布版本"), {
+      target: { value: "1.2.3" },
+    });
+    fireEvent.click(screen.getByTestId("automation-dispatch-confirm"));
+
+    await waitFor(() =>
+      expect(dispatchManualPublishRunMock).toHaveBeenCalledWith(
+        "repo-1",
+        "binding-1",
+        "1.2.3"
+      )
+    );
+    // 触发成功后自动同步一次远端证据，让新运行出现在列表里。
+    await waitFor(() =>
+      expect(synchronizeRemoteEvidenceMock).toHaveBeenCalledWith("repo-1")
+    );
+  });
+
+  it("cancels a running remote attempt from the evidence list", async () => {
+    listAutomationBindingsMock.mockResolvedValue(boundView(null));
+    synchronizeRemoteEvidenceMock.mockResolvedValue([
+      {
+        attemptId: "gh-11-1",
+        bindingId: "binding-1",
+        runId: 11,
+        state: { kind: "archived", status: "running", error: null },
+      },
+      {
+        attemptId: "gh-12-1",
+        bindingId: "binding-1",
+        runId: 12,
+        state: { kind: "archived", status: "published", error: null },
+      },
+    ]);
+    cancelRemotePublishRunMock.mockResolvedValue(undefined);
+
+    renderSection();
+    await screen.findByTestId("automation-remote-evidence");
+    fireEvent.click(screen.getByRole("button", { name: /同步远端证据/ }));
+    await screen.findByTestId("automation-remote-attempt-gh-11-1");
+
+    // 只有进行中的运行才提供取消入口。
+    expect(screen.queryByTestId("automation-remote-cancel-gh-12-1")).toBeNull();
+    fireEvent.click(screen.getByTestId("automation-remote-cancel-gh-11-1"));
+
+    await waitFor(() =>
+      expect(cancelRemotePublishRunMock).toHaveBeenCalledWith("repo-1", 11)
+    );
+    await waitFor(() =>
+      expect(synchronizeRemoteEvidenceMock).toHaveBeenCalledTimes(2)
+    );
   });
 });

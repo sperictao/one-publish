@@ -5,10 +5,12 @@ import { toast } from "sonner";
 import {
   createDiagnosticsIndexExportPlan,
   createExecutionHistoryExportPlan,
+  createFailureGroupBundleExportPlan,
 } from "@/features/history/diagnosticsExportPayload";
 import {
   exportDiagnosticsIndexFile,
   exportExecutionHistoryFile,
+  exportFailureGroupBundleFile,
 } from "@/features/history/diagnosticsExportRuntime";
 import type { HistoryExportFormat } from "@/features/history/historyFilterPresets";
 import { type ExecutionRecord } from "@/lib/store/types";
@@ -45,8 +47,59 @@ export function useDiagnosticsExports({
   trackHistoryExport,
 }: UseDiagnosticsExportsParams) {
   const [isExportingHistory, setIsExportingHistory] = useState(false);
+  const [isExportingFailureGroups, setIsExportingFailureGroups] =
+    useState(false);
   const [isExportingDiagnosticsIndex, setIsExportingDiagnosticsIndex] =
     useState(false);
+
+  const exportFailureGroupBundle = useCallback(async () => {
+    if (failureGroupCount === 0) {
+      toast.error(
+        historyT.noFailureGroupsToExport || "当前筛选下没有失败分组可导出"
+      );
+      return;
+    }
+
+    const exportPlan = createFailureGroupBundleExportPlan({
+      records: filteredExecutionHistory,
+      selectedRepoPath,
+    });
+
+    const selected = await save({
+      title: historyT.exportFailureGroupsTitle || "导出失败分组",
+      defaultPath: exportPlan.defaultPath,
+      filters: exportPlan.filters,
+    });
+
+    if (!selected) {
+      return;
+    }
+
+    setIsExportingFailureGroups(true);
+    try {
+      const outputPath = await exportFailureGroupBundleFile({
+        bundle: exportPlan.payload,
+        filePath: selected,
+      });
+
+      trackHistoryExport(outputPath);
+      toast.success(historyT.failureGroupsExported || "失败分组已导出", {
+        description: outputPath,
+      });
+    } catch (err) {
+      toast.error(historyT.exportFailureGroupsFailed || "导出失败分组失败", {
+        description: String(err),
+      });
+    } finally {
+      setIsExportingFailureGroups(false);
+    }
+  }, [
+    failureGroupCount,
+    filteredExecutionHistory,
+    historyT,
+    selectedRepoPath,
+    trackHistoryExport,
+  ]);
 
   const exportExecutionHistory = useCallback(
     async (options?: ExportHistoryOptions) => {
@@ -162,8 +215,10 @@ export function useDiagnosticsExports({
 
   return {
     isExportingHistory,
+    isExportingFailureGroups,
     isExportingDiagnosticsIndex,
     exportExecutionHistory,
+    exportFailureGroupBundle,
     exportDiagnosticsIndex,
   };
 }

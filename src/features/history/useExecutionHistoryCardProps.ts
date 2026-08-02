@@ -22,6 +22,8 @@ interface UseExecutionHistoryCardPropsParams {
   historyFilterWindow: HistoryFilterWindow;
   historyFilterKeyword: string;
   isExportingHistory: boolean;
+  isExportingFailureGroups: boolean;
+  failureGroupCount: number;
   isPublishing: boolean;
   appT: TranslationMap;
   historyT: TranslationMap;
@@ -31,6 +33,7 @@ interface UseExecutionHistoryCardPropsParams {
   setHistoryFilterWindow: (value: HistoryFilterWindow) => void;
   setHistoryFilterKeyword: (value: string) => void;
   exportExecutionHistory: () => Promise<void>;
+  exportFailureGroupBundle: () => Promise<void>;
   clearHistoryFilters: () => void;
   openSnapshotFromRecord: (record: ExecutionRecord) => Promise<void>;
   rerunFromHistory: (record: ExecutionRecord) => Promise<void>;
@@ -54,6 +57,8 @@ export function useExecutionHistoryCardProps(
       historyFilterWindow: params.historyFilterWindow,
       historyFilterKeyword: params.historyFilterKeyword,
       isExportingHistory: params.isExportingHistory,
+      isExportingFailureGroups: params.isExportingFailureGroups,
+      failureGroupCount: params.failureGroupCount,
       isPublishing: params.isPublishing,
       appT: params.appT,
       historyT: params.historyT,
@@ -63,6 +68,7 @@ export function useExecutionHistoryCardProps(
       onHistoryFilterWindowChange: params.setHistoryFilterWindow,
       onHistoryFilterKeywordChange: params.setHistoryFilterKeyword,
       onExportExecutionHistory: params.exportExecutionHistory,
+      onExportFailureGroups: params.exportFailureGroupBundle,
       onClearFilters: params.clearHistoryFilters,
       onOpenSnapshotFromRecord: params.openSnapshotFromRecord,
       onRerunFromHistory: params.rerunFromHistory,

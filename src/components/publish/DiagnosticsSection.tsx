@@ -66,7 +66,12 @@ export function DiagnosticsSection({
     extractSpecFromRecord,
   });
 
-  const { isExportingHistory, exportExecutionHistory } = useDiagnosticsExports({
+  const {
+    isExportingHistory,
+    isExportingFailureGroups,
+    exportExecutionHistory,
+    exportFailureGroupBundle,
+  } = useDiagnosticsExports({
     historyT,
     snapshotPaths,
     recentHistoryExports,
@@ -87,6 +92,8 @@ export function DiagnosticsSection({
     historyFilterWindow,
     historyFilterKeyword,
     isExportingHistory,
+    isExportingFailureGroups,
+    failureGroupCount,
     isPublishing,
     appT,
     historyT,
@@ -96,6 +103,7 @@ export function DiagnosticsSection({
     setHistoryFilterWindow,
     setHistoryFilterKeyword,
     exportExecutionHistory,
+    exportFailureGroupBundle,
     clearHistoryFilters,
     openSnapshotFromRecord,
     rerunFromHistory,

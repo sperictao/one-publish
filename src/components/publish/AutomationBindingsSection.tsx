@@ -3,6 +3,7 @@ import {
   ArrowUpCircle,
   GitBranchPlus,
   Loader2,
+  Play,
   RefreshCw,
   ShieldAlert,
   Unlink,
@@ -29,8 +30,11 @@ import {
 } from "@/components/ui/select";
 import { SectionLabel } from "@/components/ui/section-label";
 import { extractInvokeErrorMessage } from "@/lib/tauri/invokeErrors";
+import { RemoteEvidenceSection } from "@/components/publish/RemoteEvidenceSection";
 import {
   applyAutomationChange,
+  cancelRemotePublishRun,
+  dispatchManualPublishRun,
   listAutomationBindings,
   previewAutomationChange,
   synchronizeRemoteEvidence,
@@ -42,24 +46,6 @@ import {
 import type { ConfigProfile } from "@/lib/store/types";
 
 const DEFAULT_TAG_PREFIX = "v";
-
-function remoteStatusLabel(
-  status: string,
-  configPanelT: Record<string, string | undefined>
-): string {
-  switch (status) {
-    case "published":
-      return configPanelT.automationRemotePublished || "已发布";
-    case "partial_delivery":
-      return configPanelT.automationRemotePartial || "部分交付";
-    case "failed":
-      return configPanelT.automationRemoteFailed || "失败";
-    case "cancelled":
-      return configPanelT.automationRemoteCancelled || "已取消";
-    default:
-      return configPanelT.automationRemoteRunning || "进行中";
-  }
-}
 
 interface RuntimeRevisionSection {
   runnerVersion: string;
@@ -131,6 +117,12 @@ export function AutomationBindingsSection({
     RemoteAttemptEvidenceView[] | null
   >(null);
   const [syncingRemote, setSyncingRemote] = useState(false);
+  const [dispatchBindingId, setDispatchBindingId] = useState<string | null>(
+    null
+  );
+  const [dispatchVersion, setDispatchVersion] = useState("");
+  const [dispatching, setDispatching] = useState(false);
+  const [cancellingRunId, setCancellingRunId] = useState<number | null>(null);
 
   // #63 只迁移现有 Tauri workflow；第二 Provider 的远端投影由后续 Ticket 扩展。
   const activeProfiles = profiles.filter(
@@ -212,6 +204,63 @@ export function AutomationBindingsSection({
       setSyncingRemote(false);
     }
   }, [repoId, configPanelT]);
+
+  const confirmDispatch = useCallback(async () => {
+    if (!repoId || !dispatchBindingId || !dispatchVersion.trim()) return;
+    setDispatching(true);
+    try {
+      const result = await dispatchManualPublishRun(
+        repoId,
+        dispatchBindingId,
+        dispatchVersion.trim()
+      );
+      toast.success(
+        configPanelT.automationDispatchSuccess || "已触发远端发布",
+        {
+          description: `attempt ${result.attemptId}${
+            result.runId != null ? ` · run #${result.runId}` : ""
+          }`,
+        }
+      );
+      setDispatchBindingId(null);
+      setDispatchVersion("");
+      await syncRemoteEvidence();
+    } catch (error) {
+      toast.error(configPanelT.automationDispatchFailed || "触发远端发布失败", {
+        description: extractInvokeErrorMessage(error),
+      });
+    } finally {
+      setDispatching(false);
+    }
+  }, [
+    repoId,
+    dispatchBindingId,
+    dispatchVersion,
+    configPanelT,
+    syncRemoteEvidence,
+  ]);
+
+  const cancelRemoteRun = useCallback(
+    async (attempt: RemoteAttemptEvidenceView) => {
+      if (!repoId) return;
+      setCancellingRunId(attempt.runId);
+      try {
+        await cancelRemotePublishRun(repoId, attempt.runId);
+        toast.success(
+          configPanelT.automationRemoteCancelSuccess || "已请求取消远端运行"
+        );
+        await syncRemoteEvidence();
+      } catch (error) {
+        toast.error(
+          configPanelT.automationRemoteCancelFailed || "取消远端运行失败",
+          { description: extractInvokeErrorMessage(error) }
+        );
+      } finally {
+        setCancellingRunId(null);
+      }
+    },
+    [repoId, configPanelT, syncRemoteEvidence]
+  );
 
   const startInstallPreview = useCallback(() => {
     if (!installProfileId) return;
@@ -383,6 +432,19 @@ export function AutomationBindingsSection({
                     variant="ghost"
                     size="sm"
                     className="h-7 px-2 text-label-12"
+                    onClick={() => {
+                      setDispatchBindingId(item.binding.id);
+                      setDispatchVersion("");
+                    }}
+                    data-testid={`automation-dispatch-${item.binding.id}`}
+                  >
+                    <Play className="mr-1 size-3.5" />
+                    {configPanelT.automationDispatch || "手动触发"}
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-7 px-2 text-label-12"
                     onClick={() =>
                       void requestPreview({
                         kind: "upgradeRevision",
@@ -415,77 +477,70 @@ export function AutomationBindingsSection({
       )}
 
       {bindings.length > 0 ? (
-        <div className="mt-3" data-testid="automation-remote-evidence">
-          <div className="flex items-center justify-between">
-            <span className="text-label-12 font-medium text-muted-foreground">
-              {configPanelT.automationRemoteEvidence || "远端发布记录"}
-            </span>
+        <RemoteEvidenceSection
+          evidence={remoteEvidence}
+          syncing={syncingRemote}
+          cancellingRunId={cancellingRunId}
+          onSync={() => void syncRemoteEvidence()}
+          onCancelRun={(attempt) => void cancelRemoteRun(attempt)}
+          t={configPanelT}
+        />
+      ) : null}
+
+      <Dialog
+        open={dispatchBindingId !== null}
+        onOpenChange={(open) => {
+          if (!open && !dispatching) setDispatchBindingId(null);
+        }}
+      >
+        <DialogContent className="sm:max-w-[420px]">
+          <DialogHeader>
+            <DialogTitle>
+              {configPanelT.automationDispatchTitle || "手动触发远端发布"}
+            </DialogTitle>
+            <DialogDescription>
+              {configPanelT.automationDispatchHint ||
+                "按此绑定的固定修订在远端后端发布指定版本；触发后可同步远端证据查看进度。"}
+            </DialogDescription>
+          </DialogHeader>
+          <div>
+            <Label
+              htmlFor="automation-dispatch-version"
+              className="mb-1 inline-block text-label-12 font-semibold text-muted-foreground"
+            >
+              {configPanelT.automationVersionLabel || "发布版本"}
+            </Label>
+            <Input
+              id="automation-dispatch-version"
+              value={dispatchVersion}
+              onChange={(event) => setDispatchVersion(event.target.value)}
+              placeholder="1.2.3"
+              className="h-8 text-label-12"
+            />
+          </div>
+          <DialogFooter>
             <Button
               variant="ghost"
               size="sm"
-              className="h-7 px-2 text-label-12"
-              onClick={() => void syncRemoteEvidence()}
-              disabled={syncingRemote}
+              onClick={() => setDispatchBindingId(null)}
+              disabled={dispatching}
             >
-              {syncingRemote ? (
-                <Loader2 className="mr-1 size-3.5 animate-spin" />
-              ) : (
-                <RefreshCw className="mr-1 size-3.5" />
-              )}
-              {configPanelT.automationRemoteSync || "同步远端证据"}
+              {configPanelT.automationCancel || "取消"}
             </Button>
-          </div>
-          {remoteEvidence === null ? (
-            <p className="mt-1 text-label-12 text-muted-foreground">
-              {configPanelT.automationRemoteHint ||
-                "同步后展示远端发布的归档证据。"}
-            </p>
-          ) : remoteEvidence.length === 0 ? (
-            <p className="mt-1 text-label-12 text-muted-foreground">
-              {configPanelT.automationRemoteEmpty || "尚无远端发布记录"}
-            </p>
-          ) : (
-            <ul className="mt-1 space-y-1">
-              {remoteEvidence.map((attempt) => (
-                <li
-                  key={attempt.attemptId}
-                  className="flex items-center justify-between gap-2 rounded-sm border border-border px-2 py-1"
-                  data-testid={`automation-remote-attempt-${attempt.attemptId}`}
-                >
-                  <span className="truncate text-label-12 text-foreground">
-                    {attempt.attemptId}
-                  </span>
-                  {attempt.state.kind === "archived" ? (
-                    <span
-                      className={
-                        attempt.state.status === "published"
-                          ? "rounded-sm bg-success/10 px-1.5 py-0.5 text-label-12 font-medium text-success"
-                          : "rounded-sm bg-muted px-1.5 py-0.5 text-label-12 font-medium text-muted-foreground"
-                      }
-                      title={attempt.state.error ?? undefined}
-                    >
-                      {remoteStatusLabel(attempt.state.status, configPanelT)}
-                    </span>
-                  ) : attempt.state.kind === "expired" ? (
-                    <span
-                      className="rounded-sm bg-red-500/15 px-1.5 py-0.5 text-label-12 font-medium text-red-700 dark:text-red-400"
-                      data-testid={`automation-remote-expired-${attempt.attemptId}`}
-                    >
-                      {configPanelT.automationRemoteExpired || "远端证据已过期"}
-                    </span>
-                  ) : (
-                    <span className="rounded-sm bg-amber-500/15 px-1.5 py-0.5 text-label-12 font-medium text-amber-700 dark:text-amber-400">
-                      {(configPanelT.automationRemoteMissing || "证据缺失") +
-                        ": " +
-                        attempt.state.missing.join(", ")}
-                    </span>
-                  )}
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
-      ) : null}
+            <Button
+              size="sm"
+              onClick={() => void confirmDispatch()}
+              disabled={dispatching || !dispatchVersion.trim()}
+              data-testid="automation-dispatch-confirm"
+            >
+              {dispatching ? (
+                <Loader2 className="mr-1 size-3.5 animate-spin" />
+              ) : null}
+              {configPanelT.automationDispatchConfirm || "触发发布"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Dialog
         open={installOpen && !pending}

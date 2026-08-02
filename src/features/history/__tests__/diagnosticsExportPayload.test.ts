@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   createDiagnosticsIndexExportPlan,
   createExecutionHistoryExportPlan,
+  createFailureGroupBundleExportPlan,
 } from "@/features/history/diagnosticsExportPayload";
 import type { ExecutionRecord } from "@/lib/store/types";
 
@@ -104,5 +105,48 @@ describe("diagnostics export payload", () => {
         historyExports: ["/repo/history.csv"],
       },
     });
+  });
+
+  it("creates a failure group bundle plan grouping failed records by signature", () => {
+    const failedA = createExecutionRecord({ id: "failed-a" });
+    const failedB = createExecutionRecord({
+      id: "failed-b",
+      finishedAt: "2026-06-03T01:02:00.000Z",
+    });
+    const succeeded = createExecutionRecord({
+      id: "ok-1",
+      success: true,
+      error: null,
+      failureSignature: null,
+    });
+
+    const plan = createFailureGroupBundleExportPlan({
+      records: [failedA, failedB, succeeded],
+      selectedRepoPath: "/repo",
+      now: new Date("2026-06-03T04:05:06.789Z"),
+    });
+
+    expect(plan.defaultPath).toBe(
+      "/repo/failure-groups-2026-06-03T04-05-06.789Z.json"
+    );
+    expect(plan.filters).toEqual([
+      { name: "JSON", extensions: ["json"] },
+      { name: "Markdown", extensions: ["md"] },
+    ]);
+    expect(plan.payload.generatedAt).toBe("2026-06-03T04:05:06.789Z");
+    expect(plan.payload.summary).toEqual({
+      failureGroupCount: 1,
+      failedRecordCount: 2,
+    });
+    expect(plan.payload.groups).toHaveLength(1);
+    const [group] = plan.payload.groups;
+    expect(group.providerId).toBe("dotnet");
+    expect(group.signature).toBe("dotnet:build failed");
+    expect(group.count).toBe(2);
+    // 成功记录不进入分组；组内记录按完成时间倒序。
+    expect(group.records.map((record) => record.id)).toEqual([
+      "failed-b",
+      "failed-a",
+    ]);
   });
 });

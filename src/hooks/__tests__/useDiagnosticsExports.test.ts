@@ -7,6 +7,7 @@ const mocks = vi.hoisted(() => ({
   save: vi.fn(),
   exportExecutionHistoryFile: vi.fn(),
   exportDiagnosticsIndexFile: vi.fn(),
+  exportFailureGroupBundleFile: vi.fn(),
   toast: {
     success: vi.fn(),
     error: vi.fn(),
@@ -24,6 +25,7 @@ vi.mock("sonner", () => ({
 vi.mock("@/features/history/diagnosticsExportRuntime", () => ({
   exportExecutionHistoryFile: mocks.exportExecutionHistoryFile,
   exportDiagnosticsIndexFile: mocks.exportDiagnosticsIndexFile,
+  exportFailureGroupBundleFile: mocks.exportFailureGroupBundleFile,
 }));
 
 import { useDiagnosticsExports } from "@/hooks/useDiagnosticsExports";
@@ -165,5 +167,78 @@ describe("useDiagnosticsExports", () => {
     expect(mocks.toast.success).toHaveBeenCalledWith("诊断索引已导出", {
       description: "/repo/diagnostics-index.md",
     });
+  });
+
+  it("exports the failure group bundle for filtered failed records", async () => {
+    const trackHistoryExport = vi.fn();
+    mocks.save.mockResolvedValue("/repo/failure-groups.json");
+    mocks.exportFailureGroupBundleFile.mockResolvedValue(
+      "/repo/failure-groups.json"
+    );
+
+    const { result } = renderDiagnosticsExports({
+      trackHistoryExport,
+      filteredExecutionHistory: [
+        createExecutionRecord({
+          success: false,
+          error: "build failed",
+          failureSignature: "dotnet:build failed",
+        }),
+      ],
+    });
+
+    await act(async () => {
+      await result.current.exportFailureGroupBundle();
+    });
+
+    expect(mocks.save).toHaveBeenCalledWith(
+      expect.objectContaining({
+        title: "导出失败分组",
+        filters: [
+          { name: "JSON", extensions: ["json"] },
+          { name: "Markdown", extensions: ["md"] },
+        ],
+      })
+    );
+    expect(mocks.exportFailureGroupBundleFile).toHaveBeenCalledWith({
+      bundle: expect.objectContaining({
+        summary: { failureGroupCount: 1, failedRecordCount: 1 },
+        groups: [
+          expect.objectContaining({
+            providerId: "dotnet",
+            signature: "dotnet:build failed",
+            count: 1,
+          }),
+        ],
+      }),
+      filePath: "/repo/failure-groups.json",
+    });
+    expect(trackHistoryExport).toHaveBeenCalledWith(
+      "/repo/failure-groups.json"
+    );
+  });
+
+  it("refuses to export the failure group bundle when there are no failures", async () => {
+    // failureGroupCount 由父级分组结果传入；为 0 时不应触发保存对话框。
+    const { result } = renderHook(() =>
+      useDiagnosticsExports({
+        historyT: {},
+        snapshotPaths: [],
+        recentHistoryExports: [],
+        scopedExecutionHistory: [createExecutionRecord()],
+        filteredExecutionHistory: [createExecutionRecord()],
+        failureGroupCount: 0,
+        selectedRepoPath: "/repo",
+        trackHistoryExport: vi.fn(),
+      })
+    );
+
+    await act(async () => {
+      await result.current.exportFailureGroupBundle();
+    });
+
+    expect(mocks.save).not.toHaveBeenCalled();
+    expect(mocks.exportFailureGroupBundleFile).not.toHaveBeenCalled();
+    expect(mocks.toast.error).toHaveBeenCalled();
   });
 });

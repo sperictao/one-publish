@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
 import { PublishRunCard } from "@/components/publish/PublishRunCard";
@@ -552,6 +552,63 @@ describe("PublishRunCard", () => {
     expect(result).toHaveTextContent("2");
     expect(result).toHaveTextContent("receipt-stable-A");
     expect(result).toHaveTextContent("published");
+  });
+
+  it("事件时间线默认收起，点击后展开事件明细", async () => {
+    render(
+      <PublishRunCard
+        outputLog="published"
+        publishResult={null}
+        appT={{ outputLogTitle: "执行发布", noOutput: "无输出" }}
+        runtimeResult={{
+          attempt: {
+            attemptId: "attempt-events",
+            backendRunId: "backend-run-events",
+            configurationRevisionId: "revision-A",
+            planDigest: "plan-digest-A",
+            executionBackend: "local-execution",
+            status: "published",
+            manifestDigest: "manifest-digest-A",
+            manifest: { digest: "manifest-digest-A", artifactCount: 1 },
+            receipts: [],
+            routes: [],
+            warnings: [],
+            events: [
+              {
+                eventId: "event-gate-A",
+                planNodeId: "release-gates",
+                kind: "plan_node_completed",
+                manifestDigest: null,
+                receiptId: null,
+                deliveryStatus: null,
+                receipt: null,
+                error: null,
+              },
+            ],
+            error: null,
+          },
+          publishResult: null,
+        }}
+        publishActions={{
+          isPublishing: false,
+          isCancellingPublish: false,
+          startDisabled: false,
+          onStartPublish: vi.fn(),
+          onCancelPublish: vi.fn(),
+        }}
+      />
+    );
+
+    const timeline = screen.getByTestId("publish-event-timeline");
+    const toggle = timeline.querySelector("button")!;
+    // Collapse 内容始终挂载，通过 aria-expanded 表达折叠状态。
+    expect(toggle.getAttribute("aria-expanded")).toBe("false");
+
+    fireEvent.click(toggle);
+    expect(toggle.getAttribute("aria-expanded")).toBe("true");
+    const eventRow = await screen.findByTestId("publish-event-event-gate-A");
+    expect(eventRow).toHaveTextContent("plan_node_completed");
+    expect(eventRow).toHaveTextContent("release-gates");
   });
 
   it("Submitted Receipt 保持运行态，不回退为命令级成功或失败", () => {

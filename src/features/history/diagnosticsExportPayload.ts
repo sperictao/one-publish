@@ -1,3 +1,4 @@
+import { groupExecutionFailures } from "@/features/history/failureGroups";
 import type { HistoryExportFormat } from "@/features/history/historyFilterPresets";
 import { joinPath } from "@/lib/paths";
 import type { ExecutionRecord } from "@/lib/store/types";
@@ -114,6 +115,66 @@ export function createExecutionHistoryExportPlan(
     defaultPath: joinPath(options.selectedRepoPath, fileName),
     filters: createHistoryFilters(options.format),
     history: options.records.map(toExecutionHistoryExportRow),
+  };
+}
+
+export interface FailureGroupBundleGroup {
+  key: string;
+  providerId: string;
+  signature: string;
+  count: number;
+  records: ExecutionHistoryExportRow[];
+}
+
+export interface FailureGroupBundlePayload {
+  generatedAt: string;
+  summary: {
+    failureGroupCount: number;
+    failedRecordCount: number;
+  };
+  groups: FailureGroupBundleGroup[];
+}
+
+export interface FailureGroupBundleExportOptions {
+  records: ExecutionRecord[];
+  selectedRepoPath: string;
+  now?: Date;
+}
+
+export interface FailureGroupBundleExportPlan {
+  defaultPath: string;
+  filters: Array<{ name: string; extensions: string[] }>;
+  payload: FailureGroupBundlePayload;
+}
+
+export function createFailureGroupBundleExportPlan(
+  options: FailureGroupBundleExportOptions
+): FailureGroupBundleExportPlan {
+  const groups = groupExecutionFailures(options.records).map((group) => ({
+    key: group.key,
+    providerId: group.providerId,
+    signature: group.signature,
+    count: group.count,
+    records: group.records.map(toExecutionHistoryExportRow),
+  }));
+
+  return {
+    defaultPath: joinPath(
+      options.selectedRepoPath,
+      `failure-groups-${toTimestamp(options.now)}.json`
+    ),
+    filters: [
+      { name: "JSON", extensions: ["json"] },
+      { name: "Markdown", extensions: ["md"] },
+    ],
+    payload: {
+      generatedAt: (options.now ?? new Date()).toISOString(),
+      summary: {
+        failureGroupCount: groups.length,
+        failedRecordCount: groups.reduce((sum, group) => sum + group.count, 0),
+      },
+      groups,
+    },
   };
 }
 

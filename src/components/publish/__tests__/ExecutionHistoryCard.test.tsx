@@ -41,6 +41,8 @@ describe("ExecutionHistoryCard", () => {
         historyFilterWindow="all"
         historyFilterKeyword=""
         isExportingHistory={false}
+        isExportingFailureGroups={false}
+        failureGroupCount={0}
         isPublishing={false}
         appT={{
           statusSuccess: "成功",
@@ -61,6 +63,7 @@ describe("ExecutionHistoryCard", () => {
         onHistoryFilterWindowChange={vi.fn()}
         onHistoryFilterKeywordChange={vi.fn()}
         onExportExecutionHistory={vi.fn(async () => undefined)}
+        onExportFailureGroups={vi.fn(async () => undefined)}
         onClearFilters={vi.fn()}
         onOpenSnapshotFromRecord={vi.fn(async () => undefined)}
         onRerunFromHistory={vi.fn(async () => undefined)}
@@ -90,6 +93,8 @@ describe("ExecutionHistoryCard", () => {
         historyFilterWindow="all"
         historyFilterKeyword=""
         isExportingHistory={false}
+        isExportingFailureGroups={false}
+        failureGroupCount={0}
         isPublishing={false}
         appT={{
           statusSuccess: "成功",
@@ -112,6 +117,7 @@ describe("ExecutionHistoryCard", () => {
         onHistoryFilterWindowChange={vi.fn()}
         onHistoryFilterKeywordChange={vi.fn()}
         onExportExecutionHistory={vi.fn(async () => undefined)}
+        onExportFailureGroups={vi.fn(async () => undefined)}
         onClearFilters={vi.fn()}
         onOpenSnapshotFromRecord={vi.fn(async () => undefined)}
         onRerunFromHistory={vi.fn(async () => undefined)}
@@ -155,6 +161,8 @@ describe("ExecutionHistoryCard", () => {
         historyFilterWindow="all"
         historyFilterKeyword=""
         isExportingHistory={false}
+        isExportingFailureGroups={false}
+        failureGroupCount={0}
         isPublishing={false}
         appT={{
           statusSuccess: "成功",
@@ -174,6 +182,7 @@ describe("ExecutionHistoryCard", () => {
         onHistoryFilterWindowChange={vi.fn()}
         onHistoryFilterKeywordChange={vi.fn()}
         onExportExecutionHistory={vi.fn(async () => undefined)}
+        onExportFailureGroups={vi.fn(async () => undefined)}
         onClearFilters={vi.fn()}
         onOpenSnapshotFromRecord={vi.fn(async () => undefined)}
         onRerunFromHistory={vi.fn(async () => undefined)}
@@ -203,6 +212,8 @@ describe("ExecutionHistoryCard", () => {
         historyFilterWindow="all"
         historyFilterKeyword=""
         isExportingHistory={false}
+        isExportingFailureGroups={false}
+        failureGroupCount={0}
         isPublishing={false}
         appT={{
           statusSuccess: "成功",
@@ -222,6 +233,7 @@ describe("ExecutionHistoryCard", () => {
         onHistoryFilterWindowChange={vi.fn()}
         onHistoryFilterKeywordChange={vi.fn()}
         onExportExecutionHistory={vi.fn(async () => undefined)}
+        onExportFailureGroups={vi.fn(async () => undefined)}
         onClearFilters={vi.fn()}
         onOpenSnapshotFromRecord={vi.fn(async () => undefined)}
         onRerunFromHistory={vi.fn(async () => undefined)}
