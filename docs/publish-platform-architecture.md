@@ -217,6 +217,8 @@ Automation Runtime Revision 固定：
 
 应用升级只报告运行时更新可用；绑定必须经差异预览显式升级，禁止 `latest` 或浮动 Action 标签。
 
+钉住边界豁免：matrix runner 镜像（如 `ubuntu-latest`）允许浮动。镜像漂移不影响 runner 二进制与计划摘要的完整性校验；钉住会在镜像退役时强制升级所有已安装投影，维护成本不成比例（决议 #93）。
+
 ## 11. Attempt、并发、重试与取消
 
 Publish Attempt 身份固定引用：
