@@ -28,6 +28,7 @@ pub use commands::{
     update_profile, update_publish_state, update_repository, update_ui_state,
 };
 pub(crate) use runtime::{find_repository, find_repository_mut, persist_state_and_refresh_tray};
+pub(crate) use commands::repository_project_binding;
 pub use runtime::{get_state, update_state};
 pub(crate) use types::new_configuration_identity;
 pub(crate) use types::ConfigurationImport;

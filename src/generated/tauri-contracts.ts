@@ -53,6 +53,8 @@ export type PreparePublishRuntimeRequest = { repositoryId: string, repositoryPat
  */
 promotedManifestDigest?: string, };
 
+export type PrepareDraftPublishRuntimeRequest = { repositoryId: string, repositoryPath: string, providerId: string, parameters: JsonValue, spec: PublishSpec, };
+
 export type PublishAdapterCatalog = { executionBackends: Array<string>, artifactStores: Array<string>, artifactProcessors: Array<string>, deliveryDestinations: Array<string>, };
 
 export type RuntimePlanStage = "inspect_source" | "prepare_identity" | "build" | "collect_artifacts" | "process_artifacts" | "persist_manifest" | "stage_routes" | "publish_routes" | "observe_routes";
@@ -202,7 +204,12 @@ export type AutomationTriggerPolicy = { "type": "tagPush", tagPrefix: string, } 
 
 export type Branch = { name: string, isMain: boolean, isCurrent: boolean, path: string, commitCount: number | null, };
 
-export type ConfigProfile = { id: string, name: string, profileGroup: string | null, createdAt: string, isSystemDefault: boolean, currentRevisionId: string, revisions: Array<PublishConfigurationRevision>, deletedAt: string | null, blockedReason: string | null, };
+export type ConfigProfile = { id: string, name: string, profileGroup: string | null, createdAt: string, isSystemDefault: boolean, 
+/**
+ * 临时发布的隐藏草稿配置（plan 033 路线 B）：由 prepare_draft_publish_runtime
+ * 自动维护，不出现在配置列表、导出与自动化绑定候选中。
+ */
+isDraft: boolean, currentRevisionId: string, revisions: Array<PublishConfigurationRevision>, deletedAt: string | null, blockedReason: string | null, };
 
 export type ExecutionRecord = { id: string, repoId: string | null, configurationId: string | null, configurationRevisionId: string | null, providerId: string, projectPath: string, startedAt: string, finishedAt: string, success: boolean, cancelled: boolean, outputDir: string | null, error: string | null, commandLine: string | null, snapshotPath: string | null, failureSignature: string | null, outputExcerpt: string | null, spec: JsonValue | null, fileCount: number, warnings: Array<string> | null, };
 

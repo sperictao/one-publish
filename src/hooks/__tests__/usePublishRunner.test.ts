@@ -27,6 +27,7 @@ const mocks = vi.hoisted(() => ({
   showMainWindow: vi.fn(),
   renderPublishCommand: vi.fn(),
   preparePublishRuntime: vi.fn(),
+  prepareDraftPublishRuntime: vi.fn(),
   startPublishRuntime: vi.fn(),
   resumePublishRuntime: vi.fn(),
   synchronizePublishRuntime: vi.fn(),
@@ -102,6 +103,7 @@ vi.mock("@/features/publish/publishRuntime", () => ({
   renderProviderPublish: mocks.renderPublishCommand,
   preflightProviderPublishOutput: mocks.preflightPublishOutput,
   preparePublishRuntime: mocks.preparePublishRuntime,
+  prepareDraftPublishRuntime: mocks.prepareDraftPublishRuntime,
   startPublishRuntime: mocks.startPublishRuntime,
   resumePublishRuntime: mocks.resumePublishRuntime,
   synchronizePublishRuntime: mocks.synchronizePublishRuntime,
@@ -319,6 +321,39 @@ function createRuntimeResult(revision: string): PublishRuntimeResult {
   };
 }
 
+function createFailedRuntimeResult(
+  revision: string,
+  options: {
+    error?: string;
+    publishResult?: Partial<ReturnType<typeof createPublishResult>>;
+  } = {}
+): PublishRuntimeResult {
+  const base = createRuntimeResult(revision);
+  const error = options.error ?? "publish failed";
+  return {
+    ...base,
+    attempt: {
+      ...base.attempt,
+      status: "failed" as const,
+      error,
+      receipts: [],
+      routes: base.attempt.routes.map((route) => ({
+        ...route,
+        status: "failed" as const,
+        error,
+      })),
+      events: [],
+    },
+    publishResult: createPublishResult({
+      success: false,
+      error,
+      output_dir: "",
+      file_count: 0,
+      ...(options.publishResult ?? {}),
+    }),
+  };
+}
+
 function createRunnerProps() {
   return {
     appT: {
@@ -397,6 +432,10 @@ describe("usePublishRunner", () => {
       async (request: { configurationRevisionId: string }) =>
         createPreparedRuntime(request.configurationRevisionId)
     );
+    // plan 033：无命名配置时经自动草稿配置准备。
+    mocks.prepareDraftPublishRuntime.mockImplementation(async () =>
+      createPreparedRuntime("draft-revision")
+    );
     mocks.startPublishRuntime.mockImplementation(
       async (request: { runtimeToken: string }) =>
         createRuntimeResult(request.runtimeToken.replace("token-", ""))
@@ -438,17 +477,25 @@ describe("usePublishRunner", () => {
 
   it("选中 pubxml 时通过 PublishProfile 执行发布", async () => {
     mocks.runEnvironmentCheck.mockResolvedValue(readyEnvironment);
-    mocks.invoke.mockResolvedValue(createPublishResult());
 
     const props = createRunnerProps();
     const { result } = renderHook(() => usePublishRunner(props));
+    await waitFor(() => expect(result.current.preparedRuntime).not.toBeNull());
 
     await act(async () => {
       await result.current.startPublish();
     });
 
     await waitFor(() => {
-      expect(mocks.invoke).toHaveBeenCalledWith("execute_provider_publish", {
+      expect(mocks.startPublishRuntime).toHaveBeenCalledWith({
+        runtimeToken: "token-draft-revision",
+      });
+    });
+    // plan 033：临时发布经自动草稿配置准备，spec 参数原样携带。
+    expect(mocks.prepareDraftPublishRuntime).toHaveBeenCalledWith(
+      expect.objectContaining({
+        repositoryId: "repo-1",
+        providerId: "dotnet",
         spec: {
           version: 1,
           provider_id: "dotnet",
@@ -459,8 +506,8 @@ describe("usePublishRunner", () => {
             },
           },
         },
-      });
-    });
+      })
+    );
 
     expect(props.pushRecentConfig).toHaveBeenCalledWith(
       "pubxml:FolderProfile",
@@ -548,9 +595,6 @@ describe("usePublishRunner", () => {
     mocks.runEnvironmentCheck.mockResolvedValue(readyEnvironment);
     mocks.invoke.mockImplementation(
       async (command: string, args: { filePath?: string }) => {
-        if (command === "execute_provider_publish") {
-          return createPublishResult();
-        }
         if (command === "export_execution_snapshot") {
           return args.filePath;
         }
@@ -560,6 +604,7 @@ describe("usePublishRunner", () => {
 
     const props = createRunnerProps();
     const { result } = renderHook(() => usePublishRunner(props));
+    await waitFor(() => expect(result.current.preparedRuntime).not.toBeNull());
 
     await act(async () => {
       await result.current.startPublish();
@@ -589,16 +634,14 @@ describe("usePublishRunner", () => {
 
   it("快照导出失败时记录仍保存且 snapshotPath 为 null", async () => {
     mocks.runEnvironmentCheck.mockResolvedValue(readyEnvironment);
-    mocks.invoke.mockImplementation(async (command: string) => {
-      if (command === "execute_provider_publish") {
-        return createPublishResult();
-      }
+    mocks.invoke.mockImplementation(async () => {
       throw new Error("disk full");
     });
     const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
 
     const props = createRunnerProps();
     const { result } = renderHook(() => usePublishRunner(props));
+    await waitFor(() => expect(result.current.preparedRuntime).not.toBeNull());
 
     await act(async () => {
       await result.current.startPublish();
@@ -616,25 +659,25 @@ describe("usePublishRunner", () => {
 
   it("执行结果优先使用后端返回的命令与最终日志写入历史", async () => {
     mocks.runEnvironmentCheck.mockResolvedValue(readyEnvironment);
-    mocks.invoke.mockResolvedValue(
-      createPublishResult({
-        success: false,
+    mocks.startPublishRuntime.mockResolvedValue(
+      createFailedRuntimeResult("draft-revision", {
         error: "发布失败，退出代码: Some(1)",
-        command: createRenderedCommand(
-          'dotnet publish "/repo/App.csproj" -c Release -o "/exports/App/Release"'
-        ),
-        output_log: [
-          '$ dotnet publish "/repo/App.csproj" -c Release -o "/exports/App/Release"',
-          "[stderr] CSC : error CS0246: The type or namespace name 'Foo' could not be found",
-          "[stderr] Build FAILED.",
-        ].join("\n"),
-        output_dir: "",
-        file_count: 0,
+        publishResult: {
+          command: createRenderedCommand(
+            'dotnet publish "/repo/App.csproj" -c Release -o "/exports/App/Release"'
+          ),
+          output_log: [
+            '$ dotnet publish "/repo/App.csproj" -c Release -o "/exports/App/Release"',
+            "[stderr] CSC : error CS0246: The type or namespace name 'Foo' could not be found",
+            "[stderr] Build FAILED.",
+          ].join("\n"),
+        },
       })
     );
 
     const props = createRunnerProps();
     const { result } = renderHook(() => usePublishRunner(props));
+    await waitFor(() => expect(result.current.preparedRuntime).not.toBeNull());
 
     await act(async () => {
       await result.current.startPublish();
@@ -665,14 +708,9 @@ describe("usePublishRunner", () => {
         },
       ],
     });
-    mocks.invoke.mockResolvedValue(
-      createPublishResult({
-        file_count: 0,
-      })
-    );
-
     const props = createRunnerProps();
     const { result } = renderHook(() => usePublishRunner(props));
+    await waitFor(() => expect(result.current.preparedRuntime).not.toBeNull());
 
     await act(async () => {
       await result.current.startPublish();
@@ -687,7 +725,7 @@ describe("usePublishRunner", () => {
       }),
       ["dotnet"]
     );
-    expect(mocks.invoke).not.toHaveBeenCalled();
+    expect(mocks.startPublishRuntime).not.toHaveBeenCalled();
     expect(props.savePublishRecord).not.toHaveBeenCalled();
   });
 
@@ -748,12 +786,13 @@ describe("usePublishRunner", () => {
 
     const props = createRunnerProps();
     const { result } = renderHook(() => usePublishRunner(props));
+    await waitFor(() => expect(result.current.preparedRuntime).not.toBeNull());
 
     await act(async () => {
       await result.current.startPublish();
     });
 
-    expect(mocks.invoke).not.toHaveBeenCalled();
+    expect(mocks.startPublishRuntime).not.toHaveBeenCalled();
     expect(props.savePublishRecord).not.toHaveBeenCalled();
     expect(mocks.showMainWindow).toHaveBeenCalled();
     expect(mocks.requestProtectedOutputAccess).toHaveBeenCalled();
@@ -796,10 +835,9 @@ describe("usePublishRunner", () => {
       },
       selectedDirectory: "/Users/test/Downloads/publish/App",
     });
-    mocks.invoke.mockResolvedValue(createPublishResult());
-
     const props = createRunnerProps();
     const { result } = renderHook(() => usePublishRunner(props));
+    await waitFor(() => expect(result.current.preparedRuntime).not.toBeNull());
 
     await act(async () => {
       await result.current.startPublish();
@@ -820,17 +858,8 @@ describe("usePublishRunner", () => {
       deniedPreflight,
       props.appT
     );
-    expect(mocks.invoke).toHaveBeenCalledWith("execute_provider_publish", {
-      spec: {
-        version: 1,
-        provider_id: "dotnet",
-        project_path: "/repo/App.csproj",
-        parameters: {
-          properties: {
-            PublishProfile: "FolderProfile",
-          },
-        },
-      },
+    expect(mocks.startPublishRuntime).toHaveBeenCalledWith({
+      runtimeToken: "token-draft-revision",
     });
     expect(props.savePublishRecord).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -840,148 +869,9 @@ describe("usePublishRunner", () => {
     );
   });
 
-  it("执行阶段受保护目录错误授权后只重试一次并写入成功记录", async () => {
-    mocks.runEnvironmentCheck.mockResolvedValue(readyEnvironment);
-    const grantedPreflight = {
-      outputDir: "/Users/test/Downloads/publish/App/Release",
-      configuredOutputDir: "/Users/test/Downloads/publish/App/Release",
-      validation: {
-        status: "compatible",
-        issue: null,
-      },
-      access: {
-        status: "granted",
-        protectedLocation: "downloads",
-        protectedRoot: "/Users/test/Downloads",
-        probeDirectory: "/Users/test/Downloads/publish/App",
-        detail: null,
-      },
-    };
-    mocks.preflightPublishOutput.mockResolvedValue(grantedPreflight);
-    mocks.requestProtectedOutputAccess.mockResolvedValue({
-      preflight: grantedPreflight,
-      selectedDirectory: "/Users/test/Downloads/publish/App",
-    });
-    mocks.analyzePublishExecutionFailure.mockReturnValue(
-      "protected_directory_access_denied"
-    );
-    mocks.invoke
-      .mockRejectedValueOnce(
-        new Error(
-          "publish output directory requires macOS protected folder access (Downloads): /Users/test/Downloads/publish/App/Release | Operation not permitted"
-        )
-      )
-      .mockResolvedValueOnce(createPublishResult());
-
-    const props = createRunnerProps();
-    const { result } = renderHook(() => usePublishRunner(props));
-
-    await act(async () => {
-      await result.current.startPublish();
-    });
-
-    expect(
-      mocks.invoke.mock.calls.filter(
-        ([command]) => command === "execute_provider_publish"
-      )
-    ).toHaveLength(2);
-    expect(mocks.requestProtectedOutputAccess).toHaveBeenCalledWith(
-      {
-        version: 1,
-        provider_id: "dotnet",
-        project_path: "/repo/App.csproj",
-        parameters: {
-          properties: {
-            PublishProfile: "FolderProfile",
-          },
-        },
-      },
-      grantedPreflight,
-      props.appT
-    );
-    expect(mocks.showMainWindow).toHaveBeenCalled();
-    expect(props.savePublishRecord).toHaveBeenCalledTimes(1);
-    expect(props.savePublishRecord).toHaveBeenCalledWith(
-      expect.objectContaining({
-        success: true,
-        outputDir: "/exports/App/Release",
-      })
-    );
-  });
-
-  it("MSBuild 进程输出受保护目录错误时授权后重试发布", async () => {
-    mocks.runEnvironmentCheck.mockResolvedValue(readyEnvironment);
-    const grantedPreflight = {
-      outputDir: "/Users/test/Downloads/publish/App/Debug",
-      configuredOutputDir: "/Users/test/Downloads/publish/App/Debug",
-      validation: {
-        status: "compatible",
-        issue: null,
-      },
-      access: {
-        status: "granted",
-        protectedLocation: "downloads",
-        protectedRoot: "/Users/test/Downloads",
-        probeDirectory: "/Users/test/Downloads/publish/App",
-        detail: null,
-      },
-    };
-    mocks.preflightPublishOutput.mockResolvedValue(grantedPreflight);
-    mocks.requestProtectedOutputAccess.mockResolvedValue({
-      preflight: grantedPreflight,
-      selectedDirectory: "/Users/test/Downloads/publish/App",
-    });
-    mocks.invoke
-      .mockResolvedValueOnce(
-        createPublishResult({
-          success: false,
-          error: "发布失败，退出代码: Some(1)",
-          output_log: [
-            '$ dotnet publish "/repo/App.csproj"',
-            '/repo/App.csproj(79,3): error MSB3021: Unable to copy file "/Users/test/.nuget/packages/hip.core/2.7.2.1/lib/net8.0/HiP.Core.xml" to "/Users/test/Downloads/publish/App/Debug/../HiP.Core.xml".',
-            "Access to the path '/Users/test/Downloads/publish/App/HiP.Core.xml' is denied.",
-          ].join("\n"),
-          output_dir: "",
-          file_count: 0,
-        })
-      )
-      .mockResolvedValueOnce(createPublishResult());
-
-    const props = createRunnerProps();
-    const { result } = renderHook(() => usePublishRunner(props));
-
-    await act(async () => {
-      await result.current.startPublish();
-    });
-
-    expect(
-      mocks.invoke.mock.calls.filter(
-        ([command]) => command === "execute_provider_publish"
-      )
-    ).toHaveLength(2);
-    expect(mocks.requestProtectedOutputAccess).toHaveBeenCalledWith(
-      {
-        version: 1,
-        provider_id: "dotnet",
-        project_path: "/repo/App.csproj",
-        parameters: {
-          properties: {
-            PublishProfile: "FolderProfile",
-          },
-        },
-      },
-      grantedPreflight,
-      props.appT
-    );
-    expect(props.savePublishRecord).toHaveBeenCalledTimes(1);
-    expect(props.savePublishRecord).toHaveBeenCalledWith(
-      expect.objectContaining({
-        success: true,
-        outputDir: "/exports/App/Release",
-      })
-    );
-  });
-
+  // plan 033：execute 阶段的受保护目录竞态恢复随旧栈移除（原
+  // executePublishWithProtectedAccessRecovery）。preflight 的授权流程由
+  // 上方两个用例覆盖；竞态窗口内的失败按普通失败呈现。
   it("发布目录路径与当前系统不兼容时阻止发布", async () => {
     mocks.runEnvironmentCheck.mockResolvedValue(readyEnvironment);
     mocks.preflightPublishOutput.mockResolvedValue({
@@ -1002,12 +892,13 @@ describe("usePublishRunner", () => {
 
     const props = createRunnerProps();
     const { result } = renderHook(() => usePublishRunner(props));
+    await waitFor(() => expect(result.current.preparedRuntime).not.toBeNull());
 
     await act(async () => {
       await result.current.startPublish();
     });
 
-    expect(mocks.invoke).not.toHaveBeenCalled();
+    expect(mocks.startPublishRuntime).not.toHaveBeenCalled();
     expect(props.savePublishRecord).not.toHaveBeenCalled();
     expect(mocks.toast.error).toHaveBeenCalledWith(
       "发布目录路径与当前系统不兼容",
@@ -1037,12 +928,13 @@ describe("usePublishRunner", () => {
 
     const props = createRunnerProps();
     const { result } = renderHook(() => usePublishRunner(props));
+    await waitFor(() => expect(result.current.preparedRuntime).not.toBeNull());
 
     await act(async () => {
       await result.current.startPublish();
     });
 
-    expect(mocks.invoke).not.toHaveBeenCalled();
+    expect(mocks.startPublishRuntime).not.toHaveBeenCalled();
     expect(props.savePublishRecord).not.toHaveBeenCalled();
     expect(mocks.toast.error).toHaveBeenCalledWith("发布目录无效", {
       description: "发布目录指向不存在的 Windows 盘符",
@@ -1051,7 +943,7 @@ describe("usePublishRunner", () => {
 
   it("发布失败时仍然写入失败记录", async () => {
     mocks.runEnvironmentCheck.mockResolvedValue(readyEnvironment);
-    mocks.invoke.mockRejectedValue(new Error("boom"));
+    mocks.startPublishRuntime.mockRejectedValue(new Error("boom"));
 
     const props = createRunnerProps();
     props.selectedPreset = "release-fd";
@@ -1074,6 +966,7 @@ describe("usePublishRunner", () => {
     });
 
     const { result } = renderHook(() => usePublishRunner(props));
+    await waitFor(() => expect(result.current.preparedRuntime).not.toBeNull());
 
     await act(async () => {
       await result.current.startPublish();
@@ -1178,14 +1071,13 @@ describe("usePublishRunner", () => {
 
   it("系统通知模式失败时不拉起主窗口并发送失败详情", async () => {
     mocks.runEnvironmentCheck.mockResolvedValue(readyEnvironment);
-    mocks.invoke.mockResolvedValue(
-      createPublishResult({
-        success: false,
+    mocks.startPublishRuntime.mockResolvedValue(
+      createFailedRuntimeResult("draft-revision", {
         error: "publish failed",
-        output_log:
-          '$ dotnet publish "/repo/App.csproj"\n[stderr] publish failed\n',
-        output_dir: "",
-        file_count: 0,
+        publishResult: {
+          output_log:
+            '$ dotnet publish "/repo/App.csproj"\n[stderr] publish failed\n',
+        },
       })
     );
 
@@ -1223,14 +1115,13 @@ describe("usePublishRunner", () => {
 
   it("系统通知发送失败时会回退拉起主窗口暴露错误", async () => {
     mocks.runEnvironmentCheck.mockResolvedValue(readyEnvironment);
-    mocks.invoke.mockResolvedValue(
-      createPublishResult({
-        success: false,
+    mocks.startPublishRuntime.mockResolvedValue(
+      createFailedRuntimeResult("draft-revision", {
         error: "publish failed",
-        output_log:
-          '$ dotnet publish "/repo/App.csproj"\n[stderr] publish failed\n',
-        output_dir: "",
-        file_count: 0,
+        publishResult: {
+          output_log:
+            '$ dotnet publish "/repo/App.csproj"\n[stderr] publish failed\n',
+        },
       })
     );
     mocks.showSystemNotification.mockResolvedValue(false);
@@ -1608,7 +1499,7 @@ describe("usePublishRunner", () => {
     });
   });
 
-  it("新的 legacy 手动执行会替换之前的 Runtime 结果", async () => {
+  it("新的草稿手动执行会替换之前的 Runtime 结果", async () => {
     mocks.runEnvironmentCheck.mockResolvedValue(readyEnvironment);
     const props = createRunnerProps();
     props.configurationId = "profile-42";
@@ -1634,7 +1525,14 @@ describe("usePublishRunner", () => {
       configurationId: null,
       configurationRevisionId: null,
     });
-    mocks.invoke.mockRejectedValueOnce(new Error("legacy provider failed"));
+    await waitFor(() =>
+      expect(result.current.preparedRuntime?.runtimeToken).toBe(
+        "token-draft-revision"
+      )
+    );
+    mocks.startPublishRuntime.mockRejectedValueOnce(
+      new Error("draft provider failed")
+    );
     await act(async () => {
       await result.current.runPublishSpec({
         version: 1,
@@ -1649,7 +1547,7 @@ describe("usePublishRunner", () => {
     expect(usePublishStore.getState().publishResult).toEqual(
       expect.objectContaining({
         success: false,
-        error: "legacy provider failed",
+        error: "draft provider failed",
       })
     );
   });

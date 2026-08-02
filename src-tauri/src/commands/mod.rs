@@ -32,11 +32,7 @@ pub(crate) use provider::{
     __cmd__get_provider_schema, __cmd__import_from_command, __cmd__list_providers,
 };
 pub use provider::{get_provider_schema, import_from_command, list_providers};
-pub(crate) use publish::{
-    __cmd__cancel_provider_publish, __cmd__describe_publish_output_target,
-    __cmd__execute_provider_publish, __cmd__preflight_publish_output,
-    __cmd__render_provider_publish,
-};
+pub(crate) use publish::{__cmd__describe_publish_output_target, __cmd__preflight_publish_output};
 pub use publish::{
     cancel_provider_publish, describe_publish_output_target, execute_provider_publish,
     preflight_publish_output, render_provider_publish, ProtectedDirectoryLocation,

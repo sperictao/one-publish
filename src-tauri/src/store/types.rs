@@ -79,6 +79,10 @@ pub struct ConfigProfile {
     pub profile_group: Option<String>,
     pub created_at: String,
     pub is_system_default: bool,
+    /// 临时发布的隐藏草稿配置（plan 033 路线 B）：由 prepare_draft_publish_runtime
+    /// 自动维护，不出现在配置列表、导出与自动化绑定候选中。
+    #[serde(default)]
+    pub is_draft: bool,
     #[serde(default)]
     pub current_revision_id: String,
     #[serde(default)]
@@ -93,6 +97,13 @@ pub struct ConfigProfile {
 pub(crate) const LOCAL_BACKEND_ID: &str = "local-execution";
 pub(crate) const TEMPORARY_STORE_ID: &str = "temporary-artifact-store";
 pub(crate) use publish_adapters::LOCAL_DESTINATION_ID;
+
+/// 草稿配置的显示名（隐藏于 UI，仅调试可见）；按 (repo, provider) 各持一份。
+pub(crate) const DRAFT_PROFILE_NAME: &str = "本地草稿";
+/// 草稿修订 GC 上限：只保留最近 N 个，超出删最旧。进行中的 Attempt 引用的是
+/// 最新（当前）修订，不受影响；更早的草稿 Attempt 在 GC 后失去恢复能力——
+/// 这是草稿语义的可接受上限（真有恢复诉求应保存为命名配置）。
+pub(crate) const DRAFT_MAX_REVISIONS: usize = 20;
 
 /// 修订内对一个 Adapter 的选择与设置绑定；settings 是该 Adapter Schema 的非秘密
 /// JSON 对象，credentials 把 Adapter 声明的凭据要求绑定到非秘密引用，
@@ -370,6 +381,7 @@ impl ConfigProfile {
             profile_group,
             created_at,
             is_system_default,
+            is_draft: false,
             current_revision_id: revision_id,
             revisions: vec![revision],
             deleted_at: None,
@@ -393,6 +405,7 @@ impl ConfigProfile {
             profile_group,
             created_at,
             is_system_default,
+            is_draft: false,
             current_revision_id,
             revisions: vec![revision],
             deleted_at: None,
@@ -589,6 +602,71 @@ impl RepoPublishConfig {
         );
         self.profiles.push(profile);
         Ok(self.profiles.last().expect("profile was just appended"))
+    }
+
+    /// 路线 B（plan 033）：临时发布物化草稿配置——按 provider 找到（或创建）
+    /// 隐藏草稿配置，把本次参数追加为新修订并设为当前，返回
+    /// (profile_id, revision_id)。草稿不参与 create_profile 的命名冲突规则，
+    /// 查找只认 is_draft 标记。
+    pub fn upsert_draft_revision(
+        &mut self,
+        provider_id: String,
+        parameters: serde_json::Value,
+        project_binding: Option<String>,
+        created_at: String,
+    ) -> (String, String) {
+        let position = self.profiles.iter().position(|profile| {
+            profile.is_draft
+                && profile.deleted_at.is_none()
+                && profile
+                    .current_revision()
+                    .map(|revision| revision.provider_id == provider_id)
+                    .unwrap_or(false)
+        });
+
+        let Some(index) = position else {
+            let mut profile = ConfigProfile::new(
+                DRAFT_PROFILE_NAME.to_string(),
+                provider_id,
+                parameters,
+                None,
+                project_binding,
+                created_at,
+                false,
+            );
+            profile.is_draft = true;
+            let profile_id = profile.id.clone();
+            let revision_id = profile.current_revision_id.clone();
+            self.profiles.push(profile);
+            return (profile_id, revision_id);
+        };
+
+        let profile = &mut self.profiles[index];
+        let sequence = profile
+            .revisions
+            .iter()
+            .map(|revision| revision.sequence)
+            .max()
+            .unwrap_or(0)
+            + 1;
+        let revision = PublishConfigurationRevision::new_current(
+            provider_id,
+            parameters,
+            created_at,
+            sequence,
+            PublishComposition::local_default(),
+            project_binding,
+        );
+        profile.current_revision_id = revision.id.clone();
+        let revision_id = revision.id.clone();
+        profile.blocked_reason = ConfigProfile::revision_blocked_reason(&revision);
+        profile.revisions.push(revision);
+
+        while profile.revisions.len() > DRAFT_MAX_REVISIONS {
+            profile.revisions.remove(0);
+        }
+
+        (profile.id.clone(), revision_id)
     }
 
     pub(crate) fn import_profile(

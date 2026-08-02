@@ -370,7 +370,8 @@ export function usePublishBoot(params: UsePublishBootParams) {
     activeRuntime,
     runtimeResult,
     runtimePreparationError,
-    requiresPreparedRuntime: selectedConfiguration !== null,
+    // plan 033：发布一律需要 PublishRuntime（命名配置或自动草稿）。
+    requiresPreparedRuntime: true,
     isPublishing: params.isPublishing,
     isCancellingPublish: params.isCancellingPublish,
     startPublish,

@@ -8,6 +8,7 @@ use super::runtime::{
     apply_selected_repo_id_update, build_frontend_state, find_repository,
     validate_repository_project_binding,
 };
+use super::types::{DRAFT_MAX_REVISIONS, DRAFT_PROFILE_NAME};
 use super::{
     AppState, AutomationBinding, AutomationTriggerPolicy, ConfigurationImport, ExecutionRecord,
     PublishConfigStore, RepoPublishConfig, Repository,
@@ -1730,4 +1731,146 @@ fn a_failed_release_settings_merge_keeps_the_legacy_file_for_retry() {
         legacy_release_path.exists(),
         "an unmerged legacy config must stay on disk for the next startup"
     );
+}
+
+#[test]
+fn upsert_draft_revision_creates_hidden_draft_profile_with_local_composition() {
+    let mut config = RepoPublishConfig::default();
+
+    let (profile_id, revision_id) = config.upsert_draft_revision(
+        "dotnet".to_string(),
+        serde_json::json!({ "configuration": "Release" }),
+        None,
+        "2026-08-03T10:00:00Z".to_string(),
+    );
+
+    let profile = config.profile(&profile_id).expect("draft profile exists");
+    assert!(profile.is_draft);
+    assert_eq!(profile.name, DRAFT_PROFILE_NAME);
+    assert_eq!(profile.current_revision_id, revision_id);
+    assert_eq!(profile.revisions.len(), 1);
+    let revision = profile.current_revision().expect("current revision");
+    assert_eq!(revision.sequence, 1);
+    assert_eq!(revision.provider_id, "dotnet");
+    assert_eq!(
+        revision.composition,
+        crate::store::PublishComposition::local_default()
+    );
+}
+
+#[test]
+fn upsert_draft_revision_reuses_draft_per_provider_and_moves_current() {
+    let mut config = RepoPublishConfig::default();
+
+    let (first_profile, first_revision) = config.upsert_draft_revision(
+        "dotnet".to_string(),
+        serde_json::json!({ "configuration": "Debug" }),
+        None,
+        "2026-08-03T10:00:00Z".to_string(),
+    );
+    let (second_profile, second_revision) = config.upsert_draft_revision(
+        "dotnet".to_string(),
+        serde_json::json!({ "configuration": "Release" }),
+        None,
+        "2026-08-03T11:00:00Z".to_string(),
+    );
+
+    assert_eq!(first_profile, second_profile);
+    assert_ne!(first_revision, second_revision);
+    let profile = config.profile(&first_profile).expect("draft profile");
+    assert_eq!(profile.revisions.len(), 2);
+    assert_eq!(profile.revisions[1].sequence, 2);
+    assert_eq!(profile.current_revision_id, second_revision);
+    assert_eq!(
+        profile.current_revision().expect("current").parameters,
+        serde_json::json!({ "configuration": "Release" })
+    );
+}
+
+#[test]
+fn upsert_draft_revision_keeps_separate_drafts_per_provider() {
+    let mut config = RepoPublishConfig::default();
+
+    let (dotnet_profile, _) = config.upsert_draft_revision(
+        "dotnet".to_string(),
+        serde_json::json!({}),
+        None,
+        "2026-08-03T10:00:00Z".to_string(),
+    );
+    let (tauri_profile, _) = config.upsert_draft_revision(
+        "tauri".to_string(),
+        serde_json::json!({}),
+        None,
+        "2026-08-03T11:00:00Z".to_string(),
+    );
+
+    assert_ne!(dotnet_profile, tauri_profile);
+    assert_eq!(
+        config
+            .profiles
+            .iter()
+            .filter(|profile| profile.is_draft)
+            .count(),
+        2
+    );
+}
+
+#[test]
+fn upsert_draft_revision_never_matches_named_profiles() {
+    let mut config = RepoPublishConfig::default();
+    config
+        .create_profile(
+            DRAFT_PROFILE_NAME.to_string(),
+            "dotnet".to_string(),
+            serde_json::json!({ "configuration": "Release" }),
+            None,
+            None,
+            "2026-08-03T09:00:00Z".to_string(),
+        )
+        .expect("create named profile");
+
+    let (draft_profile, _) = config.upsert_draft_revision(
+        "dotnet".to_string(),
+        serde_json::json!({ "configuration": "Debug" }),
+        None,
+        "2026-08-03T10:00:00Z".to_string(),
+    );
+
+    // 即使用户配置与草稿同名，草稿也只按 is_draft 标记查找，互不干扰。
+    let named = config
+        .profiles
+        .iter()
+        .find(|profile| !profile.is_draft)
+        .expect("named profile");
+    assert_ne!(named.id, draft_profile);
+    assert_eq!(named.revisions.len(), 1);
+}
+
+#[test]
+fn upsert_draft_revision_gc_keeps_only_recent_revisions_and_current_last() {
+    let mut config = RepoPublishConfig::default();
+    let mut last_revision = String::new();
+    let mut profile_id = String::new();
+
+    for index in 0..(DRAFT_MAX_REVISIONS + 5) {
+        let (profile, revision) = config.upsert_draft_revision(
+            "dotnet".to_string(),
+            serde_json::json!({ "configuration": format!("r{index}") }),
+            None,
+            format!("2026-08-03T10:{index:02}:00Z"),
+        );
+        profile_id = profile;
+        last_revision = revision;
+    }
+
+    let profile = config.profile(&profile_id).expect("draft profile");
+    assert_eq!(profile.revisions.len(), DRAFT_MAX_REVISIONS);
+    assert_eq!(profile.current_revision_id, last_revision);
+    let sequences: Vec<u32> = profile
+        .revisions
+        .iter()
+        .map(|revision| revision.sequence)
+        .collect();
+    // 最旧的 5 个已被回收，保留 sequence 6..=25 且顺序不变。
+    assert_eq!(sequences, (6..=25).collect::<Vec<u32>>());
 }

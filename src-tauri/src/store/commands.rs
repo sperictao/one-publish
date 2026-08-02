@@ -296,7 +296,7 @@ pub async fn get_profiles(repo_id: String) -> Result<Vec<ConfigProfile>, AppErro
 /// 保存修订时解析仓库当前的 Project Candidate 并固化进修订（决议 #78）。
 /// 引用与发布 spec 的构造规则一致：使用项目文件的 Provider 用仓库绑定的
 /// project_file，其余用仓库根；无法解析时宽限为 None，失配由 prepare 阻断。
-fn repository_project_binding(
+pub(crate) fn repository_project_binding(
     repo: &crate::store::Repository,
     provider_id: &str,
 ) -> Option<String> {

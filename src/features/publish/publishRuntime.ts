@@ -3,13 +3,13 @@ import { invoke } from "@tauri-apps/api/core";
 import type {
   CancelPublishRuntimeRequest,
   PreparedPublishRuntime,
+  PrepareDraftPublishRuntimeRequest,
   PreparePublishRuntimeRequest,
   PublishOutputPreflightResult,
   PublishResult as TauriPublishResult,
   PublishRuntimeResult,
   ResumePublishRuntimeRequest,
   PublishSpec as TauriPublishSpec,
-  RenderedPublishCommand,
   StartPublishRuntimeRequest,
   SynchronizePublishRuntimeRequest,
   SynchronizePublishRuntimeResult,
@@ -20,11 +20,11 @@ export type PublishResult = TauriPublishResult;
 export type {
   CancelPublishRuntimeRequest,
   PreparedPublishRuntime,
+  PrepareDraftPublishRuntimeRequest,
   PreparePublishRuntimeRequest,
   PublishOutputPreflightResult,
   PublishRuntimeResult,
   ResumePublishRuntimeRequest,
-  RenderedPublishCommand,
   StartPublishRuntimeRequest,
   SynchronizePublishRuntimeRequest,
   SynchronizePublishRuntimeResult,
@@ -36,16 +36,18 @@ export interface ImportProviderPublishSpecFromCommandParams {
   projectPath: string;
 }
 
-export async function executeProviderPublish(
-  spec: ProviderPublishSpec
-): Promise<PublishResult> {
-  return await invoke<PublishResult>("execute_provider_publish", { spec });
-}
-
 export async function preparePublishRuntime(
   request: PreparePublishRuntimeRequest
 ): Promise<PreparedPublishRuntime> {
   return await invoke<PreparedPublishRuntime>("prepare_publish_runtime", {
+    request,
+  });
+}
+
+export async function prepareDraftPublishRuntime(
+  request: PrepareDraftPublishRuntimeRequest
+): Promise<PreparedPublishRuntime> {
+  return await invoke<PreparedPublishRuntime>("prepare_draft_publish_runtime", {
     request,
   });
 }
@@ -79,18 +81,6 @@ export async function cancelPublishRuntime(
   request: CancelPublishRuntimeRequest
 ): Promise<boolean> {
   return await invoke<boolean>("cancel_publish_runtime", { request });
-}
-
-export async function cancelProviderPublish(): Promise<boolean> {
-  return await invoke<boolean>("cancel_provider_publish");
-}
-
-export async function renderProviderPublish(
-  spec: ProviderPublishSpec
-): Promise<RenderedPublishCommand> {
-  return await invoke<RenderedPublishCommand>("render_provider_publish", {
-    spec,
-  });
 }
 
 export async function preflightProviderPublishOutput(

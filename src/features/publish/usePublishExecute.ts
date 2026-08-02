@@ -11,7 +11,8 @@ import { exportExecutionSnapshot } from "@/features/history/executionSnapshot";
 import { normalizePublishResult } from "@/features/history/publishFailure";
 import {
   cancelPublishRuntime,
-  cancelProviderPublish,
+  prepareDraftPublishRuntime,
+  preparePublishRuntime,
   resumePublishRuntime,
   startPublishRuntime,
   synchronizePublishRuntime,
@@ -272,9 +273,6 @@ export function usePublishExecute({
         return;
       }
       activeRun.phase = "running";
-      activeRun.runtimeToken = preparedRuntime?.runtimeToken;
-
-      setActiveRuntime(preparedRuntime ?? null);
       setRuntimeResult(null);
 
       if (isCurrentPresentationRevision(runRevision)) {
@@ -283,15 +281,44 @@ export function usePublishExecute({
 
       let runtimeAccepted = false;
       let runtimeRemainsPending = false;
+      let prepared: PreparedPublishRuntime | null = null;
       try {
+        // plan 033 路线 B：交互入口复用 validate 准备好的 Runtime；rerun/tray
+        // 等不带 preparedRuntime 的入口在现场准备——命名配置按原修订，其余经
+        // 自动草稿配置物化新修订。草稿修订参数与 spec 同源，重复准备同参数
+        // 发布只会追加一个等值修订，不产生状态分叉。
+        prepared =
+          preparedRuntime ??
+          (currentConfigurationId && currentConfigurationRevisionId
+            ? await preparePublishRuntime({
+                repositoryId: transaction.repoId ?? selectedRepoId!,
+                repositoryPath: selectedRepoPath!,
+                configurationId: currentConfigurationId,
+                configurationRevisionId: currentConfigurationRevisionId,
+                spec,
+              })
+            : await prepareDraftPublishRuntime({
+                repositoryId: transaction.repoId ?? selectedRepoId!,
+                repositoryPath: selectedRepoPath!,
+                providerId: spec.provider_id,
+                parameters: spec.parameters,
+                spec,
+              }));
+        if (!prepared) {
+          throw new Error("PublishRuntime preparation returned no result");
+        }
+
+        activeRun.runtimeToken = prepared.runtimeToken;
+        setActiveRuntime(prepared);
+
         if (shouldRecordRecentConfig(transaction)) {
           pushRecentConfig(transaction.recentConfigKey!, transaction.repoId);
         }
 
         let result: PublishResult;
-        if (preparedRuntime) {
+        {
           const completedRuntime = await startPublishRuntime({
-            runtimeToken: preparedRuntime.runtimeToken,
+            runtimeToken: prepared.runtimeToken,
           });
           runtimeAccepted = true;
           setRuntimeResult(completedRuntime);
@@ -315,7 +342,7 @@ export function usePublishExecute({
               success: false,
               cancelled: true,
               error: completedRuntime.attempt.error,
-              command: preparedRuntime.command,
+              command: prepared.command,
               output_log: "",
               output_dir: "",
               file_count: 0,
@@ -337,9 +364,6 @@ export function usePublishExecute({
                       "PublishRuntime failed",
                   };
           }
-        } else {
-          result =
-            await validate.executePublishWithProtectedAccessRecovery(spec);
         }
         const outputLogSnapshot =
           result.output_log || (await waitForOutputLogSnapshot());
@@ -419,17 +443,18 @@ export function usePublishExecute({
           loadInvokeErrors(),
           loadPublishFailureFeedback(),
         ]);
+        // 不确定 Attempt 的恢复同步：命名配置与草稿修订都用 prepared 携带的
+        // 修订身份（草稿场景下 currentConfigurationRevisionId 为空）。
         if (
-          preparedRuntime &&
+          prepared &&
           !runtimeAccepted &&
           extractInvokeErrorCode(err) === "publish_runtime_attempt_uncertain" &&
-          selectedRepoPath &&
-          currentConfigurationRevisionId
+          selectedRepoPath
         ) {
           try {
             const synchronized = await synchronizePublishRuntime({
               repositoryPath: selectedRepoPath,
-              configurationRevisionId: currentConfigurationRevisionId,
+              configurationRevisionId: prepared.configurationRevisionId,
               attemptId: extractInvokeErrorDetails(err) || undefined,
               events: [],
             });
@@ -455,7 +480,7 @@ export function usePublishExecute({
           }
         }
         if (
-          preparedRuntime &&
+          prepared &&
           !runtimeAccepted &&
           activeRunRef.current?.revision === runRevision
         ) {
@@ -668,11 +693,12 @@ export function usePublishExecute({
       return;
     }
     try {
+      // plan 033：取消只面对 Runtime（attempt 优先，未开始的 run 用 token）。
       const cancelled = attemptId
         ? await cancelPublishRuntime({ attemptId })
         : activeRun?.runtimeToken
           ? await cancelPublishRuntime({ runtimeToken: activeRun.runtimeToken })
-          : await cancelProviderPublish();
+          : false;
       if (cancelled) {
         toast.message(appT.cancellingPublish || "正在取消发布...");
         if (attemptId && selectedRepoPath && currentConfigurationRevisionId) {

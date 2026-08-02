@@ -12,12 +12,9 @@ import {
   requestProtectedOutputAccess,
 } from "@/features/publish/publishOutputPreflight";
 import {
-  executeProviderPublish,
   type ProviderPublishSpec,
   type PublishOutputPreflightResult,
-  type PublishResult,
 } from "@/features/publish/publishRuntime";
-import { isProtectedOutputAccessFailure } from "@/features/history/publishFailure";
 
 const loadInvokeErrors = () => import("@/lib/tauri/invokeErrors");
 
@@ -290,86 +287,7 @@ export function createPublishPreflightPipeline(deps: PublishPreflightDeps) {
     return !options.isCancelled();
   }
 
-  async function requestProtectedOutputAccessForRetry(
-    spec: ProviderPublishSpec
-  ): Promise<boolean> {
-    const outputPreflight = await preflightPublishOutput(spec);
-    if (outputPreflight.validation.status === "incompatible") {
-      return false;
-    }
-
-    if (
-      outputPreflight.access.status !== "granted" &&
-      outputPreflight.access.status !== "denied"
-    ) {
-      return false;
-    }
-
-    const accessRequest = await requestProtectedOutputAccessWithWindow(
-      spec,
-      outputPreflight
-    );
-    return (
-      accessRequest !== null &&
-      accessRequest.selectedDirectory !== null &&
-      accessRequest.preflight.access.status !== "denied"
-    );
-  }
-
-  async function executePublishWithProtectedAccessRecovery(
-    spec: ProviderPublishSpec
-  ): Promise<PublishResult> {
-    let result: PublishResult;
-    try {
-      result = await executeProviderPublish(spec);
-    } catch (err) {
-      const { analyzePublishExecutionFailure } = await loadInvokeErrors();
-      if (
-        analyzePublishExecutionFailure(err) !==
-        "protected_directory_access_denied"
-      ) {
-        throw err;
-      }
-
-      let shouldRetry: boolean;
-      try {
-        shouldRetry = await requestProtectedOutputAccessForRetry(spec);
-      } catch {
-        throw err;
-      }
-
-      if (!shouldRetry) {
-        throw err;
-      }
-
-      return await executeProviderPublish(spec);
-    }
-
-    if (
-      !isProtectedOutputAccessFailure({
-        error: result.error,
-        outputLog: result.output_log,
-      })
-    ) {
-      return result;
-    }
-
-    let shouldRetry: boolean;
-    try {
-      shouldRetry = await requestProtectedOutputAccessForRetry(spec);
-    } catch {
-      return result;
-    }
-
-    if (!shouldRetry) {
-      return result;
-    }
-
-    return await executeProviderPublish(spec);
-  }
-
   return {
     runPublishPreflight,
-    executePublishWithProtectedAccessRecovery,
   };
 }

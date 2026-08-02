@@ -63,6 +63,7 @@ function createConfigProfile(
     profileGroup: null,
     createdAt,
     isSystemDefault: false,
+    isDraft: false,
     currentRevisionId: revisionId,
     revisions: [
       {
@@ -678,19 +679,22 @@ export async function installMockTauri(
             }
 
             // ── Publish ──
-            case "prepare_publish_runtime": {
+            case "prepare_publish_runtime":
+            case "prepare_draft_publish_runtime": {
               const request = args?.request as
                 | {
-                    configurationId: string;
-                    configurationRevisionId: string;
+                    configurationId?: string;
+                    configurationRevisionId?: string;
                     spec: PublishSpec;
                   }
                 | undefined;
+              const isDraft = !request?.configurationRevisionId;
               const revision =
-                request?.configurationRevisionId || "mock-revision";
+                request?.configurationRevisionId || "mock-draft-revision";
               return {
                 configurationId:
-                  request?.configurationId || "mock-configuration",
+                  request?.configurationId ||
+                  (isDraft ? "mock-draft-configuration" : "mock-configuration"),
                 configurationRevisionId: revision,
                 command: renderMockPublishCommand(request?.spec),
                 plan: {
@@ -878,55 +882,6 @@ export async function installMockTauri(
               };
             }
 
-            case "render_provider_publish": {
-              return renderMockPublishCommand(
-                args?.spec as PublishSpec | undefined
-              );
-            }
-
-            case "execute_provider_publish": {
-              const execId = `exec-${Date.now()}`;
-              // 先 emit 会话开始事件（与真实后端 spawn 前的 emit 对齐），
-              // 再 emit 日志 chunk，保证日志捕获会话归属正确。
-              const sessionStarted = new CustomEvent(
-                "provider-publish-session-started",
-                {
-                  detail: { sessionId: execId },
-                }
-              );
-              const publishEvent = new CustomEvent("publish-log-chunk", {
-                detail: { sessionId: execId, line: "[mock] Publishing..." },
-              });
-              setTimeout(() => window.dispatchEvent(sessionStarted), 50);
-              setTimeout(() => window.dispatchEvent(publishEvent), 100);
-              setTimeout(() => {
-                window.dispatchEvent(
-                  new CustomEvent("publish-log-chunk", {
-                    detail: {
-                      sessionId: execId,
-                      line: "[mock] Publish succeeded.",
-                    },
-                  })
-                );
-              }, 200);
-              return {
-                provider_id: (args?.providerId as string) || "dotnet",
-                success: true,
-                cancelled: false,
-                error: null,
-                command: {
-                  program: "dotnet",
-                  args: ["publish"],
-                  working_dir: "/workspace/alpha-service",
-                  display_command: "dotnet publish",
-                },
-                output_log: "[mock] Publishing...\n[mock] Publish succeeded.\n",
-                output_dir: "/tmp/publish-output",
-                file_count: 12,
-              };
-            }
-
-            case "cancel_provider_publish":
             case "cancel_publish_runtime":
               return true;
 
@@ -956,6 +911,12 @@ export async function installMockTauri(
 
             case "export_failure_group_bundle":
               return "/tmp/failure-bundle.zip";
+
+            case "dispatch_manual_publish_run":
+              return { attemptId: "e2e-manual-1", runId: 1 };
+
+            case "cancel_remote_publish_run":
+              return null;
 
             case "export_execution_history":
               return "/tmp/history.csv";

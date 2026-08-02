@@ -4,18 +4,17 @@ import { useDotnetPublishSelection } from "@/features/config/useDotnetPublishSel
 import { usePublishSpecBuilder } from "@/features/publish/usePublishSpecBuilder";
 import type { TranslationMap } from "@/features/publish/publishTransaction";
 import type { EnvironmentCheckSnapshot } from "@/features/environment/environment";
-import { renderPublishCommand } from "@/features/publish/renderPublishCommand";
 import { createPublishPreflightPipeline } from "@/features/publish/publishPreflight";
 import { getRecentConfigKeyFromSelection } from "@/features/config/publishConfigIdentity";
 import type { DotnetPreset } from "@/features/config/dotnetPresets";
 import {
+  prepareDraftPublishRuntime,
   preparePublishRuntime,
   type PreparedPublishRuntime,
   type ProviderPublishSpec,
 } from "@/features/publish/publishRuntime";
 import type { ProjectInfo, PublishConfigStore } from "@/lib/store/types";
 import type { ParameterValue } from "@/types/parameters";
-import type { PublishResult } from "@/generated/tauri-contracts";
 import { extractInvokeErrorMessage } from "@/lib/tauri/invokeErrors";
 
 export function buildPublishPresentationScopeKey(params: {
@@ -94,9 +93,6 @@ export interface UsePublishValidateResult {
       isCancelled: () => boolean;
     }
   ) => Promise<boolean>;
-  executePublishWithProtectedAccessRecovery: (
-    spec: ProviderPublishSpec
-  ) => Promise<PublishResult>;
   publishPreviewCommand: string;
   preparedRuntime: PreparedPublishRuntime | null;
   runtimePreparationError: string | null;
@@ -129,8 +125,6 @@ export function usePublishValidate({
   setEnvironmentLastCheck,
 }: UsePublishValidateParams): UsePublishValidateResult {
   const presentationRevisionRef = useRef(0);
-  const [legacyPublishPreviewCommand, setLegacyPublishPreviewCommand] =
-    useState("");
   const [preparedRuntimeState, setPreparedRuntimeState] = useState<{
     key: string;
     value: PreparedPublishRuntime;
@@ -138,17 +132,6 @@ export function usePublishValidate({
   const [runtimePreparationErrorState, setRuntimePreparationErrorState] =
     useState<{ key: string; message: string } | null>(null);
   const selectedRepoPath = selectedRepo?.path ?? null;
-  const hasPublishSpec =
-    selectedRepo !== null &&
-    !(activeProviderUsesProjectFile && projectInfo === null);
-  const prevHasPublishSpecRef = useRef(hasPublishSpec);
-
-  if (prevHasPublishSpecRef.current !== hasPublishSpec) {
-    prevHasPublishSpecRef.current = hasPublishSpec;
-    if (!hasPublishSpec) {
-      setLegacyPublishPreviewCommand("");
-    }
-  }
 
   const {
     getCurrentConfig,
@@ -210,17 +193,14 @@ export function usePublishValidate({
     () => buildCurrentPublishSpec(),
     [buildCurrentPublishSpec]
   );
+  // plan 033 路线 B：无命名配置时经自动草稿配置准备，发布总是需要 Runtime。
   const runtimePreparationKey =
-    selectedRepoId &&
-    selectedRepoPath &&
-    configurationId &&
-    configurationRevisionId &&
-    currentPublishSpec
+    selectedRepoId && selectedRepoPath && currentPublishSpec
       ? JSON.stringify({
           selectedRepoId,
           selectedRepoPath,
-          configurationId,
-          configurationRevisionId,
+          configurationId: configurationId ?? null,
+          configurationRevisionId: configurationRevisionId ?? null,
           spec: currentPublishSpec,
         })
       : null;
@@ -233,9 +213,7 @@ export function usePublishValidate({
     runtimePreparationErrorState?.key === runtimePreparationKey
       ? runtimePreparationErrorState.message
       : null;
-  const publishPreviewCommand = runtimePreparationKey
-    ? (preparedRuntime?.command.display_command ?? "")
-    : legacyPublishPreviewCommand;
+  const publishPreviewCommand = preparedRuntime?.command.display_command ?? "";
 
   const getPublishStartBlocker = useCallback(() => {
     if (!selectedRepo) {
@@ -246,20 +224,17 @@ export function usePublishValidate({
       return "missing-project";
     }
 
-    if (configurationId && configurationRevisionId) {
-      if (!preparedRuntime) {
-        return "runtime-not-ready";
-      }
-      if (preparedRuntime.blockedReason) {
-        return "runtime-blocked";
-      }
+    // 发布一律走 PublishRuntime（命名配置或自动草稿），必须等 prepare 完成。
+    if (!preparedRuntime) {
+      return "runtime-not-ready";
+    }
+    if (preparedRuntime.blockedReason) {
+      return "runtime-blocked";
     }
 
     return null;
   }, [
     activeProviderUsesProjectFile,
-    configurationId,
-    configurationRevisionId,
     preparedRuntime,
     projectInfo,
     selectedRepo,
@@ -278,15 +253,10 @@ export function usePublishValidate({
     return {
       spec,
       recentConfigKey: recentConfigKeyForCurrentSelection ?? undefined,
-      preparedRuntime:
-        configurationId && configurationRevisionId
-          ? (preparedRuntime ?? undefined)
-          : undefined,
+      preparedRuntime: preparedRuntime ?? undefined,
     };
   }, [
     buildPublishSpec,
-    configurationId,
-    configurationRevisionId,
     getPublishStartBlocker,
     preparedRuntime,
     recentConfigKeyForCurrentSelection,
@@ -324,20 +294,25 @@ export function usePublishValidate({
       };
     }
 
-    if (
-      runtimePreparationKey &&
-      selectedRepoId &&
-      configurationId &&
-      configurationRevisionId &&
-      selectedRepoPath
-    ) {
-      void preparePublishRuntime({
-        repositoryId: selectedRepoId,
-        repositoryPath: selectedRepoPath,
-        configurationId,
-        configurationRevisionId,
-        spec,
-      })
+    if (runtimePreparationKey && selectedRepoId && selectedRepoPath) {
+      const preparation =
+        configurationId && configurationRevisionId
+          ? preparePublishRuntime({
+              repositoryId: selectedRepoId,
+              repositoryPath: selectedRepoPath,
+              configurationId,
+              configurationRevisionId,
+              spec,
+            })
+          : prepareDraftPublishRuntime({
+              repositoryId: selectedRepoId,
+              repositoryPath: selectedRepoPath,
+              providerId: activeProviderId,
+              // 草稿修订参数与本次 spec 同源构造，保证参数匹配不阻断。
+              parameters: spec.parameters,
+              spec,
+            });
+      void preparation
         .then((prepared) => {
           if (!disposed) {
             setPreparedRuntimeState({
@@ -356,24 +331,13 @@ export function usePublishValidate({
             });
           }
         });
-    } else {
-      void renderPublishCommand(spec)
-        .then((command) => {
-          if (!disposed) {
-            setLegacyPublishPreviewCommand(command.display_command);
-          }
-        })
-        .catch(() => {
-          if (!disposed) {
-            setLegacyPublishPreviewCommand("");
-          }
-        });
     }
 
     return () => {
       disposed = true;
     };
   }, [
+    activeProviderId,
     configurationId,
     configurationRevisionId,
     currentPublishSpec,
@@ -386,20 +350,9 @@ export function usePublishValidate({
     return presentationRevisionRef.current === runRevision;
   }, []);
 
-  const { runPublishPreflight, executePublishWithProtectedAccessRecovery } =
-    useMemo(
-      () =>
-        createPublishPreflightPipeline({
-          appT,
-          notifyFeedback,
-          syncTrayPublishStatus,
-          restoreMainWindowIfNeeded,
-          resetLogCapture,
-          isCurrentPresentationRevision,
-          openEnvironmentDialog,
-          setEnvironmentLastCheck,
-        }),
-      [
+  const { runPublishPreflight } = useMemo(
+    () =>
+      createPublishPreflightPipeline({
         appT,
         notifyFeedback,
         syncTrayPublishStatus,
@@ -408,14 +361,23 @@ export function usePublishValidate({
         isCurrentPresentationRevision,
         openEnvironmentDialog,
         setEnvironmentLastCheck,
-      ]
-    );
+      }),
+    [
+      appT,
+      notifyFeedback,
+      syncTrayPublishStatus,
+      restoreMainWindowIfNeeded,
+      resetLogCapture,
+      isCurrentPresentationRevision,
+      openEnvironmentDialog,
+      setEnvironmentLastCheck,
+    ]
+  );
 
   return {
     getPublishStartBlocker,
     resolvePublishRequest,
     runPublishPreflight,
-    executePublishWithProtectedAccessRecovery,
     publishPreviewCommand,
     preparedRuntime,
     runtimePreparationError,

@@ -36,7 +36,7 @@ test.describe("Provider Catalog", () => {
     await gotoApp(page);
 
     // The publish command display should show dotnet publish with --configuration flag
-    // This is rendered by the mock's render_provider_publish
+    // Rendered via the mock's prepare (draft) publish runtime command
     const publishSection = page.locator("text=将执行的命令");
     await expect(publishSection).toBeVisible({ timeout: 15000 });
   });

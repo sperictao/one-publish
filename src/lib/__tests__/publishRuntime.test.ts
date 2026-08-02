@@ -8,12 +8,10 @@ vi.mock("@tauri-apps/api/core", () => ({
 
 import {
   cancelPublishRuntime,
-  cancelProviderPublish,
-  executeProviderPublish,
   importProviderPublishSpecFromCommand,
+  prepareDraftPublishRuntime,
   preparePublishRuntime,
   preflightProviderPublishOutput,
-  renderProviderPublish,
   resumePublishRuntime,
   startPublishRuntime,
   synchronizePublishRuntime,
@@ -34,38 +32,29 @@ describe("publishRuntime", () => {
     vi.clearAllMocks();
   });
 
-  it("executes provider publish through the publish runtime boundary", async () => {
-    const result = {
-      provider_id: "dotnet",
-      success: true,
-      cancelled: false,
-      error: null,
+  it("centralizes draft-prepare, preflight, and command import invokes", async () => {
+    const prepared = {
+      configurationId: "draft-configuration",
+      configurationRevisionId: "draft-revision",
       command: {
         program: "dotnet",
         args: ["publish", "/repo/App.csproj"],
         working_dir: "/repo",
         display_command: "dotnet publish /repo/App.csproj",
+        env: [],
       },
-      output_log: "Build succeeded.",
-      output_dir: "/repo/bin/Release/publish",
-      file_count: 2,
+      plan: {
+        version: 1,
+        digest: "plan-draft",
+        snapshotDigest: "snapshot-draft",
+        executionBackend: "local-execution",
+        nodes: [],
+      },
+      blockedReason: null,
+      runtimeToken: "token-draft",
     };
-    invokeMock.mockResolvedValue(result);
-
-    await expect(executeProviderPublish(spec)).resolves.toBe(result);
-    expect(invokeMock).toHaveBeenCalledWith("execute_provider_publish", {
-      spec,
-    });
-  });
-
-  it("centralizes render, preflight, cancel, and command import invokes", async () => {
     invokeMock
-      .mockResolvedValueOnce({
-        program: "dotnet",
-        args: ["publish", "/repo/App.csproj"],
-        working_dir: "/repo",
-        display_command: "dotnet publish /repo/App.csproj",
-      })
+      .mockResolvedValueOnce(prepared)
       .mockResolvedValueOnce({
         outputDir: "/repo/bin/Release/publish",
         configuredOutputDir: null,
@@ -81,26 +70,42 @@ describe("publishRuntime", () => {
           detail: null,
         },
       })
-      .mockResolvedValueOnce(false)
       .mockResolvedValueOnce(spec);
 
-    await renderProviderPublish(spec);
+    // plan 033：临时发布经自动草稿配置准备（路线 B）。
+    await expect(
+      prepareDraftPublishRuntime({
+        repositoryId: "repo-1",
+        repositoryPath: "/repo",
+        providerId: "dotnet",
+        parameters: { configuration: "Release" },
+        spec,
+      })
+    ).resolves.toBe(prepared);
     await preflightProviderPublishOutput(spec);
-    await cancelProviderPublish();
     await importProviderPublishSpecFromCommand({
       command: "dotnet publish /repo/App.csproj",
       providerId: "dotnet",
       projectPath: "/repo/App.csproj",
     });
 
-    expect(invokeMock).toHaveBeenNthCalledWith(1, "render_provider_publish", {
-      spec,
-    });
+    expect(invokeMock).toHaveBeenNthCalledWith(
+      1,
+      "prepare_draft_publish_runtime",
+      {
+        request: {
+          repositoryId: "repo-1",
+          repositoryPath: "/repo",
+          providerId: "dotnet",
+          parameters: { configuration: "Release" },
+          spec,
+        },
+      }
+    );
     expect(invokeMock).toHaveBeenNthCalledWith(2, "preflight_publish_output", {
       spec,
     });
-    expect(invokeMock).toHaveBeenNthCalledWith(3, "cancel_provider_publish");
-    expect(invokeMock).toHaveBeenNthCalledWith(4, "import_from_command", {
+    expect(invokeMock).toHaveBeenNthCalledWith(3, "import_from_command", {
       command: "dotnet publish /repo/App.csproj",
       providerId: "dotnet",
       projectPath: "/repo/App.csproj",

@@ -1118,8 +1118,70 @@ pub fn prepare_publish_runtime(
     )
 }
 
-/// 桌面执行端口：经 Tauri 命令面运行（保 UI 流式输出与取消），并保留
-/// 完整执行记录供界面消费；核心契约只携带最小结果（决议 #80）。
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(rename_all = "camelCase")]
+pub struct PrepareDraftPublishRuntimeRequest {
+    pub repository_id: String,
+    pub repository_path: String,
+    pub provider_id: String,
+    pub parameters: Value,
+    pub spec: PublishSpec,
+}
+
+/// 路线 B（plan 033）：临时发布经自动草稿配置走新栈——物化草稿修订后复用
+/// 同一 prepare_runtime，Attempt 语义与命名配置完全一致（可恢复、可重跑、
+/// 有完整事件与凭证）。草稿配置隐藏于 UI，修订按 DRAFT_MAX_REVISIONS 回收。
+#[tauri::command]
+pub async fn prepare_draft_publish_runtime(
+    app: tauri::AppHandle,
+    request: PrepareDraftPublishRuntimeRequest,
+) -> Result<PreparedPublishRuntime, AppError> {
+    let _timer = crate::commands::middleware::CommandTimer::new(
+        "publish_runtime::prepare_draft_publish_runtime",
+    );
+    let mut state = crate::store::get_state();
+    let repository = crate::store::find_repository_mut(
+        &mut state.repositories,
+        &request.repository_id,
+    )?;
+    if repository.path != request.repository_path {
+        return Err(AppError::validation_with_code(
+            "selected repository path no longer matches persisted state",
+            "publish_runtime_repository_mismatch",
+        ));
+    }
+    let project_binding =
+        crate::store::repository_project_binding(repository, &request.provider_id);
+    let (configuration_id, configuration_revision_id) = repository
+        .publish_config
+        .upsert_draft_revision(
+            request.provider_id.clone(),
+            request.parameters.clone(),
+            project_binding.clone(),
+            chrono::Utc::now().to_rfc3339(),
+        );
+    crate::store::persist_state_and_refresh_tray(&app, state).await?;
+
+    prepare_runtime(
+        PreparePublishRuntimeRequest {
+            repository_id: request.repository_id,
+            repository_path: request.repository_path,
+            configuration_id,
+            configuration_revision_id,
+            spec: request.spec,
+            promoted_manifest_digest: None,
+        },
+        ResolvedPublishConfiguration {
+            provider_id: request.provider_id,
+            parameters: request.parameters,
+            composition: crate::store::PublishComposition::local_default(),
+            project_binding,
+            blocked_reason: None,
+        },
+    )
+}
+
 struct TauriProviderExecutionPort {
     app: tauri::AppHandle,
     runtime: tokio::runtime::Handle,

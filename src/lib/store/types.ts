@@ -261,7 +261,8 @@ function normalizeRepoPublishConfig(
   return {
     ...config,
     profiles: config.profiles
-      .filter((profile) => profile.deletedAt === null)
+      // 草稿配置（plan 033 路线 B）只做临时发布的修订载体，不进任何 UI 列表。
+      .filter((profile) => profile.deletedAt === null && !profile.isDraft)
       .map((profile) =>
         normalizeConfigProfile(
           profile,

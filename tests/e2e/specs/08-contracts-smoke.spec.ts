@@ -107,20 +107,35 @@ test.describe("Contract Drift Detection", () => {
     expect(params).toHaveProperty("runtime");
   });
 
-  test("render_provider_publish returns valid RenderedPublishCommand shape", async ({
+  test("prepare_draft_publish_runtime returns valid PreparedPublishRuntime shape", async ({
     page,
   }) => {
-    const cmd = (await invoke(page, "render_provider_publish", {
-      providerId: "dotnet",
-      spec: { parameters: { configuration: "Release" } },
-      projectPath: "/workspace/alpha-service",
+    const prepared = (await invoke(page, "prepare_draft_publish_runtime", {
+      request: {
+        repositoryId: "repo-a",
+        repositoryPath: "/workspace/alpha-service",
+        providerId: "dotnet",
+        parameters: { configuration: "Release" },
+        spec: {
+          version: 1,
+          provider_id: "dotnet",
+          project_path: "/workspace/alpha-service/App.csproj",
+          parameters: { configuration: "Release" },
+        },
+      },
     })) as Record<string, unknown>;
 
-    expect(cmd).toHaveProperty("program");
-    expect(cmd).toHaveProperty("args");
-    expect(cmd).toHaveProperty("display_command");
-    expect(typeof cmd.program).toBe("string");
-    expect(Array.isArray(cmd.args)).toBe(true);
+    expect(prepared).toHaveProperty("configurationId");
+    expect(prepared).toHaveProperty("configurationRevisionId");
+    expect(prepared).toHaveProperty("command");
+    expect(prepared).toHaveProperty("plan");
+    expect(prepared).toHaveProperty("runtimeToken");
+    const command = prepared.command as Record<string, unknown>;
+    expect(command).toHaveProperty("program");
+    expect(command).toHaveProperty("args");
+    expect(command).toHaveProperty("display_command");
+    expect(typeof command.program).toBe("string");
+    expect(Array.isArray(command.args)).toBe(true);
   });
 
   test("run_environment_check returns valid EnvironmentCheckResult shape", async ({
@@ -151,15 +166,23 @@ test.describe("Contract Drift Detection", () => {
     expect(Array.isArray(result.branches)).toBe(true);
   });
 
-  test("execute_provider_publish returns valid PublishResult shape", async ({
+  test("start_publish_runtime returns valid PublishRuntimeResult shape", async ({
     page,
   }) => {
-    const result = (await invoke(page, "execute_provider_publish", {
-      providerId: "dotnet",
-      spec: { parameters: {} },
-      projectPath: "/workspace/alpha-service",
+    const runtime = (await invoke(page, "start_publish_runtime", {
+      request: { runtimeToken: "runtime-smoke-revision" },
     })) as Record<string, unknown>;
 
+    expect(runtime).toHaveProperty("attempt");
+    expect(runtime).toHaveProperty("publishResult");
+    const attempt = runtime.attempt as Record<string, unknown>;
+    expect(attempt).toHaveProperty("attemptId");
+    expect(attempt).toHaveProperty("status");
+    expect(attempt).toHaveProperty("routes");
+    expect(attempt).toHaveProperty("receipts");
+    expect(attempt).toHaveProperty("events");
+
+    const result = runtime.publishResult as Record<string, unknown>;
     // PublishResult contract fields
     expect(result).toHaveProperty("provider_id");
     expect(result).toHaveProperty("success");

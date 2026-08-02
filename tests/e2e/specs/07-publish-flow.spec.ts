@@ -135,10 +135,10 @@ test.describe("Full Publish Flow — Happy Path", () => {
 
 test.describe("Full Publish Flow — Error Paths", () => {
   test("shows error state when publish command fails", async ({ page }) => {
-    // Use error injection to make execute_provider_publish throw
+    // plan 033：发布统一走 PublishRuntime，注入 start_publish_runtime 失败。
     await gotoApp(page, {
       errors: {
-        execute_provider_publish: "publish process crashed with exit code 1",
+        start_publish_runtime: "publish process crashed with exit code 1",
       },
     });
 
