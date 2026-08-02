@@ -139,6 +139,7 @@ describe("useDialogsCompositionState", () => {
         projectFrameworkOptions: ["net8.0"],
         quickCreateProfileSaving: false,
         quickCreateEditing: false,
+        quickCreateViewing: false,
         dotnetSchema: undefined,
         providerSchemas: {},
         quickCreateGroupDefaultValue: "default",

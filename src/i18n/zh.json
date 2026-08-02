@@ -449,7 +449,9 @@
     "providerParametersSection": "发布参数",
     "providerParametersSectionDescription": "按 Provider 参数定义编辑本配置的发布参数。",
     "providerParametersEmpty": "该 Provider 没有可配置的参数。",
-    "providerParametersSchemaLoading": "参数定义加载中…"
+    "providerParametersSchemaLoading": "参数定义加载中…",
+    "quickViewTitle": "查看发布配置",
+    "quickViewDescription": "只读查看该配置的全部参数。"
   },
   "app": {
     "appTitle": "One Publish",

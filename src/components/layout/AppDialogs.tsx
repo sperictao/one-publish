@@ -132,6 +132,7 @@ export interface AppDialogsProps {
     projectFrameworkOptions: string[];
     saving: boolean;
     editing: boolean;
+    viewing: boolean;
     dotnetSchema?: ParameterSchema;
     providerSchemas: Record<string, ParameterSchema>;
     groupDefaultValue: string;
@@ -271,6 +272,7 @@ export function AppDialogs(props: AppDialogsProps) {
             projectFrameworkOptions={props.quickCreate.projectFrameworkOptions}
             quickCreateProfileSaving={props.quickCreate.saving}
             quickCreateEditing={props.quickCreate.editing}
+            quickCreateViewing={props.quickCreate.viewing}
             dotnetSchema={props.quickCreate.dotnetSchema}
             providerSchemas={props.quickCreate.providerSchemas}
             quickCreateGroupDefaultValue={props.quickCreate.groupDefaultValue}

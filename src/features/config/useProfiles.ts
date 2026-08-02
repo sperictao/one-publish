@@ -260,10 +260,12 @@ export function useProfiles({
       quickCreate.setQuickCreateProfileCustomGroup,
     quickCreateProfileSaving: quickCreate.quickCreateProfileSaving,
     isQuickCreateEditing: quickCreate.isQuickCreateEditing,
+    isQuickCreateViewing: quickCreate.isQuickCreateViewing,
     loadProfiles,
     setActiveProfileName: setLocalActiveProfileName,
     openQuickCreateProfileDialog: quickCreate.openQuickCreateProfileDialog,
     openQuickEditProfileDialog: quickCreate.openQuickEditProfileDialog,
+    openQuickViewProfileDialog: quickCreate.openQuickViewProfileDialog,
     handleQuickCreateProfileOpenChange:
       quickCreate.handleQuickCreateProfileOpenChange,
     quickCreateTemplateOptions: quickCreate.quickCreateTemplateOptions,

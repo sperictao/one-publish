@@ -87,6 +87,7 @@ export interface UseAppDialogsPropsParams {
   projectFrameworkOptions: string[];
   quickCreateProfileSaving: boolean;
   quickCreateEditing: boolean;
+  quickCreateViewing: boolean;
   dotnetSchema?: ParameterSchema;
   providerSchemas: Record<string, ParameterSchema>;
   quickCreateGroupDefaultValue: string;
@@ -189,6 +190,7 @@ export function useAppDialogsProps(
       projectFrameworkOptions: params.projectFrameworkOptions,
       saving: params.quickCreateProfileSaving,
       editing: params.quickCreateEditing,
+      viewing: params.quickCreateViewing,
       dotnetSchema: params.dotnetSchema,
       providerSchemas: params.providerSchemas,
       groupDefaultValue: params.quickCreateGroupDefaultValue,

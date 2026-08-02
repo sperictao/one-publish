@@ -113,8 +113,10 @@ export interface UseQuickCreateProfileReturn {
   setQuickCreateProfileCustomGroup: (value: string) => void;
   quickCreateProfileSaving: boolean;
   isQuickCreateEditing: boolean;
+  isQuickCreateViewing: boolean;
   openQuickCreateProfileDialog: () => void;
   openQuickEditProfileDialog: (profile: ConfigProfile) => void;
+  openQuickViewProfileDialog: (profile: ConfigProfile) => void;
   handleQuickCreateProfileOpenChange: (open: boolean) => void;
   quickCreateTemplateOptions: QuickCreateTemplateOption[];
   quickCreateProfileGroupOptions: string[];
@@ -156,6 +158,7 @@ export function useQuickCreateProfile({
   const [quickCreateProfileSaving, setQuickCreateProfileSaving] =
     useState(false);
   const [editingProfileId, setEditingProfileId] = useState<string | null>(null);
+  const [quickCreateViewing, setQuickCreateViewing] = useState(false);
 
   const resetQuickCreateProfileState = useCallback(() => {
     setQuickCreateProfileName("");
@@ -165,6 +168,7 @@ export function useQuickCreateProfile({
     setQuickCreateProfileCustomGroup("");
     setQuickCreateProfileSaving(false);
     setEditingProfileId(null);
+    setQuickCreateViewing(false);
   }, [activeProviderId]);
 
   const openQuickCreateProfileDialog = useCallback(() => {
@@ -182,27 +186,44 @@ export function useQuickCreateProfile({
     [resetQuickCreateProfileState]
   );
 
-  const openQuickEditProfileDialog = useCallback((profile: ConfigProfile) => {
-    if (profile.isSystemDefault) {
-      return;
-    }
+  const loadProfileIntoDialog = useCallback(
+    (profile: ConfigProfile, viewing: boolean) => {
+      const parameters = profile.parameters || {};
+      const resolvedGroup = profile.profileGroup?.trim() || "";
 
-    const parameters = profile.parameters || {};
-    const resolvedGroup = profile.profileGroup?.trim() || "";
+      setQuickCreateProfileName(profile.name);
+      setQuickCreateTemplateId(QUICK_CREATE_CUSTOM_TEMPLATE_ID);
+      setQuickCreateProfileDraft(
+        createDraftForProvider(profile.providerId, parameters)
+      );
+      setQuickCreateProfileGroup(
+        resolvedGroup || QUICK_CREATE_PROFILE_GROUP_DEFAULT
+      );
+      setQuickCreateProfileCustomGroup("");
+      setQuickCreateProfileSaving(false);
+      setEditingProfileId(profile.id);
+      setQuickCreateViewing(viewing);
+      setQuickCreateProfileOpen(true);
+    },
+    []
+  );
 
-    setQuickCreateProfileName(profile.name);
-    setQuickCreateTemplateId(QUICK_CREATE_CUSTOM_TEMPLATE_ID);
-    setQuickCreateProfileDraft(
-      createDraftForProvider(profile.providerId, parameters)
-    );
-    setQuickCreateProfileGroup(
-      resolvedGroup || QUICK_CREATE_PROFILE_GROUP_DEFAULT
-    );
-    setQuickCreateProfileCustomGroup("");
-    setQuickCreateProfileSaving(false);
-    setEditingProfileId(profile.id);
-    setQuickCreateProfileOpen(true);
-  }, []);
+  const openQuickEditProfileDialog = useCallback(
+    (profile: ConfigProfile) => {
+      if (profile.isSystemDefault) {
+        return;
+      }
+      loadProfileIntoDialog(profile, false);
+    },
+    [loadProfileIntoDialog]
+  );
+
+  const openQuickViewProfileDialog = useCallback(
+    (profile: ConfigProfile) => {
+      loadProfileIntoDialog(profile, true);
+    },
+    [loadProfileIntoDialog]
+  );
 
   const quickCreateTemplateOptions = useMemo<QuickCreateTemplateOption[]>(
     () => [
@@ -427,8 +448,10 @@ export function useQuickCreateProfile({
     setQuickCreateProfileCustomGroup,
     quickCreateProfileSaving,
     isQuickCreateEditing: editingProfileId !== null,
+    isQuickCreateViewing: quickCreateViewing,
     openQuickCreateProfileDialog,
     openQuickEditProfileDialog,
+    openQuickViewProfileDialog,
     handleQuickCreateProfileOpenChange,
     quickCreateTemplateOptions,
     quickCreateProfileGroupOptions,

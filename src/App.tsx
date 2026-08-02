@@ -223,6 +223,7 @@ function App() {
             projectFrameworkOptions={boot.publish.projectFrameworkOptions}
             quickCreateProfileSaving={boot.publish.quickCreateProfileSaving}
             quickCreateEditing={boot.publish.isQuickCreateEditing}
+            quickCreateViewing={boot.publish.isQuickCreateViewing}
             dotnetSchema={boot.publish.providerSchemas.dotnet}
             providerSchemas={boot.publish.providerSchemas}
             quickCreateGroupDefaultValue={

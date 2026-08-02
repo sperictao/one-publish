@@ -294,4 +294,61 @@ describe("QuickCreateProfileDialog", () => {
     fireEvent.click(screen.getByLabelText("release"));
     expect(onParameterChange).toHaveBeenCalledWith("release", true);
   });
+
+  it("查看态以只读呈现 schema 表单，隐藏基础信息与保存入口", () => {
+    const onParameterChange = vi.fn();
+    const cargoSchema: ParameterSchema = {
+      parameters: {
+        target: { type: "string", flag: "--target" },
+      },
+    };
+
+    render(
+      <QuickCreateProfileDialog
+        open
+        quickCreateProfileOpen
+        quickCreateTemplateId="custom"
+        quickCreateTemplateOptions={[]}
+        quickCreateProfileName="Cargo Nightly"
+        quickCreateProfileGroup="默认分组"
+        quickCreateProfileGroupOptions={[]}
+        quickCreateProfileCustomGroup=""
+        quickCreateProfileDraft={{
+          kind: "schema",
+          providerId: "cargo",
+          parameters: { target: "aarch64-apple-darwin" },
+        }}
+        projectFrameworkOptions={[]}
+        quickCreateProfileSaving={false}
+        quickCreateEditing
+        quickCreateViewing
+        dotnetSchema={dotnetSchema}
+        providerSchemas={{ cargo: cargoSchema }}
+        quickCreateGroupDefaultValue="默认分组"
+        quickCreateGroupCustomValue="__custom__"
+        profileT={{ quickViewTitle: "查看发布配置" }}
+        appT={{}}
+        cancelLabel="关闭"
+        onOpenChange={vi.fn()}
+        onApplyTemplate={vi.fn()}
+        onProfileNameChange={vi.fn()}
+        onProfileGroupChange={vi.fn()}
+        onProfileCustomGroupChange={vi.fn()}
+        onDraftChange={vi.fn()}
+        onParameterChange={onParameterChange}
+        onSave={vi.fn()}
+      />
+    );
+
+    expect(screen.getByText("查看发布配置")).toBeInTheDocument();
+    // 基础信息编辑区与保存按钮不出现
+    expect(screen.queryByLabelText("配置名称")).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /保存修改|创建并保存/ })
+    ).not.toBeInTheDocument();
+
+    const target = screen.getByLabelText("target");
+    expect(target).toHaveValue("aarch64-apple-darwin");
+    expect(target).toHaveAttribute("readonly");
+  });
 });
