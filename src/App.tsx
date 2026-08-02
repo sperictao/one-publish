@@ -224,6 +224,7 @@ function App() {
             quickCreateProfileSaving={boot.publish.quickCreateProfileSaving}
             quickCreateEditing={boot.publish.isQuickCreateEditing}
             dotnetSchema={boot.publish.providerSchemas.dotnet}
+            providerSchemas={boot.publish.providerSchemas}
             quickCreateGroupDefaultValue={
               boot.publish.QUICK_CREATE_PROFILE_GROUP_DEFAULT
             }
@@ -244,6 +245,9 @@ function App() {
             }
             updateQuickCreateProfileDraft={
               boot.publish.updateQuickCreateProfileDraft
+            }
+            updateQuickCreateProfileParameter={
+              boot.publish.updateQuickCreateProfileParameter
             }
             handleQuickCreateProfileSave={
               boot.publish.handleQuickCreateProfileSave

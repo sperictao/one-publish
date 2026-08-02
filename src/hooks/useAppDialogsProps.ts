@@ -17,7 +17,8 @@ import type {
   EnvironmentCheckResult,
   EnvironmentCheckSnapshot,
 } from "@/features/environment/environment";
-import type { ParameterSchema } from "@/types/parameters";
+import type { QuickCreateProfileDraft } from "@/features/config/useQuickCreateProfile";
+import type { ParameterSchema, ParameterValue } from "@/types/parameters";
 import type { ProfileManagementActions } from "@/features/config/useProfiles";
 
 interface QuickCreateTemplateOption {
@@ -82,11 +83,12 @@ export interface UseAppDialogsPropsParams {
   quickCreateProfileGroup: string;
   quickCreateProfileGroupOptions: string[];
   quickCreateProfileCustomGroup: string;
-  quickCreateProfileDraft: PublishConfigStore;
+  quickCreateProfileDraft: QuickCreateProfileDraft;
   projectFrameworkOptions: string[];
   quickCreateProfileSaving: boolean;
   quickCreateEditing: boolean;
   dotnetSchema?: ParameterSchema;
+  providerSchemas: Record<string, ParameterSchema>;
   quickCreateGroupDefaultValue: string;
   quickCreateGroupCustomValue: string;
   profileT: Record<string, string | undefined>;
@@ -98,6 +100,10 @@ export interface UseAppDialogsPropsParams {
   setQuickCreateProfileGroup: (value: string) => void;
   setQuickCreateProfileCustomGroup: (value: string) => void;
   updateQuickCreateProfileDraft: (patch: Partial<PublishConfigStore>) => void;
+  updateQuickCreateProfileParameter: (
+    key: string,
+    value: ParameterValue
+  ) => void;
   handleQuickCreateProfileSave: () => void;
   configDialogOpen: boolean;
   profileManagement: ProfileManagementActions;
@@ -184,6 +190,7 @@ export function useAppDialogsProps(
       saving: params.quickCreateProfileSaving,
       editing: params.quickCreateEditing,
       dotnetSchema: params.dotnetSchema,
+      providerSchemas: params.providerSchemas,
       groupDefaultValue: params.quickCreateGroupDefaultValue,
       groupCustomValue: params.quickCreateGroupCustomValue,
       profileT: params.profileT,
@@ -195,6 +202,7 @@ export function useAppDialogsProps(
       onProfileGroupChange: params.setQuickCreateProfileGroup,
       onProfileCustomGroupChange: params.setQuickCreateProfileCustomGroup,
       onDraftChange: params.updateQuickCreateProfileDraft,
+      onParameterChange: params.updateQuickCreateProfileParameter,
       onSave: params.handleQuickCreateProfileSave,
     },
     config: {

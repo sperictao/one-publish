@@ -57,7 +57,7 @@ const dotnetSchema: ParameterSchema = {
   },
 };
 
-const baseDraft: PublishConfigStore = {
+const baseConfig: PublishConfigStore = {
   configuration: "Release",
   runtime: "",
   framework: "",
@@ -136,11 +136,12 @@ describe("QuickCreateProfileDialog", () => {
         quickCreateProfileGroup="默认分组"
         quickCreateProfileGroupOptions={["默认分组", "项目发布配置"]}
         quickCreateProfileCustomGroup=""
-        quickCreateProfileDraft={baseDraft}
+        quickCreateProfileDraft={{ kind: "dotnet", config: baseConfig }}
         projectFrameworkOptions={["net8.0", "net9.0"]}
         quickCreateProfileSaving={false}
         quickCreateEditing={false}
         dotnetSchema={dotnetSchema}
+        providerSchemas={{ dotnet: dotnetSchema }}
         quickCreateGroupDefaultValue="默认分组"
         quickCreateGroupCustomValue="__custom__"
         profileT={{
@@ -167,6 +168,7 @@ describe("QuickCreateProfileDialog", () => {
         onProfileGroupChange={() => {}}
         onProfileCustomGroupChange={() => {}}
         onDraftChange={onDraftChange}
+        onParameterChange={vi.fn()}
         onSave={() => {}}
       />
     );
@@ -235,5 +237,61 @@ describe("QuickCreateProfileDialog", () => {
       screen.queryByRole("textbox", { name: "条件编译常量" })
     ).not.toBeInTheDocument();
     expect(screen.getByText("-p:")).toBeInTheDocument();
+  });
+
+  it("schema 草稿按 Provider 参数定义渲染表单，隐藏 dotnet 模板卡", () => {
+    const onParameterChange = vi.fn();
+    const cargoSchema: ParameterSchema = {
+      parameters: {
+        target: { type: "string", flag: "--target" },
+        release: { type: "boolean", flag: "--release" },
+      },
+    };
+
+    render(
+      <QuickCreateProfileDialog
+        open
+        quickCreateProfileOpen
+        quickCreateTemplateId="custom"
+        quickCreateTemplateOptions={[]}
+        quickCreateProfileName="Cargo Nightly"
+        quickCreateProfileGroup="默认分组"
+        quickCreateProfileGroupOptions={[]}
+        quickCreateProfileCustomGroup=""
+        quickCreateProfileDraft={{
+          kind: "schema",
+          providerId: "cargo",
+          parameters: { target: "aarch64-apple-darwin" },
+        }}
+        projectFrameworkOptions={[]}
+        quickCreateProfileSaving={false}
+        quickCreateEditing
+        dotnetSchema={dotnetSchema}
+        providerSchemas={{ dotnet: dotnetSchema, cargo: cargoSchema }}
+        quickCreateGroupDefaultValue="默认分组"
+        quickCreateGroupCustomValue="__custom__"
+        profileT={{}}
+        appT={{}}
+        cancelLabel="取消"
+        onOpenChange={vi.fn()}
+        onApplyTemplate={vi.fn()}
+        onProfileNameChange={vi.fn()}
+        onProfileGroupChange={vi.fn()}
+        onProfileCustomGroupChange={vi.fn()}
+        onDraftChange={vi.fn()}
+        onParameterChange={onParameterChange}
+        onSave={vi.fn()}
+      />
+    );
+
+    // dotnet 专属模板卡与表单不出现
+    expect(screen.queryByText("快速套用模板")).not.toBeInTheDocument();
+    expect(screen.queryByText("高级参数")).not.toBeInTheDocument();
+
+    // schema 字段渲染并携带既有值
+    expect(screen.getByLabelText("target")).toHaveValue("aarch64-apple-darwin");
+
+    fireEvent.click(screen.getByLabelText("release"));
+    expect(onParameterChange).toHaveBeenCalledWith("release", true);
   });
 });

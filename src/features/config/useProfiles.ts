@@ -173,6 +173,7 @@ export function useProfiles({
 
   const quickCreate = useQuickCreateProfile({
     selectedRepoId,
+    activeProviderId,
     profileT,
     presets,
     profiles,
@@ -269,6 +270,8 @@ export function useProfiles({
     quickCreateProfileGroupOptions: quickCreate.quickCreateProfileGroupOptions,
     applyQuickCreateTemplate: quickCreate.applyQuickCreateTemplate,
     updateQuickCreateProfileDraft: quickCreate.updateQuickCreateProfileDraft,
+    updateQuickCreateProfileParameter:
+      quickCreate.updateQuickCreateProfileParameter,
     handleSelectProjectProfile: selection.handleSelectProjectProfile,
     handleSelectProfileFromPanel: selection.handleSelectProfileFromPanel,
     handleQuickCreateProfileSave: quickCreate.handleQuickCreateProfileSave,

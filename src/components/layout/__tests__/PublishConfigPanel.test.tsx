@@ -324,18 +324,19 @@ describe("PublishConfigPanel", () => {
     ).toBeVisible();
     fireEvent.pointerDown(boundCargoTrigger, { button: 0, ctrlKey: false });
     fireEvent.click(boundCargoTrigger);
-    const unavailableUpdate = await screen.findByRole("menuitem", {
-      name: "更新配置（当前 Provider 暂无可用编辑器）",
+    // 决议：所有非系统默认 Provider 均可编辑（schema 驱动表单），
+    // 受阻删除复用更新入口。
+    const cargoUpdate = await screen.findByRole("menuitem", {
+      name: "更新配置",
     });
-    expect(unavailableUpdate).toHaveAttribute("data-disabled");
-    const unavailableDelete = screen.getByRole("menuitem", {
+    expect(cargoUpdate).not.toHaveAttribute("data-disabled");
+    const cargoBlockedDelete = screen.getByRole("menuitem", {
       name: "删除受阻：1 个外部绑定仍在引用此配置。请先更新配置处理绑定",
     });
-    expect(unavailableDelete).toHaveAttribute("data-disabled");
-    fireEvent.click(unavailableDelete);
+    expect(cargoBlockedDelete).not.toHaveAttribute("data-disabled");
+    fireEvent.click(cargoBlockedDelete);
 
-    expect(onSelectProfile).not.toHaveBeenCalledWith(boundCargo);
-    expect(onEditProfile).not.toHaveBeenCalledWith(boundCargo);
+    expect(onEditProfile).toHaveBeenCalledWith(boundCargo);
     expect(onDeleteProfile).not.toHaveBeenCalledWith("profile-cargo");
     fireEvent.keyDown(document, { key: "Escape", code: "Escape" });
 
