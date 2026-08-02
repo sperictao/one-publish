@@ -1,10 +1,7 @@
 import { useCallback, useMemo, useState } from "react";
 
 import { toast } from "sonner";
-import {
-  createDefaultDotnetPublishConfig,
-  createDotnetPublishConfigFromParameters,
-} from "@/features/config/dotnetPublishConfig";
+import { createDefaultDotnetPublishConfig } from "@/features/config/dotnetPublishConfig";
 import type {
   ConfigParameters,
   ConfigProfile,
@@ -29,29 +26,17 @@ interface StoreMutationResult {
   }>;
 }
 
-/** Quick create/edit 表单草稿：dotnet 用精装表单模型，其余 Provider 直接以
- * schema 参数记录为草稿（参数即事实，无转换层）。 */
-export type QuickCreateProfileDraft =
-  | { kind: "dotnet"; config: PublishConfigStore }
-  | { kind: "schema"; providerId: string; parameters: ConfigParameters };
-
-const createDotnetDraft = (): QuickCreateProfileDraft => ({
-  kind: "dotnet",
-  config: createDefaultDotnetPublishConfig(),
-});
+/** Quick create/edit 表单草稿：所有 Provider 统一以 schema 参数记录为
+ * 草稿（参数即事实，无转换层）。 */
+export interface QuickCreateProfileDraft {
+  providerId: string;
+  parameters: ConfigParameters;
+}
 
 const createDraftForProvider = (
   providerId: string,
   parameters: ConfigParameters = {}
-): QuickCreateProfileDraft =>
-  providerId === "dotnet"
-    ? {
-        kind: "dotnet",
-        config: createDotnetPublishConfigFromParameters(
-          parameters as Record<string, unknown>
-        ),
-      }
-    : { kind: "schema", providerId, parameters };
+): QuickCreateProfileDraft => ({ providerId, parameters });
 
 const toDotnetCustomConfigDraftFromPreset = (
   preset: DotnetPreset
@@ -121,7 +106,6 @@ export interface UseQuickCreateProfileReturn {
   quickCreateTemplateOptions: QuickCreateTemplateOption[];
   quickCreateProfileGroupOptions: string[];
   applyQuickCreateTemplate: (templateId: string) => void;
-  updateQuickCreateProfileDraft: (updates: Partial<PublishConfigStore>) => void;
   updateQuickCreateProfileParameter: (
     key: string,
     value: ParameterValue
@@ -149,7 +133,7 @@ export function useQuickCreateProfile({
     QUICK_CREATE_CUSTOM_TEMPLATE_ID
   );
   const [quickCreateProfileDraft, setQuickCreateProfileDraft] =
-    useState<QuickCreateProfileDraft>(createDotnetDraft);
+    useState<QuickCreateProfileDraft>(() => createDraftForProvider("dotnet"));
   const [quickCreateProfileGroup, setQuickCreateProfileGroup] = useState(
     QUICK_CREATE_PROFILE_GROUP_DEFAULT
   );
@@ -271,48 +255,35 @@ export function useQuickCreateProfile({
     (templateId: string) => {
       setQuickCreateTemplateId(templateId);
 
+      const presetDraft = (config: PublishConfigStore) =>
+        createDraftForProvider("dotnet", buildProfileParameters(config));
+
       if (templateId === QUICK_CREATE_CUSTOM_TEMPLATE_ID) {
-        setQuickCreateProfileDraft(createDotnetDraft());
+        setQuickCreateProfileDraft(createDraftForProvider("dotnet"));
         return;
       }
 
       const matchedPreset = presets.find((preset) => preset.id === templateId);
       if (!matchedPreset) {
         setQuickCreateTemplateId(QUICK_CREATE_CUSTOM_TEMPLATE_ID);
-        setQuickCreateProfileDraft(createDotnetDraft());
+        setQuickCreateProfileDraft(createDraftForProvider("dotnet"));
         return;
       }
 
-      setQuickCreateProfileDraft({
-        kind: "dotnet",
-        config: toDotnetCustomConfigDraftFromPreset(matchedPreset),
-      });
-    },
-    [presets]
-  );
-
-  const updateQuickCreateProfileDraft = useCallback(
-    (updates: Partial<PublishConfigStore>) => {
-      setQuickCreateTemplateId(QUICK_CREATE_CUSTOM_TEMPLATE_ID);
-      setQuickCreateProfileDraft((prev) =>
-        prev.kind === "dotnet"
-          ? { kind: "dotnet", config: { ...prev.config, ...updates } }
-          : prev
+      setQuickCreateProfileDraft(
+        presetDraft(toDotnetCustomConfigDraftFromPreset(matchedPreset))
       );
     },
-    []
+    [buildProfileParameters, presets]
   );
 
   const updateQuickCreateProfileParameter = useCallback(
     (key: string, value: ParameterValue) => {
-      setQuickCreateProfileDraft((prev) =>
-        prev.kind === "schema"
-          ? {
-              ...prev,
-              parameters: { ...prev.parameters, [key]: toSpecValue(value) },
-            }
-          : prev
-      );
+      setQuickCreateTemplateId(QUICK_CREATE_CUSTOM_TEMPLATE_ID);
+      setQuickCreateProfileDraft((prev) => ({
+        ...prev,
+        parameters: { ...prev.parameters, [key]: toSpecValue(value) },
+      }));
     },
     []
   );
@@ -350,18 +321,7 @@ export function useQuickCreateProfile({
     setQuickCreateProfileSaving(true);
 
     try {
-      const { providerId, parameters } =
-        quickCreateProfileDraft.kind === "dotnet"
-          ? {
-              providerId: "dotnet",
-              parameters: buildProfileParameters(
-                quickCreateProfileDraft.config
-              ),
-            }
-          : {
-              providerId: quickCreateProfileDraft.providerId,
-              parameters: quickCreateProfileDraft.parameters,
-            };
+      const { providerId, parameters } = quickCreateProfileDraft;
       const isEditing = Boolean(editingProfileId);
 
       let mutationState;
@@ -420,7 +380,6 @@ export function useQuickCreateProfile({
       setQuickCreateProfileSaving(false);
     }
   }, [
-    buildProfileParameters,
     editingProfileId,
     handleQuickCreateProfileOpenChange,
     onProfileSaved,
@@ -456,7 +415,6 @@ export function useQuickCreateProfile({
     quickCreateTemplateOptions,
     quickCreateProfileGroupOptions,
     applyQuickCreateTemplate,
-    updateQuickCreateProfileDraft,
     updateQuickCreateProfileParameter,
     handleQuickCreateProfileSave,
   };

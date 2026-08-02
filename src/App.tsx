@@ -220,11 +220,9 @@ function App() {
               boot.publish.quickCreateProfileCustomGroup
             }
             quickCreateProfileDraft={boot.publish.quickCreateProfileDraft}
-            projectFrameworkOptions={boot.publish.projectFrameworkOptions}
             quickCreateProfileSaving={boot.publish.quickCreateProfileSaving}
             quickCreateEditing={boot.publish.isQuickCreateEditing}
             quickCreateViewing={boot.publish.isQuickCreateViewing}
-            dotnetSchema={boot.publish.providerSchemas.dotnet}
             providerSchemas={boot.publish.providerSchemas}
             quickCreateGroupDefaultValue={
               boot.publish.QUICK_CREATE_PROFILE_GROUP_DEFAULT
@@ -243,9 +241,6 @@ function App() {
             setQuickCreateProfileGroup={boot.publish.setQuickCreateProfileGroup}
             setQuickCreateProfileCustomGroup={
               boot.publish.setQuickCreateProfileCustomGroup
-            }
-            updateQuickCreateProfileDraft={
-              boot.publish.updateQuickCreateProfileDraft
             }
             updateQuickCreateProfileParameter={
               boot.publish.updateQuickCreateProfileParameter

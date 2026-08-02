@@ -20,10 +20,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { DotnetPublishConfigFormSections } from "@/components/publish/DotnetPublishConfigFormSections";
 import { ProviderParameterFormSections } from "@/components/publish/ProviderParameterFormSections";
 import type { QuickCreateProfileDraft } from "@/features/config/useQuickCreateProfile";
-import type { PublishConfigStore } from "@/lib/store/types";
 import { cn } from "@/lib/utils";
 import type { ParameterSchema, ParameterValue } from "@/types/parameters";
 
@@ -34,7 +32,6 @@ interface QuickCreateTemplateOption {
 }
 
 type QuickCreateTranslations = Record<string, string | undefined>;
-type AppTranslations = Record<string, string | undefined>;
 
 interface QuickCreateProfileDialogProps {
   open: boolean;
@@ -46,23 +43,19 @@ interface QuickCreateProfileDialogProps {
   quickCreateProfileGroupOptions: string[];
   quickCreateProfileCustomGroup: string;
   quickCreateProfileDraft: QuickCreateProfileDraft;
-  projectFrameworkOptions: string[];
   quickCreateProfileSaving: boolean;
   quickCreateEditing: boolean;
   quickCreateViewing?: boolean;
-  dotnetSchema?: ParameterSchema;
   providerSchemas: Record<string, ParameterSchema>;
   quickCreateGroupDefaultValue: string;
   quickCreateGroupCustomValue: string;
   profileT: QuickCreateTranslations;
-  appT: AppTranslations;
   cancelLabel: string;
   onOpenChange: (open: boolean) => void;
   onApplyTemplate: (id: string) => void;
   onProfileNameChange: (value: string) => void;
   onProfileGroupChange: (value: string) => void;
   onProfileCustomGroupChange: (value: string) => void;
-  onDraftChange: (patch: Partial<PublishConfigStore>) => void;
   onParameterChange: (key: string, value: ParameterValue) => void;
   onSave: () => void;
 }
@@ -286,27 +279,23 @@ export function QuickCreateProfileDialog({
   quickCreateProfileGroupOptions,
   quickCreateProfileCustomGroup,
   quickCreateProfileDraft,
-  projectFrameworkOptions,
   quickCreateProfileSaving,
   quickCreateEditing,
   quickCreateViewing = false,
-  dotnetSchema,
   providerSchemas,
   quickCreateGroupDefaultValue,
   quickCreateGroupCustomValue,
   profileT,
-  appT,
   cancelLabel,
   onOpenChange,
   onApplyTemplate,
   onProfileNameChange,
   onProfileGroupChange,
   onProfileCustomGroupChange,
-  onDraftChange,
   onParameterChange,
   onSave,
 }: QuickCreateProfileDialogProps) {
-  const isDotnetDraft = quickCreateProfileDraft.kind === "dotnet";
+  const isDotnetDraft = quickCreateProfileDraft.providerId === "dotnet";
   const selectedTemplate =
     quickCreateTemplateOptions.find(
       (option) => option.id === quickCreateTemplateId
@@ -460,25 +449,12 @@ export function QuickCreateProfileDialog({
           />
         )}
 
-        {quickCreateProfileDraft.kind === "dotnet" ? (
-          <DotnetPublishConfigFormSections
-            mode={quickCreateViewing ? "readonly" : "edit"}
-            presentation="focused"
-            profileT={profileT}
-            appT={appT}
-            config={quickCreateProfileDraft.config}
-            dotnetSchema={dotnetSchema}
-            projectFrameworkOptions={projectFrameworkOptions}
-            onDraftChange={onDraftChange}
-          />
-        ) : (
-          <ProviderParameterFormSections
-            mode={quickCreateViewing ? "readonly" : "edit"}
-            schema={providerSchemas[quickCreateProfileDraft.providerId]}
-            parameters={quickCreateProfileDraft.parameters}
-            onParameterChange={onParameterChange}
-          />
-        )}
+        <ProviderParameterFormSections
+          mode={quickCreateViewing ? "readonly" : "edit"}
+          schema={providerSchemas[quickCreateProfileDraft.providerId]}
+          parameters={quickCreateProfileDraft.parameters}
+          onParameterChange={onParameterChange}
+        />
       </AppDialogShell>
     </Dialog>
   );

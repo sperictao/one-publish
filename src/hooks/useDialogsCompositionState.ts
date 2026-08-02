@@ -14,7 +14,6 @@ import type {
   ProviderManifest,
   PublishConfigStore,
 } from "@/lib/store/types";
-import type { ParameterSchema } from "@/types/parameters";
 import type { ParameterValue } from "@/types/parameters";
 
 export type DialogsCompositionParams = Omit<
@@ -32,9 +31,7 @@ export type DialogsCompositionParams = Omit<
   availableProviders: ProviderManifest[];
   customConfig: PublishConfigStore;
   activeProviderParameters: Record<string, ParameterValue>;
-  dotnetSchema?: ParameterSchema;
   projectFile?: string;
-  projectFrameworkOptions: string[];
   selectedRepoPath?: string;
 };
 

@@ -271,7 +271,6 @@ export function useProfiles({
     quickCreateTemplateOptions: quickCreate.quickCreateTemplateOptions,
     quickCreateProfileGroupOptions: quickCreate.quickCreateProfileGroupOptions,
     applyQuickCreateTemplate: quickCreate.applyQuickCreateTemplate,
-    updateQuickCreateProfileDraft: quickCreate.updateQuickCreateProfileDraft,
     updateQuickCreateProfileParameter:
       quickCreate.updateQuickCreateProfileParameter,
     handleSelectProjectProfile: selection.handleSelectProjectProfile,
