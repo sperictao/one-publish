@@ -737,8 +737,7 @@ mod tests {
                     1,
                 ),
             ])
-            .expect("seal test runtime revision")
-            .into(),
+            .expect("seal test runtime revision"),
             external_identity: "one-publish/automation/binding-1.json".to_string(),
             created_at: "2026-07-21T10:00:00Z".to_string(),
             updated_at: "2026-07-21T10:00:00Z".to_string(),

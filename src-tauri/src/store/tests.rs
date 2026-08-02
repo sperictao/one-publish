@@ -35,7 +35,7 @@ fn test_binding(configuration_id: &str, configuration_revision_id: &str) -> Auto
             tag_prefix: "v".to_string(),
         },
         backend_projection: serde_json::Value::Null,
-        runtime_revision: test_runtime_revision().into(),
+        runtime_revision: test_runtime_revision(),
         external_identity: "one-publish/automation/binding-1.json".to_string(),
         created_at: "2026-07-21T10:00:00Z".to_string(),
         updated_at: "2026-07-21T10:00:00Z".to_string(),
@@ -789,10 +789,9 @@ fn load_from_path_migrates_name_based_profiles_once_and_writes_versioned_schema(
     let beta = first_config.active_profiles()[1];
     assert_eq!(alpha.profile_group.as_deref(), Some("Build"));
     assert_eq!(alpha.created_at, "2026-04-01T10:00:00Z");
-    assert_eq!(
-        alpha.current_revision().expect("alpha revision").parameters,
-        serde_json::json!({ "release": true })
-    );
+    // 决议 #94：legacy providerId/parameters 承接字段已删除，修订前 schema
+    // 的参数不再物化为修订；profile 保留身份但没有可用修订。
+    assert!(alpha.current_revision().is_none());
     assert_eq!(
         first_config.selected_preset,
         format!("userprofile:{}", beta.id)
@@ -828,7 +827,7 @@ fn load_from_path_migrates_name_based_profiles_once_and_writes_versioned_schema(
 }
 
 #[test]
-fn load_from_path_preserves_schema_two_runtime_pins_until_explicit_upgrade() {
+fn load_from_path_rejects_schema_two_string_runtime_pins() {
     let temp = TempDir::new().expect("temp dir");
     let config_path = temp.path().join("config.json");
     let mut repo = test_repo("repo-1");
@@ -852,23 +851,10 @@ fn load_from_path_preserves_schema_two_runtime_pins_until_explicit_upgrade() {
     )
     .expect("write schema two state");
 
+    // 决议 #94：Legacy 字符串修订读径已删除，schema v2 字符串 pin 不再
+    // 反序列化，整份状态按损坏处理回落默认（产品未发布，无承接义务）。
     let loaded = load_from_path(&config_path);
-    let pin = &loaded.repositories[0].publish_config.bindings[0].runtime_revision;
-    assert_eq!(
-        pin,
-        &publish_domain::PinnedAutomationRuntimeRevision::Legacy(
-            "plan-v1.adapter-v1.fake-automation@1".to_string()
-        )
-    );
-
-    let persisted: serde_json::Value =
-        serde_json::from_slice(&fs::read(&config_path).expect("read migrated state"))
-            .expect("parse migrated state");
-    assert_eq!(persisted["schemaVersion"], 3);
-    assert_eq!(
-        persisted["repositories"][0]["publishConfig"]["bindings"][0]["runtimeRevision"],
-        "plan-v1.adapter-v1.fake-automation@1"
-    );
+    assert!(loaded.repositories.is_empty());
 }
 
 #[test]

@@ -410,8 +410,7 @@ fn resolve_target_bindings(
                 execution_backend_id: execution_backend_id.clone(),
                 trigger_policy: trigger_policy.clone(),
                 backend_projection: fixed_backend_projection(&execution_backend_id, revision)?,
-                runtime_revision: automation_runtime_revision(backend.as_ref(), revision, digests)?
-                    .into(),
+                runtime_revision: automation_runtime_revision(backend.as_ref(), revision, digests)?,
                 external_identity: String::new(),
                 created_at: now.to_string(),
                 updated_at: now.to_string(),
@@ -439,7 +438,7 @@ fn resolve_target_bindings(
             binding.backend_projection =
                 fixed_backend_projection(&execution_backend_id, revision)?;
             binding.runtime_revision =
-                automation_runtime_revision(backend.as_ref(), revision, digests)?.into();
+                automation_runtime_revision(backend.as_ref(), revision, digests)?;
             binding.updated_at = now.to_string();
         }
         AutomationChangeRequest::Reconcile => {}
@@ -781,7 +780,7 @@ fn runner_projection(
     // 模板钉住服务它所需的精确 runner 运行时（以物化选择计算），并携带
     // 绑定固化的分发资产摘要供 workflow 下载校验；绑定级修订另含自动化
     // 后端身份，两者在 #81 Backend 合并后收敛为同一封存。
-    let pinned = binding.runtime_revision.exact().map_err(render_error)?;
+    let pinned = &binding.runtime_revision;
     let runtime_revision = one_publish_runner::current_runtime_revision_with_binary_digests(
         adapters
             .ordered_bindings()
@@ -1609,15 +1608,12 @@ pub(crate) fn bindings_view(
             let current_runtime_revision = binding.runtime_revision.identifier();
             let expected_runtime_revision_id = expected_runtime_revision.identifier();
             // 升级检测以归一形态比较（离线读路径）：分发摘要按版本不变
-            //（Immutable Releases），有无摘要不构成升级信号；Legacy 修订
-            // 没有可归一的封存，一律视为有升级可用。
-            let runtime_upgrade_available = match &binding.runtime_revision {
-                publish_domain::PinnedAutomationRuntimeRevision::Exact(pinned) => {
-                    pinned.without_binary_digests().map_err(render_error)?
-                        != expected_runtime_revision
-                }
-                publish_domain::PinnedAutomationRuntimeRevision::Legacy(_) => true,
-            };
+            //（Immutable Releases），有无摘要不构成升级信号。
+            let runtime_upgrade_available = binding
+                .runtime_revision
+                .without_binary_digests()
+                .map_err(render_error)?
+                != expected_runtime_revision;
             Ok(AutomationBindingView {
                 binding: binding.clone(),
                 configuration_name: config
@@ -2855,8 +2851,7 @@ mod tests {
                 },
                 backend_projection: Value::Null,
                 runtime_revision: automation_runtime_revision(backend.as_ref(), revision)
-                    .expect("fixture runtime revision")
-                    .into(),
+                    .expect("fixture runtime revision"),
                 external_identity: String::new(),
                 created_at: NOW.to_string(),
                 updated_at: NOW.to_string(),
@@ -3354,11 +3349,7 @@ mod tests {
         let (mut config, profile_id) = fixture_config("Stable");
         preview_then_apply(&work, &mut config, &install_request(&profile_id));
         let binding_id = config.bindings[0].id.clone();
-        let expected_runtime = config.bindings[0]
-            .runtime_revision
-            .exact()
-            .expect("new binding pins an exact runtime")
-            .clone();
+        let expected_runtime = config.bindings[0].runtime_revision.clone();
         let expected_runtime_id = expected_runtime.identifier();
         // 展示的期望修订是无摘要归一封存（离线读路径，决议 #86）。
         let expected_display_id = expected_runtime
@@ -3374,20 +3365,20 @@ mod tests {
             expected_display_id
         );
 
-        let pinned_runtime = publish_domain::PinnedAutomationRuntimeRevision::Legacy(
-            "plan-v1.adapter-v1.fake-automation@1".to_string(),
-        );
+        let pinned_runtime = expected_runtime
+            .without_binary_digests()
+            .expect("reseal without binary digests");
         config.bindings[0].runtime_revision = pinned_runtime.clone();
 
-        // 决议 #86：Legacy 修订没有固化的分发资产摘要，协调不能恢复其投影，
+        // 决议 #86：未固化分发资产摘要的修订不能渲染投影，协调不能恢复它，
         // 必须显式升级——隐式升级依旧被禁止（预览不落地）。
         let blocked = preview_change(&work, &config, &AutomationChangeRequest::Reconcile, NOW)
-            .expect_err("legacy runtime must not render a projection");
+            .expect_err("digestless runtime must not render a projection");
         assert_eq!(
             blocked.code.as_deref(),
             Some("automation_projection_render_failed")
         );
-        assert!(blocked.message.contains("explicitly upgraded"));
+        assert!(blocked.message.contains("must be pinned"));
 
         let upgrade = AutomationChangeRequest::UpgradeRevision {
             binding_id: binding_id.clone(),

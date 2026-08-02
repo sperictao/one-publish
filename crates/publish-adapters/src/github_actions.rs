@@ -251,7 +251,7 @@ fn render_thin_shell_workflow(
     };
     let repository = distribution_field("repository")?;
     let release_tag = distribution_field("releaseTag")?;
-    let runtime = binding.runtime_revision.exact()?;
+    let runtime = &binding.runtime_revision;
     let shard_platforms = public_setting(binding, "shardPlatforms")?
         .as_array()
         .map(|values| {
@@ -563,7 +563,7 @@ mod tests {
     use super::*;
     use publish_domain::{
         AdapterIdentity, AutomationProjection, AutomationRuntimeRevision,
-        PinnedAutomationRuntimeRevision, RuntimeAdapterRevision, RuntimeComponentRevision,
+        RuntimeAdapterRevision, RuntimeComponentRevision,
     };
 
     fn runtime_revision() -> AutomationRuntimeRevision {
@@ -593,7 +593,7 @@ mod tests {
             },
             release_namespace: format!("tag:{prefix}*"),
             delivery_destination_namespaces: vec!["github-release:repository".to_string()],
-            runtime_revision: runtime_revision().into(),
+            runtime_revision: runtime_revision(),
             projection: AutomationProjection {
                 public_settings: BTreeMap::from([
                     (
@@ -808,14 +808,10 @@ mod tests {
         assert!(error.to_string().contains("shard platforms"));
 
         let mut unpinned = binding("stable", "v", "revision-stable");
-        let runtime = match &unpinned.runtime_revision {
-            PinnedAutomationRuntimeRevision::Exact(runtime) => runtime.clone(),
-            PinnedAutomationRuntimeRevision::Legacy(_) => unreachable!(),
-        };
-        unpinned.runtime_revision = runtime
+        unpinned.runtime_revision = unpinned
+            .runtime_revision
             .without_binary_digests()
-            .expect("reseal without binary digests")
-            .into();
+            .expect("reseal without binary digests");
         let error = backend
             .render_automation_bundle(&[unpinned])
             .expect_err("unpinned runner digests must not render");

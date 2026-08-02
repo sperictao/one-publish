@@ -1534,7 +1534,7 @@ pub struct AutomationBindingProjection {
     pub release_namespace: String,
     /// Binding 会写入的目标范围；与 Release Namespace 共同构成自动化冲突键。
     pub delivery_destination_namespaces: Vec<String>,
-    pub runtime_revision: PinnedAutomationRuntimeRevision,
+    pub runtime_revision: AutomationRuntimeRevision,
     pub projection: AutomationProjection,
 }
 
@@ -1635,60 +1635,18 @@ pub struct AutomationRuntimeRevision {
     pub digest: String,
 }
 
-/// 持久化 Binding 的 runtime pin。`Legacy` 只用于无损承接 schema v2
-/// 已安装自动化；新安装和显式升级始终写入可验证的 `Exact` 修订。
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(untagged)]
-pub enum PinnedAutomationRuntimeRevision {
-    Exact(AutomationRuntimeRevision),
-    Legacy(String),
-}
-
-impl PinnedAutomationRuntimeRevision {
-    pub fn identifier(&self) -> String {
-        match self {
-            Self::Exact(revision) => revision.identifier(),
-            Self::Legacy(identifier) => identifier.clone(),
-        }
-    }
-
-    /// 投影渲染要求 runner 分发资产摘要已固化（决议 #86）：Exact 且摘要表
-    /// 非空。Legacy 修订没有资产摘要，必须显式升级后才能渲染。
-    pub fn validate_for_projection(&self) -> Result<(), PublishError> {
-        match self {
-            Self::Exact(revision) => {
-                revision.validate()?;
-                if revision.runner.binary_digests.is_empty() {
-                    return Err(PublishError::InvalidRuntimeRevision(
-                        "runner binary digests must be pinned before projection rendering"
-                            .to_string(),
-                    ));
-                }
-                Ok(())
-            }
-            Self::Legacy(identifier) => Err(PublishError::InvalidRuntimeRevision(format!(
-                "legacy runtime revision {identifier} must be explicitly upgraded before projection rendering"
-            ))),
-        }
-    }
-
-    pub fn exact(&self) -> Result<&AutomationRuntimeRevision, PublishError> {
-        match self {
-            Self::Exact(revision) => Ok(revision),
-            Self::Legacy(identifier) => Err(PublishError::InvalidRuntimeRevision(format!(
-                "legacy runtime revision {identifier} must be explicitly upgraded before shared Runner execution"
-            ))),
-        }
-    }
-}
-
-impl From<AutomationRuntimeRevision> for PinnedAutomationRuntimeRevision {
-    fn from(value: AutomationRuntimeRevision) -> Self {
-        Self::Exact(value)
-    }
-}
-
 impl AutomationRuntimeRevision {
+    /// 投影渲染要求 runner 分发资产摘要已固化（决议 #86）：摘要表非空。
+    pub fn validate_for_projection(&self) -> Result<(), PublishError> {
+        self.validate()?;
+        if self.runner.binary_digests.is_empty() {
+            return Err(PublishError::InvalidRuntimeRevision(
+                "runner binary digests must be pinned before projection rendering".to_string(),
+            ));
+        }
+        Ok(())
+    }
+
     pub fn seal(
         runner: RuntimeComponentRevision,
         plan_contract: RuntimeComponentRevision,

@@ -990,9 +990,14 @@ mod tests {
                 crate::tauri_release::TauriReleaseConfig::default(),
             )
             .expect("serialize release settings"),
-            runtime_revision: publish_domain::PinnedAutomationRuntimeRevision::Legacy(
-                "fixture-runtime".to_string(),
-            ),
+            runtime_revision: one_publish_runner::current_runtime_revision([
+                publish_domain::AdapterIdentity::new(
+                    publish_domain::AdapterKind::ExecutionBackend,
+                    "fake-automation",
+                    1,
+                ),
+            ])
+            .expect("seal fixture runtime revision"),
             external_identity: ".github/workflows/one-publish-binding-stable-release.yml"
                 .to_string(),
             created_at: "2026-07-22T10:00:00Z".to_string(),

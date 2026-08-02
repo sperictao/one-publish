@@ -1,4 +1,4 @@
-use publish_domain::PinnedAutomationRuntimeRevision;
+use publish_domain::AutomationRuntimeRevision;
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, HashMap};
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -87,12 +87,6 @@ pub struct ConfigProfile {
     pub deleted_at: Option<String>,
     #[serde(default)]
     pub blocked_reason: Option<String>,
-    #[serde(default, rename = "providerId", skip_serializing)]
-    #[ts(skip)]
-    pub(crate) legacy_provider_id: Option<String>,
-    #[serde(default, rename = "parameters", skip_serializing)]
-    #[ts(skip)]
-    pub(crate) legacy_parameters: Option<serde_json::Value>,
 }
 
 /// 首期内置 Adapter 的稳定标识；发布组合只允许绑定注册表内的内置实现。
@@ -286,7 +280,7 @@ pub struct AutomationBinding {
     #[serde(default)]
     pub backend_projection: serde_json::Value,
     #[ts(type = "JsonValue")]
-    pub runtime_revision: PinnedAutomationRuntimeRevision,
+    pub runtime_revision: AutomationRuntimeRevision,
     pub external_identity: String,
     pub created_at: String,
     pub updated_at: String,
@@ -380,8 +374,6 @@ impl ConfigProfile {
             revisions: vec![revision],
             deleted_at: None,
             blocked_reason,
-            legacy_provider_id: None,
-            legacy_parameters: None,
         }
     }
 
@@ -405,8 +397,6 @@ impl ConfigProfile {
             revisions: vec![revision],
             deleted_at: None,
             blocked_reason,
-            legacy_provider_id: None,
-            legacy_parameters: None,
         }
     }
 
@@ -424,45 +414,19 @@ impl ConfigProfile {
             migrated = true;
         }
 
-        if self.revisions.is_empty() {
-            let provider_id = self
-                .legacy_provider_id
-                .take()
-                .unwrap_or_else(|| "unknown".to_string());
-            let parameters = self
-                .legacy_parameters
-                .take()
-                .unwrap_or_else(|| serde_json::Value::Object(serde_json::Map::new()));
-            let revision = PublishConfigurationRevision::new_current(
-                provider_id,
-                parameters,
-                self.created_at.clone(),
-                1,
-                PublishComposition::local_default(),
-                None,
-            );
-            self.current_revision_id = revision.id.clone();
-            self.blocked_reason = Self::revision_blocked_reason(&revision);
-            self.revisions.push(revision);
-            migrated = true;
-        } else {
-            if self.current_revision().is_none() {
-                if let Some(revision) = self
-                    .revisions
-                    .iter()
-                    .max_by_key(|revision| revision.sequence)
-                {
-                    self.current_revision_id = revision.id.clone();
-                    migrated = true;
-                }
-            }
-            self.blocked_reason = self
-                .current_revision()
-                .and_then(Self::revision_blocked_reason);
-            if self.legacy_provider_id.take().is_some() || self.legacy_parameters.take().is_some() {
+        if self.current_revision().is_none() {
+            if let Some(revision) = self
+                .revisions
+                .iter()
+                .max_by_key(|revision| revision.sequence)
+            {
+                self.current_revision_id = revision.id.clone();
                 migrated = true;
             }
         }
+        self.blocked_reason = self
+            .current_revision()
+            .and_then(Self::revision_blocked_reason);
 
         migrated
     }
