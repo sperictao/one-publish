@@ -90,11 +90,6 @@ fn built_in_adapter_identities() -> BTreeSet<AdapterIdentity> {
             GITHUB_ACTIONS_BACKEND_ID,
             1,
         ),
-        AdapterIdentity::new(
-            AdapterKind::ExecutionBackend,
-            FAKE_GITHUB_ACTIONS_BACKEND_ID,
-            1,
-        ),
         AdapterIdentity::new(AdapterKind::ArtifactStore, "temporary-artifact-store", 1),
         AdapterIdentity::new(AdapterKind::DeliveryDestination, "local-directory", 1),
     ]
@@ -490,6 +485,8 @@ fn register_execution_backend(
             Arc::new(GitHubActionsBackend::new(credentials)),
             fixture,
         ),
+        // 无副作用模拟器：不在 built-in 身份集合内（决议 #96），只在投影
+        // 显式选择时命中；离线契约测试经真实二进制走此分支。
         (FAKE_GITHUB_ACTIONS_BACKEND_ID, 1) => registry.register_execution_backend(
             Arc::new(FakeGitHubActionsBackend::new(credentials)),
             fixture,
