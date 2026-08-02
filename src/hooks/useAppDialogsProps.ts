@@ -11,13 +11,13 @@ import type {
   ConfigParameters,
   ConfigProfile,
   ProviderManifest,
-  PublishConfigStore,
 } from "@/lib/store/types";
 import type {
   EnvironmentCheckResult,
   EnvironmentCheckSnapshot,
 } from "@/features/environment/environment";
-import type { ParameterSchema } from "@/types/parameters";
+import type { QuickCreateProfileDraft } from "@/features/config/useQuickCreateProfile";
+import type { ParameterSchema, ParameterValue } from "@/types/parameters";
 import type { ProfileManagementActions } from "@/features/config/useProfiles";
 
 interface QuickCreateTemplateOption {
@@ -82,11 +82,11 @@ export interface UseAppDialogsPropsParams {
   quickCreateProfileGroup: string;
   quickCreateProfileGroupOptions: string[];
   quickCreateProfileCustomGroup: string;
-  quickCreateProfileDraft: PublishConfigStore;
-  projectFrameworkOptions: string[];
+  quickCreateProfileDraft: QuickCreateProfileDraft;
   quickCreateProfileSaving: boolean;
   quickCreateEditing: boolean;
-  dotnetSchema?: ParameterSchema;
+  quickCreateViewing: boolean;
+  providerSchemas: Record<string, ParameterSchema>;
   quickCreateGroupDefaultValue: string;
   quickCreateGroupCustomValue: string;
   profileT: Record<string, string | undefined>;
@@ -97,7 +97,10 @@ export interface UseAppDialogsPropsParams {
   setQuickCreateProfileName: (value: string) => void;
   setQuickCreateProfileGroup: (value: string) => void;
   setQuickCreateProfileCustomGroup: (value: string) => void;
-  updateQuickCreateProfileDraft: (patch: Partial<PublishConfigStore>) => void;
+  updateQuickCreateProfileParameter: (
+    key: string,
+    value: ParameterValue
+  ) => void;
   handleQuickCreateProfileSave: () => void;
   configDialogOpen: boolean;
   profileManagement: ProfileManagementActions;
@@ -180,21 +183,20 @@ export function useAppDialogsProps(
       profileGroupOptions: params.quickCreateProfileGroupOptions,
       profileCustomGroup: params.quickCreateProfileCustomGroup,
       profileDraft: params.quickCreateProfileDraft,
-      projectFrameworkOptions: params.projectFrameworkOptions,
       saving: params.quickCreateProfileSaving,
       editing: params.quickCreateEditing,
-      dotnetSchema: params.dotnetSchema,
+      viewing: params.quickCreateViewing,
+      providerSchemas: params.providerSchemas,
       groupDefaultValue: params.quickCreateGroupDefaultValue,
       groupCustomValue: params.quickCreateGroupCustomValue,
       profileT: params.profileT,
-      appT: params.appT,
       cancelLabel: params.cancelLabel,
       onOpenChange: params.handleQuickCreateProfileOpenChange,
       onApplyTemplate: params.applyQuickCreateTemplate,
       onProfileNameChange: params.setQuickCreateProfileName,
       onProfileGroupChange: params.setQuickCreateProfileGroup,
       onProfileCustomGroupChange: params.setQuickCreateProfileCustomGroup,
-      onDraftChange: params.updateQuickCreateProfileDraft,
+      onParameterChange: params.updateQuickCreateProfileParameter,
       onSave: params.handleQuickCreateProfileSave,
     },
     config: {

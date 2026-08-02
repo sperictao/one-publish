@@ -1,10 +1,7 @@
 import type { ReactNode } from "react";
 import type { LucideIcon } from "lucide-react";
 
-import { ArrayParameter } from "@/components/publish/ArrayParameter";
-import { BooleanParameter } from "@/components/publish/BooleanParameter";
-import { MapParameter } from "@/components/publish/MapParameter";
-import { StringParameter } from "@/components/publish/StringParameter";
+import { ParameterField } from "@/components/publish/ParameterField";
 import { Card, CardContent } from "@/components/ui/card";
 import { SectionShell } from "@/components/ui/section-shell";
 import type { ParameterDefinition, ParameterValue } from "@/types/parameters";
@@ -40,50 +37,14 @@ export function ReadonlyParameterFieldsSection({
           {fields.map((field) => (
             <Card key={field.id}>
               <CardContent className="pt-2">
-                {field.definition.type === "boolean" ? (
-                  <BooleanParameter
-                    definition={field.definition}
-                    value={Boolean(field.value)}
-                    onChange={() => {}}
-                    readOnly
-                    label={field.label}
-                    inputId={field.id}
-                  />
-                ) : null}
-                {field.definition.type === "string" ? (
-                  <StringParameter
-                    definition={field.definition}
-                    value={typeof field.value === "string" ? field.value : ""}
-                    onChange={() => {}}
-                    readOnly
-                    label={field.label}
-                    inputId={field.id}
-                  />
-                ) : null}
-                {field.definition.type === "array" ? (
-                  <ArrayParameter
-                    definition={field.definition}
-                    value={Array.isArray(field.value) ? field.value : []}
-                    onChange={() => {}}
-                    readOnly
-                    label={field.label}
-                  />
-                ) : null}
-                {field.definition.type === "map" ? (
-                  <MapParameter
-                    definition={field.definition}
-                    value={
-                      field.value &&
-                      typeof field.value === "object" &&
-                      !Array.isArray(field.value)
-                        ? (field.value as Record<string, ParameterValue>)
-                        : {}
-                    }
-                    onChange={() => {}}
-                    readOnly
-                    label={field.label}
-                  />
-                ) : null}
+                <ParameterField
+                  id={field.id}
+                  label={field.label}
+                  definition={field.definition}
+                  value={field.value}
+                  onChange={() => {}}
+                  readOnly
+                />
               </CardContent>
             </Card>
           ))}

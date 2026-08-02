@@ -2,7 +2,6 @@ import { beforeAll, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen } from "@testing-library/react";
 
 import { QuickCreateProfileDialog } from "@/components/publish/QuickCreateProfileDialog";
-import type { PublishConfigStore } from "@/lib/store/types";
 import type { ParameterSchema } from "@/types/parameters";
 
 const dotnetSchema: ParameterSchema = {
@@ -57,22 +56,6 @@ const dotnetSchema: ParameterSchema = {
   },
 };
 
-const baseDraft: PublishConfigStore = {
-  configuration: "Release",
-  runtime: "",
-  framework: "",
-  selfContained: false,
-  outputDir: "",
-  noBuild: false,
-  noRestore: false,
-  verbosity: "",
-  noLogo: false,
-  deleteExistingFiles: false,
-  properties: {},
-  useProfile: false,
-  profileName: "",
-};
-
 beforeAll(() => {
   vi.stubGlobal(
     "matchMedia",
@@ -117,8 +100,8 @@ beforeAll(() => {
 });
 
 describe("QuickCreateProfileDialog", () => {
-  it("保留顶部模板与基础信息区，并把高级字段按 focused 分组为可编辑表单", () => {
-    const onDraftChange = vi.fn();
+  it("dotnet 草稿与其他 Provider 一致走 schema 表单，保留模板与基础信息区", () => {
+    const onParameterChange = vi.fn();
 
     render(
       <QuickCreateProfileDialog
@@ -136,11 +119,13 @@ describe("QuickCreateProfileDialog", () => {
         quickCreateProfileGroup="默认分组"
         quickCreateProfileGroupOptions={["默认分组", "项目发布配置"]}
         quickCreateProfileCustomGroup=""
-        quickCreateProfileDraft={baseDraft}
-        projectFrameworkOptions={["net8.0", "net9.0"]}
+        quickCreateProfileDraft={{
+          providerId: "dotnet",
+          parameters: { configuration: "Release", self_contained: true },
+        }}
         quickCreateProfileSaving={false}
         quickCreateEditing={false}
-        dotnetSchema={dotnetSchema}
+        providerSchemas={{ dotnet: dotnetSchema }}
         quickCreateGroupDefaultValue="默认分组"
         quickCreateGroupCustomValue="__custom__"
         profileT={{
@@ -148,17 +133,6 @@ describe("QuickCreateProfileDialog", () => {
           quickCreateBasicSection: "基础信息",
           quickCreateName: "配置名称",
           quickCreateGroup: "发布配置组",
-          quickCreateParametersSection: "发布参数",
-          quickCreateOutputSection: "输出与部署",
-          quickCreateAdvancedSection: "高级参数",
-          quickCreateAdditionalSection: "其余参数",
-        }}
-        appT={{
-          configurationType: "配置类型",
-          runtimeLabel: "运行时",
-          outputDirLabel: "输出目录",
-          frameworkDependent: "框架依赖",
-          selfContained: "自包含部署",
         }}
         cancelLabel="取消"
         onOpenChange={() => {}}
@@ -166,74 +140,128 @@ describe("QuickCreateProfileDialog", () => {
         onProfileNameChange={() => {}}
         onProfileGroupChange={() => {}}
         onProfileCustomGroupChange={() => {}}
-        onDraftChange={onDraftChange}
+        onParameterChange={onParameterChange}
         onSave={() => {}}
       />
     );
 
+    // dotnet 仍显示模板卡与基础信息区
     expect(screen.getByText("预置模板")).toBeInTheDocument();
     expect(
       screen.getByRole("textbox", { name: "配置名称" })
     ).toBeInTheDocument();
-    expect(
-      screen.getByRole("combobox", { name: "发布配置组" })
-    ).toBeInTheDocument();
-    expect(screen.getByText("发布参数")).toBeInTheDocument();
-    expect(screen.getByText("输出与部署")).toBeInTheDocument();
-    expect(screen.getByText("高级参数")).toBeInTheDocument();
 
-    const frameworkInput = screen.getByLabelText("目标框架");
-    expect(frameworkInput).toHaveAttribute("list");
-    expect(
-      screen.getByRole("switch", { name: "发布前清空目标目录" })
-    ).toBeInTheDocument();
-    expect(
-      screen.queryByRole("combobox", { name: "上次使用的构建配置" })
-    ).not.toBeInTheDocument();
-    expect(
-      screen.queryByRole("textbox", { name: "发布提供程序" })
-    ).not.toBeInTheDocument();
-    expect(
-      screen.queryByRole("textbox", { name: "目标 ID" })
-    ).not.toBeInTheDocument();
-    expect(
-      screen.queryByRole("switch", { name: "跳过构建" })
-    ).not.toBeInTheDocument();
-    expect(
-      screen.queryByRole("combobox", { name: "日志详细级别" })
-    ).not.toBeInTheDocument();
+    // 表单即 schema 表单：字段按 dotnet 参数定义渲染并携带现值
+    expect(screen.getByLabelText("configuration")).toHaveValue("Release");
+    expect(screen.getByLabelText("self_contained")).toBeChecked();
+    expect(screen.getByLabelText("runtime")).toBeInTheDocument();
 
-    fireEvent.change(frameworkInput, {
+    fireEvent.change(screen.getByLabelText("framework"), {
       target: { value: "net9.0" },
     });
+    expect(onParameterChange).toHaveBeenCalledWith("framework", "net9.0");
+  });
 
-    expect(onDraftChange).toHaveBeenCalledWith({
-      framework: "net9.0",
-    });
+  it("schema 草稿按 Provider 参数定义渲染表单，隐藏 dotnet 模板卡", () => {
+    const onParameterChange = vi.fn();
+    const cargoSchema: ParameterSchema = {
+      parameters: {
+        target: { type: "string", flag: "--target" },
+        release: { type: "boolean", flag: "--release" },
+      },
+    };
 
-    fireEvent.click(screen.getByRole("switch", { name: "发布前清空目标目录" }));
+    render(
+      <QuickCreateProfileDialog
+        open
+        quickCreateProfileOpen
+        quickCreateTemplateId="custom"
+        quickCreateTemplateOptions={[]}
+        quickCreateProfileName="Cargo Nightly"
+        quickCreateProfileGroup="默认分组"
+        quickCreateProfileGroupOptions={[]}
+        quickCreateProfileCustomGroup=""
+        quickCreateProfileDraft={{
+          providerId: "cargo",
+          parameters: { target: "aarch64-apple-darwin" },
+        }}
+        quickCreateProfileSaving={false}
+        quickCreateEditing
+        providerSchemas={{ dotnet: dotnetSchema, cargo: cargoSchema }}
+        quickCreateGroupDefaultValue="默认分组"
+        quickCreateGroupCustomValue="__custom__"
+        profileT={{}}
+        cancelLabel="取消"
+        onOpenChange={vi.fn()}
+        onApplyTemplate={vi.fn()}
+        onProfileNameChange={vi.fn()}
+        onProfileGroupChange={vi.fn()}
+        onProfileCustomGroupChange={vi.fn()}
+        onParameterChange={onParameterChange}
+        onSave={vi.fn()}
+      />
+    );
 
-    expect(onDraftChange).toHaveBeenCalledWith({
-      deleteExistingFiles: true,
-    });
+    // dotnet 专属模板卡与表单不出现
+    expect(screen.queryByText("快速套用模板")).not.toBeInTheDocument();
+    expect(screen.queryByText("高级参数")).not.toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: /其余参数/ }));
+    // schema 字段渲染并携带既有值
+    expect(screen.getByLabelText("target")).toHaveValue("aarch64-apple-darwin");
 
+    fireEvent.click(screen.getByLabelText("release"));
+    expect(onParameterChange).toHaveBeenCalledWith("release", true);
+  });
+
+  it("查看态以只读呈现 schema 表单，隐藏基础信息与保存入口", () => {
+    const onParameterChange = vi.fn();
+    const cargoSchema: ParameterSchema = {
+      parameters: {
+        target: { type: "string", flag: "--target" },
+      },
+    };
+
+    render(
+      <QuickCreateProfileDialog
+        open
+        quickCreateProfileOpen
+        quickCreateTemplateId="custom"
+        quickCreateTemplateOptions={[]}
+        quickCreateProfileName="Cargo Nightly"
+        quickCreateProfileGroup="默认分组"
+        quickCreateProfileGroupOptions={[]}
+        quickCreateProfileCustomGroup=""
+        quickCreateProfileDraft={{
+          providerId: "cargo",
+          parameters: { target: "aarch64-apple-darwin" },
+        }}
+        quickCreateProfileSaving={false}
+        quickCreateEditing
+        quickCreateViewing
+        providerSchemas={{ cargo: cargoSchema }}
+        quickCreateGroupDefaultValue="默认分组"
+        quickCreateGroupCustomValue="__custom__"
+        profileT={{ quickViewTitle: "查看发布配置" }}
+        cancelLabel="关闭"
+        onOpenChange={vi.fn()}
+        onApplyTemplate={vi.fn()}
+        onProfileNameChange={vi.fn()}
+        onProfileGroupChange={vi.fn()}
+        onProfileCustomGroupChange={vi.fn()}
+        onParameterChange={onParameterChange}
+        onSave={vi.fn()}
+      />
+    );
+
+    expect(screen.getByText("查看发布配置")).toBeInTheDocument();
+    // 基础信息编辑区与保存按钮不出现
+    expect(screen.queryByLabelText("配置名称")).not.toBeInTheDocument();
     expect(
-      screen.queryByRole("textbox", { name: "目标 ID" })
+      screen.queryByRole("button", { name: /保存修改|创建并保存/ })
     ).not.toBeInTheDocument();
-    expect(
-      screen.getByRole("switch", { name: "跳过构建" })
-    ).toBeInTheDocument();
-    expect(
-      screen.getByRole("combobox", { name: "日志详细级别" })
-    ).toBeInTheDocument();
-    expect(
-      screen.getByRole("switch", { name: "单文件发布" })
-    ).toBeInTheDocument();
-    expect(
-      screen.queryByRole("textbox", { name: "条件编译常量" })
-    ).not.toBeInTheDocument();
-    expect(screen.getByText("-p:")).toBeInTheDocument();
+
+    const target = screen.getByLabelText("target");
+    expect(target).toHaveValue("aarch64-apple-darwin");
+    expect(target).toHaveAttribute("readonly");
   });
 });

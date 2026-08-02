@@ -445,7 +445,13 @@
     "advancedFieldRemoveProperty": "移除属性 {{value}}",
     "selfContainedUnavailable": "未指定运行时 (不可用)",
     "selfContainedOn": "Self-Contained (独立运行)",
-    "selfContainedOff": "Framework-Dependent (依赖框架)"
+    "selfContainedOff": "Framework-Dependent (依赖框架)",
+    "providerParametersSection": "发布参数",
+    "providerParametersSectionDescription": "按 Provider 参数定义编辑本配置的发布参数。",
+    "providerParametersEmpty": "该 Provider 没有可配置的参数。",
+    "providerParametersSchemaLoading": "参数定义加载中…",
+    "quickViewTitle": "查看发布配置",
+    "quickViewDescription": "只读查看该配置的全部参数。"
   },
   "app": {
     "appTitle": "One Publish",

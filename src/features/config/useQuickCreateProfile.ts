@@ -1,15 +1,13 @@
 import { useCallback, useMemo, useState } from "react";
 
 import { toast } from "sonner";
-import {
-  createDefaultDotnetPublishConfig,
-  createDotnetPublishConfigFromParameters,
-} from "@/features/config/dotnetPublishConfig";
+import { createDefaultDotnetPublishConfig } from "@/features/config/dotnetPublishConfig";
 import type {
   ConfigParameters,
   ConfigProfile,
   PublishConfigStore,
 } from "@/lib/store/types";
+import { toSpecValue, type ParameterValue } from "@/types/parameters";
 import type { DotnetPreset } from "@/features/config/dotnetPresets";
 import type { Language } from "@/hooks/useI18n";
 import type { TranslationMap, QuickCreateTemplateOption } from "./types";
@@ -28,6 +26,18 @@ interface StoreMutationResult {
   }>;
 }
 
+/** Quick create/edit 表单草稿：所有 Provider 统一以 schema 参数记录为
+ * 草稿（参数即事实，无转换层）。 */
+export interface QuickCreateProfileDraft {
+  providerId: string;
+  parameters: ConfigParameters;
+}
+
+const createDraftForProvider = (
+  providerId: string,
+  parameters: ConfigParameters = {}
+): QuickCreateProfileDraft => ({ providerId, parameters });
+
 const toDotnetCustomConfigDraftFromPreset = (
   preset: DotnetPreset
 ): PublishConfigStore => ({
@@ -39,6 +49,7 @@ const toDotnetCustomConfigDraftFromPreset = (
 
 export interface UseQuickCreateProfileParams {
   selectedRepoId: string | null;
+  activeProviderId: string;
   profileT: TranslationMap;
   presets: DotnetPreset[];
   profiles: ConfigProfile[];
@@ -80,25 +91,31 @@ export interface UseQuickCreateProfileReturn {
   quickCreateProfileName: string;
   setQuickCreateProfileName: (value: string) => void;
   quickCreateTemplateId: string;
-  quickCreateProfileDraft: PublishConfigStore;
+  quickCreateProfileDraft: QuickCreateProfileDraft;
   quickCreateProfileGroup: string;
   setQuickCreateProfileGroup: (value: string) => void;
   quickCreateProfileCustomGroup: string;
   setQuickCreateProfileCustomGroup: (value: string) => void;
   quickCreateProfileSaving: boolean;
   isQuickCreateEditing: boolean;
+  isQuickCreateViewing: boolean;
   openQuickCreateProfileDialog: () => void;
   openQuickEditProfileDialog: (profile: ConfigProfile) => void;
+  openQuickViewProfileDialog: (profile: ConfigProfile) => void;
   handleQuickCreateProfileOpenChange: (open: boolean) => void;
   quickCreateTemplateOptions: QuickCreateTemplateOption[];
   quickCreateProfileGroupOptions: string[];
   applyQuickCreateTemplate: (templateId: string) => void;
-  updateQuickCreateProfileDraft: (updates: Partial<PublishConfigStore>) => void;
+  updateQuickCreateProfileParameter: (
+    key: string,
+    value: ParameterValue
+  ) => void;
   handleQuickCreateProfileSave: () => Promise<void>;
 }
 
 export function useQuickCreateProfile({
   selectedRepoId,
+  activeProviderId,
   profileT,
   presets,
   profiles,
@@ -116,7 +133,7 @@ export function useQuickCreateProfile({
     QUICK_CREATE_CUSTOM_TEMPLATE_ID
   );
   const [quickCreateProfileDraft, setQuickCreateProfileDraft] =
-    useState<PublishConfigStore>(() => createDefaultDotnetPublishConfig());
+    useState<QuickCreateProfileDraft>(() => createDraftForProvider("dotnet"));
   const [quickCreateProfileGroup, setQuickCreateProfileGroup] = useState(
     QUICK_CREATE_PROFILE_GROUP_DEFAULT
   );
@@ -125,16 +142,18 @@ export function useQuickCreateProfile({
   const [quickCreateProfileSaving, setQuickCreateProfileSaving] =
     useState(false);
   const [editingProfileId, setEditingProfileId] = useState<string | null>(null);
+  const [quickCreateViewing, setQuickCreateViewing] = useState(false);
 
   const resetQuickCreateProfileState = useCallback(() => {
     setQuickCreateProfileName("");
     setQuickCreateTemplateId(QUICK_CREATE_CUSTOM_TEMPLATE_ID);
-    setQuickCreateProfileDraft(createDefaultDotnetPublishConfig());
+    setQuickCreateProfileDraft(createDraftForProvider(activeProviderId));
     setQuickCreateProfileGroup(QUICK_CREATE_PROFILE_GROUP_DEFAULT);
     setQuickCreateProfileCustomGroup("");
     setQuickCreateProfileSaving(false);
     setEditingProfileId(null);
-  }, []);
+    setQuickCreateViewing(false);
+  }, [activeProviderId]);
 
   const openQuickCreateProfileDialog = useCallback(() => {
     resetQuickCreateProfileState();
@@ -151,29 +170,44 @@ export function useQuickCreateProfile({
     [resetQuickCreateProfileState]
   );
 
-  const openQuickEditProfileDialog = useCallback((profile: ConfigProfile) => {
-    if (profile.isSystemDefault || profile.providerId !== "dotnet") {
-      return;
-    }
+  const loadProfileIntoDialog = useCallback(
+    (profile: ConfigProfile, viewing: boolean) => {
+      const parameters = profile.parameters || {};
+      const resolvedGroup = profile.profileGroup?.trim() || "";
 
-    const parameters = profile.parameters || {};
-    const resolvedGroup = profile.profileGroup?.trim() || "";
+      setQuickCreateProfileName(profile.name);
+      setQuickCreateTemplateId(QUICK_CREATE_CUSTOM_TEMPLATE_ID);
+      setQuickCreateProfileDraft(
+        createDraftForProvider(profile.providerId, parameters)
+      );
+      setQuickCreateProfileGroup(
+        resolvedGroup || QUICK_CREATE_PROFILE_GROUP_DEFAULT
+      );
+      setQuickCreateProfileCustomGroup("");
+      setQuickCreateProfileSaving(false);
+      setEditingProfileId(profile.id);
+      setQuickCreateViewing(viewing);
+      setQuickCreateProfileOpen(true);
+    },
+    []
+  );
 
-    setQuickCreateProfileName(profile.name);
-    setQuickCreateTemplateId(QUICK_CREATE_CUSTOM_TEMPLATE_ID);
-    setQuickCreateProfileDraft(
-      createDotnetPublishConfigFromParameters(
-        parameters as Record<string, unknown>
-      )
-    );
-    setQuickCreateProfileGroup(
-      resolvedGroup || QUICK_CREATE_PROFILE_GROUP_DEFAULT
-    );
-    setQuickCreateProfileCustomGroup("");
-    setQuickCreateProfileSaving(false);
-    setEditingProfileId(profile.id);
-    setQuickCreateProfileOpen(true);
-  }, []);
+  const openQuickEditProfileDialog = useCallback(
+    (profile: ConfigProfile) => {
+      if (profile.isSystemDefault) {
+        return;
+      }
+      loadProfileIntoDialog(profile, false);
+    },
+    [loadProfileIntoDialog]
+  );
+
+  const openQuickViewProfileDialog = useCallback(
+    (profile: ConfigProfile) => {
+      loadProfileIntoDialog(profile, true);
+    },
+    [loadProfileIntoDialog]
+  );
 
   const quickCreateTemplateOptions = useMemo<QuickCreateTemplateOption[]>(
     () => [
@@ -221,29 +255,35 @@ export function useQuickCreateProfile({
     (templateId: string) => {
       setQuickCreateTemplateId(templateId);
 
+      const presetDraft = (config: PublishConfigStore) =>
+        createDraftForProvider("dotnet", buildProfileParameters(config));
+
       if (templateId === QUICK_CREATE_CUSTOM_TEMPLATE_ID) {
-        setQuickCreateProfileDraft(createDefaultDotnetPublishConfig());
+        setQuickCreateProfileDraft(createDraftForProvider("dotnet"));
         return;
       }
 
       const matchedPreset = presets.find((preset) => preset.id === templateId);
       if (!matchedPreset) {
         setQuickCreateTemplateId(QUICK_CREATE_CUSTOM_TEMPLATE_ID);
-        setQuickCreateProfileDraft(createDefaultDotnetPublishConfig());
+        setQuickCreateProfileDraft(createDraftForProvider("dotnet"));
         return;
       }
 
       setQuickCreateProfileDraft(
-        toDotnetCustomConfigDraftFromPreset(matchedPreset)
+        presetDraft(toDotnetCustomConfigDraftFromPreset(matchedPreset))
       );
     },
-    [presets]
+    [buildProfileParameters, presets]
   );
 
-  const updateQuickCreateProfileDraft = useCallback(
-    (updates: Partial<PublishConfigStore>) => {
+  const updateQuickCreateProfileParameter = useCallback(
+    (key: string, value: ParameterValue) => {
       setQuickCreateTemplateId(QUICK_CREATE_CUSTOM_TEMPLATE_ID);
-      setQuickCreateProfileDraft((prev) => ({ ...prev, ...updates }));
+      setQuickCreateProfileDraft((prev) => ({
+        ...prev,
+        parameters: { ...prev.parameters, [key]: toSpecValue(value) },
+      }));
     },
     []
   );
@@ -281,7 +321,7 @@ export function useQuickCreateProfile({
     setQuickCreateProfileSaving(true);
 
     try {
-      const parameters = buildProfileParameters(quickCreateProfileDraft);
+      const { providerId, parameters } = quickCreateProfileDraft;
       const isEditing = Boolean(editingProfileId);
 
       let mutationState;
@@ -290,7 +330,7 @@ export function useQuickCreateProfile({
           repoId: selectedRepoId,
           profileId: editingProfileId,
           name: profileName,
-          providerId: "dotnet",
+          providerId,
           parameters,
           profileGroup: resolvedProfileGroup || undefined,
         });
@@ -298,7 +338,7 @@ export function useQuickCreateProfile({
         mutationState = await saveProfileToStore({
           repoId: selectedRepoId,
           name: profileName,
-          providerId: "dotnet",
+          providerId,
           parameters,
           profileGroup: resolvedProfileGroup || undefined,
         });
@@ -340,7 +380,6 @@ export function useQuickCreateProfile({
       setQuickCreateProfileSaving(false);
     }
   }, [
-    buildProfileParameters,
     editingProfileId,
     handleQuickCreateProfileOpenChange,
     onProfileSaved,
@@ -368,13 +407,15 @@ export function useQuickCreateProfile({
     setQuickCreateProfileCustomGroup,
     quickCreateProfileSaving,
     isQuickCreateEditing: editingProfileId !== null,
+    isQuickCreateViewing: quickCreateViewing,
     openQuickCreateProfileDialog,
     openQuickEditProfileDialog,
+    openQuickViewProfileDialog,
     handleQuickCreateProfileOpenChange,
     quickCreateTemplateOptions,
     quickCreateProfileGroupOptions,
     applyQuickCreateTemplate,
-    updateQuickCreateProfileDraft,
+    updateQuickCreateProfileParameter,
     handleQuickCreateProfileSave,
   };
 }

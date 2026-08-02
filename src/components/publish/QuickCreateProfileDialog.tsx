@@ -1,4 +1,4 @@
-import { Layers3, Loader2, Save, Sparkles } from "lucide-react";
+import { Eye, Layers3, Loader2, Save, Sparkles } from "lucide-react";
 import { memo, startTransition, useCallback } from "react";
 
 import { AppDialogShell } from "@/components/ui/app-dialog-shell";
@@ -20,10 +20,10 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { DotnetPublishConfigFormSections } from "@/components/publish/DotnetPublishConfigFormSections";
-import type { PublishConfigStore } from "@/lib/store/types";
+import { ProviderParameterFormSections } from "@/components/publish/ProviderParameterFormSections";
+import type { QuickCreateProfileDraft } from "@/features/config/useQuickCreateProfile";
 import { cn } from "@/lib/utils";
-import type { ParameterSchema } from "@/types/parameters";
+import type { ParameterSchema, ParameterValue } from "@/types/parameters";
 
 interface QuickCreateTemplateOption {
   id: string;
@@ -32,7 +32,6 @@ interface QuickCreateTemplateOption {
 }
 
 type QuickCreateTranslations = Record<string, string | undefined>;
-type AppTranslations = Record<string, string | undefined>;
 
 interface QuickCreateProfileDialogProps {
   open: boolean;
@@ -43,22 +42,21 @@ interface QuickCreateProfileDialogProps {
   quickCreateProfileGroup: string;
   quickCreateProfileGroupOptions: string[];
   quickCreateProfileCustomGroup: string;
-  quickCreateProfileDraft: PublishConfigStore;
-  projectFrameworkOptions: string[];
+  quickCreateProfileDraft: QuickCreateProfileDraft;
   quickCreateProfileSaving: boolean;
   quickCreateEditing: boolean;
-  dotnetSchema?: ParameterSchema;
+  quickCreateViewing?: boolean;
+  providerSchemas: Record<string, ParameterSchema>;
   quickCreateGroupDefaultValue: string;
   quickCreateGroupCustomValue: string;
   profileT: QuickCreateTranslations;
-  appT: AppTranslations;
   cancelLabel: string;
   onOpenChange: (open: boolean) => void;
   onApplyTemplate: (id: string) => void;
   onProfileNameChange: (value: string) => void;
   onProfileGroupChange: (value: string) => void;
   onProfileCustomGroupChange: (value: string) => void;
-  onDraftChange: (patch: Partial<PublishConfigStore>) => void;
+  onParameterChange: (key: string, value: ParameterValue) => void;
   onSave: () => void;
 }
 
@@ -281,23 +279,23 @@ export function QuickCreateProfileDialog({
   quickCreateProfileGroupOptions,
   quickCreateProfileCustomGroup,
   quickCreateProfileDraft,
-  projectFrameworkOptions,
   quickCreateProfileSaving,
   quickCreateEditing,
-  dotnetSchema,
+  quickCreateViewing = false,
+  providerSchemas,
   quickCreateGroupDefaultValue,
   quickCreateGroupCustomValue,
   profileT,
-  appT,
   cancelLabel,
   onOpenChange,
   onApplyTemplate,
   onProfileNameChange,
   onProfileGroupChange,
   onProfileCustomGroupChange,
-  onDraftChange,
+  onParameterChange,
   onSave,
 }: QuickCreateProfileDialogProps) {
+  const isDotnetDraft = quickCreateProfileDraft.providerId === "dotnet";
   const selectedTemplate =
     quickCreateTemplateOptions.find(
       (option) => option.id === quickCreateTemplateId
@@ -339,18 +337,24 @@ export function QuickCreateProfileDialog({
         bodyPadding="none"
         bodyInnerClassName="space-y-4 p-5 sm:p-6"
         title={
-          quickCreateEditing
-            ? profileT.quickEditTitle || "编辑发布配置"
-            : profileT.quickCreateTitle || "创建发布配置"
+          quickCreateViewing
+            ? profileT.quickViewTitle || "查看发布配置"
+            : quickCreateEditing
+              ? profileT.quickEditTitle || "编辑发布配置"
+              : profileT.quickCreateTitle || "创建发布配置"
         }
         description={
-          quickCreateEditing
-            ? profileT.quickEditDescription || "修改发布配置后保存更新。"
-            : profileT.quickCreateDescription ||
-              "填写与自定义模式一致的参数并保存为发布配置。"
+          quickCreateViewing
+            ? profileT.quickViewDescription || "只读查看该配置的全部参数。"
+            : quickCreateEditing
+              ? profileT.quickEditDescription || "修改发布配置后保存更新。"
+              : profileT.quickCreateDescription ||
+                "填写与自定义模式一致的参数并保存为发布配置。"
         }
         icon={
-          quickCreateEditing ? (
+          quickCreateViewing ? (
+            <Eye className="size-4" />
+          ) : quickCreateEditing ? (
             <Layers3 className="size-4" />
           ) : (
             <Sparkles className="size-4" />
@@ -363,80 +367,93 @@ export function QuickCreateProfileDialog({
         )}
         footerClassName="sm:space-x-0"
         footer={
-          <>
-            <div className="text-label-12 text-muted-foreground">
-              {quickCreateEditing
-                ? profileT.quickEditFooterHint ||
-                  "保存后会立即更新并应用当前发布配置。"
-                : profileT.quickCreateFooterHint ||
-                  "保存后会立即写入并应用到当前仓库。"}
-            </div>
-            <div className="flex flex-col-reverse gap-2 sm:flex-row sm:items-center">
+          quickCreateViewing ? (
+            <div className="flex w-full justify-end">
               <Button
                 type="button"
                 variant="outline"
                 onClick={() => onOpenChange(false)}
-                disabled={quickCreateProfileSaving}
               >
                 {cancelLabel}
               </Button>
-              <Button
-                type="button"
-                onClick={onSave}
-                disabled={isSaveDisabled}
-                className="min-w-[148px]"
-              >
-                {quickCreateProfileSaving ? (
-                  <>
-                    <Loader2 className="mr-2 size-4 animate-spin" />
-                    {quickCreateEditing
-                      ? profileT.quickEditSaving || "更新中…"
-                      : profileT.quickCreateSaving || "保存中…"}
-                  </>
-                ) : (
-                  <>
-                    <Save className="mr-2 size-4" />
-                    {quickCreateEditing
-                      ? profileT.quickEditAction || "保存修改"
-                      : profileT.quickCreateAction || "创建并保存"}
-                  </>
-                )}
-              </Button>
             </div>
-          </>
+          ) : (
+            <>
+              <div className="text-label-12 text-muted-foreground">
+                {quickCreateEditing
+                  ? profileT.quickEditFooterHint ||
+                    "保存后会立即更新并应用当前发布配置。"
+                  : profileT.quickCreateFooterHint ||
+                    "保存后会立即写入并应用到当前仓库。"}
+              </div>
+              <div className="flex flex-col-reverse gap-2 sm:flex-row sm:items-center">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => onOpenChange(false)}
+                  disabled={quickCreateProfileSaving}
+                >
+                  {cancelLabel}
+                </Button>
+                <Button
+                  type="button"
+                  onClick={onSave}
+                  disabled={isSaveDisabled}
+                  className="min-w-[148px]"
+                >
+                  {quickCreateProfileSaving ? (
+                    <>
+                      <Loader2 className="mr-2 size-4 animate-spin" />
+                      {quickCreateEditing
+                        ? profileT.quickEditSaving || "更新中…"
+                        : profileT.quickCreateSaving || "保存中…"}
+                    </>
+                  ) : (
+                    <>
+                      <Save className="mr-2 size-4" />
+                      {quickCreateEditing
+                        ? profileT.quickEditAction || "保存修改"
+                        : profileT.quickCreateAction || "创建并保存"}
+                    </>
+                  )}
+                </Button>
+              </div>
+            </>
+          )
         }
       >
-        <QuickCreateTemplateCard
-          quickCreateEditing={quickCreateEditing}
-          profileT={profileT}
-          quickCreateTemplateId={quickCreateTemplateId}
-          quickCreateTemplateOptions={quickCreateTemplateOptions}
-          selectedTemplateDescription={selectedTemplate?.description || null}
-          onApplyTemplate={handleTemplateChange}
-        />
+        {isDotnetDraft && !quickCreateViewing ? (
+          <QuickCreateTemplateCard
+            quickCreateEditing={quickCreateEditing}
+            profileT={profileT}
+            quickCreateTemplateId={quickCreateTemplateId}
+            quickCreateTemplateOptions={quickCreateTemplateOptions}
+            selectedTemplateDescription={selectedTemplate?.description || null}
+            onApplyTemplate={handleTemplateChange}
+          />
+        ) : null}
 
-        <QuickCreateBasicInfoSection
-          profileT={profileT}
-          quickCreateProfileName={quickCreateProfileName}
-          quickCreateProfileGroup={quickCreateProfileGroup}
-          quickCreateGroupDefaultValue={quickCreateGroupDefaultValue}
-          quickCreateGroupCustomValue={quickCreateGroupCustomValue}
-          quickCreateProfileGroupOptions={quickCreateProfileGroupOptions}
-          quickCreateProfileCustomGroup={quickCreateProfileCustomGroup}
-          onProfileNameChange={onProfileNameChange}
-          onProfileNameKeyDown={handleProfileNameKeyDown}
-          onProfileGroupChange={onProfileGroupChange}
-          onProfileCustomGroupChange={onProfileCustomGroupChange}
-        />
+        {quickCreateViewing ? null : (
+          <QuickCreateBasicInfoSection
+            profileT={profileT}
+            quickCreateProfileName={quickCreateProfileName}
+            quickCreateProfileGroup={quickCreateProfileGroup}
+            quickCreateGroupDefaultValue={quickCreateGroupDefaultValue}
+            quickCreateGroupCustomValue={quickCreateGroupCustomValue}
+            quickCreateProfileGroupOptions={quickCreateProfileGroupOptions}
+            quickCreateProfileCustomGroup={quickCreateProfileCustomGroup}
+            onProfileNameChange={onProfileNameChange}
+            onProfileNameKeyDown={handleProfileNameKeyDown}
+            onProfileGroupChange={onProfileGroupChange}
+            onProfileCustomGroupChange={onProfileCustomGroupChange}
+          />
+        )}
 
-        <DotnetPublishConfigFormSections
-          presentation="focused"
-          profileT={profileT}
-          appT={appT}
-          config={quickCreateProfileDraft}
-          dotnetSchema={dotnetSchema}
-          projectFrameworkOptions={projectFrameworkOptions}
-          onDraftChange={onDraftChange}
+        <ProviderParameterFormSections
+          mode={quickCreateViewing ? "readonly" : "edit"}
+          schema={providerSchemas[quickCreateProfileDraft.providerId]}
+          parameters={quickCreateProfileDraft.parameters}
+          onParameterChange={onParameterChange}
         />
       </AppDialogShell>
     </Dialog>

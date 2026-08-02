@@ -173,6 +173,7 @@ export function useProfiles({
 
   const quickCreate = useQuickCreateProfile({
     selectedRepoId,
+    activeProviderId,
     profileT,
     presets,
     profiles,
@@ -259,16 +260,19 @@ export function useProfiles({
       quickCreate.setQuickCreateProfileCustomGroup,
     quickCreateProfileSaving: quickCreate.quickCreateProfileSaving,
     isQuickCreateEditing: quickCreate.isQuickCreateEditing,
+    isQuickCreateViewing: quickCreate.isQuickCreateViewing,
     loadProfiles,
     setActiveProfileName: setLocalActiveProfileName,
     openQuickCreateProfileDialog: quickCreate.openQuickCreateProfileDialog,
     openQuickEditProfileDialog: quickCreate.openQuickEditProfileDialog,
+    openQuickViewProfileDialog: quickCreate.openQuickViewProfileDialog,
     handleQuickCreateProfileOpenChange:
       quickCreate.handleQuickCreateProfileOpenChange,
     quickCreateTemplateOptions: quickCreate.quickCreateTemplateOptions,
     quickCreateProfileGroupOptions: quickCreate.quickCreateProfileGroupOptions,
     applyQuickCreateTemplate: quickCreate.applyQuickCreateTemplate,
-    updateQuickCreateProfileDraft: quickCreate.updateQuickCreateProfileDraft,
+    updateQuickCreateProfileParameter:
+      quickCreate.updateQuickCreateProfileParameter,
     handleSelectProjectProfile: selection.handleSelectProjectProfile,
     handleSelectProfileFromPanel: selection.handleSelectProfileFromPanel,
     handleQuickCreateProfileSave: quickCreate.handleQuickCreateProfileSave,

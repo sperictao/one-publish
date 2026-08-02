@@ -94,6 +94,7 @@ export interface PublishConfigPanelProps {
   onSelectProfile: (profile: ConfigProfile) => void;
   onCreateProfile: () => void;
   onEditProfile: (profile: ConfigProfile) => void;
+  onViewProfile: (profile: ConfigProfile) => void;
   onSaveProfileComposition: (
     profile: ConfigProfile,
     composition: PublishComposition
@@ -196,6 +197,7 @@ export const PublishConfigPanel = memo(function PublishConfigPanel({
   onSelectProfile,
   onCreateProfile,
   onEditProfile,
+  onViewProfile,
   onSaveProfileComposition,
   onRebindProfileProject,
   onRefreshProfiles,
@@ -959,15 +961,11 @@ export const PublishConfigPanel = memo(function PublishConfigPanel({
                       onSelectProfile(profile);
                     }}
                     onToggleFavorite={onToggleFavoriteConfig}
-                    onView={() => onSelectProfile(profile)}
+                    onView={() => onViewProfile(profile)}
                     onEdit={() => onEditProfile(profile)}
                     onEditComposition={() => setCompositionProfile(profile)}
                     compositionTitle={compositionConfigLabel}
-                    canEdit={
-                      !profile.isSystemDefault &&
-                      (profile.providerId === "dotnet" ||
-                        profile.providerId === "tauri")
-                    }
+                    canEdit={!profile.isSystemDefault}
                     viewTitle={viewConfigLabel}
                     editTitle={editConfigLabel}
                     updateUnavailableTitle={updateUnavailableLabel}

@@ -13,6 +13,7 @@ interface UsePublishConfigPanelPropsParams {
   onSelectProfile: (profile: ConfigProfile) => void;
   onCreateProfile: () => void;
   onEditProfile: (profile: ConfigProfile) => void;
+  onViewProfile: (profile: ConfigProfile) => void;
   onSaveProfileComposition: (
     profile: ConfigProfile,
     composition: PublishComposition
@@ -53,6 +54,7 @@ export function usePublishConfigPanelProps(
       onSelectProfile: params.onSelectProfile,
       onCreateProfile: params.onCreateProfile,
       onEditProfile: params.onEditProfile,
+      onViewProfile: params.onViewProfile,
       onSaveProfileComposition: params.onSaveProfileComposition,
       onRebindProfileProject: params.onRebindProfileProject,
       onRefreshProfiles: params.onRefreshProfiles,
@@ -90,6 +92,7 @@ export function usePublishConfigPanelProps(
       params.showExpandButton,
       params.onRefreshProfiles,
       params.onEditProfile,
+      params.onViewProfile,
       params.projectPublishProfiles,
       params.profiles,
       params.projectFrameworkOptions,

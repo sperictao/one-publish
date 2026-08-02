@@ -7,7 +7,6 @@ import type {
   ConfigParameters,
   ConfigProfile,
   ProviderManifest,
-  PublishConfigStore,
 } from "@/lib/store/types";
 import type { PackageResult, SignResult } from "@/lib/artifact";
 import type { AppUpdaterState } from "@/hooks/useAppUpdater";
@@ -17,7 +16,8 @@ import type {
 } from "@/features/publish/publishRuntime";
 import type { ProfileManagementActions } from "@/features/config/useProfiles";
 import type { Language } from "@/hooks/useI18n";
-import type { ParameterSchema } from "@/types/parameters";
+import type { QuickCreateProfileDraft } from "@/features/config/useQuickCreateProfile";
+import type { ParameterSchema, ParameterValue } from "@/types/parameters";
 
 const ShortcutsDialog = lazy(async () => {
   const mod = await import("@/components/layout/ShortcutsDialog");
@@ -127,22 +127,21 @@ export interface AppDialogsProps {
     profileGroup: string;
     profileGroupOptions: string[];
     profileCustomGroup: string;
-    profileDraft: PublishConfigStore;
-    projectFrameworkOptions: string[];
+    profileDraft: QuickCreateProfileDraft;
     saving: boolean;
     editing: boolean;
-    dotnetSchema?: ParameterSchema;
+    viewing: boolean;
+    providerSchemas: Record<string, ParameterSchema>;
     groupDefaultValue: string;
     groupCustomValue: string;
     profileT: Record<string, string | undefined>;
-    appT: Record<string, string | undefined>;
     cancelLabel: string;
     onOpenChange: (open: boolean) => void;
     onApplyTemplate: (id: string) => void;
     onProfileNameChange: (value: string) => void;
     onProfileGroupChange: (value: string) => void;
     onProfileCustomGroupChange: (value: string) => void;
-    onDraftChange: (patch: Partial<PublishConfigStore>) => void;
+    onParameterChange: (key: string, value: ParameterValue) => void;
     onSave: () => void;
   };
   config: {
@@ -265,14 +264,13 @@ export function AppDialogs(props: AppDialogsProps) {
             }
             quickCreateProfileCustomGroup={props.quickCreate.profileCustomGroup}
             quickCreateProfileDraft={props.quickCreate.profileDraft}
-            projectFrameworkOptions={props.quickCreate.projectFrameworkOptions}
             quickCreateProfileSaving={props.quickCreate.saving}
             quickCreateEditing={props.quickCreate.editing}
-            dotnetSchema={props.quickCreate.dotnetSchema}
+            quickCreateViewing={props.quickCreate.viewing}
+            providerSchemas={props.quickCreate.providerSchemas}
             quickCreateGroupDefaultValue={props.quickCreate.groupDefaultValue}
             quickCreateGroupCustomValue={props.quickCreate.groupCustomValue}
             profileT={props.quickCreate.profileT}
-            appT={props.quickCreate.appT}
             cancelLabel={props.quickCreate.cancelLabel}
             onOpenChange={props.quickCreate.onOpenChange}
             onApplyTemplate={props.quickCreate.onApplyTemplate}
@@ -281,7 +279,7 @@ export function AppDialogs(props: AppDialogsProps) {
             onProfileCustomGroupChange={
               props.quickCreate.onProfileCustomGroupChange
             }
-            onDraftChange={props.quickCreate.onDraftChange}
+            onParameterChange={props.quickCreate.onParameterChange}
             onSave={props.quickCreate.onSave}
           />
         </Suspense>
