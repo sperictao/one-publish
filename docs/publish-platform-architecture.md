@@ -91,6 +91,8 @@ PublishConfigurationRevision
 
 第一阶段全部是内置 Adapter，通过注册表发现。暂不加载第三方动态库；未来外部插件应使用隔离进程或 WASM，并继续满足同一合同与 conformance suite。
 
+远端观察例外（决议 #95）：Execution Backend 的"观察运行"面在仅有 github-actions 一个远端后端期间，允许留在桌面 shell 的端口 trait（`RemoteEvidenceSource` / `RemoteDispatchPort`）后按后端 id 特判；首个第二远端后端出现时必须抽象为 Backend trait 的第三面（与投影渲染双面同构），不得再加第二个特判分支。
+
 远程文件服务器是 UI 分类，不是单个 Adapter。SFTP、SMB、WebDAV、FTPS 和 HTTP Upload 分别实现，因为它们的认证、网络、续传、原子改名和覆盖语义不同。
 
 ## 5. 能力协商
