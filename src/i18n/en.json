@@ -445,7 +445,11 @@
     "advancedFieldRemoveProperty": "Remove property {{value}}",
     "selfContainedUnavailable": "Runtime not set (unavailable)",
     "selfContainedOn": "Self-Contained",
-    "selfContainedOff": "Framework-Dependent"
+    "selfContainedOff": "Framework-Dependent",
+    "providerParametersSection": "Publish parameters",
+    "providerParametersSectionDescription": "Edit the publish parameters defined by this provider.",
+    "providerParametersEmpty": "This provider has no configurable parameters.",
+    "providerParametersSchemaLoading": "Loading parameter definitions…"
   },
   "app": {
     "appTitle": "One Publish",
