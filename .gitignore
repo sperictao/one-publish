@@ -89,3 +89,4 @@ src-tauri/tauri.conf.updater.prod.json
 /.ob1/
 /.omc/
 /src-tauri/.omc/
+/.mindfs/
