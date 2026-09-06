@@ -7,6 +7,9 @@ dist-ssr/
 release-assets/
 /src-tauri/target/
 /target/
+/crates/publish-runner-core/tests/samples/*/target/
+/crates/publish-runner-core/tests/samples/*/obj/
+/crates/publish-runner-core/tests/samples/*/bin/
 
 # Logs
 logs/
