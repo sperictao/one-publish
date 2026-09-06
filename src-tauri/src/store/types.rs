@@ -471,6 +471,15 @@ pub struct ExecutionRecord {
     #[serde(default)]
     pub output_excerpt: Option<String>,
     pub spec: Option<serde_json::Value>,
+    /// 关联的运行时 Attempt；journal 建立前的失败为空。
+    #[serde(default)]
+    #[ts(optional)]
+    pub attempt_id: Option<String>,
+    /// 版本化恢复快照（§3.3）：历史重跑据此恢复原配置与已记录输入，
+    /// 不依赖草稿修订存活，也不依赖当前选中配置。
+    #[serde(default)]
+    #[ts(optional)]
+    pub recovery_snapshot: Option<serde_json::Value>,
     #[serde(default)]
     pub file_count: usize,
     #[serde(default)]
@@ -533,16 +542,124 @@ impl Default for PublishConfigStore {
     }
 }
 
+/// 编辑器选择引用（§4.1 v4）：编辑器当前针对哪个来源工作。
+/// `projectBinding` 是不透明候选引用，作用域解析由后端完成。
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+#[serde(tag = "kind", rename_all = "camelCase")]
+#[ts(tag = "kind", rename_all = "camelCase")]
+pub enum PublishSelectionRef {
+    /// 命名配置：选择其当前修订。
+    Revision {
+        #[serde(rename = "configurationId")]
+        #[ts(rename = "configurationId")]
+        configuration_id: String,
+    },
+    /// Provider 模板。
+    Template {
+        #[serde(rename = "providerId")]
+        #[ts(rename = "providerId")]
+        provider_id: String,
+        #[serde(rename = "templateId")]
+        #[ts(rename = "templateId")]
+        template_id: String,
+    },
+    /// 项目配置（.NET pubxml）：未绑定身份时沿用仓库已解析的项目文件。
+    ProjectProfile {
+        #[serde(rename = "providerId")]
+        #[ts(rename = "providerId")]
+        provider_id: String,
+        reference: String,
+    },
+    /// 草稿：编辑 (Provider, 项目候选) 作用域隔离的草稿。
+    Draft {
+        #[serde(rename = "providerId")]
+        #[ts(rename = "providerId")]
+        provider_id: String,
+        #[serde(rename = "projectBinding")]
+        #[ts(rename = "projectBinding")]
+        project_binding: Option<String>,
+    },
+}
+
+/// 按 (Provider, 项目候选) 作用域隔离的编辑草稿（§4.1）：完整参数一次保存，
+/// 不做富表单往返；`base_revision` 只表示编辑来源，修改后不能按旧修订执行。
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(rename_all = "camelCase")]
+pub struct ScopedPublishDraft {
+    #[serde(rename = "providerId")]
+    #[ts(rename = "providerId")]
+    pub provider_id: String,
+    #[serde(rename = "projectBinding")]
+    #[ts(rename = "projectBinding")]
+    #[serde(default)]
+    #[ts(optional)]
+    pub project_binding: Option<String>,
+    pub content: crate::publish_runtime::PublishConfigurationContent,
+    #[serde(rename = "baseRevision")]
+    #[ts(rename = "baseRevision")]
+    #[serde(default)]
+    #[ts(optional)]
+    pub base_revision: Option<crate::publish_runtime::PublishBaseRevisionRef>,
+}
+
+/// v4 磁盘形状（§4.2）：只写选择与草稿，不再写 selectedPreset / isCustomMode /
+/// customConfig；已有配置、修订、绑定与投影包保持不变。
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PersistedRepoPublishConfig {
+    #[serde(default)]
+    pub selection: Option<PublishSelectionRef>,
+    #[serde(default)]
+    pub drafts: Vec<ScopedPublishDraft>,
+    #[serde(default)]
+    pub profiles: Vec<ConfigProfile>,
+    #[serde(default)]
+    pub bindings: Vec<AutomationBinding>,
+    #[serde(default)]
+    pub applied_bundles: Vec<AppliedProjectionBundle>,
+}
+
+impl From<&RepoPublishConfig> for PersistedRepoPublishConfig {
+    fn from(config: &RepoPublishConfig) -> Self {
+        Self {
+            selection: config.selection.clone(),
+            drafts: config.drafts.clone(),
+            profiles: config.profiles.clone(),
+            bindings: config.bindings.clone(),
+            applied_bundles: config.applied_bundles.clone(),
+        }
+    }
+}
+
+impl From<PersistedRepoPublishConfig> for RepoPublishConfig {
+    fn from(persisted: PersistedRepoPublishConfig) -> Self {
+        Self {
+            global_v3_edit: None,
+            selection: persisted.selection,
+            drafts: persisted.drafts,
+            profiles: persisted.profiles,
+            bindings: persisted.bindings,
+            applied_bundles: persisted.applied_bundles,
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
 #[serde(rename_all = "camelCase")]
 #[ts(rename_all = "camelCase")]
 pub struct RepoPublishConfig {
-    #[serde(default = "default_preset")]
-    pub selected_preset: String,
+    /// v4 编辑器选择引用；缺失时由前端呈现待解析状态。
     #[serde(default)]
-    pub is_custom_mode: bool,
+    #[ts(optional)]
+    pub selection: Option<PublishSelectionRef>,
+    /// 迁移期间的 v3 遗留编辑状态（内存暂存）：不序列化、不下发前端。
+    #[serde(skip)]
+    #[ts(skip)]
+    pub global_v3_edit: Option<super::migration::LegacyEditStateV3>,
+    /// v4 编辑草稿存储：按 (Provider, 项目候选) 作用域隔离。
     #[serde(default)]
-    pub custom_config: PublishConfigStore,
+    pub drafts: Vec<ScopedPublishDraft>,
     #[serde(default)]
     pub profiles: Vec<ConfigProfile>,
     #[serde(default)]
@@ -554,9 +671,9 @@ pub struct RepoPublishConfig {
 impl Default for RepoPublishConfig {
     fn default() -> Self {
         Self {
-            selected_preset: default_preset(),
-            is_custom_mode: false,
-            custom_config: PublishConfigStore::default(),
+            selection: None,
+            drafts: Vec::new(),
+            global_v3_edit: None,
             profiles: Vec::new(),
             bindings: Vec::new(),
             applied_bundles: Vec::new(),
@@ -566,8 +683,9 @@ impl Default for RepoPublishConfig {
 
 impl RepoPublishConfig {
     pub(crate) fn is_default(&self) -> bool {
-        self.selected_preset == default_preset() && !self.is_custom_mode && self.profiles.is_empty()
+        self.selection.is_none() && self.drafts.is_empty() && self.profiles.is_empty()
     }
+
 
     pub fn create_profile(
         &mut self,
@@ -610,62 +728,54 @@ impl RepoPublishConfig {
     /// 查找只认 is_draft 标记。
     pub fn upsert_draft_revision(
         &mut self,
-        provider_id: String,
-        parameters: serde_json::Value,
-        project_binding: Option<String>,
+        content: crate::publish_runtime::PublishConfigurationContent,
         created_at: String,
     ) -> (String, String) {
         let position = self.profiles.iter().position(|profile| {
             profile.is_draft
                 && profile.deleted_at.is_none()
-                && profile
-                    .current_revision()
-                    .map(|revision| revision.provider_id == provider_id)
-                    .unwrap_or(false)
+                && profile.current_revision().is_some_and(|revision| revision.provider_id == content.provider_id)
         });
-
+        let sequence = position.map(|index| {
+            self.profiles[index].revisions.iter().map(|revision| revision.sequence).max().unwrap_or(0)
+        }).unwrap_or(0) + 1;
+        let revision = PublishConfigurationRevision {
+            id: new_configuration_identity("configuration-revision"),
+            sequence,
+            created_at: created_at.clone(),
+            contract_version: content.contract_version,
+            provider_id: content.provider_id,
+            provider_version: content.provider_version,
+            settings_version: content.settings_version,
+            project_binding: content.project_binding,
+            parameters: content.parameters,
+            composition: content.composition,
+        };
+        let revision_id = revision.id.clone();
+        let blocked_reason = ConfigProfile::revision_blocked_reason(&revision);
         let Some(index) = position else {
-            let mut profile = ConfigProfile::new(
-                DRAFT_PROFILE_NAME.to_string(),
-                provider_id,
-                parameters,
-                None,
-                project_binding,
+            let profile_id = new_configuration_identity("configuration");
+            self.profiles.push(ConfigProfile {
+                id: profile_id.clone(),
+                name: DRAFT_PROFILE_NAME.to_string(),
+                profile_group: None,
                 created_at,
-                false,
-            );
-            profile.is_draft = true;
-            let profile_id = profile.id.clone();
-            let revision_id = profile.current_revision_id.clone();
-            self.profiles.push(profile);
+                is_system_default: false,
+                is_draft: true,
+                current_revision_id: revision_id.clone(),
+                revisions: vec![revision],
+                deleted_at: None,
+                blocked_reason,
+            });
             return (profile_id, revision_id);
         };
-
         let profile = &mut self.profiles[index];
-        let sequence = profile
-            .revisions
-            .iter()
-            .map(|revision| revision.sequence)
-            .max()
-            .unwrap_or(0)
-            + 1;
-        let revision = PublishConfigurationRevision::new_current(
-            provider_id,
-            parameters,
-            created_at,
-            sequence,
-            PublishComposition::local_default(),
-            project_binding,
-        );
-        profile.current_revision_id = revision.id.clone();
-        let revision_id = revision.id.clone();
-        profile.blocked_reason = ConfigProfile::revision_blocked_reason(&revision);
+        profile.current_revision_id = revision_id.clone();
+        profile.blocked_reason = blocked_reason;
         profile.revisions.push(revision);
-
         while profile.revisions.len() > DRAFT_MAX_REVISIONS {
             profile.revisions.remove(0);
         }
-
         (profile.id.clone(), revision_id)
     }
 
@@ -779,8 +889,9 @@ impl RepoPublishConfig {
             ));
         }
 
-        self.selected_preset = format!("userprofile:{profile_id}");
-        self.is_custom_mode = true;
+        self.selection = Some(PublishSelectionRef::Revision {
+            configuration_id: profile_id.to_string(),
+        });
         Ok(())
     }
 
@@ -819,8 +930,12 @@ impl RepoPublishConfig {
         }
 
         profile.deleted_at = Some(deleted_at);
-        if self.selected_preset == format!("userprofile:{profile_id}") {
-            self.selected_preset = default_preset();
+        if matches!(
+            &self.selection,
+            Some(PublishSelectionRef::Revision { configuration_id })
+                if configuration_id == profile_id
+        ) {
+            self.selection = None;
         }
         Ok(())
     }
@@ -1042,7 +1157,12 @@ pub(crate) fn default_theme() -> String {
 }
 
 pub(crate) fn default_environment_provider_ids() -> Vec<String> {
-    vec!["dotnet".to_string()]
+    let mut ids = crate::provider::registry::provider_registry()
+        .repository_discoveries()
+        .map(|entry| entry.provider_id.clone())
+        .collect::<Vec<_>>();
+    ids.sort();
+    ids
 }
 
 pub(crate) fn normalize_environment_provider_ids(provider_ids: Vec<String>) -> Vec<String> {

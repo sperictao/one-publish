@@ -42,9 +42,9 @@ OnePublish ist eine **plattformübergreifende Desktop-Anwendung**, die eine eleg
 
 ## 📸 Screenshots
 
-<!-- TODO: add actual screenshots -->
+![OnePublish-Hauptfenster](docs/screenshots/main-window.png)
 
-> _Screenshots folgen in Kürze. In der Zwischenzeit sieh dir die [Design-Philosophie](docs/design-philosophy.md) und die [Geist-Designspezifikation](DESIGN.md) an._
+> _Hauptfenster — Repository auswählen, Parameter konfigurieren und mit einem Klick veröffentlichen._
 
 ---
 

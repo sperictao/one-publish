@@ -2,24 +2,16 @@ import { useEffect } from "react";
 import { isTauri } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 
-import { normalizeDotnetProjectBoundParameters } from "@/features/config/dotnetPublishConfig";
-import { resolvePreferredDotnetProjectInfo } from "@/lib/dotnetProjectInfo";
 import { parsePublishConfigKey } from "@/features/config/publishConfigIdentity";
 import { showSystemNotification } from "@/lib/systemNotification";
 import {
   getProfiles,
   getRepository,
-  resolveProjectInfo,
-  scanProject,
   setTrayPublishStatus,
   showMainWindow,
 } from "@/lib/store/api";
-import { analyzeProjectScanFailure } from "@/lib/tauri/invokeErrors";
-import type { ProviderPublishSpec } from "@/features/publish/publishRuntime";
+import type { PublishSource } from "@/features/publish/publishRuntime";
 import type { RunPublishOptions } from "@/features/publish/publishTransaction";
-import { toSpecParameters } from "@/types/parameters";
-import type { ConfigProfile, ProjectInfo } from "@/lib/store/types";
-import type { Repository } from "@/lib/store/types";
 
 interface TranslationMap {
   [key: string]: string | undefined;
@@ -31,105 +23,13 @@ export interface TrayPublishRequestPayload {
 }
 
 interface ResolvedTrayPublishRequest {
-  spec: ProviderPublishSpec;
+  source: PublishSource;
   options: RunPublishOptions;
-}
-
-async function resolveDotnetProjectInfo(
-  repo: Repository
-): Promise<ProjectInfo> {
-  try {
-    const projectInfo = await resolvePreferredDotnetProjectInfo({
-      repoPath: repo.path,
-      projectFile: repo.projectFile,
-      resolveProjectInfo: async (projectFile) => {
-        try {
-          return await resolveProjectInfo(projectFile);
-        } catch {
-          return null;
-        }
-      },
-      scanProject: async (repoPath) => await scanProject(repoPath),
-    });
-
-    if (!projectInfo) {
-      throw new Error("未能解析仓库对应的项目文件。");
-    }
-
-    return projectInfo;
-  } catch (error) {
-    if (analyzeProjectScanFailure(error) === "multiple_project_files_found") {
-      throw new Error(
-        "该仓库包含多个项目文件，请先在仓库设置中绑定明确的 Project File。"
-      );
-    }
-
-    throw error;
-  }
-}
-
-async function resolveUserProfileSpec(params: {
-  repo: Repository;
-  profile: ConfigProfile;
-  specVersion: number;
-  defaultOutputDir: string;
-}): Promise<ProviderPublishSpec> {
-  const { profile } = params;
-
-  const providerId = profile.providerId || params.repo.providerId || "dotnet";
-  if (providerId === "dotnet") {
-    const projectInfo = await resolveDotnetProjectInfo(params.repo);
-    return {
-      version: params.specVersion,
-      provider_id: "dotnet",
-      project_path: projectInfo.project_file,
-      parameters: toSpecParameters(
-        normalizeDotnetProjectBoundParameters({
-          parameters: (profile.parameters || {}) as Record<string, unknown>,
-          defaultOutputDir: params.defaultOutputDir,
-          projectFile: projectInfo.project_file,
-          projectRoot: projectInfo.root_path,
-        })
-      ),
-    };
-  }
-
-  return {
-    version: params.specVersion,
-    provider_id: providerId,
-    project_path: params.repo.path,
-    parameters: toSpecParameters(
-      (profile.parameters || {}) as Record<string, never>
-    ),
-  };
-}
-
-async function resolvePubxmlSpec(params: {
-  repo: Repository;
-  profileName: string;
-  specVersion: number;
-}): Promise<ProviderPublishSpec> {
-  const projectInfo = await resolveDotnetProjectInfo(params.repo);
-  if (!projectInfo.publish_profiles.includes(params.profileName)) {
-    throw new Error(`missing project publish profile: ${params.profileName}`);
-  }
-
-  return {
-    version: params.specVersion,
-    provider_id: "dotnet",
-    project_path: projectInfo.project_file,
-    parameters: toSpecParameters({
-      properties: {
-        PublishProfile: params.profileName,
-      },
-    }),
-  };
 }
 
 function createTrayRunOptions(
   repoId: string,
-  configKey: string,
-  configuration?: { id: string; revisionId: string }
+  configKey: string
 ): RunPublishOptions {
   return {
     repoId,
@@ -138,15 +38,11 @@ function createTrayRunOptions(
     restoreWindowOnFailure: false,
     feedbackMode: "system",
     trayStatusEffect: true,
-    configurationId: configuration?.id ?? null,
-    configurationRevisionId: configuration?.revisionId ?? null,
   };
 }
 
 export async function resolveTrayPublishRequest(params: {
   payload: TrayPublishRequestPayload;
-  specVersion: number;
-  defaultOutputDir: string;
 }): Promise<ResolvedTrayPublishRequest> {
   const repo = await getRepository(params.payload.repoId);
 
@@ -165,26 +61,25 @@ export async function resolveTrayPublishRequest(params: {
     if (profile.blockedReason) {
       throw new Error(`配置不可执行：${profile.blockedReason}`);
     }
-    const spec = await resolveUserProfileSpec({
-      repo,
-      profile,
-      specVersion: params.specVersion,
-      defaultOutputDir: params.defaultOutputDir,
-    });
-    return {
-      spec,
-      options: createTrayRunOptions(repo.id, configKey, profile),
+    if (!profile.revisionId) {
+      throw new Error(`missing configuration revision: ${profile.id}`);
+    }
+    const source: PublishSource = {
+      kind: "revision",
+      configurationId: profile.id,
+      revisionId: profile.revisionId,
     };
+    return { source, options: createTrayRunOptions(repo.id, configKey) };
   }
 
   if (identity.kind === "project-profile") {
-    const spec = await resolvePubxmlSpec({
-      repo,
-      profileName: identity.profileName,
-      specVersion: params.specVersion,
-    });
+    // pubxml 是 dotnet 项目发布档案；provider 缺失时按 dotnet 处理。
     return {
-      spec,
+      source: {
+        kind: "projectProfile",
+        providerId: repo.providerId || "dotnet",
+        reference: identity.profileName,
+      },
       options: createTrayRunOptions(repo.id, configKey),
     };
   }
@@ -194,10 +89,8 @@ export async function resolveTrayPublishRequest(params: {
 
 export function useTrayRecentPublish(params: {
   appT: TranslationMap;
-  defaultOutputDir: string;
-  specVersion: number;
   runPublishSpec: (
-    spec: ProviderPublishSpec,
+    source: PublishSource,
     options?: RunPublishOptions
   ) => Promise<void>;
 }) {
@@ -215,11 +108,9 @@ export function useTrayRecentPublish(params: {
         try {
           const resolved = await resolveTrayPublishRequest({
             payload: event.payload,
-            specVersion: params.specVersion,
-            defaultOutputDir: params.defaultOutputDir,
           });
           if (!disposed) {
-            await params.runPublishSpec(resolved.spec, resolved.options);
+            await params.runPublishSpec(resolved.source, resolved.options);
           }
         } catch (error) {
           await setTrayPublishStatus("failure").catch(() => {});
@@ -246,10 +137,5 @@ export function useTrayRecentPublish(params: {
       disposed = true;
       unlisten?.();
     };
-  }, [
-    params.appT,
-    params.defaultOutputDir,
-    params.runPublishSpec,
-    params.specVersion,
-  ]);
+  }, [params.appT, params.runPublishSpec]);
 }

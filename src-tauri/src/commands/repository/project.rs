@@ -3,8 +3,7 @@ use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 
 use super::scanner::{
-    detect_provider_discovery_from_path, matches_project_file, normalize_path_key,
-    normalize_scan_root, FileScanContext,
+    matches_project_file, normalize_path_key, normalize_scan_root, FileScanContext,
 };
 use super::*;
 
@@ -504,38 +503,60 @@ fn project_scan_candidates_from_context(context: &FileScanContext) -> ProjectSca
 pub fn scan_project_candidates_from_path(
     start_path: &Path,
 ) -> Result<ProjectScanCandidates, crate::errors::AppError> {
+    scan_provider_project_candidates_from_path(start_path, None)
+}
+
+pub fn scan_provider_project_candidates_from_path(
+    start_path: &Path,
+    provider_id: Option<&str>,
+) -> Result<ProjectScanCandidates, crate::errors::AppError> {
     if !start_path.exists() {
         return Err(repository_error(
             format!("scan start path does not exist: {}", start_path.display()),
             "path_not_found",
         ));
     }
-
-    let root_path = normalize_scan_root(start_path)?;
-    if let Some(discovery) = detect_provider_discovery_from_path(&root_path) {
-        if discovery.provider_id != "dotnet" {
-            let project_files = FileScanContext::new(&root_path)
-                .collect_files(|path| {
+    let root = normalize_scan_root(start_path)?;
+    let registry = crate::provider::registry::provider_registry();
+    let discoveries = registry
+        .repository_discoveries()
+        .filter(|discovery| provider_id.is_none_or(|id| discovery.provider_id == id))
+        .collect::<Vec<_>>();
+    if discoveries.is_empty() {
+        return Err(repository_error(
+            "unknown project provider",
+            "unsupported_provider",
+        ));
+    }
+    let context = FileScanContext::new(&root);
+    let mut candidates = project_scan_candidates_from_context(&context);
+    if provider_id.is_some_and(|id| id != "dotnet") {
+        candidates.solution_files.clear();
+        candidates.recommended_project_file = None;
+    }
+    let project_files = context
+        .collect_files(|path| {
+            !is_dotnet_solution_file(path)
+                && discoveries.iter().any(|discovery| {
                     discovery
                         .project_file_matchers
                         .iter()
                         .any(|matcher| matches_project_file(path, matcher))
                 })
-                .into_iter()
-                .map(|path| path.to_string_lossy().to_string())
-                .collect::<Vec<_>>();
-            let recommended_project_file =
-                (project_files.len() == 1).then(|| project_files[0].clone());
-
-            return Ok(ProjectScanCandidates {
-                root_path: root_path.to_string_lossy().to_string(),
-                solution_files: Vec::new(),
-                project_files,
-                recommended_project_file,
-            });
-        }
+        })
+        .into_iter()
+        .map(|path| path.to_string_lossy().to_string())
+        .collect::<Vec<_>>();
+    // 只有 .NET 内部的推荐规则可以保留；跨 Provider 的选择必须显式完成。
+    let is_dotnet_only = project_files
+        .iter()
+        .all(|path| is_dotnet_project_file(Path::new(path)));
+    if !is_dotnet_only {
+        candidates.recommended_project_file =
+            (project_files.len() == 1).then(|| project_files[0].clone());
     }
-    Ok(project_scan_candidates_from_root(&root_path))
+    candidates.project_files = project_files;
+    Ok(candidates)
 }
 
 pub fn scan_publish_profiles(project_file: &Path) -> Vec<String> {

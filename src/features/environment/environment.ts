@@ -55,7 +55,8 @@ export interface EnvironmentCheckSnapshot {
   result: EnvironmentCheckResult;
 }
 
-export const DEFAULT_ENVIRONMENT_PROVIDER_IDS = ["dotnet"];
+// 空偏好表示使用实时 Provider catalog，不预设某一种技术栈。
+export const DEFAULT_ENVIRONMENT_PROVIDER_IDS: string[] = [];
 
 function normalizeProviderIds(providerIds?: string[]) {
   return Array.from(

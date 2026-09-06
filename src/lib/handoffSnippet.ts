@@ -55,7 +55,7 @@ function buildFallbackCommand(spec: HandoffSpec): string {
     return "./gradlew build";
   }
 
-  return spec.provider_id;
+  return `# ${spec.provider_id}: 未提供实际构建命令，请从发布计划复制已选定的命令。`;
 }
 
 function resolveCommand(

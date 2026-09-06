@@ -3,10 +3,7 @@
 
 import { useEffect, useMemo } from "react";
 import { useAppStore } from "@/stores/appStore";
-import {
-  defaultPublishConfigStore,
-  defaultRepoPublishConfig,
-} from "@/lib/store/types";
+import { defaultRepoPublishConfig } from "@/lib/store/types";
 
 export function useAppState() {
   const store = useAppStore();
@@ -15,12 +12,7 @@ export function useAppState() {
       store.repositories.find((item) => item.id === store.selectedRepoId) ??
       null;
 
-    return (
-      repo?.publishConfig ?? {
-        ...defaultRepoPublishConfig,
-        customConfig: { ...defaultPublishConfigStore },
-      }
-    );
+    return repo?.publishConfig ?? { ...defaultRepoPublishConfig };
   }, [store.repositories, store.selectedRepoId]);
 
   // 初始化加载（仅一次，store 内部保证幂等）
@@ -58,13 +50,9 @@ export function useAppState() {
     setLeftPanelWidth: store.setLeftPanelWidth,
     setMiddlePanelWidth: store.setMiddlePanelWidth,
 
-    // 发布配置（从当前仓库派生）
-    selectedPreset: currentPublishConfig.selectedPreset,
-    isCustomMode: currentPublishConfig.isCustomMode,
-    customConfig: currentPublishConfig.customConfig,
-    setSelectedPreset: store.setSelectedPreset,
-    setIsCustomMode: store.setIsCustomMode,
-    setCustomConfig: store.setCustomConfig,
+    // 发布配置（统一状态：selection + drafts 直出）
+    publishConfig: currentPublishConfig,
+    updatePublishEditState: store.updatePublishEditState,
 
     // 偏好设置
     language: store.language,

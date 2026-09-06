@@ -19,10 +19,13 @@ import type {
   Branch,
   ConfigProfile,
   EnvironmentCheckResult,
+  JsonValue,
   ParameterSchema,
+  PublishSelectionRef,
   PublishSpec,
   ProviderCatalogEntry,
   Repository,
+  ScopedPublishDraft,
 } from "@/generated/tauri-contracts";
 
 // ─── Default test data ───
@@ -127,22 +130,10 @@ const DEFAULT_REPOSITORIES: Repository[] = [
     providerId: "dotnet",
     projectFile: "/workspace/alpha-service/App.csproj",
     publishConfig: {
-      selectedPreset: "profile-FolderProfile",
-      isCustomMode: false,
-      customConfig: {
-        configuration: "Release",
-        runtime: "",
-        framework: "",
-        selfContained: false,
-        outputDir: "",
-        noBuild: false,
-        noRestore: false,
-        verbosity: "",
-        noLogo: false,
-        deleteExistingFiles: false,
-        properties: {},
-        useProfile: false,
-        profileName: "",
+      selection: {
+        kind: "projectProfile" as const,
+        providerId: "dotnet",
+        reference: "FolderProfile",
       },
       profiles: [
         createConfigProfile(
@@ -158,6 +149,7 @@ const DEFAULT_REPOSITORIES: Repository[] = [
       ],
       bindings: [],
       appliedBundles: [],
+      drafts: [],
     },
   },
   {
@@ -178,22 +170,10 @@ const DEFAULT_REPOSITORIES: Repository[] = [
     providerId: "dotnet",
     projectFile: "/workspace/beta-worker/Worker.csproj",
     publishConfig: {
-      selectedPreset: "profile-FolderProfile",
-      isCustomMode: false,
-      customConfig: {
-        configuration: "Release",
-        runtime: "",
-        framework: "",
-        selfContained: false,
-        outputDir: "",
-        noBuild: false,
-        noRestore: false,
-        verbosity: "",
-        noLogo: false,
-        deleteExistingFiles: false,
-        properties: {},
-        useProfile: false,
-        profileName: "",
+      selection: {
+        kind: "projectProfile" as const,
+        providerId: "dotnet",
+        reference: "FolderProfile",
       },
       profiles: [
         createConfigProfile(
@@ -204,6 +184,7 @@ const DEFAULT_REPOSITORIES: Repository[] = [
       ],
       bindings: [],
       appliedBundles: [],
+      drafts: [],
     },
   },
 ];
@@ -238,6 +219,7 @@ const DEFAULT_PROVIDERS: ProviderCatalogEntry[] = [
     requires_project_binding: true,
     project_path_kind: "project_file",
     supports_command_import: true,
+    templates: [],
   },
   {
     id: "cargo",
@@ -250,6 +232,7 @@ const DEFAULT_PROVIDERS: ProviderCatalogEntry[] = [
     requires_project_binding: true,
     project_path_kind: "repository_root",
     supports_command_import: false,
+    templates: [],
   },
   {
     id: "go",
@@ -258,10 +241,11 @@ const DEFAULT_PROVIDERS: ProviderCatalogEntry[] = [
     label: "Go",
     command_example: "go build",
     environment_label: "go 1.23",
-    environment_description: "Go toolchain 1.23.0",
+    environment_description: "Go 1.23.0",
     requires_project_binding: true,
     project_path_kind: "repository_root",
     supports_command_import: false,
+    templates: [],
   },
 ];
 
@@ -408,7 +392,8 @@ export interface MockTauriOptions {
   repositories?: Repository[];
   /** Override provider list */
   providers?: ProviderCatalogEntry[];
-  /** Map of Tauri command name → error message to inject for testing error paths */
+  /** Map of Tauri command name → error message to inject for testing error paths.
+   * `prepare_publish_runtime` 支持 `blocked:` 前缀：返回 blocked 结果而非抛错。 */
   errors?: Record<string, string>;
   /** Whether to log all invoke calls to console (for debugging) */
   debug?: boolean;
@@ -477,6 +462,11 @@ export async function installMockTauri(
       const errMap = (opts.errors ?? {}) as Record<string, string>;
       const d = (opts.debug ?? false) as boolean;
 
+      // 后端 PublishConfigStore::default()（configuration 恒为 Release）。
+
+      // legacy_dotnet::rich_form_from_parameters 的简化移植：把草稿参数投回
+      // 旧三字段富表单视图（§4.2 过渡投影，仅服务 e2e 内存状态一致性）。
+
       const log = (...args: unknown[]) => {
         if (d) console.log("[mock-tauri]", ...args);
       };
@@ -487,9 +477,17 @@ export async function installMockTauri(
         invoke: async (cmd: string, args?: Record<string, unknown>) => {
           log("invoke:", cmd, args);
 
-          // Error injection: throw if this command is in the errors map
-          if (errMap[cmd]) {
-            throw new Error(errMap[cmd]);
+          // Error injection: throw if this command is in the errors map.
+          // Special case: a `blocked:` prefix on prepare_publish_runtime
+          // returns a blocked PreparedPublishRuntime instead of throwing.
+          const injectedError = errMap[cmd];
+          const blockedMessage =
+            cmd === "prepare_publish_runtime" &&
+            injectedError?.startsWith("blocked:")
+              ? injectedError.slice("blocked:".length).trim()
+              : null;
+          if (injectedError && !blockedMessage) {
+            throw new Error(injectedError);
           }
 
           switch (cmd) {
@@ -497,15 +495,79 @@ export async function installMockTauri(
             case "get_app_state":
               return clone({ ...appState, executionHistory: [] });
 
-            case "update_publish_state": {
+            case "update_publish_edit_state": {
+              // §4.1 v4 统一编辑状态命令：draft 提交按 (provider, 项目候选)
+              // upsert 草稿并选中草稿来源；selection 显式切换。随后按后端
+              // §4.2 投影语义同步旧三字段。
               const repo = appState.repositories?.find(
-                (r: Repository) => r.id === appState.selectedRepoId
+                (r: Repository) => r.id === (args?.repoId as string)
               );
-              if (repo && typeof args?.selectedPreset === "string") {
-                repo.publishConfig.selectedPreset = args.selectedPreset;
-              }
-              if (repo && typeof args?.isCustomMode === "boolean") {
-                repo.publishConfig.isCustomMode = args.isCustomMode;
+              const update = (args?.update ?? {}) as {
+                selection?: PublishSelectionRef;
+                draft?: {
+                  providerId?: string;
+                  projectBinding?: string | null;
+                  parameters?: unknown;
+                  baseRevision?: {
+                    configurationId: string;
+                    revisionId: string;
+                  } | null;
+                };
+              };
+              if (repo) {
+                const config = repo.publishConfig;
+                if (update.draft) {
+                  const providerId = update.draft.providerId || "dotnet";
+                  const projectBinding = update.draft.projectBinding ?? null;
+                  const draft: ScopedPublishDraft = {
+                    providerId,
+                    projectBinding: projectBinding ?? undefined,
+                    content: {
+                      providerId,
+                      contractVersion: 1,
+                      providerVersion: "1",
+                      settingsVersion: 1,
+                      projectBinding: projectBinding ?? undefined,
+                      parameters: clone(
+                        (update.draft.parameters ?? {}) as JsonValue
+                      ),
+                      composition: {
+                        executionBackend: {
+                          adapterId: "local-execution",
+                          settingsVersion: 1,
+                          settings: {},
+                          credentials: {},
+                        },
+                        artifactStore: {
+                          adapterId: "temporary-artifact-store",
+                          settingsVersion: 1,
+                          settings: {},
+                          credentials: {},
+                        },
+                        artifactProcessors: [],
+                        deliveryRoutes: [],
+                      },
+                    },
+                    baseRevision: update.draft.baseRevision ?? undefined,
+                  };
+                  const existingIndex = config.drafts.findIndex(
+                    (existing) =>
+                      existing.providerId === providerId &&
+                      (existing.projectBinding ?? null) === projectBinding
+                  );
+                  if (existingIndex >= 0) {
+                    config.drafts[existingIndex] = draft;
+                  } else {
+                    config.drafts.push(draft);
+                  }
+                  config.selection = {
+                    kind: "draft",
+                    providerId,
+                    projectBinding,
+                  };
+                } else if (update.selection) {
+                  config.selection = clone(update.selection);
+                }
               }
               return clone(appState);
             }
@@ -536,7 +598,11 @@ export async function installMockTauri(
             }
 
             case "import_from_command":
-              return null;
+              return {
+                providerId: (args?.providerId as string) || "",
+                parameters: {},
+                diagnostics: [],
+              };
 
             case "get_profiles": {
               // Return profiles from the selected repo's publishConfig
@@ -679,24 +745,81 @@ export async function installMockTauri(
             }
 
             // ── Publish ──
-            case "prepare_publish_runtime":
-            case "prepare_draft_publish_runtime": {
+            case "prepare_publish_runtime": {
+              if (blockedMessage) {
+                return {
+                  status: "blocked",
+                  diagnostics: [
+                    { code: "injected_blocked", message: blockedMessage },
+                  ],
+                  outputPreflight: {
+                    outputDir: "/tmp/publish-output",
+                    accessStatus: "granted",
+                    protectedRoot: null,
+                    probeDirectory: null,
+                    remoteLocation: null,
+                  },
+                };
+              }
               const request = args?.request as
                 | {
-                    configurationId?: string;
-                    configurationRevisionId?: string;
-                    spec: PublishSpec;
+                    repositoryId?: string;
+                    source?: {
+                      kind?: string;
+                      providerId?: string;
+                      configurationId?: string;
+                      revisionId?: string;
+                      reference?: string;
+                      templateId?: string;
+                      recordId?: string;
+                      content?: {
+                        providerId: string;
+                        parameters: Record<string, unknown>;
+                      };
+                    };
+                    runInputs?: { defaultOutputDir?: string };
                   }
                 | undefined;
-              const isDraft = !request?.configurationRevisionId;
+              const source = request?.source ?? {};
+              const kind = source.kind;
               const revision =
-                request?.configurationRevisionId || "mock-draft-revision";
+                kind === "revision"
+                  ? (source.revisionId ?? "mock-revision")
+                  : "mock-draft-revision";
+              const configurationId =
+                kind === "revision"
+                  ? (source.configurationId ?? "mock-configuration")
+                  : "mock-draft-configuration";
+              const providerId =
+                source.content?.providerId ||
+                (typeof source.providerId === "string" && source.providerId) ||
+                "dotnet";
+              // 按来源语义构造参数投影（与后端 build_resolved_spec 对齐）：
+              // projectProfile → PublishProfile 属性；draft → 前端参数；其余默认 Release。
+              const parameters =
+                source.kind === "projectProfile" && source.reference
+                  ? ({
+                      properties: { PublishProfile: source.reference },
+                    } as PublishSpec["parameters"])
+                  : source.content?.parameters &&
+                      typeof source.content.parameters === "object" &&
+                      !Array.isArray(source.content.parameters)
+                    ? (source.content.parameters as PublishSpec["parameters"])
+                    : { configuration: "Release" };
+              const resolvedSpec: PublishSpec = {
+                version: 1,
+                provider_id: providerId,
+                project_path: "/workspace/alpha-service/App.csproj",
+                parameters,
+              };
+              const defaultOutputDir =
+                request?.runInputs?.defaultOutputDir || "";
               return {
-                configurationId:
-                  request?.configurationId ||
-                  (isDraft ? "mock-draft-configuration" : "mock-configuration"),
+                status: "ready",
+                configurationId,
                 configurationRevisionId: revision,
-                command: renderMockPublishCommand(request?.spec),
+                resolvedSpec,
+                command: renderMockPublishCommand(resolvedSpec),
                 plan: {
                   version: 1,
                   digest: `plan-${revision}`,
@@ -708,6 +831,8 @@ export async function installMockTauri(
                       stage: "build",
                       adapterId: "selected-project-provider",
                       operation: "selected-project-provider:publish",
+                      cancellable: false,
+                      cleanupOwnedStaging: false,
                       irreversible: false,
                     },
                     {
@@ -715,6 +840,8 @@ export async function installMockTauri(
                       stage: "persist_manifest",
                       adapterId: "temporary-artifact-store",
                       operation: "persist_manifest",
+                      cancellable: false,
+                      cleanupOwnedStaging: false,
                       irreversible: false,
                     },
                     {
@@ -722,6 +849,8 @@ export async function installMockTauri(
                       stage: "stage_routes",
                       adapterId: "local-directory",
                       operation: "stage_local_directory",
+                      cancellable: false,
+                      cleanupOwnedStaging: false,
                       irreversible: false,
                     },
                     {
@@ -729,12 +858,99 @@ export async function installMockTauri(
                       stage: "publish_routes",
                       adapterId: "local-directory",
                       operation: "publish_local_directory",
+                      cancellable: false,
+                      cleanupOwnedStaging: false,
                       irreversible: true,
                     },
                   ],
                 },
-                blockedReason: null,
+                outputPreflight: {
+                  outputDir: defaultOutputDir || "/tmp/publish-output",
+                  accessStatus: "granted",
+                  protectedRoot: null,
+                  probeDirectory: null,
+                  remoteLocation: null,
+                },
+                recoverySnapshot: {
+                  version: 1,
+                  content: {
+                    providerId,
+                    contractVersion: 1,
+                    providerVersion: "1",
+                    settingsVersion: 1,
+                    parameters: {},
+                    composition: {
+                      executionBackend: {
+                        adapterId: "local-execution",
+                        settingsVersion: 1,
+                        settings: {},
+                        credentials: {},
+                      },
+                      artifactStore: {
+                        adapterId: "temporary-artifact-store",
+                        settingsVersion: 1,
+                        settings: {},
+                        credentials: {},
+                      },
+                      artifactProcessors: [],
+                      deliveryRoutes: [],
+                    },
+                  },
+                  configurationId,
+                  configurationRevisionId: revision,
+                  origin:
+                    kind === "revision"
+                      ? {
+                          kind: "revision",
+                          configurationId,
+                          revisionId: revision,
+                        }
+                      : { kind: "new" },
+                  runInputs: { defaultOutputDir },
+                  executedParameters: {},
+                  resolvedOutputDirectory:
+                    defaultOutputDir || "/tmp/publish-output",
+                },
                 runtimeToken: `runtime-${revision}`,
+              };
+            }
+
+            case "resolve_publish_source": {
+              const source = args?.source as
+                { providerId?: string } | undefined;
+              const providerId = source?.providerId || "dotnet";
+              return {
+                draft: {
+                  content: {
+                    providerId,
+                    contractVersion: 1,
+                    providerVersion: "1",
+                    settingsVersion: 1,
+                    parameters: {},
+                    composition: {
+                      executionBackend: {
+                        adapterId: "local-execution",
+                        settingsVersion: 1,
+                        settings: {},
+                        credentials: {},
+                      },
+                      artifactStore: {
+                        adapterId: "temporary-artifact-store",
+                        settingsVersion: 1,
+                        settings: {},
+                        credentials: {},
+                      },
+                      artifactProcessors: [],
+                      deliveryRoutes: [],
+                    },
+                  },
+                  origin: { kind: "new" },
+                  baseRevision: undefined,
+                },
+                configurationId: undefined,
+                revisionId: undefined,
+                blockedReason: undefined,
+                diagnostics: [],
               };
             }
 

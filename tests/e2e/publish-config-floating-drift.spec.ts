@@ -185,7 +185,7 @@ async function installMockTauri(page: Page) {
           }
           case "check_repository_branch_connectivity":
             return { canConnect: true, reason: null };
-          case "update_publish_state": {
+          case "update_publish_edit_state": {
             const nextSelectedPreset = args?.selectedPreset;
             const nextCustomMode = args?.isCustomMode;
             const nextRepoId = appState.selectedRepoId;

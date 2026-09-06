@@ -358,19 +358,10 @@ pub async fn scan_project_files(path: String) -> Result<Vec<String>, crate::erro
     let root = PathBuf::from(&path);
     let root = normalize_scan_root(&root)?;
 
-    let results = detect_provider_discovery_from_path(&root)
-        .map(|discovery| {
-            collect_files_recursively(&root, |entry_path| {
-                discovery
-                    .project_file_matchers
-                    .iter()
-                    .any(|matcher| matches_project_file(entry_path, matcher))
-            })
-        })
-        .unwrap_or_default()
-        .into_iter()
-        .map(|entry_path| entry_path.to_string_lossy().to_string())
-        .collect();
+    let candidates = super::scan_project_candidates_from_path(&root)?;
+    let mut results = candidates.project_files;
+    results.extend(candidates.solution_files);
+    results.sort();
     Ok(results)
 }
 

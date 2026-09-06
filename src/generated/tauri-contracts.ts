@@ -47,13 +47,97 @@ export type RenderedPublishCommand = { program: string, args: Array<string>, wor
 
 export type PublishResult = { provider_id: string, success: boolean, cancelled: boolean, error: string | null, command: RenderedPublishCommand, output_log: string, output_dir: string, file_count: number, warnings: Array<string> | null, };
 
-export type PreparePublishRuntimeRequest = { repositoryId: string, repositoryPath: string, configurationId: string, configurationRevisionId: string, spec: PublishSpec, 
+export type PreparePublishRuntimeRequest = { repositoryId: string, source: PublishSource, runInputs: PublishRunInputs, };
+
+export type PublishConfigurationContent = { providerId: string, contractVersion: number, providerVersion: string, settingsVersion: number, 
 /**
- * Artifact Promotion：复用既有封存 Manifest 的新 Attempt 输入；普通构建为空。
+ * 项目候选身份（不透明引用，沿用后端候选身份编码）。
+ */
+projectBinding?: string, 
+/**
+ * 完整参数，包含 releaseSettings 等保留键；不做富表单往返、不静默过滤。
+ */
+parameters: JsonValue, composition: PublishComposition, };
+
+export type PublishBaseRevisionRef = { configurationId: string, revisionId: string, };
+
+export type PublishDraftOrigin = { "kind": "revision", configurationId: string, revisionId: string, } | { "kind": "template", templateId: string, } | { "kind": "projectProfile", reference: string, } | { "kind": "history", recordId: string, } | { "kind": "new" };
+
+export type PublishDraft = { content: PublishConfigurationContent, origin: PublishDraftOrigin, 
+/**
+ * 编辑基准修订；仅当草稿来自命名配置修订时设置。
+ */
+baseRevision?: PublishBaseRevisionRef, };
+
+export type PublishSource = { "kind": "revision", configurationId: string, revisionId: string, } | { "kind": "draft", content: PublishConfigurationContent, 
+/**
+ * 编辑基准修订（可选）：草稿修改自某个修订时携带。
+ */
+base_revision?: PublishBaseRevisionRef, } | { "kind": "template", providerId: string, templateId: string, projectBinding: string | null, } | { "kind": "projectProfile", providerId: string, project_binding?: string, reference: string, } | { "kind": "history", recordId: string, } | { "kind": "empty", providerId: string, projectBinding: string | null, };
+
+export type PublishRunInputs = { 
+/**
+ * 当前默认输出目录；空字符串明确表示未设置。
+ */
+defaultOutputDir: string, 
+/**
+ * Artifact Promotion 复用既有封存 Manifest（ADR-0040）。
  */
 promotedManifestDigest?: string, };
 
-export type PrepareDraftPublishRuntimeRequest = { repositoryId: string, repositoryPath: string, providerId: string, parameters: JsonValue, spec: PublishSpec, };
+export type PublishSourceDiagnostic = { code: string, message: string, };
+
+export type ResolvedPublishSource = { draft: PublishDraft, 
+/**
+ * 来源身份：revision/history 来源解析出的配置与修订身份。
+ */
+configurationId?: string, revisionId?: string, 
+/**
+ * 配置级阻断（配置封锁或修订版本不兼容）；当前修订检查保留在 prepare。
+ */
+blockedReason?: string, diagnostics: Array<PublishSourceDiagnostic>, };
+
+export type PublishBlockDiagnostic = { code: string, message: string, };
+
+export type PreparedOutputSummary = { outputDir: string, accessStatus: PublishOutputAccessStatus, protectedRoot?: string, probeDirectory?: string, remoteLocation?: RemoteLocationSummary, };
+
+export type PublishRecoverySnapshot = { version: number, 
+/**
+ * 原配置完整内容（含 releaseSettings 等保留键）。
+ */
+content: PublishConfigurationContent, 
+/**
+ * 实际配置/修订身份（含隐藏草稿的真实修订身份）。
+ */
+configurationId: string, configurationRevisionId: string, 
+/**
+ * 原来源引用。
+ */
+origin: PublishDraftOrigin, 
+/**
+ * 实际项目绑定。
+ */
+projectBinding?: string, 
+/**
+ * 本次运行输入（当前默认输出目录等）。
+ */
+runInputs: PublishRunInputs, 
+/**
+ * 本次执行参数（命令参数投影，含派生输出目录）。
+ */
+executedParameters: JsonValue, 
+/**
+ * 解析输出信息。
+ */
+resolvedOutputDirectory: string, };
+
+export type ProviderTemplate = { id: string, name: string, description: string, 
+/**
+ * 模板产生的完整参数（schema 键）；false/null/空值按用户语义显式保留。
+ */
+parameters: JsonValue, };
+
+export type ProviderTemplateSummary = { id: string, name: string, description: string, };
 
 export type PublishAdapterCatalog = { executionBackends: Array<string>, artifactStores: Array<string>, artifactProcessors: Array<string>, deliveryDestinations: Array<string>, };
 
@@ -63,7 +147,19 @@ export type RuntimePlanNodeSummary = { id: string, stage: RuntimePlanStage, adap
 
 export type RuntimePlanSummary = { version: number, digest: string, snapshotDigest: string, executionBackend: string, nodes: Array<RuntimePlanNodeSummary>, };
 
-export type PreparedPublishRuntime = { configurationId: string, configurationRevisionId: string, command: RenderedPublishCommand, plan: RuntimePlanSummary, blockedReason: string | null, runtimeToken: string, };
+export type PreparedPublishRuntime = { "status": "ready", configurationId: string, configurationRevisionId: string, 
+/**
+ * 后端产生的只读执行投影；前端不得修改后再提交执行。
+ */
+resolvedSpec: PublishSpec, command: RenderedPublishCommand, plan: RuntimePlanSummary, outputPreflight: PreparedOutputSummary, recoverySnapshot: PublishRecoverySnapshot, runtimeToken: string, } | { "status": "blocked", diagnostics: Array<PublishBlockDiagnostic>, 
+/**
+ * 阻断涉及输出目录时附带的预检摘要（目录授权交互需要目录信息）。
+ */
+outputPreflight?: PreparedOutputSummary, 
+/**
+ * 已成功解析的只读身份；来源解析早期失败时为空。
+ */
+configurationId?: string, configurationRevisionId?: string, };
 
 export type StartPublishRuntimeRequest = { runtimeToken: string, };
 
@@ -146,7 +242,23 @@ export type ParameterSchema = { parameters: { [key: string]: ParameterDefinition
 
 export type ParameterType = "boolean" | "string" | "array" | "map";
 
-export type ProviderCatalogEntry = { id: string, display_name: string, version: string, label: string, command_example: string, environment_label: string, environment_description: string, requires_project_binding: boolean, project_path_kind: ProviderProjectPathKind, supports_command_import: boolean, };
+export type CommandImportDiagnostic = { code: string, message: string, };
+
+export type CommandImportResult = { providerId: string, 
+/**
+ * schema 解析出的完整参数（键为 schema 参数键，值保真）。
+ */
+parameters: { [key: string]: JsonValue }, 
+/**
+ * 无法归属到 schema 的 token/flag 诊断（code + message）。
+ */
+diagnostics: Array<CommandImportDiagnostic>, };
+
+export type ProviderCatalogEntry = { id: string, display_name: string, version: string, label: string, command_example: string, environment_label: string, environment_description: string, requires_project_binding: boolean, project_path_kind: ProviderProjectPathKind, supports_command_import: boolean, 
+/**
+ * Provider 内置模板摘要：前端只负责展示与选择，模板参数由后端实现持有。
+ */
+templates: Array<ProviderTemplateSummary>, };
 
 export type ProviderProjectPathKind = "repository_root" | "project_file";
 
@@ -211,11 +323,28 @@ export type ConfigProfile = { id: string, name: string, profileGroup: string | n
  */
 isDraft: boolean, currentRevisionId: string, revisions: Array<PublishConfigurationRevision>, deletedAt: string | null, blockedReason: string | null, };
 
-export type ExecutionRecord = { id: string, repoId: string | null, configurationId: string | null, configurationRevisionId: string | null, providerId: string, projectPath: string, startedAt: string, finishedAt: string, success: boolean, cancelled: boolean, outputDir: string | null, error: string | null, commandLine: string | null, snapshotPath: string | null, failureSignature: string | null, outputExcerpt: string | null, spec: JsonValue | null, fileCount: number, warnings: Array<string> | null, };
+export type ExecutionRecord = { id: string, repoId: string | null, configurationId: string | null, configurationRevisionId: string | null, providerId: string, projectPath: string, startedAt: string, finishedAt: string, success: boolean, cancelled: boolean, outputDir: string | null, error: string | null, commandLine: string | null, snapshotPath: string | null, failureSignature: string | null, outputExcerpt: string | null, spec: JsonValue | null, 
+/**
+ * 关联的运行时 Attempt；journal 建立前的失败为空。
+ */
+attemptId?: string, 
+/**
+ * 版本化恢复快照（§3.3）：历史重跑据此恢复原配置与已记录输入，
+ * 不依赖草稿修订存活，也不依赖当前选中配置。
+ */
+recoverySnapshot?: JsonValue, fileCount: number, warnings: Array<string> | null, };
 
 export type CancelPublishRuntimeRequest = { runtimeToken?: string, attemptId?: string, };
 
 export type PublishComposition = { executionBackend: RevisionAdapterBinding, artifactStore: RevisionAdapterBinding, artifactProcessors: Array<RevisionAdapterBinding>, deliveryRoutes: Array<RevisionDeliveryRoute>, };
+
+export type PublishSelectionRef = { "kind": "revision", configurationId: string, } | { "kind": "template", providerId: string, templateId: string, } | { "kind": "projectProfile", providerId: string, reference: string, } | { "kind": "draft", providerId: string, projectBinding: string | null, };
+
+export type PublishEditStateUpdate = { selection?: PublishSelectionRef, draft?: PublishDraftSubmission, };
+
+export type PublishDraftSubmission = { providerId: string, projectBinding?: string, parameters: JsonValue, baseRevision?: PublishBaseRevisionRef, };
+
+export type ScopedPublishDraft = { providerId: string, projectBinding?: string, content: PublishConfigurationContent, baseRevision?: PublishBaseRevisionRef, };
 
 export type PublishConfigStore = { configuration: string, runtime: string, framework: string, selfContained: boolean, outputDir: string, noBuild: boolean, noRestore: boolean, verbosity: string, noLogo: boolean, deleteExistingFiles: boolean, properties: { [key: string]: string }, useProfile: boolean, profileName: string, };
 
@@ -227,7 +356,15 @@ export type PublishConfigurationRevision = { id: string, sequence: number, creat
  */
 projectBinding?: string, };
 
-export type RepoPublishConfig = { selectedPreset: string, isCustomMode: boolean, customConfig: PublishConfigStore, profiles: Array<ConfigProfile>, bindings: Array<AutomationBinding>, appliedBundles: Array<AppliedProjectionBundle>, };
+export type RepoPublishConfig = { 
+/**
+ * v4 编辑器选择引用；缺失时由前端呈现待解析状态。
+ */
+selection?: PublishSelectionRef, 
+/**
+ * v4 编辑草稿存储：按 (Provider, 项目候选) 作用域隔离。
+ */
+drafts: Array<ScopedPublishDraft>, profiles: Array<ConfigProfile>, bindings: Array<AutomationBinding>, appliedBundles: Array<AppliedProjectionBundle>, };
 
 export type Repository = { id: string, name: string, path: string, projectFile: string | null, currentBranch: string, branches: Array<Branch>, isMain: boolean, providerId: string | null, publishConfig: RepoPublishConfig, };
 

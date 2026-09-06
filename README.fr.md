@@ -42,9 +42,9 @@ OnePublish est une **application de bureau multiplateforme** qui offre une inter
 
 ## 📸 Captures d'Écran
 
-<!-- TODO: add actual screenshots -->
+![Fenêtre principale d'OnePublish](docs/screenshots/main-window.png)
 
-> _Captures d'écran à venir. En attendant, consultez la [philosophie de design](docs/design-philosophy.md) et la [spécification de design Geist](DESIGN.md)._
+> _Fenêtre principale — sélectionnez un dépôt, configurez les paramètres et publiez en un clic._
 
 ---
 

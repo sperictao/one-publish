@@ -42,9 +42,9 @@ OnePublish é um **aplicativo de desktop multiplataforma** que oferece uma GUI b
 
 ## 📸 Capturas de Tela
 
-<!-- TODO: adicionar capturas de tela reais -->
+![Janela principal do OnePublish](docs/screenshots/main-window.png)
 
-> _Capturas de tela em breve. Enquanto isso, confira a [filosofia de design](docs/design-philosophy.md) e a [especificação de design Geist](DESIGN.md)._
+> _Janela principal — selecione um repositório, configure os parâmetros e publique com um clique._
 
 ---
 

@@ -1,13 +1,12 @@
+import type { PublishEditStateUpdate } from "@/generated/tauri-contracts";
 import { useCallback } from "react";
 import type { Dispatch, SetStateAction } from "react";
 
-import { createProjectProfileSelectedPreset } from "@/features/config/publishConfigIdentity";
 import type { ConfigProfile } from "@/lib/store/types";
 import type { LoadableProfile } from "./types";
 
 export interface UseProfileSelectionParams {
-  setIsCustomMode: (value: boolean) => void;
-  setSelectedPreset: (value: string) => void;
+  updatePublishEditState: (update: PublishEditStateUpdate) => void;
   setActiveProfileName: Dispatch<SetStateAction<string | null>>;
   applyProfile: (profile: LoadableProfile) => void;
 }
@@ -18,18 +17,22 @@ export interface UseProfileSelectionReturn {
 }
 
 export function useProfileSelection({
-  setIsCustomMode,
-  setSelectedPreset,
+  updatePublishEditState,
   setActiveProfileName,
   applyProfile,
 }: UseProfileSelectionParams): UseProfileSelectionReturn {
   const handleSelectProjectProfile = useCallback(
     (profileName: string) => {
-      setSelectedPreset(createProjectProfileSelectedPreset(profileName));
-      setIsCustomMode(false);
+      updatePublishEditState({
+        selection: {
+          kind: "projectProfile",
+          providerId: "dotnet",
+          reference: profileName,
+        },
+      });
       setActiveProfileName(null);
     },
-    [setIsCustomMode, setSelectedPreset, setActiveProfileName]
+    [updatePublishEditState, setActiveProfileName]
   );
 
   const handleSelectProfileFromPanel = useCallback(

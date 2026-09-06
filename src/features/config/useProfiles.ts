@@ -15,14 +15,14 @@ import {
   saveProfile as saveProfileToStore,
   updateProfile,
 } from "@/lib/store/api";
-import type {
-  ConfigParameters,
-  ConfigProfile,
-  PublishConfigStore,
-} from "@/lib/store/types";
-import type { DotnetPreset } from "@/features/config/dotnetPresets";
+import type { ConfigProfile } from "@/lib/store/types";
 import type { Language } from "@/hooks/useI18n";
+import type { Repository } from "@/lib/store/types";
 import type { ParameterSchema, ParameterValue } from "@/types/parameters";
+import type {
+  ProviderTemplateSummary,
+  PublishEditStateUpdate,
+} from "@/generated/tauri-contracts";
 import type { TranslationMap, ProfileManagementActions } from "./types";
 
 // Re-export types and constants for backward compatibility
@@ -50,6 +50,7 @@ import {
 } from "./publishConfigIdentity";
 
 interface UseProfilesParams {
+  backendTemplates?: ProviderTemplateSummary[];
   appT: TranslationMap;
   profileT: TranslationMap;
   language: Language;
@@ -57,33 +58,20 @@ interface UseProfilesParams {
   activeProviderId: string;
   providerSchemas: Record<string, ParameterSchema>;
   applyProfileProvider: (providerId: string) => void;
-  setIsCustomMode: (value: boolean) => void;
-  isCustomMode: boolean;
-  selectedPreset: string;
-  setSelectedPreset: (value: string) => void;
+  updatePublishEditState: (update: PublishEditStateUpdate) => void;
+  selectedRepo: Repository | null;
   setProviderParameters: Dispatch<
     SetStateAction<Record<string, Record<string, ParameterValue>>>
   >;
-  applyDotnetCustomConfig: (config: PublishConfigStore) => void;
   replaceScopedConfigKey: (
     previousKey: string,
     nextKey: string,
     repoId?: string | null
   ) => void;
-  presets: DotnetPreset[];
-  defaultPresetId: string;
-  getPresetText: (
-    presetId: string,
-    fallbackName: string,
-    fallbackDescription: string
-  ) => {
-    name: string;
-    description: string;
-  };
-  buildProfileParameters: (config: PublishConfigStore) => ConfigParameters;
 }
 
 export function useProfiles({
+  backendTemplates = [],
   appT,
   profileT,
   language,
@@ -91,16 +79,9 @@ export function useProfiles({
   activeProviderId,
   providerSchemas,
   applyProfileProvider,
-  setIsCustomMode,
-  isCustomMode,
-  selectedPreset,
-  setSelectedPreset,
+  updatePublishEditState,
+  selectedRepo,
   setProviderParameters,
-  applyDotnetCustomConfig,
-  presets,
-  defaultPresetId,
-  getPresetText,
-  buildProfileParameters,
 }: UseProfilesParams) {
   const [localActiveProfileName, setLocalActiveProfileName] = useState<
     string | null
@@ -109,10 +90,9 @@ export function useProfiles({
     () =>
       resolvePublishSelectionIdentity({
         activeProviderId,
-        isCustomMode,
-        selectedPreset,
+        selection: selectedRepo?.publishConfig.selection,
       }),
-    [activeProviderId, isCustomMode, selectedPreset]
+    [activeProviderId, selectedRepo]
   );
   const persistedActiveProfileId =
     getActiveProfileIdFromSelection(selectionIdentity);
@@ -143,43 +123,40 @@ export function useProfiles({
     selectedRepoId,
     profiles,
     activeProfileId: persistedActiveProfileId,
-    isCustomMode,
-    defaultPresetId,
     profileT,
     appT,
     activeProviderId,
     providerSchemas,
     applyProfileProvider,
-    applyDotnetCustomConfig,
     setProviderParameters,
-    setIsCustomMode,
-    setSelectedPreset,
     setActiveProfileName: setLocalActiveProfileName,
-    buildProfileParameters,
     refreshProfilesAfterMutation,
     isCurrentRepo,
     saveProfileToStore,
     deleteProfileFromStore,
     exportConfigFn: exportConfig,
     applyImportedConfigFn: applyImportedConfig,
+    updatePublishEditState,
   });
 
   const selection = useProfileSelection({
-    setIsCustomMode,
-    setSelectedPreset,
+    updatePublishEditState,
     setActiveProfileName: setLocalActiveProfileName,
     applyProfile: crud.applyProfile,
   });
 
   const quickCreate = useQuickCreateProfile({
+    backendTemplates,
+    projectBinding:
+      selectedRepo?.publishConfig.selection?.kind === "draft"
+        ? selectedRepo.publishConfig.selection.projectBinding
+        : (profiles.find((profile) => profile.id === persistedActiveProfileId)
+            ?.projectBinding ?? null),
     selectedRepoId,
     activeProviderId,
     profileT,
-    presets,
     profiles,
     language,
-    getPresetText,
-    buildProfileParameters,
     refreshProfilesAfterMutation,
     saveProfileToStore,
     updateProfile,

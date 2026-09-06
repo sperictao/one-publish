@@ -1,0 +1,11 @@
+[package]
+name = "cargo-ws-bin"
+version = "0.1.0"
+edition = "2021"
+
+[[bin]]
+name = "cargo-ws-bin"
+path = "src/main.rs"
+
+[dependencies]
+cargo-ws-lib = { path = "../lib" }

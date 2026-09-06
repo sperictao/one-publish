@@ -13,10 +13,9 @@ import { useEditorProviderState } from "@/features/provider/useEditorProviderSta
 import { useProviderPresentationState } from "@/features/provider/useProviderPresentationState";
 import { useRerunFlow } from "@/hooks/useRerunFlow";
 import { useTrayRecentPublish } from "@/hooks/useTrayRecentPublish";
+import { extractSpecFromRecord } from "@/features/history/specFromRecord";
 import { usePublishStore } from "@/stores/publishStore";
 import { useAppShortcutsProps } from "@/hooks/useAppShortcutsProps";
-
-const SPEC_VERSION = 1;
 
 export type ShellState = UseShellBootReturn;
 export type RepoState = UseRepoBootReturn;
@@ -64,6 +63,9 @@ export function useAppBoot() {
     (s) => s.setReleaseChecklistOpen
   );
   const artifactActionState = usePublishStore((s) => s.artifactActionState);
+  const setArtifactActionState = usePublishStore(
+    (s) => s.setArtifactActionState
+  );
 
   // ============================================================
   // 3. Shell domain (layout, dialogs, theme, i18n, shortcuts, updater)
@@ -101,34 +103,28 @@ export function useAppBoot() {
   // ============================================================
   // 4. Provider presentation (lifted — needs appT from shell)
   // ============================================================
-  const {
-    activeProviderUsesProjectFile,
-    activeProviderRequiresProjectBinding,
-    repositoryProviders,
-  } = useProviderPresentationState({
-    providerRuntimeProviders,
-    providerListState,
-    activeProviderSchemaState,
-    activeProvider,
-    activeProviderId,
-    appT: shell.appT,
-    retryProviderList,
-    retryProviderSchema,
-  });
+  const { activeProviderUsesProjectFile, repositoryProviders } =
+    useProviderPresentationState({
+      providerRuntimeProviders,
+      providerListState,
+      activeProviderSchemaState,
+      activeProvider,
+      activeProviderId,
+      appT: shell.appT,
+      retryProviderList,
+      retryProviderSchema,
+    });
 
   // Editor provider state (depends on providerRuntimeProviders, selectedRepo)
   const selectedRepoForEditor =
     appState.repositories.find((r) => r.id === appState.selectedRepoId) ?? null;
 
-  const {
-    applyProfileProvider,
-    applyRecoveredSpecProvider,
-    applySelectedRepositoryProvider,
-  } = useEditorProviderState({
-    availableProviders: providerRuntimeProviders,
-    selectedRepo: selectedRepoForEditor,
-    setActiveProviderId,
-  });
+  const { applyProfileProvider, applySelectedRepositoryProvider } =
+    useEditorProviderState({
+      availableProviders: providerRuntimeProviders,
+      selectedRepo: selectedRepoForEditor,
+      setActiveProviderId,
+    });
 
   // ============================================================
   // 5. Repo domain
@@ -146,10 +142,6 @@ export function useAppBoot() {
     isStateLoading: appState.isLoading,
     activeProviderUsesProjectFile,
     applySelectedRepositoryProvider,
-    setCustomConfig: appState.setCustomConfig,
-    setIsCustomMode: appState.setIsCustomMode,
-    applyRecoveredSpecProvider,
-    setProviderParameters,
   });
 
   // ============================================================
@@ -157,12 +149,7 @@ export function useAppBoot() {
   // ============================================================
   const publish = usePublishBoot({
     // From useAppState
-    selectedPreset: appState.selectedPreset,
-    isCustomMode: appState.isCustomMode,
-    customConfig: appState.customConfig,
-    setSelectedPreset: appState.setSelectedPreset,
-    setIsCustomMode: appState.setIsCustomMode,
-    setCustomConfig: appState.setCustomConfig,
+    updatePublishEditState: appState.updatePublishEditState,
     recentConfigKeysByRepo: appState.recentConfigKeysByRepo,
     pushRecentPublishConfig: appState.pushRecentPublishConfig,
     removeRecentPublishConfig: appState.removeRecentPublishConfig,
@@ -193,9 +180,7 @@ export function useAppBoot() {
     scanProject: repo.scanProject,
     orderedProjectPublishProfiles: repo.orderedProjectPublishProfiles,
     reorderProjectPublishProfiles: repo.reorderProjectPublishProfiles,
-    extractSpecFromRecord: repo.extractSpecFromRecord,
-    restoreSpecToEditor: repo.restoreSpecToEditor,
-    getRecentConfigKeyFromSpec: repo.getRecentConfigKeyFromSpec,
+    extractSpecFromRecord,
     setEnvironmentLastCheck: repo.setEnvironmentLastCheck,
     recentHistoryExports: repo.recentHistoryExports,
     trackHistoryExport: repo.trackHistoryExport,
@@ -212,7 +197,6 @@ export function useAppBoot() {
     activeProviderParameters,
     setProviderParameters,
     applyProfileProvider,
-    applyRecoveredSpecProvider,
     applySelectedRepositoryProvider,
     // Lifted publish history state
     executionHistory,
@@ -224,6 +208,7 @@ export function useAppBoot() {
     releaseChecklistOpen,
     setReleaseChecklistOpen,
     artifactActionState,
+    setArtifactActionState,
   });
 
   // ============================================================
@@ -232,18 +217,12 @@ export function useAppBoot() {
 
   // Rerun flow
   const { rerunFromHistory } = useRerunFlow({
-    historyT: shell.historyT,
-    extractSpecFromRecord: repo.extractSpecFromRecord,
-    restoreSpecToEditor: repo.restoreSpecToEditor,
-    getRecentConfigKeyFromSpec: repo.getRecentConfigKeyFromSpec,
     runPublishSpec: publish.runPublishSpec,
   });
 
   // Tray recent publish
   useTrayRecentPublish({
     appT: shell.appT,
-    defaultOutputDir: appState.defaultOutputDir,
-    specVersion: SPEC_VERSION,
     runPublishSpec: publish.runPublishSpec,
   });
 
@@ -254,8 +233,6 @@ export function useAppBoot() {
     selectedRepo: repo.selectedRepo,
     isStateLoading: appState.isLoading,
     activeProviderUsesProjectFile,
-    activeProviderRequiresProjectBinding,
-    projectInfo: repo.projectInfo,
     isPublishing,
     scanProject: repo.scanProject,
     startPublish: publish.startPublish,
@@ -279,8 +256,8 @@ export function useAppBoot() {
   // ============================================================
   const shouldLoadAppDialogsHost =
     shell.shouldLoadAppDialogsHost ||
-    releaseChecklistOpen ||
-    publish.quickCreateProfileOpen;
+    publish.quickCreateProfileOpen ||
+    releaseChecklistOpen;
 
   // ============================================================
   // 11. Merge return objects (maintain backward compatibility with App.tsx)

@@ -15,8 +15,6 @@ export interface PublishTransactionRunOptions {
   restoreWindowOnFailure?: boolean;
   feedbackMode?: "toast" | "system";
   trayStatusEffect?: boolean;
-  configurationId?: string | null;
-  configurationRevisionId?: string | null;
 }
 
 export type RunPublishOptions = PublishTransactionRunOptions;
@@ -28,8 +26,6 @@ export interface PublishTransactionContext {
   restoreWindowOnFailure: boolean;
   feedbackMode: "toast" | "system";
   trayStatusEffect: boolean;
-  configurationId: string | null;
-  configurationRevisionId: string | null;
   startedAt: string;
 }
 
@@ -45,8 +41,6 @@ export function createPublishTransactionContext(params: {
     restoreWindowOnFailure: params.options?.restoreWindowOnFailure ?? false,
     feedbackMode: params.options?.feedbackMode ?? "toast",
     trayStatusEffect: params.options?.trayStatusEffect ?? false,
-    configurationId: params.options?.configurationId ?? null,
-    configurationRevisionId: params.options?.configurationRevisionId ?? null,
     startedAt: params.startedAt ?? new Date().toISOString(),
   };
 }
@@ -58,13 +52,14 @@ export function shouldRecordRecentConfig(
 }
 
 export function createFailedPublishTransactionResult(params: {
-  spec: ProviderPublishSpec;
+  /** prepare ready 产出的 resolvedSpec；准备阶段就失败的调用为 null。 */
+  spec: ProviderPublishSpec | null;
   errorMessage: string;
   outputLog: string;
 }): PublishResult {
   return normalizePublishResult({
     result: {
-      provider_id: params.spec.provider_id,
+      provider_id: params.spec?.provider_id ?? "",
       success: false,
       cancelled: false,
       error: params.errorMessage,

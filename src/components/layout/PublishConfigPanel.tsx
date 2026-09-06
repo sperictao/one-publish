@@ -20,6 +20,7 @@ import {
   DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
 import {
+  Terminal,
   Search,
   Plus,
   RefreshCw,
@@ -76,6 +77,7 @@ import {
 } from "@/components/layout/publishConfigPanel/listOrderComparisons";
 import { createFavoriteConfigAction } from "@/components/layout/publishConfigPanel/favoriteConfigAction";
 import { ProfileListItem } from "@/components/layout/publishConfigPanel/ProfileListItem";
+import type { PublishSelectionRef } from "@/generated/tauri-contracts";
 import { configRowClass } from "@/components/layout/publishConfigPanel/configRowClass";
 import {
   ProjectProfileViewer,
@@ -86,13 +88,13 @@ const EMPTY_FRAMEWORK_OPTIONS: string[] = [];
 
 export interface PublishConfigPanelProps {
   selectedRepoId?: string | null;
-  selectedPreset: string;
-  isCustomMode: boolean;
+  selection: PublishSelectionRef | null | undefined;
   profiles: ConfigProfile[];
   isProfilesRefreshing?: boolean;
   activeProfileName: string | null;
   onSelectProfile: (profile: ConfigProfile) => void;
   onCreateProfile: () => void;
+  onImportCommand?: () => void;
   onEditProfile: (profile: ConfigProfile) => void;
   onViewProfile: (profile: ConfigProfile) => void;
   onSaveProfileComposition: (
@@ -189,13 +191,13 @@ function ConfigGroup({
 
 export const PublishConfigPanel = memo(function PublishConfigPanel({
   selectedRepoId,
-  selectedPreset,
-  isCustomMode,
+  selection,
   profiles,
   isProfilesRefreshing = false,
   activeProfileName,
   onSelectProfile,
   onCreateProfile,
+  onImportCommand,
   onEditProfile,
   onViewProfile,
   onSaveProfileComposition,
@@ -300,8 +302,7 @@ export const PublishConfigPanel = memo(function PublishConfigPanel({
     selectedRenderId,
   } = usePublishConfigListModel({
     selectedRepoScopeId,
-    selectedPreset,
-    isCustomMode,
+    selection,
     activeProfileName,
     profiles,
     projectPublishProfiles,
@@ -1219,6 +1220,18 @@ export const PublishConfigPanel = memo(function PublishConfigPanel({
             </DropdownMenuContent>
           </DropdownMenu>
           <div className="flex items-center gap-1.5">
+            {onImportCommand ? (
+              <button
+                type="button"
+                className={listActionButtonClass}
+                onClick={onImportCommand}
+                title={t.importCommand || "从命令创建配置"}
+                aria-label={t.importCommand || "从命令创建配置"}
+                data-tauri-no-drag
+              >
+                <Terminal className="size-3.5" />
+              </button>
+            ) : null}
             <button
               type="button"
               className={listActionButtonClass}

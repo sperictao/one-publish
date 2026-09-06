@@ -23,6 +23,5 @@ export {
   parsePublishConfigKey,
   resolveDotnetRecentConfigKeyForSelection,
   resolvePublishSelectionIdentity,
-  resolveSelectedPublishConfigKey,
   resolveSelectedPublishConfigKeyFromIdentity,
 } from "@/lib/publishConfigIdentity";

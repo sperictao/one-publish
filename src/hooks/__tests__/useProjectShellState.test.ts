@@ -365,36 +365,39 @@ describe("useProjectShellState", () => {
     expect(result.current.projectInfo).toBeNull();
   });
 
-  it("存在显式 projectFile 绑定时优先解析绑定项目", async () => {
-    mocks.resolveProjectInfo.mockResolvedValue(
-      createProjectInfo("/repo-bound")
-    );
+  it.each(["dotnet", "tauri"])(
+    "%s 显式绑定优先于全仓扫描",
+    async (providerId) => {
+      const projectFile =
+        providerId === "tauri"
+          ? "/repo-bound/second/src-tauri/tauri.conf.json"
+          : "/repo-bound/App.csproj";
+      mocks.resolveProjectInfo.mockResolvedValue({
+        ...createProjectInfo("/repo-bound"),
+        project_file: projectFile,
+      });
 
-    const { result } = renderHook(() =>
-      useProjectShellState({
-        appT: {},
-        isStateLoading: false,
-        selectedRepoId: "repo-a",
-        selectedRepoPath: "/repo-a",
-        selectedRepoProjectFile: "/repo-bound/App.csproj",
-        activeProviderId: "dotnet",
-      })
-    );
-
-    await waitFor(() => {
-      expect(result.current.projectInfo?.project_file).toBe(
-        "/repo-bound/App.csproj"
+      const { result } = renderHook(() =>
+        useProjectShellState({
+          appT: {},
+          isStateLoading: false,
+          selectedRepoId: "repo-a",
+          selectedRepoPath: "/repo-a",
+          selectedRepoProjectFile: projectFile,
+          activeProviderId: providerId,
+        })
       );
-    });
 
-    expect(mocks.resolveProjectInfo).toHaveBeenCalledWith(
-      "/repo-bound/App.csproj",
-      {
+      await waitFor(() => {
+        expect(result.current.projectInfo?.project_file).toBe(projectFile);
+      });
+
+      expect(mocks.resolveProjectInfo).toHaveBeenCalledWith(projectFile, {
         silentFailure: true,
-      }
-    );
-    expect(mocks.scanProject).not.toHaveBeenCalled();
-  });
+      });
+      expect(mocks.scanProject).not.toHaveBeenCalled();
+    }
+  );
 
   it("绑定的是 .sln 时会回退扫描真实项目文件", async () => {
     mocks.scanProject.mockResolvedValue(createProjectInfo("/repo-a"));
@@ -423,7 +426,7 @@ describe("useProjectShellState", () => {
     });
   });
 
-  it("绑定项目解析失败时会回退仓库扫描", async () => {
+  it("绑定项目解析失败时保留失败状态，不改选其他项目", async () => {
     mocks.resolveProjectInfo.mockResolvedValue(null);
     mocks.scanProject.mockResolvedValue(createProjectInfo("/repo-fallback"));
 
@@ -439,10 +442,9 @@ describe("useProjectShellState", () => {
     );
 
     await waitFor(() => {
-      expect(result.current.projectInfo?.project_file).toBe(
-        "/repo-fallback/App.csproj"
-      );
+      expect(result.current.isProjectInfoRefreshing).toBe(false);
     });
+    expect(result.current.projectInfo).toBeNull();
 
     expect(mocks.resolveProjectInfo).toHaveBeenCalledWith(
       "/repo-a/App.csproj",
@@ -450,9 +452,6 @@ describe("useProjectShellState", () => {
         silentFailure: true,
       }
     );
-    expect(mocks.scanProject).toHaveBeenCalledWith("/repo-a", {
-      silentSuccess: true,
-      silentFailure: true,
-    });
+    expect(mocks.scanProject).not.toHaveBeenCalled();
   });
 });

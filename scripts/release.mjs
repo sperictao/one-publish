@@ -102,9 +102,14 @@ function ensureReleaseReady(tag, dryRun) {
 }
 
 function getPreviousTag() {
-  const result = run("git", ["describe", "--tags", "--abbrev=0"], {
-    allowFailure: true,
-  });
+  // 只匹配 v 前缀的正式发版标签，避免 runner-v* 等 crate 标签污染发布基线
+  const result = run(
+    "git",
+    ["describe", "--tags", "--abbrev=0", "--match", "v[0-9]*"],
+    {
+      allowFailure: true,
+    }
+  );
   return result.status === 0 ? result.stdout : "";
 }
 

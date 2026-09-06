@@ -8,7 +8,7 @@ use path_validation::evaluate_publish_output_validation;
 use super::output::{configured_output_dir, infer_output_dir, should_delete_existing_files};
 use crate::output_target::{parse_output_target, MountKind, OutputTarget, RemoteUri};
 use crate::spec::PublishSpec;
-use serde::{ser::SerializeStruct, Serialize, Serializer};
+use serde::{ser::SerializeStruct, Deserialize, Serialize, Serializer};
 use std::path::Path;
 use ts_rs::TS;
 
@@ -23,7 +23,7 @@ pub enum ProtectedDirectoryLocation {
     Downloads,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, TS)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[serde(rename_all = "snake_case")]
 #[ts(rename_all = "snake_case")]
 pub enum PublishOutputAccessStatus {
@@ -59,7 +59,7 @@ pub struct PublishOutputValidation {
     pub issue: Option<PublishOutputValidationIssue>,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, TS)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[serde(rename_all = "snake_case")]
 #[ts(rename_all = "snake_case")]
 pub enum RemoteLocationKind {
@@ -68,7 +68,7 @@ pub enum RemoteLocationKind {
     Remote,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, TS)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[serde(rename_all = "camelCase")]
 #[ts(rename_all = "camelCase")]
 pub struct RemoteLocationSummary {

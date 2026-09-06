@@ -5,6 +5,7 @@ use super::*;
 #[tauri::command]
 pub async fn scan_project_candidates(
     start_path: Option<String>,
+    provider_id: Option<String>,
 ) -> Result<ProjectScanCandidates, crate::errors::AppError> {
     let _timer = crate::commands::middleware::CommandTimer::new(
         "commands::repository::resolver::scan_project_candidates",
@@ -18,7 +19,7 @@ pub async fn scan_project_candidates(
             )
         })?,
     };
-    scan_project_candidates_from_path(&search_path)
+    scan_provider_project_candidates_from_path(&search_path, provider_id.as_deref())
 }
 
 #[tauri::command]

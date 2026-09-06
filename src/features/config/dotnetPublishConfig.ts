@@ -1,7 +1,4 @@
-import {
-  defaultRepoPublishConfig,
-  type PublishConfigStore,
-} from "@/lib/store/types";
+import type { PublishConfigStore } from "@/lib/store/types";
 import { getPathBasename, joinPath } from "@/lib/paths";
 import type { ParameterValue } from "@/types/parameters";
 
@@ -39,17 +36,22 @@ const DOTNET_UNSUPPORTED_PUBLISH_PROPERTY_KEY_SET = new Set(
   DOTNET_UNSUPPORTED_PUBLISH_PROPERTY_KEYS.map((key) => key.toLowerCase())
 );
 
-function clonePublishConfigStore(
-  config: PublishConfigStore
-): PublishConfigStore {
-  return {
-    ...config,
-    properties: { ...config.properties },
-  };
-}
-
 export function createDefaultDotnetPublishConfig(): PublishConfigStore {
-  return clonePublishConfigStore(defaultRepoPublishConfig.customConfig);
+  return {
+    configuration: "Release",
+    runtime: "",
+    framework: "",
+    selfContained: false,
+    outputDir: "",
+    noBuild: false,
+    noRestore: false,
+    verbosity: "",
+    noLogo: false,
+    deleteExistingFiles: false,
+    properties: {},
+    useProfile: false,
+    profileName: "",
+  };
 }
 
 function stripFileExtension(name: string): string {
@@ -157,22 +159,6 @@ export function normalizeDeleteExistingFilesProperty(
   delete nextProperties.deleteExistingFiles;
 
   return { deleteExistingFiles: parsed, properties: nextProperties };
-}
-
-export function buildDotnetAdvancedParameters(
-  config: PublishConfigStore
-): Record<string, ParameterValue> {
-  return {
-    framework: config.framework,
-    no_build: config.noBuild,
-    no_restore: config.noRestore,
-    verbosity: config.verbosity,
-    no_logo: config.noLogo,
-    delete_existing_files: config.deleteExistingFiles,
-    properties: sanitizeDotnetPublishProperties(
-      normalizeDotnetPropertyMap(config.properties)
-    ),
-  };
 }
 
 export function buildDotnetProfileParameters(

@@ -76,7 +76,6 @@ export {
   showMainWindow,
   updatePreferences,
   updateProfile,
-  updatePublishState,
   updateRepository,
   updateUIState,
 } from "./api";

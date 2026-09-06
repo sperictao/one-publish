@@ -42,9 +42,9 @@ OnePublish is a **cross-platform desktop application** that gives you a beautifu
 
 ## 📸 Screenshots
 
-<!-- TODO: add actual screenshots -->
+![OnePublish main window](docs/screenshots/main-window.png)
 
-> _Screenshots coming soon. In the meantime, check the [design philosophy](docs/design-philosophy.md) and the [Geist design spec](DESIGN.md)._
+> _The main window — pick a repository, configure parameters, and publish with one click._
 
 ---
 

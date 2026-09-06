@@ -4,6 +4,9 @@ use std::fs::{self, File, OpenOptions};
 use std::io::{self, Write};
 use std::path::Path;
 
+mod recovery_snapshot;
+pub(crate) use recovery_snapshot::sanitize_publish_recovery_snapshot;
+
 pub(crate) const REDACTED_VALUE: &str = "<redacted>";
 pub(crate) const LOCAL_PATH_VALUE: &str = "<local-path>";
 

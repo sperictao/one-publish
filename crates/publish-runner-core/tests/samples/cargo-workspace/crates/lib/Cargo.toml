@@ -1,0 +1,8 @@
+[package]
+name = "cargo-ws-lib"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+name = "cargo_ws_lib"
+path = "src/lib.rs"

@@ -16,6 +16,19 @@ describe("handoffSnippet", () => {
     },
   };
 
+  it("Tauri 缺少已选定驱动的命令时明确提示，不猜测驱动", () => {
+    const snippet = buildShellHandoffSnippet({
+      spec: {
+        provider_id: "tauri",
+        project_path: "/repo/src-tauri/tauri.conf.json",
+        parameters: {},
+      },
+    });
+    expect(snippet).toContain("tauri: 未提供实际构建命令");
+    expect(snippet).not.toContain("cargo tauri");
+    expect(snippet).not.toContain("pnpm tauri");
+  });
+
   it("生成 shell 片段时保留项目路径上下文", () => {
     const snippet = buildShellHandoffSnippet({
       spec,

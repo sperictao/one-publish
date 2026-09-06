@@ -1,3 +1,4 @@
+import type { PublishSelectionRef } from "@/generated/tauri-contracts";
 import { useEffect, useMemo } from "react";
 
 import {
@@ -182,15 +183,13 @@ function countProfiles(profileGroups: readonly ProfileGroupBucket[]) {
 }
 
 function resolveSelectedConfigId(params: {
-  isCustomMode: boolean;
-  selectedPreset: string;
+  selection: PublishSelectionRef | null | undefined;
   pubxmlSet: ReadonlySet<string>;
 }) {
   return resolveSelectedPublishConfigKeyFromIdentity(
     resolvePublishSelectionIdentity({
       activeProviderId: "dotnet",
-      isCustomMode: params.isCustomMode,
-      selectedPreset: params.selectedPreset,
+      selection: params.selection,
     }),
     {
       hasProjectProfile: (profileName) => params.pubxmlSet.has(profileName),
@@ -254,8 +253,7 @@ function resolveSelectedRenderId(params: {
 
 export function usePublishConfigListModel(params: {
   selectedRepoScopeId: string | null;
-  selectedPreset: string;
-  isCustomMode: boolean;
+  selection: PublishSelectionRef | null | undefined;
   activeProfileName: string | null;
   profiles: readonly ConfigProfile[];
   projectPublishProfiles: readonly string[];
@@ -392,11 +390,10 @@ export function usePublishConfigListModel(params: {
   const selectedConfigId = useMemo(
     () =>
       resolveSelectedConfigId({
-        isCustomMode: params.isCustomMode,
-        selectedPreset: params.selectedPreset,
+        selection: params.selection,
         pubxmlSet,
       }),
-    [params.isCustomMode, params.selectedPreset, pubxmlSet]
+    [params.selection, pubxmlSet]
   );
   const allConfigIds = useMemo(
     () =>

@@ -1,14 +1,9 @@
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { toast } from "sonner";
-import { createDefaultDotnetPublishConfig } from "@/features/config/dotnetPublishConfig";
-import type {
-  ConfigParameters,
-  ConfigProfile,
-  PublishConfigStore,
-} from "@/lib/store/types";
+import { resolvePublishSource } from "@/features/publish/publishRuntime";
+import type { ConfigParameters, ConfigProfile } from "@/lib/store/types";
 import { toSpecValue, type ParameterValue } from "@/types/parameters";
-import type { DotnetPreset } from "@/features/config/dotnetPresets";
 import type { Language } from "@/hooks/useI18n";
 import type { TranslationMap, QuickCreateTemplateOption } from "./types";
 import {
@@ -38,31 +33,20 @@ const createDraftForProvider = (
   parameters: ConfigParameters = {}
 ): QuickCreateProfileDraft => ({ providerId, parameters });
 
-const toDotnetCustomConfigDraftFromPreset = (
-  preset: DotnetPreset
-): PublishConfigStore => ({
-  ...createDefaultDotnetPublishConfig(),
-  configuration: preset.config.configuration,
-  runtime: preset.config.runtime,
-  selfContained: preset.config.self_contained,
-});
+interface QuickCreateBackendTemplate {
+  id: string;
+  name: string;
+  description: string;
+}
 
 export interface UseQuickCreateProfileParams {
+  backendTemplates: QuickCreateBackendTemplate[];
+  projectBinding?: string | null;
   selectedRepoId: string | null;
   activeProviderId: string;
   profileT: TranslationMap;
-  presets: DotnetPreset[];
   profiles: ConfigProfile[];
   language: Language;
-  getPresetText: (
-    presetId: string,
-    fallbackName: string,
-    fallbackDescription: string
-  ) => {
-    name: string;
-    description: string;
-  };
-  buildProfileParameters: (config: PublishConfigStore) => ConfigParameters;
   refreshProfilesAfterMutation: (
     repoId: string,
     preFetchedProfiles?: ConfigProfile[]
@@ -99,7 +83,7 @@ export interface UseQuickCreateProfileReturn {
   quickCreateProfileSaving: boolean;
   isQuickCreateEditing: boolean;
   isQuickCreateViewing: boolean;
-  openQuickCreateProfileDialog: () => void;
+  openQuickCreateProfileDialog: (draft?: QuickCreateProfileDraft) => void;
   openQuickEditProfileDialog: (profile: ConfigProfile) => void;
   openQuickViewProfileDialog: (profile: ConfigProfile) => void;
   handleQuickCreateProfileOpenChange: (open: boolean) => void;
@@ -117,11 +101,10 @@ export function useQuickCreateProfile({
   selectedRepoId,
   activeProviderId,
   profileT,
-  presets,
   profiles,
   language,
-  getPresetText,
-  buildProfileParameters,
+  backendTemplates,
+  projectBinding = null,
   refreshProfilesAfterMutation,
   saveProfileToStore,
   updateProfile,
@@ -133,7 +116,9 @@ export function useQuickCreateProfile({
     QUICK_CREATE_CUSTOM_TEMPLATE_ID
   );
   const [quickCreateProfileDraft, setQuickCreateProfileDraft] =
-    useState<QuickCreateProfileDraft>(() => createDraftForProvider("dotnet"));
+    useState<QuickCreateProfileDraft>(() =>
+      createDraftForProvider(activeProviderId)
+    );
   const [quickCreateProfileGroup, setQuickCreateProfileGroup] = useState(
     QUICK_CREATE_PROFILE_GROUP_DEFAULT
   );
@@ -144,7 +129,29 @@ export function useQuickCreateProfile({
   const [editingProfileId, setEditingProfileId] = useState<string | null>(null);
   const [quickCreateViewing, setQuickCreateViewing] = useState(false);
 
+  const templateRequestRef = useRef(0);
+  const templateLoadingRef = useRef(false);
+  const [templateLoading, setTemplateLoading] = useState(false);
+  const invalidateTemplateRequest = useCallback(() => {
+    templateRequestRef.current += 1;
+    templateLoadingRef.current = false;
+    setTemplateLoading(false);
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      templateRequestRef.current += 1;
+      templateLoadingRef.current = false;
+    };
+  }, [selectedRepoId, activeProviderId, projectBinding]);
+
+  useEffect(() => {
+    setTemplateLoading(false);
+    setQuickCreateProfileOpen(false);
+  }, [selectedRepoId, activeProviderId, projectBinding]);
+
   const resetQuickCreateProfileState = useCallback(() => {
+    invalidateTemplateRequest();
     setQuickCreateProfileName("");
     setQuickCreateTemplateId(QUICK_CREATE_CUSTOM_TEMPLATE_ID);
     setQuickCreateProfileDraft(createDraftForProvider(activeProviderId));
@@ -153,12 +160,16 @@ export function useQuickCreateProfile({
     setQuickCreateProfileSaving(false);
     setEditingProfileId(null);
     setQuickCreateViewing(false);
-  }, [activeProviderId]);
+  }, [activeProviderId, invalidateTemplateRequest]);
 
-  const openQuickCreateProfileDialog = useCallback(() => {
-    resetQuickCreateProfileState();
-    setQuickCreateProfileOpen(true);
-  }, [resetQuickCreateProfileState]);
+  const openQuickCreateProfileDialog = useCallback(
+    (draft?: QuickCreateProfileDraft) => {
+      resetQuickCreateProfileState();
+      if (draft) setQuickCreateProfileDraft(draft);
+      setQuickCreateProfileOpen(true);
+    },
+    [resetQuickCreateProfileState]
+  );
 
   const handleQuickCreateProfileOpenChange = useCallback(
     (open: boolean) => {
@@ -172,6 +183,7 @@ export function useQuickCreateProfile({
 
   const loadProfileIntoDialog = useCallback(
     (profile: ConfigProfile, viewing: boolean) => {
+      invalidateTemplateRequest();
       const parameters = profile.parameters || {};
       const resolvedGroup = profile.profileGroup?.trim() || "";
 
@@ -189,7 +201,7 @@ export function useQuickCreateProfile({
       setQuickCreateViewing(viewing);
       setQuickCreateProfileOpen(true);
     },
-    []
+    [invalidateTemplateRequest]
   );
 
   const openQuickEditProfileDialog = useCallback(
@@ -216,21 +228,13 @@ export function useQuickCreateProfile({
         name: profileT.quickCreateTemplateCustom || "自定义配置（空表单）",
         description: "",
       },
-      ...presets.map((preset) => {
-        const presetText = getPresetText(
-          preset.id,
-          preset.name,
-          preset.description
-        );
-
-        return {
-          id: preset.id,
-          name: presetText.name,
-          description: presetText.description,
-        };
-      }),
+      ...backendTemplates.map((template) => ({
+        id: template.id,
+        name: template.name,
+        description: template.description,
+      })),
     ],
-    [getPresetText, presets, profileT.quickCreateTemplateCustom]
+    [backendTemplates, profileT.quickCreateTemplateCustom]
   );
 
   const quickCreateProfileGroupOptions = useMemo(() => {
@@ -252,44 +256,79 @@ export function useQuickCreateProfile({
   }, [profiles, language]);
 
   const applyQuickCreateTemplate = useCallback(
-    (templateId: string) => {
+    async (templateId: string) => {
+      invalidateTemplateRequest();
       setQuickCreateTemplateId(templateId);
-
-      const presetDraft = (config: PublishConfigStore) =>
-        createDraftForProvider("dotnet", buildProfileParameters(config));
-
+      const providerId = quickCreateProfileDraft.providerId;
       if (templateId === QUICK_CREATE_CUSTOM_TEMPLATE_ID) {
-        setQuickCreateProfileDraft(createDraftForProvider("dotnet"));
+        setQuickCreateProfileDraft(createDraftForProvider(providerId));
         return;
       }
+      if (!selectedRepoId || !quickCreateProfileOpen) return;
 
-      const matchedPreset = presets.find((preset) => preset.id === templateId);
-      if (!matchedPreset) {
+      const request = templateRequestRef.current;
+      templateLoadingRef.current = true;
+      setTemplateLoading(true);
+      try {
+        const resolved = await resolvePublishSource(selectedRepoId, {
+          kind: "template",
+          providerId,
+          templateId,
+          projectBinding,
+        });
+        if (request !== templateRequestRef.current) return;
+        if (resolved.blockedReason || resolved.diagnostics.length > 0) {
+          throw new Error(
+            resolved.blockedReason ||
+              resolved.diagnostics.map((item) => item.message).join("\n")
+          );
+        }
+        const { content } = resolved.draft;
+        if (
+          !content.parameters ||
+          typeof content.parameters !== "object" ||
+          Array.isArray(content.parameters)
+        ) {
+          throw new Error("模板参数必须是对象");
+        }
+        setQuickCreateProfileDraft(
+          createDraftForProvider(content.providerId, content.parameters)
+        );
+      } catch (error) {
+        const { extractInvokeErrorMessage } = await loadInvokeErrors();
+        if (request !== templateRequestRef.current) return;
         setQuickCreateTemplateId(QUICK_CREATE_CUSTOM_TEMPLATE_ID);
-        setQuickCreateProfileDraft(createDraftForProvider("dotnet"));
-        return;
+        toast.error(extractInvokeErrorMessage(error) || "加载模板失败");
+      } finally {
+        if (request === templateRequestRef.current) {
+          templateLoadingRef.current = false;
+          setTemplateLoading(false);
+        }
       }
-
-      setQuickCreateProfileDraft(
-        presetDraft(toDotnetCustomConfigDraftFromPreset(matchedPreset))
-      );
     },
-    [buildProfileParameters, presets]
+    [
+      invalidateTemplateRequest,
+      projectBinding,
+      quickCreateProfileDraft.providerId,
+      quickCreateProfileOpen,
+      selectedRepoId,
+    ]
   );
 
   const updateQuickCreateProfileParameter = useCallback(
     (key: string, value: ParameterValue) => {
+      invalidateTemplateRequest();
       setQuickCreateTemplateId(QUICK_CREATE_CUSTOM_TEMPLATE_ID);
       setQuickCreateProfileDraft((prev) => ({
         ...prev,
         parameters: { ...prev.parameters, [key]: toSpecValue(value) },
       }));
     },
-    []
+    [invalidateTemplateRequest]
   );
 
   const handleQuickCreateProfileSave = useCallback(async () => {
-    if (!selectedRepoId) {
+    if (!selectedRepoId || templateLoadingRef.current) {
       return;
     }
 
@@ -405,7 +444,7 @@ export function useQuickCreateProfile({
     setQuickCreateProfileGroup,
     quickCreateProfileCustomGroup,
     setQuickCreateProfileCustomGroup,
-    quickCreateProfileSaving,
+    quickCreateProfileSaving: quickCreateProfileSaving || templateLoading,
     isQuickCreateEditing: editingProfileId !== null,
     isQuickCreateViewing: quickCreateViewing,
     openQuickCreateProfileDialog,

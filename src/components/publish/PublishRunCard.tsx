@@ -16,7 +16,10 @@ import {
   Terminal,
   XCircle,
 } from "lucide-react";
-import type { PublishResult } from "@/features/publish/publishRuntime";
+import type {
+  PublishResult,
+  ReadyPublishRuntime,
+} from "@/features/publish/publishRuntime";
 import type {
   PreparedPublishRuntime,
   PublishRuntimeResult,
@@ -26,6 +29,8 @@ import {
   formatElapsed,
 } from "@/features/publish/useElapsedTimer";
 import { PublishLogView } from "@/components/publish/PublishLogView";
+import { ArtifactActions } from "@/components/publish/ArtifactActions";
+import type { ArtifactActionState } from "@/lib/artifact";
 import { openOutputDirectory } from "@/lib/store/api";
 import { SectionLabel } from "@/components/ui/section-label";
 import { cn } from "@/lib/utils";
@@ -51,10 +56,13 @@ export interface PublishRunCardProps {
   appT: Record<string, string | undefined>;
   publishActions: PublishRunCardActions | null;
   preparedRuntime?: PreparedPublishRuntime | null;
-  activeRuntime?: PreparedPublishRuntime | null;
+  activeRuntime?: ReadyPublishRuntime | null;
   runtimeResult?: PublishRuntimeResult | null;
   runtimePreparationError?: string | null;
   isRefreshing?: boolean;
+  artifactActionState?: ArtifactActionState;
+  onArtifactStateChange?: (state: ArtifactActionState) => void;
+  onOpenReleaseChecklist?: () => void;
 }
 
 type PublishVisualState =
@@ -71,6 +79,9 @@ export const PublishRunCard = memo(function PublishRunCard({
   appT,
   publishActions: currentPublishActions,
   isRefreshing = false,
+  artifactActionState,
+  onArtifactStateChange,
+  onOpenReleaseChecklist,
 }: PublishRunCardProps) {
   const [isOpeningOutputDir, setIsOpeningOutputDir] = useState(false);
   const [logExpanded, setLogExpanded] = useState(false);
@@ -343,7 +354,7 @@ export const PublishRunCard = memo(function PublishRunCard({
           </div>
         )}
 
-        {preparedRuntime ? (
+        {preparedRuntime?.status === "ready" ? (
           <section
             data-testid="publish-runtime-plan"
             className="min-w-0 rounded-sm border border-border bg-muted/20 px-3 py-3"
@@ -384,15 +395,17 @@ export const PublishRunCard = memo(function PublishRunCard({
                 </li>
               ))}
             </ol>
-            {preparedRuntime.blockedReason ? (
-              <div
-                role="alert"
-                className="mt-2 rounded-sm border border-destructive/20 bg-destructive/5 px-3 py-2 text-copy-14 text-destructive"
-              >
-                {preparedRuntime.blockedReason}
-              </div>
-            ) : null}
           </section>
+        ) : null}
+        {preparedRuntime?.status === "blocked" ? (
+          <div
+            role="alert"
+            className="rounded-sm border border-destructive/20 bg-destructive/5 px-3 py-2 text-copy-14 text-destructive"
+          >
+            {preparedRuntime.diagnostics.map((diagnostic) => (
+              <div key={diagnostic.code}>{diagnostic.message}</div>
+            ))}
+          </div>
         ) : null}
 
         {!preparedRuntime && runtimePreparationError ? (
@@ -406,7 +419,9 @@ export const PublishRunCard = memo(function PublishRunCard({
 
         {activeRuntime &&
         activeRuntime.configurationRevisionId !==
-          preparedRuntime?.configurationRevisionId ? (
+          (preparedRuntime?.status === "ready"
+            ? preparedRuntime.configurationRevisionId
+            : undefined) ? (
           <div className="rounded-sm border border-interactive/20 bg-interactive/5 px-3 py-2 text-label-12 text-interactive">
             {(appT.publishRuntimeActiveRevisionLabel || "正在执行配置版本") +
               ": " +
@@ -593,6 +608,26 @@ export const PublishRunCard = memo(function PublishRunCard({
               <ArrowUpRight className="size-4 flex-shrink-0 text-muted-foreground transition-colors duration-150 ease-geist group-hover:text-interactive" />
             </button>
           )}
+
+          {canOpenOutputDir && artifactActionState && onArtifactStateChange ? (
+            <ArtifactActions
+              outputDir={publishResult?.output_dir?.trim() || ""}
+              state={artifactActionState}
+              onStateChange={onArtifactStateChange}
+              disabled={isRefreshing || isRunning}
+            />
+          ) : null}
+
+          {canOpenOutputDir && onOpenReleaseChecklist ? (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={onOpenReleaseChecklist}
+              disabled={isRefreshing || isRunning}
+            >
+              {appT.releaseChecklist || "发布清单"}
+            </Button>
+          ) : null}
 
           {failureMessage ? (
             <div className="rounded-sm border border-destructive/20 bg-destructive/5 px-4 py-3 text-copy-14 text-destructive">

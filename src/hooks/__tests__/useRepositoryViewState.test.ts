@@ -17,7 +17,7 @@ vi.mock("@/lib/store/api", async () => {
 });
 
 import { useRepositoryViewState } from "@/features/repository/useRepositoryViewState";
-import { defaultPublishConfigStore, type Repository } from "@/lib/store/types";
+import type { Repository } from "@/lib/store/types";
 
 function createRepository(): Repository {
   return {
@@ -29,15 +29,15 @@ function createRepository(): Repository {
     isMain: true,
     providerId: "dotnet",
     publishConfig: {
-      selectedPreset: "release-fd",
-      isCustomMode: true,
-      customConfig: {
-        ...defaultPublishConfigStore,
-        configuration: "Release",
+      selection: {
+        kind: "draft" as const,
+        providerId: "dotnet",
+        projectBinding: null,
       },
       profiles: [],
       bindings: [],
       appliedBundles: [],
+      drafts: [],
     },
   };
 }
@@ -122,7 +122,6 @@ describe("useRepositoryViewState", () => {
           ...repository,
           publishConfig: {
             ...repository.publishConfig,
-            selectedPreset: "release-win-x64",
           },
         },
       ],

@@ -3,11 +3,14 @@
 //! 处理应用的全局快捷键功能
 
 use tauri::AppHandle;
+use tauri::Emitter;
 use tauri_plugin_global_shortcut::Error as ShortcutError;
 use tauri_plugin_global_shortcut::GlobalShortcutExt;
+use tauri_plugin_global_shortcut::ShortcutState;
 use ts_rs::TS;
 
-/// 注册全局快捷键
+/// 注册全局快捷键；按下时向前端广播对应事件
+/// （useShortcuts 监听 shortcut-refresh / shortcut-publish / shortcut-settings）。
 pub fn register_shortcuts(app: &AppHandle) -> Result<(), ShortcutError> {
     // Cmd/Ctrl + R - 刷新项目
     let shortcut_r = if cfg!(target_os = "macos") {
@@ -16,7 +19,13 @@ pub fn register_shortcuts(app: &AppHandle) -> Result<(), ShortcutError> {
         "Ctrl+R"
     };
 
-    app.global_shortcut().register(shortcut_r)?;
+    app.global_shortcut().on_shortcut(shortcut_r, |app, _, event| {
+        if event.state == ShortcutState::Pressed {
+            if let Err(err) = app.emit("shortcut-refresh", ()) {
+                log::warn!("发送 shortcut-refresh 失败: {}", err);
+            }
+        }
+    })?;
     log::debug!("已注册快捷键: {}", shortcut_r);
 
     // Cmd/Ctrl + P - 执行发布
@@ -26,7 +35,13 @@ pub fn register_shortcuts(app: &AppHandle) -> Result<(), ShortcutError> {
         "Ctrl+P"
     };
 
-    app.global_shortcut().register(shortcut_p)?;
+    app.global_shortcut().on_shortcut(shortcut_p, |app, _, event| {
+        if event.state == ShortcutState::Pressed {
+            if let Err(err) = app.emit("shortcut-publish", ()) {
+                log::warn!("发送 shortcut-publish 失败: {}", err);
+            }
+        }
+    })?;
     log::debug!("已注册快捷键: {}", shortcut_p);
 
     // Cmd/Ctrl + , - 打开设置
@@ -36,7 +51,14 @@ pub fn register_shortcuts(app: &AppHandle) -> Result<(), ShortcutError> {
         "Ctrl+,"
     };
 
-    app.global_shortcut().register(shortcut_comma)?;
+    app.global_shortcut()
+        .on_shortcut(shortcut_comma, |app, _, event| {
+            if event.state == ShortcutState::Pressed {
+                if let Err(err) = app.emit("shortcut-settings", ()) {
+                    log::warn!("发送 shortcut-settings 失败: {}", err);
+                }
+            }
+        })?;
     log::debug!("已注册快捷键: {}", shortcut_comma);
 
     log::info!(

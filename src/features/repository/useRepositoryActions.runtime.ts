@@ -108,7 +108,7 @@ async function resolveInitialRepositoryMetadata(
     providers
   ).then((shouldScan) =>
     shouldScan
-      ? scanProjectCandidates(path).catch(() => null)
+      ? scanProjectCandidates(path, providerId).catch(() => null)
       : Promise.resolve<ProjectScanCandidates | null>(null)
   );
   const [projectCandidates, branchResult] = await Promise.all([
@@ -384,7 +384,8 @@ export async function handleDetectRepoProviderRuntime(params: {
 }
 
 export async function handleScanProjectCandidatesRuntime(
-  path: string
+  path: string,
+  providerId?: string
 ): Promise<ProjectScanCandidates | null> {
   const nextPath = path.trim();
   if (!nextPath) {
@@ -392,7 +393,7 @@ export async function handleScanProjectCandidatesRuntime(
   }
 
   try {
-    return await scanProjectCandidates(nextPath);
+    return await scanProjectCandidates(nextPath, providerId);
   } catch {
     return null;
   }

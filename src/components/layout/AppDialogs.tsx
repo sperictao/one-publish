@@ -8,16 +8,14 @@ import type {
   ConfigProfile,
   ProviderManifest,
 } from "@/lib/store/types";
-import type { PackageResult, SignResult } from "@/lib/artifact";
 import type { AppUpdaterState } from "@/hooks/useAppUpdater";
-import type {
-  ProviderPublishSpec,
-  PublishResult,
-} from "@/features/publish/publishRuntime";
+import type { CommandImportResult } from "@/features/publish/publishRuntime";
 import type { ProfileManagementActions } from "@/features/config/useProfiles";
 import type { Language } from "@/hooks/useI18n";
 import type { QuickCreateProfileDraft } from "@/features/config/useQuickCreateProfile";
 import type { ParameterSchema, ParameterValue } from "@/types/parameters";
+import type { PackageResult, SignResult } from "@/lib/artifact";
+import type { PublishResult } from "@/features/publish/publishRuntime";
 
 const ShortcutsDialog = lazy(async () => {
   const mod = await import("@/components/layout/ShortcutsDialog");
@@ -117,7 +115,7 @@ export interface AppDialogsProps {
     providerId: string;
     provider: ProviderManifest | null;
     projectPath: string;
-    onImport: (spec: ProviderPublishSpec) => void;
+    onImport: (result: CommandImportResult) => void;
   };
   quickCreate: {
     open: boolean;
@@ -240,6 +238,7 @@ export function AppDialogs(props: AppDialogsProps) {
       props.commandImport.open ? (
         <Suspense fallback={null}>
           <CommandImportDialog
+            key={`${props.commandImport.providerId}:${props.commandImport.projectPath}`}
             open={props.commandImport.open}
             onOpenChange={props.commandImport.onOpenChange}
             providerId={props.commandImport.providerId}

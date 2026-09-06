@@ -50,7 +50,7 @@ export function useProjectScanner(params: { appT: TranslationMap }) {
         toast.error(appT.scanProjectFileNotFound || "未检测到项目文件", {
           description:
             appT.scanProjectFileNotFoundDesc ||
-            "未发现 .csproj/.fsproj/.vbproj 文件，请检查项目结构。",
+            "未发现当前 Provider 支持的项目文件，请检查项目结构和绑定设置。",
         });
         return;
       }

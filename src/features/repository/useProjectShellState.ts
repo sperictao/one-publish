@@ -9,7 +9,7 @@ import { isTauri } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 
 import { useProjectScanner } from "@/features/repository/useProjectScanner";
-import { resolvePreferredDotnetProjectInfo } from "@/lib/dotnetProjectInfo";
+import { resolvePreferredProjectInfo } from "@/lib/projectInfo";
 import type { ProjectInfo } from "@/lib/store/types";
 
 interface TranslationMap {
@@ -175,12 +175,12 @@ export function useProjectShellState(params: {
       }
 
       setIsProjectInfoRefreshing(true);
-      const info = await resolvePreferredDotnetProjectInfo({
+      const info = await resolvePreferredProjectInfo({
         repoPath: targetPath,
         projectFile: boundProjectFile,
         resolveProjectInfo: (projectFile) =>
           resolveProjectInfoRequest(projectFile, {
-            silentFailure: true,
+            silentFailure: options?.silentFailure,
           }),
         scanProject: (repoPath) =>
           scanProjectRequest(repoPath, {

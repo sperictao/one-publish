@@ -2,6 +2,7 @@ import { invoke } from "@tauri-apps/api/core";
 
 import { normalizeEnvironmentProviderIds } from "@/features/environment/environment";
 import type { ParameterSchema } from "@/types/parameters";
+import type { PublishEditStateUpdate } from "@/generated/tauri-contracts";
 import type {
   AppState,
   ConfigExport,
@@ -31,7 +32,6 @@ import type {
   ProviderCatalogEntry as TauriProviderCatalogEntry,
   PublishAdapterCatalog,
   PublishComposition,
-  PublishConfigStore,
   Repository as TauriRepository,
   RepositoryBranchConnectivityResult,
   RepositoryBranchScanResult,
@@ -87,13 +87,14 @@ export async function updateUIState(params: {
   return normalizeAppState(state);
 }
 
-export async function updatePublishState(params: {
+export async function updatePublishEditState(params: {
   repoId: string;
-  selectedPreset?: string;
-  isCustomMode?: boolean;
-  customConfig?: PublishConfigStore;
+  update: PublishEditStateUpdate;
 }): Promise<AppState> {
-  const state = await invoke<TauriAppState>("update_publish_state", params);
+  const state = await invoke<TauriAppState>(
+    "update_publish_edit_state",
+    params
+  );
   return normalizeAppState(state);
 }
 
@@ -176,6 +177,7 @@ export async function listProviders(): Promise<ProviderManifest[]> {
     requiresProjectBinding: entry.requires_project_binding,
     projectPathKind: entry.project_path_kind,
     supportsCommandImport: entry.supports_command_import,
+    templates: entry.templates,
   }));
 }
 
@@ -211,12 +213,14 @@ export async function scanProject(startPath?: string): Promise<ProjectInfo> {
 }
 
 export async function scanProjectCandidates(
-  startPath?: string
+  startPath?: string,
+  providerId?: string
 ): Promise<ProjectScanCandidates> {
   const result = await invoke<TauriProjectScanCandidates>(
     "scan_project_candidates",
     {
       startPath,
+      providerId,
     }
   );
   return {

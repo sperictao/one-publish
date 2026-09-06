@@ -1,8 +1,11 @@
 import type { TranslationMap } from "@/features/publish/publishTransaction";
 import type { EnvironmentCheckSnapshot } from "@/features/environment/environment";
-import type { DotnetPreset } from "@/features/config/dotnetPresets";
 import { type ExecutionRecord } from "@/lib/store/types";
 import { usePublishLogStream } from "@/features/publish/usePublishLogStream";
+import type {
+  PublishSelectionRef,
+  ScopedPublishDraft,
+} from "@/generated/tauri-contracts";
 import type { PublishConfigStore, ProjectInfo } from "@/lib/store/types";
 import type { ParameterValue } from "@/types/parameters";
 
@@ -14,16 +17,22 @@ interface UsePublishRunnerParams {
   appT: TranslationMap;
   publishT: TranslationMap;
   selectedRepoId: string | null;
-  selectedRepo: { path: string } | null;
+  selectedRepo: {
+    path: string;
+    providerId?: string | null;
+    publishConfig: {
+      selection?: PublishSelectionRef | null;
+      drafts: ScopedPublishDraft[];
+      profiles: Array<{ id: string; revisionId?: string | null }>;
+    };
+  } | null;
   activeProviderId: string;
   activeProviderUsesProjectFile: boolean;
   activeProviderParameters: Record<string, ParameterValue>;
-  selectedPreset: string;
-  isCustomMode: boolean;
   customConfig: PublishConfigStore;
+  selectionKey: string;
   defaultOutputDir?: string;
   projectInfo: ProjectInfo | null;
-  presets: DotnetPreset[];
   specVersion: number;
   pushRecentConfig: (key: string, repoId?: string | null) => void;
   openEnvironmentDialog: (
@@ -32,7 +41,6 @@ interface UsePublishRunnerParams {
   ) => void;
   setEnvironmentLastCheck: (snapshot: EnvironmentCheckSnapshot | null) => void;
   savePublishRecord: (record: ExecutionRecord) => Promise<void>;
-  configurationId?: string | null;
   configurationRevisionId?: string | null;
   currentConfigurationBlockedReason?: string | null;
 }
@@ -45,18 +53,15 @@ export function usePublishRunner({
   activeProviderId,
   activeProviderUsesProjectFile,
   activeProviderParameters,
-  selectedPreset,
-  isCustomMode,
   customConfig,
+  selectionKey,
   defaultOutputDir,
   projectInfo,
-  presets,
   specVersion,
   pushRecentConfig,
   openEnvironmentDialog,
   setEnvironmentLastCheck,
   savePublishRecord,
-  configurationId,
   configurationRevisionId,
   currentConfigurationBlockedReason,
 }: UsePublishRunnerParams) {
@@ -78,16 +83,13 @@ export function usePublishRunner({
     activeProviderId,
     activeProviderUsesProjectFile,
     activeProviderParameters,
-    selectedPreset,
-    isCustomMode,
     customConfig,
+    selectionKey,
     defaultOutputDir,
     projectInfo,
-    presets,
     specVersion,
     selectedRepoId,
     selectedRepo,
-    configurationId,
     configurationRevisionId,
     appT,
     outputLog,
@@ -111,7 +113,7 @@ export function usePublishRunner({
     getOutputLogSnapshot,
     replaceCapturedOutputLog,
     validate,
-    currentConfigurationId: configurationId,
+    defaultOutputDir,
     currentConfigurationRevisionId: configurationRevisionId,
     currentConfigurationBlockedReason,
   });

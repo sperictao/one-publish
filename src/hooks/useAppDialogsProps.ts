@@ -2,11 +2,7 @@ import type { AppDialogsProps } from "@/components/layout/AppDialogs";
 import type { AppUpdaterState } from "@/hooks/useAppUpdater";
 import type { EnvironmentStatus } from "@/features/environment/useEnvironmentStatus";
 import type { Language } from "@/hooks/useI18n";
-import type {
-  ProviderPublishSpec,
-  PublishResult,
-} from "@/features/publish/publishRuntime";
-import type { PackageResult, SignResult } from "@/lib/artifact";
+import type { CommandImportResult } from "@/features/publish/publishRuntime";
 import type {
   ConfigParameters,
   ConfigProfile,
@@ -18,6 +14,8 @@ import type {
 } from "@/features/environment/environment";
 import type { QuickCreateProfileDraft } from "@/features/config/useQuickCreateProfile";
 import type { ParameterSchema, ParameterValue } from "@/types/parameters";
+import type { PackageResult, SignResult } from "@/lib/artifact";
+import type { PublishResult } from "@/features/publish/publishRuntime";
 import type { ProfileManagementActions } from "@/features/config/useProfiles";
 
 interface QuickCreateTemplateOption {
@@ -55,10 +53,6 @@ export interface UseAppDialogsPropsParams {
   currentProviderEnvironmentResult: EnvironmentCheckResult | null;
   availableProviders: ProviderManifest[];
   activeProvider: ProviderManifest | null;
-  openEnvironmentDialog: (
-    initialCheck?: EnvironmentCheckSnapshot | null,
-    providerIds?: string[]
-  ) => void;
   activeProviderId: string;
   updaterState: AppUpdaterState;
   checkForUpdates: () => Promise<void>;
@@ -69,12 +63,16 @@ export interface UseAppDialogsPropsParams {
   publishResult: PublishResult | null;
   packageResult: PackageResult | null;
   signResult: SignResult | null;
+  openEnvironmentDialog: (
+    initialCheck?: EnvironmentCheckSnapshot | null,
+    providerIds?: string[]
+  ) => void;
   handleOpenSettings: () => void;
   selectedRepoExists: boolean;
   commandImportProjectPath: string;
   commandImportOpen: boolean;
   setCommandImportOpen: (open: boolean) => void;
-  handleCommandImport: (spec: ProviderPublishSpec) => void;
+  handleCommandImport: (result: CommandImportResult) => void;
   quickCreateProfileOpen: boolean;
   quickCreateTemplateId: string;
   quickCreateTemplateOptions: QuickCreateTemplateOption[];
@@ -166,7 +164,9 @@ export function useAppDialogsProps(
       onOpenSettings: params.handleOpenSettings,
     },
     commandImport: {
-      enabled: params.selectedRepoExists,
+      enabled:
+        params.selectedRepoExists &&
+        Boolean(params.activeProvider?.supportsCommandImport),
       open: params.commandImportOpen,
       onOpenChange: params.setCommandImportOpen,
       providerId: params.activeProviderId,

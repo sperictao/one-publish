@@ -25,19 +25,12 @@ export interface EnvironmentProviderOption {
 export function resolveProviderIdCandidate(
   providerId: string | null | undefined,
   providers: ProviderManifest[],
-  fallbackProviderId = "dotnet"
+  fallbackProviderId = ""
 ): string {
-  const normalizedProviderId = providerId?.trim() || "";
-  if (normalizedProviderId) {
-    const matchedProvider = providers.find(
-      (provider) => provider.id === normalizedProviderId
-    );
-    if (matchedProvider) {
-      return matchedProvider.id;
-    }
-  }
-
-  return providers[0]?.id || fallbackProviderId;
+  // 显式选择不能被 catalog 顺序替换；未知 Provider 交给运行时报告错误。
+  return (
+    providerId?.trim() || fallbackProviderId.trim() || providers[0]?.id || ""
+  );
 }
 
 export function resolveProviderLabel(

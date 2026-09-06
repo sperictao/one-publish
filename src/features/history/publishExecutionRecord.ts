@@ -55,10 +55,17 @@ function toStoredSpecValue(spec: ProviderPublishSpec): JsonValue {
 }
 
 export function createPublishExecutionRecord(params: {
-  spec: ProviderPublishSpec;
+  /** prepare ready 产出的 resolvedSpec；准备失败/被阻断的早期失败为 null。 */
+  spec: ProviderPublishSpec | null;
+  /** spec 缺失时的 provider 回退（来源自带的 providerId）。 */
+  providerId?: string;
   repoId: string | null;
   configurationId?: string | null;
   configurationRevisionId?: string | null;
+  /** 关联的运行时 Attempt；start 之前失败的记录为空。 */
+  attemptId?: string;
+  /** prepare ready 携带的版本化恢复快照（§3.3）。 */
+  recoverySnapshot?: JsonValue;
   startedAt: string;
   finishedAt: string;
   result: PublishResult;
@@ -82,8 +89,8 @@ export function createPublishExecutionRecord(params: {
     repoId: params.repoId,
     configurationId: params.configurationId ?? null,
     configurationRevisionId: params.configurationRevisionId ?? null,
-    providerId: params.spec.provider_id,
-    projectPath: params.spec.project_path,
+    providerId: params.spec?.provider_id ?? params.providerId ?? "",
+    projectPath: params.spec?.project_path ?? "",
     startedAt: params.startedAt,
     finishedAt: params.finishedAt,
     success: params.result.success,
@@ -94,7 +101,9 @@ export function createPublishExecutionRecord(params: {
     snapshotPath: null,
     failureSignature,
     outputExcerpt,
-    spec: toStoredSpecValue(params.spec),
+    spec: params.spec ? toStoredSpecValue(params.spec) : null,
+    attemptId: params.attemptId,
+    recoverySnapshot: params.recoverySnapshot,
     fileCount: params.result.file_count,
     warnings: params.result.warnings ?? null,
   };

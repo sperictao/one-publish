@@ -302,15 +302,22 @@ describe("PublishRunCard", () => {
     expect(screen.queryByText(/个警告/)).not.toBeInTheDocument();
   });
 
-  it("展示选中配置对应的本地计划摘要与阻塞原因", () => {
+  it("展示选中配置对应的本地计划摘要", () => {
     render(
       <PublishRunCard
         outputLog=""
         publishResult={null}
         appT={{ outputLogTitle: "执行发布", noOutput: "无输出" }}
         preparedRuntime={{
+          status: "ready",
           configurationId: "configuration-A",
           configurationRevisionId: "revision-A",
+          resolvedSpec: {
+            version: 1,
+            provider_id: "dotnet",
+            project_path: "/repo/App.csproj",
+            parameters: {},
+          },
           command: {
             program: "dotnet",
             args: ["publish"],
@@ -344,13 +351,48 @@ describe("PublishRunCard", () => {
               },
             ],
           },
-          blockedReason: "publish output access is denied",
+          outputPreflight: {
+            outputDir: "/repo/publish-output",
+            accessStatus: "granted",
+          },
+          recoverySnapshot: {
+            version: 1,
+            content: {
+              providerId: "dotnet",
+              contractVersion: 1,
+              providerVersion: "1",
+              settingsVersion: 1,
+              parameters: {},
+              composition: {
+                executionBackend: {
+                  adapterId: "local-execution",
+                  settingsVersion: 1,
+                  settings: {},
+                  credentials: {},
+                },
+                artifactStore: {
+                  adapterId: "temporary-artifact-store",
+                  settingsVersion: 1,
+                  settings: {},
+                  credentials: {},
+                },
+                artifactProcessors: [],
+                deliveryRoutes: [],
+              },
+            },
+            configurationId: "configuration-A",
+            configurationRevisionId: "revision-A",
+            origin: { kind: "new" },
+            runInputs: { defaultOutputDir: "" },
+            executedParameters: {},
+            resolvedOutputDirectory: "/repo/publish-output",
+          },
           runtimeToken: "",
         }}
         publishActions={{
           isPublishing: false,
           isCancellingPublish: false,
-          startDisabled: true,
+          startDisabled: false,
           onStartPublish: vi.fn(),
           onCancelPublish: vi.fn(),
         }}
@@ -363,10 +405,44 @@ describe("PublishRunCard", () => {
     expect(plan).toHaveTextContent("local-execution");
     expect(plan).toHaveTextContent("build");
     expect(plan).toHaveTextContent("persist_manifest");
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
+
+  it("prepare 被阻断时展示诊断且不展示计划摘要", () => {
+    render(
+      <PublishRunCard
+        outputLog=""
+        publishResult={null}
+        appT={{ outputLogTitle: "执行发布", noOutput: "无输出" }}
+        preparedRuntime={{
+          status: "blocked",
+          diagnostics: [
+            {
+              code: "publish_output_access_denied",
+              message: "publish output access is denied",
+            },
+          ],
+          outputPreflight: {
+            outputDir: "/repo/publish-output",
+            accessStatus: "denied",
+          },
+        }}
+        publishActions={{
+          isPublishing: false,
+          isCancellingPublish: false,
+          startDisabled: true,
+          onStartPublish: vi.fn(),
+          onCancelPublish: vi.fn(),
+        }}
+      />
+    );
+
     expect(screen.getByRole("alert")).toHaveTextContent(
       "publish output access is denied"
     );
-    expect(screen.getByTestId("publish-execute-btn")).toBeDisabled();
+    expect(
+      screen.queryByTestId("publish-runtime-plan")
+    ).not.toBeInTheDocument();
   });
 
   it("选中 Tauri 配置时右侧用通用计划展示 Provider 阶段与驱动命令", () => {
@@ -376,8 +452,15 @@ describe("PublishRunCard", () => {
         publishResult={null}
         appT={{ outputLogTitle: "执行发布", noOutput: "无输出" }}
         preparedRuntime={{
+          status: "ready",
           configurationId: "configuration-tauri",
           configurationRevisionId: "revision-tauri",
+          resolvedSpec: {
+            version: 1,
+            provider_id: "tauri",
+            project_path: "/repo",
+            parameters: {},
+          },
           command: {
             program: "pnpm",
             args: ["tauri", "build"],
@@ -411,7 +494,42 @@ describe("PublishRunCard", () => {
               },
             ],
           },
-          blockedReason: null,
+          outputPreflight: {
+            outputDir: "/repo/publish-output",
+            accessStatus: "granted",
+          },
+          recoverySnapshot: {
+            version: 1,
+            content: {
+              providerId: "tauri",
+              contractVersion: 1,
+              providerVersion: "1",
+              settingsVersion: 1,
+              parameters: {},
+              composition: {
+                executionBackend: {
+                  adapterId: "local-execution",
+                  settingsVersion: 1,
+                  settings: {},
+                  credentials: {},
+                },
+                artifactStore: {
+                  adapterId: "temporary-artifact-store",
+                  settingsVersion: 1,
+                  settings: {},
+                  credentials: {},
+                },
+                artifactProcessors: [],
+                deliveryRoutes: [],
+              },
+            },
+            configurationId: "configuration-tauri",
+            configurationRevisionId: "revision-tauri",
+            origin: { kind: "new" },
+            runInputs: { defaultOutputDir: "" },
+            executedParameters: {},
+            resolvedOutputDirectory: "/repo/publish-output",
+          },
           runtimeToken: "runtime-token-tauri",
         }}
         publishActions={{
@@ -440,25 +558,14 @@ describe("PublishRunCard", () => {
         publishResult={null}
         appT={{ outputLogTitle: "执行发布", noOutput: "无输出" }}
         preparedRuntime={{
-          configurationId: "configuration-tauri",
-          configurationRevisionId: "revision-tauri",
-          command: {
-            program: "",
-            args: [],
-            working_dir: null,
-            display_command: "",
-            env: [],
-          },
-          plan: {
-            version: 0,
-            digest: "",
-            snapshotDigest: "",
-            executionBackend: "",
-            nodes: [],
-          },
-          blockedReason:
-            "tauri_build_driver_conflict: conflicting Tauri package-manager lockfiles: pnpm, yarn",
-          runtimeToken: "",
+          status: "blocked",
+          diagnostics: [
+            {
+              code: "tauri_build_driver_conflict",
+              message:
+                "tauri_build_driver_conflict: conflicting Tauri package-manager lockfiles: pnpm, yarn",
+            },
+          ],
         }}
         publishActions={{
           isPublishing: false,

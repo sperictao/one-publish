@@ -58,7 +58,8 @@ interface EditRepositoryDialogProps {
     options?: { silentSuccess?: boolean }
   ) => Promise<string | null>;
   onScanProjectCandidates: (
-    path: string
+    path: string,
+    providerId?: string
   ) => Promise<ProjectScanCandidates | null>;
   onRefreshBranches: (
     path: string,
@@ -268,7 +269,10 @@ function EditRepositoryDialogContent({
       setIsProjectScanPending(true);
 
       try {
-        const candidates = await onScanProjectCandidates(nextPath);
+        const candidates = await onScanProjectCandidates(
+          nextPath,
+          editProviderId === NO_PROVIDER_VALUE ? undefined : editProviderId
+        );
         if (projectScanRequestIdRef.current !== requestId) {
           return candidates;
         }
@@ -294,7 +298,7 @@ function EditRepositoryDialogContent({
         }
       }
     },
-    [onScanProjectCandidates]
+    [editProviderId, onScanProjectCandidates]
   );
 
   useEffect(() => {

@@ -8,6 +8,11 @@ import type {
 
 export type { PackageFormat, PackageResult, SignMethod, SignResult };
 
+export interface ArtifactActionState {
+  packageResult: PackageResult | null;
+  signResult: SignResult | null;
+}
+
 export async function packageArtifact(params: {
   inputDir: string;
   outputPath: string;

@@ -47,24 +47,23 @@ pub(crate) async fn validate_repository_project_binding(repo: &Repository) -> Re
         return Ok(());
     }
 
-    let candidates = match crate::commands::scan_project_candidates_from_path(Path::new(repo_path))
-    {
-        Ok(candidates) => candidates,
-        Err(error) => {
-            log::warn!(
-                "仓库项目绑定校验跳过，无法扫描候选项目。路径: {}, 错误: {}",
-                repo_path,
-                error
-            );
-            return Ok(());
-        }
-    };
-
-    if candidates.project_files.len() <= 1 {
+    // 仓库是源码容器，可以先添加再绑定；只有已声明的绑定必须有效。
+    let bound_project_file = repo.project_file.as_deref().map(str::trim).unwrap_or("");
+    if bound_project_file.is_empty() {
         return Ok(());
     }
-
-    let bound_project_file = repo.project_file.as_deref().map(str::trim).unwrap_or("");
+    let candidates = crate::commands::scan_provider_project_candidates_from_path(
+        Path::new(repo_path),
+        repo.provider_id.as_deref(),
+    )?;
+    // 兼容旧仓库中保存的解决方案路径，它由前端继续解析为项目。
+    if candidates
+        .solution_files
+        .iter()
+        .any(|path| path == bound_project_file)
+    {
+        return Ok(());
+    }
     if candidates
         .project_files
         .iter()
@@ -74,8 +73,8 @@ pub(crate) async fn validate_repository_project_binding(repo: &Repository) -> Re
     }
 
     Err(AppError::repository_with_code(
-        "multiple project files found; bind an explicit project file first",
-        "multiple_project_files_found",
+        "bound project file was not found for this provider; choose a project candidate again",
+        "project_binding_not_found",
     ))
 }
 

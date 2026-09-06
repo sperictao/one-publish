@@ -1,6 +1,6 @@
 import { create } from "zustand";
 
-import type { ArtifactActionState } from "@/components/publish/ArtifactActions";
+import type { ArtifactActionState } from "@/lib/artifact";
 import type {
   ProviderPublishSpec,
   PublishResult,

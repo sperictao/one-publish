@@ -40,6 +40,7 @@ impl BuiltInProvider {
                 requires_project_binding: true,
                 project_path_kind: ProviderProjectPathKind::ProjectFile,
                 supports_command_import: false,
+                templates: Vec::new(),
             },
             ProviderRepositoryDiscovery {
                 provider_id: "tauri".to_string(),

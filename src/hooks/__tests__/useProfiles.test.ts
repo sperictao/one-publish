@@ -1,3 +1,5 @@
+import type { PublishSelectionRef } from "@/generated/tauri-contracts";
+import type { Repository } from "@/lib/store/types";
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -43,9 +45,32 @@ interface UseProfilesTestProps {
 
 const defaultUseProfilesProps: UseProfilesTestProps = {
   selectedRepoId: "repo-a",
-  selectedPreset: "release-fd",
-  isCustomMode: false,
 };
+
+function createSelectedRepo(configurationId: string | null): Repository {
+  return {
+    id: "repo-a",
+    name: "repo-a",
+    path: "/repo-a",
+    currentBranch: "main",
+    branches: [],
+    isMain: false,
+    providerId: "dotnet",
+    publishConfig: {
+      profiles: [],
+      bindings: [],
+      appliedBundles: [],
+      drafts: [],
+      selection:
+        configurationId === null
+          ? undefined
+          : ({
+              kind: "revision" as const,
+              configurationId,
+            } as PublishSelectionRef),
+    },
+  };
+}
 
 function createProfile(name: string): ConfigProfile {
   return {
@@ -97,20 +122,10 @@ describe("useProfiles", () => {
           activeProviderId: "dotnet",
           providerSchemas: {},
           applyProfileProvider: vi.fn(),
-          setIsCustomMode: vi.fn(),
-          isCustomMode: false,
-          selectedPreset: "release-fd",
-          setSelectedPreset: vi.fn(),
+          updatePublishEditState: vi.fn(),
+          selectedRepo: null,
           setProviderParameters: vi.fn(),
-          applyDotnetCustomConfig: vi.fn(),
           replaceScopedConfigKey: vi.fn(),
-          presets: [],
-          defaultPresetId: "release-fd",
-          getPresetText: (_presetId, fallbackName, fallbackDescription) => ({
-            name: fallbackName,
-            description: fallbackDescription,
-          }),
-          buildProfileParameters: () => ({}),
         }),
       {
         initialProps: "repo-a",
@@ -157,20 +172,10 @@ describe("useProfiles", () => {
           activeProviderId: "dotnet",
           providerSchemas: {},
           applyProfileProvider: vi.fn(),
-          setIsCustomMode: vi.fn(),
-          isCustomMode: false,
-          selectedPreset: "release-fd",
-          setSelectedPreset: vi.fn(),
+          updatePublishEditState: vi.fn(),
+          selectedRepo: null,
           setProviderParameters: vi.fn(),
-          applyDotnetCustomConfig: vi.fn(),
           replaceScopedConfigKey: vi.fn(),
-          presets: [],
-          defaultPresetId: "release-fd",
-          getPresetText: (_presetId, fallbackName, fallbackDescription) => ({
-            name: fallbackName,
-            description: fallbackDescription,
-          }),
-          buildProfileParameters: () => ({}),
         }),
       {
         initialProps: "repo-a",
@@ -220,20 +225,10 @@ describe("useProfiles", () => {
           activeProviderId: "dotnet",
           providerSchemas: {},
           applyProfileProvider: vi.fn(),
-          setIsCustomMode: vi.fn(),
-          isCustomMode: false,
-          selectedPreset: "release-fd",
-          setSelectedPreset: vi.fn(),
+          updatePublishEditState: vi.fn(),
+          selectedRepo: null,
           setProviderParameters: vi.fn(),
-          applyDotnetCustomConfig: vi.fn(),
           replaceScopedConfigKey: vi.fn(),
-          presets: [],
-          defaultPresetId: "release-fd",
-          getPresetText: (_presetId, fallbackName, fallbackDescription) => ({
-            name: fallbackName,
-            description: fallbackDescription,
-          }),
-          buildProfileParameters: () => ({}),
         }),
       {
         initialProps: "repo-a",
@@ -300,20 +295,10 @@ describe("useProfiles", () => {
           activeProviderId: "dotnet",
           providerSchemas: {},
           applyProfileProvider: vi.fn(),
-          setIsCustomMode: vi.fn(),
-          isCustomMode: false,
-          selectedPreset: "release-fd",
-          setSelectedPreset: vi.fn(),
+          updatePublishEditState: vi.fn(),
+          selectedRepo: null,
           setProviderParameters: vi.fn(),
-          applyDotnetCustomConfig: vi.fn(),
           replaceScopedConfigKey: vi.fn(),
-          presets: [],
-          defaultPresetId: "release-fd",
-          getPresetText: (_presetId, fallbackName, fallbackDescription) => ({
-            name: fallbackName,
-            description: fallbackDescription,
-          }),
-          buildProfileParameters: () => ({}),
         }),
       {
         initialProps: "repo-a",
@@ -381,29 +366,17 @@ describe("useProfiles", () => {
           profileT: {},
           language: "zh",
           selectedRepoId: props.selectedRepoId,
-          selectedPreset: props.selectedPreset ?? "release-fd",
           activeProviderId: "dotnet",
           providerSchemas: {},
           applyProfileProvider: vi.fn(),
-          setIsCustomMode: vi.fn(),
-          isCustomMode: props.isCustomMode ?? false,
-          setSelectedPreset: vi.fn(),
+          updatePublishEditState: vi.fn(),
+          selectedRepo: createSelectedRepo("alpha"),
           setProviderParameters: vi.fn(),
-          applyDotnetCustomConfig: vi.fn(),
           replaceScopedConfigKey: vi.fn(),
-          presets: [],
-          defaultPresetId: "release-fd",
-          getPresetText: (_presetId, fallbackName, fallbackDescription) => ({
-            name: fallbackName,
-            description: fallbackDescription,
-          }),
-          buildProfileParameters: () => ({}),
         }),
       {
         initialProps: {
           selectedRepoId: "repo-a",
-          selectedPreset: "userprofile:alpha",
-          isCustomMode: true,
         },
       }
     );
@@ -422,8 +395,6 @@ describe("useProfiles", () => {
     rerender({
       ...defaultUseProfilesProps,
       selectedRepoId: "repo-b",
-      selectedPreset: "release-fd",
-      isCustomMode: false,
     });
 
     await act(async () => {
@@ -439,8 +410,6 @@ describe("useProfiles", () => {
 
     rerender({
       selectedRepoId: "repo-a",
-      selectedPreset: "userprofile:alpha",
-      isCustomMode: true,
     });
 
     expect(result.current.profiles.map((profile) => profile.name)).toEqual([
@@ -463,41 +432,31 @@ describe("useProfiles", () => {
           profileT: {},
           language: "zh",
           selectedRepoId: props.selectedRepoId,
-          selectedPreset: props.selectedPreset ?? "release-fd",
           activeProviderId: "dotnet",
           providerSchemas: {},
           applyProfileProvider: vi.fn(),
-          setIsCustomMode: vi.fn(),
-          isCustomMode: props.isCustomMode ?? false,
-          setSelectedPreset: vi.fn(),
+          updatePublishEditState: vi.fn(),
+          selectedRepo: null,
           setProviderParameters: vi.fn(),
-          applyDotnetCustomConfig: vi.fn(),
           replaceScopedConfigKey: vi.fn(),
-          presets: [],
-          defaultPresetId: "release-fd",
-          getPresetText: (_presetId, fallbackName, fallbackDescription) => ({
-            name: fallbackName,
-            description: fallbackDescription,
-          }),
-          buildProfileParameters: () => ({}),
         }),
       {
         initialProps: {
           selectedRepoId: "repo-a",
-          selectedPreset: "userprofile:alpha",
-          isCustomMode: true,
         },
       }
     );
 
+    // 统一协议：仓库无 selection（草稿态）不继承任何 userprofile 选中名。
     await waitFor(() => {
-      expect(result.current.activeProfileName).toBe("alpha");
+      expect(result.current.profiles.map((profile) => profile.name)).toEqual([
+        "alpha",
+      ]);
     });
+    expect(result.current.activeProfileName).toBeNull();
 
     rerender({
       selectedRepoId: "repo-a",
-      selectedPreset: "release-fd",
-      isCustomMode: true,
     });
 
     expect(result.current.activeProfileName).toBeNull();
@@ -521,20 +480,10 @@ describe("useProfiles", () => {
         activeProviderId: "dotnet",
         providerSchemas: {},
         applyProfileProvider: vi.fn(),
-        setIsCustomMode: vi.fn(),
-        isCustomMode: false,
-        selectedPreset: "release-fd",
-        setSelectedPreset: vi.fn(),
+        updatePublishEditState: vi.fn(),
+        selectedRepo: null,
         setProviderParameters: vi.fn(),
-        applyDotnetCustomConfig: vi.fn(),
         replaceScopedConfigKey: vi.fn(),
-        presets: [],
-        defaultPresetId: "release-fd",
-        getPresetText: (_presetId, fallbackName, fallbackDescription) => ({
-          name: fallbackName,
-          description: fallbackDescription,
-        }),
-        buildProfileParameters: () => ({}),
       })
     );
 
@@ -579,7 +528,6 @@ describe("useProfiles", () => {
     mocks.updateProfile.mockResolvedValue({
       repositories: [{ id: "repo-1", publishConfig: { profiles: [renamed] } }],
     });
-    const setSelectedPreset = vi.fn();
     const replaceScopedConfigKey = vi.fn();
 
     const { result } = renderHook(() =>
@@ -591,20 +539,10 @@ describe("useProfiles", () => {
         activeProviderId: "dotnet",
         providerSchemas: {},
         applyProfileProvider: vi.fn(),
-        setIsCustomMode: vi.fn(),
-        isCustomMode: true,
-        selectedPreset: "userprofile:profile-42",
-        setSelectedPreset,
+        updatePublishEditState: vi.fn(),
+        selectedRepo: createSelectedRepo("profile-42"),
         setProviderParameters: vi.fn(),
-        applyDotnetCustomConfig: vi.fn(),
         replaceScopedConfigKey,
-        presets: [],
-        defaultPresetId: "release-fd",
-        getPresetText: (_presetId, fallbackName, fallbackDescription) => ({
-          name: fallbackName,
-          description: fallbackDescription,
-        }),
-        buildProfileParameters: () => ({ configuration: "Release" }),
       })
     );
 
@@ -625,7 +563,7 @@ describe("useProfiles", () => {
         name: "Renamed",
       })
     );
-    expect(setSelectedPreset).toHaveBeenCalledWith("userprofile:profile-42");
+    // 统一协议：重命名不回写选择（selection 已是稳定配置 ID）。
     expect(replaceScopedConfigKey).not.toHaveBeenCalled();
     expect(result.current.activeProfileName).toBe("Renamed");
   });
@@ -639,8 +577,7 @@ describe("useProfiles", () => {
       parameters: { release: true },
     };
     mocks.getProfiles.mockResolvedValue([cargoProfile]);
-    const setIsCustomMode = vi.fn();
-    const setSelectedPreset = vi.fn();
+    const updatePublishEditState = vi.fn();
     const setProviderParameters = vi.fn();
 
     const { result } = renderHook(() =>
@@ -652,20 +589,10 @@ describe("useProfiles", () => {
         activeProviderId: "cargo",
         providerSchemas: {},
         applyProfileProvider: vi.fn(),
-        setIsCustomMode,
-        isCustomMode: false,
-        selectedPreset: "release",
-        setSelectedPreset,
+        updatePublishEditState,
+        selectedRepo: null,
         setProviderParameters,
-        applyDotnetCustomConfig: vi.fn(),
         replaceScopedConfigKey: vi.fn(),
-        presets: [],
-        defaultPresetId: "release-fd",
-        getPresetText: (_presetId, fallbackName, fallbackDescription) => ({
-          name: fallbackName,
-          description: fallbackDescription,
-        }),
-        buildProfileParameters: () => ({}),
       })
     );
     await waitFor(() =>
@@ -676,10 +603,13 @@ describe("useProfiles", () => {
       result.current.handleSelectProfileFromPanel(cargoProfile);
     });
 
-    expect(setIsCustomMode).toHaveBeenCalledWith(true);
-    expect(setSelectedPreset).toHaveBeenCalledWith(
-      "userprofile:cargo-profile-42"
-    );
+    // 统一协议：非 dotnet 档案选择提交 revision 引用 + schema 参数注入本地状态。
+    expect(updatePublishEditState).toHaveBeenCalledWith({
+      selection: {
+        kind: "revision",
+        configurationId: "cargo-profile-42",
+      },
+    });
     expect(setProviderParameters).toHaveBeenCalled();
     expect(result.current.activeProfileName).toBe("Cargo Release");
   });
@@ -699,20 +629,10 @@ describe("useProfiles", () => {
         activeProviderId: "dotnet",
         providerSchemas: {},
         applyProfileProvider: vi.fn(),
-        setIsCustomMode: vi.fn(),
-        isCustomMode: false,
-        selectedPreset: "release-fd",
-        setSelectedPreset: vi.fn(),
+        updatePublishEditState: vi.fn(),
+        selectedRepo: null,
         setProviderParameters: vi.fn(),
-        applyDotnetCustomConfig: vi.fn(),
         replaceScopedConfigKey: vi.fn(),
-        presets: [],
-        defaultPresetId: "release-fd",
-        getPresetText: (_presetId, fallbackName, fallbackDescription) => ({
-          name: fallbackName,
-          description: fallbackDescription,
-        }),
-        buildProfileParameters: () => ({}),
       })
     );
 

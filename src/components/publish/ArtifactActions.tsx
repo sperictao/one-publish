@@ -6,8 +6,7 @@ import { Button } from "@/components/ui/button";
 import {
   packageArtifact,
   signArtifact,
-  type PackageResult,
-  type SignResult,
+  type ArtifactActionState,
 } from "@/lib/artifact";
 import { appendExtensionToPath } from "@/lib/paths";
 import { useI18n } from "@/hooks/useI18n";
@@ -23,24 +22,25 @@ function formatBytes(bytes: number) {
   return `${gb.toFixed(2)} GB`;
 }
 
-export interface ArtifactActionState {
-  packageResult: PackageResult | null;
-  signResult: SignResult | null;
-}
-
 export interface ArtifactActionsProps {
   outputDir: string;
-  onStateChange?: (state: ArtifactActionState) => void;
+  state: ArtifactActionState;
+  onStateChange: (state: ArtifactActionState) => void;
+  disabled?: boolean;
 }
 
 export function ArtifactActions({
   outputDir,
+  state,
   onStateChange,
+  disabled,
 }: ArtifactActionsProps) {
   return (
     <ArtifactActionsContent
       key={outputDir}
       outputDir={outputDir}
+      state={state}
+      disabled={disabled}
       onStateChange={onStateChange}
     />
   );
@@ -48,22 +48,23 @@ export function ArtifactActions({
 
 function ArtifactActionsContent({
   outputDir,
+  state,
   onStateChange,
+  disabled,
 }: ArtifactActionsProps) {
   const [packaging, setPackaging] = useState(false);
   const { translations } = useI18n();
   const artifactT = translations.artifact || {};
   const [signing, setSigning] = useState(false);
-  const [packageResult, setPackageResult] = useState<PackageResult | null>(
-    null
-  );
-  const [signResult, setSignResult] = useState<SignResult | null>(null);
+  const { packageResult, signResult } = state;
 
   const defaultZipPath = useMemo(() => {
     return appendExtensionToPath(outputDir, ".zip");
   }, [outputDir]);
 
   const handlePackage = async () => {
+    if (disabled || packaging || signing) return;
+    setPackaging(true);
     try {
       const selected = await save({
         title: artifactT.savePackageTitle || "保存打包文件",
@@ -72,7 +73,7 @@ function ArtifactActionsContent({
       });
       if (!selected) return;
 
-      setPackaging(true);
+      onStateChange({ packageResult: null, signResult: null });
       const res = await packageArtifact({
         inputDir: outputDir,
         outputPath: selected,
@@ -80,8 +81,7 @@ function ArtifactActionsContent({
         format: "zip",
       });
 
-      setPackageResult(res);
-      onStateChange?.({ packageResult: res, signResult });
+      onStateChange({ packageResult: res, signResult: null });
       toast.success(artifactT.packageDone || "打包完成", {
         description: res.artifactPath,
       });
@@ -95,15 +95,15 @@ function ArtifactActionsContent({
   };
 
   const handleSign = async () => {
-    if (!packageResult) return;
+    if (!packageResult || disabled || packaging || signing) return;
     try {
       setSigning(true);
+      onStateChange({ packageResult, signResult: null });
       const res = await signArtifact({
         artifactPath: packageResult.artifactPath,
         method: "gpg_detached",
       });
-      setSignResult(res);
-      onStateChange?.({ packageResult, signResult: res });
+      onStateChange({ packageResult, signResult: res });
 
       if (res.success) {
         toast.success(artifactT.signDone || "签名完成", {
@@ -131,7 +131,7 @@ function ArtifactActionsContent({
           variant="outline"
           size="sm"
           onClick={handlePackage}
-          disabled={!outputDir || packaging}
+          disabled={disabled || !outputDir || packaging || signing}
         >
           {packaging
             ? artifactT.packaging || "打包中…"
@@ -143,7 +143,7 @@ function ArtifactActionsContent({
           variant="outline"
           size="sm"
           onClick={handleSign}
-          disabled={!packageResult || signing}
+          disabled={disabled || !packageResult || packaging || signing}
         >
           {signing
             ? artifactT.signing || "签名中…"

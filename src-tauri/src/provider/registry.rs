@@ -124,6 +124,13 @@ impl Provider for BuiltInProvider {
         &self.manifest
     }
 
+    fn templates(&self) -> Vec<super::ProviderTemplate> {
+        match self.kind {
+            BuiltInProviderKind::Dotnet => crate::provider::providers::dotnet::dotnet_templates(),
+            _ => Vec::new(),
+        }
+    }
+
     fn capabilities(&self) -> &ProviderCapabilities {
         &self.capabilities
     }
@@ -544,6 +551,128 @@ mod tests {
             provider.catalog().project_path_kind,
             ProviderProjectPathKind::ProjectFile
         );
+    }
+
+    // ── 行为基线（统一发布输入方案 Phase 1）──────────────────────────────
+    // 固定各 Provider 的默认输出目录派生规则：统一 prepare 之后，这些规则
+    // 集中到后端，模板、普通配置与直接 pubxml 发布共用同一实现。
+
+    fn output_dir_spec(project_path: &Path, parameters: &[(&str, SpecValue)]) -> PublishSpec {
+        PublishSpec {
+            version: SPEC_VERSION,
+            provider_id: String::new(),
+            project_path: project_path.to_string_lossy().to_string(),
+            parameters: parameters
+                .iter()
+                .map(|(key, value)| (key.to_string(), value.clone()))
+                .collect(),
+        }
+    }
+
+    #[test]
+    fn dotnet_infers_the_default_publish_output_directory() {
+        let repository = tempfile::tempdir().expect("create repository");
+        let project_path = repository.path().join("App.csproj");
+        std::fs::write(&project_path, "<Project />").expect("write project file");
+        let registry = ProviderRegistry::new();
+        let provider = registry.get("dotnet").expect("provider");
+
+        // 无 output 参数：{project_dir}/bin/{configuration}/publish，缺省 Release。
+        let spec = output_dir_spec(
+            &project_path,
+            &[("configuration", SpecValue::String("Debug".to_string()))],
+        );
+        assert_eq!(
+            provider.infer_output_dir(&spec),
+            repository.path().join("bin/Debug/publish").to_string_lossy()
+        );
+        let default_spec = output_dir_spec(&project_path, &[]);
+        assert_eq!(
+            provider.infer_output_dir(&default_spec),
+            repository
+                .path()
+                .join("bin/Release/publish")
+                .to_string_lossy()
+        );
+
+        // 显式 output 覆盖推断，且属于已配置输出目录。
+        let explicit = output_dir_spec(
+            &project_path,
+            &[(
+                "output",
+                SpecValue::String("/tmp/one-publish-out".to_string()),
+            )],
+        );
+        assert_eq!(
+            provider.infer_output_dir(&explicit),
+            "/tmp/one-publish-out"
+        );
+        assert_eq!(
+            provider.configured_output_dir(&explicit),
+            Some("/tmp/one-publish-out".to_string())
+        );
+        assert_eq!(provider.configured_output_dir(&default_spec), None);
+    }
+
+    #[test]
+    fn cargo_infers_the_target_profile_directory() {
+        let repository = tempfile::tempdir().expect("create repository");
+        std::fs::write(repository.path().join("Cargo.toml"), "[package]").expect("write manifest");
+        let registry = ProviderRegistry::new();
+        let provider = registry.get("cargo").expect("provider");
+
+        let debug_spec = output_dir_spec(repository.path(), &[]);
+        assert_eq!(
+            provider.infer_output_dir(&debug_spec),
+            repository.path().join("target/debug").to_string_lossy()
+        );
+        let release_spec = output_dir_spec(
+            repository.path(),
+            &[("release", SpecValue::Bool(true))],
+        );
+        assert_eq!(
+            provider.infer_output_dir(&release_spec),
+            repository.path().join("target/release").to_string_lossy()
+        );
+        assert_eq!(provider.configured_output_dir(&debug_spec), None);
+    }
+
+    #[test]
+    fn go_only_uses_an_explicit_output_directory() {
+        let repository = tempfile::tempdir().expect("create repository");
+        std::fs::write(repository.path().join("go.mod"), "module demo").expect("write go.mod");
+        let registry = ProviderRegistry::new();
+        let provider = registry.get("go").expect("provider");
+
+        let implicit = output_dir_spec(repository.path(), &[]);
+        assert_eq!(provider.infer_output_dir(&implicit), "");
+        let explicit = output_dir_spec(
+            repository.path(),
+            &[(
+                "output",
+                SpecValue::String("/tmp/go-out".to_string()),
+            )],
+        );
+        assert_eq!(provider.infer_output_dir(&explicit), "/tmp/go-out");
+        assert_eq!(
+            provider.configured_output_dir(&explicit),
+            Some("/tmp/go-out".to_string())
+        );
+    }
+
+    #[test]
+    fn java_infers_the_gradle_libs_directory() {
+        let repository = tempfile::tempdir().expect("create repository");
+        std::fs::write(repository.path().join("build.gradle"), "// gradle").expect("write build");
+        let registry = ProviderRegistry::new();
+        let provider = registry.get("java").expect("provider");
+
+        let spec = output_dir_spec(repository.path(), &[]);
+        assert_eq!(
+            provider.infer_output_dir(&spec),
+            repository.path().join("build/libs").to_string_lossy()
+        );
+        assert_eq!(provider.configured_output_dir(&spec), None);
     }
 
     #[test]

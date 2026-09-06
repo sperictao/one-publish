@@ -42,9 +42,9 @@ OnePublish 是一个**跨平台桌面应用**，为软件项目发布提供美�
 
 ## 📸 界面预览
 
-<!-- TODO: 添加实际截图 -->
+![OnePublish 主窗口](docs/screenshots/main-window.png)
 
-> _截图即将补充。在此期间，可查阅[设计理念](docs/design-philosophy.md)与 [Geist 设计规范](DESIGN.md)。_
+> _主窗口 —— 选择仓库、配置参数、一键发布。_
 
 ---
 

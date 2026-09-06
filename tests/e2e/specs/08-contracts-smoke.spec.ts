@@ -107,28 +107,29 @@ test.describe("Contract Drift Detection", () => {
     expect(params).toHaveProperty("runtime");
   });
 
-  test("prepare_draft_publish_runtime returns valid PreparedPublishRuntime shape", async ({
+  test("prepare_publish_runtime returns valid PreparedPublishRuntime shape", async ({
     page,
   }) => {
-    const prepared = (await invoke(page, "prepare_draft_publish_runtime", {
+    const prepared = (await invoke(page, "prepare_publish_runtime", {
       request: {
         repositoryId: "repo-a",
-        repositoryPath: "/workspace/alpha-service",
-        providerId: "dotnet",
-        parameters: { configuration: "Release" },
-        spec: {
-          version: 1,
-          provider_id: "dotnet",
-          project_path: "/workspace/alpha-service/App.csproj",
+        source: {
+          kind: "draft",
+          providerId: "dotnet",
           parameters: { configuration: "Release" },
         },
+        runInputs: { defaultOutputDir: "" },
       },
     })) as Record<string, unknown>;
 
+    expect(prepared).toHaveProperty("status", "ready");
     expect(prepared).toHaveProperty("configurationId");
     expect(prepared).toHaveProperty("configurationRevisionId");
+    expect(prepared).toHaveProperty("resolvedSpec");
     expect(prepared).toHaveProperty("command");
     expect(prepared).toHaveProperty("plan");
+    expect(prepared).toHaveProperty("outputPreflight");
+    expect(prepared).toHaveProperty("recoverySnapshot");
     expect(prepared).toHaveProperty("runtimeToken");
     const command = prepared.command as Record<string, unknown>;
     expect(command).toHaveProperty("program");
@@ -136,6 +137,25 @@ test.describe("Contract Drift Detection", () => {
     expect(command).toHaveProperty("display_command");
     expect(typeof command.program).toBe("string");
     expect(Array.isArray(command.args)).toBe(true);
+  });
+
+  test("resolve_publish_source returns draft-shaped ResolvedPublishSource", async ({
+    page,
+  }) => {
+    const resolved = (await invoke(page, "resolve_publish_source", {
+      repositoryId: "repo-a",
+      source: {
+        kind: "draft",
+        providerId: "dotnet",
+        parameters: { configuration: "Release" },
+      },
+    })) as Record<string, unknown>;
+
+    expect(resolved).toHaveProperty("draft");
+    expect(resolved).toHaveProperty("diagnostics");
+    const draft = resolved.draft as Record<string, unknown>;
+    expect(draft).toHaveProperty("content");
+    expect(draft).toHaveProperty("origin");
   });
 
   test("run_environment_check returns valid EnvironmentCheckResult shape", async ({
@@ -205,7 +225,7 @@ test.describe("Contract Drift Detection", () => {
   }) => {
     // Re-install with error injection
     await installMockTauri(page, {
-      errors: { update_publish_state: "injected test error" },
+      errors: { update_publish_edit_state: "injected test error" },
     });
     await page.goto("/", { waitUntil: "domcontentloaded" });
 
@@ -217,8 +237,9 @@ test.describe("Contract Drift Detection", () => {
         };
       };
       try {
-        await win.__TAURI_INTERNALS__!.invoke("update_publish_state", {
-          selectedPreset: "test",
+        await win.__TAURI_INTERNALS__!.invoke("update_publish_edit_state", {
+          repoId: "repo-1",
+          update: {},
         });
         return null;
       } catch (e) {

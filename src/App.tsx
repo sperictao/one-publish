@@ -106,7 +106,18 @@ function App() {
           width={`${boot.shell.effectiveMiddlePanelWidth}px`}
         >
           <Suspense fallback={<PanelSkeleton />}>
-            <PublishConfigPanel {...boot.publish.publishConfigPanelProps} />
+            <PublishConfigPanel
+              {...boot.publish.publishConfigPanelProps}
+              onImportCommand={
+                boot.repo.selectedRepo &&
+                boot.publish.activeProvider?.supportsCommandImport &&
+                boot.publish.providerSchemas[boot.publish.activeProviderId] &&
+                (!boot.publish.activeProviderUsesProjectFile ||
+                  boot.publish.projectInfo)
+                  ? () => boot.shell.setCommandImportOpen(true)
+                  : undefined
+              }
+            />
           </Suspense>
         </SidebarPanelShell>
 
@@ -156,6 +167,7 @@ function App() {
       {boot.shell.shouldLoadAppDialogsHost ? (
         <Suspense fallback={null}>
           <AppDialogsHost
+            customConfig={boot.publish.customConfig}
             shortcutsOpen={boot.shell.shortcutsOpen}
             setShortcutsOpen={boot.shell.setShortcutsOpen}
             environmentDialogOpen={boot.shell.environmentDialogOpen}
@@ -185,7 +197,6 @@ function App() {
               boot.shell.handleConfigDialogOpenChange
             }
             environmentLastCheck={boot.repo.environmentLastCheck}
-            openEnvironmentDialog={boot.shell.openEnvironmentDialog}
             activeProviderId={boot.publish.activeProviderId}
             activeProviderUsesProjectFile={
               boot.publish.activeProviderUsesProjectFile
@@ -203,6 +214,7 @@ function App() {
             publishResult={boot.publish.publishResult}
             packageResult={boot.publish.artifactActionState.packageResult}
             signResult={boot.publish.artifactActionState.signResult}
+            openEnvironmentDialog={boot.shell.openEnvironmentDialog}
             handleOpenSettings={boot.shell.handleOpenSettings}
             selectedRepoExists={Boolean(boot.repo.selectedRepo)}
             commandImportOpen={boot.shell.commandImportOpen}
@@ -252,7 +264,6 @@ function App() {
             profileManagement={boot.publish.profileManagement}
             handleLoadProfile={boot.publish.handleLoadProfile}
             selectedRepoId={boot.repo.selectedRepoId}
-            customConfig={boot.publish.customConfig}
             activeProviderParameters={boot.publish.activeProviderParameters}
             projectFile={boot.publish.projectInfo?.project_file}
             selectedRepoPath={boot.repo.selectedRepo?.path}

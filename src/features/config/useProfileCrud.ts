@@ -2,9 +2,8 @@ import { useCallback, useMemo } from "react";
 import { toast } from "sonner";
 import type { Dispatch, SetStateAction } from "react";
 
-import { mapImportedSpecByProvider } from "@/features/provider/commandImportMapping";
-import { createDotnetPublishConfigFromParameters } from "@/features/config/dotnetPublishConfig";
-import { createUserProfileConfigKey } from "@/features/config/publishConfigIdentity";
+import { buildDotnetProfileParameters } from "@/features/config/dotnetPublishConfig";
+import type { PublishEditStateUpdate } from "@/generated/tauri-contracts";
 import type {
   ConfigParameters,
   ConfigProfile,
@@ -26,25 +25,37 @@ interface StoreMutationResult {
   }>;
 }
 
+/** 非 dotnet Provider 加载配置时，仅保留 schema 认识的参数键；无 schema 时直通。 */
+function filterParametersBySchema(
+  parameters: ConfigParameters,
+  schema?: ParameterSchema
+): ConfigParameters {
+  const supportedKeys = schema ? Object.keys(schema.parameters) : [];
+  const allowed = supportedKeys.length > 0 ? new Set(supportedKeys) : null;
+
+  const filtered: ConfigParameters = {};
+  for (const [key, value] of Object.entries(parameters)) {
+    if (!allowed || allowed.has(key)) {
+      filtered[key] = value;
+    }
+  }
+  return filtered;
+}
+
 export interface UseProfileCrudParams {
   selectedRepoId: string | null;
   profiles: ConfigProfile[];
   activeProfileId: string | null;
-  isCustomMode: boolean;
-  defaultPresetId: string;
+  updatePublishEditState: (update: PublishEditStateUpdate) => void;
   profileT: TranslationMap;
   appT: TranslationMap;
   activeProviderId: string;
   providerSchemas: Record<string, ParameterSchema>;
   applyProfileProvider: (providerId: string) => void;
-  applyDotnetCustomConfig: (config: PublishConfigStore) => void;
   setProviderParameters: Dispatch<
     SetStateAction<Record<string, Record<string, ParameterValue>>>
   >;
-  setIsCustomMode: (value: boolean) => void;
-  setSelectedPreset: (value: string) => void;
   setActiveProfileName: Dispatch<SetStateAction<string | null>>;
-  buildProfileParameters: (config: PublishConfigStore) => ConfigParameters;
   refreshProfilesAfterMutation: (
     repoId: string,
     preFetchedProfiles?: ConfigProfile[]
@@ -90,19 +101,14 @@ export function useProfileCrud({
   selectedRepoId,
   profiles,
   activeProfileId,
-  isCustomMode,
-  defaultPresetId,
+  updatePublishEditState,
   profileT,
   appT,
   activeProviderId,
   providerSchemas,
   applyProfileProvider,
-  applyDotnetCustomConfig,
   setProviderParameters,
-  setIsCustomMode,
-  setSelectedPreset,
   setActiveProfileName,
-  buildProfileParameters,
   refreshProfilesAfterMutation,
   isCurrentRepo,
   saveProfileToStore,
@@ -114,42 +120,31 @@ export function useProfileCrud({
     (profile: LoadableProfile) => {
       const profileProviderId =
         profile.providerId || profile.provider_id || activeProviderId;
-      const schema = providerSchemas[profileProviderId];
-      const mapping = mapImportedSpecByProvider(
-        {
-          providerId: profileProviderId,
-          parameters: profile.parameters || {},
-        },
-        profileProviderId,
-        {
-          supportedKeys: schema ? Object.keys(schema.parameters) : undefined,
-        }
-      );
 
       if (profileProviderId !== activeProviderId) {
         applyProfileProvider(profileProviderId);
       }
 
-      if (mapping.providerId === "dotnet") {
-        applyDotnetCustomConfig(
-          createDotnetPublishConfigFromParameters(
-            (profile.parameters || {}) as Record<string, unknown>,
-            {
-              inferProfileSelection: true,
-            }
-          )
-        );
-      } else {
+      if (profile.id) {
+        // 统一协议：任何 Provider 的命名配置都提交 revision 选择；
+        // 编辑器视图由统一状态水合（§4.1）。
+        updatePublishEditState({
+          selection: {
+            kind: "revision",
+            configurationId: profile.id,
+          },
+        });
+      }
+      if (profileProviderId !== "dotnet") {
         setProviderParameters((prev) => ({
           ...prev,
-          [mapping.providerId]: mapping.providerParameters,
+          [profileProviderId]: filterParametersBySchema(
+            (profile.parameters || {}) as ConfigParameters,
+            providerSchemas[profileProviderId]
+          ),
         }));
       }
 
-      if (profile.id) {
-        setIsCustomMode(true);
-        setSelectedPreset(createUserProfileConfigKey(profile.id));
-      }
       setActiveProfileName(profile.name);
 
       toast.success(appT.profileLoaded || "配置文件已加载", {
@@ -159,13 +154,11 @@ export function useProfileCrud({
     [
       activeProviderId,
       applyProfileProvider,
-      applyDotnetCustomConfig,
       appT,
       providerSchemas,
       setActiveProfileName,
       setProviderParameters,
-      setIsCustomMode,
-      setSelectedPreset,
+      updatePublishEditState,
     ]
   );
 
@@ -186,21 +179,13 @@ export function useProfileCrud({
       if (isCurrentRepo(repoId)) {
         if (activeProfileId === profileId) {
           setActiveProfileName(null);
-          if (isCustomMode) {
-            setIsCustomMode(false);
-            setSelectedPreset(defaultPresetId);
-          }
         }
       }
     },
     [
       activeProfileId,
-      defaultPresetId,
       isCurrentRepo,
-      isCustomMode,
       refreshProfilesAfterMutation,
-      setIsCustomMode,
-      setSelectedPreset,
       setActiveProfileName,
       deleteProfileFromStore,
     ]
@@ -293,8 +278,8 @@ export function useProfileCrud({
         sourceProfileName,
         existingNames
       );
-      const parameters = buildProfileParameters(config);
-
+      // 富表单视图 → 参数（编辑器仍为富表单，过渡转换保留在本模块内）。
+      const parameters = buildDotnetProfileParameters(config);
       const state = await saveProfileToStore({
         repoId: selectedRepoId,
         name: profileName,
@@ -317,20 +302,22 @@ export function useProfileCrud({
       }
 
       setActiveProfileName(createdProfile.name);
-      applyDotnetCustomConfig(config);
-      setSelectedPreset(createUserProfileConfigKey(createdProfile.id));
+      updatePublishEditState({
+        selection: {
+          kind: "revision",
+          configurationId: createdProfile.id,
+        },
+      });
 
       return profileName;
     },
     [
-      applyDotnetCustomConfig,
-      buildProfileParameters,
       profileT.saveFailed,
       profiles,
       refreshProfilesAfterMutation,
       selectedRepoId,
       setActiveProfileName,
-      setSelectedPreset,
+      updatePublishEditState,
       saveProfileToStore,
     ]
   );

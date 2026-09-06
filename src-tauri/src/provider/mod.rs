@@ -43,6 +43,42 @@ pub struct ProviderCatalogEntry {
     pub requires_project_binding: bool,
     pub project_path_kind: ProviderProjectPathKind,
     pub supports_command_import: bool,
+    /// Provider 内置模板摘要：前端只负责展示与选择，模板参数由后端实现持有。
+    #[serde(default)]
+    pub templates: Vec<ProviderTemplateSummary>,
+}
+
+/// Provider 内置模板：完整参数由 Provider 实现持有，是统一来源解析中
+/// `template` 来源的数据源。
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(rename_all = "camelCase")]
+pub struct ProviderTemplate {
+    pub id: String,
+    pub name: String,
+    pub description: String,
+    /// 模板产生的完整参数（schema 键）；false/null/空值按用户语义显式保留。
+    pub parameters: serde_json::Value,
+}
+
+/// 目录下发的模板摘要：不含参数细节。
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(rename_all = "camelCase")]
+pub struct ProviderTemplateSummary {
+    pub id: String,
+    pub name: String,
+    pub description: String,
+}
+
+impl ProviderTemplate {
+    pub fn summary(&self) -> ProviderTemplateSummary {
+        ProviderTemplateSummary {
+            id: self.id.clone(),
+            name: self.name.clone(),
+            description: self.description.clone(),
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -84,6 +120,18 @@ pub trait Provider: Send + Sync {
     fn catalog(&self) -> &ProviderCatalogEntry;
 
     fn repository_discovery(&self) -> &ProviderRepositoryDiscovery;
+
+    /// Provider 内置模板：空实现表示该 Provider 没有模板。
+    fn templates(&self) -> Vec<ProviderTemplate> {
+        Vec::new()
+    }
+
+    /// 按模板 ID 解析模板；找不到时返回 None（由来源解析层报错）。
+    fn resolve_template(&self, template_id: &str) -> Option<ProviderTemplate> {
+        self.templates()
+            .into_iter()
+            .find(|template| template.id == template_id)
+    }
 
     fn get_schema(&self) -> Result<ParameterSchema, RenderError>;
 

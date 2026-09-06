@@ -101,7 +101,10 @@ describe("handleAddRepoRuntime", () => {
       "/tmp/demo-repo"
     );
     expect(mocks.listProviders).not.toHaveBeenCalled();
-    expect(mocks.scanProjectCandidates).toHaveBeenCalledWith("/tmp/demo-repo");
+    expect(mocks.scanProjectCandidates).toHaveBeenCalledWith(
+      "/tmp/demo-repo",
+      "dotnet"
+    );
     expect(mocks.scanRepositoryBranches).toHaveBeenCalledWith(
       "/tmp/demo-repo",
       {
@@ -142,7 +145,10 @@ describe("handleAddRepoRuntime", () => {
       "/tmp/demo-repo"
     );
     expect(mocks.listProviders).toHaveBeenCalledOnce();
-    expect(mocks.scanProjectCandidates).toHaveBeenCalledWith("/tmp/demo-repo");
+    expect(mocks.scanProjectCandidates).toHaveBeenCalledWith(
+      "/tmp/demo-repo",
+      "dotnet"
+    );
     expect(mocks.addRepository).toHaveBeenCalledWith(
       expect.objectContaining({
         providerId: "dotnet",

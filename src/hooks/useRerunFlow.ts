@@ -1,63 +1,25 @@
 import { useCallback } from "react";
-import { toast } from "sonner";
 
 import type { ExecutionRecord } from "@/lib/store/types";
-import type { ProviderPublishSpec } from "@/features/publish/publishRuntime";
+import type { PublishSource } from "@/features/publish/publishRuntime";
 import type { RunPublishOptions } from "@/features/publish/publishTransaction";
 
-interface TranslationMap {
-  [key: string]: string | undefined;
-}
-
 interface UseRerunFlowParams {
-  historyT: TranslationMap;
-  extractSpecFromRecord: (
-    record: ExecutionRecord
-  ) => ProviderPublishSpec | null;
-  restoreSpecToEditor: (spec: ProviderPublishSpec) => void;
-  getRecentConfigKeyFromSpec: (spec: ProviderPublishSpec) => string | null;
   runPublishSpec: (
-    spec: ProviderPublishSpec,
+    source: PublishSource,
     options?: RunPublishOptions
   ) => Promise<void>;
 }
 
-export function useRerunFlow({
-  historyT,
-  extractSpecFromRecord,
-  restoreSpecToEditor,
-  getRecentConfigKeyFromSpec,
-  runPublishSpec,
-}: UseRerunFlowParams) {
+export function useRerunFlow({ runPublishSpec }: UseRerunFlowParams) {
   const rerunFromHistory = useCallback(
     async (record: ExecutionRecord) => {
-      const spec = extractSpecFromRecord(record);
-      if (!spec) {
-        toast.error(
-          historyT.historyMissingRecoverableSpec ||
-            "历史记录缺少可恢复的发布参数",
-          {
-            description:
-              historyT.historyMissingRecoverableSpecHint ||
-              "请使用最新版本重新执行一次后再重跑",
-          }
-        );
-        return;
-      }
-
-      restoreSpecToEditor(spec);
-      await runPublishSpec(spec, {
-        recentConfigKey: getRecentConfigKeyFromSpec(spec),
-      });
+      // 历史重跑只携带 history 来源：后端从恢复快照还原原配置与已记录输入，
+      // 不依赖草稿修订存活，也不依赖当前选中配置。无完整原配置的旧记录由
+      // 后端返回 history_input_incomplete，按普通失败反馈呈现。
+      await runPublishSpec({ kind: "history", recordId: record.id });
     },
-    [
-      extractSpecFromRecord,
-      getRecentConfigKeyFromSpec,
-      historyT.historyMissingRecoverableSpec,
-      historyT.historyMissingRecoverableSpecHint,
-      restoreSpecToEditor,
-      runPublishSpec,
-    ]
+    [runPublishSpec]
   );
 
   return { rerunFromHistory };

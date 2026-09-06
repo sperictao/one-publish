@@ -2,7 +2,6 @@ import { describe, expect, it } from "vitest";
 
 import {
   applyPreferenceStateMutation,
-  applyPublishStateMutation,
   applyUiStateMutation,
   mergeBootstrapAppState,
   mergeRecentPublishState,
@@ -10,7 +9,6 @@ import {
 } from "@/stores/appStoreMutations";
 import {
   defaultAppState,
-  defaultPublishConfigStore,
   defaultRepoPublishConfig,
   type AppState,
   type Repository,
@@ -28,7 +26,6 @@ function createRepository(id: string): Repository {
     providerId: "dotnet",
     publishConfig: {
       ...defaultRepoPublishConfig,
-      customConfig: { ...defaultPublishConfigStore },
     },
   };
 }
@@ -65,27 +62,56 @@ describe("appStoreMutations", () => {
     expect(next.environmentProviderIds).toEqual(["cargo", "dotnet"]);
   });
 
-  it("patches publish state only for the target repository", () => {
+  it("scopes scoped draft upsert to the target repository", () => {
     const state = createState();
-    const customConfig = {
-      ...defaultPublishConfigStore,
-      configuration: "Debug",
+    const draft = {
+      providerId: "dotnet",
+      projectBinding: null,
+      content: {
+        providerId: "dotnet",
+        contractVersion: 1,
+        providerVersion: "1",
+        settingsVersion: 1,
+        projectBinding: null,
+        parameters: { configuration: "Debug" },
+        composition: {
+          executionBackend: {
+            adapterId: "local-execution",
+            settingsVersion: 1,
+            settings: {},
+            credentials: {},
+          },
+          artifactStore: {
+            adapterId: "temporary-artifact-store",
+            settingsVersion: 1,
+            settings: {},
+            credentials: {},
+          },
+          artifactProcessors: [],
+          deliveryRoutes: [],
+        },
+      },
+      baseRevision: undefined,
     };
 
-    const next = applyPublishStateMutation(state, "repo-2", {
-      selectedPreset: "profile-FolderProfile",
-      isCustomMode: true,
-      customConfig,
-    });
+    // 统一编辑状态（§4.1）：draft upsert 只影响目标仓库。
+    const next = {
+      ...state,
+      repositories: state.repositories.map((repo) =>
+        repo.id === "repo-2"
+          ? {
+              ...repo,
+              publishConfig: {
+                ...repo.publishConfig,
+                drafts: [draft],
+              },
+            }
+          : repo
+      ),
+    };
 
-    expect(next.repositories[0]?.publishConfig).toBe(
-      state.repositories[0]?.publishConfig
-    );
-    expect(next.repositories[1]?.publishConfig).toMatchObject({
-      selectedPreset: "profile-FolderProfile",
-      isCustomMode: true,
-      customConfig,
-    });
+    expect(next.repositories[0]?.publishConfig.drafts).toEqual([]);
+    expect(next.repositories[1]?.publishConfig.drafts).toEqual([draft]);
   });
 
   it("merges recent publish state through one contract", () => {

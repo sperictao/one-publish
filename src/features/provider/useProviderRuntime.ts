@@ -26,7 +26,7 @@ export function useProviderRuntime() {
   const [providerListState, setProviderListState] = useState<
     ResourceState<ProviderManifest[]>
   >(createIdleState<ProviderManifest[]>);
-  const [activeProviderId, setActiveProviderId] = useState("dotnet");
+  const [activeProviderId, setActiveProviderId] = useState("");
   const [providerSchemaStates, setProviderSchemaStates] =
     useState<ProviderSchemaStateMap>({});
 
@@ -93,10 +93,7 @@ export function useProviderRuntime() {
     const availableProviderIds = (providerListState.data ?? []).map(
       (provider) => provider.id
     );
-    if (
-      availableProviderIds.length > 0 &&
-      !availableProviderIds.includes(activeProviderId)
-    ) {
+    if (availableProviderIds.length > 0 && !activeProviderId) {
       setActiveProviderId(availableProviderIds[0]);
     }
   }, [activeProviderId, providerListState.data]);

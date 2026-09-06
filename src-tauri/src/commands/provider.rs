@@ -28,15 +28,17 @@ pub async fn get_provider_schema(
     Ok(schema)
 }
 
-/// 从命令导入配置
+/// 从命令导入配置：schema 解析为草稿参数 + 诊断，不再构造执行 spec。
 #[tauri::command]
 pub async fn import_from_command(
     command: String,
     provider_id: String,
     project_path: String,
-) -> Result<crate::spec::PublishSpec, crate::errors::AppError> {
+) -> Result<crate::command_parser::CommandImportResult, crate::errors::AppError> {
     let _timer =
         crate::commands::middleware::CommandTimer::new("commands::provider::import_from_command");
+    // project_path 是导入入口的上下文参数，当前解析不需要工作目录；保留签名以备后用。
+    let _ = project_path;
     let provider = provider_registry()
         .get(&provider_id)
         .map_err(crate::errors::AppError::from)?;
@@ -47,15 +49,7 @@ pub async fn import_from_command(
         )
     })?;
     let parser = CommandParser::new(provider_id);
-    let spec = parser
-        .parse_command(&command, project_path, &schema)
-        .map_err(|source| {
-            crate::errors::AppError::provider_with_code(
-                format!("parse error: {}", source),
-                "provider_command_parse_failed",
-            )
-        })?;
-    Ok(spec)
+    Ok(parser.parse(&command, &schema))
 }
 
 #[cfg(test)]

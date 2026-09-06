@@ -1,3 +1,4 @@
+import type { PublishSelectionRef } from "@/generated/tauri-contracts";
 import { useMemo } from "react";
 import type { PublishConfigPanelProps } from "@/components/layout/PublishConfigPanel";
 import type { ConfigProfile } from "@/lib/store/types";
@@ -5,8 +6,7 @@ import type { PublishComposition } from "@/generated/tauri-contracts";
 
 interface UsePublishConfigPanelPropsParams {
   selectedRepoId: string | null;
-  selectedPreset: string;
-  isCustomMode: boolean;
+  selection: PublishSelectionRef | null | undefined;
   profiles: ConfigProfile[];
   isProfilesRefreshing: boolean;
   activeProfileName: string | null;
@@ -46,8 +46,7 @@ export function usePublishConfigPanelProps(
   return useMemo<PublishConfigPanelProps>(
     () => ({
       selectedRepoId: params.selectedRepoId,
-      selectedPreset: params.selectedPreset,
-      isCustomMode: params.isCustomMode,
+      selection: params.selection,
       profiles: params.profiles,
       isProfilesRefreshing: params.isProfilesRefreshing,
       activeProfileName: params.activeProfileName,
@@ -86,7 +85,7 @@ export function usePublishConfigPanelProps(
       params.onReorderProfiles,
       params.onSelectProfile,
       params.onSelectProjectProfile,
-      params.isCustomMode,
+      params.selection,
       params.isProfilesRefreshing,
       params.isProjectProfilesRefreshing,
       params.showExpandButton,
@@ -101,7 +100,6 @@ export function usePublishConfigPanelProps(
       params.onRemoveRecentConfig,
       params.onReorderProjectProfiles,
       params.onReorderRecentConfigs,
-      params.selectedPreset,
       params.selectedRepoId,
       params.onCollapse,
       params.onExpandRepo,

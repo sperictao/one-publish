@@ -1,9 +1,8 @@
 import { buildDotnetProfileParameters } from "@/features/config/dotnetPublishConfig";
-import type { ProviderPublishSpec } from "@/features/publish/publishRuntime";
-import { toSpecParameters, type ParameterValue } from "@/types/parameters";
-import type { ProjectInfo } from "@/lib/store/types";
 
-export interface DotnetPublishIntentConfig {
+// 统一发布输入方案 Phase 5：前端不再构造执行 spec；本模块仅保留 dotnet
+// 富表单视图 → 参数的过渡转换（编辑器替换为 schema 表单后随之删除）。
+export type DotnetPublishIntentConfig = {
   configuration: string;
   runtime: string;
   framework: string;
@@ -17,25 +16,11 @@ export interface DotnetPublishIntentConfig {
   properties: Record<string, string>;
   use_profile: boolean;
   profile_name: string;
-}
+};
 
-export interface ProviderPublishIntent {
-  providerId: string;
-  providerUsesProjectFile: boolean;
-  providerParameters: Record<string, ParameterValue>;
-  projectInfo: ProjectInfo | null;
-  repository: { path: string } | null;
-  specVersion: number;
-  dotnetConfig?: DotnetPublishIntentConfig;
-}
-
-function resolveProviderProjectPath(intent: ProviderPublishIntent) {
-  return intent.providerUsesProjectFile
-    ? intent.projectInfo?.project_file
-    : intent.repository?.path;
-}
-
-function buildDotnetProviderParameters(config: DotnetPublishIntentConfig) {
+export function buildDotnetProviderParameters(
+  config: DotnetPublishIntentConfig
+) {
   return buildDotnetProfileParameters({
     configuration: config.configuration,
     runtime: config.runtime,
@@ -51,35 +36,4 @@ function buildDotnetProviderParameters(config: DotnetPublishIntentConfig) {
     useProfile: config.use_profile,
     profileName: config.profile_name,
   });
-}
-
-export function buildProviderPublishSpec(
-  intent: ProviderPublishIntent
-): ProviderPublishSpec | null {
-  const projectPath = resolveProviderProjectPath(intent);
-  if (!projectPath) {
-    return null;
-  }
-
-  if (intent.providerId === "dotnet") {
-    if (!intent.dotnetConfig) {
-      return null;
-    }
-
-    return {
-      version: intent.specVersion,
-      provider_id: "dotnet",
-      project_path: projectPath,
-      parameters: toSpecParameters(
-        buildDotnetProviderParameters(intent.dotnetConfig)
-      ),
-    };
-  }
-
-  return {
-    version: intent.specVersion,
-    provider_id: intent.providerId,
-    project_path: projectPath,
-    parameters: toSpecParameters(intent.providerParameters),
-  };
 }

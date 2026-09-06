@@ -161,7 +161,8 @@ interface RepositoryListProps {
     options?: { silentSuccess?: boolean }
   ) => Promise<string | null>;
   onScanProjectCandidates: (
-    path: string
+    path: string,
+    providerId?: string
   ) => Promise<ProjectScanCandidates | null>;
   onRefreshBranches: (
     path: string,

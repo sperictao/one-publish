@@ -111,6 +111,9 @@ test.describe("Full Publish Flow — Happy Path", () => {
 
     const plan = page.locator("[data-testid='publish-runtime-plan']");
     await expect(plan).toBeVisible({ timeout: 10000 });
+    // 统一选择协议：点击保存的配置 → revision 来源 → prepare 以该配置的
+    // 当前修订执行（mock 按 selection 返回 profile-folder-revision-1），
+    // plan → manifest → receipt 链路贯穿该修订身份。
     await expect(plan).toContainText("profile-folder-revision-1");
     await expect(plan).toContainText("local-execution");
     await expect(plan).toContainText("persist_manifest");

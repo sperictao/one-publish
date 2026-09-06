@@ -154,66 +154,6 @@
     "error": "错误: {{error}}",
     "configurationBlocked": "当前发布配置不可执行"
   },
-  "releaseChecklist": {
-    "title": "签名发布清单",
-    "description": "按步骤核对发布条件，确保产物可分发且可验证。",
-    "ready": "签名发布条件已满足",
-    "notReady": "签名发布条件未满足",
-    "prev": "上一步",
-    "next": "下一步",
-    "close": "完成",
-    "summary": {
-      "passed": "已通过",
-      "warning": "警告",
-      "failed": "失败"
-    },
-    "status": {
-      "pass": "通过",
-      "warning": "警告",
-      "fail": "失败",
-      "pending": "待处理"
-    },
-    "actions": {
-      "openEnvironment": "打开环境检查",
-      "openSettings": "打开设置"
-    },
-    "steps": {
-      "environment": {
-        "title": "环境检查",
-        "description": "确认发布机器不存在阻断问题",
-        "pendingDetail": "还没有环境检查结果，建议先执行一次环境检查。"
-      },
-      "publish": {
-        "title": "发布结果",
-        "description": "确认发布命令执行成功并产出目标目录",
-        "pendingDetail": "尚未执行发布。",
-        "failedDetail": "发布失败，先修复后重试。"
-      },
-      "package": {
-        "title": "产物打包",
-        "description": "将发布目录打包为可分发的 ZIP 产物",
-        "pendingDetail": "在输出日志卡片点击「打包 ZIP」。",
-        "blockedDetail": "需先完成发布。"
-      },
-      "sign": {
-        "title": "签名校验",
-        "description": "为产物生成 detached signature",
-        "pendingDetail": "在输出日志卡片点击「签名 (GPG)」。",
-        "blockedDetail": "需先完成打包。"
-      },
-      "updater": {
-        "title": "Updater 配置",
-        "description": "确认应用更新通道配置可用",
-        "loadingDetail": "正在检测 updater 配置…",
-        "pendingDetail": "尚未获取 updater 状态。"
-      }
-    },
-    "export": "导出预检报告",
-    "exporting": "导出中…",
-    "exportSuccess": "预检报告已导出",
-    "exportFailed": "导出预检报告失败",
-    "exportDialogTitle": "导出预检报告"
-  },
   "branchPanel": {
     "expandRepoList": "展开仓库列表",
     "collapsePanel": "收起面板",
@@ -298,27 +238,17 @@
     "description": "粘贴你的构建命令，自动提取参数",
     "commandSectionTitle": "命令输入",
     "commandLabel": "构建命令",
-    "currentProvider": "当前 Provider: {{provider}}（支持: dotnet, cargo, go, gradle）",
+    "currentProvider": "当前 Provider: {{provider}}",
     "enterCommand": "输入命令",
     "parsing": "解析中…",
     "parseCommand": "解析命令",
     "parseSuccess": "参数已导入",
     "parseFailed": "解析失败",
     "extractedParameters": "提取的参数",
+    "diagnostics": "解析诊断",
     "cancel": "取消",
     "importParameters": "导入参数",
     "examplePrefix": "示例"
-  },
-  "artifact": {
-    "savePackageTitle": "保存打包文件",
-    "packageDone": "打包完成",
-    "packageFailed": "打包失败",
-    "signDone": "签名完成",
-    "signFailed": "签名失败",
-    "packaging": "打包中…",
-    "packageZip": "打包 ZIP",
-    "signing": "签名中…",
-    "signGpg": "签名 (GPG)"
   },
   "profiles": {
     "title": "配置管理",
@@ -558,7 +488,7 @@
     "scanProjectRootNotFound": "未检测到项目根目录",
     "scanProjectRootNotFoundDesc": "未找到 .sln 文件，确认当前目录或上级目录包含解决方案文件。",
     "scanProjectFileNotFound": "未检测到项目文件",
-    "scanProjectFileNotFoundDesc": "已找到解决方案，但未发现 .csproj 文件，检查项目结构。",
+    "scanProjectFileNotFoundDesc": "未发现当前 Provider 支持的项目文件，请检查项目结构和绑定设置。",
     "scanProjectMultipleCandidates": "检测到多个项目文件",
     "scanProjectMultipleCandidatesDesc": "该仓库包含多个项目文件，先在仓库设置里绑定明确的 Project File。",
     "scanProjectPermissionDenied": "缺少目录访问权限",
@@ -656,26 +586,22 @@
     "copySuccess": "{{label}}已复制",
     "copyFailedWithLabel": "复制{{label}}失败",
     "selectRepositoryFirst": "先选择仓库",
-    "selectDotnetProjectFirst": "先选择 .NET 项目",
+    "selectProjectFirst": "请先在仓库设置中绑定项目",
     "cancellingPublish": "正在取消发布…",
     "noRunningPublishTask": "当前没有运行中的发布任务",
     "cancelPublishFailed": "取消发布失败",
-    "noMappableParameters": "未找到可映射参数",
-    "unmappedFields": "未映射字段",
     "partialImport": "参数已部分导入",
-    "mappedFields": "已映射",
-    "fieldsUnit": "个字段",
     "parametersImported": "参数已导入",
     "profileLoaded": "配置文件已加载",
     "loadedProfile": "已加载配置文件",
-    "commandImportResult": "命令导入映射结果",
-    "mappedFieldsLabel": "已映射字段",
-    "unmappedFieldsLabel": "未映射字段",
+    "commandImportResult": "命令导入结果",
+    "commandImportDiagnostics": "解析诊断",
     "macOsProtectedFilesAndFolders": "文件与文件夹",
     "macOsProtectedDesktop": "桌面",
     "macOsProtectedDocuments": "文稿",
     "macOsProtectedDownloads": "下载",
-    "none": "无"
+    "none": "无",
+    "releaseChecklist": "发布清单"
   },
   "failure": {
     "groupTitle": "失败诊断聚合",
@@ -880,7 +806,8 @@
     "automationRemoteCancelRun": "取消运行",
     "automationRemoteCancelSuccess": "已请求取消远端运行",
     "automationRemoteCancelFailed": "取消远端运行失败",
-    "compositionConfig": "发布组合"
+    "compositionConfig": "发布组合",
+    "importCommand": "从命令创建配置"
   },
   "common": {
     "close": "关闭",
@@ -933,5 +860,76 @@
     "moveDown": "下移",
     "remove": "移除",
     "compositionMissing": "该配置的当前修订缺少发布组合，无法编辑。"
+  },
+  "artifact": {
+    "savePackageTitle": "保存打包文件",
+    "packageDone": "打包完成",
+    "packageFailed": "打包失败",
+    "signDone": "签名完成",
+    "signFailed": "签名失败",
+    "packaging": "打包中…",
+    "packageZip": "打包 ZIP",
+    "signing": "签名中…",
+    "signGpg": "签名 (GPG)"
+  },
+  "releaseChecklist": {
+    "title": "签名发布清单",
+    "description": "按步骤核对发布条件，确保产物可分发且可验证。",
+    "ready": "签名发布条件已满足",
+    "notReady": "签名发布条件未满足",
+    "prev": "上一步",
+    "next": "下一步",
+    "close": "完成",
+    "summary": {
+      "passed": "已通过",
+      "warning": "警告",
+      "failed": "失败"
+    },
+    "status": {
+      "pass": "通过",
+      "warning": "警告",
+      "fail": "失败",
+      "pending": "待处理"
+    },
+    "actions": {
+      "openEnvironment": "打开环境检查",
+      "openSettings": "打开设置"
+    },
+    "steps": {
+      "environment": {
+        "title": "环境检查",
+        "description": "确认发布机器不存在阻断问题",
+        "pendingDetail": "还没有环境检查结果，建议先执行一次环境检查。"
+      },
+      "publish": {
+        "title": "发布结果",
+        "description": "确认发布命令执行成功并产出目标目录",
+        "pendingDetail": "尚未执行发布。",
+        "failedDetail": "发布失败，先修复后重试。"
+      },
+      "package": {
+        "title": "产物打包",
+        "description": "将发布目录打包为可分发的 ZIP 产物",
+        "pendingDetail": "在输出日志卡片点击「打包 ZIP」。",
+        "blockedDetail": "需先完成发布。"
+      },
+      "sign": {
+        "title": "签名校验",
+        "description": "为产物生成 detached signature",
+        "pendingDetail": "在输出日志卡片点击「签名 (GPG)」。",
+        "blockedDetail": "需先完成打包。"
+      },
+      "updater": {
+        "title": "Updater 配置",
+        "description": "确认应用更新通道配置可用",
+        "loadingDetail": "正在检测 updater 配置…",
+        "pendingDetail": "尚未获取 updater 状态。"
+      }
+    },
+    "export": "导出预检报告",
+    "exporting": "导出中…",
+    "exportSuccess": "预检报告已导出",
+    "exportFailed": "导出预检报告失败",
+    "exportDialogTitle": "导出预检报告"
   }
 }

@@ -1,5 +1,5 @@
 import { normalizeEnvironmentProviderIds } from "@/features/environment/environment";
-import type { AppState, PublishConfigStore } from "@/lib/store/types";
+import type { AppState } from "@/lib/store/types";
 
 export type UiStateMutation = {
   leftPanelWidth?: number;
@@ -15,12 +15,6 @@ export type PreferenceStateMutation = {
   theme?: "light" | "dark" | "auto";
   executionHistoryLimit?: number;
   environmentProviderIds?: string[];
-};
-
-export type PublishStatePatch = {
-  selectedPreset?: string;
-  isCustomMode?: boolean;
-  customConfig?: PublishConfigStore;
 };
 
 export function applyUiStateMutation(
@@ -64,37 +58,6 @@ export function applyPreferenceStateMutation(
       environmentProviderIds: normalizeEnvironmentProviderIds(
         mutation.environmentProviderIds
       ),
-    }),
-  };
-}
-
-export function applyPublishStateMutation(
-  state: AppState,
-  repoId: string,
-  patch: PublishStatePatch
-): AppState {
-  return {
-    ...state,
-    repositories: state.repositories.map((repo) => {
-      if (repo.id !== repoId) {
-        return repo;
-      }
-
-      return {
-        ...repo,
-        publishConfig: {
-          ...repo.publishConfig,
-          ...(patch.selectedPreset !== undefined && {
-            selectedPreset: patch.selectedPreset,
-          }),
-          ...(patch.isCustomMode !== undefined && {
-            isCustomMode: patch.isCustomMode,
-          }),
-          ...(patch.customConfig !== undefined && {
-            customConfig: patch.customConfig,
-          }),
-        },
-      };
     }),
   };
 }

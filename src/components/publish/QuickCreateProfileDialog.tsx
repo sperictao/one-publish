@@ -295,7 +295,9 @@ export function QuickCreateProfileDialog({
   onParameterChange,
   onSave,
 }: QuickCreateProfileDialogProps) {
-  const isDotnetDraft = quickCreateProfileDraft.providerId === "dotnet";
+  const hasTemplates = quickCreateTemplateOptions.some(
+    (option) => option.id !== "custom"
+  );
   const selectedTemplate =
     quickCreateTemplateOptions.find(
       (option) => option.id === quickCreateTemplateId
@@ -422,7 +424,7 @@ export function QuickCreateProfileDialog({
           )
         }
       >
-        {isDotnetDraft && !quickCreateViewing ? (
+        {hasTemplates && !quickCreateViewing ? (
           <QuickCreateTemplateCard
             quickCreateEditing={quickCreateEditing}
             profileT={profileT}

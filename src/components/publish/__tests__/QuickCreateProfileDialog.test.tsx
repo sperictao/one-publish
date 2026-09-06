@@ -114,6 +114,7 @@ describe("QuickCreateProfileDialog", () => {
             name: "自定义配置（空表单）",
             description: "从空白表单开始配置",
           },
+          { id: "release-fd", name: "Release", description: "后端提供的模板" },
         ]}
         quickCreateProfileName="My Publish Profile"
         quickCreateProfileGroup="默认分组"

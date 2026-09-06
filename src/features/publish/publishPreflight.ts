@@ -10,8 +10,11 @@ import {
   buildProtectedOutputAccessDescription,
   preflightPublishOutput,
   requestProtectedOutputAccess,
+  requestPreparedOutputDirectoryAccess,
 } from "@/features/publish/publishOutputPreflight";
 import {
+  canRequestRuntimeOutputAccess,
+  type PreparedPublishRuntime,
   type ProviderPublishSpec,
   type PublishOutputPreflightResult,
 } from "@/features/publish/publishRuntime";
@@ -124,6 +127,26 @@ export function createPublishPreflightPipeline(deps: PublishPreflightDeps) {
       return null;
     }
     return await requestProtectedOutputAccess(spec, outputPreflight, appT);
+  }
+
+  async function requestRuntimeOutputAccess(
+    prepared: PreparedPublishRuntime,
+    isCancelled: () => boolean
+  ): Promise<boolean> {
+    if (
+      !canRequestRuntimeOutputAccess(prepared) ||
+      !prepared.outputPreflight ||
+      isCancelled()
+    ) {
+      return false;
+    }
+    await restoreMainWindowIfNeeded(true);
+    if (isCancelled()) return false;
+    const authorized = await requestPreparedOutputDirectoryAccess(
+      prepared.outputPreflight,
+      appT
+    );
+    return authorized && !isCancelled();
   }
 
   async function runPublishPreflight(
@@ -288,6 +311,7 @@ export function createPublishPreflightPipeline(deps: PublishPreflightDeps) {
   }
 
   return {
+    requestRuntimeOutputAccess,
     runPublishPreflight,
   };
 }

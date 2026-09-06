@@ -42,9 +42,9 @@ OnePublish es una **aplicación de escritorio multiplataforma** que te ofrece un
 
 ## 📸 Capturas de Pantalla
 
-<!-- TODO: agregar capturas de pantalla reales -->
+![Ventana principal de OnePublish](docs/screenshots/main-window.png)
 
-> _Capturas de pantalla próximamente. Mientras tanto, consulta la [filosofía de diseño](docs/design-philosophy.md) y la [especificación de diseño Geist](DESIGN.md)._
+> _Ventana principal — seleccione un repositorio, configure los parámetros y publique con un clic._
 
 ---
 

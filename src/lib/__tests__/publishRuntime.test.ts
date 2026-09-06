@@ -8,10 +8,10 @@ vi.mock("@tauri-apps/api/core", () => ({
 
 import {
   cancelPublishRuntime,
-  importProviderPublishSpecFromCommand,
-  prepareDraftPublishRuntime,
+  importFromCommand,
   preparePublishRuntime,
   preflightProviderPublishOutput,
+  resolvePublishSource,
   resumePublishRuntime,
   startPublishRuntime,
   synchronizePublishRuntime,
@@ -27,15 +27,41 @@ const spec: ProviderPublishSpec = {
   },
 };
 
+const draftContent = {
+  providerId: "dotnet",
+  contractVersion: 1,
+  providerVersion: "1",
+  settingsVersion: 1,
+  parameters: { configuration: "Release" },
+  composition: {
+    executionBackend: {
+      adapterId: "local-execution",
+      settingsVersion: 1,
+      settings: {},
+      credentials: {},
+    },
+    artifactStore: {
+      adapterId: "temporary-artifact-store",
+      settingsVersion: 1,
+      settings: {},
+      credentials: {},
+    },
+    artifactProcessors: [],
+    deliveryRoutes: [],
+  },
+};
+
 describe("publishRuntime", () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
 
-  it("centralizes draft-prepare, preflight, and command import invokes", async () => {
+  it("centralizes source resolution, prepare, preflight, and command import invokes", async () => {
     const prepared = {
+      status: "ready",
       configurationId: "draft-configuration",
       configurationRevisionId: "draft-revision",
+      resolvedSpec: spec,
       command: {
         program: "dotnet",
         args: ["publish", "/repo/App.csproj"],
@@ -50,10 +76,38 @@ describe("publishRuntime", () => {
         executionBackend: "local-execution",
         nodes: [],
       },
-      blockedReason: null,
+      outputPreflight: {
+        outputDir: "/repo/bin/Release/publish",
+        accessStatus: "granted",
+      },
+      recoverySnapshot: {
+        version: 1,
+        content: {},
+        configurationId: "draft-configuration",
+        configurationRevisionId: "draft-revision",
+        origin: { kind: "new" },
+        runInputs: { defaultOutputDir: "" },
+        executedParameters: {},
+        resolvedOutputDirectory: "/repo/bin/Release/publish",
+      },
       runtimeToken: "token-draft",
     };
+    const resolved = {
+      draft: {
+        content: {
+          providerId: "dotnet",
+          contractVersion: 1,
+          providerVersion: "1",
+          settingsVersion: 1,
+          parameters: {},
+          composition: {},
+        },
+        origin: { kind: "new" },
+      },
+      diagnostics: [],
+    };
     invokeMock
+      .mockResolvedValueOnce(resolved)
       .mockResolvedValueOnce(prepared)
       .mockResolvedValueOnce({
         outputDir: "/repo/bin/Release/publish",
@@ -72,40 +126,51 @@ describe("publishRuntime", () => {
       })
       .mockResolvedValueOnce(spec);
 
-    // plan 033：临时发布经自动草稿配置准备（路线 B）。
+    // 统一 prepare 合同：来源解析与准备是两个独立命令。
     await expect(
-      prepareDraftPublishRuntime({
+      resolvePublishSource("repo-1", {
+        kind: "draft",
+        content: draftContent,
+      })
+    ).resolves.toBe(resolved);
+    await expect(
+      preparePublishRuntime({
         repositoryId: "repo-1",
-        repositoryPath: "/repo",
-        providerId: "dotnet",
-        parameters: { configuration: "Release" },
-        spec,
+        source: {
+          kind: "draft",
+          content: draftContent,
+        },
+        runInputs: { defaultOutputDir: "", promotedManifestDigest: undefined },
       })
     ).resolves.toBe(prepared);
     await preflightProviderPublishOutput(spec);
-    await importProviderPublishSpecFromCommand({
+    await importFromCommand({
       command: "dotnet publish /repo/App.csproj",
       providerId: "dotnet",
       projectPath: "/repo/App.csproj",
     });
 
-    expect(invokeMock).toHaveBeenNthCalledWith(
-      1,
-      "prepare_draft_publish_runtime",
-      {
-        request: {
-          repositoryId: "repo-1",
-          repositoryPath: "/repo",
-          providerId: "dotnet",
-          parameters: { configuration: "Release" },
-          spec,
+    expect(invokeMock).toHaveBeenNthCalledWith(1, "resolve_publish_source", {
+      repositoryId: "repo-1",
+      source: {
+        kind: "draft",
+        content: draftContent,
+      },
+    });
+    expect(invokeMock).toHaveBeenNthCalledWith(2, "prepare_publish_runtime", {
+      request: {
+        repositoryId: "repo-1",
+        source: {
+          kind: "draft",
+          content: draftContent,
         },
-      }
-    );
-    expect(invokeMock).toHaveBeenNthCalledWith(2, "preflight_publish_output", {
+        runInputs: { defaultOutputDir: "", promotedManifestDigest: undefined },
+      },
+    });
+    expect(invokeMock).toHaveBeenNthCalledWith(3, "preflight_publish_output", {
       spec,
     });
-    expect(invokeMock).toHaveBeenNthCalledWith(3, "import_from_command", {
+    expect(invokeMock).toHaveBeenNthCalledWith(4, "import_from_command", {
       command: "dotnet publish /repo/App.csproj",
       providerId: "dotnet",
       projectPath: "/repo/App.csproj",
@@ -114,8 +179,10 @@ describe("publishRuntime", () => {
 
   it("prepares and starts the sealed local publish runtime through request contracts", async () => {
     const prepared = {
+      status: "ready",
       configurationId: "configuration-A",
       configurationRevisionId: "revision-A",
+      resolvedSpec: spec,
       command: {
         program: "dotnet",
         args: ["publish", "/repo/App.csproj"],
@@ -130,7 +197,24 @@ describe("publishRuntime", () => {
         executionBackend: "local-execution",
         nodes: [],
       },
-      blockedReason: null,
+      outputPreflight: {
+        outputDir: "/repo/bin/Release/publish",
+        accessStatus: "granted",
+      },
+      recoverySnapshot: {
+        version: 1,
+        content: {},
+        configurationId: "configuration-A",
+        configurationRevisionId: "revision-A",
+        origin: {
+          kind: "revision",
+          configurationId: "configuration-A",
+          revisionId: "revision-A",
+        },
+        runInputs: { defaultOutputDir: "" },
+        executedParameters: {},
+        resolvedOutputDirectory: "/repo/bin/Release/publish",
+      },
       runtimeToken: "sealed-runtime-A",
     };
     const started = {
@@ -153,10 +237,12 @@ describe("publishRuntime", () => {
 
     const prepareRequest = {
       repositoryId: "repository-A",
-      repositoryPath: "/repo",
-      configurationId: "configuration-A",
-      configurationRevisionId: "revision-A",
-      spec,
+      source: {
+        kind: "revision" as const,
+        configurationId: "configuration-A",
+        revisionId: "revision-A",
+      },
+      runInputs: { defaultOutputDir: "", promotedManifestDigest: undefined },
     };
     await expect(preparePublishRuntime(prepareRequest)).resolves.toBe(prepared);
     await expect(

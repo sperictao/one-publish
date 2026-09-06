@@ -112,7 +112,7 @@ export function EnvironmentCheckContent({
     const visibleIds = normalizedIds.filter((providerId) =>
       availableProviderIds.includes(providerId)
     );
-    return visibleIds.length > 0 ? visibleIds : [availableProviderIds[0]];
+    return visibleIds.length > 0 ? visibleIds : availableProviderIds;
   };
 
   const [selectedProviderIds, setSelectedProviderIds] = useState<string[]>(() =>

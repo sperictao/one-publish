@@ -9,8 +9,11 @@ use super::runtime::{
 };
 use super::types::{
     normalize_environment_provider_ids, normalize_execution_history_limit, trim_execution_history,
-    AppState, ConfigProfile, ExecutionRecord, PublishConfigStore, Repository,
+    AppState, ConfigProfile, ExecutionRecord, PublishComposition,
+    PublishSelectionRef, Repository, ScopedPublishDraft, CURRENT_SETTINGS_VERSION,
+    PUBLISH_CONFIGURATION_CONTRACT_VERSION,
 };
+use crate::publish_runtime::PublishBaseRevisionRef;
 use crate::errors::AppError;
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -254,30 +257,123 @@ pub async fn update_preferences(
     Ok(get_bootstrap_state())
 }
 
+/// 显式编辑状态协议（§4.1 v4）：设置选择引用与/或写入当前作用域草稿。
+/// 草稿提交只携带前端拥有的数据（Provider、绑定、参数、基准修订），
+/// 版本与组合由后端补全；写入草稿时自动选中该草稿作用域。
+#[derive(Debug, Clone, serde::Deserialize, serde::Serialize, ts_rs::TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(rename_all = "camelCase")]
+pub struct PublishEditStateUpdate {
+    #[serde(default)]
+    #[ts(optional)]
+    pub selection: Option<PublishSelectionRef>,
+    #[serde(default)]
+    #[ts(optional)]
+    pub draft: Option<PublishDraftSubmission>,
+}
+
+/// 草稿提交载荷：完整参数一次写入，不做富表单往返。
+#[derive(Debug, Clone, serde::Deserialize, serde::Serialize, ts_rs::TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(rename_all = "camelCase")]
+pub struct PublishDraftSubmission {
+    #[serde(rename = "providerId")]
+    #[ts(rename = "providerId")]
+    pub provider_id: String,
+    #[serde(rename = "projectBinding")]
+    #[ts(rename = "projectBinding")]
+    #[serde(default)]
+    #[ts(optional)]
+    pub project_binding: Option<String>,
+    pub parameters: serde_json::Value,
+    #[serde(rename = "baseRevision")]
+    #[ts(rename = "baseRevision")]
+    #[serde(default)]
+    #[ts(optional)]
+    pub base_revision: Option<PublishBaseRevisionRef>,
+}
+
 #[tauri::command]
-pub async fn update_publish_state(
+pub async fn update_publish_edit_state(
     repo_id: String,
-    selected_preset: Option<String>,
-    is_custom_mode: Option<bool>,
-    custom_config: Option<PublishConfigStore>,
+    update: PublishEditStateUpdate,
 ) -> Result<AppState, AppError> {
     let _timer =
-        crate::commands::middleware::CommandTimer::new("store::commands::update_publish_state");
+        crate::commands::middleware::CommandTimer::new("store::commands::update_publish_edit_state");
     let mut state = get_state();
     let repo = find_repository_mut(&mut state.repositories, &repo_id)?;
 
-    if let Some(preset) = selected_preset {
-        repo.publish_config.selected_preset = preset;
-    }
-    if let Some(mode) = is_custom_mode {
-        repo.publish_config.is_custom_mode = mode;
-    }
-    if let Some(config) = custom_config {
-        repo.publish_config.custom_config = config;
+    if let Some(draft) = update.draft {
+        let project_binding = upsert_edit_draft(
+            repo,
+            &draft.provider_id,
+            draft.project_binding.clone(),
+            draft.parameters,
+            draft.base_revision,
+        )?;
+        repo.publish_config.selection = Some(PublishSelectionRef::Draft {
+            provider_id: draft.provider_id,
+            project_binding,
+        });
+    } else if let Some(selection) = update.selection {
+        repo.publish_config.selection = Some(selection);
     }
 
     update_state(state)?;
     Ok(get_bootstrap_state())
+}
+
+fn upsert_edit_draft(
+    repo: &mut Repository,
+    provider_id: &str,
+    project_binding: Option<String>,
+    parameters: serde_json::Value,
+    base_revision: Option<PublishBaseRevisionRef>,
+) -> Result<Option<String>, AppError> {
+    let mut content = if let Some(base) = &base_revision {
+        let revision = repo.publish_config.profile(&base.configuration_id)
+            .filter(|profile| profile.deleted_at.is_none() && profile.current_revision_id == base.revision_id)
+            .and_then(|profile| profile.current_revision())
+            .filter(|revision| revision.provider_id == provider_id)
+            .ok_or_else(|| AppError::validation_with_code(
+                "草稿基准修订已变化，请重新加载配置", "publish_source_draft_conflict"
+            ))?;
+        crate::publish_runtime::source::content_from_revision(revision)
+    } else { crate::publish_runtime::PublishConfigurationContent {
+        provider_id: provider_id.to_string(),
+        contract_version: PUBLISH_CONFIGURATION_CONTRACT_VERSION,
+        provider_version: crate::provider::registry::ProviderRegistry::new()
+            .get(provider_id)
+            .map(|provider| provider.manifest().version.clone())
+            .unwrap_or_else(|_| "unknown".to_string()),
+        settings_version: CURRENT_SETTINGS_VERSION,
+        project_binding: project_binding.clone(),
+        parameters: serde_json::json!({}),
+        composition: PublishComposition::local_default(),
+    }};
+    content.parameters = parameters;
+    content.project_binding = project_binding.or(content.project_binding);
+    let project_binding = content.project_binding.clone();
+    let draft = ScopedPublishDraft {
+        provider_id: provider_id.to_string(),
+        project_binding: project_binding.clone(),
+        content,
+        base_revision,
+    };
+    if let Some(existing) = repo
+        .publish_config
+        .drafts
+        .iter_mut()
+        .find(|existing| {
+            existing.provider_id == draft.provider_id
+                && existing.project_binding == draft.project_binding
+        })
+    {
+        *existing = draft;
+    } else {
+        repo.publish_config.drafts.push(draft);
+    }
+    Ok(project_binding)
 }
 
 #[tauri::command]
@@ -601,6 +697,9 @@ fn redact_sensitive_spec_values(value: &mut serde_json::Value) {
 }
 
 fn sanitize_record_for_storage(record: &mut ExecutionRecord) {
+    if let Some(snapshot) = record.recovery_snapshot.as_mut() {
+        crate::security::sanitize_publish_recovery_snapshot(snapshot);
+    }
     if let Some(command_line) = record.command_line.as_mut() {
         *command_line = crate::security::sanitize_secrets_in_text(command_line);
     }
@@ -690,6 +789,8 @@ mod tests {
             failure_signature: None,
             output_excerpt: None,
             spec: None,
+            attempt_id: None,
+            recovery_snapshot: None,
             file_count: 2,
             warnings: None,
         }
@@ -810,6 +911,25 @@ mod tests {
             "FolderProfile"
         );
         assert_eq!(spec["project_path"], "/repo/App.csproj");
+    }
+
+    #[test]
+    fn sanitize_record_for_storage_redacts_recovery_snapshot_and_marks_it_incomplete() {
+        let mut record = test_record();
+        record.recovery_snapshot = Some(json!({
+            "content": {"providerId": "dotnet", "parameters": {
+                "output": "/tmp/out", "properties": {"Password": "test-only-password"}
+            }},
+            "executedParameters": {"properties": {"ApiToken": "test-only-token"}}
+        }));
+        sanitize_record_for_storage(&mut record);
+        let snapshot = record.recovery_snapshot.as_ref().unwrap();
+        assert_eq!(snapshot["redacted"], true);
+        assert_eq!(snapshot["content"]["parameters"]["output"], "/tmp/out");
+        assert!(!snapshot.to_string().contains("test-only-"));
+        let original = snapshot.clone();
+        sanitize_record_for_storage(&mut record);
+        assert_eq!(record.recovery_snapshot.as_ref(), Some(&original));
     }
 
     #[test]

@@ -1,3 +1,4 @@
+import type { PublishSelectionRef } from "@/generated/tauri-contracts";
 const PROJECT_PROFILE_SELECTED_PRESET_PREFIX = "profile-";
 const RECENT_CONFIG_RENDER_ID_PREFIX = "recent:";
 
@@ -174,29 +175,42 @@ export function getUserProfileIdFromRenderId(renderId: string | null) {
 
 export function resolvePublishSelectionIdentity(params: {
   activeProviderId: string;
-  isCustomMode: boolean;
-  selectedPreset: string;
+  selection: PublishSelectionRef | null | undefined;
+  activeProfileName?: string | null;
 }): PublishSelectionIdentity {
-  if (params.isCustomMode) {
-    const selectedConfig = parsePublishConfigKey(params.selectedPreset);
-    if (selectedConfig?.kind === "user-profile") {
-      return {
-        kind: "user-profile",
-        profileId: selectedConfig.profileId,
-        configKey: createUserProfileConfigKey(selectedConfig.profileId),
-      };
+  const selection = params.selection;
+  if (selection) {
+    switch (selection.kind) {
+      case "revision":
+        return {
+          kind: "user-profile",
+          profileId: selection.configurationId,
+          configKey: createUserProfileConfigKey(selection.configurationId),
+        };
+      case "projectProfile":
+        return {
+          kind: "project-profile",
+          profileName: selection.reference,
+          configKey: createProjectProfileConfigKey(selection.reference),
+        };
+      case "template":
+        return {
+          kind: "preset",
+          presetId: selection.templateId,
+          configKey: createPresetConfigKey(selection.templateId),
+        };
+      case "draft":
+        if (selection.providerId !== "dotnet") {
+          return {
+            kind: "provider",
+            providerId: selection.providerId,
+          };
+        }
+        // dotnet 草稿若源自某命名配置，仍高亮该配置。
+        return {
+          kind: "custom",
+        };
     }
-
-    if (params.activeProviderId !== "dotnet") {
-      return {
-        kind: "provider",
-        providerId: params.activeProviderId,
-      };
-    }
-
-    return {
-      kind: "custom",
-    };
   }
 
   if (params.activeProviderId !== "dotnet") {
@@ -206,22 +220,8 @@ export function resolvePublishSelectionIdentity(params: {
     };
   }
 
-  const projectProfileName = getSelectedProjectProfileName(
-    params.selectedPreset
-  );
-  if (projectProfileName) {
-    return {
-      kind: "project-profile",
-      profileName: projectProfileName,
-      configKey: createProjectProfileConfigKey(projectProfileName),
-    };
-  }
-
-  const presetId = normalizeIdentityValue(params.selectedPreset);
   return {
-    kind: "preset",
-    presetId,
-    configKey: createPresetConfigKey(presetId),
+    kind: "custom",
   };
 }
 
@@ -266,33 +266,12 @@ export function resolveSelectedPublishConfigKeyFromIdentity(
 
 export function resolveDotnetRecentConfigKeyForSelection(params: {
   activeProviderId: string;
-  isCustomMode: boolean;
-  activeProfileName: string | null;
-  selectedPreset: string;
+  selection: PublishSelectionRef | null | undefined;
 }) {
   return getRecentConfigKeyFromSelection(
     resolvePublishSelectionIdentity({
       activeProviderId: params.activeProviderId,
-      isCustomMode: params.isCustomMode,
-      selectedPreset: params.selectedPreset,
+      selection: params.selection,
     })
-  );
-}
-
-export function resolveSelectedPublishConfigKey(params: {
-  isCustomMode: boolean;
-  activeProfileName: string | null;
-  selectedPreset: string;
-  hasProjectProfile?: (profileName: string) => boolean;
-}) {
-  return resolveSelectedPublishConfigKeyFromIdentity(
-    resolvePublishSelectionIdentity({
-      activeProviderId: "dotnet",
-      isCustomMode: params.isCustomMode,
-      selectedPreset: params.selectedPreset,
-    }),
-    {
-      hasProjectProfile: params.hasProjectProfile,
-    }
   );
 }

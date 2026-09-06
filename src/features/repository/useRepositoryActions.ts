@@ -91,10 +91,13 @@ export function useRepositoryActions({
   );
 
   const handleScanProjectCandidates = useCallback(
-    async (path: string): Promise<ProjectScanCandidates | null> => {
+    async (
+      path: string,
+      providerId?: string
+    ): Promise<ProjectScanCandidates | null> => {
       const { handleScanProjectCandidatesRuntime } =
         await loadRepositoryActionsRuntime();
-      return await handleScanProjectCandidatesRuntime(path);
+      return await handleScanProjectCandidatesRuntime(path, providerId);
     },
     []
   );

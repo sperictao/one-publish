@@ -1,20 +1,28 @@
 use crate::parameter::{ParameterSchema, ParameterType};
-use crate::spec::{PublishSpec, SpecValue, SPEC_VERSION};
+use crate::spec::SpecValue;
+use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
+use ts_rs::TS;
 
-#[derive(Debug, thiserror::Error)]
-pub enum ParseError {
-    #[error("unknown command: {0}")]
-    UnknownCommand(String),
+/// 无法归属到 schema 的 token/flag 诊断（code + message）。
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(rename_all = "camelCase")]
+pub struct CommandImportDiagnostic {
+    pub code: String,
+    pub message: String,
+}
 
-    #[error("invalid flag: {0}")]
-    InvalidFlag(String),
-
-    #[error("missing value for flag: {0}")]
-    MissingValue(String),
-
-    #[error("provider not found: {0}")]
-    ProviderNotFound(String),
+/// 命令导入结果：schema 解析出的草稿参数 + 诊断。
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(rename_all = "camelCase")]
+pub struct CommandImportResult {
+    pub provider_id: String,
+    /// schema 解析出的完整参数（键为 schema 参数键，值保真）。
+    pub parameters: BTreeMap<String, serde_json::Value>,
+    /// 无法归属到 schema 的 token/flag 诊断（code + message）。
+    pub diagnostics: Vec<CommandImportDiagnostic>,
 }
 
 /// Command parser for extracting parameters from CLI commands
@@ -27,22 +35,16 @@ impl CommandParser {
         Self { provider_id }
     }
 
-    /// Parse a command string and generate a PublishSpec
-    pub fn parse_command(
-        &self,
-        command: &str,
-        project_path: String,
-        schema: &ParameterSchema,
-    ) -> Result<PublishSpec, ParseError> {
+    /// Parse a command string into draft parameters and diagnostics.
+    pub fn parse(&self, command: &str, schema: &ParameterSchema) -> CommandImportResult {
         let tokens = tokenize(command);
-        let parameters = self.parse_tokens(&tokens, schema)?;
+        let (parameters, diagnostics) = self.parse_tokens(&tokens, schema);
 
-        Ok(PublishSpec {
-            version: SPEC_VERSION,
+        CommandImportResult {
             provider_id: self.provider_id.clone(),
-            project_path,
             parameters,
-        })
+            diagnostics,
+        }
     }
 
     /// Parse tokens into parameters based on provider type
@@ -50,9 +52,14 @@ impl CommandParser {
         &self,
         tokens: &[String],
         schema: &ParameterSchema,
-    ) -> Result<BTreeMap<String, SpecValue>, ParseError> {
-        let mut parameters = BTreeMap::new();
+    ) -> (
+        BTreeMap<String, serde_json::Value>,
+        Vec<CommandImportDiagnostic>,
+    ) {
+        let mut parameters = BTreeMap::<String, SpecValue>::new();
+        let mut diagnostics = Vec::new();
         let mut i = 0;
+        let mut seen_flag = false;
 
         while i < tokens.len() {
             let token = &tokens[i];
@@ -69,77 +76,113 @@ impl CommandParser {
                 continue;
             }
 
-            // Skip command name
-            if i == 0 && !token.starts_with('-') {
+            if !token.starts_with('-') {
+                // 首个 flag 之前的裸 token 是程序名/子命令，不属于参数；
+                // 其后出现的裸 token 无法归属到任何 schema 参数。
+                if seen_flag {
+                    diagnostics.push(CommandImportDiagnostic {
+                        code: "command_import_unparsed_token".to_string(),
+                        message: format!("unrecognized token: {token}"),
+                    });
+                }
                 i += 1;
                 continue;
             }
 
-            // Parse flags
-            if token.starts_with('-') {
-                let (flag_name, value) = if token.contains('=') {
-                    // Flag=value format
-                    let parts: Vec<&str> = token.splitn(2, '=').collect();
-                    (parts[0].to_string(), Some(parts[1].to_string()))
-                } else if i + 1 < tokens.len() && !tokens[i + 1].starts_with('-') {
-                    // Flag value format (next token is value)
-                    (token.clone(), Some(tokens[i + 1].clone()))
-                } else {
-                    // Boolean flag format
-                    (token.clone(), None)
-                };
+            seen_flag = true;
+            let (flag_name, value) = if token.contains('=') {
+                // Flag=value format
+                let parts: Vec<&str> = token.splitn(2, '=').collect();
+                (parts[0].to_string(), Some(parts[1].to_string()))
+            } else if i + 1 < tokens.len() && !tokens[i + 1].starts_with('-') {
+                // Flag value format (next token is value)
+                (token.clone(), Some(tokens[i + 1].clone()))
+            } else {
+                // Boolean flag format
+                (token.clone(), None)
+            };
+            let consumed_value = value.is_some() && !token.contains('=');
 
-                // Map flag to parameter key
-                if let Some(param_key) = self.map_flag_to_param(&flag_name) {
-                    // Find parameter definition
-                    if let Some(def) = schema.parameters.get(&param_key) {
-                        match (&def.param_type, value.clone()) {
-                            (ParameterType::Boolean, None) => {
-                                parameters.insert(param_key, SpecValue::Bool(true));
+            let mut applied = false;
+            let mut value_unattachable = false;
+            if let Some(param_key) = self.map_flag_to_param(&flag_name) {
+                if let Some(def) = schema.parameters.get(&param_key) {
+                    match (&def.param_type, value.clone()) {
+                        (ParameterType::Boolean, None) => {
+                            parameters.insert(param_key, SpecValue::Bool(true));
+                            applied = true;
+                        }
+                        (ParameterType::String, Some(v)) => {
+                            parameters.insert(param_key, SpecValue::String(v));
+                            applied = true;
+                        }
+                        (ParameterType::String, None) => {
+                            parameters.insert(param_key, SpecValue::String(String::new()));
+                            applied = true;
+                        }
+                        (ParameterType::Array, Some(v)) => {
+                            // Parse comma-separated values
+                            let values: Vec<SpecValue> = v
+                                .split(',')
+                                .map(|item| SpecValue::String(item.trim().to_string()))
+                                .collect();
+                            parameters.insert(param_key, SpecValue::List(values));
+                            applied = true;
+                        }
+                        (ParameterType::Map, Some(v)) => {
+                            if let Some((entry_key, entry_value)) = parse_map_assignment(&v) {
+                                insert_map_entry(
+                                    &mut parameters,
+                                    param_key,
+                                    entry_key,
+                                    entry_value,
+                                );
+                                applied = true;
+                            } else {
+                                value_unattachable = true;
                             }
-                            (ParameterType::String, Some(v)) => {
-                                parameters.insert(param_key, SpecValue::String(v));
-                            }
-                            (ParameterType::String, None) => {
-                                parameters.insert(param_key, SpecValue::String(String::new()));
-                            }
-                            (ParameterType::Array, Some(v)) => {
-                                // Parse comma-separated values
-                                let values: Vec<SpecValue> = v
-                                    .split(',')
-                                    .map(|item| SpecValue::String(item.trim().to_string()))
-                                    .collect();
-                                parameters.insert(param_key, SpecValue::List(values));
-                            }
-                            (ParameterType::Map, Some(v)) => {
-                                if let Some((entry_key, entry_value)) = parse_map_assignment(&v) {
-                                    insert_map_entry(
-                                        &mut parameters,
-                                        param_key,
-                                        entry_key,
-                                        entry_value,
-                                    );
-                                }
-                            }
-                            _ => {
-                                // Ignore unsupported combinations to keep backward compatibility
-                            }
+                        }
+                        _ => {
+                            value_unattachable = true;
                         }
                     }
                 }
+            }
 
-                // Skip value token if we consumed it
-                if value.is_some() && !token.contains('=') {
-                    i += 2;
-                } else {
-                    i += 1;
-                }
+            if !applied {
+                let message = match &value {
+                    Some(v) => format!("unrecognized flag: {flag_name} (value: {v})"),
+                    None => format!("unrecognized flag: {flag_name}"),
+                };
+                diagnostics.push(CommandImportDiagnostic {
+                    code: if value_unattachable {
+                        "command_import_unparsed_token".to_string()
+                    } else {
+                        "command_import_unknown_flag".to_string()
+                    },
+                    message,
+                });
+            }
+
+            // Skip value token if we consumed it
+            if consumed_value {
+                i += 2;
             } else {
                 i += 1;
             }
         }
 
-        Ok(parameters)
+        let parameters = parameters
+            .into_iter()
+            .map(|(key, value)| {
+                (
+                    key,
+                    serde_json::to_value(&value).expect("SpecValue is JSON-serializable"),
+                )
+            })
+            .collect();
+
+        (parameters, diagnostics)
     }
 
     /// Map CLI flag to schema parameter key based on provider
@@ -396,23 +439,21 @@ mod tests {
         let parser = CommandParser::new("dotnet".to_string());
         let command = "dotnet publish -c Release -r win-x64 --self-contained";
         let schema = dotnet_schema();
-        let result = parser.parse_command(command, "test.csproj".to_string(), &schema);
+        let result = parser.parse(command, &schema);
 
-        assert!(result.is_ok());
-        let spec = result.unwrap();
-        assert_eq!(spec.provider_id, "dotnet");
-        assert_eq!(spec.project_path, "test.csproj");
+        assert_eq!(result.provider_id, "dotnet");
+        assert!(result.diagnostics.is_empty());
         assert_eq!(
-            spec.parameters.get("configuration"),
-            Some(&SpecValue::String("Release".to_string()))
+            result.parameters.get("configuration"),
+            Some(&serde_json::json!("Release"))
         );
         assert_eq!(
-            spec.parameters.get("runtime"),
-            Some(&SpecValue::String("win-x64".to_string()))
+            result.parameters.get("runtime"),
+            Some(&serde_json::json!("win-x64"))
         );
         assert_eq!(
-            spec.parameters.get("self_contained"),
-            Some(&SpecValue::Bool(true))
+            result.parameters.get("self_contained"),
+            Some(&serde_json::json!(true))
         );
     }
 
@@ -421,16 +462,17 @@ mod tests {
         let parser = CommandParser::new("cargo".to_string());
         let command = "cargo build --release --target x86_64-apple-darwin";
         let schema = cargo_schema();
-        let result = parser.parse_command(command, "Cargo.toml".to_string(), &schema);
+        let result = parser.parse(command, &schema);
 
-        assert!(result.is_ok());
-        let spec = result.unwrap();
-        assert_eq!(spec.provider_id, "cargo");
-        assert_eq!(spec.project_path, "Cargo.toml");
-        assert_eq!(spec.parameters.get("release"), Some(&SpecValue::Bool(true)));
+        assert_eq!(result.provider_id, "cargo");
+        assert!(result.diagnostics.is_empty());
         assert_eq!(
-            spec.parameters.get("target"),
-            Some(&SpecValue::String("x86_64-apple-darwin".to_string()))
+            result.parameters.get("release"),
+            Some(&serde_json::json!(true))
+        );
+        assert_eq!(
+            result.parameters.get("target"),
+            Some(&serde_json::json!("x86_64-apple-darwin"))
         );
     }
 
@@ -439,26 +481,20 @@ mod tests {
         let parser = CommandParser::new("java".to_string());
         let command = "./gradlew build -Dversion=1.2.3 -Dprofile=prod --offline";
         let schema = java_schema();
-        let spec = parser
-            .parse_command(command, "build.gradle".to_string(), &schema)
-            .expect("parse java command");
+        let result = parser.parse(command, &schema);
 
-        let properties = spec.parameters.get("properties").expect("properties");
-        match properties {
-            SpecValue::Map(map) => {
-                assert_eq!(
-                    map.get("version"),
-                    Some(&SpecValue::String("1.2.3".to_string()))
-                );
-                assert_eq!(
-                    map.get("profile"),
-                    Some(&SpecValue::String("prod".to_string()))
-                );
-            }
-            _ => panic!("properties should be map"),
-        }
-
-        assert_eq!(spec.parameters.get("offline"), Some(&SpecValue::Bool(true)));
+        assert!(result.diagnostics.is_empty());
+        assert_eq!(
+            result.parameters.get("properties"),
+            Some(&serde_json::json!({
+                "version": "1.2.3",
+                "profile": "prod",
+            }))
+        );
+        assert_eq!(
+            result.parameters.get("offline"),
+            Some(&serde_json::json!(true))
+        );
     }
 
     #[test]
@@ -466,22 +502,90 @@ mod tests {
         let parser = CommandParser::new("go".to_string());
         let command = "GOOS=linux GOARCH=amd64 go build -o ./dist/app";
         let schema = go_schema();
-        let spec = parser
-            .parse_command(command, "go.mod".to_string(), &schema)
-            .expect("parse go command");
+        let result = parser.parse(command, &schema);
+
+        assert!(result.diagnostics.is_empty());
+        assert_eq!(
+            result.parameters.get("target"),
+            Some(&serde_json::json!("linux"))
+        );
+        assert_eq!(
+            result.parameters.get("arch"),
+            Some(&serde_json::json!("amd64"))
+        );
+        assert_eq!(
+            result.parameters.get("output"),
+            Some(&serde_json::json!("./dist/app"))
+        );
+    }
+
+    #[test]
+    fn parse_dotnet_publish_full_command_has_no_diagnostics() {
+        let parser = CommandParser::new("dotnet".to_string());
+        let command = "dotnet publish -c Debug -o /tmp/out -p:Version=1.2.3";
+        let schema = dotnet_schema();
+        let result = parser.parse(command, &schema);
+
+        assert!(result.diagnostics.is_empty());
+        assert_eq!(
+            result.parameters.get("configuration"),
+            Some(&serde_json::json!("Debug"))
+        );
+        assert_eq!(
+            result.parameters.get("output"),
+            Some(&serde_json::json!("/tmp/out"))
+        );
+        assert_eq!(
+            result.parameters.get("properties"),
+            Some(&serde_json::json!({ "Version": "1.2.3" }))
+        );
+    }
+
+    #[test]
+    fn parse_unknown_flag_reports_diagnostic() {
+        let parser = CommandParser::new("dotnet".to_string());
+        let command = "dotnet publish --not-a-flag x -c Debug";
+        let schema = dotnet_schema();
+        let result = parser.parse(command, &schema);
 
         assert_eq!(
-            spec.parameters.get("target"),
-            Some(&SpecValue::String("linux".to_string()))
+            result.parameters.get("configuration"),
+            Some(&serde_json::json!("Debug"))
         );
+        assert_eq!(result.diagnostics.len(), 1);
+        let diagnostic = &result.diagnostics[0];
+        assert_eq!(diagnostic.code, "command_import_unknown_flag");
+        assert!(diagnostic.message.contains("--not-a-flag"));
+    }
+
+    #[test]
+    fn parse_boolean_flag_sets_true() {
+        let parser = CommandParser::new("dotnet".to_string());
+        let command = "dotnet publish -c Debug --no-build";
+        let schema = dotnet_schema();
+        let result = parser.parse(command, &schema);
+
+        assert!(result.diagnostics.is_empty());
         assert_eq!(
-            spec.parameters.get("arch"),
-            Some(&SpecValue::String("amd64".to_string()))
+            result.parameters.get("no_build"),
+            Some(&serde_json::json!(true))
         );
+    }
+
+    #[test]
+    fn parse_unattachable_tokens_report_diagnostics() {
+        let parser = CommandParser::new("dotnet".to_string());
+        let command = "dotnet publish -c Debug stray-value";
+        let schema = dotnet_schema();
+        let result = parser.parse(command, &schema);
+
         assert_eq!(
-            spec.parameters.get("output"),
-            Some(&SpecValue::String("./dist/app".to_string()))
+            result.parameters.get("configuration"),
+            Some(&serde_json::json!("Debug"))
         );
+        assert_eq!(result.diagnostics.len(), 1);
+        assert_eq!(result.diagnostics[0].code, "command_import_unparsed_token");
+        assert!(result.diagnostics[0].message.contains("stray-value"));
     }
 
     fn dotnet_schema() -> ParameterSchema {
@@ -495,8 +599,20 @@ mod tests {
             parameter(ParameterType::String, "-r", None),
         );
         parameters.insert(
+            "output".to_string(),
+            parameter(ParameterType::String, "-o", None),
+        );
+        parameters.insert(
             "self_contained".to_string(),
             parameter(ParameterType::Boolean, "--self-contained", None),
+        );
+        parameters.insert(
+            "no_build".to_string(),
+            parameter(ParameterType::Boolean, "--no-build", None),
+        );
+        parameters.insert(
+            "properties".to_string(),
+            parameter(ParameterType::Map, "-p", Some("-p:")),
         );
 
         ParameterSchema { parameters }

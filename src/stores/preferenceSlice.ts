@@ -61,7 +61,7 @@ export const createPreferenceSlice: StateCreator<
     minimizeToTrayOnClose: true,
     defaultOutputDir: "",
     executionHistoryLimit: 20,
-    environmentProviderIds: ["dotnet"],
+    environmentProviderIds: [],
     startupNotice: null,
 
     // ── Preferences ──

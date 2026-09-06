@@ -154,66 +154,6 @@
     "error": "Error: {{error}}",
     "configurationBlocked": "The current publish profile cannot run"
   },
-  "releaseChecklist": {
-    "title": "Signed Release Checklist",
-    "description": "Verify release gates step by step before distribution.",
-    "ready": "Signed release gates are satisfied",
-    "notReady": "Signed release gates are incomplete",
-    "prev": "Previous",
-    "next": "Next",
-    "close": "Done",
-    "summary": {
-      "passed": "Passed",
-      "warning": "Warnings",
-      "failed": "Failed"
-    },
-    "status": {
-      "pass": "Pass",
-      "warning": "Warning",
-      "fail": "Fail",
-      "pending": "Pending"
-    },
-    "actions": {
-      "openEnvironment": "Open environment check",
-      "openSettings": "Open settings"
-    },
-    "steps": {
-      "environment": {
-        "title": "Environment",
-        "description": "Ensure no critical toolchain issues on this machine",
-        "pendingDetail": "No environment result yet. Run an environment check first."
-      },
-      "publish": {
-        "title": "Publish",
-        "description": "Confirm publish command completed with output",
-        "pendingDetail": "Publish has not been executed.",
-        "failedDetail": "Publish failed. Fix it before continuing."
-      },
-      "package": {
-        "title": "Package",
-        "description": "Package output directory into a distributable ZIP artifact",
-        "pendingDetail": "Click \"Package ZIP\" in the output log card.",
-        "blockedDetail": "Publish must succeed first."
-      },
-      "sign": {
-        "title": "Sign",
-        "description": "Generate a detached signature for the artifact",
-        "pendingDetail": "Click \"Sign (GPG)\" in the output log card.",
-        "blockedDetail": "Packaging must finish first."
-      },
-      "updater": {
-        "title": "Updater",
-        "description": "Verify updater channel configuration",
-        "loadingDetail": "Checking updater configuration…",
-        "pendingDetail": "Updater status is not available yet."
-      }
-    },
-    "export": "Export Preflight Report",
-    "exporting": "Exporting…",
-    "exportSuccess": "Preflight report exported",
-    "exportFailed": "Failed to export preflight report",
-    "exportDialogTitle": "Export preflight report"
-  },
   "branchPanel": {
     "expandRepoList": "Expand repository list",
     "collapsePanel": "Collapse panel",
@@ -298,27 +238,17 @@
     "description": "Paste your build command to extract parameters automatically",
     "commandSectionTitle": "Command input",
     "commandLabel": "Build Command",
-    "currentProvider": "Current provider: {{provider}} (supports: dotnet, cargo, go, gradle)",
+    "currentProvider": "Current provider: {{provider}}",
     "enterCommand": "Enter a command",
     "parsing": "Parsing…",
     "parseCommand": "Parse Command",
     "parseSuccess": "Parameters imported",
     "parseFailed": "Parse failed",
     "extractedParameters": "Extracted Parameters",
+    "diagnostics": "Parse Diagnostics",
     "cancel": "Cancel",
     "importParameters": "Import Parameters",
     "examplePrefix": "Example"
-  },
-  "artifact": {
-    "savePackageTitle": "Save package file",
-    "packageDone": "Package completed",
-    "packageFailed": "Package failed",
-    "signDone": "Signing completed",
-    "signFailed": "Signing failed",
-    "packaging": "Packaging…",
-    "packageZip": "Package ZIP",
-    "signing": "Signing…",
-    "signGpg": "Sign (GPG)"
   },
   "profiles": {
     "title": "Profile Manager",
@@ -558,7 +488,7 @@
     "scanProjectRootNotFound": "Project root not detected",
     "scanProjectRootNotFoundDesc": "No .sln file found. Ensure current or parent directory contains a solution file.",
     "scanProjectFileNotFound": "Project file not detected",
-    "scanProjectFileNotFoundDesc": "Solution found, but no .csproj file was detected. Check project structure.",
+    "scanProjectFileNotFoundDesc": "No project file supported by the current provider was found. Check the project structure and binding.",
     "scanProjectMultipleCandidates": "Multiple project files detected",
     "scanProjectMultipleCandidatesDesc": "This repository contains multiple project files. Bind an explicit Project File in repository settings first.",
     "scanProjectPermissionDenied": "Insufficient directory permissions",
@@ -656,26 +586,22 @@
     "copySuccess": "{{label}} copied",
     "copyFailedWithLabel": "Failed to copy {{label}}",
     "selectRepositoryFirst": "Select a repository first",
-    "selectDotnetProjectFirst": "Select a .NET project first",
+    "selectProjectFirst": "Bind a project in repository settings first",
     "cancellingPublish": "Cancelling publish…",
     "noRunningPublishTask": "No running publish task",
     "cancelPublishFailed": "Failed to cancel publish",
-    "noMappableParameters": "No mappable parameters found",
-    "unmappedFields": "Unmapped fields",
     "partialImport": "Parameters partially imported",
-    "mappedFields": "Mapped",
-    "fieldsUnit": "fields",
     "parametersImported": "Parameters imported",
     "profileLoaded": "Profile loaded",
     "loadedProfile": "Loaded profile",
-    "commandImportResult": "Command import mapping result",
-    "mappedFieldsLabel": "Mapped fields",
-    "unmappedFieldsLabel": "Unmapped fields",
+    "commandImportResult": "Command import result",
+    "commandImportDiagnostics": "Parse diagnostics",
     "macOsProtectedFilesAndFolders": "Files and Folders",
     "macOsProtectedDesktop": "Desktop",
     "macOsProtectedDocuments": "Documents",
     "macOsProtectedDownloads": "Downloads",
-    "none": "None"
+    "none": "None",
+    "releaseChecklist": "Release checklist"
   },
   "failure": {
     "groupTitle": "Failure Diagnostics Groups",
@@ -880,7 +806,8 @@
     "automationRemoteCancelRun": "Cancel run",
     "automationRemoteCancelSuccess": "Cancellation requested for the remote run",
     "automationRemoteCancelFailed": "Failed to cancel the remote run",
-    "compositionConfig": "Publish composition"
+    "compositionConfig": "Publish composition",
+    "importCommand": "Create configuration from command"
   },
   "common": {
     "close": "Close",
@@ -933,5 +860,76 @@
     "moveDown": "Move down",
     "remove": "Remove",
     "compositionMissing": "The current revision has no publish composition to edit."
+  },
+  "artifact": {
+    "savePackageTitle": "Save package file",
+    "packageDone": "Package completed",
+    "packageFailed": "Package failed",
+    "signDone": "Signing completed",
+    "signFailed": "Signing failed",
+    "packaging": "Packaging…",
+    "packageZip": "Package ZIP",
+    "signing": "Signing…",
+    "signGpg": "Sign (GPG)"
+  },
+  "releaseChecklist": {
+    "title": "Signed Release Checklist",
+    "description": "Verify release gates step by step before distribution.",
+    "ready": "Signed release gates are satisfied",
+    "notReady": "Signed release gates are incomplete",
+    "prev": "Previous",
+    "next": "Next",
+    "close": "Done",
+    "summary": {
+      "passed": "Passed",
+      "warning": "Warnings",
+      "failed": "Failed"
+    },
+    "status": {
+      "pass": "Pass",
+      "warning": "Warning",
+      "fail": "Fail",
+      "pending": "Pending"
+    },
+    "actions": {
+      "openEnvironment": "Open environment check",
+      "openSettings": "Open settings"
+    },
+    "steps": {
+      "environment": {
+        "title": "Environment",
+        "description": "Ensure no critical toolchain issues on this machine",
+        "pendingDetail": "No environment result yet. Run an environment check first."
+      },
+      "publish": {
+        "title": "Publish",
+        "description": "Confirm publish command completed with output",
+        "pendingDetail": "Publish has not been executed.",
+        "failedDetail": "Publish failed. Fix it before continuing."
+      },
+      "package": {
+        "title": "Package",
+        "description": "Package output directory into a distributable ZIP artifact",
+        "pendingDetail": "Click \"Package ZIP\" in the output log card.",
+        "blockedDetail": "Publish must succeed first."
+      },
+      "sign": {
+        "title": "Sign",
+        "description": "Generate a detached signature for the artifact",
+        "pendingDetail": "Click \"Sign (GPG)\" in the output log card.",
+        "blockedDetail": "Packaging must finish first."
+      },
+      "updater": {
+        "title": "Updater",
+        "description": "Verify updater channel configuration",
+        "loadingDetail": "Checking updater configuration…",
+        "pendingDetail": "Updater status is not available yet."
+      }
+    },
+    "export": "Export Preflight Report",
+    "exporting": "Exporting…",
+    "exportSuccess": "Preflight report exported",
+    "exportFailed": "Failed to export preflight report",
+    "exportDialogTitle": "Export preflight report"
   }
 }

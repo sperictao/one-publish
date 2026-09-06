@@ -65,15 +65,15 @@ pub async fn scan_project(
 ) -> Result<ProjectInfo, crate::errors::AppError> {
     let _timer =
         crate::commands::middleware::CommandTimer::new("commands::repository::mod::scan_project");
-    let candidates = scan_project_candidates(start_path).await?;
+    let candidates = scan_project_candidates(start_path, None).await?;
 
     match candidates.project_files.as_slice() {
         [] if candidates.solution_files.is_empty() => Err(repository_error(
-            "cannot find project root (.sln or project file)",
+            "cannot find a supported project root",
             "project_root_not_found",
         )),
         [] => Err(repository_error(
-            "cannot find project file (.csproj/.fsproj/.vbproj)",
+            "cannot find a supported project file",
             "project_file_not_found",
         )),
         [only_project] => resolve_project_info(only_project.clone()).await,
@@ -553,6 +553,30 @@ EndProject
             detect_provider_from_path(temp_dir.path()),
             Some("tauri".to_string())
         );
+    }
+
+    #[test]
+    fn scan_project_candidates_keeps_mixed_provider_entries() {
+        let temp_dir = TempDir::new().expect("temp dir");
+        let root = temp_dir.path();
+        fs::create_dir_all(root.join("src-tauri")).unwrap();
+        for name in ["App.csproj", "Cargo.toml", "src-tauri/tauri.conf.json"] {
+            fs::write(root.join(name), "").unwrap();
+        }
+        let candidates = scan_project_candidates_from_path(root).unwrap();
+        assert_eq!(candidates.project_files.len(), 3);
+        assert_eq!(candidates.recommended_project_file, None);
+        for (provider, file) in [
+            ("dotnet", "App.csproj"),
+            ("tauri", "src-tauri/tauri.conf.json"),
+            ("cargo", "Cargo.toml"),
+        ] {
+            let scoped = scan_provider_project_candidates_from_path(root, Some(provider)).unwrap();
+            assert_eq!(
+                scoped.project_files,
+                vec![root.join(file).to_string_lossy().to_string()]
+            );
+        }
     }
 
     #[test]

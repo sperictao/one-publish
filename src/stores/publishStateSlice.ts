@@ -1,17 +1,16 @@
 import type { StateCreator } from "zustand";
-import type { AppState, PublishConfigStore } from "@/lib/store/types";
+import type { AppState } from "@/lib/store/types";
+import type { PublishEditStateUpdate } from "@/generated/tauri-contracts";
 import {
-  updatePublishState as apiUpdatePublishState,
+  updatePublishEditState as apiUpdatePublishEditState,
   pushRecentPublishConfig as apiPushRecentPublishConfig,
   removeRecentPublishConfig as apiRemoveRecentPublishConfig,
   replaceRecentPublishConfigKey as apiReplaceRecentPublishConfigKey,
   reorderRecentPublishConfigs as apiReorderRecentPublishConfigs,
 } from "@/lib/store/api";
 import {
-  applyPublishStateMutation,
   mergeRecentPublishState,
   resolveScopedMutationRepoId,
-  type PublishStatePatch,
 } from "./appStoreMutations";
 import { makeHandlePersistenceFailure } from "./appStoreHelpers";
 import type { AppStore } from "./appStore";
@@ -23,13 +22,8 @@ export interface PublishStateSlice {
   recentConfigKeysByRepo: Record<string, string[]>;
 
   /** 设置发布状态（带防抖持久化，按仓库作用域） */
-  setPublishState: (params: PublishStatePatch) => void;
-  /** 设置选中的预设 */
-  setSelectedPreset: (preset: string) => void;
-  /** 设置自定义模式 */
-  setIsCustomMode: (mode: boolean) => void;
-  /** 设置自定义配置 */
-  setCustomConfig: (config: PublishConfigStore) => void;
+  /** 显式提交编辑状态（选择引用与/或当前作用域草稿） */
+  updatePublishEditState: (update: PublishEditStateUpdate) => void;
 
   /** 记录最近使用的发布配置 */
   pushRecentPublishConfig: (configKey: string, repoId?: string | null) => void;
@@ -52,10 +46,7 @@ export interface PublishStateSlice {
 }
 
 // ── Module-level closures ──
-const DEBOUNCE_DELAY = 500;
-let publishDebounceTimer: ReturnType<typeof setTimeout> | null = null;
 let recentMutationQueue: Promise<void> = Promise.resolve();
-const pendingPublishState = new Map<string, PublishStatePatch>();
 
 export const createPublishStateSlice: StateCreator<
   AppStore,
@@ -91,43 +82,30 @@ export const createPublishStateSlice: StateCreator<
     recentConfigKeysByRepo: {},
 
     // ── Publish State ──
-    setPublishState: (params) => {
+    updatePublishEditState: (update) => {
       const { selectedRepoId } = get();
       if (!selectedRepoId) return;
-
-      set((prev) => applyPublishStateMutation(prev, selectedRepoId, params));
-
-      if (publishDebounceTimer) clearTimeout(publishDebounceTimer);
-      const previousPending = pendingPublishState.get(selectedRepoId) ?? {};
-      pendingPublishState.set(selectedRepoId, {
-        ...previousPending,
-        ...params,
-      });
-
-      publishDebounceTimer = setTimeout(() => {
-        const pendingEntries = Array.from(pendingPublishState.entries());
-        pendingPublishState.clear();
-
-        void Promise.all(
-          pendingEntries.map(([repoId, pendingParams]) =>
-            apiUpdatePublishState({ repoId, ...pendingParams }).catch((err) => {
-              void handlePersistenceFailure("保存发布配置失败", err);
-            })
-          )
-        );
-      }, DEBOUNCE_DELAY);
-    },
-
-    setSelectedPreset: (preset) => {
-      get().setPublishState({ selectedPreset: preset });
-    },
-
-    setIsCustomMode: (mode) => {
-      get().setPublishState({ isCustomMode: mode });
-    },
-
-    setCustomConfig: (config) => {
-      get().setPublishState({ customConfig: config });
+      void apiUpdatePublishEditState({ repoId: selectedRepoId, update })
+        .then((nextState) => {
+          // 回写 selection：交互后即时可用于来源构造（批次 3 的水合也依赖）。
+          set((prev) => {
+            const repositories = prev.repositories.map((repo) =>
+              repo.id === selectedRepoId
+                ? {
+                    ...repo,
+                    publishConfig:
+                      nextState.repositories.find(
+                        (r) => r.id === selectedRepoId
+                      )?.publishConfig ?? repo.publishConfig,
+                  }
+                : repo
+            );
+            return { repositories };
+          });
+        })
+        .catch((err) => {
+          void handlePersistenceFailure("保存发布配置失败", err);
+        });
     },
 
     // ── Recent configs ──

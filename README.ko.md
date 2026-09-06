@@ -42,9 +42,9 @@ OnePublish는 소프트웨어 프로젝트를 배포하기 위한 아름답고 �
 
 ## 📸 스크린샷
 
-<!-- TODO: add actual screenshots -->
+![OnePublish 메인 창](docs/screenshots/main-window.png)
 
-> _곧 스크린샷이 추가됩니다. 그동안 [디자인 철학](docs/design-philosophy.md)과 [Geist 디자인 사양](DESIGN.md)을 확인해 보세요._
+> _메인 창 — 저장소를 선택하고, 매개변수를 구성하고, 한 번의 클릭으로 게시합니다._
 
 ---
 

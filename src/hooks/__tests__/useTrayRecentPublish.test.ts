@@ -9,8 +9,6 @@ const mocks = vi.hoisted(() => ({
   listen: vi.fn(),
   getRepository: vi.fn(),
   getProfiles: vi.fn(),
-  resolveProjectInfo: vi.fn(),
-  scanProject: vi.fn(),
   setTrayPublishStatus: vi.fn(),
   showMainWindow: vi.fn(),
   showSystemNotification: vi.fn(),
@@ -32,8 +30,6 @@ vi.mock("@/lib/store/api", async () => {
     ...actual,
     getRepository: mocks.getRepository,
     getProfiles: mocks.getProfiles,
-    resolveProjectInfo: mocks.resolveProjectInfo,
-    scanProject: mocks.scanProject,
     setTrayPublishStatus: mocks.setTrayPublishStatus,
     showMainWindow: mocks.showMainWindow,
   };
@@ -45,6 +41,7 @@ vi.mock("@/lib/systemNotification", () => ({
 
 import {
   useTrayRecentPublish,
+  resolveTrayPublishRequest,
   type TrayPublishRequestPayload,
 } from "@/hooks/useTrayRecentPublish";
 
@@ -59,26 +56,10 @@ function createRepository(overrides?: Partial<Repository>): Repository {
     isMain: true,
     providerId: "dotnet",
     publishConfig: {
-      selectedPreset: "release-fd",
-      isCustomMode: false,
-      customConfig: {
-        configuration: "Release",
-        runtime: "",
-        framework: "",
-        selfContained: false,
-        outputDir: "",
-        noBuild: false,
-        noRestore: false,
-        verbosity: "",
-        noLogo: false,
-        deleteExistingFiles: false,
-        properties: {},
-        useProfile: false,
-        profileName: "",
-      },
       profiles: [],
       bindings: [],
       appliedBundles: [],
+      drafts: [],
     },
     ...overrides,
   };
@@ -89,21 +70,33 @@ describe("useTrayRecentPublish", () => {
     vi.clearAllMocks();
     mocks.listen.mockResolvedValue(() => {});
     mocks.getRepository.mockResolvedValue(createRepository());
-    mocks.resolveProjectInfo.mockResolvedValue({
-      root_path: "/repo",
-      project_file: "/repo/App.csproj",
-      publish_profiles: ["FolderProfile"],
-      target_frameworks: ["net8.0"],
-    });
-    mocks.scanProject.mockResolvedValue({
-      root_path: "/repo",
-      project_file: "/repo/App.csproj",
-      publish_profiles: ["FolderProfile"],
-      target_frameworks: ["net8.0"],
-    });
     mocks.setTrayPublishStatus.mockResolvedValue(true);
     mocks.showSystemNotification.mockResolvedValue(true);
     mocks.showMainWindow.mockResolvedValue(true);
+  });
+
+  it("userprofile 解析为携带修订身份的 revision 来源，项目解析交给后端", async () => {
+    const projectFile = "/repo/apps/second/src-tauri/tauri.conf.json";
+    mocks.getRepository.mockResolvedValue(
+      createRepository({ providerId: "tauri", projectFile })
+    );
+    mocks.getProfiles.mockResolvedValue([
+      {
+        id: "tauri-profile",
+        revisionId: "r1",
+        providerId: "tauri",
+        parameters: {},
+      },
+    ]);
+    const request = await resolveTrayPublishRequest({
+      payload: { repoId: "repo-1", configKey: "userprofile:tauri-profile" },
+    });
+    expect(request.source).toEqual({
+      kind: "revision",
+      configurationId: "tauri-profile",
+      revisionId: "r1",
+    });
+    expect(mocks.getProfiles).toHaveBeenCalledWith("repo-1");
   });
 
   it("支持从托盘直接执行 userprofile", async () => {
@@ -131,8 +124,6 @@ describe("useTrayRecentPublish", () => {
     renderHook(() =>
       useTrayRecentPublish({
         appT: {},
-        defaultOutputDir: "/exports",
-        specVersion: 1,
         runPublishSpec,
       })
     );
@@ -156,19 +147,13 @@ describe("useTrayRecentPublish", () => {
 
     expect(runPublishSpec).toHaveBeenCalledWith(
       {
-        version: 1,
-        provider_id: "dotnet",
-        project_path: "/repo/App.csproj",
-        parameters: {
-          configuration: "Release",
-          output: "/repo/out",
-        },
+        kind: "revision",
+        configurationId: "profile-42",
+        revisionId: "revision-7",
       },
       expect.objectContaining({
         repoId: "repo-1",
         recentConfigKey: "userprofile:profile-42",
-        configurationId: "profile-42",
-        configurationRevisionId: "revision-7",
         openOutputDirOnSuccess: true,
         restoreWindowOnFailure: false,
         feedbackMode: "system",
@@ -177,7 +162,7 @@ describe("useTrayRecentPublish", () => {
     );
   });
 
-  it("userprofile 里的空 output 会按默认输出目录规则标准化", async () => {
+  it("userprofile 缺修订身份时明确失败，不执行默认草稿", async () => {
     const runPublishSpec = vi.fn().mockResolvedValue(undefined);
     let handler:
       | ((event: { payload: TrayPublishRequestPayload }) => Promise<void>)
@@ -189,12 +174,11 @@ describe("useTrayRecentPublish", () => {
     mocks.getProfiles.mockResolvedValue([
       {
         id: "alpha",
-        revisionId: "alpha-revision",
+        revisionId: "",
         name: "alpha",
         providerId: "dotnet",
         parameters: {
           configuration: "Debug",
-          output: "",
           runtime: "osx-arm64",
         },
       },
@@ -203,8 +187,6 @@ describe("useTrayRecentPublish", () => {
     renderHook(() =>
       useTrayRecentPublish({
         appT: {},
-        defaultOutputDir: "/exports",
-        specVersion: 1,
         runPublishSpec,
       })
     );
@@ -226,88 +208,11 @@ describe("useTrayRecentPublish", () => {
       },
     });
 
-    expect(runPublishSpec).toHaveBeenCalledWith(
+    expect(runPublishSpec).not.toHaveBeenCalled();
+    expect(mocks.setTrayPublishStatus).toHaveBeenCalledWith("failure");
+    expect(mocks.showSystemNotification).toHaveBeenCalledWith(
       expect.objectContaining({
-        parameters: {
-          configuration: "Debug",
-          output: "/exports/App/Debug",
-          runtime: "osx-arm64",
-        },
-      }),
-      expect.objectContaining({
-        repoId: "repo-1",
-        trayStatusEffect: true,
-      })
-    );
-  });
-
-  it("仓库 projectFile 是 .sln 时会回退扫描真实项目文件", async () => {
-    const runPublishSpec = vi.fn().mockResolvedValue(undefined);
-    let handler:
-      | ((event: { payload: TrayPublishRequestPayload }) => Promise<void>)
-      | null = null;
-    mocks.listen.mockImplementation(async (_eventName, callback) => {
-      handler = callback;
-      return () => {};
-    });
-    mocks.getProfiles.mockResolvedValue([
-      {
-        id: "alpha",
-        revisionId: "alpha-revision",
-        name: "alpha",
-        providerId: "dotnet",
-        parameters: {
-          configuration: "Release",
-        },
-      },
-    ]);
-    mocks.getRepository.mockResolvedValue(
-      createRepository({
-        projectFile: "/repo/App.sln",
-      })
-    );
-    mocks.scanProject.mockResolvedValue({
-      root_path: "/repo",
-      project_file: "/repo/UI/App.csproj",
-      publish_profiles: ["FolderProfile"],
-      target_frameworks: ["net8.0"],
-    });
-
-    renderHook(() =>
-      useTrayRecentPublish({
-        appT: {},
-        defaultOutputDir: "/exports",
-        specVersion: 1,
-        runPublishSpec,
-      })
-    );
-
-    await waitFor(() => {
-      expect(handler).not.toBeNull();
-    });
-    if (!handler) {
-      throw new Error("tray handler missing");
-    }
-    const trayHandler = handler as (event: {
-      payload: TrayPublishRequestPayload;
-    }) => Promise<void>;
-
-    await trayHandler({
-      payload: {
-        repoId: "repo-1",
-        configKey: "userprofile:alpha",
-      },
-    });
-
-    expect(mocks.scanProject).toHaveBeenCalledWith("/repo");
-    expect(runPublishSpec).toHaveBeenCalledWith(
-      expect.objectContaining({
-        project_path: "/repo/UI/App.csproj",
-      }),
-      expect.objectContaining({
-        repoId: "repo-1",
-        recentConfigKey: "userprofile:alpha",
-        trayStatusEffect: true,
+        body: "missing configuration revision: alpha",
       })
     );
   });
@@ -324,8 +229,6 @@ describe("useTrayRecentPublish", () => {
     renderHook(() =>
       useTrayRecentPublish({
         appT: {},
-        defaultOutputDir: "/exports",
-        specVersion: 1,
         runPublishSpec,
       })
     );
@@ -350,14 +253,9 @@ describe("useTrayRecentPublish", () => {
 
     expect(runPublishSpec).toHaveBeenCalledWith(
       {
-        version: 1,
-        provider_id: "dotnet",
-        project_path: "/repo/App.csproj",
-        parameters: {
-          properties: {
-            PublishProfile: "FolderProfile",
-          },
-        },
+        kind: "projectProfile",
+        providerId: "dotnet",
+        reference: "FolderProfile",
       },
       expect.objectContaining({
         repoId: "repo-1",
@@ -384,7 +282,6 @@ describe("useTrayRecentPublish", () => {
         providerId: "dotnet",
         parameters: {
           configuration: "Release",
-          output: "/repo/out",
         },
       },
     ]);
@@ -392,8 +289,6 @@ describe("useTrayRecentPublish", () => {
     renderHook(() =>
       useTrayRecentPublish({
         appT: {},
-        defaultOutputDir: "/exports",
-        specVersion: 1,
         runPublishSpec,
       })
     );
@@ -417,11 +312,12 @@ describe("useTrayRecentPublish", () => {
     });
 
     expect(mocks.getRepository).toHaveBeenCalledWith("repo-1");
-    expect(mocks.resolveProjectInfo).toHaveBeenCalledWith("/repo/App.csproj");
     expect(runPublishSpec).toHaveBeenCalledWith(
-      expect.objectContaining({
-        project_path: "/repo/App.csproj",
-      }),
+      {
+        kind: "revision",
+        configurationId: "alpha",
+        revisionId: "alpha-revision",
+      },
       expect.objectContaining({
         repoId: "repo-1",
         recentConfigKey: "userprofile:alpha",
@@ -446,8 +342,6 @@ describe("useTrayRecentPublish", () => {
         appT: {
           trayPublishFailed: "状态栏发布启动失败",
         },
-        defaultOutputDir: "/exports",
-        specVersion: 1,
         runPublishSpec,
       })
     );
@@ -494,8 +388,6 @@ describe("useTrayRecentPublish", () => {
         appT: {
           trayPublishFailed: "状态栏发布启动失败",
         },
-        defaultOutputDir: "/exports",
-        specVersion: 1,
         runPublishSpec,
       })
     );
@@ -552,8 +444,6 @@ describe("useTrayRecentPublish", () => {
         appT: {
           trayPublishFailed: "状态栏发布启动失败",
         },
-        defaultOutputDir: "/exports",
-        specVersion: 1,
         runPublishSpec,
       })
     );
@@ -583,72 +473,6 @@ describe("useTrayRecentPublish", () => {
     });
   });
 
-  it("未绑定且存在多个候选项目时不会触发托盘发布", async () => {
-    const runPublishSpec = vi.fn().mockResolvedValue(undefined);
-    let handler:
-      | ((event: { payload: TrayPublishRequestPayload }) => Promise<void>)
-      | null = null;
-    mocks.listen.mockImplementation(async (_eventName, callback) => {
-      handler = callback;
-      return () => {};
-    });
-    mocks.getRepository.mockResolvedValue(
-      createRepository({
-        projectFile: undefined,
-      })
-    );
-    mocks.getProfiles.mockResolvedValue([
-      {
-        id: "alpha",
-        revisionId: "alpha-revision",
-        name: "alpha",
-        providerId: "dotnet",
-        parameters: {
-          configuration: "Release",
-        },
-      },
-    ]);
-    mocks.scanProject.mockRejectedValue({
-      code: "multiple_project_files_found",
-      message: "multiple project files found",
-    });
-
-    renderHook(() =>
-      useTrayRecentPublish({
-        appT: {
-          trayPublishFailed: "状态栏发布启动失败",
-        },
-        defaultOutputDir: "/exports",
-        specVersion: 1,
-        runPublishSpec,
-      })
-    );
-
-    await waitFor(() => {
-      expect(handler).not.toBeNull();
-    });
-
-    if (!handler) {
-      throw new Error("tray handler missing");
-    }
-    const trayHandler = handler as (event: {
-      payload: TrayPublishRequestPayload;
-    }) => Promise<void>;
-
-    await trayHandler({
-      payload: {
-        repoId: "repo-1",
-        configKey: "userprofile:alpha",
-      },
-    });
-
-    expect(runPublishSpec).not.toHaveBeenCalled();
-    expect(mocks.showSystemNotification).toHaveBeenCalledWith({
-      title: "状态栏发布启动失败",
-      body: "该仓库包含多个项目文件，请先在仓库设置中绑定明确的 Project File。",
-    });
-  });
-
   it("如果系统通知发送失败会回退显示主窗口", async () => {
     const runPublishSpec = vi.fn().mockResolvedValue(undefined);
     let handler:
@@ -666,8 +490,6 @@ describe("useTrayRecentPublish", () => {
         appT: {
           trayPublishFailed: "状态栏发布启动失败",
         },
-        defaultOutputDir: "/exports",
-        specVersion: 1,
         runPublishSpec,
       })
     );

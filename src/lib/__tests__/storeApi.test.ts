@@ -62,9 +62,11 @@ describe("store api wrappers", () => {
       isMain: true,
       providerId: "dotnet",
       publishConfig: {
-        selectedPreset: "userprofile:profile-42",
-        isCustomMode: true,
-        customConfig: {},
+        selection: {
+          kind: "draft" as const,
+          providerId: "dotnet",
+          projectBinding: null,
+        },
         bindings: [
           {
             id: "binding-1",

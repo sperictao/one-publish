@@ -61,13 +61,6 @@ export function useEditorProviderState({
     [applyEditorProvider]
   );
 
-  const applyRecoveredSpecProvider = useCallback(
-    (providerId: string) => {
-      applyEditorProvider(providerId);
-    },
-    [applyEditorProvider]
-  );
-
   const applySelectedRepositoryProvider = useCallback(
     (providerId?: string | null) => {
       applyEditorProvider(providerId);
@@ -77,7 +70,6 @@ export function useEditorProviderState({
 
   return {
     applyProfileProvider,
-    applyRecoveredSpecProvider,
     applySelectedRepositoryProvider,
   };
 }

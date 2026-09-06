@@ -37,7 +37,7 @@ use crate::commands::{
 };
 use crate::errors::AppError;
 use crate::provider::{registry::provider_registry, ProviderSourceInputKind};
-use crate::spec::PublishSpec;
+use crate::spec::{PublishSpec, SpecValue, SPEC_VERSION};
 use crate::tauri_release::ReleaseGate;
 
 use crate::store::{
@@ -47,6 +47,13 @@ use crate::store::{
 
 mod journal;
 pub mod remote_evidence;
+pub mod source;
+
+pub use source::{
+    resolve_publish_source, PublishBaseRevisionRef, PublishConfigurationContent, PublishDraft,
+    PublishDraftOrigin, PublishRunInputs, PublishSource, PublishSourceDiagnostic,
+    ResolvedPublishSource,
+};
 
 /// 桌面端产物存储的明确保留期限：7 天（ADR-0038）。
 const ARTIFACT_RETENTION_SECONDS: u64 = 604_800;
@@ -394,28 +401,188 @@ pub fn cancel_publish_runtime(request: CancelPublishRuntimeRequest) -> Result<bo
     Ok(false)
 }
 
+/// 统一 prepare 的公开请求（§2.2）：仓库 + 来源 + 运行输入；后端生成执行
+/// spec，客户端不再传 repositoryPath、configuration/revision 身份或 spec。
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
 #[serde(rename_all = "camelCase")]
 #[ts(rename_all = "camelCase")]
 pub struct PreparePublishRuntimeRequest {
     pub repository_id: String,
+    pub source: PublishSource,
+    #[serde(default)]
+    pub run_inputs: PublishRunInputs,
+}
+
+/// 统一 prepare 的内部调用形态：来源解析完成后，核心流程只看内容、身份与
+/// 本次运行输入。测试直接构造该结构驱动核心流程。
+#[derive(Debug, Clone)]
+pub(crate) struct PrepareRuntimeRequest {
+    pub repository_id: String,
     pub repository_path: String,
     pub configuration_id: String,
     pub configuration_revision_id: String,
-    pub spec: PublishSpec,
-    /// Artifact Promotion：复用既有封存 Manifest 的新 Attempt 输入；普通构建为空。
-    #[serde(default)]
-    #[ts(optional)]
     pub promoted_manifest_digest: Option<String>,
+    pub content: PublishConfigurationContent,
+    pub origin: PublishDraftOrigin,
+    pub spec: PublishSpec,
+    pub run_inputs: PublishRunInputs,
 }
 
-#[derive(Debug, Clone, PartialEq)]
-pub(crate) struct ResolvedPublishConfiguration {
-    pub provider_id: String,
-    pub parameters: Value,
-    pub composition: PublishComposition,
+/// 阻断诊断：结构化编码 + 面向用户的描述（§2.3）。
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(rename_all = "camelCase")]
+pub struct PublishBlockDiagnostic {
+    pub code: String,
+    pub message: String,
+}
+
+/// 版本化恢复快照（§3.3）：由 prepare 生成，放入发布输入快照的命名字段，
+/// 使历史重跑不依赖草稿修订存活，也不依赖当前选中配置。
+pub const PUBLISH_RECOVERY_SNAPSHOT_VERSION: u32 = 1;
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(rename_all = "camelCase")]
+pub struct PublishRecoverySnapshot {
+    pub version: u32,
+    /// 原配置完整内容（含 releaseSettings 等保留键）。
+    pub content: PublishConfigurationContent,
+    /// 实际配置/修订身份（含隐藏草稿的真实修订身份）。
+    pub configuration_id: String,
+    pub configuration_revision_id: String,
+    /// 原来源引用。
+    pub origin: PublishDraftOrigin,
+    /// 实际项目绑定。
+    #[serde(default)]
+    #[ts(optional)]
     pub project_binding: Option<String>,
-    pub blocked_reason: Option<String>,
+    /// 本次运行输入（当前默认输出目录等）。
+    pub run_inputs: PublishRunInputs,
+    /// 本次执行参数（命令参数投影，含派生输出目录）。
+    pub executed_parameters: Value,
+    /// 解析输出信息。
+    pub resolved_output_directory: String,
+}
+
+/// 准备结果中的输出预检摘要（§2.3）：展示与目录授权交互所需的最小字段集。
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(rename_all = "camelCase")]
+pub struct PreparedOutputSummary {
+    pub output_dir: String,
+    pub access_status: crate::commands::PublishOutputAccessStatus,
+    #[serde(default)]
+    #[ts(optional)]
+    pub protected_root: Option<String>,
+    #[serde(default)]
+    #[ts(optional)]
+    pub probe_directory: Option<String>,
+    #[serde(default)]
+    #[ts(optional)]
+    pub remote_location: Option<crate::commands::RemoteLocationSummary>,
+}
+
+fn output_summary(preflight: &crate::commands::PublishOutputPreflightResult) -> PreparedOutputSummary {
+    PreparedOutputSummary {
+        output_dir: preflight.output_dir.clone(),
+        access_status: preflight.access.status,
+        protected_root: preflight.access.protected_root.clone(),
+        probe_directory: preflight.access.probe_directory.clone(),
+        remote_location: preflight.access.remote_location.clone(),
+    }
+}
+
+/// 统一准备结果（§2.3）：ready 可执行；blocked 只读可见，不返回可执行 token。
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[serde(tag = "status", rename_all = "camelCase")]
+#[ts(tag = "status", rename_all = "camelCase")]
+pub enum PreparedPublishRuntime {
+    #[serde(rename_all = "camelCase")]
+    Ready {
+        #[serde(rename = "configurationId")]
+        configuration_id: String,
+        #[serde(rename = "configurationRevisionId")]
+        configuration_revision_id: String,
+        /// 后端产生的只读执行投影；前端不得修改后再提交执行。
+        resolved_spec: PublishSpec,
+        command: RenderedPublishCommand,
+        plan: RuntimePlanSummary,
+        output_preflight: PreparedOutputSummary,
+        recovery_snapshot: PublishRecoverySnapshot,
+        runtime_token: String,
+    },
+    #[serde(rename_all = "camelCase")]
+    Blocked {
+        diagnostics: Vec<PublishBlockDiagnostic>,
+        /// 阻断涉及输出目录时附带的预检摘要（目录授权交互需要目录信息）。
+        #[serde(default)]
+        #[ts(optional)]
+        output_preflight: Option<PreparedOutputSummary>,
+        /// 已成功解析的只读身份；来源解析早期失败时为空。
+        #[serde(default)]
+        #[ts(optional)]
+        configuration_id: Option<String>,
+        #[serde(default)]
+        #[ts(optional)]
+        configuration_revision_id: Option<String>,
+    },
+}
+
+impl PreparedPublishRuntime {
+    /// 阻断原因的可读描述（首个诊断）；ready 时为 None。
+    pub fn blocked_reason(&self) -> Option<&str> {
+        match self {
+            PreparedPublishRuntime::Blocked { diagnostics, .. } => {
+                diagnostics.first().map(|diagnostic| diagnostic.message.as_str())
+            }
+            _ => None,
+        }
+    }
+
+    pub fn runtime_token(&self) -> &str {
+        match self {
+            PreparedPublishRuntime::Ready { runtime_token, .. } => runtime_token,
+            PreparedPublishRuntime::Blocked { .. } => "",
+        }
+    }
+
+    pub fn plan(&self) -> Option<&RuntimePlanSummary> {
+        match self {
+            PreparedPublishRuntime::Ready { plan, .. } => Some(plan),
+            PreparedPublishRuntime::Blocked { .. } => None,
+        }
+    }
+
+    pub fn command(&self) -> Option<&RenderedPublishCommand> {
+        match self {
+            PreparedPublishRuntime::Ready { command, .. } => Some(command),
+            PreparedPublishRuntime::Blocked { .. } => None,
+        }
+    }
+
+    pub fn configuration_id(&self) -> Option<&str> {
+        self.identity().0
+    }
+
+    pub fn configuration_revision_id(&self) -> Option<&str> {
+        self.identity().1
+    }
+
+    pub fn identity(&self) -> (Option<&str>, Option<&str>) {
+        match self {
+            PreparedPublishRuntime::Ready {
+                configuration_id,
+                configuration_revision_id,
+                ..
+            } => (Some(configuration_id), Some(configuration_revision_id)),
+            PreparedPublishRuntime::Blocked {
+                configuration_id,
+                configuration_revision_id,
+                ..
+            } => (configuration_id.as_deref(), configuration_revision_id.as_deref()),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
@@ -455,18 +622,6 @@ pub struct RuntimePlanSummary {
     pub snapshot_digest: String,
     pub execution_backend: String,
     pub nodes: Vec<RuntimePlanNodeSummary>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, TS)]
-#[serde(rename_all = "camelCase")]
-#[ts(rename_all = "camelCase")]
-pub struct PreparedPublishRuntime {
-    pub configuration_id: String,
-    pub configuration_revision_id: String,
-    pub command: RenderedPublishCommand,
-    pub plan: RuntimePlanSummary,
-    pub blocked_reason: Option<String>,
-    pub runtime_token: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
@@ -732,16 +887,47 @@ pub(crate) struct AttemptIdentity {
 }
 
 pub(crate) fn prepare_runtime(
-    request: PreparePublishRuntimeRequest,
-    resolved: ResolvedPublishConfiguration,
+    request: PrepareRuntimeRequest,
 ) -> Result<PreparedPublishRuntime, AppError> {
     validate_prepare_request(&request)?;
-    // 发布设置只有一个来源：所选配置修订的保留参数键（ADR-0058）。
-    let tauri_release = if resolved.provider_id == TAURI_PROVIDER_ID {
-        match crate::tauri_release::release_settings_from_parameters(&resolved.parameters) {
+    let identity = (
+        Some(request.configuration_id.clone()),
+        Some(request.configuration_revision_id.clone()),
+    );
+    if sensitive_publish_input(&request.content, &request.spec.parameters) {
+        return Ok(blocked_prepared_runtime(
+            identity.0,
+            identity.1,
+            "publish_runtime_sensitive_input",
+            "发布参数包含凭据值或脱敏占位符，请改用凭据引用后重新准备发布".to_string(),
+            None,
+        ));
+    }
+    // 合同版本校验：不兼容的配置内容明确阻断，不伪造可执行计划。
+    if request.content.contract_version != crate::store::PUBLISH_CONFIGURATION_CONTRACT_VERSION {
+        return Ok(blocked_prepared_runtime(
+            identity.0,
+            identity.1,
+            "publish_runtime_configuration_blocked",
+            format!(
+                "configuration_contract_version_unsupported:{}",
+                request.content.contract_version
+            ),
+            None,
+        ));
+    }
+    // 发布设置只有一个来源：配置内容的保留参数键（ADR-0058）。
+    let tauri_release = if request.content.provider_id == TAURI_PROVIDER_ID {
+        match crate::tauri_release::release_settings_from_parameters(&request.content.parameters) {
             Ok(settings) => settings,
             Err(error) => {
-                return Ok(blocked_prepared_runtime(request, error.to_string()));
+                return Ok(blocked_prepared_runtime(
+                    identity.0,
+                    identity.1,
+                    "publish_runtime_tauri_blocked",
+                    error.to_string(),
+                    None,
+                ));
             }
         }
     } else {
@@ -752,7 +938,13 @@ pub(crate) fn prepare_runtime(
             TauriBindingCheck::Bound(binding) => Some(binding),
             TauriBindingCheck::Blocked(reason) => {
                 // 不兼容或缺失的 Tauri 配置以阻断状态呈现，而不是让准备请求失败。
-                return Ok(blocked_prepared_runtime(request, reason));
+                return Ok(blocked_prepared_runtime(
+                    identity.0,
+                    identity.1,
+                    "publish_runtime_tauri_blocked",
+                    reason,
+                    None,
+                ));
             }
         }
     } else {
@@ -769,39 +961,35 @@ pub(crate) fn prepare_runtime(
     };
     let command = render_provider_publish(request.spec.clone())?;
     let preflight = preflight_publish_output(request.spec.clone());
-    let mut blocked_reason = resolved.blocked_reason;
-    let actual_parameters =
-        serde_json::to_value(&request.spec.parameters).map_err(runtime_serialization_error)?;
-    if request.spec.provider_id != resolved.provider_id
-        || !configuration_parameters_match(
-            &request.spec.provider_id,
-            &resolved.parameters,
-            &actual_parameters,
-        )
-    {
-        blocked_reason = Some(
-            "selected configuration revision no longer matches the publish inputs".to_string(),
-        );
-    }
     // 修订固化的候选绑定 vs 本次发布输入解析出的实际候选：失配显式阻断，
     // 换绑走显式动作；存量未绑定修订（None）宽限跳过（决议 #78）。
-    if blocked_reason.is_none() {
-        if let Some(bound) = &resolved.project_binding {
-            let actual = resolve_project_binding(
-                &request.repository_path,
-                &request.spec.provider_id,
-                &request.spec.project_path,
-            );
-            if actual.as_deref() != Some(bound.as_str()) {
-                blocked_reason = Some(format!(
+    let mut blocked: Option<(&str, String)> = None;
+    if let Some(bound) = &request.content.project_binding {
+        let actual = resolve_project_binding(
+            &request.repository_path,
+            &request.spec.provider_id,
+            &request.spec.project_path,
+        );
+        if actual.as_deref() != Some(bound.as_str()) {
+            blocked = Some((
+                "publish_runtime_project_binding_mismatch",
+                format!(
                     "selected configuration revision is bound to {bound}, but the publish inputs resolve to {}",
                     actual.as_deref().unwrap_or("no project candidate")
-                ));
-            }
+                ),
+            ));
         }
     }
-    if blocked_reason.is_none() {
-        blocked_reason = preflight_blocked_reason(&preflight);
+    if blocked.is_none() {
+        blocked = preflight_blocked_reason(&preflight).map(|reason| {
+            let access_only = preflight.validation.status != PublishOutputValidationStatus::Incompatible
+                && preflight.access.status == PublishOutputAccessStatus::Denied
+                && !preflight.access.remote_location.as_ref().is_some_and(|location| location.kind == RemoteLocationKind::Remote);
+            (
+                if access_only { "publish_output_access_denied" } else { "publish_runtime_output_preflight_blocked" },
+                reason,
+            )
+        });
     }
 
     let spec_json = serde_json::to_string(&request.spec).map_err(runtime_serialization_error)?;
@@ -815,9 +1003,33 @@ pub(crate) fn prepare_runtime(
         preflight.output_dir.clone()
     };
     let delivery_directory = local_delivery_root(&provider_output_directory)?;
-    if blocked_reason.is_none() {
-        blocked_reason = delivery_root_blocked_reason(Path::new(&delivery_directory));
+    if blocked.is_none() {
+        blocked = delivery_root_blocked_reason(Path::new(&delivery_directory))
+            .map(|reason| ("publish_runtime_delivery_blocked", reason));
     }
+    if let Some((code, reason)) = blocked {
+        return Ok(blocked_prepared_runtime(
+            identity.0,
+            identity.1,
+            code,
+            reason,
+            Some(output_summary(&preflight)),
+        ));
+    }
+
+    // 恢复快照（§3.3）：原配置完整内容 + 实际身份 + 本次运行输入与执行参数。
+    let recovery_snapshot = PublishRecoverySnapshot {
+        version: PUBLISH_RECOVERY_SNAPSHOT_VERSION,
+        content: request.content.clone(),
+        configuration_id: request.configuration_id.clone(),
+        configuration_revision_id: request.configuration_revision_id.clone(),
+        origin: request.origin.clone(),
+        project_binding: request.content.project_binding.clone(),
+        run_inputs: request.run_inputs.clone(),
+        executed_parameters: serde_json::to_value(&request.spec.parameters)
+            .map_err(runtime_serialization_error)?,
+        resolved_output_directory: preflight.output_dir.clone(),
+    };
     let snapshot = build_snapshot(
         &request,
         spec_json.clone(),
@@ -825,25 +1037,23 @@ pub(crate) fn prepare_runtime(
         &delivery_directory,
         tauri_binding.as_ref(),
         &release_gates,
-        &resolved.composition,
+        &request.content.composition,
+        &recovery_snapshot,
     )?;
     let registry = build_registry(&snapshot, None)?;
     let prepared = PublishRuntime::new(registry)
         .prepare_attempt(&snapshot)
         .map_err(runtime_error)?;
-    let runtime_token = if blocked_reason.is_none() {
-        serde_json::to_string(&prepared).map_err(runtime_serialization_error)?
-    } else {
-        String::new()
-    };
 
-    Ok(PreparedPublishRuntime {
+    Ok(PreparedPublishRuntime::Ready {
         configuration_id: request.configuration_id,
         configuration_revision_id: request.configuration_revision_id,
+        resolved_spec: request.spec,
         command,
         plan: summarize_plan(&prepared),
-        blocked_reason,
-        runtime_token,
+        output_preflight: output_summary(&preflight),
+        recovery_snapshot,
+        runtime_token: serde_json::to_string(&prepared).map_err(runtime_serialization_error)?,
     })
 }
 
@@ -988,36 +1198,28 @@ fn repository_relative_config(
     publish_domain::is_safe_portable_relative_path(&portable).then_some(portable)
 }
 
-/// Tauri 检查失败时仍返回可见的准备结果：驱动未知时不渲染猜测的命令或计划，
-/// 只呈现阻断原因，而不是错误弹窗（领域词汇：Tauri 构建驱动禁止猜测）。
+/// 阻断结果仍然可见：不渲染猜测的命令或计划，只呈现结构化诊断，
+/// 而不是错误弹窗（领域词汇：Tauri 构建驱动禁止猜测）。
 fn blocked_prepared_runtime(
-    request: PreparePublishRuntimeRequest,
+    configuration_id: Option<String>,
+    configuration_revision_id: Option<String>,
+    code: &str,
     reason: String,
+    output_preflight: Option<PreparedOutputSummary>,
 ) -> PreparedPublishRuntime {
-    PreparedPublishRuntime {
-        configuration_id: request.configuration_id,
-        configuration_revision_id: request.configuration_revision_id,
-        command: RenderedPublishCommand {
-            program: String::new(),
-            args: Vec::new(),
-            working_dir: None,
-            display_command: String::new(),
-            env: Vec::new(),
-        },
-        plan: RuntimePlanSummary {
-            version: 0,
-            digest: String::new(),
-            snapshot_digest: String::new(),
-            execution_backend: String::new(),
-            nodes: Vec::new(),
-        },
-        blocked_reason: Some(reason),
-        runtime_token: String::new(),
+    PreparedPublishRuntime::Blocked {
+        diagnostics: vec![PublishBlockDiagnostic {
+            code: code.to_string(),
+            message: reason,
+        }],
+        output_preflight,
+        configuration_id,
+        configuration_revision_id,
     }
 }
 
-/// 修订参数中的保留键（如 `releaseSettings`）承载发布设置而不是命令参数，
-/// 匹配只针对真正进入命令渲染的参数进行。
+/// 配置内容中的保留键（如 `releaseSettings`）承载发布设置而不是命令参数；
+/// 命令参数投影把它们从执行 spec 中排除，供渲染与恢复快照共用。
 fn command_parameters(parameters: &Value) -> Value {
     let mut parameters = parameters.clone();
     if let Some(object) = parameters.as_object_mut() {
@@ -1026,160 +1228,247 @@ fn command_parameters(parameters: &Value) -> Value {
     parameters
 }
 
-fn configuration_parameters_match(provider_id: &str, expected: &Value, actual: &Value) -> bool {
-    let expected = &command_parameters(expected);
-    let actual = &command_parameters(actual);
-    if expected == actual {
-        return true;
-    }
-    if provider_id != "dotnet" {
-        return false;
-    }
-
-    let (Some(expected), Some(actual)) = (expected.as_object(), actual.as_object()) else {
-        return false;
-    };
-    if expected.contains_key("output") {
-        return false;
-    }
-    let mut actual_without_derived_output = actual.clone();
-    let Some(Value::String(output)) = actual_without_derived_output.remove("output") else {
-        return false;
-    };
-    !output.trim().is_empty() && &actual_without_derived_output == expected
+/// 统一 prepare 的 spec 构造失败形态：阻断（可见、结构化）或致命错误。
+#[derive(Debug)]
+enum PublishBuildFailure {
+    Blocked(PublishBlockDiagnostic),
+    Fatal(AppError),
 }
 
+impl From<AppError> for PublishBuildFailure {
+    fn from(error: AppError) -> Self {
+        PublishBuildFailure::Fatal(error)
+    }
+}
+
+/// 后端唯一的执行 spec 构造（§3.1）：项目路径解析与命令参数投影都从完整
+/// 配置内容派生，前端不再构造 spec。
+fn sensitive_publish_input(
+    content: &PublishConfigurationContent,
+    parameters: &BTreeMap<String, SpecValue>,
+) -> bool {
+    let mut snapshot = serde_json::json!({
+        "content": content,
+        "executedParameters": parameters,
+    });
+    crate::security::sanitize_publish_recovery_snapshot(&mut snapshot)
+}
+
+fn build_resolved_spec(
+    repository: &crate::store::Repository,
+    content: &PublishConfigurationContent,
+    run_inputs: &PublishRunInputs,
+    source: &PublishSource,
+) -> Result<PublishSpec, PublishBuildFailure> {
+    let provider = provider_registry()
+        .get(&content.provider_id)
+        .map_err(|error| {
+            PublishBuildFailure::Fatal(AppError::validation_with_code(
+                error.to_string(),
+                "publish_runtime_provider_unknown",
+            ))
+        })?;
+
+    // 项目路径：来源绑定优先；否则按 Provider 的路径类型解析仓库默认候选。
+    let project_path = match content.project_binding.as_deref() {
+        Some(binding) => {
+            let prefix = format!("{}:", content.provider_id);
+            let selector = binding.strip_prefix(&prefix).unwrap_or(binding);
+            let candidate = if selector == "." {
+                repository.path.clone()
+            } else {
+                Path::new(&repository.path)
+                    .join(selector)
+                    .to_string_lossy()
+                    .to_string()
+            };
+            if !Path::new(&candidate).exists() {
+                return Err(PublishBuildFailure::Blocked(PublishBlockDiagnostic {
+                    code: "publish_runtime_project_binding_missing".to_string(),
+                    message: format!("the bound project candidate no longer exists: {selector}"),
+                }));
+            }
+            candidate
+        }
+        None => match provider.capabilities().project_path_kind {
+            crate::provider::ProviderProjectPathKind::RepositoryRoot => repository.path.clone(),
+            crate::provider::ProviderProjectPathKind::ProjectFile => {
+                // 仓库已解析的项目文件是唯一候选；缺失则阻断，不猜测。
+                match repository.project_file.as_deref() {
+                    Some(file) if Path::new(file).exists() => file.to_string(),
+                    _ => {
+                        return Err(PublishBuildFailure::Blocked(PublishBlockDiagnostic {
+                            code: "publish_runtime_project_binding_missing".to_string(),
+                            message: "the repository has no resolved project file; bind a project candidate first".to_string(),
+                        }));
+                    }
+                }
+            }
+        },
+    };
+
+    // 命令参数投影：保留键不进入命令；false/null/空值原样保留。
+    let mut parameters: BTreeMap<String, SpecValue> =
+        serde_json::from_value(command_parameters(&content.parameters)).map_err(|error| {
+            PublishBuildFailure::Fatal(AppError::validation_with_code(
+                format!("configuration parameters must be a JSON object of schema values: {error}"),
+                "publish_runtime_parameter_shape_invalid",
+            ))
+        })?;
+    // 在草稿落盘和 journal 封存前拒绝凭据值；不能用脱敏值代替实际执行参数。
+    if sensitive_publish_input(content, &parameters) {
+        return Err(PublishBuildFailure::Blocked(PublishBlockDiagnostic {
+            code: "publish_runtime_sensitive_input".to_string(),
+            message: "发布参数包含凭据值或脱敏占位符，请改用凭据引用后重新准备发布".to_string(),
+        }));
+    }
+
+    // .NET 默认输出目录派生（唯一后端实现）：模板、普通配置与草稿按当前
+    // 默认目录派生；直接 pubxml 与历史来源使用各自明确的输出，不重套当前默认。
+    let derives_default_output = content.provider_id == "dotnet"
+        && !matches!(
+            source,
+            PublishSource::ProjectProfile { .. } | PublishSource::History { .. }
+        );
+    let has_explicit_output = match parameters.get("output") {
+        Some(SpecValue::String(output)) => !output.trim().is_empty(),
+        _ => false,
+    };
+    if derives_default_output && !has_explicit_output && !run_inputs.default_output_dir.trim().is_empty()
+    {
+        let configuration = match parameters.get("configuration") {
+            Some(SpecValue::String(value)) if !value.trim().is_empty() => value.trim().to_string(),
+            _ => "Release".to_string(),
+        };
+        let project_name = Path::new(&project_path)
+            .file_stem()
+            .map(|name| name.to_string_lossy().to_string())
+            .unwrap_or_default();
+        let scoped_output = if project_name.is_empty() {
+            Path::new(&run_inputs.default_output_dir)
+                .join(&configuration)
+                .to_string_lossy()
+                .to_string()
+        } else {
+            Path::new(&run_inputs.default_output_dir)
+                .join(&project_name)
+                .join(&configuration)
+                .to_string_lossy()
+                .to_string()
+        };
+        parameters.insert(
+            "output".to_string(),
+            SpecValue::String(scoped_output),
+        );
+    }
+
+    Ok(PublishSpec {
+        version: SPEC_VERSION,
+        provider_id: content.provider_id.clone(),
+        project_path,
+        parameters,
+    })
+}
+
+/// 统一准备流程（§3.1）：读取仓库 → 解析来源 → 物化草稿修订 → 生成执行
+/// spec → 渲染/预检/封存。主界面、托盘、历史重跑共用同一入口。
 #[tauri::command]
-pub fn prepare_publish_runtime(
+pub async fn prepare_publish_runtime(
+    app: tauri::AppHandle,
     request: PreparePublishRuntimeRequest,
 ) -> Result<PreparedPublishRuntime, AppError> {
-    let state = crate::store::get_state();
-    let repository = state
-        .repositories
-        .iter()
-        .find(|repository| repository.id == request.repository_id)
-        .ok_or_else(|| {
-            AppError::repository_with_code(
-                format!("repository {} was not found", request.repository_id),
-                "publish_runtime_repository_not_found",
-            )
-        })?;
-    if repository.path != request.repository_path {
-        return Err(AppError::validation_with_code(
-            "selected repository path no longer matches persisted state",
-            "publish_runtime_repository_mismatch",
-        ));
-    }
-    let configuration = repository
-        .publish_config
-        .profiles
-        .iter()
-        .find(|configuration| configuration.id == request.configuration_id)
-        .ok_or_else(|| {
-            AppError::config_with_code(
-                format!(
-                    "publish configuration {} was not found",
-                    request.configuration_id
-                ),
-                "publish_runtime_configuration_not_found",
-            )
-        })?;
-    if configuration.deleted_at.is_some() {
-        return Err(AppError::config_with_code(
-            "selected publish configuration has been deleted",
-            "publish_runtime_configuration_deleted",
-        ));
-    }
-    let revision = configuration
-        .revisions
-        .iter()
-        .find(|revision| revision.id == request.configuration_revision_id)
-        .ok_or_else(|| {
-            AppError::config_with_code(
-                format!(
-                    "publish configuration revision {} was not found",
-                    request.configuration_revision_id
-                ),
-                "publish_runtime_revision_not_found",
-            )
-        })?;
-    let blocked_reason = (configuration.current_revision_id != revision.id)
-        .then(|| "selected publish configuration revision is no longer current".to_string())
-        .or_else(|| configuration.blocked_reason.clone());
-    prepare_runtime(
-        request,
-        ResolvedPublishConfiguration {
-            provider_id: revision.provider_id.clone(),
-            parameters: revision.parameters.clone(),
-            composition: revision.composition.clone(),
-            project_binding: revision.project_binding.clone(),
-            blocked_reason,
-        },
-    )
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, TS)]
-#[serde(rename_all = "camelCase")]
-#[ts(rename_all = "camelCase")]
-pub struct PrepareDraftPublishRuntimeRequest {
-    pub repository_id: String,
-    pub repository_path: String,
-    pub provider_id: String,
-    pub parameters: Value,
-    pub spec: PublishSpec,
-}
-
-/// 路线 B（plan 033）：临时发布经自动草稿配置走新栈——物化草稿修订后复用
-/// 同一 prepare_runtime，Attempt 语义与命名配置完全一致（可恢复、可重跑、
-/// 有完整事件与凭证）。草稿配置隐藏于 UI，修订按 DRAFT_MAX_REVISIONS 回收。
-#[tauri::command]
-pub async fn prepare_draft_publish_runtime(
-    app: tauri::AppHandle,
-    request: PrepareDraftPublishRuntimeRequest,
-) -> Result<PreparedPublishRuntime, AppError> {
     let _timer = crate::commands::middleware::CommandTimer::new(
-        "publish_runtime::prepare_draft_publish_runtime",
+        "publish_runtime::prepare_publish_runtime",
     );
     let mut state = crate::store::get_state();
     let repository = crate::store::find_repository_mut(
         &mut state.repositories,
         &request.repository_id,
     )?;
-    if repository.path != request.repository_path {
-        return Err(AppError::validation_with_code(
-            "selected repository path no longer matches persisted state",
-            "publish_runtime_repository_mismatch",
+    let repository_path = repository.path.clone();
+    let resolution = source::resolve_publish_source_scoped(
+        repository,
+        &state.execution_history,
+        &request.source,
+    )?;
+    let mut content = resolution.draft.content.clone();
+    let origin = resolution.draft.origin.clone();
+
+    // 配置级阻断（配置封锁）与"选中的修订已不是当前修订"保持旧行为：
+    // 明确阻断，保存新修订或换绑后才能执行。
+    if let Some(reason) = resolution.blocked_reason {
+        return Ok(blocked_prepared_runtime(
+            resolution.configuration_id,
+            resolution.revision_id,
+            "publish_runtime_configuration_blocked",
+            reason,
+            None,
         ));
     }
-    let project_binding =
-        crate::store::repository_project_binding(repository, &request.provider_id);
-    let (configuration_id, configuration_revision_id) = repository
-        .publish_config
-        .upsert_draft_revision(
-            request.provider_id.clone(),
-            request.parameters.clone(),
-            project_binding.clone(),
-            chrono::Utc::now().to_rfc3339(),
-        );
-    crate::store::persist_state_and_refresh_tray(&app, state).await?;
+    if resolution
+        .diagnostics
+        .iter()
+        .any(|diagnostic| diagnostic.code == "publish_source_revision_not_current")
+    {
+        return Ok(blocked_prepared_runtime(
+            resolution.configuration_id,
+            resolution.revision_id,
+            "publish_runtime_revision_not_current",
+            "selected publish configuration revision is no longer current".to_string(),
+            None,
+        ));
+    }
 
-    prepare_runtime(
-        PreparePublishRuntimeRequest {
-            repository_id: request.repository_id,
-            repository_path: request.repository_path,
+    let spec = match build_resolved_spec(repository, &content, &request.run_inputs, &request.source)
+    {
+        Ok(spec) => spec,
+        Err(PublishBuildFailure::Blocked(block)) => {
+            return Ok(blocked_prepared_runtime(
+                resolution.configuration_id,
+                resolution.revision_id,
+                &block.code,
+                block.message,
+                None,
+            ));
+        }
+        Err(PublishBuildFailure::Fatal(error)) => return Err(error),
+    };
+
+    // 非 revision 来源：经现有隐藏草稿机制物化修订，取得真实修订身份；
+    // 修订按 DRAFT_MAX_REVISIONS 回收，历史重跑依赖恢复快照而非修订存活。
+    let (configuration_id, configuration_revision_id) = match &request.source {
+        PublishSource::Revision {
             configuration_id,
-            configuration_revision_id,
-            spec: request.spec,
-            promoted_manifest_digest: None,
-        },
-        ResolvedPublishConfiguration {
-            provider_id: request.provider_id,
-            parameters: request.parameters,
-            composition: crate::store::PublishComposition::local_default(),
-            project_binding,
-            blocked_reason: None,
-        },
-    )
+            revision_id,
+        } => (configuration_id.clone(), revision_id.clone()),
+        _ => {
+            let project_binding = content
+                .project_binding
+                .clone()
+                .or_else(|| {
+                    crate::store::repository_project_binding(repository, &content.provider_id)
+                });
+            content.project_binding = project_binding.clone();
+            let identity = repository.publish_config.upsert_draft_revision(
+                content.clone(),
+                chrono::Utc::now().to_rfc3339(),
+            );
+            crate::store::persist_state_and_refresh_tray(&app, state).await?;
+            identity
+        }
+    };
+
+    prepare_runtime(PrepareRuntimeRequest {
+        repository_id: request.repository_id,
+        repository_path,
+        configuration_id,
+        configuration_revision_id,
+        promoted_manifest_digest: request.run_inputs.promoted_manifest_digest.clone(),
+        content,
+        origin,
+        spec,
+        run_inputs: request.run_inputs,
+    })
 }
 
 struct TauriProviderExecutionPort {
@@ -1813,7 +2102,7 @@ fn synchronize_runtime_with_repository(
     })
 }
 
-fn validate_prepare_request(request: &PreparePublishRuntimeRequest) -> Result<(), AppError> {
+fn validate_prepare_request(request: &PrepareRuntimeRequest) -> Result<(), AppError> {
     if request.repository_id.trim().is_empty()
         || request.repository_path.trim().is_empty()
         || request.configuration_id.trim().is_empty()
@@ -1828,13 +2117,14 @@ fn validate_prepare_request(request: &PreparePublishRuntimeRequest) -> Result<()
 }
 
 fn build_snapshot(
-    request: &PreparePublishRuntimeRequest,
+    request: &PrepareRuntimeRequest,
     spec_json: String,
     provider_output_directory: &str,
     delivery_directory: &str,
     tauri_binding: Option<&ResolvedTauriSettings>,
     release_gates: &[ReleaseGate],
     composition: &PublishComposition,
+    recovery_snapshot: &PublishRecoverySnapshot,
 ) -> Result<PlanningInputSnapshot, AppError> {
     let project_identity = project_identity(&request.repository_path, &request.spec)?;
     let repository = canonical_repository(Path::new(&request.repository_path))?;
@@ -1901,6 +2191,11 @@ fn build_snapshot(
             Value::String(project_identity),
         ),
     ]);
+    // 恢复快照进入发布输入快照的命名字段（§3.3），随快照摘要一起密封。
+    release_input.insert(
+        "recovery_snapshot".to_string(),
+        serde_json::to_value(recovery_snapshot).map_err(runtime_serialization_error)?,
+    );
     let project_provider = match tauri_binding {
         Some(binding) => {
             // Tauri 发布身份使用 Provider 按版本来源语义解析的版本；
@@ -3153,8 +3448,7 @@ mod tests {
 
     use super::{
         capture_source_snapshot, normalize_remote_namespace, project_identity, AttemptIdentity,
-        PreparePublishRuntimeRequest, ProviderExecutionPort, ResolvedPublishConfiguration,
-        RuntimeAttemptStatus, RuntimePlanStage, StartPublishRuntimeRequest,
+        ProviderExecutionPort, RuntimeAttemptStatus, RuntimePlanStage, StartPublishRuntimeRequest,
     };
 
     /// 测试隔离：每次调用使用独立的租约协调器，避免并行测试因相同内容
@@ -3354,6 +3648,192 @@ mod tests {
         }
     }
 
+    /// 统一 prepare 的修订内容 fixture：契约与设置版本跟随 store 常量，
+    /// 组合缺省为本地默认。
+    fn revision_content(
+        provider_id: &str,
+        parameters: serde_json::Value,
+        project_binding: Option<String>,
+    ) -> super::PublishConfigurationContent {
+        super::PublishConfigurationContent {
+            provider_id: provider_id.to_string(),
+            contract_version: crate::store::PUBLISH_CONFIGURATION_CONTRACT_VERSION,
+            provider_version: "1".to_string(),
+            settings_version: crate::store::CURRENT_SETTINGS_VERSION,
+            project_binding,
+            parameters,
+            composition: crate::store::PublishComposition::local_default(),
+        }
+    }
+
+    /// 统一 prepare 的标准调用 fixture：身份固定为 configuration-A/revision-A，
+    /// 来源为新建草稿，运行输入为默认值。
+    fn prepare_invocation(
+        repository_path: &std::path::Path,
+        provider_id: &str,
+        parameters: serde_json::Value,
+        spec: PublishSpec,
+    ) -> super::PrepareRuntimeRequest {
+        super::PrepareRuntimeRequest {
+            repository_id: "repository-A".to_string(),
+            repository_path: repository_path.to_string_lossy().to_string(),
+            configuration_id: "configuration-A".to_string(),
+            configuration_revision_id: "revision-A".to_string(),
+            promoted_manifest_digest: None,
+            content: revision_content(provider_id, parameters, None),
+            origin: super::PublishDraftOrigin::New,
+            spec,
+            run_inputs: super::PublishRunInputs::default(),
+        }
+    }
+
+    #[test]
+    fn prepare_blocks_sensitive_values_before_journal_or_command_rendering() {
+        for value in ["test-only-secret", "<redacted>"] {
+            let parameters = serde_json::json!({"properties": {"ApiToken": value}});
+            let spec = PublishSpec {
+                version: crate::spec::SPEC_VERSION,
+                provider_id: "dotnet".to_string(),
+                project_path: "/unused/App.csproj".to_string(),
+                parameters: serde_json::from_value(parameters.clone()).unwrap(),
+            };
+            let request = prepare_invocation(std::path::Path::new("/unused"), "dotnet", parameters, spec);
+            let result = super::prepare_runtime(request).expect("structured block");
+            match result {
+                super::PreparedPublishRuntime::Blocked { diagnostics, .. } => {
+                    assert_eq!(diagnostics[0].code, "publish_runtime_sensitive_input");
+                    assert!(!diagnostics[0].message.contains(value));
+                }
+                _ => panic!("credentials cannot enter a prepared plan"),
+            }
+        }
+    }
+
+    fn spec_builder_repository() -> (tempfile::TempDir, crate::store::Repository) {
+        let dir = tempfile::tempdir().expect("create repository dir");
+        let project_file = dir.path().join("App.csproj");
+        std::fs::write(&project_file, "<Project />").expect("write project file");
+        let repository = crate::store::Repository {
+            id: "repository-A".to_string(),
+            name: "Demo".to_string(),
+            path: dir.path().to_string_lossy().to_string(),
+            project_file: Some(project_file.to_string_lossy().to_string()),
+            current_branch: "main".to_string(),
+            branches: Vec::new(),
+            is_main: false,
+            provider_id: None,
+            publish_config: crate::store::RepoPublishConfig::default(),
+        };
+        (dir, repository)
+    }
+
+    fn built_spec(spec: Result<PublishSpec, super::PublishBuildFailure>) -> PublishSpec {
+        match spec {
+            Ok(spec) => spec,
+            Err(failure) => panic!("expected a built spec, got {failure:?}"),
+        }
+    }
+
+    // ── 后端唯一 spec 构造（§3.1）：默认输出目录派生规则 ────────────────────
+    #[test]
+    fn resolved_spec_derives_dotnet_default_output_from_run_inputs() {
+        let (_dir, repository) = spec_builder_repository();
+        let content = revision_content(
+            "dotnet",
+            serde_json::json!({ "configuration": "Release" }),
+            None,
+        );
+        let run_inputs = super::PublishRunInputs {
+            default_output_dir: "/default-out".to_string(),
+            promoted_manifest_digest: None,
+        };
+        let source = super::PublishSource::Empty {
+            provider_id: "dotnet".to_string(),
+            project_binding: None,
+        };
+
+        let spec = built_spec(super::build_resolved_spec(
+            &repository,
+            &content,
+            &run_inputs,
+            &source,
+        ));
+        assert_eq!(
+            spec.parameters.get("output"),
+            Some(&SpecValue::String(
+                std::path::Path::new("/default-out")
+                    .join("App")
+                    .join("Release")
+                    .to_string_lossy()
+                    .to_string()
+            ))
+        );
+
+        // 显式 output 不被派生覆盖。
+        let explicit_content = revision_content(
+            "dotnet",
+            serde_json::json!({ "configuration": "Release", "output": "/explicit-out" }),
+            None,
+        );
+        let explicit = built_spec(super::build_resolved_spec(
+            &repository,
+            &explicit_content,
+            &run_inputs,
+            &source,
+        ));
+        assert_eq!(
+            explicit.parameters.get("output"),
+            Some(&SpecValue::String("/explicit-out".to_string()))
+        );
+
+        // 默认输出目录未设置：不派生，交给 Provider 推断（bin/{configuration}/publish）。
+        let no_default = built_spec(super::build_resolved_spec(
+            &repository,
+            &content,
+            &super::PublishRunInputs::default(),
+            &source,
+        ));
+        assert!(!no_default.parameters.contains_key("output"));
+    }
+
+    #[test]
+    fn resolved_spec_skips_default_output_for_project_profile_and_history_sources() {
+        let (_dir, repository) = spec_builder_repository();
+        let content = revision_content(
+            "dotnet",
+            serde_json::json!({ "configuration": "Release" }),
+            Some("dotnet:App.csproj".to_string()),
+        );
+        let run_inputs = super::PublishRunInputs {
+            default_output_dir: "/default-out".to_string(),
+            promoted_manifest_digest: None,
+        };
+
+        // 直接 pubxml 发布：不派生默认目录，输出由 pubxml 自身的配置决定。
+        let pubxml = built_spec(super::build_resolved_spec(
+            &repository,
+            &content,
+            &run_inputs,
+            &super::PublishSource::ProjectProfile {
+                provider_id: "dotnet".to_string(),
+                project_binding: Some("dotnet:App.csproj".to_string()),
+                reference: "FolderProfile".to_string(),
+            },
+        ));
+        assert!(!pubxml.parameters.contains_key("output"));
+
+        // 历史重跑：使用记录中的输入，不重套当前默认目录。
+        let history = built_spec(super::build_resolved_spec(
+            &repository,
+            &content,
+            &run_inputs,
+            &super::PublishSource::History {
+                record_id: "record-1".to_string(),
+            },
+        ));
+        assert!(!history.parameters.contains_key("output"));
+    }
+
     #[test]
     fn selected_revision_prepares_its_local_command_plan_and_blocking_state() {
         let repository = tempfile::tempdir().expect("create repository");
@@ -3376,33 +3856,25 @@ mod tests {
                 ),
             ]),
         };
-        let resolved = ResolvedPublishConfiguration {
-            composition: crate::store::PublishComposition::local_default(),
-            provider_id: "dotnet".to_string(),
-            parameters: serde_json::to_value(&spec.parameters).expect("serialize parameters"),
-            project_binding: None,
-            blocked_reason: None,
-        };
-
-        let prepared = super::prepare_runtime(
-            PreparePublishRuntimeRequest {
-                promoted_manifest_digest: None,
-                repository_id: "repository-A".to_string(),
-                repository_path: repository.path().to_string_lossy().to_string(),
-                configuration_id: "configuration-A".to_string(),
-                configuration_revision_id: "revision-A".to_string(),
-                spec,
-            },
-            resolved,
-        )
+        let prepared = super::prepare_runtime(prepare_invocation(
+            repository.path(),
+            "dotnet",
+            serde_json::to_value(&spec.parameters).expect("serialize parameters"),
+            spec,
+        ))
         .expect("prepare selected configuration");
 
-        assert_eq!(prepared.configuration_id, "configuration-A");
-        assert_eq!(prepared.configuration_revision_id, "revision-A");
-        assert!(prepared.command.display_command.contains("dotnet publish"));
+        assert_eq!(prepared.configuration_id(), Some("configuration-A"));
+        assert_eq!(prepared.configuration_revision_id(), Some("revision-A"));
+        assert!(prepared
+            .command()
+            .expect("command")
+            .display_command
+            .contains("dotnet publish"));
         assert_eq!(
             prepared
-                .plan
+                .plan()
+                .expect("plan summary")
                 .nodes
                 .iter()
                 .map(|node| node.stage)
@@ -3415,8 +3887,8 @@ mod tests {
                 RuntimePlanStage::PublishRoutes,
             ]
         );
-        assert!(prepared.blocked_reason.is_none());
-        assert!(!prepared.runtime_token.is_empty());
+        assert!(prepared.blocked_reason().is_none());
+        assert!(!prepared.runtime_token().is_empty());
     }
 
     #[test]
@@ -3441,29 +3913,106 @@ mod tests {
                 ),
             ]),
         };
-        let resolved = ResolvedPublishConfiguration {
-            composition: crate::store::PublishComposition::local_default(),
-            provider_id: "dotnet".to_string(),
-            parameters: serde_json::json!({ "configuration": "Release" }),
-            project_binding: None,
-            blocked_reason: None,
-        };
-
-        let prepared = super::prepare_runtime(
-            PreparePublishRuntimeRequest {
-                promoted_manifest_digest: None,
-                repository_id: "repository-A".to_string(),
-                repository_path: repository.path().to_string_lossy().to_string(),
-                configuration_id: "configuration-A".to_string(),
-                configuration_revision_id: "revision-A".to_string(),
-                spec,
-            },
-            resolved,
-        )
+        let prepared = super::prepare_runtime(prepare_invocation(
+            repository.path(),
+            "dotnet",
+            serde_json::json!({ "configuration": "Release" }),
+            spec,
+        ))
         .expect("prepare revision with derived output");
 
-        assert!(prepared.blocked_reason.is_none());
-        assert!(!prepared.runtime_token.is_empty());
+        assert!(prepared.blocked_reason().is_none());
+        assert!(!prepared.runtime_token().is_empty());
+        let decoded = decoded_runtime_token(&prepared);
+        assert_eq!(decoded.snapshot.configuration_revision, "revision-A");
+    }
+
+    // ── 行为基线（统一发布输入方案 Phase 1）──────────────────────────────
+    // 这些测试固定当前后端在封存边界上的参数保真语义：修订参数里的
+    // false / null / 空串必须原样进入密封计划，不做富表单往返或静默过滤。
+
+    #[test]
+    fn prepared_plan_seals_false_null_and_empty_revision_parameters_verbatim() {
+        let repository = tempfile::tempdir().expect("create repository");
+        let project_path = repository.path().join("App.csproj");
+        std::fs::write(&project_path, "<Project />").expect("write project file");
+        initialize_git_repository(repository.path());
+        let parameters = BTreeMap::from([
+            (
+                "configuration".to_string(),
+                SpecValue::String("Debug".to_string()),
+            ),
+            // 空串是"已设置但为空"，不是"未设置"：封存时不得被丢弃或改写。
+            ("runtime".to_string(), SpecValue::String(String::new())),
+            // 显式 false 与 null 是用户选择，渲染层负责省略 flag，封存层负责保真。
+            ("self_contained".to_string(), SpecValue::Bool(false)),
+            ("verbosity".to_string(), SpecValue::Null),
+        ]);
+        let spec = PublishSpec {
+            version: SPEC_VERSION,
+            provider_id: "dotnet".to_string(),
+            project_path: project_path.to_string_lossy().to_string(),
+            parameters: parameters.clone(),
+        };
+        let prepared = super::prepare_runtime(prepare_invocation(
+            repository.path(),
+            "dotnet",
+            serde_json::to_value(&parameters).expect("serialize parameters"),
+            spec,
+        ))
+        .expect("prepare revision with edge-case parameter values");
+
+        assert!(
+            prepared.blocked_reason().is_none(),
+            "edge-case values must not read as drift: {:?}",
+            prepared.blocked_reason()
+        );
+        let decoded = decoded_runtime_token(&prepared);
+        let sealed_spec_json = decoded
+            .snapshot
+            .adapters
+            .project_provider
+            .settings
+            .values
+            .get("spec_json")
+            .expect("sealed provider settings carry the spec json");
+        let sealed_spec: PublishSpec = serde_json::from_str(sealed_spec_json.as_str().expect("spec json is a string"))
+            .expect("decode sealed publish spec");
+
+        assert_eq!(sealed_spec.parameters, parameters);
+    }
+
+    #[test]
+    fn unknown_execution_parameters_fail_preparation_instead_of_being_filtered() {
+        let repository = tempfile::tempdir().expect("create repository");
+        let project_path = repository.path().join("App.csproj");
+        std::fs::write(&project_path, "<Project />").expect("write project file");
+        initialize_git_repository(repository.path());
+        let spec = PublishSpec {
+            version: SPEC_VERSION,
+            provider_id: "dotnet".to_string(),
+            project_path: project_path.to_string_lossy().to_string(),
+            parameters: BTreeMap::from([
+                (
+                    "configuration".to_string(),
+                    SpecValue::String("Release".to_string()),
+                ),
+                (
+                    "not_in_schema".to_string(),
+                    SpecValue::String("value".to_string()),
+                ),
+            ]),
+        };
+        let error = super::prepare_runtime(prepare_invocation(
+            repository.path(),
+            "dotnet",
+            serde_json::to_value(&spec.parameters).expect("serialize parameters"),
+            spec,
+        ))
+        .expect_err("unknown execution parameters must fail loudly");
+
+        assert_eq!(error.code.as_deref(), Some("publish_unknown_parameter"));
+        assert!(error.message.contains("not_in_schema"), "{error:?}");
     }
 
     #[test]
@@ -3534,35 +4083,30 @@ mod tests {
                 SpecValue::String("Release".to_string()),
             )]),
         };
-        let request = PreparePublishRuntimeRequest {
-            promoted_manifest_digest: None,
-            repository_id: "repository-A".to_string(),
-            repository_path: repository.path().to_string_lossy().to_string(),
-            configuration_id: "configuration-A".to_string(),
-            configuration_revision_id: "revision-A".to_string(),
-            spec,
-        };
-        let resolved = |project_binding: Option<&str>| ResolvedPublishConfiguration {
-            composition: crate::store::PublishComposition::local_default(),
-            provider_id: "dotnet".to_string(),
-            parameters: serde_json::json!({ "configuration": "Release" }),
-            project_binding: project_binding.map(ToString::to_string),
-            blocked_reason: None,
+        let request_with_binding = |project_binding: &str| {
+            let mut request = prepare_invocation(
+                repository.path(),
+                "dotnet",
+                serde_json::json!({ "configuration": "Release" }),
+                spec.clone(),
+            );
+            request.content.project_binding = Some(project_binding.to_string());
+            request
         };
 
         // 绑定指向另一个候选：显式阻断，换绑必须走显式动作。
-        let blocked = super::prepare_runtime(
-            request.clone(),
-            resolved(Some("dotnet:Other/App.csproj")),
-        )
-        .expect("prepare mismatched binding");
-        let reason = blocked.blocked_reason.expect("mismatch blocks the runtime");
+        let blocked =
+            super::prepare_runtime(request_with_binding("dotnet:Other/App.csproj"))
+                .expect("prepare mismatched binding");
+        let reason = blocked
+            .blocked_reason()
+            .expect("mismatch blocks the runtime");
         assert!(reason.contains("is bound to dotnet:Other/App.csproj"), "{reason}");
 
         // 绑定与发布输入解析出的候选一致：正常放行。
-        let matched = super::prepare_runtime(request, resolved(Some("dotnet:App.csproj")))
+        let matched = super::prepare_runtime(request_with_binding("dotnet:App.csproj"))
             .expect("prepare matching binding");
-        assert!(matched.blocked_reason.is_none());
+        assert!(matched.blocked_reason().is_none());
     }
 
     #[test]
@@ -3593,33 +4137,19 @@ mod tests {
                 ),
             ]),
         };
-        let resolved = ResolvedPublishConfiguration {
-            composition: crate::store::PublishComposition::local_default(),
-            provider_id: "dotnet".to_string(),
-            parameters: serde_json::to_value(&spec.parameters).expect("serialize parameters"),
-            project_binding: None,
-            blocked_reason: None,
-        };
-
-        let prepared = super::prepare_runtime(
-            PreparePublishRuntimeRequest {
-                promoted_manifest_digest: None,
-                repository_id: "repository-A".to_string(),
-                repository_path: repository.path().to_string_lossy().to_string(),
-                configuration_id: "configuration-A".to_string(),
-                configuration_revision_id: "revision-A".to_string(),
-                spec,
-            },
-            resolved,
-        )
+        let prepared = super::prepare_runtime(prepare_invocation(
+            repository.path(),
+            "dotnet",
+            serde_json::to_value(&spec.parameters).expect("serialize parameters"),
+            spec,
+        ))
         .expect("blocked destination still yields a visible plan");
 
         assert!(prepared
-            .blocked_reason
-            .as_deref()
+            .blocked_reason()
             .is_some_and(|reason| reason.contains("delivery destination")
                 && reason.contains("not a directory")));
-        assert!(prepared.runtime_token.is_empty());
+        assert!(prepared.runtime_token().is_empty());
     }
 
     #[test]
@@ -3637,32 +4167,19 @@ mod tests {
             parameters: BTreeMap::new(),
         };
 
-        let prepared = super::prepare_runtime(
-            PreparePublishRuntimeRequest {
-                promoted_manifest_digest: None,
-                repository_id: "repository-A".to_string(),
-                repository_path: repository.path().to_string_lossy().to_string(),
-                configuration_id: "configuration-A".to_string(),
-                configuration_revision_id: "revision-A".to_string(),
-                spec,
-            },
-            ResolvedPublishConfiguration {
-                composition: crate::store::PublishComposition::local_default(),
-                provider_id: "go".to_string(),
-                parameters: serde_json::json!({}),
-                project_binding: None,
-                blocked_reason: None,
-            },
-        )
+        let prepared = super::prepare_runtime(prepare_invocation(
+            repository.path(),
+            "go",
+            serde_json::json!({}),
+            spec,
+        ))
         .expect("blocked configuration still has a deterministic preview");
 
-        assert!(prepared.command.display_command.contains("go build"));
         assert!(prepared
-            .blocked_reason
-            .as_deref()
+            .blocked_reason()
             .is_some_and(|reason| reason.contains("output directory is empty")));
-        assert!(!prepared.plan.nodes.is_empty());
-        assert!(prepared.runtime_token.is_empty());
+        assert!(prepared.plan().is_none());
+        assert!(prepared.runtime_token().is_empty());
     }
 
     fn write_tauri_app(repository: &std::path::Path, app_prefix: &str, version: &str) {
@@ -3689,30 +4206,14 @@ mod tests {
     fn tauri_prepare_request(
         repository: &std::path::Path,
         config_path: &std::path::Path,
-    ) -> (PreparePublishRuntimeRequest, ResolvedPublishConfiguration) {
+    ) -> super::PrepareRuntimeRequest {
         let spec = PublishSpec {
             version: SPEC_VERSION,
             provider_id: "tauri".to_string(),
             project_path: config_path.to_string_lossy().to_string(),
             parameters: BTreeMap::new(),
         };
-        (
-            PreparePublishRuntimeRequest {
-                promoted_manifest_digest: None,
-                repository_id: "repository-A".to_string(),
-                repository_path: repository.to_string_lossy().to_string(),
-                configuration_id: "configuration-A".to_string(),
-                configuration_revision_id: "revision-A".to_string(),
-                spec: spec.clone(),
-            },
-            ResolvedPublishConfiguration {
-                composition: crate::store::PublishComposition::local_default(),
-                provider_id: "tauri".to_string(),
-                parameters: serde_json::to_value(&spec.parameters).expect("serialize parameters"),
-                project_binding: None,
-                blocked_reason: None,
-            },
-        )
+        prepare_invocation(repository, "tauri", serde_json::json!({}), spec)
     }
 
     #[test]
@@ -3720,22 +4221,23 @@ mod tests {
         let repository = tempfile::tempdir().expect("create repository");
         write_tauri_app(repository.path(), ".", "1.2.3");
         initialize_git_repository(repository.path());
-        let (request, resolved) = tauri_prepare_request(
+        let request = tauri_prepare_request(
             repository.path(),
             &repository.path().join("src-tauri/tauri.conf.json"),
         );
 
-        let prepared =
-            super::prepare_runtime(request, resolved).expect("prepare tauri configuration");
+        let prepared = super::prepare_runtime(request).expect("prepare tauri configuration");
 
-        assert!(prepared.blocked_reason.is_none());
-        assert!(!prepared.runtime_token.is_empty());
+        assert!(prepared.blocked_reason().is_none());
+        assert!(!prepared.runtime_token().is_empty());
         assert!(prepared
-            .command
+            .command()
+            .expect("command")
             .display_command
             .contains("pnpm tauri build"));
         let tauri_nodes = prepared
-            .plan
+            .plan()
+            .expect("plan summary")
             .nodes
             .iter()
             .filter(|node| node.adapter_id == "tauri")
@@ -3756,19 +4258,18 @@ mod tests {
         std::fs::write(repository.path().join("README.md"), "# fixture\n")
             .expect("write fixture file");
         initialize_git_repository(repository.path());
-        let (request, resolved) = tauri_prepare_request(
+        let request = tauri_prepare_request(
             repository.path(),
             &repository.path().join("src-tauri/tauri.conf.json"),
         );
 
-        let prepared = super::prepare_runtime(request, resolved)
+        let prepared = super::prepare_runtime(request)
             .expect("missing config still prepares a view");
 
         assert!(prepared
-            .blocked_reason
-            .as_deref()
+            .blocked_reason()
             .is_some_and(|reason| reason.contains("tauri_candidate_not_found")));
-        assert!(prepared.runtime_token.is_empty());
+        assert!(prepared.runtime_token().is_empty());
     }
 
     #[test]
@@ -3777,21 +4278,20 @@ mod tests {
         write_tauri_app(repository.path(), "apps/desktop", "1.0.0");
         write_tauri_app(repository.path(), "apps/kiosk", "2.0.0");
         initialize_git_repository(repository.path());
-        let (request, resolved) = tauri_prepare_request(
+        let request = tauri_prepare_request(
             repository.path(),
             &repository
                 .path()
                 .join("apps/removed/src-tauri/tauri.conf.json"),
         );
 
-        let prepared =
-            super::prepare_runtime(request, resolved).expect("stale binding still prepares a view");
+        let prepared = super::prepare_runtime(request)
+            .expect("stale binding still prepares a view");
 
         assert!(prepared
-            .blocked_reason
-            .as_deref()
+            .blocked_reason()
             .is_some_and(|reason| reason.contains("tauri_candidate_binding_stale")));
-        assert!(prepared.runtime_token.is_empty());
+        assert!(prepared.runtime_token().is_empty());
     }
 
     #[test]
@@ -3812,16 +4312,18 @@ mod tests {
         )
         .expect("write kiosk manifest");
         initialize_git_repository(repository.path());
-        let (request, resolved) = tauri_prepare_request(
+        let request = tauri_prepare_request(
             repository.path(),
             &kiosk_root.join("src-tauri/tauri.conf.json"),
         );
 
-        let prepared = super::prepare_runtime(request, resolved).expect("prepare bound candidate");
+        let prepared =
+            super::prepare_runtime(request).expect("prepare bound candidate");
 
-        assert!(prepared.blocked_reason.is_none());
+        assert!(prepared.blocked_reason().is_none());
         let build_node = prepared
-            .plan
+            .plan()
+            .expect("plan summary")
             .nodes
             .iter()
             .find(|node| node.adapter_id == "tauri" && node.stage == RuntimePlanStage::Build)
@@ -3835,19 +4337,18 @@ mod tests {
         write_tauri_app(repository.path(), ".", "1.2.3");
         std::fs::write(repository.path().join("yarn.lock"), "").expect("write second lockfile");
         initialize_git_repository(repository.path());
-        let (request, resolved) = tauri_prepare_request(
+        let request = tauri_prepare_request(
             repository.path(),
             &repository.path().join("src-tauri/tauri.conf.json"),
         );
 
-        let prepared = super::prepare_runtime(request, resolved)
+        let prepared = super::prepare_runtime(request)
             .expect("driver conflict still prepares a view");
 
         assert!(prepared
-            .blocked_reason
-            .as_deref()
+            .blocked_reason()
             .is_some_and(|reason| reason.contains("tauri_build_driver_conflict")));
-        assert!(prepared.runtime_token.is_empty());
+        assert!(prepared.runtime_token().is_empty());
     }
 
     fn tauri_release_config(gates: Vec<ReleaseGate>) -> TauriReleaseConfig {
@@ -3859,12 +4360,12 @@ mod tests {
     }
 
     fn with_release_settings(
-        mut resolved: ResolvedPublishConfiguration,
+        mut request: super::PrepareRuntimeRequest,
         config: TauriReleaseConfig,
-    ) -> ResolvedPublishConfiguration {
-        resolved.parameters[crate::tauri_release::RELEASE_SETTINGS_PARAMETER] =
+    ) -> super::PrepareRuntimeRequest {
+        request.content.parameters[crate::tauri_release::RELEASE_SETTINGS_PARAMETER] =
             serde_json::to_value(config).expect("serialize release settings");
-        resolved
+        request
     }
 
     fn gate(program: &str, args: &[&str]) -> ReleaseGate {
@@ -3883,7 +4384,7 @@ mod tests {
     }
 
     fn decoded_runtime_token(prepared: &super::PreparedPublishRuntime) -> PreparedPublishPlan {
-        serde_json::from_str(&prepared.runtime_token).expect("decode prepared runtime token")
+        serde_json::from_str(prepared.runtime_token()).expect("decode prepared runtime token")
     }
 
     #[test]
@@ -3891,27 +4392,28 @@ mod tests {
         let repository = tempfile::tempdir().expect("create repository");
         write_tauri_app(repository.path(), ".", "1.2.3");
         initialize_git_repository(repository.path());
-        let (request, mut resolved) = tauri_prepare_request(
+        let mut request = tauri_prepare_request(
             repository.path(),
             &repository.path().join("src-tauri/tauri.conf.json"),
         );
-        resolved.parameters[crate::tauri_release::RELEASE_SETTINGS_PARAMETER] =
+        request.content.parameters[crate::tauri_release::RELEASE_SETTINGS_PARAMETER] =
             serde_json::to_value(tauri_release_config(vec![gate(
                 "git",
                 &["rev-parse", "HEAD"],
             )]))
             .expect("serialize release settings");
 
-        let prepared = super::prepare_runtime(request, resolved)
+        let prepared = super::prepare_runtime(request)
             .expect("prepare tauri configuration from revision release settings");
 
         assert!(
-            prepared.blocked_reason.is_none(),
+            prepared.blocked_reason().is_none(),
             "release settings are not command parameters and must not read as drift: {:?}",
-            prepared.blocked_reason
+            prepared.blocked_reason()
         );
         assert!(prepared
-            .plan
+            .plan()
+            .expect("plan summary")
             .nodes
             .iter()
             .any(|node| node.operation == "run_release_gate"));
@@ -3922,21 +4424,20 @@ mod tests {
         let repository = tempfile::tempdir().expect("create repository");
         write_tauri_app(repository.path(), ".", "1.2.3");
         initialize_git_repository(repository.path());
-        let (request, mut resolved) = tauri_prepare_request(
+        let mut request = tauri_prepare_request(
             repository.path(),
             &repository.path().join("src-tauri/tauri.conf.json"),
         );
-        resolved.parameters[crate::tauri_release::RELEASE_SETTINGS_PARAMETER] =
+        request.content.parameters[crate::tauri_release::RELEASE_SETTINGS_PARAMETER] =
             serde_json::json!({ "enabledTargets": "not-an-array" });
 
-        let prepared = super::prepare_runtime(request, resolved)
+        let prepared = super::prepare_runtime(request)
             .expect("corrupt settings still prepare a blocked view");
 
         assert!(prepared
-            .blocked_reason
-            .as_deref()
+            .blocked_reason()
             .is_some_and(|reason| reason.contains("tauri_release_settings_invalid")));
-        assert!(prepared.runtime_token.is_empty());
+        assert!(prepared.runtime_token().is_empty());
     }
 
     #[test]
@@ -3944,26 +4445,24 @@ mod tests {
         let repository = tempfile::tempdir().expect("create repository");
         write_tauri_app(repository.path(), ".", "1.2.3");
         initialize_git_repository(repository.path());
-        let (request, resolved) = tauri_prepare_request(
+        let request = tauri_prepare_request(
             repository.path(),
             &repository.path().join("src-tauri/tauri.conf.json"),
         );
 
-        let prepared = super::prepare_runtime(
+        let prepared = super::prepare_runtime(with_release_settings(
             request,
-            with_release_settings(
-                resolved,
-                tauri_release_config(vec![
-                    gate("git", &["rev-parse", "HEAD"]),
-                    gate("git", &["status", "--porcelain"]),
-                ]),
-            ),
-        )
+            tauri_release_config(vec![
+                gate("git", &["rev-parse", "HEAD"]),
+                gate("git", &["status", "--porcelain"]),
+            ]),
+        ))
         .expect("prepare tauri configuration with release gates");
 
-        assert!(prepared.blocked_reason.is_none());
+        assert!(prepared.blocked_reason().is_none());
         let tauri_nodes = prepared
-            .plan
+            .plan()
+            .expect("plan summary")
             .nodes
             .iter()
             .filter(|node| node.adapter_id == "tauri")
@@ -3995,19 +4494,21 @@ mod tests {
         let repository = tempfile::tempdir().expect("create repository");
         write_tauri_app(repository.path(), ".", "1.2.3");
         initialize_git_repository(repository.path());
-        let (request, resolved) = tauri_prepare_request(
+        let request = tauri_prepare_request(
             repository.path(),
             &repository.path().join("src-tauri/tauri.conf.json"),
         );
         let mut config = tauri_release_config(vec![gate("git", &["rev-parse", "HEAD"])]);
         config.app_config_path = "./src-tauri/tauri.conf.json".to_string();
 
-        let prepared = super::prepare_runtime(request, with_release_settings(resolved, config))
-            .expect("prepare tauri configuration");
+        let prepared =
+            super::prepare_runtime(with_release_settings(request, config))
+                .expect("prepare tauri configuration");
 
         assert_eq!(
             prepared
-                .plan
+                .plan()
+                .expect("plan summary")
                 .nodes
                 .iter()
                 .filter(|node| node.operation == "run_release_gate")
@@ -4022,18 +4523,20 @@ mod tests {
         let repository = tempfile::tempdir().expect("create repository");
         write_tauri_app(repository.path(), ".", "1.2.3");
         initialize_git_repository(repository.path());
-        let (request, resolved) = tauri_prepare_request(
+        let request = tauri_prepare_request(
             repository.path(),
             &repository.path().join("src-tauri/tauri.conf.json"),
         );
         let mut config = tauri_release_config(vec![gate("git", &["rev-parse", "HEAD"])]);
         config.app_config_path = "apps/other/src-tauri/tauri.conf.json".to_string();
 
-        let prepared = super::prepare_runtime(request, with_release_settings(resolved, config))
-            .expect("prepare tauri configuration");
+        let prepared =
+            super::prepare_runtime(with_release_settings(request, config))
+                .expect("prepare tauri configuration");
 
         assert!(prepared
-            .plan
+            .plan()
+            .expect("plan summary")
             .nodes
             .iter()
             .all(|node| node.operation != "run_release_gate"));
@@ -4044,27 +4547,24 @@ mod tests {
         let repository = tempfile::tempdir().expect("create repository");
         write_tauri_app(repository.path(), ".", "1.2.3");
         initialize_git_repository(repository.path());
-        let (request, resolved) = tauri_prepare_request(
+        let request = tauri_prepare_request(
             repository.path(),
             &repository.path().join("src-tauri/tauri.conf.json"),
         );
-        let prepared = super::prepare_runtime(
+        let prepared = super::prepare_runtime(with_release_settings(
             request,
-            with_release_settings(
-                resolved,
-                tauri_release_config(vec![gate(
-                    "git",
-                    &["rev-parse", "--verify", "one-publish-missing-gate-ref"],
-                )]),
-            ),
-        )
+            tauri_release_config(vec![gate(
+                "git",
+                &["rev-parse", "--verify", "one-publish-missing-gate-ref"],
+            )]),
+        ))
         .expect("prepare tauri configuration with a failing gate");
         let bundle_directory = tauri_bundle_directory(repository.path());
         let build = Arc::new(FakeTauriBuild::new(bundle_directory.clone()));
 
         let result = start_runtime_with_port(
             StartPublishRuntimeRequest {
-                runtime_token: prepared.runtime_token,
+                runtime_token: prepared.runtime_token().to_string(),
             },
             Arc::clone(&build) as Arc<dyn ProviderExecutionPort>,
             AttemptIdentity {
@@ -4098,24 +4598,21 @@ mod tests {
         let repository = tempfile::tempdir().expect("create repository");
         write_tauri_app(repository.path(), ".", "1.2.3");
         initialize_git_repository(repository.path());
-        let (request, resolved) = tauri_prepare_request(
+        let request = tauri_prepare_request(
             repository.path(),
             &repository.path().join("src-tauri/tauri.conf.json"),
         );
-        let prepared = super::prepare_runtime(
+        let prepared = super::prepare_runtime(with_release_settings(
             request,
-            with_release_settings(
-                resolved,
-                tauri_release_config(vec![gate("git", &["rev-parse", "HEAD"])]),
-            ),
-        )
+            tauri_release_config(vec![gate("git", &["rev-parse", "HEAD"])]),
+        ))
         .expect("prepare tauri configuration");
         let bundle_directory = tauri_bundle_directory(repository.path());
         let build = Arc::new(FakeTauriBuild::new(bundle_directory.clone()));
 
         let result = start_runtime_with_port(
             StartPublishRuntimeRequest {
-                runtime_token: prepared.runtime_token,
+                runtime_token: prepared.runtime_token().to_string(),
             },
             Arc::clone(&build) as Arc<dyn ProviderExecutionPort>,
             AttemptIdentity {
@@ -4170,12 +4667,12 @@ mod tests {
         let repository = tempfile::tempdir().expect("create repository");
         write_tauri_app(repository.path(), ".", "1.2.3");
         initialize_git_repository(repository.path());
-        let (request, resolved) = tauri_prepare_request(
+        let request = tauri_prepare_request(
             repository.path(),
             &repository.path().join("src-tauri/tauri.conf.json"),
         );
         let prepared =
-            super::prepare_runtime(request, resolved).expect("prepare tauri configuration");
+            super::prepare_runtime(request).expect("prepare tauri configuration");
         let sealed = decoded_runtime_token(&prepared);
         let release_value = |key: &str| {
             sealed
@@ -4264,12 +4761,12 @@ mod tests {
         let repository = tempfile::tempdir().expect("create repository");
         write_tauri_app(repository.path(), ".", "1.2.3");
         initialize_git_repository(repository.path());
-        let (request, resolved) = tauri_prepare_request(
+        let request = tauri_prepare_request(
             repository.path(),
             &repository.path().join("src-tauri/tauri.conf.json"),
         );
         let prepared =
-            super::prepare_runtime(request, resolved).expect("prepare tauri configuration");
+            super::prepare_runtime(request).expect("prepare tauri configuration");
         let bundle_directory = tauri_bundle_directory(repository.path());
         let build = Arc::new(FakeTauriBuild::failing(
             bundle_directory,
@@ -4278,7 +4775,7 @@ mod tests {
 
         let result = start_runtime_with_port(
             StartPublishRuntimeRequest {
-                runtime_token: prepared.runtime_token,
+                runtime_token: prepared.runtime_token().to_string(),
             },
             Arc::clone(&build) as Arc<dyn ProviderExecutionPort>,
             AttemptIdentity {
@@ -4314,10 +4811,8 @@ mod tests {
             )
         };
 
-        let (request, resolved) = request_pair();
-        let first = super::prepare_runtime(request, resolved).expect("prepare workspace build");
-        let (request, resolved) = request_pair();
-        let second = super::prepare_runtime(request, resolved)
+        let first = super::prepare_runtime(request_pair()).expect("prepare workspace build");
+        let second = super::prepare_runtime(request_pair())
             .expect("re-prepare unchanged workspace build");
 
         let first_source = decoded_runtime_token(&first).snapshot.source;
@@ -4343,7 +4838,7 @@ mod tests {
         let bundle_directory = tauri_bundle_directory(repository.path());
         let result = start_runtime_with_port(
             StartPublishRuntimeRequest {
-                runtime_token: second.runtime_token,
+                runtime_token: second.runtime_token().to_string(),
             },
             Arc::new(FakeTauriBuild::new(bundle_directory)),
             AttemptIdentity {
@@ -4463,25 +4958,13 @@ mod tests {
                 ),
             ]),
         };
-        let resolved = ResolvedPublishConfiguration {
-            composition: crate::store::PublishComposition::local_default(),
-            provider_id: "dotnet".to_string(),
-            parameters: serde_json::to_value(&spec.parameters).expect("serialize parameters"),
-            project_binding: None,
-            blocked_reason: None,
-        };
 
-        let error = super::prepare_runtime(
-            PreparePublishRuntimeRequest {
-                promoted_manifest_digest: None,
-                repository_id: "repository-A".to_string(),
-                repository_path: repository.to_string_lossy().to_string(),
-                configuration_id: "configuration-A".to_string(),
-                configuration_revision_id: "revision-A".to_string(),
-                spec,
-            },
-            resolved,
-        )
+        let error = super::prepare_runtime(prepare_invocation(
+            &repository,
+            "dotnet",
+            serde_json::to_value(&spec.parameters).expect("serialize parameters"),
+            spec,
+        ))
         .expect_err("parent traversal must not identify a project outside the repository");
 
         assert_eq!(
@@ -4808,25 +5291,13 @@ mod tests {
                 ),
             ]),
         };
-        let resolved = ResolvedPublishConfiguration {
-            composition: crate::store::PublishComposition::local_default(),
-            provider_id: "dotnet".to_string(),
-            parameters: serde_json::to_value(&spec.parameters).expect("serialize parameters"),
-            project_binding: None,
-            blocked_reason: None,
-        };
 
-        let error = super::prepare_runtime(
-            PreparePublishRuntimeRequest {
-                promoted_manifest_digest: None,
-                repository_id: "repository-A".to_string(),
-                repository_path: repository.path().to_string_lossy().to_string(),
-                configuration_id: "configuration-A".to_string(),
-                configuration_revision_id: "revision-A".to_string(),
-                spec,
-            },
-            resolved,
-        )
+        let error = super::prepare_runtime(prepare_invocation(
+            repository.path(),
+            "dotnet",
+            serde_json::to_value(&spec.parameters).expect("serialize parameters"),
+            spec,
+        ))
         .expect_err("provider output must not contain the selected source root");
 
         assert_eq!(
@@ -5136,7 +5607,7 @@ mod tests {
         let output_directory = delivery.path().join("publish-output");
         let prepared_runtime = prepare_test_runtime(repository.path(), &output_directory);
         let prepared: PreparedPublishPlan =
-            serde_json::from_str(&prepared_runtime.runtime_token).expect("decode prepared plan");
+            serde_json::from_str(prepared_runtime.runtime_token()).expect("decode prepared plan");
         let attempt_id = "attempt-remote-manifest".to_string();
         let backend_run_id = "backend-remote-manifest".to_string();
         let lease = publish_runner_core::PublishLeaseCoordinator::new()
@@ -5403,7 +5874,7 @@ mod tests {
         let output_directory = delivery.path().join("publish-output");
         let prepared = prepare_test_runtime(repository.path(), &output_directory);
         let mut tampered: PreparedPublishPlan =
-            serde_json::from_str(&prepared.runtime_token).expect("decode prepared runtime");
+            serde_json::from_str(prepared.runtime_token()).expect("decode prepared runtime");
         tampered.plan.digest = "0".repeat(64);
         let identity = AttemptIdentity {
             attempt_id: "attempt-pre-header-failure".to_string(),
@@ -5467,7 +5938,7 @@ mod tests {
         let output_directory = delivery.path().join("publish-output");
         let prepared = prepare_test_runtime(repository.path(), &output_directory);
         let prepared: PreparedPublishPlan =
-            serde_json::from_str(&prepared.runtime_token).expect("decode prepared runtime");
+            serde_json::from_str(prepared.runtime_token()).expect("decode prepared runtime");
         let release_identity =
             super::release_identity(&prepared.snapshot).expect("prepared release identity");
         let repository_path = repository.path().to_string_lossy().to_string();
@@ -5497,7 +5968,7 @@ mod tests {
         let output_directory = delivery.path().join("publish-output");
         let prepared = prepare_test_runtime(repository.path(), &output_directory);
         let prepared: PreparedPublishPlan =
-            serde_json::from_str(&prepared.runtime_token).expect("decode prepared runtime");
+            serde_json::from_str(prepared.runtime_token()).expect("decode prepared runtime");
         let attempt_id = "attempt-heartbeat";
         let backend_run_id = "backend-heartbeat";
         let repository_path = repository.path().to_string_lossy().to_string();
@@ -5576,7 +6047,7 @@ mod tests {
         let output_directory = delivery.path().join("publish-output");
         let prepared = prepare_test_runtime(repository.path(), &output_directory);
         let prepared: PreparedPublishPlan =
-            serde_json::from_str(&prepared.runtime_token).expect("decode prepared runtime");
+            serde_json::from_str(prepared.runtime_token()).expect("decode prepared runtime");
         let attempt_id = "attempt-expired-lease-sync";
         let backend_run_id = "backend-expired-lease-sync";
         let repository_path = super::canonical_repository(repository.path())
@@ -5656,7 +6127,8 @@ mod tests {
         let output_directory = delivery.path().join("publish-output");
         let prepared_runtime = prepare_test_runtime(repository.path(), &output_directory);
         let prepared: PreparedPublishPlan =
-            serde_json::from_str(&prepared_runtime.runtime_token).expect("decode prepared runtime");
+            serde_json::from_str(prepared_runtime.runtime_token())
+                .expect("decode prepared runtime");
         let repository_path = super::canonical_repository(repository.path())
             .expect("canonical repository")
             .to_string_lossy()
@@ -5701,7 +6173,7 @@ mod tests {
         let terminal_attempt_id = "attempt-newer-terminal";
         let terminal = super::start_runtime_with_repository(
             StartPublishRuntimeRequest {
-                runtime_token: prepared_runtime.runtime_token,
+                runtime_token: prepared_runtime.runtime_token().to_string(),
             },
             Arc::new(FakeProviderExecution {
                 output_directory,
@@ -5768,10 +6240,10 @@ mod tests {
         let prepared_a_runtime = prepare_test_runtime(repository_a.path(), &output_a);
         let prepared_b_runtime = prepare_test_runtime(repository_b.path(), &output_b);
         let prepared_a: PreparedPublishPlan =
-            serde_json::from_str(&prepared_a_runtime.runtime_token)
+            serde_json::from_str(prepared_a_runtime.runtime_token())
                 .expect("decode first prepared runtime");
         let prepared_b: PreparedPublishPlan =
-            serde_json::from_str(&prepared_b_runtime.runtime_token)
+            serde_json::from_str(prepared_b_runtime.runtime_token())
                 .expect("decode second prepared runtime");
         let repository_a_path = super::canonical_repository(repository_a.path())
             .expect("canonical first repository")
@@ -5834,7 +6306,7 @@ mod tests {
         let terminal_attempt_id = "attempt-disjoint-terminal";
         let terminal = super::start_runtime_with_repository(
             StartPublishRuntimeRequest {
-                runtime_token: prepared_b_runtime.runtime_token,
+                runtime_token: prepared_b_runtime.runtime_token().to_string(),
             },
             Arc::new(FakeProviderExecution {
                 output_directory: output_b,
@@ -5889,7 +6361,7 @@ mod tests {
 
         let result = super::start_runtime_with_repository(
             StartPublishRuntimeRequest {
-                runtime_token: prepared.runtime_token,
+                runtime_token: prepared.runtime_token().to_string(),
             },
             Arc::new(JournalBreakingProviderExecution {
                 delegate: FakeProviderExecution {
@@ -5941,7 +6413,7 @@ mod tests {
         };
         let result = super::start_runtime_with_repository(
             StartPublishRuntimeRequest {
-                runtime_token: prepared.runtime_token,
+                runtime_token: prepared.runtime_token().to_string(),
             },
             Arc::new(FakeProviderExecution {
                 output_directory,
@@ -6341,7 +6813,7 @@ mod tests {
         let execute = || {
             start_runtime_with_port(
                 StartPublishRuntimeRequest {
-                    runtime_token: prepared.runtime_token.clone(),
+                    runtime_token: prepared.runtime_token().to_string(),
                 },
                 Arc::new(FakeProviderExecution {
                     output_directory: output_directory.clone(),
@@ -6436,28 +6908,17 @@ mod tests {
                 SpecValue::String(output_file.to_string_lossy().to_string()),
             )]),
         };
-        let prepared = super::prepare_runtime(
-            PreparePublishRuntimeRequest {
-                promoted_manifest_digest: None,
-                repository_id: "repository-A".to_string(),
-                repository_path: repository.path().to_string_lossy().to_string(),
-                configuration_id: "configuration-go".to_string(),
-                configuration_revision_id: "revision-go".to_string(),
-                spec: spec.clone(),
-            },
-            ResolvedPublishConfiguration {
-                composition: crate::store::PublishComposition::local_default(),
-                provider_id: "go".to_string(),
-                parameters: serde_json::to_value(&spec.parameters).expect("serialize parameters"),
-                project_binding: None,
-                blocked_reason: None,
-            },
-        )
+        let prepared = super::prepare_runtime(prepare_invocation(
+            repository.path(),
+            "go",
+            serde_json::to_value(&spec.parameters).expect("serialize parameters"),
+            spec,
+        ))
         .expect("prepare Go file output runtime");
 
         let result = start_runtime_with_port(
             StartPublishRuntimeRequest {
-                runtime_token: prepared.runtime_token,
+                runtime_token: prepared.runtime_token().to_string(),
             },
             Arc::new(FakeProviderExecution {
                 output_directory: output_file.clone(),
@@ -6500,7 +6961,7 @@ mod tests {
 
         let failed = start_runtime_with_port(
             StartPublishRuntimeRequest {
-                runtime_token: prepared.runtime_token,
+                runtime_token: prepared.runtime_token().to_string(),
             },
             Arc::new(FakeProviderExecution {
                 output_directory,
@@ -6541,7 +7002,7 @@ mod tests {
 
         let error = start_runtime_with_port(
             StartPublishRuntimeRequest {
-                runtime_token: prepared.runtime_token,
+                runtime_token: prepared.runtime_token().to_string(),
             },
             Arc::new(FakeProviderExecution {
                 output_directory: output_directory.clone(),
@@ -6572,7 +7033,7 @@ mod tests {
 
         let result = start_runtime_with_port(
             StartPublishRuntimeRequest {
-                runtime_token: prepared.runtime_token,
+                runtime_token: prepared.runtime_token().to_string(),
             },
             Arc::new(FakeProviderExecution {
                 output_directory,
@@ -6622,24 +7083,12 @@ mod tests {
                 ),
             ]),
         };
-        let resolved = ResolvedPublishConfiguration {
-            composition: crate::store::PublishComposition::local_default(),
-            provider_id: "dotnet".to_string(),
-            parameters: serde_json::to_value(&spec.parameters).expect("serialize parameters"),
-            project_binding: None,
-            blocked_reason: None,
-        };
-        super::prepare_runtime(
-            PreparePublishRuntimeRequest {
-                promoted_manifest_digest: None,
-                repository_id: "repository-A".to_string(),
-                repository_path: repository.to_string_lossy().to_string(),
-                configuration_id: "configuration-A".to_string(),
-                configuration_revision_id: "revision-A".to_string(),
-                spec,
-            },
-            resolved,
-        )
+        super::prepare_runtime(prepare_invocation(
+            repository,
+            "dotnet",
+            serde_json::to_value(&spec.parameters).expect("serialize parameters"),
+            spec,
+        ))
         .expect("prepare selected configuration")
     }
 

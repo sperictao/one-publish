@@ -1,4 +1,6 @@
 import { useCallback, useMemo } from "react";
+import type { ArtifactActionState } from "@/lib/artifact";
+import { usePublishStore } from "@/stores/publishStore";
 import { usePublishRunner } from "@/features/publish/usePublishRunner";
 import {
   useProfiles,
@@ -8,21 +10,20 @@ import {
 import { useCommandImport } from "@/hooks/useCommandImport";
 import { useScopedConfigs } from "@/features/config/useScopedConfigs";
 import { useProviderPresentationState } from "@/features/provider/useProviderPresentationState";
-import { usePresetText } from "@/hooks/usePresetText";
 import { usePublishConfigPanelProps } from "@/hooks/usePublishConfigPanelProps";
 import { usePublishRunCardProps } from "@/hooks/usePublishRunCardProps";
-import { buildDotnetProfileParameters } from "@/features/config/dotnetPublishConfig";
-import { parsePublishConfigKey } from "@/features/config/publishConfigIdentity";
-import {
-  DEFAULT_DOTNET_PRESET_ID,
-  DOTNET_PRESETS,
-} from "@/features/config/dotnetPresets";
-import type { PublishConfigStore } from "@/lib/store/types";
-import type { PublishComposition } from "@/generated/tauri-contracts";
+import type {
+  PublishComposition,
+  PublishEditStateUpdate,
+} from "@/generated/tauri-contracts";
 import {
   rebindProfileProject,
   updateProfile as updateProfileInStore,
 } from "@/lib/store/api";
+import {
+  createDefaultDotnetPublishConfig,
+  createDotnetPublishConfigFromParameters,
+} from "@/features/config/dotnetPublishConfig";
 import type { EnvironmentCheckSnapshot } from "@/features/environment/environment";
 import type { CommandImportResultCardProps } from "@/components/publish/CommandImportResultCard";
 import type { ProviderPublishSpec } from "@/features/publish/publishRuntime";
@@ -47,12 +48,7 @@ interface TranslationMap {
 
 interface UsePublishBootParams {
   // From useAppState (publish domain)
-  selectedPreset: string;
-  isCustomMode: boolean;
-  customConfig: PublishConfigStore;
-  setSelectedPreset: (value: string) => void;
-  setIsCustomMode: (value: boolean) => void;
-  setCustomConfig: (config: PublishConfigStore) => void;
+  updatePublishEditState: (update: PublishEditStateUpdate) => void;
   recentConfigKeysByRepo: Record<string, string[]>;
   pushRecentPublishConfig: (key: string, repoId?: string | null) => void;
   removeRecentPublishConfig: (key: string, repoId?: string | null) => void;
@@ -98,8 +94,6 @@ interface UsePublishBootParams {
   extractSpecFromRecord: (
     record: ExecutionRecord
   ) => ProviderPublishSpec | null;
-  restoreSpecToEditor: (spec: ProviderPublishSpec) => void;
-  getRecentConfigKeyFromSpec: (spec: ProviderPublishSpec) => string | null;
   setEnvironmentLastCheck: (snapshot: EnvironmentCheckSnapshot | null) => void;
   recentHistoryExports: string[];
   trackHistoryExport: (outputPath: string) => void;
@@ -119,7 +113,6 @@ interface UsePublishBootParams {
     React.SetStateAction<Record<string, Record<string, ParameterValue>>>
   >;
   applyProfileProvider: (providerId: string) => void;
-  applyRecoveredSpecProvider: (providerId: string) => void;
   applySelectedRepositoryProvider: (providerId?: string | null) => void;
 
   // Lifted publish history state
@@ -132,7 +125,8 @@ interface UsePublishBootParams {
   publishResult: any;
   releaseChecklistOpen: boolean;
   setReleaseChecklistOpen: (open: boolean) => void;
-  artifactActionState: any;
+  artifactActionState: ArtifactActionState;
+  setArtifactActionState: (state: ArtifactActionState) => void;
 }
 
 export function usePublishBoot(params: UsePublishBootParams) {
@@ -171,30 +165,10 @@ export function usePublishBoot(params: UsePublishBootParams) {
     reorderRecentConfig: params.reorderRecentPublishConfigs,
   });
 
-  // Dotnet custom config
-  const applyDotnetCustomConfig = useCallback(
-    (config: PublishConfigStore) => {
-      params.setCustomConfig(config);
-      params.setIsCustomMode(true);
-      params.setSelectedPreset(DEFAULT_DOTNET_PRESET_ID);
-    },
-    [params.setCustomConfig, params.setIsCustomMode, params.setSelectedPreset]
-  );
-
-  // Command import
-  const { activeImportFeedback, handleCommandImport } = useCommandImport({
-    activeProviderId: params.activeProviderId,
-    appT: params.appT,
-    providerSchemas: params.providerSchemas,
-    onDotnetConfigReplace: applyDotnetCustomConfig,
-    setProviderParameters: params.setProviderParameters,
-  });
-
   // Preset text
-  const { getPresetText } = usePresetText(params.configT);
-
   // Profiles
   const profilesState = useProfiles({
+    backendTemplates: params.activeProvider?.templates ?? [],
     appT: params.appT,
     profileT: params.profileT,
     language: params.language,
@@ -202,17 +176,10 @@ export function usePublishBoot(params: UsePublishBootParams) {
     activeProviderId: params.activeProviderId,
     providerSchemas: params.providerSchemas,
     applyProfileProvider: params.applyProfileProvider,
-    setIsCustomMode: params.setIsCustomMode,
-    isCustomMode: params.isCustomMode,
-    selectedPreset: params.selectedPreset,
-    setSelectedPreset: params.setSelectedPreset,
+    updatePublishEditState: params.updatePublishEditState,
+    selectedRepo: params.selectedRepo,
     setProviderParameters: params.setProviderParameters,
-    applyDotnetCustomConfig,
     replaceScopedConfigKey,
-    presets: DOTNET_PRESETS,
-    defaultPresetId: DEFAULT_DOTNET_PRESET_ID,
-    getPresetText,
-    buildProfileParameters: buildDotnetProfileParameters,
   });
 
   const {
@@ -291,17 +258,61 @@ export function usePublishBoot(params: UsePublishBootParams) {
   );
 
   const selectedConfiguration = useMemo(() => {
-    if (!params.isCustomMode) {
-      return null;
-    }
-    const identity = parsePublishConfigKey(params.selectedPreset);
-    if (identity?.kind !== "user-profile") {
+    const selection = params.selectedRepo?.publishConfig.selection;
+    if (selection?.kind !== "revision") {
       return null;
     }
     return (
-      profiles.find((profile) => profile.id === identity.profileId) ?? null
+      profiles.find((profile) => profile.id === selection.configurationId) ??
+      null
     );
-  }, [params.isCustomMode, params.selectedPreset, profiles]);
+  }, [params.selectedRepo, profiles]);
+
+  // 编辑器视图水合（§4.1）：dotnet 富表单初值从当前作用域草稿还原。
+  // 只读水合——提交路径经 updatePublishEditState 直接写草稿参数。
+  const dotnetEditorView = useMemo(() => {
+    const publishConfig = params.selectedRepo?.publishConfig;
+    const selection = publishConfig?.selection;
+    if (selection?.kind === "draft") {
+      const draft = publishConfig?.drafts.find(
+        (draft) =>
+          draft.providerId === selection.providerId &&
+          (draft.projectBinding ?? null) === (selection.projectBinding ?? null)
+      );
+      if (draft) {
+        return createDotnetPublishConfigFromParameters(
+          (draft.content.parameters ?? {}) as Record<string, unknown>
+        );
+      }
+    }
+    if (selection?.kind === "revision") {
+      const profile = (publishConfig?.profiles ?? []).find(
+        (profile) => profile.id === selection.configurationId
+      );
+      if (profile) {
+        return createDotnetPublishConfigFromParameters(
+          (profile.parameters ?? {}) as Record<string, unknown>
+        );
+      }
+    }
+    return createDefaultDotnetPublishConfig();
+  }, [params.selectedRepo]);
+
+  // Selection-derived key（列表高亮/最近使用身份）
+  const selectionKey = useMemo(() => {
+    const selection = params.selectedRepo?.publishConfig.selection;
+    if (!selection) return "";
+    switch (selection.kind) {
+      case "revision":
+        return `userprofile:${selection.configurationId}`;
+      case "projectProfile":
+        return `profile-${selection.reference}`;
+      case "template":
+        return selection.templateId;
+      default:
+        return "custom";
+    }
+  }, [params.selectedRepo]);
 
   // Publish runner
   const {
@@ -324,21 +335,28 @@ export function usePublishBoot(params: UsePublishBootParams) {
     activeProviderId: params.activeProviderId,
     activeProviderUsesProjectFile,
     activeProviderParameters: params.activeProviderParameters,
-    selectedPreset: params.selectedPreset,
-    isCustomMode: params.isCustomMode,
-    customConfig: params.customConfig,
+    customConfig: dotnetEditorView,
+    selectionKey,
     defaultOutputDir: params.defaultOutputDir,
     projectInfo: params.projectInfo,
-    presets: DOTNET_PRESETS,
     specVersion: SPEC_VERSION,
     pushRecentConfig,
     openEnvironmentDialog: params.openEnvironmentDialog,
     setEnvironmentLastCheck: params.setEnvironmentLastCheck,
     savePublishRecord: params.savePublishRecord,
-    configurationId: selectedConfiguration?.id ?? null,
     configurationRevisionId: selectedConfiguration?.revisionId ?? null,
     currentConfigurationBlockedReason:
       selectedConfiguration?.blockedReason ?? null,
+  });
+
+  const { activeImportFeedback, handleCommandImport } = useCommandImport({
+    activeProviderId: params.activeProviderId,
+    appT: params.appT,
+    onImportDraft: (result) =>
+      openQuickCreateProfileDialog({
+        providerId: result.providerId,
+        parameters: result.parameters,
+      }),
   });
 
   // Derived values
@@ -353,6 +371,16 @@ export function usePublishBoot(params: UsePublishBootParams) {
     activeProviderUsesProjectFile &&
     (params.isProjectInfoRefreshing || isResolvingSelectedProjectProfile);
 
+  const handleArtifactStateChange = useCallback(
+    (state: ArtifactActionState) => {
+      // 异步打包或签名只能更新发起操作的那次发布结果。
+      if (usePublishStore.getState().publishResult === params.publishResult) {
+        params.setArtifactActionState(state);
+      }
+    },
+    [params.publishResult, params.setArtifactActionState]
+  );
+
   // Memoized publish run card props
   const publishRunCardProps = usePublishRunCardProps({
     outputLog,
@@ -363,8 +391,6 @@ export function usePublishBoot(params: UsePublishBootParams) {
     configT: params.configT,
     isRefreshing: isPublishRunCardRefreshing,
     selectedRepo: params.selectedRepo,
-    activeProviderRequiresProjectBinding,
-    projectInfo: params.projectInfo,
     publishPreviewCommand,
     preparedRuntime,
     activeRuntime,
@@ -374,6 +400,9 @@ export function usePublishBoot(params: UsePublishBootParams) {
     requiresPreparedRuntime: true,
     isPublishing: params.isPublishing,
     isCancellingPublish: params.isCancellingPublish,
+    artifactActionState: params.artifactActionState,
+    onArtifactStateChange: handleArtifactStateChange,
+    onOpenReleaseChecklist: () => params.setReleaseChecklistOpen(true),
     startPublish,
     cancelPublish,
   });
@@ -419,8 +448,7 @@ export function usePublishBoot(params: UsePublishBootParams) {
   // Memoized publish config panel props
   const publishConfigPanelProps = usePublishConfigPanelProps({
     selectedRepoId: params.selectedRepoId,
-    selectedPreset: params.selectedPreset,
-    isCustomMode: params.isCustomMode,
+    selection: params.selectedRepo?.publishConfig.selection,
     profiles,
     isProfilesRefreshing: Boolean(params.selectedRepo) && isProfilesRefreshing,
     activeProfileName,
@@ -453,16 +481,11 @@ export function usePublishBoot(params: UsePublishBootParams) {
 
   return {
     // Publish config from useAppState
+    customConfig: dotnetEditorView,
     pushRecentPublishConfig: params.pushRecentPublishConfig,
     removeRecentPublishConfig: params.removeRecentPublishConfig,
     reorderRecentPublishConfigs: params.reorderRecentPublishConfigs,
     replaceRecentPublishConfigKey: params.replaceRecentPublishConfigKey,
-    selectedPreset: params.selectedPreset,
-    isCustomMode: params.isCustomMode,
-    customConfig: params.customConfig,
-    setSelectedPreset: params.setSelectedPreset,
-    setIsCustomMode: params.setIsCustomMode,
-    setCustomConfig: params.setCustomConfig,
 
     // Provider runtime (lifted, re-exported)
     activeProviderId: params.activeProviderId,
@@ -477,7 +500,6 @@ export function usePublishBoot(params: UsePublishBootParams) {
     activeProviderParameters: params.activeProviderParameters,
     setProviderParameters: params.setProviderParameters,
     applyProfileProvider: params.applyProfileProvider,
-    applyRecoveredSpecProvider: params.applyRecoveredSpecProvider,
     applySelectedRepositoryProvider: params.applySelectedRepositoryProvider,
 
     // Scoped configs
@@ -497,7 +519,6 @@ export function usePublishBoot(params: UsePublishBootParams) {
     providerRuntimeBanner,
 
     // Dotnet custom config
-    applyDotnetCustomConfig,
 
     // Command import
     activeImportFeedback,
@@ -572,8 +593,6 @@ export function usePublishBoot(params: UsePublishBootParams) {
 
     // Recoverable spec (from repo, re-exported)
     extractSpecFromRecord: params.extractSpecFromRecord,
-    restoreSpecToEditor: params.restoreSpecToEditor,
-    getRecentConfigKeyFromSpec: params.getRecentConfigKeyFromSpec,
 
     // Derived
     projectFrameworkOptions,

@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 
 import {
-  buildDotnetAdvancedParameters,
   buildDotnetProfileParameters,
   createDefaultDotnetPublishConfig,
   createDotnetPublishConfigFromParameters,
@@ -136,29 +135,6 @@ describe("dotnetPublishConfig", () => {
     });
   });
 
-  it("生成高级参数草稿", () => {
-    const config = {
-      ...createDefaultDotnetPublishConfig(),
-      framework: "net8.0",
-      noBuild: true,
-      properties: {
-        Version: "1.0.0",
-      },
-    };
-
-    expect(buildDotnetAdvancedParameters(config)).toEqual({
-      framework: "net8.0",
-      no_build: true,
-      no_restore: false,
-      verbosity: "",
-      no_logo: false,
-      delete_existing_files: false,
-      properties: {
-        Version: "1.0.0",
-      },
-    });
-  });
-
   it("可从 PublishProfile 属性恢复配置文件选择", () => {
     const restored = createDotnetPublishConfigFromParameters(
       {
@@ -193,5 +169,34 @@ describe("dotnetPublishConfig", () => {
         PublishProfile: "FolderProfile",
       },
     });
+  });
+
+  // 已知缺陷（统一发布输入方案 Phase 1 记录）：富表单往返不是无损的。
+  // 显式 false、null 值与黑名单属性在 参数 → 富表单 → 参数 的链路上被静默
+  // 丢弃。统一草稿落地后将删除富表单往返（Phase 5），本测试仅固定缺陷现状，
+  // 防止在迁移完成前丢失进一步恶化。
+  it("[现有缺陷] 富表单往返丢失显式 false、null 与黑名单属性", () => {
+    const original = {
+      configuration: "Debug",
+      self_contained: false,
+      no_build: false,
+      verbosity: null,
+      properties: {
+        Version: "1.2.3",
+        TargetFramework: "net8.0",
+      },
+    };
+
+    const rebuilt = buildDotnetProfileParameters(
+      createDotnetPublishConfigFromParameters(original)
+    );
+
+    // 显式 false 丢失：无法区分"显式关闭"与"未设置"。
+    expect(rebuilt.self_contained).toBeUndefined();
+    expect(rebuilt.no_build).toBeUndefined();
+    // null 值丢失：回落到富表单默认值而非保留。
+    expect(rebuilt.verbosity).toBeUndefined();
+    // 黑名单属性被静默删除：TargetFramework 不再出现。
+    expect(rebuilt.properties).toEqual({ Version: "1.2.3" });
   });
 });

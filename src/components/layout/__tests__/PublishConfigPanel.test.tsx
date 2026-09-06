@@ -253,8 +253,7 @@ describe("PublishConfigPanel", () => {
     const onDeleteProfile = vi.fn();
     const { container } = render(
       <PublishConfigPanel
-        selectedPreset="userprofile:profile-42"
-        isCustomMode
+        selection={{ kind: "revision" as const, configurationId: "profile-42" }}
         profiles={[editable, bound, boundCargo, driftedTauri]}
         activeProfileName="Alpha"
         onSelectProfile={onSelectProfile}
@@ -359,8 +358,7 @@ describe("PublishConfigPanel", () => {
   it("重命名后选中、收藏和最近使用继续引用同一 profile ID", async () => {
     const original = createProfile("Alpha", undefined, { id: "profile-42" });
     const sharedProps = {
-      selectedPreset: "userprofile:profile-42",
-      isCustomMode: true,
+      selection: { kind: "revision" as const, configurationId: "profile-42" },
       activeProfileName: "Alpha",
       onSelectProfile: vi.fn(),
       onCreateProfile: vi.fn(),
@@ -427,8 +425,7 @@ describe("PublishConfigPanel", () => {
   it("项目发布配置刷新期间不会阻塞自定义配置组渲染", async () => {
     render(
       <PublishConfigPanel
-        selectedPreset="release-fd"
-        isCustomMode={true}
+        selection={null}
         profiles={[createProfile("alpha-profile")]}
         isProfilesRefreshing={false}
         activeProfileName="alpha-profile"
@@ -466,8 +463,11 @@ describe("PublishConfigPanel", () => {
   it("自定义配置刷新期间不会阻塞项目发布配置组渲染", async () => {
     render(
       <PublishConfigPanel
-        selectedPreset="profile-FolderProfile"
-        isCustomMode={false}
+        selection={{
+          kind: "projectProfile" as const,
+          providerId: "dotnet",
+          reference: "FolderProfile",
+        }}
         profiles={[]}
         isProfilesRefreshing
         activeProfileName={null}
@@ -513,8 +513,7 @@ describe("PublishConfigPanel", () => {
 
     const { container } = render(
       <PublishConfigPanel
-        selectedPreset="release-fd"
-        isCustomMode={true}
+        selection={null}
         profiles={profiles}
         activeProfileName="alpha-profile"
         onSelectProfile={onSelectProfile}
@@ -597,8 +596,11 @@ describe("PublishConfigPanel", () => {
     const { container, rerender } = render(
       <PublishConfigPanel
         selectedRepoId="repo-a"
-        selectedPreset="profile-FolderProfile"
-        isCustomMode={false}
+        selection={{
+          kind: "projectProfile" as const,
+          providerId: "dotnet",
+          reference: "FolderProfile",
+        }}
         profiles={[]}
         activeProfileName={null}
         onSelectProfile={() => {}}
@@ -652,8 +654,11 @@ describe("PublishConfigPanel", () => {
     rerender(
       <PublishConfigPanel
         selectedRepoId="repo-b"
-        selectedPreset="profile-FolderProfile"
-        isCustomMode={false}
+        selection={{
+          kind: "projectProfile" as const,
+          providerId: "dotnet",
+          reference: "FolderProfile",
+        }}
         profiles={[]}
         activeProfileName={null}
         onSelectProfile={() => {}}
@@ -699,8 +704,7 @@ describe("PublishConfigPanel", () => {
       const { rerender } = render(
         <PublishConfigPanel
           selectedRepoId="repo-a"
-          selectedPreset="release-fd"
-          isCustomMode={true}
+          selection={null}
           profiles={[
             createProfile("alpha-profile"),
             createProfile("beta-profile"),
@@ -741,8 +745,7 @@ describe("PublishConfigPanel", () => {
       rerender(
         <PublishConfigPanel
           selectedRepoId="repo-b"
-          selectedPreset="release-fd"
-          isCustomMode={true}
+          selection={null}
           profiles={[
             createProfile("beta-profile"),
             createProfile("alpha-profile"),
@@ -819,8 +822,11 @@ describe("PublishConfigPanel", () => {
     const { container, rerender } = render(
       <PublishConfigPanel
         selectedRepoId="repo-b"
-        selectedPreset="profile-C PRD"
-        isCustomMode={false}
+        selection={{
+          kind: "projectProfile" as const,
+          providerId: "dotnet",
+          reference: "C PRD",
+        }}
         profiles={[]}
         activeProfileName={null}
         onSelectProfile={() => {}}
@@ -860,8 +866,11 @@ describe("PublishConfigPanel", () => {
     rerender(
       <PublishConfigPanel
         selectedRepoId="repo-b"
-        selectedPreset="profile-C PRD"
-        isCustomMode={false}
+        selection={{
+          kind: "projectProfile" as const,
+          providerId: "dotnet",
+          reference: "C PRD",
+        }}
         profiles={[]}
         activeProfileName={null}
         onSelectProfile={() => {}}
@@ -909,8 +918,7 @@ describe("PublishConfigPanel", () => {
   it("点击排序按钮后会切换发布配置拖拽手柄的常驻显示", () => {
     const { container } = render(
       <PublishConfigPanel
-        selectedPreset="release-fd"
-        isCustomMode={true}
+        selection={null}
         profiles={[
           createProfile("alpha-profile"),
           createProfile("beta-profile"),
@@ -981,8 +989,7 @@ describe("PublishConfigPanel", () => {
 
     const { container } = render(
       <PublishConfigPanel
-        selectedPreset="release-fd"
-        isCustomMode={true}
+        selection={null}
         profiles={[
           createProfile("alpha-profile"),
           createProfile("beta-profile"),
@@ -1084,8 +1091,7 @@ describe("PublishConfigPanel", () => {
 
     const { container } = render(
       <PublishConfigPanel
-        selectedPreset="release-fd"
-        isCustomMode={false}
+        selection={null}
         profiles={[]}
         activeProfileName={null}
         onSelectProfile={() => {}}
@@ -1171,8 +1177,7 @@ describe("PublishConfigPanel", () => {
 
     const { container } = render(
       <PublishConfigPanel
-        selectedPreset="release-fd"
-        isCustomMode={false}
+        selection={null}
         profiles={[
           createProfile("alpha-profile", "Group A"),
           createProfile("beta-profile", "Group B"),
@@ -1343,8 +1348,7 @@ describe("PublishConfigPanel", () => {
 
     const { container } = render(
       <PublishConfigPanel
-        selectedPreset="release-fd"
-        isCustomMode={false}
+        selection={null}
         profiles={[]}
         activeProfileName={null}
         onSelectProfile={() => {}}
@@ -1572,8 +1576,7 @@ describe("PublishConfigPanel", () => {
 
     const { container } = render(
       <PublishConfigPanel
-        selectedPreset="release-fd"
-        isCustomMode={false}
+        selection={null}
         profiles={[]}
         activeProfileName={null}
         onSelectProfile={() => {}}
@@ -1637,8 +1640,7 @@ describe("PublishConfigPanel — preset selection state", () => {
     overrides: Partial<Parameters<typeof PublishConfigPanel>[0]> = {}
   ) {
     return {
-      selectedPreset: "release-fd",
-      isCustomMode: false,
+      selection: null,
       profiles: [] as ConfigProfile[],
       isProfilesRefreshing: false,
       activeProfileName: null as string | null,
@@ -1674,7 +1676,11 @@ describe("PublishConfigPanel — preset selection state", () => {
     render(
       <PublishConfigPanel
         {...baseProps({
-          selectedPreset: "profile-FolderProfile",
+          selection: {
+            kind: "projectProfile" as const,
+            providerId: "dotnet",
+            reference: "FolderProfile",
+          },
           projectPublishProfiles: ["FolderProfile", "ZipProfile", "WebDeploy"],
         })}
       />
@@ -1694,7 +1700,6 @@ describe("PublishConfigPanel — preset selection state", () => {
     render(
       <PublishConfigPanel
         {...baseProps({
-          selectedPreset: "release-fd",
           projectPublishProfiles: ["FolderProfile", "ZipProfile"],
         })}
       />
@@ -1707,11 +1712,15 @@ describe("PublishConfigPanel — preset selection state", () => {
     expect(zipBtn).toHaveAttribute("data-selected", "false");
   });
 
-  it("changing selectedPreset prop updates data-selected", async () => {
+  it("changing selection prop updates data-selected", async () => {
     const { rerender } = render(
       <PublishConfigPanel
         {...baseProps({
-          selectedPreset: "profile-FolderProfile",
+          selection: {
+            kind: "projectProfile" as const,
+            providerId: "dotnet",
+            reference: "FolderProfile",
+          },
           projectPublishProfiles: ["FolderProfile", "ZipProfile"],
         })}
       />
@@ -1729,7 +1738,11 @@ describe("PublishConfigPanel — preset selection state", () => {
     rerender(
       <PublishConfigPanel
         {...baseProps({
-          selectedPreset: "profile-ZipProfile",
+          selection: {
+            kind: "projectProfile" as const,
+            providerId: "dotnet",
+            reference: "ZipProfile",
+          },
           projectPublishProfiles: ["FolderProfile", "ZipProfile"],
         })}
       />

@@ -1,10 +1,15 @@
 import { useMemo } from "react";
 import type { PublishRunCardProps } from "@/components/publish/PublishRunCard";
-import type { Repository, ProjectInfo } from "@/lib/store/types";
+import type { ArtifactActionState } from "@/lib/artifact";
+import type { Repository } from "@/lib/store/types";
 import type {
   PreparedPublishRuntime,
   PublishRuntimeResult,
 } from "@/generated/tauri-contracts";
+import {
+  canRequestRuntimeOutputAccess,
+  type ReadyPublishRuntime,
+} from "@/features/publish/publishRuntime";
 type TranslationMap = Record<string, string | undefined>;
 
 interface UsePublishRunCardPropsParams {
@@ -16,11 +21,9 @@ interface UsePublishRunCardPropsParams {
   configT: TranslationMap;
   isRefreshing: boolean;
   selectedRepo: Repository | null;
-  activeProviderRequiresProjectBinding: boolean;
-  projectInfo: ProjectInfo | null;
   publishPreviewCommand: string | null;
   preparedRuntime: PreparedPublishRuntime | null;
-  activeRuntime: PreparedPublishRuntime | null;
+  activeRuntime: ReadyPublishRuntime | null;
   runtimeResult: PublishRuntimeResult | null;
   runtimePreparationError: string | null;
   requiresPreparedRuntime: boolean;
@@ -28,6 +31,9 @@ interface UsePublishRunCardPropsParams {
   isCancellingPublish: boolean;
   startPublish: () => void;
   cancelPublish: () => void;
+  artifactActionState: ArtifactActionState;
+  onArtifactStateChange: (state: ArtifactActionState) => void;
+  onOpenReleaseChecklist: () => void;
 }
 
 export function usePublishRunCardProps(
@@ -44,33 +50,30 @@ export function usePublishRunCardProps(
       runtimePreparationError: params.runtimePreparationError,
       appT: params.appT,
       isRefreshing: params.isRefreshing,
-      publishActions:
-        params.selectedRepo &&
-        (params.activeProviderRequiresProjectBinding
-          ? Boolean(params.projectInfo)
-          : true)
-          ? {
-              publishCommand: params.publishPreviewCommand || null,
-              publishCommandLabel: params.publishT.command || "将执行的命令:",
-              startLabel: params.configT.execute || "执行发布",
-              publishingLabel: params.configT.publishing || "发布中...",
-              cancelLabel: params.appT.cancelPublish || "取消发布",
-              cancellingLabel: params.appT.cancelling || "取消中...",
-              isPublishing: params.isPublishing,
-              isCancellingPublish: params.isCancellingPublish,
-              startDisabled:
-                !params.selectedRepo ||
-                (params.requiresPreparedRuntime &&
-                  (!params.preparedRuntime ||
-                    Boolean(params.preparedRuntime.blockedReason) ||
-                    !params.preparedRuntime.runtimeToken)),
-              onStartPublish: params.startPublish,
-              onCancelPublish: params.cancelPublish,
-            }
-          : null,
+      artifactActionState: params.artifactActionState,
+      onArtifactStateChange: params.onArtifactStateChange,
+      onOpenReleaseChecklist: params.onOpenReleaseChecklist,
+      publishActions: params.selectedRepo
+        ? {
+            publishCommand: params.publishPreviewCommand || null,
+            publishCommandLabel: params.publishT.command || "将执行的命令:",
+            startLabel: params.configT.execute || "执行发布",
+            publishingLabel: params.configT.publishing || "发布中...",
+            cancelLabel: params.appT.cancelPublish || "取消发布",
+            cancellingLabel: params.appT.cancelling || "取消中...",
+            isPublishing: params.isPublishing,
+            isCancellingPublish: params.isCancellingPublish,
+            startDisabled:
+              !params.selectedRepo ||
+              (params.requiresPreparedRuntime &&
+                params.preparedRuntime?.status !== "ready" &&
+                !canRequestRuntimeOutputAccess(params.preparedRuntime)),
+            onStartPublish: params.startPublish,
+            onCancelPublish: params.cancelPublish,
+          }
+        : null,
     }),
     [
-      params.activeProviderRequiresProjectBinding,
       params.activeRuntime,
       params.appT,
       params.cancelPublish,
@@ -81,9 +84,11 @@ export function usePublishRunCardProps(
       params.isRefreshing,
       params.isPublishing,
       params.outputLog,
+      params.artifactActionState,
+      params.onArtifactStateChange,
+      params.onOpenReleaseChecklist,
       params.publishPreviewCommand,
       params.preparedRuntime,
-      params.projectInfo,
       params.publishResult,
       params.requiresPreparedRuntime,
       params.runtimeResult,

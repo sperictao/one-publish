@@ -29,6 +29,7 @@ impl BuiltInProvider {
                 requires_project_binding: false,
                 project_path_kind: ProviderProjectPathKind::RepositoryRoot,
                 supports_command_import: true,
+                templates: Vec::new(),
             },
             ProviderRepositoryDiscovery {
                 provider_id: "go".to_string(),

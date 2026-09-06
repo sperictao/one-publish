@@ -10,16 +10,17 @@ import { createPublishExecutionRecord } from "@/features/history/publishExecutio
 import { exportExecutionSnapshot } from "@/features/history/executionSnapshot";
 import { normalizePublishResult } from "@/features/history/publishFailure";
 import {
+  canRequestRuntimeOutputAccess,
   cancelPublishRuntime,
-  prepareDraftPublishRuntime,
   preparePublishRuntime,
   resumePublishRuntime,
   startPublishRuntime,
   synchronizePublishRuntime,
   type PreparedPublishRuntime,
-  type ProviderPublishSpec,
   type PublishResult,
   type PublishRuntimeResult,
+  type PublishSource,
+  type ReadyPublishRuntime,
 } from "@/features/publish/publishRuntime";
 import {
   createFailedPublishTransactionResult,
@@ -51,7 +52,8 @@ export interface UsePublishExecuteParams {
   getOutputLogSnapshot: () => string;
   replaceCapturedOutputLog: (log: string) => void;
   validate: UsePublishValidateResult;
-  currentConfigurationId?: string | null;
+  /** 偏好设置里的默认输出目录；随 runInputs 交给后端派生。 */
+  defaultOutputDir?: string;
   currentConfigurationRevisionId?: string | null;
   currentConfigurationBlockedReason?: string | null;
 }
@@ -60,11 +62,11 @@ export interface UsePublishExecuteResult {
   startPublish: () => Promise<void>;
   cancelPublish: () => Promise<void>;
   runPublishSpec: (
-    spec: ProviderPublishSpec,
+    source: PublishSource,
     options?: RunPublishOptions,
     preparedRuntime?: PreparedPublishRuntime
   ) => Promise<void>;
-  activeRuntime: PreparedPublishRuntime | null;
+  activeRuntime: ReadyPublishRuntime | null;
   runtimeResult: PublishRuntimeResult | null;
 }
 
@@ -75,6 +77,19 @@ type ActivePublishRun = {
   runtimeToken?: string;
   attemptId?: string;
 };
+
+function sourceProviderId(source: PublishSource): string {
+  switch (source.kind) {
+    case "draft":
+      return source.content.providerId;
+    case "template":
+    case "projectProfile":
+    case "empty":
+      return source.providerId;
+    default:
+      return "";
+  }
+}
 
 export function usePublishExecute({
   appT,
@@ -87,14 +102,14 @@ export function usePublishExecute({
   getOutputLogSnapshot,
   replaceCapturedOutputLog,
   validate,
-  currentConfigurationId,
+  defaultOutputDir,
   currentConfigurationRevisionId,
   currentConfigurationBlockedReason,
 }: UsePublishExecuteParams): UsePublishExecuteResult {
   const presentationRevisionRef = useRef(0);
   const activeRunRef = useRef<ActivePublishRun | null>(null);
   const [activeRuntime, setActiveRuntime] =
-    useState<PreparedPublishRuntime | null>(null);
+    useState<ReadyPublishRuntime | null>(null);
   const [runtimeResult, setRuntimeResult] =
     useState<PublishRuntimeResult | null>(null);
 
@@ -107,6 +122,7 @@ export function usePublishExecute({
   const setCurrentPublishRecordId = usePublishStore(
     (s) => s.setCurrentPublishRecordId
   );
+
   const setReleaseChecklistOpen = usePublishStore(
     (s) => s.setReleaseChecklistOpen
   );
@@ -229,7 +245,7 @@ export function usePublishExecute({
 
   const runPublishSpec = useCallback(
     async (
-      spec: ProviderPublishSpec,
+      source: PublishSource,
       options?: RunPublishOptions,
       preparedRuntime?: PreparedPublishRuntime
     ) => {
@@ -249,76 +265,92 @@ export function usePublishExecute({
       };
       setIsPublishing(true);
 
-      const preflightPassed = await validate.runPublishPreflight(spec, {
-        runRevision,
-        feedbackMode: transaction.feedbackMode,
-        restoreWindowOnFailure: transaction.restoreWindowOnFailure,
-        trayStatusEffect: transaction.trayStatusEffect,
-        isCancelled: () => {
-          const activeRun = activeRunRef.current;
-          return activeRun?.revision !== runRevision || activeRun.cancelled;
+      const request = {
+        repositoryId: transaction.repoId ?? selectedRepoId!,
+        source,
+        runInputs: {
+          defaultOutputDir:
+            source.kind === "history" ? "" : (defaultOutputDir ?? ""),
+          promotedManifestDigest: undefined,
         },
-      });
-      const activeRun = activeRunRef.current;
-      if (
-        !preflightPassed ||
-        activeRun?.revision !== runRevision ||
-        activeRun.cancelled
-      ) {
-        if (activeRun?.revision === runRevision) {
-          activeRunRef.current = null;
-          setIsPublishing(false);
-          setIsCancellingPublish(false);
-        }
-        return;
-      }
-      activeRun.phase = "running";
-      setRuntimeResult(null);
-
-      if (isCurrentPresentationRevision(runRevision)) {
-        setLastPublishSpec(spec);
-      }
-
+      };
+      const isCancelled = () => {
+        const activeRun = activeRunRef.current;
+        return (
+          activeRun?.revision !== runRevision ||
+          activeRun.cancelled ||
+          !isCurrentPresentationRevision(runRevision)
+        );
+      };
+      let prepared: PreparedPublishRuntime | null = preparedRuntime ?? null;
+      let ready: ReadyPublishRuntime | null =
+        prepared?.status === "ready" ? prepared : null;
       let runtimeAccepted = false;
       let runtimeRemainsPending = false;
-      let prepared: PreparedPublishRuntime | null = null;
       try {
-        // plan 033 路线 B：交互入口复用 validate 准备好的 Runtime；rerun/tray
-        // 等不带 preparedRuntime 的入口在现场准备——命名配置按原修订，其余经
-        // 自动草稿配置物化新修订。草稿修订参数与 spec 同源，重复准备同参数
-        // 发布只会追加一个等值修订，不产生状态分叉。
-        prepared =
-          preparedRuntime ??
-          (currentConfigurationId && currentConfigurationRevisionId
-            ? await preparePublishRuntime({
-                repositoryId: transaction.repoId ?? selectedRepoId!,
-                repositoryPath: selectedRepoPath!,
-                configurationId: currentConfigurationId,
-                configurationRevisionId: currentConfigurationRevisionId,
-                spec,
-              })
-            : await prepareDraftPublishRuntime({
-                repositoryId: transaction.repoId ?? selectedRepoId!,
-                repositoryPath: selectedRepoPath!,
-                providerId: spec.provider_id,
-                parameters: spec.parameters,
-                spec,
-              }));
         if (!prepared) {
-          throw new Error("PublishRuntime preparation returned no result");
+          prepared = await preparePublishRuntime(request);
+        }
+        if (isCancelled()) return;
+        if (canRequestRuntimeOutputAccess(prepared)) {
+          const authorized = await validate.requestRuntimeOutputAccess(
+            prepared,
+            isCancelled
+          );
+          if (!authorized || isCancelled()) return;
+          prepared = await preparePublishRuntime(request);
+          if (isCancelled()) return;
+        }
+        ready = prepared.status === "ready" ? prepared : null;
+        if (!ready) {
+          throw new Error(
+            prepared && prepared.status === "blocked"
+              ? prepared.diagnostics[0]?.message ||
+                  appT.publishRuntimeBlocked ||
+                  "本地发布计划存在阻塞项"
+              : "PublishRuntime preparation returned no result"
+          );
         }
 
-        activeRun.runtimeToken = prepared.runtimeToken;
-        setActiveRuntime(prepared);
+        // 预检改用 prepare 产出的 resolvedSpec（后端投影），授权流程沿用同一份。
+        const preflightPassed = await validate.runPublishPreflight(
+          ready.resolvedSpec,
+          {
+            runRevision,
+            feedbackMode: transaction.feedbackMode,
+            restoreWindowOnFailure: transaction.restoreWindowOnFailure,
+            trayStatusEffect: transaction.trayStatusEffect,
+            isCancelled,
+          }
+        );
+        const activeRun = activeRunRef.current;
+        if (!preflightPassed || isCancelled() || !activeRun) {
+          if (activeRun?.revision === runRevision) {
+            activeRunRef.current = null;
+            setIsPublishing(false);
+            setIsCancellingPublish(false);
+          }
+          return;
+        }
+        activeRun.phase = "running";
+        setRuntimeResult(null);
+
+        if (isCurrentPresentationRevision(runRevision)) {
+          setLastPublishSpec(ready.resolvedSpec);
+        }
+
+        activeRun.runtimeToken = ready.runtimeToken;
+        setActiveRuntime(ready);
 
         if (shouldRecordRecentConfig(transaction)) {
           pushRecentConfig(transaction.recentConfigKey!, transaction.repoId);
         }
 
         let result: PublishResult;
+        let completedRuntime: PublishRuntimeResult;
         {
-          const completedRuntime = await startPublishRuntime({
-            runtimeToken: prepared.runtimeToken,
+          completedRuntime = await startPublishRuntime({
+            runtimeToken: ready.runtimeToken,
           });
           runtimeAccepted = true;
           setRuntimeResult(completedRuntime);
@@ -338,11 +370,11 @@ export function usePublishExecute({
               );
             }
             result = {
-              provider_id: spec.provider_id,
+              provider_id: ready.resolvedSpec.provider_id,
               success: false,
               cancelled: true,
               error: completedRuntime.attempt.error,
-              command: prepared.command,
+              command: ready.command,
               output_log: "",
               output_dir: "",
               file_count: 0,
@@ -378,10 +410,12 @@ export function usePublishExecute({
         }
 
         const record = createPublishExecutionRecord({
-          spec,
+          spec: ready.resolvedSpec,
           repoId: transaction.repoId,
-          configurationId: transaction.configurationId,
-          configurationRevisionId: transaction.configurationRevisionId,
+          configurationId: ready.configurationId,
+          configurationRevisionId: ready.configurationRevisionId,
+          attemptId: completedRuntime.attempt.attemptId,
+          recoverySnapshot: ready.recoverySnapshot,
           startedAt: transaction.startedAt,
           finishedAt: new Date().toISOString(),
           result: resolvedResult,
@@ -443,10 +477,10 @@ export function usePublishExecute({
           loadInvokeErrors(),
           loadPublishFailureFeedback(),
         ]);
-        // 不确定 Attempt 的恢复同步：命名配置与草稿修订都用 prepared 携带的
-        // 修订身份（草稿场景下 currentConfigurationRevisionId 为空）。
+        // 不确定 Attempt 的恢复同步：用 prepared 携带的修订身份（含草稿场景下
+        // 后端物化的隐藏草稿修订）。
         if (
-          prepared &&
+          ready &&
           !runtimeAccepted &&
           extractInvokeErrorCode(err) === "publish_runtime_attempt_uncertain" &&
           selectedRepoPath
@@ -454,7 +488,7 @@ export function usePublishExecute({
           try {
             const synchronized = await synchronizePublishRuntime({
               repositoryPath: selectedRepoPath,
-              configurationRevisionId: prepared.configurationRevisionId,
+              configurationRevisionId: ready.configurationRevisionId,
               attemptId: extractInvokeErrorDetails(err) || undefined,
               events: [],
             });
@@ -465,7 +499,8 @@ export function usePublishExecute({
               runtimeAccepted = true;
               setRuntimeResult(synchronized.result);
               if (synchronized.result.attempt.status === "running") {
-                activeRun.attemptId = synchronized.result.attempt.attemptId;
+                activeRunRef.current!.attemptId =
+                  synchronized.result.attempt.attemptId;
                 runtimeRemainsPending = true;
               }
               return;
@@ -480,7 +515,7 @@ export function usePublishExecute({
           }
         }
         if (
-          prepared &&
+          ready &&
           !runtimeAccepted &&
           activeRunRef.current?.revision === runRevision
         ) {
@@ -492,7 +527,7 @@ export function usePublishExecute({
         const outputLogSnapshot = await waitForOutputLogSnapshot();
 
         const failedResult = createFailedPublishTransactionResult({
-          spec,
+          spec: ready?.resolvedSpec ?? null,
           errorMessage: rawErrorMessage,
           outputLog: outputLogSnapshot,
         });
@@ -508,10 +543,12 @@ export function usePublishExecute({
         );
 
         const record = createPublishExecutionRecord({
-          spec,
+          spec: ready?.resolvedSpec ?? null,
+          providerId: sourceProviderId(source),
           repoId: transaction.repoId,
-          configurationId: transaction.configurationId,
-          configurationRevisionId: transaction.configurationRevisionId,
+          configurationId: ready?.configurationId ?? null,
+          configurationRevisionId: ready?.configurationRevisionId ?? null,
+          recoverySnapshot: ready?.recoverySnapshot,
           startedAt: transaction.startedAt,
           finishedAt: new Date().toISOString(),
           result: failedResult,
@@ -548,13 +585,13 @@ export function usePublishExecute({
     },
     [
       appT,
+      defaultOutputDir,
       isCurrentPresentationRevision,
       publishT,
       pushRecentConfig,
       validate,
       selectedRepoId,
       selectedRepoPath,
-      currentConfigurationRevisionId,
       setIsCancellingPublish,
       setIsPublishing,
       setLastPublishSpec,
@@ -618,7 +655,7 @@ export function usePublishExecute({
     }
 
     if (blocker === "missing-project") {
-      toast.error(appT.selectDotnetProjectFirst || "请先选择 .NET 项目");
+      toast.error(appT.selectProjectFirst || "请先在仓库设置中绑定项目");
       return;
     }
 
@@ -635,7 +672,9 @@ export function usePublishExecute({
     if (blocker === "runtime-blocked") {
       toast.error(publishT.configurationBlocked || "当前发布配置不可执行", {
         description:
-          validate.preparedRuntime?.blockedReason ||
+          (validate.preparedRuntime?.status === "blocked"
+            ? validate.preparedRuntime.diagnostics[0]?.message
+            : undefined) ||
           appT.publishRuntimeBlocked ||
           "本地发布计划存在阻塞项",
       });
@@ -648,20 +687,16 @@ export function usePublishExecute({
     }
 
     await runPublishSpec(
-      request.spec,
+      request.source,
       {
         repoId: selectedRepoId,
         recentConfigKey: request.recentConfigKey,
-        configurationId: currentConfigurationId,
-        configurationRevisionId: currentConfigurationRevisionId,
       },
       request.preparedRuntime
     );
   }, [
     appT,
     currentConfigurationBlockedReason,
-    currentConfigurationId,
-    currentConfigurationRevisionId,
     publishT.configurationBlocked,
     resumePendingPublish,
     runPublishSpec,

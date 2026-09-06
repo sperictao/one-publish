@@ -78,6 +78,7 @@ src-tauri/tauri.conf.updater.prod.json
 /scratch/
 /CLAUDE.md
 /branch-title.json
+/.zcode/
 
 # Autoresearch local state
 /autoresearch-*.json
@@ -90,3 +91,11 @@ src-tauri/tauri.conf.updater.prod.json
 /.omc/
 /src-tauri/.omc/
 /.mindfs/
+
+# Untracked doc artifacts (generated/report outputs, not source)
+/docs/archify/
+/docs/architecture.mmd
+/docs/architecture.png
+/docs/architecture.svg
+# docs/agent/ (singular) is a divergent ad-hoc report dir; keep docs/agents/ (plural, tracked)
+/docs/agent/

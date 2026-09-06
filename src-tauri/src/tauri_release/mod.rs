@@ -54,7 +54,7 @@ fn validate_relative_path(path: &str, field: &str) -> Result<(), AppError> {
     Ok(())
 }
 
-fn validate_secret_name(name: &str) -> bool {
+pub(crate) fn validate_secret_name(name: &str) -> bool {
     let mut chars = name.chars();
     matches!(chars.next(), Some(first) if first.is_ascii_uppercase() || first == '_')
         && chars.all(|character| {

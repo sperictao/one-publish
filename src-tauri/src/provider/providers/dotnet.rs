@@ -64,6 +64,7 @@ impl BuiltInProvider {
                 requires_project_binding: true,
                 project_path_kind: ProviderProjectPathKind::ProjectFile,
                 supports_command_import: true,
+                templates: dotnet_templates().iter().map(|t| t.summary()).collect(),
             },
             ProviderRepositoryDiscovery {
                 provider_id: "dotnet".to_string(),
@@ -80,4 +81,116 @@ impl BuiltInProvider {
 /// 供 `providers::all()` 调用的统一入口。
 pub(crate) fn create() -> BuiltInProvider {
     BuiltInProvider::dotnet()
+}
+
+use crate::provider::ProviderTemplate;
+
+/// Provider 内置模板（原前端 dotnetPresets 迁入后端）：模板参数是完整参数，
+/// 显式保留 false 语义；runtime 为空表示不限定 RID，不写入参数。
+pub(crate) fn dotnet_templates() -> Vec<ProviderTemplate> {
+    fn template(
+        id: &str,
+        name: &str,
+        description: &str,
+        configuration: &str,
+        runtime: &str,
+        self_contained: bool,
+    ) -> ProviderTemplate {
+        let mut parameters = serde_json::json!({
+            "configuration": configuration,
+            "self_contained": self_contained,
+        });
+        if !runtime.is_empty() {
+            parameters["runtime"] = serde_json::Value::String(runtime.to_string());
+        }
+        ProviderTemplate {
+            id: id.to_string(),
+            name: name.to_string(),
+            description: description.to_string(),
+            parameters,
+        }
+    }
+
+    vec![
+        template(
+            "release-fd",
+            "Release - 框架依赖",
+            "推荐用于开发/测试",
+            "Release",
+            "",
+            false,
+        ),
+        template(
+            "release-win-x64",
+            "Release - Windows x64",
+            "自包含部署",
+            "Release",
+            "win-x64",
+            true,
+        ),
+        template(
+            "release-osx-arm64",
+            "Release - macOS ARM64",
+            "Apple Silicon",
+            "Release",
+            "osx-arm64",
+            true,
+        ),
+        template(
+            "release-osx-x64",
+            "Release - macOS x64",
+            "Intel Mac",
+            "Release",
+            "osx-x64",
+            true,
+        ),
+        template(
+            "release-linux-x64",
+            "Release - Linux x64",
+            "自包含部署",
+            "Release",
+            "linux-x64",
+            true,
+        ),
+        template(
+            "debug-fd",
+            "Debug - 框架依赖",
+            "调试模式",
+            "Debug",
+            "",
+            false,
+        ),
+        template(
+            "debug-win-x64",
+            "Debug - Windows x64",
+            "自包含部署",
+            "Debug",
+            "win-x64",
+            true,
+        ),
+        template(
+            "debug-osx-arm64",
+            "Debug - macOS ARM64",
+            "Apple Silicon",
+            "Debug",
+            "osx-arm64",
+            true,
+        ),
+        template(
+            "debug-osx-x64",
+            "Debug - macOS x64",
+            "Intel Mac",
+            "Debug",
+            "osx-x64",
+            true,
+        ),
+        template(
+            "debug-linux-x64",
+            "Debug - Linux x64",
+            "自包含部署",
+            "Debug",
+            "linux-x64",
+            true,
+        ),
+    ]
 }

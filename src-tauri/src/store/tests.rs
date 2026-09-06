@@ -8,13 +8,14 @@ use super::runtime::{
     apply_selected_repo_id_update, build_frontend_state, find_repository,
     validate_repository_project_binding,
 };
-use super::types::{DRAFT_MAX_REVISIONS, DRAFT_PROFILE_NAME};
+use super::types::{DRAFT_MAX_REVISIONS, DRAFT_PROFILE_NAME, PublishSelectionRef};
 use super::{
     AppState, AutomationBinding, AutomationTriggerPolicy, ConfigurationImport, ExecutionRecord,
     PublishConfigStore, RepoPublishConfig, Repository,
 };
 use std::collections::BTreeMap;
 use std::fs;
+use std::path::Path;
 use tempfile::TempDir;
 
 fn test_runtime_revision() -> publish_domain::AutomationRuntimeRevision {
@@ -174,7 +175,12 @@ fn switching_the_current_configuration_never_touches_automation_bindings() {
 
     assert_eq!(config.bindings, bindings_before);
     assert_eq!(config.applied_bundles, bundles_before);
-    assert_eq!(config.selected_preset, format!("userprofile:{}", other.id));
+    assert_eq!(
+        config.selection,
+        Some(PublishSelectionRef::Revision {
+            configuration_id: other.id.clone(),
+        })
+    );
 }
 
 #[test]
@@ -195,7 +201,12 @@ fn repo_publish_config_selection_and_identity_references_survive_rename() {
     repo.publish_config
         .select_profile(&created.id)
         .expect("select profile");
-    assert!(repo.publish_config.is_custom_mode);
+    assert_eq!(
+        repo.publish_config.selection,
+        Some(PublishSelectionRef::Revision {
+            configuration_id: created.id.clone(),
+        })
+    );
     repo.publish_config
         .bindings
         .push(test_binding(&created.id, &created.current_revision_id));
@@ -225,6 +236,8 @@ fn repo_publish_config_selection_and_identity_references_survive_rename() {
             failure_signature: None,
             output_excerpt: None,
             spec: None,
+            attempt_id: None,
+            recovery_snapshot: None,
             file_count: 0,
             warnings: None,
         }],
@@ -251,7 +264,13 @@ fn repo_publish_config_selection_and_identity_references_survive_rename() {
     assert_eq!(renamed.profile_group.as_deref(), Some("Renamed Group"));
     assert_eq!(renamed.revisions.len(), 1);
     assert_eq!(renamed.current_revision_id, created.current_revision_id);
-    assert_eq!(config.selected_preset, recent_key);
+    assert_eq!(
+        config.selection,
+        Some(PublishSelectionRef::Revision {
+            configuration_id: created.id.clone(),
+        })
+    );
+    let _ = recent_key;
     assert_eq!(
         state.recent_config_keys_by_repo["repo-1"],
         vec![format!("userprofile:{}", created.id)]
@@ -316,7 +335,7 @@ fn repo_publish_config_delete_is_blocked_by_binding_then_tombstones_history() {
     );
     assert_eq!(tombstone.current_revision_id, created.current_revision_id);
     assert_eq!(tombstone.revisions, created.revisions);
-    assert_eq!(config.selected_preset, "release-fd");
+    assert!(config.selection.is_none());
 }
 
 #[test]
@@ -395,8 +414,10 @@ fn repo_publish_config_import_creates_unselected_identity_and_skips_duplicate_na
         Some("provider_unavailable:future-provider")
     );
     assert_eq!(
-        config.selected_preset,
-        format!("userprofile:{}", selected.id)
+        config.selection,
+        Some(PublishSelectionRef::Revision {
+            configuration_id: selected.id.clone(),
+        })
     );
     assert_eq!(config.bindings.len(), 1);
     assert!(config
@@ -490,6 +511,8 @@ fn bootstrap_state_serialization_excludes_execution_history() {
             failure_signature: None,
             output_excerpt: None,
             spec: None,
+            attempt_id: None,
+            recovery_snapshot: None,
             file_count: 2,
             warnings: None,
         }],
@@ -704,9 +727,41 @@ fn load_from_path_migrates_legacy_global_publish_fields() {
     let state = load_from_path(&config_path);
     let repo_publish_config = &state.repositories[0].publish_config;
 
-    assert_eq!(repo_publish_config.selected_preset, "profile-FolderProfile");
-    assert!(repo_publish_config.is_custom_mode);
-    assert_eq!(repo_publish_config.custom_config.configuration, "Debug");
+    // §4.2：独立 customConfig 按旧格式语义一次性转换为 dotnet 草稿
+    //（custom 优先于全局 preset 标签；旧 profile- 标签不再保留）。
+    assert_eq!(
+        repo_publish_config.selection,
+        Some(PublishSelectionRef::Draft {
+            provider_id: "dotnet".to_string(),
+            project_binding: None,
+        })
+    );
+    let dotnet_draft = repo_publish_config
+        .drafts
+        .iter()
+        .find(|draft| draft.provider_id == "dotnet")
+        .expect("dotnet draft stored");
+    assert_eq!(
+        dotnet_draft.content.parameters,
+        serde_json::json!({
+            "configuration": "Debug",
+            "runtime": "win-x64",
+            "self_contained": true,
+        })
+    );
+    let dotnet_draft = repo_publish_config
+        .drafts
+        .iter()
+        .find(|draft| draft.provider_id == "dotnet")
+        .expect("dotnet draft stored");
+    assert_eq!(
+        dotnet_draft.content.parameters,
+        serde_json::json!({
+            "configuration": "Debug",
+            "runtime": "win-x64",
+            "self_contained": true,
+        })
+    );
     assert_eq!(repo_publish_config.profiles.len(), 1);
     assert!(state.startup_notice.is_none());
 }
@@ -716,6 +771,7 @@ fn load_from_path_migrates_name_based_profiles_once_and_writes_versioned_schema(
     let temp_dir = TempDir::new().expect("temp dir");
     let config_path = temp_dir.path().join("config.json");
     let legacy_payload = serde_json::json!({
+        "schemaVersion": 3,
         "repositories": [
             {
                 "id": "repo-1",
@@ -794,8 +850,10 @@ fn load_from_path_migrates_name_based_profiles_once_and_writes_versioned_schema(
     // 的参数不再物化为修订；profile 保留身份但没有可用修订。
     assert!(alpha.current_revision().is_none());
     assert_eq!(
-        first_config.selected_preset,
-        format!("userprofile:{}", beta.id)
+        first_config.selection,
+        Some(PublishSelectionRef::Revision {
+            configuration_id: beta.id.clone(),
+        })
     );
     assert_eq!(
         first.recent_config_keys_by_repo["repo-1"],
@@ -805,14 +863,21 @@ fn load_from_path_migrates_name_based_profiles_once_and_writes_versioned_schema(
         ]
     );
     assert_eq!(
-        first.repositories[1].publish_config.selected_preset,
-        "profile-FolderProfile"
+        first.repositories[1].publish_config.selection,
+        Some(PublishSelectionRef::ProjectProfile {
+            provider_id: "dotnet".to_string(),
+            reference: "FolderProfile".to_string(),
+        })
     );
 
     let persisted = fs::read_to_string(&config_path).expect("read migrated config");
     let persisted_json: serde_json::Value =
         serde_json::from_str(&persisted).expect("parse migrated config");
-    assert_eq!(persisted_json["schemaVersion"], 3);
+    // §4.2：v4 只写选择与草稿；schemaVersion 升级为 4。
+    assert_eq!(persisted_json["schemaVersion"], 4);
+    assert!(persisted_json["repositories"][0]["publishConfig"].get("selectedPreset").is_none());
+    assert!(persisted_json["repositories"][0]["publishConfig"].get("isCustomMode").is_none());
+    assert!(persisted_json["repositories"][0]["publishConfig"].get("customConfig").is_none());
     assert!(
         persisted_json["repositories"][0]["publishConfig"]["profiles"][0]
             .get("providerId")
@@ -858,35 +923,6 @@ fn load_from_path_rejects_schema_two_string_runtime_pins() {
     assert!(loaded.repositories.is_empty());
 }
 
-#[test]
-fn sanitize_state_migrates_delete_existing_files_properties() {
-    let mut legacy_true_repo = test_repo("repo-true");
-    legacy_true_repo
-        .publish_config
-        .custom_config
-        .properties
-        .insert("deleteExistingFiles".to_string(), "true".to_string());
-
-    let mut legacy_false_repo = test_repo("repo-false");
-    legacy_false_repo
-        .publish_config
-        .custom_config
-        .properties
-        .insert("DeleteExistingFiles".to_string(), "false".to_string());
-
-    let state = sanitize_state(AppState {
-        repositories: vec![legacy_true_repo, legacy_false_repo],
-        ..AppState::default()
-    });
-
-    let true_config = &state.repositories[0].publish_config.custom_config;
-    assert!(true_config.delete_existing_files);
-    assert!(!true_config.properties.contains_key("deleteExistingFiles"));
-
-    let false_config = &state.repositories[1].publish_config.custom_config;
-    assert!(!false_config.delete_existing_files);
-    assert!(!false_config.properties.contains_key("DeleteExistingFiles"));
-}
 
 #[test]
 fn load_from_path_recovers_from_corrupt_config_and_creates_backup() {
@@ -913,6 +949,45 @@ fn load_from_path_recovers_from_corrupt_config_and_creates_backup() {
 }
 
 #[tokio::test]
+async fn validate_repository_project_binding_allows_adding_unbound_multi_app_repository() {
+    let temp_dir = TempDir::new().unwrap();
+    for app in ["first", "second"] {
+        let dir = temp_dir.path().join(app);
+        fs::create_dir_all(&dir).unwrap();
+        fs::write(dir.join("tauri.conf.json"), "{}").unwrap();
+    }
+    let repo = Repository {
+        path: temp_dir.path().to_string_lossy().to_string(),
+        provider_id: Some("tauri".into()),
+        project_file: None,
+        ..test_repo("repo-1")
+    };
+    validate_repository_project_binding(&repo).await.unwrap();
+}
+
+#[tokio::test]
+async fn validate_repository_project_binding_rejects_stale_single_candidate_binding() {
+    let temp_dir = TempDir::new().unwrap();
+    fs::write(temp_dir.path().join("tauri.conf.json"), "{}").unwrap();
+    let repo = Repository {
+        path: temp_dir.path().to_string_lossy().to_string(),
+        provider_id: Some("tauri".into()),
+        project_file: Some(
+            temp_dir
+                .path()
+                .join("deleted/tauri.conf.json")
+                .to_string_lossy()
+                .to_string(),
+        ),
+        ..test_repo("repo-1")
+    };
+    let error = validate_repository_project_binding(&repo)
+        .await
+        .unwrap_err();
+    assert_eq!(error.code.as_deref(), Some("project_binding_not_found"));
+}
+
+#[tokio::test]
 async fn validate_repository_project_binding_requires_explicit_candidate_when_multiple_exist() {
     let temp_dir = TempDir::new().expect("temp dir");
     let project_a = temp_dir.path().join("AppA.csproj");
@@ -930,7 +1005,7 @@ async fn validate_repository_project_binding_requires_explicit_candidate_when_mu
         .await
         .expect_err("invalid explicit binding should be rejected");
 
-    assert_eq!(error.code.as_deref(), Some("multiple_project_files_found"));
+    assert_eq!(error.code.as_deref(), Some("project_binding_not_found"));
 }
 
 #[tokio::test]
@@ -1471,7 +1546,14 @@ fn rebind_profile_project_creates_a_revision_only_when_the_candidate_changes() {
         )
         .expect("rebind with identical candidate");
     assert!(!unchanged);
-    assert_eq!(config.profile(&profile.id).expect("profile").revisions.len(), 2);
+    assert_eq!(
+        config
+            .profile(&profile.id)
+            .expect("profile")
+            .revisions
+            .len(),
+        2
+    );
 
     // 解析不出候选：显式拒绝，而不是换绑成未绑定。
     let error = config
@@ -1569,7 +1651,11 @@ fn update_profile_inherits_and_backfills_the_project_binding() {
         )
         .expect("rename bound profile");
     assert_eq!(
-        config.profile(&bound.id).expect("bound profile").revisions.len(),
+        config
+            .profile(&bound.id)
+            .expect("bound profile")
+            .revisions
+            .len(),
         2
     );
 }
@@ -1733,11 +1819,29 @@ fn a_failed_release_settings_merge_keeps_the_legacy_file_for_retry() {
     );
 }
 
+fn upsert_test_draft(
+    config: &mut RepoPublishConfig,
+    provider_id: String,
+    parameters: serde_json::Value,
+    project_binding: Option<String>,
+    created_at: String,
+) -> (String, String) {
+    config.upsert_draft_revision(crate::publish_runtime::PublishConfigurationContent {
+        provider_id,
+        contract_version: 1,
+        provider_version: "1".to_string(),
+        settings_version: 1,
+        parameters,
+        project_binding,
+        composition: crate::store::PublishComposition::local_default(),
+    }, created_at)
+}
+
 #[test]
 fn upsert_draft_revision_creates_hidden_draft_profile_with_local_composition() {
     let mut config = RepoPublishConfig::default();
 
-    let (profile_id, revision_id) = config.upsert_draft_revision(
+    let (profile_id, revision_id) = upsert_test_draft(&mut config,
         "dotnet".to_string(),
         serde_json::json!({ "configuration": "Release" }),
         None,
@@ -1762,13 +1866,13 @@ fn upsert_draft_revision_creates_hidden_draft_profile_with_local_composition() {
 fn upsert_draft_revision_reuses_draft_per_provider_and_moves_current() {
     let mut config = RepoPublishConfig::default();
 
-    let (first_profile, first_revision) = config.upsert_draft_revision(
+    let (first_profile, first_revision) = upsert_test_draft(&mut config,
         "dotnet".to_string(),
         serde_json::json!({ "configuration": "Debug" }),
         None,
         "2026-08-03T10:00:00Z".to_string(),
     );
-    let (second_profile, second_revision) = config.upsert_draft_revision(
+    let (second_profile, second_revision) = upsert_test_draft(&mut config,
         "dotnet".to_string(),
         serde_json::json!({ "configuration": "Release" }),
         None,
@@ -1791,13 +1895,13 @@ fn upsert_draft_revision_reuses_draft_per_provider_and_moves_current() {
 fn upsert_draft_revision_keeps_separate_drafts_per_provider() {
     let mut config = RepoPublishConfig::default();
 
-    let (dotnet_profile, _) = config.upsert_draft_revision(
+    let (dotnet_profile, _) = upsert_test_draft(&mut config,
         "dotnet".to_string(),
         serde_json::json!({}),
         None,
         "2026-08-03T10:00:00Z".to_string(),
     );
-    let (tauri_profile, _) = config.upsert_draft_revision(
+    let (tauri_profile, _) = upsert_test_draft(&mut config,
         "tauri".to_string(),
         serde_json::json!({}),
         None,
@@ -1829,7 +1933,7 @@ fn upsert_draft_revision_never_matches_named_profiles() {
         )
         .expect("create named profile");
 
-    let (draft_profile, _) = config.upsert_draft_revision(
+    let (draft_profile, _) = upsert_test_draft(&mut config,
         "dotnet".to_string(),
         serde_json::json!({ "configuration": "Debug" }),
         None,
@@ -1853,7 +1957,7 @@ fn upsert_draft_revision_gc_keeps_only_recent_revisions_and_current_last() {
     let mut profile_id = String::new();
 
     for index in 0..(DRAFT_MAX_REVISIONS + 5) {
-        let (profile, revision) = config.upsert_draft_revision(
+        let (profile, revision) = upsert_test_draft(&mut config,
             "dotnet".to_string(),
             serde_json::json!({ "configuration": format!("r{index}") }),
             None,
@@ -1873,4 +1977,465 @@ fn upsert_draft_revision_gc_keeps_only_recent_revisions_and_current_last() {
         .collect();
     // 最旧的 5 个已被回收，保留 sequence 6..=25 且顺序不变。
     assert_eq!(sequences, (6..=25).collect::<Vec<u32>>());
+}
+
+// ── v3 → v4 编辑状态迁移（§4.2）────────────────────────────────────────────
+
+fn v3_repo_payload(publish_config: serde_json::Value) -> serde_json::Value {
+    serde_json::json!({
+        "id": "repo-1",
+        "name": "Repo 1",
+        "path": "/repo-1",
+        "currentBranch": "main",
+        "branches": [],
+        "isMain": true,
+        "providerId": "dotnet",
+        "publishConfig": publish_config,
+    })
+}
+
+fn write_v3_config(config_path: &Path, repositories: Vec<serde_json::Value>) {
+    let payload = serde_json::json!({
+        "schemaVersion": 3,
+        "repositories": repositories,
+    });
+    fs::write(config_path, serde_json::to_vec_pretty(&payload).expect("serialize v3 payload"))
+        .expect("write v3 config");
+}
+
+#[test]
+fn v3_migration_preserves_automation_bindings_and_applied_bundles_on_reload() {
+    let temp_dir = TempDir::new().expect("temp dir");
+    let config_path = temp_dir.path().join("config.json");
+    let mut config = RepoPublishConfig::default();
+    let profile = config
+        .create_profile(
+            "Release".to_string(),
+            "dotnet".to_string(),
+            serde_json::json!({ "configuration": "Release" }),
+            None,
+            Some("src/App.csproj".to_string()),
+            "2026-07-21T10:00:00Z".to_string(),
+        )
+        .expect("create profile")
+        .clone();
+    let mut binding = test_binding(&profile.id, &profile.current_revision_id);
+    binding.backend_projection = serde_json::json!({
+        "workflowPath": ".github/workflows/release.yml",
+        "environment": "production"
+    });
+    let bundle = super::types::AppliedProjectionBundle {
+        backend_id: binding.execution_backend_id.clone(),
+        digest: "sha256:original-bundle".to_string(),
+        files: vec![
+            ".github/workflows/release.yml".to_string(),
+            binding.external_identity.clone(),
+        ],
+        applied_at: "2026-07-21T10:01:00Z".to_string(),
+    };
+    write_v3_config(
+        &config_path,
+        vec![v3_repo_payload(serde_json::json!({
+            "selectedPreset": format!("userprofile:{}", profile.id),
+            "isCustomMode": false,
+            "customConfig": PublishConfigStore::default(),
+            "profiles": [profile],
+            "bindings": [binding],
+            "appliedBundles": [bundle],
+        }))],
+    );
+
+    let first = load_from_path(&config_path);
+    assert!(first.startup_notice.is_none());
+    let first_config = &first.repositories[0].publish_config;
+    assert_eq!(first_config.bindings, vec![binding.clone()]);
+    assert_eq!(first_config.applied_bundles, vec![bundle.clone()]);
+    assert_eq!(first_config.profiles[0].id, profile.id);
+    assert_eq!(first_config.profiles[0].revisions, profile.revisions);
+
+    let migrated: serde_json::Value =
+        serde_json::from_slice(&fs::read(&config_path).expect("read migrated config"))
+            .expect("parse migrated config");
+    assert_eq!(migrated["schemaVersion"], 4);
+    let persisted_config = &migrated["repositories"][0]["publishConfig"];
+    assert_eq!(persisted_config["bindings"], serde_json::json!([binding]));
+    assert_eq!(persisted_config["appliedBundles"], serde_json::json!([bundle]));
+
+    let second = load_from_path(&config_path);
+    assert!(second.startup_notice.is_none());
+    let second_config = &second.repositories[0].publish_config;
+    assert_eq!(second_config.bindings, first_config.bindings);
+    assert_eq!(second_config.applied_bundles, first_config.applied_bundles);
+    assert_eq!(second_config.profiles[0].revisions, profile.revisions);
+    save_to_path(&second, &config_path).expect("save reloaded v4 config");
+    let reloaded: serde_json::Value =
+        serde_json::from_slice(&fs::read(&config_path).expect("read reloaded config"))
+            .expect("parse reloaded config");
+    assert_eq!(reloaded, migrated, "v4 reload and write must be idempotent");
+}
+
+#[test]
+fn v3_named_config_without_modifications_keeps_revision_selection() {
+    let temp_dir = TempDir::new().expect("temp dir");
+    let config_path = temp_dir.path().join("config.json");
+    write_v3_config(
+        &config_path,
+        vec![v3_repo_payload(serde_json::json!({
+            "selectedPreset": "userprofile:config-A",
+            "isCustomMode": true,
+            "customConfig": {
+                "configuration": "Release",
+                "runtime": "",
+                "framework": "",
+                "selfContained": false,
+                "outputDir": "",
+                "noBuild": false,
+                "noRestore": false,
+                "verbosity": "",
+                "noLogo": false,
+                "properties": {},
+                "useProfile": false,
+                "profileName": ""
+            },
+            "profiles": [
+                {
+                    "id": "config-A",
+                    "name": "Release",
+                    "providerId": "dotnet",
+                    "createdAt": "2026-04-02T10:00:00Z",
+                    "isSystemDefault": false,
+                    "currentRevisionId": "rev-1",
+                    "revisions": [
+                        {
+                            "id": "rev-1",
+                            "sequence": 1,
+                            "createdAt": "2026-04-02T10:00:00Z",
+                            "providerId": "dotnet",
+                            "parameters": { "configuration": "Release" }
+                        }
+                    ]
+                }
+            ]
+        }))],
+    );
+
+    let state = load_from_path(&config_path);
+    let config = &state.repositories[0].publish_config;
+    // 无未保存修改：保留修订选择（投影把修订参数作为编辑器基础）。
+    assert_eq!(
+        config.selection,
+        Some(PublishSelectionRef::Revision {
+            configuration_id: "config-A".to_string(),
+        })
+    );
+    assert!(config.drafts.is_empty());
+}
+
+#[test]
+fn v3_named_config_with_unsaved_modifications_becomes_draft_with_base_revision() {
+    let temp_dir = TempDir::new().expect("temp dir");
+    let config_path = temp_dir.path().join("config.json");
+    write_v3_config(
+        &config_path,
+        vec![v3_repo_payload(serde_json::json!({
+            "selectedPreset": "userprofile:config-A",
+            "isCustomMode": true,
+            "customConfig": {
+                "configuration": "Release",
+                "runtime": "",
+                "framework": "",
+                "selfContained": false,
+                "outputDir": "",
+                "noBuild": false,
+                "noRestore": false,
+                "verbosity": "minimal",
+                "noLogo": false,
+                "properties": {},
+                "useProfile": false,
+                "profileName": ""
+            },
+            "profiles": [
+                {
+                    "id": "config-A",
+                    "name": "Release",
+                    "providerId": "dotnet",
+                    "createdAt": "2026-04-02T10:00:00Z",
+                    "isSystemDefault": false,
+                    "currentRevisionId": "rev-1",
+                    "revisions": [
+                        {
+                            "id": "rev-1",
+                            "sequence": 1,
+                            "createdAt": "2026-04-02T10:00:00Z",
+                            "providerId": "dotnet",
+                            "parameters": { "configuration": "Release" }
+                        }
+                    ]
+                }
+            ]
+        }))],
+    );
+
+    let state = load_from_path(&config_path);
+    let config = &state.repositories[0].publish_config;
+    assert!(matches!(
+        &config.selection,
+        Some(PublishSelectionRef::Draft { provider_id, .. }) if provider_id == "dotnet"
+    ));
+    let draft = config.drafts.first().expect("dotnet draft");
+    // 基础修订引用指向原修订。
+    assert_eq!(
+        draft.base_revision.as_ref().expect("base revision"),
+        &crate::publish_runtime::PublishBaseRevisionRef {
+            configuration_id: "config-A".to_string(),
+            revision_id: "rev-1".to_string(),
+        }
+    );
+    // 只叠加实际变化的字段：verbosity=minimal，其余保留修订参数。
+    assert_eq!(
+        draft.content.parameters,
+        serde_json::json!({ "configuration": "Release", "verbosity": "minimal" })
+    );
+}
+
+#[test]
+fn v3_preset_and_pubxml_selections_become_explicit_sources() {
+    let temp_dir = TempDir::new().expect("temp dir");
+    let config_path = temp_dir.path().join("config.json");
+    write_v3_config(
+        &config_path,
+        vec![
+            v3_repo_payload(serde_json::json!({
+                "id": "repo-1",
+                "selectedPreset": "release-win-x64",
+                "isCustomMode": false,
+                "profiles": []
+            })),
+            v3_repo_payload(serde_json::json!({
+                "id": "repo-2",
+                "selectedPreset": "profile-FolderProfile",
+                "isCustomMode": false,
+                "profiles": []
+            })),
+        ],
+    );
+
+    let state = load_from_path(&config_path);
+    assert_eq!(
+        state.repositories[0].publish_config.selection,
+        Some(PublishSelectionRef::Template {
+            provider_id: "dotnet".to_string(),
+            template_id: "release-win-x64".to_string(),
+        })
+    );
+    assert_eq!(
+        state.repositories[1].publish_config.selection,
+        Some(PublishSelectionRef::ProjectProfile {
+            provider_id: "dotnet".to_string(),
+            reference: "FolderProfile".to_string(),
+        })
+    );
+}
+
+#[test]
+fn non_dotnet_repo_does_not_inherit_dotnet_preset_or_custom_config() {
+    let temp_dir = TempDir::new().expect("temp dir");
+    let config_path = temp_dir.path().join("config.json");
+    let mut payload = v3_repo_payload(serde_json::json!({
+        "selectedPreset": "release-fd",
+        "isCustomMode": false,
+        "profiles": []
+    }));
+    payload["providerId"] = serde_json::json!("go");
+    write_v3_config(&config_path, vec![payload]);
+
+    let state = load_from_path(&config_path);
+    let config = &state.repositories[0].publish_config;
+    // 非 .NET 不继承 release-fd：转为该 Provider 的空草稿（内存参数不承诺恢复）。
+    assert!(matches!(
+        &config.selection,
+        Some(PublishSelectionRef::Draft { provider_id, .. }) if provider_id == "go"
+    ));
+}
+
+#[test]
+fn v4_reload_is_stable_and_does_not_double_migrate() {
+    let temp_dir = TempDir::new().expect("temp dir");
+    let config_path = temp_dir.path().join("config.json");
+    write_v3_config(
+        &config_path,
+        vec![v3_repo_payload(serde_json::json!({
+            "selectedPreset": "userprofile:config-A",
+            "isCustomMode": true,
+            "customConfig": {
+                "configuration": "Release",
+                "runtime": "",
+                "framework": "",
+                "selfContained": false,
+                "outputDir": "",
+                "noBuild": false,
+                "noRestore": false,
+                "verbosity": "minimal",
+                "noLogo": false,
+                "properties": {},
+                "useProfile": false,
+                "profileName": ""
+            },
+            "profiles": [
+                {
+                    "id": "config-A",
+                    "name": "Release",
+                    "providerId": "dotnet",
+                    "createdAt": "2026-04-02T10:00:00Z",
+                    "isSystemDefault": false,
+                    "currentRevisionId": "rev-1",
+                    "revisions": [
+                        {
+                            "id": "rev-1",
+                            "sequence": 1,
+                            "createdAt": "2026-04-02T10:00:00Z",
+                            "providerId": "dotnet",
+                            "parameters": { "configuration": "Release" }
+                        }
+                    ]
+                }
+            ]
+        }))],
+    );
+
+    let first = load_from_path(&config_path);
+    save_to_path(&first, &config_path).expect("save v4");
+    let persisted = fs::read_to_string(&config_path).expect("read v4");
+    let persisted_json: serde_json::Value =
+        serde_json::from_str(&persisted).expect("parse v4");
+    // v4 磁盘不再写旧三字段。
+    assert!(persisted_json["repositories"][0]["publishConfig"].get("selectedPreset").is_none());
+    assert!(persisted_json["repositories"][0]["publishConfig"].get("customConfig").is_none());
+
+    let second = load_from_path(&config_path);
+    let first_config = &first.repositories[0].publish_config;
+    let second_config = &second.repositories[0].publish_config;
+    assert_eq!(first_config.selection, second_config.selection);
+    assert_eq!(first_config.drafts, second_config.drafts);
+    // 未保存修改经草稿持久化并保持一致。
+    let draft = second_config.drafts.first().expect("dotnet draft");
+    assert_eq!(
+        draft.content.parameters.get("verbosity"),
+        Some(&serde_json::json!("minimal"))
+    );
+}
+
+#[test]
+fn first_v4_write_keeps_a_migration_backup_of_the_original_file() {
+    let temp_dir = TempDir::new().expect("temp dir");
+    let config_path = temp_dir.path().join("config.json");
+    write_v3_config(
+        &config_path,
+        vec![v3_repo_payload(serde_json::json!({
+            "selectedPreset": "release-win-x64",
+            "isCustomMode": false,
+            "profiles": []
+        }))],
+    );
+
+    let _state = load_from_path(&config_path);
+    let backups: Vec<_> = fs::read_dir(temp_dir.path())
+        .expect("read config dir")
+        .filter_map(|entry| entry.ok())
+        .map(|entry| entry.file_name().to_string_lossy().to_string())
+        .filter(|name| name.starts_with("config.migrate."))
+        .collect();
+    assert_eq!(backups.len(), 1, "exactly one migration backup: {backups:?}");
+}
+
+#[test]
+fn v3_load_with_unsaved_changes_hydrates_draft_parameters() {
+    let temp_dir = TempDir::new().expect("temp dir");
+    let config_path = temp_dir.path().join("config.json");
+    fs::write(
+        &config_path,
+        serde_json::to_vec_pretty(&serde_json::json!({
+            "schemaVersion": 3,
+            "repositories": [v3_repo_payload(serde_json::json!({
+                "selectedPreset": "userprofile:config-A",
+                "isCustomMode": true,
+                "customConfig": {
+                    "configuration": "Debug",
+                    "runtime": "",
+                    "framework": "",
+                    "selfContained": false,
+                    "outputDir": "",
+                    "noBuild": false,
+                    "noRestore": false,
+                    "verbosity": "minimal",
+                    "noLogo": false,
+                    "properties": {},
+                    "useProfile": false,
+                    "profileName": ""
+                },
+                "profiles": [
+                    {
+                        "id": "config-A",
+                        "name": "Release",
+                        "providerId": "dotnet",
+                        "createdAt": "2026-04-02T10:00:00Z",
+                        "isSystemDefault": false,
+                        "currentRevisionId": "rev-1",
+                        "revisions": [
+                            {
+                                "id": "rev-1",
+                                "sequence": 1,
+                                "createdAt": "2026-04-02T10:00:00Z",
+                                "providerId": "dotnet",
+                                "parameters": { "configuration": "Release" }
+                            }
+                        ]
+                    }
+                ]
+            }))],
+        }))
+        .expect("serialize"),
+    )
+    .expect("write config");
+
+    let state = load_from_path(&config_path);
+    let config = &state.repositories[0].publish_config;
+    assert!(matches!(
+        &config.selection,
+        Some(PublishSelectionRef::Draft { provider_id, .. }) if provider_id == "dotnet"
+    ));
+    let draft = config.drafts.first().expect("dotnet draft");
+    // 只叠加实际变化的字段；基础修订指向原修订。
+    assert_eq!(
+        draft.content.parameters,
+        serde_json::json!({ "configuration": "Debug", "verbosity": "minimal" })
+    );
+    assert_eq!(
+        draft.base_revision.as_ref().expect("base revision").revision_id,
+        "rev-1"
+    );
+}
+
+#[test]
+fn draft_revision_preserves_full_content_on_creation_and_update() {
+    let mut config = RepoPublishConfig::default();
+    let mut content = crate::publish_runtime::PublishConfigurationContent {
+        provider_id: "dotnet".to_string(),
+        contract_version: 1,
+        provider_version: "1".to_string(),
+        settings_version: 1,
+        project_binding: Some("dotnet:App.csproj".to_string()),
+        parameters: serde_json::json!({"self_contained": false, "extra": null, "releaseSettings": {"keep": true}}),
+        composition: crate::store::PublishComposition::local_default(),
+    };
+    content.composition.artifact_processors.clear();
+    for index in 0..2 {
+        let (id, _) = config.upsert_draft_revision(content.clone(), format!("2026-09-06T10:00:0{index}Z"));
+        let revision = config.profile(&id).unwrap().current_revision().unwrap();
+        assert_eq!(revision.parameters, content.parameters);
+        assert_eq!(revision.composition, content.composition);
+        assert_eq!(revision.project_binding, content.project_binding);
+        assert_eq!(revision.provider_version, content.provider_version);
+        assert_eq!(revision.sequence, index + 1);
+    }
 }

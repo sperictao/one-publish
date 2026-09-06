@@ -37,6 +37,23 @@ describe("useProviderRuntime", () => {
     vi.clearAllMocks();
   });
 
+  it("显式未知 Provider 不会被列表首项悄悄替换", async () => {
+    mocks.listProviders.mockResolvedValue([dotnetProvider]);
+    mocks.getProviderSchema.mockImplementation(async (id) => {
+      if (id === "missing") throw new Error("unsupported_provider");
+      return { parameters: {} };
+    });
+    const { result } = renderHook(() => useProviderRuntime());
+    await waitFor(() =>
+      expect(result.current.providerListState.status).toBe("ready")
+    );
+    act(() => result.current.setActiveProviderId("missing"));
+    await waitFor(() =>
+      expect(result.current.activeProviderSchemaState.status).toBe("error")
+    );
+    expect(result.current.activeProviderId).toBe("missing");
+  });
+
   it("provider 列表加载失败后可通过 retry 恢复", async () => {
     mocks.listProviders
       .mockRejectedValueOnce(new Error("provider list failed"))

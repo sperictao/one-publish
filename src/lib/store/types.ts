@@ -10,6 +10,7 @@ import type {
   ProjectPublishProfileFile,
   ProjectScanCandidates as TauriProjectScanCandidates,
   ProviderProjectPathKind,
+  ProviderTemplateSummary,
   PublishComposition,
   PublishConfigStore,
   Repository as TauriRepository,
@@ -139,6 +140,7 @@ export interface ProviderManifest {
   requiresProjectBinding: boolean;
   projectPathKind: ProviderProjectPathKind;
   supportsCommandImport: boolean;
+  templates?: ProviderTemplateSummary[];
 }
 
 export interface UpdateInfo {
@@ -309,7 +311,7 @@ export const defaultBootstrapState: BootstrapState = {
   defaultOutputDir: "",
   theme: "auto",
   executionHistoryLimit: 20,
-  environmentProviderIds: ["dotnet"],
+  environmentProviderIds: [],
   recentRepoIds: [],
   recentConfigKeysByRepo: {},
   startupNotice: null,
@@ -337,12 +339,10 @@ export const defaultAppState: AppState = {
 };
 
 export const defaultRepoPublishConfig: RepoPublishConfig = {
-  selectedPreset: "release-fd",
-  isCustomMode: false,
-  customConfig: { ...defaultPublishConfigStore },
   profiles: [],
   bindings: [],
   appliedBundles: [],
+  drafts: [],
 };
 
 export type { EnvironmentCheckResult };

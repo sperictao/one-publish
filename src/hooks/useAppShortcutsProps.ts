@@ -5,8 +5,6 @@ interface UseAppShortcutsPropsParams {
   selectedRepo: Repository | null;
   isStateLoading: boolean;
   activeProviderUsesProjectFile: boolean;
-  activeProviderRequiresProjectBinding: boolean;
-  projectInfo: ProjectInfo | null;
   isPublishing: boolean;
   scanProject: (
     path?: string,
@@ -44,22 +42,10 @@ export function useAppShortcutsProps(
     if (params.isPublishing) {
       return;
     }
-    if (params.activeProviderRequiresProjectBinding) {
-      if (params.projectInfo) {
-        params.startPublish();
-      }
-      return;
-    }
     if (params.selectedRepo) {
       params.startPublish();
     }
-  }, [
-    params.isPublishing,
-    params.activeProviderRequiresProjectBinding,
-    params.projectInfo,
-    params.selectedRepo,
-    params.startPublish,
-  ]);
+  }, [params.isPublishing, params.selectedRepo, params.startPublish]);
 
   return { onRefreshShortcut, onPublishShortcut };
 }

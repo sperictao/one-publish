@@ -5,7 +5,7 @@ const mocks = vi.hoisted(() => ({
   getAppState: vi.fn(),
   reorderRecentPublishConfigs: vi.fn(),
   reorderRepositories: vi.fn(),
-  updatePublishState: vi.fn(),
+  updatePublishEditState: vi.fn(),
   updateUIState: vi.fn(),
   updatePreferences: vi.fn(),
   toastError: vi.fn(),
@@ -25,17 +25,13 @@ vi.mock("@/lib/store/api", async () => {
     getAppState: mocks.getAppState,
     reorderRecentPublishConfigs: mocks.reorderRecentPublishConfigs,
     reorderRepositories: mocks.reorderRepositories,
-    updatePublishState: mocks.updatePublishState,
+    updatePublishEditState: mocks.updatePublishEditState,
     updateUIState: mocks.updateUIState,
     updatePreferences: mocks.updatePreferences,
   };
 });
 
-import {
-  defaultAppState,
-  defaultPublishConfigStore,
-  type AppState,
-} from "@/lib/store/types";
+import { defaultAppState, type AppState } from "@/lib/store/types";
 import { useAppStore } from "@/stores/appStore";
 import { useAppState } from "@/hooks/useAppState";
 
@@ -52,15 +48,15 @@ function createAppState(): AppState {
         isMain: true,
         providerId: "dotnet",
         publishConfig: {
-          selectedPreset: "release-fd",
-          isCustomMode: true,
-          customConfig: {
-            ...defaultPublishConfigStore,
-            configuration: "Debug",
+          selection: {
+            kind: "draft" as const,
+            providerId: "dotnet",
+            projectBinding: null,
           },
           profiles: [],
           bindings: [],
           appliedBundles: [],
+          drafts: [],
         },
       },
     ],
@@ -84,7 +80,7 @@ describe("useAppState", () => {
     mocks.getAppState.mockResolvedValue(createAppState());
     mocks.reorderRecentPublishConfigs.mockResolvedValue(createAppState());
     mocks.reorderRepositories.mockResolvedValue(createAppState());
-    mocks.updatePublishState.mockResolvedValue(undefined);
+    mocks.updatePublishEditState.mockResolvedValue(undefined);
     mocks.updateUIState.mockResolvedValue(undefined);
     mocks.updatePreferences.mockResolvedValue(createAppState());
   });
@@ -99,24 +95,30 @@ describe("useAppState", () => {
 
     await waitForAppStateLoad();
     expect(result.current.isLoading).toBe(false);
-    expect(result.current.selectedPreset).toBe("release-fd");
-    expect(result.current.isCustomMode).toBe(true);
 
     await act(async () => {
-      result.current.setSelectedPreset("profile-FolderProfile");
-      result.current.setIsCustomMode(false);
-      vi.advanceTimersByTime(500);
+      result.current.updatePublishEditState({
+        selection: {
+          kind: "projectProfile",
+          providerId: "dotnet",
+          reference: "FolderProfile",
+        },
+      });
       await Promise.resolve();
     });
 
-    expect(result.current.selectedPreset).toBe("profile-FolderProfile");
-    expect(result.current.isCustomMode).toBe(false);
-    expect(mocks.updatePublishState).toHaveBeenCalledWith({
+    // §4.1 v4：显式提交统一选择引用（pubxml 选择）。
+    expect(mocks.updatePublishEditState).toHaveBeenCalledWith({
       repoId: "repo-1",
-      selectedPreset: "profile-FolderProfile",
-      isCustomMode: false,
+      update: {
+        selection: {
+          kind: "projectProfile",
+          providerId: "dotnet",
+          reference: "FolderProfile",
+        },
+      },
     });
-    expect(mocks.updatePublishState).toHaveBeenCalledTimes(1);
+    expect(mocks.updatePublishEditState).toHaveBeenCalledTimes(1);
   });
 
   it("清空选中仓库时会显式发送 clearSelectedRepoId", async () => {
@@ -140,21 +142,25 @@ describe("useAppState", () => {
   it("发布配置持久化失败时会回滚并提示", async () => {
     const initialState = createAppState();
     const authoritativeState = createAppState();
-    authoritativeState.repositories[0].publishConfig.selectedPreset =
-      "release-fd";
-    authoritativeState.repositories[0].publishConfig.isCustomMode = true;
     mocks.getAppState
       .mockResolvedValueOnce(initialState)
       .mockResolvedValueOnce(authoritativeState);
-    mocks.updatePublishState.mockRejectedValueOnce(new Error("publish failed"));
+    mocks.updatePublishEditState.mockRejectedValueOnce(
+      new Error("publish failed")
+    );
 
     const { result } = renderHook(() => useAppState());
 
     await waitForAppStateLoad();
 
     await act(async () => {
-      result.current.setSelectedPreset("profile-FolderProfile");
-      vi.advanceTimersByTime(500);
+      result.current.updatePublishEditState({
+        selection: {
+          kind: "projectProfile",
+          providerId: "dotnet",
+          reference: "FolderProfile",
+        },
+      });
       await Promise.resolve();
     });
 
@@ -164,7 +170,6 @@ describe("useAppState", () => {
       await Promise.resolve();
     });
 
-    expect(result.current.selectedPreset).toBe("release-fd");
     expect(mocks.toastError).toHaveBeenCalledWith("保存发布配置失败", {
       description: "publish failed",
     });

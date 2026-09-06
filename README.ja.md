@@ -42,9 +42,9 @@ OnePublish は、ソフトウェアプロジェクトをパブリッシュする
 
 ## 📸 スクリーンショット
 
-<!-- TODO: add actual screenshots -->
+![OnePublish メインウィンドウ](docs/screenshots/main-window.png)
 
-> _スクリーンショットは近日公開予定です。それまでの間、[設計哲学](docs/design-philosophy.md) と [Geist デザイン仕様](DESIGN.md) をご覧ください。_
+> _メインウィンドウ — リポジトリを選択し、パラメータを設定して、ワンクリックで公開します。_
 
 ---
 

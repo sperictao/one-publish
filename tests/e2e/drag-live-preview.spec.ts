@@ -378,7 +378,7 @@ async function installMockTauri(page: Page) {
             return clone(appState);
           }
           case "update_ui_state":
-          case "update_publish_state":
+          case "update_publish_edit_state":
           case "update_preferences":
             return null;
           default:

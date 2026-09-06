@@ -1,6 +1,6 @@
 use super::migration::{
     migrate_legacy_state, migrate_legacy_tauri_release_settings, sanitize_stored_state,
-    LegacyStoredAppState, StoredAppState, CURRENT_STORE_SCHEMA_VERSION,
+    LegacyStoredAppState, StoredAppState, StoredAppStateV3, CURRENT_STORE_SCHEMA_VERSION,
 };
 use super::types::AppState;
 use std::fs::{self};
@@ -74,11 +74,20 @@ fn backup_corrupt_file(path: &Path) -> Option<PathBuf> {
 
 /// 正常加载成功后的收尾：执行旧 Tauri 发布状态的一次性迁移，仅在持久化
 /// 成功后才移除旧文件，保证迁移不会丢失尚未写盘的数据。
-fn finalize_loaded_state(mut state: AppState, path: &Path, mut needs_save: bool) -> AppState {
+/// `migration_backup`：首次写入新 schema 前保留原始文件备份（§4.2）。
+fn finalize_loaded_state(
+    mut state: AppState,
+    path: &Path,
+    mut needs_save: bool,
+    migration_backup: bool,
+) -> AppState {
     let legacy_tauri_release_path = path.with_file_name("tauri-release.json");
     let migration = migrate_legacy_tauri_release_settings(&mut state, &legacy_tauri_release_path);
     needs_save |= migration.changed;
     if needs_save {
+        if migration_backup {
+            backup_before_migration(path);
+        }
         if let Err(error) = save_to_path(&state, path) {
             log::warn!(
                 "写回迁移后的配置失败。路径: {}, 错误: {}",
@@ -90,6 +99,28 @@ fn finalize_loaded_state(mut state: AppState, path: &Path, mut needs_save: bool)
     }
     migration.cleanup();
     state
+}
+
+/// §4.2：首次成功写入 v4 前保留一份原始迁移备份；失败仅记录，不阻断迁移。
+fn backup_before_migration(path: &Path) {
+    if !path.exists() {
+        return;
+    }
+    let timestamp = chrono::Utc::now().format("%Y%m%d%H%M%S%3f");
+    let backup_path = path.with_file_name(format!("config.migrate.{timestamp}.json"));
+    match fs::copy(path, &backup_path) {
+        Ok(_) => {
+            let _ = crate::security::harden_private_path(&backup_path);
+            log::info!("迁移前已备份原始配置: {}", backup_path.display());
+        }
+        Err(error) => {
+            log::warn!(
+                "迁移前备份原始配置失败（继续迁移）。路径: {}, 错误: {}",
+                path.display(),
+                error
+            );
+        }
+    }
 }
 
 pub(crate) fn load_from_path(path: &Path) -> AppState {
@@ -110,20 +141,47 @@ pub(crate) fn load_from_path(path: &Path) -> AppState {
         Ok(value) => value,
         Err(_) => serde_json::Value::Null,
     };
-    let is_legacy_schema = parsed_json.get("selectedPreset").is_some()
+    let schema_version = parsed_json
+        .get("schemaVersion")
+        .and_then(serde_json::Value::as_u64)
+        .unwrap_or(0);
+    let has_legacy_fields = parsed_json.get("selectedPreset").is_some()
         || parsed_json.get("isCustomMode").is_some()
         || parsed_json.get("customConfig").is_some()
         || parsed_json.get("profiles").is_some();
 
-    if is_legacy_schema {
+    // v2 及更早：顶层全局三字段形态。
+    if schema_version < 3 {
         if let Ok(legacy_state) = serde_json::from_str::<LegacyStoredAppState>(&content) {
             let state = migrate_legacy_state(legacy_state);
-            return finalize_loaded_state(state, path, true);
+            return finalize_loaded_state(state, path, true, true);
         }
-    } else if let Ok(stored_state) = serde_json::from_str::<StoredAppState>(&content) {
-        let schema_changed = stored_state.schema_version != CURRENT_STORE_SCHEMA_VERSION;
-        let (state, profiles_migrated) = sanitize_stored_state(stored_state.into());
-        return finalize_loaded_state(state, path, schema_changed || profiles_migrated);
+    }
+
+    // v3：仓库级三字段编辑状态，转换为统一选择与草稿。
+    if schema_version == 3 || (schema_version == 0 && has_legacy_fields) {
+        if let Ok(stored_state) = serde_json::from_str::<StoredAppStateV3>(&content) {
+            let mut state: AppState = stored_state.into();
+            // §4.2：先执行常规清理（含名称到身份迁移），再转换编辑状态。
+            let (mut state, profiles_migrated) = sanitize_stored_state(state);
+            let mut edit_state_migrated = false;
+            for repo in &mut state.repositories {
+                edit_state_migrated |= super::migration::migrate_repo_edit_state_v3_to_v4(repo);
+            }
+            return finalize_loaded_state(
+                state,
+                path,
+                true || profiles_migrated || edit_state_migrated,
+                true,
+            );
+        }
+    }
+
+    // v4：统一选择与草稿，只做常规清理。
+    if let Ok(v4_state) = serde_json::from_str::<StoredAppState>(&content) {
+        let state: AppState = v4_state.into();
+        let (state, profiles_migrated) = sanitize_stored_state(state);
+        return finalize_loaded_state(state, path, profiles_migrated, false);
     }
 
     let mut fallback_state = AppState::default();

@@ -1,18 +1,19 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
-import { useDotnetPublishSelection } from "@/features/config/useDotnetPublishSelection";
-import { usePublishSpecBuilder } from "@/features/publish/usePublishSpecBuilder";
 import type { TranslationMap } from "@/features/publish/publishTransaction";
 import type { EnvironmentCheckSnapshot } from "@/features/environment/environment";
 import { createPublishPreflightPipeline } from "@/features/publish/publishPreflight";
-import { getRecentConfigKeyFromSelection } from "@/features/config/publishConfigIdentity";
-import type { DotnetPreset } from "@/features/config/dotnetPresets";
 import {
-  prepareDraftPublishRuntime,
+  canRequestRuntimeOutputAccess,
   preparePublishRuntime,
   type PreparedPublishRuntime,
   type ProviderPublishSpec,
+  type PublishSource,
 } from "@/features/publish/publishRuntime";
+import type {
+  PublishSelectionRef,
+  ScopedPublishDraft,
+} from "@/generated/tauri-contracts";
 import type { ProjectInfo, PublishConfigStore } from "@/lib/store/types";
 import type { ParameterValue } from "@/types/parameters";
 import { extractInvokeErrorMessage } from "@/lib/tauri/invokeErrors";
@@ -40,16 +41,21 @@ export interface UsePublishValidateParams {
   activeProviderId: string;
   activeProviderUsesProjectFile: boolean;
   activeProviderParameters: Record<string, ParameterValue>;
-  selectedPreset: string;
-  isCustomMode: boolean;
   customConfig: PublishConfigStore;
+  selectionKey: string;
   defaultOutputDir?: string;
   projectInfo: ProjectInfo | null;
-  presets: DotnetPreset[];
   specVersion: number;
   selectedRepoId: string | null;
-  selectedRepo: { path: string } | null;
-  configurationId?: string | null;
+  selectedRepo: {
+    path: string;
+    providerId?: string | null;
+    publishConfig: {
+      selection?: PublishSelectionRef | null;
+      drafts: ScopedPublishDraft[];
+      profiles: Array<{ id: string; revisionId?: string | null }>;
+    };
+  } | null;
   configurationRevisionId?: string | null;
   appT: TranslationMap;
   outputLog: string;
@@ -71,6 +77,62 @@ export interface UsePublishValidateParams {
   setEnvironmentLastCheck: (snapshot: EnvironmentCheckSnapshot | null) => void;
 }
 
+export function resolveSelectedPublishSource(
+  repository: NonNullable<UsePublishValidateParams["selectedRepo"]>,
+  activeProviderId: string
+): PublishSource {
+  const { selection, drafts, profiles } = repository.publishConfig;
+  if (!selection) {
+    return {
+      kind: "empty",
+      providerId: activeProviderId,
+      projectBinding: null,
+    };
+  }
+  switch (selection.kind) {
+    case "revision": {
+      const profile = profiles.find(
+        (item) => item.id === selection.configurationId
+      );
+      if (!profile?.revisionId) {
+        throw new Error("所选发布配置或修订不存在，请重新选择配置");
+      }
+      return {
+        kind: "revision",
+        configurationId: profile.id,
+        revisionId: profile.revisionId,
+      };
+    }
+    case "draft": {
+      const matches = drafts.filter(
+        (draft) =>
+          draft.providerId === selection.providerId &&
+          (draft.projectBinding ?? null) === selection.projectBinding
+      );
+      if (matches.length !== 1) {
+        throw new Error("所选项目草稿不存在或不唯一，请重新选择配置");
+      }
+      const draft = matches[0];
+      if (
+        draft.content.providerId !== draft.providerId ||
+        (draft.content.projectBinding ?? null) !==
+          (draft.projectBinding ?? null)
+      ) {
+        throw new Error("草稿内容与所选项目作用域不一致，请重新绑定项目");
+      }
+      return {
+        kind: "draft",
+        content: draft.content,
+        base_revision: draft.baseRevision,
+      };
+    }
+    case "template":
+      return { ...selection, projectBinding: null };
+    case "projectProfile":
+      return selection;
+  }
+}
+
 export interface UsePublishValidateResult {
   getPublishStartBlocker: () =>
     | "missing-repository"
@@ -79,10 +141,14 @@ export interface UsePublishValidateResult {
     | "runtime-blocked"
     | null;
   resolvePublishRequest: () => Promise<{
-    spec: ProviderPublishSpec;
+    source: PublishSource;
     recentConfigKey?: string;
     preparedRuntime?: PreparedPublishRuntime;
   } | null>;
+  requestRuntimeOutputAccess: (
+    prepared: PreparedPublishRuntime,
+    isCancelled: () => boolean
+  ) => Promise<boolean>;
   runPublishPreflight: (
     spec: ProviderPublishSpec,
     options: {
@@ -102,18 +168,15 @@ export interface UsePublishValidateResult {
 
 export function usePublishValidate({
   activeProviderId,
-  activeProviderUsesProjectFile,
-  activeProviderParameters,
-  selectedPreset,
-  isCustomMode,
-  customConfig,
+  activeProviderUsesProjectFile: _activeProviderUsesProjectFile,
+  activeProviderParameters: _activeProviderParameters,
+  customConfig: _customConfig,
+  selectionKey,
   defaultOutputDir,
   projectInfo,
-  presets,
   specVersion,
   selectedRepoId,
   selectedRepo,
-  configurationId,
   configurationRevisionId,
   appT,
   outputLog: _outputLog,
@@ -133,75 +196,28 @@ export function usePublishValidate({
     useState<{ key: string; message: string } | null>(null);
   const selectedRepoPath = selectedRepo?.path ?? null;
 
-  const {
-    getCurrentConfig,
-    selectionIdentity,
-    recentConfigKeyForCurrentSelection,
-    isResolvingSelectedProjectProfile,
-  } = useDotnetPublishSelection({
-    activeProviderId,
-    selectedPreset,
-    isCustomMode,
-    customConfig,
-    defaultOutputDir,
-    projectInfo,
-    presets,
-  });
-
-  const { buildPublishSpec } = usePublishSpecBuilder({
-    activeProviderId,
-    activeProviderUsesProjectFile,
-    activeProviderParameters,
-    projectInfo,
-    selectedRepo,
-    specVersion,
-    getCurrentConfig,
-  });
-
-  const publishPresentationSelectionKey = useMemo(() => {
-    const recentConfigKey = getRecentConfigKeyFromSelection(selectionIdentity);
-    if (recentConfigKey) {
-      return recentConfigKey;
+  const selectedSource = useMemo(() => {
+    if (!selectedRepo) return { source: null, error: null };
+    try {
+      return {
+        source: resolveSelectedPublishSource(selectedRepo, activeProviderId),
+        error: null,
+      };
+    } catch (error) {
+      return { source: null, error: extractInvokeErrorMessage(error) };
     }
+  }, [selectedRepo, activeProviderId]);
+  const currentPublishSource = selectedSource.source;
+  const publishPresentationSelectionKey = selectionKey;
 
-    if (selectionIdentity.kind === "provider") {
-      return `provider:${selectionIdentity.providerId}`;
-    }
-
-    return "custom";
-  }, [selectionIdentity]);
-
-  const buildCurrentPublishSpec =
-    useCallback((): ProviderPublishSpec | null => {
-      if (!selectedRepo) {
-        return null;
-      }
-
-      if (activeProviderUsesProjectFile && !projectInfo) {
-        return null;
-      }
-
-      return buildPublishSpec();
-    }, [
-      activeProviderUsesProjectFile,
-      buildPublishSpec,
-      projectInfo,
-      selectedRepo,
-    ]);
-
-  const currentPublishSpec = useMemo(
-    () => buildCurrentPublishSpec(),
-    [buildCurrentPublishSpec]
-  );
   // plan 033 路线 B：无命名配置时经自动草稿配置准备，发布总是需要 Runtime。
   const runtimePreparationKey =
-    selectedRepoId && selectedRepoPath && currentPublishSpec
+    selectedRepoId && selectedRepoPath && currentPublishSource
       ? JSON.stringify({
           selectedRepoId,
           selectedRepoPath,
-          configurationId: configurationId ?? null,
-          configurationRevisionId: configurationRevisionId ?? null,
-          spec: currentPublishSpec,
+          source: currentPublishSource,
+          defaultOutputDir: defaultOutputDir ?? "",
         })
       : null;
   const preparedRuntime =
@@ -209,71 +225,72 @@ export function usePublishValidate({
       ? preparedRuntimeState.value
       : null;
   const runtimePreparationError =
-    runtimePreparationKey &&
+    selectedSource.error ??
+    (runtimePreparationKey &&
     runtimePreparationErrorState?.key === runtimePreparationKey
       ? runtimePreparationErrorState.message
-      : null;
-  const publishPreviewCommand = preparedRuntime?.command.display_command ?? "";
+      : null);
+  const publishPreviewCommand =
+    preparedRuntime?.status === "ready"
+      ? preparedRuntime.command.display_command
+      : "";
 
   const getPublishStartBlocker = useCallback(() => {
     if (!selectedRepo) {
       return "missing-repository";
     }
 
-    if (activeProviderUsesProjectFile && !projectInfo) {
-      return "missing-project";
-    }
-
     // 发布一律走 PublishRuntime（命名配置或自动草稿），必须等 prepare 完成。
     if (!preparedRuntime) {
       return "runtime-not-ready";
     }
-    if (preparedRuntime.blockedReason) {
+    if (
+      preparedRuntime.status === "blocked" &&
+      !canRequestRuntimeOutputAccess(preparedRuntime)
+    ) {
       return "runtime-blocked";
     }
 
     return null;
-  }, [
-    activeProviderUsesProjectFile,
-    preparedRuntime,
-    projectInfo,
-    selectedRepo,
-  ]);
+  }, [preparedRuntime, projectInfo, selectedRepo]);
 
   const resolvePublishRequest = useCallback(async () => {
     if (getPublishStartBlocker()) {
       return null;
     }
 
-    const spec = buildPublishSpec();
-    if (!spec) {
+    if (!currentPublishSource) {
       return null;
     }
 
     return {
-      spec,
-      recentConfigKey: recentConfigKeyForCurrentSelection ?? undefined,
+      source: currentPublishSource,
+      recentConfigKey: selectionKey || undefined,
       preparedRuntime: preparedRuntime ?? undefined,
     };
   }, [
-    buildPublishSpec,
+    currentPublishSource,
     getPublishStartBlocker,
     preparedRuntime,
-    recentConfigKeyForCurrentSelection,
+    selectionKey,
   ]);
 
   const publishPresentationScopeKey = useMemo(
     () =>
-      buildPublishPresentationScopeKey({
-        selectedRepoId,
-        selectedRepoPath,
-        activeProviderId,
-        selectionKey: publishPresentationSelectionKey,
-        projectFile: projectInfo?.project_file ?? null,
-        specVersion,
-        configurationRevisionId,
-      }),
+      JSON.stringify([
+        runtimePreparationKey,
+        buildPublishPresentationScopeKey({
+          selectedRepoId,
+          selectedRepoPath,
+          activeProviderId,
+          selectionKey: publishPresentationSelectionKey,
+          projectFile: projectInfo?.project_file ?? null,
+          specVersion,
+          configurationRevisionId,
+        }),
+      ]),
     [
+      runtimePreparationKey,
       activeProviderId,
       configurationRevisionId,
       projectInfo?.project_file,
@@ -286,32 +303,23 @@ export function usePublishValidate({
 
   useEffect(() => {
     let disposed = false;
-    const spec = currentPublishSpec;
+    const source = currentPublishSource;
 
-    if (!spec) {
+    if (!source) {
       return () => {
         disposed = true;
       };
     }
 
     if (runtimePreparationKey && selectedRepoId && selectedRepoPath) {
-      const preparation =
-        configurationId && configurationRevisionId
-          ? preparePublishRuntime({
-              repositoryId: selectedRepoId,
-              repositoryPath: selectedRepoPath,
-              configurationId,
-              configurationRevisionId,
-              spec,
-            })
-          : prepareDraftPublishRuntime({
-              repositoryId: selectedRepoId,
-              repositoryPath: selectedRepoPath,
-              providerId: activeProviderId,
-              // 草稿修订参数与本次 spec 同源构造，保证参数匹配不阻断。
-              parameters: spec.parameters,
-              spec,
-            });
+      const preparation = preparePublishRuntime({
+        repositoryId: selectedRepoId,
+        source,
+        runInputs: {
+          defaultOutputDir: defaultOutputDir ?? "",
+          promotedManifestDigest: undefined,
+        },
+      });
       void preparation
         .then((prepared) => {
           if (!disposed) {
@@ -337,10 +345,8 @@ export function usePublishValidate({
       disposed = true;
     };
   }, [
-    activeProviderId,
-    configurationId,
-    configurationRevisionId,
-    currentPublishSpec,
+    currentPublishSource,
+    defaultOutputDir,
     runtimePreparationKey,
     selectedRepoPath,
     selectedRepoId,
@@ -350,7 +356,7 @@ export function usePublishValidate({
     return presentationRevisionRef.current === runRevision;
   }, []);
 
-  const { runPublishPreflight } = useMemo(
+  const { runPublishPreflight, requestRuntimeOutputAccess } = useMemo(
     () =>
       createPublishPreflightPipeline({
         appT,
@@ -378,10 +384,11 @@ export function usePublishValidate({
     getPublishStartBlocker,
     resolvePublishRequest,
     runPublishPreflight,
+    requestRuntimeOutputAccess,
     publishPreviewCommand,
     preparedRuntime,
     runtimePreparationError,
-    isResolvingSelectedProjectProfile,
+    isResolvingSelectedProjectProfile: false,
     publishPresentationScopeKey,
   };
 }

@@ -2,8 +2,10 @@ import { act, renderHook, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { EnvironmentCheckResult } from "@/features/environment/environment";
 import type {
+  PreparePublishRuntimeRequest,
   PreparedPublishRuntime,
   PublishRuntimeResult,
+  PublishSpec,
 } from "@/generated/tauri-contracts";
 import type { PublishConfigStore } from "@/lib/store/types";
 
@@ -13,6 +15,7 @@ const mocks = vi.hoisted(() => ({
   listen: vi.fn(),
   preflightPublishOutput: vi.fn(),
   requestProtectedOutputAccess: vi.fn(),
+  requestPreparedOutputDirectoryAccess: vi.fn(),
   analyzePublishExecutionFailure: vi.fn(() => "process_failed"),
   runEnvironmentCheck: vi.fn(),
   showSystemNotification: vi.fn(),
@@ -25,17 +28,14 @@ const mocks = vi.hoisted(() => ({
   openOutputDirectory: vi.fn(),
   setTrayPublishStatus: vi.fn(),
   showMainWindow: vi.fn(),
+  updatePublishEditState: vi.fn(),
   renderPublishCommand: vi.fn(),
   preparePublishRuntime: vi.fn(),
-  prepareDraftPublishRuntime: vi.fn(),
   startPublishRuntime: vi.fn(),
   resumePublishRuntime: vi.fn(),
   synchronizePublishRuntime: vi.fn(),
   cancelPublishRuntime: vi.fn(),
-  useDotnetPublishSelection: vi.fn(),
-  usePublishSpecBuilder: vi.fn(),
 }));
-let buildPublishSpecMock = vi.fn();
 
 vi.mock("@tauri-apps/api/core", () => ({
   invoke: mocks.invoke,
@@ -61,17 +61,11 @@ vi.mock("@/features/environment/environment", () => ({
   }),
 }));
 
-vi.mock("@/features/config/useDotnetPublishSelection", () => ({
-  useDotnetPublishSelection: mocks.useDotnetPublishSelection,
-}));
-
-vi.mock("@/features/publish/usePublishSpecBuilder", () => ({
-  usePublishSpecBuilder: mocks.usePublishSpecBuilder,
-}));
-
 vi.mock("@/features/publish/publishOutputPreflight", () => ({
   preflightPublishOutput: mocks.preflightPublishOutput,
   requestProtectedOutputAccess: mocks.requestProtectedOutputAccess,
+  requestPreparedOutputDirectoryAccess:
+    mocks.requestPreparedOutputDirectoryAccess,
   buildProtectedOutputAccessDescription: () => "需要授权 Downloads",
   buildPublishOutputValidationTitle: (result: {
     validation: { issue: string | null };
@@ -95,7 +89,10 @@ vi.mock("@/features/publish/renderPublishCommand", () => ({
   renderPublishCommand: mocks.renderPublishCommand,
 }));
 
-vi.mock("@/features/publish/publishRuntime", () => ({
+vi.mock("@/features/publish/publishRuntime", async () => ({
+  ...(await vi.importActual<typeof import("@/features/publish/publishRuntime")>(
+    "@/features/publish/publishRuntime"
+  )),
   executeProviderPublish: (spec: unknown) =>
     mocks.invoke("execute_provider_publish", { spec }),
   cancelProviderPublish: () => mocks.invoke("cancel_provider_publish"),
@@ -103,7 +100,6 @@ vi.mock("@/features/publish/publishRuntime", () => ({
   renderProviderPublish: mocks.renderPublishCommand,
   preflightProviderPublishOutput: mocks.preflightPublishOutput,
   preparePublishRuntime: mocks.preparePublishRuntime,
-  prepareDraftPublishRuntime: mocks.prepareDraftPublishRuntime,
   startPublishRuntime: mocks.startPublishRuntime,
   resumePublishRuntime: mocks.resumePublishRuntime,
   synchronizePublishRuntime: mocks.synchronizePublishRuntime,
@@ -117,6 +113,7 @@ vi.mock("@/lib/store/api", async () => {
     openOutputDirectory: mocks.openOutputDirectory,
     setTrayPublishStatus: mocks.setTrayPublishStatus,
     showMainWindow: mocks.showMainWindow,
+    updatePublishEditState: mocks.updatePublishEditState,
   };
 });
 
@@ -154,6 +151,12 @@ vi.mock("@/features/publish/usePublishFailureFeedback", () => ({
 import { usePublishRunner } from "@/features/publish/usePublishRunner";
 import { usePublishStore } from "@/stores/publishStore";
 
+// 与 usePublishRunner 参数同形的 selectedRepo 结构（避免 fixture 赋值被
+// 推断出的窄字面量类型拒绝）。
+type RunnerSelectedRepo = NonNullable<
+  Parameters<typeof usePublishRunner>[0]["selectedRepo"]
+>;
+
 const readyEnvironment: EnvironmentCheckResult = {
   is_ready: true,
   providers: [],
@@ -177,21 +180,34 @@ const defaultCustomConfig: PublishConfigStore = {
   profileName: "",
 };
 
-const projectProfileSelectionIdentity = {
-  kind: "project-profile",
-  profileName: "FolderProfile",
-  configKey: "pubxml:FolderProfile",
-} as const;
+// 富表单意图配置（customConfig 视图，用于构造 dotnet 草稿参数）。
 
-const presetSelectionIdentity = {
-  kind: "preset",
-  presetId: "release-fd",
-  configKey: "preset:release-fd",
-} as const;
-
-const customSelectionIdentity = {
-  kind: "custom",
-} as const;
+const draftSource = {
+  kind: "draft",
+  content: {
+    providerId: "dotnet",
+    contractVersion: 1,
+    providerVersion: "1",
+    settingsVersion: 1,
+    parameters: { configuration: "Release" },
+    composition: {
+      executionBackend: {
+        adapterId: "local-execution",
+        settingsVersion: 1,
+        settings: {},
+        credentials: {},
+      },
+      artifactStore: {
+        adapterId: "temporary-artifact-store",
+        settingsVersion: 1,
+        settings: {},
+        credentials: {},
+      },
+      artifactProcessors: [],
+      deliveryRoutes: [],
+    },
+  },
+} satisfies Extract<PreparePublishRuntimeRequest["source"], { kind: "draft" }>;
 
 function createRenderedCommand(
   displayCommand = 'dotnet publish "/repo/App.csproj"'
@@ -232,10 +248,25 @@ function createPublishResult(
   };
 }
 
-function createPreparedRuntime(revision: string): PreparedPublishRuntime {
+function createPreparedRuntime(
+  revision: string,
+  options: {
+    configurationId?: string;
+    parameters?: PublishSpec["parameters"];
+  } = {}
+): PreparedPublishRuntime {
+  const configurationId = options.configurationId ?? "mock-draft-configuration";
+  const resolvedSpec = {
+    version: 1,
+    provider_id: "dotnet",
+    project_path: "/repo/App.csproj",
+    parameters: options.parameters ?? { configuration: "Release" },
+  };
   return {
-    configurationId: "profile-42",
+    status: "ready",
+    configurationId,
     configurationRevisionId: revision,
+    resolvedSpec,
     command: {
       ...createRenderedCommand(),
       env: [],
@@ -257,9 +288,48 @@ function createPreparedRuntime(revision: string): PreparedPublishRuntime {
         },
       ],
     },
-    blockedReason: null,
+    outputPreflight: {
+      outputDir: "/exports/App/Release",
+      accessStatus: "granted" as const,
+    },
+    recoverySnapshot: {
+      version: 1,
+      content: {
+        providerId: "dotnet",
+        contractVersion: 1,
+        providerVersion: "1",
+        settingsVersion: 1,
+        parameters: {},
+        composition: {
+          executionBackend: {
+            adapterId: "local-execution",
+            settingsVersion: 1,
+            settings: {},
+            credentials: {},
+          },
+          artifactStore: {
+            adapterId: "temporary-artifact-store",
+            settingsVersion: 1,
+            settings: {},
+            credentials: {},
+          },
+          artifactProcessors: [],
+          deliveryRoutes: [],
+        },
+      },
+      configurationId,
+      configurationRevisionId: revision,
+      origin: { kind: "new" },
+      runInputs: { defaultOutputDir: "" },
+      executedParameters: {},
+      resolvedOutputDirectory: "/exports/App/Release",
+    },
     runtimeToken: `token-${revision}`,
   };
+}
+
+function readyToken(prepared: PreparedPublishRuntime | null): string | null {
+  return prepared?.status === "ready" ? prepared.runtimeToken : null;
 }
 
 function createRuntimeResult(revision: string): PublishRuntimeResult {
@@ -355,6 +425,10 @@ function createFailedRuntimeResult(
 }
 
 function createRunnerProps() {
+  const selectedRepo: RunnerSelectedRepo = {
+    path: "/repo",
+    publishConfig: { drafts: [], profiles: [] },
+  };
   return {
     appT: {
       environmentBlocked: "环境阻断",
@@ -373,12 +447,11 @@ function createRunnerProps() {
       configurationBlocked: "当前发布配置不可执行",
     },
     selectedRepoId: "repo-1",
-    selectedRepo: { path: "/repo" },
+    selectedRepo,
     activeProviderId: "dotnet",
     activeProviderUsesProjectFile: true,
     activeProviderParameters: {},
-    selectedPreset: "profile-FolderProfile",
-    isCustomMode: false,
+    selectionKey: "profile-FolderProfile",
     activeProfileName: null,
     customConfig: defaultCustomConfig,
     defaultOutputDir: "/exports",
@@ -394,16 +467,52 @@ function createRunnerProps() {
     openEnvironmentDialog: vi.fn(),
     setEnvironmentLastCheck: vi.fn(),
     savePublishRecord: vi.fn(),
-    configurationId: null as string | null,
     configurationRevisionId: null as string | null,
     currentConfigurationBlockedReason: null as string | null,
+  };
+}
+
+// §4.1 v4：发布来源由统一选择引用驱动。revision 选择需要 profile 携带
+// revisionId（hook 从 profiles 列表解析修订身份）。
+function revisionSelectionRepoFixture(
+  configurationId: string,
+  revisionId: string
+): RunnerSelectedRepo {
+  return {
+    path: "/repo",
+    providerId: "dotnet",
+    publishConfig: {
+      selection: { kind: "revision", configurationId },
+      drafts: [],
+      profiles: [{ id: configurationId, revisionId }],
+    },
+  };
+}
+
+function projectProfileSelectionRepoFixture(
+  reference: string
+): RunnerSelectedRepo {
+  return {
+    path: "/repo",
+    providerId: "dotnet",
+    publishConfig: {
+      selection: {
+        kind: "projectProfile",
+        providerId: "dotnet",
+        reference,
+      },
+      drafts: [],
+      profiles: [],
+    },
   };
 }
 
 describe("usePublishRunner", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mocks.preparePublishRuntime.mockReset();
     mocks.showSystemNotification.mockResolvedValue(true);
+    mocks.updatePublishEditState.mockResolvedValue(undefined);
     mocks.preflightPublishOutput.mockResolvedValue({
       outputDir: "/exports/App/Release",
       configuredOutputDir: "/exports/App/Release",
@@ -428,13 +537,36 @@ describe("usePublishRunner", () => {
     mocks.analyzePublishExecutionFailure.mockReturnValue("process_failed");
     mocks.setTrayPublishStatus.mockResolvedValue(true);
     mocks.renderPublishCommand.mockResolvedValue(createRenderedCommand());
+    // 统一 prepare 合同：按 source.kind 返回 ready 形状（对齐后端行为）。
     mocks.preparePublishRuntime.mockImplementation(
-      async (request: { configurationRevisionId: string }) =>
-        createPreparedRuntime(request.configurationRevisionId)
-    );
-    // plan 033：无命名配置时经自动草稿配置准备。
-    mocks.prepareDraftPublishRuntime.mockImplementation(async () =>
-      createPreparedRuntime("draft-revision")
+      async (request: PreparePublishRuntimeRequest) => {
+        const source = request.source;
+        if (source.kind === "revision") {
+          return createPreparedRuntime(source.revisionId, {});
+        }
+        if (source.kind === "projectProfile") {
+          return createPreparedRuntime("draft-revision", {
+            parameters: { properties: { PublishProfile: source.reference } },
+          });
+        }
+        if (source.kind === "template") {
+          return createPreparedRuntime("draft-revision", {
+            parameters: {},
+          });
+        }
+        if (source.kind === "history") {
+          return createPreparedRuntime("history-revision", {
+            parameters: {},
+          });
+        }
+        return createPreparedRuntime("draft-revision", {
+          parameters:
+            source.kind === "draft"
+              ? ((source.content.parameters as
+                  PublishSpec["parameters"] | undefined) ?? {})
+              : {},
+        });
+      }
     );
     mocks.startPublishRuntime.mockImplementation(
       async (request: { runtimeToken: string }) =>
@@ -452,33 +584,13 @@ describe("usePublishRunner", () => {
       result: null,
     });
     mocks.cancelPublishRuntime.mockResolvedValue(true);
-    buildPublishSpecMock = vi.fn(() => ({
-      version: 1,
-      provider_id: "dotnet",
-      project_path: "/repo/App.csproj",
-      parameters: {
-        properties: {
-          PublishProfile: "FolderProfile",
-        },
-      },
-    }));
-
-    mocks.useDotnetPublishSelection.mockReturnValue({
-      getCurrentConfig: vi.fn(),
-      selectionIdentity: projectProfileSelectionIdentity,
-      recentConfigKeyForCurrentSelection: "pubxml:FolderProfile",
-      isResolvingSelectedProjectProfile: false,
-    });
-
-    mocks.usePublishSpecBuilder.mockReturnValue({
-      buildPublishSpec: buildPublishSpecMock,
-    });
   });
 
   it("选中 pubxml 时通过 PublishProfile 执行发布", async () => {
     mocks.runEnvironmentCheck.mockResolvedValue(readyEnvironment);
 
     const props = createRunnerProps();
+    props.selectedRepo = projectProfileSelectionRepoFixture("FolderProfile");
     const { result } = renderHook(() => usePublishRunner(props));
     await waitFor(() => expect(result.current.preparedRuntime).not.toBeNull());
 
@@ -491,26 +603,25 @@ describe("usePublishRunner", () => {
         runtimeToken: "token-draft-revision",
       });
     });
-    // plan 033：临时发布经自动草稿配置准备，spec 参数原样携带。
-    expect(mocks.prepareDraftPublishRuntime).toHaveBeenCalledWith(
+    // 默认选中 pubxml（profile-FolderProfile）→ projectProfile 来源，运行输入
+    // 携带偏好里的默认输出目录，spec 由后端投影。
+    expect(mocks.preparePublishRuntime).toHaveBeenCalledWith(
       expect.objectContaining({
         repositoryId: "repo-1",
-        providerId: "dotnet",
-        spec: {
-          version: 1,
-          provider_id: "dotnet",
-          project_path: "/repo/App.csproj",
-          parameters: {
-            properties: {
-              PublishProfile: "FolderProfile",
-            },
-          },
+        source: {
+          kind: "projectProfile",
+          providerId: "dotnet",
+          reference: "FolderProfile",
+        },
+        runInputs: {
+          defaultOutputDir: "/exports",
+          promotedManifestDigest: undefined,
         },
       })
     );
 
     expect(props.pushRecentConfig).toHaveBeenCalledWith(
-      "pubxml:FolderProfile",
+      "profile-FolderProfile",
       "repo-1"
     );
     expect(props.savePublishRecord).toHaveBeenCalledWith(
@@ -529,14 +640,12 @@ describe("usePublishRunner", () => {
         }),
       })
     );
-    expect(buildPublishSpecMock).toHaveBeenCalled();
   });
 
-  it("当前配置不兼容时显示原因且不会解析或执行发布", async () => {
+  it("当前配置不兼容时显示原因且不会执行发布", async () => {
     const props = createRunnerProps();
     props.currentConfigurationBlockedReason = "provider_version_unsupported:7";
     const { result } = renderHook(() => usePublishRunner(props));
-    const previewBuildCalls = buildPublishSpecMock.mock.calls.length;
 
     await act(async () => {
       await result.current.startPublish();
@@ -545,32 +654,21 @@ describe("usePublishRunner", () => {
     expect(mocks.toast.error).toHaveBeenCalledWith("当前发布配置不可执行", {
       description: "provider_version_unsupported:7",
     });
-    expect(buildPublishSpecMock).toHaveBeenCalledTimes(previewBuildCalls);
-    expect(mocks.invoke).not.toHaveBeenCalledWith(
-      "execute_provider_publish",
-      expect.anything()
-    );
+    expect(mocks.startPublishRuntime).not.toHaveBeenCalled();
   });
 
   it("手动 userprofile 发布记录固定当前 profile 与 revision ID", async () => {
     mocks.runEnvironmentCheck.mockResolvedValue(readyEnvironment);
     mocks.invoke.mockResolvedValue(createPublishResult());
-    mocks.useDotnetPublishSelection.mockReturnValue({
-      getCurrentConfig: vi.fn(),
-      selectionIdentity: {
-        kind: "user-profile",
-        profileId: "profile-42",
-        configKey: "userprofile:profile-42",
-      },
-      recentConfigKeyForCurrentSelection: "userprofile:profile-42",
-      isResolvingSelectedProjectProfile: false,
-    });
 
     const props = createRunnerProps();
-    props.selectedPreset = "userprofile:profile-42";
-    props.isCustomMode = true;
-    props.configurationId = "profile-42";
+    props.selectionKey = "userprofile:profile-42";
     props.configurationRevisionId = "revision-7";
+    // 统一选择协议：revision 选择 + profile 修订身份驱动 prepare 来源。
+    props.selectedRepo = revisionSelectionRepoFixture(
+      "profile-42",
+      "revision-7"
+    );
     const { result } = renderHook(() => usePublishRunner(props));
 
     await waitFor(() => {
@@ -583,9 +681,17 @@ describe("usePublishRunner", () => {
       await result.current.startPublish();
     });
 
+    expect(mocks.preparePublishRuntime).toHaveBeenCalledWith(
+      expect.objectContaining({
+        source: {
+          kind: "revision",
+          configurationId: "profile-42",
+          revisionId: "revision-7",
+        },
+      })
+    );
     expect(props.savePublishRecord).toHaveBeenCalledWith(
       expect.objectContaining({
-        configurationId: "profile-42",
         configurationRevisionId: "revision-7",
       })
     );
@@ -741,21 +847,11 @@ describe("usePublishRunner", () => {
     const { result } = renderHook(() => usePublishRunner(props));
 
     await act(async () => {
-      await result.current.runPublishSpec(
-        {
-          version: 1,
-          provider_id: "dotnet",
-          project_path: "/repo/App.csproj",
-          parameters: {
-            configuration: "Release",
-          },
-        },
-        {
-          repoId: "repo-1",
-          recentConfigKey: "pubxml:FolderProfile",
-          restoreWindowOnFailure: true,
-        }
-      );
+      await result.current.runPublishSpec(draftSource, {
+        repoId: "repo-1",
+        recentConfigKey: "profile-FolderProfile",
+        restoreWindowOnFailure: true,
+      });
     });
 
     expect(mocks.invoke).not.toHaveBeenCalled();
@@ -836,6 +932,7 @@ describe("usePublishRunner", () => {
       selectedDirectory: "/Users/test/Downloads/publish/App",
     });
     const props = createRunnerProps();
+    props.selectedRepo = projectProfileSelectionRepoFixture("FolderProfile");
     const { result } = renderHook(() => usePublishRunner(props));
     await waitFor(() => expect(result.current.preparedRuntime).not.toBeNull());
 
@@ -844,6 +941,7 @@ describe("usePublishRunner", () => {
     });
 
     expect(mocks.showMainWindow).toHaveBeenCalled();
+    // 授权流程使用 prepare 产出的 resolvedSpec（projectProfile → PublishProfile 参数）。
     expect(mocks.requestProtectedOutputAccess).toHaveBeenCalledWith(
       {
         version: 1,
@@ -946,24 +1044,7 @@ describe("usePublishRunner", () => {
     mocks.startPublishRuntime.mockRejectedValue(new Error("boom"));
 
     const props = createRunnerProps();
-    props.selectedPreset = "release-fd";
-    const buildPublishSpec = vi.fn(() => ({
-      version: 1,
-      provider_id: "dotnet",
-      project_path: "/repo/App.csproj",
-      parameters: {
-        configuration: "Debug",
-      },
-    }));
-    mocks.usePublishSpecBuilder.mockReturnValue({
-      buildPublishSpec,
-    });
-    mocks.useDotnetPublishSelection.mockReturnValue({
-      getCurrentConfig: vi.fn(),
-      selectionIdentity: presetSelectionIdentity,
-      recentConfigKeyForCurrentSelection: "preset:release-fd",
-      isResolvingSelectedProjectProfile: false,
-    });
+    props.selectionKey = "";
 
     const { result } = renderHook(() => usePublishRunner(props));
     await waitFor(() => expect(result.current.preparedRuntime).not.toBeNull());
@@ -978,15 +1059,12 @@ describe("usePublishRunner", () => {
           success: false,
           error: "boom",
           spec: expect.objectContaining({
-            parameters: {
-              configuration: "Debug",
-            },
+            parameters: {},
           }),
         })
       );
     });
 
-    expect(buildPublishSpec).toHaveBeenCalled();
     expect(mocks.toast.error).toHaveBeenCalledWith("发布失败", {
       description: "boom",
     });
@@ -1003,12 +1081,13 @@ describe("usePublishRunner", () => {
     await act(async () => {
       await result.current.runPublishSpec(
         {
-          version: 1,
-          provider_id: "dotnet",
-          project_path: "/repo/App.csproj",
-          parameters: {
-            configuration: "Release",
-            output: "/exports/App/Release",
+          kind: "draft",
+          content: {
+            ...draftSource.content,
+            parameters: {
+              configuration: "Release",
+              output: "/exports/App/Release",
+            },
           },
         },
         {
@@ -1048,22 +1127,12 @@ describe("usePublishRunner", () => {
     const { result } = renderHook(() => usePublishRunner(props));
 
     await act(async () => {
-      await result.current.runPublishSpec(
-        {
-          version: 1,
-          provider_id: "dotnet",
-          project_path: "/repo/App.csproj",
-          parameters: {
-            configuration: "Release",
-          },
-        },
-        {
-          repoId: "repo-1",
-          recentConfigKey: "pubxml:FolderProfile",
-          feedbackMode: "system",
-          trayStatusEffect: true,
-        }
-      );
+      await result.current.runPublishSpec(draftSource, {
+        repoId: "repo-1",
+        recentConfigKey: "profile-FolderProfile",
+        feedbackMode: "system",
+        trayStatusEffect: true,
+      });
     });
 
     expect(mocks.setTrayPublishStatus).toHaveBeenCalledWith("success");
@@ -1085,22 +1154,12 @@ describe("usePublishRunner", () => {
     const { result } = renderHook(() => usePublishRunner(props));
 
     await act(async () => {
-      await result.current.runPublishSpec(
-        {
-          version: 1,
-          provider_id: "dotnet",
-          project_path: "/repo/App.csproj",
-          parameters: {
-            configuration: "Release",
-          },
-        },
-        {
-          repoId: "repo-1",
-          recentConfigKey: "pubxml:FolderProfile",
-          feedbackMode: "system",
-          restoreWindowOnFailure: false,
-        }
-      );
+      await result.current.runPublishSpec(draftSource, {
+        repoId: "repo-1",
+        recentConfigKey: "profile-FolderProfile",
+        feedbackMode: "system",
+        restoreWindowOnFailure: false,
+      });
     });
 
     expect(mocks.showSystemNotification).toHaveBeenCalledWith({
@@ -1130,22 +1189,12 @@ describe("usePublishRunner", () => {
     const { result } = renderHook(() => usePublishRunner(props));
 
     await act(async () => {
-      await result.current.runPublishSpec(
-        {
-          version: 1,
-          provider_id: "dotnet",
-          project_path: "/repo/App.csproj",
-          parameters: {
-            configuration: "Release",
-          },
-        },
-        {
-          repoId: "repo-1",
-          recentConfigKey: "pubxml:FolderProfile",
-          feedbackMode: "system",
-          restoreWindowOnFailure: false,
-        }
-      );
+      await result.current.runPublishSpec(draftSource, {
+        repoId: "repo-1",
+        recentConfigKey: "profile-FolderProfile",
+        feedbackMode: "system",
+        restoreWindowOnFailure: false,
+      });
     });
 
     expect(mocks.showMainWindow).toHaveBeenCalled();
@@ -1161,22 +1210,12 @@ describe("usePublishRunner", () => {
     const { result } = renderHook(() => usePublishRunner(props));
 
     await act(async () => {
-      await result.current.runPublishSpec(
-        {
-          version: 1,
-          provider_id: "dotnet",
-          project_path: "/repo/App.csproj",
-          parameters: {
-            configuration: "Release",
-          },
-        },
-        {
-          repoId: "repo-1",
-          recentConfigKey: "pubxml:FolderProfile",
-          feedbackMode: "system",
-          trayStatusEffect: true,
-        }
-      );
+      await result.current.runPublishSpec(draftSource, {
+        repoId: "repo-1",
+        recentConfigKey: "profile-FolderProfile",
+        feedbackMode: "system",
+        trayStatusEffect: true,
+      });
     });
 
     expect(mocks.setTrayPublishStatus).toHaveBeenCalledWith("failure");
@@ -1197,20 +1236,10 @@ describe("usePublishRunner", () => {
     );
 
     await act(async () => {
-      await result.current.runPublishSpec(
-        {
-          version: 1,
-          provider_id: "dotnet",
-          project_path: "/repo/App.csproj",
-          parameters: {
-            configuration: "Release",
-          },
-        },
-        {
-          repoId: "repo-1",
-          recentConfigKey: "pubxml:FolderProfile",
-        }
-      );
+      await result.current.runPublishSpec(draftSource, {
+        repoId: "repo-1",
+        recentConfigKey: "profile-FolderProfile",
+      });
     });
 
     await waitFor(() => {
@@ -1230,8 +1259,10 @@ describe("usePublishRunner", () => {
     rerender({
       ...props,
       selectedRepoId: "repo-2",
-      selectedRepo: { path: "/repo-b" },
-      selectedPreset: "release-fd",
+      selectedRepo: {
+        path: "/repo-b",
+        publishConfig: { drafts: [], profiles: [] },
+      },
     });
 
     await waitFor(() => {
@@ -1247,14 +1278,7 @@ describe("usePublishRunner", () => {
     mocks.invoke.mockResolvedValue(createPublishResult());
 
     const props = createRunnerProps();
-    props.isCustomMode = true;
-    props.selectedPreset = "release-fd";
-    mocks.useDotnetPublishSelection.mockReturnValue({
-      getCurrentConfig: vi.fn(),
-      selectionIdentity: customSelectionIdentity,
-      recentConfigKeyForCurrentSelection: null,
-      isResolvingSelectedProjectProfile: false,
-    });
+    props.selectionKey = "";
 
     const { result, rerender } = renderHook(
       (hookProps: ReturnType<typeof createRunnerProps>) =>
@@ -1265,19 +1289,9 @@ describe("usePublishRunner", () => {
     );
 
     await act(async () => {
-      await result.current.runPublishSpec(
-        {
-          version: 1,
-          provider_id: "dotnet",
-          project_path: "/repo/App.csproj",
-          parameters: {
-            configuration: "Release",
-          },
-        },
-        {
-          repoId: "repo-1",
-        }
-      );
+      await result.current.runPublishSpec(draftSource, {
+        repoId: "repo-1",
+      });
     });
 
     await waitFor(() => {
@@ -1323,20 +1337,10 @@ describe("usePublishRunner", () => {
     usePublishStore.getState().setIsPublishing(true);
 
     await act(async () => {
-      await result.current.runPublishSpec(
-        {
-          version: 1,
-          provider_id: "dotnet",
-          project_path: "/repo/App.csproj",
-          parameters: {
-            configuration: "Release",
-          },
-        },
-        {
-          repoId: "repo-1",
-          recentConfigKey: "pubxml:FolderProfile",
-        }
-      );
+      await result.current.runPublishSpec(draftSource, {
+        repoId: "repo-1",
+        recentConfigKey: "profile-FolderProfile",
+      });
     });
 
     expect(mocks.runEnvironmentCheck).not.toHaveBeenCalled();
@@ -1352,16 +1356,6 @@ describe("usePublishRunner", () => {
 
   it("切换选中配置只更新下一次手动执行，不改变已经启动的 Attempt", async () => {
     mocks.runEnvironmentCheck.mockResolvedValue(readyEnvironment);
-    mocks.useDotnetPublishSelection.mockReturnValue({
-      getCurrentConfig: vi.fn(),
-      selectionIdentity: {
-        kind: "user-profile",
-        profileId: "profile-42",
-        configKey: "userprofile:profile-42",
-      },
-      recentConfigKeyForCurrentSelection: "userprofile:profile-42",
-      isResolvingSelectedProjectProfile: false,
-    });
     let resolveAttemptA: (
       value: ReturnType<typeof createRuntimeResult>
     ) => void = () => {};
@@ -1373,10 +1367,12 @@ describe("usePublishRunner", () => {
     );
 
     const props = createRunnerProps();
-    props.isCustomMode = true;
-    props.selectedPreset = "userprofile:profile-42";
-    props.configurationId = "profile-42";
+    props.selectionKey = "userprofile:profile-42";
     props.configurationRevisionId = "revision-A";
+    props.selectedRepo = revisionSelectionRepoFixture(
+      "profile-42",
+      "revision-A"
+    );
     const { result, rerender } = renderHook(
       (hookProps: ReturnType<typeof createRunnerProps>) =>
         usePublishRunner(hookProps),
@@ -1402,9 +1398,11 @@ describe("usePublishRunner", () => {
       );
     });
 
+    // 统一选择协议：换 revision 由后端翻新 profile 修订驱动，hook 重新 prepare。
     rerender({
       ...props,
       configurationRevisionId: "revision-B",
+      selectedRepo: revisionSelectionRepoFixture("profile-42", "revision-B"),
     });
     await waitFor(() => {
       expect(result.current.preparedRuntime?.configurationRevisionId).toBe(
@@ -1436,26 +1434,18 @@ describe("usePublishRunner", () => {
 
   it("同一 revision 的单次运行输入变化会立即使旧 Runtime 令牌失效", async () => {
     mocks.runEnvironmentCheck.mockResolvedValue(readyEnvironment);
-    let currentOutput = "/exports/App/A";
-    buildPublishSpecMock = vi.fn(() => ({
-      version: 1,
-      provider_id: "dotnet",
-      project_path: "/repo/App.csproj",
-      parameters: {
-        configuration: "Release",
-        output: currentOutput,
-      },
-    }));
-    mocks.usePublishSpecBuilder.mockReturnValue({
-      buildPublishSpec: buildPublishSpecMock,
-    });
     mocks.preparePublishRuntime
-      .mockResolvedValueOnce(createPreparedRuntime("revision-A"))
+      .mockResolvedValueOnce(
+        createPreparedRuntime("revision-A", {
+          parameters: {
+            configuration: "Release",
+            output: "/exports/App/A",
+          },
+        })
+      )
       .mockImplementationOnce(() => new Promise(() => {}));
 
     const props = createRunnerProps();
-    props.configurationId = "profile-42";
-    props.configurationRevisionId = "revision-A";
     const { result, rerender } = renderHook(
       (hookProps: ReturnType<typeof createRunnerProps>) =>
         usePublishRunner(hookProps),
@@ -1463,15 +1453,14 @@ describe("usePublishRunner", () => {
     );
 
     await waitFor(() => {
-      expect(result.current.preparedRuntime?.runtimeToken).toBe(
+      expect(readyToken(result.current.preparedRuntime)).toBe(
         "token-revision-A"
       );
     });
 
-    currentOutput = "/exports/App/B";
     rerender({
       ...props,
-      selectedRepo: { path: "/repo" },
+      defaultOutputDir: "/exports/App/B",
     });
 
     expect(result.current.preparedRuntime).toBeNull();
@@ -1487,7 +1476,6 @@ describe("usePublishRunner", () => {
       message: "source changed since preparation",
     });
     const props = createRunnerProps();
-    props.configurationId = "profile-42";
     props.configurationRevisionId = "revision-A";
 
     const { result } = renderHook(() => usePublishRunner(props));
@@ -1502,8 +1490,11 @@ describe("usePublishRunner", () => {
   it("新的草稿手动执行会替换之前的 Runtime 结果", async () => {
     mocks.runEnvironmentCheck.mockResolvedValue(readyEnvironment);
     const props = createRunnerProps();
-    props.configurationId = "profile-42";
     props.configurationRevisionId = "revision-A";
+    props.selectedRepo = revisionSelectionRepoFixture(
+      "profile-42",
+      "revision-A"
+    );
     const { result, rerender } = renderHook(
       (hookProps: ReturnType<typeof createRunnerProps>) =>
         usePublishRunner(hookProps),
@@ -1511,7 +1502,7 @@ describe("usePublishRunner", () => {
     );
 
     await waitFor(() => {
-      expect(result.current.preparedRuntime?.runtimeToken).toBe(
+      expect(readyToken(result.current.preparedRuntime)).toBe(
         "token-revision-A"
       );
     });
@@ -1520,13 +1511,18 @@ describe("usePublishRunner", () => {
     });
     expect(result.current.runtimeResult?.attempt.status).toBe("published");
 
+    // 回到无选择的草稿来源（本地参数草稿）→ 重新 prepare。
     rerender({
       ...props,
-      configurationId: null,
       configurationRevisionId: null,
+      selectedRepo: {
+        path: "/repo",
+        providerId: "dotnet",
+        publishConfig: { drafts: [], profiles: [] },
+      },
     });
     await waitFor(() =>
-      expect(result.current.preparedRuntime?.runtimeToken).toBe(
+      expect(readyToken(result.current.preparedRuntime)).toBe(
         "token-draft-revision"
       )
     );
@@ -1534,12 +1530,7 @@ describe("usePublishRunner", () => {
       new Error("draft provider failed")
     );
     await act(async () => {
-      await result.current.runPublishSpec({
-        version: 1,
-        provider_id: "dotnet",
-        project_path: "/repo/App.csproj",
-        parameters: { configuration: "Release" },
-      });
+      await result.current.runPublishSpec(draftSource);
     });
 
     expect(result.current.activeRuntime).toBeNull();
@@ -1567,12 +1558,15 @@ describe("usePublishRunner", () => {
       ],
     });
     const props = createRunnerProps();
-    props.configurationId = "profile-42";
     props.configurationRevisionId = "revision-A";
+    props.selectedRepo = revisionSelectionRepoFixture(
+      "profile-42",
+      "revision-A"
+    );
     const { result } = renderHook(() => usePublishRunner(props));
 
     await waitFor(() => {
-      expect(result.current.preparedRuntime?.runtimeToken).toBe(
+      expect(readyToken(result.current.preparedRuntime)).toBe(
         "token-revision-A"
       );
     });
@@ -1603,24 +1597,19 @@ describe("usePublishRunner", () => {
 
     let publishPromise: Promise<void> | undefined;
     act(() => {
-      publishPromise = result.current.runPublishSpec(
-        {
-          version: 1,
-          provider_id: "dotnet",
-          project_path: "/repo/App.csproj",
-          parameters: {
-            configuration: "Release",
-          },
-        },
-        {
-          repoId: "repo-1",
-          recentConfigKey: "pubxml:FolderProfile",
-        }
-      );
+      publishPromise = result.current.runPublishSpec(draftSource, {
+        repoId: "repo-1",
+        recentConfigKey: "profile-FolderProfile",
+      });
     });
 
     // preflight 仍 pending，isPublishing 已在第一个 await 之前置位
     expect(usePublishStore.getState().isPublishing).toBe(true);
+
+    // prepare 先于 preflight：等环境检查真正发起后再解除挂起。
+    await waitFor(() => {
+      expect(mocks.runEnvironmentCheck).toHaveBeenCalled();
+    });
 
     await act(async () => {
       resolveEnvironmentCheck({
@@ -1657,17 +1646,11 @@ describe("usePublishRunner", () => {
     );
     const props = createRunnerProps();
     const { result } = renderHook(() => usePublishRunner(props));
-    const spec = {
-      version: 1,
-      provider_id: "dotnet",
-      project_path: "/repo/App.csproj",
-      parameters: { configuration: "Release" },
-    };
     let publishPromise: Promise<void> | undefined;
 
     act(() => {
       publishPromise = result.current.runPublishSpec(
-        spec,
+        draftSource,
         { repoId: "repo-1" },
         createPreparedRuntime("revision-cancelled-before-start")
       );
@@ -1707,12 +1690,7 @@ describe("usePublishRunner", () => {
 
     act(() => {
       publishPromise = result.current.runPublishSpec(
-        {
-          version: 1,
-          provider_id: "dotnet",
-          project_path: "/repo/App.csproj",
-          parameters: { configuration: "Release" },
-        },
+        draftSource,
         { repoId: "repo-1" },
         createPreparedRuntime("revision-runtime-cancel")
       );
@@ -1777,12 +1755,7 @@ describe("usePublishRunner", () => {
 
     await act(async () => {
       await result.current.runPublishSpec(
-        {
-          version: 1,
-          provider_id: "dotnet",
-          project_path: "/repo/App.csproj",
-          parameters: { configuration: "Release" },
-        },
+        draftSource,
         { repoId: "repo-1" },
         createPreparedRuntime("revision-runtime-submitted")
       );
@@ -1841,12 +1814,7 @@ describe("usePublishRunner", () => {
 
     await act(async () => {
       await result.current.runPublishSpec(
-        {
-          version: 1,
-          provider_id: "dotnet",
-          project_path: "/repo/App.csproj",
-          parameters: { configuration: "Release" },
-        },
+        draftSource,
         { repoId: "repo-1" },
         createPreparedRuntime("revision-runtime-resume")
       );
@@ -1934,12 +1902,7 @@ describe("usePublishRunner", () => {
 
     await act(async () => {
       await result.current.runPublishSpec(
-        {
-          version: 1,
-          provider_id: "dotnet",
-          project_path: "/repo/App.csproj",
-          parameters: { configuration: "Release" },
-        },
+        draftSource,
         { repoId: "repo-1" },
         createPreparedRuntime("revision-runtime-uncertain")
       );
@@ -1968,12 +1931,7 @@ describe("usePublishRunner", () => {
 
     await act(async () => {
       await result.current.runPublishSpec(
-        {
-          version: 1,
-          provider_id: "dotnet",
-          project_path: "/repo/App.csproj",
-          parameters: { configuration: "Release" },
-        },
+        draftSource,
         { repoId: "repo-1" },
         createPreparedRuntime("revision-rejected")
       );
@@ -1987,5 +1945,92 @@ describe("usePublishRunner", () => {
         error: "runtime request rejected",
       })
     );
+  });
+  it.each(["granted", "cancelled", "still-blocked"] as const)(
+    "blocked output permission can recover before execution: %s",
+    async (outcome) => {
+      const blocked: PreparedPublishRuntime = {
+        status: "blocked",
+        diagnostics: [
+          {
+            code: "publish_output_access_denied",
+            message: "permission needed",
+          },
+        ],
+        outputPreflight: {
+          outputDir: "/protected/out",
+          accessStatus: "denied",
+          probeDirectory: "/protected",
+        },
+      };
+      mocks.runEnvironmentCheck.mockResolvedValue(readyEnvironment);
+      mocks.preparePublishRuntime
+        .mockResolvedValueOnce(blocked)
+        .mockResolvedValueOnce(
+          outcome === "still-blocked"
+            ? blocked
+            : createPreparedRuntime("authorized")
+        );
+      mocks.requestPreparedOutputDirectoryAccess.mockResolvedValue(
+        outcome !== "cancelled"
+      );
+      const props = createRunnerProps();
+      const { result } = renderHook(() => usePublishRunner(props));
+      await waitFor(() =>
+        expect(result.current.preparedRuntime?.status).toBe("blocked")
+      );
+      await act(async () => {
+        await result.current.startPublish();
+      });
+      expect(mocks.requestPreparedOutputDirectoryAccess).toHaveBeenCalledOnce();
+      if (outcome === "granted") {
+        expect(mocks.preparePublishRuntime.mock.calls[1][0]).toEqual(
+          mocks.preparePublishRuntime.mock.calls[0][0]
+        );
+        expect(mocks.startPublishRuntime).toHaveBeenCalledWith({
+          runtimeToken: "token-authorized",
+        });
+      } else {
+        expect(mocks.startPublishRuntime).not.toHaveBeenCalled();
+      }
+    }
+  );
+
+  it("does not start after scope changes during output authorization", async () => {
+    let authorize!: (allowed: boolean) => void;
+    mocks.runEnvironmentCheck.mockResolvedValue(readyEnvironment);
+    mocks.preparePublishRuntime.mockResolvedValueOnce({
+      status: "blocked",
+      diagnostics: [
+        { code: "publish_output_access_denied", message: "permission needed" },
+      ],
+      outputPreflight: { outputDir: "/protected/out", accessStatus: "denied" },
+    });
+    mocks.requestPreparedOutputDirectoryAccess.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          authorize = resolve;
+        })
+    );
+    const props = createRunnerProps();
+    const { result, rerender } = renderHook(usePublishRunner, {
+      initialProps: props,
+    });
+    await waitFor(() =>
+      expect(result.current.preparedRuntime?.status).toBe("blocked")
+    );
+    let running!: Promise<void>;
+    act(() => {
+      running = result.current.startPublish();
+    });
+    await waitFor(() =>
+      expect(mocks.requestPreparedOutputDirectoryAccess).toHaveBeenCalledOnce()
+    );
+    rerender({ ...props, defaultOutputDir: "/changed" });
+    await act(async () => {
+      authorize(true);
+      await running;
+    });
+    expect(mocks.startPublishRuntime).not.toHaveBeenCalled();
   });
 });

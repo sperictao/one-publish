@@ -1,22 +1,14 @@
-import {
-  useCallback,
-  useMemo,
-  useState,
-  type Dispatch,
-  type SetStateAction,
-} from "react";
+import { useCallback, useMemo, useState } from "react";
 import { toast } from "sonner";
 
-import { mapImportedSpecByProvider } from "@/features/provider/commandImportMapping";
-import { createDotnetPublishConfigFromParameters } from "@/features/config/dotnetPublishConfig";
-import type { ProviderPublishSpec } from "@/features/publish/publishRuntime";
-import type { PublishConfigStore } from "@/lib/store/types";
-import type { ParameterSchema, ParameterValue } from "@/types/parameters";
+import type {
+  CommandImportDiagnostic,
+  CommandImportResult,
+} from "@/features/publish/publishRuntime";
 
 export interface ImportFeedback {
   providerId: string;
-  mappedKeys: string[];
-  unmappedKeys: string[];
+  diagnostics: CommandImportDiagnostic[];
 }
 
 interface TranslationMap {
@@ -26,19 +18,13 @@ interface TranslationMap {
 interface UseCommandImportParams {
   activeProviderId: string;
   appT: TranslationMap;
-  providerSchemas: Record<string, ParameterSchema>;
-  onDotnetConfigReplace: (config: PublishConfigStore) => void;
-  setProviderParameters: Dispatch<
-    SetStateAction<Record<string, Record<string, ParameterValue>>>
-  >;
+  onImportDraft: (result: CommandImportResult) => void;
 }
 
 export function useCommandImport({
   activeProviderId,
   appT,
-  providerSchemas,
-  onDotnetConfigReplace,
-  setProviderParameters,
+  onImportDraft,
 }: UseCommandImportParams) {
   const [lastImportFeedback, setLastImportFeedback] =
     useState<ImportFeedback | null>(null);
@@ -52,63 +38,28 @@ export function useCommandImport({
   );
 
   const handleCommandImport = useCallback(
-    (spec: ProviderPublishSpec) => {
-      const importedProviderId = spec.provider_id || activeProviderId;
-      const schema = providerSchemas[importedProviderId];
-      const mapping = mapImportedSpecByProvider(spec, activeProviderId, {
-        supportedKeys: schema ? Object.keys(schema.parameters) : undefined,
-      });
+    (result: CommandImportResult) => {
+      const providerId = result.providerId || activeProviderId;
+      setLastImportFeedback({ providerId, diagnostics: result.diagnostics });
 
-      setLastImportFeedback({
-        providerId: mapping.providerId,
-        mappedKeys: mapping.mappedKeys,
-        unmappedKeys: mapping.unmappedKeys,
-      });
+      onImportDraft({ ...result, providerId });
 
-      if (mapping.providerId === "dotnet") {
-        if (Object.keys(mapping.dotnetUpdates).length > 0) {
-          onDotnetConfigReplace(
-            createDotnetPublishConfigFromParameters(spec?.parameters || {}, {
-              inferProfileSelection: true,
-            })
-          );
-        }
-      } else {
-        setProviderParameters((prev) => ({
-          ...prev,
-          [mapping.providerId]: mapping.providerParameters,
-        }));
-      }
-
-      if (mapping.mappedKeys.length === 0 && mapping.unmappedKeys.length > 0) {
-        toast.error(appT.noMappableParameters || "未找到可映射参数", {
-          description: `${appT.unmappedFields || "未映射字段"}: ${mapping.unmappedKeys.join(", ")}`,
+      if (result.diagnostics.length > 0) {
+        toast.warning(appT.partialImport || "参数已部分导入", {
+          description: result.diagnostics
+            .map((diagnostic) => diagnostic.message)
+            .join(", "),
         });
         return;
       }
 
-      if (mapping.unmappedKeys.length > 0) {
-        toast.message(appT.partialImport || "参数已部分导入", {
-          description: `${appT.mappedFields || "已映射"} ${mapping.mappedKeys.length} ${appT.fieldsUnit || "个字段"}，${appT.unmappedFields || "未映射字段"} ${mapping.unmappedKeys.length} ${appT.fieldsUnit || "个字段"}`,
-        });
-        return;
-      }
-
-      toast.success(appT.parametersImported || "参数已导入", {
-        description: `${appT.mappedFields || "已映射"} ${mapping.mappedKeys.length} ${appT.fieldsUnit || "个字段"}`,
-      });
+      toast.success(appT.parametersImported || "参数已导入");
     },
     [
       activeProviderId,
-      appT.fieldsUnit,
-      appT.parametersImported,
-      appT.mappedFields,
-      appT.noMappableParameters,
       appT.partialImport,
-      appT.unmappedFields,
-      onDotnetConfigReplace,
-      providerSchemas,
-      setProviderParameters,
+      appT.parametersImported,
+      onImportDraft,
     ]
   );
 

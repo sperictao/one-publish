@@ -10,8 +10,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { Loader2, Terminal } from "lucide-react";
 import { useI18n } from "@/hooks/useI18n";
 import {
-  importProviderPublishSpecFromCommand,
-  type ProviderPublishSpec,
+  importFromCommand,
+  type CommandImportResult,
 } from "@/features/publish/publishRuntime";
 import {
   resolveProviderCommandExample,
@@ -25,7 +25,7 @@ interface CommandImportDialogProps {
   providerId: string;
   provider: ProviderManifest | null;
   projectPath: string;
-  onImport: (spec: ProviderPublishSpec) => void;
+  onImport: (result: CommandImportResult) => void;
 }
 
 export function CommandImportDialog({
@@ -38,7 +38,7 @@ export function CommandImportDialog({
 }: CommandImportDialogProps) {
   const [command, setCommand] = useState("");
   const [isParsing, setIsParsing] = useState(false);
-  const [parsedSpec, setParsedSpec] = useState<ProviderPublishSpec | null>(
+  const [parsedResult, setParsedResult] = useState<CommandImportResult | null>(
     null
   );
   const [error, setError] = useState<string | null>(null);
@@ -49,6 +49,7 @@ export function CommandImportDialog({
   const providerLabel = resolveProviderLabel(provider, providerId);
 
   const handleParse = async () => {
+    if (!provider?.supportsCommandImport || isParsing) return;
     if (!command.trim()) {
       toast.error(commandT.enterCommand || "输入命令");
       return;
@@ -56,15 +57,15 @@ export function CommandImportDialog({
 
     setIsParsing(true);
     setError(null);
-    setParsedSpec(null);
+    setParsedResult(null);
 
     try {
-      const spec = await importProviderPublishSpecFromCommand({
+      const result = await importFromCommand({
         command,
         providerId,
         projectPath,
       });
-      setParsedSpec(spec);
+      setParsedResult(result);
       toast.success(commandT.parseSuccess || "参数已导入");
     } catch (err) {
       const errorMsg = String(err);
@@ -78,15 +79,15 @@ export function CommandImportDialog({
   };
 
   const handleImport = () => {
-    if (parsedSpec) {
-      onImport(parsedSpec);
+    if (parsedResult) {
+      onImport(parsedResult);
       handleClose();
     }
   };
 
   const handleClose = () => {
     setCommand("");
-    setParsedSpec(null);
+    setParsedResult(null);
     setError(null);
     onOpenChange(false);
   };
@@ -105,7 +106,10 @@ export function CommandImportDialog({
             <Button variant="outline" onClick={handleClose}>
               {commandT.cancel || "取消"}
             </Button>
-            <Button onClick={handleImport} disabled={!parsedSpec}>
+            <Button
+              onClick={handleImport}
+              disabled={!parsedResult || isParsing}
+            >
               {commandT.importParameters || "导入参数"}
             </Button>
           </div>
@@ -119,8 +123,7 @@ export function CommandImportDialog({
               </div>
               <p className="text-label-12 text-muted-foreground">
                 {(
-                  commandT.currentProvider ||
-                  "当前 Provider: {{provider}}（支持: dotnet, cargo, go, gradle）"
+                  commandT.currentProvider || "当前 Provider: {{provider}}"
                 ).replace("{{provider}}", providerLabel)}
               </p>
             </div>
@@ -135,8 +138,13 @@ export function CommandImportDialog({
                     ? `${commandT.examplePrefix || "示例"}: ${commandExample}`
                     : undefined
                 }
+                disabled={isParsing}
                 value={command}
-                onChange={(e) => setCommand(e.target.value)}
+                onChange={(e) => {
+                  setCommand(e.target.value);
+                  setParsedResult(null);
+                  setError(null);
+                }}
                 rows={4}
                 className="font-mono text-copy-13-mono"
               />
@@ -145,7 +153,9 @@ export function CommandImportDialog({
 
           <Button
             onClick={handleParse}
-            disabled={isParsing || !command.trim()}
+            disabled={
+              isParsing || !command.trim() || !provider?.supportsCommandImport
+            }
             className="w-full"
           >
             {isParsing ? (
@@ -169,14 +179,32 @@ export function CommandImportDialog({
             </AppDialogInset>
           )}
 
-          {parsedSpec && (
+          {parsedResult && (
             <AppDialogInset className="space-y-2">
               <Label>{commandT.extractedParameters || "提取的参数"}</Label>
               <div className="rounded-sm bg-muted p-3">
                 <pre className="font-mono text-copy-13-mono overflow-auto max-h-40">
-                  {JSON.stringify(parsedSpec.parameters, null, 2)}
+                  {JSON.stringify(parsedResult.parameters, null, 2)}
                 </pre>
               </div>
+              {parsedResult.diagnostics.length > 0 && (
+                <div className="status-cancelled rounded-sm px-3 py-2">
+                  <p className="text-label-12 font-semibold">
+                    {(commandT.diagnostics || "解析诊断") +
+                      ` (${parsedResult.diagnostics.length})`}
+                  </p>
+                  <ul className="mt-1 space-y-1">
+                    {parsedResult.diagnostics.map((diagnostic, index) => (
+                      <li
+                        key={`${diagnostic.code}-${index}`}
+                        className="font-mono text-label-13-mono"
+                      >
+                        {diagnostic.message}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
             </AppDialogInset>
           )}
         </div>

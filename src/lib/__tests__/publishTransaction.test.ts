@@ -26,8 +26,6 @@ describe("publishTransaction", () => {
         restoreWindowOnFailure: true,
         feedbackMode: "system",
         trayStatusEffect: true,
-        configurationId: "profile-42",
-        configurationRevisionId: "revision-7",
       },
     });
 
@@ -38,8 +36,6 @@ describe("publishTransaction", () => {
       restoreWindowOnFailure: true,
       feedbackMode: "system",
       trayStatusEffect: true,
-      configurationId: "profile-42",
-      configurationRevisionId: "revision-7",
       startedAt: "2026-05-23T00:00:00.000Z",
     });
   });

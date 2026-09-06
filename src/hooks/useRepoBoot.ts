@@ -2,14 +2,11 @@ import { useCallback, useState } from "react";
 import { useRepositoryViewState } from "@/features/repository/useRepositoryViewState";
 import { useRepositoryActions } from "@/features/repository/useRepositoryActions";
 import { useProjectShellState } from "@/features/repository/useProjectShellState";
-import { useRecoverableSpec } from "@/hooks/useRecoverableSpec";
 import { useProjectPublishProfileOrder } from "@/hooks/useProjectPublishProfileOrder";
+import { extractSpecFromRecord as specFromRecord } from "@/features/history/specFromRecord";
 import type { Repository } from "@/lib/store/types";
-import type { ProviderManifest, PublishConfigStore } from "@/lib/store/types";
+import type { ProviderManifest } from "@/lib/store/types";
 import type { EnvironmentCheckSnapshot } from "@/features/environment/environment";
-import type { ParameterValue } from "@/types/parameters";
-
-const SPEC_VERSION = 1;
 
 interface TranslationMap {
   [key: string]: string | undefined;
@@ -31,14 +28,6 @@ interface UseRepoBootParams {
   isStateLoading: boolean;
   activeProviderUsesProjectFile: boolean;
   applySelectedRepositoryProvider: (providerId?: string | null) => void;
-
-  // For useRecoverableSpec
-  setCustomConfig: (config: PublishConfigStore) => void;
-  setIsCustomMode: (value: boolean) => void;
-  applyRecoveredSpecProvider: (providerId: string) => void;
-  setProviderParameters: React.Dispatch<
-    React.SetStateAction<Record<string, Record<string, ParameterValue>>>
-  >;
 }
 
 export function useRepoBoot(params: UseRepoBootParams) {
@@ -102,17 +91,7 @@ export function useRepoBoot(params: UseRepoBootParams) {
     });
 
   // Recoverable spec
-  const {
-    extractSpecFromRecord,
-    restoreSpecToEditor,
-    getRecentConfigKeyFromSpec,
-  } = useRecoverableSpec({
-    specVersion: SPEC_VERSION,
-    setCustomConfig: params.setCustomConfig,
-    setIsCustomMode: params.setIsCustomMode,
-    applyRecoveredSpecProvider: params.applyRecoveredSpecProvider,
-    setProviderParameters: params.setProviderParameters,
-  });
+  const extractSpecFromRecord = specFromRecord;
 
   return {
     // Repo domain
@@ -145,8 +124,6 @@ export function useRepoBoot(params: UseRepoBootParams) {
     orderedProjectPublishProfiles,
     reorderProjectPublishProfiles,
     extractSpecFromRecord,
-    restoreSpecToEditor,
-    getRecentConfigKeyFromSpec,
   };
 }
 

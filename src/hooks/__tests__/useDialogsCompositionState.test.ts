@@ -63,7 +63,6 @@ describe("useDialogsCompositionState", () => {
         setTheme: vi.fn(),
         handleConfigDialogOpenChange: vi.fn(),
         environmentLastCheck: snapshot,
-        openEnvironmentDialog: vi.fn(),
         activeProviderId: "dotnet",
         activeProviderUsesProjectFile: true,
         activeProvider: {
@@ -115,13 +114,14 @@ describe("useDialogsCompositionState", () => {
         checkForUpdates: vi.fn(),
         installAvailableUpdate: vi.fn(),
         openUpdaterHelpTarget: vi.fn(),
+        selectedRepoExists: true,
         releaseChecklistOpen: false,
         setReleaseChecklistOpen: vi.fn(),
         publishResult: null,
         packageResult: null,
         signResult: null,
+        openEnvironmentDialog: vi.fn(),
         handleOpenSettings: vi.fn(),
-        selectedRepoExists: true,
         commandImportOpen: false,
         setCommandImportOpen: vi.fn(),
         handleCommandImport: vi.fn(),
@@ -174,9 +174,6 @@ describe("useDialogsCompositionState", () => {
     expect(
       result.current.appDialogsProps.settings.environmentInitialCheck
     ).toEqual(snapshot);
-    expect(
-      result.current.appDialogsProps.release.environmentResult?.checked_at
-    ).toBe("2026-04-02T10:00:00Z");
     expect(result.current.appDialogsProps.commandImport.projectPath).toBe(
       "/repo/App.csproj"
     );

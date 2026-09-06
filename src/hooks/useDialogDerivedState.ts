@@ -14,8 +14,8 @@ export function useDialogDerivedState(params: {
 }) {
   const providerUsesProjectFile = params.activeProviderUsesProjectFile ?? false;
   const commandImportProjectPath = useMemo(() => {
-    if (providerUsesProjectFile && params.projectFile) {
-      return params.projectFile;
+    if (providerUsesProjectFile) {
+      return params.projectFile || "";
     }
     return params.selectedRepoPath || "";
   }, [params.projectFile, params.selectedRepoPath, providerUsesProjectFile]);

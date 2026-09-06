@@ -12,26 +12,10 @@ function createRepository(path: string): Repository {
     currentBranch: "main",
     branches: [],
     publishConfig: {
-      selectedPreset: "release-fd",
-      isCustomMode: false,
-      customConfig: {
-        configuration: "Release",
-        runtime: "",
-        framework: "",
-        selfContained: false,
-        outputDir: "",
-        noBuild: false,
-        noRestore: false,
-        verbosity: "",
-        noLogo: false,
-        deleteExistingFiles: false,
-        properties: {},
-        useProfile: false,
-        profileName: "",
-      },
       profiles: [],
       bindings: [],
       appliedBundles: [],
+      drafts: [],
     },
   };
 }

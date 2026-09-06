@@ -13,3 +13,16 @@ serde_json.workspace = true
 
 [dev-dependencies]
 tempfile = "3.10"
+serde_json.workspace = true
+
+[features]
+# 真实 E2E 测试门控：每个 Provider 独立开关 + 外部服务依赖开关
+e2e-real = ["e2e-real-cargo", "e2e-real-go", "e2e-real-dotnet", "e2e-real-java", "e2e-real-tauri"]
+e2e-real-cargo = []
+e2e-real-go = []
+e2e-real-dotnet = []
+e2e-real-java = []
+e2e-real-tauri = []
+e2e-real-sftp = []
+e2e-real-github = []
+e2e-real-cross = []
