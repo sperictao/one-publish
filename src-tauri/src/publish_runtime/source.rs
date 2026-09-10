@@ -94,6 +94,7 @@ pub struct PublishDraft {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
 #[serde(tag = "kind", rename_all = "camelCase")]
 #[ts(rename_all = "camelCase")]
+#[allow(clippy::large_enum_variant)] // Serialized IPC contract; boxing would only change Rust storage semantics.
 pub enum PublishSource {
     /// 已保存命名配置：加载指定修订；当前修订检查保留在统一 prepare 中。
     Revision {

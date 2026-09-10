@@ -547,7 +547,7 @@ pub fn scan_provider_project_candidates_from_path(
     let registry = crate::provider::registry::provider_registry();
     let discoveries = registry
         .repository_discoveries()
-        .filter(|discovery| provider_id.is_none_or(|id| discovery.provider_id == id))
+        .filter(|discovery| provider_id.map_or(true, |id| discovery.provider_id == id))
         .collect::<Vec<_>>();
     if discoveries.is_empty() {
         return Err(repository_error(

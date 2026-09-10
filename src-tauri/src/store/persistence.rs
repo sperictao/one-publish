@@ -80,10 +80,12 @@ fn future_schema_version(value: &serde_json::Value) -> Option<u64> {
 }
 
 fn future_schema_fallback(path: &Path, schema_version: u64) -> AppState {
-    let mut state = AppState::default();
-    state.startup_notice = Some(format!(
-        "检测到由更高版本 One Publish 写入的配置（schemaVersion={schema_version}，当前仅支持到 {CURRENT_STORE_SCHEMA_VERSION}）。为避免数据丢失，本版本不会读取或覆盖该配置文件，请升级 One Publish 后再修改设置。"
-    ));
+    let state = AppState {
+        startup_notice: Some(format!(
+            "检测到由更高版本 One Publish 写入的配置（schemaVersion={schema_version}，当前仅支持到 {CURRENT_STORE_SCHEMA_VERSION}）。为避免数据丢失，本版本不会读取或覆盖该配置文件，请升级 One Publish 后再修改设置。"
+        )),
+        ..Default::default()
+    };
     log::warn!(
         "配置文件 schemaVersion={} 高于当前支持的 {}，已按只读保护处理。路径: {}",
         schema_version,
@@ -208,7 +210,7 @@ pub(crate) fn load_from_path(path: &Path) -> AppState {
     // v3：仓库级三字段编辑状态，转换为统一选择与草稿。
     if schema_version == 3 || (schema_version == 0 && has_legacy_fields) {
         if let Ok(stored_state) = serde_json::from_str::<StoredAppStateV3>(&content) {
-            let mut state: AppState = stored_state.into();
+            let state: AppState = stored_state.into();
             // §4.2：先执行常规清理（含名称到身份迁移），再转换编辑状态。
             let (mut state, profiles_migrated) = sanitize_stored_state(state);
             let mut edit_state_migrated = false;

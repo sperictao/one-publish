@@ -76,7 +76,7 @@ fn unsupported_environment_provider_issue(provider_id: &str) -> EnvironmentIssue
 
 async fn check_provider_runtime_environment(
     provider_id: &str,
-) -> Result<ProviderEnvironmentCheck, EnvironmentIssue> {
+) -> Result<ProviderEnvironmentCheck, Box<EnvironmentIssue>> {
     // Runtime probing stays in environment; provider registry owns catalog and discovery facts.
     match provider_id {
         "cargo" => {
@@ -99,7 +99,7 @@ async fn check_provider_runtime_environment(
             let issues = java_provider::detect_java_issues(&status);
             Ok(ProviderEnvironmentCheck { status, issues })
         }
-        _ => Err(unsupported_environment_provider_issue(provider_id)),
+        _ => Err(Box::new(unsupported_environment_provider_issue(provider_id))),
     }
 }
 
@@ -133,7 +133,7 @@ pub async fn check_environment(provider_ids: Option<Vec<String>>) -> Environment
                 result = result.with_provider(check.status);
             }
             Err(issue) => {
-                result = result.with_issue(issue);
+                result = result.with_issue(*issue);
             }
         }
     }

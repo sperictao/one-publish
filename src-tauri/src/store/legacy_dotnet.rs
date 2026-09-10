@@ -323,7 +323,7 @@ pub(crate) fn draft_parameters_with_unsaved_changes(
         }
     }
 
-    changed.then(|| Value::Object(parameters))
+    changed.then_some(Value::Object(parameters))
 }
 
 #[cfg(test)]
