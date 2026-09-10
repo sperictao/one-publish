@@ -1323,9 +1323,11 @@ fn build_resolved_spec(
         }));
     }
 
-    // .NET 默认输出目录派生（唯一后端实现）：模板、普通配置与草稿按当前
-    // 默认目录派生；直接 pubxml 与历史来源使用各自明确的输出，不重套当前默认。
-    let derives_default_output = content.provider_id == "dotnet"
+    // 默认输出目录派生（唯一后端实现，按 Provider 声明的布局模板求值）：
+    // 模板、普通配置与草稿按当前默认目录派生；直接项目配置与历史来源使用
+    // 各自明确的输出，不重套当前默认。
+    let output_layout = provider.capabilities().output_layout.clone();
+    let derives_default_output = output_layout.is_some()
         && !matches!(
             source,
             PublishSource::ProjectProfile { .. } | PublishSource::History { .. }
@@ -1334,31 +1336,47 @@ fn build_resolved_spec(
         Some(SpecValue::String(output)) => !output.trim().is_empty(),
         _ => false,
     };
-    if derives_default_output && !has_explicit_output && !run_inputs.default_output_dir.trim().is_empty()
+    if derives_default_output
+        && !has_explicit_output
+        && !run_inputs.default_output_dir.trim().is_empty()
     {
-        let configuration = match parameters.get("configuration") {
-            Some(SpecValue::String(value)) if !value.trim().is_empty() => value.trim().to_string(),
-            _ => "Release".to_string(),
-        };
-        let project_name = Path::new(&project_path)
+        let schema = provider.get_schema().map_err(|error| {
+            PublishBuildFailure::Fatal(AppError::validation_with_code(
+                error.to_string(),
+                "publish_runtime_schema_load_failed",
+            ))
+        })?;
+        let project_stem = Path::new(&project_path)
             .file_stem()
             .map(|name| name.to_string_lossy().to_string())
             .unwrap_or_default();
-        let scoped_output = if project_name.is_empty() {
-            Path::new(&run_inputs.default_output_dir)
-                .join(&configuration)
-                .to_string_lossy()
-                .to_string()
-        } else {
-            Path::new(&run_inputs.default_output_dir)
-                .join(&project_name)
-                .join(&configuration)
-                .to_string_lossy()
-                .to_string()
+        let parameter_value = |key: &str| -> Option<String> {
+            match parameters.get(key) {
+                Some(SpecValue::String(value)) if !value.trim().is_empty() => {
+                    Some(value.trim().to_string())
+                }
+                _ => schema
+                    .parameters
+                    .get(key)
+                    .and_then(|def| def.default.as_ref())
+                    .and_then(|value| value.as_str())
+                    .filter(|value| !value.trim().is_empty())
+                    .map(str::to_string),
+            }
         };
+        let segments = evaluate_output_layout(
+            output_layout.as_deref().unwrap_or_default(),
+            run_inputs.default_output_dir.trim(),
+            Some(project_stem.as_str()),
+            &parameter_value,
+        );
+        let mut scoped_output = PathBuf::new();
+        for segment in segments {
+            scoped_output.push(segment);
+        }
         parameters.insert(
             "output".to_string(),
-            SpecValue::String(scoped_output),
+            SpecValue::String(scoped_output.to_string_lossy().to_string()),
         );
     }
 
@@ -1368,6 +1386,51 @@ fn build_resolved_spec(
         project_path,
         parameters,
     })
+}
+
+/// 输出布局模板求值：按 `/` 分段，段内令牌 `{default_output_dir}`、
+/// `{project_stem}`、`{param:<key>}` 解析失败（无值）时丢弃整段，不猜测。
+fn evaluate_output_layout(
+    layout: &str,
+    default_output_dir: &str,
+    project_stem: Option<&str>,
+    parameter_value: &dyn Fn(&str) -> Option<String>,
+) -> Vec<String> {
+    layout
+        .split('/')
+        .filter(|segment| !segment.is_empty())
+        .filter_map(|segment| {
+            resolve_layout_segment(segment, default_output_dir, project_stem, parameter_value)
+        })
+        .collect()
+}
+
+fn resolve_layout_segment(
+    segment: &str,
+    default_output_dir: &str,
+    project_stem: Option<&str>,
+    parameter_value: &dyn Fn(&str) -> Option<String>,
+) -> Option<String> {
+    let mut resolved = String::new();
+    let mut rest = segment;
+    while let Some(start) = rest.find('{') {
+        resolved.push_str(&rest[..start]);
+        let end = rest[start..].find('}')? + start;
+        let token = &rest[start + 1..end];
+        let value = match token {
+            "default_output_dir" => (!default_output_dir.is_empty())
+                .then(|| default_output_dir.to_string())?,
+            "project_stem" => project_stem
+                .filter(|stem| !stem.is_empty())
+                .map(str::to_string)?,
+            _ if token.starts_with("param:") => parameter_value(&token["param:".len()..])?,
+            _ => return None,
+        };
+        resolved.push_str(&value);
+        rest = &rest[end + 1..];
+    }
+    resolved.push_str(rest);
+    (!resolved.is_empty()).then_some(resolved)
 }
 
 /// 统一准备流程（§3.1）：读取仓库 → 解析来源 → 物化草稿修订 → 生成执行

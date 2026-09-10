@@ -28,6 +28,10 @@ impl BuiltInProvider {
                 requires_project_binding: true,
                 project_path_kind: ProviderProjectPathKind::ProjectFile,
                 supports_command_import: false,
+                    appends_project_path: false,
+                    output_layout: None,
+                    project_profiles: None,
+                    framework_tags: Vec::new(),
             },
             ProviderCatalogEntry {
                 id: "tauri".to_string(),
@@ -40,6 +44,7 @@ impl BuiltInProvider {
                 requires_project_binding: true,
                 project_path_kind: ProviderProjectPathKind::ProjectFile,
                 supports_command_import: false,
+                supports_project_profiles: false,
                 templates: Vec::new(),
             },
             ProviderRepositoryDiscovery {
@@ -49,6 +54,8 @@ impl BuiltInProvider {
                     .map(|name| ProviderRepositoryMarker::RecursiveFileName((*name).to_string()))
                     .collect(),
                 project_file_matchers: config_matchers(),
+                    solution_file_extensions: Vec::new(),
+                    owns_project_recommendation: false,
             },
             include_str!("../schemas/tauri.json"),
             "tauri.build",

@@ -20,10 +20,6 @@ import {
   rebindProfileProject,
   updateProfile as updateProfileInStore,
 } from "@/lib/store/api";
-import {
-  createDefaultDotnetPublishConfig,
-  createDotnetPublishConfigFromParameters,
-} from "@/features/config/dotnetPublishConfig";
 import type { EnvironmentCheckSnapshot } from "@/features/environment/environment";
 import type { CommandImportResultCardProps } from "@/components/publish/CommandImportResultCard";
 import type { ProviderPublishSpec } from "@/features/publish/publishRuntime";
@@ -268,9 +264,12 @@ export function usePublishBoot(params: UsePublishBootParams) {
     );
   }, [params.selectedRepo, profiles]);
 
-  // 编辑器视图水合（§4.1）：dotnet 富表单初值从当前作用域草稿还原。
-  // 只读水合——提交路径经 updatePublishEditState 直接写草稿参数。
-  const dotnetEditorView = useMemo(() => {
+  // 编辑器水合（§4.1）：当前作用域（草稿/修订）的原始参数供配置对话框
+  // 初值使用；所有 Provider 共用，只读——提交路径经 updatePublishEditState。
+  const selectionParameters = useMemo<Record<
+    string,
+    ParameterValue
+  > | null>(() => {
     const publishConfig = params.selectedRepo?.publishConfig;
     const selection = publishConfig?.selection;
     if (selection?.kind === "draft") {
@@ -280,9 +279,10 @@ export function usePublishBoot(params: UsePublishBootParams) {
           (draft.projectBinding ?? null) === (selection.projectBinding ?? null)
       );
       if (draft) {
-        return createDotnetPublishConfigFromParameters(
-          (draft.content.parameters ?? {}) as Record<string, unknown>
-        );
+        return (draft.content.parameters ?? {}) as Record<
+          string,
+          ParameterValue
+        >;
       }
     }
     if (selection?.kind === "revision") {
@@ -290,12 +290,10 @@ export function usePublishBoot(params: UsePublishBootParams) {
         (profile) => profile.id === selection.configurationId
       );
       if (profile) {
-        return createDotnetPublishConfigFromParameters(
-          (profile.parameters ?? {}) as Record<string, unknown>
-        );
+        return (profile.parameters ?? {}) as Record<string, ParameterValue>;
       }
     }
-    return createDefaultDotnetPublishConfig();
+    return null;
   }, [params.selectedRepo]);
 
   // Selection-derived key（列表高亮/最近使用身份）
@@ -335,7 +333,6 @@ export function usePublishBoot(params: UsePublishBootParams) {
     activeProviderId: params.activeProviderId,
     activeProviderUsesProjectFile,
     activeProviderParameters: params.activeProviderParameters,
-    customConfig: dotnetEditorView,
     selectionKey,
     defaultOutputDir: params.defaultOutputDir,
     projectInfo: params.projectInfo,
@@ -481,7 +478,7 @@ export function usePublishBoot(params: UsePublishBootParams) {
 
   return {
     // Publish config from useAppState
-    customConfig: dotnetEditorView,
+    selectionParameters,
     pushRecentPublishConfig: params.pushRecentPublishConfig,
     removeRecentPublishConfig: params.removeRecentPublishConfig,
     reorderRecentPublishConfigs: params.reorderRecentPublishConfigs,

@@ -9,11 +9,7 @@ import {
   matchesEnvironmentCheckSnapshot,
   type EnvironmentCheckSnapshot,
 } from "@/features/environment/environment";
-import type {
-  ConfigParameters,
-  ProviderManifest,
-  PublishConfigStore,
-} from "@/lib/store/types";
+import type { ConfigParameters, ProviderManifest } from "@/lib/store/types";
 import type { ParameterValue } from "@/types/parameters";
 
 export type DialogsCompositionParams = Omit<
@@ -29,7 +25,8 @@ export type DialogsCompositionParams = Omit<
   activeProviderUsesProjectFile: boolean;
   activeProvider: ProviderManifest | null;
   availableProviders: ProviderManifest[];
-  customConfig: PublishConfigStore;
+  /** 当前作用域（草稿/修订）的原始参数；null 表示没有可用的作用域水合。 */
+  selectionParameters: Record<string, ParameterValue> | null;
   activeProviderParameters: Record<string, ParameterValue>;
   projectFile?: string;
   selectedRepoPath?: string;
@@ -55,7 +52,7 @@ export function useDialogsCompositionState(params: DialogsCompositionParams) {
     useDialogDerivedState({
       activeProviderId: params.activeProviderId,
       activeProviderUsesProjectFile: params.activeProviderUsesProjectFile,
-      customConfig: params.customConfig,
+      selectionParameters: params.selectionParameters,
       activeProviderParameters: params.activeProviderParameters,
       projectFile: params.projectFile,
       selectedRepoPath: params.selectedRepoPath,

@@ -200,28 +200,16 @@ export function resolvePublishSelectionIdentity(params: {
           configKey: createPresetConfigKey(selection.templateId),
         };
       case "draft":
-        if (selection.providerId !== "dotnet") {
-          return {
-            kind: "provider",
-            providerId: selection.providerId,
-          };
-        }
-        // dotnet 草稿若源自某命名配置，仍高亮该配置。
         return {
-          kind: "custom",
+          kind: "provider",
+          providerId: selection.providerId,
         };
     }
   }
 
-  if (params.activeProviderId !== "dotnet") {
-    return {
-      kind: "provider",
-      providerId: params.activeProviderId,
-    };
-  }
-
   return {
-    kind: "custom",
+    kind: "provider",
+    providerId: params.activeProviderId,
   };
 }
 

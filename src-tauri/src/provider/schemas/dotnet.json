@@ -3,21 +3,26 @@
     "configuration": {
       "type": "string",
       "flag": "--configuration",
+      "aliases": ["-c"],
+      "default": "Release",
       "description": "Build configuration (Debug or Release)"
     },
     "runtime": {
       "type": "string",
       "flag": "--runtime",
+      "aliases": ["-r"],
       "description": "Target runtime (e.g., win-x64, osx-x64, linux-x64)"
     },
     "framework": {
       "type": "string",
       "flag": "--framework",
+      "aliases": ["-f"],
       "description": "Target framework (e.g., net8.0, net9.0)"
     },
     "output": {
       "type": "string",
       "flag": "--output",
+      "aliases": ["-o"],
       "description": "Output directory"
     },
     "self_contained": {
@@ -43,6 +48,7 @@
     "no_logo": {
       "type": "boolean",
       "flag": "--no-logo",
+      "aliases": ["-nologo"],
       "description": "Display startup banner or not"
     },
     "delete_existing_files": {

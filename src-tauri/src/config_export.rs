@@ -37,7 +37,8 @@ impl Default for ConfigProfile {
     fn default() -> Self {
         Self {
             name: "Default".to_string(),
-            provider_id: "dotnet".to_string(),
+            // Provider 必须由创建方显式给定（ADR-0044）：不设隐式默认绑定。
+            provider_id: String::new(),
             contract_version: default_contract_version(),
             provider_version: default_provider_version(),
             settings_version: default_settings_version(),

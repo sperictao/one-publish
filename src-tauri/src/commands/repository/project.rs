@@ -12,22 +12,45 @@ const DOTNET_PROJECT_EXTENSIONS: &[&str] = &["csproj", "fsproj", "vbproj"];
 const VISUAL_STUDIO_LAUNCH_EXTENSION: &str = "slnLaunch";
 const TEST_LIKE_PROJECT_PENALTY: i32 = 1_000;
 
-pub fn is_dotnet_project_file(path: &Path) -> bool {
+fn has_extension(path: &Path, extension: &str) -> bool {
     path.extension()
         .and_then(|ext| ext.to_str())
-        .map(|ext| {
-            DOTNET_PROJECT_EXTENSIONS
-                .iter()
-                .any(|candidate| ext.eq_ignore_ascii_case(candidate))
-        })
-        .unwrap_or(false)
+        .is_some_and(|ext| ext.eq_ignore_ascii_case(extension))
+}
+
+/// 按“项目文件命中哪个 Provider 的声明”解析项目发布配置语义；
+/// 这是 scan/resolve/read 三个 pubxml 操作的唯一入口判断。
+/// 项目配置宿主是项目文件：解决方案文件（Provider 声明的 solution 扩展名）
+/// 不承载配置目录，返回 None。
+pub fn project_profiles_declaration(
+    project_file: &Path,
+) -> Option<crate::provider::ProviderProjectProfiles> {
+    let registry = crate::provider::registry::provider_registry();
+    let discovery = registry.repository_discoveries().find(|discovery| {
+        discovery
+            .project_file_matchers
+            .iter()
+            .any(|matcher| matches_project_file(project_file, matcher))
+    })?;
+    if discovery
+        .solution_file_extensions
+        .iter()
+        .any(|extension| has_extension(project_file, extension))
+    {
+        return None;
+    }
+    let provider = registry.get(&discovery.provider_id).ok()?;
+    provider.capabilities().project_profiles.clone()
+}
+
+fn is_dotnet_project_file(path: &Path) -> bool {
+    DOTNET_PROJECT_EXTENSIONS
+        .iter()
+        .any(|extension| has_extension(path, extension))
 }
 
 fn is_dotnet_solution_file(path: &Path) -> bool {
-    path.extension()
-        .and_then(|ext| ext.to_str())
-        .map(|ext| ext.eq_ignore_ascii_case(DOTNET_SOLUTION_EXTENSION))
-        .unwrap_or(false)
+    has_extension(path, DOTNET_SOLUTION_EXTENSION)
 }
 
 fn is_visual_studio_launch_file(path: &Path) -> bool {
@@ -37,8 +60,8 @@ fn is_visual_studio_launch_file(path: &Path) -> bool {
         .unwrap_or(false)
 }
 
-pub fn collect_solution_files(root: &Path) -> Vec<PathBuf> {
-    FileScanContext::new(root).collect_files(is_dotnet_solution_file)
+pub fn collect_solution_files(root: &Path, extension: &str) -> Vec<PathBuf> {
+    FileScanContext::new(root).collect_files(|path| has_extension(path, extension))
 }
 
 fn path_from_visual_studio_relative(base_dir: &Path, raw_path: &str) -> PathBuf {
@@ -441,15 +464,19 @@ fn recommend_project_file(
     })
 }
 
-pub fn resolve_project_root_for_file(project_file: &Path) -> PathBuf {
+pub fn resolve_project_root_for_file(
+    project_file: &Path,
+    solution_extensions: &[String],
+) -> PathBuf {
     let project_dir = project_file
         .parent()
         .map(Path::to_path_buf)
         .unwrap_or_else(|| project_file.to_path_buf());
 
     for ancestor in project_dir.ancestors() {
-        if collect_solution_files(ancestor)
-            .into_iter()
+        if solution_extensions
+            .iter()
+            .flat_map(|extension| collect_solution_files(ancestor, extension))
             .any(|candidate| {
                 candidate
                     .parent()
@@ -530,13 +557,19 @@ pub fn scan_provider_project_candidates_from_path(
     }
     let context = FileScanContext::new(&root);
     let mut candidates = project_scan_candidates_from_context(&context);
-    if provider_id.is_some_and(|id| id != "dotnet") {
+    // 解决方案列表只保留给声明了 solution 语义的 Provider。
+    let solution_extensions: Vec<String> = discoveries
+        .iter()
+        .flat_map(|discovery| discovery.solution_file_extensions.clone())
+        .collect();
+    if solution_extensions.is_empty() {
         candidates.solution_files.clear();
-        candidates.recommended_project_file = None;
     }
+    let is_solution_file =
+        |path: &Path| solution_extensions.iter().any(|extension| has_extension(path, extension));
     let project_files = context
         .collect_files(|path| {
-            !is_dotnet_solution_file(path)
+            !is_solution_file(path)
                 && discoveries.iter().any(|discovery| {
                     discovery
                         .project_file_matchers
@@ -547,11 +580,20 @@ pub fn scan_provider_project_candidates_from_path(
         .into_iter()
         .map(|path| path.to_string_lossy().to_string())
         .collect::<Vec<_>>();
-    // 只有 .NET 内部的推荐规则可以保留；跨 Provider 的选择必须显式完成。
-    let is_dotnet_only = project_files
+    // 项目文件推荐引擎只在声明了引擎的 Provider 的候选范围内生效；
+    // 跨 Provider 的选择必须显式完成，其余 Provider 仅“唯一候选即推荐”。
+    let recommendation_discovery = discoveries
         .iter()
-        .all(|path| is_dotnet_project_file(Path::new(path)));
-    if !is_dotnet_only {
+        .find(|discovery| discovery.owns_project_recommendation);
+    let recommendation_applies = recommendation_discovery.is_some_and(|discovery| {
+        project_files.iter().all(|path| {
+            discovery
+                .project_file_matchers
+                .iter()
+                .any(|matcher| matches_project_file(Path::new(path), matcher))
+        })
+    });
+    if !recommendation_applies {
         candidates.recommended_project_file =
             (project_files.len() == 1).then(|| project_files[0].clone());
     }
@@ -560,24 +602,27 @@ pub fn scan_provider_project_candidates_from_path(
 }
 
 pub fn scan_publish_profiles(project_file: &Path) -> Vec<String> {
-    let mut profiles = Vec::new();
+    let Some(profiles) = project_profiles_declaration(project_file) else {
+        return Vec::new();
+    };
+    let mut names = Vec::new();
     if let Some(project_dir) = project_file.parent() {
-        let profiles_dir = project_dir.join("Properties").join("PublishProfiles");
+        let profiles_dir = project_dir.join(&profiles.directory);
         if profiles_dir.is_dir() {
             if let Ok(entries) = std::fs::read_dir(&profiles_dir) {
                 for entry in entries.flatten() {
                     let path = entry.path();
-                    if path.extension().is_some_and(|e| e == "pubxml") {
+                    if has_extension(&path, &profiles.extension) {
                         if let Some(stem) = path.file_stem() {
-                            profiles.push(stem.to_string_lossy().to_string());
+                            names.push(stem.to_string_lossy().to_string());
                         }
                     }
                 }
             }
         }
     }
-    profiles.sort();
-    profiles
+    names.sort();
+    names
 }
 
 pub fn resolve_project_file_from_search_path(start_path: &Path) -> Option<PathBuf> {
@@ -635,10 +680,13 @@ pub fn extract_xml_tag_values(content: &str, tag_name: &str) -> Vec<String> {
     values
 }
 
-pub fn extract_target_frameworks_from_project_xml(content: &str) -> Vec<String> {
+pub fn extract_target_frameworks_from_project_xml(
+    content: &str,
+    framework_tags: &[String],
+) -> Vec<String> {
     let mut frameworks = Vec::new();
 
-    for tag_name in ["TargetFramework", "TargetFrameworks"] {
+    for tag_name in framework_tags {
         for raw_value in extract_xml_tag_values(content, tag_name) {
             for framework in raw_value
                 .split(';')
@@ -655,7 +703,10 @@ pub fn extract_target_frameworks_from_project_xml(content: &str) -> Vec<String> 
     frameworks
 }
 
-pub fn read_target_frameworks(project_file: &Path) -> Result<Vec<String>, crate::errors::AppError> {
+pub fn read_target_frameworks(
+    project_file: &Path,
+    framework_tags: &[String],
+) -> Result<Vec<String>, crate::errors::AppError> {
     let content = std::fs::read_to_string(project_file).map_err(|error| {
         repository_error(
             format!(
@@ -667,7 +718,10 @@ pub fn read_target_frameworks(project_file: &Path) -> Result<Vec<String>, crate:
         )
     })?;
 
-    Ok(extract_target_frameworks_from_project_xml(&content))
+    Ok(extract_target_frameworks_from_project_xml(
+        &content,
+        framework_tags,
+    ))
 }
 
 pub fn resolve_publish_profile_path(
@@ -687,10 +741,20 @@ pub fn resolve_publish_profile_path(
         || normalized_profile_name.contains('\\')
     {
         return Err(repository_error(
-            format!("invalid publish profile name: {}", normalized_profile_name),
+            format!("invalid publish profile name: {normalized_profile_name}"),
             "invalid_profile_name",
         ));
     }
+
+    let profiles = project_profiles_declaration(project_file).ok_or_else(|| {
+        repository_error(
+            format!(
+                "project file does not support publish profiles: {}",
+                project_file.display()
+            ),
+            "publish_profiles_unsupported",
+        )
+    })?;
 
     let project_dir = project_file.parent().ok_or_else(|| {
         repository_error(
@@ -703,9 +767,8 @@ pub fn resolve_publish_profile_path(
     })?;
 
     let profile_path = project_dir
-        .join("Properties")
-        .join("PublishProfiles")
-        .join(format!("{}.pubxml", normalized_profile_name));
+        .join(&profiles.directory)
+        .join(format!("{}.{}", normalized_profile_name, profiles.extension));
 
     if !profile_path.is_file() {
         return Err(repository_error(
@@ -725,6 +788,18 @@ mod tests {
     use super::*;
     use std::fs;
     use tempfile::TempDir;
+
+    /// 回归钉子：项目发布配置宿主是项目文件——解决方案文件即使命中
+    /// dotnet 的项目文件匹配器集合，也不解析出配置声明（ADR-0059）。
+    #[test]
+    fn project_profiles_declaration_rejects_solution_files() {
+        let csproj = Path::new("/repo/src/App/App.csproj");
+        let solution = Path::new("/repo/App.sln");
+
+        assert!(project_profiles_declaration(csproj).is_some());
+        assert!(project_profiles_declaration(solution).is_none());
+        assert!(project_profiles_declaration(Path::new("/repo/go.mod")).is_none());
+    }
 
     #[test]
     fn project_scan_candidates_skips_nested_worktree_root_without_git_file() {

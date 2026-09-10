@@ -192,6 +192,10 @@ _Avoid_: 移动端发布、当前电脑平台
 单个仓库从桌面发布矩阵中选择、每次 GitHub 发布都必须完整成功的目标子集；其变化属于发布接入，不属于单次发版参数。
 _Avoid_: 临时跳过平台、失败后降级
 
+**项目发布配置（Project Publish Profile）**:
+项目仓库存放的、由 Provider 声明格式与属性映射的命名发布设置文件（例如 .NET 的 `.pubxml`）；它是发布来源之一，经映射固化进配置修订，而不是仓库级的 Provider 设置。
+_Avoid_: 仓库级 Provider 设置、任意 XML 文件、第二配置权威来源
+
 **本地发布配置（Local Release Configuration）**:
 由 One Publish 本地状态保存并作为唯一可编辑权威来源的命名发布配置；远端自动化只能持有其不可反向编辑的运行投影。
 _Avoid_: Provider 专用配置列表、workflow 作为配置、远端第二权威来源

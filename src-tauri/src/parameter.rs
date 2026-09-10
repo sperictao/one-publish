@@ -13,6 +13,14 @@ pub struct ParameterDefinition {
     #[ts(rename = "type")]
     pub param_type: ParameterType,
     pub flag: String,
+    /// 命令导入时可识别的别名 flag（如 dotnet 的 "-c"）。
+    #[serde(default)]
+    #[ts(optional = nullable)]
+    pub aliases: Option<Vec<String>>,
+    /// 参数默认值（ADR-0030）：输出布局求值等声明消费方使用；命令渲染不注入默认值。
+    #[serde(default)]
+    #[ts(optional = nullable)]
+    pub default: Option<serde_json::Value>,
     pub multiple: Option<bool>,
     pub prefix: Option<String>,
     pub description: Option<String>,
@@ -288,6 +296,8 @@ mod tests {
             ParameterDefinition {
                 param_type: ParameterType::Boolean,
                 flag: "--release".to_string(),
+                aliases: None,
+                default: None,
                 multiple: None,
                 prefix: None,
                 description: Some("Build in release mode".to_string()),
@@ -300,6 +310,8 @@ mod tests {
             ParameterDefinition {
                 param_type: ParameterType::String,
                 flag: "--target".to_string(),
+                aliases: None,
+                default: None,
                 multiple: None,
                 prefix: None,
                 description: Some("Target triple".to_string()),
@@ -312,6 +324,8 @@ mod tests {
             ParameterDefinition {
                 param_type: ParameterType::Array,
                 flag: "--features".to_string(),
+                aliases: None,
+                default: None,
                 multiple: None,
                 prefix: None,
                 description: Some("List of features".to_string()),
@@ -324,6 +338,8 @@ mod tests {
             ParameterDefinition {
                 param_type: ParameterType::Map,
                 flag: "".to_string(),
+                aliases: None,
+                default: None,
                 multiple: None,
                 prefix: Some("--define=".to_string()),
                 description: Some("Preprocessor defines".to_string()),
@@ -501,6 +517,8 @@ mod tests {
         ParameterDefinition {
             param_type: ParameterType::String,
             flag: flag.to_string(),
+            aliases: None,
+            default: None,
             multiple: None,
             prefix: prefix.map(|value| value.to_string()),
             description: None,
@@ -571,6 +589,8 @@ mod tests {
             ParameterDefinition {
                 param_type: ParameterType::Array,
                 flag: "".to_string(),
+                aliases: None,
+                default: None,
                 multiple: None,
                 prefix: Some("-D".to_string()),
                 description: None,

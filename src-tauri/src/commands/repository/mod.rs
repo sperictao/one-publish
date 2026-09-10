@@ -127,7 +127,12 @@ mod tests {
     use super::extract_target_frameworks_from_project_xml;
     use super::*;
     use std::fs;
+    use std::sync::LazyLock;
     use tempfile::TempDir;
+
+    static DOTNET_FRAMEWORK_TAGS: LazyLock<Vec<String>> = LazyLock::new(|| {
+        vec!["TargetFramework".to_string(), "TargetFrameworks".to_string()]
+    });
 
     #[test]
     fn extracts_single_target_framework() {
@@ -139,6 +144,7 @@ mod tests {
               </PropertyGroup>
             </Project>
             "#,
+            &DOTNET_FRAMEWORK_TAGS,
         );
         assert_eq!(frameworks, vec!["net8.0"]);
     }
@@ -153,6 +159,7 @@ mod tests {
               </PropertyGroup>
             </Project>
             "#,
+            &DOTNET_FRAMEWORK_TAGS,
         );
         assert_eq!(frameworks, vec!["net8.0", "net9.0", "net10.0"]);
     }
@@ -167,6 +174,7 @@ mod tests {
               </PropertyGroup>
             </Project>
             "#,
+            &DOTNET_FRAMEWORK_TAGS,
         );
         assert!(frameworks.is_empty());
     }

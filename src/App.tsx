@@ -167,7 +167,7 @@ function App() {
       {boot.shell.shouldLoadAppDialogsHost ? (
         <Suspense fallback={null}>
           <AppDialogsHost
-            customConfig={boot.publish.customConfig}
+            selectionParameters={boot.publish.selectionParameters}
             shortcutsOpen={boot.shell.shortcutsOpen}
             setShortcutsOpen={boot.shell.setShortcutsOpen}
             environmentDialogOpen={boot.shell.environmentDialogOpen}

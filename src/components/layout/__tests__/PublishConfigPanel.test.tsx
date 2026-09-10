@@ -17,7 +17,7 @@ import {
 } from "@testing-library/react";
 import { PublishConfigPanel } from "@/components/layout/PublishConfigPanel";
 import { __setTranslationsCacheForTest } from "@/hooks/useI18n";
-import type { ConfigProfile, PublishConfigStore } from "@/lib/store/types";
+import type { ConfigProfile } from "@/lib/store/types";
 import type { ParameterSchema } from "@/types/parameters";
 
 const ROW_HEIGHT = 40;
@@ -214,6 +214,13 @@ beforeAll(() => {
         searchConfig: "搜索配置",
         refreshingProjectProfiles: "正在刷新项目发布配置...",
         refreshingCustomProfiles: "正在刷新自定义配置...",
+      },
+      profiles: {
+        providerParametersSection: "发布参数",
+        providerParametersSectionDescription:
+          "按 Provider 参数定义编辑本配置的发布参数。",
+        providerParametersSchemaLoading: "正在加载参数定义…",
+        providerParametersEmpty: "暂无发布参数。",
       },
     },
   });
@@ -442,10 +449,7 @@ describe("PublishConfigPanel", () => {
         projectPublishProfiles={[]}
         isProjectProfilesRefreshing
         onSelectProjectProfile={() => {}}
-        onCopyProjectProfileToCustom={async (
-          _name,
-          _config: PublishConfigStore
-        ) => "copied"}
+        onCopyProjectProfileToCustom={async () => "copied"}
         recentConfigKeys={[]}
         favoriteConfigKeys={[]}
         onToggleFavoriteConfig={() => {}}
@@ -484,10 +488,7 @@ describe("PublishConfigPanel", () => {
         projectPublishProfiles={["FolderProfile"]}
         isProjectProfilesRefreshing={false}
         onSelectProjectProfile={() => {}}
-        onCopyProjectProfileToCustom={async (
-          _name,
-          _config: PublishConfigStore
-        ) => "copied"}
+        onCopyProjectProfileToCustom={async () => "copied"}
         recentConfigKeys={[]}
         favoriteConfigKeys={[]}
         onToggleFavoriteConfig={() => {}}
@@ -528,10 +529,7 @@ describe("PublishConfigPanel", () => {
         dotnetSchema={dotnetSchema}
         projectPublishProfiles={[]}
         onSelectProjectProfile={onSelectProjectProfile}
-        onCopyProjectProfileToCustom={async (
-          _name,
-          _config: PublishConfigStore
-        ) => "copied"}
+        onCopyProjectProfileToCustom={async () => "copied"}
         recentConfigKeys={["userprofile:beta-profile"]}
         favoriteConfigKeys={[]}
         onToggleFavoriteConfig={() => {}}
@@ -615,10 +613,7 @@ describe("PublishConfigPanel", () => {
         dotnetSchema={dotnetSchema}
         projectPublishProfiles={["FolderProfile", "ZipProfile"]}
         onSelectProjectProfile={() => {}}
-        onCopyProjectProfileToCustom={async (
-          _name,
-          _config: PublishConfigStore
-        ) => "copied"}
+        onCopyProjectProfileToCustom={async () => "copied"}
         recentConfigKeys={["pubxml:FolderProfile"]}
         favoriteConfigKeys={[]}
         onToggleFavoriteConfig={() => {}}
@@ -673,10 +668,7 @@ describe("PublishConfigPanel", () => {
         dotnetSchema={dotnetSchema}
         projectPublishProfiles={["FolderProfile", "ZipProfile"]}
         onSelectProjectProfile={() => {}}
-        onCopyProjectProfileToCustom={async (
-          _name,
-          _config: PublishConfigStore
-        ) => "copied"}
+        onCopyProjectProfileToCustom={async () => "copied"}
         recentConfigKeys={["pubxml:FolderProfile"]}
         favoriteConfigKeys={[]}
         onToggleFavoriteConfig={() => {}}
@@ -722,10 +714,7 @@ describe("PublishConfigPanel", () => {
           dotnetSchema={dotnetSchema}
           projectPublishProfiles={[]}
           onSelectProjectProfile={() => {}}
-          onCopyProjectProfileToCustom={async (
-            _name,
-            _config: PublishConfigStore
-          ) => "copied"}
+          onCopyProjectProfileToCustom={async () => "copied"}
           recentConfigKeys={[]}
           favoriteConfigKeys={[]}
           onToggleFavoriteConfig={() => {}}
@@ -763,10 +752,7 @@ describe("PublishConfigPanel", () => {
           dotnetSchema={dotnetSchema}
           projectPublishProfiles={[]}
           onSelectProjectProfile={() => {}}
-          onCopyProjectProfileToCustom={async (
-            _name,
-            _config: PublishConfigStore
-          ) => "copied"}
+          onCopyProjectProfileToCustom={async () => "copied"}
           recentConfigKeys={[]}
           favoriteConfigKeys={[]}
           onToggleFavoriteConfig={() => {}}
@@ -842,10 +828,7 @@ describe("PublishConfigPanel", () => {
         projectPublishProfiles={["C PRD"]}
         isProjectProfilesRefreshing
         onSelectProjectProfile={() => {}}
-        onCopyProjectProfileToCustom={async (
-          _name,
-          _config: PublishConfigStore
-        ) => "copied"}
+        onCopyProjectProfileToCustom={async () => "copied"}
         recentConfigKeys={[]}
         favoriteConfigKeys={[]}
         onToggleFavoriteConfig={() => {}}
@@ -893,10 +876,7 @@ describe("PublishConfigPanel", () => {
         ]}
         isProjectProfilesRefreshing
         onSelectProjectProfile={() => {}}
-        onCopyProjectProfileToCustom={async (
-          _name,
-          _config: PublishConfigStore
-        ) => "copied"}
+        onCopyProjectProfileToCustom={async () => "copied"}
         recentConfigKeys={[]}
         favoriteConfigKeys={[]}
         onToggleFavoriteConfig={() => {}}
@@ -936,10 +916,7 @@ describe("PublishConfigPanel", () => {
         dotnetSchema={dotnetSchema}
         projectPublishProfiles={[]}
         onSelectProjectProfile={() => {}}
-        onCopyProjectProfileToCustom={async (
-          _name,
-          _config: PublishConfigStore
-        ) => "copied"}
+        onCopyProjectProfileToCustom={async () => "copied"}
         recentConfigKeys={[]}
         favoriteConfigKeys={[]}
         onToggleFavoriteConfig={() => {}}
@@ -1007,10 +984,7 @@ describe("PublishConfigPanel", () => {
         dotnetSchema={dotnetSchema}
         projectPublishProfiles={[]}
         onSelectProjectProfile={() => {}}
-        onCopyProjectProfileToCustom={async (
-          _name,
-          _config: PublishConfigStore
-        ) => "copied"}
+        onCopyProjectProfileToCustom={async () => "copied"}
         recentConfigKeys={[
           "userprofile:alpha-profile",
           "userprofile:beta-profile",
@@ -1106,10 +1080,7 @@ describe("PublishConfigPanel", () => {
         dotnetSchema={dotnetSchema}
         projectPublishProfiles={["FolderProfile", "ZipProfile"]}
         onSelectProjectProfile={() => {}}
-        onCopyProjectProfileToCustom={async (
-          _name,
-          _config: PublishConfigStore
-        ) => "copied"}
+        onCopyProjectProfileToCustom={async () => "copied"}
         recentConfigKeys={[]}
         favoriteConfigKeys={[]}
         onToggleFavoriteConfig={() => {}}
@@ -1196,10 +1167,7 @@ describe("PublishConfigPanel", () => {
         dotnetSchema={dotnetSchema}
         projectPublishProfiles={[]}
         onSelectProjectProfile={() => {}}
-        onCopyProjectProfileToCustom={async (
-          _name,
-          _config: PublishConfigStore
-        ) => "copied"}
+        onCopyProjectProfileToCustom={async () => "copied"}
         recentConfigKeys={[]}
         favoriteConfigKeys={[]}
         onToggleFavoriteConfig={() => {}}
@@ -1365,10 +1333,7 @@ describe("PublishConfigPanel", () => {
         projectFilePath="/repo/Project.csproj"
         projectFrameworkOptions={["net8.0", "net9.0"]}
         onSelectProjectProfile={() => {}}
-        onCopyProjectProfileToCustom={async (
-          _name,
-          _config: PublishConfigStore
-        ) => "copied"}
+        onCopyProjectProfileToCustom={async () => "copied"}
         recentConfigKeys={[]}
         favoriteConfigKeys={[]}
         onToggleFavoriteConfig={() => {}}
@@ -1408,8 +1373,6 @@ describe("PublishConfigPanel", () => {
     });
 
     expect(await screen.findByText("发布参数")).toBeInTheDocument();
-    expect(screen.getByText("输出与部署")).toBeInTheDocument();
-    expect(screen.getByText("高级参数")).toBeInTheDocument();
     expect(
       screen.getByText("/repo/Properties/PublishProfiles/FolderProfile.pubxml")
     ).toBeInTheDocument();
@@ -1426,62 +1389,23 @@ describe("PublishConfigPanel", () => {
       ).length
     ).toBeGreaterThan(0);
 
+    // Schema 驱动的只读渲染：字段以 schema 键为标签，值只读。
     expect(
-      screen.getByRole("combobox", {
-        name: "配置类型",
-      })
-    ).toBeDisabled();
-    expect(
-      screen.getByRole("textbox", {
-        name: "输出目录",
-      })
+      screen.getByRole("textbox", { name: "configuration" })
     ).toHaveAttribute("readonly");
-    expect(
-      screen.getByRole("switch", {
-        name: "自包含部署",
-      })
-    ).toBeDisabled();
+    expect(screen.getByRole("textbox", { name: "configuration" })).toHaveValue(
+      "Release"
+    );
     expect(
       screen.queryByRole("button", { name: /remove item/i })
     ).not.toBeInTheDocument();
     expect(
       screen.queryByRole("button", { name: /remove entry/i })
     ).not.toBeInTheDocument();
-    expect(screen.getByRole("textbox", { name: "目标框架" })).toHaveValue(
-      "net8.0"
-    );
+    // 未出现在参数里的 schema 字段按类型显示默认值，同样只读。
     expect(
-      screen.getByRole("switch", { name: "发布前清空目标目录" })
-    ).toBeChecked();
-    expect(
-      screen.queryByRole("combobox", { name: "上次使用的构建配置" })
-    ).not.toBeInTheDocument();
-    expect(
-      screen.queryByRole("textbox", { name: "发布提供程序" })
-    ).not.toBeInTheDocument();
-    expect(
-      screen.getAllByRole("switch", { name: "发布前清空目标目录" })
-    ).toHaveLength(1);
-    expect(
-      screen.queryByRole("textbox", { name: "目标 ID" })
-    ).not.toBeInTheDocument();
-
-    fireEvent.click(
-      screen.getByRole("button", {
-        name: /其余参数/,
-      })
-    );
-
-    expect(
-      screen.queryByRole("textbox", { name: "目标 ID" })
-    ).not.toBeInTheDocument();
-    expect(screen.getByRole("switch", { name: "单文件发布" })).toBeChecked();
-    expect(
-      screen.getByRole("combobox", { name: "日志详细级别" })
+      screen.getByRole("switch", { name: "self_contained" })
     ).toBeDisabled();
-    expect(
-      screen.queryByText("当前未设置条件编译常量。")
-    ).not.toBeInTheDocument();
 
     const parsedFieldsToggle = screen.getByRole("button", {
       name: /完整解析参数/,
@@ -1593,10 +1517,7 @@ describe("PublishConfigPanel", () => {
         projectFilePath="/repo/Project.csproj"
         projectFrameworkOptions={["net8.0"]}
         onSelectProjectProfile={() => {}}
-        onCopyProjectProfileToCustom={async (
-          _name,
-          _config: PublishConfigStore
-        ) => "copied"}
+        onCopyProjectProfileToCustom={async () => "copied"}
         recentConfigKeys={[]}
         favoriteConfigKeys={[]}
         onToggleFavoriteConfig={() => {}}
@@ -1657,10 +1578,7 @@ describe("PublishConfigPanel — preset selection state", () => {
       projectPublishProfiles: [] as string[],
       isProjectProfilesRefreshing: false,
       onSelectProjectProfile: () => {},
-      onCopyProjectProfileToCustom: async (
-        _name: string,
-        _config: PublishConfigStore
-      ) => "copied",
+      onCopyProjectProfileToCustom: async () => "copied",
       recentConfigKeys: [] as string[],
       favoriteConfigKeys: [] as string[],
       onToggleFavoriteConfig: () => {},

@@ -105,7 +105,7 @@ impl CommandParser {
 
             let mut applied = false;
             let mut value_unattachable = false;
-            if let Some(param_key) = self.map_flag_to_param(&flag_name) {
+            if let Some(param_key) = Self::map_flag_to_param(&flag_name, schema) {
                 if let Some(def) = schema.parameters.get(&param_key) {
                     match (&def.param_type, value.clone()) {
                         (ParameterType::Boolean, None) => {
@@ -185,15 +185,20 @@ impl CommandParser {
         (parameters, diagnostics)
     }
 
-    /// Map CLI flag to schema parameter key based on provider
-    fn map_flag_to_param(&self, flag: &str) -> Option<String> {
-        match self.provider_id.as_str() {
-            "dotnet" => map_dotnet_flag(flag),
-            "cargo" => map_cargo_flag(flag),
-            "go" => map_go_flag(flag),
-            "java" => map_java_flag(flag),
-            _ => None,
-        }
+    /// 从 schema 推导 CLI flag → 参数键的映射：schema 是命令导入的唯一事实源，
+    /// 主 flag 与声明别名同样可识别。
+    fn map_flag_to_param(flag: &str, schema: &ParameterSchema) -> Option<String> {
+        schema
+            .parameters
+            .iter()
+            .find(|(_, def)| {
+                def.flag == flag
+                    || def
+                        .aliases
+                        .as_ref()
+                        .is_some_and(|aliases| aliases.iter().any(|alias| alias == flag))
+            })
+            .map(|(key, _)| key.clone())
     }
 }
 
@@ -303,67 +308,6 @@ fn tokenize(command: &str) -> Vec<String> {
     tokens
 }
 
-/// Map dotnet CLI flags to parameter keys
-fn map_dotnet_flag(flag: &str) -> Option<String> {
-    match flag {
-        "-c" | "--configuration" => Some("configuration".to_string()),
-        "-r" | "--runtime" => Some("runtime".to_string()),
-        "-f" | "--framework" => Some("framework".to_string()),
-        "-o" | "--output" => Some("output".to_string()),
-        "--self-contained" => Some("self_contained".to_string()),
-        "--no-build" => Some("no_build".to_string()),
-        "--no-restore" => Some("no_restore".to_string()),
-        "--verbosity" => Some("verbosity".to_string()),
-        "-nologo" | "--no-logo" => Some("no_logo".to_string()),
-        _ => None,
-    }
-}
-
-/// Map cargo CLI flags to parameter keys
-fn map_cargo_flag(flag: &str) -> Option<String> {
-    match flag {
-        "--release" => Some("release".to_string()),
-        "--target" => Some("target".to_string()),
-        "--features" => Some("features".to_string()),
-        "--all-features" => Some("all_features".to_string()),
-        "--no-default-features" => Some("no_default_features".to_string()),
-        "--target-dir" => Some("target_dir".to_string()),
-        "--message-format" => Some("message_format".to_string()),
-        "--verbose" => Some("verbose".to_string()),
-        "-v" => Some("verbose".to_string()),
-        "--quiet" => Some("quiet".to_string()),
-        _ => None,
-    }
-}
-
-/// Map go CLI flags to parameter keys
-fn map_go_flag(flag: &str) -> Option<String> {
-    match flag {
-        "-o" => Some("output".to_string()),
-        "-tags" => Some("tags".to_string()),
-        "-race" => Some("race".to_string()),
-        "-v" => Some("v".to_string()),
-        "-work" => Some("work".to_string()),
-        "-trimpath" => Some("trimpath".to_string()),
-        _ => None,
-    }
-}
-
-/// Map gradle/Java CLI flags to parameter keys
-fn map_java_flag(flag: &str) -> Option<String> {
-    match flag {
-        "-D" => Some("properties".to_string()),
-        "--offline" => Some("offline".to_string()),
-        "--quiet" => Some("quiet".to_string()),
-        "--info" => Some("info".to_string()),
-        "--debug" => Some("debug".to_string()),
-        "--stacktrace" => Some("stacktrace".to_string()),
-        "--rerun-tasks" => Some("rerun_tasks".to_string()),
-        "--exclude-task" => Some("exclude_task".to_string()),
-        _ => None,
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -416,22 +360,32 @@ mod tests {
     }
 
     #[test]
-    fn map_dotnet_configuration_flag() {
-        assert_eq!(map_dotnet_flag("-c"), Some("configuration".to_string()));
+    fn schema_alias_flag_maps_to_parameter() {
+        let mut parameters = BTreeMap::new();
+        parameters.insert(
+            "configuration".to_string(),
+            ParameterDefinition {
+                param_type: ParameterType::String,
+                flag: "--configuration".to_string(),
+                aliases: Some(vec!["-c".to_string()]),
+                default: None,
+                multiple: None,
+                prefix: None,
+                description: None,
+                env: None,
+            },
+        );
+        let schema = ParameterSchema { parameters };
+
         assert_eq!(
-            map_dotnet_flag("--configuration"),
+            CommandParser::map_flag_to_param("-c", &schema),
             Some("configuration".to_string())
         );
-    }
-
-    #[test]
-    fn map_cargo_release_flag() {
-        assert_eq!(map_cargo_flag("--release"), Some("release".to_string()));
-    }
-
-    #[test]
-    fn map_go_output_flag() {
-        assert_eq!(map_go_flag("-o"), Some("output".to_string()));
+        assert_eq!(
+            CommandParser::map_flag_to_param("--configuration", &schema),
+            Some("configuration".to_string())
+        );
+        assert_eq!(CommandParser::map_flag_to_param("--other", &schema), None);
     }
 
     #[test]
@@ -672,6 +626,8 @@ mod tests {
         ParameterDefinition {
             param_type,
             flag: flag.to_string(),
+            aliases: None,
+            default: None,
             multiple: None,
             prefix: prefix.map(ToString::to_string),
             description: None,

@@ -18,7 +18,6 @@ vi.mock("@/hooks/useDialogDerivedState", () => ({
 }));
 
 import { createEnvironmentCheckSnapshot } from "@/features/environment/environment";
-import { defaultPublishConfigStore } from "@/lib/store/types";
 import { useDialogsCompositionState } from "@/hooks/useDialogsCompositionState";
 
 describe("useDialogsCompositionState", () => {
@@ -164,7 +163,7 @@ describe("useDialogsCompositionState", () => {
         },
         handleLoadProfile: vi.fn(),
         selectedRepoId: "repo-1",
-        customConfig: { ...defaultPublishConfigStore },
+        selectionParameters: null,
         activeProviderParameters: { configuration: "Release" },
         projectFile: "/repo/App.csproj",
         selectedRepoPath: "/repo",

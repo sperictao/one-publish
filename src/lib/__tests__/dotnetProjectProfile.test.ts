@@ -109,14 +109,9 @@ describe("resolveDotnetProjectProfile", () => {
     });
 
     expect(resolved.parameters).toEqual({
-      configuration: "Release",
       output: "./publish",
       delete_existing_files: true,
     });
-    expect(resolved.editableConfig.deleteExistingFiles).toBe(true);
-    expect(
-      resolved.editableConfig.properties.DeleteExistingFiles
-    ).toBeUndefined();
   });
 
   it("将 pubxml 中的 DeleteExistingFiles=false 视为显式关闭并清理属性集", async () => {
@@ -142,13 +137,8 @@ describe("resolveDotnetProjectProfile", () => {
     });
 
     expect(resolved.parameters).toEqual({
-      configuration: "Release",
       output: "./publish",
     });
-    expect(resolved.editableConfig.deleteExistingFiles).toBe(false);
-    expect(
-      resolved.editableConfig.properties.DeleteExistingFiles
-    ).toBeUndefined();
   });
 
   it("根据共享参数结果生成可编辑的自定义配置", async () => {
@@ -175,15 +165,13 @@ describe("resolveDotnetProjectProfile", () => {
       defaultOutputDir: "/exports",
     });
 
-    expect(resolved.editableConfig).toMatchObject({
+    expect(resolved.parameters).toEqual({
       configuration: "Release",
       runtime: "osx-arm64",
-      outputDir: "/exports/MyApp/Release",
+      output: "/exports/MyApp/Release",
       properties: {
         PublishSingleFile: "true",
       },
-      useProfile: false,
-      profileName: "",
     });
   });
 });

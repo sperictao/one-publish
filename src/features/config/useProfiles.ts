@@ -113,11 +113,11 @@ export function useProfiles({
     profileT,
     onRepositoryScopeChange: handleRepositoryScopeChange,
   });
+  // 高亮名优先跟随持久化选择（跨仓库切换可恢复）；无匹配选择时
+  // 回落会话内最近加载的名称，且不沿用任何未匹配的旧选中名。
   const activeProfileName =
-    activeProviderId === "dotnet"
-      ? (profiles.find((profile) => profile.id === persistedActiveProfileId)
-          ?.name ?? null)
-      : localActiveProfileName;
+    profiles.find((profile) => profile.id === persistedActiveProfileId)?.name ??
+    localActiveProfileName;
 
   const crud = useProfileCrud({
     selectedRepoId,

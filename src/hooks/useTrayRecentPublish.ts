@@ -73,11 +73,14 @@ export async function resolveTrayPublishRequest(params: {
   }
 
   if (identity.kind === "project-profile") {
-    // pubxml 是 dotnet 项目发布档案；provider 缺失时按 dotnet 处理。
+    // 项目发布配置必须显式绑定 Provider；缺失即拒绝，不做隐式回退（ADR-0044）。
+    if (!repo.providerId) {
+      throw new Error(`repository has no bound provider: ${repo.id}`);
+    }
     return {
       source: {
         kind: "projectProfile",
-        providerId: repo.providerId || "dotnet",
+        providerId: repo.providerId,
         reference: identity.profileName,
       },
       options: createTrayRunOptions(repo.id, configKey),

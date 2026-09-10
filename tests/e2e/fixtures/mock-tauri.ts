@@ -219,6 +219,7 @@ const DEFAULT_PROVIDERS: ProviderCatalogEntry[] = [
     requires_project_binding: true,
     project_path_kind: "project_file",
     supports_command_import: true,
+    supports_project_profiles: true,
     templates: [],
   },
   {
@@ -232,6 +233,7 @@ const DEFAULT_PROVIDERS: ProviderCatalogEntry[] = [
     requires_project_binding: true,
     project_path_kind: "repository_root",
     supports_command_import: false,
+    supports_project_profiles: false,
     templates: [],
   },
   {
@@ -245,6 +247,7 @@ const DEFAULT_PROVIDERS: ProviderCatalogEntry[] = [
     requires_project_binding: true,
     project_path_kind: "repository_root",
     supports_command_import: false,
+    supports_project_profiles: false,
     templates: [],
   },
 ];

@@ -25,8 +25,6 @@ export interface ProjectProfileViewerProps {
   projectFrameworkOptions?: string[];
   dotnetSchema?: ParameterSchema;
   configPanelT: ViewerTranslations;
-  profileT: ViewerTranslations;
-  appT: ViewerTranslations;
   commonT: ViewerTranslations;
 }
 
@@ -48,8 +46,6 @@ export const ProjectProfileViewer = forwardRef<
     projectFrameworkOptions = EMPTY_PROJECT_FRAMEWORK_OPTIONS,
     dotnetSchema,
     configPanelT,
-    profileT,
-    appT,
     commonT,
   },
   ref
@@ -102,7 +98,7 @@ export const ProjectProfileViewer = forwardRef<
             status: "ready",
             profileName: resolvedProfile.profileName,
             filePath: resolvedProfile.filePath,
-            editableConfig: resolvedProfile.editableConfig,
+            parameters: resolvedProfile.parameters,
             parsedProfile: resolvedProfile.parsedProfile,
           });
         })
@@ -146,10 +142,7 @@ export const ProjectProfileViewer = forwardRef<
       open={open}
       onOpenChange={handleOpenChange}
       viewerState={viewerState}
-      dotnetSchema={dotnetSchema}
-      projectFrameworkOptions={projectFrameworkOptions}
-      profileT={profileT}
-      appT={appT}
+      providerSchema={dotnetSchema}
       commonT={commonT}
       configPanelT={configPanelT}
     />

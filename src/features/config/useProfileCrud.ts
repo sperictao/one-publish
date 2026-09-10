@@ -2,13 +2,8 @@ import { useCallback, useMemo } from "react";
 import { toast } from "sonner";
 import type { Dispatch, SetStateAction } from "react";
 
-import { buildDotnetProfileParameters } from "@/features/config/dotnetPublishConfig";
 import type { PublishEditStateUpdate } from "@/generated/tauri-contracts";
-import type {
-  ConfigParameters,
-  ConfigProfile,
-  PublishConfigStore,
-} from "@/lib/store/types";
+import type { ConfigParameters, ConfigProfile } from "@/lib/store/types";
 import type { ParameterSchema, ParameterValue } from "@/types/parameters";
 import { buildCopiedProfileName } from "@/lib/profileListSnapshot";
 import type {
@@ -25,7 +20,7 @@ interface StoreMutationResult {
   }>;
 }
 
-/** 非 dotnet Provider 加载配置时，仅保留 schema 认识的参数键；无 schema 时直通。 */
+/** Provider 加载配置时，仅保留 schema 认识的参数键；无 schema 时直通。 */
 function filterParametersBySchema(
   parameters: ConfigParameters,
   schema?: ParameterSchema
@@ -92,7 +87,7 @@ export interface UseProfileCrudReturn {
   applyImportedProfiles: (profiles: ConfigProfile[]) => Promise<void>;
   handleCreateProfileFromProjectProfile: (
     sourceProfileName: string,
-    config: PublishConfigStore
+    parameters: Record<string, ParameterValue>
   ) => Promise<string>;
   profileManagement: ProfileManagementActions;
 }
@@ -135,15 +130,13 @@ export function useProfileCrud({
           },
         });
       }
-      if (profileProviderId !== "dotnet") {
-        setProviderParameters((prev) => ({
-          ...prev,
-          [profileProviderId]: filterParametersBySchema(
-            (profile.parameters || {}) as ConfigParameters,
-            providerSchemas[profileProviderId]
-          ),
-        }));
-      }
+      setProviderParameters((prev) => ({
+        ...prev,
+        [profileProviderId]: filterParametersBySchema(
+          (profile.parameters || {}) as ConfigParameters,
+          providerSchemas[profileProviderId]
+        ),
+      }));
 
       setActiveProfileName(profile.name);
 
@@ -268,7 +261,10 @@ export function useProfileCrud({
   );
 
   const handleCreateProfileFromProjectProfile = useCallback(
-    async (sourceProfileName: string, config: PublishConfigStore) => {
+    async (
+      sourceProfileName: string,
+      parameters: Record<string, ParameterValue>
+    ) => {
       if (!selectedRepoId) {
         throw new Error(profileT.saveFailed || "保存配置文件失败");
       }
@@ -278,13 +274,12 @@ export function useProfileCrud({
         sourceProfileName,
         existingNames
       );
-      // 富表单视图 → 参数（编辑器仍为富表单，过渡转换保留在本模块内）。
-      const parameters = buildDotnetProfileParameters(config);
+      // 项目发布配置解析出的原始参数直接持久化，不做富表单往返。
       const state = await saveProfileToStore({
         repoId: selectedRepoId,
         name: profileName,
         providerId: "dotnet",
-        parameters,
+        parameters: parameters as ConfigParameters,
       });
 
       const repo = state.repositories.find((r) => r.id === selectedRepoId);

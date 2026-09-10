@@ -1,12 +1,27 @@
 use crate::provider::registry::{BuiltInProvider, BuiltInProviderKind};
 use crate::provider::{
     ProviderCapabilities, ProviderCatalogEntry, ProviderManifest, ProviderProjectFileMatcher,
-    ProviderProjectPathKind, ProviderRepositoryDiscovery, ProviderRepositoryMarker,
+    ProviderProjectPathKind, ProviderProjectProfiles, ProviderRepositoryDiscovery,
+    ProviderRepositoryMarker,
 };
 
 const DOTNET_PROJECT_EXTENSIONS: &[&str] = &["csproj", "fsproj", "vbproj"];
 const DOTNET_SOLUTION_EXTENSION: &str = "sln";
 const DOTNET_NESTED_PROJECT_DIRECTORIES: &[&str] = &["src", "UI"];
+
+/// 项目发布配置（.pubxml）声明：目录、扩展名与引用参数固化位置。
+pub(crate) fn dotnet_project_profiles() -> ProviderProjectProfiles {
+    ProviderProjectProfiles {
+        directory: "Properties/PublishProfiles".to_string(),
+        extension: "pubxml".to_string(),
+        reference_parameter: "properties".to_string(),
+        reference_property: "PublishProfile".to_string(),
+    }
+}
+
+/// dotnet 默认输出目录布局：{default_output_dir}/{项目名}/{configuration}。
+pub(crate) const DOTNET_OUTPUT_LAYOUT: &str =
+    "{default_output_dir}/{project_stem}/{param:configuration}";
 
 fn dotnet_project_file_matchers() -> Vec<ProviderProjectFileMatcher> {
     DOTNET_PROJECT_EXTENSIONS
@@ -50,6 +65,10 @@ impl BuiltInProvider {
                 requires_project_binding: true,
                 project_path_kind: ProviderProjectPathKind::ProjectFile,
                 supports_command_import: true,
+                appends_project_path: true,
+                output_layout: Some(DOTNET_OUTPUT_LAYOUT.to_string()),
+                project_profiles: Some(dotnet_project_profiles()),
+                framework_tags: vec!["TargetFramework".to_string(), "TargetFrameworks".to_string()],
             },
             ProviderCatalogEntry {
                 id: "dotnet".to_string(),
@@ -64,12 +83,15 @@ impl BuiltInProvider {
                 requires_project_binding: true,
                 project_path_kind: ProviderProjectPathKind::ProjectFile,
                 supports_command_import: true,
+                supports_project_profiles: true,
                 templates: dotnet_templates().iter().map(|t| t.summary()).collect(),
             },
             ProviderRepositoryDiscovery {
                 provider_id: "dotnet".to_string(),
                 repository_markers: dotnet_repository_markers(),
                 project_file_matchers: dotnet_project_file_matchers(),
+                solution_file_extensions: vec![DOTNET_SOLUTION_EXTENSION.to_string()],
+                owns_project_recommendation: true,
             },
             include_str!("../schemas/dotnet.json"),
             "dotnet.publish",

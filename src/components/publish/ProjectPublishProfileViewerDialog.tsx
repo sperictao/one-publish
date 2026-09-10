@@ -2,7 +2,7 @@ import { useMemo, type ReactNode } from "react";
 import { Eye, FileCode2, RefreshCw } from "lucide-react";
 import { HelpTip } from "@/components/ui/help-tip";
 
-import { DotnetPublishConfigFormSections } from "@/components/publish/DotnetPublishConfigFormSections";
+import { ProviderParameterFormSections } from "@/components/publish/ProviderParameterFormSections";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -19,13 +19,10 @@ import {
   type ProjectPublishProfileSupplementSection,
 } from "@/lib/dotnetPublishProfileViewer";
 import type { ParsedProjectPublishProfile } from "@/lib/projectPublishProfileXml";
-import type { PublishConfigStore } from "@/lib/store/types";
 import { cn } from "@/lib/utils";
-import type { ParameterSchema } from "@/types/parameters";
+import type { ParameterSchema, ParameterValue } from "@/types/parameters";
 
 type ViewerTranslations = Record<string, string | undefined>;
-
-const EMPTY_PROJECT_FRAMEWORK_OPTIONS: string[] = [];
 
 export type ProjectProfileViewerState =
   | {
@@ -40,7 +37,7 @@ export type ProjectProfileViewerState =
       status: "ready";
       profileName: string;
       filePath: string;
-      editableConfig: PublishConfigStore;
+      parameters: Record<string, ParameterValue>;
       parsedProfile: ParsedProjectPublishProfile;
     }
   | {
@@ -53,10 +50,7 @@ interface ProjectPublishProfileViewerDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   viewerState: ProjectProfileViewerState;
-  dotnetSchema?: ParameterSchema;
-  projectFrameworkOptions?: string[];
-  profileT: ViewerTranslations;
-  appT: ViewerTranslations;
+  providerSchema?: ParameterSchema;
   commonT: ViewerTranslations;
   configPanelT: ViewerTranslations;
 }
@@ -65,10 +59,7 @@ export function ProjectPublishProfileViewerDialog({
   open,
   onOpenChange,
   viewerState,
-  dotnetSchema,
-  projectFrameworkOptions = EMPTY_PROJECT_FRAMEWORK_OPTIONS,
-  profileT,
-  appT,
+  providerSchema,
   commonT,
   configPanelT,
 }: ProjectPublishProfileViewerDialogProps): ReactNode {
@@ -145,14 +136,10 @@ export function ProjectPublishProfileViewerDialog({
               </div>
             </AppDialogInset>
 
-            <DotnetPublishConfigFormSections
+            <ProviderParameterFormSections
               mode="readonly"
-              presentation="focused"
-              profileT={profileT}
-              appT={appT}
-              config={viewerState.editableConfig}
-              dotnetSchema={dotnetSchema}
-              projectFrameworkOptions={projectFrameworkOptions}
+              schema={providerSchema}
+              parameters={viewerState.parameters}
             />
 
             {supplementSections.length > 0 ? (

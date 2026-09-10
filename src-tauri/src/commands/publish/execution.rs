@@ -65,7 +65,7 @@ fn prepare_publish_command(
         None => resolve_plan_command(&plan)?,
     };
 
-    if spec.provider_id == "dotnet" {
+    if provider.capabilities().appends_project_path {
         args.push(spec.project_path.clone());
     }
     let crate::parameter::RenderedCommand {

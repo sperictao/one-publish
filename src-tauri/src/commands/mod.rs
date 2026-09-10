@@ -54,8 +54,8 @@ pub use repository::{
     RepositoryBranchConnectivityResult, RepositoryBranchScanResult,
 };
 pub(crate) use repository::{
-    resolve_project_file_from_search_path, scan_provider_project_candidates_from_path,
-    scan_publish_profiles,
+    project_profiles_declaration, resolve_project_file_from_search_path,
+    scan_provider_project_candidates_from_path, scan_publish_profiles,
 };
 pub(crate) use updater::PendingUpdateState;
 pub(crate) use updater::{

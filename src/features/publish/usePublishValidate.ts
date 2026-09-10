@@ -14,7 +14,7 @@ import type {
   PublishSelectionRef,
   ScopedPublishDraft,
 } from "@/generated/tauri-contracts";
-import type { ProjectInfo, PublishConfigStore } from "@/lib/store/types";
+import type { ProjectInfo } from "@/lib/store/types";
 import type { ParameterValue } from "@/types/parameters";
 import { extractInvokeErrorMessage } from "@/lib/tauri/invokeErrors";
 
@@ -41,7 +41,6 @@ export interface UsePublishValidateParams {
   activeProviderId: string;
   activeProviderUsesProjectFile: boolean;
   activeProviderParameters: Record<string, ParameterValue>;
-  customConfig: PublishConfigStore;
   selectionKey: string;
   defaultOutputDir?: string;
   projectInfo: ProjectInfo | null;
@@ -170,7 +169,6 @@ export function usePublishValidate({
   activeProviderId,
   activeProviderUsesProjectFile: _activeProviderUsesProjectFile,
   activeProviderParameters: _activeProviderParameters,
-  customConfig: _customConfig,
   selectionKey,
   defaultOutputDir,
   projectInfo,

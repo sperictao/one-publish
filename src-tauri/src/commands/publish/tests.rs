@@ -276,6 +276,47 @@ fn render_publish_command_uses_backend_display_command() {
     );
 }
 
+/// 能力真实性金测（ADR-0059）：dotnet 命令的逐字节形态。重构若改变实际
+/// 执行的命令，必须显式更新本测试。
+#[test]
+fn dotnet_publish_args_are_byte_stable() {
+    let mut parameters = BTreeMap::new();
+    parameters.insert(
+        "configuration".to_string(),
+        SpecValue::String("Release".to_string()),
+    );
+    parameters.insert("self_contained".to_string(), SpecValue::Bool(true));
+    parameters.insert("no_logo".to_string(), SpecValue::Bool(true));
+    let mut properties = BTreeMap::new();
+    properties.insert(
+        "Version".to_string(),
+        SpecValue::String("1.2.3".to_string()),
+    );
+    parameters.insert("properties".to_string(), SpecValue::Map(properties));
+    let spec = PublishSpec {
+        version: SPEC_VERSION,
+        provider_id: "dotnet".to_string(),
+        project_path: "/tmp/demo-project/src/App.csproj".to_string(),
+        parameters,
+    };
+
+    let rendered = super::execution::render_publish_command(&spec).expect("render command");
+
+    assert!(rendered.program.ends_with("dotnet"));
+    assert_eq!(
+        rendered.args,
+        vec![
+            "publish",
+            "/tmp/demo-project/src/App.csproj",
+            "--configuration",
+            "Release",
+            "--no-logo",
+            "-p:Version=1.2.3",
+            "--self-contained",
+        ]
+    );
+}
+
 fn render_with_provider_schema(
     provider_id: &str,
     parameters: BTreeMap<String, SpecValue>,

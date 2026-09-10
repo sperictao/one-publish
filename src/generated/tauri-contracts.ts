@@ -236,7 +236,15 @@ export type IssueType = "missing_tool" | "outdated_version" | "missing_dependenc
 
 export type ProviderStatus = { provider_id: string, installed: boolean, version: string | null, path: string | null, };
 
-export type ParameterDefinition = { type: ParameterType, flag: string, multiple: boolean | null, prefix: string | null, description: string | null, env?: string | null, };
+export type ParameterDefinition = { type: ParameterType, flag: string, 
+/**
+ * 命令导入时可识别的别名 flag（如 dotnet 的 "-c"）。
+ */
+aliases?: Array<string> | null, 
+/**
+ * 参数默认值（ADR-0030）：输出布局求值等声明消费方使用；命令渲染不注入默认值。
+ */
+default?: JsonValue | null, multiple: boolean | null, prefix: string | null, description: string | null, env?: string | null, };
 
 export type ParameterSchema = { parameters: { [key: string]: ParameterDefinition }, };
 
@@ -255,6 +263,10 @@ parameters: { [key: string]: JsonValue },
 diagnostics: Array<CommandImportDiagnostic>, };
 
 export type ProviderCatalogEntry = { id: string, display_name: string, version: string, label: string, command_example: string, environment_label: string, environment_description: string, requires_project_binding: boolean, project_path_kind: ProviderProjectPathKind, supports_command_import: boolean, 
+/**
+ * 该 Provider 是否支持项目发布配置来源。
+ */
+supports_project_profiles: boolean, 
 /**
  * Provider 内置模板摘要：前端只负责展示与选择，模板参数由后端实现持有。
  */

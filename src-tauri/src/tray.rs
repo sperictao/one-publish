@@ -284,18 +284,16 @@ fn parse_tray_publish_event_id(event_id: &str) -> Option<TrayPublishRequestPaylo
     })
 }
 
-fn is_supported_dotnet_project_file(path: &Path) -> bool {
-    path.extension()
-        .and_then(|extension| extension.to_str())
-        .map(|extension| extension.to_ascii_lowercase().ends_with("proj"))
-        .unwrap_or(false)
+// 托盘的项目配置菜单只服务声明了项目发布配置语义的 Provider。
+fn supports_project_profiles(path: &Path) -> bool {
+    crate::commands::project_profiles_declaration(path).is_some()
 }
 
 fn resolve_repo_project_file(repo: &crate::store::Repository) -> Option<PathBuf> {
     repo.project_file
         .as_deref()
         .map(PathBuf::from)
-        .filter(|path| path.is_file() && is_supported_dotnet_project_file(path))
+        .filter(|path| path.is_file() && supports_project_profiles(path))
         .or_else(|| crate::commands::resolve_project_file_from_search_path(Path::new(&repo.path)))
 }
 

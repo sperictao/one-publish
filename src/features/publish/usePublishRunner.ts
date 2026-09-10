@@ -6,7 +6,7 @@ import type {
   PublishSelectionRef,
   ScopedPublishDraft,
 } from "@/generated/tauri-contracts";
-import type { PublishConfigStore, ProjectInfo } from "@/lib/store/types";
+import type { ProjectInfo } from "@/lib/store/types";
 import type { ParameterValue } from "@/types/parameters";
 
 import { usePublishNotify } from "@/features/publish/usePublishNotify";
@@ -29,7 +29,6 @@ interface UsePublishRunnerParams {
   activeProviderId: string;
   activeProviderUsesProjectFile: boolean;
   activeProviderParameters: Record<string, ParameterValue>;
-  customConfig: PublishConfigStore;
   selectionKey: string;
   defaultOutputDir?: string;
   projectInfo: ProjectInfo | null;
@@ -53,7 +52,6 @@ export function usePublishRunner({
   activeProviderId,
   activeProviderUsesProjectFile,
   activeProviderParameters,
-  customConfig,
   selectionKey,
   defaultOutputDir,
   projectInfo,
@@ -83,7 +81,6 @@ export function usePublishRunner({
     activeProviderId,
     activeProviderUsesProjectFile,
     activeProviderParameters,
-    customConfig,
     selectionKey,
     defaultOutputDir,
     projectInfo,

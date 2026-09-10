@@ -38,6 +38,7 @@
     "verbose": {
       "type": "boolean",
       "flag": "--verbose",
+      "aliases": ["-v"],
       "description": "Use verbose output"
     },
     "quiet": {

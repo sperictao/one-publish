@@ -76,7 +76,6 @@ function props(): UsePublishValidateParams {
     activeProviderId: "dotnet",
     activeProviderUsesProjectFile: true,
     activeProviderParameters: { wrong: true },
-    customConfig: {} as UsePublishValidateParams["customConfig"],
     selectionKey: "draft",
     projectInfo: null,
     specVersion: 1,

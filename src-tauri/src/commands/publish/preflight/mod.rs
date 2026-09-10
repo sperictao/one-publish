@@ -335,7 +335,12 @@ fn resolve_publish_output_access_intent(spec: &PublishSpec) -> PublishOutputAcce
         return PublishOutputAccessIntent::CleanExistingOutput;
     }
 
-    if spec.provider_id == "dotnet" {
+    // 声明了默认输出布局的 Provider 会把产物放进更深的派生目录，需检查父目录写权限。
+    let derives_nested_output = crate::provider::registry::provider_registry()
+        .get(&spec.provider_id)
+        .ok()
+        .is_some_and(|provider| provider.capabilities().output_layout.is_some());
+    if derives_nested_output {
         return PublishOutputAccessIntent::WriteOutputParent;
     }
 

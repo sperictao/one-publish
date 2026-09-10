@@ -1,4 +1,5 @@
-import { sanitizeDotnetPublishProperties } from "@/features/config/dotnetPublishConfig";
+import { getPathBasename, joinPath } from "@/lib/paths";
+import type { ParameterValue } from "@/types/parameters";
 
 export interface ProjectPublishProfileEntry {
   key: string;
@@ -148,7 +149,126 @@ export function parseProjectPublishProfileXml(
   };
 }
 
-function parseDotnetBooleanValue(value: string): boolean | null {
+export const DOTNET_UNSUPPORTED_PUBLISH_PROPERTY_KEYS = [
+  "Configuration",
+  "Define",
+  "ExcludeApp_Data",
+  "LastUsedBuildConfiguration",
+  "LastUsedPlatform",
+  "LaunchSiteAfterPublish",
+  "Platform",
+  "ProjectGuid",
+  "PublishProvider",
+  "PublishUrl",
+  "RuntimeIdentifier",
+  "RuntimeIdentifiers",
+  "SiteUrlToLaunchAfterPublish",
+  "TargetFramework",
+  "TargetFrameworks",
+  "WebPublishMethod",
+  "_TargetId",
+] as const;
+
+const DOTNET_UNSUPPORTED_PUBLISH_PROPERTY_KEY_SET = new Set(
+  DOTNET_UNSUPPORTED_PUBLISH_PROPERTY_KEYS.map((key) => key.toLowerCase())
+);
+
+export function sanitizeDotnetPublishProperties(
+  properties: Record<string, string>
+): Record<string, string> {
+  return Object.fromEntries(
+    Object.entries(properties).filter(
+      ([key]) =>
+        !DOTNET_UNSUPPORTED_PUBLISH_PROPERTY_KEY_SET.has(key.toLowerCase())
+    )
+  );
+}
+
+function stripFileExtension(name: string): string {
+  return name.replace(/\.[^.]+$/, "");
+}
+
+function buildDefaultScopedOutputDir(params: {
+  defaultOutputDir?: string;
+  projectFile?: string;
+  projectRoot?: string;
+  configuration?: string;
+}): string {
+  const { defaultOutputDir, projectFile, projectRoot, configuration } = params;
+  if (!defaultOutputDir) {
+    return "";
+  }
+
+  const projectName = projectFile
+    ? stripFileExtension(getPathBasename(projectFile))
+    : projectRoot
+      ? getPathBasename(projectRoot)
+      : "";
+  const resolvedConfiguration = configuration?.trim() || "Release";
+
+  return projectName
+    ? joinPath(defaultOutputDir, projectName, resolvedConfiguration)
+    : joinPath(defaultOutputDir, resolvedConfiguration);
+}
+
+/**
+ * 项目发布配置参数归一化：缺省输出目录时按当前默认目录派生作用域路径；
+ * 属性映射中的 DeleteExistingFiles 提升为一等 delete_existing_files 参数
+ * （显式 true 生效；false 仅从属性集中清除，与后端默认语义一致）。
+ * 直接在原始参数上运算，不做任何富表单往返。
+ */
+export function normalizeProjectProfileParameters(params: {
+  parameters: Record<string, ParameterValue>;
+  defaultOutputDir?: string;
+  projectFile?: string;
+  projectRoot?: string;
+}): Record<string, ParameterValue> {
+  const { parameters } = params;
+  const next: Record<string, ParameterValue> = { ...parameters };
+
+  const properties: Record<string, string> = {
+    ...(typeof next.properties === "object" &&
+    next.properties &&
+    !Array.isArray(next.properties)
+      ? (next.properties as Record<string, string>)
+      : {}),
+  };
+  const rawDeleteExistingFiles =
+    properties.DeleteExistingFiles ?? properties.deleteExistingFiles;
+  if (typeof rawDeleteExistingFiles === "string") {
+    const parsed = parseDotnetBooleanValue(rawDeleteExistingFiles);
+    delete properties.DeleteExistingFiles;
+    delete properties.deleteExistingFiles;
+    if (parsed === true && next.delete_existing_files === undefined) {
+      next.delete_existing_files = true;
+    }
+  }
+  if (Object.keys(properties).length > 0) {
+    next.properties = properties;
+  } else {
+    delete next.properties;
+  }
+
+  if (
+    (typeof next.output !== "string" || !next.output.trim()) &&
+    params.defaultOutputDir
+  ) {
+    const scopedOutput = buildDefaultScopedOutputDir({
+      defaultOutputDir: params.defaultOutputDir,
+      projectFile: params.projectFile,
+      projectRoot: params.projectRoot,
+      configuration:
+        typeof next.configuration === "string" ? next.configuration : undefined,
+    });
+    if (scopedOutput) {
+      next.output = scopedOutput;
+    }
+  }
+
+  return next;
+}
+
+export function parseDotnetBooleanValue(value: string): boolean | null {
   const normalized = value.trim().toLowerCase();
   if (!normalized) {
     return null;

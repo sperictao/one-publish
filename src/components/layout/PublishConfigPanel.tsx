@@ -38,7 +38,8 @@ import {
   ArrowUpDown,
 } from "lucide-react";
 import { toast } from "sonner";
-import { type ConfigProfile, type PublishConfigStore } from "@/lib/store/types";
+import { type ConfigProfile } from "@/lib/store/types";
+import type { ParameterValue } from "@/types/parameters";
 import type { PublishComposition } from "@/generated/tauri-contracts";
 import { CompositionEditorDialog } from "@/components/publish/CompositionEditorDialog";
 import { resolveDotnetProjectProfile } from "@/lib/dotnetProjectProfile";
@@ -113,7 +114,7 @@ export interface PublishConfigPanelProps {
   onSelectProjectProfile: (profileName: string) => void;
   onCopyProjectProfileToCustom: (
     sourceProfileName: string,
-    config: PublishConfigStore
+    parameters: Record<string, ParameterValue>
   ) => Promise<string>;
   recentConfigKeys: string[];
   favoriteConfigKeys: string[];
@@ -240,8 +241,6 @@ export const PublishConfigPanel = memo(function PublishConfigPanel({
   const projectProfileViewerRef = useRef<ProjectProfileViewerHandle>(null);
   const { translations } = useI18n();
   const t = translations.configPanel || {};
-  const appT = translations.app || {};
-  const profileT = translations.profiles || {};
   const commonT = translations.common || {};
   const defaultGroupName = t.defaultProfileGroup || "默认分组";
   const configManagementLabel =
@@ -561,7 +560,7 @@ export const PublishConfigPanel = memo(function PublishConfigPanel({
 
         const createdProfileName = await onCopyProjectProfileToCustom(
           resolvedProfile.profileName,
-          resolvedProfile.editableConfig
+          resolvedProfile.parameters
         );
         toast.success(t.copyConfigSuccess || "已复制为自定义配置", {
           description: (
@@ -1356,8 +1355,6 @@ export const PublishConfigPanel = memo(function PublishConfigPanel({
         projectFrameworkOptions={projectFrameworkOptions}
         dotnetSchema={dotnetSchema}
         configPanelT={t}
-        profileT={profileT}
-        appT={appT}
         commonT={commonT}
       />
     </div>

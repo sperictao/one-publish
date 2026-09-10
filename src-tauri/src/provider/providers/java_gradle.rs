@@ -33,6 +33,10 @@ impl BuiltInProvider {
                 requires_project_binding: false,
                 project_path_kind: ProviderProjectPathKind::RepositoryRoot,
                 supports_command_import: true,
+                    appends_project_path: false,
+                    output_layout: None,
+                    project_profiles: None,
+                    framework_tags: Vec::new(),
             },
             ProviderCatalogEntry {
                 id: "java".to_string(),
@@ -45,6 +49,7 @@ impl BuiltInProvider {
                 requires_project_binding: false,
                 project_path_kind: ProviderProjectPathKind::RepositoryRoot,
                 supports_command_import: true,
+                supports_project_profiles: false,
                 templates: Vec::new(),
             },
             ProviderRepositoryDiscovery {
@@ -61,6 +66,8 @@ impl BuiltInProvider {
                     })
                     .collect(),
                 project_file_matchers: gradle_project_file_matchers(),
+                    solution_file_extensions: Vec::new(),
+                    owns_project_recommendation: false,
             },
             include_str!("../schemas/java.json"),
             "gradle.build",

@@ -409,21 +409,29 @@ fn resolve_template_source(
     ))
 }
 
-/// 项目配置（.NET pubxml）：绑定选择子定位项目文件，引用必须命中已发现的
-/// pubxml 名单；其他 Provider 暂无项目配置语义。
+/// 项目配置（Project Publish Profile）：绑定选择子定位项目文件，引用必须命中
+/// 已发现的配置名单；按 Provider 声明的项目配置语义解析，不识别具体工具链。
 fn resolve_project_profile_source(
     repository: &Repository,
     provider_id: &str,
     project_binding: Option<&str>,
     reference: &str,
 ) -> Result<ResolvedPublishSource, AppError> {
-    known_provider(provider_id)?;
-    if provider_id != "dotnet" {
+    let registry = ProviderRegistry::new();
+    let provider = registry
+        .get(provider_id)
+        .map_err(|_| {
+            source_error(
+                "publish_source_unknown_provider",
+                format!("unknown publish provider: {provider_id}"),
+            )
+        })?;
+    let Some(project_profiles) = provider.capabilities().project_profiles.clone() else {
         return Err(source_error(
             "publish_source_project_profile_unsupported",
             format!("provider {provider_id} does not support project profiles"),
         ));
-    }
+    };
 
     let project_file = match project_binding {
         Some(binding) => project_file_for_binding(repository, provider_id, binding)?,
@@ -449,15 +457,23 @@ fn resolve_project_profile_source(
         ));
     }
 
-    let registry = ProviderRegistry::new();
-    let provider = registry.get(provider_id).expect("provider known");
+    let mut reference_value = serde_json::Map::new();
+    reference_value.insert(
+        project_profiles.reference_property,
+        serde_json::Value::String(reference.to_string()),
+    );
+    let mut parameters = serde_json::Map::new();
+    parameters.insert(
+        project_profiles.reference_parameter,
+        serde_json::Value::Object(reference_value),
+    );
     let content = PublishConfigurationContent {
         provider_id: provider_id.to_string(),
         contract_version: PUBLISH_CONFIGURATION_CONTRACT_VERSION,
         provider_version: provider.manifest().version.clone(),
         settings_version: CURRENT_SETTINGS_VERSION,
         project_binding: project_binding.map(str::to_string),
-        parameters: serde_json::json!({ "properties": { "PublishProfile": reference } }),
+        parameters: serde_json::Value::Object(parameters),
         composition: PublishComposition::local_default(),
     };
     Ok(resolution(
