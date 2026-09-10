@@ -1087,14 +1087,18 @@ impl RepoPublishConfig {
             .max()
             .unwrap_or(0)
             + 1;
-        let revision = PublishConfigurationRevision::new_current(
-            current.provider_id.clone(),
-            current.parameters.clone(),
-            updated_at,
+        let revision = PublishConfigurationRevision {
+            id: new_configuration_identity("configuration-revision"),
             sequence,
-            current.composition.clone(),
-            Some(project_binding),
-        );
+            created_at: updated_at,
+            contract_version: current.contract_version,
+            provider_id: current.provider_id.clone(),
+            provider_version: current.provider_version.clone(),
+            settings_version: current.settings_version,
+            parameters: current.parameters.clone(),
+            composition: current.composition.clone(),
+            project_binding: Some(project_binding),
+        };
         profile.current_revision_id = revision.id.clone();
         profile.blocked_reason = ConfigProfile::revision_blocked_reason(&revision);
         profile.revisions.push(revision);
