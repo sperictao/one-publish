@@ -72,6 +72,50 @@ fn backup_corrupt_file(path: &Path) -> Option<PathBuf> {
     }
 }
 
+fn future_schema_version(value: &serde_json::Value) -> Option<u64> {
+    value
+        .get("schemaVersion")
+        .and_then(serde_json::Value::as_u64)
+        .filter(|version| *version > u64::from(CURRENT_STORE_SCHEMA_VERSION))
+}
+
+fn future_schema_fallback(path: &Path, schema_version: u64) -> AppState {
+    let mut state = AppState::default();
+    state.startup_notice = Some(format!(
+        "检测到由更高版本 One Publish 写入的配置（schemaVersion={schema_version}，当前仅支持到 {CURRENT_STORE_SCHEMA_VERSION}）。为避免数据丢失，本版本不会读取或覆盖该配置文件，请升级 One Publish 后再修改设置。"
+    ));
+    log::warn!(
+        "配置文件 schemaVersion={} 高于当前支持的 {}，已按只读保护处理。路径: {}",
+        schema_version,
+        CURRENT_STORE_SCHEMA_VERSION,
+        path.display()
+    );
+    state
+}
+
+fn ensure_writable_store_schema(path: &Path) -> Result<(), crate::errors::AppError> {
+    let content = match fs::read_to_string(path) {
+        Ok(content) => content,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(()),
+        // 现有行为允许 save_to_path 修复已由 load 路径隔离的损坏文件；这里仅
+        // 对能够明确识别为未来 schema 的文件加写保护，不扩大错误面。
+        Err(_) => return Ok(()),
+    };
+    let Ok(value) = serde_json::from_str::<serde_json::Value>(&content) else {
+        return Ok(());
+    };
+    let Some(schema_version) = future_schema_version(&value) else {
+        return Ok(());
+    };
+
+    Err(crate::errors::AppError::store_with_code(
+        format!(
+            "配置文件 schemaVersion {schema_version} 高于当前支持的 {CURRENT_STORE_SCHEMA_VERSION}，已拒绝覆盖以避免数据丢失"
+        ),
+        "store_schema_version_newer",
+    ))
+}
+
 /// 正常加载成功后的收尾：执行旧 Tauri 发布状态的一次性迁移，仅在持久化
 /// 成功后才移除旧文件，保证迁移不会丢失尚未写盘的数据。
 /// `migration_backup`：首次写入新 schema 前保留原始文件备份（§4.2）。
@@ -141,6 +185,9 @@ pub(crate) fn load_from_path(path: &Path) -> AppState {
         Ok(value) => value,
         Err(_) => serde_json::Value::Null,
     };
+    if let Some(schema_version) = future_schema_version(&parsed_json) {
+        return future_schema_fallback(path, schema_version);
+    }
     let schema_version = parsed_json
         .get("schemaVersion")
         .and_then(serde_json::Value::as_u64)
@@ -302,6 +349,7 @@ pub(crate) fn write_json_atomically(
 }
 
 pub(crate) fn save_to_path(state: &AppState, path: &Path) -> Result<(), crate::errors::AppError> {
+    ensure_writable_store_schema(path)?;
     let json = serde_json::to_vec_pretty(&StoredAppState::from(state)).map_err(|error| {
         crate::errors::AppError::store_with_code(
             format!("序列化失败: {}", error),
@@ -313,4 +361,52 @@ pub(crate) fn save_to_path(state: &AppState, path: &Path) -> Result<(), crate::e
 
 pub(crate) fn save_to_file(state: &AppState) -> Result<(), crate::errors::AppError> {
     save_to_path(state, &get_config_path())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tempfile::TempDir;
+
+    #[test]
+    fn future_schema_load_keeps_original_file_untouched() {
+        let temp = TempDir::new().expect("temp dir");
+        let path = temp.path().join("config.json");
+        let future_version = CURRENT_STORE_SCHEMA_VERSION + 1;
+        let original = format!(
+            r#"{{"schemaVersion":{future_version},"futureOnly":{{"value":42}},"repositories":[]}}"#
+        );
+        fs::write(&path, &original).expect("write future config");
+
+        let state = load_from_path(&path);
+
+        assert!(state
+            .startup_notice
+            .as_deref()
+            .is_some_and(|notice| notice.contains(&format!("schemaVersion={future_version}"))));
+        assert_eq!(
+            fs::read_to_string(&path).expect("read future config"),
+            original
+        );
+    }
+
+    #[test]
+    fn save_refuses_to_overwrite_future_schema() {
+        let temp = TempDir::new().expect("temp dir");
+        let path = temp.path().join("config.json");
+        let future_version = CURRENT_STORE_SCHEMA_VERSION + 1;
+        let original = format!(
+            r#"{{"schemaVersion":{future_version},"futureOnly":{{"value":42}},"repositories":[]}}"#
+        );
+        fs::write(&path, &original).expect("write future config");
+
+        let error = save_to_path(&AppState::default(), &path)
+            .expect_err("future schema must be write protected");
+
+        assert_eq!(error.code.as_deref(), Some("store_schema_version_newer"));
+        assert_eq!(
+            fs::read_to_string(&path).expect("read future config"),
+            original
+        );
+    }
 }
