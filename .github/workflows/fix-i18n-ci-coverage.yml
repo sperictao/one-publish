@@ -1,0 +1,93 @@
+name: Fix i18n CI coverage
+
+on:
+  push:
+    branches:
+      - fix/i18n-ci-coverage
+
+permissions:
+  contents: write
+
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Add missing translations and remove false-positive CJK comment
+        shell: bash
+        run: |
+          node <<'NODE'
+          const fs = require('node:fs');
+
+          function insertAfter(object, afterKey, entries) {
+            const next = {};
+            let inserted = false;
+            for (const [key, value] of Object.entries(object)) {
+              next[key] = value;
+              if (key === afterKey) {
+                Object.assign(next, entries);
+                inserted = true;
+              }
+            }
+            if (!inserted) {
+              throw new Error(`missing insertion anchor: ${afterKey}`);
+            }
+            return next;
+          }
+
+          function updateLocale(path, values) {
+            const data = JSON.parse(fs.readFileSync(path, 'utf8'));
+            let panel = data.configPanel;
+            panel = insertAfter(panel, 'automationInstallHint', {
+              automationCompositionGuide: values.automationCompositionGuide,
+              automationEditComposition: values.automationEditComposition,
+            });
+            panel = insertAfter(panel, 'automationRuntimeCurrent', {
+              automationRuntimeSection: values.automationRuntimeSection,
+            });
+            panel = insertAfter(panel, 'automationRemoteCancelFailed', {
+              automationRemoteSyncFailed: values.automationRemoteSyncFailed,
+            });
+            data.configPanel = panel;
+            fs.writeFileSync(path, `${JSON.stringify(data, null, 2)}\n`);
+          }
+
+          updateLocale('src/i18n/zh.json', {
+            automationCompositionGuide:
+              '该配置的当前修订以本机执行发布。远端自动化的执行后端来自修订组合：请先保存 backend=github-actions 的新修订，再回到这里安装。',
+            automationEditComposition: '去编辑发布组合',
+            automationRuntimeSection: 'Runtime Revision',
+            automationRemoteSyncFailed: '远端发布记录同步失败',
+          });
+
+          updateLocale('src/i18n/en.json', {
+            automationCompositionGuide:
+              'The current revision publishes with the local backend. Remote automation gets its execution backend from the revision composition: save a new revision with backend=github-actions, then return here to install it.',
+            automationEditComposition: 'Edit publish composition',
+            automationRuntimeSection: 'Runtime Revision',
+            automationRemoteSyncFailed: 'Failed to synchronize remote publish evidence',
+          });
+
+          const sourcePath = 'src/components/publish/CompositionEditorDialog.tsx';
+          let source = fs.readFileSync(sourcePath, 'utf8');
+          const oldComment = '/** 凭据填的是引用（`<scheme>:<定位>`），不是秘密值；引用的含义由凭据来源决定。 */';
+          const newComment =
+            '/** Credential fields store references (`<scheme>:<locator>`), never secret values; each credential source defines its reference semantics. */';
+          if (source.split(oldComment).length !== 2) {
+            throw new Error('expected exactly one credential reference comment');
+          }
+          source = source.replace(oldComment, newComment);
+          fs.writeFileSync(sourcePath, source);
+          NODE
+      - name: Verify i18n coverage
+        run: node scripts/check-i18n-coverage.mjs
+      - name: Commit focused cleanup
+        shell: bash
+        run: |
+          rm .github/workflows/fix-i18n-ci-coverage.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/i18n/zh.json src/i18n/en.json src/components/publish/CompositionEditorDialog.tsx .github/workflows/fix-i18n-ci-coverage.yml
+          git diff --cached --check
+          git commit -m "fix(i18n): cover automation binding strings"
+          git push origin HEAD:fix/i18n-ci-coverage
