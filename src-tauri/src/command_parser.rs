@@ -112,6 +112,17 @@ impl CommandParser {
                             parameters.insert(param_key, SpecValue::Bool(true));
                             applied = true;
                         }
+                        (ParameterType::Boolean, Some(v)) => {
+                            if v.eq_ignore_ascii_case("true") {
+                                parameters.insert(param_key, SpecValue::Bool(true));
+                                applied = true;
+                            } else if v.eq_ignore_ascii_case("false") {
+                                parameters.insert(param_key, SpecValue::Bool(false));
+                                applied = true;
+                            } else {
+                                value_unattachable = true;
+                            }
+                        }
                         (ParameterType::String, Some(v)) => {
                             parameters.insert(param_key, SpecValue::String(v));
                             applied = true;
@@ -524,6 +535,39 @@ mod tests {
             result.parameters.get("no_build"),
             Some(&serde_json::json!(true))
         );
+    }
+
+    #[test]
+    fn parse_boolean_flag_preserves_explicit_values() {
+        let parser = CommandParser::new("dotnet".to_string());
+        let schema = dotnet_schema();
+
+        for (command, expected) in [
+            ("dotnet publish --self-contained=false", false),
+            ("dotnet publish --self-contained false", false),
+            ("dotnet publish --self-contained=true", true),
+            ("dotnet publish --self-contained TRUE", true),
+        ] {
+            let result = parser.parse(command, &schema);
+            assert!(result.diagnostics.is_empty(), "{command}: {:?}", result.diagnostics);
+            assert_eq!(
+                result.parameters.get("self_contained"),
+                Some(&serde_json::json!(expected)),
+                "{command}"
+            );
+        }
+    }
+
+    #[test]
+    fn parse_boolean_flag_rejects_non_boolean_value() {
+        let parser = CommandParser::new("dotnet".to_string());
+        let schema = dotnet_schema();
+        let result = parser.parse("dotnet publish --self-contained=maybe", &schema);
+
+        assert!(!result.parameters.contains_key("self_contained"));
+        assert_eq!(result.diagnostics.len(), 1);
+        assert_eq!(result.diagnostics[0].code, "command_import_unparsed_token");
+        assert!(result.diagnostics[0].message.contains("maybe"));
     }
 
     #[test]
