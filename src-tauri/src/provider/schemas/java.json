@@ -3,6 +3,7 @@
     "task": {
       "type": "string",
       "flag": "",
+      "default": "build",
       "description": "Gradle task (e.g., build, test, publish)"
     },
     "configuration": {
