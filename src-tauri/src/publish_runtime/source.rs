@@ -475,12 +475,15 @@ fn resolve_project_profile_source(
 
     let project_file = match project_binding {
         Some(binding) => project_file_for_binding(repository, provider_id, binding)?,
-        None => repository.project_file.as_deref().map(PathBuf::from).ok_or_else(|| {
-            source_error(
-                "publish_source_project_profile_not_found",
-                "the repository has no resolved project file for the publish profile",
-            )
-        })?,
+        None => {
+            let project_file = repository.project_file.as_deref().ok_or_else(|| {
+                source_error(
+                    "publish_source_project_profile_not_found",
+                    "the repository has no resolved project file for the publish profile",
+                )
+            })?;
+            repository_scoped_project_file(repository, Path::new(project_file))?
+        }
     };
     let valid_profiles = crate::commands::scan_publish_profiles(&project_file);
     if !valid_profiles.iter().any(|name| name == reference) {
@@ -743,8 +746,77 @@ fn find_revision<'a>(
         })
 }
 
+fn project_binding_outside_repository(repository: &Repository) -> AppError {
+    source_error(
+        "publish_source_project_binding_outside_repository",
+        format!(
+            "the project binding resolves outside repository {}",
+            repository.path
+        ),
+    )
+}
+
+/// 在读取项目配置之前强制 Project Binding 留在仓库边界内。
+/// 先做词法边界校验，避免 `..`/绝对路径直接访问仓库外；再 canonicalize
+/// 验证真实路径，阻断仓库内 symlink 指向仓库外的逃逸。
+fn repository_scoped_project_file(
+    repository: &Repository,
+    project_file: &Path,
+) -> Result<PathBuf, AppError> {
+    let raw_repository = Path::new(&repository.path);
+    let canonical_repository = std::fs::canonicalize(raw_repository).map_err(|error| {
+        source_error(
+            "publish_source_project_profile_not_found",
+            format!("the repository root cannot be resolved: {error}"),
+        )
+    })?;
+
+    let candidate = if project_file.is_absolute() {
+        project_file.to_path_buf()
+    } else {
+        if project_file.components().any(|component| {
+            matches!(
+                component,
+                std::path::Component::ParentDir
+                    | std::path::Component::RootDir
+                    | std::path::Component::Prefix(_)
+            )
+        }) {
+            return Err(project_binding_outside_repository(repository));
+        }
+        raw_repository.join(project_file)
+    };
+
+    let relative = candidate
+        .strip_prefix(raw_repository)
+        .or_else(|_| candidate.strip_prefix(&canonical_repository))
+        .map_err(|_| project_binding_outside_repository(repository))?;
+    if relative.components().any(|component| {
+        matches!(
+            component,
+            std::path::Component::ParentDir
+                | std::path::Component::RootDir
+                | std::path::Component::Prefix(_)
+        )
+    }) {
+        return Err(project_binding_outside_repository(repository));
+    }
+
+    let canonical_candidate = std::fs::canonicalize(&candidate).map_err(|error| {
+        source_error(
+            "publish_source_project_profile_not_found",
+            format!("the project file cannot be resolved: {error}"),
+        )
+    })?;
+    if !canonical_candidate.starts_with(&canonical_repository) {
+        return Err(project_binding_outside_repository(repository));
+    }
+
+    Ok(canonical_candidate)
+}
+
 /// 从绑定身份编码中取出仓库相对选择子并定位项目文件；仓库根选择子（"."）
-/// 沿用仓库已解析的项目文件。
+/// 沿用仓库已解析的项目文件。所有路径在返回前都必须通过仓库边界校验。
 fn project_file_for_binding(
     repository: &Repository,
     provider_id: &str,
@@ -754,8 +826,8 @@ fn project_file_for_binding(
     let selector = project_binding
         .strip_prefix(&prefix)
         .unwrap_or(project_binding);
-    if selector == "." {
-        return repository
+    let project_file = if selector == "." {
+        repository
             .project_file
             .as_deref()
             .map(PathBuf::from)
@@ -764,9 +836,11 @@ fn project_file_for_binding(
                     "publish_source_project_profile_not_found",
                     "the repository has no resolved project file for the publish profile",
                 )
-            });
-    }
-    Ok(Path::new(&repository.path).join(selector))
+            })?
+    } else {
+        Path::new(selector).to_path_buf()
+    };
+    repository_scoped_project_file(repository, &project_file)
 }
 
 #[cfg(test)]
@@ -1186,6 +1260,118 @@ mod tests {
         assert_eq!(
             missing.code.as_deref(),
             Some("publish_source_project_profile_not_found")
+        );
+    }
+
+    #[test]
+    fn project_profile_source_rejects_repository_boundary_escape() {
+        let repository_dir = tempfile::tempdir().expect("create repository dir");
+        let outside_dir = tempfile::tempdir().expect("create outside dir");
+        let inside_project = repository_dir.path().join("App.csproj");
+        std::fs::write(&inside_project, "<Project />").expect("write inside project");
+        let outside_project = outside_dir.path().join("Outside.csproj");
+        std::fs::write(&outside_project, "<Project />").expect("write outside project");
+        let outside_profiles = outside_dir.path().join("Properties").join("PublishProfiles");
+        std::fs::create_dir_all(&outside_profiles).expect("create outside profiles");
+        std::fs::write(outside_profiles.join("OutsideProfile.pubxml"), "<Project />")
+            .expect("write outside pubxml");
+
+        let repository = Repository {
+            id: "repository-A".to_string(),
+            name: "Demo".to_string(),
+            path: repository_dir.path().to_string_lossy().to_string(),
+            project_file: Some(inside_project.to_string_lossy().to_string()),
+            current_branch: "main".to_string(),
+            branches: Vec::new(),
+            is_main: false,
+            provider_id: Some("dotnet".to_string()),
+            publish_config: crate::store::RepoPublishConfig::default(),
+        };
+
+        let outside_name = outside_dir
+            .path()
+            .file_name()
+            .expect("outside directory name")
+            .to_string_lossy();
+        let attacks = [
+            format!("dotnet:../{outside_name}/Outside.csproj"),
+            format!("dotnet:{}", outside_project.to_string_lossy()),
+        ];
+        for project_binding in attacks {
+            let error = resolve_publish_source_scoped(
+                &repository,
+                &[],
+                &PublishSource::ProjectProfile {
+                    provider_id: "dotnet".to_string(),
+                    project_binding: Some(project_binding),
+                    reference: "OutsideProfile".to_string(),
+                },
+            )
+            .expect_err("project binding must not escape repository");
+            assert_eq!(
+                error.code.as_deref(),
+                Some("publish_source_project_binding_outside_repository")
+            );
+        }
+
+        let mut unbound = repository.clone();
+        unbound.project_file = Some(outside_project.to_string_lossy().to_string());
+        let error = resolve_publish_source_scoped(
+            &unbound,
+            &[],
+            &PublishSource::ProjectProfile {
+                provider_id: "dotnet".to_string(),
+                project_binding: None,
+                reference: "OutsideProfile".to_string(),
+            },
+        )
+        .expect_err("repository project_file must obey the same boundary");
+        assert_eq!(
+            error.code.as_deref(),
+            Some("publish_source_project_binding_outside_repository")
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn project_profile_source_rejects_symlink_escape() {
+        use std::os::unix::fs::symlink;
+
+        let repository_dir = tempfile::tempdir().expect("create repository dir");
+        let outside_dir = tempfile::tempdir().expect("create outside dir");
+        let outside_project = outside_dir.path().join("Outside.csproj");
+        std::fs::write(&outside_project, "<Project />").expect("write outside project");
+        let outside_profiles = outside_dir.path().join("Properties").join("PublishProfiles");
+        std::fs::create_dir_all(&outside_profiles).expect("create outside profiles");
+        std::fs::write(outside_profiles.join("OutsideProfile.pubxml"), "<Project />")
+            .expect("write outside pubxml");
+        symlink(outside_dir.path(), repository_dir.path().join("linked-outside"))
+            .expect("create escape symlink");
+
+        let repository = Repository {
+            id: "repository-A".to_string(),
+            name: "Demo".to_string(),
+            path: repository_dir.path().to_string_lossy().to_string(),
+            project_file: None,
+            current_branch: "main".to_string(),
+            branches: Vec::new(),
+            is_main: false,
+            provider_id: Some("dotnet".to_string()),
+            publish_config: crate::store::RepoPublishConfig::default(),
+        };
+        let error = resolve_publish_source_scoped(
+            &repository,
+            &[],
+            &PublishSource::ProjectProfile {
+                provider_id: "dotnet".to_string(),
+                project_binding: Some("dotnet:linked-outside/Outside.csproj".to_string()),
+                reference: "OutsideProfile".to_string(),
+            },
+        )
+        .expect_err("symlink must not escape repository");
+        assert_eq!(
+            error.code.as_deref(),
+            Some("publish_source_project_binding_outside_repository")
         );
     }
 
