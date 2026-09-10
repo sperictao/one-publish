@@ -41,7 +41,7 @@ import type {
 } from "@/generated/tauri-contracts";
 import { useI18n } from "@/hooks/useI18n";
 
-/** 凭据填的是引用（`<scheme>:<定位>`），不是秘密值；引用的含义由凭据来源决定。 */
+/** Credential fields store references (`<scheme>:<locator>`), never secret values; each credential source defines its reference semantics. */
 const CREDENTIAL_REFERENCE_PATTERN = /^[a-z][a-z0-9+.-]*:\S+$/i;
 
 type FieldKind = "string" | "number" | "boolean" | "stringList";
