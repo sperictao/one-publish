@@ -48,6 +48,36 @@ fn project_profiles_declaration_requires_discovery_matchers() {
 }
 
 #[test]
+fn output_layout_declaration_targets_a_string_schema_parameter() {
+    for provider_id in provider_registry().known_ids() {
+        let provider = provider_registry().get(&provider_id).expect("provider");
+        let Some(output) = provider.capabilities().output_layout.as_ref() else {
+            continue;
+        };
+        assert!(
+            !output.parameter.trim().is_empty(),
+            "provider {provider_id} 的输出声明缺少目标参数"
+        );
+        assert!(
+            !output.template.trim().is_empty(),
+            "provider {provider_id} 的输出声明缺少布局模板"
+        );
+        let schema = provider.get_schema().expect("schema");
+        let definition = schema.parameters.get(&output.parameter).unwrap_or_else(|| {
+            panic!(
+                "provider {provider_id} 的输出参数 {} 不存在于 schema",
+                output.parameter
+            )
+        });
+        assert!(
+            matches!(&definition.param_type, ParameterType::String),
+            "provider {provider_id} 的输出参数 {} 必须是 string",
+            output.parameter
+        );
+    }
+}
+
+#[test]
 fn command_import_covers_every_declared_flag_alias_and_positional() {
     for provider_id in provider_registry().known_ids() {
         let provider = provider_registry().get(&provider_id).expect("provider");
