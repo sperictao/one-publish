@@ -212,16 +212,17 @@ pub(crate) struct StoredRepoPublishConfigV3 {
 
 impl StoredRepoPublishConfigV3 {
     fn into_v4_repo_config(self) -> crate::store::types::RepoPublishConfig {
-        let mut config = crate::store::types::RepoPublishConfig::default();
-        config.profiles = self.profiles;
-        config.bindings = self.bindings;
-        config.applied_bundles = self.applied_bundles;
-        config.global_v3_edit = Some(LegacyEditStateV3 {
-            selected_preset: self.selected_preset,
-            is_custom_mode: self.is_custom_mode,
-            custom_config: self.custom_config,
-        });
-        config
+        crate::store::types::RepoPublishConfig {
+            profiles: self.profiles,
+            bindings: self.bindings,
+            applied_bundles: self.applied_bundles,
+            global_v3_edit: Some(LegacyEditStateV3 {
+                selected_preset: self.selected_preset,
+                is_custom_mode: self.is_custom_mode,
+                custom_config: self.custom_config,
+            }),
+            ..Default::default()
+        }
     }
 }
 
@@ -262,7 +263,7 @@ impl From<Repository> for StoredRepository {
 
 impl From<StoredRepository> for Repository {
     fn from(stored: StoredRepository) -> Self {
-        let mut repo = Self {
+        Self {
             id: stored.id,
             name: stored.name,
             path: stored.path,
@@ -272,8 +273,7 @@ impl From<StoredRepository> for Repository {
             is_main: stored.is_main,
             provider_id: stored.provider_id,
             publish_config: stored.publish_config.into(),
-        };
-        repo
+        }
     }
 }
 
@@ -403,7 +403,6 @@ pub(crate) fn sanitize_state(state: AppState) -> AppState {
 pub(crate) fn sanitize_stored_state(state: AppState) -> (AppState, bool) {
     sanitize_state_with_migration(state)
 }
-
 
 pub(crate) fn migrate_legacy_state(legacy: LegacyStoredAppState) -> AppState {
     let mut state = AppState {
@@ -701,7 +700,7 @@ fn merge_tauri_release_settings(
 // ── v3 → v4 编辑状态迁移（统一发布输入方案 §4.2）──────────────────────────
 
 use super::types::{PublishSelectionRef, ScopedPublishDraft};
-use crate::publish_runtime::{PublishBaseRevisionRef, PublishConfigurationContent};
+use crate::publish_runtime::PublishConfigurationContent;
 
 /// 把修订/草稿内容包装为完整配置内容：版本与组合由后端补全。
 fn draft_content(
@@ -724,33 +723,14 @@ fn draft_content(
 }
 
 fn upsert_scoped_draft(drafts: &mut Vec<ScopedPublishDraft>, draft: ScopedPublishDraft) {
-    if let Some(existing) = drafts
-        .iter_mut()
-        .find(|existing| {
-            existing.provider_id == draft.provider_id
-                && existing.project_binding == draft.project_binding
-        })
-    {
+    if let Some(existing) = drafts.iter_mut().find(|existing| {
+        existing.provider_id == draft.provider_id
+            && existing.project_binding == draft.project_binding
+    }) {
         *existing = draft;
     } else {
         drafts.push(draft);
     }
-}
-
-fn userprofile_base_revision(
-    repo: &Repository,
-    selected_preset: &str,
-) -> Option<PublishBaseRevisionRef> {
-    let configuration_id = selected_preset.strip_prefix("userprofile:")?;
-    let profile = repo
-        .publish_config
-        .profiles
-        .iter()
-        .find(|profile| profile.id == configuration_id)?;
-    Some(PublishBaseRevisionRef {
-        configuration_id: configuration_id.to_string(),
-        revision_id: profile.current_revision_id.clone(),
-    })
 }
 
 /// v3 编辑状态 → 统一选择与草稿（§4.2 旧状态转换规则）。幂等：已是 v4
@@ -824,7 +804,8 @@ pub(crate) fn migrate_repo_edit_state_v3_to_v4(repo: &mut Repository) -> bool {
                     &legacy_custom,
                 ) {
                     Some(parameters) => {
-                        let mut content = crate::publish_runtime::source::content_from_revision(revision);
+                        let mut content =
+                            crate::publish_runtime::source::content_from_revision(revision);
                         content.parameters = parameters;
                         content.project_binding = content.project_binding.or(binding.clone());
                         let draft_binding = content.project_binding.clone();
@@ -879,7 +860,8 @@ pub(crate) fn migrate_repo_edit_state_v3_to_v4(repo: &mut Repository) -> bool {
             provider_id,
             reference: reference.to_string(),
         })
-    } else if legacy_preset.is_empty() || legacy_preset == default_preset() && provider_id != "dotnet"
+    } else if legacy_preset.is_empty()
+        || legacy_preset == default_preset() && provider_id != "dotnet"
     {
         // 非 .NET 不继承无关的 release-fd；旧临时参数仅存于内存，转为空草稿。
         Some(PublishSelectionRef::Draft {

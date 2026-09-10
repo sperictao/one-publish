@@ -19,13 +19,14 @@ pub fn register_shortcuts(app: &AppHandle) -> Result<(), ShortcutError> {
         "Ctrl+R"
     };
 
-    app.global_shortcut().on_shortcut(shortcut_r, |app, _, event| {
-        if event.state == ShortcutState::Pressed {
-            if let Err(err) = app.emit("shortcut-refresh", ()) {
-                log::warn!("发送 shortcut-refresh 失败: {}", err);
+    app.global_shortcut()
+        .on_shortcut(shortcut_r, |app, _, event| {
+            if event.state == ShortcutState::Pressed {
+                if let Err(err) = app.emit("shortcut-refresh", ()) {
+                    log::warn!("发送 shortcut-refresh 失败: {}", err);
+                }
             }
-        }
-    })?;
+        })?;
     log::debug!("已注册快捷键: {}", shortcut_r);
 
     // Cmd/Ctrl + P - 执行发布
@@ -35,13 +36,14 @@ pub fn register_shortcuts(app: &AppHandle) -> Result<(), ShortcutError> {
         "Ctrl+P"
     };
 
-    app.global_shortcut().on_shortcut(shortcut_p, |app, _, event| {
-        if event.state == ShortcutState::Pressed {
-            if let Err(err) = app.emit("shortcut-publish", ()) {
-                log::warn!("发送 shortcut-publish 失败: {}", err);
+    app.global_shortcut()
+        .on_shortcut(shortcut_p, |app, _, event| {
+            if event.state == ShortcutState::Pressed {
+                if let Err(err) = app.emit("shortcut-publish", ()) {
+                    log::warn!("发送 shortcut-publish 失败: {}", err);
+                }
             }
-        }
-    })?;
+        })?;
     log::debug!("已注册快捷键: {}", shortcut_p);
 
     // Cmd/Ctrl + , - 打开设置

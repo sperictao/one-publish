@@ -584,7 +584,10 @@ mod tests {
         );
         assert_eq!(
             provider.infer_output_dir(&spec),
-            repository.path().join("bin/Debug/publish").to_string_lossy()
+            repository
+                .path()
+                .join("bin/Debug/publish")
+                .to_string_lossy()
         );
         let default_spec = output_dir_spec(&project_path, &[]);
         assert_eq!(
@@ -603,10 +606,7 @@ mod tests {
                 SpecValue::String("/tmp/one-publish-out".to_string()),
             )],
         );
-        assert_eq!(
-            provider.infer_output_dir(&explicit),
-            "/tmp/one-publish-out"
-        );
+        assert_eq!(provider.infer_output_dir(&explicit), "/tmp/one-publish-out");
         assert_eq!(
             provider.configured_output_dir(&explicit),
             Some("/tmp/one-publish-out".to_string())
@@ -626,10 +626,8 @@ mod tests {
             provider.infer_output_dir(&debug_spec),
             repository.path().join("target/debug").to_string_lossy()
         );
-        let release_spec = output_dir_spec(
-            repository.path(),
-            &[("release", SpecValue::Bool(true))],
-        );
+        let release_spec =
+            output_dir_spec(repository.path(), &[("release", SpecValue::Bool(true))]);
         assert_eq!(
             provider.infer_output_dir(&release_spec),
             repository.path().join("target/release").to_string_lossy()
@@ -648,10 +646,7 @@ mod tests {
         assert_eq!(provider.infer_output_dir(&implicit), "");
         let explicit = output_dir_spec(
             repository.path(),
-            &[(
-                "output",
-                SpecValue::String("/tmp/go-out".to_string()),
-            )],
+            &[("output", SpecValue::String("/tmp/go-out".to_string()))],
         );
         assert_eq!(provider.infer_output_dir(&explicit), "/tmp/go-out");
         assert_eq!(

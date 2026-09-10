@@ -248,9 +248,7 @@ fn parse_runner_asset_digests(
             .get("digest")
             .and_then(Value::as_str)
             .and_then(|digest| digest.strip_prefix("sha256:"))
-            .ok_or_else(|| {
-                runner_digest_error(format!("runner 资产 {name} 缺少 sha256 digest"))
-            })?;
+            .ok_or_else(|| runner_digest_error(format!("runner 资产 {name} 缺少 sha256 digest")))?;
         digests.insert(target.to_string(), digest.to_string());
     }
     if digests.is_empty() {
@@ -435,8 +433,7 @@ fn resolve_target_bindings(
             let backend = automation_backend(&execution_backend_id)?;
             binding.execution_backend_id = execution_backend_id.clone();
             binding.configuration_revision_id = profile.current_revision_id.clone();
-            binding.backend_projection =
-                fixed_backend_projection(&execution_backend_id, revision)?;
+            binding.backend_projection = fixed_backend_projection(&execution_backend_id, revision)?;
             binding.runtime_revision =
                 automation_runtime_revision(backend.as_ref(), revision, digests)?;
             binding.updated_at = now.to_string();
@@ -477,8 +474,7 @@ fn automation_backend_for_revision(
     Ok(backend_id)
 }
 
-pub(crate) const AUTOMATION_PENDING_CONSOLIDATION_REASON: &str =
-    "automation_backend_split_pending";
+pub(crate) const AUTOMATION_PENDING_CONSOLIDATION_REASON: &str = "automation_backend_split_pending";
 
 /// 存量分裂绑定（决议 #90）：绑定固化的 Backend 与其钉住修订的组合推导不一致
 ///（#90 之前 Backend 曾是独立请求字段）。此类绑定继续自治运行与只读同步，
@@ -677,15 +673,15 @@ fn runner_projection(
             "automation_remote_provider_unsupported",
         ));
     }
-    let release_config =
-        crate::tauri_release::release_settings_from_parameters(&revision.parameters)?.ok_or_else(
-            || {
-                AppError::config_with_code(
-                    "GitHub Actions 自动化需要修订中的 Tauri 发布设置",
-                    "github_actions_release_config_missing",
-                )
-            },
-        )?;
+    let release_config = crate::tauri_release::release_settings_from_parameters(
+        &revision.parameters,
+    )?
+    .ok_or_else(|| {
+        AppError::config_with_code(
+            "GitHub Actions 自动化需要修订中的 Tauri 发布设置",
+            "github_actions_release_config_missing",
+        )
+    })?;
 
     let composition = &revision.composition;
     let enabled_targets = release_config
@@ -766,10 +762,8 @@ fn runner_projection(
         delivery_routes,
     };
 
-    let mut release_input = BTreeMap::from([(
-        "channel".to_string(),
-        Value::String("stable".to_string()),
-    )]);
+    let mut release_input =
+        BTreeMap::from([("channel".to_string(), Value::String("stable".to_string()))]);
     if !release_config.release_gates.is_empty() {
         release_input.insert(
             publish_adapters::tauri::RELEASE_GATES_INPUT.to_string(),
@@ -811,9 +805,7 @@ fn runner_projection(
 /// 决议 #87：凭据引用确定性规范化为执行环境 Secret 名（`ONE_PUBLISH_<slug>`）。
 /// 名字非秘密，进投影公开部分；不同引用折叠出同一 slug 时以引用摘要后缀
 /// 消歧，保证映射可重放、diff 可预览。
-fn secret_bindings(
-    composition: &crate::store::PublishComposition,
-) -> BTreeMap<String, String> {
+fn secret_bindings(composition: &crate::store::PublishComposition) -> BTreeMap<String, String> {
     let mut by_slug: BTreeMap<String, BTreeSet<&str>> = BTreeMap::new();
     let bindings = std::iter::once(&composition.execution_backend)
         .chain(std::iter::once(&composition.artifact_store))
@@ -839,10 +831,7 @@ fn secret_bindings(
                 format!("ONE_PUBLISH_{slug}")
             } else {
                 let digest = publish_domain::sha256_hex(reference.as_bytes());
-                format!(
-                    "ONE_PUBLISH_{slug}_{}",
-                    digest[..8].to_ascii_uppercase()
-                )
+                format!("ONE_PUBLISH_{slug}_{}", digest[..8].to_ascii_uppercase())
             };
             secret_names.insert((*reference).to_string(), name);
         }
@@ -1547,9 +1536,7 @@ pub(crate) fn bindings_view(
         digests,
     ) {
         Ok(outcome) => Some(outcome),
-        Err(error)
-            if error.code.as_deref() == Some(AUTOMATION_PENDING_CONSOLIDATION_REASON) =>
-        {
+        Err(error) if error.code.as_deref() == Some(AUTOMATION_PENDING_CONSOLIDATION_REASON) => {
             None
         }
         Err(error) => return Err(error),
@@ -2329,8 +2316,8 @@ mod tests {
             Some(&"ONE_PUBLISH_CI_GITHUB_TOKEN".to_string())
         );
         // 分层投影契约把同一映射表呈现为"需在仓库配置的 Secrets"清单。
-        let binding_projection = binding_projection(&config, &outcome.targets[0])
-            .expect("render binding projection");
+        let binding_projection =
+            binding_projection(&config, &outcome.targets[0]).expect("render binding projection");
         assert_eq!(
             binding_projection.projection.secret_references,
             projection.secret_bindings
@@ -2404,15 +2391,11 @@ mod tests {
                 { "name": "unrelated.txt", "digest": "sha256:ff" },
             ]
         });
-        let digests =
-            parse_runner_asset_digests(payload.to_string().as_bytes(), "runner-v0.1.0")
-                .expect("parse per-target digests");
+        let digests = parse_runner_asset_digests(payload.to_string().as_bytes(), "runner-v0.1.0")
+            .expect("parse per-target digests");
         assert_eq!(
             digests,
-            BTreeMap::from([(
-                "x86_64-unknown-linux-gnu".to_string(),
-                "c".repeat(64)
-            )])
+            BTreeMap::from([("x86_64-unknown-linux-gnu".to_string(), "c".repeat(64))])
         );
 
         let missing_digest = serde_json::json!({

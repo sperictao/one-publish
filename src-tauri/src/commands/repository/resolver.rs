@@ -41,15 +41,12 @@ pub async fn resolve_project_info(
     }
 
     let registry = crate::provider::registry::provider_registry();
-    let Some(discovery) = registry
-        .repository_discoveries()
-        .find(|discovery| {
-            discovery
-                .project_file_matchers
-                .iter()
-                .any(|matcher| super::matches_project_file(&project_file_path, matcher))
-        })
-    else {
+    let Some(discovery) = registry.repository_discoveries().find(|discovery| {
+        discovery
+            .project_file_matchers
+            .iter()
+            .any(|matcher| super::matches_project_file(&project_file_path, matcher))
+    }) else {
         return Err(repository_error(
             format!("unsupported project file: {}", project_file_path.display()),
             "project_file_not_found",
@@ -63,15 +60,12 @@ pub async fn resolve_project_info(
     };
     let capabilities = provider.capabilities();
     // 解决方案文件不是项目配置宿主：按无项目语义的普通文件处理。
-    let is_solution_file = discovery
-        .solution_file_extensions
-        .iter()
-        .any(|extension| {
-            project_file_path
-                .extension()
-                .and_then(|ext| ext.to_str())
-                .is_some_and(|ext| ext.eq_ignore_ascii_case(extension))
-        });
+    let is_solution_file = discovery.solution_file_extensions.iter().any(|extension| {
+        project_file_path
+            .extension()
+            .and_then(|ext| ext.to_str())
+            .is_some_and(|ext| ext.eq_ignore_ascii_case(extension))
+    });
     if (capabilities.project_profiles.is_none() && capabilities.framework_tags.is_empty())
         || is_solution_file
     {
@@ -97,10 +91,8 @@ pub async fn resolve_project_info(
     } else {
         read_target_frameworks(&project_file_path, &capabilities.framework_tags)?
     };
-    let root_path = resolve_project_root_for_file(
-        &project_file_path,
-        &discovery.solution_file_extensions,
-    );
+    let root_path =
+        resolve_project_root_for_file(&project_file_path, &discovery.solution_file_extensions);
 
     Ok(ProjectInfo {
         root_path: root_path.to_string_lossy().to_string(),

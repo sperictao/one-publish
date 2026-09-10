@@ -4,7 +4,10 @@ use serde_json::Value;
 /// Keeps executable paths intact while removing secret values from recovery data.
 /// Credential references are exempt only at their contract-defined locations.
 pub(crate) fn sanitize_publish_recovery_snapshot(snapshot: &mut Value) -> bool {
-    let tauri = snapshot.pointer("/content/providerId").and_then(Value::as_str) == Some("tauri");
+    let tauri = snapshot
+        .pointer("/content/providerId")
+        .and_then(Value::as_str)
+        == Some("tauri");
     let mut incomplete = snapshot.get("redacted").and_then(Value::as_bool) == Some(true);
     incomplete |= sanitize_value(snapshot, &mut Vec::new(), tauri);
     if incomplete {
@@ -28,9 +31,25 @@ fn is_reference_location(path: &[String], value: &Value, tauri: bool) -> bool {
     let path = path.iter().map(String::as_str).collect::<Vec<_>>();
     let credential_binding = matches!(
         path.as_slice(),
-        ["content", "composition", "executionBackend" | "artifactStore", "credentials"]
-            | ["content", "composition", "artifactProcessors", "[]", "credentials"]
-            | ["content", "composition", "deliveryRoutes", "[]", "destination", "credentials"]
+        [
+            "content",
+            "composition",
+            "executionBackend" | "artifactStore",
+            "credentials"
+        ] | [
+            "content",
+            "composition",
+            "artifactProcessors",
+            "[]",
+            "credentials"
+        ] | [
+            "content",
+            "composition",
+            "deliveryRoutes",
+            "[]",
+            "destination",
+            "credentials"
+        ]
     );
     if credential_binding {
         return value
@@ -118,8 +137,14 @@ mod tests {
         });
         assert!(sanitize_publish_recovery_snapshot(&mut snapshot));
         assert_eq!(snapshot["redacted"], true);
-        assert_eq!(snapshot["content"]["parameters"]["properties"]["Password"], "<redacted>");
-        assert_eq!(snapshot["executedParameters"]["properties"]["apiToken"], "<redacted>");
+        assert_eq!(
+            snapshot["content"]["parameters"]["properties"]["Password"],
+            "<redacted>"
+        );
+        assert_eq!(
+            snapshot["executedParameters"]["properties"]["apiToken"],
+            "<redacted>"
+        );
         assert!(!snapshot.to_string().contains("secret-"));
         assert_eq!(snapshot["content"]["parameters"]["output"], "/tmp/out");
         assert_eq!(snapshot["executedParameters"]["output"], "/tmp/out");
@@ -165,7 +190,12 @@ mod tests {
             json!("ghp_actualSecretValue");
         assert!(sanitize_publish_recovery_snapshot(&mut snapshot));
         let serialized = snapshot.to_string();
-        for secret in ["looks-like-reference-but-is-secret", "nested-secret", "NOT_A_REFERENCE_HERE", "ghp_actualSecretValue"] {
+        for secret in [
+            "looks-like-reference-but-is-secret",
+            "nested-secret",
+            "NOT_A_REFERENCE_HERE",
+            "ghp_actualSecretValue",
+        ] {
             assert!(!serialized.contains(secret));
         }
     }

@@ -72,7 +72,10 @@ impl BuiltInProvider {
                     template: DOTNET_OUTPUT_LAYOUT.to_string(),
                 }),
                 project_profiles: Some(dotnet_project_profiles()),
-                framework_tags: vec!["TargetFramework".to_string(), "TargetFrameworks".to_string()],
+                framework_tags: vec![
+                    "TargetFramework".to_string(),
+                    "TargetFrameworks".to_string(),
+                ],
             },
             ProviderCatalogEntry {
                 id: "dotnet".to_string(),

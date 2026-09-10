@@ -547,7 +547,7 @@ pub fn scan_provider_project_candidates_from_path(
     let registry = crate::provider::registry::provider_registry();
     let discoveries = registry
         .repository_discoveries()
-        .filter(|discovery| provider_id.is_none_or(|id| discovery.provider_id == id))
+        .filter(|discovery| provider_id.map_or(true, |id| discovery.provider_id == id))
         .collect::<Vec<_>>();
     if discoveries.is_empty() {
         return Err(repository_error(
@@ -565,8 +565,11 @@ pub fn scan_provider_project_candidates_from_path(
     if solution_extensions.is_empty() {
         candidates.solution_files.clear();
     }
-    let is_solution_file =
-        |path: &Path| solution_extensions.iter().any(|extension| has_extension(path, extension));
+    let is_solution_file = |path: &Path| {
+        solution_extensions
+            .iter()
+            .any(|extension| has_extension(path, extension))
+    };
     let project_files = context
         .collect_files(|path| {
             !is_solution_file(path)
@@ -766,9 +769,10 @@ pub fn resolve_publish_profile_path(
         )
     })?;
 
-    let profile_path = project_dir
-        .join(&profiles.directory)
-        .join(format!("{}.{}", normalized_profile_name, profiles.extension));
+    let profile_path = project_dir.join(&profiles.directory).join(format!(
+        "{}.{}",
+        normalized_profile_name, profiles.extension
+    ));
 
     if !profile_path.is_file() {
         return Err(repository_error(

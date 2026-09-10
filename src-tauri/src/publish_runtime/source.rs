@@ -94,6 +94,7 @@ pub struct PublishDraft {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
 #[serde(tag = "kind", rename_all = "camelCase")]
 #[ts(rename_all = "camelCase")]
+#[allow(clippy::large_enum_variant)] // Serialized IPC contract; boxing would only change Rust storage semantics.
 pub enum PublishSource {
     /// 已保存命名配置：加载指定修订；当前修订检查保留在统一 prepare 中。
     Revision {
@@ -244,7 +245,9 @@ fn configuration_content_blocked_reason(content: &PublishConfigurationContent) -
     None
 }
 
-pub(crate) fn content_from_revision(revision: &PublishConfigurationRevision) -> PublishConfigurationContent {
+pub(crate) fn content_from_revision(
+    revision: &PublishConfigurationRevision,
+) -> PublishConfigurationContent {
     PublishConfigurationContent {
         provider_id: revision.provider_id.clone(),
         contract_version: revision.contract_version,
@@ -326,7 +329,12 @@ pub(crate) fn resolve_publish_source_scoped(
             provider_id,
             project_binding,
             reference,
-        } => resolve_project_profile_source(repository, provider_id, project_binding.as_deref(), reference),
+        } => resolve_project_profile_source(
+            repository,
+            provider_id,
+            project_binding.as_deref(),
+            reference,
+        ),
         PublishSource::History { record_id } => {
             resolve_history_source(repository, history, record_id)
         }
@@ -441,7 +449,13 @@ fn resolve_template_source(
         composition: PublishComposition::local_default(),
     };
     Ok(resolution(
-        draft_from_content(content, PublishDraftOrigin::Template { template_id: template_id.to_string() }, None),
+        draft_from_content(
+            content,
+            PublishDraftOrigin::Template {
+                template_id: template_id.to_string(),
+            },
+            None,
+        ),
         None,
         None,
         None,
@@ -458,14 +472,12 @@ fn resolve_project_profile_source(
     reference: &str,
 ) -> Result<ResolvedPublishSource, AppError> {
     let registry = ProviderRegistry::new();
-    let provider = registry
-        .get(provider_id)
-        .map_err(|_| {
-            source_error(
-                "publish_source_unknown_provider",
-                format!("unknown publish provider: {provider_id}"),
-            )
-        })?;
+    let provider = registry.get(provider_id).map_err(|_| {
+        source_error(
+            "publish_source_unknown_provider",
+            format!("unknown publish provider: {provider_id}"),
+        )
+    })?;
     let Some(project_profiles) = provider.capabilities().project_profiles.clone() else {
         return Err(source_error(
             "publish_source_project_profile_unsupported",
@@ -573,8 +585,8 @@ fn resolve_history_source(
         if crate::security::sanitize_publish_recovery_snapshot(&mut value) {
             return Err(history_incomplete());
         }
-        let snapshot: PublishRecoverySnapshot = serde_json::from_value(value)
-            .map_err(|_| history_incomplete())?;
+        let snapshot: PublishRecoverySnapshot =
+            serde_json::from_value(value).map_err(|_| history_incomplete())?;
         if snapshot.version != super::PUBLISH_RECOVERY_SNAPSHOT_VERSION {
             return Err(history_incomplete());
         }
@@ -738,10 +750,7 @@ fn find_revision<'a>(
         .ok_or_else(|| {
             source_error(
                 "publish_source_revision_not_found",
-                format!(
-                    "configuration {} has no revision {revision_id}",
-                    profile.id
-                ),
+                format!("configuration {} has no revision {revision_id}", profile.id),
             )
         })
 }
@@ -975,8 +984,10 @@ mod tests {
 
     #[test]
     fn revision_source_reports_non_current_revision_as_diagnostic() {
-        let (_dir, mut repository) =
-            repository_with_profile(serde_json::json!({ "configuration": "Release" }), "revision-1");
+        let (_dir, mut repository) = repository_with_profile(
+            serde_json::json!({ "configuration": "Release" }),
+            "revision-1",
+        );
         let old_revision = PublishConfigurationRevision {
             id: "revision-old".to_string(),
             sequence: 0,
@@ -1020,8 +1031,7 @@ mod tests {
 
     #[test]
     fn revision_source_fails_with_specific_codes() {
-        let (_dir, repository) =
-            repository_with_profile(serde_json::json!({}), "revision-A");
+        let (_dir, repository) = repository_with_profile(serde_json::json!({}), "revision-A");
 
         let missing_config = resolve_publish_source_scoped(
             &repository,
@@ -1160,8 +1170,7 @@ mod tests {
 
     #[test]
     fn template_source_resolves_backend_template_parameters() {
-        let (dir, mut repository) =
-            repository_with_profile(serde_json::json!({}), "revision-A");
+        let (dir, mut repository) = repository_with_profile(serde_json::json!({}), "revision-A");
         repository.project_file = Some(dir.path().join("App.csproj").to_string_lossy().to_string());
 
         let resolved = resolve_publish_source_scoped(
@@ -1187,7 +1196,12 @@ mod tests {
             resolved.draft.content.project_binding.as_deref(),
             Some("dotnet:App.csproj")
         );
-        assert_eq!(resolved.draft.origin, PublishDraftOrigin::Template { template_id: "release-win-x64".to_string() });
+        assert_eq!(
+            resolved.draft.origin,
+            PublishDraftOrigin::Template {
+                template_id: "release-win-x64".to_string()
+            }
+        );
 
         let unknown = resolve_publish_source_scoped(
             &repository,
@@ -1271,10 +1285,16 @@ mod tests {
         std::fs::write(&inside_project, "<Project />").expect("write inside project");
         let outside_project = outside_dir.path().join("Outside.csproj");
         std::fs::write(&outside_project, "<Project />").expect("write outside project");
-        let outside_profiles = outside_dir.path().join("Properties").join("PublishProfiles");
+        let outside_profiles = outside_dir
+            .path()
+            .join("Properties")
+            .join("PublishProfiles");
         std::fs::create_dir_all(&outside_profiles).expect("create outside profiles");
-        std::fs::write(outside_profiles.join("OutsideProfile.pubxml"), "<Project />")
-            .expect("write outside pubxml");
+        std::fs::write(
+            outside_profiles.join("OutsideProfile.pubxml"),
+            "<Project />",
+        )
+        .expect("write outside pubxml");
 
         let repository = Repository {
             id: "repository-A".to_string(),
@@ -1341,12 +1361,21 @@ mod tests {
         let outside_dir = tempfile::tempdir().expect("create outside dir");
         let outside_project = outside_dir.path().join("Outside.csproj");
         std::fs::write(&outside_project, "<Project />").expect("write outside project");
-        let outside_profiles = outside_dir.path().join("Properties").join("PublishProfiles");
+        let outside_profiles = outside_dir
+            .path()
+            .join("Properties")
+            .join("PublishProfiles");
         std::fs::create_dir_all(&outside_profiles).expect("create outside profiles");
-        std::fs::write(outside_profiles.join("OutsideProfile.pubxml"), "<Project />")
-            .expect("write outside pubxml");
-        symlink(outside_dir.path(), repository_dir.path().join("linked-outside"))
-            .expect("create escape symlink");
+        std::fs::write(
+            outside_profiles.join("OutsideProfile.pubxml"),
+            "<Project />",
+        )
+        .expect("write outside pubxml");
+        symlink(
+            outside_dir.path(),
+            repository_dir.path().join("linked-outside"),
+        )
+        .expect("create escape symlink");
 
         let repository = Repository {
             id: "repository-A".to_string(),
@@ -1415,8 +1444,10 @@ mod tests {
 
     #[test]
     fn history_source_without_recoverable_configuration_is_incomplete() {
-        let (_dir, repository) =
-            repository_with_profile(serde_json::json!({ "configuration": "Release" }), "revision-A");
+        let (_dir, repository) = repository_with_profile(
+            serde_json::json!({ "configuration": "Release" }),
+            "revision-A",
+        );
 
         // 无配置引用。
         let no_refs = resolve_publish_source_scoped(
@@ -1451,8 +1482,10 @@ mod tests {
 
     #[test]
     fn history_source_prefers_a_complete_recovery_snapshot() {
-        let (_dir, repository) =
-            repository_with_profile(serde_json::json!({ "configuration": "Release" }), "revision-A");
+        let (_dir, repository) = repository_with_profile(
+            serde_json::json!({ "configuration": "Release" }),
+            "revision-A",
+        );
         // 快照来自已被回收的草稿修订（revision-gone 不存在），重跑仍可恢复。
         let snapshot = PublishRecoverySnapshot {
             version: 1,
@@ -1505,10 +1538,7 @@ mod tests {
                 "output": "/recorded-out/App/Debug",
             })
         );
-        assert_eq!(
-            resolved.revision_id.as_deref(),
-            Some("revision-gone")
-        );
+        assert_eq!(resolved.revision_id.as_deref(), Some("revision-gone"));
         assert!(resolved
             .diagnostics
             .iter()
@@ -1518,8 +1548,10 @@ mod tests {
 
     #[test]
     fn history_recovery_snapshot_marks_incompatible_versions_blocked() {
-        let (_dir, repository) =
-            repository_with_profile(serde_json::json!({ "configuration": "Release" }), "revision-A");
+        let (_dir, repository) = repository_with_profile(
+            serde_json::json!({ "configuration": "Release" }),
+            "revision-A",
+        );
         let snapshot = PublishRecoverySnapshot {
             version: 1,
             content: PublishConfigurationContent {
@@ -1571,11 +1603,21 @@ mod tests {
             serde_json::json!({"content": {"parameters": {"properties": {"Password": "test-only-secret"}}}}),
             serde_json::json!({"content": {"parameters": {"value": "<redacted>"}}}),
         ] {
-            let mut entry = record("secret-record", Some("configuration-A"), Some("revision-A"), None);
+            let mut entry = record(
+                "secret-record",
+                Some("configuration-A"),
+                Some("revision-A"),
+                None,
+            );
             entry.recovery_snapshot = Some(snapshot);
-            let error = resolve_publish_source_scoped(&repository, &[entry], &PublishSource::History {
-                record_id: "secret-record".to_string(),
-            }).expect_err("never execute secrets or redaction placeholders");
+            let error = resolve_publish_source_scoped(
+                &repository,
+                &[entry],
+                &PublishSource::History {
+                    record_id: "secret-record".to_string(),
+                },
+            )
+            .expect_err("never execute secrets or redaction placeholders");
             assert_eq!(error.code.as_deref(), Some("history_input_incomplete"));
         }
     }
@@ -1603,10 +1645,7 @@ mod tests {
             resolved.draft.content.composition,
             PublishComposition::local_default()
         );
-        assert_eq!(
-            resolved.draft.content.parameters,
-            serde_json::json!({})
-        );
+        assert_eq!(resolved.draft.content.parameters, serde_json::json!({}));
         assert_eq!(resolved.draft.origin, PublishDraftOrigin::New);
         assert!(resolved.blocked_reason.is_none());
     }

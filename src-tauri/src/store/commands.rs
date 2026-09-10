@@ -9,12 +9,11 @@ use super::runtime::{
 };
 use super::types::{
     normalize_environment_provider_ids, normalize_execution_history_limit, trim_execution_history,
-    AppState, ConfigProfile, ExecutionRecord, PublishComposition,
-    PublishSelectionRef, Repository, ScopedPublishDraft, CURRENT_SETTINGS_VERSION,
-    PUBLISH_CONFIGURATION_CONTRACT_VERSION,
+    AppState, ConfigProfile, ExecutionRecord, PublishComposition, PublishSelectionRef, Repository,
+    ScopedPublishDraft, CURRENT_SETTINGS_VERSION, PUBLISH_CONFIGURATION_CONTRACT_VERSION,
 };
-use crate::publish_runtime::PublishBaseRevisionRef;
 use crate::errors::AppError;
+use crate::publish_runtime::PublishBaseRevisionRef;
 use std::collections::{BTreeMap, BTreeSet};
 
 #[derive(Debug, Clone, serde::Deserialize)]
@@ -298,8 +297,9 @@ pub async fn update_publish_edit_state(
     repo_id: String,
     update: PublishEditStateUpdate,
 ) -> Result<AppState, AppError> {
-    let _timer =
-        crate::commands::middleware::CommandTimer::new("store::commands::update_publish_edit_state");
+    let _timer = crate::commands::middleware::CommandTimer::new(
+        "store::commands::update_publish_edit_state",
+    );
     let mut state = get_state();
     let repo = find_repository_mut(&mut state.repositories, &repo_id)?;
 
@@ -331,26 +331,35 @@ fn upsert_edit_draft(
     base_revision: Option<PublishBaseRevisionRef>,
 ) -> Result<Option<String>, AppError> {
     let mut content = if let Some(base) = &base_revision {
-        let revision = repo.publish_config.profile(&base.configuration_id)
-            .filter(|profile| profile.deleted_at.is_none() && profile.current_revision_id == base.revision_id)
+        let revision = repo
+            .publish_config
+            .profile(&base.configuration_id)
+            .filter(|profile| {
+                profile.deleted_at.is_none() && profile.current_revision_id == base.revision_id
+            })
             .and_then(|profile| profile.current_revision())
             .filter(|revision| revision.provider_id == provider_id)
-            .ok_or_else(|| AppError::validation_with_code(
-                "草稿基准修订已变化，请重新加载配置", "publish_source_draft_conflict"
-            ))?;
+            .ok_or_else(|| {
+                AppError::validation_with_code(
+                    "草稿基准修订已变化，请重新加载配置",
+                    "publish_source_draft_conflict",
+                )
+            })?;
         crate::publish_runtime::source::content_from_revision(revision)
-    } else { crate::publish_runtime::PublishConfigurationContent {
-        provider_id: provider_id.to_string(),
-        contract_version: PUBLISH_CONFIGURATION_CONTRACT_VERSION,
-        provider_version: crate::provider::registry::ProviderRegistry::new()
-            .get(provider_id)
-            .map(|provider| provider.manifest().version.clone())
-            .unwrap_or_else(|_| "unknown".to_string()),
-        settings_version: CURRENT_SETTINGS_VERSION,
-        project_binding: project_binding.clone(),
-        parameters: serde_json::json!({}),
-        composition: PublishComposition::local_default(),
-    }};
+    } else {
+        crate::publish_runtime::PublishConfigurationContent {
+            provider_id: provider_id.to_string(),
+            contract_version: PUBLISH_CONFIGURATION_CONTRACT_VERSION,
+            provider_version: crate::provider::registry::ProviderRegistry::new()
+                .get(provider_id)
+                .map(|provider| provider.manifest().version.clone())
+                .unwrap_or_else(|_| "unknown".to_string()),
+            settings_version: CURRENT_SETTINGS_VERSION,
+            project_binding: project_binding.clone(),
+            parameters: serde_json::json!({}),
+            composition: PublishComposition::local_default(),
+        }
+    };
     content.parameters = parameters;
     content.project_binding = project_binding.or(content.project_binding);
     let project_binding = content.project_binding.clone();
@@ -360,15 +369,10 @@ fn upsert_edit_draft(
         content,
         base_revision,
     };
-    if let Some(existing) = repo
-        .publish_config
-        .drafts
-        .iter_mut()
-        .find(|existing| {
-            existing.provider_id == draft.provider_id
-                && existing.project_binding == draft.project_binding
-        })
-    {
+    if let Some(existing) = repo.publish_config.drafts.iter_mut().find(|existing| {
+        existing.provider_id == draft.provider_id
+            && existing.project_binding == draft.project_binding
+    }) {
         *existing = draft;
     } else {
         repo.publish_config.drafts.push(draft);

@@ -509,7 +509,10 @@ mod tests {
         let result = parser.parse(command, &schema);
 
         assert!(result.diagnostics.is_empty());
-        assert_eq!(result.parameters.get("task"), Some(&serde_json::json!("build")));
+        assert_eq!(
+            result.parameters.get("task"),
+            Some(&serde_json::json!("build"))
+        );
         assert_eq!(
             result.parameters.get("properties"),
             Some(&serde_json::json!({
@@ -529,7 +532,10 @@ mod tests {
         let result = parser.parse("./gradlew test", &java_schema());
 
         assert!(result.diagnostics.is_empty());
-        assert_eq!(result.parameters.get("task"), Some(&serde_json::json!("test")));
+        assert_eq!(
+            result.parameters.get("task"),
+            Some(&serde_json::json!("test"))
+        );
     }
 
     #[test]
@@ -538,8 +544,14 @@ mod tests {
         let result = parser.parse("./gradlew --offline test", &java_schema());
 
         assert!(result.diagnostics.is_empty(), "{:?}", result.diagnostics);
-        assert_eq!(result.parameters.get("offline"), Some(&serde_json::json!(true)));
-        assert_eq!(result.parameters.get("task"), Some(&serde_json::json!("test")));
+        assert_eq!(
+            result.parameters.get("offline"),
+            Some(&serde_json::json!(true))
+        );
+        assert_eq!(
+            result.parameters.get("task"),
+            Some(&serde_json::json!("test"))
+        );
     }
 
     #[test]
@@ -629,7 +641,11 @@ mod tests {
             ("dotnet publish --self-contained TRUE", true),
         ] {
             let result = parser.parse(command, &schema);
-            assert!(result.diagnostics.is_empty(), "{command}: {:?}", result.diagnostics);
+            assert!(
+                result.diagnostics.is_empty(),
+                "{command}: {:?}",
+                result.diagnostics
+            );
             assert_eq!(
                 result.parameters.get("self_contained"),
                 Some(&serde_json::json!(expected)),

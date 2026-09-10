@@ -43,7 +43,10 @@ fn explicit_positional_overrides_default(spec: &PublishSpec, default_arg: &str) 
             && definition.flag.is_empty()
             && definition.prefix.is_none()
             && definition.env.is_none()
-            && definition.default.as_ref().and_then(serde_json::Value::as_str)
+            && definition
+                .default
+                .as_ref()
+                .and_then(serde_json::Value::as_str)
                 == Some(default_arg)
             && matches!(
                 spec.parameters.get(key),
@@ -66,9 +69,10 @@ pub(crate) fn resolve_plan_command(
         .to_string();
     let mut args = parts.map(|item| item.to_string()).collect::<Vec<_>>();
 
-    if args.last().is_some_and(|default_arg| {
-        explicit_positional_overrides_default(&plan.spec, default_arg)
-    }) {
+    if args
+        .last()
+        .is_some_and(|default_arg| explicit_positional_overrides_default(&plan.spec, default_arg))
+    {
         args.pop();
     }
 
@@ -195,7 +199,8 @@ mod tests {
 
     #[test]
     fn plan_command_removes_positional_default_when_spec_has_explicit_value() {
-        let (program, args) = resolve_plan_command(&java_plan(Some("test"))).expect("resolve command");
+        let (program, args) =
+            resolve_plan_command(&java_plan(Some("test"))).expect("resolve command");
         assert_eq!(program, "./gradlew");
         assert!(args.is_empty());
     }

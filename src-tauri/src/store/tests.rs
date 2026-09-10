@@ -8,7 +8,7 @@ use super::runtime::{
     apply_selected_repo_id_update, build_frontend_state, find_repository,
     validate_repository_project_binding,
 };
-use super::types::{DRAFT_MAX_REVISIONS, DRAFT_PROFILE_NAME, PublishSelectionRef};
+use super::types::{PublishSelectionRef, DRAFT_MAX_REVISIONS, DRAFT_PROFILE_NAME};
 use super::{
     AppState, AutomationBinding, AutomationTriggerPolicy, ConfigurationImport, ExecutionRecord,
     PublishConfigStore, RepoPublishConfig, Repository,
@@ -875,9 +875,15 @@ fn load_from_path_migrates_name_based_profiles_once_and_writes_versioned_schema(
         serde_json::from_str(&persisted).expect("parse migrated config");
     // §4.2：v4 只写选择与草稿；schemaVersion 升级为 4。
     assert_eq!(persisted_json["schemaVersion"], 4);
-    assert!(persisted_json["repositories"][0]["publishConfig"].get("selectedPreset").is_none());
-    assert!(persisted_json["repositories"][0]["publishConfig"].get("isCustomMode").is_none());
-    assert!(persisted_json["repositories"][0]["publishConfig"].get("customConfig").is_none());
+    assert!(persisted_json["repositories"][0]["publishConfig"]
+        .get("selectedPreset")
+        .is_none());
+    assert!(persisted_json["repositories"][0]["publishConfig"]
+        .get("isCustomMode")
+        .is_none());
+    assert!(persisted_json["repositories"][0]["publishConfig"]
+        .get("customConfig")
+        .is_none());
     assert!(
         persisted_json["repositories"][0]["publishConfig"]["profiles"][0]
             .get("providerId")
@@ -922,7 +928,6 @@ fn load_from_path_rejects_schema_two_string_runtime_pins() {
     let loaded = load_from_path(&config_path);
     assert!(loaded.repositories.is_empty());
 }
-
 
 #[test]
 fn load_from_path_recovers_from_corrupt_config_and_creates_backup() {
@@ -1826,22 +1831,26 @@ fn upsert_test_draft(
     project_binding: Option<String>,
     created_at: String,
 ) -> (String, String) {
-    config.upsert_draft_revision(crate::publish_runtime::PublishConfigurationContent {
-        provider_id,
-        contract_version: 1,
-        provider_version: "1".to_string(),
-        settings_version: 1,
-        parameters,
-        project_binding,
-        composition: crate::store::PublishComposition::local_default(),
-    }, created_at)
+    config.upsert_draft_revision(
+        crate::publish_runtime::PublishConfigurationContent {
+            provider_id,
+            contract_version: 1,
+            provider_version: "1".to_string(),
+            settings_version: 1,
+            parameters,
+            project_binding,
+            composition: crate::store::PublishComposition::local_default(),
+        },
+        created_at,
+    )
 }
 
 #[test]
 fn upsert_draft_revision_creates_hidden_draft_profile_with_local_composition() {
     let mut config = RepoPublishConfig::default();
 
-    let (profile_id, revision_id) = upsert_test_draft(&mut config,
+    let (profile_id, revision_id) = upsert_test_draft(
+        &mut config,
         "dotnet".to_string(),
         serde_json::json!({ "configuration": "Release" }),
         None,
@@ -1866,13 +1875,15 @@ fn upsert_draft_revision_creates_hidden_draft_profile_with_local_composition() {
 fn upsert_draft_revision_reuses_draft_per_provider_and_moves_current() {
     let mut config = RepoPublishConfig::default();
 
-    let (first_profile, first_revision) = upsert_test_draft(&mut config,
+    let (first_profile, first_revision) = upsert_test_draft(
+        &mut config,
         "dotnet".to_string(),
         serde_json::json!({ "configuration": "Debug" }),
         None,
         "2026-08-03T10:00:00Z".to_string(),
     );
-    let (second_profile, second_revision) = upsert_test_draft(&mut config,
+    let (second_profile, second_revision) = upsert_test_draft(
+        &mut config,
         "dotnet".to_string(),
         serde_json::json!({ "configuration": "Release" }),
         None,
@@ -1895,13 +1906,15 @@ fn upsert_draft_revision_reuses_draft_per_provider_and_moves_current() {
 fn upsert_draft_revision_keeps_separate_drafts_per_provider() {
     let mut config = RepoPublishConfig::default();
 
-    let (dotnet_profile, _) = upsert_test_draft(&mut config,
+    let (dotnet_profile, _) = upsert_test_draft(
+        &mut config,
         "dotnet".to_string(),
         serde_json::json!({}),
         None,
         "2026-08-03T10:00:00Z".to_string(),
     );
-    let (tauri_profile, _) = upsert_test_draft(&mut config,
+    let (tauri_profile, _) = upsert_test_draft(
+        &mut config,
         "tauri".to_string(),
         serde_json::json!({}),
         None,
@@ -1933,7 +1946,8 @@ fn upsert_draft_revision_never_matches_named_profiles() {
         )
         .expect("create named profile");
 
-    let (draft_profile, _) = upsert_test_draft(&mut config,
+    let (draft_profile, _) = upsert_test_draft(
+        &mut config,
         "dotnet".to_string(),
         serde_json::json!({ "configuration": "Debug" }),
         None,
@@ -1957,7 +1971,8 @@ fn upsert_draft_revision_gc_keeps_only_recent_revisions_and_current_last() {
     let mut profile_id = String::new();
 
     for index in 0..(DRAFT_MAX_REVISIONS + 5) {
-        let (profile, revision) = upsert_test_draft(&mut config,
+        let (profile, revision) = upsert_test_draft(
+            &mut config,
             "dotnet".to_string(),
             serde_json::json!({ "configuration": format!("r{index}") }),
             None,
@@ -1999,8 +2014,11 @@ fn write_v3_config(config_path: &Path, repositories: Vec<serde_json::Value>) {
         "schemaVersion": 3,
         "repositories": repositories,
     });
-    fs::write(config_path, serde_json::to_vec_pretty(&payload).expect("serialize v3 payload"))
-        .expect("write v3 config");
+    fs::write(
+        config_path,
+        serde_json::to_vec_pretty(&payload).expect("serialize v3 payload"),
+    )
+    .expect("write v3 config");
 }
 
 #[test]
@@ -2059,7 +2077,10 @@ fn v3_migration_preserves_automation_bindings_and_applied_bundles_on_reload() {
     assert_eq!(migrated["schemaVersion"], 4);
     let persisted_config = &migrated["repositories"][0]["publishConfig"];
     assert_eq!(persisted_config["bindings"], serde_json::json!([binding]));
-    assert_eq!(persisted_config["appliedBundles"], serde_json::json!([bundle]));
+    assert_eq!(
+        persisted_config["appliedBundles"],
+        serde_json::json!([bundle])
+    );
 
     let second = load_from_path(&config_path);
     assert!(second.startup_notice.is_none());
@@ -2306,11 +2327,14 @@ fn v4_reload_is_stable_and_does_not_double_migrate() {
     let first = load_from_path(&config_path);
     save_to_path(&first, &config_path).expect("save v4");
     let persisted = fs::read_to_string(&config_path).expect("read v4");
-    let persisted_json: serde_json::Value =
-        serde_json::from_str(&persisted).expect("parse v4");
+    let persisted_json: serde_json::Value = serde_json::from_str(&persisted).expect("parse v4");
     // v4 磁盘不再写旧三字段。
-    assert!(persisted_json["repositories"][0]["publishConfig"].get("selectedPreset").is_none());
-    assert!(persisted_json["repositories"][0]["publishConfig"].get("customConfig").is_none());
+    assert!(persisted_json["repositories"][0]["publishConfig"]
+        .get("selectedPreset")
+        .is_none());
+    assert!(persisted_json["repositories"][0]["publishConfig"]
+        .get("customConfig")
+        .is_none());
 
     let second = load_from_path(&config_path);
     let first_config = &first.repositories[0].publish_config;
@@ -2345,7 +2369,11 @@ fn first_v4_write_keeps_a_migration_backup_of_the_original_file() {
         .map(|entry| entry.file_name().to_string_lossy().to_string())
         .filter(|name| name.starts_with("config.migrate."))
         .collect();
-    assert_eq!(backups.len(), 1, "exactly one migration backup: {backups:?}");
+    assert_eq!(
+        backups.len(),
+        1,
+        "exactly one migration backup: {backups:?}"
+    );
 }
 
 #[test]
@@ -2411,7 +2439,11 @@ fn v3_load_with_unsaved_changes_hydrates_draft_parameters() {
         serde_json::json!({ "configuration": "Debug", "verbosity": "minimal" })
     );
     assert_eq!(
-        draft.base_revision.as_ref().expect("base revision").revision_id,
+        draft
+            .base_revision
+            .as_ref()
+            .expect("base revision")
+            .revision_id,
         "rev-1"
     );
 }
@@ -2430,7 +2462,8 @@ fn draft_revision_preserves_full_content_on_creation_and_update() {
     };
     content.composition.artifact_processors.clear();
     for index in 0..2 {
-        let (id, _) = config.upsert_draft_revision(content.clone(), format!("2026-09-06T10:00:0{index}Z"));
+        let (id, _) =
+            config.upsert_draft_revision(content.clone(), format!("2026-09-06T10:00:0{index}Z"));
         let revision = config.profile(&id).unwrap().current_revision().unwrap();
         assert_eq!(revision.parameters, content.parameters);
         assert_eq!(revision.composition, content.composition);

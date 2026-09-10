@@ -48,7 +48,8 @@ pub(crate) trait RemoteEvidenceSource {
         repo_root: &Path,
         workflow_file: &str,
     ) -> Result<Vec<RemoteRun>, AppError>;
-    fn run_artifacts(&self, repo_root: &Path, run_id: u64) -> Result<Vec<RemoteArtifact>, AppError>;
+    fn run_artifacts(&self, repo_root: &Path, run_id: u64)
+        -> Result<Vec<RemoteArtifact>, AppError>;
     fn download_artifact(&self, repo_root: &Path, artifact_id: u64) -> Result<Vec<u8>, AppError>;
 }
 
@@ -182,9 +183,7 @@ impl RemoteDispatchPort for GhCliRemoteDispatchPort {
         let mut command = crate::process_utils::new_std_command("gh");
         command.current_dir(repo_root).args([
             "api",
-            &format!(
-                "repos/{{owner}}/{{repo}}/actions/workflows/{workflow_file}/dispatches"
-            ),
+            &format!("repos/{{owner}}/{{repo}}/actions/workflows/{workflow_file}/dispatches"),
             "-X",
             "POST",
             "-f",
@@ -454,12 +453,7 @@ fn expected_segments(binding: &AutomationBinding) -> Result<Vec<String>, AppErro
     let release_config = serde_json::from_value::<crate::tauri_release::TauriReleaseConfig>(
         binding.backend_projection.clone(),
     )
-    .map_err(|error| {
-        remote_error(format!(
-            "绑定 {} 的固化投影无法解析: {error}",
-            binding.id
-        ))
-    })?;
+    .map_err(|error| remote_error(format!("绑定 {} 的固化投影无法解析: {error}", binding.id)))?;
     let mut segments = release_config
         .enabled_targets
         .iter()
@@ -585,9 +579,8 @@ fn synchronize_run(
                     verify_artifact_digest(artifact, &bytes)?;
                     let payload = unzip_single_json(&bytes)?;
                     // 归档前校验形状：段必须能解析为分片证据。
-                    let _: ShardOutcome = serde_json::from_slice(&payload).map_err(|error| {
-                        remote_error(format!("段 {name} 无法解析: {error}"))
-                    })?;
+                    let _: ShardOutcome = serde_json::from_slice(&payload)
+                        .map_err(|error| remote_error(format!("段 {name} 无法解析: {error}")))?;
                     archive.write(&archive.segment_path(&archive_key, &segment)?, &payload)?;
                 }
                 None => {}
@@ -912,7 +905,10 @@ mod tests {
             payload: BTreeMap::new(),
         };
         ShardOutcome {
-            events: vec![event(1, "plan_node_started"), event(2, "plan_node_completed")],
+            events: vec![
+                event(1, "plan_node_started"),
+                event(2, "plan_node_completed"),
+            ],
             manifest: None,
             artifacts: Vec::new(),
         }
@@ -941,12 +937,15 @@ mod tests {
 
     impl FakeSource {
         fn push_artifact(&mut self, run_id: u64, id: u64, name: &str, zip: Vec<u8>, expired: bool) {
-            self.artifacts.entry(run_id).or_default().push(RemoteArtifact {
-                id,
-                name: name.to_string(),
-                expired,
-                digest: Some(format!("sha256:{}", sha256_hex(&zip))),
-            });
+            self.artifacts
+                .entry(run_id)
+                .or_default()
+                .push(RemoteArtifact {
+                    id,
+                    name: name.to_string(),
+                    expired,
+                    digest: Some(format!("sha256:{}", sha256_hex(&zip))),
+                });
             self.payloads.insert(id, zip);
         }
     }
@@ -968,7 +967,11 @@ mod tests {
             Ok(self.artifacts.get(&run_id).cloned().unwrap_or_default())
         }
 
-        fn download_artifact(&self, _repo_root: &Path, artifact_id: u64) -> Result<Vec<u8>, AppError> {
+        fn download_artifact(
+            &self,
+            _repo_root: &Path,
+            artifact_id: u64,
+        ) -> Result<Vec<u8>, AppError> {
             *self.downloads.borrow_mut() += 1;
             self.payloads
                 .get(&artifact_id)
@@ -1056,9 +1059,8 @@ mod tests {
         let archive = RemoteEvidenceArchive::new(archive_root.path().to_path_buf());
         let config = fixture_config();
 
-        let views =
-            synchronize_remote_evidence(checkout.path(), &config, &source, &archive)
-                .expect("synchronize remote evidence");
+        let views = synchronize_remote_evidence(checkout.path(), &config, &source, &archive)
+            .expect("synchronize remote evidence");
         assert_eq!(views.len(), 1);
         assert_eq!(views[0].attempt_id, "gh-7-1");
         assert_eq!(
@@ -1094,7 +1096,11 @@ mod tests {
             .iter()
             .position(|artifact| artifact.name.ends_with("-windows"))
             .expect("windows segment");
-        let windows = source.artifacts.get_mut(&7).expect("run artifacts").remove(removed);
+        let windows = source
+            .artifacts
+            .get_mut(&7)
+            .expect("run artifacts")
+            .remove(removed);
         let archive_root = tempfile::tempdir().expect("archive root");
         let archive = RemoteEvidenceArchive::new(archive_root.path().to_path_buf());
         let config = fixture_config();
@@ -1110,7 +1116,11 @@ mod tests {
 
         // 段重新可得：补拉只下载缺段，随后归约完整。
         let downloads_before = *source.downloads.borrow();
-        source.artifacts.get_mut(&7).expect("run artifacts").push(windows);
+        source
+            .artifacts
+            .get_mut(&7)
+            .expect("run artifacts")
+            .push(windows);
         let views = synchronize_remote_evidence(checkout.path(), &config, &source, &archive)
             .expect("refetch the missing segment");
         assert!(matches!(
@@ -1152,13 +1162,9 @@ mod tests {
         let archive_root = tempfile::tempdir().expect("archive root");
         let archive = RemoteEvidenceArchive::new(archive_root.path().to_path_buf());
 
-        let error = synchronize_remote_evidence(
-            checkout.path(),
-            &fixture_config(),
-            &source,
-            &archive,
-        )
-        .expect_err("digest mismatches must fail loudly");
+        let error =
+            synchronize_remote_evidence(checkout.path(), &fixture_config(), &source, &archive)
+                .expect_err("digest mismatches must fail loudly");
         assert!(error.message.contains("digest 不匹配"));
     }
 
@@ -1254,7 +1260,10 @@ mod tests {
         let leftovers = std::fs::read_dir(&pending_dir)
             .map(|entries| entries.count())
             .unwrap_or(0);
-        assert_eq!(leftovers, 1, "only the successful dispatch keeps its placeholder");
+        assert_eq!(
+            leftovers, 1,
+            "only the successful dispatch keeps its placeholder"
+        );
     }
 
     #[test]
@@ -1301,4 +1310,3 @@ mod tests {
         assert!(port.dispatched.borrow().is_empty());
     }
 }
-

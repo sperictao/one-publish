@@ -132,7 +132,9 @@ pub(crate) fn parameters_from_rich_form(config: &PublishConfigStore) -> Value {
         parameters.insert("delete_existing_files".to_string(), Value::Bool(true));
     }
 
-    let mut properties = sanitize_properties(normalize_property_map(&properties_value(&config.properties)));
+    let mut properties = sanitize_properties(normalize_property_map(&properties_value(
+        &config.properties,
+    )));
     if use_profile && !config.profile_name.trim().is_empty() {
         properties.push((
             "PublishProfile".to_string(),
@@ -254,8 +256,20 @@ pub(crate) fn draft_parameters_with_unsaved_changes(
         &projected.configuration,
         &edited.configuration,
     );
-    set_string(&mut parameters, &mut changed, "runtime", &projected.runtime, &edited.runtime);
-    set_string(&mut parameters, &mut changed, "framework", &projected.framework, &edited.framework);
+    set_string(
+        &mut parameters,
+        &mut changed,
+        "runtime",
+        &projected.runtime,
+        &edited.runtime,
+    );
+    set_string(
+        &mut parameters,
+        &mut changed,
+        "framework",
+        &projected.framework,
+        &edited.framework,
+    );
     set_bool(
         &mut parameters,
         &mut changed,
@@ -263,11 +277,41 @@ pub(crate) fn draft_parameters_with_unsaved_changes(
         projected.self_contained,
         edited.self_contained,
     );
-    set_string(&mut parameters, &mut changed, "output", &projected.output_dir, &edited.output_dir);
-    set_bool(&mut parameters, &mut changed, "no_build", projected.no_build, edited.no_build);
-    set_bool(&mut parameters, &mut changed, "no_restore", projected.no_restore, edited.no_restore);
-    set_string(&mut parameters, &mut changed, "verbosity", &projected.verbosity, &edited.verbosity);
-    set_bool(&mut parameters, &mut changed, "no_logo", projected.no_logo, edited.no_logo);
+    set_string(
+        &mut parameters,
+        &mut changed,
+        "output",
+        &projected.output_dir,
+        &edited.output_dir,
+    );
+    set_bool(
+        &mut parameters,
+        &mut changed,
+        "no_build",
+        projected.no_build,
+        edited.no_build,
+    );
+    set_bool(
+        &mut parameters,
+        &mut changed,
+        "no_restore",
+        projected.no_restore,
+        edited.no_restore,
+    );
+    set_string(
+        &mut parameters,
+        &mut changed,
+        "verbosity",
+        &projected.verbosity,
+        &edited.verbosity,
+    );
+    set_bool(
+        &mut parameters,
+        &mut changed,
+        "no_logo",
+        projected.no_logo,
+        edited.no_logo,
+    );
     set_bool(
         &mut parameters,
         &mut changed,
@@ -277,14 +321,18 @@ pub(crate) fn draft_parameters_with_unsaved_changes(
     );
 
     // 属性 map 按 key 应用差异。
-    let projected_properties = sanitize_properties(normalize_property_map(
-        &properties_value(&projected.properties),
-    ));
-    let edited_properties = sanitize_properties(normalize_property_map(&properties_value(&edited.properties)));
+    let projected_properties = sanitize_properties(normalize_property_map(&properties_value(
+        &projected.properties,
+    )));
+    let edited_properties = sanitize_properties(normalize_property_map(&properties_value(
+        &edited.properties,
+    )));
     for (key, value) in &edited_properties {
         if projected_properties
             .iter()
-            .any(|(projected_key, projected_value)| projected_key == key && projected_value == value)
+            .any(|(projected_key, projected_value)| {
+                projected_key == key && projected_value == value
+            })
         {
             continue;
         }
@@ -297,9 +345,14 @@ pub(crate) fn draft_parameters_with_unsaved_changes(
             .insert(key.clone(), Value::String(value.clone()));
     }
     for (key, _) in &projected_properties {
-        if !edited_properties.iter().any(|(edited_key, _)| edited_key == key) {
+        if !edited_properties
+            .iter()
+            .any(|(edited_key, _)| edited_key == key)
+        {
             changed = true;
-            if let Some(properties) = parameters.get_mut("properties").and_then(Value::as_object_mut)
+            if let Some(properties) = parameters
+                .get_mut("properties")
+                .and_then(Value::as_object_mut)
             {
                 properties.remove(key);
             }
@@ -323,7 +376,7 @@ pub(crate) fn draft_parameters_with_unsaved_changes(
         }
     }
 
-    changed.then(|| Value::Object(parameters))
+    changed.then_some(Value::Object(parameters))
 }
 
 #[cfg(test)]
