@@ -61,6 +61,18 @@ impl CommandParser {
         let mut i = 0;
         let mut seen_flag = false;
 
+        // Renderer 已将 `flag="" + no prefix/env` 的 string 参数定义为裸 positional。
+        // Command Import 使用同一 schema 语义：当前合同仅允许唯一一个 positional string，
+        // 并把首个 flag 之前最后一个裸 token 视为该参数；更早的 token 保留为程序名/子命令。
+        let positional_param = positional_string_parameter(schema);
+        let positional_token_index = positional_param.as_ref().and_then(|_| {
+            let first_flag = tokens
+                .iter()
+                .position(|token| token.starts_with('-'))
+                .unwrap_or(tokens.len());
+            (first_flag >= 2).then_some(first_flag - 1)
+        });
+
         while i < tokens.len() {
             let token = &tokens[i];
 
@@ -77,8 +89,16 @@ impl CommandParser {
             }
 
             if !token.starts_with('-') {
-                // 首个 flag 之前的裸 token 是程序名/子命令，不属于参数；
-                // 其后出现的裸 token 无法归属到任何 schema 参数。
+                if positional_token_index == Some(i) {
+                    if let Some(param_key) = positional_param.as_ref() {
+                        parameters.insert(param_key.clone(), SpecValue::String(token.clone()));
+                        i += 1;
+                        continue;
+                    }
+                }
+
+                // 首个 flag 之前除声明 positional 外的裸 token 是程序名/子命令；
+                // 其后出现且未被 flag 消费的裸 token 无法归属到 schema 参数。
                 if seen_flag {
                     diagnostics.push(CommandImportDiagnostic {
                         code: "command_import_unparsed_token".to_string(),
@@ -211,6 +231,23 @@ impl CommandParser {
             })
             .map(|(key, _)| key.clone())
     }
+}
+
+/// 当前 schema 的裸 positional 合同：string + 空 flag + 无 prefix/env。
+/// 多个 positional 缺少稳定顺序声明，因此拒绝猜测；若未来需要多个位置参数，
+/// 应先扩展 schema 的显式位置合同，而不是依赖 BTreeMap 键顺序。
+fn positional_string_parameter(schema: &ParameterSchema) -> Option<String> {
+    let mut candidates = schema.parameters.iter().filter(|(_, def)| {
+        matches!(def.param_type, ParameterType::String)
+            && def.flag.is_empty()
+            && def.prefix.is_none()
+            && def.env.is_none()
+    });
+    let (key, _) = candidates.next()?;
+    if candidates.next().is_some() {
+        return None;
+    }
+    Some(key.clone())
 }
 
 fn parse_prefixed_map_token(
@@ -442,13 +479,14 @@ mod tests {
     }
 
     #[test]
-    fn parse_java_command_maps_prefixed_properties() {
+    fn parse_java_command_maps_positional_task_and_prefixed_properties() {
         let parser = CommandParser::new("java".to_string());
         let command = "./gradlew build -Dversion=1.2.3 -Dprofile=prod --offline";
         let schema = java_schema();
         let result = parser.parse(command, &schema);
 
         assert!(result.diagnostics.is_empty());
+        assert_eq!(result.parameters.get("task"), Some(&serde_json::json!("build")));
         assert_eq!(
             result.parameters.get("properties"),
             Some(&serde_json::json!({
@@ -460,6 +498,15 @@ mod tests {
             result.parameters.get("offline"),
             Some(&serde_json::json!(true))
         );
+    }
+
+    #[test]
+    fn parse_java_positional_task_without_flags() {
+        let parser = CommandParser::new("java".to_string());
+        let result = parser.parse("./gradlew test", &java_schema());
+
+        assert!(result.diagnostics.is_empty());
+        assert_eq!(result.parameters.get("task"), Some(&serde_json::json!("test")));
     }
 
     #[test]
@@ -632,6 +679,10 @@ mod tests {
 
     fn java_schema() -> ParameterSchema {
         let mut parameters = BTreeMap::new();
+        parameters.insert(
+            "task".to_string(),
+            parameter(ParameterType::String, "", None),
+        );
         parameters.insert(
             "properties".to_string(),
             parameter(ParameterType::Map, "", Some("-D")),
