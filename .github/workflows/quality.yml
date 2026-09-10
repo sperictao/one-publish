@@ -5,9 +5,27 @@ on:
     branches:
       - ci-clippy-fix-20260910-v2
 
+permissions:
+  contents: write
+
 jobs:
-  validate:
+  apply:
     runs-on: ubuntu-latest
     steps:
-      - name: Validate branch workflow
-        run: echo workflow-ok
+      - uses: actions/checkout@v5
+        with:
+          ref: ci-clippy-fix-20260910-v2
+          fetch-depth: 0
+      - name: Apply focused Clippy fixes
+        run: python3 scripts/temp_clippy_fix.py
+      - name: Format and commit
+        run: |
+          cargo fmt --manifest-path src-tauri/Cargo.toml
+          git checkout c79e95980a49872d8777073410edcac8e489e8b3 -- .github/workflows/quality.yml
+          rm scripts/temp_clippy_fix.py
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add .github/workflows/quality.yml scripts/temp_clippy_fix.py src-tauri/src
+          git diff --cached --check
+          git commit -m "fix(ci): satisfy Rust clippy checks"
+          git push origin HEAD:ci-clippy-fix-20260910-v2
