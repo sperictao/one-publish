@@ -396,16 +396,41 @@ pub(crate) fn repository_project_binding(
     repo: &crate::store::Repository,
     provider_id: &str,
 ) -> Option<String> {
-    let kind = crate::provider::registry::provider_registry()
-        .get(provider_id)
-        .ok()?
-        .capabilities()
-        .project_path_kind;
-    let reference = match kind {
-        crate::provider::ProviderProjectPathKind::ProjectFile => repo
-            .project_file
-            .clone()
-            .filter(|file| !file.trim().is_empty())?,
+    let registry = crate::provider::registry::provider_registry();
+    let provider = registry.get(provider_id).ok()?;
+    let reference = match provider.capabilities().project_path_kind {
+        crate::provider::ProviderProjectPathKind::ProjectFile => {
+            let project_file = repo
+                .project_file
+                .clone()
+                .filter(|file| !file.trim().is_empty())?;
+            let project_path = std::path::Path::new(&project_file);
+            let discovery = provider.repository_discovery();
+            let matches_project_file = discovery.project_file_matchers.iter().any(|matcher| {
+                match matcher {
+                    crate::provider::ProviderProjectFileMatcher::Extension(extension) => {
+                        project_path
+                            .extension()
+                            .and_then(|value| value.to_str())
+                            .is_some_and(|value| value.eq_ignore_ascii_case(extension))
+                    }
+                    crate::provider::ProviderProjectFileMatcher::FileName(name) => project_path
+                        .file_name()
+                        .and_then(|value| value.to_str())
+                        .is_some_and(|value| value.eq_ignore_ascii_case(name)),
+                }
+            });
+            let matches_solution = discovery.solution_file_extensions.iter().any(|extension| {
+                project_path
+                    .extension()
+                    .and_then(|value| value.to_str())
+                    .is_some_and(|value| value.eq_ignore_ascii_case(extension))
+            });
+            if !matches_project_file && !matches_solution {
+                return None;
+            }
+            project_file
+        }
         crate::provider::ProviderProjectPathKind::RepositoryRoot => repo.path.clone(),
     };
     crate::publish_runtime::resolve_project_binding(&repo.path, provider_id, &reference)

@@ -2439,3 +2439,52 @@ fn draft_revision_preserves_full_content_on_creation_and_update() {
         assert_eq!(revision.sequence, index + 1);
     }
 }
+
+
+#[test]
+fn repository_project_binding_accepts_provider_owned_project_file() {
+    let temp_dir = TempDir::new().expect("temp dir");
+    let project_file = temp_dir.path().join("App.csproj");
+    fs::write(&project_file, "<Project />").expect("write project");
+    let repo = Repository {
+        path: temp_dir.path().to_string_lossy().to_string(),
+        project_file: Some(project_file.to_string_lossy().to_string()),
+        ..test_repo("repo-binding-dotnet")
+    };
+
+    assert_eq!(
+        super::repository_project_binding(&repo, "dotnet").as_deref(),
+        Some("dotnet:App.csproj")
+    );
+}
+
+#[test]
+fn repository_project_binding_rejects_project_file_owned_by_another_provider() {
+    let temp_dir = TempDir::new().expect("temp dir");
+    let project_file = temp_dir.path().join("App.csproj");
+    fs::write(&project_file, "<Project />").expect("write project");
+    let repo = Repository {
+        path: temp_dir.path().to_string_lossy().to_string(),
+        project_file: Some(project_file.to_string_lossy().to_string()),
+        ..test_repo("repo-binding-mismatch")
+    };
+
+    assert_eq!(super::repository_project_binding(&repo, "tauri"), None);
+}
+
+#[test]
+fn repository_project_binding_preserves_declared_solution_semantics() {
+    let temp_dir = TempDir::new().expect("temp dir");
+    let solution_file = temp_dir.path().join("App.sln");
+    fs::write(&solution_file, "").expect("write solution");
+    let repo = Repository {
+        path: temp_dir.path().to_string_lossy().to_string(),
+        project_file: Some(solution_file.to_string_lossy().to_string()),
+        ..test_repo("repo-binding-solution")
+    };
+
+    assert_eq!(
+        super::repository_project_binding(&repo, "dotnet").as_deref(),
+        Some("dotnet:App.sln")
+    );
+}
