@@ -1014,7 +1014,8 @@ impl RepoPublishConfig {
         let project_binding = current_revision.project_binding.clone().or(project_binding);
         let content_changed = current_revision.provider_id != provider_id
             || current_revision.parameters != parameters
-            || current_revision.composition != composition;
+            || current_revision.composition != composition
+            || current_revision.project_binding != project_binding;
 
         profile.name = name;
         profile.profile_group = profile_group
