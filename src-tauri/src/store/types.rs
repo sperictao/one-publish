@@ -996,9 +996,14 @@ impl RepoPublishConfig {
         // 组合与参数一样属于修订：未显式携带的更新从当前修订继承，保存不得
         // 把 Backend、Store、Processor 或 Delivery Route 静默重置回默认组合。
         let composition = composition.unwrap_or_else(|| current_revision.composition.clone());
-        // 候选绑定创建时固化、更新时继承，换绑必须走显式动作而不是随手保存；
-        // 存量修订缺失绑定时用调用方解析的当前候选补固化（决议 #78）。
-        let project_binding = current_revision.project_binding.clone().or(project_binding);
+        // 同 Provider 保存保留既有绑定，存量 None 可用当前解析候选补固化；
+        // Provider 切换时旧绑定属于旧 Provider，不能继承，只采用新 Provider 的解析结果。
+        // 同 Provider 的主动换绑仍必须走显式 rebind 动作（决议 #78）。
+        let project_binding = if current_revision.provider_id == provider_id {
+            current_revision.project_binding.clone().or(project_binding)
+        } else {
+            project_binding
+        };
         let content_changed = current_revision.provider_id != provider_id
             || current_revision.parameters != parameters
             || current_revision.composition != composition
