@@ -210,6 +210,40 @@ fn known_provider(provider_id: &str) -> Result<(), AppError> {
         })
 }
 
+/// 所有 PublishSource 共用的配置内容版本门禁。来源可以不同，但只要最终
+/// 解析为同一份 PublishConfigurationContent，就必须按当前 Provider/Settings
+/// 合同统一判断兼容性，禁止 History/Draft 绕过命名 Revision 的版本阻断。
+fn configuration_content_blocked_reason(content: &PublishConfigurationContent) -> Option<String> {
+    if content.contract_version != PUBLISH_CONFIGURATION_CONTRACT_VERSION {
+        return Some(format!(
+            "configuration_contract_version_unsupported:{}",
+            content.contract_version
+        ));
+    }
+
+    let registry = ProviderRegistry::new();
+    let provider = match registry.get(&content.provider_id) {
+        Ok(provider) => provider,
+        Err(_) => return Some(format!("provider_unavailable:{}", content.provider_id)),
+    };
+
+    if content.provider_version != provider.manifest().version {
+        return Some(format!(
+            "provider_version_unsupported:{}",
+            content.provider_version
+        ));
+    }
+
+    if content.settings_version != CURRENT_SETTINGS_VERSION {
+        return Some(format!(
+            "settings_version_unsupported:{}",
+            content.settings_version
+        ));
+    }
+
+    None
+}
+
 pub(crate) fn content_from_revision(revision: &PublishConfigurationRevision) -> PublishConfigurationContent {
     PublishConfigurationContent {
         provider_id: revision.provider_id.clone(),
@@ -274,7 +308,7 @@ pub(crate) fn resolve_publish_source_scoped(
     history: &[ExecutionRecord],
     source: &PublishSource,
 ) -> Result<ResolvedPublishSource, AppError> {
-    match source {
+    let mut resolved = match source {
         PublishSource::Revision {
             configuration_id,
             revision_id,
@@ -300,7 +334,13 @@ pub(crate) fn resolve_publish_source_scoped(
             provider_id,
             project_binding,
         } => resolve_empty_source(provider_id, project_binding.as_deref()),
+    }?;
+
+    if resolved.blocked_reason.is_none() {
+        resolved.blocked_reason = configuration_content_blocked_reason(&resolved.draft.content);
     }
+
+    Ok(resolved)
 }
 
 fn resolve_revision_source(
@@ -968,6 +1008,49 @@ mod tests {
         .expect("resolve draft source");
 
         assert_eq!(resolved.draft.content, draft.content);
+        assert!(resolved.blocked_reason.is_none());
+    }
+
+    #[test]
+    fn draft_source_marks_provider_and_settings_version_mismatches_blocked() {
+        let repository = repository_fixture();
+        let content = |provider_version: &str, settings_version: u32| PublishConfigurationContent {
+            provider_id: "go".to_string(),
+            contract_version: PUBLISH_CONFIGURATION_CONTRACT_VERSION,
+            provider_version: provider_version.to_string(),
+            settings_version,
+            project_binding: Some("go:.".to_string()),
+            parameters: serde_json::json!({}),
+            composition: PublishComposition::local_default(),
+        };
+
+        let provider_mismatch = resolve_publish_source_scoped(
+            &repository,
+            &[],
+            &PublishSource::Draft {
+                content: content("0", CURRENT_SETTINGS_VERSION),
+                base_revision: None,
+            },
+        )
+        .expect("resolve incompatible provider draft");
+        assert_eq!(
+            provider_mismatch.blocked_reason.as_deref(),
+            Some("provider_version_unsupported:0")
+        );
+
+        let settings_mismatch = resolve_publish_source_scoped(
+            &repository,
+            &[],
+            &PublishSource::Draft {
+                content: content("1", CURRENT_SETTINGS_VERSION + 1),
+                base_revision: None,
+            },
+        )
+        .expect("resolve incompatible settings draft");
+        assert_eq!(
+            settings_mismatch.blocked_reason.as_deref(),
+            Some("settings_version_unsupported:2")
+        );
     }
 
     #[test]
@@ -1141,6 +1224,7 @@ mod tests {
             .diagnostics
             .iter()
             .any(|d| d.code == "history_recorded_inputs_applied"));
+        assert!(resolved.blocked_reason.is_none());
     }
 
     #[test]
@@ -1243,6 +1327,54 @@ mod tests {
             .diagnostics
             .iter()
             .any(|d| d.code == "history_recorded_inputs_applied"));
+        assert!(resolved.blocked_reason.is_none());
+    }
+
+    #[test]
+    fn history_recovery_snapshot_marks_incompatible_versions_blocked() {
+        let (_dir, repository) =
+            repository_with_profile(serde_json::json!({ "configuration": "Release" }), "revision-A");
+        let snapshot = PublishRecoverySnapshot {
+            version: 1,
+            content: PublishConfigurationContent {
+                provider_id: "dotnet".to_string(),
+                contract_version: PUBLISH_CONFIGURATION_CONTRACT_VERSION,
+                provider_version: "0".to_string(),
+                settings_version: CURRENT_SETTINGS_VERSION,
+                project_binding: Some("dotnet:App.csproj".to_string()),
+                parameters: serde_json::json!({ "configuration": "Debug" }),
+                composition: PublishComposition::local_default(),
+            },
+            configuration_id: "draft-configuration".to_string(),
+            configuration_revision_id: "revision-gone".to_string(),
+            origin: PublishDraftOrigin::New,
+            project_binding: Some("dotnet:App.csproj".to_string()),
+            run_inputs: PublishRunInputs::default(),
+            executed_parameters: serde_json::json!({ "configuration": "Debug" }),
+            resolved_output_directory: "/recorded-out/App/Debug".to_string(),
+        };
+        let mut entry = record(
+            "record-incompatible",
+            Some("draft-configuration"),
+            Some("revision-gone"),
+            None,
+        );
+        entry.recovery_snapshot =
+            Some(serde_json::to_value(&snapshot).expect("serialize recovery snapshot"));
+
+        let resolved = resolve_publish_source_scoped(
+            &repository,
+            &[entry],
+            &PublishSource::History {
+                record_id: "record-incompatible".to_string(),
+            },
+        )
+        .expect("resolve incompatible history snapshot");
+
+        assert_eq!(
+            resolved.blocked_reason.as_deref(),
+            Some("provider_version_unsupported:0")
+        );
     }
 
     #[test]
@@ -1290,6 +1422,7 @@ mod tests {
             serde_json::json!({})
         );
         assert_eq!(resolved.draft.origin, PublishDraftOrigin::New);
+        assert!(resolved.blocked_reason.is_none());
     }
 
     fn repository_fixture() -> Repository {
