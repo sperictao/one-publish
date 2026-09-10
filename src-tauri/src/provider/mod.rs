@@ -57,9 +57,9 @@ pub struct ProviderCapabilities {
     pub supports_command_import: bool,
     /// 执行时把项目文件追加为位置参数。
     pub appends_project_path: bool,
-    /// 默认输出声明；None 表示不向命令参数派生默认输出。
-    /// template 可用令牌：{default_output_dir}、{project_stem}、{param:<key>}；
-    /// 令牌无值时丢弃所在段，param 缺失时回退 schema 默认值。
+    /// 默认输出声明；`None` 表示不向命令参数派生默认输出。
+    /// `template` 可用令牌：`{default_output_dir}`、`{project_stem}`、`{param:<key>}`；
+    /// 令牌无值时丢弃所在段，`param` 缺失时回退 `schema` 默认值。
     #[serde(default)]
     #[ts(optional = nullable)]
     pub output_layout: Option<ProviderOutputLayout>,
