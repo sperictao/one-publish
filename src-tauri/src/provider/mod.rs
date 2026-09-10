@@ -40,6 +40,16 @@ pub struct ProviderProjectProfiles {
     pub reference_property: String,
 }
 
+/// Provider 默认输出声明：目标参数名与路径布局必须一起由 Provider 持有，
+/// 通用 runtime 只消费声明，不知道 `output`、`target_dir` 等具体 schema 键。
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+pub struct ProviderOutputLayout {
+    /// 派生输出目录写入的 schema 参数键。
+    pub parameter: String,
+    /// 默认输出目录布局模板。
+    pub template: String,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
 pub struct ProviderCapabilities {
     pub requires_project_binding: bool,
@@ -47,12 +57,12 @@ pub struct ProviderCapabilities {
     pub supports_command_import: bool,
     /// 执行时把项目文件追加为位置参数。
     pub appends_project_path: bool,
-    /// 默认输出目录布局模板；None 表示不派生默认输出。
-    /// 可用令牌：{default_output_dir}、{project_stem}、{param:<key>}；
+    /// 默认输出声明；None 表示不向命令参数派生默认输出。
+    /// template 可用令牌：{default_output_dir}、{project_stem}、{param:<key>}；
     /// 令牌无值时丢弃所在段，param 缺失时回退 schema 默认值。
     #[serde(default)]
     #[ts(optional = nullable)]
-    pub output_layout: Option<String>,
+    pub output_layout: Option<ProviderOutputLayout>,
     /// 项目发布配置声明；None 表示该 Provider 没有项目配置语义。
     #[serde(default)]
     #[ts(optional = nullable)]
