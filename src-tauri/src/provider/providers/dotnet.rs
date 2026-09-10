@@ -207,7 +207,6 @@ pub(crate) fn dotnet_templates() -> Vec<ProviderTemplate> {
             "Debug - macOS x64",
             "Intel Mac",
             "Debug",
-            "Debug",
             "osx-x64",
             true,
         ),
