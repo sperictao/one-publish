@@ -1254,6 +1254,27 @@ fn sensitive_publish_input(
     crate::security::sanitize_publish_recovery_snapshot(&mut snapshot)
 }
 
+fn has_explicit_declared_output(
+    parameters: &BTreeMap<String, SpecValue>,
+    output_layout: &crate::provider::ProviderOutputLayout,
+) -> bool {
+    matches!(
+        parameters.get(&output_layout.parameter),
+        Some(SpecValue::String(output)) if !output.trim().is_empty()
+    )
+}
+
+fn insert_declared_output(
+    parameters: &mut BTreeMap<String, SpecValue>,
+    output_layout: &crate::provider::ProviderOutputLayout,
+    output: PathBuf,
+) {
+    parameters.insert(
+        output_layout.parameter.clone(),
+        SpecValue::String(output.to_string_lossy().to_string()),
+    );
+}
+
 fn build_resolved_spec(
     repository: &crate::store::Repository,
     content: &PublishConfigurationContent,
@@ -1323,7 +1344,7 @@ fn build_resolved_spec(
         }));
     }
 
-    // 默认输出目录派生（唯一后端实现，按 Provider 声明的布局模板求值）：
+    // 默认输出目录派生（唯一后端实现，按 Provider 声明的目标参数 + 布局模板求值）：
     // 模板、普通配置与草稿按当前默认目录派生；直接项目配置与历史来源使用
     // 各自明确的输出，不重套当前默认。
     let output_layout = provider.capabilities().output_layout.clone();
@@ -1332,14 +1353,16 @@ fn build_resolved_spec(
             source,
             PublishSource::ProjectProfile { .. } | PublishSource::History { .. }
         );
-    let has_explicit_output = match parameters.get("output") {
-        Some(SpecValue::String(output)) => !output.trim().is_empty(),
-        _ => false,
-    };
+    let has_explicit_output = output_layout
+        .as_ref()
+        .is_some_and(|layout| has_explicit_declared_output(&parameters, layout));
     if derives_default_output
         && !has_explicit_output
         && !run_inputs.default_output_dir.trim().is_empty()
     {
+        let output_layout = output_layout
+            .as_ref()
+            .expect("derives_default_output requires an output declaration");
         let schema = provider.get_schema().map_err(|error| {
             PublishBuildFailure::Fatal(AppError::validation_with_code(
                 error.to_string(),
@@ -1365,7 +1388,7 @@ fn build_resolved_spec(
             }
         };
         let segments = evaluate_output_layout(
-            output_layout.as_deref().unwrap_or_default(),
+            &output_layout.template,
             run_inputs.default_output_dir.trim(),
             Some(project_stem.as_str()),
             &parameter_value,
@@ -1374,10 +1397,7 @@ fn build_resolved_spec(
         for segment in segments {
             scoped_output.push(segment);
         }
-        parameters.insert(
-            "output".to_string(),
-            SpecValue::String(scoped_output.to_string_lossy().to_string()),
-        );
+        insert_declared_output(&mut parameters, output_layout, scoped_output);
     }
 
     Ok(PublishSpec {
@@ -3797,6 +3817,33 @@ mod tests {
         }
     }
 
+    #[test]
+    fn declared_output_parameter_name_is_not_hardcoded() {
+        let declaration = crate::provider::ProviderOutputLayout {
+            parameter: "target_dir".to_string(),
+            template: "{default_output_dir}".to_string(),
+        };
+        let mut parameters = BTreeMap::new();
+        assert!(!super::has_explicit_declared_output(&parameters, &declaration));
+
+        super::insert_declared_output(
+            &mut parameters,
+            &declaration,
+            std::path::PathBuf::from("/tmp/custom-output"),
+        );
+
+        assert_eq!(
+            parameters.get("target_dir"),
+            Some(&SpecValue::String(
+                std::path::PathBuf::from("/tmp/custom-output")
+                    .to_string_lossy()
+                    .to_string()
+            ))
+        );
+        assert!(super::has_explicit_declared_output(&parameters, &declaration));
+        assert!(!parameters.contains_key("output"));
+    }
+
     // ── 后端唯一 spec 构造（§3.1）：默认输出目录派生规则 ────────────────────
     #[test]
     fn resolved_spec_derives_dotnet_default_output_from_run_inputs() {
@@ -4222,7 +4269,8 @@ mod tests {
             .expect("write fixture project");
         initialize_git_repository(repository.path());
         let project_path = repository.path().join("go.mod");
-        std::fs::write(&project_path, "module example.invalid/app\n").expect("write go project");
+        std::fs::write(&project_path, "module example.invalid/app\
+").expect("write go project");
         let spec = PublishSpec {
             version: SPEC_VERSION,
             provider_id: "go".to_string(),
@@ -4255,7 +4303,10 @@ mod tests {
         .expect("write tauri config");
         std::fs::write(
             app_root.join("src-tauri").join("Cargo.toml"),
-            format!("[package]\nname = \"demo\"\nversion = \"{version}\"\n"),
+            format!("[package]\
+name = \"demo\"\
+version = \"{version}\"\
+"),
         )
         .expect("write cargo manifest");
         std::fs::write(
@@ -4318,7 +4369,8 @@ mod tests {
     #[test]
     fn missing_tauri_configuration_blocks_the_prepared_runtime() {
         let repository = tempfile::tempdir().expect("create repository");
-        std::fs::write(repository.path().join("README.md"), "# fixture\n")
+        std::fs::write(repository.path().join("README.md"), "# fixture\
+")
             .expect("write fixture file");
         initialize_git_repository(repository.path());
         let request = tauri_prepare_request(
@@ -4371,7 +4423,10 @@ mod tests {
         .expect("write kiosk config");
         std::fs::write(
             kiosk_root.join("src-tauri").join("Cargo.toml"),
-            "[package]\nname = \"kiosk\"\nversion = \"2.0.0\"\n",
+            "[package]\
+name = \"kiosk\"\
+version = \"2.0.0\"\
+",
         )
         .expect("write kiosk manifest");
         initialize_git_repository(repository.path());
@@ -5162,7 +5217,8 @@ mod tests {
         std::fs::write(repository.path().join("App.csproj"), "<Project />")
             .expect("write project file");
         initialize_git_repository(repository.path());
-        std::fs::write(repository.path().join(".gitignore"), ".env.local\n")
+        std::fs::write(repository.path().join(".gitignore"), ".env.local\
+")
             .expect("ignore local environment file");
         let credential = repository.path().join(".env.local");
         std::fs::write(&credential, "TOKEN=first-secret").expect("write credential input");
@@ -5208,7 +5264,8 @@ mod tests {
         initialize_git_repository(repository.path());
         std::fs::write(
             repository.path().join(".npmrc"),
-            "registry=https://example.invalid\n",
+            "registry=https://example.invalid\
+",
         )
         .expect("write tracked environment file");
         run_git_fixture(repository.path(), &["add", ".npmrc"]);
@@ -6960,7 +7017,8 @@ mod tests {
             .expect("write git fixture file");
         initialize_git_repository(repository.path());
         let go_module = repository.path().join("go.mod");
-        std::fs::write(&go_module, "module example.invalid/one-publish\n")
+        std::fs::write(&go_module, "module example.invalid/one-publish\
+")
             .expect("write go module");
         let spec = PublishSpec {
             version: SPEC_VERSION,
