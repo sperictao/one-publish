@@ -13,6 +13,14 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
+      - uses: pnpm/action-setup@v5
+        with:
+          version: 10.10.0
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 20
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile --ignore-scripts
       - name: Add missing translations and remove false-positive CJK comment
         shell: bash
         run: |
@@ -80,7 +88,7 @@ jobs:
           fs.writeFileSync(sourcePath, source);
           NODE
       - name: Verify i18n coverage
-        run: node scripts/check-i18n-coverage.mjs
+        run: pnpm check:i18n
       - name: Commit focused cleanup
         shell: bash
         run: |
