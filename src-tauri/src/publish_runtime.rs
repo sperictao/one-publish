@@ -497,6 +497,7 @@ fn output_summary(preflight: &crate::commands::PublishOutputPreflightResult) -> 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
 #[serde(tag = "status", rename_all = "camelCase")]
 #[ts(tag = "status", rename_all = "camelCase")]
+#[allow(clippy::large_enum_variant)] // Serialized IPC contract; keep its boundary shape explicit.
 pub enum PreparedPublishRuntime {
     #[serde(rename_all = "camelCase")]
     Ready {
@@ -2199,6 +2200,7 @@ fn validate_prepare_request(request: &PrepareRuntimeRequest) -> Result<(), AppEr
     Ok(())
 }
 
+#[allow(clippy::too_many_arguments)] // Explicit immutable inputs make snapshot construction auditable.
 fn build_snapshot(
     request: &PrepareRuntimeRequest,
     spec_json: String,

@@ -645,7 +645,7 @@ impl From<PersistedRepoPublishConfig> for RepoPublishConfig {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, TS)]
 #[serde(rename_all = "camelCase")]
 #[ts(rename_all = "camelCase")]
 pub struct RepoPublishConfig {
@@ -656,7 +656,7 @@ pub struct RepoPublishConfig {
     /// 迁移期间的 v3 遗留编辑状态（内存暂存）：不序列化、不下发前端。
     #[serde(skip)]
     #[ts(skip)]
-    pub global_v3_edit: Option<super::migration::LegacyEditStateV3>,
+    pub(crate) global_v3_edit: Option<super::migration::LegacyEditStateV3>,
     /// v4 编辑草稿存储：按 (Provider, 项目候选) 作用域隔离。
     #[serde(default)]
     pub drafts: Vec<ScopedPublishDraft>,
@@ -666,19 +666,6 @@ pub struct RepoPublishConfig {
     pub bindings: Vec<AutomationBinding>,
     #[serde(default)]
     pub applied_bundles: Vec<AppliedProjectionBundle>,
-}
-
-impl Default for RepoPublishConfig {
-    fn default() -> Self {
-        Self {
-            selection: None,
-            drafts: Vec::new(),
-            global_v3_edit: None,
-            profiles: Vec::new(),
-            bindings: Vec::new(),
-            applied_bundles: Vec::new(),
-        }
-    }
 }
 
 impl RepoPublishConfig {
