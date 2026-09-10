@@ -62,16 +62,10 @@ impl CommandParser {
         let mut seen_flag = false;
 
         // Renderer 已将 `flag="" + no prefix/env` 的 string 参数定义为裸 positional。
-        // Command Import 使用同一 schema 语义：当前合同仅允许唯一一个 positional string，
-        // 并把首个 flag 之前最后一个裸 token 视为该参数；更早的 token 保留为程序名/子命令。
+        // Command Import 使用同一 schema 语义：当前合同仅允许唯一一个 positional string。
+        // 第一个 token 视为程序名；其后首个未被 flag 消费的裸 token 即 positional，
+        // 因而 `./gradlew build --info` 与 `./gradlew --info build` 都能等价导入。
         let positional_param = positional_string_parameter(schema);
-        let positional_token_index = positional_param.as_ref().and_then(|_| {
-            let first_flag = tokens
-                .iter()
-                .position(|token| token.starts_with('-'))
-                .unwrap_or(tokens.len());
-            (first_flag >= 2).then_some(first_flag - 1)
-        });
 
         while i < tokens.len() {
             let token = &tokens[i];
@@ -89,16 +83,18 @@ impl CommandParser {
             }
 
             if !token.starts_with('-') {
-                if positional_token_index == Some(i) {
+                if i > 0 {
                     if let Some(param_key) = positional_param.as_ref() {
-                        parameters.insert(param_key.clone(), SpecValue::String(token.clone()));
-                        i += 1;
-                        continue;
+                        if !parameters.contains_key(param_key) {
+                            parameters.insert(param_key.clone(), SpecValue::String(token.clone()));
+                            i += 1;
+                            continue;
+                        }
                     }
                 }
 
-                // 首个 flag 之前除声明 positional 外的裸 token 是程序名/子命令；
-                // 其后出现且未被 flag 消费的裸 token 无法归属到 schema 参数。
+                // 没有 positional 声明时，首个 flag 之前的裸 token 是程序名/子命令；
+                // flag 之后未被消费的额外裸 token 无法归属到 schema 参数。
                 if seen_flag {
                     diagnostics.push(CommandImportDiagnostic {
                         code: "command_import_unparsed_token".to_string(),
@@ -110,22 +106,50 @@ impl CommandParser {
             }
 
             seen_flag = true;
-            let (flag_name, value) = if token.contains('=') {
-                // Flag=value format
-                let parts: Vec<&str> = token.splitn(2, '=').collect();
-                (parts[0].to_string(), Some(parts[1].to_string()))
-            } else if i + 1 < tokens.len() && !tokens[i + 1].starts_with('-') {
-                // Flag value format (next token is value)
-                (token.clone(), Some(tokens[i + 1].clone()))
+            let (flag_name, attached_value) = if let Some((flag, value)) = token.split_once('=') {
+                (flag.to_string(), Some(value.to_string()))
             } else {
-                // Boolean flag format
                 (token.clone(), None)
             };
-            let consumed_value = value.is_some() && !token.contains('=');
+            let mapped_param = Self::map_flag_to_param(&flag_name, schema);
+            let next_bare_value = (i + 1 < tokens.len() && !tokens[i + 1].starts_with('-'))
+                .then(|| tokens[i + 1].clone());
+
+            // 是否消费空格分隔的下一个 token 必须由 schema 类型决定。
+            // Boolean 只消费显式 true/false；若 schema 没有 positional，则继续保留
+            // 旧行为，消费其它裸值并产生诊断。这样不会把 Gradle task 吞成 --info 的值。
+            let (value, consumed_value) = match attached_value {
+                Some(value) => (Some(value), false),
+                None => match mapped_param
+                    .as_ref()
+                    .and_then(|param_key| schema.parameters.get(param_key))
+                {
+                    Some(def) if matches!(&def.param_type, ParameterType::Boolean) => {
+                        match next_bare_value {
+                            Some(value)
+                                if value.eq_ignore_ascii_case("true")
+                                    || value.eq_ignore_ascii_case("false") =>
+                            {
+                                (Some(value), true)
+                            }
+                            Some(value) if positional_param.is_none() => (Some(value), true),
+                            _ => (None, false),
+                        }
+                    }
+                    Some(_) => match next_bare_value {
+                        Some(value) => (Some(value), true),
+                        None => (None, false),
+                    },
+                    None => match next_bare_value {
+                        Some(value) => (Some(value), true),
+                        None => (None, false),
+                    },
+                },
+            };
 
             let mut applied = false;
             let mut value_unattachable = false;
-            if let Some(param_key) = Self::map_flag_to_param(&flag_name, schema) {
+            if let Some(param_key) = mapped_param {
                 if let Some(def) = schema.parameters.get(&param_key) {
                     match (&def.param_type, value.clone()) {
                         (ParameterType::Boolean, None) => {
@@ -195,7 +219,6 @@ impl CommandParser {
                 });
             }
 
-            // Skip value token if we consumed it
             if consumed_value {
                 i += 2;
             } else {
@@ -238,7 +261,7 @@ impl CommandParser {
 /// 应先扩展 schema 的显式位置合同，而不是依赖 BTreeMap 键顺序。
 fn positional_string_parameter(schema: &ParameterSchema) -> Option<String> {
     let mut candidates = schema.parameters.iter().filter(|(_, def)| {
-        matches!(def.param_type, ParameterType::String)
+        matches!(&def.param_type, ParameterType::String)
             && def.flag.is_empty()
             && def.prefix.is_none()
             && def.env.is_none()
@@ -255,7 +278,7 @@ fn parse_prefixed_map_token(
     schema: &ParameterSchema,
 ) -> Option<(String, String, String)> {
     for (param_key, def) in &schema.parameters {
-        if !matches!(def.param_type, ParameterType::Map) {
+        if !matches!(&def.param_type, ParameterType::Map) {
             continue;
         }
 
@@ -278,7 +301,7 @@ fn parse_prefixed_map_token(
 
 fn parse_prefixed_string_token(token: &str, schema: &ParameterSchema) -> Option<(String, String)> {
     for (param_key, def) in &schema.parameters {
-        if !matches!(def.param_type, ParameterType::String) {
+        if !matches!(&def.param_type, ParameterType::String) {
             continue;
         }
 
@@ -506,6 +529,16 @@ mod tests {
         let result = parser.parse("./gradlew test", &java_schema());
 
         assert!(result.diagnostics.is_empty());
+        assert_eq!(result.parameters.get("task"), Some(&serde_json::json!("test")));
+    }
+
+    #[test]
+    fn parse_java_positional_task_after_boolean_flag() {
+        let parser = CommandParser::new("java".to_string());
+        let result = parser.parse("./gradlew --offline test", &java_schema());
+
+        assert!(result.diagnostics.is_empty(), "{:?}", result.diagnostics);
+        assert_eq!(result.parameters.get("offline"), Some(&serde_json::json!(true)));
         assert_eq!(result.parameters.get("task"), Some(&serde_json::json!("test")));
     }
 
