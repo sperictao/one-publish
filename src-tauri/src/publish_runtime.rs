@@ -4269,8 +4269,7 @@ mod tests {
             .expect("write fixture project");
         initialize_git_repository(repository.path());
         let project_path = repository.path().join("go.mod");
-        std::fs::write(&project_path, "module example.invalid/app\
-").expect("write go project");
+        std::fs::write(&project_path, "module example.invalid/app\\n").expect("write go project");
         let spec = PublishSpec {
             version: SPEC_VERSION,
             provider_id: "go".to_string(),
@@ -4303,10 +4302,7 @@ mod tests {
         .expect("write tauri config");
         std::fs::write(
             app_root.join("src-tauri").join("Cargo.toml"),
-            format!("[package]\
-name = \"demo\"\
-version = \"{version}\"\
-"),
+            format!("[package]\\nname = \"demo\"\\nversion = \"{version}\"\\n"),
         )
         .expect("write cargo manifest");
         std::fs::write(
@@ -4369,8 +4365,7 @@ version = \"{version}\"\
     #[test]
     fn missing_tauri_configuration_blocks_the_prepared_runtime() {
         let repository = tempfile::tempdir().expect("create repository");
-        std::fs::write(repository.path().join("README.md"), "# fixture\
-")
+        std::fs::write(repository.path().join("README.md"), "# fixture\\n")
             .expect("write fixture file");
         initialize_git_repository(repository.path());
         let request = tauri_prepare_request(
@@ -4423,10 +4418,7 @@ version = \"{version}\"\
         .expect("write kiosk config");
         std::fs::write(
             kiosk_root.join("src-tauri").join("Cargo.toml"),
-            "[package]\
-name = \"kiosk\"\
-version = \"2.0.0\"\
-",
+            "[package]\\nname = \"kiosk\"\\nversion = \"2.0.0\"\\n",
         )
         .expect("write kiosk manifest");
         initialize_git_repository(repository.path());
@@ -5217,8 +5209,7 @@ version = \"2.0.0\"\
         std::fs::write(repository.path().join("App.csproj"), "<Project />")
             .expect("write project file");
         initialize_git_repository(repository.path());
-        std::fs::write(repository.path().join(".gitignore"), ".env.local\
-")
+        std::fs::write(repository.path().join(".gitignore"), ".env.local\\n")
             .expect("ignore local environment file");
         let credential = repository.path().join(".env.local");
         std::fs::write(&credential, "TOKEN=first-secret").expect("write credential input");
@@ -5264,8 +5255,7 @@ version = \"2.0.0\"\
         initialize_git_repository(repository.path());
         std::fs::write(
             repository.path().join(".npmrc"),
-            "registry=https://example.invalid\
-",
+            "registry=https://example.invalid\\n",
         )
         .expect("write tracked environment file");
         run_git_fixture(repository.path(), &["add", ".npmrc"]);
@@ -7017,8 +7007,7 @@ version = \"2.0.0\"\
             .expect("write git fixture file");
         initialize_git_repository(repository.path());
         let go_module = repository.path().join("go.mod");
-        std::fs::write(&go_module, "module example.invalid/one-publish\
-")
+        std::fs::write(&go_module, "module example.invalid/one-publish\\n")
             .expect("write go module");
         let spec = PublishSpec {
             version: SPEC_VERSION,
