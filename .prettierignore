@@ -16,6 +16,9 @@ target/
 src-tauri/target/
 src-tauri/gen/
 
+# Vendored third-party sources (owned and formatted upstream)
+src-tauri/vendor/
+
 # Tool caches
 .cache/
 .eslintcache
