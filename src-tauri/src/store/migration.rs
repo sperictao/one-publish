@@ -701,7 +701,7 @@ fn merge_tauri_release_settings(
 // ── v3 → v4 编辑状态迁移（统一发布输入方案 §4.2）──────────────────────────
 
 use super::types::{PublishSelectionRef, ScopedPublishDraft};
-use crate::publish_runtime::PublishConfigurationContent;
+use crate::publish_runtime::{PublishBaseRevisionRef, PublishConfigurationContent};
 
 /// 把修订/草稿内容包装为完整配置内容：版本与组合由后端补全。
 fn draft_content(
