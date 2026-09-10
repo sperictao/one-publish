@@ -1,13 +1,14 @@
 use crate::provider::registry::{BuiltInProvider, BuiltInProviderKind};
 use crate::provider::{
-    ProviderCapabilities, ProviderCatalogEntry, ProviderManifest, ProviderProjectFileMatcher,
-    ProviderProjectPathKind, ProviderProjectProfiles, ProviderRepositoryDiscovery,
-    ProviderRepositoryMarker,
+    ProviderCapabilities, ProviderCatalogEntry, ProviderManifest, ProviderOutputLayout,
+    ProviderProjectFileMatcher, ProviderProjectPathKind, ProviderProjectProfiles,
+    ProviderRepositoryDiscovery, ProviderRepositoryMarker,
 };
 
 const DOTNET_PROJECT_EXTENSIONS: &[&str] = &["csproj", "fsproj", "vbproj"];
 const DOTNET_SOLUTION_EXTENSION: &str = "sln";
 const DOTNET_NESTED_PROJECT_DIRECTORIES: &[&str] = &["src", "UI"];
+const DOTNET_OUTPUT_PARAMETER: &str = "output";
 
 /// 项目发布配置（.pubxml）声明：目录、扩展名与引用参数固化位置。
 pub(crate) fn dotnet_project_profiles() -> ProviderProjectProfiles {
@@ -66,7 +67,10 @@ impl BuiltInProvider {
                 project_path_kind: ProviderProjectPathKind::ProjectFile,
                 supports_command_import: true,
                 appends_project_path: true,
-                output_layout: Some(DOTNET_OUTPUT_LAYOUT.to_string()),
+                output_layout: Some(ProviderOutputLayout {
+                    parameter: DOTNET_OUTPUT_PARAMETER.to_string(),
+                    template: DOTNET_OUTPUT_LAYOUT.to_string(),
+                }),
                 project_profiles: Some(dotnet_project_profiles()),
                 framework_tags: vec!["TargetFramework".to_string(), "TargetFrameworks".to_string()],
             },
@@ -202,6 +206,7 @@ pub(crate) fn dotnet_templates() -> Vec<ProviderTemplate> {
             "debug-osx-x64",
             "Debug - macOS x64",
             "Intel Mac",
+            "Debug",
             "Debug",
             "osx-x64",
             true,
