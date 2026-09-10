@@ -48,7 +48,7 @@ fn project_profiles_declaration_requires_discovery_matchers() {
 }
 
 #[test]
-fn command_import_covers_every_declared_flag_and_alias() {
+fn command_import_covers_every_declared_flag_alias_and_positional() {
     for provider_id in provider_registry().known_ids() {
         let provider = provider_registry().get(&provider_id).expect("provider");
         if !provider.capabilities().supports_command_import {
@@ -56,6 +56,27 @@ fn command_import_covers_every_declared_flag_and_alias() {
         }
         let schema = provider.get_schema().expect("schema");
         for (key, definition) in &schema.parameters {
+            // Renderer 的现有合同把 string + 空 flag + 无 prefix/env 渲染成裸位置参数；
+            // Command Import 必须按同一声明恢复该参数，而不是因为 flag 为空就跳过。
+            if matches!(&definition.param_type, ParameterType::String)
+                && definition.flag.is_empty()
+                && definition.prefix.is_none()
+                && definition.env.is_none()
+            {
+                let result =
+                    CommandParser::new(provider_id.clone()).parse("prog positional-value", &schema);
+                assert!(
+                    result.diagnostics.is_empty(),
+                    "provider {provider_id} 的 positional 参数 {key} 无法被命令导入识别: {:?}",
+                    result.diagnostics
+                );
+                assert_eq!(
+                    result.parameters.get(key.as_str()),
+                    Some(&serde_json::json!("positional-value")),
+                    "provider {provider_id} 的 positional 参数 {key} 未按 schema 落入结果"
+                );
+            }
+
             let mut flags = Vec::new();
             if !definition.flag.is_empty() {
                 flags.push(definition.flag.clone());
@@ -66,8 +87,7 @@ fn command_import_covers_every_declared_flag_and_alias() {
 
             for flag in flags {
                 let command = match definition.param_type {
-                    // 布尔与字符串 flag 各按其取值形态构造；map 走 prefix 通道，
-                    // 空 flag 不参与命令导入。
+                    // 布尔与字符串 flag 各按其取值形态构造；map 走 prefix 通道。
                     ParameterType::Boolean => format!("prog {flag}"),
                     ParameterType::String | ParameterType::Array => format!("prog {flag} v"),
                     ParameterType::Map => continue,
