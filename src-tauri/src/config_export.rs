@@ -266,6 +266,15 @@ pub fn validate_import(config: &ConfigExport) -> Result<(), ImportError> {
             )));
         }
 
+        if let Some(composition) = profile.composition.as_ref() {
+            if let Some(reason) = crate::publish_runtime::composition_invalid_reason(composition) {
+                return Err(ImportError::ValidationFailed(format!(
+                    "profile '{}' has invalid composition: {reason}",
+                    profile.name
+                )));
+            }
+        }
+
         if let Some(project_binding) = profile.project_binding.as_deref() {
             if crate::publish_runtime::project_binding_selector(
                 &profile.provider_id,
@@ -794,6 +803,109 @@ mod tests {
                 "project binding must belong to its provider regardless of provider version",
             );
             assert!(error.to_string().contains("does not belong to provider"));
+        }
+    }
+
+    #[test]
+    fn validate_rejects_structurally_invalid_compositions() {
+        let mut cases = Vec::new();
+
+        let mut missing_routes = crate::store::PublishComposition::local_default();
+        missing_routes.delivery_routes.clear();
+        cases.push((missing_routes, "composition_routes_missing"));
+
+        let mut duplicate_route = crate::store::PublishComposition::local_default();
+        duplicate_route
+            .delivery_routes
+            .push(duplicate_route.delivery_routes[0].clone());
+        cases.push((duplicate_route, "composition_route_id_duplicate"));
+
+        let mut reserved_route = crate::store::PublishComposition::local_default();
+        reserved_route.delivery_routes[0].route_id = "backend".to_string();
+        cases.push((reserved_route, "composition_route_id_reserved"));
+
+        let mut invalid_settings = crate::store::PublishComposition::local_default();
+        invalid_settings.execution_backend.settings = serde_json::json!("not-an-object");
+        cases.push((invalid_settings, "composition_settings_invalid"));
+
+        let mut wrong_kind = crate::store::PublishComposition::local_default();
+        wrong_kind.execution_backend.adapter_id = crate::store::TEMPORARY_STORE_ID.to_string();
+        cases.push((wrong_kind, "composition_adapter_kind_mismatch"));
+
+        for (composition, expected_reason) in cases {
+            let profile = ConfigProfile {
+                name: expected_reason.to_string(),
+                provider_id: "dotnet".to_string(),
+                composition: Some(composition),
+                parameters: BTreeMap::new(),
+                profile_group: None,
+                created_at: Utc::now(),
+                is_system_default: false,
+                ..ConfigProfile::default()
+            };
+            let config = ConfigExport {
+                version: CONFIG_VERSION,
+                exported_at: Utc::now(),
+                profiles: vec![profile],
+            };
+
+            let error = validate_import(&config).expect_err("invalid composition must fail import");
+            assert!(
+                error.to_string().contains(expected_reason),
+                "unexpected validation error: {error}"
+            );
+        }
+    }
+
+    #[test]
+    fn unknown_and_future_adapter_compatibility_is_preserved_as_blocked() {
+        for (composition, expected_reason) in [
+            ({
+                let mut composition = crate::store::PublishComposition::local_default();
+                composition.execution_backend.adapter_id = "future-execution".to_string();
+                composition
+            }, "composition_adapter_unavailable:execution_backend:future-execution"),
+            ({
+                let mut composition = crate::store::PublishComposition::local_default();
+                composition.execution_backend.settings_version = 999;
+                composition
+            }, "composition_settings_version_unsupported:execution_backend:local-execution:999"),
+        ] {
+            let profile = ConfigProfile {
+                name: expected_reason.to_string(),
+                provider_id: "dotnet".to_string(),
+                composition: Some(composition.clone()),
+                parameters: BTreeMap::new(),
+                profile_group: None,
+                created_at: Utc::now(),
+                is_system_default: false,
+                ..ConfigProfile::default()
+            };
+            let export = ConfigExport {
+                version: CONFIG_VERSION,
+                exported_at: Utc::now(),
+                profiles: vec![profile],
+            };
+            validate_import(&export).expect("forward-compatible composition should import");
+
+            let mut store = RepoPublishConfig::default();
+            let imported = store
+                .import_profile(crate::store::ConfigurationImport {
+                    name: expected_reason.to_string(),
+                    provider_id: "dotnet".to_string(),
+                    contract_version: crate::store::PUBLISH_CONFIGURATION_CONTRACT_VERSION,
+                    provider_version: "1".to_string(),
+                    settings_version: crate::store::CURRENT_SETTINGS_VERSION,
+                    parameters: serde_json::json!({}),
+                    composition,
+                    project_binding: None,
+                    profile_group: None,
+                    created_at: "2026-09-11T00:00:00Z".to_string(),
+                    is_system_default: false,
+                })
+                .expect("import profile")
+                .expect("profile should be created");
+            assert_eq!(imported.blocked_reason.as_deref(), Some(expected_reason));
         }
     }
 
