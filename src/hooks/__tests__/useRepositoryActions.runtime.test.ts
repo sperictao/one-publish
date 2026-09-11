@@ -39,7 +39,10 @@ vi.mock("@/lib/store/api", async () => {
   };
 });
 
-import { handleAddRepoRuntime } from "@/features/repository/useRepositoryActions.runtime";
+import {
+  handleAddRepoRuntime,
+  handleDetectRepoProviderRuntime,
+} from "@/features/repository/useRepositoryActions.runtime";
 import { defaultRepoPublishConfig } from "@/lib/store/types";
 import type { Repository } from "@/lib/store/types";
 
@@ -427,5 +430,45 @@ describe("handleAddRepoRuntime", () => {
     expect(firstRepo.id).toBeTruthy();
     expect(secondRepo.id).toBeTruthy();
     expect(firstRepo.id).not.toBe(secondRepo.id);
+  });
+});
+
+describe("handleDetectRepoProviderRuntime", () => {
+  const appT: Record<string, string> = {
+    providerDetected: "已自动检测 Provider",
+  };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("自动探测（silentFailure）失败时不弹错误，只返回 null", async () => {
+    mocks.detectRepositoryProvider.mockRejectedValue({
+      code: "unsupported_provider",
+    });
+
+    const result = await handleDetectRepoProviderRuntime({
+      appT,
+      path: "/tmp/demo-repo",
+      options: { silentSuccess: true, silentFailure: true },
+    });
+
+    expect(result).toBeNull();
+    expect(mocks.toastError).not.toHaveBeenCalled();
+  });
+
+  it("手动检测失败时仍然给出可读文案", async () => {
+    mocks.detectRepositoryProvider.mockRejectedValue({
+      code: "unsupported_provider",
+    });
+
+    const result = await handleDetectRepoProviderRuntime({
+      appT,
+      path: "/tmp/demo-repo",
+    });
+
+    expect(result).toBeNull();
+    expect(mocks.toastError).toHaveBeenCalledTimes(1);
+    expect(mocks.toastError.mock.calls[0][0]).toBe("未识别到支持的 Provider");
   });
 });

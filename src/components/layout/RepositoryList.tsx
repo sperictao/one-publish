@@ -162,7 +162,7 @@ interface RepositoryListProps {
   onRemoveRepo: (repo: Repository) => Promise<void> | void;
   onDetectProvider: (
     path: string,
-    options?: { silentSuccess?: boolean }
+    options?: { silentSuccess?: boolean; silentFailure?: boolean }
   ) => Promise<string | null>;
   onScanProjectCandidates: (
     path: string,

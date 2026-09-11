@@ -55,7 +55,7 @@ interface EditRepositoryDialogProps {
   onEditRepo: (repo: Repository) => Promise<boolean> | boolean;
   onDetectProvider: (
     path: string,
-    options?: { silentSuccess?: boolean }
+    options?: { silentSuccess?: boolean; silentFailure?: boolean }
   ) => Promise<string | null>;
   onScanProjectCandidates: (
     path: string,
@@ -333,8 +333,11 @@ function EditRepositoryDialogContent({
     const detect = async () => {
       setIsDetectingProvider(true);
       try {
+        // 打开窗口时的首次自动探测：失败不重复弹错，用户已在触发流程
+        // （如添加仓库）里看到结果，这里只负责把识别到的 Provider 填上。
         const providerId = await onDetectProvider(detectPath, {
           silentSuccess: true,
+          silentFailure: true,
         });
         if (!cancelled && providerId) {
           setEditProviderId(providerId);

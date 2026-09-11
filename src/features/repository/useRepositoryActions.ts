@@ -107,7 +107,10 @@ export function useRepositoryActions({
   );
 
   const handleDetectRepoProvider = useCallback(
-    async (path: string, options?: { silentSuccess?: boolean }) => {
+    async (
+      path: string,
+      options?: { silentSuccess?: boolean; silentFailure?: boolean }
+    ) => {
       const { handleDetectRepoProviderRuntime } =
         await loadRepositoryActionsRuntime();
       return await handleDetectRepoProviderRuntime({ appT, path, options });

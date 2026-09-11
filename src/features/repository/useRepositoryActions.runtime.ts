@@ -506,10 +506,13 @@ export async function handleEditRepoRuntime(params: {
 export async function handleDetectRepoProviderRuntime(params: {
   appT: TranslationMap;
   path: string;
-  options?: { silentSuccess?: boolean };
+  options?: { silentSuccess?: boolean; silentFailure?: boolean };
 }) {
   const { appT, path, options } = params;
   const silentSuccess = options?.silentSuccess ?? false;
+  // 自动检测（如编辑窗口打开时的首次探测）失败不必再弹一次错误：
+  // 触发它的流程（添加仓库等）已经把结果告知用户了，重复弹会互相矛盾。
+  const silentFailure = options?.silentFailure ?? false;
   const nextPath = path.trim();
 
   if (!nextPath) {
@@ -528,6 +531,10 @@ export async function handleDetectRepoProviderRuntime(params: {
 
     return providerId;
   } catch (error) {
+    if (silentFailure) {
+      return null;
+    }
+
     const failureReason = analyzeProviderDetectFailure(error);
     const copy = resolveProviderDetectFailureCopy(failureReason, error, appT);
 

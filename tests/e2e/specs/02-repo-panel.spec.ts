@@ -73,11 +73,13 @@ test.describe("Repository List", () => {
   test("shows provider badge for each repository", async ({ page }) => {
     await gotoApp(page);
 
+    // 徽标显示 Provider 的友好名称（mock 中 dotnet 的 label 为 ".NET SDK"），
+    // 而不是裸 provider id。
     await expect(page.locator("[data-list-item-id='repo-a']")).toContainText(
-      "dotnet"
+      ".NET SDK"
     );
     await expect(page.locator("[data-list-item-id='repo-b']")).toContainText(
-      "dotnet"
+      ".NET SDK"
     );
   });
 
