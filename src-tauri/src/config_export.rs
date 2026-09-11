@@ -229,6 +229,17 @@ pub fn validate_import(config: &ConfigExport) -> Result<(), ImportError> {
             )));
         }
 
+        if let Some(project_binding) = profile.project_binding.as_deref() {
+            if crate::publish_runtime::project_binding_selector(&profile.provider_id, project_binding)
+                .is_none()
+            {
+                return Err(ImportError::ValidationFailed(format!(
+                    "profile '{}' project binding '{}' does not belong to provider '{}'",
+                    profile.name, project_binding, profile.provider_id
+                )));
+            }
+        }
+
         // Check if provider exists
         let Ok(provider) = registry.get(&profile.provider_id) else {
             continue;
@@ -240,17 +251,6 @@ pub fn validate_import(config: &ConfigExport) -> Result<(), ImportError> {
             || profile.settings_version != crate::store::CURRENT_SETTINGS_VERSION
         {
             continue;
-        }
-
-        if let Some(project_binding) = profile.project_binding.as_deref() {
-            if crate::publish_runtime::project_binding_selector(&profile.provider_id, project_binding)
-                .is_none()
-            {
-                return Err(ImportError::ValidationFailed(format!(
-                    "profile '{}' project binding '{}' does not belong to provider '{}'",
-                    profile.name, project_binding, profile.provider_id
-                )));
-            }
         }
 
         // Validate parameters against schema
@@ -573,7 +573,7 @@ mod tests {
             name: "Future dotnet".to_string(),
             provider_id: "dotnet".to_string(),
             provider_version: "999".to_string(),
-            project_binding: Some("cargo:App.csproj".to_string()),
+            project_binding: Some("dotnet:future-selector".to_string()),
             parameters: BTreeMap::from([(
                 "configuration".to_string(),
                 serde_json::Value::Bool(false),
@@ -593,11 +593,16 @@ mod tests {
     }
 
     #[test]
-    fn validate_rejects_current_project_binding_not_owned_by_provider() {
-        for project_binding in ["cargo:App.csproj", "dotnet:"] {
+    fn validate_rejects_project_binding_not_owned_by_provider() {
+        for (project_binding, provider_version) in [
+            ("cargo:App.csproj", "1"),
+            ("dotnet:", "1"),
+            ("cargo:future-selector", "999"),
+        ] {
             let profile = ConfigProfile {
                 name: "Binding mismatch".to_string(),
                 provider_id: "dotnet".to_string(),
+                provider_version: provider_version.to_string(),
                 project_binding: Some(project_binding.to_string()),
                 parameters: BTreeMap::new(),
                 profile_group: None,
@@ -612,7 +617,7 @@ mod tests {
             };
 
             let error = validate_import(&config)
-                .expect_err("current project binding must belong to its provider");
+                .expect_err("project binding must belong to its provider regardless of provider version");
             assert!(error.to_string().contains("does not belong to provider"));
         }
     }
