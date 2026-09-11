@@ -337,6 +337,16 @@ impl ConfigProfile {
             Err(_) => return Some(format!("provider_unavailable:{}", revision.provider_id)),
         };
 
+        if let Some(project_binding) = revision.project_binding.as_deref() {
+            if crate::publish_runtime::project_binding_selector(&revision.provider_id, project_binding)
+                .is_none()
+            {
+                return Some(format!(
+                    "project_binding_provider_mismatch:{project_binding}"
+                ));
+            }
+        }
+
         if revision.provider_version != provider.manifest().version {
             return Some(format!(
                 "provider_version_unsupported:{}",

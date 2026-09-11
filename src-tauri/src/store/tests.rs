@@ -2488,3 +2488,29 @@ fn repository_project_binding_preserves_declared_solution_semantics() {
         Some("dotnet:App.sln")
     );
 }
+
+#[test]
+fn imported_profile_with_foreign_project_binding_is_marked_blocked() {
+    let mut config = RepoPublishConfig::default();
+    let profile = config
+        .import_profile(ConfigurationImport {
+            name: "foreign-binding".to_string(),
+            provider_id: "dotnet".to_string(),
+            contract_version: crate::store::PUBLISH_CONFIGURATION_CONTRACT_VERSION,
+            provider_version: "1".to_string(),
+            settings_version: crate::store::CURRENT_SETTINGS_VERSION,
+            parameters: serde_json::json!({}),
+            composition: crate::store::PublishComposition::local_default(),
+            project_binding: Some("cargo:App.csproj".to_string()),
+            profile_group: None,
+            created_at: "2026-09-11T00:00:00Z".to_string(),
+            is_system_default: false,
+        })
+        .expect("import profile")
+        .expect("profile should be added");
+
+    assert_eq!(
+        profile.blocked_reason.as_deref(),
+        Some("project_binding_provider_mismatch:cargo:App.csproj")
+    );
+}

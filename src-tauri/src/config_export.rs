@@ -242,6 +242,17 @@ pub fn validate_import(config: &ConfigExport) -> Result<(), ImportError> {
             continue;
         }
 
+        if let Some(project_binding) = profile.project_binding.as_deref() {
+            if crate::publish_runtime::project_binding_selector(&profile.provider_id, project_binding)
+                .is_none()
+            {
+                return Err(ImportError::ValidationFailed(format!(
+                    "profile '{}' project binding '{}' does not belong to provider '{}'",
+                    profile.name, project_binding, profile.provider_id
+                )));
+            }
+        }
+
         // Validate parameters against schema
         let schema = provider
             .get_schema()
@@ -562,6 +573,7 @@ mod tests {
             name: "Future dotnet".to_string(),
             provider_id: "dotnet".to_string(),
             provider_version: "999".to_string(),
+            project_binding: Some("cargo:App.csproj".to_string()),
             parameters: BTreeMap::from([(
                 "configuration".to_string(),
                 serde_json::Value::Bool(false),
@@ -578,6 +590,31 @@ mod tests {
         };
 
         assert!(validate_import(&config).is_ok());
+    }
+
+    #[test]
+    fn validate_rejects_current_project_binding_not_owned_by_provider() {
+        for project_binding in ["cargo:App.csproj", "dotnet:"] {
+            let profile = ConfigProfile {
+                name: "Binding mismatch".to_string(),
+                provider_id: "dotnet".to_string(),
+                project_binding: Some(project_binding.to_string()),
+                parameters: BTreeMap::new(),
+                profile_group: None,
+                created_at: Utc::now(),
+                is_system_default: false,
+                ..ConfigProfile::default()
+            };
+            let config = ConfigExport {
+                version: CONFIG_VERSION,
+                exported_at: Utc::now(),
+                profiles: vec![profile],
+            };
+
+            let error = validate_import(&config)
+                .expect_err("current project binding must belong to its provider");
+            assert!(error.to_string().contains("does not belong to provider"));
+        }
     }
 
     #[test]
