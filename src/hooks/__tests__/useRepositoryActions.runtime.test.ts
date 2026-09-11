@@ -212,4 +212,59 @@ describe("handleAddRepoRuntime", () => {
       })
     );
   });
+
+  it("重复路径（repository_exists）提示仓库已存在而非原始错误", async () => {
+    mocks.addRepository.mockRejectedValue({
+      code: "repository_exists",
+      message: "仓库已存在",
+    });
+
+    await handleAddRepoRuntime({
+      appT: {
+        selectRepositoryDirectory: "选择仓库目录",
+        repositoryAdded: "仓库已添加",
+        repositoryAlreadyExists: "仓库已存在",
+      },
+      providers,
+      addRepository: mocks.addRepository,
+    });
+
+    expect(mocks.toastError).toHaveBeenCalledWith("仓库已存在", {
+      description: "/tmp/demo-repo",
+    });
+    expect(mocks.toastError).not.toHaveBeenCalledWith(
+      "添加仓库失败",
+      expect.anything()
+    );
+  });
+
+  it("添加流程检测失败使用专用文案，不引导不存在的手动入口", async () => {
+    mocks.detectRepositoryProvider.mockRejectedValue(
+      new Error("cannot detect provider from repository path")
+    );
+
+    await handleAddRepoRuntime({
+      appT: {
+        selectRepositoryDirectory: "选择仓库目录",
+        addRepoProviderDetectUnsupported: "未识别到支持的 Provider",
+        addRepoProviderDetectUnsupportedDesc:
+          "未添加仓库。请确认所选目录包含 Provider 识别的项目文件（如 .sln、.csproj、build.gradle），然后重新添加。",
+      },
+      providers,
+      addRepository: mocks.addRepository,
+    });
+
+    expect(mocks.toastError).toHaveBeenCalledWith("未识别到支持的 Provider", {
+      description:
+        "未添加仓库。请确认所选目录包含 Provider 识别的项目文件（如 .sln、.csproj、build.gradle），然后重新添加。",
+    });
+    expect(mocks.toastError).not.toHaveBeenCalledWith(
+      "未识别到支持的 Provider",
+      {
+        description:
+          "可手动选择 Provider，或确认项目根目录下包含可识别的构建文件。",
+      }
+    );
+    expect(mocks.addRepository).not.toHaveBeenCalled();
+  });
 });

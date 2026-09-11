@@ -16,6 +16,7 @@ import { remapPathPrefix } from "@/features/repository/utils/pathUtils";
 import {
   analyzeBranchRefreshFailure,
   analyzeProviderDetectFailure,
+  extractInvokeErrorCode,
   extractInvokeErrorMessage,
 } from "@/lib/tauri/invokeErrors";
 import type { ProjectScanCandidates } from "@/lib/store/types";
@@ -148,11 +149,14 @@ export async function handleAddRepoRuntime(params: {
   try {
     providerId = await detectRepositoryProvider(path);
   } catch {
-    toast.error(appT.providerDetectUnsupported || "未识别到支持的 Provider", {
-      description:
-        appT.providerDetectUnsupportedDesc ||
-        "可手动选择 Provider，或确认项目根目录下包含可识别的构建文件。",
-    });
+    toast.error(
+      appT.addRepoProviderDetectUnsupported || "未识别到支持的 Provider",
+      {
+        description:
+          appT.addRepoProviderDetectUnsupportedDesc ||
+          "未添加仓库。请确认所选目录包含 Provider 识别的项目文件（如 .sln、.csproj、build.gradle），然后重新添加。",
+      }
+    );
     return;
   }
 
@@ -176,8 +180,14 @@ export async function handleAddRepoRuntime(params: {
     await addRepository(newRepo);
     toast.success(appT.repositoryAdded || "仓库已添加", { description: name });
   } catch (err) {
+    if (extractInvokeErrorCode(err) === "repository_exists") {
+      toast.error(appT.repositoryAlreadyExists || "仓库已存在", {
+        description: path,
+      });
+      return;
+    }
     toast.error(appT.addRepositoryFailed || "添加仓库失败", {
-      description: String(err),
+      description: extractInvokeErrorMessage(err),
     });
   }
 }

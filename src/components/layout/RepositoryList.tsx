@@ -21,6 +21,7 @@ import {
   ChevronDown,
   FolderGit2,
   ArrowUpDown,
+  Loader2,
 } from "lucide-react";
 import type { ProjectScanCandidates } from "@/lib/store/types";
 import type { Branch, Repository } from "@/lib/store/types";
@@ -152,7 +153,7 @@ interface RepositoryListProps {
   selectedRepoId: string | null;
   providers: Array<{ id: string; displayName: string; label?: string }>;
   onSelectRepo: (id: string) => void;
-  onAddRepo: () => void;
+  onAddRepo: () => void | Promise<void>;
   onOpenRepoDirectory: (repo: Repository) => Promise<unknown> | unknown;
   onEditRepo: (repo: Repository) => Promise<boolean> | boolean;
   onRemoveRepo: (repo: Repository) => Promise<void> | void;
@@ -197,6 +198,7 @@ export const RepositoryList = memo(function RepositoryList({
   const [filterExpanded, setFilterExpanded] = useState(true);
   const [editingRepo, setEditingRepo] = useState<Repository | null>(null);
   const [showReorderControls, setShowReorderControls] = useState(false);
+  const [isAddingRepo, setIsAddingRepo] = useState(false);
   const { translations } = useI18n();
   const repoT = useMemo(
     () => translations.repositoryList || {},
@@ -309,6 +311,12 @@ export const RepositoryList = memo(function RepositoryList({
   const openEditDialog = useCallback((repo: Repository) => {
     setEditingRepo(repo);
   }, []);
+
+  const handleAddRepoClick = useCallback(() => {
+    if (isAddingRepo) return;
+    setIsAddingRepo(true);
+    Promise.resolve(onAddRepo()).finally(() => setIsAddingRepo(false));
+  }, [isAddingRepo, onAddRepo]);
 
   const handleEditDialogChange = useCallback((open: boolean) => {
     if (!open) {
@@ -467,12 +475,27 @@ export const RepositoryList = memo(function RepositoryList({
             className={listActionButtonClass}
             onClick={(event) => {
               event.stopPropagation();
-              onAddRepo();
+              handleAddRepoClick();
             }}
-            title={repoT.addRepository || "添加仓库"}
+            disabled={isAddingRepo}
+            aria-busy={isAddingRepo}
+            title={
+              isAddingRepo
+                ? repoT.addRepositoryInProgress || "正在添加仓库…"
+                : repoT.addRepository || "添加仓库"
+            }
+            aria-label={
+              isAddingRepo
+                ? repoT.addRepositoryInProgress || "正在添加仓库…"
+                : repoT.addRepository || "添加仓库"
+            }
             data-tauri-no-drag
           >
-            <Plus className="size-3.5 text-muted-foreground transition-transform duration-150 ease-geist hover:rotate-90" />
+            {isAddingRepo ? (
+              <Loader2 className="size-3.5 animate-spin text-muted-foreground" />
+            ) : (
+              <Plus className="size-3.5 text-muted-foreground transition-transform duration-150 ease-geist hover:rotate-90" />
+            )}
           </button>
           <button
             type="button"
