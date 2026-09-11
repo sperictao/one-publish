@@ -828,9 +828,9 @@ mod tests {
         invalid_settings.execution_backend.settings = serde_json::json!("not-an-object");
         cases.push((invalid_settings, "composition_settings_invalid"));
 
-        let mut wrong_kind = crate::store::PublishComposition::local_default();
-        wrong_kind.execution_backend.adapter_id = crate::store::TEMPORARY_STORE_ID.to_string();
-        cases.push((wrong_kind, "composition_adapter_kind_mismatch"));
+        let mut invalid_adapter_id = crate::store::PublishComposition::local_default();
+        invalid_adapter_id.execution_backend.adapter_id = " ".to_string();
+        cases.push((invalid_adapter_id, "composition_adapter_id_invalid"));
 
         for (composition, expected_reason) in cases {
             let profile = ConfigProfile {
@@ -858,21 +858,33 @@ mod tests {
     }
 
     #[test]
-    fn unknown_and_future_adapter_compatibility_is_preserved_as_blocked() {
-        for (composition, expected_reason) in [
-            ({
+    #[test]
+    fn adapter_registry_compatibility_is_deferred_to_runtime() {
+        let cases = [
+            {
                 let mut composition = crate::store::PublishComposition::local_default();
                 composition.execution_backend.adapter_id = "future-execution".to_string();
                 composition
-            }, "composition_adapter_unavailable:execution_backend:future-execution"),
-            ({
+            },
+            {
                 let mut composition = crate::store::PublishComposition::local_default();
                 composition.execution_backend.settings_version = 999;
                 composition
-            }, "composition_settings_version_unsupported:execution_backend:local-execution:999"),
-        ] {
+            },
+            {
+                let mut composition = crate::store::PublishComposition::local_default();
+                // Adapter IDs are namespaced by kind in AdapterRegistry. A built-in Store ID
+                // can therefore also be a valid custom ExecutionBackend ID in another registry.
+                composition.execution_backend.adapter_id =
+                    crate::store::TEMPORARY_STORE_ID.to_string();
+                composition
+            },
+        ];
+
+        for (index, composition) in cases.into_iter().enumerate() {
+            let name = format!("Deferred registry compatibility {index}");
             let profile = ConfigProfile {
-                name: expected_reason.to_string(),
+                name: name.clone(),
                 provider_id: "dotnet".to_string(),
                 composition: Some(composition.clone()),
                 parameters: BTreeMap::new(),
@@ -886,12 +898,13 @@ mod tests {
                 exported_at: Utc::now(),
                 profiles: vec![profile],
             };
-            validate_import(&export).expect("forward-compatible composition should import");
+            validate_import(&export)
+                .expect("registry-dependent compatibility must be deferred to runtime");
 
             let mut store = RepoPublishConfig::default();
             let imported = store
                 .import_profile(crate::store::ConfigurationImport {
-                    name: expected_reason.to_string(),
+                    name,
                     provider_id: "dotnet".to_string(),
                     contract_version: crate::store::PUBLISH_CONFIGURATION_CONTRACT_VERSION,
                     provider_version: "1".to_string(),
@@ -905,7 +918,7 @@ mod tests {
                 })
                 .expect("import profile")
                 .expect("profile should be created");
-            assert_eq!(imported.blocked_reason.as_deref(), Some(expected_reason));
+            assert_eq!(imported.blocked_reason, None);
         }
     }
 

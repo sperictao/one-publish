@@ -41,8 +41,8 @@ use crate::spec::{PublishSpec, SpecValue, SPEC_VERSION};
 use crate::tauri_release::ReleaseGate;
 
 use crate::store::{
-    PublishComposition, RevisionAdapterBinding, CURRENT_SETTINGS_VERSION, LOCAL_BACKEND_ID,
-    LOCAL_DESTINATION_ID, TEMPORARY_STORE_ID,
+    PublishComposition, RevisionAdapterBinding, LOCAL_BACKEND_ID, LOCAL_DESTINATION_ID,
+    TEMPORARY_STORE_ID,
 };
 
 mod journal;
@@ -1183,59 +1183,13 @@ pub(crate) fn project_binding_selector<'a>(
 }
 
 
-fn composition_adapter_role(catalog: &PublishAdapterCatalog, adapter_id: &str) -> Option<&'static str> {
-    if catalog.execution_backends.iter().any(|id| id == adapter_id) {
-        Some("execution_backend")
-    } else if catalog.artifact_stores.iter().any(|id| id == adapter_id) {
-        Some("artifact_store")
-    } else if catalog.artifact_processors.iter().any(|id| id == adapter_id)
-        || adapter_id == publish_adapters::CUSTOM_COMMAND_PROCESSOR_ID
-    {
-        Some("artifact_processor")
-    } else if catalog
-        .delivery_destinations
-        .iter()
-        .any(|id| id == adapter_id)
-    {
-        Some("delivery_destination")
-    } else {
-        None
-    }
-}
-
-fn composition_adapter_supported(
-    catalog: &PublishAdapterCatalog,
-    role: &str,
-    adapter_id: &str,
-) -> bool {
-    match role {
-        "execution_backend" => catalog.execution_backends.iter().any(|id| id == adapter_id),
-        "artifact_store" => catalog.artifact_stores.iter().any(|id| id == adapter_id),
-        "artifact_processor" => {
-            catalog.artifact_processors.iter().any(|id| id == adapter_id)
-                || adapter_id == publish_adapters::CUSTOM_COMMAND_PROCESSOR_ID
-        }
-        "delivery_destination" => catalog
-            .delivery_destinations
-            .iter()
-            .any(|id| id == adapter_id),
-        _ => false,
-    }
-}
-
 fn composition_binding_invalid_reason(
-    catalog: &PublishAdapterCatalog,
     role: &str,
     binding: &RevisionAdapterBinding,
 ) -> Option<String> {
     let adapter_id = binding.adapter_id.trim();
     if adapter_id.is_empty() || adapter_id != binding.adapter_id {
         return Some(format!("composition_adapter_id_invalid:{role}"));
-    }
-    if binding.settings_version == 0 {
-        return Some(format!(
-            "composition_settings_version_invalid:{role}:{adapter_id}:0"
-        ));
     }
     if !binding.settings.is_object() {
         return Some(format!("composition_settings_invalid:{role}:{adapter_id}"));
@@ -1247,39 +1201,25 @@ fn composition_binding_invalid_reason(
             "composition_credential_binding_invalid:{role}:{adapter_id}"
         ));
     }
-    if let Some(actual_role) = composition_adapter_role(catalog, adapter_id) {
-        if actual_role != role {
-            return Some(format!(
-                "composition_adapter_kind_mismatch:{role}:{adapter_id}:{actual_role}"
-            ));
-        }
-    }
     None
 }
 
-/// Stable composition-shape validation. These failures are invalid regardless of
-/// which Adapter versions are installed, so imports must reject them instead of
-/// persisting a configuration that can never form an unambiguous plan.
+/// Stable composition-shape validation. These failures do not depend on which
+/// Adapters are registered, so imports/store/source may reject or block them without
+/// guessing runtime capabilities.
 pub(crate) fn composition_invalid_reason(composition: &PublishComposition) -> Option<String> {
-    let catalog = builtin_adapter_catalog();
-    if let Some(reason) = composition_binding_invalid_reason(
-        &catalog,
-        "execution_backend",
-        &composition.execution_backend,
-    ) {
+    if let Some(reason) =
+        composition_binding_invalid_reason("execution_backend", &composition.execution_backend)
+    {
         return Some(reason);
     }
-    if let Some(reason) = composition_binding_invalid_reason(
-        &catalog,
-        "artifact_store",
-        &composition.artifact_store,
-    ) {
+    if let Some(reason) =
+        composition_binding_invalid_reason("artifact_store", &composition.artifact_store)
+    {
         return Some(reason);
     }
     for processor in &composition.artifact_processors {
-        if let Some(reason) =
-            composition_binding_invalid_reason(&catalog, "artifact_processor", processor)
-        {
+        if let Some(reason) = composition_binding_invalid_reason("artifact_processor", processor) {
             return Some(reason);
         }
     }
@@ -1301,55 +1241,9 @@ pub(crate) fn composition_invalid_reason(composition: &PublishComposition) -> Op
         if !route_ids.insert(route_id) {
             return Some(format!("composition_route_id_duplicate:{route_id}"));
         }
-        if let Some(reason) = composition_binding_invalid_reason(
-            &catalog,
-            "delivery_destination",
-            &route.destination,
-        ) {
-            return Some(reason);
-        }
-    }
-    None
-}
-
-/// Runtime compatibility validation. Unknown Adapters or newer settings schemas
-/// are preserved as blocked configurations so an older app does not destroy
-/// forward-compatible backup data.
-pub(crate) fn composition_blocked_reason(composition: &PublishComposition) -> Option<String> {
-    if let Some(reason) = composition_invalid_reason(composition) {
-        return Some(reason);
-    }
-
-    let catalog = builtin_adapter_catalog();
-    let binding_reason = |role: &str, binding: &RevisionAdapterBinding| {
-        if !composition_adapter_supported(&catalog, role, &binding.adapter_id) {
-            return Some(format!(
-                "composition_adapter_unavailable:{role}:{}",
-                binding.adapter_id
-            ));
-        }
-        if binding.settings_version != CURRENT_SETTINGS_VERSION {
-            return Some(format!(
-                "composition_settings_version_unsupported:{role}:{}:{}",
-                binding.adapter_id, binding.settings_version
-            ));
-        }
-        None
-    };
-
-    if let Some(reason) = binding_reason("execution_backend", &composition.execution_backend) {
-        return Some(reason);
-    }
-    if let Some(reason) = binding_reason("artifact_store", &composition.artifact_store) {
-        return Some(reason);
-    }
-    for processor in &composition.artifact_processors {
-        if let Some(reason) = binding_reason("artifact_processor", processor) {
-            return Some(reason);
-        }
-    }
-    for route in &composition.delivery_routes {
-        if let Some(reason) = binding_reason("delivery_destination", &route.destination) {
+        if let Some(reason) =
+            composition_binding_invalid_reason("delivery_destination", &route.destination)
+        {
             return Some(reason);
         }
     }

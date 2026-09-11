@@ -250,7 +250,7 @@ fn configuration_content_blocked_reason(content: &PublishConfigurationContent) -
         ));
     }
 
-    if let Some(reason) = super::composition_blocked_reason(&content.composition) {
+    if let Some(reason) = super::composition_invalid_reason(&content.composition) {
         return Some(reason);
     }
 
