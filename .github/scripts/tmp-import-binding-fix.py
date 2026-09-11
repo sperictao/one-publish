@@ -146,4 +146,4 @@ fn imported_profile_with_foreign_project_binding_is_marked_blocked() {
 }
 '''
 assert 'fn imported_profile_with_foreign_project_binding_is_marked_blocked()' not in text
-path.write_text(text.rstrip() + append + '\n')
+path.write_text(text.rstrip() + append.rstrip() + '\n')
