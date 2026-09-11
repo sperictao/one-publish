@@ -25,6 +25,36 @@ pub struct ProfileOrderEntry {
     pub profile_group: Option<String>,
 }
 
+/// 是否按 Windows 路径规则处理（盘符 / 反斜杠 / UNC 前缀）。
+fn is_windows_like_path(path: &str) -> bool {
+    let bytes = path.as_bytes();
+    let has_drive_prefix =
+        bytes.len() >= 2 && bytes[0].is_ascii_alphabetic() && bytes[1] == b':';
+
+    has_drive_prefix || path.contains('\\') || path.starts_with("\\\\")
+}
+
+/// 仓库路径比较用的归一化：去掉首尾空白与尾部分隔符，Windows 风格路径忽略大小写。
+///
+/// 与前端 `isSameRepositoryPath` 保持同一套规则（POSIX 路径按大小写敏感处理）。
+/// 不解析符号链接 —— 那是文件系统语义，且对不存在的路径会失败。
+pub(super) fn normalize_repository_path(path: &str) -> String {
+    let trimmed = path.trim();
+    let without_trailing = trimmed.trim_end_matches(['/', '\\']);
+    // 根路径（"/"、"C:\"）整串都是分隔符，去尾后会变空，此时保留原文
+    let normalized = if without_trailing.is_empty() {
+        trimmed
+    } else {
+        without_trailing
+    };
+
+    if is_windows_like_path(normalized) {
+        normalized.to_ascii_lowercase()
+    } else {
+        normalized.to_string()
+    }
+}
+
 fn normalize_ordered_ids(ids: Vec<String>) -> Vec<String> {
     let mut normalized = Vec::with_capacity(ids.len());
     let mut seen = BTreeSet::new();
@@ -84,11 +114,12 @@ pub async fn save_app_state(state: AppState) -> Result<(), AppError> {
 pub async fn add_repository(app: tauri::AppHandle, repo: Repository) -> Result<AppState, AppError> {
     let _timer = crate::commands::middleware::CommandTimer::new("store::commands::add_repository");
     let mut state = get_state();
+    let normalized_path = normalize_repository_path(&repo.path);
 
     if state
         .repositories
         .iter()
-        .any(|repository| repository.path == repo.path)
+        .any(|repository| normalize_repository_path(&repository.path) == normalized_path)
     {
         return Err(AppError::validation_with_code(
             "仓库已存在",

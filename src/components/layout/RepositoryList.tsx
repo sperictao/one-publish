@@ -18,12 +18,13 @@ import {
   Search,
   Plus,
   Settings,
-  ChevronDown,
   FolderGit2,
   ArrowUpDown,
+  Loader2,
 } from "lucide-react";
 import type { ProjectScanCandidates } from "@/lib/store/types";
 import type { Branch, Repository } from "@/lib/store/types";
+import type { AddRepositoryOutcome } from "@/features/repository/useRepositoryActions";
 import { useI18n } from "@/hooks/useI18n";
 import { RepositoryRow } from "@/components/layout/RepositoryRow";
 import { topbarIconButtonClass } from "@/components/layout/topbarButtonStyles";
@@ -152,7 +153,10 @@ interface RepositoryListProps {
   selectedRepoId: string | null;
   providers: Array<{ id: string; displayName: string; label?: string }>;
   onSelectRepo: (id: string) => void;
-  onAddRepo: () => void;
+  onAddRepo: () =>
+    Promise<AddRepositoryOutcome | void> | AddRepositoryOutcome | void;
+  /** 添加流程进行中：入口需要 disabled + aria-busy 反馈 */
+  isAddingRepo?: boolean;
   onOpenRepoDirectory: (repo: Repository) => Promise<unknown> | unknown;
   onEditRepo: (repo: Repository) => Promise<boolean> | boolean;
   onRemoveRepo: (repo: Repository) => Promise<void> | void;
@@ -181,6 +185,7 @@ export const RepositoryList = memo(function RepositoryList({
   providers,
   onSelectRepo,
   onAddRepo,
+  isAddingRepo = false,
   onOpenRepoDirectory,
   onEditRepo,
   onRemoveRepo,
@@ -194,8 +199,11 @@ export const RepositoryList = memo(function RepositoryList({
   onReorderRepositories,
 }: RepositoryListProps): ReactNode {
   const [searchQuery, setSearchQuery] = useState("");
-  const [filterExpanded, setFilterExpanded] = useState(true);
   const [editingRepo, setEditingRepo] = useState<Repository | null>(null);
+  // 添加成功但尚未拿到 store 里那条记录时，等 repositories 更新后再打开编辑窗口
+  const [pendingEditRepoId, setPendingEditRepoId] = useState<string | null>(
+    null
+  );
   const [showReorderControls, setShowReorderControls] = useState(false);
   const { translations } = useI18n();
   const repoT = useMemo(
@@ -203,10 +211,19 @@ export const RepositoryList = memo(function RepositoryList({
     [translations.repositoryList]
   );
   const listActionButtonClass =
-    "flex size-7 items-center justify-center rounded-full border border-border bg-background transition-colors duration-150 ease-geist hover:bg-gray-alpha-100 focus-ring";
+    "flex size-7 items-center justify-center rounded-full border border-border bg-background transition-colors duration-150 ease-geist hover:bg-gray-alpha-100 focus-ring disabled:cursor-not-allowed disabled:bg-gray-100 disabled:text-gray-700 disabled:border-transparent disabled:hover:bg-gray-100";
   const reorderControlsLabel = showReorderControls
     ? repoT.hideReorderControls || "关闭排序"
     : repoT.showReorderControls || "开启排序";
+  // 仓库行徽标使用 Provider 的展示名（与编辑对话框、设置页同一套文案）
+  const providerLabelById = useMemo(() => {
+    const labels: Record<string, string> = {};
+    for (const provider of providers) {
+      labels[provider.id] =
+        provider.label?.trim() || provider.displayName?.trim() || provider.id;
+    }
+    return labels;
+  }, [providers]);
 
   const filteredRepos = useMemo(
     () =>
@@ -310,11 +327,57 @@ export const RepositoryList = memo(function RepositoryList({
     setEditingRepo(repo);
   }, []);
 
+  const hasRepositories = repositories.length > 0;
+
   const handleEditDialogChange = useCallback((open: boolean) => {
     if (!open) {
       setEditingRepo(null);
+      setPendingEditRepoId(null);
     }
   }, []);
+
+  const handleAddRepoClick = useCallback(async () => {
+    const outcome = await onAddRepo();
+
+    if (
+      !outcome ||
+      outcome.status === "cancelled" ||
+      outcome.status === "failed"
+    ) {
+      return;
+    }
+
+    // 搜索过滤生效时，新仓库可能不匹配当前搜索词 —— 那样它既不渲染也不可见，
+    // 而主区已经切到它。这里清掉搜索词，保证「新行 + 选中态」一致可见。
+    setSearchQuery((current) => {
+      const query = current.trim().toLowerCase();
+      if (!query) {
+        return current;
+      }
+
+      const matches =
+        outcome.name.toLowerCase().includes(query) ||
+        outcome.path.toLowerCase().includes(query);
+
+      return matches ? current : "";
+    });
+
+    if (outcome.status === "needs-provider") {
+      // 未识别到 Provider：落库后由用户在该仓库的编辑窗口手动选择
+      setPendingEditRepoId(outcome.repoId);
+    }
+  }, [onAddRepo]);
+
+  // 添加流程结束时新的仓库对象可能还没进入 store，这里在渲染期直接把
+  // 「待编辑 id」解析成 store 里的那条记录，避免用 effect 同步状态。
+  const pendingEditRepo = useMemo(
+    () =>
+      pendingEditRepoId
+        ? (repositories.find((repo) => repo.id === pendingEditRepoId) ?? null)
+        : null,
+    [pendingEditRepoId, repositories]
+  );
+  const dialogRepo = editingRepo ?? pendingEditRepo;
 
   const repoListContent = useMemo(() => {
     // Stable per-row ref composer: avoids allocating a fresh closure per row
@@ -345,7 +408,34 @@ export const RepositoryList = memo(function RepositoryList({
             className="h-full"
             icon={FolderGit2}
             title={repoT.noRepositories || "暂无仓库"}
-            hint={repoT.noRepositoriesHint || "点击下方添加仓库"}
+            hint={
+              hasRepositories
+                ? repoT.noMatchingRepositories || "没有匹配的仓库"
+                : repoT.noRepositoriesHint || "点击上方 + 添加仓库"
+            }
+            action={
+              hasRepositories ? undefined : (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="gap-1.5 px-3"
+                  onClick={() => {
+                    void handleAddRepoClick();
+                  }}
+                  disabled={isAddingRepo}
+                  aria-busy={isAddingRepo}
+                  data-tauri-no-drag
+                >
+                  {isAddingRepo ? (
+                    <Loader2 className="size-3.5 animate-spin" />
+                  ) : (
+                    <Plus className="size-3.5" />
+                  )}
+                  {repoT.addRepository || "添加仓库"}
+                </Button>
+              )
+            }
           />
         ) : (
           <div className="repo-list-grid space-y-1.5">
@@ -358,6 +448,11 @@ export const RepositoryList = memo(function RepositoryList({
                 isMenuOpen={interaction.isMenuOpenForRepo(repo.id)}
                 canConnectBranch={branchConnectivityByRepoId[repo.id] ?? false}
                 actualBranch={actualBranchByRepoId[repo.id]}
+                providerLabel={
+                  repo.providerId
+                    ? providerLabelById[repo.providerId]
+                    : undefined
+                }
                 repoT={repoT}
                 rowRef={composeRowRef(repo.id)}
                 onSelect={onSelectRepo}
@@ -386,9 +481,13 @@ export const RepositoryList = memo(function RepositoryList({
   }, [
     branchConnectivityByRepoId,
     actualBranchByRepoId,
+    handleAddRepoClick,
     handleListPointerLeave,
     handleListPointerReentry,
+    hasRepositories,
+    isAddingRepo,
     previewRepos,
+    providerLabelById,
     interaction.handleListPointerEnter,
     interaction.handleListPointerLeave,
     interaction.handleMenuOpenChange,
@@ -445,34 +544,37 @@ export const RepositoryList = memo(function RepositoryList({
       </div>
 
       <div className="flex items-center justify-between px-3 py-2">
-        <button
-          type="button"
-          className="flex items-center gap-1.5 rounded-full border border-border bg-background px-3 py-1 text-button-14 font-normal transition-colors duration-150 ease-geist hover:bg-gray-alpha-100 focus-ring"
-          onClick={() => setFilterExpanded(!filterExpanded)}
+        {/* 仓库总数：纯展示计数标签。旧实现是带 chevron 的按钮，点击只旋转箭头
+            而不产生任何折叠/筛选效果，属于失效控件。 */}
+        <span
+          className="flex items-center gap-1.5 rounded-full border border-border bg-background px-3 py-1 text-button-14 font-normal"
+          data-testid="repo-count-label"
         >
           <span className="text-foreground">{repoT.all || "全部"}</span>
           <span className="flex h-4 min-w-4 items-center justify-center rounded-full bg-interactive/10 px-1 text-label-12 font-semibold text-interactive">
             {repositories.length}
           </span>
-          <ChevronDown
-            className={cn(
-              "size-3 text-muted-foreground/60 transition-transform duration-150 ease-geist",
-              filterExpanded ? "" : "-rotate-90"
-            )}
-          />
-        </button>
+        </span>
         <div className="flex items-center gap-1.5">
           <button
             type="button"
             className={listActionButtonClass}
             onClick={(event) => {
               event.stopPropagation();
-              onAddRepo();
+              void handleAddRepoClick();
             }}
             title={repoT.addRepository || "添加仓库"}
+            aria-label={repoT.addRepository || "添加仓库"}
+            aria-busy={isAddingRepo}
+            disabled={isAddingRepo}
+            data-testid="repo-add-button"
             data-tauri-no-drag
           >
-            <Plus className="size-3.5 text-muted-foreground transition-transform duration-150 ease-geist hover:rotate-90" />
+            {isAddingRepo ? (
+              <Loader2 className="size-3.5 animate-spin text-muted-foreground" />
+            ) : (
+              <Plus className="size-3.5 text-muted-foreground transition-transform duration-150 ease-geist hover:rotate-90" />
+            )}
           </button>
           <button
             type="button"
@@ -518,10 +620,10 @@ export const RepositoryList = memo(function RepositoryList({
 
       {repoListContent}
 
-      {editingRepo ? (
+      {dialogRepo ? (
         <Suspense fallback={null}>
           <EditRepositoryDialog
-            repository={editingRepo}
+            repository={dialogRepo}
             providers={providers}
             repoT={repoT}
             onOpenChange={handleEditDialogChange}
@@ -539,7 +641,10 @@ export const RepositoryList = memo(function RepositoryList({
           type="button"
           aria-label={repoT.openSettings || "打开设置"}
           title={repoT.openSettings || "打开设置"}
-          className="flex size-7 items-center justify-center rounded-sm text-muted-foreground transition-colors duration-150 ease-geist hover:bg-gray-alpha-100 hover:text-foreground focus-ring"
+          className={cn(
+            listActionButtonClass,
+            "text-muted-foreground hover:text-foreground"
+          )}
           onClick={onSettings}
         >
           <Settings className="size-3.5" />

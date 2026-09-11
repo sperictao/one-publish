@@ -138,6 +138,10 @@ beforeAll(() => {
         searchRepository: "搜索仓库",
         all: "全部",
         currentBranchUnknown: "未知分支",
+        noRepositories: "暂无仓库",
+        noRepositoriesHint: "点击上方 + 添加仓库",
+        noMatchingRepositories: "没有匹配的仓库",
+        openSettings: "打开设置",
       },
     },
   });
@@ -460,5 +464,165 @@ describe("RepositoryList", () => {
       "repo-c",
       "repo-b",
     ]);
+  });
+});
+
+describe("RepositoryList · 添加仓库入口与反馈", () => {
+  const baseProps = {
+    selectedRepoId: null,
+    providers: [{ id: "java", displayName: "java", label: "Java (Gradle)" }],
+    onSelectRepo: () => {},
+    onOpenRepoDirectory: () => {},
+    onEditRepo: () => true,
+    onRemoveRepo: () => {},
+    onDetectProvider: async () => null,
+    onScanProjectCandidates: async () => null,
+    onRefreshBranches: async () => null,
+    branchConnectivityByRepoId: {},
+    actualBranchByRepoId: {},
+    onSettings: () => {},
+    onReorderRepositories: () => {},
+  };
+
+  it("添加流程进行中时入口 disabled + aria-busy，阻止并发触发第二个目录选择器", () => {
+    render(
+      <RepositoryList
+        {...baseProps}
+        repositories={[]}
+        onAddRepo={() => {}}
+        isAddingRepo
+      />
+    );
+
+    const addButton = screen.getByTestId("repo-add-button");
+    expect(addButton).toBeDisabled();
+    expect(addButton).toHaveAttribute("aria-busy", "true");
+    expect(addButton).toHaveAttribute("aria-label", "添加仓库");
+  });
+
+  it("空闲时入口可点击且不带 aria-busy", () => {
+    const onAddRepo = vi.fn();
+    render(
+      <RepositoryList {...baseProps} repositories={[]} onAddRepo={onAddRepo} />
+    );
+
+    const addButton = screen.getByTestId("repo-add-button");
+    expect(addButton).not.toBeDisabled();
+    expect(addButton).toHaveAttribute("aria-busy", "false");
+
+    fireEvent.click(addButton);
+    expect(onAddRepo).toHaveBeenCalledTimes(1);
+  });
+
+  it("空态提供主行动按钮，并把引导文案指向工具栏的 + 按钮", () => {
+    const onAddRepo = vi.fn();
+    render(
+      <RepositoryList {...baseProps} repositories={[]} onAddRepo={onAddRepo} />
+    );
+
+    expect(screen.getByText("点击上方 + 添加仓库")).toBeTruthy();
+
+    const emptyStateAction = screen
+      .getAllByRole("button", { name: "添加仓库" })
+      .find((button) => button.dataset.testid !== "repo-add-button");
+
+    expect(emptyStateAction).toBeTruthy();
+    fireEvent.click(emptyStateAction as HTMLElement);
+    expect(onAddRepo).toHaveBeenCalledTimes(1);
+  });
+
+  it("搜索无结果时不再提示添加仓库，而是提示没有匹配项", () => {
+    render(
+      <RepositoryList
+        {...baseProps}
+        repositories={[createRepository("repo-a", "alpha-service")]}
+        onAddRepo={() => {}}
+      />
+    );
+
+    fireEvent.change(screen.getByTestId("repo-search-input"), {
+      target: { value: "zzz" },
+    });
+
+    expect(screen.getByText("没有匹配的仓库")).toBeTruthy();
+    expect(screen.queryByText("点击上方 + 添加仓库")).toBeNull();
+  });
+
+  it("仓库总数是纯展示计数标签，不再是会动但无后果的按钮", () => {
+    render(
+      <RepositoryList
+        {...baseProps}
+        repositories={[createRepository("repo-a", "alpha-service")]}
+        onAddRepo={() => {}}
+      />
+    );
+
+    const countLabel = screen.getByTestId("repo-count-label");
+    expect(countLabel.tagName).toBe("SPAN");
+    expect(countLabel.textContent).toBe("全部1");
+  });
+
+  it("仓库行徽标使用 Provider 展示名，与编辑对话框一致", () => {
+    render(
+      <RepositoryList
+        {...baseProps}
+        repositories={[
+          {
+            ...createRepository("repo-java", "payments-api"),
+            providerId: "java",
+          },
+        ]}
+        onAddRepo={() => {}}
+      />
+    );
+
+    const badge = screen.getByTestId("repo-provider-badge");
+    expect(badge.textContent).toBe("Java (Gradle)");
+    expect(badge).toHaveAttribute("title", "Java (Gradle)");
+  });
+
+  it("搜索过滤生效时添加仓库，新行会被清空筛选后重新可见（M1）", async () => {
+    const alpha = createRepository("repo-alpha", "alpha-service");
+    const added = createRepository("repo-new", "payments-api");
+    const onAddRepo = vi.fn().mockResolvedValue({
+      status: "added",
+      repoId: "repo-new",
+      name: "payments-api",
+      path: "/tmp/payments-api",
+    });
+
+    const { container, rerender } = render(
+      <RepositoryList
+        {...baseProps}
+        repositories={[alpha]}
+        onAddRepo={onAddRepo}
+      />
+    );
+
+    fireEvent.change(screen.getByTestId("repo-search-input"), {
+      target: { value: "alpha" },
+    });
+
+    expect(getRenderedRepoIds(container)).toEqual(["repo-alpha"]);
+
+    await act(async () => {
+      fireEvent.click(screen.getByTestId("repo-add-button"));
+    });
+
+    rerender(
+      <RepositoryList
+        {...baseProps}
+        repositories={[alpha, added]}
+        onAddRepo={onAddRepo}
+      />
+    );
+
+    await waitFor(() => {
+      expect(getRenderedRepoIds(container)).toEqual(["repo-alpha", "repo-new"]);
+    });
+
+    expect(
+      (screen.getByTestId("repo-search-input") as HTMLInputElement).value
+    ).toBe("");
   });
 });

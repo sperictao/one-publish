@@ -17,6 +17,8 @@ interface RepositoryRowProps {
   isMenuOpen: boolean;
   canConnectBranch: boolean;
   actualBranch?: string;
+  /** Provider 展示名（如 "Java (Gradle)"），与编辑对话框保持同一套文案 */
+  providerLabel?: string;
   repoT: Record<string, string | undefined>;
   rowRef: (node: HTMLDivElement | null) => void;
   onSelect: (repoId: string) => void;
@@ -46,6 +48,7 @@ export const RepositoryRow = memo(function RepositoryRow({
   isMenuOpen,
   canConnectBranch,
   actualBranch,
+  providerLabel,
   repoT,
   rowRef,
   onSelect,
@@ -153,8 +156,12 @@ export const RepositoryRow = memo(function RepositoryRow({
                 {repo.name}
               </span>
               {repo.providerId ? (
-                <span className="flex-shrink-0 rounded-full bg-interactive/10 px-1.5 py-0.5 text-label-12 font-semibold text-interactive">
-                  {repo.providerId}
+                <span
+                  className="flex-shrink-0 rounded-full bg-interactive/10 px-1.5 py-0.5 text-label-12 font-semibold text-interactive"
+                  title={providerLabel || repo.providerId}
+                  data-testid="repo-provider-badge"
+                >
+                  {providerLabel || repo.providerId}
                 </span>
               ) : null}
             </div>

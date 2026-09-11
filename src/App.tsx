@@ -77,6 +77,7 @@ function App() {
               providers={boot.repo.repositoryProviders}
               onSelectRepo={boot.repo.selectRepository}
               onAddRepo={boot.repo.handleAddRepo}
+              isAddingRepo={boot.repo.isAddingRepo}
               onOpenRepoDirectory={boot.repo.handleOpenRepoDirectory}
               onEditRepo={boot.repo.handleEditRepo}
               onRemoveRepo={boot.repo.handleRemoveRepo}

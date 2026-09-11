@@ -4,6 +4,7 @@ import {
   appendExtensionToPath,
   getPathBasename,
   getPathRelativeToRoot,
+  isSameRepositoryPath,
   joinPath,
   remapPathPrefix,
 } from "@/lib/paths";
@@ -64,5 +65,37 @@ describe("paths", () => {
         "/workspace/demo"
       )
     ).toBe("/workspace/other/src/App/App.csproj");
+  });
+
+  it("判定同一仓库目录时忽略尾部分隔符与首尾空白", () => {
+    expect(
+      isSameRepositoryPath(
+        "/Users/dev/work/payments-api/",
+        "/Users/dev/work/payments-api"
+      )
+    ).toBe(true);
+    expect(
+      isSameRepositoryPath(
+        "  /Users/dev/work/payments-api  ",
+        "/Users/dev/work/payments-api"
+      )
+    ).toBe(true);
+  });
+
+  it("只有 Windows 风格路径忽略大小写，POSIX 路径保持大小写敏感", () => {
+    expect(
+      isSameRepositoryPath("C:\\Work\\Payments-API\\", "c:\\work\\payments-api")
+    ).toBe(true);
+    expect(
+      isSameRepositoryPath(
+        "/Users/dev/work/Payments-API",
+        "/Users/dev/work/payments-api"
+      )
+    ).toBe(false);
+  });
+
+  it("空路径永不相等，不同目录不相等", () => {
+    expect(isSameRepositoryPath("", "")).toBe(false);
+    expect(isSameRepositoryPath("/a/b", "/a/c")).toBe(false);
   });
 });

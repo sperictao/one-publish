@@ -2514,3 +2514,47 @@ fn imported_profile_with_foreign_project_binding_is_marked_blocked() {
         Some("project_binding_provider_mismatch:cargo:App.csproj")
     );
 }
+
+#[test]
+fn normalize_repository_path_ignores_trailing_separators_and_whitespace() {
+    let normalize = super::commands::normalize_repository_path;
+
+    assert_eq!(
+        normalize("/Users/dev/work/payments-api/"),
+        normalize("/Users/dev/work/payments-api")
+    );
+    assert_eq!(
+        normalize("  /Users/dev/work/payments-api  "),
+        normalize("/Users/dev/work/payments-api")
+    );
+    assert_eq!(
+        normalize("/Users/dev/work/payments-api///"),
+        normalize("/Users/dev/work/payments-api")
+    );
+}
+
+#[test]
+fn normalize_repository_path_is_case_insensitive_only_for_windows_like_paths() {
+    let normalize = super::commands::normalize_repository_path;
+
+    assert_eq!(
+        normalize("C:\\Work\\Payments-API\\"),
+        normalize("c:\\work\\payments-api")
+    );
+    // POSIX 路径保持大小写敏感，避免把两个真实不同的目录判成同一个
+    assert_ne!(
+        normalize("/Users/dev/work/Payments-API"),
+        normalize("/Users/dev/work/payments-api")
+    );
+}
+
+#[test]
+fn normalize_repository_path_preserves_root_paths() {
+    let normalize = super::commands::normalize_repository_path;
+
+    // POSIX 根路径整串都是分隔符，去尾会变空，必须保留原文而不是归一化成 ""
+    assert_eq!(normalize("/"), "/");
+    // 盘符根目录归一化到同一个规范形式，保证 "C:\" 与 "C:/" 判为同一目录
+    assert_eq!(normalize("C:\\"), "c:");
+    assert_eq!(normalize("C:/"), normalize("C:\\"));
+}

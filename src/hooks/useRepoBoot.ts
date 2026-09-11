@@ -54,6 +54,7 @@ export function useRepoBoot(params: UseRepoBootParams) {
   // Repository actions
   const {
     handleAddRepo,
+    isAddingRepo,
     handleRemoveRepo,
     handleOpenRepoDirectory,
     handleEditRepo,
@@ -106,6 +107,7 @@ export function useRepoBoot(params: UseRepoBootParams) {
     branchConnectivityByRepoId,
     actualBranchByRepoId,
     handleAddRepo,
+    isAddingRepo,
     handleRemoveRepo,
     handleOpenRepoDirectory,
     handleEditRepo,

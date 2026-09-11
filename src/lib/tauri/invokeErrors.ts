@@ -309,6 +309,77 @@ export function analyzeProviderDetectFailure(
   return "unknown";
 }
 
+export type RepositoryWriteFailureReason =
+  | "repository_exists"
+  | "path_not_found"
+  | "not_directory"
+  | "permission_denied"
+  | "unknown";
+
+/**
+ * 分类 add / update / remove 仓库这类写操作的失败原因。
+ *
+ * 与 detect / refresh branches 路径保持同一套写法：优先看后端 error code，
+ * 再做一次文案兜底，最后落到 "unknown"（调用方用 extractInvokeErrorMessage
+ * 兜底展示，禁止直接把序列化负载塞进 toast）。
+ */
+export function analyzeRepositoryWriteFailure(
+  error: unknown
+): RepositoryWriteFailureReason {
+  const errorCode = extractInvokeErrorCode(error);
+  if (errorCode) {
+    if (errorCode === "repository_exists") {
+      return "repository_exists";
+    }
+
+    if (errorCode === "path_not_found") {
+      return "path_not_found";
+    }
+
+    if (errorCode === "not_directory") {
+      return "not_directory";
+    }
+
+    if (errorCode === "permission_denied") {
+      return "permission_denied";
+    }
+  }
+
+  const normalized = extractInvokeErrorMessage(error).toLowerCase();
+
+  if (
+    normalized.includes("repository already exists") ||
+    normalized.includes("仓库已存在")
+  ) {
+    return "repository_exists";
+  }
+
+  if (
+    normalized.includes("repository path does not exist") ||
+    normalized.includes("仓库路径不存在")
+  ) {
+    return "path_not_found";
+  }
+
+  if (
+    normalized.includes("repository path is not a directory") ||
+    normalized.includes("仓库路径不是目录")
+  ) {
+    return "not_directory";
+  }
+
+  if (
+    normalized.includes("permission denied") ||
+    normalized.includes("operation not permitted") ||
+    normalized.includes("访问被拒绝") ||
+    normalized.includes("权限")
+  ) {
+    return "permission_denied";
+  }
+
+  return "unknown";
+}
+
 export type ProjectScanFailureReason =
   | "path_not_found"
   | "project_root_not_found"

@@ -10,14 +10,19 @@ import {
   scanRepositoryBranches,
 } from "@/lib/store/api";
 import type { ProviderManifest } from "@/lib/store/types";
-import { getPathBasename } from "@/lib/paths";
-import { providerRequiresProjectBinding } from "@/features/provider/providers";
+import { getPathBasename, isSameRepositoryPath } from "@/lib/paths";
+import {
+  providerRequiresProjectBinding,
+  resolveProviderLabel,
+} from "@/features/provider/providers";
 import { remapPathPrefix } from "@/features/repository/utils/pathUtils";
 import {
   analyzeBranchRefreshFailure,
   analyzeProviderDetectFailure,
+  analyzeRepositoryWriteFailure,
   extractInvokeErrorMessage,
 } from "@/lib/tauri/invokeErrors";
+import type { ProviderDetectFailureReason } from "@/lib/tauri/invokeErrors";
 import type { ProjectScanCandidates } from "@/lib/store/types";
 import type { Branch, Repository } from "@/lib/store/types";
 import type { RepositoryBranchScanResult } from "@/lib/store/types";
@@ -31,10 +36,53 @@ interface RefreshBranchesResult {
   currentBranch: string;
 }
 
+/**
+ * 「添加仓库」的终态，供左栏决定是否需要继续引导（例如打开编辑窗口手动选 Provider）。
+ */
+export type AddRepositoryOutcome =
+  | { status: "cancelled" }
+  | { status: "failed" }
+  | {
+      status: "added" | "needs-provider";
+      repoId: string;
+      name: string;
+      path: string;
+    };
+
 const DEFAULT_ADD_REPO_BRANCH = "main";
 
 function isMainBranch(name: string): boolean {
   return name === "main" || name === "master";
+}
+
+/**
+ * 仓库 id。同毫秒内连续添加不能撞 id（旧实现用 Date.now()），
+ * 优先用 crypto.randomUUID，环境不支持时退化为时间戳 + 随机后缀。
+ */
+function createRepositoryId(): string {
+  const cryptoRef = globalThis.crypto;
+  if (cryptoRef && typeof cryptoRef.randomUUID === "function") {
+    return cryptoRef.randomUUID();
+  }
+
+  return `repo-${Date.now().toString(36)}-${Math.random()
+    .toString(36)
+    .slice(2, 10)}`;
+}
+
+function fillTemplate(
+  template: string,
+  values: Record<string, string>
+): string {
+  return Object.entries(values).reduce(
+    (result, [key, value]) => result.replace(`{{${key}}}`, value),
+    template
+  );
+}
+
+/** 统一的可读错误兜底：优先取后端 message，禁止把序列化负载直接丢进 UI。 */
+function describeInvokeError(error: unknown): string {
+  return extractInvokeErrorMessage(error);
 }
 
 function createFallbackBranches(path: string, currentBranch: string): Branch[] {
@@ -94,6 +142,11 @@ async function shouldScanProjectCandidates(
   providerId: string,
   providers: ProviderManifest[]
 ): Promise<boolean> {
+  // Provider 留空（未识别到）时不做项目文件扫描，避免一次无意义的 IPC 往返
+  if (!providerId.trim()) {
+    return false;
+  }
+
   const provider = await resolveProviderManifest(providerId, providers);
   return providerRequiresProjectBinding(provider);
 }
@@ -125,61 +178,203 @@ async function resolveInitialRepositoryMetadata(
   };
 }
 
+/**
+ * Provider 识别失败的统一文案。detect 按钮与添加流程共用，避免两处措辞漂移
+ * （旧实现里添加流程的兜底字符串与 i18n 的 providerDetectUnsupportedDesc 不一致）。
+ */
+function resolveProviderDetectFailureCopy(
+  reason: ProviderDetectFailureReason,
+  error: unknown,
+  appT: TranslationMap
+): { title: string; description: string } {
+  switch (reason) {
+    case "path_not_found":
+      return {
+        title: appT.providerDetectPathNotFound || "仓库路径不存在",
+        description:
+          appT.providerDetectPathNotFoundDesc ||
+          "请确认 Project Root 路径存在且可访问。",
+      };
+    case "not_directory":
+      return {
+        title: appT.providerDetectNotDirectory || "Project Root 不是目录",
+        description:
+          appT.providerDetectNotDirectoryDesc ||
+          "请填写项目根目录，而不是文件路径。",
+      };
+    case "permission_denied":
+      return {
+        title: appT.providerDetectPermissionDenied || "缺少目录访问权限",
+        description:
+          appT.providerDetectPermissionDeniedDesc ||
+          "请检查当前用户对 Project Root 的读取权限后重试。",
+      };
+    case "unsupported_provider":
+      return {
+        title: appT.providerDetectUnsupported || "未识别到支持的 Provider",
+        description:
+          appT.providerDetectUnsupportedDesc ||
+          "可手动选择 Provider；若仓库只有 pom.xml，注意当前 Java provider 仅支持 Gradle 项目。",
+      };
+    case "read_failed":
+      return {
+        title: appT.providerDetectReadFailed || "读取项目目录失败",
+        description:
+          appT.providerDetectReadFailedDesc ||
+          "请检查磁盘状态、网络盘连接和目录可访问性后重试。",
+      };
+    default:
+      return {
+        title: appT.detectProviderFailed || "自动检测 Provider 失败",
+        description: describeInvokeError(error),
+      };
+  }
+}
+
+/** 成功反馈里显式回显「识别到了什么」，Provider + 分支 + 完整路径。 */
+function buildAddedRepositoryDescription(
+  repo: Repository,
+  providers: ProviderManifest[]
+): string {
+  const matchedProvider =
+    providers.find((provider) => provider.id === repo.providerId) ?? null;
+  const providerLabel = resolveProviderLabel(
+    matchedProvider,
+    repo.providerId ?? ""
+  );
+
+  return [providerLabel, repo.currentBranch, repo.path]
+    .filter((part) => Boolean(part && part.trim()))
+    .join(" · ");
+}
+
 export async function handleAddRepoRuntime(params: {
   appT: TranslationMap;
   providers: ProviderManifest[];
+  repositories: Repository[];
   addRepository: (repo: Repository) => Promise<unknown>;
-}) {
-  const { appT, providers, addRepository } = params;
-  const selected = await open({
-    directory: true,
-    multiple: false,
-    title: appT.selectRepositoryDirectory || "选择仓库目录",
-  });
+}): Promise<AddRepositoryOutcome> {
+  const { appT, providers, repositories, addRepository } = params;
+
+  // ── 1. 选择目录（自身失败也要有反馈，不能变成未处理的 rejection）──
+  let selected: string | null;
+  try {
+    const picked = await open({
+      directory: true,
+      multiple: false,
+      title: appT.selectRepositoryDirectory || "选择仓库目录",
+    });
+    selected = typeof picked === "string" ? picked : null;
+  } catch (error) {
+    toast.error(appT.selectRepositoryDirectoryFailed || "无法打开目录选择器", {
+      description: describeInvokeError(error),
+    });
+    return { status: "failed" };
+  }
 
   if (!selected) {
-    return;
+    return { status: "cancelled" };
   }
 
-  const path = selected as string;
+  const path = selected;
   const name = getPathBasename(path) || "Unknown";
-  let providerId: string;
+  // 同一条 toast 随流程演进（loading → success / error），避免叠加两条互相矛盾
+  const toastId = createRepositoryId();
 
+  toast.loading(appT.addingRepository || "正在检测仓库…", {
+    id: toastId,
+    description: appT.addingRepositoryDesc || "正在识别 Provider 并读取分支…",
+  });
+
+  // ── 2. Provider 识别 ──
+  // 「未识别到支持的 Provider」不再中断成死路：继续落库，随后由编辑窗口手动选择。
+  // 其余失败（路径不存在/不是目录/无权限/读取失败）确实无法继续，按原因给出文案。
+  let providerId: string | null = null;
   try {
     providerId = await detectRepositoryProvider(path);
-  } catch {
-    toast.error(appT.providerDetectUnsupported || "未识别到支持的 Provider", {
-      description:
-        appT.providerDetectUnsupportedDesc ||
-        "可手动选择 Provider，或确认项目根目录下包含可识别的构建文件。",
-    });
-    return;
+  } catch (error) {
+    const failureReason = analyzeProviderDetectFailure(error);
+
+    if (failureReason !== "unsupported_provider") {
+      const copy = resolveProviderDetectFailureCopy(failureReason, error, appT);
+      toast.error(copy.title, { id: toastId, description: copy.description });
+      return { status: "failed" };
+    }
   }
 
+  // ── 3. 读取初始分支 / 项目文件 ──
   const initialMetadata = await resolveInitialRepositoryMetadata(
     path,
-    providerId,
+    providerId ?? "",
     providers
   );
+
+  // ── 4. 前端预检重复目录，避免把用户送到后端错误分支 ──
+  const duplicatedRepo = repositories.find((repository) =>
+    isSameRepositoryPath(repository.path, path)
+  );
+
+  if (duplicatedRepo) {
+    toast.error(appT.addRepositoryFailed || "添加仓库失败", {
+      id: toastId,
+      description: fillTemplate(
+        appT.repositoryAlreadyExistsNamed || "该目录已添加为仓库「{{name}}」",
+        { name: duplicatedRepo.name }
+      ),
+    });
+    return { status: "failed" };
+  }
+
   const newRepo: Repository = {
-    id: Date.now().toString(),
+    id: createRepositoryId(),
     name,
     path,
     projectFile: initialMetadata.projectFile,
     currentBranch: initialMetadata.currentBranch,
     branches: initialMetadata.branches,
-    providerId,
+    providerId: providerId ?? undefined,
     publishConfig: { ...defaultRepoPublishConfig },
   };
 
   try {
     await addRepository(newRepo);
-    toast.success(appT.repositoryAdded || "仓库已添加", { description: name });
-  } catch (err) {
+  } catch (error) {
+    const failureReason = analyzeRepositoryWriteFailure(error);
+
+    if (failureReason === "repository_exists") {
+      // 前端预检没拦住（路径写法/符号链接差异），后端判定命中
+      toast.error(appT.addRepositoryFailed || "添加仓库失败", {
+        id: toastId,
+        description: appT.repositoryAlreadyExists || "该目录已添加为仓库",
+      });
+      return { status: "failed" };
+    }
+
     toast.error(appT.addRepositoryFailed || "添加仓库失败", {
-      description: String(err),
+      id: toastId,
+      description: describeInvokeError(error),
     });
+    return { status: "failed" };
   }
+
+  if (!providerId) {
+    toast.warning(
+      appT.repositoryAddedNeedsProvider || "已添加仓库，请手动选择 Provider",
+      {
+        id: toastId,
+        description:
+          appT.repositoryAddedNeedsProviderDesc ||
+          "未识别到支持的 Provider，已打开编辑窗口。若仓库只有 pom.xml，注意当前 Java provider 仅支持 Gradle 项目。",
+      }
+    );
+    return { status: "needs-provider", repoId: newRepo.id, name, path };
+  }
+
+  toast.success(appT.repositoryAdded || "仓库已添加", {
+    id: toastId,
+    description: buildAddedRepositoryDescription(newRepo, providers),
+  });
+  return { status: "added", repoId: newRepo.id, name, path };
 }
 
 export async function handleRemoveRepoRuntime(params: {
@@ -205,9 +400,9 @@ export async function handleRemoveRepoRuntime(params: {
     toast.success(appT.repositoryRemoved || "仓库已移除", {
       description: repo.name,
     });
-  } catch (err) {
+  } catch (error) {
     toast.error(appT.removeRepositoryFailed || "移除仓库失败", {
-      description: String(err),
+      description: describeInvokeError(error),
     });
   }
 }
@@ -229,9 +424,9 @@ export async function handleOpenRepoDirectoryRuntime(params: {
     toast.success(appT.repositoryDirectoryOpened || "已打开仓库目录", {
       description: openedPath,
     });
-  } catch (err) {
+  } catch (error) {
     toast.error(appT.openRepositoryDirectoryFailed || "打开仓库目录失败", {
-      description: String(err),
+      description: describeInvokeError(error),
     });
   }
 }
@@ -295,9 +490,14 @@ export async function handleEditRepoRuntime(params: {
       description: nextName,
     });
     return true;
-  } catch (err) {
+  } catch (error) {
+    const failureReason = analyzeRepositoryWriteFailure(error);
+
     toast.error(appT.updateRepositoryFailed || "更新仓库失败", {
-      description: String(err),
+      description:
+        failureReason === "repository_exists"
+          ? appT.repositoryAlreadyExists || "该目录已添加为仓库"
+          : describeInvokeError(error),
     });
     return false;
   }
@@ -327,58 +527,11 @@ export async function handleDetectRepoProviderRuntime(params: {
     }
 
     return providerId;
-  } catch (err) {
-    const rawErrorMessage = extractInvokeErrorMessage(err);
-    const failureReason = analyzeProviderDetectFailure(err);
+  } catch (error) {
+    const failureReason = analyzeProviderDetectFailure(error);
+    const copy = resolveProviderDetectFailureCopy(failureReason, error, appT);
 
-    if (failureReason === "path_not_found") {
-      toast.error(appT.providerDetectPathNotFound || "仓库路径不存在", {
-        description:
-          appT.providerDetectPathNotFoundDesc ||
-          "请确认 Project Root 路径存在且可访问。",
-      });
-      return null;
-    }
-
-    if (failureReason === "not_directory") {
-      toast.error(appT.providerDetectNotDirectory || "Project Root 不是目录", {
-        description:
-          appT.providerDetectNotDirectoryDesc ||
-          "请填写项目根目录，而不是文件路径。",
-      });
-      return null;
-    }
-
-    if (failureReason === "permission_denied") {
-      toast.error(appT.providerDetectPermissionDenied || "缺少目录访问权限", {
-        description:
-          appT.providerDetectPermissionDeniedDesc ||
-          "请检查当前用户对 Project Root 的读取权限后重试。",
-      });
-      return null;
-    }
-
-    if (failureReason === "unsupported_provider") {
-      toast.error(appT.providerDetectUnsupported || "未识别到支持的 Provider", {
-        description:
-          appT.providerDetectUnsupportedDesc ||
-          "可手动选择 Provider；若当前仓库只有 pom.xml，请注意 Java provider 本轮仅支持 Gradle 项目。",
-      });
-      return null;
-    }
-
-    if (failureReason === "read_failed") {
-      toast.error(appT.providerDetectReadFailed || "读取项目目录失败", {
-        description:
-          appT.providerDetectReadFailedDesc ||
-          "请检查磁盘状态、网络盘连接和目录可访问性后重试。",
-      });
-      return null;
-    }
-
-    toast.error(appT.detectProviderFailed || "自动检测 Provider 失败", {
-      description: rawErrorMessage,
-    });
+    toast.error(copy.title, { description: copy.description });
     return null;
   }
 }
