@@ -458,6 +458,22 @@ export async function installMockTauri(
         };
       };
 
+      // 极简版仓库标记识别，对应后端 `provider_registry().repository_discoveries()`
+      // （真实实现按仓库根目录下的构建标记文件选 provider）。mock 里只做演示性判断：
+      //   - 路径含 gradle → "java"（真实 Java provider 仅支持 Gradle，不接受 pom.xml）
+      //   - 路径含 maven / pom → 不可识别（返回 null，由调用方按 unsupported_provider 拒绝）
+      //   - 其余 → "dotnet"（本 mock 的既有默认）
+      const detectProviderFromMockPath = (repoPath: string): string | null => {
+        const lower = repoPath.toLowerCase();
+        if (lower.includes("gradle")) {
+          return "java";
+        }
+        if (lower.includes("maven") || lower.includes("pom")) {
+          return null;
+        }
+        return "dotnet";
+      };
+
       const appState = clone(opts.appState) as AppState;
       const providerList = clone(opts.providers) as ProviderCatalogEntry[];
       const dotnetSchema = clone(opts.dotnetSchema) as ParameterSchema;
@@ -684,14 +700,31 @@ export async function installMockTauri(
             case "check_repository_branch_connectivity":
               return { canConnect: true };
 
+            // 真实契约：`detect_repository_provider(path: String) -> Result<String, AppError>`
+            //   - 入参是 `path`（不是 `repoPath`）
+            //   - 返回**裸 provider id 字符串**（不是 `{ provider_id, project_file }` 对象）——
+            //     返回对象会让 `repo.providerId` 变成对象，进而在列表渲染时崩溃
+            //   - 未识别到时以 `code: "unsupported_provider"` 的 AppError 拒绝
             case "detect_repository_provider": {
-              const providerId = args?.repoPath ? "dotnet" : null;
-              return {
-                provider_id: providerId,
-                project_file: providerId
-                  ? `${args?.repoPath}/App.csproj`
-                  : null,
-              };
+              const repoPath = args?.path as string | undefined;
+              if (!repoPath) {
+                throw {
+                  kind: "repository",
+                  message: "repository path does not exist",
+                  code: "path_not_found",
+                };
+              }
+
+              const provider = detectProviderFromMockPath(repoPath);
+              if (!provider) {
+                throw {
+                  kind: "repository",
+                  message: "cannot detect provider from repository path",
+                  code: "unsupported_provider",
+                };
+              }
+
+              return provider;
             }
 
             case "scan_project": {
