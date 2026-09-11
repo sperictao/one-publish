@@ -228,6 +228,14 @@ fn configuration_content_blocked_reason(content: &PublishConfigurationContent) -
         Err(_) => return Some(format!("provider_unavailable:{}", content.provider_id)),
     };
 
+    if let Some(project_binding) = content.project_binding.as_deref() {
+        if super::project_binding_selector(&content.provider_id, project_binding).is_none() {
+            return Some(format!(
+                "project_binding_provider_mismatch:{project_binding}"
+            ));
+        }
+    }
+
     if content.provider_version != provider.manifest().version {
         return Some(format!(
             "provider_version_unsupported:{}",
@@ -823,10 +831,14 @@ fn project_file_for_binding(
     provider_id: &str,
     project_binding: &str,
 ) -> Result<PathBuf, AppError> {
-    let prefix = format!("{provider_id}:");
-    let selector = project_binding
-        .strip_prefix(&prefix)
-        .unwrap_or(project_binding);
+    let selector = super::project_binding_selector(provider_id, project_binding).ok_or_else(|| {
+        source_error(
+            "publish_source_project_binding_provider_mismatch",
+            format!(
+                "project binding {project_binding} does not belong to provider {provider_id}"
+            ),
+        )
+    })?;
     let project_file = if selector == "." {
         repository
             .project_file
@@ -1129,6 +1141,34 @@ mod tests {
     }
 
     #[test]
+    fn draft_source_marks_project_binding_provider_mismatch_blocked() {
+        let content = PublishConfigurationContent {
+            provider_id: "go".to_string(),
+            contract_version: PUBLISH_CONFIGURATION_CONTRACT_VERSION,
+            provider_version: "1".to_string(),
+            settings_version: CURRENT_SETTINGS_VERSION,
+            project_binding: Some("dotnet:App.csproj".to_string()),
+            parameters: serde_json::json!({}),
+            composition: PublishComposition::local_default(),
+        };
+
+        let resolved = resolve_publish_source_scoped(
+            &repository_fixture(),
+            &[],
+            &PublishSource::Draft {
+                content,
+                base_revision: None,
+            },
+        )
+        .expect("resolve mismatched binding draft as a blocked source");
+
+        assert_eq!(
+            resolved.blocked_reason.as_deref(),
+            Some("project_binding_provider_mismatch:dotnet:App.csproj")
+        );
+    }
+
+    #[test]
     fn draft_source_rejects_unknown_provider() {
         let draft = PublishDraft {
             content: PublishConfigurationContent {
@@ -1246,6 +1286,21 @@ mod tests {
         assert_eq!(
             resolved.draft.content.project_binding.as_deref(),
             Some("dotnet:App.csproj")
+        );
+
+        let mismatch = resolve_publish_source_scoped(
+            &repository,
+            &[],
+            &PublishSource::ProjectProfile {
+                provider_id: "dotnet".to_string(),
+                project_binding: Some("cargo:App.csproj".to_string()),
+                reference: "FolderProfile".to_string(),
+            },
+        )
+        .expect_err("project profile binding must belong to its provider");
+        assert_eq!(
+            mismatch.code.as_deref(),
+            Some("publish_source_project_binding_provider_mismatch")
         );
 
         let missing = resolve_publish_source_scoped(

@@ -1169,6 +1169,19 @@ pub(crate) fn resolve_project_binding(
     Some(format!("{provider_id}:{selector}"))
 }
 
+/// Parse a Project Binding owned by the selected Provider. Bindings are opaque
+/// identities and must never be reinterpreted as a raw path when their Provider
+/// prefix does not match.
+pub(crate) fn project_binding_selector<'a>(
+    provider_id: &str,
+    project_binding: &'a str,
+) -> Option<&'a str> {
+    let prefix = format!("{provider_id}:");
+    project_binding
+        .strip_prefix(&prefix)
+        .filter(|selector| !selector.trim().is_empty())
+}
+
 fn repository_relative_config(
     raw_repository: &Path,
     canonical_repository: &Path,
@@ -1294,8 +1307,15 @@ fn build_resolved_spec(
     // 项目路径：来源绑定优先；否则按 Provider 的路径类型解析仓库默认候选。
     let project_path = match content.project_binding.as_deref() {
         Some(binding) => {
-            let prefix = format!("{}:", content.provider_id);
-            let selector = binding.strip_prefix(&prefix).unwrap_or(binding);
+            let Some(selector) = project_binding_selector(&content.provider_id, binding) else {
+                return Err(PublishBuildFailure::Blocked(PublishBlockDiagnostic {
+                    code: "publish_runtime_project_binding_provider_mismatch".to_string(),
+                    message: format!(
+                        "project binding {binding} does not belong to provider {}",
+                        content.provider_id
+                    ),
+                }));
+            };
             let candidate = if selector == "." {
                 repository.path.clone()
             } else {
@@ -3847,6 +3867,35 @@ mod tests {
     }
 
     // ── 后端唯一 spec 构造（§3.1）：默认输出目录派生规则 ────────────────────
+    #[test]
+    fn resolved_spec_rejects_project_binding_owned_by_another_provider() {
+        let (_dir, repository) = spec_builder_repository();
+        let content = revision_content(
+            "dotnet",
+            serde_json::json!({ "configuration": "Release" }),
+            Some("cargo:App.csproj".to_string()),
+        );
+        let source = super::PublishSource::Empty {
+            provider_id: "dotnet".to_string(),
+            project_binding: Some("cargo:App.csproj".to_string()),
+        };
+
+        let failure = super::build_resolved_spec(
+            &repository,
+            &content,
+            &super::PublishRunInputs::default(),
+            &source,
+        )
+        .expect_err("a binding owned by another provider must be blocked");
+        match failure {
+            super::PublishBuildFailure::Blocked(block) => assert_eq!(
+                block.code,
+                "publish_runtime_project_binding_provider_mismatch"
+            ),
+            other => panic!("expected a blocked project binding, got {other:?}"),
+        }
+    }
+
     #[test]
     fn resolved_spec_derives_dotnet_default_output_from_run_inputs() {
         let (_dir, repository) = spec_builder_repository();
