@@ -361,6 +361,11 @@ impl ConfigProfile {
             ));
         }
 
+        if let Some(reason) = crate::publish_runtime::composition_blocked_reason(&revision.composition)
+        {
+            return Some(reason);
+        }
+
         None
     }
 
