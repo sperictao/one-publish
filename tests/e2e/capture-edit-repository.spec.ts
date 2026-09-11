@@ -7,10 +7,10 @@
  * 文件保证用户路径一致；差异仅在断言强度（UI_AUDIT_PHASE）。
  *
  * 运行（常规 e2e 自动跳过）：
- *   UI_AUDIT_CAPTURE=1 UI_AUDIT_PHASE=baseline pnpm e2e --grep capture-edit-dotnet-repo
- *   UI_AUDIT_CAPTURE=1 UI_AUDIT_PHASE=after    pnpm e2e --grep capture-edit-dotnet-repo
+ *   UI_AUDIT_CAPTURE=1 UI_AUDIT_PHASE=baseline pnpm e2e --grep capture-edit-repository
+ *   UI_AUDIT_CAPTURE=1 UI_AUDIT_PHASE=after    pnpm e2e --grep capture-edit-repository
  *
- * 产物：test-results/ui-audit/edit-dotnet-repo/<phase>/
+ * 产物：test-results/ui-audit/edit-repository/<phase>/
  */
 import { mkdirSync, readdirSync, renameSync, rmSync } from "node:fs";
 import path from "node:path";
@@ -23,7 +23,7 @@ import {
 
 const CAPTURE = !!process.env.UI_AUDIT_CAPTURE;
 const PHASE = process.env.UI_AUDIT_PHASE === "after" ? "after" : "baseline";
-const OUT_DIR = path.resolve("test-results/ui-audit/edit-dotnet-repo", PHASE);
+const OUT_DIR = path.resolve("test-results/ui-audit/edit-repository", PHASE);
 
 const observations: Array<{ tag: string; detail: string }> = [];
 
@@ -76,6 +76,7 @@ const REPO_WITHOUT_PROVIDER = {
   name: "gamma-tool",
   path: "/workspace/gamma-tool",
   currentBranch: "main",
+  isMain: false,
   branches: [
     {
       name: "main",
@@ -145,10 +146,9 @@ for (const scenario of [
     },
   },
   {
-    name: "E2-detect-fail-no-provider",
+    name: "E2-auto-bind-no-provider",
     options: {
       repositories: [...DEFAULT_REPOSITORIES, REPO_WITHOUT_PROVIDER],
-      debug: true,
     } as MockTauriOptions,
     run: async (page: Page) => {
       await openEditDialog(page, "gamma-tool");
@@ -158,16 +158,26 @@ for (const scenario of [
       await shot(page, "E2-03-settled");
       const toasts = await collectToasts(page);
       observe("E2.toasts", JSON.stringify(toasts));
-      const bindingBadge = await page
-        .getByText("未绑定")
+      const boundBadge = await page
+        .getByText("已绑定")
         .isVisible()
         .catch(() => false);
-      observe("E2.unbound-visible", String(bindingBadge));
+      observe("E2.bound-visible", String(boundBadge));
+      observe("E2.state", await describeSaveButton(page));
       if (PHASE === "after") {
-        await expect(page.locator("[data-sonner-toast]")).toContainText(
-          "未识别到支持的 Provider"
+        // 自动检测绑定 dotnet、扫描回填推荐 Project File、保存可用。
+        await expect(page.locator("[data-sonner-toast]")).toHaveCount(0);
+        expect(boundBadge).toBe(true);
+        expect(
+          await page.getByRole("button", { name: "保存" }).isDisabled()
+        ).toBe(false);
+        await expect(page.locator("#repo-edit-project-file")).toContainText(
+          "App.csproj"
         );
-        observe("after.detect-failure-toast", "provider detect failure shown");
+        observe(
+          "after.auto-bind",
+          "no error toast, provider bound, recommended project file applied, save enabled"
+        );
       }
     },
   },
@@ -273,9 +283,12 @@ for (const scenario of [
         await expect(page.locator("[data-sonner-toast]")).not.toContainText(
           '{"code"'
         );
+        await expect(page.locator("[data-sonner-toast]")).not.toContainText(
+          "Error:"
+        );
         observe(
           "after.save-failure",
-          "failure toast shown, no raw serialized error"
+          "failure toast shown, no raw error prefix or serialized error"
         );
       }
     },
@@ -310,7 +323,7 @@ for (const scenario of [
     },
   },
 ]) {
-  test(`capture-edit-dotnet-repo ${scenario.name}`, async ({
+  test(`capture-edit-repository ${scenario.name}`, async ({
     browser,
   }, testInfo) => {
     mkdirSync(OUT_DIR, { recursive: true });
