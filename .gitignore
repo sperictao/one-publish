@@ -92,6 +92,7 @@ src-tauri/tauri.conf.updater.prod.json
 # Other local agent state
 /.ob1/
 /.omc/
+/.workbuddy/
 /src-tauri/.omc/
 /.mindfs/
 
@@ -102,3 +103,6 @@ src-tauri/tauri.conf.updater.prod.json
 /docs/architecture.svg
 # docs/agent/ (singular) is a divergent ad-hoc report dir; keep docs/agents/ (plural, tracked)
 /docs/agent/
+
+# UI/UX audit workspace (recording specs, screenshots, self-contained reports — local evidence only)
+/.ui-audit/
