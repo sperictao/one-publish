@@ -8,10 +8,10 @@ test.describe("Provider Catalog", () => {
   test("provider information is displayed after boot", async ({ page }) => {
     await gotoApp(page);
 
-    // The provider selector should show "dotnet" as the active provider
-    // (repo-a has providerId "dotnet")
+    // The provider badge should show the active provider of repo-a
+    // (providerId "dotnet"，mock 中其 label 为 ".NET SDK")
     await expect(page.locator("[data-list-item-id='repo-a']")).toContainText(
-      "dotnet"
+      ".NET SDK"
     );
   });
 
@@ -86,9 +86,9 @@ test.describe("Multiple Providers", () => {
     await gotoApp(page);
 
     // The mock provides dotnet, cargo, and go providers
-    // Verify dotnet is visible (used by repos)
+    // Verify dotnet is visible (used by repos，徽标显示其 label ".NET SDK")
     await expect(page.locator("[data-list-item-id='repo-a']")).toContainText(
-      "dotnet"
+      ".NET SDK"
     );
   });
 });

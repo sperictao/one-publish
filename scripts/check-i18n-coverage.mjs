@@ -250,7 +250,13 @@ function collectHardcodedCjkUi(file, source) {
 
     const lineNumber = index + 1;
     const trimmed = line.trim();
-    if (!trimmed || trimmed.startsWith("//") || trimmed.startsWith("*")) {
+    if (
+      !trimmed ||
+      trimmed.startsWith("//") ||
+      trimmed.startsWith("*") ||
+      // 单行/起始块注释（如 `/** 说明 */`）不是 UI 文本，不应触发 CJK 检查
+      trimmed.startsWith("/*")
+    ) {
       return;
     }
 

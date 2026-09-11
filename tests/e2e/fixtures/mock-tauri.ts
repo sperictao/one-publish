@@ -398,6 +398,8 @@ export interface MockTauriOptions {
   /** Map of Tauri command name → error message to inject for testing error paths.
    * `prepare_publish_runtime` 支持 `blocked:` 前缀：返回 blocked 结果而非抛错。 */
   errors?: Record<string, string>;
+  /** Value returned by `plugin:dialog|open`（目录选择）。null 表示用户取消。 */
+  dialogOpenPath?: string | null;
   /** Whether to log all invoke calls to console (for debugging) */
   debug?: boolean;
 }
@@ -406,7 +408,14 @@ export async function installMockTauri(
   page: Page,
   options: MockTauriOptions = {}
 ) {
-  const { initialState, repositories, providers, errors, debug } = options;
+  const {
+    initialState,
+    repositories,
+    providers,
+    errors,
+    dialogOpenPath,
+    debug,
+  } = options;
 
   const clone = <T>(v: T): T =>
     (v === undefined ? undefined : JSON.parse(JSON.stringify(v))) as T;
@@ -463,6 +472,7 @@ export async function installMockTauri(
       const dotnetSchema = clone(opts.dotnetSchema) as ParameterSchema;
       const envCheck = clone(opts.envCheck) as EnvironmentCheckResult;
       const errMap = (opts.errors ?? {}) as Record<string, string>;
+      const dialogOpen = (opts.dialogOpenPath ?? null) as string | null;
       const d = (opts.debug ?? false) as boolean;
 
       // 后端 PublishConfigStore::default()（configuration 恒为 Release）。
@@ -653,7 +663,6 @@ export async function installMockTauri(
             }
 
             case "save_app_state":
-            case "add_repository":
             case "remove_repository":
             case "update_repository":
             case "reorder_repositories":
@@ -667,31 +676,62 @@ export async function installMockTauri(
             case "update_tray_menu":
               return null;
 
+            case "add_repository": {
+              // 与 store/commands.rs#add_repository 对齐：重复路径报
+              // repository_exists（Tauri reject 序列化对象）；成功后自动
+              // 选中新仓库并返回新 AppState。
+              const repo = args?.repo as Repository;
+              const exists = appState.repositories?.some(
+                (existing) => existing.path === repo.path
+              );
+              if (exists) {
+                throw {
+                  code: "repository_exists",
+                  message: "仓库已存在",
+                };
+              }
+              appState.repositories = [...(appState.repositories ?? []), repo];
+              appState.selectedRepoId = repo.id;
+              return clone({ ...appState, executionHistory: [] });
+            }
+
             // ── Repository ──
             case "scan_repository_branches": {
-              const repoId = args?.repoId as string;
+              // 前端契约传 path（api.ts#scanRepositoryBranches）；
+              // 兼容历史 spec 直接传 repoId。未知 path 返回 main fallback，
+              // 对齐 normalizeInitialBranchState 的兜底语义。
+              const pathOrId = (args?.path ?? args?.repoId) as
+                string | undefined;
               const repo = appState.repositories?.find(
-                (r: Repository) => r.id === repoId
+                (r: Repository) => r.id === pathOrId || r.path === pathOrId
               );
-              return repo
-                ? {
-                    branches: clone(repo.branches),
-                    current_branch: repo.currentBranch,
-                  }
-                : { branches: [], current_branch: "" };
+              if (repo) {
+                return {
+                  branches: clone(repo.branches),
+                  current_branch: repo.currentBranch,
+                };
+              }
+              return {
+                branches: [
+                  {
+                    name: "main",
+                    isMain: true,
+                    isCurrent: true,
+                    path: pathOrId ?? "",
+                    commitCount: 0,
+                  },
+                ],
+                current_branch: "main",
+              };
             }
 
             case "check_repository_branch_connectivity":
               return { canConnect: true };
 
             case "detect_repository_provider": {
-              const providerId = args?.repoPath ? "dotnet" : null;
-              return {
-                provider_id: providerId,
-                project_file: providerId
-                  ? `${args?.repoPath}/App.csproj`
-                  : null,
-              };
+              // 后端契约：path 存在时返回 provider id 字符串（scanner.rs）。
+              const repoPath = args?.path as string | undefined;
+              return repoPath ? "dotnet" : "";
             }
 
             case "scan_project": {
@@ -721,8 +761,11 @@ export async function installMockTauri(
             }
 
             case "scan_project_candidates": {
+              // 前端契约传 startPath（api.ts#scanProjectCandidates）。
               const rootPath =
-                (args?.path as string) || "/workspace/alpha-service";
+                (args?.startPath as string) ||
+                (args?.path as string) ||
+                "/workspace/alpha-service";
               return {
                 rootPath: rootPath,
                 solutionFiles: [`${rootPath}/Solution.sln`],
@@ -1225,6 +1268,16 @@ export async function installMockTauri(
             case "plugin:event|emit":
               return null;
 
+            // ── Dialog plugin ──
+            case "plugin:dialog|open":
+              return dialogOpen;
+
+            case "plugin:dialog|ask":
+              return true;
+
+            case "plugin:dialog|message":
+              return null;
+
             default:
               log("UNHANDLED COMMAND:", cmd);
               // Return null for unknown commands rather than throwing
@@ -1242,6 +1295,7 @@ export async function installMockTauri(
       dotnetSchema: clone(DOTNET_SCHEMA),
       envCheck: clone(DEFAULT_ENV_CHECK),
       errors: clone(errors ?? {}),
+      dialogOpenPath: dialogOpenPath ?? null,
       debug,
     } as unknown as Record<string, unknown>
   );

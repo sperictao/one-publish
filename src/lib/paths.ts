@@ -58,6 +58,32 @@ export function stripTrailingPathSeparators(path: string): string {
   return path.replace(/[\\/]+$/, "");
 }
 
+/**
+ * 判定两个路径是否指向同一个仓库目录。
+ *
+ * 仅做「写法归一化」而不解析符号链接：去掉首尾空白与尾部分隔符，并在
+ * Windows 风格路径下忽略大小写。与 paths.ts 其余比较逻辑保持一致
+ * （POSIX 路径按大小写敏感处理）。
+ */
+export function isSameRepositoryPath(left: string, right: string): boolean {
+  const normalizedLeft = stripTrailingPathSeparators((left ?? "").trim());
+  const normalizedRight = stripTrailingPathSeparators((right ?? "").trim());
+
+  if (!normalizedLeft || !normalizedRight) {
+    return false;
+  }
+
+  const caseSensitive = preferCaseSensitivePathComparison([
+    normalizedLeft,
+    normalizedRight,
+  ]);
+
+  return (
+    normalizeSegment(normalizedLeft, caseSensitive) ===
+    normalizeSegment(normalizedRight, caseSensitive)
+  );
+}
+
 export function getPathBasename(path: string): string {
   const segments = splitPathSegments(path);
   return (

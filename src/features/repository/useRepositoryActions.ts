@@ -1,12 +1,15 @@
-import { useCallback } from "react";
+import { useCallback, useRef, useState } from "react";
 import type {
   ProjectScanCandidates,
   ProviderManifest,
 } from "@/lib/store/types";
 import type { Branch, Repository } from "@/lib/store/types";
+import type { AddRepositoryOutcome } from "@/features/repository/useRepositoryActions.runtime";
 
 const loadRepositoryActionsRuntime = () =>
   import("@/features/repository/useRepositoryActions.runtime");
+
+export type { AddRepositoryOutcome };
 
 interface TranslationMap {
   [key: string]: string | undefined;
@@ -38,10 +41,32 @@ export function useRepositoryActions({
   updateRepository,
   applySelectedRepositoryProvider,
 }: UseRepositoryActionsParams) {
-  const handleAddRepo = useCallback(async () => {
-    const { handleAddRepoRuntime } = await loadRepositoryActionsRuntime();
-    await handleAddRepoRuntime({ appT, providers, addRepository });
-  }, [addRepository, appT, providers]);
+  // 添加流程是「选目录 → 检测 → 扫描分支 → 写库」的长链路，
+  // 期间必须让入口可见地进入进行中状态，并禁止并发触发第二次目录选择。
+  const [isAddingRepo, setIsAddingRepo] = useState(false);
+  const isAddingRepoRef = useRef(false);
+
+  const handleAddRepo = useCallback(async (): Promise<AddRepositoryOutcome> => {
+    if (isAddingRepoRef.current) {
+      return { status: "cancelled" };
+    }
+
+    isAddingRepoRef.current = true;
+    setIsAddingRepo(true);
+
+    try {
+      const { handleAddRepoRuntime } = await loadRepositoryActionsRuntime();
+      return await handleAddRepoRuntime({
+        appT,
+        providers,
+        repositories,
+        addRepository,
+      });
+    } finally {
+      isAddingRepoRef.current = false;
+      setIsAddingRepo(false);
+    }
+  }, [addRepository, appT, providers, repositories]);
 
   const handleRemoveRepo = useCallback(
     async (repo: Repository) => {
@@ -82,7 +107,10 @@ export function useRepositoryActions({
   );
 
   const handleDetectRepoProvider = useCallback(
-    async (path: string, options?: { silentSuccess?: boolean }) => {
+    async (
+      path: string,
+      options?: { silentSuccess?: boolean; silentFailure?: boolean }
+    ) => {
       const { handleDetectRepoProviderRuntime } =
         await loadRepositoryActionsRuntime();
       return await handleDetectRepoProviderRuntime({ appT, path, options });
@@ -116,6 +144,7 @@ export function useRepositoryActions({
 
   return {
     handleAddRepo,
+    isAddingRepo,
     handleRemoveRepo,
     handleOpenRepoDirectory,
     handleEditRepo,
