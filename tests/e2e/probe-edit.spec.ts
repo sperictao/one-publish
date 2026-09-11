@@ -6,6 +6,7 @@ const REPO_C = {
   name: "gamma-tool",
   path: "/workspace/gamma-tool",
   currentBranch: "main",
+  isMain: false,
   branches: [
     {
       name: "main",

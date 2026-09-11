@@ -309,7 +309,9 @@ for (const scenario of [
       observe("E6.toasts", JSON.stringify(toasts));
       observe("E6.state", await describeSaveButton(page));
       if (PHASE === "after") {
-        await expect(page.locator("[data-sonner-toast]")).toContainText(
+        // 开发态 StrictMode 会双触发自动刷新产生两条相同 toast；
+        // 生产构建单条。断言锁定语义而非开发态伪影。
+        await expect(page.locator("[data-sonner-toast]").first()).toContainText(
           "该目录不是 Git 仓库"
         );
         expect(

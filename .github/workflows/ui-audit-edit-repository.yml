@@ -1,4 +1,4 @@
-name: UI Audit (edit-dotnet-repo)
+name: UI Audit (edit-repository)
 
 on:
   workflow_dispatch:
@@ -10,7 +10,7 @@ on:
         type: string
   pull_request:
     paths:
-      - "tests/e2e/capture-edit-dotnet-repo.spec.ts"
+      - "tests/e2e/capture-edit-repository.spec.ts"
       - "tests/e2e/fixtures/mock-tauri.ts"
       - "src/components/layout/EditRepositoryDialog.tsx"
       - "src/components/layout/editRepositoryProjectBinding.ts"
@@ -32,13 +32,13 @@ jobs:
       - name: Install Playwright chromium + ffmpeg
         run: pnpm exec playwright install --with-deps chromium ffmpeg
       - name: Capture UI audit recording
-        run: pnpm e2e --grep capture-edit-dotnet-repo
+        run: pnpm e2e --grep capture-edit-repository
         env:
           UI_AUDIT_CAPTURE: "1"
           UI_AUDIT_PHASE: ${{ inputs.phase || 'baseline' }}
       - name: Upload recording artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: ui-audit-edit-dotnet-repo-${{ inputs.phase || 'baseline' }}
-          path: test-results/ui-audit/edit-dotnet-repo/
+          name: ui-audit-edit-repository-${{ inputs.phase || 'baseline' }}
+          path: test-results/ui-audit/edit-repository/
           if-no-files-found: error

@@ -799,6 +799,12 @@ function EditRepositoryDialogContent({
                           setIsProjectFileManual(true);
                           return;
                         }
+                        // 下拉未展开时选项未注册，受控值的程序化变更会经
+                        // 隐藏原生 select 回显一个裸空值 change；它不是
+                        // 用户选择，忽略以保护扫描回填的绑定。
+                        if (!value) {
+                          return;
+                        }
                         setEditProjectFile(
                           value === NO_PROJECT_FILE_VALUE ? "" : value
                         );
