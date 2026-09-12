@@ -167,7 +167,9 @@ function ArtifactActionsContent({
 
       {signResult && (
         <div className="text-label-12 text-muted-foreground space-y-1">
-          <div className="font-mono break-all">{signResult.signaturePath}</div>
+          <div className="font-mono break-all" data-testid="artifact-sign-path">
+            {signResult.signaturePath}
+          </div>
           {signResult.stdout && (
             <div className="font-mono break-all whitespace-pre-wrap">
               {signResult.stdout}

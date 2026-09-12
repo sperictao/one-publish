@@ -67,9 +67,11 @@ test("发布成功后可打包、签名、打开清单，新发布清空旧产�
   await page.getByRole("button", { name: "打包 ZIP" }).click();
   await expect(page.getByRole("button", { name: "签名 (GPG)" })).toBeEnabled();
   await page.getByRole("button", { name: "签名 (GPG)" }).click();
-  await expect(
-    page.getByText("/tmp/artifact.zip.sig", { exact: true })
-  ).toBeVisible();
+  // 签名成功 toast 与结果面板会同时显示该路径，限定结果面板 testid
+  // 避免 strict mode 冲突（#101 flaky 根因）。
+  await expect(page.getByTestId("artifact-sign-path")).toHaveText(
+    "/tmp/artifact.zip.sig"
+  );
   await page.getByRole("button", { name: "发布清单", exact: true }).click();
   await expect(
     page.getByRole("heading", { name: "签名发布清单" })
@@ -82,7 +84,5 @@ test("发布成功后可打包、签名、打开清单，新发布清空旧产�
   await page.getByRole("button", { name: "重新发布", exact: true }).click();
   await expect(page.getByTestId("publish-status-panel")).toContainText("成功");
   await expect(page.getByRole("button", { name: "签名 (GPG)" })).toBeDisabled();
-  await expect(
-    page.getByText("/tmp/artifact.zip.sig", { exact: true })
-  ).toHaveCount(0);
+  await expect(page.getByTestId("artifact-sign-path")).toHaveCount(0);
 });
