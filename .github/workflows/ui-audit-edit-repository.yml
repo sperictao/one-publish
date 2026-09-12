@@ -1,0 +1,44 @@
+name: UI Audit (edit-repository)
+
+on:
+  workflow_dispatch:
+    inputs:
+      phase:
+        description: "录制阶段：baseline 或 after"
+        required: true
+        default: "baseline"
+        type: string
+  pull_request:
+    paths:
+      - "tests/e2e/capture-edit-repository.spec.ts"
+      - "tests/e2e/fixtures/mock-tauri.ts"
+      - "src/components/layout/EditRepositoryDialog.tsx"
+      - "src/components/layout/editRepositoryProjectBinding.ts"
+      - "src/features/repository/**"
+
+jobs:
+  capture:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: pnpm/action-setup@v5
+        with:
+          version: "10.10.0"
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "20"
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile --ignore-scripts
+      - name: Install Playwright chromium + ffmpeg
+        run: pnpm exec playwright install --with-deps chromium ffmpeg
+      - name: Capture UI audit recording
+        run: pnpm e2e --grep capture-edit-repository
+        env:
+          UI_AUDIT_CAPTURE: "1"
+          UI_AUDIT_PHASE: ${{ inputs.phase || 'baseline' }}
+      - name: Upload recording artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: ui-audit-edit-repository-${{ inputs.phase || 'baseline' }}
+          path: test-results/ui-audit/edit-repository/
+          if-no-files-found: error

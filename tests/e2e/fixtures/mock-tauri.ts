@@ -119,7 +119,7 @@ function createConfigProfile(
   };
 }
 
-const DEFAULT_REPOSITORIES: Repository[] = [
+export const DEFAULT_REPOSITORIES: Repository[] = [
   {
     id: "repo-a",
     name: "alpha-service",
@@ -664,7 +664,6 @@ export async function installMockTauri(
 
             case "save_app_state":
             case "remove_repository":
-            case "update_repository":
             case "reorder_repositories":
             case "save_profile":
             case "update_profile":
@@ -675,6 +674,29 @@ export async function installMockTauri(
             case "replace_recent_publish_config_key":
             case "update_tray_menu":
               return null;
+
+            case "update_repository": {
+              // 与 store/commands.rs#update_repository 对齐：找不到仓库报
+              // repository_not_found；merge_repository_metadata 保留既有
+              // publishConfig；成功返回新 AppState。
+              const updated = args?.repo as Repository;
+              const repoIndex = appState.repositories?.findIndex(
+                (existing) => existing.id === updated.id
+              );
+              if (repoIndex === undefined || repoIndex < 0) {
+                throw {
+                  code: "repository_not_found",
+                  message: "未找到目标仓库",
+                };
+              }
+              appState.repositories = appState.repositories.map(
+                (existing, index) =>
+                  index === repoIndex
+                    ? { ...updated, publishConfig: existing.publishConfig }
+                    : existing
+              );
+              return clone({ ...appState, executionHistory: [] });
+            }
 
             case "add_repository": {
               // 与 store/commands.rs#add_repository 对齐：重复路径报
