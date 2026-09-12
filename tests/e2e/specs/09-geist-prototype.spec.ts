@@ -21,17 +21,8 @@ test.describe("Geist prototype cleanup", () => {
     await expect(page.locator("[data-list-item-id='repo-a']")).toBeVisible();
   });
 
-  test("keeps only the selected A prototype route for comparison", async ({
-    page,
-  }) => {
-    await gotoVariant(page, "A");
-
-    await expect(page.getByTestId("geist-prototype-switcher")).toHaveCount(0);
-    await expect(
-      page.getByText("Prototype - A - Dense Workbench")
-    ).toBeVisible();
-    await expect(page.getByText("alpha-service").first()).toBeVisible();
-  });
+  // 原型 A 路由已随原型清理整体移除（页面源码中不再存在 Dense Workbench /
+  // prototype switcher），对应的 A 路由对比与暗色用例随之删除。
 
   test("does not render removed B/C prototype variants", async ({ page }) => {
     for (const variant of ["B", "C"] as const) {
@@ -41,15 +32,5 @@ test.describe("Geist prototype cleanup", () => {
       await expect(page.getByText(/Prototype -/)).toHaveCount(0);
       await expect(page.locator("[data-list-item-id='repo-a']")).toBeVisible();
     }
-  });
-
-  test("keeps prototype readable in dark mode", async ({ page }) => {
-    await gotoVariant(page, "A");
-    await page.locator("html").evaluate((node) => node.classList.add("dark"));
-
-    await expect(
-      page.getByText("Prototype - A - Dense Workbench")
-    ).toBeVisible();
-    await expect(page.getByText("alpha-service").first()).toBeVisible();
   });
 });
