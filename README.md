@@ -114,6 +114,10 @@ pnpm build
 
 ## 🏗️ Architecture
 
+**One shared frontend spine for every project type** — five language providers (including Tauri desktop) converge into a single **Provider capability model**, which drives four shared pages: repository list → publish config → publish run → diagnostics.
+
+![Interactive walkthrough of the frontend Provider architecture — node passport, downstream reach, and route tracing from Rust (cargo) to diagnostics](docs/screenshots/architecture-frontend-providers.gif)
+
 ```
 one-publish/
 ├── src/                          # React Frontend (TypeScript)
