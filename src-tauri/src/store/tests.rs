@@ -1,4 +1,4 @@
-use super::migration::{sanitize_state, StoredAppState};
+use super::migration::StoredAppState;
 use super::persistence::{load_from_path, save_to_path};
 use super::recent::{
     push_recent_publish_config_state, remove_recent_publish_config_state,

@@ -3285,16 +3285,25 @@ mod tests {
     #[test]
     fn bindings_keep_their_revision_until_an_explicit_upgrade_is_applied() {
         let (_temp, work) = fixture_repository();
-        let (mut config, profile_id) = fixture_config("Stable");
-        preview_then_apply(&work, &mut config, &install_request(&profile_id));
+        // 组合目录校验只认内置适配器，fake 后端会让 update_profile 把配置
+        // 盖上阻断戳（composition_adapter_unavailable）；改用 tauri +
+        // GitHub Actions 模板，修订钉住与显式升级的语义不受影响。
+        let (mut config, profile_id) = fixture_tauri_config("Stable");
+        let install = github_actions_install_request(&profile_id, "binding-stable", "v");
+        preview_then_apply(&work, &mut config, &install);
         let pinned_revision = config.bindings[0].configuration_revision_id.clone();
 
+        let mut settings = github_actions_config();
+        settings.app_name = "Fixture Renamed".to_string();
         config
             .update_profile(
                 &profile_id,
                 "Stable".to_string(),
-                "dotnet".to_string(),
-                serde_json::json!({ "configuration": "Debug" }),
+                "tauri".to_string(),
+                serde_json::json!({
+                    crate::tauri_release::RELEASE_SETTINGS_PARAMETER:
+                        serde_json::to_value(settings).expect("serialize release settings")
+                }),
                 None,
                 None,
                 None,
@@ -3327,12 +3336,19 @@ mod tests {
             .iter()
             .map(|change| (change.path.as_str(), change.kind))
             .collect::<Vec<_>>();
+        // GitHub Actions 后端的升级投影 = 工作流模板 + 该绑定的 runtime 固化。
         assert_eq!(
             described,
-            vec![(
-                format!("one-publish/automation/{binding_id}.json").as_str(),
-                AutomationFileChangeKind::Updated
-            )]
+            vec![
+                (
+                    ".one-publish/automation/github-actions.json",
+                    AutomationFileChangeKind::Updated
+                ),
+                (
+                    format!(".one-publish/automation/runtime/{binding_id}.json").as_str(),
+                    AutomationFileChangeKind::Updated
+                ),
+            ]
         );
 
         preview_then_apply(&work, &mut config, &upgrade);
