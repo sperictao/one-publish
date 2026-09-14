@@ -1,0 +1,31 @@
+version = 1
+
+# Document：读者可直接使用的已接受知识。docs/agent/ 是调研报告（R 侧），不属于 Document。
+[document]
+paths = [
+  "CONTEXT.md",
+  "README.md",
+  "docs/adr/**",
+  "docs/roadmap/**",
+  "docs/agents/**",
+  "docs/release/**",
+  "docs/updater/**",
+  "docs/USER_MANUAL.md",
+  "docs/design-philosophy.md",
+  "docs/publish-platform-architecture.md",
+  "docs/tauri-github-release-design.md",
+  "docs/architecture.mmd",
+]
+
+# Research：未验证的调研、审计、覆盖度报告。
+[research]
+path = "docs/agent"
+
+# Evolve：进行中的变更走 GitHub Issues/PRs（仓库约定，见 docs/agents/issue-tracker.md），
+# 不使用本地 evolve 目录。plans/ 是已冻结的历史执行台账，不承接新工作。
+[evolve]
+path = "plans"
+
+[policy]
+document_requires_approval = true
+report_document_implementation_conflicts = true
