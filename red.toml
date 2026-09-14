@@ -1,6 +1,7 @@
 version = 1
 
 # Document：读者可直接使用的已接受知识。docs/agent/ 是调研报告（R 侧），不属于 Document。
+# 注：docs/architecture.mmd 等生成物按仓库 .gitignore 策略不跟踪，此处不列入。
 [document]
 paths = [
   "CONTEXT.md",
@@ -14,15 +15,16 @@ paths = [
   "docs/design-philosophy.md",
   "docs/publish-platform-architecture.md",
   "docs/tauri-github-release-design.md",
-  "docs/architecture.mmd",
 ]
 
 # Research：未验证的调研、审计、覆盖度报告。
+# 按仓库 .gitignore 策略为本地目录，不纳入版本控制（RED 允许的三种策略之一）。
 [research]
 path = "docs/agent"
 
-# Evolve：进行中的变更走 GitHub Issues/PRs（仓库约定，见 docs/agents/issue-tracker.md），
-# 不使用本地 evolve 目录。plans/ 是已冻结的历史执行台账，不承接新工作。
+# Evolve：新工作走 GitHub Issues/PRs（仓库约定，见 docs/agents/issue-tracker.md），
+# 不使用本地 evolve 目录。plans/ 是历史执行台账（E-1 至 E-35，已冻结），
+# 同为 .gitignore 排除的本地目录，仅供本机追溯。
 [evolve]
 path = "plans"
 
