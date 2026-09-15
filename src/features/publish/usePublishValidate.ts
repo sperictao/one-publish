@@ -37,6 +37,13 @@ export function buildPublishPresentationScopeKey(params: {
   });
 }
 
+export function shouldDeferRuntimePreparationOnStartup(): boolean {
+  return (
+    typeof navigator !== "undefined" &&
+    /Windows/i.test(navigator.userAgent ?? "")
+  );
+}
+
 export interface UsePublishValidateParams {
   activeProviderId: string;
   activeProviderUsesProjectFile: boolean;
@@ -193,6 +200,10 @@ export function usePublishValidate({
   const [runtimePreparationErrorState, setRuntimePreparationErrorState] =
     useState<{ key: string; message: string } | null>(null);
   const selectedRepoPath = selectedRepo?.path ?? null;
+  const deferRuntimePreparationOnStartup = useMemo(
+    () => shouldDeferRuntimePreparationOnStartup(),
+    []
+  );
 
   const selectedSource = useMemo(() => {
     if (!selectedRepo) return { source: null, error: null };
@@ -238,38 +249,86 @@ export function usePublishValidate({
       return "missing-repository";
     }
 
-    // 发布一律走 PublishRuntime（命名配置或自动草稿），必须等 prepare 完成。
-    if (!preparedRuntime) {
+    // Windows startup must remain process-free. Runtime preparation may derive
+    // Git-backed project identity, so defer the initial preparation until the
+    // user explicitly starts publishing. Other platforms keep eager preview.
+    if (!preparedRuntime && !deferRuntimePreparationOnStartup) {
       return "runtime-not-ready";
     }
     if (
-      preparedRuntime.status === "blocked" &&
+      preparedRuntime?.status === "blocked" &&
       !canRequestRuntimeOutputAccess(preparedRuntime)
     ) {
       return "runtime-blocked";
     }
 
     return null;
-  }, [preparedRuntime, projectInfo, selectedRepo]);
+  }, [
+    deferRuntimePreparationOnStartup,
+    preparedRuntime,
+    projectInfo,
+    selectedRepo,
+  ]);
 
   const resolvePublishRequest = useCallback(async () => {
-    if (getPublishStartBlocker()) {
+    if (!selectedRepo || !currentPublishSource) {
       return null;
     }
 
-    if (!currentPublishSource) {
+    if (selectedSource.error) {
+      return null;
+    }
+
+    let resolvedPreparedRuntime = preparedRuntime;
+
+    if (
+      !resolvedPreparedRuntime &&
+      deferRuntimePreparationOnStartup &&
+      runtimePreparationKey &&
+      selectedRepoId
+    ) {
+      try {
+        resolvedPreparedRuntime = await preparePublishRuntime({
+          repositoryId: selectedRepoId,
+          source: currentPublishSource,
+          runInputs: {
+            defaultOutputDir: defaultOutputDir ?? "",
+            promotedManifestDigest: undefined,
+          },
+        });
+        setPreparedRuntimeState({
+          key: runtimePreparationKey,
+          value: resolvedPreparedRuntime,
+        });
+        setRuntimePreparationErrorState(null);
+      } catch (error) {
+        setPreparedRuntimeState(null);
+        setRuntimePreparationErrorState({
+          key: runtimePreparationKey,
+          message: extractInvokeErrorMessage(error),
+        });
+        return null;
+      }
+    }
+
+    if (!resolvedPreparedRuntime) {
       return null;
     }
 
     return {
       source: currentPublishSource,
       recentConfigKey: selectionKey || undefined,
-      preparedRuntime: preparedRuntime ?? undefined,
+      preparedRuntime: resolvedPreparedRuntime,
     };
   }, [
     currentPublishSource,
-    getPublishStartBlocker,
+    defaultOutputDir,
+    deferRuntimePreparationOnStartup,
     preparedRuntime,
+    runtimePreparationKey,
+    selectedRepo,
+    selectedRepoId,
+    selectedSource.error,
     selectionKey,
   ]);
 
@@ -303,7 +362,7 @@ export function usePublishValidate({
     let disposed = false;
     const source = currentPublishSource;
 
-    if (!source) {
+    if (!source || deferRuntimePreparationOnStartup) {
       return () => {
         disposed = true;
       };
@@ -345,6 +404,7 @@ export function usePublishValidate({
   }, [
     currentPublishSource,
     defaultOutputDir,
+    deferRuntimePreparationOnStartup,
     runtimePreparationKey,
     selectedRepoPath,
     selectedRepoId,
