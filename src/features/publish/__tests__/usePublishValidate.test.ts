@@ -175,15 +175,12 @@ describe("stored publish source", () => {
       expect(prepare).not.toHaveBeenCalled();
       expect(result.current.getPublishStartBlocker()).toBeNull();
 
-      let request: Awaited<
-        ReturnType<typeof result.current.resolvePublishRequest>
-      > = null;
       await act(async () => {
-        request = await result.current.resolvePublishRequest();
+        await result.current.resolvePublishRequest();
       });
 
       expect(prepare).toHaveBeenCalledOnce();
-      expect(request?.preparedRuntime).toEqual(blocked);
+      expect(result.current.preparedRuntime).toEqual(blocked);
     } finally {
       userAgent.mockRestore();
     }
