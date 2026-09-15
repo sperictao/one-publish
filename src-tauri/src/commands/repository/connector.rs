@@ -149,27 +149,61 @@ pub async fn check_repository_branch_connectivity(
         return RepositoryBranchConnectivityResult { can_connect: false };
     }
 
-    let remote_branch_ref = format!("refs/heads/{}", remote_branch);
-    let ls_remote_output = match timeout(
-        Duration::from_secs(5),
-        crate::process_utils::new_tokio_command("git")
-            .arg("-C")
-            .arg(&path)
-            .arg("ls-remote")
-            .arg("--exit-code")
-            .arg("--heads")
-            .arg(remote)
-            .arg(&remote_branch_ref)
-            .output(),
-    )
-    .await
+    // On Windows this command runs passively for every repository when the main
+    // view boots. `git ls-remote` may launch ssh.exe / credential helpers as
+    // grandchildren of git.exe. Those processes do not inherit our Rust-side
+    // CREATE_NO_WINDOW creation flag and can therefore flash terminal windows.
+    // Keep the startup probe local on Windows: an existing upstream plus a
+    // configured remote is enough for the list's lightweight connectivity hint.
+    // Explicit publish/fetch operations still perform their normal network I/O.
+    #[cfg(windows)]
     {
-        Ok(Ok(output)) => output,
-        _ => return RepositoryBranchConnectivityResult { can_connect: false },
-    };
+        let remote_url_output = match timeout(
+            Duration::from_secs(5),
+            crate::process_utils::new_tokio_command("git")
+                .arg("-C")
+                .arg(&path)
+                .arg("remote")
+                .arg("get-url")
+                .arg(remote)
+                .output(),
+        )
+        .await
+        {
+            Ok(Ok(output)) => output,
+            _ => return RepositoryBranchConnectivityResult { can_connect: false },
+        };
 
-    RepositoryBranchConnectivityResult {
-        can_connect: ls_remote_output.status.success() && !ls_remote_output.stdout.is_empty(),
+        return RepositoryBranchConnectivityResult {
+            can_connect: remote_url_output.status.success()
+                && !remote_url_output.stdout.is_empty(),
+        };
+    }
+
+    #[cfg(not(windows))]
+    {
+        let remote_branch_ref = format!("refs/heads/{}", remote_branch);
+        let ls_remote_output = match timeout(
+            Duration::from_secs(5),
+            crate::process_utils::new_tokio_command("git")
+                .arg("-C")
+                .arg(&path)
+                .arg("ls-remote")
+                .arg("--exit-code")
+                .arg("--heads")
+                .arg(remote)
+                .arg(&remote_branch_ref)
+                .output(),
+        )
+        .await
+        {
+            Ok(Ok(output)) => output,
+            _ => return RepositoryBranchConnectivityResult { can_connect: false },
+        };
+
+        RepositoryBranchConnectivityResult {
+            can_connect: ls_remote_output.status.success() && !ls_remote_output.stdout.is_empty(),
+        }
     }
 }
 
