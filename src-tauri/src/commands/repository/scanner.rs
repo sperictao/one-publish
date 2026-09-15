@@ -118,6 +118,7 @@ fn nested_worktree_roots_from_paths(root: &Path, worktree_paths: Vec<PathBuf>) -
     nested_roots
 }
 
+#[cfg(not(windows))]
 fn discover_nested_worktree_roots(root: &Path) -> Vec<PathBuf> {
     let Ok(output) = crate::process_utils::new_std_command("git")
         .arg("-C")
@@ -136,6 +137,17 @@ fn discover_nested_worktree_roots(root: &Path) -> Vec<PathBuf> {
 
     let stdout = String::from_utf8_lossy(&output.stdout);
     nested_worktree_roots_from_paths(root, parse_git_worktree_porcelain_paths(&stdout))
+}
+
+#[cfg(windows)]
+fn discover_nested_worktree_roots(_root: &Path) -> Vec<PathBuf> {
+    // FileScanContext is used during app startup to resolve the selected
+    // repository/project. A single project-root lookup may construct several
+    // contexts while walking ancestors, so invoking `git worktree list` here
+    // can flash many console windows on Windows. Nested repositories/worktrees
+    // already carry their own `.git` file or directory and `should_skip_entry`
+    // prunes them without launching any process.
+    Vec::new()
 }
 
 pub(super) struct FileScanContext {
@@ -405,5 +417,34 @@ branch refs/heads/sibling
             nested_worktree_roots_from_paths(&repo_root, paths),
             vec![nested_worktree]
         );
+    }
+
+    #[test]
+    fn filesystem_git_marker_prunes_nested_repository_without_excluded_roots() {
+        let temp_dir = TempDir::new().expect("temp dir");
+        let root = temp_dir.path().join("repo");
+        let nested = root.join("worktrees").join("feature");
+        let root_project = root.join("src").join("App.csproj");
+        let nested_project = nested.join("Nested.csproj");
+
+        std::fs::create_dir_all(root_project.parent().expect("root project parent"))
+            .expect("create root project parent");
+        std::fs::create_dir_all(&nested).expect("create nested worktree");
+        std::fs::write(&root_project, "<Project />").expect("write root project");
+        std::fs::write(&nested_project, "<Project />").expect("write nested project");
+        std::fs::write(
+            nested.join(".git"),
+            "gitdir: ../../../.git/worktrees/feature\n",
+        )
+        .expect("write nested git marker");
+
+        let context = FileScanContext::with_excluded_roots(&root, Vec::new());
+        let files = context.collect_files(|path| {
+            path.extension()
+                .and_then(|ext| ext.to_str())
+                .is_some_and(|ext| ext.eq_ignore_ascii_case("csproj"))
+        });
+
+        assert_eq!(files, vec![root_project]);
     }
 }

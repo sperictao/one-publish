@@ -162,6 +162,29 @@ describe("stored publish source", () => {
       "project-b"
     );
   });
+  it("defers runtime preparation on Windows until publish is explicitly requested", async () => {
+    const userAgent = vi
+      .spyOn(window.navigator, "userAgent", "get")
+      .mockReturnValue("Mozilla/5.0 (Windows NT 10.0; Win64; x64)");
+    prepare.mockResolvedValue(blocked);
+    const input = props();
+
+    try {
+      const { result } = renderHook(() => usePublishValidate(input));
+      await act(async () => Promise.resolve());
+      expect(prepare).not.toHaveBeenCalled();
+      expect(result.current.getPublishStartBlocker()).toBeNull();
+
+      await act(async () => {
+        await result.current.resolvePublishRequest();
+      });
+
+      expect(prepare).toHaveBeenCalledOnce();
+      expect(result.current.preparedRuntime).toEqual(blocked);
+    } finally {
+      userAgent.mockRestore();
+    }
+  });
   it("does not prepare an unresolved selection", async () => {
     const input = props();
     input.selectedRepo!.publishConfig.drafts = [];

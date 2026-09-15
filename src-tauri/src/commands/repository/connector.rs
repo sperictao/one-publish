@@ -1,3 +1,6 @@
+#[cfg(any(windows, test))]
+mod local_git;
+
 use crate::store::Branch;
 use std::io::ErrorKind as IoErrorKind;
 use std::path::PathBuf;
@@ -97,17 +100,55 @@ pub async fn check_repository_branch_connectivity(
         return RepositoryBranchConnectivityResult { can_connect: false };
     }
 
-    let mut branch_name = current_branch
-        .map(|branch| branch.trim().to_string())
-        .unwrap_or_default();
+    // The repository list calls this passively for every repository during app
+    // startup. On Windows, never spawn git.exe (or any child console process)
+    // for that passive status path. Read HEAD/config directly instead.
+    #[cfg(windows)]
+    {
+        return RepositoryBranchConnectivityResult {
+            can_connect: local_git::branch_connectivity(
+                &repo_path,
+                current_branch.as_deref(),
+            ),
+        };
+    }
 
-    if branch_name.is_empty() {
-        let head_output = match crate::process_utils::new_tokio_command("git")
+    #[cfg(not(windows))]
+    {
+        let mut branch_name = current_branch
+            .map(|branch| branch.trim().to_string())
+            .unwrap_or_default();
+
+        if branch_name.is_empty() {
+            let head_output = match crate::process_utils::new_tokio_command("git")
+                .arg("-C")
+                .arg(&path)
+                .arg("rev-parse")
+                .arg("--abbrev-ref")
+                .arg("HEAD")
+                .output()
+                .await
+            {
+                Ok(output) if output.status.success() => output,
+                _ => return RepositoryBranchConnectivityResult { can_connect: false },
+            };
+
+            branch_name = String::from_utf8_lossy(&head_output.stdout)
+                .trim()
+                .to_string();
+        }
+
+        if branch_name.is_empty() || branch_name == "HEAD" {
+            return RepositoryBranchConnectivityResult { can_connect: false };
+        }
+
+        let upstream_output = match crate::process_utils::new_tokio_command("git")
             .arg("-C")
             .arg(&path)
             .arg("rev-parse")
             .arg("--abbrev-ref")
-            .arg("HEAD")
+            .arg("--symbolic-full-name")
+            .arg(format!("{}@{{upstream}}", branch_name))
             .output()
             .await
         {
@@ -115,73 +156,17 @@ pub async fn check_repository_branch_connectivity(
             _ => return RepositoryBranchConnectivityResult { can_connect: false },
         };
 
-        branch_name = String::from_utf8_lossy(&head_output.stdout)
+        let upstream = String::from_utf8_lossy(&upstream_output.stdout)
             .trim()
             .to_string();
-    }
-
-    if branch_name.is_empty() || branch_name == "HEAD" {
-        return RepositoryBranchConnectivityResult { can_connect: false };
-    }
-
-    let upstream_output = match crate::process_utils::new_tokio_command("git")
-        .arg("-C")
-        .arg(&path)
-        .arg("rev-parse")
-        .arg("--abbrev-ref")
-        .arg("--symbolic-full-name")
-        .arg(format!("{}@{{upstream}}", branch_name))
-        .output()
-        .await
-    {
-        Ok(output) if output.status.success() => output,
-        _ => return RepositoryBranchConnectivityResult { can_connect: false },
-    };
-
-    let upstream = String::from_utf8_lossy(&upstream_output.stdout)
-        .trim()
-        .to_string();
-    let Some((remote, remote_branch)) = upstream.split_once('/') else {
-        return RepositoryBranchConnectivityResult { can_connect: false };
-    };
-
-    if remote.is_empty() || remote_branch.is_empty() {
-        return RepositoryBranchConnectivityResult { can_connect: false };
-    }
-
-    // On Windows this command runs passively for every repository when the main
-    // view boots. `git ls-remote` may launch ssh.exe / credential helpers as
-    // grandchildren of git.exe. Those processes do not inherit our Rust-side
-    // CREATE_NO_WINDOW creation flag and can therefore flash terminal windows.
-    // Keep the startup probe local on Windows: an existing upstream plus a
-    // configured remote is enough for the list's lightweight connectivity hint.
-    // Explicit publish/fetch operations still perform their normal network I/O.
-    #[cfg(windows)]
-    {
-        let remote_url_output = match timeout(
-            Duration::from_secs(5),
-            crate::process_utils::new_tokio_command("git")
-                .arg("-C")
-                .arg(&path)
-                .arg("remote")
-                .arg("get-url")
-                .arg(remote)
-                .output(),
-        )
-        .await
-        {
-            Ok(Ok(output)) => output,
-            _ => return RepositoryBranchConnectivityResult { can_connect: false },
+        let Some((remote, remote_branch)) = upstream.split_once('/') else {
+            return RepositoryBranchConnectivityResult { can_connect: false };
         };
 
-        return RepositoryBranchConnectivityResult {
-            can_connect: remote_url_output.status.success()
-                && !remote_url_output.stdout.is_empty(),
-        };
-    }
+        if remote.is_empty() || remote_branch.is_empty() {
+            return RepositoryBranchConnectivityResult { can_connect: false };
+        }
 
-    #[cfg(not(windows))]
-    {
         let remote_branch_ref = format!("refs/heads/{}", remote_branch);
         let ls_remote_output = match timeout(
             Duration::from_secs(5),
@@ -225,6 +210,14 @@ async fn scan_repository_branches_internal(
             format!("repository path is not a directory: {}", path),
             "not_directory",
         ));
+    }
+
+    // `refresh_remote = false` is the passive path used by the repository list
+    // on startup/focus and by lightweight add/edit scans. Avoid spawning Git on
+    // Windows entirely so opening OnePublish cannot flash terminal windows.
+    #[cfg(windows)]
+    if !refresh_remote {
+        return local_git::scan_repository_branches(&path, &repo_path);
     }
 
     let remote_output = timeout(
