@@ -1,0 +1,22 @@
+name: windows-zero-process-smoke
+
+on:
+  push:
+    branches:
+      - ci/windows-zero-process-smoke
+
+permissions:
+  contents: write
+
+jobs:
+  windows-rust:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Compile and run Rust tests on Windows
+        run: cargo test --manifest-path src-tauri/Cargo.toml --no-fail-fast
+      - name: Remove temporary smoke branch
+        if: success()
+        shell: pwsh
+        run: git push origin --delete ci/windows-zero-process-smoke
