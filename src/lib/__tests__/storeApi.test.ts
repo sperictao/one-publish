@@ -7,11 +7,14 @@ vi.mock("@tauri-apps/api/core", () => ({
 }));
 
 import {
+  applyImportedConfig,
   deleteProfile,
   exportConfig,
   getProfiles,
+  importConfig,
   reorderProfiles,
   scanProjectCandidates,
+  setExecutionRecordSnapshot,
   updateProfile,
 } from "@/lib/store/api";
 
@@ -185,16 +188,50 @@ describe("store api wrappers", () => {
     });
   });
 
-  it("exports the authoritative repository catalog without accepting frontend profiles", async () => {
-    invokeMock.mockResolvedValue("/tmp/config.json");
+  // Tauri v2 把 Rust 命令参数（snake_case）映射为 camelCase 键；
+  // 键名写错只会在运行时报 "missing required key"，因此逐条锁定 IPC 契约。
+  it.each([
+    {
+      name: "exportConfig",
+      call: () =>
+        exportConfig({ repoId: "repo-1", filePath: "/tmp/config.json" }),
+      response: "/tmp/config.json",
+      command: "export_config",
+      args: { repoId: "repo-1", filePath: "/tmp/config.json" },
+    },
+    {
+      name: "importConfig",
+      call: () => importConfig("/tmp/config.json"),
+      response: {
+        version: 1,
+        exported_at: "2026-04-02T12:00:00.000Z",
+        profiles: [],
+      },
+      command: "import_config",
+      args: { filePath: "/tmp/config.json" },
+    },
+    {
+      name: "applyImportedConfig",
+      call: () => applyImportedConfig("repo-1", []),
+      response: null,
+      command: "apply_imported_config",
+      args: { repoId: "repo-1", profiles: [] },
+    },
+    {
+      name: "setExecutionRecordSnapshot",
+      call: () => setExecutionRecordSnapshot("record-1", "/tmp/snapshot.json"),
+      response: [],
+      command: "set_execution_record_snapshot",
+      args: { recordId: "record-1", snapshotPath: "/tmp/snapshot.json" },
+    },
+  ])(
+    "$name invokes $command with camelCase argument keys",
+    async ({ call, response, command, args }) => {
+      invokeMock.mockResolvedValue(response);
 
-    await expect(
-      exportConfig({ repoId: "repo-1", filePath: "/tmp/config.json" })
-    ).resolves.toBe("/tmp/config.json");
+      await call();
 
-    expect(invokeMock).toHaveBeenCalledWith("export_config", {
-      repoId: "repo-1",
-      filePath: "/tmp/config.json",
-    });
-  });
+      expect(invokeMock).toHaveBeenCalledExactlyOnceWith(command, args);
+    }
+  );
 });

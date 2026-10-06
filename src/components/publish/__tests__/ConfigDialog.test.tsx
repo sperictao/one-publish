@@ -3,6 +3,7 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 
 const mocks = vi.hoisted(() => ({
   openDialog: vi.fn(),
+  saveDialog: vi.fn(),
   importConfig: vi.fn(),
   refreshProfiles: vi.fn(),
   saveProfile: vi.fn(),
@@ -15,6 +16,7 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock("@tauri-apps/plugin-dialog", () => ({
   open: mocks.openDialog,
+  save: mocks.saveDialog,
 }));
 
 vi.mock("sonner", () => ({
@@ -95,6 +97,7 @@ describe("ConfigManagementContent", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.openDialog.mockResolvedValue("/tmp/one-publish-config.json");
+    mocks.saveDialog.mockResolvedValue("/tmp/new-export.json");
     mocks.refreshProfiles.mockResolvedValue([]);
     mocks.saveProfile.mockResolvedValue(undefined);
     mocks.deleteProfile.mockResolvedValue(undefined);
@@ -172,6 +175,22 @@ describe("ConfigManagementContent", () => {
       });
     });
     expect(mocks.toastSuccess).toHaveBeenCalledWith("配置已保存");
+  });
+
+  it("导出配置时用保存对话框选择目标路径，以便创建新文件", async () => {
+    renderConfigManagementContent();
+
+    fireEvent.click(screen.getByRole("button", { name: "导出配置" }));
+
+    await waitFor(() => {
+      expect(mocks.exportProfiles).toHaveBeenCalledWith("/tmp/new-export.json");
+    });
+    expect(mocks.saveDialog).toHaveBeenCalledWith({
+      filters: [{ name: "JSON", extensions: ["json"] }],
+      defaultPath: "one-publish-config.json",
+    });
+    expect(mocks.openDialog).not.toHaveBeenCalled();
+    expect(mocks.toastSuccess).toHaveBeenCalledWith("配置已导出");
   });
 
   it("导入配置时先显示应用内确认对话框，再执行真正导入", async () => {
