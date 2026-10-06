@@ -3,127 +3,19 @@
 //! 同一触发上下文（同一 tag、同一提交）重放必须产出相同的 snapshot/plan
 //! 摘要；脏 checkout、前缀不匹配的 tag 与手动触发都必须显式失败。
 
-use std::collections::BTreeMap;
-use std::path::Path;
-use std::process::Command;
+mod common;
 
+use common::{fixture_checkout, fixture_projection};
 use one_publish_runner::{
-    current_runtime_revision, installed_runner, prepare_from_projection,
-    validate_prepared_attempt, RunnerProjection, TriggerContext, TriggerInput,
-    RUNNER_PROJECTION_VERSION,
+    installed_runner, prepare_from_projection, validate_prepared_attempt, TriggerContext,
+    TriggerInput,
 };
-use publish_domain::{
-    AdapterBinding, AdapterIdentity, AdapterKind, AdapterSelection, AdapterSettings,
-    AutomationTriggerPolicy, DeliveryRoute, PlanNodePlatform,
-};
+use publish_domain::{AutomationTriggerPolicy, PlanNodePlatform};
 use serde_json::Value;
-
-fn run_git(dir: &Path, args: &[&str]) {
-    let output = Command::new("git")
-        .arg("-C")
-        .arg(dir)
-        .args(args)
-        .output()
-        .expect("run git fixture command");
-    assert!(
-        output.status.success(),
-        "git {:?} failed: {}",
-        args,
-        String::from_utf8_lossy(&output.stderr)
-    );
-}
-
-fn fixture_checkout() -> tempfile::TempDir {
-    let temp = tempfile::tempdir().expect("temp checkout");
-    run_git(temp.path(), &["init", "--quiet", "-b", "main"]);
-    run_git(temp.path(), &["config", "user.name", "One Publish Tests"]);
-    run_git(
-        temp.path(),
-        &["config", "user.email", "tests@one-publish.invalid"],
-    );
-    std::fs::write(temp.path().join("README.md"), "fixture\n").expect("write fixture file");
-    run_git(temp.path(), &["add", "--all"]);
-    run_git(temp.path(), &["commit", "--quiet", "-m", "fixture"]);
-    temp
-}
-
-fn fixture_projection() -> RunnerProjection {
-    let adapters = AdapterSelection {
-        project_provider: AdapterBinding::new(
-            "project",
-            AdapterIdentity::new(
-                AdapterKind::ProjectProvider,
-                publish_adapters::TAURI_PROVIDER_ID,
-                1,
-            ),
-            AdapterSettings::new(1)
-                .with_value(
-                    "config_path",
-                    Value::String("src-tauri/tauri.conf.json".to_string()),
-                )
-                .with_value("build_driver", Value::String("pnpm".to_string())),
-        ),
-        artifact_processors: vec![AdapterBinding::new(
-            "checksums",
-            AdapterIdentity::new(
-                AdapterKind::ArtifactProcessor,
-                publish_adapters::CHECKSUM_PROCESSOR_ID,
-                1,
-            ),
-            AdapterSettings::new(1),
-        )],
-        execution_backend: AdapterBinding::new(
-            "backend",
-            AdapterIdentity::new(
-                AdapterKind::ExecutionBackend,
-                publish_adapters::GITHUB_ACTIONS_BACKEND_ID,
-                1,
-            ),
-            AdapterSettings::new(1),
-        ),
-        artifact_store: AdapterBinding::new(
-            "store",
-            AdapterIdentity::new(AdapterKind::ArtifactStore, "temporary-artifact-store", 1),
-            AdapterSettings::new(1),
-        ),
-        delivery_routes: vec![DeliveryRoute::required(AdapterBinding::new(
-            "local-delivery",
-            AdapterIdentity::new(
-                AdapterKind::DeliveryDestination,
-                publish_adapters::LOCAL_DESTINATION_ID,
-                1,
-            ),
-            AdapterSettings::new(1),
-        ))],
-    };
-    let runtime_revision = current_runtime_revision(
-        adapters
-            .ordered_bindings()
-            .into_iter()
-            .map(|binding| binding.adapter.clone()),
-    )
-    .expect("seal fixture runtime revision");
-    RunnerProjection {
-        version: RUNNER_PROJECTION_VERSION,
-        binding_id: "binding-stable".to_string(),
-        configuration_id: "configuration-1".to_string(),
-        configuration_revision_id: "configuration-revision-1".to_string(),
-        trigger_policy: AutomationTriggerPolicy::TagPush {
-            tag_prefix: "v".to_string(),
-        },
-        runtime_revision,
-        release_input: BTreeMap::from([(
-            "channel".to_string(),
-            Value::String("stable".to_string()),
-        )]),
-        adapters,
-        secret_bindings: BTreeMap::new(),
-    }
-}
 
 #[test]
 fn replaying_the_same_trigger_context_seals_identical_attempt_identities() {
-    let checkout = fixture_checkout();
+    let checkout = fixture_checkout(&[]);
     let projection = fixture_projection();
     let context = TriggerContext {
         repository_root: checkout.path().to_path_buf(),
@@ -170,7 +62,7 @@ fn replaying_the_same_trigger_context_seals_identical_attempt_identities() {
 
 #[test]
 fn shard_execution_skips_unassigned_nodes_instead_of_failing() {
-    let checkout = fixture_checkout();
+    let checkout = fixture_checkout(&[]);
     let projection = fixture_projection();
     let attempt = prepare_from_projection(
         &projection,
@@ -198,7 +90,7 @@ fn shard_execution_skips_unassigned_nodes_instead_of_failing() {
 
 #[test]
 fn dirty_checkouts_and_foreign_trigger_contexts_are_rejected() {
-    let checkout = fixture_checkout();
+    let checkout = fixture_checkout(&[]);
     let projection = fixture_projection();
 
     let mismatched = prepare_from_projection(
