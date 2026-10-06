@@ -340,6 +340,7 @@ fn headless_provider_execution() -> publish_adapters::ProviderExecution {
         port: Arc::new(publish_adapters::DirectProviderExecutionPort),
         output_directory: std::path::PathBuf::from(".one-publish-work/provider-output"),
         artifact_filter: None,
+        clear_stale_artifacts: false,
         source_guard: Arc::new(publish_adapters::CleanCheckoutGuard),
     }
 }

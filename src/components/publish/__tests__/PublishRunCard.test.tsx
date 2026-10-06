@@ -445,6 +445,40 @@ describe("PublishRunCard", () => {
     ).not.toBeInTheDocument();
   });
 
+  it("无法确定输出位置时展示本地化的可操作提示而非后端原文", () => {
+    render(
+      <PublishRunCard
+        outputLog=""
+        publishResult={null}
+        appT={{
+          outputLogTitle: "执行发布",
+          noOutput: "无输出",
+          publishRuntimeOutputUnresolved: "请设置默认发布目录",
+        }}
+        preparedRuntime={{
+          status: "blocked",
+          diagnostics: [
+            {
+              code: "publish_runtime_output_unresolved",
+              message: "publish output location could not be determined",
+            },
+          ],
+        }}
+        publishActions={{
+          isPublishing: false,
+          isCancellingPublish: false,
+          startDisabled: true,
+          onStartPublish: vi.fn(),
+          onCancelPublish: vi.fn(),
+        }}
+      />
+    );
+
+    const alert = screen.getByRole("alert");
+    expect(alert).toHaveTextContent("请设置默认发布目录");
+    expect(alert).not.toHaveTextContent("could not be determined");
+  });
+
   it("选中 Tauri 配置时右侧用通用计划展示 Provider 阶段与驱动命令", () => {
     render(
       <PublishRunCard

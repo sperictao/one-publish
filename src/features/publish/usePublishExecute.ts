@@ -12,6 +12,7 @@ import { normalizePublishResult } from "@/features/history/publishFailure";
 import {
   canRequestRuntimeOutputAccess,
   cancelPublishRuntime,
+  describeBlockedRuntime,
   preparePublishRuntime,
   resumePublishRuntime,
   startPublishRuntime,
@@ -305,7 +306,7 @@ export function usePublishExecute({
         if (!ready) {
           throw new Error(
             prepared && prepared.status === "blocked"
-              ? prepared.diagnostics[0]?.message ||
+              ? describeBlockedRuntime(prepared, appT) ||
                   appT.publishRuntimeBlocked ||
                   "本地发布计划存在阻塞项"
               : "PublishRuntime preparation returned no result"
@@ -672,9 +673,7 @@ export function usePublishExecute({
     if (blocker === "runtime-blocked") {
       toast.error(publishT.configurationBlocked || "当前发布配置不可执行", {
         description:
-          (validate.preparedRuntime?.status === "blocked"
-            ? validate.preparedRuntime.diagnostics[0]?.message
-            : undefined) ||
+          describeBlockedRuntime(validate.preparedRuntime, appT) ||
           appT.publishRuntimeBlocked ||
           "本地发布计划存在阻塞项",
       });

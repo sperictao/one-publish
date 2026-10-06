@@ -86,7 +86,53 @@ pub struct ProviderExecution {
     pub output_directory: PathBuf,
     /// `None` 表示整个输出目录都是产物。
     pub artifact_filter: Option<ArtifactEntryFilter>,
+    /// 原生输出目录跨构建累积旧产物（例如 Gradle 的 `build/libs` 保留旧版本 jar）：
+    /// 构建前移除顶层被 `artifact_filter` 接受的文件，交付只含本次构建的产物。
+    /// 未声明筛选时不生效。
+    pub clear_stale_artifacts: bool,
     pub source_guard: Arc<dyn ExecutionSourceGuard>,
+}
+
+impl ProviderExecution {
+    /// 构建前清理旧产物；只移除顶层普通文件，从不删除目录。
+    pub(crate) fn clear_stale_artifacts(&self) -> Result<(), PublishError> {
+        if !self.clear_stale_artifacts {
+            return Ok(());
+        }
+        let Some(accept) = self.artifact_filter else {
+            return Ok(());
+        };
+        let entries = match fs::read_dir(&self.output_directory) {
+            Ok(entries) => entries,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(()),
+            Err(error) => {
+                return Err(PublishError::Io {
+                    operation: format!(
+                        "read provider output directory {}",
+                        self.output_directory.display()
+                    ),
+                    message: error.to_string(),
+                })
+            }
+        };
+        for entry in entries {
+            let entry = entry.map_err(|error| PublishError::Io {
+                operation: format!(
+                    "read provider output entry in {}",
+                    self.output_directory.display()
+                ),
+                message: error.to_string(),
+            })?;
+            if !accept(&entry) || !entry.file_type().is_ok_and(|file_type| file_type.is_file()) {
+                continue;
+            }
+            fs::remove_file(entry.path()).map_err(|error| PublishError::Io {
+                operation: format!("remove stale provider artifact {}", entry.path().display()),
+                message: error.to_string(),
+            })?;
+        }
+        Ok(())
+    }
 }
 
 /// 遗留 Provider 的命令桥：计划与执行共享密封的发布规格这一个事实来源；
@@ -181,6 +227,7 @@ impl AdapterContract for SelectedProjectProvider {
                 "selected-provider execution port is unavailable for this runtime".to_string(),
             )
         })?;
+        execution.clear_stale_artifacts()?;
         let outcome = execution
             .port
             .execute_spec(planned_spec)
@@ -537,5 +584,46 @@ mod artifact_collection_tests {
                 "nested/meta.json"
             ]
         );
+    }
+
+    fn accept_jars(entry: &fs::DirEntry) -> bool {
+        entry.file_name().to_string_lossy().ends_with(".jar")
+    }
+
+    fn stale_cleanup_execution(output: &Path, clear: bool) -> ProviderExecution {
+        ProviderExecution {
+            port: Arc::new(DirectProviderExecutionPort),
+            output_directory: output.to_path_buf(),
+            artifact_filter: Some(accept_jars),
+            clear_stale_artifacts: clear,
+            source_guard: Arc::new(CleanCheckoutGuard),
+        }
+    }
+
+    #[test]
+    fn stale_artifact_cleanup_removes_only_accepted_top_level_files() {
+        let temp = tempfile::tempdir().expect("temp output");
+        let root = temp.path();
+        fs::create_dir_all(root.join("nested.jar")).expect("create accepted-looking directory");
+        fs::write(root.join("app-1.0.jar"), b"stale").expect("write stale jar");
+        fs::write(root.join("notes.txt"), b"notes").expect("write unrelated file");
+        fs::write(root.join("nested.jar").join("inner.jar"), b"inner").expect("write nested jar");
+
+        stale_cleanup_execution(root, false)
+            .clear_stale_artifacts()
+            .expect("cleanup not declared");
+        assert!(root.join("app-1.0.jar").exists());
+
+        stale_cleanup_execution(root, true)
+            .clear_stale_artifacts()
+            .expect("clear stale artifacts");
+        assert!(!root.join("app-1.0.jar").exists());
+        assert!(root.join("notes.txt").exists());
+        // 目录即使被筛选接受也不删除，也不递归。
+        assert!(root.join("nested.jar").join("inner.jar").exists());
+
+        stale_cleanup_execution(&root.join("missing"), true)
+            .clear_stale_artifacts()
+            .expect("a missing output directory has nothing stale");
     }
 }

@@ -16,9 +16,10 @@ import {
   Terminal,
   XCircle,
 } from "lucide-react";
-import type {
-  PublishResult,
-  ReadyPublishRuntime,
+import {
+  describeRuntimeDiagnostic,
+  type PublishResult,
+  type ReadyPublishRuntime,
 } from "@/features/publish/publishRuntime";
 import type {
   PreparedPublishRuntime,
@@ -403,7 +404,9 @@ export const PublishRunCard = memo(function PublishRunCard({
             className="rounded-sm border border-destructive/20 bg-destructive/5 px-3 py-2 text-copy-14 text-destructive"
           >
             {preparedRuntime.diagnostics.map((diagnostic) => (
-              <div key={diagnostic.code}>{diagnostic.message}</div>
+              <div key={diagnostic.code}>
+                {describeRuntimeDiagnostic(diagnostic, appT)}
+              </div>
             ))}
           </div>
         ) : null}

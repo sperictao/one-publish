@@ -452,6 +452,7 @@
     "publishStatusPartialDeliveryDetail": "Some required routes failed to deliver; published routes remain valid. Review each route status and error.",
     "publishRuntimeNotReady": "The publish plan is not ready yet",
     "publishRuntimeBlocked": "The local publish plan has blockers",
+    "publishRuntimeOutputUnresolved": "Couldn't determine where to publish. Set an output path in the publish configuration, or choose a folder in Settings > Default Output Directory, then try again.",
     "publishRuntimeRecoveryFailed": "Failed to recover publish state",
     "statusSuccess": "Success",
     "statusCancelled": "Cancelled",

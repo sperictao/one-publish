@@ -452,6 +452,7 @@
     "publishStatusPartialDeliveryDetail": "部分必需路线交付失败，已发布路线的结果保持有效；请查看各路线的状态与错误。",
     "publishRuntimeNotReady": "发布计划尚未准备完成",
     "publishRuntimeBlocked": "本地发布计划存在阻塞项",
+    "publishRuntimeOutputUnresolved": "无法确定发布输出位置。请在发布配置中填写输出路径，或在“设置 > 默认发布目录”中指定目录后重试。",
     "publishRuntimeRecoveryFailed": "恢复发布状态失败",
     "statusSuccess": "成功",
     "statusCancelled": "已取消",

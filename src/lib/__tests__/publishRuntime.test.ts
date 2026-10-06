@@ -8,6 +8,8 @@ vi.mock("@tauri-apps/api/core", () => ({
 
 import {
   cancelPublishRuntime,
+  describeBlockedRuntime,
+  describeRuntimeDiagnostic,
   importFromCommand,
   preparePublishRuntime,
   preflightProviderPublishOutput,
@@ -305,5 +307,34 @@ describe("publishRuntime", () => {
     expect(invokeMock).toHaveBeenNthCalledWith(3, "cancel_publish_runtime", {
       request: { runtimeToken: "sealed-runtime-A" },
     });
+  });
+
+  it("localizes actionable block diagnostics and keeps other messages verbatim", () => {
+    const unresolved = {
+      code: "publish_runtime_output_unresolved",
+      message: "publish output location could not be determined",
+    };
+    const denied = {
+      code: "publish_output_access_denied",
+      message: "publish output access is denied",
+    };
+    const appT = { publishRuntimeOutputUnresolved: "Set an output path" };
+
+    expect(describeRuntimeDiagnostic(unresolved, appT)).toBe(
+      "Set an output path"
+    );
+    expect(describeRuntimeDiagnostic(unresolved, {})).toContain("默认发布目录");
+    expect(describeRuntimeDiagnostic(denied, appT)).toBe(denied.message);
+
+    expect(
+      describeBlockedRuntime(
+        { status: "blocked", diagnostics: [unresolved, denied] },
+        appT
+      )
+    ).toBe("Set an output path");
+    expect(
+      describeBlockedRuntime({ status: "blocked", diagnostics: [] }, appT)
+    ).toBeUndefined();
+    expect(describeBlockedRuntime(null, appT)).toBeUndefined();
   });
 });
