@@ -254,6 +254,13 @@ impl Provider for BuiltInProvider {
         }
     }
 
+    fn artifact_filter(&self) -> Option<publish_adapters::ArtifactEntryFilter> {
+        match self.kind {
+            BuiltInProviderKind::Cargo => Some(is_cargo_build_product),
+            _ => None,
+        }
+    }
+
     fn resolve_runtime_program(
         &self,
         program: &str,
@@ -561,6 +568,8 @@ fn verify_cargo_build_output(output_dir: &Path) -> Result<(), String> {
     }
 }
 
+/// cargo 提升到 profile 目录顶层的最终产物；构建校验与交付筛选共用此规则，
+/// 锁文件、dep-info（`.d`）以及 `deps/`、`build/`、`incremental/` 等子目录都不是产物。
 fn is_cargo_build_product(entry: &std::fs::DirEntry) -> bool {
     if entry.file_name().to_string_lossy().starts_with('.') {
         return false;
@@ -842,13 +851,61 @@ mod tests {
     }
 
     #[test]
-    fn non_cargo_providers_skip_build_output_verification() {
+    fn non_cargo_providers_skip_build_output_verification_and_filtering() {
         let registry = ProviderRegistry::new();
         let missing = Path::new("/nonexistent/one-publish-output");
         for id in ["dotnet", "go", "java", "tauri"] {
             let provider = registry.get(id).expect("provider");
             assert_eq!(provider.verify_build_output(missing), Ok(()), "{id}");
+            assert!(provider.artifact_filter().is_none(), "{id}");
         }
+    }
+
+    #[test]
+    fn cargo_artifact_filter_keeps_only_uplifted_products() {
+        let registry = ProviderRegistry::new();
+        let provider = registry.get("cargo").expect("provider");
+        let accept = provider
+            .artifact_filter()
+            .expect("cargo declares an artifact filter");
+        let profile_dir = tempfile::tempdir().expect("create profile dir");
+        let profile = profile_dir.path();
+
+        // cargo 1.97 profile 目录中的非产物：锁文件、dep-info 与各类中间目录。
+        for name in [
+            ".cargo-lock",
+            ".cargo-build-lock",
+            ".cargo-artifact-lock",
+            "demo.d",
+            "libdemo.d",
+        ] {
+            std::fs::write(profile.join(name), "").expect("write non-product file");
+        }
+        for name in [".fingerprint", "build", "deps", "examples", "incremental"] {
+            std::fs::create_dir_all(profile.join(name)).expect("create cargo subdirectory");
+        }
+        let products = [
+            "demo.dll",
+            "demo.exe",
+            "demo.lib",
+            "demo.wasm",
+            "libdemo.a",
+            "libdemo.dylib",
+            "libdemo.rlib",
+            "libdemo.so",
+        ];
+        for name in products {
+            std::fs::write(profile.join(name), "").expect("write build product");
+        }
+
+        let mut accepted = std::fs::read_dir(profile)
+            .expect("read profile dir")
+            .flatten()
+            .filter(|entry| accept(entry))
+            .map(|entry| entry.file_name().to_string_lossy().to_string())
+            .collect::<Vec<_>>();
+        accepted.sort();
+        assert_eq!(accepted, products);
     }
 
     #[test]

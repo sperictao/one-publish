@@ -933,6 +933,7 @@ impl TauriRuntimeProvider {
                 Ok(crate::AdapterExecutionOutput {
                     artifacts: crate::bridge::collect_artifacts_with(
                         &staged,
+                        execution.artifact_filter,
                         classify_tauri_artifact,
                     )?,
                     ..crate::AdapterExecutionOutput::default()

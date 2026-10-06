@@ -138,6 +138,7 @@ fn delivered_executables_keep_their_mode_and_run_directly() {
                 output_directory: output.clone(),
             }),
             output_directory: output,
+            artifact_filter: None,
             source_guard: Arc::new(CleanCheckoutGuard),
         }),
     );
