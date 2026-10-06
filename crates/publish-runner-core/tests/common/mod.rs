@@ -14,9 +14,9 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use publish_adapters::{
-    AdapterConformanceFixture, AdapterContract, AdapterExecutionContext, AdapterExecutionOutput,
-    AdapterRegistry, ChecksumProcessor, LocalDirectoryDestination, LocalExecutionBackend,
-    ProjectProvider, StaticCredentialSource, TemporaryArtifactStore,
+    is_one_publish_owned_file, AdapterConformanceFixture, AdapterContract, AdapterExecutionContext,
+    AdapterExecutionOutput, AdapterRegistry, ChecksumProcessor, LocalDirectoryDestination,
+    LocalExecutionBackend, ProjectProvider, StaticCredentialSource, TemporaryArtifactStore,
 };
 use publish_domain::{
     sha256_hex, AdapterBinding, AdapterDescriptor, AdapterIdentity, AdapterKind, AdapterSchema,
@@ -262,7 +262,12 @@ pub fn collect_artifacts(
                 }
                 if file_type.is_dir() {
                     pending.push(entry.path());
-                } else if file_type.is_file() {
+                } else if file_type.is_file()
+                    && !entry
+                        .file_name()
+                        .to_str()
+                        .is_some_and(is_one_publish_owned_file)
+                {
                     files.push(entry.path());
                 }
             }

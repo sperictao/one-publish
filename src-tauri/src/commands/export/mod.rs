@@ -61,15 +61,39 @@ pub async fn export_preflight_report(
     Ok(file_path)
 }
 
-#[tauri::command]
-pub async fn export_execution_snapshot(
-    snapshot: Value,
-    file_path: String,
-) -> Result<String, crate::errors::AppError> {
-    let _timer = crate::commands::middleware::CommandTimer::new(
-        "commands::export::export_execution_snapshot",
-    );
-    let mut snapshot = snapshot;
+/// 执行快照的私有存储区 `~/.one-publish/execution-snapshots/`。快照含完整构建日志，
+/// 绝不能写进 Provider 输出目录，否则会被下一次发布当作产物收集并交付。
+fn execution_snapshot_root() -> Result<PathBuf, crate::errors::AppError> {
+    dirs::home_dir()
+        .map(|home| home.join(".one-publish").join("execution-snapshots"))
+        .ok_or_else(|| {
+            export_error(
+                "无法定位当前用户主目录以保存执行快照",
+                "snapshot_home_dir_missing",
+            )
+        })
+}
+
+/// 同一输出目录的快照归入同一子目录，供历史记录按输出目录回退查找最新快照。
+fn execution_snapshot_bucket(
+    root: &Path,
+    output_dir: &str,
+) -> Result<PathBuf, crate::errors::AppError> {
+    let output_dir = output_dir.trim();
+    if output_dir.is_empty() {
+        return Err(export_error(
+            "记录中没有可用的输出目录",
+            "snapshot_output_dir_missing",
+        ));
+    }
+    Ok(root.join(&publish_domain::sha256_hex(output_dir.as_bytes())[..24]))
+}
+
+pub(crate) fn write_execution_snapshot(
+    root: &Path,
+    output_dir: &str,
+    mut snapshot: Value,
+) -> Result<PathBuf, crate::errors::AppError> {
     if !snapshot.is_object() {
         return Err(export_error(
             "execution snapshot payload must be an object",
@@ -77,26 +101,28 @@ pub async fn export_execution_snapshot(
         ));
     }
     crate::security::sanitize_export_value(&mut snapshot);
-    let ext = Path::new(&file_path)
-        .extension()
-        .and_then(|e| e.to_str())
-        .map(|s| s.to_ascii_lowercase())
-        .unwrap_or_else(|| "json".to_string());
-    let content = if ext == "md" || ext == "markdown" {
-        render_execution_snapshot_markdown(&snapshot)?
-    } else {
-        serde_json::to_string_pretty(&snapshot).map_err(|source| {
-            export_source_error(
-                "serialization error",
-                source,
-                "execution_snapshot_serialize_failed",
-            )
-        })?
-    };
-    crate::security::write_private_text_file(Path::new(&file_path), &content).map_err(
-        |source| export_source_error("write error", source, "execution_snapshot_write_failed"),
-    )?;
+    let content = render_execution_snapshot_markdown(&snapshot)?;
+    let file_path = execution_snapshot_bucket(root, output_dir)?.join(format!(
+        "{}{}.md",
+        publish_adapters::EXECUTION_SNAPSHOT_FILE_PREFIX,
+        chrono::Utc::now().format("%Y-%m-%dT%H-%M-%S%.3fZ")
+    ));
+    crate::security::write_private_text_file(&file_path, &content).map_err(|source| {
+        export_source_error("write error", source, "execution_snapshot_write_failed")
+    })?;
     Ok(file_path)
+}
+
+#[tauri::command]
+pub async fn export_execution_snapshot(
+    snapshot: Value,
+    output_dir: String,
+) -> Result<String, crate::errors::AppError> {
+    let _timer = crate::commands::middleware::CommandTimer::new(
+        "commands::export::export_execution_snapshot",
+    );
+    let path = write_execution_snapshot(&execution_snapshot_root()?, &output_dir, snapshot)?;
+    Ok(path.to_string_lossy().to_string())
 }
 
 #[tauri::command]
@@ -218,38 +244,27 @@ pub async fn export_diagnostics_index(
     Ok(file_path)
 }
 
-fn find_latest_snapshot_in_output_dir(
+fn find_latest_snapshot_for_output_dir(
+    root: &Path,
     output_dir: &str,
 ) -> Result<PathBuf, crate::errors::AppError> {
-    if output_dir.trim().is_empty() {
-        return Err(export_error(
-            "记录中没有可用的输出目录",
-            "snapshot_output_dir_missing",
-        ));
-    }
-
-    let dir = PathBuf::from(output_dir);
+    let dir = execution_snapshot_bucket(root, output_dir)?;
+    let not_found = || {
+        export_error(
+            format!("未找到输出目录的执行快照: {}", output_dir.trim()),
+            "snapshot_not_found_for_output_dir",
+        )
+    };
     if !dir.is_dir() {
-        return Err(export_error(
-            format!("输出目录不存在: {}", dir.to_string_lossy()),
-            "snapshot_output_dir_not_found",
-        ));
+        return Err(not_found());
     }
 
     let mut latest: Option<(std::time::SystemTime, PathBuf)> = None;
     for entry in std::fs::read_dir(&dir).map_err(|source| {
-        export_source_error(
-            "读取输出目录失败",
-            source,
-            "snapshot_output_dir_read_failed",
-        )
+        export_source_error("读取快照目录失败", source, "snapshot_dir_read_failed")
     })? {
         let entry = entry.map_err(|source| {
-            export_source_error(
-                "读取目录项失败",
-                source,
-                "snapshot_output_dir_entry_read_failed",
-            )
+            export_source_error("读取目录项失败", source, "snapshot_dir_entry_read_failed")
         })?;
         let path = entry.path();
         if !path.is_file() {
@@ -259,15 +274,9 @@ fn find_latest_snapshot_in_output_dir(
         let Some(name) = path.file_name().and_then(|value| value.to_str()) else {
             continue;
         };
-        if !name.starts_with("execution-snapshot-") {
-            continue;
-        }
-
-        let Some(ext) = path.extension().and_then(|value| value.to_str()) else {
-            continue;
-        };
-        let ext = ext.to_ascii_lowercase();
-        if ext != "md" && ext != "markdown" && ext != "json" {
+        if !name.starts_with(publish_adapters::EXECUTION_SNAPSHOT_FILE_PREFIX)
+            || !name.ends_with(".md")
+        {
             continue;
         }
 
@@ -282,12 +291,11 @@ fn find_latest_snapshot_in_output_dir(
         }
     }
 
-    latest.map(|(_, path)| path).ok_or_else(|| {
-        export_error(
-            format!("未在输出目录找到执行快照: {}", dir.to_string_lossy()),
-            "snapshot_not_found_in_output_dir",
-        )
-    })
+    latest.map(|(_, path)| path).ok_or_else(not_found)
+}
+
+fn find_latest_execution_snapshot(output_dir: &str) -> Result<PathBuf, crate::errors::AppError> {
+    find_latest_snapshot_for_output_dir(&execution_snapshot_root()?, output_dir)
 }
 
 #[tauri::command]
@@ -301,7 +309,7 @@ pub async fn open_execution_snapshot(
         let trimmed = snapshot_path.trim();
         if trimmed.is_empty() {
             if let Some(output_dir) = output_dir {
-                find_latest_snapshot_in_output_dir(&output_dir)?
+                find_latest_execution_snapshot(&output_dir)?
             } else {
                 return Err(export_error("记录中没有快照路径", "snapshot_path_missing"));
             }
@@ -310,7 +318,7 @@ pub async fn open_execution_snapshot(
             if candidate.is_file() {
                 candidate
             } else if let Some(output_dir) = output_dir {
-                find_latest_snapshot_in_output_dir(&output_dir)?
+                find_latest_execution_snapshot(&output_dir)?
             } else {
                 return Err(export_error(
                     format!("快照文件不存在: {}", trimmed),
@@ -319,7 +327,7 @@ pub async fn open_execution_snapshot(
             }
         }
     } else if let Some(output_dir) = output_dir {
-        find_latest_snapshot_in_output_dir(&output_dir)?
+        find_latest_execution_snapshot(&output_dir)?
     } else {
         return Err(export_error(
             "记录中没有可用的快照路径和输出目录",
@@ -467,6 +475,47 @@ mod tests {
         assert!(markdown.contains("## Spec"));
         assert!(markdown.contains("## Result"));
         assert!(markdown.contains("## Log"));
+    }
+
+    #[test]
+    fn execution_snapshot_is_stored_outside_the_provider_output() {
+        let store = tempfile::tempdir().expect("snapshot store");
+        let workspace = tempfile::tempdir().expect("workspace");
+        let output_dir = workspace.path().join("build").join("libs");
+        std::fs::create_dir_all(&output_dir).expect("create provider output");
+        let output_dir = output_dir.to_string_lossy().to_string();
+
+        let path = write_execution_snapshot(
+            store.path(),
+            &output_dir,
+            json!({
+                "generatedAt": "2026-07-17T10:01:02.345Z",
+                "providerId": "gradle",
+                "output": { "log": "BUILD SUCCESSFUL" }
+            }),
+        )
+        .expect("write snapshot");
+
+        assert!(path.starts_with(store.path()));
+        assert!(path
+            .file_name()
+            .and_then(|name| name.to_str())
+            .is_some_and(publish_adapters::is_one_publish_owned_file));
+        assert_eq!(
+            std::fs::read_dir(&output_dir)
+                .expect("list provider output")
+                .count(),
+            0,
+            "the provider output must stay untouched"
+        );
+        assert_eq!(
+            find_latest_snapshot_for_output_dir(store.path(), &output_dir)
+                .expect("lookup by output dir"),
+            path
+        );
+        let other_output = workspace.path().join("other").to_string_lossy().to_string();
+        assert!(find_latest_snapshot_for_output_dir(store.path(), &other_output).is_err());
+        assert!(write_execution_snapshot(store.path(), "  ", json!({})).is_err());
     }
 
     #[test]

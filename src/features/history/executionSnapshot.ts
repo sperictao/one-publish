@@ -1,12 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
-import { joinPath } from "@/lib/paths";
 import type { ExecutionRecord } from "@/lib/store/types";
-
-// 文件名必须以 execution-snapshot- 开头且扩展名为 md，
-// 后端 find_latest_snapshot_in_output_dir 按此约定扫描输出目录。
-export function buildExecutionSnapshotFileName(finishedAt: string): string {
-  return `execution-snapshot-${finishedAt.replace(/[:]/g, "-")}.md`;
-}
 
 export function buildExecutionSnapshotPayload(
   record: ExecutionRecord,
@@ -30,6 +23,8 @@ export function buildExecutionSnapshotPayload(
   };
 }
 
+// 快照由后端写入私有存储区（~/.one-publish/execution-snapshots/）并按输出目录归档，
+// 绝不写进 Provider 输出目录：否则下一次发布会把它当作产物收集并交付。
 export async function exportExecutionSnapshot(
   record: ExecutionRecord,
   outputLog: string
@@ -40,10 +35,7 @@ export async function exportExecutionSnapshot(
 
   try {
     return await invoke<string>("export_execution_snapshot", {
-      filePath: joinPath(
-        record.outputDir,
-        buildExecutionSnapshotFileName(record.finishedAt)
-      ),
+      outputDir: record.outputDir,
       snapshot: buildExecutionSnapshotPayload(record, outputLog),
     });
   } catch (error) {

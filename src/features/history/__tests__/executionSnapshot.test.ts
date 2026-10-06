@@ -7,7 +7,6 @@ vi.mock("@tauri-apps/api/core", () => ({
 }));
 
 import {
-  buildExecutionSnapshotFileName,
   buildExecutionSnapshotPayload,
   exportExecutionSnapshot,
 } from "@/features/history/executionSnapshot";
@@ -43,12 +42,6 @@ describe("executionSnapshot", () => {
     invokeMock.mockReset();
   });
 
-  it("文件名匹配后端扫描约定 execution-snapshot-*.md", () => {
-    expect(buildExecutionSnapshotFileName("2026-07-17T10:01:02.345Z")).toBe(
-      "execution-snapshot-2026-07-17T10-01-02.345Z.md"
-    );
-  });
-
   it("payload 包含渲染所需的核心字段", () => {
     const payload = buildExecutionSnapshotPayload(
       createRecord(),
@@ -73,20 +66,17 @@ describe("executionSnapshot", () => {
     });
   });
 
-  it("导出到输出目录并返回后端写入路径", async () => {
-    invokeMock.mockImplementation(
-      async (_command: string, args: { filePath: string }) => args.filePath
-    );
+  it("交由后端写入私有存储区，不把快照路径指向输出目录", async () => {
+    const storedPath =
+      "/Users/me/.one-publish/execution-snapshots/abc/execution-snapshot-2026-07-17T10-01-02.345Z.md";
+    invokeMock.mockResolvedValue(storedPath);
 
     const record = createRecord();
     const path = await exportExecutionSnapshot(record, "log");
 
-    expect(path).toBe(
-      "/exports/App/Release/execution-snapshot-2026-07-17T10-01-02.345Z.md"
-    );
+    expect(path).toBe(storedPath);
     expect(invokeMock).toHaveBeenCalledWith("export_execution_snapshot", {
-      filePath:
-        "/exports/App/Release/execution-snapshot-2026-07-17T10-01-02.345Z.md",
+      outputDir: "/exports/App/Release",
       snapshot: buildExecutionSnapshotPayload(record, "log"),
     });
   });
