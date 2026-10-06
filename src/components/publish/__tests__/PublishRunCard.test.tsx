@@ -1,7 +1,8 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
 import { PublishRunCard } from "@/components/publish/PublishRunCard";
+import zh from "@/i18n/zh.json";
 
 vi.mock("@/lib/store/api", async () => {
   const actual =
@@ -408,7 +409,7 @@ describe("PublishRunCard", () => {
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
   });
 
-  it("prepare 被阻断时展示诊断且不展示计划摘要", () => {
+  it("prepare 被阻断时按 code 本地化诊断且不展示计划摘要", async () => {
     render(
       <PublishRunCard
         outputLog=""
@@ -420,6 +421,11 @@ describe("PublishRunCard", () => {
             {
               code: "publish_output_access_denied",
               message: "publish output access is denied",
+            },
+            {
+              code: "publish_runtime_delivery_blocked",
+              message:
+                "local delivery destination /repo/out is not a directory",
             },
           ],
           outputPreflight: {
@@ -437,8 +443,14 @@ describe("PublishRunCard", () => {
       />
     );
 
-    expect(screen.getByRole("alert")).toHaveTextContent(
-      "publish output access is denied"
+    const alert = screen.getByRole("alert");
+    await waitFor(() => {
+      expect(alert).toHaveTextContent(zh.errors.publish_output_access_denied);
+    });
+    expect(alert).not.toHaveTextContent("publish output access is denied");
+    // 未登记的诊断码保留后端原文（语言中立的技术细节）。
+    expect(alert).toHaveTextContent(
+      "local delivery destination /repo/out is not a directory"
     );
     expect(
       screen.queryByTestId("publish-runtime-plan")

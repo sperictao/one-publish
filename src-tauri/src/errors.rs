@@ -191,6 +191,13 @@ impl AppError {
             code: Some(code.into()),
         }
     }
+
+    /// 附加语言中立的技术细节（路径、分支、底层错误）；message 保持静态，
+    /// 前端按 code 本地化 message 时仍可原样展示 details。
+    pub fn with_details(mut self, details: impl Into<String>) -> Self {
+        self.details = Some(details.into());
+        self
+    }
 }
 
 impl fmt::Display for AppError {

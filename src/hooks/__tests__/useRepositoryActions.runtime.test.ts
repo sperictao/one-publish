@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
+  askDialog: vi.fn(),
   openDialog: vi.fn(),
   detectRepositoryProvider: vi.fn(),
   listProviders: vi.fn(),
@@ -14,7 +15,7 @@ const mocks = vi.hoisted(() => ({
 }));
 
 vi.mock("@tauri-apps/plugin-dialog", () => ({
-  ask: vi.fn(),
+  ask: mocks.askDialog,
   open: mocks.openDialog,
 }));
 
@@ -42,6 +43,7 @@ vi.mock("@/lib/store/api", async () => {
 import {
   handleAddRepoRuntime,
   handleDetectRepoProviderRuntime,
+  handleRemoveRepoRuntime,
 } from "@/features/repository/useRepositoryActions.runtime";
 import { defaultRepoPublishConfig } from "@/lib/store/types";
 import type { Repository } from "@/lib/store/types";
@@ -470,5 +472,55 @@ describe("handleDetectRepoProviderRuntime", () => {
     expect(result).toBeNull();
     expect(mocks.toastError).toHaveBeenCalledTimes(1);
     expect(mocks.toastError.mock.calls[0][0]).toBe("未识别到支持的 Provider");
+  });
+});
+
+describe("handleRemoveRepoRuntime", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("原生确认框使用界面语言的按钮文案，而不是系统默认的 Yes/No", async () => {
+    mocks.askDialog.mockResolvedValue(false);
+    const removeRepository = vi.fn();
+
+    await handleRemoveRepoRuntime({
+      appT: {
+        removeRepository: "Remove repository",
+        removeRepositoryConfirm: 'Remove repository "{{name}}"?',
+        removeRepositoryConfirmOk: "Remove",
+        removeRepositoryConfirmCancel: "Cancel",
+      },
+      repo: existingRepo(),
+      removeRepository,
+    });
+
+    expect(mocks.askDialog).toHaveBeenCalledWith(
+      'Remove repository "demo-repo"?',
+      {
+        title: "Remove repository",
+        kind: "warning",
+        okLabel: "Remove",
+        cancelLabel: "Cancel",
+      }
+    );
+    expect(removeRepository).not.toHaveBeenCalled();
+  });
+
+  it("确认后移除仓库", async () => {
+    mocks.askDialog.mockResolvedValue(true);
+    const removeRepository = vi.fn().mockResolvedValue(undefined);
+
+    await handleRemoveRepoRuntime({
+      appT: {},
+      repo: existingRepo(),
+      removeRepository,
+    });
+
+    expect(mocks.askDialog.mock.calls[0][1]).toMatchObject({
+      okLabel: "移除",
+      cancelLabel: "取消",
+    });
+    expect(removeRepository).toHaveBeenCalledWith("repo-existing");
   });
 });

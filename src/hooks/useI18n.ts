@@ -28,6 +28,14 @@ function normalizeLanguage(value: string | null): Language {
   return value === "en" ? "en" : DEFAULT_LANGUAGE;
 }
 
+/**
+ * 应用语言对应的 BCP 47 标签：供日期格式化与 `<html lang>` 使用，
+ * 避免回落到系统语言造成界面混排。
+ */
+export function getLanguageLocale(language: Language): string {
+  return language === "en" ? "en-US" : "zh-CN";
+}
+
 function getStoredLanguage(): Language {
   return normalizeLanguage(localStorage.getItem(LANGUAGE_STORAGE_KEY));
 }
@@ -129,9 +137,10 @@ export function useI18n() {
     };
   }, [language]);
 
-  // 首次加载或外部同步后，统一修正本地存储中的语言值
+  // 首次加载或外部同步后，统一修正本地存储中的语言值与文档语言
   useEffect(() => {
     writeStoredLanguage(language);
+    document.documentElement.lang = getLanguageLocale(language);
   }, [language]);
 
   useEffect(() => {

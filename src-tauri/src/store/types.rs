@@ -98,8 +98,9 @@ pub(crate) const LOCAL_BACKEND_ID: &str = "local-execution";
 pub(crate) const TEMPORARY_STORE_ID: &str = "temporary-artifact-store";
 pub(crate) use publish_adapters::LOCAL_DESTINATION_ID;
 
-/// 草稿配置的显示名（隐藏于 UI，仅调试可见）；按 (repo, provider) 各持一份。
-pub(crate) const DRAFT_PROFILE_NAME: &str = "本地草稿";
+/// 草稿配置的内部名（隐藏于 UI，但会出现在导出 JSON 中）；按 (repo, provider)
+/// 各持一份。使用语言中立的标识，避免导出内容随界面语言混杂。
+pub(crate) const DRAFT_PROFILE_NAME: &str = "local-draft";
 /// 草稿修订 GC 上限：只保留最近 N 个，超出删最旧。进行中的 Attempt 引用的是
 /// 最新（当前）修订，不受影响；更早的草稿 Attempt 在 GC 后失去恢复能力——
 /// 这是草稿语义的可接受上限（真有恢复诉求应保存为命名配置）。
@@ -451,6 +452,11 @@ impl ConfigProfile {
                 self.current_revision_id = revision.id.clone();
                 migrated = true;
             }
+        }
+        // 旧版本草稿使用中文显示名（"本地草稿"）；草稿只按 is_draft 查找，统一改为内部名。
+        if self.is_draft && self.name != DRAFT_PROFILE_NAME {
+            self.name = DRAFT_PROFILE_NAME.to_string();
+            migrated = true;
         }
         self.blocked_reason = self
             .current_revision()

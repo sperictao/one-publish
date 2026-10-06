@@ -32,6 +32,8 @@ import { PublishLogView } from "@/components/publish/PublishLogView";
 import { ArtifactActions } from "@/components/publish/ArtifactActions";
 import type { ArtifactActionState } from "@/lib/artifact";
 import { openOutputDirectory } from "@/lib/store/api";
+import { useI18n } from "@/hooks/useI18n";
+import { localizeInvokeError } from "@/lib/tauri/invokeErrors";
 import { SectionLabel } from "@/components/ui/section-label";
 import { cn } from "@/lib/utils";
 
@@ -83,6 +85,7 @@ export const PublishRunCard = memo(function PublishRunCard({
   onArtifactStateChange,
   onOpenReleaseChecklist,
 }: PublishRunCardProps) {
+  const { translations } = useI18n();
   const [isOpeningOutputDir, setIsOpeningOutputDir] = useState(false);
   const [logExpanded, setLogExpanded] = useState(false);
   const [warningExpanded, setWarningExpanded] = useState(false);
@@ -403,7 +406,9 @@ export const PublishRunCard = memo(function PublishRunCard({
             className="rounded-sm border border-destructive/20 bg-destructive/5 px-3 py-2 text-copy-14 text-destructive"
           >
             {preparedRuntime.diagnostics.map((diagnostic) => (
-              <div key={diagnostic.code}>{diagnostic.message}</div>
+              <div key={diagnostic.code}>
+                {localizeInvokeError(diagnostic, translations)}
+              </div>
             ))}
           </div>
         ) : null}

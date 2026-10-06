@@ -365,9 +365,10 @@ fn active_profile<'a>(
 fn ensure_unblocked(profile: &crate::store::ConfigProfile) -> Result<(), AppError> {
     if let Some(reason) = &profile.blocked_reason {
         return Err(AppError::validation_with_code(
-            format!("配置处于阻断状态，无法绑定自动化: {reason}"),
+            "配置处于阻断状态，无法绑定自动化",
             "automation_bind_blocked_configuration",
-        ));
+        )
+        .with_details(reason));
     }
     Ok(())
 }
@@ -1196,11 +1197,10 @@ fn workflow_delivery_destination_namespace(
 
     if has_tag_trigger && can_write_contents {
         return Err(AppError::validation_with_code(
-            format!(
-                "标签触发的 workflow {path} 具有 contents: write 权限，但无法确定交付目标命名空间"
-            ),
+            "标签触发的 workflow 具有 contents: write 权限，但无法确定交付目标命名空间",
             "automation_workflow_namespace_ambiguous",
-        ));
+        )
+        .with_details(path));
     }
     Ok(None)
 }
@@ -1287,9 +1287,10 @@ fn discover_initial_takeover_conflicts(
         };
         if inspection.release_namespaces.is_empty() {
             return Err(AppError::validation_with_code(
-                format!("workflow {relative} 会写入 GitHub Release，但无法确定 Release Namespace"),
+                "workflow 会写入 GitHub Release，但无法确定 Release Namespace",
                 "automation_workflow_namespace_ambiguous",
-            ));
+            )
+            .with_details(relative));
         }
         let conflict = inspection.release_namespaces.into_iter().find(|release| {
             let key = AutomationConflictKey {
@@ -1446,12 +1447,7 @@ pub(crate) fn apply_change(
         let branch = current_branch(repo_root)?;
         let expected_branch = default_branch(repo_root)?;
         if branch != expected_branch {
-            return Err(AppError::repository_with_code(
-                format!(
-                    "自动化接入必须在 origin 默认分支 '{expected_branch}' 上执行，当前分支是 '{branch}'"
-                ),
-                "automation_default_branch_required",
-            ));
+            return Err(default_branch_required(&expected_branch, &branch));
         }
         let pending_commit =
             retry_pending_projection_push(repo_root, &expected_branch, config, &outcome)?;
@@ -1468,12 +1464,7 @@ pub(crate) fn apply_change(
     let branch = current_branch(repo_root)?;
     let expected_branch = default_branch(repo_root)?;
     if branch != expected_branch {
-        return Err(AppError::repository_with_code(
-            format!(
-                "自动化接入必须在 origin 默认分支 '{expected_branch}' 上执行，当前分支是 '{branch}'"
-            ),
-            "automation_default_branch_required",
-        ));
+        return Err(default_branch_required(&expected_branch, &branch));
     }
     ensure_synced_default_branch(repo_root, &expected_branch)?;
 
@@ -1679,15 +1670,24 @@ fn successful_git(repository_root: &Path, args: &[&str]) -> Result<String, AppEr
     ))
 }
 
+/// 分支信息走 details（`当前 → 期望`），message 保持静态以便前端按 code 本地化。
+fn default_branch_required(expected_branch: &str, branch: &str) -> AppError {
+    AppError::repository_with_code(
+        "自动化接入必须在 origin 默认分支上执行",
+        "automation_default_branch_required",
+    )
+    .with_details(format!("{branch} → origin/{expected_branch}"))
+}
+
 fn ensure_clean(repository_root: &Path) -> Result<(), AppError> {
     let status = successful_git(repository_root, &["status", "--porcelain=v1"])?;
     if status.is_empty() {
         return Ok(());
     }
-    Err(AppError::repository_with_code(
-        format!("自动化接入需要干净的工作区:\n{status}"),
-        "automation_worktree_dirty",
-    ))
+    Err(
+        AppError::repository_with_code("自动化接入需要干净的工作区", "automation_worktree_dirty")
+            .with_details(status),
+    )
 }
 
 fn current_branch(repository_root: &Path) -> Result<String, AppError> {
