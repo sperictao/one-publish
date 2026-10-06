@@ -315,17 +315,17 @@ pub fn classify_generic(_relative: &Path) -> (&'static str, &'static str) {
     (PROVIDER_OUTPUT_ROLE, "application/octet-stream")
 }
 
-/// Cargo 产物分类：二进制归 build-support，其余归 provider-output。
+/// Cargo 产物分类：profile 目录顶层的最终产物归 build-output；子目录
+/// （deps/、build/、.fingerprint/ 等）、隐藏的锁文件（.cargo-lock 等）
+/// 与 dep-info / 库中间产物都是 cargo 内部状态，归 build-support。
 pub fn classify_cargo(relative: &Path) -> (&'static str, &'static str) {
     let name = relative.file_name().and_then(|n| n.to_str()).unwrap_or("");
-    // 跳过非最终产物
-    if name.ends_with(".d") || name.ends_with(".rlib") || name.ends_with(".rmeta") {
-        return ("build-support", "application/octet-stream");
-    }
-    if relative
-        .components()
-        .any(|c| c.as_os_str() == "deps" || c.as_os_str() == "build" || c.as_os_str() == "examples"
-            || c.as_os_str() == "incremental")
+    let nested = relative.components().count() > 1;
+    if nested
+        || name.starts_with('.')
+        || name.ends_with(".d")
+        || name.ends_with(".rlib")
+        || name.ends_with(".rmeta")
     {
         return ("build-support", "application/octet-stream");
     }
