@@ -1953,12 +1953,21 @@ fn start_runtime_with_repository(
             )
         })?
         .to_string();
+    // 产物筛选与原生输出目录同属 Provider 知识，按密封的 provider_id 读取声明。
+    let artifact_filter = prepared
+        .snapshot
+        .release_input
+        .get("provider_id")
+        .and_then(Value::as_str)
+        .and_then(|provider_id| provider_registry().get(provider_id).ok())
+        .and_then(|provider| provider.artifact_filter());
     let repository_path = source_guard.repository.to_string_lossy().to_string();
     let registry = build_registry(
         &prepared.snapshot,
         Some(ProviderExecution {
             port: execution_port,
             output_directory: PathBuf::from(&provider_output_directory),
+            artifact_filter,
             source_guard: Arc::new(source_guard),
         }),
     )?;
@@ -3927,6 +3936,69 @@ mod tests {
         }
     }
 
+    /// 复现 cargo 1.97 `build --release --target <triple>` 在 profile 目录留下的布局：
+    /// 提升到顶层的产物与锁文件、dep-info 和中间目录混在一起。
+    #[cfg(unix)]
+    struct FakeCargoBuild {
+        profile_directory: std::path::PathBuf,
+    }
+
+    #[cfg(unix)]
+    impl ProviderExecutionPort for FakeCargoBuild {
+        fn execute_spec(
+            &self,
+            _spec_json: &str,
+        ) -> Result<super::ProviderExecutionOutcome, publish_domain::PublishError> {
+            use std::os::unix::fs::PermissionsExt;
+
+            let profile = &self.profile_directory;
+            for directory in [
+                ".fingerprint/demo-0123",
+                "build",
+                "deps",
+                "examples",
+                "incremental/demo-0123",
+            ] {
+                std::fs::create_dir_all(profile.join(directory))
+                    .expect("create cargo subdirectory");
+            }
+            for (name, contents) in [
+                (".cargo-lock", ""),
+                (".cargo-build-lock", ""),
+                (".cargo-artifact-lock", ""),
+                ("demo.d", "demo: src/main.rs"),
+                ("deps/demo-0123.d", "demo-0123: src/main.rs"),
+                (".fingerprint/demo-0123/bin-demo", "fingerprint"),
+                ("incremental/demo-0123/dep-graph.bin", "graph"),
+                ("libdemo.rlib", "library"),
+            ] {
+                std::fs::write(profile.join(name), contents).expect("write cargo output");
+            }
+            for name in ["demo", "deps/demo-0123"] {
+                let binary = profile.join(name);
+                std::fs::write(&binary, "binary").expect("write cargo binary");
+                std::fs::set_permissions(&binary, std::fs::Permissions::from_mode(0o755))
+                    .expect("mark cargo binary executable");
+            }
+            Ok(super::ProviderExecutionOutcome {
+                success: true,
+                cancelled: false,
+                error: None,
+                output_dir: profile.to_string_lossy().to_string(),
+            })
+        }
+
+        fn execute_build(
+            &self,
+            request: publish_adapters::SealedBuildCommand,
+        ) -> Result<super::ProviderExecutionOutcome, publish_domain::PublishError> {
+            panic!(
+                "cargo publishes through the sealed spec, not sealed build commands: {}",
+                request.program
+            );
+        }
+    }
+
     /// 统一 prepare 的修订内容 fixture：契约与设置版本跟随 store 常量，
     /// 组合缺省为本地默认。
     fn revision_content(
@@ -5028,6 +5100,7 @@ mod tests {
                 output_directory: std::path::PathBuf::from(release_value(
                     "provider_output_directory",
                 )),
+                artifact_filter: None,
                 source_guard: Arc::new(source_guard),
             }),
         )
@@ -7380,6 +7453,91 @@ mod tests {
             std::fs::read(delivered).expect("read delivered Go artifact"),
             b"application"
         );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn cargo_delivery_contains_only_uplifted_build_products() {
+        let repository = tempfile::tempdir().expect("create repository");
+        let build = tempfile::tempdir().expect("create cargo target parent");
+        std::fs::write(
+            repository.path().join("Cargo.toml"),
+            "[package]\nname = \"demo\"\n",
+        )
+        .expect("write cargo manifest");
+        initialize_git_repository(repository.path());
+        let target_dir = build.path().join("cargo-target");
+        let triple = "x86_64-unknown-linux-gnu";
+        let spec = PublishSpec {
+            version: SPEC_VERSION,
+            provider_id: "cargo".to_string(),
+            project_path: repository.path().to_string_lossy().to_string(),
+            parameters: BTreeMap::from([
+                ("release".to_string(), SpecValue::Bool(true)),
+                ("target".to_string(), SpecValue::String(triple.to_string())),
+                (
+                    "target_dir".to_string(),
+                    SpecValue::String(target_dir.to_string_lossy().to_string()),
+                ),
+            ]),
+        };
+        let prepared = super::prepare_runtime(prepare_invocation(
+            repository.path(),
+            "cargo",
+            serde_json::to_value(&spec.parameters).expect("serialize parameters"),
+            spec,
+        ))
+        .expect("prepare cargo runtime");
+
+        let result = start_runtime_with_port(
+            StartPublishRuntimeRequest {
+                runtime_token: prepared.runtime_token().to_string(),
+            },
+            Arc::new(FakeCargoBuild {
+                profile_directory: target_dir.join(triple).join("release"),
+            }),
+            AttemptIdentity {
+                attempt_id: "attempt-cargo".to_string(),
+                backend_run_id: "backend-cargo".to_string(),
+            },
+        )
+        .expect("run cargo runtime");
+
+        assert_eq!(result.attempt.status, RuntimeAttemptStatus::Published);
+        // 可执行文件与库两份提升产物，加上校验和处理器派生的 SHA256SUMS 清单。
+        assert_eq!(
+            result
+                .attempt
+                .manifest
+                .as_ref()
+                .map(|manifest| manifest.artifact_count),
+            Some(3)
+        );
+        assert_eq!(result.attempt.receipts.len(), 1);
+        let delivered = std::path::PathBuf::from(&result.attempt.receipts[0].external_reference);
+        let mut delivered_entries = std::fs::read_dir(&delivered)
+            .expect("read cargo delivery")
+            .flatten()
+            .map(|entry| entry.file_name().to_string_lossy().to_string())
+            .collect::<Vec<_>>();
+        delivered_entries.sort();
+        // 除本地交付目标自身的清单摘要标记外，只有提升产物与校验和清单。
+        assert_eq!(
+            delivered_entries,
+            [
+                ".one-publish-manifest-digest",
+                "SHA256SUMS",
+                "demo",
+                "libdemo.rlib"
+            ]
+        );
+        let checksums =
+            std::fs::read_to_string(delivered.join("SHA256SUMS")).expect("read cargo checksums");
+        let listed = checksums
+            .lines()
+            .filter_map(|line| line.split_once("  ").map(|(_, name)| name))
+            .collect::<Vec<_>>();
+        assert_eq!(listed, ["demo", "libdemo.rlib"]);
     }
 
     #[test]

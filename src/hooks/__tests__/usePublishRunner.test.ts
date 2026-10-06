@@ -698,10 +698,12 @@ describe("usePublishRunner", () => {
   });
 
   it("发布成功后自动导出执行快照并写入记录 snapshotPath", async () => {
+    const snapshotPath =
+      "/Users/me/.one-publish/execution-snapshots/abc/execution-snapshot-1.md";
     mocks.runEnvironmentCheck.mockResolvedValue(readyEnvironment);
     mocks.invoke.mockImplementation(async (command: string) => {
       if (command === "export_execution_snapshot") {
-        return "/Users/me/.one-publish/execution-snapshots/abc/execution-snapshot-1.md";
+        return snapshotPath;
       }
       throw new Error(`unexpected invoke: ${command}`);
     });
@@ -714,22 +716,20 @@ describe("usePublishRunner", () => {
       await result.current.startPublish();
     });
 
-    expect(mocks.invoke).toHaveBeenCalledWith(
-      "export_execution_snapshot",
-      expect.objectContaining({
-        outputDir: "/exports/App/Release",
-        snapshot: expect.objectContaining({
-          providerId: "dotnet",
-          output: expect.objectContaining({
-            log: expect.stringContaining("Build succeeded."),
-          }),
+    expect(mocks.invoke).toHaveBeenCalledWith("export_execution_snapshot", {
+      outputDir: "/exports/App/Release",
+      snapshot: expect.objectContaining({
+        providerId: "dotnet",
+        output: expect.objectContaining({
+          log: expect.stringContaining("Build succeeded."),
         }),
-      })
-    );
+      }),
+    });
     expect(props.savePublishRecord).toHaveBeenCalledWith(
       expect.objectContaining({
         success: true,
-        snapshotPath: expect.stringMatching(/execution-snapshot-.+\.md$/),
+        outputDir: "/exports/App/Release",
+        snapshotPath,
       })
     );
   });

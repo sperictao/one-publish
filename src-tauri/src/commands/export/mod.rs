@@ -267,16 +267,14 @@ fn find_latest_snapshot_for_output_dir(
             export_source_error("读取目录项失败", source, "snapshot_dir_entry_read_failed")
         })?;
         let path = entry.path();
-        if !path.is_file() {
-            continue;
-        }
-
-        let Some(name) = path.file_name().and_then(|value| value.to_str()) else {
-            continue;
-        };
-        if !name.starts_with(publish_adapters::EXECUTION_SNAPSHOT_FILE_PREFIX)
-            || !name.ends_with(".md")
-        {
+        let is_snapshot = path
+            .file_name()
+            .and_then(|value| value.to_str())
+            .is_some_and(|name| {
+                name.starts_with(publish_adapters::EXECUTION_SNAPSHOT_FILE_PREFIX)
+                    && name.ends_with(".md")
+            });
+        if !is_snapshot || !path.is_file() {
             continue;
         }
 
@@ -294,8 +292,32 @@ fn find_latest_snapshot_for_output_dir(
     latest.map(|(_, path)| path).ok_or_else(not_found)
 }
 
-fn find_latest_execution_snapshot(output_dir: &str) -> Result<PathBuf, crate::errors::AppError> {
-    find_latest_snapshot_for_output_dir(&execution_snapshot_root()?, output_dir)
+fn resolve_execution_snapshot(
+    root: &Path,
+    snapshot_path: Option<String>,
+    output_dir: Option<String>,
+) -> Result<PathBuf, crate::errors::AppError> {
+    let recorded = snapshot_path
+        .as_deref()
+        .map(str::trim)
+        .filter(|path| !path.is_empty());
+    if let Some(candidate) = recorded.map(PathBuf::from).filter(|path| path.is_file()) {
+        return Ok(candidate);
+    }
+    if let Some(output_dir) = output_dir {
+        return find_latest_snapshot_for_output_dir(root, &output_dir);
+    }
+
+    Err(match recorded {
+        Some(path) => export_error(format!("快照文件不存在: {path}"), "snapshot_file_not_found"),
+        None if snapshot_path.is_some() => {
+            export_error("记录中没有快照路径", "snapshot_path_missing")
+        }
+        None => export_error(
+            "记录中没有可用的快照路径和输出目录",
+            "snapshot_and_output_dir_missing",
+        ),
+    })
 }
 
 #[tauri::command]
@@ -305,35 +327,7 @@ pub async fn open_execution_snapshot(
 ) -> Result<String, crate::errors::AppError> {
     let _timer =
         crate::commands::middleware::CommandTimer::new("commands::export::open_execution_snapshot");
-    let path = if let Some(snapshot_path) = snapshot_path {
-        let trimmed = snapshot_path.trim();
-        if trimmed.is_empty() {
-            if let Some(output_dir) = output_dir {
-                find_latest_execution_snapshot(&output_dir)?
-            } else {
-                return Err(export_error("记录中没有快照路径", "snapshot_path_missing"));
-            }
-        } else {
-            let candidate = PathBuf::from(trimmed);
-            if candidate.is_file() {
-                candidate
-            } else if let Some(output_dir) = output_dir {
-                find_latest_execution_snapshot(&output_dir)?
-            } else {
-                return Err(export_error(
-                    format!("快照文件不存在: {}", trimmed),
-                    "snapshot_file_not_found",
-                ));
-            }
-        }
-    } else if let Some(output_dir) = output_dir {
-        find_latest_execution_snapshot(&output_dir)?
-    } else {
-        return Err(export_error(
-            "记录中没有可用的快照路径和输出目录",
-            "snapshot_and_output_dir_missing",
-        ));
-    };
+    let path = resolve_execution_snapshot(&execution_snapshot_root()?, snapshot_path, output_dir)?;
 
     open::that(&path)
         .map_err(|source| export_open_error("打开快照失败", source, "open_snapshot_failed"))?;
@@ -636,5 +630,108 @@ mod tests {
         assert!(html.contains("href=\"/tmp/out/a&amp;b.md\""));
         assert!(html.contains("href=\"/tmp/out/&lt;bundle&gt;.md\""));
         assert!(html.contains("<li>(none)</li>"));
+    }
+
+    fn snapshot_payload() -> Value {
+        json!({ "providerId": "dotnet", "output": { "log": "Build succeeded." } })
+    }
+
+    fn set_modified(path: &Path, secs: u64) {
+        std::fs::File::options()
+            .write(true)
+            .open(path)
+            .expect("open snapshot")
+            .set_modified(std::time::UNIX_EPOCH + std::time::Duration::from_secs(secs))
+            .expect("set snapshot mtime");
+    }
+
+    #[test]
+    fn latest_snapshot_lookup_picks_the_newest_snapshot_in_its_bucket() {
+        let store = tempfile::tempdir().expect("snapshot store");
+        let output_dir = "/exports/App/Release";
+        let newest = write_execution_snapshot(store.path(), output_dir, snapshot_payload())
+            .expect("write snapshot");
+        let bucket = newest.parent().expect("snapshot bucket");
+        let older = bucket.join("execution-snapshot-older.md");
+        let unrelated = bucket.join("notes.md");
+        std::fs::write(&older, "# older").expect("older snapshot");
+        std::fs::write(&unrelated, "# notes").expect("unrelated file");
+        set_modified(&older, 100);
+        set_modified(&newest, 200);
+        set_modified(&unrelated, 300);
+
+        assert_eq!(
+            find_latest_snapshot_for_output_dir(store.path(), &format!("  {output_dir} "))
+                .expect("latest snapshot"),
+            newest
+        );
+    }
+
+    #[test]
+    fn latest_snapshot_lookup_ignores_legacy_snapshots_in_the_output_dir() {
+        let temp = tempfile::tempdir().expect("temp dir");
+        let root = temp.path().join("execution-snapshots");
+        let output = temp.path().join("out");
+        std::fs::create_dir_all(&output).expect("provider output");
+        std::fs::write(output.join("execution-snapshot-legacy.md"), "# legacy")
+            .expect("legacy snapshot");
+
+        let error =
+            find_latest_snapshot_for_output_dir(&root, &output.to_string_lossy()).unwrap_err();
+        assert_eq!(
+            error.code.as_deref(),
+            Some("snapshot_not_found_for_output_dir")
+        );
+    }
+
+    #[test]
+    fn resolve_snapshot_prefers_the_recorded_path_and_falls_back_to_the_output_dir_bucket() {
+        let temp = tempfile::tempdir().expect("temp dir");
+        let root = temp.path().join("execution-snapshots");
+        let output_dir = temp.path().join("out").to_string_lossy().to_string();
+        let recorded = temp.path().join("recorded.md");
+        std::fs::write(&recorded, "# recorded").expect("recorded snapshot");
+        let latest = write_execution_snapshot(&root, &output_dir, snapshot_payload())
+            .expect("bucket snapshot");
+
+        assert_eq!(
+            resolve_execution_snapshot(
+                &root,
+                Some(recorded.to_string_lossy().to_string()),
+                Some(output_dir.clone()),
+            )
+            .expect("recorded path"),
+            recorded
+        );
+        assert_eq!(
+            resolve_execution_snapshot(
+                &root,
+                Some(temp.path().join("gone.md").to_string_lossy().to_string()),
+                Some(output_dir.clone()),
+            )
+            .expect("fallback for a missing recorded path"),
+            latest
+        );
+        assert_eq!(
+            resolve_execution_snapshot(&root, None, Some(output_dir)).expect("fallback"),
+            latest
+        );
+        let error_code = |snapshot_path: Option<&str>| {
+            resolve_execution_snapshot(&root, snapshot_path.map(str::to_string), None)
+                .unwrap_err()
+                .code
+        };
+        assert_eq!(
+            error_code(Some("/missing/snapshot.md")).as_deref(),
+            Some("snapshot_file_not_found")
+        );
+        assert_eq!(
+            error_code(Some("  ")).as_deref(),
+            Some("snapshot_path_missing")
+        );
+        assert_eq!(
+            error_code(None).as_deref(),
+            Some("snapshot_and_output_dir_missing")
+        );
     }
 }

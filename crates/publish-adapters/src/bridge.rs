@@ -76,10 +76,16 @@ pub trait ExecutionSourceGuard: Send + Sync {
     fn validate_for_execution(&self) -> Result<(), PublishError>;
 }
 
-/// 一次运行时执行的环境注入集合：端口、Provider 原生输出目录与源守卫。
+/// 产物筛选：判定输出目录遍历中的条目是否属于交付产物，被拒绝的目录不再递归。
+/// 规则是 Provider 知识，由环境随原生输出目录一并注入，核心不解释其含义。
+pub type ArtifactEntryFilter = fn(&fs::DirEntry) -> bool;
+
+/// 一次运行时执行的环境注入集合：端口、Provider 原生输出目录及其产物筛选与源守卫。
 pub struct ProviderExecution {
     pub port: Arc<dyn ProviderExecutionPort>,
     pub output_directory: PathBuf,
+    /// `None` 表示整个输出目录都是产物。
+    pub artifact_filter: Option<ArtifactEntryFilter>,
     pub source_guard: Arc<dyn ExecutionSourceGuard>,
 }
 
@@ -195,7 +201,11 @@ pub(crate) fn finish_provider_execution(
     execution.source_guard.validate_for_execution()?;
 
     Ok(AdapterExecutionOutput {
-        artifacts: collect_artifacts_with(&execution.output_directory, classify)?,
+        artifacts: collect_artifacts_with(
+            &execution.output_directory,
+            execution.artifact_filter,
+            classify,
+        )?,
         ..AdapterExecutionOutput::default()
     })
 }
@@ -238,6 +248,7 @@ fn classify_generic_artifact(_relative: &Path) -> (&'static str, &'static str) {
 
 pub(crate) fn collect_artifacts_with(
     root: &Path,
+    filter: Option<ArtifactEntryFilter>,
     classify: fn(&Path) -> (&'static str, &'static str),
 ) -> Result<Vec<ArtifactCandidate>, PublishError> {
     let metadata = fs::symlink_metadata(root).map_err(|error| PublishError::Io {
@@ -271,6 +282,9 @@ pub(crate) fn collect_artifacts_with(
                     operation: format!("read provider output entry in {}", directory.display()),
                     message: error.to_string(),
                 })?;
+                if filter.is_some_and(|accept| !accept(&entry)) {
+                    continue;
+                }
                 let file_type = entry.file_type().map_err(|error| PublishError::Io {
                     operation: format!("inspect provider output {}", entry.path().display()),
                     message: error.to_string(),
@@ -463,7 +477,7 @@ mod artifact_collection_tests {
         .expect("write nested legacy snapshot");
         fs::write(output.join(".one-publish-access-check-1-2"), b"").expect("write probe");
 
-        let artifacts = collect_artifacts_with(output, classify_generic_artifact)
+        let artifacts = collect_artifacts_with(output, None, classify_generic_artifact)
             .expect("collect provider output");
         let paths: Vec<&str> = artifacts
             .iter()
@@ -481,8 +495,47 @@ mod artifact_collection_tests {
         )
         .expect("write legacy snapshot");
 
-        let error = collect_artifacts_with(temp.path(), classify_generic_artifact)
+        let error = collect_artifacts_with(temp.path(), None, classify_generic_artifact)
             .expect_err("tool-owned files alone are not provider artifacts");
         assert!(error.to_string().contains("produced no artifacts"));
+    }
+
+    fn reject_cache_and_logs(entry: &fs::DirEntry) -> bool {
+        entry.file_name() != "cache" && entry.file_name() != "build.log"
+    }
+
+    fn collected_names(root: &Path, filter: Option<ArtifactEntryFilter>) -> Vec<String> {
+        collect_artifacts_with(root, filter, classify_generic_artifact)
+            .expect("collect provider output")
+            .into_iter()
+            .map(|artifact| artifact.file_name)
+            .collect()
+    }
+
+    #[test]
+    fn artifact_filter_skips_rejected_entries_without_descending() {
+        let temp = tempfile::tempdir().expect("temp output");
+        let root = temp.path();
+        fs::create_dir_all(root.join("cache")).expect("create rejected directory");
+        fs::create_dir_all(root.join("nested")).expect("create accepted directory");
+        fs::write(root.join("app.bin"), b"app").expect("write accepted file");
+        fs::write(root.join("build.log"), b"log").expect("write rejected file");
+        // 筛选本会接受该文件；它缺席说明被拒绝的目录没有被遍历。
+        fs::write(root.join("cache").join("inner.bin"), b"cached").expect("write cached file");
+        fs::write(root.join("nested").join("meta.json"), b"{}").expect("write nested file");
+
+        assert_eq!(
+            collected_names(root, Some(reject_cache_and_logs)),
+            vec!["app.bin", "nested/meta.json"]
+        );
+        assert_eq!(
+            collected_names(root, None),
+            vec![
+                "app.bin",
+                "build.log",
+                "cache/inner.bin",
+                "nested/meta.json"
+            ]
+        );
     }
 }

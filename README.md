@@ -35,7 +35,7 @@ OnePublish is a **cross-platform desktop application** that gives you a beautifu
 - 🌐 **Internationalized** — full Chinese (简体中文) and English support
 - 🌓 **Dark & Light Themes** — follows your system preference
 - 🔄 **Auto-Update** — Tauri updater pipeline with GitHub Releases integration
-- ⌨️ **Keyboard-First** — global shortcuts for frequent actions; publish without touching the mouse
+- ⌨️ **Keyboard-First** — in-app shortcuts for frequent actions; publish without touching the mouse
 - 📦 **One-Click GitHub Release** — `pnpm release -v 1.0.0` syncs versions, generates release notes, commits, tags, pushes, and waits for CI
 
 ---
@@ -148,7 +148,7 @@ one-publish/
 │   │   ├── parameter.rs          # ParameterSchema + validation
 │   │   ├── store/                # Persistence (JSON file storage)
 │   │   ├── config_export.rs      # Config import/export
-│   │   ├── shortcuts.rs          # Global hotkey registration
+│   │   ├── shortcuts.rs          # Shortcut help text
 │   │   └── tray.rs               # System tray
 │   ├── Cargo.toml                # Rust dependencies
 │   └── tauri.conf.json           # Tauri window, bundle, updater config

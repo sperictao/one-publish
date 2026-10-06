@@ -37,8 +37,10 @@ pub const PROVIDER_OUTPUT_ROLE: &str = "provider-output";
 
 /// 检测工具链是否可用；不可用时返回 false。
 pub fn toolchain_available(tool: &str) -> bool {
+    // Go 不支持 `--version` 标志，只接受 `go version` 子命令。
+    let probe = if tool == "go" { "version" } else { "--version" };
     std::process::Command::new(tool)
-        .arg("--version")
+        .arg(probe)
         .stdout(std::process::Stdio::null())
         .stderr(std::process::Stdio::null())
         .status()
