@@ -15,7 +15,7 @@ mod common;
 
 use std::collections::BTreeMap;
 use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::sync::Arc;
 
 use common::*;
@@ -51,36 +51,38 @@ fn current_platform() -> String {
     format!("{}-{}", std::env::consts::OS, std::env::consts::ARCH)
 }
 
-/// Cargo classify that assigns `installer` role to the binary, for GitHub
-/// Release compatibility (the platform-matrix check requires `installer`).
+/// `classify_cargo` with the final binary assigned the `installer` role, for
+/// GitHub Release compatibility (the platform-matrix check requires
+/// `installer`).
 fn classify_cargo_installer(relative: &Path) -> (&'static str, &'static str) {
-    let name = relative
-        .file_name()
-        .and_then(|n| n.to_str())
-        .unwrap_or("");
-    if name.ends_with(".d") || name.ends_with(".rlib") || name.ends_with(".rmeta") {
-        return ("build-support", "application/octet-stream");
+    match classify_cargo(relative) {
+        ("build-output", media_type) => ("installer", media_type),
+        other => other,
     }
-    if relative
-        .components()
-        .any(|c| c.as_os_str() == "deps" || c.as_os_str() == "build" || c.as_os_str() == "examples"
-            || c.as_os_str() == "incremental")
-    {
-        return ("build-support", "application/octet-stream");
-    }
-    ("installer", "application/octet-stream")
 }
 
-/// Create a Cargo provider using `classify_cargo_installer`.
-fn cargo_provider(args: Vec<String>, output_dir: PathBuf) -> Arc<RealBuildProvider> {
+/// Create a `cargo build --release` provider for the cargo-cli sample with a
+/// test-exclusive target directory (`target/<test_id>`).
+///
+/// Tests run in parallel against the same sample. Cargo re-links the final
+/// binary on every build, even a fresh one, so with a shared target directory
+/// one test's build can remove `release/cargo-cli` while another test is
+/// collecting its artifacts.
+fn cargo_provider(test_id: &str) -> Arc<RealBuildProvider> {
     let project = sample_path("cargo-cli");
+    let target_dir = project.join("target").join(test_id);
     Arc::new(RealBuildProvider::new(
         "real-cargo",
         "cargo:build",
         "cargo",
-        args,
+        vec![
+            "build".to_string(),
+            "--release".to_string(),
+            "--target-dir".to_string(),
+            target_dir.to_string_lossy().into_owned(),
+        ],
         project,
-        output_dir,
+        target_dir.join("release"),
         classify_cargo_installer,
     ))
 }
@@ -314,15 +316,10 @@ fn cross_recovery_01_sftp_network_error() {
         return;
     }
 
-    let project = sample_path("cargo-cli");
-    let output_dir = project.join("target").join("release");
     let store_dir = tempfile::tempdir().expect("store dir");
     let delivery_dir = tempfile::tempdir().expect("delivery dir");
 
-    let provider = cargo_provider(
-        vec!["build".to_string(), "--release".to_string()],
-        output_dir,
-    );
+    let provider = cargo_provider("cross-recovery-01");
     let sftp = Arc::new(FakeSftpServer::new());
     sftp.fail_next(
         "write",
@@ -385,16 +382,11 @@ fn cross_recovery_02_github_500_error() {
         return;
     }
 
-    let project = sample_path("cargo-cli");
-    let output_dir = project.join("target").join("release");
     let store_dir = tempfile::tempdir().expect("store dir");
     let delivery_dir = tempfile::tempdir().expect("delivery dir");
     let github = Arc::new(FakeGitHubReleaseApi::new());
 
-    let provider = cargo_provider(
-        vec!["build".to_string(), "--release".to_string()],
-        output_dir,
-    );
+    let provider = cargo_provider("cross-recovery-02");
 
     let mut snapshot = build_snapshot("real-cargo", store_dir.path(), delivery_dir.path(), "0.1.0");
     snapshot.adapters.delivery_routes = vec![github_route("github-route", "v")];
@@ -455,15 +447,10 @@ fn cross_recovery_03_sftp_file_corruption() {
         return;
     }
 
-    let project = sample_path("cargo-cli");
-    let output_dir = project.join("target").join("release");
     let store_dir = tempfile::tempdir().expect("store dir");
     let delivery_dir = tempfile::tempdir().expect("delivery dir");
 
-    let provider = cargo_provider(
-        vec!["build".to_string(), "--release".to_string()],
-        output_dir,
-    );
+    let provider = cargo_provider("cross-recovery-03");
     let sftp = Arc::new(FakeSftpServer::new());
     sftp.corrupt_next_write();
 
@@ -513,8 +500,6 @@ fn cross_recovery_04_github_conflict() {
         return;
     }
 
-    let project = sample_path("cargo-cli");
-    let output_dir = project.join("target").join("release");
     let store_dir = tempfile::tempdir().expect("store dir");
     let delivery_dir = tempfile::tempdir().expect("delivery dir");
     let github = Arc::new(FakeGitHubReleaseApi::new());
@@ -533,10 +518,7 @@ fn cross_recovery_04_github_conflict() {
         assets: vec![],
     });
 
-    let provider = cargo_provider(
-        vec!["build".to_string(), "--release".to_string()],
-        output_dir,
-    );
+    let provider = cargo_provider("cross-recovery-04");
 
     let mut snapshot = build_snapshot("real-cargo", store_dir.path(), delivery_dir.path(), "0.1.0");
     snapshot.adapters.delivery_routes = vec![github_route("github-route", "v")];
@@ -584,63 +566,38 @@ fn cross_promote_01_local_to_sftp() {
         return;
     }
 
-    let project = sample_path("cargo-cli");
-    let output_dir = project.join("target").join("release");
     let store_dir = tempfile::tempdir().expect("store dir");
     let delivery_dir = tempfile::tempdir().expect("delivery dir");
 
     // First publish: build to Local
-    let provider = cargo_provider(
-        vec!["build".to_string(), "--release".to_string()],
-        output_dir.clone(),
-    );
+    let provider = cargo_provider("cross-promote-01");
     let snapshot = build_snapshot("real-cargo", store_dir.path(), delivery_dir.path(), "0.1.0");
-    let registry = build_local_registry(provider, store_dir.path(), delivery_dir.path(), &snapshot);
+    let registry =
+        build_local_registry(provider.clone(), store_dir.path(), delivery_dir.path(), &snapshot);
     let runtime = PublishRuntime::new(registry);
 
     let attempt1 = run_publish(&runtime, &snapshot, "cargo-cli", "0.1.0", "cross-prom-1");
     let manifest1 = assert_published(&attempt1);
     let original_digest = manifest1.digest.clone();
 
-    // Second publish: promote to SFTP (no rebuild)
+    // Second publish: promote to SFTP (no rebuild). The planner skips the
+    // build, but still resolves capabilities through the registered provider.
     let sftp = Arc::new(FakeSftpServer::new());
     let mut snapshot2 = build_snapshot("real-cargo", store_dir.path(), delivery_dir.path(), "0.1.0");
     snapshot2.promoted_manifest_digest = Some(original_digest.clone());
     snapshot2.adapters.delivery_routes = vec![sftp_route("sftp-route", "/upload")];
 
-    let fixture = publish_adapters::AdapterConformanceFixture::new(snapshot2.clone());
-    let mut registry2 = AdapterRegistry::new();
-    registry2
-        .register_artifact_processor(Arc::new(ChecksumProcessor::new()), &fixture)
-        .expect("register checksum");
-    registry2
-        .register_execution_backend(
-            Arc::new(LocalExecutionBackend::with_credential_source(Arc::new(
-                StaticCredentialSource::new().with_secret(
-                    SFTP_KEY_REFERENCE,
-                    CredentialKind::SshPrivateKey,
-                    SFTP_KEY_VALUE,
-                ),
-            ))),
-            &fixture,
-        )
-        .expect("register backend");
-    registry2
-        .register_artifact_store(
-            Arc::new(TemporaryArtifactStore::new(store_dir.path())),
-            &fixture,
-        )
-        .expect("register store");
-    registry2
-        .register_delivery_destination(
-            Arc::new(SftpDeliveryDestination::new(sftp.clone())),
-            &fixture,
-        )
-        .expect("register sftp");
+    let registry2 = build_sftp_registry(
+        provider,
+        store_dir.path(),
+        delivery_dir.path(),
+        sftp.clone(),
+        &snapshot2,
+    );
     let runtime2 = PublishRuntime::new(registry2);
 
     let attempt2 = run_publish(&runtime2, &snapshot2, "cargo-cli", "0.1.0", "cross-prom-2");
-    let manifest2 = attempt2.manifest.as_ref().expect("manifest");
+    let manifest2 = assert_published(&attempt2);
     assert_eq!(
         manifest2.digest, original_digest,
         "promoted manifest digest should match original"
@@ -657,63 +614,39 @@ fn cross_promote_02_local_to_github() {
         return;
     }
 
-    let project = sample_path("cargo-cli");
-    let output_dir = project.join("target").join("release");
     let store_dir = tempfile::tempdir().expect("store dir");
     let delivery_dir = tempfile::tempdir().expect("delivery dir");
 
     // First publish: build to Local
-    let provider = cargo_provider(
-        vec!["build".to_string(), "--release".to_string()],
-        output_dir,
-    );
+    let provider = cargo_provider("cross-promote-02");
     let snapshot = build_snapshot("real-cargo", store_dir.path(), delivery_dir.path(), "0.1.0");
-    let registry = build_local_registry(provider, store_dir.path(), delivery_dir.path(), &snapshot);
+    let registry =
+        build_local_registry(provider.clone(), store_dir.path(), delivery_dir.path(), &snapshot);
     let runtime = PublishRuntime::new(registry);
 
     let attempt1 = run_publish(&runtime, &snapshot, "cargo-cli", "0.1.0", "cross-prom-g-1");
     let manifest1 = assert_published(&attempt1);
     let original_digest = manifest1.digest.clone();
 
-    // Second publish: promote to GitHub Release (no rebuild)
+    // Second publish: promote to GitHub Release (no rebuild). The planner
+    // skips the build, but still resolves capabilities through the
+    // registered provider.
     let github = Arc::new(FakeGitHubReleaseApi::new());
     let mut snapshot2 = build_snapshot("real-cargo", store_dir.path(), delivery_dir.path(), "0.1.0");
     snapshot2.promoted_manifest_digest = Some(original_digest.clone());
     snapshot2.adapters.delivery_routes = vec![github_route("github-route", "v")];
 
-    let fixture = publish_adapters::AdapterConformanceFixture::new(snapshot2.clone());
-    let mut registry2 = AdapterRegistry::new();
-    registry2
-        .register_artifact_processor(Arc::new(ChecksumProcessor::new()), &fixture)
-        .expect("register checksum");
-    registry2
-        .register_execution_backend(
-            Arc::new(LocalExecutionBackend::with_credential_source(Arc::new(
-                StaticCredentialSource::new().with_secret(
-                    GITHUB_TOKEN_REFERENCE,
-                    CredentialKind::Token,
-                    GITHUB_TOKEN_VALUE,
-                ),
-            ))),
-            &fixture,
-        )
-        .expect("register backend");
-    registry2
-        .register_artifact_store(
-            Arc::new(TemporaryArtifactStore::new(store_dir.path())),
-            &fixture,
-        )
-        .expect("register store");
-    registry2
-        .register_delivery_destination(
-            Arc::new(GitHubReleaseDestination::new(github.clone())),
-            &fixture,
-        )
-        .expect("register github");
+    let registry2 = build_github_registry(
+        provider,
+        store_dir.path(),
+        delivery_dir.path(),
+        github.clone(),
+        &snapshot2,
+    );
     let runtime2 = PublishRuntime::new(registry2);
 
     let attempt2 = run_publish(&runtime2, &snapshot2, "cargo-cli", "0.1.0", "cross-prom-g-2");
-    let manifest2 = attempt2.manifest.as_ref().expect("manifest");
+    let manifest2 = assert_published(&attempt2);
     assert_eq!(
         manifest2.digest, original_digest,
         "promoted manifest digest should match original"
@@ -732,25 +665,23 @@ fn cross_promote_03_local_to_sftp_and_github() {
         return;
     }
 
-    let project = sample_path("cargo-cli");
-    let output_dir = project.join("target").join("release");
     let store_dir = tempfile::tempdir().expect("store dir");
     let delivery_dir = tempfile::tempdir().expect("delivery dir");
 
     // First publish: build to Local
-    let provider = cargo_provider(
-        vec!["build".to_string(), "--release".to_string()],
-        output_dir.clone(),
-    );
+    let provider = cargo_provider("cross-promote-03");
     let snapshot = build_snapshot("real-cargo", store_dir.path(), delivery_dir.path(), "0.1.0");
-    let registry = build_local_registry(provider, store_dir.path(), delivery_dir.path(), &snapshot);
+    let registry =
+        build_local_registry(provider.clone(), store_dir.path(), delivery_dir.path(), &snapshot);
     let runtime = PublishRuntime::new(registry);
 
     let attempt1 = run_publish(&runtime, &snapshot, "cargo-cli", "0.1.0", "cross-prom-b-1");
     let manifest1 = assert_published(&attempt1);
     let original_digest = manifest1.digest.clone();
 
-    // Second publish: promote to both SFTP and GitHub
+    // Second publish: promote to both SFTP and GitHub (no rebuild). The
+    // planner skips the build, but still resolves capabilities through the
+    // registered provider.
     let sftp = Arc::new(FakeSftpServer::new());
     let github = Arc::new(FakeGitHubReleaseApi::new());
     let mut snapshot2 = build_snapshot("real-cargo", store_dir.path(), delivery_dir.path(), "0.1.0");
@@ -761,14 +692,7 @@ fn cross_promote_03_local_to_sftp_and_github() {
     ];
 
     let registry2 = build_sftp_github_registry(
-        // Promotion does not rebuild; pass a dummy provider is not needed.
-        // The planner skips build when promoted_manifest_digest is set,
-        // but still requires the provider to be registered for capability
-        // resolution. Use the same provider.
-        cargo_provider(
-            vec!["build".to_string(), "--release".to_string()],
-            output_dir.clone(),
-        ),
+        provider,
         store_dir.path(),
         delivery_dir.path(),
         sftp.clone(),
@@ -778,22 +702,13 @@ fn cross_promote_03_local_to_sftp_and_github() {
     let runtime2 = PublishRuntime::new(registry2);
 
     let attempt2 = run_publish(&runtime2, &snapshot2, "cargo-cli", "0.1.0", "cross-prom-b-2");
-    let manifest2 = attempt2.manifest.as_ref().expect("manifest");
+    // Both required routes must be Published; a failed route has no
+    // receipt, so checking receipts alone would not catch it.
+    let manifest2 = assert_published(&attempt2);
     assert_eq!(
         manifest2.digest, original_digest,
         "promoted manifest digest should match original"
     );
-
-    // Both routes should be Published
-    for receipt in &attempt2.receipts {
-        assert_eq!(
-            receipt.status,
-            DeliveryStatus::Published,
-            "route {} should be Published, got {:?}",
-            receipt.route_id,
-            receipt.status
-        );
-    }
 
     assert!(!sftp.paths().is_empty(), "SFTP should have files");
     let release = github.release("v0.1.0").expect("release should exist");
@@ -821,10 +736,7 @@ fn cross_cap_01_missing_execution_backend() {
     );
 
     // Register all adapters, using FakeAutomationBackend as the backend.
-    let provider = cargo_provider(
-        vec!["build".to_string(), "--release".to_string()],
-        sample_path("cargo-cli").join("target").join("release"),
-    );
+    let provider = cargo_provider("cross-cap-01");
     let fixture = publish_adapters::AdapterConformanceFixture::new(snapshot.clone());
     let mut registry = AdapterRegistry::new();
     registry
@@ -1008,15 +920,10 @@ fn cross_gate_01_planning_only() {
         return;
     }
 
-    let project = sample_path("cargo-cli");
-    let output_dir = project.join("target").join("release");
     let store_dir = tempfile::tempdir().expect("store dir");
     let delivery_dir = tempfile::tempdir().expect("delivery dir");
 
-    let provider = cargo_provider(
-        vec!["build".to_string(), "--release".to_string()],
-        output_dir,
-    );
+    let provider = cargo_provider("cross-gate-01");
     let custom_processor = CustomCommandProcessor::new(["test:gate"]);
 
     let mut snapshot = build_snapshot("real-cargo", store_dir.path(), delivery_dir.path(), "0.1.0");
@@ -1093,15 +1000,10 @@ fn cross_gate_02_gate_failure_blocks() {
         return;
     }
 
-    let project = sample_path("cargo-cli");
-    let output_dir = project.join("target").join("release");
     let store_dir = tempfile::tempdir().expect("store dir");
     let delivery_dir = tempfile::tempdir().expect("delivery dir");
 
-    let provider = cargo_provider(
-        vec!["build".to_string(), "--release".to_string()],
-        output_dir,
-    );
+    let provider = cargo_provider("cross-gate-02");
     let custom_processor = CustomCommandProcessor::new(["test:gate"]);
 
     let mut snapshot = build_snapshot("real-cargo", store_dir.path(), delivery_dir.path(), "0.1.0");
@@ -1187,15 +1089,10 @@ fn cross_gate_03_gate_before_checksum() {
         return;
     }
 
-    let project = sample_path("cargo-cli");
-    let output_dir = project.join("target").join("release");
     let store_dir = tempfile::tempdir().expect("store dir");
     let delivery_dir = tempfile::tempdir().expect("delivery dir");
 
-    let provider = cargo_provider(
-        vec!["build".to_string(), "--release".to_string()],
-        output_dir,
-    );
+    let provider = cargo_provider("cross-gate-03");
     let custom_processor = CustomCommandProcessor::new(["test:gate"]);
 
     // Put the gate processor BEFORE the checksum processor in the list
@@ -1296,15 +1193,10 @@ fn cross_idempotent_01_local_matching() {
         return;
     }
 
-    let project = sample_path("cargo-cli");
-    let output_dir = project.join("target").join("release");
     let store_dir = tempfile::tempdir().expect("store dir");
     let delivery_dir = tempfile::tempdir().expect("delivery dir");
 
-    let provider = cargo_provider(
-        vec!["build".to_string(), "--release".to_string()],
-        output_dir,
-    );
+    let provider = cargo_provider("cross-idempotent-01");
     let snapshot = build_snapshot("real-cargo", store_dir.path(), delivery_dir.path(), "0.1.0");
     let registry = build_local_registry(provider, store_dir.path(), delivery_dir.path(), &snapshot);
     let runtime = PublishRuntime::new(registry);
@@ -1338,16 +1230,11 @@ fn cross_idempotent_02_github_matching() {
         return;
     }
 
-    let project = sample_path("cargo-cli");
-    let output_dir = project.join("target").join("release");
     let store_dir = tempfile::tempdir().expect("store dir");
     let delivery_dir = tempfile::tempdir().expect("delivery dir");
     let github = Arc::new(FakeGitHubReleaseApi::new());
 
-    let provider = cargo_provider(
-        vec!["build".to_string(), "--release".to_string()],
-        output_dir,
-    );
+    let provider = cargo_provider("cross-idempotent-02");
     let mut snapshot = build_snapshot("real-cargo", store_dir.path(), delivery_dir.path(), "0.1.0");
     snapshot.adapters.delivery_routes = vec![github_route("github-route", "v")];
 
@@ -1384,15 +1271,10 @@ fn cross_idempotent_03_sftp_matching() {
         return;
     }
 
-    let project = sample_path("cargo-cli");
-    let output_dir = project.join("target").join("release");
     let store_dir = tempfile::tempdir().expect("store dir");
     let delivery_dir = tempfile::tempdir().expect("delivery dir");
 
-    let provider = cargo_provider(
-        vec!["build".to_string(), "--release".to_string()],
-        output_dir,
-    );
+    let provider = cargo_provider("cross-idempotent-03");
     let sftp = Arc::new(FakeSftpServer::new());
 
     let mut snapshot = build_snapshot("real-cargo", store_dir.path(), delivery_dir.path(), "0.1.0");
@@ -1444,15 +1326,10 @@ fn cross_cred_01_missing_sftp_key() {
         return;
     }
 
-    let project = sample_path("cargo-cli");
-    let output_dir = project.join("target").join("release");
     let store_dir = tempfile::tempdir().expect("store dir");
     let delivery_dir = tempfile::tempdir().expect("delivery dir");
 
-    let provider = cargo_provider(
-        vec!["build".to_string(), "--release".to_string()],
-        output_dir,
-    );
+    let provider = cargo_provider("cross-cred-01");
     let sftp = Arc::new(FakeSftpServer::new());
 
     let mut snapshot = build_snapshot("real-cargo", store_dir.path(), delivery_dir.path(), "0.1.0");
@@ -1514,16 +1391,11 @@ fn cross_cred_02_github_auth_failure() {
         return;
     }
 
-    let project = sample_path("cargo-cli");
-    let output_dir = project.join("target").join("release");
     let store_dir = tempfile::tempdir().expect("store dir");
     let delivery_dir = tempfile::tempdir().expect("delivery dir");
     let github = Arc::new(FakeGitHubReleaseApi::new());
 
-    let provider = cargo_provider(
-        vec!["build".to_string(), "--release".to_string()],
-        output_dir,
-    );
+    let provider = cargo_provider("cross-cred-02");
 
     let mut snapshot = build_snapshot("real-cargo", store_dir.path(), delivery_dir.path(), "0.1.0");
     snapshot.adapters.delivery_routes = vec![github_route("github-route", "v")];
