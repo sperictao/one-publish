@@ -9,4 +9,8 @@ path = "src/main.rs"
 
 [dependencies]
 
+[features]
+# CARGO-04 以 `--features test-feature` 构建，验证 features 参数原样透传。
+test-feature = []
+
 [workspace]

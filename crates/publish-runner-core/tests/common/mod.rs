@@ -336,17 +336,17 @@ pub fn classify_generic(_relative: &Path) -> (&'static str, &'static str) {
     (PROVIDER_OUTPUT_ROLE, "application/octet-stream")
 }
 
-/// Cargo 产物分类：二进制归 build-support，其余归 provider-output。
+/// Cargo 产物分类：profile 目录顶层的最终产物归 build-output；子目录
+/// （deps/、build/、.fingerprint/ 等）、隐藏的锁文件（.cargo-lock 等）
+/// 与 dep-info / 库中间产物都是 cargo 内部状态，归 build-support。
 pub fn classify_cargo(relative: &Path) -> (&'static str, &'static str) {
     let name = relative.file_name().and_then(|n| n.to_str()).unwrap_or("");
-    // 跳过非最终产物
-    if name.ends_with(".d") || name.ends_with(".rlib") || name.ends_with(".rmeta") {
-        return ("build-support", "application/octet-stream");
-    }
-    if relative
-        .components()
-        .any(|c| c.as_os_str() == "deps" || c.as_os_str() == "build" || c.as_os_str() == "examples"
-            || c.as_os_str() == "incremental")
+    let nested = relative.components().count() > 1;
+    if nested
+        || name.starts_with('.')
+        || name.ends_with(".d")
+        || name.ends_with(".rlib")
+        || name.ends_with(".rmeta")
     {
         return ("build-support", "application/octet-stream");
     }
@@ -412,6 +412,23 @@ pub fn build_local_registry(
     delivery_dir: &Path,
     snapshot: &PlanningInputSnapshot,
 ) -> AdapterRegistry {
+    build_local_registry_with_credentials(
+        provider,
+        StaticCredentialSource::new(),
+        store_dir,
+        delivery_dir,
+        snapshot,
+    )
+}
+
+/// 同 `build_local_registry`，但执行后端从 `credentials` 解析路线凭据。
+fn build_local_registry_with_credentials(
+    provider: Arc<RealBuildProvider>,
+    credentials: StaticCredentialSource,
+    store_dir: &Path,
+    delivery_dir: &Path,
+    snapshot: &PlanningInputSnapshot,
+) -> AdapterRegistry {
     let fixture = AdapterConformanceFixture::new(snapshot.clone());
     let mut registry = AdapterRegistry::new();
     registry
@@ -423,7 +440,7 @@ pub fn build_local_registry(
     registry
         .register_execution_backend(
             Arc::new(LocalExecutionBackend::with_credential_source(Arc::new(
-                StaticCredentialSource::new(),
+                credentials,
             ))),
             &fixture,
         )
@@ -443,7 +460,12 @@ pub fn build_local_registry(
     registry
 }
 
-/// 构建一个包含 SFTP 交付目标的注册表。
+/// `build_registry_with_sftp` 注册到执行后端的 SFTP 凭据引用；SFTP 路线的
+/// `ssh_private_key` 须绑定此引用，否则预检因凭据不可用而失败。
+#[cfg(feature = "e2e-real-sftp")]
+pub const SFTP_KEY_REFERENCE: &str = "sftp-key";
+
+/// 构建一个包含 SFTP 交付目标及其凭据（`SFTP_KEY_REFERENCE`）的注册表。
 #[cfg(feature = "e2e-real-sftp")]
 pub fn build_registry_with_sftp(
     provider: Arc<RealBuildProvider>,
@@ -455,7 +477,18 @@ pub fn build_registry_with_sftp(
     use publish_adapters::SftpDeliveryDestination;
 
     let fixture = AdapterConformanceFixture::new(snapshot.clone());
-    let mut registry = build_local_registry(provider, store_dir, delivery_dir, snapshot);
+    let credentials = StaticCredentialSource::new().with_secret(
+        SFTP_KEY_REFERENCE,
+        CredentialKind::SshPrivateKey,
+        "test-key-value",
+    );
+    let mut registry = build_local_registry_with_credentials(
+        provider,
+        credentials,
+        store_dir,
+        delivery_dir,
+        snapshot,
+    );
     registry
         .register_delivery_destination(Arc::new(SftpDeliveryDestination::new(sftp)), &fixture)
         .expect("register sftp destination");
@@ -578,8 +611,10 @@ pub fn assert_published(
     assert_eq!(
         attempt.status,
         PublishAttemptStatus::Published,
-        "attempt should be Published, got {:?}",
-        attempt.status
+        "attempt should be Published, got {:?}: error={:?}, routes={:#?}",
+        attempt.status,
+        attempt.error,
+        attempt.routes
     );
     let manifest = attempt
         .manifest
