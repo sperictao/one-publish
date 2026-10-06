@@ -12,12 +12,50 @@ import {
   getProfiles,
   reorderProfiles,
   scanProjectCandidates,
+  updatePreferences,
   updateProfile,
 } from "@/lib/store/api";
 
 describe("store api wrappers", () => {
   beforeEach(() => {
     invokeMock.mockReset();
+  });
+
+  it.each([
+    {
+      name: "updatePreferences sends camelCase keys with normalized provider IDs",
+      call: () =>
+        updatePreferences({
+          language: "en",
+          minimizeToTrayOnClose: true,
+          defaultOutputDir: "/tmp/out",
+          theme: "dark",
+          executionHistoryLimit: 50,
+          environmentProviderIds: [" node ", "dotnet", "node", ""],
+        }),
+      command: "update_preferences",
+      args: {
+        language: "en",
+        minimizeToTrayOnClose: true,
+        defaultOutputDir: "/tmp/out",
+        theme: "dark",
+        executionHistoryLimit: 50,
+        environmentProviderIds: ["dotnet", "node"],
+      },
+    },
+    {
+      name: "updatePreferences omits provider IDs when not provided",
+      call: () => updatePreferences({ language: "zh" }),
+      command: "update_preferences",
+      args: { language: "zh" },
+    },
+  ])("IPC contract: $name", async ({ call, command, args }) => {
+    invokeMock.mockResolvedValue({ repositories: [] });
+
+    await call();
+
+    expect(invokeMock).toHaveBeenCalledTimes(1);
+    expect(invokeMock).toHaveBeenCalledWith(command, args);
   });
 
   it("scanProjectCandidates passes the selected path using Tauri's camelCase argument key", async () => {
