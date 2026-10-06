@@ -698,15 +698,15 @@ describe("usePublishRunner", () => {
   });
 
   it("发布成功后自动导出执行快照并写入记录 snapshotPath", async () => {
+    const snapshotPath =
+      "/home/u/.one-publish/execution-snapshots/abc/execution-snapshot-1.md";
     mocks.runEnvironmentCheck.mockResolvedValue(readyEnvironment);
-    mocks.invoke.mockImplementation(
-      async (command: string, args: { filePath?: string }) => {
-        if (command === "export_execution_snapshot") {
-          return args.filePath;
-        }
-        throw new Error(`unexpected invoke: ${command}`);
+    mocks.invoke.mockImplementation(async (command: string) => {
+      if (command === "export_execution_snapshot") {
+        return snapshotPath;
       }
-    );
+      throw new Error(`unexpected invoke: ${command}`);
+    });
 
     const props = createRunnerProps();
     const { result } = renderHook(() => usePublishRunner(props));
@@ -716,24 +716,21 @@ describe("usePublishRunner", () => {
       await result.current.startPublish();
     });
 
-    expect(mocks.invoke).toHaveBeenCalledWith(
-      "export_execution_snapshot",
-      expect.objectContaining({
-        filePath: expect.stringMatching(
-          /^\/exports\/App\/Release\/execution-snapshot-.+\.md$/
-        ),
-        snapshot: expect.objectContaining({
-          providerId: "dotnet",
-          output: expect.objectContaining({
-            log: expect.stringContaining("Build succeeded."),
-          }),
+    expect(mocks.invoke).toHaveBeenCalledWith("export_execution_snapshot", {
+      outputDir: "/exports/App/Release",
+      finishedAt: expect.any(String),
+      snapshot: expect.objectContaining({
+        providerId: "dotnet",
+        output: expect.objectContaining({
+          log: expect.stringContaining("Build succeeded."),
         }),
-      })
-    );
+      }),
+    });
     expect(props.savePublishRecord).toHaveBeenCalledWith(
       expect.objectContaining({
         success: true,
-        snapshotPath: expect.stringMatching(/execution-snapshot-.+\.md$/),
+        outputDir: "/exports/App/Release",
+        snapshotPath,
       })
     );
   });
