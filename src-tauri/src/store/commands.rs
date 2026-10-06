@@ -752,7 +752,7 @@ fn redact_sensitive_spec_values(value: &mut serde_json::Value) {
     }
 }
 
-fn sanitize_record_for_storage(record: &mut ExecutionRecord) {
+pub(super) fn sanitize_record_for_storage(record: &mut ExecutionRecord) {
     if let Some(snapshot) = record.recovery_snapshot.as_mut() {
         crate::security::sanitize_publish_recovery_snapshot(snapshot);
     }

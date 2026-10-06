@@ -6,6 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   AlertTriangle,
   ArrowUpRight,
+  Ban,
   CheckCircle2,
   ChevronDown,
   Clock3,
@@ -16,9 +17,10 @@ import {
   Terminal,
   XCircle,
 } from "lucide-react";
-import type {
-  PublishResult,
-  ReadyPublishRuntime,
+import {
+  canRequestRuntimeOutputAccess,
+  type PublishResult,
+  type ReadyPublishRuntime,
 } from "@/features/publish/publishRuntime";
 import type {
   PreparedPublishRuntime,
@@ -66,7 +68,13 @@ export interface PublishRunCardProps {
 }
 
 type PublishVisualState =
-  "idle" | "running" | "success" | "partial" | "cancelled" | "failed";
+  | "idle"
+  | "blocked"
+  | "running"
+  | "success"
+  | "partial"
+  | "cancelled"
+  | "failed";
 
 export const PublishRunCard = memo(function PublishRunCard({
   outputLog: currentOutputLog,
@@ -193,6 +201,15 @@ export const PublishRunCard = memo(function PublishRunCard({
     }
   };
 
+  // 准备未通过且无法通过"开始发布"自行解除时，不能宣称"已准备完成"；
+  // 仅缺输出目录授权的阻断可在开始发布时申请授权，仍视为待执行。
+  const isPreparationBlocked =
+    (preparedRuntime?.status === "blocked" &&
+      !canRequestRuntimeOutputAccess(preparedRuntime)) ||
+    (!preparedRuntime && Boolean(runtimePreparationError));
+  const notStartedVisualState: PublishVisualState = isPreparationBlocked
+    ? "blocked"
+    : "idle";
   const publishVisualState: PublishVisualState = publishActions?.isPublishing
     ? "running"
     : ((runtimeResult && runtimeVisualState(runtimeResult)) ??
@@ -202,86 +219,89 @@ export const PublishRunCard = memo(function PublishRunCard({
           : publishResult.cancelled
             ? "cancelled"
             : "failed"
-        : "idle"));
-  const statusMeta =
-    publishVisualState === "running"
-      ? {
-          label: publishActions?.publishingLabel || "发布中…",
-          description:
-            appT.publishStatusRunningDetail ||
-            "发布命令正在执行，日志会持续追加到下方输出区域。",
-          badgeClassName:
-            "border-interactive/20 bg-interactive/10 text-interactive",
-          panelClassName: "border-interactive/20 bg-card",
-          iconWrapClassName:
-            "bg-interactive/10 text-interactive ring-1 ring-interactive/15",
-          iconClassName: "",
-          icon: Loader2,
-        }
-      : publishVisualState === "success"
-        ? {
-            label: appT.statusSuccess || "成功",
-            description:
-              appT.publishStatusSuccessDetail ||
-              "发布已完成，可直接打开输出目录查看产物。",
-            badgeClassName: "status-success",
-            panelClassName: "border-success/20 bg-card",
-            iconWrapClassName:
-              "bg-success/10 text-success ring-1 ring-success/15",
-            iconClassName: "",
-            icon: CheckCircle2,
-          }
-        : publishVisualState === "partial"
-          ? {
-              label: appT.statusPartialDelivery || "部分交付",
-              description:
-                appT.publishStatusPartialDeliveryDetail ||
-                "部分必需路线交付失败，已发布路线的结果保持有效；请查看各路线的状态与错误。",
-              badgeClassName: "border-warning/20 bg-warning/10 text-warning",
-              panelClassName: "border-warning/20 bg-card",
-              iconWrapClassName:
-                "bg-warning/10 text-warning ring-1 ring-warning/15",
-              iconClassName: "",
-              icon: AlertTriangle,
-            }
-          : publishVisualState === "cancelled"
-            ? {
-                label: appT.statusCancelled || "已取消",
-                description:
-                  appT.publishStatusCancelledDetail ||
-                  "当前执行已停止，可调整参数后重新发起发布。",
-                badgeClassName: "status-cancelled",
-                panelClassName: "border-warning/20 bg-card",
-                iconWrapClassName:
-                  "bg-warning/10 text-warning ring-1 ring-warning/15",
-                iconClassName: "",
-                icon: Square,
-              }
-            : publishVisualState === "failed"
-              ? {
-                  label: appT.statusFailed || "失败",
-                  description:
-                    appT.publishStatusFailedDetail ||
-                    "发布命令已退出，结合下方日志定位失败原因。",
-                  badgeClassName: "status-failed",
-                  panelClassName: "border-destructive/20 bg-card",
-                  iconWrapClassName:
-                    "bg-destructive/10 text-destructive ring-1 ring-destructive/15",
-                  iconClassName: "",
-                  icon: XCircle,
-                }
-              : {
-                  label: appT.publishStatusIdle || "待执行",
-                  description:
-                    appT.publishStatusIdleDetail ||
-                    "命令与参数准备完成，可以开始本次发布。",
-                  badgeClassName: "border-border bg-muted text-foreground",
-                  panelClassName: "border-border bg-card",
-                  iconWrapClassName:
-                    "bg-muted text-muted-foreground ring-1 ring-border",
-                  iconClassName: "",
-                  icon: Clock3,
-                };
+        : notStartedVisualState));
+  const statusMeta = {
+    running: {
+      label: publishActions?.publishingLabel || "发布中…",
+      description:
+        appT.publishStatusRunningDetail ||
+        "发布命令正在执行，日志会持续追加到下方输出区域。",
+      badgeClassName:
+        "border-interactive/20 bg-interactive/10 text-interactive",
+      panelClassName: "border-interactive/20 bg-card",
+      iconWrapClassName:
+        "bg-interactive/10 text-interactive ring-1 ring-interactive/15",
+      iconClassName: "",
+      icon: Loader2,
+    },
+    success: {
+      label: appT.statusSuccess || "成功",
+      description:
+        appT.publishStatusSuccessDetail ||
+        "发布已完成，可直接打开输出目录查看产物。",
+      badgeClassName: "status-success",
+      panelClassName: "border-success/20 bg-card",
+      iconWrapClassName: "bg-success/10 text-success ring-1 ring-success/15",
+      iconClassName: "",
+      icon: CheckCircle2,
+    },
+    partial: {
+      label: appT.statusPartialDelivery || "部分交付",
+      description:
+        appT.publishStatusPartialDeliveryDetail ||
+        "部分必需路线交付失败，已发布路线的结果保持有效；请查看各路线的状态与错误。",
+      badgeClassName: "border-warning/20 bg-warning/10 text-warning",
+      panelClassName: "border-warning/20 bg-card",
+      iconWrapClassName: "bg-warning/10 text-warning ring-1 ring-warning/15",
+      iconClassName: "",
+      icon: AlertTriangle,
+    },
+    cancelled: {
+      label: appT.statusCancelled || "已取消",
+      description:
+        appT.publishStatusCancelledDetail ||
+        "当前执行已停止，可调整参数后重新发起发布。",
+      badgeClassName: "status-cancelled",
+      panelClassName: "border-warning/20 bg-card",
+      iconWrapClassName: "bg-warning/10 text-warning ring-1 ring-warning/15",
+      iconClassName: "",
+      icon: Square,
+    },
+    failed: {
+      label: appT.statusFailed || "失败",
+      description:
+        appT.publishStatusFailedDetail ||
+        "发布命令已退出，结合下方日志定位失败原因。",
+      badgeClassName: "status-failed",
+      panelClassName: "border-destructive/20 bg-card",
+      iconWrapClassName:
+        "bg-destructive/10 text-destructive ring-1 ring-destructive/15",
+      iconClassName: "",
+      icon: XCircle,
+    },
+    blocked: {
+      label: appT.publishStatusBlocked || "无法执行",
+      description:
+        appT.publishStatusBlockedDetail ||
+        "发布准备未通过，请先处理上方提示的问题，再开始发布。",
+      badgeClassName: "border-warning/20 bg-warning/10 text-warning",
+      panelClassName: "border-warning/20 bg-card",
+      iconWrapClassName: "bg-warning/10 text-warning ring-1 ring-warning/15",
+      iconClassName: "",
+      icon: Ban,
+    },
+    idle: {
+      label: appT.publishStatusIdle || "待执行",
+      description:
+        appT.publishStatusIdleDetail ||
+        "命令与参数准备完成，可以开始本次发布。",
+      badgeClassName: "border-border bg-muted text-foreground",
+      panelClassName: "border-border bg-card",
+      iconWrapClassName: "bg-muted text-muted-foreground ring-1 ring-border",
+      iconClassName: "",
+      icon: Clock3,
+    },
+  }[publishVisualState];
 
   const StatusIcon = statusMeta.icon;
   const successFileCount =

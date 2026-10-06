@@ -42,6 +42,7 @@ import { type ConfigProfile } from "@/lib/store/types";
 import type { ParameterValue } from "@/types/parameters";
 import type { PublishComposition } from "@/generated/tauri-contracts";
 import { CompositionEditorDialog } from "@/components/publish/CompositionEditorDialog";
+import { DeleteProfileConfirmDialog } from "@/components/publish/DeleteProfileConfirmDialog";
 import { resolveDotnetProjectProfile } from "@/lib/dotnetProjectProfile";
 import { extractInvokeErrorMessage } from "@/lib/tauri/invokeErrors";
 import {
@@ -105,7 +106,7 @@ export interface PublishConfigPanelProps {
   onRebindProfileProject: (profile: ConfigProfile) => Promise<void>;
   onRefreshProfiles: () => void;
   onOpenConfigDialog: () => void;
-  onDeleteProfile: (profileId: string) => void;
+  onDeleteProfile: (profileId: string) => void | Promise<void>;
   dotnetSchema?: ParameterSchema;
   projectPublishProfiles: string[];
   isProjectProfilesRefreshing?: boolean;
@@ -233,6 +234,8 @@ export const PublishConfigPanel = memo(function PublishConfigPanel({
     useState<PreferredSelectedRenderAnchor | null>(null);
   const [showReorderControls, setShowReorderControls] = useState(false);
   const [compositionProfile, setCompositionProfile] =
+    useState<ConfigProfile | null>(null);
+  const [pendingDeleteProfile, setPendingDeleteProfile] =
     useState<ConfigProfile | null>(null);
   // 决议 #91：安装向导拉起编辑器时预填 github-actions（仅表单初值）。
   const [compositionPresetBackendId, setCompositionPresetBackendId] = useState<
@@ -981,7 +984,7 @@ export const PublishConfigPanel = memo(function PublishConfigPanel({
                     favoriteLabel={favoriteConfigLabel}
                     unfavoriteLabel={unfavoriteConfigLabel}
                     moreActionsLabel={moreActionsLabel}
-                    onDelete={() => onDeleteProfile(profile.id)}
+                    onDelete={() => setPendingDeleteProfile(profile)}
                     onMenuOpenChange={(open) => {
                       interaction.handleMenuOpenChange(configKey, open);
                     }}
@@ -1040,7 +1043,6 @@ export const PublishConfigPanel = memo(function PublishConfigPanel({
     customProfileDragEnabled,
     customProfilesRefreshingLabel,
     customMotion,
-    onDeleteProfile,
     onEditProfile,
     onRemoveRecentConfig,
     onSelectProfile,
@@ -1348,6 +1350,12 @@ export const PublishConfigPanel = memo(function PublishConfigPanel({
           onRebindProject={onRebindProfileProject}
         />
       ) : null}
+
+      <DeleteProfileConfirmDialog
+        profile={pendingDeleteProfile}
+        onClose={() => setPendingDeleteProfile(null)}
+        onConfirm={(profile) => onDeleteProfile(profile.id)}
+      />
 
       <ProjectProfileViewer
         ref={projectProfileViewerRef}

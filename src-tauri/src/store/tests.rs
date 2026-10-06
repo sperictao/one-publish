@@ -948,6 +948,76 @@ fn load_from_path_recovers_from_corrupt_config_and_creates_backup() {
     assert_eq!(backup_files, 1);
 }
 
+#[test]
+fn load_from_path_scrubs_legacy_plaintext_history_once() {
+    let temp_dir = TempDir::new().expect("temp dir");
+    let config_path = temp_dir.path().join("config.json");
+    // 009 脱敏上线前的记录：命令行、输出摘录与 spec 参数均为明文。
+    let legacy_state = AppState {
+        execution_history: vec![ExecutionRecord {
+            id: "legacy-1".to_string(),
+            repo_id: None,
+            configuration_id: None,
+            configuration_revision_id: None,
+            provider_id: "dotnet".to_string(),
+            project_path: "/repo/App.csproj".to_string(),
+            started_at: "2025-01-01T10:00:00Z".to_string(),
+            finished_at: "2025-01-01T10:01:00Z".to_string(),
+            success: true,
+            cancelled: false,
+            output_dir: Some("/repo/publish".to_string()),
+            error: None,
+            command_line: Some("$ dotnet publish /repo/App.csproj -p:ApiToken=hunter2".to_string()),
+            snapshot_path: None,
+            failure_signature: None,
+            output_excerpt: Some("token=hunter2".to_string()),
+            spec: Some(serde_json::json!({
+                "parameters": { "properties": { "ClientSecret": "hunter2" } }
+            })),
+            attempt_id: None,
+            recovery_snapshot: None,
+            file_count: 0,
+            warnings: None,
+        }],
+        ..AppState::default()
+    };
+    save_to_path(&legacy_state, &config_path).expect("save legacy state");
+
+    let loaded = load_from_path(&config_path);
+
+    let record = &loaded.execution_history[0];
+    assert_eq!(
+        record.command_line.as_deref(),
+        Some("$ dotnet publish /repo/App.csproj -p:ApiToken=<redacted>")
+    );
+    assert_eq!(record.output_dir.as_deref(), Some("/repo/publish"));
+    let persisted = fs::read_to_string(&config_path).expect("read scrubbed config");
+    assert!(!persisted.contains("hunter2"));
+
+    // 已脱敏状态不再回写；v4 补做脱敏也不留下含明文的迁移备份。
+    let scrubbed_at = fs::metadata(&config_path)
+        .and_then(|metadata| metadata.modified())
+        .expect("scrubbed mtime");
+    let reloaded = load_from_path(&config_path);
+    assert_eq!(reloaded.execution_history, loaded.execution_history);
+    assert_eq!(
+        fs::metadata(&config_path)
+            .and_then(|metadata| metadata.modified())
+            .expect("reloaded mtime"),
+        scrubbed_at
+    );
+    let leftover_plaintext = fs::read_dir(temp_dir.path())
+        .expect("read temp dir")
+        .flatten()
+        .filter(|entry| entry.path() != config_path)
+        .any(|entry| {
+            fs::read_to_string(entry.path())
+                .map(|content| content.contains("hunter2"))
+                .unwrap_or(false)
+        });
+    assert!(!leftover_plaintext);
+}
+
 #[tokio::test]
 async fn validate_repository_project_binding_allows_adding_unbound_multi_app_repository() {
     let temp_dir = TempDir::new().unwrap();
