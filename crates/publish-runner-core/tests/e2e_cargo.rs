@@ -12,55 +12,71 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use common::*;
-use publish_adapters::{
-    AdapterRegistry, FakeSftpServer, SftpDeliveryDestination, StaticCredentialSource,
-};
+use publish_adapters::{AdapterRegistry, FakeSftpServer, StaticCredentialSource};
 use publish_domain::{
-    AdapterBinding, AdapterIdentity, AdapterKind, AdapterSettings, CredentialKind, DeliveryRoute,
-    DeliveryStatus, PublishAttemptStatus, PublishingCapability,
+    AdapterBinding, AdapterIdentity, AdapterKind, AdapterSettings, DeliveryRoute,
+    DeliveryStatus, PublishAttemptStatus,
 };
 use publish_runner_core::PublishRuntime;
 use serde_json::Value;
 
-/// 辅助：创建 Cargo provider。
+/// 辅助：创建 cargo-cli 样本的 `cargo build --release` provider。
+///
+/// `target` 为交叉编译目标三元组，`extra_args` 追加在构建参数末尾。
+///
+/// 每个测试使用独占的 target 目录（`target/<test_id>`）：测试并行构建同一样本，
+/// 而 cargo 每次构建（即使无需重新编译）都会重新链接最终二进制；共享 target
+/// 目录时，一个测试的构建可能在另一个测试收集产物期间删除 `release/cargo-cli`。
 fn cargo_provider(
-    args: Vec<String>,
-    output_dir: PathBuf,
+    test_id: &str,
+    target: Option<&str>,
+    extra_args: &[&str],
 ) -> Arc<RealBuildProvider> {
     let project = sample_path("cargo-cli");
-    Arc::new(
-        RealBuildProvider::new(
-            "real-cargo",
-            "cargo:build",
-            "cargo",
-            args,
-            project,
-            output_dir,
-            classify_cargo,
-        ),
-    )
-}
-
-/// 辅助：创建带环境变量的 Cargo provider（用于交叉编译）。
-fn cargo_provider_with_env(
-    args: Vec<String>,
-    output_dir: PathBuf,
-    env: &[(&str, &str)],
-) -> Arc<RealBuildProvider> {
-    let project = sample_path("cargo-cli");
-    let mut provider = RealBuildProvider::new(
+    let target_dir = project.join("target").join(test_id);
+    let mut args = vec![
+        "build".to_string(),
+        "--release".to_string(),
+        "--target-dir".to_string(),
+        target_dir.to_string_lossy().into_owned(),
+    ];
+    let mut output_dir = target_dir;
+    if let Some(triple) = target {
+        args.extend(["--target".to_string(), triple.to_string()]);
+        output_dir.push(triple);
+    }
+    args.extend(extra_args.iter().map(|arg| arg.to_string()));
+    Arc::new(RealBuildProvider::new(
         "real-cargo",
         "cargo:build",
         "cargo",
         args,
         project,
-        output_dir,
+        output_dir.join("release"),
         classify_cargo,
-    );
-    for (k, v) in env {
-        provider = provider.with_env(k, v);
-    }
-    Arc::new(provider)
+    ))
+}
+
+/// 辅助：创建 SFTP 交付路线绑定，凭据引用与 `build_registry_with_sftp` 注册的一致。
+#[cfg(feature = "e2e-real-sftp")]
+fn sftp_binding() -> AdapterBinding {
+    AdapterBinding::new(
+        "sftp-route",
+        AdapterIdentity::new(AdapterKind::DeliveryDestination, "sftp", 1),
+        AdapterSettings::new(1)
+            .with_value("host", Value::String("localhost".to_string()))
+            .with_value("port", Value::from(2222u64))
+            .with_value("username", Value::String("testuser".to_string()))
+            .with_value("remote_path", Value::String("/upload".to_string()))
+            .with_value(
+                "artifact_roles",
+                Value::Array(vec![
+                    Value::String("build-output".to_string()),
+                    Value::String("checksum-manifest".to_string()),
+                ]),
+            ),
+    )
+    .with_credential("ssh_private_key", SFTP_KEY_REFERENCE)
 }
 
 /// CARGO-01: Release 构建发布到本地目录（无 Checksum）。
@@ -71,15 +87,10 @@ fn cargo_01_release_build_to_local() {
         return;
     }
 
-    let project = sample_path("cargo-cli");
-    let output_dir = project.join("target").join("release");
     let store_dir = tempfile::tempdir().expect("store dir");
     let delivery_dir = tempfile::tempdir().expect("delivery dir");
 
-    let provider = cargo_provider(
-        vec!["build".to_string(), "--release".to_string()],
-        output_dir.clone(),
-    );
+    let provider = cargo_provider("cargo-01", None, &[]);
     let snapshot = build_snapshot("real-cargo", store_dir.path(), delivery_dir.path(), "0.1.0");
     let registry = build_local_registry(provider, store_dir.path(), delivery_dir.path(), &snapshot);
     let runtime = PublishRuntime::new(registry);
@@ -103,15 +114,10 @@ fn cargo_02_release_with_checksum_to_local() {
         return;
     }
 
-    let project = sample_path("cargo-cli");
-    let output_dir = project.join("target").join("release");
     let store_dir = tempfile::tempdir().expect("store dir");
     let delivery_dir = tempfile::tempdir().expect("delivery dir");
 
-    let provider = cargo_provider(
-        vec!["build".to_string(), "--release".to_string()],
-        output_dir,
-    );
+    let provider = cargo_provider("cargo-02", None, &[]);
     let snapshot = build_snapshot("real-cargo", store_dir.path(), delivery_dir.path(), "0.1.0");
     let registry = build_local_registry(provider, store_dir.path(), delivery_dir.path(), &snapshot);
     let runtime = PublishRuntime::new(registry);
@@ -161,72 +167,23 @@ fn cargo_03_cross_compile_to_sftp() {
         }
     }
 
-    let project = sample_path("cargo-cli");
-    let output_dir = project.join("target").join(target).join("release");
     let store_dir = tempfile::tempdir().expect("store dir");
     let delivery_dir = tempfile::tempdir().expect("delivery dir");
 
-    let provider = cargo_provider_with_env(
-        vec!["build".to_string(), "--release".to_string(), "--target".to_string(), target.to_string()],
-        output_dir,
-        &[],
-    );
+    let provider = cargo_provider("cargo-03", Some(target), &[]);
     let sftp = Arc::new(FakeSftpServer::new());
 
     let mut snapshot = build_snapshot("real-cargo", store_dir.path(), delivery_dir.path(), "0.1.0");
     // 替换交付路线为 SFTP
-    snapshot.adapters.delivery_routes = vec![DeliveryRoute::required(
-        AdapterBinding::new(
-            "sftp-route",
-            AdapterIdentity::new(AdapterKind::DeliveryDestination, "sftp", 1),
-            AdapterSettings::new(1)
-                .with_value("host", Value::String("localhost".to_string()))
-                .with_value("port", Value::from(2222u64))
-                .with_value("username", Value::String("testuser".to_string()))
-                .with_value("remote_path", Value::String("/upload".to_string()))
-                .with_value(
-                    "artifact_roles",
-                    Value::Array(vec![
-                        Value::String("build-output".to_string()),
-                        Value::String("checksum-manifest".to_string()),
-                    ]),
-                ),
-        )
-        .with_credential("ssh_private_key", "sftp-key"),
-    )];
+    snapshot.adapters.delivery_routes = vec![DeliveryRoute::required(sftp_binding())];
 
-    let fixture = publish_adapters::AdapterConformanceFixture::new(snapshot.clone());
-    let mut registry = AdapterRegistry::new();
-    registry
-        .register_project_provider(provider, &fixture)
-        .expect("register provider");
-    registry
-        .register_artifact_processor(Arc::new(publish_adapters::ChecksumProcessor::new()), &fixture)
-        .expect("register checksum");
-    registry
-        .register_execution_backend(
-            Arc::new(publish_adapters::LocalExecutionBackend::with_credential_source(Arc::new(
-                StaticCredentialSource::new().with_secret(
-                    "sftp-key",
-                    CredentialKind::SshPrivateKey,
-                    "test-key-value",
-                ),
-            ))),
-            &fixture,
-        )
-        .expect("register backend");
-    registry
-        .register_artifact_store(
-            Arc::new(publish_adapters::TemporaryArtifactStore::new(store_dir.path())),
-            &fixture,
-        )
-        .expect("register store");
-    registry
-        .register_delivery_destination(
-            Arc::new(SftpDeliveryDestination::new(sftp.clone())),
-            &fixture,
-        )
-        .expect("register sftp");
+    let registry = build_registry_with_sftp(
+        provider,
+        store_dir.path(),
+        delivery_dir.path(),
+        sftp.clone(),
+        &snapshot,
+    );
     let runtime = PublishRuntime::new(registry);
 
     let attempt = run_publish(&runtime, &snapshot, "cargo-cli", "0.1.0", "cargo-03");
@@ -251,62 +208,46 @@ fn cargo_04_features_multi_route() {
         return;
     }
 
-    let project = sample_path("cargo-cli");
-    let output_dir = project.join("target").join("release");
     let store_dir = tempfile::tempdir().expect("store dir");
     let delivery_dir = tempfile::tempdir().expect("delivery dir");
 
-    let provider = cargo_provider(
-        vec!["build".to_string(), "--release".to_string(), "--features".to_string(), "test-feature".to_string()],
-        output_dir,
-    );
+    let provider = cargo_provider("cargo-04", None, &["--features", "test-feature"]);
     let sftp = Arc::new(FakeSftpServer::new());
 
     let mut snapshot = build_snapshot("real-cargo", store_dir.path(), delivery_dir.path(), "0.1.0");
     // 添加 SFTP 作为 Optional 路线
-    snapshot.adapters.delivery_routes.push(DeliveryRoute::optional(
-        AdapterBinding::new(
-            "sftp-route",
-            AdapterIdentity::new(AdapterKind::DeliveryDestination, "sftp", 1),
-            AdapterSettings::new(1)
-                .with_value("host", Value::String("localhost".to_string()))
-                .with_value("port", Value::from(2222u64))
-                .with_value("username", Value::String("testuser".to_string()))
-                .with_value("remote_path", Value::String("/upload".to_string()))
-                .with_value(
-                    "artifact_roles",
-                    Value::Array(vec![
-                        Value::String("build-output".to_string()),
-                        Value::String("checksum-manifest".to_string()),
-                    ]),
-                ),
-        )
-        .with_credential("ssh_private_key", "sftp-key"),
-    ));
+    snapshot
+        .adapters
+        .delivery_routes
+        .push(DeliveryRoute::optional(sftp_binding()));
 
-    let fixture = publish_adapters::AdapterConformanceFixture::new(snapshot.clone());
-    let mut registry = build_local_registry(provider, store_dir.path(), delivery_dir.path(), &snapshot);
-    registry
-        .register_delivery_destination(
-            Arc::new(SftpDeliveryDestination::new(sftp.clone())),
-            &fixture,
-        )
-        .expect("register sftp");
+    let registry = build_registry_with_sftp(
+        provider,
+        store_dir.path(),
+        delivery_dir.path(),
+        sftp.clone(),
+        &snapshot,
+    );
     let runtime = PublishRuntime::new(registry);
 
     let attempt = run_publish(&runtime, &snapshot, "cargo-cli", "0.1.0", "cargo-04");
 
-    // Local 路线必须 Published
-    let local_receipt = attempt
-        .receipts
-        .iter()
-        .find(|r| r.route_id == "local-route")
-        .expect("local route receipt");
-    assert_eq!(local_receipt.status, DeliveryStatus::Published);
-
     // 构建只执行一次：Manifest 只封存一次
-    let manifest = attempt.manifest.as_ref().expect("manifest");
+    let manifest = assert_published(&attempt);
     assert_manifest_has_role(manifest, "build-output");
+
+    // Optional 路线失败只产生警告、不影响聚合状态，且失败路线没有 Receipt，
+    // 因此逐路线确认两条路线都已交付。
+    for route in &attempt.routes {
+        assert_eq!(
+            route.status,
+            DeliveryStatus::Published,
+            "route {} should be Published, error: {:?}",
+            route.route_id,
+            route.error
+        );
+    }
+    assert!(!sftp.paths().is_empty(), "SFTP should have files");
 }
 
 /// CARGO-05: Workspace 成员构建。
@@ -362,19 +303,10 @@ fn cargo_06_no_default_features() {
         return;
     }
 
-    let project = sample_path("cargo-cli");
-    let output_dir = project.join("target").join("release");
     let store_dir = tempfile::tempdir().expect("store dir");
     let delivery_dir = tempfile::tempdir().expect("delivery dir");
 
-    let provider = cargo_provider(
-        vec![
-            "build".to_string(),
-            "--release".to_string(),
-            "--no-default-features".to_string(),
-        ],
-        output_dir,
-    );
+    let provider = cargo_provider("cargo-06", None, &["--no-default-features"]);
     let snapshot = build_snapshot("real-cargo", store_dir.path(), delivery_dir.path(), "0.1.0");
     let registry = build_local_registry(provider, store_dir.path(), delivery_dir.path(), &snapshot);
     let runtime = PublishRuntime::new(registry);
@@ -394,81 +326,38 @@ fn cargo_07_artifact_promotion() {
         return;
     }
 
-    let project = sample_path("cargo-cli");
-    let output_dir = project.join("target").join("release");
     let store_dir = tempfile::tempdir().expect("store dir");
     let delivery_dir = tempfile::tempdir().expect("delivery dir");
 
     // 第一次发布：构建到 Local
-    let provider = cargo_provider(
-        vec!["build".to_string(), "--release".to_string()],
-        output_dir,
-    );
+    let provider = cargo_provider("cargo-07", None, &[]);
     let snapshot = build_snapshot("real-cargo", store_dir.path(), delivery_dir.path(), "0.1.0");
-    let registry = build_local_registry(provider, store_dir.path(), delivery_dir.path(), &snapshot);
+    let registry =
+        build_local_registry(provider.clone(), store_dir.path(), delivery_dir.path(), &snapshot);
     let runtime = PublishRuntime::new(registry);
 
     let attempt1 = run_publish(&runtime, &snapshot, "cargo-cli", "0.1.0", "cargo-07-1");
     let manifest1 = assert_published(&attempt1);
     let original_digest = manifest1.digest.clone();
 
-    // 第二次发布：推广到 SFTP（不重新构建）
+    // 第二次发布：推广到 SFTP（不重新构建）。规划器跳过构建，但仍经已注册的
+    // provider 解析能力。
     let sftp = Arc::new(FakeSftpServer::new());
     let mut snapshot2 = build_snapshot("real-cargo", store_dir.path(), delivery_dir.path(), "0.1.0");
     snapshot2.promoted_manifest_digest = Some(original_digest.clone());
-    snapshot2.adapters.delivery_routes = vec![DeliveryRoute::required(
-        AdapterBinding::new(
-            "sftp-route",
-            AdapterIdentity::new(AdapterKind::DeliveryDestination, "sftp", 1),
-            AdapterSettings::new(1)
-                .with_value("host", Value::String("localhost".to_string()))
-                .with_value("port", Value::from(2222u64))
-                .with_value("username", Value::String("testuser".to_string()))
-                .with_value("remote_path", Value::String("/upload".to_string()))
-                .with_value(
-                    "artifact_roles",
-                    Value::Array(vec![
-                        Value::String("build-output".to_string()),
-                        Value::String("checksum-manifest".to_string()),
-                    ]),
-                ),
-        )
-        .with_credential("ssh_private_key", "sftp-key"),
-    )];
+    snapshot2.adapters.delivery_routes = vec![DeliveryRoute::required(sftp_binding())];
 
-    let fixture = publish_adapters::AdapterConformanceFixture::new(snapshot2.clone());
-    let mut registry2 = AdapterRegistry::new();
-    registry2
-        .register_artifact_processor(Arc::new(publish_adapters::ChecksumProcessor::new()), &fixture)
-        .expect("register checksum");
-    registry2
-        .register_execution_backend(
-            Arc::new(publish_adapters::LocalExecutionBackend::with_credential_source(Arc::new(
-                StaticCredentialSource::new().with_secret(
-                    "sftp-key",
-                    CredentialKind::SshPrivateKey,
-                    "test-key-value",
-                ),
-            ))),
-            &fixture,
-        )
-        .expect("register backend");
-    registry2
-        .register_artifact_store(
-            Arc::new(publish_adapters::TemporaryArtifactStore::new(store_dir.path())),
-            &fixture,
-        )
-        .expect("register store");
-    registry2
-        .register_delivery_destination(
-            Arc::new(SftpDeliveryDestination::new(sftp.clone())),
-            &fixture,
-        )
-        .expect("register sftp");
+    let registry2 = build_registry_with_sftp(
+        provider,
+        store_dir.path(),
+        delivery_dir.path(),
+        sftp.clone(),
+        &snapshot2,
+    );
     let runtime2 = PublishRuntime::new(registry2);
 
     let attempt2 = run_publish(&runtime2, &snapshot2, "cargo-cli", "0.1.0", "cargo-07-2");
-    let manifest2 = attempt2.manifest.as_ref().expect("manifest");
+    let manifest2 = assert_published(&attempt2);
     // 推广：digest 应与原 Manifest 一致
     assert_eq!(
         manifest2.digest, original_digest,
@@ -488,15 +377,10 @@ fn cargo_08_partial_delivery_recovery() {
         return;
     }
 
-    let project = sample_path("cargo-cli");
-    let output_dir = project.join("target").join("release");
     let store_dir = tempfile::tempdir().expect("store dir");
     let delivery_dir = tempfile::tempdir().expect("delivery dir");
 
-    let provider = cargo_provider(
-        vec!["build".to_string(), "--release".to_string()],
-        output_dir,
-    );
+    let provider = cargo_provider("cargo-08", None, &[]);
     let sftp = Arc::new(FakeSftpServer::new());
     // 注入故障：第一次 write 失败
     sftp.fail_next(
@@ -508,34 +392,18 @@ fn cargo_08_partial_delivery_recovery() {
 
     let mut snapshot = build_snapshot("real-cargo", store_dir.path(), delivery_dir.path(), "0.1.0");
     // Local (Required) + SFTP (Required)
-    snapshot.adapters.delivery_routes.push(DeliveryRoute::required(
-        AdapterBinding::new(
-            "sftp-route",
-            AdapterIdentity::new(AdapterKind::DeliveryDestination, "sftp", 1),
-            AdapterSettings::new(1)
-                .with_value("host", Value::String("localhost".to_string()))
-                .with_value("port", Value::from(2222u64))
-                .with_value("username", Value::String("testuser".to_string()))
-                .with_value("remote_path", Value::String("/upload".to_string()))
-                .with_value(
-                    "artifact_roles",
-                    Value::Array(vec![
-                        Value::String("build-output".to_string()),
-                        Value::String("checksum-manifest".to_string()),
-                    ]),
-                ),
-        )
-        .with_credential("ssh_private_key", "sftp-key"),
-    ));
+    snapshot
+        .adapters
+        .delivery_routes
+        .push(DeliveryRoute::required(sftp_binding()));
 
-    let fixture = publish_adapters::AdapterConformanceFixture::new(snapshot.clone());
-    let mut registry = build_local_registry(provider, store_dir.path(), delivery_dir.path(), &snapshot);
-    registry
-        .register_delivery_destination(
-            Arc::new(SftpDeliveryDestination::new(sftp.clone())),
-            &fixture,
-        )
-        .expect("register sftp");
+    let registry = build_registry_with_sftp(
+        provider,
+        store_dir.path(),
+        delivery_dir.path(),
+        sftp.clone(),
+        &snapshot,
+    );
     let runtime = PublishRuntime::new(registry);
 
     let attempt = run_publish(&runtime, &snapshot, "cargo-cli", "0.1.0", "cargo-08");
@@ -544,8 +412,10 @@ fn cargo_08_partial_delivery_recovery() {
     assert_eq!(
         attempt.status,
         PublishAttemptStatus::PartialDelivery,
-        "expected PartialDelivery, got {:?}",
-        attempt.status
+        "expected PartialDelivery, got {:?}: error={:?}, routes={:#?}",
+        attempt.status,
+        attempt.error,
+        attempt.routes
     );
 
     // Local 路线应该 Published
@@ -569,12 +439,7 @@ fn cargo_08_partial_delivery_recovery() {
         .expect("resume attempt");
 
     // 重试后应该 Published
-    assert_eq!(
-        resumed.status,
-        PublishAttemptStatus::Published,
-        "expected Published after resume, got {:?}",
-        resumed.status
-    );
+    assert_published(&resumed);
 
     // SFTP 远端应有文件
     assert!(!sftp.paths().is_empty(), "SFTP should have files after resume");
@@ -591,15 +456,10 @@ fn cargo_09_custom_command_gate() {
         return;
     }
 
-    let project = sample_path("cargo-cli");
-    let output_dir = project.join("target").join("release");
     let store_dir = tempfile::tempdir().expect("store dir");
     let delivery_dir = tempfile::tempdir().expect("delivery dir");
 
-    let provider = cargo_provider(
-        vec!["build".to_string(), "--release".to_string()],
-        output_dir,
-    );
+    let provider = cargo_provider("cargo-09", None, &[]);
 
     let custom_processor = publish_adapters::CustomCommandProcessor::new(["test:gate"]);
 
@@ -674,15 +534,10 @@ fn cargo_10_idempotent_retry() {
         return;
     }
 
-    let project = sample_path("cargo-cli");
-    let output_dir = project.join("target").join("release");
     let store_dir = tempfile::tempdir().expect("store dir");
     let delivery_dir = tempfile::tempdir().expect("delivery dir");
 
-    let provider = cargo_provider(
-        vec!["build".to_string(), "--release".to_string()],
-        output_dir,
-    );
+    let provider = cargo_provider("cargo-10", None, &[]);
     let snapshot = build_snapshot("real-cargo", store_dir.path(), delivery_dir.path(), "0.1.0");
     let registry = build_local_registry(provider, store_dir.path(), delivery_dir.path(), &snapshot);
     let runtime = PublishRuntime::new(registry);
