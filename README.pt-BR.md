@@ -35,7 +35,7 @@ OnePublish é um **aplicativo de desktop multiplataforma** que oferece uma GUI b
 - 🌐 **Internacionalizado** — suporte completo a Chinês (简体中文) e Inglês
 - 🌓 **Temas Claro e Escuro** — segue a preferência do seu sistema
 - 🔄 **Atualização Automática** — pipeline de atualização do Tauri com integração ao GitHub Releases
-- ⌨️ **Focado em Teclado** — atalhos globais para ações frequentes; publique sem tocar no mouse
+- ⌨️ **Focado em Teclado** — atalhos no aplicativo para ações frequentes; publique sem tocar no mouse
 - 📦 **GitHub Release com Um Clique** — `pnpm release -v 1.0.0` sincroniza versões, gera notas de lançamento, faz commit, tag, push e aguarda o CI
 
 ---
@@ -148,7 +148,7 @@ one-publish/
 │   │   ├── parameter.rs          # ParameterSchema + validação
 │   │   ├── store/                # Persistência (armazenamento em arquivo JSON)
 │   │   ├── config_export.rs      # Importação/exportação de configuração
-│   │   ├── shortcuts.rs          # Registro de atalhos globais
+│   │   ├── shortcuts.rs          # Texto de ajuda dos atalhos
 │   │   └── tray.rs               # Bandeja do sistema
 │   ├── Cargo.toml                # Dependências Rust
 │   └── tauri.conf.json           # Configuração de janela, bundle e atualização do Tauri

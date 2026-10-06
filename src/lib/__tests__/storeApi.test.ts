@@ -15,6 +15,7 @@ import {
   reorderProfiles,
   scanProjectCandidates,
   setExecutionRecordSnapshot,
+  updatePreferences,
   updateProfile,
 } from "@/lib/store/api";
 
@@ -223,6 +224,35 @@ describe("store api wrappers", () => {
       response: [],
       command: "set_execution_record_snapshot",
       args: { recordId: "record-1", snapshotPath: "/tmp/snapshot.json" },
+    },
+    {
+      name: "updatePreferences",
+      call: () =>
+        updatePreferences({
+          language: "en",
+          minimizeToTrayOnClose: true,
+          defaultOutputDir: "/tmp/out",
+          theme: "dark",
+          executionHistoryLimit: 50,
+          environmentProviderIds: [" node ", "dotnet", "node", ""],
+        }),
+      response: { repositories: [] },
+      command: "update_preferences",
+      args: {
+        language: "en",
+        minimizeToTrayOnClose: true,
+        defaultOutputDir: "/tmp/out",
+        theme: "dark",
+        executionHistoryLimit: 50,
+        environmentProviderIds: ["dotnet", "node"],
+      },
+    },
+    {
+      name: "updatePreferences without environmentProviderIds",
+      call: () => updatePreferences({ language: "zh" }),
+      response: { repositories: [] },
+      command: "update_preferences",
+      args: { language: "zh" },
     },
   ])(
     "$name invokes $command with camelCase argument keys",

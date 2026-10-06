@@ -108,9 +108,7 @@ export async function updatePreferences(params: {
 }): Promise<AppState> {
   const state = await invoke<TauriAppState>("update_preferences", {
     ...params,
-    default_output_dir: params.defaultOutputDir,
-    execution_history_limit: params.executionHistoryLimit,
-    environment_provider_ids:
+    environmentProviderIds:
       params.environmentProviderIds !== undefined
         ? normalizeEnvironmentProviderIds(params.environmentProviderIds)
         : undefined,

@@ -35,7 +35,7 @@ OnePublish 是一个**跨平台桌面应用**，为软件项目发布提供美�
 - 🌐 **国际化** — 完整支持简体中文和 English
 - 🌓 **深色/浅色主题** — 跟随系统偏好自动切换
 - 🔄 **自动更新** — Tauri 内置更新管线，集成 GitHub Releases
-- ⌨️ **键盘优先** — 全局快捷键覆盖高频操作；无需鼠标即可发布
+- ⌨️ **键盘优先** — 应用内快捷键覆盖高频操作；无需鼠标即可发布
 - 📦 **一键 GitHub Release** — `pnpm release -v 1.0.0` 同步版本、生成发布说明、提交、打标签、推送并等待 CI 完成
 
 ---
@@ -148,7 +148,7 @@ one-publish/
 │   │   ├── parameter.rs          # ParameterSchema + 校验
 │   │   ├── store/                # 持久化（JSON 文件存储）
 │   │   ├── config_export.rs      # 配置导入/导出
-│   │   ├── shortcuts.rs          # 全局快捷键注册
+│   │   ├── shortcuts.rs          # 快捷键帮助文本
 │   │   └── tray.rs               # 系统托盘
 │   ├── Cargo.toml                # Rust 依赖
 │   └── tauri.conf.json           # Tauri 窗口、打包、更新配置
