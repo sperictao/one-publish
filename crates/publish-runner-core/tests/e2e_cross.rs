@@ -782,6 +782,14 @@ fn cross_cap_02_missing_artifact_store() {
     let delivery_dir = tempfile::tempdir().expect("delivery dir");
 
     let mut snapshot = build_snapshot("real-cargo", store_dir.path(), delivery_dir.path(), "0.1.0");
+
+    // Register every adapter the snapshot selects, so the store binding is the
+    // only unresolved one: the planner resolves bindings in selection order
+    // (provider, processors, backend, store, routes) and fails on the first miss.
+    let provider = cargo_provider("cross-cap-02");
+    let registry = build_local_registry(provider, store_dir.path(), delivery_dir.path(), &snapshot);
+    let runtime = PublishRuntime::new(registry);
+
     // Reference a non-existent artifact store
     snapshot.adapters.artifact_store = AdapterBinding::new(
         "store",
@@ -789,17 +797,14 @@ fn cross_cap_02_missing_artifact_store() {
         AdapterSettings::new(1),
     );
 
-    // Empty registry — no adapters registered
-    let registry = AdapterRegistry::new();
-    let runtime = PublishRuntime::new(registry);
-
     let error = runtime
         .prepare_attempt(&snapshot)
         .expect_err("planning should fail");
     assert!(
         matches!(
             &error,
-            PublishError::AdapterNotRegistered { id, .. } if id == "non-existent-store"
+            PublishError::AdapterNotRegistered { kind: AdapterKind::ArtifactStore, id, .. }
+                if id == "non-existent-store"
         ),
         "expected AdapterNotRegistered for non-existent-store, got {error}"
     );
@@ -1517,6 +1522,12 @@ fn cross_auto_01_automation_bundle() {
                 serde_json::json!({
                     "driver": "cargo",
                     "configPath": "Cargo.toml",
+                    // Every shard platform installs a Rust toolchain for its targets.
+                    "rustTargets": {
+                        "linux": "x86_64-unknown-linux-gnu",
+                        "macos": "aarch64-apple-darwin",
+                        "windows": "x86_64-pc-windows-msvc",
+                    },
                 }),
             ),
         ]),
