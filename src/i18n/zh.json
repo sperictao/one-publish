@@ -1006,6 +1006,25 @@
     "unsafe_brew_formula_argument": "不支持的 brew formula 参数",
     "unsupported_winget_fix_command": "不支持的 winget 命令（仅允许 winget install …）",
     "unsupported_rustup_fix_command": "不支持的 rustup 命令（仅允许 rustup update）",
-    "unsupported_fix_command": "不支持的命令：不允许运行该程序"
+    "unsupported_fix_command": "不支持的命令：不允许运行该程序",
+    "preflight_report_serialize_failed": "无法序列化预检报告",
+    "preflight_markdown_serialize_failed": "无法序列化预检报告的原始快照",
+    "preflight_report_write_failed": "无法写入预检报告文件",
+    "execution_snapshot_spec_serialize_failed": "无法序列化执行快照中的发布配置",
+    "execution_snapshot_result_serialize_failed": "无法序列化执行快照中的执行结果",
+    "execution_snapshot_write_failed": "无法写入执行快照文件",
+    "failure_group_bundle_serialize_failed": "无法序列化失败分组",
+    "failure_group_bundle_markdown_serialize_failed": "无法序列化失败分组的原始数据",
+    "failure_group_bundle_write_failed": "无法写入失败分组文件",
+    "execution_history_serialize_failed": "无法序列化执行历史",
+    "execution_history_write_failed": "无法写入执行历史文件",
+    "diagnostics_index_serialize_failed": "无法序列化诊断索引",
+    "diagnostics_index_markdown_serialize_failed": "无法序列化诊断索引的原始数据",
+    "diagnostics_index_write_failed": "无法写入诊断索引文件",
+    "snapshot_dir_read_failed": "无法读取执行快照目录",
+    "snapshot_dir_entry_read_failed": "无法读取执行快照目录中的条目",
+    "open_snapshot_failed": "无法打开执行快照",
+    "open_directory_failed": "无法打开目录",
+    "open_output_directory_failed": "无法打开输出目录"
   }
 }

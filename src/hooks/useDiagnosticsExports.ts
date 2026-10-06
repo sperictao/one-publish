@@ -13,7 +13,9 @@ import {
   exportFailureGroupBundleFile,
 } from "@/features/history/diagnosticsExportRuntime";
 import type { HistoryExportFormat } from "@/features/history/historyFilterPresets";
+import { useI18n } from "@/hooks/useI18n";
 import { type ExecutionRecord } from "@/lib/store/types";
+import { localizeInvokeError } from "@/lib/tauri/invokeErrors";
 
 type TranslationMap = Record<string, string | undefined>;
 
@@ -46,6 +48,9 @@ export function useDiagnosticsExports({
   selectedRepoPath,
   trackHistoryExport,
 }: UseDiagnosticsExportsParams) {
+  // 导出回调只作为按钮 handler 使用，不驱动 useEffect；historyT 随语言切换
+  // 同步变化，translations 进依赖不会带来额外重建。
+  const { translations } = useI18n();
   const [isExportingHistory, setIsExportingHistory] = useState(false);
   const [isExportingFailureGroups, setIsExportingFailureGroups] =
     useState(false);
@@ -88,7 +93,7 @@ export function useDiagnosticsExports({
       });
     } catch (err) {
       toast.error(historyT.exportFailureGroupsFailed || "导出失败分组失败", {
-        description: String(err),
+        description: localizeInvokeError(err, translations),
       });
     } finally {
       setIsExportingFailureGroups(false);
@@ -99,6 +104,7 @@ export function useDiagnosticsExports({
     historyT,
     selectedRepoPath,
     trackHistoryExport,
+    translations,
   ]);
 
   const exportExecutionHistory = useCallback(
@@ -144,13 +150,19 @@ export function useDiagnosticsExports({
         );
       } catch (err) {
         toast.error(historyT.exportHistoryFailed || "导出执行历史失败", {
-          description: String(err),
+          description: localizeInvokeError(err, translations),
         });
       } finally {
         setIsExportingHistory(false);
       }
     },
-    [filteredExecutionHistory, historyT, selectedRepoPath, trackHistoryExport]
+    [
+      filteredExecutionHistory,
+      historyT,
+      selectedRepoPath,
+      trackHistoryExport,
+      translations,
+    ]
   );
 
   const exportDiagnosticsIndex = useCallback(async () => {
@@ -198,7 +210,7 @@ export function useDiagnosticsExports({
       });
     } catch (err) {
       toast.error(historyT.exportDiagnosticsIndexFailed || "导出诊断索引失败", {
-        description: String(err),
+        description: localizeInvokeError(err, translations),
       });
     } finally {
       setIsExportingDiagnosticsIndex(false);
@@ -211,6 +223,7 @@ export function useDiagnosticsExports({
     scopedExecutionHistory.length,
     selectedRepoPath,
     snapshotPaths,
+    translations,
   ]);
 
   return {

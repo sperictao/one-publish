@@ -8,20 +8,21 @@ fn export_error(message: impl Into<String>, code: impl Into<String>) -> crate::e
     crate::errors::AppError::export_with_code(message, code)
 }
 
+/// message 保持静态、底层错误进 details：前端按 code 取 `errors.<code>` 后仍可附加原因。
 fn export_source_error(
-    prefix: &str,
+    message: &'static str,
     source: impl std::fmt::Display,
     code: &'static str,
 ) -> crate::errors::AppError {
-    export_error(format!("{prefix}: {source}"), code)
+    export_error(message, code).with_details(source.to_string())
 }
 
 fn export_open_error(
-    prefix: &str,
+    message: &'static str,
     source: impl std::fmt::Display,
     code: &'static str,
 ) -> crate::errors::AppError {
-    crate::errors::AppError::external_open_with_code(format!("{prefix}: {source}"), code)
+    crate::errors::AppError::external_open_with_code(message, code).with_details(source.to_string())
 }
 
 #[tauri::command]
@@ -769,5 +770,25 @@ mod tests {
             error_code(&temp.path().join("missing").to_string_lossy()).as_deref(),
             Some("output_dir_not_found")
         );
+    }
+
+    #[test]
+    fn write_failures_keep_the_io_error_in_details() {
+        let temp = tempfile::tempdir().expect("temp dir");
+        // 快照根目录被同名文件占据，创建 bucket 目录必然失败。
+        let root = temp.path().join("snapshots");
+        std::fs::write(&root, "not a directory").expect("occupy snapshot root");
+
+        let error = write_execution_snapshot(&root, "/tmp/out", snapshot_payload())
+            .expect_err("snapshot root is a file");
+        assert_eq!(
+            error.code.as_deref(),
+            Some("execution_snapshot_write_failed")
+        );
+        assert_eq!(error.message, "write error");
+        assert!(error
+            .details
+            .as_deref()
+            .is_some_and(|details| !details.is_empty()));
     }
 }

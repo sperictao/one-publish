@@ -1006,6 +1006,25 @@
     "unsafe_brew_formula_argument": "Unsupported brew formula argument.",
     "unsupported_winget_fix_command": "Unsupported winget command (only winget install … is allowed).",
     "unsupported_rustup_fix_command": "Unsupported rustup command (only rustup update is allowed).",
-    "unsupported_fix_command": "Unsupported command: this program isn't allowed."
+    "unsupported_fix_command": "Unsupported command: this program isn't allowed.",
+    "preflight_report_serialize_failed": "Couldn't serialize the preflight report.",
+    "preflight_markdown_serialize_failed": "Couldn't serialize the preflight report's raw snapshot.",
+    "preflight_report_write_failed": "Couldn't write the preflight report file.",
+    "execution_snapshot_spec_serialize_failed": "Couldn't serialize the publish spec in the execution snapshot.",
+    "execution_snapshot_result_serialize_failed": "Couldn't serialize the execution result in the execution snapshot.",
+    "execution_snapshot_write_failed": "Couldn't write the execution snapshot file.",
+    "failure_group_bundle_serialize_failed": "Couldn't serialize the failure groups.",
+    "failure_group_bundle_markdown_serialize_failed": "Couldn't serialize the raw failure group data.",
+    "failure_group_bundle_write_failed": "Couldn't write the failure group file.",
+    "execution_history_serialize_failed": "Couldn't serialize the execution history.",
+    "execution_history_write_failed": "Couldn't write the execution history file.",
+    "diagnostics_index_serialize_failed": "Couldn't serialize the diagnostics index.",
+    "diagnostics_index_markdown_serialize_failed": "Couldn't serialize the raw diagnostics index data.",
+    "diagnostics_index_write_failed": "Couldn't write the diagnostics index file.",
+    "snapshot_dir_read_failed": "Couldn't read the execution snapshot directory.",
+    "snapshot_dir_entry_read_failed": "Couldn't read an entry in the execution snapshot directory.",
+    "open_snapshot_failed": "Couldn't open the execution snapshot.",
+    "open_directory_failed": "Couldn't open the directory.",
+    "open_output_directory_failed": "Couldn't open the output directory."
   }
 }
