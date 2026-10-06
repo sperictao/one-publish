@@ -296,6 +296,18 @@ impl AdapterSchema {
         );
         self
     }
+
+    /// 可选字段：缺省合法，出现时仍按类型校验。
+    pub fn with_optional_string_list(mut self, key: impl Into<String>) -> Self {
+        self.fields.insert(
+            key.into(),
+            AdapterSchemaField {
+                value_type: AdapterSchemaValueType::StringList,
+                required: false,
+            },
+        );
+        self
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
