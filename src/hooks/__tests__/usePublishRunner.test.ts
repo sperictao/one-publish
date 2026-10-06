@@ -699,14 +699,12 @@ describe("usePublishRunner", () => {
 
   it("发布成功后自动导出执行快照并写入记录 snapshotPath", async () => {
     mocks.runEnvironmentCheck.mockResolvedValue(readyEnvironment);
-    mocks.invoke.mockImplementation(
-      async (command: string, args: { filePath?: string }) => {
-        if (command === "export_execution_snapshot") {
-          return args.filePath;
-        }
-        throw new Error(`unexpected invoke: ${command}`);
+    mocks.invoke.mockImplementation(async (command: string) => {
+      if (command === "export_execution_snapshot") {
+        return "/Users/me/.one-publish/execution-snapshots/abc/execution-snapshot-1.md";
       }
-    );
+      throw new Error(`unexpected invoke: ${command}`);
+    });
 
     const props = createRunnerProps();
     const { result } = renderHook(() => usePublishRunner(props));
@@ -719,9 +717,7 @@ describe("usePublishRunner", () => {
     expect(mocks.invoke).toHaveBeenCalledWith(
       "export_execution_snapshot",
       expect.objectContaining({
-        filePath: expect.stringMatching(
-          /^\/exports\/App\/Release\/execution-snapshot-.+\.md$/
-        ),
+        outputDir: "/exports/App/Release",
         snapshot: expect.objectContaining({
           providerId: "dotnet",
           output: expect.objectContaining({
