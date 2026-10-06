@@ -186,6 +186,45 @@ describe("handleAddRepoRuntime", () => {
     expect(outcome).toMatchObject({ status: "added" });
   });
 
+  it.each(["/tmp/demo-repo/.git", "/tmp/demo-repo/.git/"])(
+    "选中仓库内的 .git 目录（%s）时归一化为工作区根目录",
+    async (selectedPath) => {
+      mocks.openDialog.mockResolvedValue(selectedPath);
+
+      const outcome = await runAddRepo();
+
+      expect(mocks.detectRepositoryProvider).toHaveBeenCalledWith(
+        "/tmp/demo-repo"
+      );
+      expect(mocks.addRepository).toHaveBeenCalledWith(
+        expect.objectContaining({ name: "demo-repo", path: "/tmp/demo-repo" })
+      );
+      expect(outcome).toMatchObject({
+        status: "added",
+        name: "demo-repo",
+        path: "/tmp/demo-repo",
+      });
+    }
+  );
+
+  it("Windows 路径下的 .git 目录同样归一化，且重复目录预检按归一化后的路径判断", async () => {
+    mocks.openDialog.mockResolvedValue("C:\\work\\demo-repo\\.git");
+
+    await runAddRepo({
+      repositories: [
+        existingRepo({ name: "demo-repo", path: "C:\\work\\demo-repo" }),
+      ],
+    });
+
+    expect(mocks.addRepository).not.toHaveBeenCalled();
+    expect(mocks.toastError).toHaveBeenCalledWith(
+      "添加仓库失败",
+      expect.objectContaining({
+        description: "该目录已添加为仓库「demo-repo」",
+      })
+    );
+  });
+
   it("provider 列表尚未加载但已检测到 dotnet 时仍会扫描并绑定推荐项目", async () => {
     await runAddRepo({ providers: [] });
 

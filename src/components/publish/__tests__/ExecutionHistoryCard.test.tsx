@@ -2,6 +2,8 @@ import { render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
 import { ExecutionHistoryCard } from "@/components/publish/ExecutionHistoryCard";
+import en from "@/i18n/en.json";
+import zh from "@/i18n/zh.json";
 import type { ExecutionRecord } from "@/lib/store/types";
 
 function createRecord(overrides?: Partial<ExecutionRecord>): ExecutionRecord {
@@ -242,5 +244,48 @@ describe("ExecutionHistoryCard", () => {
     );
 
     expect(screen.queryByText(/警告/)).not.toBeInTheDocument();
+  });
+
+  // 旧记录已在加载时按持久化规则补做脱敏，历史区不再常驻明文密钥提示。
+  it.each([
+    ["zh", zh],
+    ["en", en],
+  ])("%s：有历史记录时不展示旧记录明文密钥横幅", (_language, locale) => {
+    const record = createRecord();
+
+    render(
+      <ExecutionHistoryCard
+        scopedExecutionHistory={[record]}
+        filteredExecutionHistory={[record]}
+        executionHistoryLimit={20}
+        historyProviderOptions={["dotnet"]}
+        historyFilterProvider="all"
+        historyFilterStatus="all"
+        historyFilterWindow="all"
+        historyFilterKeyword=""
+        isExportingHistory={false}
+        isExportingFailureGroups={false}
+        failureGroupCount={0}
+        isPublishing={false}
+        appT={locale.app}
+        historyT={locale.history}
+        failureT={locale.failure}
+        onHistoryFilterProviderChange={vi.fn()}
+        onHistoryFilterStatusChange={vi.fn()}
+        onHistoryFilterWindowChange={vi.fn()}
+        onHistoryFilterKeywordChange={vi.fn()}
+        onExportExecutionHistory={vi.fn(async () => undefined)}
+        onExportFailureGroups={vi.fn(async () => undefined)}
+        onClearFilters={vi.fn()}
+        onOpenSnapshotFromRecord={vi.fn(async () => undefined)}
+        onRerunFromHistory={vi.fn(async () => undefined)}
+        onCopyHandoffSnippet={vi.fn(async () => undefined)}
+      />
+    );
+
+    expect(screen.getByText(locale.history.title)).toBeInTheDocument();
+    expect(
+      screen.queryByText(/密钥脱敏|明文密钥|secret redaction|plaintext/i)
+    ).not.toBeInTheDocument();
   });
 });

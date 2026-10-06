@@ -262,6 +262,11 @@
     "deleteSuccess": "Profile deleted",
     "deleteFailed": "Failed to delete profile",
     "deleteProfileAction": "Delete profile",
+    "deleteConfirmTitle": "Delete profile",
+    "deleteConfirmDescription": "Delete the profile \"{{name}}\"?",
+    "deleteConfirmHint": "Deleted profiles cannot be restored in the app. To keep a copy, export it from Profile Manager first.",
+    "confirmDeleteAction": "Delete",
+    "deleting": "Deleting…",
     "export": "Export Profiles",
     "import": "Import Profiles",
     "exportSuccess": "Profiles exported",
@@ -431,6 +436,8 @@
     "publishStatusLabel": "Publish status",
     "publishStatusIdle": "Ready",
     "publishStatusIdleDetail": "The command and parameters are ready. You can start this publish now.",
+    "publishStatusBlocked": "Blocked",
+    "publishStatusBlockedDetail": "Publish preparation is blocked. Resolve the issue shown above before publishing.",
     "publishStatusRunningDetail": "The publish command is running and logs will continue streaming into the output area below.",
     "publishStatusSuccessDetail": "Publish completed. Open the output directory to inspect the artifacts.",
     "publishStatusCancelledDetail": "The current run has stopped. Adjust the parameters and start a new publish when ready.",
@@ -703,8 +710,7 @@
     "exportDiagnosticsIndexFailed": "Failed to export diagnostics index",
     "warningsLabel": "Warnings",
     "warningsExpand": "Expand warnings",
-    "warningsCollapse": "Collapse warnings",
-    "legacyPlaintextHint": "Older records were saved before secret redaction, so their command lines may contain plaintext keys. To be safe, lower the retention limit to 5 in Settings to trigger trimming, or rerun to overwrite history."
+    "warningsCollapse": "Collapse warnings"
   },
   "configPanel": {
     "allConfigs": "All",

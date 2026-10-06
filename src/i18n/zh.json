@@ -262,6 +262,11 @@
     "deleteSuccess": "配置已删除",
     "deleteFailed": "删除配置文件失败",
     "deleteProfileAction": "删除配置",
+    "deleteConfirmTitle": "删除配置",
+    "deleteConfirmDescription": "确定删除配置「{{name}}」？",
+    "deleteConfirmHint": "删除后无法在应用内恢复。如需保留，请先在配置管理中导出备份。",
+    "confirmDeleteAction": "删除",
+    "deleting": "删除中…",
     "export": "导出配置",
     "import": "导入配置",
     "exportSuccess": "配置已导出",
@@ -431,6 +436,8 @@
     "publishStatusLabel": "发布状态",
     "publishStatusIdle": "待执行",
     "publishStatusIdleDetail": "命令与参数已准备完成，可以开始本次发布。",
+    "publishStatusBlocked": "无法执行",
+    "publishStatusBlockedDetail": "发布准备未通过，请先处理上方提示的问题，再开始发布。",
     "publishStatusRunningDetail": "发布命令正在执行，日志会持续追加到下方输出区域。",
     "publishStatusSuccessDetail": "发布已完成，可直接打开输出目录查看产物。",
     "publishStatusCancelledDetail": "当前执行已停止，可调整参数后重新发起发布。",
@@ -703,8 +710,7 @@
     "exportDiagnosticsIndexFailed": "导出诊断索引失败",
     "warningsLabel": "警告",
     "warningsExpand": "展开警告",
-    "warningsCollapse": "收起警告",
-    "legacyPlaintextHint": "较早的记录在密钥脱敏功能上线前保存，命令行可能含明文密钥。如担心泄露，可在设置中将保留上限调到 5 触发裁剪，或重新执行覆盖历史。"
+    "warningsCollapse": "收起警告"
   },
   "configPanel": {
     "allConfigs": "全部",

@@ -28,6 +28,7 @@ import { importConfig } from "@/lib/store/api";
 import { type ConfigParameters, type ConfigProfile } from "@/lib/store/types";
 import { getLanguageLocale, useI18n } from "@/hooks/useI18n";
 import { localizeInvokeError } from "@/lib/tauri/invokeErrors";
+import { DeleteProfileConfirmDialog } from "@/components/publish/DeleteProfileConfirmDialog";
 
 interface ConfigManagementContentProps {
   active: boolean;
@@ -100,6 +101,8 @@ export function ConfigManagementContent({
   );
   const [isImportLoading, setIsImportLoading] = useState(false);
   const [isApplyingImport, setIsApplyingImport] = useState(false);
+  const [pendingDeleteProfile, setPendingDeleteProfile] =
+    useState<ConfigProfile | null>(null);
   const isLoading = isProfilesRefreshing || isImportLoading;
 
   useEffect(() => {
@@ -389,7 +392,7 @@ export function ConfigManagementContent({
                     {!profile.isSystemDefault ? (
                       <Button
                         variant="ghost"
-                        onClick={() => void handleDeleteProfile(profile)}
+                        onClick={() => setPendingDeleteProfile(profile)}
                         aria-label={`${profileT.deleteProfileAction || "删除配置"}${profile.name ? `: ${profile.name}` : ""}`}
                         className="h-10 px-3 text-destructive hover:text-destructive"
                       >
@@ -485,6 +488,12 @@ export function ConfigManagementContent({
           </AppDialogShell>
         ) : null}
       </Dialog>
+
+      <DeleteProfileConfirmDialog
+        profile={pendingDeleteProfile}
+        onClose={() => setPendingDeleteProfile(null)}
+        onConfirm={handleDeleteProfile}
+      />
     </div>
   );
 }

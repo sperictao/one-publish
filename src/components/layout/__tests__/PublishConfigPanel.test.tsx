@@ -362,6 +362,74 @@ describe("PublishConfigPanel", () => {
     expect(onEditProfile).toHaveBeenCalledWith(driftedTauri);
   });
 
+  it("菜单删除配置先弹出应用内确认，取消不删除，确认后才删除", async () => {
+    const editable = createProfile("Alpha", undefined, { id: "profile-42" });
+    const onDeleteProfile = vi.fn();
+    const { container } = render(
+      <PublishConfigPanel
+        selection={{ kind: "revision" as const, configurationId: "profile-42" }}
+        profiles={[editable]}
+        activeProfileName="Alpha"
+        onSelectProfile={() => {}}
+        onCreateProfile={() => {}}
+        onEditProfile={() => {}}
+        onViewProfile={() => {}}
+        onSaveProfileComposition={async () => {}}
+        onRebindProfileProject={async () => {}}
+        onRefreshProfiles={() => {}}
+        onOpenConfigDialog={() => {}}
+        onDeleteProfile={onDeleteProfile}
+        dotnetSchema={dotnetSchema}
+        projectPublishProfiles={[]}
+        onSelectProjectProfile={() => {}}
+        onCopyProjectProfileToCustom={async () => "copied"}
+        recentConfigKeys={[]}
+        favoriteConfigKeys={[]}
+        onToggleFavoriteConfig={() => {}}
+        onRemoveRecentConfig={() => {}}
+        onReorderRecentConfigs={() => {}}
+        onReorderProjectProfiles={() => {}}
+        onReorderProfiles={() => {}}
+      />
+    );
+    const row = container.querySelector<HTMLElement>(
+      '[data-list-item-id="userprofile:profile-42"]'
+    );
+    const openDeleteConfirm = async () => {
+      const trigger = within(row!).getByRole("button", {
+        name: "更多操作: Alpha",
+      });
+      fireEvent.pointerDown(trigger, { button: 0, ctrlKey: false });
+      fireEvent.click(trigger);
+      fireEvent.click(
+        await screen.findByRole("menuitem", { name: "删除配置" })
+      );
+      return screen.findByRole("dialog", { name: "删除配置" });
+    };
+
+    const dialog = await openDeleteConfirm();
+    expect(within(dialog).getByText("确定删除配置「Alpha」？")).toBeVisible();
+    expect(onDeleteProfile).not.toHaveBeenCalled();
+
+    fireEvent.click(within(dialog).getByRole("button", { name: "取消" }));
+    await waitFor(() => {
+      expect(
+        screen.queryByRole("dialog", { name: "删除配置" })
+      ).not.toBeInTheDocument();
+    });
+    expect(onDeleteProfile).not.toHaveBeenCalled();
+
+    const confirmDialog = await openDeleteConfirm();
+    fireEvent.click(
+      within(confirmDialog).getByRole("button", { name: "删除" })
+    );
+
+    await waitFor(() => {
+      expect(onDeleteProfile).toHaveBeenCalledWith("profile-42");
+    });
+    expect(onDeleteProfile).toHaveBeenCalledTimes(1);
+  });
+
   it("重命名后选中、收藏和最近使用继续引用同一 profile ID", async () => {
     const original = createProfile("Alpha", undefined, { id: "profile-42" });
     const sharedProps = {

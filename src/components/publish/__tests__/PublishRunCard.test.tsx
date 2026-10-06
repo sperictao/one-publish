@@ -2,6 +2,7 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
 import { PublishRunCard } from "@/components/publish/PublishRunCard";
+import en from "@/i18n/en.json";
 import zh from "@/i18n/zh.json";
 
 vi.mock("@/lib/store/api", async () => {
@@ -593,6 +594,91 @@ describe("PublishRunCard", () => {
       "tauri_build_driver_conflict"
     );
     expect(screen.getByTestId("publish-execute-btn")).toBeDisabled();
+  });
+
+  describe("准备被阻断时的状态文案", () => {
+    const blockedPublishActions = {
+      isPublishing: false,
+      isCancellingPublish: false,
+      startDisabled: true,
+      onStartPublish: vi.fn(),
+      onCancelPublish: vi.fn(),
+    };
+
+    it.each([
+      ["zh", zh.app],
+      ["en", en.app],
+    ])("%s：阻断态使用独立文案，不再宣称已准备完成", (_language, appT) => {
+      render(
+        <PublishRunCard
+          outputLog=""
+          publishResult={null}
+          appT={appT}
+          preparedRuntime={{
+            status: "blocked",
+            diagnostics: [
+              {
+                code: "project_binding_required",
+                message: "请先绑定 Tauri 项目",
+              },
+            ],
+          }}
+          publishActions={blockedPublishActions}
+        />
+      );
+
+      const statusPanel = screen.getByTestId("publish-status-panel");
+      expect(statusPanel).toHaveTextContent(appT.publishStatusBlocked);
+      expect(statusPanel).toHaveTextContent(appT.publishStatusBlockedDetail);
+      expect(statusPanel).not.toHaveTextContent(appT.publishStatusIdleDetail);
+    });
+
+    it("准备请求本身失败时同样进入阻断态", () => {
+      render(
+        <PublishRunCard
+          outputLog=""
+          publishResult={null}
+          appT={zh.app}
+          runtimePreparationError="Go 发布需要输出目录"
+          publishActions={blockedPublishActions}
+        />
+      );
+
+      expect(screen.getByRole("alert")).toHaveTextContent(
+        "Go 发布需要输出目录"
+      );
+      expect(screen.getByTestId("publish-status-panel")).toHaveTextContent(
+        zh.app.publishStatusBlocked
+      );
+    });
+
+    it("仅缺输出目录授权时可在开始发布时申请授权，保持待执行", () => {
+      render(
+        <PublishRunCard
+          outputLog=""
+          publishResult={null}
+          appT={zh.app}
+          preparedRuntime={{
+            status: "blocked",
+            diagnostics: [
+              {
+                code: "publish_output_access_denied",
+                message: "publish output access is denied",
+              },
+            ],
+            outputPreflight: {
+              outputDir: "/repo/publish-output",
+              accessStatus: "denied",
+            },
+          }}
+          publishActions={{ ...blockedPublishActions, startDisabled: false }}
+        />
+      );
+
+      const statusPanel = screen.getByTestId("publish-status-panel");
+      expect(statusPanel).toHaveTextContent(zh.app.publishStatusIdle);
+      expect(statusPanel).not.toHaveTextContent(zh.app.publishStatusBlocked);
+    });
   });
 
   it("展示 Manifest、稳定 Receipt ID 与最终 Delivery Lifecycle", () => {

@@ -21,7 +21,7 @@ interface UsePublishConfigPanelPropsParams {
   onRebindProfileProject: (profile: ConfigProfile) => Promise<void>;
   onRefreshProfiles: () => void;
   onOpenConfigDialog: () => void;
-  onDeleteProfile: (name: string) => void;
+  onDeleteProfile: PublishConfigPanelProps["onDeleteProfile"];
   projectPublishProfiles: string[];
   isProjectProfilesRefreshing: boolean;
   projectFilePath?: string;

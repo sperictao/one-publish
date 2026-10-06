@@ -10,7 +10,11 @@ import {
   scanRepositoryBranches,
 } from "@/lib/store/api";
 import type { ProviderManifest } from "@/lib/store/types";
-import { getPathBasename, isSameRepositoryPath } from "@/lib/paths";
+import {
+  getPathBasename,
+  isSameRepositoryPath,
+  stripTrailingPathSeparators,
+} from "@/lib/paths";
 import {
   providerRequiresProjectBinding,
   resolveProviderLabel,
@@ -83,6 +87,19 @@ function fillTemplate(
 /** 统一的可读错误兜底：优先取后端 message，禁止把序列化负载直接丢进 UI。 */
 function describeInvokeError(error: unknown): string {
   return extractInvokeErrorMessage(error);
+}
+
+/**
+ * 目录选择器选中仓库内的 `.git` 目录时，归一化为其所在的工作区根目录，
+ * 避免仓库被命名为 ".git" 且 Provider / 分支探测全部落空。
+ */
+function normalizeSelectedRepositoryPath(path: string): string {
+  const trimmed = stripTrailingPathSeparators(path.trim());
+  if (getPathBasename(trimmed).toLowerCase() !== ".git") {
+    return path;
+  }
+
+  return stripTrailingPathSeparators(trimmed.slice(0, -".git".length)) || path;
 }
 
 function createFallbackBranches(path: string, currentBranch: string): Branch[] {
@@ -276,7 +293,7 @@ export async function handleAddRepoRuntime(params: {
     return { status: "cancelled" };
   }
 
-  const path = selected;
+  const path = normalizeSelectedRepositoryPath(selected);
   const name = getPathBasename(path) || "Unknown";
   // 同一条 toast 随流程演进（loading → success / error），避免叠加两条互相矛盾
   const toastId = createRepositoryId();
