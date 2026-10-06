@@ -35,7 +35,7 @@ OnePublish assumes you publish often.
 
 Design consequences:
 
-- Global shortcuts exist for core actions.
+- In-app keyboard shortcuts exist for core actions (active while the OnePublish window has focus).
 - The UI is optimized for quick re-runs.
 - Settings focus on high-leverage preferences instead of endless knobs.
 
@@ -77,8 +77,8 @@ Design consequences:
 
 ### Separation Of Concerns
 
-- Frontend (React): state, user intent, rendering, client-side preferences.
-- Backend (Tauri/Rust): OS-level capabilities, filesystem/process integration, global shortcuts, tray.
+- Frontend (React): state, user intent, keyboard shortcuts, rendering, client-side preferences.
+- Backend (Tauri/Rust): OS-level capabilities, filesystem/process integration, tray.
 
 This boundary keeps the UI fast to iterate and the system behavior correct and testable.
 
@@ -87,7 +87,7 @@ This boundary keeps the UI fast to iterate and the system behavior correct and t
 The contract between frontend and backend should be:
 
 - Tauri commands: for request/response actions (e.g. run publish, scan projects).
-- Events: for asynchronous signals (e.g. global shortcut triggers, long-running process output).
+- Events: for asynchronous signals (e.g. long-running publish output, update download progress).
 
 Rule of thumb:
 
