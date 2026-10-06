@@ -12,7 +12,8 @@ pub use prepare::{prepare_from_projection, TriggerContext, TriggerInput};
 pub use staging::{load_staged_artifacts, stage_shard_artifacts, SHARD_STAGING_DIRECTORY};
 
 use publish_adapters::{
-    AdapterConformanceFixture, AdapterRegistry, ChecksumProcessor, CustomCommandProcessor,
+    AdapterConformanceFixture, AdapterRegistry, CancellationSignal, ChecksumProcessor,
+    CustomCommandProcessor,
     FakeGitHubActionsBackend, GhCliGitHubReleaseApi, GitHubActionsBackend,
     GitHubReleaseDestination, LocalDirectoryDestination, LocalExecutionBackend,
     OpenSshSftpTransport, SftpDeliveryDestination, StaticCredentialSource,
@@ -132,6 +133,7 @@ pub struct PreparedAttempt {
 pub struct StandaloneRunner {
     runtime: PublishRuntime,
     runtime_revision: AutomationRuntimeRevision,
+    cancellation: CancellationSignal,
 }
 
 impl StandaloneRunner {
@@ -143,7 +145,15 @@ impl StandaloneRunner {
         Ok(Self {
             runtime: PublishRuntime::new(registry),
             runtime_revision,
+            cancellation: CancellationSignal::default(),
         })
+    }
+
+    /// 注入执行环境的取消信号（ADR-0041）：headless 进程据此把终止信号转成
+    /// 取消请求，进行中的构建进程树由执行端口中断回收。
+    pub fn with_cancellation(mut self, cancellation: CancellationSignal) -> Self {
+        self.cancellation = cancellation;
+        self
     }
 
     pub fn prepare_attempt(
@@ -170,7 +180,11 @@ impl StandaloneRunner {
                 "prepared attempt no longer matches its sealed planning input".to_string(),
             ));
         }
-        self.runtime.start_prepared(&attempt.prepared, attempt_id)
+        self.runtime.start_prepared_with_cancellation(
+            &attempt.prepared,
+            attempt_id,
+            &self.cancellation,
+        )
     }
 
     /// 分片执行（决议 #85）：只执行分配给指定平台亲和的节点子集，输出本段
@@ -183,8 +197,13 @@ impl StandaloneRunner {
         staged_artifacts: Vec<publish_domain::ArtifactCandidate>,
     ) -> Result<publish_runner_core::ShardOutcome, PublishError> {
         self.ensure_serviceable_attempt(attempt)?;
-        self.runtime
-            .start_prepared_shard(&attempt.prepared, attempt_id, platform, staged_artifacts)
+        self.runtime.start_prepared_shard_with_cancellation(
+            &attempt.prepared,
+            attempt_id,
+            platform,
+            staged_artifacts,
+            &self.cancellation,
+        )
     }
 
     fn ensure_serviceable_attempt(&self, attempt: &PreparedAttempt) -> Result<(), PublishError> {
