@@ -210,24 +210,22 @@ impl Provider for BuiltInProvider {
                 String::new()
             }
             BuiltInProviderKind::Cargo => {
-                if let Some(target_dir) = read_parameter_string(&spec.parameters, "target_dir") {
-                    return resolve_output_path(target_dir, self.resolve_working_dir(spec));
+                // cargo 产物布局：<target-dir>/[<triple>/]<profile>，target-dir 缺省为项目下的 target。
+                let target_dir = read_parameter_string(&spec.parameters, "target_dir")
+                    .unwrap_or_else(|| "target".to_string());
+                let mut output_dir = PathBuf::from(resolve_output_path(
+                    target_dir,
+                    self.resolve_working_dir(spec),
+                ));
+                if let Some(triple) = read_parameter_string(&spec.parameters, "target") {
+                    output_dir.push(triple);
                 }
-
-                if let Some(project_dir) = self.resolve_working_dir(spec) {
-                    let profile = if read_parameter_bool(&spec.parameters, "release") {
-                        "release"
-                    } else {
-                        "debug"
-                    };
-                    return project_dir
-                        .join("target")
-                        .join(profile)
-                        .to_string_lossy()
-                        .to_string();
-                }
-
-                String::new()
+                output_dir.push(if read_parameter_bool(&spec.parameters, "release") {
+                    "release"
+                } else {
+                    "debug"
+                });
+                output_dir.to_string_lossy().to_string()
             }
             BuiltInProviderKind::Go => read_parameter_string(&spec.parameters, "output")
                 .map(|output| resolve_output_path(output, self.resolve_working_dir(spec)))
@@ -246,6 +244,13 @@ impl Provider for BuiltInProvider {
             BuiltInProviderKind::Cargo => read_parameter_string(&spec.parameters, "target_dir"),
             BuiltInProviderKind::Go => read_parameter_string(&spec.parameters, "output"),
             BuiltInProviderKind::JavaGradle => None,
+        }
+    }
+
+    fn verify_build_output(&self, output_dir: &Path) -> Result<(), String> {
+        match self.kind {
+            BuiltInProviderKind::Cargo => verify_cargo_build_output(output_dir),
+            _ => Ok(()),
         }
     }
 
@@ -538,6 +543,55 @@ fn resolve_gradle_program(
     ))
 }
 
+/// cargo 只把最终产物（可执行文件、库）提升到 profile 目录顶层；顶层只剩
+/// `.cargo-lock`、dep-info 或其他无关文件时，说明输出目录与实际构建布局不符。
+fn verify_cargo_build_output(output_dir: &Path) -> Result<(), String> {
+    let has_build_product = std::fs::read_dir(output_dir).is_ok_and(|entries| {
+        entries
+            .flatten()
+            .any(|entry| is_cargo_build_product(&entry))
+    });
+    if has_build_product {
+        Ok(())
+    } else {
+        Err(format!(
+            "cargo build produced no executable or library in {}",
+            output_dir.display()
+        ))
+    }
+}
+
+fn is_cargo_build_product(entry: &std::fs::DirEntry) -> bool {
+    if entry.file_name().to_string_lossy().starts_with('.') {
+        return false;
+    }
+    let metadata = match entry.metadata() {
+        Ok(metadata) if metadata.is_file() => metadata,
+        _ => return false,
+    };
+    let extension = entry
+        .path()
+        .extension()
+        .and_then(|extension| extension.to_str())
+        .unwrap_or_default()
+        .to_ascii_lowercase();
+    matches!(
+        extension.as_str(),
+        "exe" | "wasm" | "dll" | "so" | "dylib" | "rlib" | "a" | "lib"
+    ) || is_executable_file(&metadata)
+}
+
+#[cfg(unix)]
+fn is_executable_file(metadata: &std::fs::Metadata) -> bool {
+    use std::os::unix::fs::PermissionsExt;
+    metadata.permissions().mode() & 0o111 != 0
+}
+
+#[cfg(not(unix))]
+fn is_executable_file(_metadata: &std::fs::Metadata) -> bool {
+    false
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -635,6 +689,166 @@ mod tests {
             repository.path().join("target/release").to_string_lossy()
         );
         assert_eq!(provider.configured_output_dir(&debug_spec), None);
+    }
+
+    #[test]
+    fn cargo_places_cross_target_output_under_the_triple() {
+        let repository = tempfile::tempdir().expect("create repository");
+        std::fs::write(repository.path().join("Cargo.toml"), "[package]").expect("write manifest");
+        let registry = ProviderRegistry::new();
+        let provider = registry.get("cargo").expect("provider");
+        let target = (
+            "target",
+            SpecValue::String("x86_64-unknown-linux-gnu".to_string()),
+        );
+
+        let release_spec = output_dir_spec(
+            repository.path(),
+            &[("release", SpecValue::Bool(true)), target.clone()],
+        );
+        assert_eq!(
+            provider.infer_output_dir(&release_spec),
+            repository
+                .path()
+                .join("target")
+                .join("x86_64-unknown-linux-gnu")
+                .join("release")
+                .to_string_lossy()
+        );
+        let debug_spec = output_dir_spec(repository.path(), &[target]);
+        assert_eq!(
+            provider.infer_output_dir(&debug_spec),
+            repository
+                .path()
+                .join("target")
+                .join("x86_64-unknown-linux-gnu")
+                .join("debug")
+                .to_string_lossy()
+        );
+        assert_eq!(provider.configured_output_dir(&release_spec), None);
+    }
+
+    #[test]
+    fn cargo_appends_the_profile_to_an_explicit_target_dir() {
+        let repository = tempfile::tempdir().expect("create repository");
+        std::fs::write(repository.path().join("Cargo.toml"), "[package]").expect("write manifest");
+        let registry = ProviderRegistry::new();
+        let provider = registry.get("cargo").expect("provider");
+
+        // 相对 target_dir 以项目目录为基准，与 cargo 的 --target-dir 解析一致。
+        let relative = output_dir_spec(
+            repository.path(),
+            &[
+                ("release", SpecValue::Bool(true)),
+                ("target_dir", SpecValue::String("build-out".to_string())),
+            ],
+        );
+        assert_eq!(
+            provider.infer_output_dir(&relative),
+            repository
+                .path()
+                .join("build-out")
+                .join("release")
+                .to_string_lossy()
+        );
+
+        // 显式 target_dir 是已配置输出根目录，profile 子目录仍需派生。
+        let absolute_root = repository.path().join("shared-target");
+        let absolute_root_text = absolute_root.to_string_lossy().to_string();
+        let absolute = output_dir_spec(
+            repository.path(),
+            &[("target_dir", SpecValue::String(absolute_root_text.clone()))],
+        );
+        assert_eq!(
+            provider.infer_output_dir(&absolute),
+            absolute_root.join("debug").to_string_lossy()
+        );
+        assert_eq!(
+            provider.configured_output_dir(&absolute),
+            Some(absolute_root_text)
+        );
+    }
+
+    #[test]
+    fn cargo_combines_target_dir_triple_and_profile() {
+        let repository = tempfile::tempdir().expect("create repository");
+        std::fs::write(repository.path().join("Cargo.toml"), "[package]").expect("write manifest");
+        let registry = ProviderRegistry::new();
+        let provider = registry.get("cargo").expect("provider");
+
+        let spec = output_dir_spec(
+            repository.path(),
+            &[
+                ("release", SpecValue::Bool(true)),
+                (
+                    "target",
+                    SpecValue::String("aarch64-apple-darwin".to_string()),
+                ),
+                ("target_dir", SpecValue::String("build-out".to_string())),
+            ],
+        );
+        assert_eq!(
+            provider.infer_output_dir(&spec),
+            repository
+                .path()
+                .join("build-out")
+                .join("aarch64-apple-darwin")
+                .join("release")
+                .to_string_lossy()
+        );
+    }
+
+    #[test]
+    fn cargo_build_output_requires_an_uplifted_product() {
+        let registry = ProviderRegistry::new();
+        let provider = registry.get("cargo").expect("provider");
+        let profile_dir = tempfile::tempdir().expect("create profile dir");
+        let profile = profile_dir.path();
+
+        // 复现输出目录派生错误时的形态：顶层只有锁文件、dep-info 与旧快照，
+        // 依赖产物位于子目录，都不是可交付产物。
+        for name in [".cargo-lock", "demo.d", "execution-snapshot-2026-10-06.md"] {
+            std::fs::write(profile.join(name), "").expect("write non-product file");
+        }
+        std::fs::create_dir_all(profile.join("deps")).expect("create deps dir");
+        std::fs::write(profile.join("deps").join("libdep-0123.rlib"), "")
+            .expect("write dependency rlib");
+        assert!(provider.verify_build_output(profile).is_err());
+        assert!(provider
+            .verify_build_output(&profile.join("missing"))
+            .is_err());
+
+        std::fs::write(profile.join("libdemo.rlib"), "").expect("write library");
+        assert_eq!(provider.verify_build_output(profile), Ok(()));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn cargo_build_output_accepts_an_extensionless_executable() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let registry = ProviderRegistry::new();
+        let provider = registry.get("cargo").expect("provider");
+        let profile_dir = tempfile::tempdir().expect("create profile dir");
+        let binary = profile_dir.path().join("demo");
+        std::fs::write(&binary, "").expect("write binary");
+        std::fs::set_permissions(&binary, std::fs::Permissions::from_mode(0o644))
+            .expect("clear executable bit");
+        assert!(provider.verify_build_output(profile_dir.path()).is_err());
+
+        std::fs::set_permissions(&binary, std::fs::Permissions::from_mode(0o755))
+            .expect("set executable bit");
+        assert_eq!(provider.verify_build_output(profile_dir.path()), Ok(()));
+    }
+
+    #[test]
+    fn non_cargo_providers_skip_build_output_verification() {
+        let registry = ProviderRegistry::new();
+        let missing = Path::new("/nonexistent/one-publish-output");
+        for id in ["dotnet", "go", "java", "tauri"] {
+            let provider = registry.get(id).expect("provider");
+            assert_eq!(provider.verify_build_output(missing), Ok(()), "{id}");
+        }
     }
 
     #[test]
