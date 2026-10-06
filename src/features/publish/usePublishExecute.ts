@@ -6,12 +6,14 @@ import type {
   TranslationMap,
 } from "@/features/publish/publishTransaction";
 import { usePublishStore } from "@/stores/publishStore";
+import { useI18n } from "@/hooks/useI18n";
 import { createPublishExecutionRecord } from "@/features/history/publishExecutionRecord";
 import { exportExecutionSnapshot } from "@/features/history/executionSnapshot";
 import { normalizePublishResult } from "@/features/history/publishFailure";
 import {
   canRequestRuntimeOutputAccess,
   cancelPublishRuntime,
+  describeBlockedRuntime,
   preparePublishRuntime,
   resumePublishRuntime,
   startPublishRuntime,
@@ -106,6 +108,8 @@ export function usePublishExecute({
   currentConfigurationRevisionId,
   currentConfigurationBlockedReason,
 }: UsePublishExecuteParams): UsePublishExecuteResult {
+  // 阻断诊断按 `errors.<code>` 本地化，该分支不在 appT 内。
+  const { translations } = useI18n();
   const presentationRevisionRef = useRef(0);
   const activeRunRef = useRef<ActivePublishRun | null>(null);
   const [activeRuntime, setActiveRuntime] =
@@ -305,7 +309,7 @@ export function usePublishExecute({
         if (!ready) {
           throw new Error(
             prepared && prepared.status === "blocked"
-              ? prepared.diagnostics[0]?.message ||
+              ? describeBlockedRuntime(prepared, translations) ||
                   appT.publishRuntimeBlocked ||
                   "本地发布计划存在阻塞项"
               : "PublishRuntime preparation returned no result"
@@ -599,6 +603,7 @@ export function usePublishExecute({
       setCurrentPublishRecordId,
       replaceCapturedOutputLog,
       startPublishPresentationRun,
+      translations,
       waitForOutputLogSnapshot,
     ]
   );
@@ -672,9 +677,7 @@ export function usePublishExecute({
     if (blocker === "runtime-blocked") {
       toast.error(publishT.configurationBlocked || "当前发布配置不可执行", {
         description:
-          (validate.preparedRuntime?.status === "blocked"
-            ? validate.preparedRuntime.diagnostics[0]?.message
-            : undefined) ||
+          describeBlockedRuntime(validate.preparedRuntime, translations) ||
           appT.publishRuntimeBlocked ||
           "本地发布计划存在阻塞项",
       });
@@ -702,6 +705,7 @@ export function usePublishExecute({
     runPublishSpec,
     runtimeResult,
     selectedRepoId,
+    translations,
     validate,
   ]);
 

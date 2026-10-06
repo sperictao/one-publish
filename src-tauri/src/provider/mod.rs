@@ -48,6 +48,19 @@ pub struct ProviderOutputLayout {
     pub parameter: String,
     /// 默认输出目录布局模板。
     pub template: String,
+    /// 清理开关的 schema 布尔参数键：派生目录归 OnePublish 独占时缺省开启，
+    /// 避免交付上次发布残留的文件；配置显式设置时保留用户选择。
+    #[serde(default)]
+    #[ts(optional = nullable)]
+    pub cleanup_parameter: Option<String>,
+}
+
+/// Provider 自行派生的缺省输出：配置未显式给出时写入执行参数。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ProviderDefaultOutput {
+    /// 写入的 schema 参数键。
+    pub parameter: String,
+    pub path: PathBuf,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
@@ -199,6 +212,16 @@ pub trait Provider: Send + Sync {
 
     fn configured_output_dir(&self, spec: &PublishSpec) -> Option<String>;
 
+    /// 未声明 `output_layout` 模板的 Provider 自行派生缺省输出；`default_output_dir`
+    /// 是设置中的默认发布目录（可能为空）。空实现表示沿用 Provider 原生输出。
+    fn default_output(
+        &self,
+        _spec: &PublishSpec,
+        _default_output_dir: &str,
+    ) -> Option<ProviderDefaultOutput> {
+        None
+    }
+
     /// 构建进程成功退出后校验原生输出目录确实含有交付产物；返回 Err 时本次发布
     /// 按失败处理，避免把锁文件等无关内容当作产物交付。空实现表示不做额外校验。
     fn verify_build_output(&self, _output_dir: &Path) -> Result<(), String> {
@@ -209,6 +232,12 @@ pub trait Provider: Send + Sync {
     /// 不再递归。空实现表示整个输出目录都是产物。
     fn artifact_filter(&self) -> Option<publish_adapters::ArtifactEntryFilter> {
         None
+    }
+
+    /// 原生输出目录跨构建累积旧产物时返回 true：构建前移除被 `artifact_filter`
+    /// 接受的顶层文件，交付只含本次构建的产物。
+    fn clears_stale_artifacts(&self) -> bool {
+        false
     }
 
     fn resolve_runtime_program(

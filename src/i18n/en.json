@@ -959,6 +959,7 @@
     "publish_runtime_project_binding_mismatch": "The publish inputs resolve to a different project than the one bound to this configuration revision. Rebind the project.",
     "publish_runtime_project_binding_provider_mismatch": "The bound project doesn't belong to this provider.",
     "publish_output_access_denied": "Access to the publish output directory was denied. Grant access and try again.",
+    "publish_runtime_output_unresolved": "Couldn't determine where to publish. Set an output path in the publish configuration, or choose a folder in Settings > Default Output Directory, then try again.",
     "github_actions_release_config_missing": "GitHub Actions automation requires Tauri release settings in the configuration revision.",
     "automation_install_identity_missing": "The install request is missing the binding identity from the preview. Preview the projection changes first.",
     "automation_remote_targets_missing": "Remote planning requires at least one enabled build target.",

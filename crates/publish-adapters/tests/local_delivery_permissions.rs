@@ -145,6 +145,7 @@ fn delivered_executables_keep_their_mode_and_run_directly() {
             }),
             output_directory: output,
             artifact_filter: None,
+            clear_stale_artifacts: false,
             source_guard: Arc::new(CleanCheckoutGuard),
         }),
     );

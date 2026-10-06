@@ -959,6 +959,7 @@
     "publish_runtime_project_binding_mismatch": "发布输入解析出的项目与配置修订绑定的项目不一致，请重新绑定项目",
     "publish_runtime_project_binding_provider_mismatch": "绑定的项目不属于当前 Provider",
     "publish_output_access_denied": "没有访问发布输出目录的权限，请授权后重试",
+    "publish_runtime_output_unresolved": "无法确定发布输出位置，请在发布配置中填写输出路径，或在“设置 > 默认发布目录”中指定目录后重试",
     "github_actions_release_config_missing": "GitHub Actions 自动化需要修订中的 Tauri 发布设置",
     "automation_install_identity_missing": "安装请求缺少预览归一化的绑定身份，请先预览投影差异",
     "automation_remote_targets_missing": "远端现场规划需要至少一个启用的构建目标",

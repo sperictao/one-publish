@@ -145,6 +145,7 @@ fn runtime(
                     port: Arc::new(port),
                     output_directory,
                     artifact_filter: None,
+                    clear_stale_artifacts: false,
                     source_guard: Arc::new(CleanCheckoutGuard),
                 }),
             )),

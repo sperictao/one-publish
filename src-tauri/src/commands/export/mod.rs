@@ -368,6 +368,18 @@ pub async fn open_directory(path: String) -> Result<String, crate::errors::AppEr
 pub async fn open_output_directory(output_dir: String) -> Result<String, crate::errors::AppError> {
     let _timer =
         crate::commands::middleware::CommandTimer::new("commands::export::open_output_directory");
+    let path = output_directory_to_open(&output_dir)?;
+
+    open::that(&path).map_err(|source| {
+        export_open_error("打开输出目录失败", source, "open_output_directory_failed")
+    })?;
+
+    Ok(path.to_string_lossy().to_string())
+}
+
+/// 输出可以是目录，也可以是单个文件（例如 `go build -o` 写出的二进制）；
+/// 文件输出打开其所在文件夹。
+fn output_directory_to_open(output_dir: &str) -> Result<PathBuf, crate::errors::AppError> {
     let trimmed = output_dir.trim();
     if trimmed.is_empty() {
         return Err(export_error("输出目录为空", "output_dir_empty"));
@@ -381,18 +393,18 @@ pub async fn open_output_directory(output_dir: String) -> Result<String, crate::
         ));
     }
 
-    if !path.is_dir() {
-        return Err(export_error(
+    if path.is_dir() {
+        return Ok(path);
+    }
+    match path.parent() {
+        Some(parent) if path.is_file() && !parent.as_os_str().is_empty() => {
+            Ok(parent.to_path_buf())
+        }
+        _ => Err(export_error(
             format!("输出目录不是文件夹: {}", trimmed),
             "output_dir_not_directory",
-        ));
+        )),
     }
-
-    open::that(&path).map_err(|source| {
-        export_open_error("打开输出目录失败", source, "open_output_directory_failed")
-    })?;
-
-    Ok(path.to_string_lossy().to_string())
 }
 
 #[cfg(test)]
@@ -732,6 +744,30 @@ mod tests {
         assert_eq!(
             error_code(None).as_deref(),
             Some("snapshot_and_output_dir_missing")
+        );
+    }
+
+    #[test]
+    fn opening_a_file_output_reveals_its_parent_folder() {
+        let temp = tempfile::tempdir().expect("temp dir");
+        let binary = temp.path().join("dist").join("app");
+        std::fs::create_dir_all(binary.parent().expect("binary parent")).expect("create dist");
+        std::fs::write(&binary, "binary").expect("write binary");
+
+        assert_eq!(
+            output_directory_to_open(&binary.to_string_lossy()).expect("file output"),
+            temp.path().join("dist")
+        );
+        assert_eq!(
+            output_directory_to_open(&format!(" {} ", temp.path().display()))
+                .expect("directory output"),
+            temp.path()
+        );
+        let error_code = |output: &str| output_directory_to_open(output).unwrap_err().code;
+        assert_eq!(error_code("  ").as_deref(), Some("output_dir_empty"));
+        assert_eq!(
+            error_code(&temp.path().join("missing").to_string_lossy()).as_deref(),
+            Some("output_dir_not_found")
         );
     }
 }

@@ -899,6 +899,7 @@ impl TauriRuntimeProvider {
             args.push("--target".to_string());
             args.push(target.to_string());
         }
+        execution.clear_stale_artifacts()?;
         // 分片构建（决议 #85）：每个目标物化进输出目录的 per-target 子目录，
         // 同一 job 内多目标互不重复收集；产物结构知识（bundle 布局）属本
         // Provider，端口只负责跑命令。本地无目标路径保持桌面合同不变。
