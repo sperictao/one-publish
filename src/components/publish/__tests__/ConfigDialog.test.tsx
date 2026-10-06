@@ -32,7 +32,8 @@ vi.mock("sonner", () => ({
   },
 }));
 
-vi.mock("@/hooks/useI18n", () => ({
+vi.mock("@/hooks/useI18n", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/hooks/useI18n")>()),
   useI18n: () => ({
     language: "zh",
     translations: {

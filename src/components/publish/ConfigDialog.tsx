@@ -26,7 +26,8 @@ import {
 import { toast } from "sonner";
 import { importConfig } from "@/lib/store/api";
 import { type ConfigParameters, type ConfigProfile } from "@/lib/store/types";
-import { useI18n } from "@/hooks/useI18n";
+import { getLanguageLocale, useI18n } from "@/hooks/useI18n";
+import { localizeInvokeError } from "@/lib/tauri/invokeErrors";
 import { DeleteProfileConfirmDialog } from "@/components/publish/DeleteProfileConfirmDialog";
 
 interface ConfigManagementContentProps {
@@ -92,7 +93,7 @@ export function ConfigManagementContent({
 }: ConfigManagementContentProps) {
   const { translations, language } = useI18n();
   const profileT = translations.profiles || {};
-  const dateLocale = language === "en" ? "en-US" : "zh-CN";
+  const dateLocale = getLanguageLocale(language);
   const [newProfileName, setNewProfileName] = useState("");
   const [isSaving, setIsSaving] = useState(false);
   const [pendingImport, setPendingImport] = useState<PendingImportState | null>(
@@ -129,7 +130,7 @@ export function ConfigManagementContent({
       setNewProfileName("");
     } catch (err) {
       toast.error(profileT.saveFailed || "保存配置文件失败", {
-        description: err instanceof Error ? err.message : String(err),
+        description: localizeInvokeError(err, translations),
       });
     } finally {
       setIsSaving(false);
@@ -148,7 +149,7 @@ export function ConfigManagementContent({
       toast.success(profileT.deleteSuccess || "配置已删除");
     } catch (err) {
       toast.error(profileT.deleteFailed || "删除配置文件失败", {
-        description: err instanceof Error ? err.message : String(err),
+        description: localizeInvokeError(err, translations),
       });
     }
   };
@@ -178,7 +179,7 @@ export function ConfigManagementContent({
       }
     } catch (err) {
       toast.error(profileT.exportFailed || "导出配置失败", {
-        description: err instanceof Error ? err.message : String(err),
+        description: localizeInvokeError(err, translations),
       });
     }
   };
@@ -202,7 +203,7 @@ export function ConfigManagementContent({
       setPendingImport(null);
     } catch (err) {
       toast.error(profileT.importFailed || "导入配置失败", {
-        description: err instanceof Error ? err.message : String(err),
+        description: localizeInvokeError(err, translations),
       });
     } finally {
       setIsApplyingImport(false);
@@ -213,6 +214,7 @@ export function ConfigManagementContent({
     profileT.importFailed,
     profileT.importSuccess,
     repoId,
+    translations,
   ]);
 
   const handleImportConfig = async () => {
@@ -236,7 +238,7 @@ export function ConfigManagementContent({
           });
         } catch (err) {
           toast.error(profileT.importFailed || "导入配置失败", {
-            description: err instanceof Error ? err.message : String(err),
+            description: localizeInvokeError(err, translations),
           });
         } finally {
           setIsImportLoading(false);
@@ -244,7 +246,7 @@ export function ConfigManagementContent({
       }
     } catch (err) {
       toast.error(profileT.importFailed || "导入配置失败", {
-        description: err instanceof Error ? err.message : String(err),
+        description: localizeInvokeError(err, translations),
       });
     }
   };

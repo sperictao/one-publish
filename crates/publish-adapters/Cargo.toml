@@ -12,3 +12,6 @@ semver.workspace = true
 serde.workspace = true
 tempfile.workspace = true
 toml_edit.workspace = true
+
+[target.'cfg(unix)'.dependencies]
+libc.workspace = true

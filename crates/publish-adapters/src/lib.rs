@@ -1,4 +1,5 @@
 use std::collections::BTreeMap;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 
 use publish_domain::{
@@ -17,6 +18,7 @@ pub mod fixture;
 mod github_actions;
 mod github_release;
 mod local;
+pub mod process_tree;
 mod processors;
 mod sftp;
 pub mod tauri;
@@ -181,6 +183,25 @@ pub fn execute_plan_in_order(
     Ok(())
 }
 
+/// 取消信号（ADR-0041）：运行核心据此停止尚未开始的节点；声明支持取消的
+/// Adapter（如 Provider 构建端口）据此中断自身进行中的执行。
+#[derive(Debug, Clone, Default)]
+pub struct CancellationSignal(Arc<AtomicBool>);
+
+impl CancellationSignal {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    pub fn request(&self) {
+        self.0.store(true, Ordering::SeqCst);
+    }
+
+    pub fn is_requested(&self) -> bool {
+        self.0.load(Ordering::SeqCst)
+    }
+}
+
 #[derive(Debug)]
 pub struct AdapterExecutionContext<'a> {
     pub attempt_id: &'a str,
@@ -193,6 +214,8 @@ pub struct AdapterExecutionContext<'a> {
     /// 当前节点 Adapter 的 schema 声明并由执行后端解析的凭据；只在执行边界存在，
     /// 不进入任何序列化面（ADR-0029）。
     pub credentials: &'a BTreeMap<String, publish_domain::ResolvedCredential>,
+    /// 本次尝试的取消信号；支持中断的 Adapter 在执行期间观察它。
+    pub cancellation: CancellationSignal,
 }
 
 #[derive(Debug, Default)]
