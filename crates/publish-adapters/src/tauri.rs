@@ -144,7 +144,9 @@ impl TauriProjectProvider {
             1,
             AdapterSchema::new(1)
                 .with_required_string(CONFIG_PATH_SETTING)
-                .with_required_string(BUILD_DRIVER_SETTING),
+                .with_required_string(BUILD_DRIVER_SETTING)
+                // 远端绑定总是写入启用目标（决议 #85），本地绑定缺省。
+                .with_optional_string_list(ENABLED_TARGETS_SETTING),
             PublishingCapability {
                 // 构建产物是未验证候选；摘要验证由 Artifact Processor 提供，
                 // Provider 不得越权声明已验证能力（ADR-0035、Issue T20）。
@@ -256,6 +258,7 @@ impl AdapterContract for TauriProjectProvider {
         crate::validate_settings_against_schema(self.descriptor(), settings)?;
         let adapter = self.descriptor.identity().display_name();
         bound_settings(settings, &adapter)?;
+        enabled_build_targets(settings, &adapter)?;
         Ok(())
     }
 
@@ -1414,13 +1417,22 @@ mod plan_fragment_tests {
             serde_json::json!("x86_64-unknown-linux-gnu"),
             serde_json::json!([1, 2]),
         ] {
-            let error = provider
-                .plan_fragment(&snapshot(), &settings(Some(malformed.clone())))
-                .expect_err("malformed enabled targets must be rejected");
-            assert!(
-                error.to_string().contains(ENABLED_TARGETS_SETTING),
-                "unexpected error for {malformed}: {error}"
-            );
+            let malformed_settings = settings(Some(malformed.clone()));
+            // 设置校验（规划入口）与计划展开同样显式拒绝，而不是静默降级为本地单构建。
+            let errors = [
+                provider
+                    .validate_settings(&malformed_settings)
+                    .expect_err("settings validation must reject malformed enabled targets"),
+                provider
+                    .plan_fragment(&snapshot(), &malformed_settings)
+                    .expect_err("malformed enabled targets must be rejected"),
+            ];
+            for error in errors {
+                assert!(
+                    error.to_string().contains(ENABLED_TARGETS_SETTING),
+                    "unexpected error for {malformed}: {error}"
+                );
+            }
         }
     }
 
