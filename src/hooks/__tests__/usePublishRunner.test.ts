@@ -138,6 +138,7 @@ vi.mock("@/lib/tauri/invokeErrors", () => ({
     error && typeof error === "object" && "details" in error
       ? String((error as { details: unknown }).details)
       : null,
+  localizeInvokeError: (error: { message: string }) => error.message,
   analyzePublishExecutionFailure: mocks.analyzePublishExecutionFailure,
 }));
 

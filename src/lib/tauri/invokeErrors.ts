@@ -127,6 +127,30 @@ export function extractInvokeErrorDetails(error: unknown): string | null {
   return extractDetailsFromObject(error);
 }
 
+/** 只依赖翻译树中的 `errors` 分支，兼容 useI18n().translations。 */
+export interface InvokeErrorTranslations {
+  errors?: Record<string, unknown>;
+}
+
+/**
+ * 按后端稳定错误码（AppError.code / 阻断诊断 code）取 `errors.<code>` 文案；
+ * 后端 message 语言不受界面语言控制，只作为未登记错误码时的兜底。
+ * details 约定为语言中立的技术细节（路径、分支、底层错误），本地化后原样附加。
+ */
+export function localizeInvokeError(
+  error: unknown,
+  translations: InvokeErrorTranslations | null | undefined
+): string {
+  const code = extractInvokeErrorCode(error);
+  const localized = code ? translations?.errors?.[code] : undefined;
+  if (typeof localized !== "string" || localized.length === 0) {
+    return extractInvokeErrorMessage(error);
+  }
+
+  const details = extractInvokeErrorDetails(error);
+  return details ? `${localized} | ${details}` : localized;
+}
+
 export function analyzeBranchRefreshFailure(
   error: unknown
 ): BranchRefreshFailureReason {

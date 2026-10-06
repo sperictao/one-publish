@@ -9,7 +9,6 @@ vi.mock("@tauri-apps/api/core", () => ({
 import {
   cancelPublishRuntime,
   describeBlockedRuntime,
-  describeRuntimeDiagnostic,
   importFromCommand,
   preparePublishRuntime,
   preflightProviderPublishOutput,
@@ -309,32 +308,38 @@ describe("publishRuntime", () => {
     });
   });
 
-  it("localizes actionable block diagnostics and keeps other messages verbatim", () => {
+  it("describes the first blocked diagnostic through the errors catalog", () => {
     const unresolved = {
       code: "publish_runtime_output_unresolved",
       message: "publish output location could not be determined",
     };
-    const denied = {
-      code: "publish_output_access_denied",
-      message: "publish output access is denied",
+    const unregistered = {
+      code: "publish_runtime_delivery_blocked",
+      message: "local delivery destination /repo/out is not a directory",
     };
-    const appT = { publishRuntimeOutputUnresolved: "Set an output path" };
-
-    expect(describeRuntimeDiagnostic(unresolved, appT)).toBe(
-      "Set an output path"
-    );
-    expect(describeRuntimeDiagnostic(unresolved, {})).toContain("默认发布目录");
-    expect(describeRuntimeDiagnostic(denied, appT)).toBe(denied.message);
+    const translations = {
+      errors: { publish_runtime_output_unresolved: "Set an output path" },
+    };
 
     expect(
       describeBlockedRuntime(
-        { status: "blocked", diagnostics: [unresolved, denied] },
-        appT
+        { status: "blocked", diagnostics: [unresolved, unregistered] },
+        translations
       )
     ).toBe("Set an output path");
+    // 未登记的诊断码沿用后端原文。
     expect(
-      describeBlockedRuntime({ status: "blocked", diagnostics: [] }, appT)
+      describeBlockedRuntime(
+        { status: "blocked", diagnostics: [unregistered] },
+        translations
+      )
+    ).toBe(unregistered.message);
+    expect(
+      describeBlockedRuntime(
+        { status: "blocked", diagnostics: [] },
+        translations
+      )
     ).toBeUndefined();
-    expect(describeBlockedRuntime(null, appT)).toBeUndefined();
+    expect(describeBlockedRuntime(null, translations)).toBeUndefined();
   });
 });

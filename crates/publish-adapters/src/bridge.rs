@@ -14,8 +14,9 @@ use publish_domain::{
 use serde_json::Value;
 
 use crate::{
-    AdapterContract, AdapterExecutionContext, AdapterExecutionOutput, ProjectProvider,
-    ARTIFACT_CANDIDATE_CAPABILITY, STRUCTURED_PLAN_EXECUTION_CAPABILITY,
+    process_tree, AdapterContract, AdapterExecutionContext, AdapterExecutionOutput,
+    CancellationSignal, ProjectProvider, ARTIFACT_CANDIDATE_CAPABILITY,
+    STRUCTURED_PLAN_EXECUTION_CAPABILITY,
 };
 
 pub const SELECTED_PROVIDER_ID: &str = "selected-project-provider";
@@ -57,17 +58,23 @@ pub struct ProviderExecutionOutcome {
     pub output_dir: String,
 }
 
-/// Provider 执行端口：桌面注入 Tauri 命令面实现（UI 流式输出与取消），
-/// headless 环境注入直接进程执行实现。
+/// Provider 执行端口：桌面注入 Tauri 命令面实现（UI 流式输出），headless
+/// 环境注入直接进程执行实现。两者都必须在 `cancellation` 被请求时终止构建
+/// 进程树，并以 `cancelled` 结果返回（ADR-0041）。
 pub trait ProviderExecutionPort: Send + Sync {
     /// 执行遗留 Provider 的完整发布规格；`spec_json` 是密封节点携带的规格原文，
     /// 实现方负责解码与校验。
-    fn execute_spec(&self, spec_json: &str) -> Result<ProviderExecutionOutcome, PublishError>;
+    fn execute_spec(
+        &self,
+        spec_json: &str,
+        cancellation: &CancellationSignal,
+    ) -> Result<ProviderExecutionOutcome, PublishError>;
 
     /// 运行密封计划节点物化出的结构化构建命令。
     fn execute_build(
         &self,
         request: SealedBuildCommand,
+        cancellation: &CancellationSignal,
     ) -> Result<ProviderExecutionOutcome, PublishError>;
 }
 
@@ -194,7 +201,7 @@ impl AdapterContract for SelectedProjectProvider {
     fn execute_node(
         &self,
         node: &PlanNode,
-        _context: &AdapterExecutionContext<'_>,
+        context: &AdapterExecutionContext<'_>,
     ) -> Result<AdapterExecutionOutput, PublishError> {
         match &node.operation {
             PlanOperation::RunProgram {
@@ -230,7 +237,7 @@ impl AdapterContract for SelectedProjectProvider {
         execution.clear_stale_artifacts()?;
         let outcome = execution
             .port
-            .execute_spec(planned_spec)
+            .execute_spec(planned_spec, &context.cancellation)
             .map_err(|error| PublishError::Execution(error.to_string()))?;
         finish_provider_execution(execution, outcome, classify_generic_artifact)
     }
@@ -257,13 +264,14 @@ pub(crate) fn finish_provider_execution(
     })
 }
 
-/// 执行结果的合同校验：未取消、成功、且产物目录与约定一致。
+/// 执行结果的合同校验：未取消、成功、且产物目录与约定一致。取消以
+/// `Cancelled` 报告，运行核心据此把节点记为取消而不是失败。
 pub(crate) fn ensure_provider_outcome(
     outcome: &ProviderExecutionOutcome,
     expected_output: &Path,
 ) -> Result<(), PublishError> {
     if outcome.cancelled {
-        return Err(PublishError::Execution(
+        return Err(PublishError::Cancelled(
             outcome
                 .error
                 .clone()
@@ -430,7 +438,11 @@ impl ExecutionSourceGuard for CleanCheckoutGuard {
 pub struct DirectProviderExecutionPort;
 
 impl ProviderExecutionPort for DirectProviderExecutionPort {
-    fn execute_spec(&self, _spec_json: &str) -> Result<ProviderExecutionOutcome, PublishError> {
+    fn execute_spec(
+        &self,
+        _spec_json: &str,
+        _cancellation: &CancellationSignal,
+    ) -> Result<ProviderExecutionOutcome, PublishError> {
         Err(PublishError::Execution(
             "legacy provider spec execution is not available in headless runners".to_string(),
         ))
@@ -439,21 +451,33 @@ impl ProviderExecutionPort for DirectProviderExecutionPort {
     fn execute_build(
         &self,
         request: SealedBuildCommand,
+        cancellation: &CancellationSignal,
     ) -> Result<ProviderExecutionOutcome, PublishError> {
-        let status = std::process::Command::new(&request.program)
+        let run_error = |error: std::io::Error| {
+            PublishError::Execution(format!(
+                "failed to run sealed build {}: {error}",
+                request.program
+            ))
+        };
+        let mut command = std::process::Command::new(&request.program);
+        command
             .args(&request.args)
             .current_dir(&request.working_directory)
-            .status()
-            .map_err(|error| {
-                PublishError::Execution(format!(
-                    "failed to run sealed build {}: {error}",
-                    request.program
-                ))
-            })?;
+            // 构建位于独立进程组，不得读取终端。
+            .stdin(std::process::Stdio::null());
+        process_tree::isolate(&mut command);
+        let mut child = command.spawn().map_err(run_error)?;
+        let (status, cancelled) =
+            process_tree::wait_or_cancel(&mut child, cancellation).map_err(run_error)?;
+        let success = status.success() && !cancelled;
         Ok(ProviderExecutionOutcome {
-            success: status.success(),
-            cancelled: false,
-            error: (!status.success()).then(|| format!("sealed build exited with {status}")),
+            success,
+            cancelled,
+            error: if cancelled {
+                Some("sealed build was cancelled".to_string())
+            } else {
+                (!success).then(|| format!("sealed build exited with {status}"))
+            },
             output_dir: request.output_directory.to_string_lossy().to_string(),
         })
     }
@@ -470,31 +494,37 @@ mod direct_execution_tests {
         let output = temp.path().join("provider-output");
 
         let outcome = DirectProviderExecutionPort
-            .execute_build(SealedBuildCommand {
-                provider_id: "fixture-provider".to_string(),
-                program: "true".to_string(),
-                args: Vec::new(),
-                working_directory: temp.path().to_path_buf(),
-                output_directory: output.clone(),
-            })
+            .execute_build(
+                SealedBuildCommand {
+                    provider_id: "fixture-provider".to_string(),
+                    program: "true".to_string(),
+                    args: Vec::new(),
+                    working_directory: temp.path().to_path_buf(),
+                    output_directory: output.clone(),
+                },
+                &CancellationSignal::new(),
+            )
             .expect("run the sealed build directly");
         assert!(outcome.success);
         assert_eq!(outcome.output_dir, output.to_string_lossy());
 
         let failed = DirectProviderExecutionPort
-            .execute_build(SealedBuildCommand {
-                provider_id: "fixture-provider".to_string(),
-                program: "false".to_string(),
-                args: Vec::new(),
-                working_directory: temp.path().to_path_buf(),
-                output_directory: output,
-            })
+            .execute_build(
+                SealedBuildCommand {
+                    provider_id: "fixture-provider".to_string(),
+                    program: "false".to_string(),
+                    args: Vec::new(),
+                    working_directory: temp.path().to_path_buf(),
+                    output_directory: output,
+                },
+                &CancellationSignal::new(),
+            )
             .expect("a failing build is a reported outcome, not a port error");
         assert!(!failed.success);
         assert!(failed.error.is_some());
 
         DirectProviderExecutionPort
-            .execute_spec("{}")
+            .execute_spec("{}", &CancellationSignal::new())
             .expect_err("the legacy spec bridge has no headless semantics");
     }
 }

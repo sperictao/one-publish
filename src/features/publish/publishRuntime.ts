@@ -6,7 +6,6 @@ import type {
   CommandImportResult,
   PreparedPublishRuntime,
   PreparePublishRuntimeRequest,
-  PublishBlockDiagnostic,
   PublishOutputPreflightResult,
   PublishResult as TauriPublishResult,
   PublishRuntimeResult,
@@ -19,7 +18,10 @@ import type {
   SynchronizePublishRuntimeRequest,
   SynchronizePublishRuntimeResult,
 } from "@/generated/tauri-contracts";
-import type { TranslationMap } from "@/features/publish/publishTransaction";
+import {
+  localizeInvokeError,
+  type InvokeErrorTranslations,
+} from "@/lib/tauri/invokeErrors";
 
 export type ProviderPublishSpec = TauriPublishSpec;
 export type PublishResult = TauriPublishResult;
@@ -121,29 +123,16 @@ export async function importFromCommand({
 }
 
 /**
- * 阻断诊断的展示文案：有可操作提示的诊断码使用本地化文案，其余沿用后端原文。
+ * 阻断运行时首个诊断的展示文案（按诊断码取 `errors.<code>`，未登记时沿用后端原文）；
+ * 未阻断或没有诊断时为 undefined。
  */
-export function describeRuntimeDiagnostic(
-  diagnostic: PublishBlockDiagnostic,
-  appT: TranslationMap
-): string {
-  if (diagnostic.code === "publish_runtime_output_unresolved") {
-    return (
-      appT.publishRuntimeOutputUnresolved ||
-      "无法确定发布输出位置。请在发布配置中填写输出路径，或在“设置 > 默认发布目录”中指定目录后重试。"
-    );
-  }
-  return diagnostic.message;
-}
-
-/** 阻断运行时首个诊断的展示文案；未阻断或没有诊断时为 undefined。 */
 export function describeBlockedRuntime(
   prepared: PreparedPublishRuntime | null | undefined,
-  appT: TranslationMap
+  translations: InvokeErrorTranslations | null | undefined
 ): string | undefined {
   const diagnostic =
     prepared?.status === "blocked" ? prepared.diagnostics[0] : undefined;
-  return diagnostic && describeRuntimeDiagnostic(diagnostic, appT);
+  return diagnostic && localizeInvokeError(diagnostic, translations);
 }
 
 /** Only output access denial can be resolved by requesting directory access. */

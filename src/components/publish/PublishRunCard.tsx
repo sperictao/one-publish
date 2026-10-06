@@ -16,10 +16,9 @@ import {
   Terminal,
   XCircle,
 } from "lucide-react";
-import {
-  describeRuntimeDiagnostic,
-  type PublishResult,
-  type ReadyPublishRuntime,
+import type {
+  PublishResult,
+  ReadyPublishRuntime,
 } from "@/features/publish/publishRuntime";
 import type {
   PreparedPublishRuntime,
@@ -33,6 +32,8 @@ import { PublishLogView } from "@/components/publish/PublishLogView";
 import { ArtifactActions } from "@/components/publish/ArtifactActions";
 import type { ArtifactActionState } from "@/lib/artifact";
 import { openOutputDirectory } from "@/lib/store/api";
+import { useI18n } from "@/hooks/useI18n";
+import { localizeInvokeError } from "@/lib/tauri/invokeErrors";
 import { SectionLabel } from "@/components/ui/section-label";
 import { cn } from "@/lib/utils";
 
@@ -84,6 +85,7 @@ export const PublishRunCard = memo(function PublishRunCard({
   onArtifactStateChange,
   onOpenReleaseChecklist,
 }: PublishRunCardProps) {
+  const { translations } = useI18n();
   const [isOpeningOutputDir, setIsOpeningOutputDir] = useState(false);
   const [logExpanded, setLogExpanded] = useState(false);
   const [warningExpanded, setWarningExpanded] = useState(false);
@@ -405,7 +407,7 @@ export const PublishRunCard = memo(function PublishRunCard({
           >
             {preparedRuntime.diagnostics.map((diagnostic) => (
               <div key={diagnostic.code}>
-                {describeRuntimeDiagnostic(diagnostic, appT)}
+                {localizeInvokeError(diagnostic, translations)}
               </div>
             ))}
           </div>

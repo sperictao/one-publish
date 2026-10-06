@@ -9,9 +9,9 @@ use std::thread::{self, JoinHandle};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use publish_adapters::{
-    tauri::RELEASE_GATES_INPUT, AdapterRegistry, ProjectProvider, ProviderExecution,
-    ProviderExecutionOutcome, ProviderExecutionPort, TauriBuildDriver, TauriProjectProvider,
-    CHECKSUM_PROCESSOR_ID, GITHUB_RELEASE_DESTINATION_ID,
+    tauri::RELEASE_GATES_INPUT, AdapterRegistry, CancellationSignal, ProjectProvider,
+    ProviderExecution, ProviderExecutionOutcome, ProviderExecutionPort, TauriBuildDriver,
+    TauriProjectProvider, CHECKSUM_PROCESSOR_ID, GITHUB_RELEASE_DESTINATION_ID,
     SELECTED_PROVIDER_ID, SFTP_DESTINATION_ID, TAURI_PROVIDER_ID,
 };
 use publish_domain::{
@@ -336,8 +336,9 @@ pub struct CancelPublishRuntimeRequest {
     pub attempt_id: Option<String>,
 }
 
-/// 按密封令牌或 Attempt ID 请求协作取消（ADR-0041）：已开始的节点不被
-/// 中断，Submitted/Published 路线保持不变。返回是否存在被请求的执行。
+/// 按密封令牌或 Attempt ID 请求取消（ADR-0041）：未开始的节点不再执行，
+/// 进行中的 Provider 构建经执行端口终止其进程树；Submitted/Published 路线
+/// 保持不变。返回是否存在被请求的执行。
 #[tauri::command]
 pub fn cancel_publish_runtime(request: CancelPublishRuntimeRequest) -> Result<bool, AppError> {
     let runtime_token = request
@@ -1794,7 +1795,11 @@ impl TauriProviderExecutionPort {
 }
 
 impl ProviderExecutionPort for TauriProviderExecutionPort {
-    fn execute_spec(&self, spec_json: &str) -> Result<ProviderExecutionOutcome, PublishError> {
+    fn execute_spec(
+        &self,
+        spec_json: &str,
+        cancellation: &CancellationSignal,
+    ) -> Result<ProviderExecutionOutcome, PublishError> {
         let spec: PublishSpec = serde_json::from_str(spec_json).map_err(|error| {
             PublishError::Execution(format!("cannot decode sealed publish spec: {error}"))
         })?;
@@ -1803,6 +1808,7 @@ impl ProviderExecutionPort for TauriProviderExecutionPort {
                 .block_on(crate::commands::execute_provider_publish(
                     self.app.clone(),
                     spec,
+                    cancellation,
                 )),
         )
     }
@@ -1810,6 +1816,7 @@ impl ProviderExecutionPort for TauriProviderExecutionPort {
     fn execute_build(
         &self,
         request: publish_adapters::SealedBuildCommand,
+        cancellation: &CancellationSignal,
     ) -> Result<ProviderExecutionOutcome, PublishError> {
         let request = SealedBuildCommand {
             provider_id: request.provider_id,
@@ -1818,10 +1825,11 @@ impl ProviderExecutionPort for TauriProviderExecutionPort {
             working_directory: request.working_directory,
             output_directory: request.output_directory,
         };
-        self.capture(
-            self.runtime
-                .block_on(crate::commands::execute_sealed_build(&self.app, &request)),
-        )
+        self.capture(self.runtime.block_on(crate::commands::execute_sealed_build(
+            &self.app,
+            &request,
+            cancellation,
+        )))
     }
 }
 
@@ -3802,6 +3810,7 @@ mod tests {
         fn execute_spec(
             &self,
             spec_json: &str,
+            _cancellation: &publish_adapters::CancellationSignal,
         ) -> Result<super::ProviderExecutionOutcome, publish_domain::PublishError> {
             let _spec: PublishSpec =
                 serde_json::from_str(spec_json).expect("decode sealed publish spec");
@@ -3849,6 +3858,7 @@ mod tests {
         fn execute_build(
             &self,
             request: publish_adapters::SealedBuildCommand,
+            _cancellation: &publish_adapters::CancellationSignal,
         ) -> Result<super::ProviderExecutionOutcome, publish_domain::PublishError> {
             panic!(
                 "non-tauri providers must not execute sealed build commands: {}",
@@ -3866,8 +3876,9 @@ mod tests {
         fn execute_spec(
             &self,
             spec_json: &str,
+            cancellation: &publish_adapters::CancellationSignal,
         ) -> Result<super::ProviderExecutionOutcome, publish_domain::PublishError> {
-            let outcome = self.delegate.execute_spec(spec_json)?;
+            let outcome = self.delegate.execute_spec(spec_json, cancellation)?;
             let displaced = self
                 .events_directory
                 .with_file_name("events-before-persistence-failure");
@@ -3881,8 +3892,9 @@ mod tests {
         fn execute_build(
             &self,
             request: publish_adapters::SealedBuildCommand,
+            cancellation: &publish_adapters::CancellationSignal,
         ) -> Result<super::ProviderExecutionOutcome, publish_domain::PublishError> {
-            self.delegate.execute_build(request)
+            self.delegate.execute_build(request, cancellation)
         }
     }
 
@@ -3919,6 +3931,7 @@ mod tests {
         fn execute_spec(
             &self,
             _spec_json: &str,
+            _cancellation: &publish_adapters::CancellationSignal,
         ) -> Result<super::ProviderExecutionOutcome, publish_domain::PublishError> {
             panic!("tauri runtime must not fall back to the legacy publish spec pipeline");
         }
@@ -3926,6 +3939,7 @@ mod tests {
         fn execute_build(
             &self,
             request: publish_adapters::SealedBuildCommand,
+            _cancellation: &publish_adapters::CancellationSignal,
         ) -> Result<super::ProviderExecutionOutcome, publish_domain::PublishError> {
             self.requests
                 .lock()
@@ -3982,6 +3996,7 @@ mod tests {
         fn execute_spec(
             &self,
             _spec_json: &str,
+            _cancellation: &publish_adapters::CancellationSignal,
         ) -> Result<super::ProviderExecutionOutcome, publish_domain::PublishError> {
             use std::os::unix::fs::PermissionsExt;
 
@@ -4025,6 +4040,7 @@ mod tests {
         fn execute_build(
             &self,
             request: publish_adapters::SealedBuildCommand,
+            _cancellation: &publish_adapters::CancellationSignal,
         ) -> Result<super::ProviderExecutionOutcome, publish_domain::PublishError> {
             panic!(
                 "cargo publishes through the sealed spec, not sealed build commands: {}",
@@ -4046,6 +4062,7 @@ mod tests {
         fn execute_spec(
             &self,
             _spec_json: &str,
+            _cancellation: &publish_adapters::CancellationSignal,
         ) -> Result<super::ProviderExecutionOutcome, publish_domain::PublishError> {
             assert!(
                 !self.stale_jar.exists(),
@@ -4071,6 +4088,7 @@ mod tests {
         fn execute_build(
             &self,
             request: publish_adapters::SealedBuildCommand,
+            _cancellation: &publish_adapters::CancellationSignal,
         ) -> Result<super::ProviderExecutionOutcome, publish_domain::PublishError> {
             panic!(
                 "gradle publishes through the sealed spec, not sealed build commands: {}",
@@ -4089,6 +4107,7 @@ mod tests {
         fn execute_spec(
             &self,
             spec_json: &str,
+            _cancellation: &publish_adapters::CancellationSignal,
         ) -> Result<super::ProviderExecutionOutcome, publish_domain::PublishError> {
             use std::os::unix::fs::PermissionsExt;
 
@@ -4115,6 +4134,7 @@ mod tests {
         fn execute_build(
             &self,
             request: publish_adapters::SealedBuildCommand,
+            _cancellation: &publish_adapters::CancellationSignal,
         ) -> Result<super::ProviderExecutionOutcome, publish_domain::PublishError> {
             panic!(
                 "go publishes through the sealed spec, not sealed build commands: {}",
@@ -5565,6 +5585,7 @@ mod tests {
             envelopes: &[],
             receipts: &[],
             credentials: &credentials,
+            cancellation: publish_adapters::CancellationSignal::new(),
         };
 
         let error = publish_adapters::AdapterContract::execute_node(&provider, &drifted, &context)

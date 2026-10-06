@@ -874,6 +874,7 @@ impl TauriRuntimeProvider {
         config_path: &str,
         driver: TauriBuildDriver,
         build_target: Option<&str>,
+        cancellation: &crate::CancellationSignal,
     ) -> Result<crate::AdapterExecutionOutput, PublishError> {
         let execution = self.execution.as_ref().ok_or_else(|| {
             PublishError::Execution(
@@ -906,13 +907,16 @@ impl TauriRuntimeProvider {
             None => {
                 let outcome = execution
                     .port
-                    .execute_build(crate::bridge::SealedBuildCommand {
-                        provider_id: TAURI_PROVIDER_ID.to_string(),
-                        program: driver.name().to_string(),
-                        args,
-                        working_directory: app_root,
-                        output_directory: execution.output_directory.clone(),
-                    })
+                    .execute_build(
+                        crate::bridge::SealedBuildCommand {
+                            provider_id: TAURI_PROVIDER_ID.to_string(),
+                            program: driver.name().to_string(),
+                            args,
+                            working_directory: app_root,
+                            output_directory: execution.output_directory.clone(),
+                        },
+                        cancellation,
+                    )
                     .map_err(|error| PublishError::Execution(error.to_string()))?;
                 crate::bridge::finish_provider_execution(execution, outcome, classify_tauri_artifact)
             }
@@ -920,13 +924,16 @@ impl TauriRuntimeProvider {
                 let staged = execution.output_directory.join(target);
                 let outcome = execution
                     .port
-                    .execute_build(crate::bridge::SealedBuildCommand {
-                        provider_id: TAURI_PROVIDER_ID.to_string(),
-                        program: driver.name().to_string(),
-                        args,
-                        working_directory: app_root.clone(),
-                        output_directory: staged.clone(),
-                    })
+                    .execute_build(
+                        crate::bridge::SealedBuildCommand {
+                            provider_id: TAURI_PROVIDER_ID.to_string(),
+                            program: driver.name().to_string(),
+                            args,
+                            working_directory: app_root.clone(),
+                            output_directory: staged.clone(),
+                        },
+                        cancellation,
+                    )
                     .map_err(|error| PublishError::Execution(error.to_string()))?;
                 crate::bridge::ensure_provider_outcome(&outcome, &staged)?;
                 materialize_target_bundle(&app_root, target, &staged)?;
@@ -1048,7 +1055,7 @@ impl AdapterContract for TauriRuntimeProvider {
     fn execute_node(
         &self,
         node: &publish_domain::PlanNode,
-        _context: &crate::AdapterExecutionContext<'_>,
+        context: &crate::AdapterExecutionContext<'_>,
     ) -> Result<crate::AdapterExecutionOutput, PublishError> {
         let adapter = self.provider.descriptor().identity().display_name();
         let config_path = node.settings.string(CONFIG_PATH_SETTING, &adapter)?;
@@ -1094,7 +1101,13 @@ impl AdapterContract for TauriRuntimeProvider {
                         node.id
                     )));
                 }
-                self.run_sealed_build(node, config_path, driver, build_target.flatten().as_deref())
+                self.run_sealed_build(
+                    node,
+                    config_path,
+                    driver,
+                    build_target.flatten().as_deref(),
+                    &context.cancellation,
+                )
             }
             _ => Err(PublishError::Execution(format!(
                 "node {} is not a tauri provider operation",

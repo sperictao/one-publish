@@ -388,7 +388,13 @@ export async function handleRemoveRepoRuntime(params: {
       "{{name}}",
       repo.name
     ),
-    { title: appT.removeRepository || "移除仓库", kind: "warning" }
+    {
+      title: appT.removeRepository || "移除仓库",
+      kind: "warning",
+      // 原生对话框默认按钮跟随系统语言（Yes/No），显式传入界面语言文案
+      okLabel: appT.removeRepositoryConfirmOk || "移除",
+      cancelLabel: appT.removeRepositoryConfirmCancel || "取消",
+    }
   );
 
   if (!confirmed) {
