@@ -14,7 +14,7 @@
       "generalDescription": "Manage language, default output directory, and runtime preferences.",
       "appearanceDescription": "Tune the visual theme to match your system and workflow.",
       "environmentDescription": "Review diagnostics and quickly jump to environment checks.",
-      "shortcutsDescription": "Review global shortcuts and improve frequent action efficiency.",
+      "shortcutsDescription": "Review in-app shortcuts and improve frequent action efficiency.",
       "aboutDescription": "Check version details, update status, and release notes."
     },
     "general": {
@@ -110,7 +110,7 @@
   },
   "shortcuts": {
     "title": "Keyboard Shortcuts",
-    "description": "Available global shortcuts",
+    "description": "Shortcuts available in the app window",
     "button": "View Shortcuts",
     "refresh": "Refresh Project",
     "publish": "Execute Publish",

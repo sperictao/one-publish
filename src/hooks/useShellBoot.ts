@@ -2,7 +2,6 @@ import { useEffect, useCallback, useRef, useState } from "react";
 import { toast } from "sonner";
 import { useAppDialogs } from "@/hooks/useAppDialogs";
 import { useTheme, type Theme } from "@/hooks/useTheme";
-import { useShortcuts } from "@/hooks/useShortcuts";
 import { useLayoutShellState } from "@/hooks/useLayoutShellState";
 import { useAppUpdater } from "@/hooks/useAppUpdater";
 import { useI18n, type Language } from "@/hooks/useI18n";
@@ -31,10 +30,6 @@ interface UseShellBootParams {
   panelWidthsCustomized: boolean;
   setLeftPanelWidth: (width: number) => void;
   setMiddlePanelWidth: (width: number) => void;
-
-  // Shortcut handler callbacks (built in useAppBoot from cross-domain values)
-  onRefreshShortcut?: () => void;
-  onPublishShortcut?: () => void;
 }
 
 export function useShellBoot(params: UseShellBootParams) {
@@ -121,15 +116,6 @@ export function useShellBoot(params: UseShellBootParams) {
     handleEnvironmentDialogOpenChange,
     handleConfigDialogOpenChange,
   } = useAppDialogs(params.environmentProviderIds);
-
-  // Keyboard shortcuts
-  useShortcuts({
-    onRefresh: params.onRefreshShortcut,
-    onPublish: params.onPublishShortcut,
-    onOpenSettings: () => {
-      setSettingsOpen(true);
-    },
-  });
 
   // Layout shell state
   const {

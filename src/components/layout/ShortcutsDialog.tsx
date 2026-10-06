@@ -28,7 +28,7 @@ export function ShortcutsDialog({ open, onOpenChange }: ShortcutsDialogProps) {
       <AppDialogShell
         size="compact"
         title={shortcutT.title || "快捷键"}
-        description={shortcutT.description || "可用的全局快捷键"}
+        description={shortcutT.description || "应用窗口内可用的快捷键"}
         icon={<Keyboard className="size-4" />}
         bodyInnerClassName="space-y-2"
       >
