@@ -21,6 +21,22 @@ use crate::{
 pub const SELECTED_PROVIDER_ID: &str = "selected-project-provider";
 pub const SELECTED_PROVIDER_PROGRAM: &str = "selected-project-provider:publish";
 
+/// 执行快照的文件名前缀；快照由桌面端写入私有存储区，从不属于 Provider 产物。
+pub const EXECUTION_SNAPSHOT_FILE_PREFIX: &str = "execution-snapshot-";
+
+/// OnePublish 自身写出的文件：执行快照（v1.0.3 及之前写进了 Provider 输出目录）
+/// 与 `.one-publish*` 探针/标记文件。产物收集据此兜底排除，工具文件不得进入清单。
+pub fn is_one_publish_owned_file(name: &str) -> bool {
+    if name.starts_with(".one-publish") {
+        return true;
+    }
+    let name = name.to_ascii_lowercase();
+    name.starts_with(EXECUTION_SNAPSHOT_FILE_PREFIX)
+        && [".md", ".markdown", ".json"]
+            .iter()
+            .any(|extension| name.ends_with(extension))
+}
+
 /// 密封计划节点物化出的结构化构建命令；执行层不得重新推导或替换命令。
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SealedBuildCommand {
@@ -267,7 +283,12 @@ pub(crate) fn collect_artifacts_with(
                 }
                 if file_type.is_dir() {
                     pending.push(entry.path());
-                } else if file_type.is_file() {
+                } else if file_type.is_file()
+                    && !entry
+                        .file_name()
+                        .to_str()
+                        .is_some_and(is_one_publish_owned_file)
+                {
                     files.push(entry.path());
                 }
             }
@@ -299,6 +320,10 @@ pub(crate) fn collect_artifacts_with(
                 operation: format!("read provider artifact {}", path.display()),
                 message: error.to_string(),
             })?;
+            let metadata = fs::metadata(&path).map_err(|error| PublishError::Io {
+                operation: format!("inspect provider artifact {}", path.display()),
+                message: error.to_string(),
+            })?;
             let (role, media_type) = classify(relative);
             Ok(ArtifactCandidate::new(
                 role,
@@ -307,9 +332,22 @@ pub(crate) fn collect_artifacts_with(
                 std::env::consts::OS,
                 std::env::consts::ARCH,
                 bytes,
-            ))
+            )
+            .with_executable(is_executable(&metadata)))
         })
         .collect()
+}
+
+/// Unix 上任一执行位即视为可执行；其他平台没有执行位语义。
+#[cfg(unix)]
+fn is_executable(metadata: &fs::Metadata) -> bool {
+    use std::os::unix::fs::PermissionsExt;
+    metadata.permissions().mode() & 0o111 != 0
+}
+
+#[cfg(not(unix))]
+fn is_executable(_metadata: &fs::Metadata) -> bool {
+    false
 }
 
 // ===== Headless 直执行（决议 #80：headless 环境的默认执行实现）=====
@@ -397,5 +435,54 @@ mod direct_execution_tests {
         DirectProviderExecutionPort
             .execute_spec("{}")
             .expect_err("the legacy spec bridge has no headless semantics");
+    }
+}
+
+#[cfg(test)]
+mod artifact_collection_tests {
+    use super::*;
+
+    #[test]
+    fn collection_skips_one_publish_owned_files() {
+        let temp = tempfile::tempdir().expect("temp output");
+        let output = temp.path();
+        fs::create_dir_all(output.join("nested")).expect("create nested output");
+        fs::write(output.join("app.jar"), b"application").expect("write artifact");
+        fs::write(output.join("nested").join("execution-notes.md"), b"notes")
+            .expect("write provider markdown");
+        // v1.0.3 遗留在 Provider 输出目录中的执行快照与工具探针。
+        fs::write(
+            output.join("execution-snapshot-2026-07-17T10-01-02.345Z.md"),
+            b"# Execution Snapshot",
+        )
+        .expect("write legacy snapshot");
+        fs::write(
+            output.join("nested").join("execution-snapshot-legacy.json"),
+            b"{}",
+        )
+        .expect("write nested legacy snapshot");
+        fs::write(output.join(".one-publish-access-check-1-2"), b"").expect("write probe");
+
+        let artifacts = collect_artifacts_with(output, classify_generic_artifact)
+            .expect("collect provider output");
+        let paths: Vec<&str> = artifacts
+            .iter()
+            .map(|artifact| artifact.file_name.as_str())
+            .collect();
+        assert_eq!(paths, vec!["app.jar", "nested/execution-notes.md"]);
+    }
+
+    #[test]
+    fn output_with_only_one_publish_files_has_no_artifacts() {
+        let temp = tempfile::tempdir().expect("temp output");
+        fs::write(
+            temp.path().join("execution-snapshot-2026-07-17.md"),
+            b"# Execution Snapshot",
+        )
+        .expect("write legacy snapshot");
+
+        let error = collect_artifacts_with(temp.path(), classify_generic_artifact)
+            .expect_err("tool-owned files alone are not provider artifacts");
+        assert!(error.to_string().contains("produced no artifacts"));
     }
 }

@@ -966,6 +966,10 @@ pub struct ArtifactCandidate {
     pub size: u64,
     pub digest: String,
     pub bytes: Vec<u8>,
+    /// 源文件带执行位：字节之外唯一需要随产物保留的文件属性，
+    /// 否则交付出的二进制无法直接运行。
+    #[serde(default)]
+    pub executable: bool,
 }
 
 impl ArtifactCandidate {
@@ -986,7 +990,13 @@ impl ArtifactCandidate {
             size: bytes.len() as u64,
             digest: sha256_hex(&bytes),
             bytes,
+            executable: false,
         }
+    }
+
+    pub fn with_executable(mut self, executable: bool) -> Self {
+        self.executable = executable;
+        self
     }
 
     pub fn verify(&self) -> Result<(), PublishError> {

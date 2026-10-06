@@ -30,7 +30,6 @@ tauri-plugin-updater = "2"
 # exact constraint until the transitive Tauri dependency floor reaches it.
 rustls = { version = "=0.23.45", default-features = false }
 tauri-plugin-notification = "2"
-tauri-plugin-global-shortcut = "2"
 tauri-plugin-decorum = { path = "vendor/tauri-plugin-decorum" }
 dirs = "5.0"
 tokio = { version = "1", features = ["macros", "rt-multi-thread", "process", "io-util", "time"] }

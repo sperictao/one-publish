@@ -16,6 +16,7 @@ import { useTrayRecentPublish } from "@/hooks/useTrayRecentPublish";
 import { extractSpecFromRecord } from "@/features/history/specFromRecord";
 import { usePublishStore } from "@/stores/publishStore";
 import { useAppShortcutsProps } from "@/hooks/useAppShortcutsProps";
+import { useShortcuts } from "@/hooks/useShortcuts";
 
 export type ShellState = UseShellBootReturn;
 export type RepoState = UseRepoBootReturn;
@@ -68,13 +69,8 @@ export function useAppBoot() {
   );
 
   // ============================================================
-  // 3. Shell domain (layout, dialogs, theme, i18n, shortcuts, updater)
+  // 3. Shell domain (layout, dialogs, theme, i18n, updater)
   // ============================================================
-
-  // Shortcut callbacks built as closures that capture the latest values.
-  // These are initially placeholders; they will be correct after the first
-  // render when repo and publish state becomes available. This is safe
-  // because shortcuts are event-driven and never fire during render.
   const shell = useShellBoot({
     isStateLoading: appState.isLoading,
     theme: appState.theme as "light" | "dark" | "auto",
@@ -95,9 +91,6 @@ export function useAppBoot() {
     panelWidthsCustomized: appState.panelWidthsCustomized,
     setLeftPanelWidth: appState.setLeftPanelWidth,
     setMiddlePanelWidth: appState.setMiddlePanelWidth,
-    // Shortcut handlers — built after all domains below
-    onRefreshShortcut: undefined,
-    onPublishShortcut: undefined,
   });
 
   // ============================================================
@@ -227,7 +220,7 @@ export function useAppBoot() {
   });
 
   // ============================================================
-  // 8. Shortcut callbacks (built after all domains for correct closures)
+  // 8. Keyboard shortcuts (registered after all domains for correct closures)
   // ============================================================
   const { onRefreshShortcut, onPublishShortcut } = useAppShortcutsProps({
     selectedRepo: repo.selectedRepo,
@@ -236,6 +229,12 @@ export function useAppBoot() {
     isPublishing,
     scanProject: repo.scanProject,
     startPublish: publish.startPublish,
+  });
+
+  useShortcuts({
+    onRefresh: onRefreshShortcut,
+    onPublish: onPublishShortcut,
+    onOpenSettings: shell.handleOpenSettings,
   });
 
   // ============================================================
@@ -265,9 +264,6 @@ export function useAppBoot() {
   return {
     shell: {
       ...shell,
-      // Override shortcut handlers with correct closures
-      onRefreshShortcut,
-      onPublishShortcut,
       shouldLoadAppDialogsHost,
     },
     repo: {

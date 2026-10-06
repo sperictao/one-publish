@@ -64,12 +64,18 @@ fn classify_go_installer(_relative: &Path) -> (&'static str, &'static str) {
     ("installer", "application/octet-stream")
 }
 
-/// 辅助：清理并创建 bin 目录。
-fn prepare_bin_dir(project: &Path) -> PathBuf {
-    let bin_dir = project.join("bin");
+/// 辅助：清理并创建测试独占的 `bin/<test_id>` 目录。
+/// 测试并行运行且共享样本项目，共用同一 bin 目录会互相删除、覆盖产物。
+fn prepare_bin_dir(project: &Path, test_id: &str) -> PathBuf {
+    let bin_dir = project.join("bin").join(test_id);
     let _ = fs::remove_dir_all(&bin_dir);
     fs::create_dir_all(&bin_dir).expect("create bin dir");
     bin_dir
+}
+
+/// 辅助：`go build -o` 参数，指向输出目录内的指定文件。
+fn output_arg(output_dir: &Path, file_name: &str) -> String {
+    output_dir.join(file_name).to_string_lossy().into_owned()
 }
 
 /// 辅助：构建包含 SFTP 凭据的注册表（Local + SFTP 目标）。
@@ -130,12 +136,12 @@ fn go_01_single_platform_build_to_local() {
     }
 
     let project = sample_path("go-cli");
-    let output_dir = prepare_bin_dir(&project);
+    let output_dir = prepare_bin_dir(&project, "go-01");
     let store_dir = tempfile::tempdir().expect("store dir");
     let delivery_dir = tempfile::tempdir().expect("delivery dir");
 
     let provider = go_provider(
-        vec!["build".to_string(), "-o".to_string(), "./bin/app".to_string()],
+        vec!["build".to_string(), "-o".to_string(), output_arg(&output_dir, "app")],
         output_dir,
     );
     let snapshot = build_snapshot("real-go", store_dir.path(), delivery_dir.path(), "0.1.0");
@@ -157,6 +163,17 @@ fn go_01_single_platform_build_to_local() {
     );
     let checksums_content = fs::read_to_string(&checksums_path).expect("read SHA256SUMS");
     assert!(!checksums_content.is_empty(), "SHA256SUMS should not be empty");
+
+    // 交付出的二进制保留执行位，可以直接运行。
+    #[cfg(unix)]
+    {
+        let delivered = PathBuf::from(receipt.external_reference.as_str()).join("app");
+        let run = std::process::Command::new(&delivered)
+            .output()
+            .expect("run the delivered Go binary directly");
+        assert!(run.status.success());
+        assert_eq!(String::from_utf8_lossy(&run.stdout), "go-cli v0.1.0\n");
+    }
 }
 
 /// GO-02: 交叉编译发布到 SFTP（GOOS=linux GOARCH=amd64）。
@@ -169,7 +186,7 @@ fn go_02_cross_compile_to_sftp() {
     }
 
     let project = sample_path("go-cli");
-    let output_dir = prepare_bin_dir(&project);
+    let output_dir = prepare_bin_dir(&project, "go-02");
     let store_dir = tempfile::tempdir().expect("store dir");
     let delivery_dir = tempfile::tempdir().expect("delivery dir");
 
@@ -177,7 +194,7 @@ fn go_02_cross_compile_to_sftp() {
         vec![
             "build".to_string(),
             "-o".to_string(),
-            "./bin/app-linux".to_string(),
+            output_arg(&output_dir, "app-linux"),
         ],
         output_dir,
         &[("GOOS", "linux"), ("GOARCH", "amd64")],
@@ -237,7 +254,7 @@ fn go_03_ldflags_version_injection() {
     }
 
     let project = sample_path("go-cli");
-    let output_dir = prepare_bin_dir(&project);
+    let output_dir = prepare_bin_dir(&project, "go-03");
     let store_dir = tempfile::tempdir().expect("store dir");
     let delivery_dir = tempfile::tempdir().expect("delivery dir");
 
@@ -245,7 +262,7 @@ fn go_03_ldflags_version_injection() {
         vec![
             "build".to_string(),
             "-o".to_string(),
-            "./bin/app".to_string(),
+            output_arg(&output_dir, "app"),
             "-ldflags".to_string(),
             "-X main.version=1.0.0".to_string(),
         ],
@@ -272,7 +289,7 @@ fn go_04_dual_route_local_and_github_release() {
     }
 
     let project = sample_path("go-cli");
-    let output_dir = prepare_bin_dir(&project);
+    let output_dir = prepare_bin_dir(&project, "go-04");
     let store_dir = tempfile::tempdir().expect("store dir");
     let delivery_dir = tempfile::tempdir().expect("delivery dir");
 
@@ -284,7 +301,7 @@ fn go_04_dual_route_local_and_github_release() {
         vec![
             "build".to_string(),
             "-o".to_string(),
-            "./bin/app".to_string(),
+            output_arg(&output_dir, "app"),
         ],
         project,
         output_dir,
@@ -407,7 +424,7 @@ fn go_05_multi_binary_project() {
     }
 
     let project = sample_path("go-multi-binary");
-    let output_dir = prepare_bin_dir(&project);
+    let output_dir = prepare_bin_dir(&project, "go-05");
     let store_dir = tempfile::tempdir().expect("store dir");
     let delivery_dir = tempfile::tempdir().expect("delivery dir");
 
@@ -418,7 +435,7 @@ fn go_05_multi_binary_project() {
         vec![
             "build".to_string(),
             "-o".to_string(),
-            "./bin/app1".to_string(),
+            output_arg(&output_dir, "app1"),
             "./cmd/app1".to_string(),
         ],
         project,
@@ -459,7 +476,7 @@ fn go_06_trimpath_reproducible_build() {
     let project = sample_path("go-cli");
 
     // 第一次构建
-    let output_dir_1 = prepare_bin_dir(&project);
+    let output_dir_1 = prepare_bin_dir(&project, "go-06-1");
     let store_dir_1 = tempfile::tempdir().expect("store dir 1");
     let delivery_dir_1 = tempfile::tempdir().expect("delivery dir 1");
 
@@ -467,7 +484,7 @@ fn go_06_trimpath_reproducible_build() {
         vec![
             "build".to_string(),
             "-o".to_string(),
-            "./bin/app".to_string(),
+            output_arg(&output_dir_1, "app"),
             "-trimpath".to_string(),
         ],
         output_dir_1,
@@ -477,12 +494,21 @@ fn go_06_trimpath_reproducible_build() {
         build_local_registry(provider_1, store_dir_1.path(), delivery_dir_1.path(), &snapshot_1);
     let runtime_1 = PublishRuntime::new(registry_1);
 
+    // Manifest 摘要包含规划快照摘要与存储定位（随临时目录变化），
+    // 因此比较各产物的内容摘要，而非 Manifest 摘要。
+    let content_digests = |manifest: &publish_domain::ArtifactManifest| {
+        manifest
+            .artifacts
+            .iter()
+            .map(|a| (a.file_name.clone(), a.digest.clone()))
+            .collect::<std::collections::BTreeMap<_, _>>()
+    };
+
     let attempt_1 = run_publish(&runtime_1, &snapshot_1, "go-cli", "0.1.0", "go-06-1");
-    let manifest_1 = assert_published(&attempt_1);
-    let digest_1 = manifest_1.digest.clone();
+    let digests_1 = content_digests(assert_published(&attempt_1));
 
     // 第二次构建（相同参数，独立目录）
-    let output_dir_2 = prepare_bin_dir(&project);
+    let output_dir_2 = prepare_bin_dir(&project, "go-06-2");
     let store_dir_2 = tempfile::tempdir().expect("store dir 2");
     let delivery_dir_2 = tempfile::tempdir().expect("delivery dir 2");
 
@@ -490,7 +516,7 @@ fn go_06_trimpath_reproducible_build() {
         vec![
             "build".to_string(),
             "-o".to_string(),
-            "./bin/app".to_string(),
+            output_arg(&output_dir_2, "app"),
             "-trimpath".to_string(),
         ],
         output_dir_2,
@@ -501,13 +527,12 @@ fn go_06_trimpath_reproducible_build() {
     let runtime_2 = PublishRuntime::new(registry_2);
 
     let attempt_2 = run_publish(&runtime_2, &snapshot_2, "go-cli", "0.1.0", "go-06-2");
-    let manifest_2 = assert_published(&attempt_2);
-    let digest_2 = manifest_2.digest.clone();
+    let digests_2 = content_digests(assert_published(&attempt_2));
 
-    // trimpath 构建应产生相同的 Manifest 摘要
+    // trimpath 构建应产生字节一致的产物
     assert_eq!(
-        digest_1, digest_2,
-        "trimpath builds should produce identical manifest digests"
+        digests_1, digests_2,
+        "trimpath builds should produce identical artifact content digests"
     );
 }
 
@@ -521,17 +546,18 @@ fn go_07_artifact_promotion() {
     }
 
     let project = sample_path("go-cli");
-    let output_dir = prepare_bin_dir(&project);
+    let output_dir = prepare_bin_dir(&project, "go-07");
     let store_dir = tempfile::tempdir().expect("store dir");
     let delivery_dir = tempfile::tempdir().expect("delivery dir");
 
     // 第一次发布：构建到 Local
     let provider = go_provider(
-        vec!["build".to_string(), "-o".to_string(), "./bin/app".to_string()],
+        vec!["build".to_string(), "-o".to_string(), output_arg(&output_dir, "app")],
         output_dir,
     );
     let snapshot = build_snapshot("real-go", store_dir.path(), delivery_dir.path(), "0.1.0");
-    let registry = build_local_registry(provider, store_dir.path(), delivery_dir.path(), &snapshot);
+    let registry =
+        build_local_registry(provider.clone(), store_dir.path(), delivery_dir.path(), &snapshot);
     let runtime = PublishRuntime::new(registry);
 
     let attempt1 = run_publish(&runtime, &snapshot, "go-cli", "0.1.0", "go-07-1");
@@ -564,6 +590,10 @@ fn go_07_artifact_promotion() {
 
     let fixture = publish_adapters::AdapterConformanceFixture::new(snapshot2.clone());
     let mut registry2 = AdapterRegistry::new();
+    // 推广不会重新构建，但规划仍需已注册的 provider 完成能力解析。
+    registry2
+        .register_project_provider(provider, &fixture)
+        .expect("register provider");
     registry2
         .register_artifact_processor(Arc::new(publish_adapters::ChecksumProcessor::new()), &fixture)
         .expect("register checksum");
@@ -615,12 +645,12 @@ fn go_08_partial_delivery_recovery() {
     }
 
     let project = sample_path("go-cli");
-    let output_dir = prepare_bin_dir(&project);
+    let output_dir = prepare_bin_dir(&project, "go-08");
     let store_dir = tempfile::tempdir().expect("store dir");
     let delivery_dir = tempfile::tempdir().expect("delivery dir");
 
     let provider = go_provider(
-        vec!["build".to_string(), "-o".to_string(), "./bin/app".to_string()],
+        vec!["build".to_string(), "-o".to_string(), output_arg(&output_dir, "app")],
         output_dir,
     );
     let sftp = Arc::new(FakeSftpServer::new());
@@ -715,12 +745,12 @@ fn go_09_optional_route_failure_does_not_affect_overall() {
     }
 
     let project = sample_path("go-cli");
-    let output_dir = prepare_bin_dir(&project);
+    let output_dir = prepare_bin_dir(&project, "go-09");
     let store_dir = tempfile::tempdir().expect("store dir");
     let delivery_dir = tempfile::tempdir().expect("delivery dir");
 
     let provider = go_provider(
-        vec!["build".to_string(), "-o".to_string(), "./bin/app".to_string()],
+        vec!["build".to_string(), "-o".to_string(), output_arg(&output_dir, "app")],
         output_dir,
     );
     let sftp = Arc::new(FakeSftpServer::new());
@@ -808,7 +838,7 @@ fn go_10_build_tags() {
     }
 
     let project = sample_path("go-cli");
-    let output_dir = prepare_bin_dir(&project);
+    let output_dir = prepare_bin_dir(&project, "go-10");
     let store_dir = tempfile::tempdir().expect("store dir");
     let delivery_dir = tempfile::tempdir().expect("delivery dir");
 
@@ -816,7 +846,7 @@ fn go_10_build_tags() {
         vec![
             "build".to_string(),
             "-o".to_string(),
-            "./bin/app".to_string(),
+            output_arg(&output_dir, "app"),
             "-tags".to_string(),
             "production".to_string(),
         ],

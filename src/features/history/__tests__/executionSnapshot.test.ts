@@ -66,22 +66,19 @@ describe("executionSnapshot", () => {
     });
   });
 
-  it("由后端决定快照位置，不向 Provider 输出目录写入", async () => {
-    const backendPath =
-      "/home/u/.one-publish/execution-snapshots/abc/execution-snapshot-2026-07-17T10-01-02.345Z.md";
-    invokeMock.mockResolvedValue(backendPath);
+  it("交由后端写入私有存储区，不把快照路径指向输出目录", async () => {
+    const storedPath =
+      "/Users/me/.one-publish/execution-snapshots/abc/execution-snapshot-2026-07-17T10-01-02.345Z.md";
+    invokeMock.mockResolvedValue(storedPath);
 
     const record = createRecord();
     const path = await exportExecutionSnapshot(record, "log");
 
-    expect(path).toBe(backendPath);
-    expect(invokeMock).toHaveBeenCalledTimes(1);
+    expect(path).toBe(storedPath);
     expect(invokeMock).toHaveBeenCalledWith("export_execution_snapshot", {
       outputDir: "/exports/App/Release",
-      finishedAt: "2026-07-17T10:01:02.345Z",
       snapshot: buildExecutionSnapshotPayload(record, "log"),
     });
-    expect(invokeMock.mock.calls[0][1]).not.toHaveProperty("filePath");
   });
 
   it("记录没有输出目录时跳过导出", async () => {

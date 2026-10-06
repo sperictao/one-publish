@@ -19,6 +19,8 @@ struct StagedCandidateRecord {
     platform: String,
     architecture: String,
     path: String,
+    #[serde(default)]
+    executable: bool,
 }
 
 fn staging_io_error(operation: String, error: impl std::fmt::Display) -> PublishError {
@@ -64,6 +66,7 @@ pub fn stage_shard_artifacts(
             platform: artifact.platform.clone(),
             architecture: artifact.architecture.clone(),
             path: relative,
+            executable: artifact.executable,
         });
     }
     let manifest = serde_json::to_vec_pretty(&records)
@@ -111,14 +114,17 @@ pub fn load_staged_artifacts(root: &Path) -> Result<Vec<ArtifactCandidate>, Publ
             let bytes = std::fs::read(segment.join(&record.path)).map_err(|error| {
                 staging_io_error(format!("read staged candidate {}", record.path), error)
             })?;
-            artifacts.push(ArtifactCandidate::new(
-                record.role,
-                record.file_name,
-                record.media_type,
-                record.platform,
-                record.architecture,
-                bytes,
-            ));
+            artifacts.push(
+                ArtifactCandidate::new(
+                    record.role,
+                    record.file_name,
+                    record.media_type,
+                    record.platform,
+                    record.architecture,
+                    bytes,
+                )
+                .with_executable(record.executable),
+            );
         }
     }
     Ok(artifacts)
@@ -170,7 +176,8 @@ mod tests {
             "linux",
             "x86_64",
             b"linux bytes".to_vec(),
-        );
+        )
+        .with_executable(true);
         let macos = ArtifactCandidate::new(
             "installer",
             "app.dmg",

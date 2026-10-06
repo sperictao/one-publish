@@ -23,8 +23,8 @@ export function buildExecutionSnapshotPayload(
   };
 }
 
-// 快照位置由后端决定（One Publish 本地状态，按输出目录分桶），
-// 不得写入 Provider 输出目录，否则会被下一次发布收集进产物集合。
+// 快照由后端写入私有存储区（~/.one-publish/execution-snapshots/）并按输出目录归档，
+// 绝不写进 Provider 输出目录：否则下一次发布会把它当作产物收集并交付。
 export async function exportExecutionSnapshot(
   record: ExecutionRecord,
   outputLog: string
@@ -36,7 +36,6 @@ export async function exportExecutionSnapshot(
   try {
     return await invoke<string>("export_execution_snapshot", {
       outputDir: record.outputDir,
-      finishedAt: record.finishedAt,
       snapshot: buildExecutionSnapshotPayload(record, outputLog),
     });
   } catch (error) {

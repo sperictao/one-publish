@@ -5,13 +5,11 @@ import "non.geist";
 import "non.geist/mono";
 import "./index.css";
 import { Toaster } from "@/components/ui/sonner";
+import { isMacPlatform } from "@/lib/platform";
 
 // Add platform class for platform-specific styles
 try {
-  const ua = navigator.userAgent || "";
-  const plat = (navigator.platform || "").toLowerCase();
-  const isMac = /mac/i.test(ua) || plat.includes("mac");
-  if (isMac) {
+  if (isMacPlatform()) {
     document.body.classList.add("is-mac");
   }
 } catch {

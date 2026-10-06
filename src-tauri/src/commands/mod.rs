@@ -26,6 +26,8 @@ pub use export::{
     export_failure_group_bundle, export_preflight_report, open_directory, open_execution_snapshot,
     open_output_directory,
 };
+#[cfg(test)]
+pub(crate) use export::write_execution_snapshot;
 pub(crate) use notification::__cmd__show_system_notification;
 pub use notification::show_system_notification;
 pub(crate) use provider::{

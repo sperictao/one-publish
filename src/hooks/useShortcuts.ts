@@ -1,6 +1,5 @@
 import { useEffect, useRef } from "react";
-import { isTauri } from "@tauri-apps/api/core";
-import { listen } from "@tauri-apps/api/event";
+import { isMacPlatform } from "@/lib/platform";
 
 export interface ShortcutHandlers {
   onRefresh?: () => void;
@@ -8,20 +7,21 @@ export interface ShortcutHandlers {
   onOpenSettings?: () => void;
 }
 
-const SHORTCUT_EVENTS = [
-  {
-    event: "shortcut-refresh",
-    getHandler: (handlers: ShortcutHandlers) => handlers.onRefresh,
-  },
-  {
-    event: "shortcut-publish",
-    getHandler: (handlers: ShortcutHandlers) => handlers.onPublish,
-  },
-  {
-    event: "shortcut-settings",
-    getHandler: (handlers: ShortcutHandlers) => handlers.onOpenSettings,
-  },
-] as const;
+// 窗口内快捷键（Cmd/Ctrl + 键）：仅在 OnePublish 窗口聚焦时生效，不抢占其他应用的按键。
+const SHORTCUT_KEYS = new Map<string, keyof ShortcutHandlers>([
+  ["r", "onRefresh"],
+  ["p", "onPublish"],
+  [",", "onOpenSettings"],
+]);
+
+function hasOnlyPrimaryModifier(event: KeyboardEvent, isMac: boolean) {
+  if (event.altKey || event.shiftKey) {
+    return false;
+  }
+  return isMac
+    ? event.metaKey && !event.ctrlKey
+    : event.ctrlKey && !event.metaKey;
+}
 
 export function useShortcuts(handlers: ShortcutHandlers) {
   const handlersRef = useRef(handlers);
@@ -31,39 +31,28 @@ export function useShortcuts(handlers: ShortcutHandlers) {
   }, [handlers]);
 
   useEffect(() => {
-    if (!isTauri()) {
-      return;
-    }
+    const isMac = isMacPlatform();
 
-    let disposed = false;
-    const unlisteners: Array<() => void> = [];
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.isComposing || !hasOnlyPrimaryModifier(event, isMac)) {
+        return;
+      }
 
-    const registerListeners = async () => {
-      try {
-        const registered = await Promise.all(
-          SHORTCUT_EVENTS.map(async ({ event, getHandler }) =>
-            listen(event, () => {
-              getHandler(handlersRef.current)?.();
-            })
-          )
-        );
+      const handlerName = SHORTCUT_KEYS.get(event.key.toLowerCase());
+      if (!handlerName) {
+        return;
+      }
 
-        if (disposed) {
-          registered.forEach((unlisten) => unlisten());
-          return;
-        }
-
-        unlisteners.push(...registered);
-      } catch (error) {
-        console.error("Failed to register shortcut listeners:", error);
+      // 屏蔽 webview 默认行为（Ctrl+R 重新加载、Ctrl+P 打印）；长按时不重复触发。
+      event.preventDefault();
+      if (!event.repeat) {
+        handlersRef.current[handlerName]?.();
       }
     };
 
-    void registerListeners();
-
+    window.addEventListener("keydown", handleKeyDown);
     return () => {
-      disposed = true;
-      unlisteners.forEach((unlisten) => unlisten());
+      window.removeEventListener("keydown", handleKeyDown);
     };
   }, []);
 }

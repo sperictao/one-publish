@@ -33,8 +33,9 @@ pub use fixture::{
     FIXTURE_BUNDLE_ROLE, FIXTURE_INSPECT_ACTION, FIXTURE_MANIFEST_FILE_NAME, FIXTURE_PROVIDER_ID,
 };
 pub use bridge::{
-    CleanCheckoutGuard, DirectProviderExecutionPort, ExecutionSourceGuard, ProviderExecution,
-    ProviderExecutionOutcome, ProviderExecutionPort, SealedBuildCommand, SelectedProjectProvider,
+    is_one_publish_owned_file, CleanCheckoutGuard, DirectProviderExecutionPort,
+    ExecutionSourceGuard, ProviderExecution, ProviderExecutionOutcome, ProviderExecutionPort,
+    SealedBuildCommand, SelectedProjectProvider, EXECUTION_SNAPSHOT_FILE_PREFIX,
     SELECTED_PROVIDER_ID, SELECTED_PROVIDER_PROGRAM,
 };
 pub use github_actions::{GitHubActionsBackend, GITHUB_ACTIONS_BACKEND_ID};

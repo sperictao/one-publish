@@ -14,9 +14,9 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use publish_adapters::{
-    AdapterConformanceFixture, AdapterContract, AdapterExecutionContext, AdapterExecutionOutput,
-    AdapterRegistry, ChecksumProcessor, LocalDirectoryDestination, LocalExecutionBackend,
-    ProjectProvider, StaticCredentialSource, TemporaryArtifactStore,
+    is_one_publish_owned_file, AdapterConformanceFixture, AdapterContract, AdapterExecutionContext,
+    AdapterExecutionOutput, AdapterRegistry, ChecksumProcessor, LocalDirectoryDestination,
+    LocalExecutionBackend, ProjectProvider, StaticCredentialSource, TemporaryArtifactStore,
 };
 use publish_domain::{
     sha256_hex, AdapterBinding, AdapterDescriptor, AdapterIdentity, AdapterKind, AdapterSchema,
@@ -37,8 +37,10 @@ pub const PROVIDER_OUTPUT_ROLE: &str = "provider-output";
 
 /// 检测工具链是否可用；不可用时返回 false。
 pub fn toolchain_available(tool: &str) -> bool {
+    // Go 不支持 `--version` 标志，只接受 `go version` 子命令。
+    let probe = if tool == "go" { "version" } else { "--version" };
     std::process::Command::new(tool)
-        .arg("--version")
+        .arg(probe)
         .stdout(std::process::Stdio::null())
         .stderr(std::process::Stdio::null())
         .status()
@@ -262,7 +264,12 @@ pub fn collect_artifacts(
                 }
                 if file_type.is_dir() {
                     pending.push(entry.path());
-                } else if file_type.is_file() {
+                } else if file_type.is_file()
+                    && !entry
+                        .file_name()
+                        .to_str()
+                        .is_some_and(is_one_publish_owned_file)
+                {
                     files.push(entry.path());
                 }
             }
@@ -295,6 +302,10 @@ pub fn collect_artifacts(
                 operation: format!("read provider artifact {}", path.display()),
                 message: error.to_string(),
             })?;
+            let metadata = fs::metadata(&path).map_err(|error| PublishError::Io {
+                operation: format!("inspect provider artifact {}", path.display()),
+                message: error.to_string(),
+            })?;
             let (role, media_type) = classify(relative);
             Ok(ArtifactCandidate::new(
                 role,
@@ -303,9 +314,21 @@ pub fn collect_artifacts(
                 std::env::consts::OS,
                 std::env::consts::ARCH,
                 bytes,
-            ))
+            )
+            .with_executable(is_executable(&metadata)))
         })
         .collect()
+}
+
+#[cfg(unix)]
+fn is_executable(metadata: &fs::Metadata) -> bool {
+    use std::os::unix::fs::PermissionsExt;
+    metadata.permissions().mode() & 0o111 != 0
+}
+
+#[cfg(not(unix))]
+fn is_executable(_metadata: &fs::Metadata) -> bool {
+    false
 }
 
 // ─── 产物分类函数 ───

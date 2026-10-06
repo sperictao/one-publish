@@ -7224,6 +7224,101 @@ mod tests {
     }
 
     #[test]
+    fn repeated_publishes_keep_execution_snapshots_out_of_the_manifest() {
+        let repository = tempfile::tempdir().expect("create repository");
+        let delivery = tempfile::tempdir().expect("create delivery parent");
+        let snapshot_store = tempfile::tempdir().expect("create snapshot store");
+        let output_directory = delivery.path().join("publish-output");
+        let prepared = prepare_test_runtime(repository.path(), &output_directory);
+        let publish = |attempt_id: &str| {
+            start_runtime_with_port(
+                StartPublishRuntimeRequest {
+                    runtime_token: prepared.runtime_token().to_string(),
+                },
+                Arc::new(FakeProviderExecution {
+                    output_directory: output_directory.clone(),
+                    output_is_file: false,
+                    failure: None,
+                    source_change: None,
+                }),
+                AttemptIdentity {
+                    attempt_id: attempt_id.to_string(),
+                    backend_run_id: format!("backend-{attempt_id}"),
+                },
+            )
+            .expect("run prepared local attempt")
+        };
+        let delivered_files = |result: &super::PublishRuntimeResult| {
+            let root = std::path::PathBuf::from(&result.attempt.receipts[0].external_reference);
+            let mut pending = vec![root.clone()];
+            let mut files = Vec::new();
+            while let Some(directory) = pending.pop() {
+                for entry in std::fs::read_dir(directory).expect("list delivery directory") {
+                    let path = entry.expect("delivery entry").path();
+                    if path.is_dir() {
+                        pending.push(path);
+                    } else {
+                        files.push(
+                            path.strip_prefix(&root)
+                                .expect("delivered file under root")
+                                .to_string_lossy()
+                                .replace('\\', "/"),
+                        );
+                    }
+                }
+            }
+            files.sort();
+            let checksums =
+                std::fs::read_to_string(root.join("SHA256SUMS")).expect("read SHA256SUMS");
+            (files, checksums)
+        };
+
+        let first = publish("attempt-first");
+        // 发布后的自动快照导出走真实导出路径；另模拟 v1.0.3 遗留在输出目录中的快照。
+        let snapshot = crate::commands::write_execution_snapshot(
+            snapshot_store.path(),
+            &output_directory.to_string_lossy(),
+            serde_json::json!({
+                "generatedAt": "2026-07-17T10:01:02.345Z",
+                "providerId": "dotnet",
+                "output": { "log": "JAVA_TOOL_OPTIONS=-Dinternal.flag=1" }
+            }),
+        )
+        .expect("export execution snapshot");
+        assert!(!snapshot.starts_with(&output_directory));
+        std::fs::write(
+            output_directory.join("execution-snapshot-2026-07-17T09-00-00.000Z.md"),
+            "JAVA_TOOL_OPTIONS=-Dinternal.flag=1",
+        )
+        .expect("write legacy snapshot into provider output");
+        let second = publish("attempt-second");
+
+        for result in [&first, &second] {
+            assert_eq!(result.attempt.status, RuntimeAttemptStatus::Published);
+            assert_eq!(
+                result
+                    .attempt
+                    .manifest
+                    .as_ref()
+                    .map(|manifest| manifest.artifact_count),
+                Some(3),
+                "two provider outputs plus SHA256SUMS, never execution snapshots"
+            );
+        }
+        let (first_files, first_checksums) = delivered_files(&first);
+        let (second_files, second_checksums) = delivered_files(&second);
+        assert_eq!(
+            first_files, second_files,
+            "the delivered artifact set is stable"
+        );
+        assert!(second_files
+            .iter()
+            .all(|file| !file.contains(publish_adapters::EXECUTION_SNAPSHOT_FILE_PREFIX)));
+        assert_eq!(first_checksums, second_checksums);
+        assert!(!second_checksums.contains(publish_adapters::EXECUTION_SNAPSHOT_FILE_PREFIX));
+    }
+
+    #[test]
     fn go_file_output_seals_and_delivers_the_file_with_derived_checksums() {
         let repository = tempfile::tempdir().expect("create repository");
         let delivery = tempfile::tempdir().expect("create delivery parent");

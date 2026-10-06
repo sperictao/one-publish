@@ -7,7 +7,7 @@ use super::logs::{
 };
 use super::output::{
     build_display_command, count_output_files, resolve_plan_command, resolve_runtime_program,
-    resolve_spawn_program, resolve_working_dir,
+    resolve_spawn_program, resolve_working_dir, verify_build_output,
 };
 use super::output_policy::{self, PublishOutputCleanupDecision, PublishOutputPolicy};
 use super::session::reserve_execution;
@@ -307,8 +307,14 @@ async fn run_publish_process(
         }
         .await;
 
-        let (success, cancelled, error, output_log, warnings) = run_result?;
+        let (mut success, cancelled, mut error, output_log, warnings) = run_result?;
         let output_dir = output_dir.to_string();
+        if success {
+            if let Err(reason) = verify_build_output(provider_id, &output_dir) {
+                success = false;
+                error = Some(reason);
+            }
+        }
         let file_count = if success {
             count_output_files(&output_dir)
         } else {
