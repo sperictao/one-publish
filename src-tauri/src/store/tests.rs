@@ -1863,6 +1863,48 @@ fn upsert_draft_revision_creates_hidden_draft_profile_with_local_composition() {
 }
 
 #[test]
+fn migrate_legacy_identity_renames_localized_draft_profiles_only() {
+    let mut config = RepoPublishConfig::default();
+    config
+        .create_profile(
+            "本地草稿".to_string(),
+            "dotnet".to_string(),
+            serde_json::json!({}),
+            None,
+            None,
+            "2026-08-03T09:00:00Z".to_string(),
+        )
+        .expect("create named profile");
+    let (draft_id, _) = upsert_test_draft(&mut config,
+        "dotnet".to_string(),
+        serde_json::json!({}),
+        None,
+        "2026-08-03T10:00:00Z".to_string(),
+    );
+    config
+        .profiles
+        .iter_mut()
+        .find(|profile| profile.id == draft_id)
+        .expect("draft profile")
+        .name = "本地草稿".to_string();
+
+    let mut migrated = false;
+    for profile in &mut config.profiles {
+        migrated |= profile.migrate_legacy_identity();
+    }
+
+    assert!(migrated);
+    let draft = config.profile(&draft_id).expect("draft profile");
+    assert_eq!(draft.name, DRAFT_PROFILE_NAME);
+    let named = config
+        .profiles
+        .iter()
+        .find(|profile| !profile.is_draft)
+        .expect("named profile");
+    assert_eq!(named.name, "本地草稿", "user-named profiles keep their name");
+}
+
+#[test]
 fn upsert_draft_revision_reuses_draft_per_provider_and_moves_current() {
     let mut config = RepoPublishConfig::default();
 

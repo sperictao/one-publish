@@ -21,6 +21,7 @@ import type {
   HistoryFilterWindow,
 } from "@/features/history/historyFilterPresets";
 import type { HandoffSnippetFormat } from "@/lib/handoffSnippet";
+import { getLanguageLocale, useI18n } from "@/hooks/useI18n";
 
 function getExecutionFailureReason(record: ExecutionRecord): string | null {
   if (record.success || record.cancelled) {
@@ -93,6 +94,9 @@ export function ExecutionHistoryCard({
   onRerunFromHistory,
   onCopyHandoffSnippet,
 }: ExecutionHistoryCardProps) {
+  const { language } = useI18n();
+  const dateLocale = getLanguageLocale(language);
+
   if (scopedExecutionHistory.length === 0) {
     return null;
   }
@@ -295,7 +299,7 @@ export function ExecutionHistoryCard({
                 </div>
                 <div className="text-label-12 text-muted-foreground">
                   {historyT.completedAt || "完成时间"}:{" "}
-                  {new Date(record.finishedAt).toLocaleString()}
+                  {new Date(record.finishedAt).toLocaleString(dateLocale)}
                 </div>
                 {failureReason && (
                   <div className="mt-2 rounded-sm border border-destructive/20 bg-destructive/5 px-2.5 py-2 text-label-12 text-destructive">

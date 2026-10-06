@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 
+import en from "@/i18n/en.json";
+import zh from "@/i18n/zh.json";
 import {
   analyzeBranchRefreshFailure,
   analyzeProviderDetectFailure,
@@ -8,6 +10,7 @@ import {
   extractInvokeErrorCode,
   extractInvokeErrorDetails,
   extractInvokeErrorMessage,
+  localizeInvokeError,
   type BranchRefreshFailureReason,
   type ProjectScanFailureReason,
   type ProviderDetectFailureReason,
@@ -152,6 +155,151 @@ describe("extractInvokeErrorDetails", () => {
     expect(extractInvokeErrorDetails("{not valid json}")).toBeNull();
     expect(extractInvokeErrorDetails("plain failure")).toBeNull();
     expect(extractInvokeErrorDetails(null)).toBeNull();
+  });
+});
+
+describe("localizeInvokeError", () => {
+  const CJK_PATTERN = /[\u3400-\u9fff]/;
+  const translations = {
+    errors: {
+      automation_preview_stale: "Preview again and confirm.",
+      automation_worktree_dirty: "Automation requires a clean working tree.",
+    },
+  };
+
+  it("按 code 返回 errors 分支中的文案", () => {
+    expect(
+      localizeInvokeError(
+        {
+          kind: "validation",
+          code: "automation_preview_stale",
+          message: "投影差异与预览时不一致，请重新预览并确认",
+        },
+        translations
+      )
+    ).toBe("Preview again and confirm.");
+  });
+
+  it("code 大小写与空白按 extractInvokeErrorCode 归一", () => {
+    expect(
+      localizeInvokeError(
+        { code: "  AUTOMATION_PREVIEW_STALE ", message: "raw" },
+        translations
+      )
+    ).toBe("Preview again and confirm.");
+  });
+
+  it("本地化后原样附加语言中立的 details", () => {
+    expect(
+      localizeInvokeError(
+        {
+          code: "automation_worktree_dirty",
+          message: "自动化接入需要干净的工作区",
+          details: " M src/main.rs ",
+        },
+        translations
+      )
+    ).toBe("Automation requires a clean working tree. | M src/main.rs");
+  });
+
+  it("支持序列化为 JSON string 的错误负载", () => {
+    expect(
+      localizeInvokeError(
+        JSON.stringify({ code: "automation_preview_stale", message: "raw" }),
+        translations
+      )
+    ).toBe("Preview again and confirm.");
+  });
+
+  it("未登记的 code 回退到后端 message 与 details", () => {
+    expect(
+      localizeInvokeError(
+        { code: "unknown_code", message: "raw message", details: "detail" },
+        translations
+      )
+    ).toBe("raw message | detail");
+  });
+
+  it("没有 code 或翻译尚未加载时回退到原始消息", () => {
+    expect(localizeInvokeError("plain failure", translations)).toBe(
+      "plain failure"
+    );
+    expect(
+      localizeInvokeError(
+        { code: "automation_preview_stale", message: "raw" },
+        undefined
+      )
+    ).toBe("raw");
+    expect(
+      localizeInvokeError(
+        { code: "automation_preview_stale", message: "raw" },
+        {}
+      )
+    ).toBe("raw");
+  });
+
+  it("非字符串或空译文视为未登记", () => {
+    expect(
+      localizeInvokeError(
+        { code: "automation_preview_stale", message: "raw" },
+        { errors: { automation_preview_stale: "" } }
+      )
+    ).toBe("raw");
+    expect(
+      localizeInvokeError(
+        { code: "automation_preview_stale", message: "raw" },
+        { errors: { automation_preview_stale: { nested: "x" } } }
+      )
+    ).toBe("raw");
+  });
+
+  it("阻断诊断 {code, message} 与 AppError 同样本地化", () => {
+    const diagnostic = {
+      code: "publish_runtime_sensitive_input",
+      message: "发布参数包含凭据值或脱敏占位符，请改用凭据引用后重新准备发布",
+    };
+
+    const localized = localizeInvokeError(diagnostic, en);
+
+    expect(localized).toBe(en.errors.publish_runtime_sensitive_input);
+    expect(localized).not.toMatch(CJK_PATTERN);
+  });
+
+  it("英文界面下自动化预览错误不再透出中文后端文案", () => {
+    const error = {
+      kind: "config",
+      code: "github_actions_release_config_missing",
+      message: "GitHub Actions 自动化需要修订中的 Tauri 发布设置",
+    };
+
+    expect(localizeInvokeError(error, en)).toBe(
+      "GitHub Actions automation requires Tauri release settings in the configuration revision."
+    );
+    expect(localizeInvokeError(error, zh)).toBe(
+      zh.errors.github_actions_release_config_missing
+    );
+  });
+
+  it("中文界面下英文后端文案（环境修复）被本地化", () => {
+    const error = {
+      kind: "validation",
+      code: "unsupported_fix_command",
+      message: "unsupported command: this program is not allowed",
+      details: "curl",
+    };
+
+    expect(localizeInvokeError(error, zh)).toBe(
+      `${zh.errors.unsupported_fix_command} | curl`
+    );
+  });
+
+  it("en.json 的 errors 文案不含中文，且与 zh.json 的错误码一一对应", () => {
+    expect(Object.keys(en.errors).sort()).toEqual(
+      Object.keys(zh.errors).sort()
+    );
+    for (const [code, text] of Object.entries(en.errors)) {
+      expect(text, code).not.toMatch(CJK_PATTERN);
+    }
   });
 });
 

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   ArrowUpCircle,
   GitBranchPlus,
@@ -29,7 +29,8 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { SectionLabel } from "@/components/ui/section-label";
-import { extractInvokeErrorMessage } from "@/lib/tauri/invokeErrors";
+import { useI18n } from "@/hooks/useI18n";
+import { localizeInvokeError } from "@/lib/tauri/invokeErrors";
 import { RemoteEvidenceSection } from "@/components/publish/RemoteEvidenceSection";
 import {
   applyAutomationChange,
@@ -106,6 +107,13 @@ export function AutomationBindingsSection({
   configPanelT,
   onGuideComposition,
 }: AutomationBindingsSectionProps) {
+  const { translations } = useI18n();
+  // 错误文案只在 toast 时读取最新翻译；不进入回调依赖，避免翻译加载完成时
+  // 重建 refresh 并重复拉取绑定列表。
+  const translationsRef = useRef(translations);
+  useEffect(() => {
+    translationsRef.current = translations;
+  }, [translations]);
   const [view, setView] = useState<AutomationBindingsView | null>(null);
   const [loading, setLoading] = useState(false);
   const [installOpen, setInstallOpen] = useState(false);
@@ -140,7 +148,7 @@ export function AutomationBindingsSection({
     } catch (error) {
       setView(null);
       toast.error(configPanelT.automationLoadFailed || "自动化绑定加载失败", {
-        description: extractInvokeErrorMessage(error),
+        description: localizeInvokeError(error, translationsRef.current),
       });
     } finally {
       setLoading(false);
@@ -160,7 +168,7 @@ export function AutomationBindingsSection({
       } catch (error) {
         toast.error(
           configPanelT.automationPreviewFailed || "投影差异预览失败",
-          { description: extractInvokeErrorMessage(error) }
+          { description: localizeInvokeError(error, translationsRef.current) }
         );
       }
     },
@@ -185,7 +193,7 @@ export function AutomationBindingsSection({
         current ? { ...current, applying: false } : current
       );
       toast.error(configPanelT.automationApplyFailed || "自动化投影应用失败", {
-        description: extractInvokeErrorMessage(error),
+        description: localizeInvokeError(error, translationsRef.current),
       });
     }
   }, [pending, refresh, repoId, configPanelT]);
@@ -198,7 +206,7 @@ export function AutomationBindingsSection({
     } catch (error) {
       toast.error(
         configPanelT.automationRemoteSyncFailed || "远端发布记录同步失败",
-        { description: extractInvokeErrorMessage(error) }
+        { description: localizeInvokeError(error, translationsRef.current) }
       );
     } finally {
       setSyncingRemote(false);
@@ -227,7 +235,7 @@ export function AutomationBindingsSection({
       await syncRemoteEvidence();
     } catch (error) {
       toast.error(configPanelT.automationDispatchFailed || "触发远端发布失败", {
-        description: extractInvokeErrorMessage(error),
+        description: localizeInvokeError(error, translationsRef.current),
       });
     } finally {
       setDispatching(false);
@@ -253,7 +261,7 @@ export function AutomationBindingsSection({
       } catch (error) {
         toast.error(
           configPanelT.automationRemoteCancelFailed || "取消远端运行失败",
-          { description: extractInvokeErrorMessage(error) }
+          { description: localizeInvokeError(error, translationsRef.current) }
         );
       } finally {
         setCancellingRunId(null);

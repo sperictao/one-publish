@@ -26,9 +26,10 @@ pub async fn apply_fix(action: FixAction) -> Result<FixResult, crate::errors::Ap
             })?;
             open::that(&url).map_err(|e| {
                 crate::errors::AppError::external_open_with_code(
-                    format!("failed to open URL: {}", e),
+                    "failed to open URL",
                     "fix_open_url_failed",
                 )
+                .with_details(e.to_string())
             })?;
             Ok(FixResult::OpenedUrl(url))
         }
@@ -58,9 +59,10 @@ pub async fn apply_fix(action: FixAction) -> Result<FixResult, crate::errors::Ap
             })?
             .map_err(|e| {
                 crate::errors::AppError::external_command_with_code(
-                    format!("failed to run command: {}", e),
+                    "failed to run command",
                     "fix_command_spawn_failed",
                 )
+                .with_details(e.to_string())
             })?;
             crate::environment::invalidate_environment_cache();
             Ok(FixResult::CommandExecuted {
@@ -142,9 +144,10 @@ fn validate_and_parse_fix_command(
                     });
                 if looks_like_formula_path || !valid_formula_name {
                     return Err(crate::errors::AppError::validation_with_code(
-                        format!("unsupported brew formula argument: {}", arg),
+                        "unsupported brew formula argument",
                         "unsafe_brew_formula_argument",
-                    ));
+                    )
+                    .with_details(*arg));
                 }
             }
         }
@@ -166,9 +169,10 @@ fn validate_and_parse_fix_command(
         }
         _ => {
             return Err(crate::errors::AppError::validation_with_code(
-                format!("unsupported command: `{}` is not allowed", program),
+                "unsupported command: this program is not allowed",
                 "unsupported_fix_command",
-            ));
+            )
+            .with_details(*program));
         }
     }
     Ok((
@@ -194,6 +198,14 @@ mod tests {
         let err = validate_and_parse_fix_command("brew install rust; rm -rf /")
             .expect_err("unsafe command should fail");
         assert!(err.message.contains("unsafe shell characters"));
+    }
+
+    #[test]
+    fn fix_command_parsing_reports_disallowed_program_in_details() {
+        let err = validate_and_parse_fix_command("curl https://example.invalid")
+            .expect_err("unknown program should fail");
+        assert_eq!(err.code.as_deref(), Some("unsupported_fix_command"));
+        assert_eq!(err.details.as_deref(), Some("curl"));
     }
 
     #[test]
