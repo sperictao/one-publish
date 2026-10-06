@@ -299,6 +299,10 @@ pub(crate) fn collect_artifacts_with(
                 operation: format!("read provider artifact {}", path.display()),
                 message: error.to_string(),
             })?;
+            let metadata = fs::metadata(&path).map_err(|error| PublishError::Io {
+                operation: format!("inspect provider artifact {}", path.display()),
+                message: error.to_string(),
+            })?;
             let (role, media_type) = classify(relative);
             Ok(ArtifactCandidate::new(
                 role,
@@ -307,9 +311,22 @@ pub(crate) fn collect_artifacts_with(
                 std::env::consts::OS,
                 std::env::consts::ARCH,
                 bytes,
-            ))
+            )
+            .with_executable(is_executable(&metadata)))
         })
         .collect()
+}
+
+/// Unix 上任一执行位即视为可执行；其他平台没有执行位语义。
+#[cfg(unix)]
+fn is_executable(metadata: &fs::Metadata) -> bool {
+    use std::os::unix::fs::PermissionsExt;
+    metadata.permissions().mode() & 0o111 != 0
+}
+
+#[cfg(not(unix))]
+fn is_executable(_metadata: &fs::Metadata) -> bool {
+    false
 }
 
 // ===== Headless 直执行（决议 #80：headless 环境的默认执行实现）=====

@@ -295,6 +295,10 @@ pub fn collect_artifacts(
                 operation: format!("read provider artifact {}", path.display()),
                 message: error.to_string(),
             })?;
+            let metadata = fs::metadata(&path).map_err(|error| PublishError::Io {
+                operation: format!("inspect provider artifact {}", path.display()),
+                message: error.to_string(),
+            })?;
             let (role, media_type) = classify(relative);
             Ok(ArtifactCandidate::new(
                 role,
@@ -303,9 +307,21 @@ pub fn collect_artifacts(
                 std::env::consts::OS,
                 std::env::consts::ARCH,
                 bytes,
-            ))
+            )
+            .with_executable(is_executable(&metadata)))
         })
         .collect()
+}
+
+#[cfg(unix)]
+fn is_executable(metadata: &fs::Metadata) -> bool {
+    use std::os::unix::fs::PermissionsExt;
+    metadata.permissions().mode() & 0o111 != 0
+}
+
+#[cfg(not(unix))]
+fn is_executable(_metadata: &fs::Metadata) -> bool {
+    false
 }
 
 // ─── 产物分类函数 ───

@@ -256,7 +256,12 @@ impl AdapterContract for TemporaryArtifactStore {
             if let Some(parent) = stored_path.parent() {
                 create_directory(parent)?;
             }
-            persist_content_addressed(&stored_path, &artifact.bytes, &artifact.digest)?;
+            persist_content_addressed(
+                &stored_path,
+                &artifact.bytes,
+                &artifact.digest,
+                artifact.executable,
+            )?;
             entries.push(ArtifactManifestEntry {
                 role: artifact.role.clone(),
                 file_name: artifact.file_name.clone(),
@@ -658,6 +663,7 @@ fn persist_content_addressed(
     path: &Path,
     bytes: &[u8],
     expected_digest: &str,
+    executable: bool,
 ) -> Result<(), PublishError> {
     let actual_digest = sha256_hex(bytes);
     if actual_digest != expected_digest {
@@ -668,7 +674,12 @@ fn persist_content_addressed(
         });
     }
     if path.exists() {
-        return verify_file(path, expected_digest);
+        verify_file(path, expected_digest)?;
+        // 可复现构建会命中旧版本以默认权限写入的同内容副本：复用时按本次产物校正。
+        return apply_artifact_permissions(path, executable).map_err(|error| PublishError::Io {
+            operation: format!("set permissions of artifact {}", path.display()),
+            message: error.to_string(),
+        });
     }
 
     let sequence = CONTENT_TEMP_SEQUENCE.fetch_add(1, Ordering::Relaxed);
@@ -692,7 +703,11 @@ fn persist_content_addressed(
             operation: format!("create temporary artifact {}", temporary.display()),
             message: error.to_string(),
         })?;
-    let write_result = file.write_all(bytes).and_then(|_| file.sync_all());
+    // 权限在硬链接发布前落定，内容寻址路径一出现就带着正确的执行位。
+    let write_result = file
+        .write_all(bytes)
+        .and_then(|_| file.sync_all())
+        .and_then(|_| apply_artifact_permissions(&temporary, executable));
     drop(file);
     if let Err(error) = write_result {
         let _ = fs::remove_file(&temporary);
@@ -718,6 +733,20 @@ fn persist_content_addressed(
     verify_file(path, expected_digest)
 }
 
+/// Store 副本的权限只由产物决定、与写入进程的 umask 无关：可执行 0o755，其余 0o644。
+#[cfg(unix)]
+fn apply_artifact_permissions(path: &Path, executable: bool) -> std::io::Result<()> {
+    use std::os::unix::fs::PermissionsExt;
+    let mode = if executable { 0o755 } else { 0o644 };
+    fs::set_permissions(path, fs::Permissions::from_mode(mode))
+}
+
+#[cfg(not(unix))]
+fn apply_artifact_permissions(_path: &Path, _executable: bool) -> std::io::Result<()> {
+    Ok(())
+}
+
+/// 交付副本经 `fs::copy` 继承 Store 副本的权限位（含执行位）。
 fn copy_verified(
     source: &Path,
     destination: &Path,

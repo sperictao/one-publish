@@ -157,6 +157,17 @@ fn go_01_single_platform_build_to_local() {
     );
     let checksums_content = fs::read_to_string(&checksums_path).expect("read SHA256SUMS");
     assert!(!checksums_content.is_empty(), "SHA256SUMS should not be empty");
+
+    // 交付出的二进制保留执行位，可以直接运行。
+    #[cfg(unix)]
+    {
+        let delivered = PathBuf::from(receipt.external_reference.as_str()).join("app");
+        let run = std::process::Command::new(&delivered)
+            .output()
+            .expect("run the delivered Go binary directly");
+        assert!(run.status.success());
+        assert_eq!(String::from_utf8_lossy(&run.stdout), "go-cli v0.1.0\n");
+    }
 }
 
 /// GO-02: 交叉编译发布到 SFTP（GOOS=linux GOARCH=amd64）。
