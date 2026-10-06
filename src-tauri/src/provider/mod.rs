@@ -205,6 +205,12 @@ pub trait Provider: Send + Sync {
         Ok(())
     }
 
+    /// 交付产物筛选：原生输出目录中只有被接受的条目进入产物集合，被拒绝的目录
+    /// 不再递归。空实现表示整个输出目录都是产物。
+    fn artifact_filter(&self) -> Option<publish_adapters::ArtifactEntryFilter> {
+        None
+    }
+
     fn resolve_runtime_program(
         &self,
         program: &str,
