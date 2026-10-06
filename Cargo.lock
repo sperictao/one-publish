@@ -163,6 +163,7 @@ name = "one-publish-runner"
 version = "0.1.0"
 dependencies = [
  "hex",
+ "libc",
  "publish-adapters",
  "publish-domain",
  "publish-runner-core",

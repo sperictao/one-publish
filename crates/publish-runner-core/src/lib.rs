@@ -1815,13 +1815,31 @@ impl PublishRuntime {
         plan: &PublishPlan,
         attempt_id: &str,
     ) -> Result<PublishOutcome, PublishError> {
-        self.execute(plan, attempt_id, attempt_id, None)
+        self.execute(
+            plan,
+            attempt_id,
+            attempt_id,
+            None,
+            &CancellationSignal::default(),
+        )
     }
 
     pub fn start_prepared(
         &self,
         prepared: &PreparedPublishPlan,
         attempt_id: &str,
+    ) -> Result<PublishOutcome, PublishError> {
+        self.start_prepared_with_cancellation(prepared, attempt_id, &CancellationSignal::default())
+    }
+
+    /// 可取消的预备计划执行（ADR-0041）：信号置位后未开始的节点不再执行，
+    /// 进行中的构建由执行端口中断。完整发布结果要求计划全部完成，因取消而
+    /// 未完成的执行以 `Cancelled` 报告，而不是不完整计划错误。
+    pub fn start_prepared_with_cancellation(
+        &self,
+        prepared: &PreparedPublishPlan,
+        attempt_id: &str,
+        cancellation: &CancellationSignal,
     ) -> Result<PublishOutcome, PublishError> {
         let current_plan = self.prepare(&prepared.snapshot)?;
         if current_plan != prepared.plan {
@@ -1834,6 +1852,7 @@ impl PublishRuntime {
             attempt_id,
             attempt_id,
             prepared.snapshot.promoted_manifest_digest.as_deref(),
+            cancellation,
         )
     }
 
@@ -1848,6 +1867,25 @@ impl PublishRuntime {
         attempt_id: &str,
         platform: PlanNodePlatform,
         staged_artifacts: Vec<ArtifactCandidate>,
+    ) -> Result<ShardOutcome, PublishError> {
+        self.start_prepared_shard_with_cancellation(
+            prepared,
+            attempt_id,
+            platform,
+            staged_artifacts,
+            &CancellationSignal::default(),
+        )
+    }
+
+    /// 可取消的分片执行（ADR-0041）：本段因取消停下工作时，尚无交付证据的
+    /// 路线记为取消，段事件据此归约为 Cancelled 而不是停在 Running。
+    pub fn start_prepared_shard_with_cancellation(
+        &self,
+        prepared: &PreparedPublishPlan,
+        attempt_id: &str,
+        platform: PlanNodePlatform,
+        staged_artifacts: Vec<ArtifactCandidate>,
+        cancellation: &CancellationSignal,
     ) -> Result<ShardOutcome, PublishError> {
         let current_plan = self.prepare(&prepared.snapshot)?;
         if current_plan != prepared.plan {
@@ -1871,9 +1909,15 @@ impl PublishRuntime {
             RuntimeNodeExecutor::new(&self.registry, plan, attempt_id, &backend_run_id)
                 .with_promoted_manifest_digest(prepared.snapshot.promoted_manifest_digest.as_deref())
                 .with_assigned_platform(platform)
-                .with_staged_artifacts(staged_artifacts);
+                .with_staged_artifacts(staged_artifacts)
+                .with_cancellation(cancellation.clone());
         self.registry
             .execute_plan(&plan.execution_backend, plan, &mut executor)?;
+        // 只在本段确实被打断时收尾：已完成的段看不到其他段的 Receipt，
+        // 若也记取消会覆盖汇聚段真实的交付结果。
+        if executor.interrupted {
+            executor.settle_cancelled_routes(plan)?;
+        }
         Ok(ShardOutcome {
             events: executor.events,
             manifest: executor.manifest,
@@ -1887,6 +1931,7 @@ impl PublishRuntime {
         attempt_id: &str,
         backend_run_id: &str,
         promoted_manifest_digest: Option<&str>,
+        cancellation: &CancellationSignal,
     ) -> Result<PublishOutcome, PublishError> {
         validate_plan(plan)?;
         preflight_adapter_contracts(&self.registry, plan)?;
@@ -1899,9 +1944,15 @@ impl PublishRuntime {
 
         let mut executor =
             RuntimeNodeExecutor::new(&self.registry, plan, attempt_id, backend_run_id)
-                .with_promoted_manifest_digest(promoted_manifest_digest);
+                .with_promoted_manifest_digest(promoted_manifest_digest)
+                .with_cancellation(cancellation.clone());
         self.registry
             .execute_plan(&plan.execution_backend, plan, &mut executor)?;
+        if executor.interrupted {
+            return Err(PublishError::Cancelled(format!(
+                "publish attempt {attempt_id} was cancelled before it completed"
+            )));
+        }
         executor.finish(plan)
     }
 }
@@ -2096,6 +2147,8 @@ struct RuntimeNodeExecutor<'a> {
     /// 取消（ADR-0041）：置位后未开始的节点不再执行；进行中的节点经
     /// Adapter 执行上下文观察同一信号，支持中断者以 `Cancelled` 返回。
     cancellation: CancellationSignal,
+    /// 是否有本应执行的节点因取消而未完成；信号在全部工作完成后才置位时保持 false。
+    interrupted: bool,
     /// 分片执行（决议 #85）：只执行分配给该平台亲和的节点，其余跳过。
     assigned_platform: Option<PlanNodePlatform>,
     /// 可选的追加持久化边界；生产控制面注入，纯核心调用可保持内存执行。
@@ -2145,6 +2198,7 @@ impl<'a> RuntimeNodeExecutor<'a> {
                 .map(|node| (node.id.as_str(), node))
                 .collect(),
             cancellation: CancellationSignal::default(),
+            interrupted: false,
             assigned_platform: None,
             persistence: None,
             lease_maintenance: None,
@@ -2599,16 +2653,7 @@ impl<'a> RuntimeNodeExecutor<'a> {
         plan: &PublishPlan,
         mut attempt: ReleaseAttempt,
     ) -> Result<PublishAttemptView, PublishError> {
-        self.cleanup_staged_routes(plan)?;
-        for route in &plan.routes {
-            let plan_node_id = plan
-                .nodes
-                .iter()
-                .find(|node| node.binding_id == route.route_id)
-                .map(|node| node.id.clone())
-                .unwrap_or_else(|| "runtime".to_string());
-            self.cancel_route_if_unresolved(&route.route_id, &plan_node_id)?;
-        }
+        self.settle_cancelled_routes(plan)?;
         let projection = reduce_publish_events(&self.events, self.routes)?;
         attempt.manifest_digest = projection.manifest_digest.clone();
         Ok(PublishAttemptView {
@@ -2623,6 +2668,22 @@ impl<'a> RuntimeNodeExecutor<'a> {
             warnings: projection.warnings,
             error: projection.error,
         })
+    }
+
+    /// 取消收尾的路线部分：清理已暂存未提交的路线，再把尚无交付证据的路线
+    /// 记为取消；Submitted/Published 路线保持不变（ADR-0041）。
+    fn settle_cancelled_routes(&mut self, plan: &PublishPlan) -> Result<(), PublishError> {
+        self.cleanup_staged_routes(plan)?;
+        for route in &plan.routes {
+            let plan_node_id = plan
+                .nodes
+                .iter()
+                .find(|node| node.binding_id == route.route_id)
+                .map(|node| node.id.clone())
+                .unwrap_or_else(|| "runtime".to_string());
+            self.cancel_route_if_unresolved(&route.route_id, &plan_node_id)?;
+        }
+        Ok(())
     }
 
     /// 路线节点失败：记录 route_failed 事件并隔离本路线，不再返回错误给执行后端。
@@ -2825,6 +2886,7 @@ impl PlanNodeExecutor for RuntimeNodeExecutor<'_> {
         // 证据则记为取消，Submitted/Published 路线与既有 Receipt 保持不变（ADR-0041）。
         if self.cancellation.is_requested() && node.cancellable {
             self.skipped_nodes.insert(node.id.clone());
+            self.interrupted = true;
             if self.is_route_node(node) {
                 self.cancel_route_if_unresolved(&node.binding_id, &node.id)?;
             }
@@ -2870,6 +2932,7 @@ impl PlanNodeExecutor for RuntimeNodeExecutor<'_> {
                 if self.cancellation.is_requested() =>
             {
                 self.skipped_nodes.insert(node.id.clone());
+                self.interrupted = true;
                 if self.is_route_node(node) {
                     self.cancel_route_if_unresolved(&node.binding_id, &node.id)
                         .map_err(attempt_state_uncertain)?;
