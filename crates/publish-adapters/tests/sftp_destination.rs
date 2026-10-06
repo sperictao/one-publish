@@ -99,6 +99,7 @@ impl Fixture {
             envelopes,
             receipts,
             credentials: &self.credentials,
+            cancellation: publish_adapters::CancellationSignal::new(),
         };
         self.destination.execute_node(node, &context)
     }

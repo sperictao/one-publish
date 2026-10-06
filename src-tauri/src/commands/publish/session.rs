@@ -1,82 +1,17 @@
 use super::errors::publish_error;
-use std::sync::{
-    atomic::{AtomicBool, Ordering},
-    Arc, OnceLock,
-};
-use tokio::sync::{Mutex, Notify};
+use std::sync::OnceLock;
+use tokio::sync::Mutex;
 
-#[derive(Clone)]
-struct StartingExecution {
-    session_id: String,
-    cancel_requested: Arc<AtomicBool>,
-    cancel_notify: Arc<Notify>,
-}
-
-#[derive(Clone)]
-struct ActiveExecution {
-    session_id: String,
-    cancel_requested: Arc<AtomicBool>,
-    cancel_notify: Arc<Notify>,
-}
-
-#[derive(Clone)]
-enum RunningExecution {
-    Starting(StartingExecution),
-    Running(ActiveExecution),
-}
-
-impl RunningExecution {
-    fn session_id(&self) -> &str {
-        match self {
-            Self::Starting(execution) => &execution.session_id,
-            Self::Running(execution) => &execution.session_id,
-        }
-    }
-
-    fn cancel_handles(&self) -> (Arc<AtomicBool>, Arc<Notify>) {
-        match self {
-            Self::Starting(execution) => (
-                Arc::clone(&execution.cancel_requested),
-                Arc::clone(&execution.cancel_notify),
-            ),
-            Self::Running(execution) => (
-                Arc::clone(&execution.cancel_requested),
-                Arc::clone(&execution.cancel_notify),
-            ),
-        }
-    }
-}
-
+/// 本机同一时刻只运行一个 Provider 构建进程。取消不经这里登记：发布运行时
+/// 的取消信号随执行端口直接传入构建执行（ADR-0041）。
 #[derive(Debug)]
 pub(crate) struct ExecutionPermit {
     pub(crate) session_id: String,
-    pub(crate) cancel_requested: Arc<AtomicBool>,
-    pub(crate) cancel_notify: Arc<Notify>,
 }
 
-impl ExecutionPermit {
-    pub(crate) fn is_cancel_requested(&self) -> bool {
-        self.cancel_requested.load(Ordering::SeqCst)
-    }
+static RUNNING_EXECUTION: OnceLock<Mutex<Option<String>>> = OnceLock::new();
 
-    pub(crate) async fn mark_running(&self) {
-        let mut slot = running_execution_slot().lock().await;
-        if matches!(
-            slot.as_ref(),
-            Some(RunningExecution::Starting(execution)) if execution.session_id == self.session_id
-        ) {
-            *slot = Some(RunningExecution::Running(ActiveExecution {
-                session_id: self.session_id.clone(),
-                cancel_requested: Arc::clone(&self.cancel_requested),
-                cancel_notify: Arc::clone(&self.cancel_notify),
-            }));
-        }
-    }
-}
-
-static RUNNING_EXECUTION: OnceLock<Mutex<Option<RunningExecution>>> = OnceLock::new();
-
-fn running_execution_slot() -> &'static Mutex<Option<RunningExecution>> {
+fn running_execution_slot() -> &'static Mutex<Option<String>> {
     RUNNING_EXECUTION.get_or_init(|| Mutex::new(None))
 }
 
@@ -97,45 +32,13 @@ pub(crate) async fn reserve_execution(
         ));
     }
 
-    let cancel_requested = Arc::new(AtomicBool::new(false));
-    let cancel_notify = Arc::new(Notify::new());
-    *slot = Some(RunningExecution::Starting(StartingExecution {
-        session_id: session_id.clone(),
-        cancel_requested: Arc::clone(&cancel_requested),
-        cancel_notify: Arc::clone(&cancel_notify),
-    }));
-
-    Ok(ExecutionPermit {
-        session_id,
-        cancel_requested,
-        cancel_notify,
-    })
-}
-
-pub(crate) async fn cancel_running_execution() -> Result<bool, crate::errors::AppError> {
-    let running = {
-        let guard = running_execution_slot().lock().await;
-        guard.clone()
-    };
-
-    let Some(running) = running else {
-        return Ok(false);
-    };
-
-    let (cancel_requested, cancel_notify) = running.cancel_handles();
-    cancel_requested.store(true, Ordering::SeqCst);
-    cancel_notify.notify_one();
-    Ok(true)
+    *slot = Some(session_id.clone());
+    Ok(ExecutionPermit { session_id })
 }
 
 pub(crate) async fn clear_running_execution(session_id: &str) {
     let mut slot = running_execution_slot().lock().await;
-    let should_clear = slot
-        .as_ref()
-        .map(|running| running.session_id() == session_id)
-        .unwrap_or(false);
-
-    if should_clear {
+    if slot.as_deref() == Some(session_id) {
         *slot = None;
     }
 }

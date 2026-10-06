@@ -3,9 +3,9 @@ use crate::errors::ErrorKind;
 use crate::spec::{PublishSpec, SpecValue, SPEC_VERSION};
 use std::collections::BTreeMap;
 use std::path::PathBuf;
-use std::sync::{Arc, OnceLock};
+use std::sync::OnceLock;
 use std::time::Duration;
-use tokio::process::{Child, Command};
+use tokio::process::Command;
 use tokio::sync::Mutex as AsyncMutex;
 
 fn base_java_spec(project_path: &str) -> PublishSpec {
@@ -30,22 +30,6 @@ fn sample_rendered_command() -> RenderedPublishCommand {
 fn execution_test_lock() -> &'static AsyncMutex<()> {
     static TEST_LOCK: OnceLock<AsyncMutex<()>> = OnceLock::new();
     TEST_LOCK.get_or_init(|| AsyncMutex::new(()))
-}
-
-#[cfg(target_os = "windows")]
-async fn spawn_test_sleep_child() -> Child {
-    Command::new("cmd")
-        .args(["/C", "ping", "127.0.0.1", "-n", "60"])
-        .spawn()
-        .expect("spawn windows sleep child")
-}
-
-#[cfg(not(target_os = "windows"))]
-async fn spawn_test_sleep_child() -> Child {
-    Command::new("sleep")
-        .arg("60")
-        .spawn()
-        .expect("spawn sleep child")
 }
 
 #[test]
@@ -523,67 +507,93 @@ async fn reserve_execution_blocks_second_start_while_starting() {
     clear_running_execution(&permit.session_id).await;
 }
 
+#[cfg(unix)]
 #[tokio::test]
-async fn cancel_provider_publish_marks_starting_execution() {
-    let _guard = execution_test_lock().lock().await;
-    force_clear_running_execution().await;
+async fn build_that_exits_on_its_own_is_not_reported_cancelled() {
+    let mut child = Command::new("true").spawn().expect("spawn build");
 
-    let permit = reserve_execution("starting-cancel".to_string())
-        .await
-        .expect("reserve execution");
+    let (status, cancelled) =
+        super::execution::wait_for_build_exit(&mut child, &CancellationSignal::new())
+            .await
+            .expect("wait build");
 
-    assert!(cancel_provider_publish().await.expect("cancel starting"));
-    assert!(permit.is_cancel_requested());
-
-    clear_running_execution(&permit.session_id).await;
+    assert!(status.success());
+    assert!(!cancelled);
 }
 
+/// 取消终止整棵构建进程树：前台子进程响应 SIGINT 退出，忽略 SIGINT 的后台
+/// 孙进程在宽限期后被强制终止，返回时进程组内无任何存活进程。
+#[cfg(unix)]
 #[tokio::test]
-async fn cancel_provider_publish_kills_running_execution() {
-    let _guard = execution_test_lock().lock().await;
-    force_clear_running_execution().await;
+async fn cancellation_terminates_the_whole_build_process_tree() {
+    let mut command = Command::new("sh");
+    command.args(["-c", "sleep 30 & sleep 30; wait"]);
+    publish_adapters::process_tree::isolate(command.as_std_mut());
+    let mut child = command.spawn().expect("spawn build process tree");
+    let leader = child.id().expect("build leader pid");
+    let descendants = wait_for_children(leader, 2).await;
 
-    let permit = reserve_execution("running-cancel".to_string())
+    let cancellation = CancellationSignal::new();
+    let started = std::time::Instant::now();
+    let waiter = {
+        let cancellation = cancellation.clone();
+        tokio::spawn(async move {
+            super::execution::wait_for_build_exit(&mut child, &cancellation).await
+        })
+    };
+    cancellation.request();
+    let (status, cancelled) = tokio::time::timeout(Duration::from_secs(10), waiter)
         .await
-        .expect("reserve execution");
-    let mut child = spawn_test_sleep_child().await;
-    permit.mark_running().await;
+        .expect("cancelled build must stop within 10 s")
+        .expect("join build waiter")
+        .expect("wait cancelled build");
 
-    // Mirror the executor in execution.rs: the task owns the child and waits
-    // for either process exit or the cancel notification. Reproduces the
-    // production arrangement where cancellation arrives mid-wait.
-    let cancel_requested = Arc::clone(&permit.cancel_requested);
-    let cancel_notify = Arc::clone(&permit.cancel_notify);
-    let executor = tokio::spawn(async move {
-        let status = tokio::select! {
-            status = child.wait() => status.expect("wait child"),
-            _ = cancel_notify.notified() => {
-                let _ = child.start_kill();
-                child.wait().await.expect("wait child after kill")
-            }
-        };
-        let cancelled = cancel_requested.load(std::sync::atomic::Ordering::SeqCst);
-        (status, cancelled)
-    });
-
-    // Let the executor task enter the wait before cancelling.
-    tokio::time::sleep(Duration::from_millis(100)).await;
-
-    // Regression assertion: the cancel call must return promptly instead of
-    // blocking until the child exits on its own (the old deadlock).
-    let cancelled = tokio::time::timeout(Duration::from_secs(5), cancel_provider_publish())
-        .await
-        .expect("cancel should return promptly, not block on the running child")
-        .expect("cancel running execution");
     assert!(cancelled);
-    assert!(permit.is_cancel_requested());
-
-    let (status, executor_cancelled) = tokio::time::timeout(Duration::from_secs(5), executor)
-        .await
-        .expect("executor should finish promptly after cancel")
-        .expect("join executor task");
-    assert!(executor_cancelled);
     assert!(!status.success());
+    assert!(started.elapsed() < Duration::from_secs(10));
+    for pid in std::iter::once(leader).chain(descendants) {
+        assert_process_gone(pid).await;
+    }
+}
 
-    force_clear_running_execution().await;
+/// 轮询直到 `parent` 派生出至少 `count` 个直接子进程，返回其 PID。
+#[cfg(unix)]
+async fn wait_for_children(parent: u32, count: usize) -> Vec<u32> {
+    for _ in 0..50 {
+        let output = std::process::Command::new("ps")
+            .args(["-A", "-o", "pid=,ppid="])
+            .output()
+            .expect("list processes");
+        let children = String::from_utf8_lossy(&output.stdout)
+            .lines()
+            .filter_map(|line| {
+                let mut fields = line.split_whitespace();
+                let pid = fields.next()?.parse::<u32>().ok()?;
+                let ppid = fields.next()?.parse::<u32>().ok()?;
+                (ppid == parent).then_some(pid)
+            })
+            .collect::<Vec<_>>();
+        if children.len() >= count {
+            return children;
+        }
+        tokio::time::sleep(Duration::from_millis(100)).await;
+    }
+    panic!("process {parent} did not start {count} children");
+}
+
+/// 进程已退出（不存在或仅剩待回收的僵尸）；给信号投递留出短暂余量。
+#[cfg(unix)]
+async fn assert_process_gone(pid: u32) {
+    for _ in 0..20 {
+        let output = std::process::Command::new("ps")
+            .args(["-o", "stat=", "-p", &pid.to_string()])
+            .output()
+            .expect("inspect process");
+        let state = String::from_utf8_lossy(&output.stdout);
+        if state.trim().is_empty() || state.trim_start().starts_with('Z') {
+            return;
+        }
+        tokio::time::sleep(Duration::from_millis(100)).await;
+    }
+    panic!("process {pid} survived build cancellation");
 }
