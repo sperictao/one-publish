@@ -375,7 +375,7 @@ export async function exportConfig(params: {
 
 export async function importConfig(filePath: string): Promise<ConfigExport> {
   const config = await invoke<TauriConfigExport>("import_config", {
-    file_path: filePath,
+    filePath,
   });
 
   return {
@@ -412,8 +412,8 @@ export async function setExecutionRecordSnapshot(
   snapshotPath: string
 ): Promise<ExecutionRecord[]> {
   return await invoke<TauriExecutionRecord[]>("set_execution_record_snapshot", {
-    record_id: recordId,
-    snapshot_path: snapshotPath,
+    recordId,
+    snapshotPath,
   });
 }
 

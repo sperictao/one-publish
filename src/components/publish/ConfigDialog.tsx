@@ -19,7 +19,10 @@ import {
   Sparkles,
 } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
-import { open as openDialog } from "@tauri-apps/plugin-dialog";
+import {
+  open as openDialog,
+  save as saveDialog,
+} from "@tauri-apps/plugin-dialog";
 import { toast } from "sonner";
 import { importConfig } from "@/lib/store/api";
 import { type ConfigParameters, type ConfigProfile } from "@/lib/store/types";
@@ -156,7 +159,7 @@ export function ConfigManagementContent({
 
   const handleExportConfig = async () => {
     try {
-      const filePath = await openDialog({
+      const filePath = await saveDialog({
         filters: [
           {
             name: "JSON",
@@ -167,7 +170,7 @@ export function ConfigManagementContent({
       });
 
       if (filePath) {
-        await onExportProfiles(filePath as string);
+        await onExportProfiles(filePath);
         toast.success(profileT.exportSuccess || "配置已导出");
       }
     } catch (err) {
