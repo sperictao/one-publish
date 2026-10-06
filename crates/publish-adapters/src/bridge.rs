@@ -417,7 +417,10 @@ impl ProviderExecutionPort for DirectProviderExecutionPort {
             .args(&request.args)
             .current_dir(&request.working_directory)
             // 构建位于独立进程组，不得读取终端。
-            .stdin(std::process::Stdio::null());
+            .stdin(std::process::Stdio::null())
+            // runner 的 stdout 只承载结构化结果（workflow 把它重定向为事件段），
+            // 构建自身输出一律转入 stderr，仍保留在 CI 日志中。
+            .stdout(std::io::stderr());
         process_tree::isolate(&mut command);
         let mut child = command.spawn().map_err(run_error)?;
         let (status, cancelled) =
