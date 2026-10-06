@@ -53,7 +53,6 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_notification::init())
-        .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .plugin(tauri_plugin_decorum::init())
         .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
             // 当尝试启动第二个实例时，显示主窗口
@@ -98,11 +97,6 @@ pub fn run() {
             // 初始化系统托盘
             if let Err(err) = tray::init_tray(app.handle()) {
                 log::error!("初始化系统托盘失败: {}", err);
-            }
-
-            // 注册全局快捷键
-            if let Err(err) = shortcuts::register_shortcuts(app.handle()) {
-                log::error!("注册全局快捷键失败: {}", err);
             }
 
             Ok(())

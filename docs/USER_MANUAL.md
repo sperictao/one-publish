@@ -44,7 +44,7 @@
 | 🎨 Geist 设计系统      | Vercel 风格 token 驱动 UI、P3 广色域、dark/light 主题                     |
 | 🌐 国际化              | 简体中文 + English                                                        |
 | 🔄 自动更新            | Tauri Updater 管线 + GitHub Releases 集成                                 |
-| ⌨️ 键盘优先            | 全局快捷键，免鼠标发布                                                    |
+| ⌨️ 键盘优先            | 应用内快捷键，免鼠标发布                                                  |
 | 📦 一键 GitHub Release | `pnpm release -v x.y.z` 同步版本、生成 notes、提交、打 tag、推送并等待 CI |
 
 ---
@@ -389,7 +389,7 @@ pnpm build
 
 ### 快捷键
 
-- 列出全局快捷键；「查看快捷键」按钮打开 **ShortcutsDialog**。
+- 列出应用内快捷键；「查看快捷键」按钮打开 **ShortcutsDialog**。
 
 ### 关于
 
@@ -409,6 +409,10 @@ pnpm build
 | `Cmd/Ctrl + ,` | 打开设置                                               |
 
 > macOS 显示为 `⌘ R` / `⌘ P` / `⌘ ,`；其他平台为 `Ctrl R` / `Ctrl P` / `Ctrl ,`。
+
+- 快捷键仅在 OnePublish 窗口获得焦点时生效，不会注册为系统全局热键：其他应用聚焦时同样的组合键照常交给该应用，窗口最小化到托盘时也不响应。
+- 在 OnePublish 窗口内，这些组合键会屏蔽 WebView 的默认行为（如 `Ctrl+R` 重新加载页面、`Ctrl+P` 打印）。
+- 需精确匹配：额外按住 `Shift` / `Alt` 不会触发；长按不会重复触发。
 
 ---
 

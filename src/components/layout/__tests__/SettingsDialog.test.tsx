@@ -37,7 +37,7 @@ vi.mock("@/hooks/useI18n", () => {
         generalDescription: "管理语言、默认输出目录与运行偏好。",
         appearanceDescription: "调整主题显示风格，匹配你的系统与使用习惯。",
         environmentDescription: "查看环境诊断结果并快速进入检查页。",
-        shortcutsDescription: "查看全局快捷键，提高常用操作效率。",
+        shortcutsDescription: "查看应用内快捷键，提高常用操作效率。",
         aboutDescription: "查看版本信息、更新状态与更新日志。",
       },
       general: {
