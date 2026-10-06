@@ -168,7 +168,7 @@ fn infer_output_dir_for_cargo_relative_target_dir_resolves_from_project_dir() {
     let mut params = BTreeMap::new();
     params.insert(
         "target_dir".to_string(),
-        SpecValue::String("artifacts/release".to_string()),
+        SpecValue::String("artifacts".to_string()),
     );
     let spec = PublishSpec {
         version: SPEC_VERSION,
@@ -181,7 +181,9 @@ fn infer_output_dir_for_cargo_relative_target_dir_resolves_from_project_dir() {
 
     assert_eq!(
         PathBuf::from(output_dir),
-        PathBuf::from("/tmp/demo-project").join("artifacts/release")
+        PathBuf::from("/tmp/demo-project")
+            .join("artifacts")
+            .join("debug")
     );
 }
 

@@ -104,6 +104,14 @@ pub(crate) fn configured_output_dir(spec: &PublishSpec) -> Option<String> {
         .and_then(|provider| provider.configured_output_dir(spec))
 }
 
+pub(crate) fn verify_build_output(provider_id: &str, output_dir: &str) -> Result<(), String> {
+    provider_registry()
+        .get(provider_id)
+        .map_or(Ok(()), |provider| {
+            provider.verify_build_output(Path::new(output_dir))
+        })
+}
+
 pub(crate) fn should_delete_existing_files(spec: &PublishSpec) -> bool {
     matches!(
         spec.parameters.get("delete_existing_files"),
