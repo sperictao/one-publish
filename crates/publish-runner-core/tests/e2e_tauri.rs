@@ -858,6 +858,11 @@ fn tauri_10_automation_projection_rendering() {
                 serde_json::json!({
                     "driver": "pnpm",
                     "configPath": "src-tauri/tauri.conf.json",
+                    "rustTargets": {
+                        "linux": "x86_64-unknown-linux-gnu",
+                        "macos": "aarch64-apple-darwin,x86_64-apple-darwin",
+                        "windows": "x86_64-pc-windows-msvc",
+                    },
                 }),
             ),
         ]),
