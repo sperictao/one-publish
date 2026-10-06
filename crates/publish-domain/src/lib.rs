@@ -179,6 +179,9 @@ pub enum PublishError {
         failure.retry_after_seconds
     )]
     Classified { failure: PublishFailure },
+    /// 进行中的执行响应取消请求而停止（ADR-0041）：这是取消结果，不是执行失败。
+    #[error("adapter execution was cancelled: {0}")]
+    Cancelled(String),
     #[error("adapter execution failed: {0}")]
     Execution(String),
     #[error("I/O operation {operation} failed: {message}")]

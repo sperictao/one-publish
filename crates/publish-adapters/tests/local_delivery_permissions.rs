@@ -10,9 +10,9 @@ use std::process::Command;
 use std::sync::Arc;
 
 use publish_adapters::{
-    AdapterContract, AdapterExecutionContext, CleanCheckoutGuard, LocalDirectoryDestination,
-    ProviderExecution, ProviderExecutionOutcome, ProviderExecutionPort, SealedBuildCommand,
-    SelectedProjectProvider, TemporaryArtifactStore, SELECTED_PROVIDER_PROGRAM,
+    AdapterContract, AdapterExecutionContext, CancellationSignal, CleanCheckoutGuard,
+    LocalDirectoryDestination, ProviderExecution, ProviderExecutionOutcome, ProviderExecutionPort,
+    SealedBuildCommand, SelectedProjectProvider, TemporaryArtifactStore, SELECTED_PROVIDER_PROGRAM,
 };
 use publish_domain::{
     AdapterSettings, ArtifactCandidate, ArtifactManifest, DeliveryEnvelope, PlanNode,
@@ -27,7 +27,11 @@ struct PrebuiltOutputPort {
 }
 
 impl ProviderExecutionPort for PrebuiltOutputPort {
-    fn execute_spec(&self, _spec_json: &str) -> Result<ProviderExecutionOutcome, PublishError> {
+    fn execute_spec(
+        &self,
+        _spec_json: &str,
+        _cancellation: &CancellationSignal,
+    ) -> Result<ProviderExecutionOutcome, PublishError> {
         Ok(ProviderExecutionOutcome {
             success: true,
             cancelled: false,
@@ -39,6 +43,7 @@ impl ProviderExecutionPort for PrebuiltOutputPort {
     fn execute_build(
         &self,
         _request: SealedBuildCommand,
+        _cancellation: &CancellationSignal,
     ) -> Result<ProviderExecutionOutcome, PublishError> {
         unreachable!("the selected provider runs its sealed publish spec")
     }
@@ -89,6 +94,7 @@ fn context<'a>(
         envelopes,
         receipts: &[],
         credentials: &EMPTY_CREDENTIALS,
+        cancellation: CancellationSignal::new(),
     }
 }
 

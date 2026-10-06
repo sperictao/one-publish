@@ -1,8 +1,9 @@
 use std::collections::{BTreeMap, BTreeSet};
-use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{SystemTime, UNIX_EPOCH};
 
+pub use publish_adapters::CancellationSignal;
 use publish_adapters::{
     AdapterExecutionContext, AdapterExecutionOutput, AdapterRegistry, DeliveryProbe,
     PlanNodeExecutor,
@@ -1101,25 +1102,6 @@ fn validate_lease_ttl(ttl_seconds: u64) -> Result<(), PublishError> {
     Ok(())
 }
 
-/// 协作取消信号（ADR-0041）：只表达"请求停止尚未开始的工作"。已开始的
-/// 节点不被中断，Submitted/Published 路线与既有 Receipt 保持不变。
-#[derive(Clone, Default)]
-pub struct CancellationSignal(Arc<AtomicBool>);
-
-impl CancellationSignal {
-    pub fn new() -> Self {
-        Self::default()
-    }
-
-    pub fn request(&self) {
-        self.0.store(true, Ordering::SeqCst);
-    }
-
-    pub fn is_requested(&self) -> bool {
-        self.0.load(Ordering::SeqCst)
-    }
-}
-
 /// Attempt durability boundary. Implementations must make the initial attempt,
 /// sealed manifest, and every event durable before returning success. When an
 /// event binds a manifest, both pieces of evidence must become visible atomically.
@@ -2111,7 +2093,8 @@ struct RuntimeNodeExecutor<'a> {
     /// 不重新执行（ADR-0040、Issue T12）。
     resume_completed: BTreeSet<String>,
     expected_nodes: BTreeMap<&'a str, &'a PlanNode>,
-    /// 协作取消：置位后未开始的节点不再执行（ADR-0041）。
+    /// 取消（ADR-0041）：置位后未开始的节点不再执行；进行中的节点经
+    /// Adapter 执行上下文观察同一信号，支持中断者以 `Cancelled` 返回。
     cancellation: CancellationSignal,
     /// 分片执行（决议 #85）：只执行分配给该平台亲和的节点，其余跳过。
     assigned_platform: Option<PlanNodePlatform>,
@@ -2588,6 +2571,7 @@ impl<'a> RuntimeNodeExecutor<'a> {
                 envelopes: &self.envelopes,
                 receipts: &self.receipts,
                 credentials: &credentials,
+                cancellation: self.cancellation.clone(),
             };
             let cleaned = self.registry.cleanup_owned_staging(node, &context)?;
             self.maintain_lease().map_err(attempt_state_uncertain)?;
@@ -2880,6 +2864,18 @@ impl PlanNodeExecutor for RuntimeNodeExecutor<'_> {
                 self.executed_nodes.insert(node.id.clone());
                 Ok(())
             }
+            // Adapter 响应本次取消中断了进行中的节点：这是取消而不是失败，
+            // 不记 plan_node_failed；节点按未完成跳过，尝试由取消收尾归约（ADR-0041）。
+            Err(NodeRunError::Adapter(PublishError::Cancelled(_)))
+                if self.cancellation.is_requested() =>
+            {
+                self.skipped_nodes.insert(node.id.clone());
+                if self.is_route_node(node) {
+                    self.cancel_route_if_unresolved(&node.binding_id, &node.id)
+                        .map_err(attempt_state_uncertain)?;
+                }
+                Ok(())
+            }
             Err(NodeRunError::Adapter(error)) if self.is_route_node(node) => {
                 // 路线失败被隔离为可观察的路线级结果；其余路线继续执行（ADR-0022）。
                 self.fail_route(node, &error)
@@ -2939,6 +2935,7 @@ impl RuntimeNodeExecutor<'_> {
             envelopes: &self.envelopes,
             receipts: &self.receipts,
             credentials: &credentials,
+            cancellation: self.cancellation.clone(),
         };
         let output = self
             .registry
@@ -3058,6 +3055,7 @@ pub fn validate_recovered_delivery_envelopes(
                 envelopes: &empty_envelopes,
                 receipts: &empty_receipts,
                 credentials: &empty_credentials,
+                cancellation: CancellationSignal::default(),
             },
             envelope,
         )?;
