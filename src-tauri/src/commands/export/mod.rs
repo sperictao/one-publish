@@ -806,4 +806,17 @@ mod tests {
             .as_deref()
             .is_some_and(|details| !details.is_empty()));
     }
+
+    #[tokio::test]
+    async fn open_directory_rejects_a_file_with_the_path_in_details() {
+        let temp = tempfile::tempdir().expect("temp dir");
+        let file = temp.path().join("file.txt");
+        std::fs::write(&file, "not a directory").expect("write file");
+        let file = file.to_string_lossy().to_string();
+
+        let error = open_directory(file.clone()).await.unwrap_err();
+        assert_eq!(error.code.as_deref(), Some("directory_not_directory"));
+        assert_eq!(error.message, "路径不是文件夹");
+        assert_eq!(error.details.as_deref(), Some(file.as_str()));
+    }
 }

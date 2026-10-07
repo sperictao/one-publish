@@ -1,4 +1,5 @@
-import { extractInvokeErrorMessage } from "@/lib/tauri/invokeErrors";
+import { getCurrentTranslations } from "@/hooks/useI18n";
+import { localizeInvokeError } from "@/lib/tauri/invokeErrors";
 import { getAppState } from "@/lib/store/api";
 import type { AppState } from "@/lib/store/types";
 import { mergeBootstrapAppState } from "@/stores/appStoreMutations";
@@ -14,7 +15,7 @@ export function makeHandlePersistenceFailure(
 ) {
   return async (title: string, err: unknown) => {
     console.error(title, err);
-    let description = extractInvokeErrorMessage(err);
+    let description = localizeInvokeError(err, getCurrentTranslations());
     try {
       const authoritativeState = await getAppState();
       set({
@@ -23,7 +24,10 @@ export function makeHandlePersistenceFailure(
       });
     } catch (reloadError) {
       console.error("重新加载应用状态失败:", reloadError);
-      description = `${description}；${extractInvokeErrorMessage(reloadError)}`;
+      description = `${description}；${localizeInvokeError(
+        reloadError,
+        getCurrentTranslations()
+      )}`;
     }
     toast.error(title, { description });
   };

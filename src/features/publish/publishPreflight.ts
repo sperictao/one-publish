@@ -18,6 +18,7 @@ import {
   type ProviderPublishSpec,
   type PublishOutputPreflightResult,
 } from "@/features/publish/publishRuntime";
+import type { InvokeErrorTranslations } from "@/lib/tauri/invokeErrors";
 
 const loadInvokeErrors = () => import("@/lib/tauri/invokeErrors");
 
@@ -42,6 +43,8 @@ export interface AbortPublishPreparationOptions extends PublishPreparationOption
 
 export interface PublishPreflightDeps {
   appT: TranslationMap;
+  /** invoke 失败按 `errors.<code>` 本地化时读取的最新翻译树。 */
+  getTranslations: () => InvokeErrorTranslations;
   notifyFeedback: (
     level: "success" | "warning" | "error",
     title: string,
@@ -66,6 +69,7 @@ export interface PublishPreflightDeps {
 export function createPublishPreflightPipeline(deps: PublishPreflightDeps) {
   const {
     appT,
+    getTranslations,
     notifyFeedback,
     syncTrayPublishStatus,
     restoreMainWindowIfNeeded,
@@ -202,7 +206,7 @@ export function createPublishPreflightPipeline(deps: PublishPreflightDeps) {
       if (options.isCancelled()) {
         return false;
       }
-      const { extractInvokeErrorMessage } = await loadInvokeErrors();
+      const { localizeInvokeError } = await loadInvokeErrors();
       if (options.isCancelled()) {
         return false;
       }
@@ -210,7 +214,7 @@ export function createPublishPreflightPipeline(deps: PublishPreflightDeps) {
         ...options,
         level: "error",
         title: appT.environmentCheckFailed || "环境检查失败",
-        description: extractInvokeErrorMessage(err),
+        description: localizeInvokeError(err, getTranslations()),
       });
       return false;
     }
@@ -229,7 +233,7 @@ export function createPublishPreflightPipeline(deps: PublishPreflightDeps) {
       if (options.isCancelled()) {
         return false;
       }
-      const { extractInvokeErrorMessage } = await loadInvokeErrors();
+      const { localizeInvokeError } = await loadInvokeErrors();
       if (options.isCancelled()) {
         return false;
       }
@@ -237,7 +241,7 @@ export function createPublishPreflightPipeline(deps: PublishPreflightDeps) {
         ...options,
         level: "error",
         title: appT.publishOutputPreflightFailed || "发布目录预检失败",
-        description: extractInvokeErrorMessage(err),
+        description: localizeInvokeError(err, getTranslations()),
       });
       return false;
     }
@@ -273,7 +277,7 @@ export function createPublishPreflightPipeline(deps: PublishPreflightDeps) {
         if (options.isCancelled()) {
           return false;
         }
-        const { extractInvokeErrorMessage } = await loadInvokeErrors();
+        const { localizeInvokeError } = await loadInvokeErrors();
         if (options.isCancelled()) {
           return false;
         }
@@ -283,7 +287,7 @@ export function createPublishPreflightPipeline(deps: PublishPreflightDeps) {
           title:
             appT.publishProtectedDirectoryAccessRequestFailed ||
             "申请目录访问权限失败",
-          description: extractInvokeErrorMessage(err),
+          description: localizeInvokeError(err, getTranslations()),
         });
         return false;
       }

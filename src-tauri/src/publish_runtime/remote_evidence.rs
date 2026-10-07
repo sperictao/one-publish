@@ -149,10 +149,8 @@ impl RemoteEvidenceSource for GhCliRemoteEvidenceSource {
 }
 
 fn remote_error(message: String) -> AppError {
-    AppError::publish_with_code(
-        format!("远端证据同步失败: {message}"),
-        "remote_evidence_sync_failed",
-    )
+    AppError::publish_with_code("远端证据同步失败", "remote_evidence_sync_failed")
+        .with_details(message)
 }
 
 /// 手动 dispatch 与强取消端口（决议 #89/#84）：dispatch 经 workflow
@@ -260,25 +258,25 @@ pub(crate) fn dispatch_manual_publish(
         .iter()
         .find(|binding| binding.id == binding_id)
         .ok_or_else(|| {
-            AppError::validation_with_code(
-                format!("未找到自动化绑定: {binding_id}"),
-                "automation_binding_not_found",
-            )
+            AppError::validation_with_code("未找到自动化绑定", "automation_binding_not_found")
+                .with_details(binding_id)
         })?;
     if binding.execution_backend_id != publish_adapters::GITHUB_ACTIONS_BACKEND_ID {
         return Err(AppError::validation_with_code(
-            format!("绑定 {binding_id} 不是 GitHub Actions 远端绑定"),
+            "该绑定不是 GitHub Actions 远端绑定",
             "remote_dispatch_backend_unsupported",
-        ));
+        )
+        .with_details(binding_id));
     }
     if !matches!(
         binding.trigger_policy,
         crate::store::AutomationTriggerPolicy::Manual
     ) {
         return Err(AppError::validation_with_code(
-            format!("绑定 {binding_id} 不是手动触发，请通过推送 tag 发布"),
+            "该绑定不是手动触发，请通过推送 tag 发布",
             "remote_dispatch_trigger_mismatch",
-        ));
+        )
+        .with_details(binding_id));
     }
     let workflow_file = Path::new(&binding.external_identity)
         .file_name()
@@ -286,9 +284,10 @@ pub(crate) fn dispatch_manual_publish(
         .filter(|name| !name.is_empty())
         .ok_or_else(|| {
             AppError::validation_with_code(
-                format!("绑定 {binding_id} 尚未安装远端投影，请先应用自动化投影"),
+                "该绑定尚未安装远端投影，请先应用自动化投影",
                 "remote_dispatch_projection_not_installed",
             )
+            .with_details(binding_id)
         })?;
     let version = version.trim();
     if version.is_empty() {
@@ -766,9 +765,10 @@ fn repository_root(path: &str) -> Result<PathBuf, AppError> {
     let root = Path::new(path.trim());
     if path.trim().is_empty() || !root.is_dir() {
         return Err(AppError::repository_with_code(
-            format!("仓库路径不可用: {path}"),
+            "仓库路径不可用",
             "remote_evidence_repository_unavailable",
-        ));
+        )
+        .with_details(path));
     }
     Ok(root.to_path_buf())
 }
@@ -1159,7 +1159,11 @@ mod tests {
             &archive,
         )
         .expect_err("digest mismatches must fail loudly");
-        assert!(error.message.contains("digest 不匹配"));
+        assert_eq!(error.message, "远端证据同步失败");
+        assert!(error
+            .details
+            .as_deref()
+            .is_some_and(|details| details.contains("digest 不匹配")));
     }
 
     type DispatchedRecord = (String, String, BTreeMap<String, String>);
@@ -1249,7 +1253,7 @@ mod tests {
             &archive,
         )
         .expect_err("dispatch failure surfaces");
-        assert!(error.message.contains("dispatch rejected"));
+        assert_eq!(error.details.as_deref(), Some("dispatch rejected"));
         let pending_dir = archive_root.path().join("pending");
         let leftovers = std::fs::read_dir(&pending_dir)
             .map(|entries| entries.count())

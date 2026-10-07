@@ -1,35 +1,24 @@
 import { useCallback, useEffect, useLayoutEffect, useState } from "react";
-import { toast } from "sonner";
 
 import { useLazyRef } from "@/hooks/useLazyRef";
 
-import { getProfiles, reorderProfiles } from "@/lib/store/api";
-import { type ConfigProfile, type ProfileOrderEntry } from "@/lib/store/types";
+import { getProfiles } from "@/lib/store/api";
+import { type ConfigProfile } from "@/lib/store/types";
 import {
   createProfileListSnapshot,
   EMPTY_PROFILE_LIST_SNAPSHOT,
   type ProfileListSnapshot,
 } from "@/lib/profileListSnapshot";
 
-const loadInvokeErrors = () => import("@/lib/tauri/invokeErrors");
-
-interface TranslationMap {
-  [key: string]: string | undefined;
-}
-
 export function useProfileListState(params: {
   selectedRepoId: string | null;
-  profileT: TranslationMap;
   onRepositoryScopeChange: () => void;
 }) {
-  const { selectedRepoId, profileT, onRepositoryScopeChange } = params;
+  const { selectedRepoId, onRepositoryScopeChange } = params;
   const [visibleProfilesSnapshot, setVisibleProfilesSnapshot] =
     useState<ProfileListSnapshot>(EMPTY_PROFILE_LIST_SNAPSHOT);
   const [isProfilesRefreshing, setIsProfilesRefreshing] = useState(false);
   const loadProfilesRequestIdRef = useLazyRef<number>(() => 0);
-  const reorderProfilesQueueRef = useLazyRef<Promise<void>>(() =>
-    Promise.resolve()
-  );
   const profilesCacheRef = useLazyRef<Record<string, ProfileListSnapshot>>(
     () => ({})
   );
@@ -137,59 +126,12 @@ export function useProfileListState(params: {
     onRepositoryScopeChange();
   }, [onRepositoryScopeChange, selectedRepoId]);
 
-  const reorderVisibleProfiles = useCallback(
-    (nextProfiles: ConfigProfile[]) => {
-      const repoId = selectedRepoId;
-      if (!repoId) {
-        return;
-      }
-
-      const nextProfileOrder: ProfileOrderEntry[] = nextProfiles.map(
-        (profile) => ({
-          id: profile.id,
-          profileGroup: profile.profileGroup ?? null,
-        })
-      );
-
-      commitProfilesSnapshot(repoId, nextProfiles);
-
-      reorderProfilesQueueRef.current = reorderProfilesQueueRef.current
-        .catch(() => undefined)
-        .then(async () => {
-          try {
-            await reorderProfiles({
-              repoId,
-              profiles: nextProfileOrder,
-            });
-          } catch (err) {
-            console.error("保存配置排序失败:", err);
-
-            if (selectedRepoIdRef.current === repoId) {
-              await loadProfiles();
-            }
-
-            const { extractInvokeErrorMessage } = await loadInvokeErrors();
-            toast.error(profileT.quickEditFailed || "更新配置文件失败", {
-              description: extractInvokeErrorMessage(err),
-            });
-          }
-        });
-    },
-    [
-      commitProfilesSnapshot,
-      loadProfiles,
-      profileT.quickEditFailed,
-      selectedRepoId,
-    ]
-  );
-
   return {
     profiles,
     profilesRevision,
     isProfilesRefreshing,
     loadProfiles,
     refreshProfilesAfterMutation,
-    reorderVisibleProfiles,
     isCurrentRepo,
     commitProfilesSnapshot,
   };

@@ -20,20 +20,13 @@ pub fn normalize_scan_root(start_path: &Path) -> Result<PathBuf, crate::errors::
             .parent()
             .map(|parent| parent.to_path_buf())
             .ok_or_else(|| {
-                repository_error(
-                    format!(
-                        "cannot resolve parent directory for {}",
-                        start_path.display()
-                    ),
-                    "not_directory",
-                )
+                repository_error("cannot resolve parent directory", "not_directory")
+                    .with_details(start_path.display().to_string())
             });
     }
 
-    Err(repository_error(
-        format!("path is not a directory: {}", start_path.display()),
-        "not_directory",
-    ))
+    Err(repository_error("path is not a directory", "not_directory")
+        .with_details(start_path.display().to_string()))
 }
 
 fn normalized_path_components(path: &Path) -> Vec<String> {
@@ -333,24 +326,24 @@ pub async fn detect_repository_provider(path: String) -> Result<String, crate::e
     let repo_path = PathBuf::from(&path);
 
     if !repo_path.exists() {
-        return Err(repository_error(
-            format!("repository path does not exist: {}", path),
-            "path_not_found",
-        ));
+        return Err(
+            repository_error("repository path does not exist", "path_not_found").with_details(path),
+        );
     }
 
     if !repo_path.is_dir() {
-        return Err(repository_error(
-            format!("repository path is not a directory: {}", path),
-            "not_directory",
-        ));
+        return Err(
+            repository_error("repository path is not a directory", "not_directory")
+                .with_details(path),
+        );
     }
 
     if let Err(err) = std::fs::read_dir(&repo_path) {
         return Err(repository_error(
-            format!("failed to read repository directory: {}", err),
+            "failed to read repository directory",
             classify_repository_path_error(err.kind()),
-        ));
+        )
+        .with_details(err.to_string()));
     }
 
     detect_provider_from_path(&repo_path).ok_or_else(|| {

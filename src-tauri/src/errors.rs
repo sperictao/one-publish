@@ -211,8 +211,8 @@ impl From<CompileError> for AppError {
         match err {
             CompileError::UnsupportedSpecVersion(v) => Self {
                 kind: ErrorKind::UnsupportedSpecVersion,
-                message: format!("unsupported spec version: {v}"),
-                details: None,
+                message: "unsupported spec version".to_string(),
+                details: Some(v.to_string()),
                 code: Some("unsupported_spec_version".to_string()),
             },
             CompileError::UnsupportedProvider(p) => Self {
@@ -246,5 +246,6 @@ mod tests {
         let e: AppError = CompileError::UnsupportedSpecVersion(999).into();
         assert_eq!(e.kind, ErrorKind::UnsupportedSpecVersion);
         assert_eq!(e.code.as_deref(), Some("unsupported_spec_version"));
+        assert_eq!(e.details.as_deref(), Some("999"));
     }
 }

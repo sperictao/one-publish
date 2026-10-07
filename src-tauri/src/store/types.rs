@@ -689,7 +689,7 @@ pub struct RepoPublishConfig {
     pub applied_bundles: Vec<AppliedProjectionBundle>,
 }
 
-/// 配置查找类错误：message 保持静态，配置 ID / 名称放进 details 供前端按 code 本地化后附加。
+// message 保持静态、标识进 details：前端按 code 取 `errors.<code>` 后仍可附加名称或 id。
 pub(crate) fn profile_not_found_error(profile_id: &str) -> crate::errors::AppError {
     crate::errors::AppError::validation_with_code("未找到配置文件", "profile_not_found")
         .with_details(profile_id)

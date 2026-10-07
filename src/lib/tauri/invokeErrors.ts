@@ -344,7 +344,7 @@ export type RepositoryWriteFailureReason =
  * 分类 add / update / remove 仓库这类写操作的失败原因。
  *
  * 与 detect / refresh branches 路径保持同一套写法：优先看后端 error code，
- * 再做一次文案兜底，最后落到 "unknown"（调用方用 extractInvokeErrorMessage
+ * 再做一次文案兜底，最后落到 "unknown"（调用方用 localizeInvokeError
  * 兜底展示，禁止直接把序列化负载塞进 toast）。
  */
 export function analyzeRepositoryWriteFailure(
@@ -506,7 +506,14 @@ export function analyzePublishExecutionFailure(
       return "project_path_not_found";
     }
 
-    if (errorCode === "publish_output_windows_drive_root_missing") {
+    if (
+      errorCode === "publish_output_windows_drive_root_missing" ||
+      errorCode === "publish_runtime_provider_output_name_missing" ||
+      errorCode === "publish_runtime_provider_output_contains_source" ||
+      errorCode === "publish_runtime_provider_output_escapes_root" ||
+      errorCode === "publish_runtime_provider_output_ancestor_missing" ||
+      errorCode === "publish_runtime_provider_output_ancestor_unresolved"
+    ) {
       return "output_path_invalid";
     }
 

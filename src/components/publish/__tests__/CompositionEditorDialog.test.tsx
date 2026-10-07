@@ -209,7 +209,7 @@ describe("CompositionEditorDialog", () => {
     fireEvent.click(await screen.findByTestId("composition-save"));
     await waitFor(() => {
       expect(toastErrorMock).toHaveBeenCalledWith("保存发布组合失败", {
-        description: "系统默认配置文件不可修改",
+        description: "系统默认配置文件不能编辑或删除",
       });
     });
 

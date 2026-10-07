@@ -14,9 +14,13 @@ import type {
   PublishSelectionRef,
   ScopedPublishDraft,
 } from "@/generated/tauri-contracts";
+import { useI18n } from "@/hooks/useI18n";
 import type { ProjectInfo } from "@/lib/store/types";
 import type { ParameterValue } from "@/types/parameters";
-import { extractInvokeErrorMessage } from "@/lib/tauri/invokeErrors";
+import {
+  extractInvokeErrorMessage,
+  localizeInvokeError,
+} from "@/lib/tauri/invokeErrors";
 
 export function buildPublishPresentationScopeKey(params: {
   selectedRepoId: string | null;
@@ -83,6 +87,46 @@ export interface UsePublishValidateParams {
   setEnvironmentLastCheck: (snapshot: EnvironmentCheckSnapshot | null) => void;
 }
 
+export type PublishSourceSelectionFailure =
+  "revisionMissing" | "draftUnresolved" | "draftScopeMismatch";
+
+/** 持久化选择无法解析为发布来源；文案在渲染时按当前语言取 appT，切换语言即时生效。 */
+export class PublishSourceSelectionError extends Error {
+  readonly reason: PublishSourceSelectionFailure;
+
+  constructor(reason: PublishSourceSelectionFailure) {
+    super(`publish source selection is unresolved: ${reason}`);
+    this.name = "PublishSourceSelectionError";
+    this.reason = reason;
+  }
+}
+
+export function describePublishSourceSelectionError(
+  error: unknown,
+  appT: TranslationMap
+): string {
+  if (!(error instanceof PublishSourceSelectionError)) {
+    return extractInvokeErrorMessage(error);
+  }
+  switch (error.reason) {
+    case "revisionMissing":
+      return (
+        appT.publishSourceRevisionMissing ||
+        "所选发布配置或修订不存在，请重新选择配置"
+      );
+    case "draftUnresolved":
+      return (
+        appT.publishSourceDraftUnresolved ||
+        "所选项目草稿不存在或不唯一，请重新选择配置"
+      );
+    case "draftScopeMismatch":
+      return (
+        appT.publishSourceDraftScopeMismatch ||
+        "草稿内容与所选项目作用域不一致，请重新绑定项目"
+      );
+  }
+}
+
 export function resolveSelectedPublishSource(
   repository: NonNullable<UsePublishValidateParams["selectedRepo"]>,
   activeProviderId: string
@@ -101,7 +145,7 @@ export function resolveSelectedPublishSource(
         (item) => item.id === selection.configurationId
       );
       if (!profile?.revisionId) {
-        throw new Error("所选发布配置或修订不存在，请重新选择配置");
+        throw new PublishSourceSelectionError("revisionMissing");
       }
       return {
         kind: "revision",
@@ -116,7 +160,7 @@ export function resolveSelectedPublishSource(
           (draft.projectBinding ?? null) === selection.projectBinding
       );
       if (matches.length !== 1) {
-        throw new Error("所选项目草稿不存在或不唯一，请重新选择配置");
+        throw new PublishSourceSelectionError("draftUnresolved");
       }
       const draft = matches[0];
       if (
@@ -124,7 +168,7 @@ export function resolveSelectedPublishSource(
         (draft.content.projectBinding ?? null) !==
           (draft.projectBinding ?? null)
       ) {
-        throw new Error("草稿内容与所选项目作用域不一致，请重新绑定项目");
+        throw new PublishSourceSelectionError("draftScopeMismatch");
       }
       return {
         kind: "draft",
@@ -192,13 +236,22 @@ export function usePublishValidate({
   openEnvironmentDialog,
   setEnvironmentLastCheck,
 }: UsePublishValidateParams): UsePublishValidateResult {
+  const { translations } = useI18n();
+  // 预检管线会进入 runPublishSpec（托盘监听 useEffect 的依赖）：经稳定 getter
+  // 在 toast 时读取最新翻译，translations 不进管线的 useMemo 依赖。
+  const translationsRef = useRef(translations);
+  useEffect(() => {
+    translationsRef.current = translations;
+  }, [translations]);
+  const getTranslations = useCallback(() => translationsRef.current, []);
   const presentationRevisionRef = useRef(0);
   const [preparedRuntimeState, setPreparedRuntimeState] = useState<{
     key: string;
     value: PreparedPublishRuntime;
   } | null>(null);
+  // 保存原始 invoke 错误而非文案：渲染时按当前语言本地化，切换语言即时生效。
   const [runtimePreparationErrorState, setRuntimePreparationErrorState] =
-    useState<{ key: string; message: string } | null>(null);
+    useState<{ key: string; error: unknown } | null>(null);
   const selectedRepoPath = selectedRepo?.path ?? null;
   const deferRuntimePreparationOnStartup = useMemo(
     () => shouldDeferRuntimePreparationOnStartup(),
@@ -213,10 +266,15 @@ export function usePublishValidate({
         error: null,
       };
     } catch (error) {
-      return { source: null, error: extractInvokeErrorMessage(error) };
+      return { source: null, error };
     }
   }, [selectedRepo, activeProviderId]);
   const currentPublishSource = selectedSource.source;
+  // 选择解析错误在渲染时本地化：appT 不进 selectedSource 的依赖，
+  // 切换语言不会重建来源对象、触发重新准备。
+  const selectedSourceError = selectedSource.error
+    ? describePublishSourceSelectionError(selectedSource.error, appT)
+    : null;
   const publishPresentationSelectionKey = selectionKey;
 
   // plan 033 路线 B：无命名配置时经自动草稿配置准备，发布总是需要 Runtime。
@@ -234,10 +292,10 @@ export function usePublishValidate({
       ? preparedRuntimeState.value
       : null;
   const runtimePreparationError =
-    selectedSource.error ??
+    selectedSourceError ??
     (runtimePreparationKey &&
     runtimePreparationErrorState?.key === runtimePreparationKey
-      ? runtimePreparationErrorState.message
+      ? localizeInvokeError(runtimePreparationErrorState.error, translations)
       : null);
   const publishPreviewCommand =
     preparedRuntime?.status === "ready"
@@ -303,10 +361,7 @@ export function usePublishValidate({
         setRuntimePreparationErrorState(null);
       } catch (error) {
         setPreparedRuntimeState(null);
-        setRuntimePreparationErrorState({
-          key: runtimePreparationKey,
-          message: extractInvokeErrorMessage(error),
-        });
+        setRuntimePreparationErrorState({ key: runtimePreparationKey, error });
         return null;
       }
     }
@@ -392,7 +447,7 @@ export function usePublishValidate({
             setPreparedRuntimeState(null);
             setRuntimePreparationErrorState({
               key: runtimePreparationKey,
-              message: extractInvokeErrorMessage(error),
+              error,
             });
           }
         });
@@ -418,6 +473,7 @@ export function usePublishValidate({
     () =>
       createPublishPreflightPipeline({
         appT,
+        getTranslations,
         notifyFeedback,
         syncTrayPublishStatus,
         restoreMainWindowIfNeeded,
@@ -428,6 +484,7 @@ export function usePublishValidate({
       }),
     [
       appT,
+      getTranslations,
       notifyFeedback,
       syncTrayPublishStatus,
       restoreMainWindowIfNeeded,

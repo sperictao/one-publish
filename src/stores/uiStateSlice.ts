@@ -1,4 +1,5 @@
 import type { StateCreator } from "zustand";
+import { t } from "@/hooks/useI18n";
 import { updateUIState } from "@/lib/store/api";
 import {
   applyUiStateMutation,
@@ -51,7 +52,7 @@ export const createUiStateSlice: StateCreator<
       if (uiDebounceTimer) clearTimeout(uiDebounceTimer);
       uiDebounceTimer = setTimeout(() => {
         void updateUIState(params).catch((err) => {
-          void handlePersistenceFailure("保存界面状态失败", err);
+          void handlePersistenceFailure(t("app.saveUiStateFailed"), err);
         });
       }, DEBOUNCE_DELAY);
     },

@@ -44,7 +44,7 @@ import type { PublishComposition } from "@/generated/tauri-contracts";
 import { CompositionEditorDialog } from "@/components/publish/CompositionEditorDialog";
 import { DeleteProfileConfirmDialog } from "@/components/publish/DeleteProfileConfirmDialog";
 import { resolveDotnetProjectProfile } from "@/lib/dotnetProjectProfile";
-import { extractInvokeErrorMessage } from "@/lib/tauri/invokeErrors";
+import { localizeInvokeError } from "@/lib/tauri/invokeErrors";
 import {
   createProjectProfileConfigKey,
   createRecentConfigRenderId,
@@ -572,12 +572,8 @@ export const PublishConfigPanel = memo(function PublishConfigPanel({
           ).replace("{{name}}", createdProfileName),
         });
       } catch (error) {
-        const errorMessage =
-          error instanceof Error
-            ? error.message
-            : extractInvokeErrorMessage(error);
         toast.error(t.copyConfigFailed || "复制为自定义配置失败", {
-          description: errorMessage,
+          description: localizeInvokeError(error, translations),
         });
       }
     },
@@ -589,6 +585,7 @@ export const PublishConfigPanel = memo(function PublishConfigPanel({
       t.copyConfigFailedDescription,
       t.copyConfigSuccess,
       t.copyConfigSuccessDescription,
+      translations,
     ]
   );
 

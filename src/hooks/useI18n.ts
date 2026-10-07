@@ -77,14 +77,6 @@ async function loadTranslations(lang: Language): Promise<TranslationTree> {
 }
 
 /**
- * 组件外（如 Zustand store）读取当前语言的翻译树；尚未加载时返回 undefined，
- * 调用方需能回退（localizeInvokeError 会退回后端 message）。
- */
-export function getCurrentTranslations(): TranslationTree | undefined {
-  return translationsCache[getStoredLanguage()];
-}
-
-/**
  * 获取翻译（带参数替换）
  */
 function t(key: string, params?: Record<string, string | number>): string {
@@ -119,6 +111,14 @@ function t(key: string, params?: Record<string, string | number>): string {
   }
 
   return text;
+}
+
+/**
+ * 当前语言的完整翻译树，供组件外（如 Zustand store）按错误码本地化；
+ * 翻译尚未加载时返回空树，调用方应回落到后端 message。
+ */
+function getCurrentTranslations(): TranslationTree {
+  return translationsCache[getStoredLanguage()] || {};
 }
 
 /**
@@ -207,4 +207,4 @@ export function useI18n() {
 }
 
 // 导出翻译函数以便在组件外使用
-export { t };
+export { getCurrentTranslations, t };
