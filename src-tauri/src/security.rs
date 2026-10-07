@@ -58,6 +58,8 @@ fn is_freeform_text_key(key: &str) -> bool {
             | "stdout"
             | "stderr"
             | "error"
+            | "warning"
+            | "warnings"
             | "message"
             | "description"
             | "detail"
@@ -388,6 +390,8 @@ mod tests {
         let mut payload = json!({
             "projectPath": "/Users/demo/project/App.csproj",
             "commandLine": "$ dotnet publish /Users/demo/project/App.csproj -p:Password=hunter2",
+            "error": "I/O operation inspect provider output /Users/demo/project/bin/Release/publish failed",
+            "warnings": ["output written to /Users/demo/project/bin/Release/publish"],
             "spec": {
                 "project_path": "/Users/demo/project/App.csproj",
                 "parameters": {
@@ -413,5 +417,11 @@ mod tests {
             .as_str()
             .expect("command line")
             .contains("<redacted>"));
+        // 本地界面保留真实路径，导出时错误与警告中的本机路径必须遮蔽。
+        assert_eq!(
+            payload["error"],
+            "I/O operation inspect provider output <local-path> failed"
+        );
+        assert_eq!(payload["warnings"][0], "output written to <local-path>");
     }
 }
