@@ -113,6 +113,16 @@ pub(crate) fn require_action(node: &PlanNode, expected: &str) -> Result<(), Publ
     Ok(())
 }
 
+/// 交付文件的权限位只由封存执行位决定、与写入端 umask 无关：可执行 0o755，
+/// 其余 0o644。所有落地文件的交付目标共用这一条规则。
+pub(crate) fn delivered_file_mode(executable: bool) -> u32 {
+    if executable {
+        0o755
+    } else {
+        0o644
+    }
+}
+
 /// 密封在 Adapter Action 节点里的单次发布输入；缺失代表计划被篡改而不是可选默认。
 pub(crate) fn sealed_inputs(
     node: &PlanNode,

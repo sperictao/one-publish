@@ -167,7 +167,11 @@ export type ResumePublishRuntimeRequest = { attemptId: string, };
 
 export type RuntimePublishEvent = { version: number, eventId: string, attemptId: string, backendRunId: string, sequence: number, planDigest: string, planNodeId: string, kind: string, payload: { [key: string]: JsonValue }, };
 
-export type RuntimeArtifactManifestEntry = { role: string, fileName: string, mediaType: string, platform: string, architecture: string, size: number, digest: string, locator: string, retention: string, };
+export type RuntimeArtifactManifestEntry = { role: string, fileName: string, mediaType: string, platform: string, architecture: string, size: number, digest: string, locator: string, retention: string, 
+/**
+ * v2 清单封存的执行位；v1 清单没有该字段。
+ */
+executable?: boolean, };
 
 export type RuntimeArtifactManifest = { version: number, planningSnapshotDigest: string, artifacts: Array<RuntimeArtifactManifestEntry>, digest: string, };
 

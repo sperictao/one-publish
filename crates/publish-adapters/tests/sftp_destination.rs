@@ -13,7 +13,8 @@ use publish_domain::{
     ArtifactManifest, ArtifactManifestEntry, CredentialKind, CredentialValue, DeliveryEnvelope,
     DeliveryIdempotencyIdentity, DeliveryReceipt, DeliveryStatus, PlanNode, PlanStage,
     PlanningInputSnapshot, PublishError, PublishFailureCategory, ReleaseIdentity,
-    ResolvedCredential, SourceSnapshot, PLANNING_INPUT_SNAPSHOT_VERSION,
+    ResolvedCredential, SourceSnapshot, LEGACY_ARTIFACT_MANIFEST_VERSION,
+    PLANNING_INPUT_SNAPSHOT_VERSION,
 };
 use serde_json::Value;
 
@@ -181,23 +182,34 @@ fn snapshot_with_release_input(release_input: BTreeMap<String, Value>) -> Planni
 fn manifest_with(root: &Path, entries: &[(&str, &str, &[u8])]) -> ArtifactManifest {
     let sealed = entries
         .iter()
-        .map(|(role, file_name, bytes)| {
-            let path = root.join(file_name.replace('/', "_"));
-            std::fs::write(&path, bytes).expect("write fixture artifact");
-            ArtifactManifestEntry {
-                role: role.to_string(),
-                file_name: file_name.to_string(),
-                media_type: "application/octet-stream".to_string(),
-                platform: "macos".to_string(),
-                architecture: "aarch64".to_string(),
-                size: bytes.len() as u64,
-                digest: sha256_hex(bytes),
-                locator: path.to_string_lossy().to_string(),
-                retention: "604800s".to_string(),
-            }
-        })
+        .map(|(role, file_name, bytes)| stored_entry(root, role, file_name, bytes, Some(false)))
         .collect();
     ArtifactManifest::seal(sha256_hex(b"snapshot"), sealed).expect("seal manifest")
+}
+
+/// 把一个产物写进夹具目录，返回指向它的清单条目；`executable` 为 `None`
+/// 即 v1 清单条目。
+fn stored_entry(
+    root: &Path,
+    role: &str,
+    file_name: &str,
+    bytes: &[u8],
+    executable: Option<bool>,
+) -> ArtifactManifestEntry {
+    let path = root.join(file_name.replace('/', "_"));
+    std::fs::write(&path, bytes).expect("write fixture artifact");
+    ArtifactManifestEntry {
+        role: role.to_string(),
+        file_name: file_name.to_string(),
+        media_type: "application/octet-stream".to_string(),
+        platform: "macos".to_string(),
+        architecture: "aarch64".to_string(),
+        size: bytes.len() as u64,
+        digest: sha256_hex(bytes),
+        locator: path.to_string_lossy().to_string(),
+        retention: "604800s".to_string(),
+        executable,
+    }
 }
 
 fn desktop_manifest(root: &Path) -> ArtifactManifest {
@@ -766,6 +778,57 @@ fn publishing_uploads_via_temporary_names_and_commits_atomically() {
         record.get("manifest_digest").and_then(Value::as_str),
         Some(manifest.digest.as_str())
     );
+}
+
+/// 远端权限按封存执行位设定：可执行产物 0755，其余产物与交付记录 0644——
+/// 不取客户端临时文件（0600）或服务器 umask 的权限，并在原子改名前落定。
+#[test]
+fn publishing_applies_the_sealed_executable_flag_to_remote_files() {
+    let fixture = Fixture::new();
+    let root = fixture.root.path();
+    let manifest = ArtifactManifest::seal(
+        sha256_hex(b"snapshot"),
+        vec![
+            stored_entry(root, "installer", "demo-cli", b"\x7fELF cli", Some(true)),
+            stored_entry(root, "installer", "Demo.dmg", b"dmg-bytes", Some(false)),
+        ],
+    )
+    .expect("seal manifest");
+
+    let (_, publish) = fixture.stage_then_publish(&settings(), &manifest);
+    publish.expect("publish the sftp delivery");
+
+    assert_eq!(fixture.server.mode(&final_path("demo-cli")), Some(0o755));
+    assert_eq!(fixture.server.mode(&final_path("Demo.dmg")), Some(0o644));
+    assert_eq!(
+        fixture.server.mode(&final_path(SFTP_DELIVERY_RECORD_NAME)),
+        Some(0o644)
+    );
+}
+
+/// 推广 v1.0.3 存下的集合：v1 清单没有执行位，按内容识别可执行映像，
+/// 交付出的二进制在远端仍可直接运行。
+#[test]
+fn publishing_a_legacy_manifest_keeps_recognized_executables_runnable() {
+    let fixture = Fixture::new();
+    let root = fixture.root.path();
+    let mut legacy = ArtifactManifest {
+        version: LEGACY_ARTIFACT_MANIFEST_VERSION,
+        planning_snapshot_digest: sha256_hex(b"snapshot"),
+        artifacts: vec![
+            stored_entry(root, "installer", "demo-cli", b"\x7fELF cli", None),
+            stored_entry(root, "installer", "Demo.dmg", b"dmg-bytes", None),
+        ],
+        digest: String::new(),
+    };
+    legacy.digest = legacy.recomputed_digest().expect("legacy digest");
+    legacy.validate().expect("legacy manifests stay valid");
+
+    let (_, publish) = fixture.stage_then_publish(&settings(), &legacy);
+    publish.expect("publish the legacy set");
+
+    assert_eq!(fixture.server.mode(&final_path("demo-cli")), Some(0o755));
+    assert_eq!(fixture.server.mode(&final_path("Demo.dmg")), Some(0o644));
 }
 
 #[test]

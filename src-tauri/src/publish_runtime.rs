@@ -702,6 +702,10 @@ pub struct RuntimeArtifactManifestEntry {
     pub digest: String,
     pub locator: String,
     pub retention: String,
+    /// v2 清单封存的执行位；v1 清单没有该字段。
+    #[serde(default)]
+    #[ts(optional)]
+    pub executable: Option<bool>,
 }
 
 impl From<RuntimeArtifactManifestEntry> for ArtifactManifestEntry {
@@ -716,6 +720,7 @@ impl From<RuntimeArtifactManifestEntry> for ArtifactManifestEntry {
             digest: entry.digest,
             locator: entry.locator,
             retention: entry.retention,
+            executable: entry.executable,
         }
     }
 }
@@ -6075,6 +6080,7 @@ mod tests {
                 digest: publish_domain::sha256_hex(b"remote artifact"),
                 locator: artifact_path.to_string_lossy().to_string(),
                 retention: "604800s".to_string(),
+                executable: Some(false),
             }],
         )
         .expect("seal remote manifest");
