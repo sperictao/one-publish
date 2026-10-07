@@ -158,12 +158,12 @@ export const PublishRunCard = memo(function PublishRunCard({
       });
     } catch (err) {
       toast.error(appT.openOutputDirectoryFailed || "打开输出目录失败", {
-        description: String(err),
+        description: localizeInvokeError(err, translations),
       });
     } finally {
       setIsOpeningOutputDir(false);
     }
-  }, [appT, publishResult?.output_dir]);
+  }, [appT, publishResult?.output_dir, translations]);
 
   // 运行耗时：必须在任何早退之前调用（hooks 规则）。running 时实时累加，
   // 完成后组件不卸载故 elapsedMs 保留最后值。

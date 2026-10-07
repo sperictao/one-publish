@@ -1025,6 +1025,20 @@
     "snapshot_dir_entry_read_failed": "无法读取执行快照目录中的条目",
     "open_snapshot_failed": "无法打开执行快照",
     "open_directory_failed": "无法打开目录",
-    "open_output_directory_failed": "无法打开输出目录"
+    "open_output_directory_failed": "无法打开输出目录",
+    "snapshot_home_dir_missing": "无法定位当前用户主目录以存放执行快照",
+    "snapshot_output_dir_missing": "记录中没有可用的输出目录",
+    "snapshot_not_found_for_output_dir": "未找到该输出目录的执行快照",
+    "snapshot_file_not_found": "执行快照文件不存在",
+    "snapshot_path_missing": "记录中没有快照路径",
+    "snapshot_and_output_dir_missing": "记录中没有可用的快照路径和输出目录",
+    "directory_path_empty": "目录路径为空",
+    "directory_not_found": "目录不存在",
+    "directory_not_directory": "路径不是文件夹",
+    "output_dir_empty": "输出目录路径为空",
+    "output_dir_not_found": "输出目录不存在",
+    "output_dir_not_directory": "输出路径不是文件夹",
+    "artifact_package_failed": "无法打包产物",
+    "artifact_sign_failed": "无法签名产物"
   }
 }

@@ -1025,6 +1025,20 @@
     "snapshot_dir_entry_read_failed": "Couldn't read an entry in the execution snapshot directory.",
     "open_snapshot_failed": "Couldn't open the execution snapshot.",
     "open_directory_failed": "Couldn't open the directory.",
-    "open_output_directory_failed": "Couldn't open the output directory."
+    "open_output_directory_failed": "Couldn't open the output directory.",
+    "snapshot_home_dir_missing": "Couldn't locate the home directory used to store execution snapshots.",
+    "snapshot_output_dir_missing": "The record has no output directory.",
+    "snapshot_not_found_for_output_dir": "No execution snapshot was found for this output directory.",
+    "snapshot_file_not_found": "The execution snapshot file doesn't exist.",
+    "snapshot_path_missing": "The record has no snapshot path.",
+    "snapshot_and_output_dir_missing": "The record has neither a snapshot path nor an output directory.",
+    "directory_path_empty": "The directory path is empty.",
+    "directory_not_found": "The directory doesn't exist.",
+    "directory_not_directory": "The path isn't a folder.",
+    "output_dir_empty": "The output directory path is empty.",
+    "output_dir_not_found": "The output directory doesn't exist.",
+    "output_dir_not_directory": "The output path isn't a folder.",
+    "artifact_package_failed": "Couldn't package the artifact.",
+    "artifact_sign_failed": "Couldn't sign the artifact."
   }
 }

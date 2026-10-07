@@ -21,10 +21,8 @@ pub async fn package_artifact(
     )
     .await
     .map_err(|e| {
-        crate::errors::AppError::artifact_with_code(
-            format!("package failed: {}", e),
-            "artifact_package_failed",
-        )
+        crate::errors::AppError::artifact_with_code("package failed", "artifact_package_failed")
+            .with_details(e.to_string())
     })
 }
 
@@ -46,9 +44,7 @@ pub async fn sign_artifact(
     )
     .await
     .map_err(|e| {
-        crate::errors::AppError::artifact_with_code(
-            format!("sign failed: {}", e),
-            "artifact_sign_failed",
-        )
+        crate::errors::AppError::artifact_with_code("sign failed", "artifact_sign_failed")
+            .with_details(e.to_string())
     })
 }
