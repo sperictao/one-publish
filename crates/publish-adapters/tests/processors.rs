@@ -420,6 +420,7 @@ fn execution_context<'a>(
         envelopes: &[],
         receipts: &[],
         credentials: &EMPTY_CREDENTIALS,
+        cancellation: publish_adapters::CancellationSignal::new(),
     }
 }
 

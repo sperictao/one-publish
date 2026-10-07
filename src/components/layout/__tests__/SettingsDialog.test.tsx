@@ -21,7 +21,8 @@ vi.mock("@tauri-apps/plugin-process", () => ({
 }));
 
 // Mock translations
-vi.mock("@/hooks/useI18n", () => {
+vi.mock("@/hooks/useI18n", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/hooks/useI18n")>();
   const translations = {
     settings: {
       title: "应用设置",
@@ -94,6 +95,7 @@ vi.mock("@/hooks/useI18n", () => {
   };
 
   return {
+    ...actual,
     useI18n: () => ({
       language: "zh",
       setLanguage: vi.fn(),

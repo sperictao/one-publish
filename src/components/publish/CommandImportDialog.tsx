@@ -18,6 +18,7 @@ import {
   resolveProviderLabel,
 } from "@/features/provider/providers";
 import type { ProviderManifest } from "@/lib/store/types";
+import { localizeInvokeError } from "@/lib/tauri/invokeErrors";
 
 interface CommandImportDialogProps {
   open: boolean;
@@ -68,7 +69,7 @@ export function CommandImportDialog({
       setParsedResult(result);
       toast.success(commandT.parseSuccess || "参数已导入");
     } catch (err) {
-      const errorMsg = String(err);
+      const errorMsg = localizeInvokeError(err, translations);
       setError(errorMsg);
       toast.error(commandT.parseFailed || "解析失败", {
         description: errorMsg,

@@ -1,6 +1,7 @@
 import type { StateCreator } from "zustand";
 import type { AppState } from "@/lib/store/types";
 import type { PublishEditStateUpdate } from "@/generated/tauri-contracts";
+import { t } from "@/hooks/useI18n";
 import {
   updatePublishEditState as apiUpdatePublishEditState,
   pushRecentPublishConfig as apiPushRecentPublishConfig,
@@ -104,7 +105,10 @@ export const createPublishStateSlice: StateCreator<
           });
         })
         .catch((err) => {
-          void handlePersistenceFailure("保存发布配置失败", err);
+          void handlePersistenceFailure(
+            t("app.savePublishEditStateFailed"),
+            err
+          );
         });
     },
 
@@ -114,7 +118,7 @@ export const createPublishStateSlice: StateCreator<
       if (!id || !configKey.trim()) return;
       enqueueRecentMutation(
         () => apiPushRecentPublishConfig({ repoId: id, configKey }),
-        "记录最近使用发布配置失败:"
+        t("app.recordRecentPublishConfigFailed")
       );
     },
 
@@ -123,7 +127,7 @@ export const createPublishStateSlice: StateCreator<
       if (!id || !configKey.trim()) return;
       enqueueRecentMutation(
         () => apiRemoveRecentPublishConfig({ repoId: id, configKey }),
-        "移除最近使用发布配置失败:"
+        t("app.removeRecentPublishConfigFailed")
       );
     },
 
@@ -137,7 +141,7 @@ export const createPublishStateSlice: StateCreator<
             previousKey,
             nextKey,
           }),
-        "替换最近使用发布配置 key 失败:"
+        t("app.replaceRecentPublishConfigFailed")
       );
     },
 
@@ -157,7 +161,7 @@ export const createPublishStateSlice: StateCreator<
 
       enqueueRecentMutation(
         () => apiReorderRecentPublishConfigs({ repoId: id, configKeys }),
-        "保存最近使用排序失败",
+        t("app.saveRecentPublishConfigOrderFailed"),
         { applyState: false }
       );
     },

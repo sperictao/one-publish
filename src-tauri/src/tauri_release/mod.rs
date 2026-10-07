@@ -37,6 +37,69 @@ pub(crate) fn release_settings_from_parameters(
         })
 }
 
+/// 写入关口（ADR-0060）：参数显式携带、且与修订已有值不同的发布设置必须先
+/// 通过与自动化绑定相同的校验；原样回传或继承的值不重复校验，存量设置不阻断
+/// 普通编辑；显式 null 表示清除，无需校验。
+pub(crate) fn validate_supplied_release_settings(
+    parameters: &serde_json::Value,
+    current: Option<&serde_json::Value>,
+) -> Result<(), AppError> {
+    if parameters.get(RELEASE_SETTINGS_PARAMETER) == current {
+        return Ok(());
+    }
+    match release_settings_from_parameters(parameters)? {
+        Some(settings) => validate_release_config(&settings),
+        None => Ok(()),
+    }
+}
+
+/// 修订没有可读发布设置时的表单初值（ADR-0060）：以默认值为底，按项目绑定的
+/// Tauri 配置入口探测应用名、构建驱动、Updater 与版本镜像建议。探测失败只
+/// 退回默认值；未签名发布保持未授权，由使用者显式决定（ADR-0006）。
+pub(crate) fn suggested_release_settings(
+    repository_path: &Path,
+    config_path: Option<&str>,
+) -> TauriReleaseConfig {
+    let mut settings = TauriReleaseConfig::default();
+    let Some(config_path) = config_path else {
+        return settings;
+    };
+    settings.app_config_path = config_path.to_string();
+    let inspection = match publish_adapters::tauri::TauriProjectProvider::new()
+        .inspect(repository_path, config_path)
+    {
+        Ok(inspection) => inspection,
+        Err(error) => {
+            log::warn!("探测 Tauri 项目失败，发布设置初值退回默认值: {error}");
+            return settings;
+        }
+    };
+    settings.app_name = inspection.app_name;
+    settings.build_driver = match inspection.build_driver {
+        publish_adapters::tauri::TauriBuildDriver::Pnpm => TauriBuildDriver::Pnpm,
+        publish_adapters::tauri::TauriBuildDriver::Npm => TauriBuildDriver::Npm,
+        publish_adapters::tauri::TauriBuildDriver::Yarn => TauriBuildDriver::Yarn,
+        publish_adapters::tauri::TauriBuildDriver::Bun => TauriBuildDriver::Bun,
+        publish_adapters::tauri::TauriBuildDriver::Cargo => TauriBuildDriver::Cargo,
+    };
+    settings.updater.enabled = inspection.updater_enabled;
+    settings.version_mirrors = inspection
+        .suggested_version_mirrors
+        .into_iter()
+        .map(|mirror| VersionMirror {
+            path: mirror.path,
+            kind: match mirror.kind {
+                publish_adapters::tauri::VersionMirrorKind::JsonPointer => {
+                    VersionMirrorKind::JsonPointer
+                }
+                publish_adapters::tauri::VersionMirrorKind::TomlKey => VersionMirrorKind::TomlKey,
+            },
+            selector: mirror.selector,
+        })
+        .collect();
+    settings
+}
+
 fn validate_relative_path(path: &str, field: &str) -> Result<(), AppError> {
     let value = Path::new(path);
     if path.trim().is_empty()
@@ -49,7 +112,8 @@ fn validate_relative_path(path: &str, field: &str) -> Result<(), AppError> {
         return Err(AppError::validation_with_code(
             format!("{field} must be a repository-relative path"),
             "tauri_release_path_invalid",
-        ));
+        )
+        .with_details(field));
     }
     Ok(())
 }
@@ -295,6 +359,142 @@ mod tests {
         };
         let error = validate_release_config(&outside_mirror).expect_err("outside mirror");
         assert_eq!(error.code.as_deref(), Some("tauri_release_path_invalid"));
+    }
+
+    #[test]
+    fn default_settings_leave_the_unsigned_release_decision_to_the_user() {
+        // ADR-0006：默认目标含需要平台签名的桌面平台，默认值不替使用者授权
+        // 未签名发布，因此不能原样通过绑定校验。
+        let error = validate_release_config(&TauriReleaseConfig::default())
+            .expect_err("defaults need a signing decision");
+        assert_eq!(
+            error.code.as_deref(),
+            Some("tauri_release_platform_signing_required")
+        );
+
+        let linux_only = TauriReleaseConfig {
+            enabled_targets: vec![TauriDesktopTarget::LinuxX64],
+            ..TauriReleaseConfig::default()
+        };
+        validate_release_config(&linux_only).expect("linux needs no platform signing");
+    }
+
+    #[test]
+    fn invalid_paths_name_the_offending_field() {
+        let config = TauriReleaseConfig {
+            local_delivery_dir: "/abs/dist".to_string(),
+            allow_unsigned_release: true,
+            ..TauriReleaseConfig::default()
+        };
+
+        let error = validate_release_config(&config).expect_err("absolute path");
+        assert_eq!(error.code.as_deref(), Some("tauri_release_path_invalid"));
+        assert_eq!(error.details.as_deref(), Some("localDeliveryDir"));
+    }
+
+    #[test]
+    fn stripped_secret_names_still_parse_as_empty() {
+        // 配置备份剥离 Secret 名称后，设置仍须可读（ADR-0060）。
+        let mut stripped =
+            serde_json::to_value(TauriReleaseConfig::default()).expect("serialize settings");
+        let object = stripped.as_object_mut().expect("settings object");
+        object.remove("requiredActionsSecretNames");
+        object.remove("actionsSecretEnvironment");
+        object["updater"]
+            .as_object_mut()
+            .expect("updater object")
+            .remove("privateKeySecretName");
+
+        let parsed = release_settings_from_parameters(
+            &serde_json::json!({ RELEASE_SETTINGS_PARAMETER: stripped }),
+        )
+        .expect("stripped settings parse")
+        .expect("settings are present");
+        assert!(parsed.required_actions_secret_names.is_empty());
+        assert!(parsed.actions_secret_environment.is_empty());
+        assert_eq!(parsed.updater.private_key_secret_name, None);
+    }
+
+    #[test]
+    fn supplied_release_settings_are_validated_only_when_they_change() {
+        let invalid = serde_json::to_value(TauriReleaseConfig::default()).expect("serialize");
+        let valid = serde_json::to_value(TauriReleaseConfig {
+            allow_unsigned_release: true,
+            ..TauriReleaseConfig::default()
+        })
+        .expect("serialize");
+        let with = |settings: &serde_json::Value| serde_json::json!({ "target": "x", RELEASE_SETTINGS_PARAMETER: settings });
+
+        // 原样回传的存量设置不阻断普通编辑。
+        validate_supplied_release_settings(&with(&invalid), Some(&invalid))
+            .expect("unchanged settings pass through");
+        // 省略（继承）与显式 null（清除）都无需校验。
+        validate_supplied_release_settings(&serde_json::json!({}), Some(&invalid))
+            .expect("omitted settings inherit");
+        validate_supplied_release_settings(&with(&serde_json::Value::Null), Some(&invalid))
+            .expect("null clears");
+
+        let error = validate_supplied_release_settings(&with(&invalid), Some(&valid))
+            .expect_err("changed settings are validated");
+        assert_eq!(
+            error.code.as_deref(),
+            Some("tauri_release_platform_signing_required")
+        );
+        let error = validate_supplied_release_settings(&with(&invalid), None)
+            .expect_err("new settings are validated");
+        assert_eq!(
+            error.code.as_deref(),
+            Some("tauri_release_platform_signing_required")
+        );
+        validate_supplied_release_settings(&with(&valid), None).expect("valid settings pass");
+
+        let error = validate_supplied_release_settings(
+            &with(&serde_json::json!({ "tagPrefix": "v" })),
+            None,
+        )
+        .expect_err("malformed settings fail");
+        assert_eq!(
+            error.code.as_deref(),
+            Some("tauri_release_settings_invalid")
+        );
+    }
+
+    #[test]
+    fn suggestions_inspect_the_bound_project_and_fall_back_to_defaults() {
+        let repository = tempfile::TempDir::new().expect("temp repository");
+        let write = |path: &str, content: &str| {
+            let path = repository.path().join(path);
+            std::fs::create_dir_all(path.parent().expect("parent")).expect("create dir");
+            std::fs::write(path, content).expect("write file");
+        };
+        write(
+            "src-tauri/tauri.conf.json",
+            r#"{"productName":"Demo","version":"1.2.3","bundle":{"createUpdaterArtifacts":true}}"#,
+        );
+        write("package.json", r#"{"version":"1.2.3"}"#);
+        write("yarn.lock", "");
+
+        let suggested =
+            suggested_release_settings(repository.path(), Some("src-tauri/tauri.conf.json"));
+        assert_eq!(suggested.app_config_path, "src-tauri/tauri.conf.json");
+        assert_eq!(suggested.app_name, "Demo");
+        assert_eq!(suggested.build_driver, TauriBuildDriver::Yarn);
+        assert!(suggested.updater.enabled);
+        assert!(suggested.version_mirrors.contains(&VersionMirror {
+            path: "package.json".to_string(),
+            kind: VersionMirrorKind::JsonPointer,
+            selector: "/version".to_string(),
+        }));
+        // 探测只填事实，不替使用者授权未签名发布。
+        assert!(!suggested.allow_unsigned_release);
+
+        assert_eq!(
+            suggested_release_settings(repository.path(), None),
+            TauriReleaseConfig::default()
+        );
+        let missing = suggested_release_settings(repository.path(), Some("app/tauri.conf.json"));
+        assert_eq!(missing.app_config_path, "app/tauri.conf.json");
+        assert_eq!(missing.build_driver, TauriBuildDriver::Pnpm);
     }
 
     #[test]

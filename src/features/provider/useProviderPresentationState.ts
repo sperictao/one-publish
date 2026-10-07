@@ -7,6 +7,11 @@ import {
   resolveProviderLabel,
 } from "@/features/provider/providers";
 import type { ResourceState } from "@/features/provider/useProviderRuntime";
+import { useI18n } from "@/hooks/useI18n";
+import {
+  localizeInvokeError,
+  type InvokeErrorTranslations,
+} from "@/lib/tauri/invokeErrors";
 import type { ParameterSchema } from "@/types/parameters";
 
 interface ProviderRuntimeCopy {
@@ -28,12 +33,16 @@ export interface ProviderRuntimeBannerState {
   onRetry: () => void;
 }
 
-function describeRuntimeError(error: unknown, fallback: string): string {
+function describeRuntimeError(
+  error: unknown,
+  fallback: string,
+  translations: InvokeErrorTranslations
+): string {
   if (error === null || error === undefined) {
     return fallback;
   }
 
-  const description = String(error).trim();
+  const description = localizeInvokeError(error, translations).trim();
   return description || fallback;
 }
 
@@ -47,6 +56,7 @@ export function useProviderPresentationState(params: {
   retryProviderList: () => void;
   retryProviderSchema: () => void;
 }) {
+  const { translations } = useI18n();
   const availableProviders = useMemo(
     () => params.providerRuntimeProviders,
     [params.providerRuntimeProviders]
@@ -110,7 +120,8 @@ export function useProviderPresentationState(params: {
           description: describeRuntimeError(
             params.providerListState.error,
             params.appT.providerListLoadFailedDescription ||
-              "未能读取可用 Provider，请重试。"
+              "未能读取可用 Provider，请重试。",
+            translations
           ),
           onRetry: params.retryProviderList,
         };
@@ -142,7 +153,8 @@ export function useProviderPresentationState(params: {
           description: describeRuntimeError(
             params.activeProviderSchemaState.error,
             params.appT.providerSchemaLoadFailedDescription ||
-              "无法读取当前 Provider 的参数定义，请重试。"
+              "无法读取当前 Provider 的参数定义，请重试。",
+            translations
           ),
           onRetry: params.retryProviderSchema,
         };
@@ -162,6 +174,7 @@ export function useProviderPresentationState(params: {
       params.providerListState,
       params.retryProviderList,
       params.retryProviderSchema,
+      translations,
     ]);
 
   return {

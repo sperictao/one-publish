@@ -8,7 +8,8 @@ import type { LoadableProfile } from "./types";
 export interface UseProfileSelectionParams {
   updatePublishEditState: (update: PublishEditStateUpdate) => void;
   setActiveProfileName: Dispatch<SetStateAction<string | null>>;
-  applyProfile: (profile: LoadableProfile) => void;
+  /** 成功时自行记录激活名；Provider 与仓库不一致时拒绝并返回 false。 */
+  applyProfile: (profile: LoadableProfile) => boolean;
 }
 
 export interface UseProfileSelectionReturn {
@@ -37,10 +38,9 @@ export function useProfileSelection({
 
   const handleSelectProfileFromPanel = useCallback(
     (profile: ConfigProfile) => {
-      setActiveProfileName(profile.name);
       applyProfile(profile);
     },
-    [applyProfile, setActiveProfileName]
+    [applyProfile]
   );
 
   return {

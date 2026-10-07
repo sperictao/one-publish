@@ -2,7 +2,7 @@
 //
 // The four providers (cargo/go/dotnet/java) share an identical shape:
 //   - resolve the command path
-//   - run `<command> <version_arg>`
+//   - run `<command> <version_args...>`
 //   - parse the version string (from stdout or, for java, stderr)
 //   - return a ProviderStatus
 //
@@ -41,8 +41,8 @@ pub enum VersionSource {
 pub struct ToolProbe {
     pub provider_id: &'static str,
     pub command: &'static str,
-    pub version_arg: &'static str,
-    /// Where the version string lives in `<command> <version_arg>` output.
+    pub version_args: &'static [&'static str],
+    /// Where the version string lives in `<command> <version_args...>` output.
     pub version_source: VersionSource,
     pub min_version: &'static str,
 }
@@ -70,7 +70,7 @@ pub async fn check_tool(probe: &ToolProbe, parse_version: VersionParser) -> Prov
     let program = path.clone().unwrap_or_else(|| probe.command.to_string());
 
     let command = crate::process_utils::new_tokio_command(&program)
-        .arg(probe.version_arg)
+        .args(probe.version_args)
         .output();
 
     // Bound the probe so a hung toolchain cannot wedge the environment
@@ -196,7 +196,7 @@ mod tests {
         ToolProbe {
             provider_id: "cargo",
             command: "cargo",
-            version_arg: "--version",
+            version_args: &["--version"],
             version_source: VersionSource::Stdout,
             min_version: "1.70.0",
         }
@@ -384,7 +384,7 @@ mod tests {
         let probe = ToolProbe {
             provider_id: "hang-sim",
             command: "sleep",
-            version_arg: "30",
+            version_args: &["30"],
             version_source: VersionSource::Stdout,
             min_version: "0.0.0",
         };

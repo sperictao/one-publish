@@ -14,10 +14,11 @@ use super::session::reserve_execution;
 use super::{PublishResult, RenderedPublishCommand};
 use crate::provider::registry::provider_registry;
 use crate::spec::PublishSpec;
+use publish_adapters::{process_tree, CancellationSignal};
 use std::path::PathBuf;
-use std::process::Stdio;
-use std::sync::Arc;
+use std::process::{ExitStatus, Stdio};
 use tauri::AppHandle;
+use tokio::process::Child;
 use tokio::sync::mpsc;
 
 /// (success, cancelled, error, output_log, warnings)
@@ -137,18 +138,20 @@ fn apply_cleanup_policy(policy: &PublishOutputPolicy) -> Result<(), crate::error
 pub(crate) async fn execute_publish_spec(
     app: &AppHandle,
     spec: PublishSpec,
+    cancellation: &CancellationSignal,
 ) -> Result<PublishResult, crate::errors::AppError> {
     let prepared = prepare_publish_command(&spec)?;
     let output_policy = output_policy::resolve_publish_output_policy(&spec)?;
     apply_cleanup_policy(&output_policy)?;
     let output_dir = output_policy.output_dir().to_string();
-    run_publish_process(app, &spec.provider_id, prepared, &output_dir).await
+    run_publish_process(app, &spec.provider_id, prepared, &output_dir, cancellation).await
 }
 
 /// 执行密封计划节点的构建命令：不经过 spec 渲染管道，命令即计划节点的唯一事实来源。
 pub(crate) async fn execute_sealed_build(
     app: &AppHandle,
     request: &SealedBuildCommand,
+    cancellation: &CancellationSignal,
 ) -> Result<PublishResult, crate::errors::AppError> {
     let prepared = PreparedPublishCommand {
         command: RenderedPublishCommand {
@@ -161,7 +164,41 @@ pub(crate) async fn execute_sealed_build(
         working_dir_path: Some(request.working_directory.clone()),
     };
     let output_dir = request.output_directory.to_string_lossy().to_string();
-    run_publish_process(app, &request.provider_id, prepared, &output_dir).await
+    run_publish_process(
+        app,
+        &request.provider_id,
+        prepared,
+        &output_dir,
+        cancellation,
+    )
+    .await
+}
+
+/// 等待构建进程退出；取消请求到达时先中断、宽限期后强制终止整棵进程树。
+/// 返回退出状态与是否因取消而终止。
+pub(super) async fn wait_for_build_exit(
+    child: &mut Child,
+    cancellation: &CancellationSignal,
+) -> std::io::Result<(ExitStatus, bool)> {
+    // 组长被回收后 id() 不再可用，进程组号须在等待前取得。
+    let pid = child.id();
+    tokio::select! {
+        status = child.wait() => return Ok((status?, false)),
+        _ = cancellation_requested(cancellation) => {}
+    }
+    if let Some(pid) = pid {
+        process_tree::interrupt(pid);
+        let _ = tokio::time::timeout(process_tree::TERMINATION_GRACE, child.wait()).await;
+        // 组长退出后进程组仍可能残留后代（如忽略 SIGINT 的后台任务），无条件强制终止。
+        process_tree::kill(pid);
+    }
+    Ok((child.wait().await?, true))
+}
+
+async fn cancellation_requested(cancellation: &CancellationSignal) {
+    while !cancellation.is_requested() {
+        tokio::time::sleep(process_tree::POLL_INTERVAL).await;
+    }
 }
 
 async fn run_publish_process(
@@ -169,6 +206,7 @@ async fn run_publish_process(
     provider_id: &str,
     prepared: PreparedPublishCommand,
     output_dir: &str,
+    cancellation: &CancellationSignal,
 ) -> Result<PublishResult, crate::errors::AppError> {
     let session_id = build_publish_session_id(provider_id);
     let permit = reserve_execution(session_id.clone()).await?;
@@ -176,7 +214,7 @@ async fn run_publish_process(
     // 避免上一运行迟到的尾部 chunk 锁存成错误会话导致新运行日志被静默丢弃。
     emit_publish_session_started(app, &session_id);
     let execution_result: Result<PublishResult, crate::errors::AppError> = async {
-        if permit.is_cancel_requested() {
+        if cancellation.is_requested() {
             return Ok(PublishResult {
                 provider_id: provider_id.to_string(),
                 success: false,
@@ -201,11 +239,15 @@ async fn run_publish_process(
         command
             .args(&prepared.command.args)
             .envs(prepared.command.env.iter().cloned())
+            // 构建位于独立进程组，不得读取终端。
+            .stdin(Stdio::null())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped());
         if let Some(dir) = &prepared.working_dir_path {
             command.current_dir(dir);
         }
+        // 构建独占进程组：取消时整棵进程树（Gradle 等派生的子进程）一并终止。
+        process_tree::isolate(command.as_std_mut());
 
         let mut child = command.spawn().map_err(|error| {
             publish_error(
@@ -219,8 +261,6 @@ async fn run_publish_process(
 
         let stdout = child.stdout.take();
         let stderr = child.stderr.take();
-        let cancel_requested = Arc::clone(&permit.cancel_requested);
-        permit.mark_running().await;
 
         let run_result: PublishRunResult = async {
             let (sender, receiver) = mpsc::unbounded_channel::<(String, String)>();
@@ -246,27 +286,14 @@ async fn run_publish_process(
             }
             drop(sender);
 
-            // A cancel that landed while the execution was still starting
-            // is serviced immediately instead of entering the select.
-            let cancelled_before_wait = cancel_requested.load(std::sync::atomic::Ordering::SeqCst);
-            let status = if cancelled_before_wait {
-                let _ = child.start_kill();
-                child.wait().await
-            } else {
-                tokio::select! {
-                    status = child.wait() => status,
-                    _ = permit.cancel_notify.notified() => {
-                        let _ = child.start_kill();
-                        child.wait().await
-                    }
-                }
-            }
-            .map_err(|error| {
-                publish_error(
-                    format!("failed to wait publish process: {}", error),
-                    classify_process_wait_error(error.kind()),
-                )
-            })?;
+            let (status, cancelled) = wait_for_build_exit(&mut child, cancellation)
+                .await
+                .map_err(|error| {
+                    publish_error(
+                        format!("failed to wait publish process: {}", error),
+                        classify_process_wait_error(error.kind()),
+                    )
+                })?;
 
             for reader in readers {
                 let _ = reader.await;
@@ -278,7 +305,6 @@ async fn run_publish_process(
                     "publish_log_collect_failed",
                 )
             })?;
-            let cancelled = cancel_requested.load(std::sync::atomic::Ordering::SeqCst);
             if cancelled {
                 let cancelled_line = if log_summary.ends_with_newline {
                     "[cancelled] 发布已取消".to_string()
@@ -339,6 +365,6 @@ async fn run_publish_process(
     }
     .await;
 
-    super::session::clear_running_execution(&session_id).await;
+    super::session::clear_running_execution(&permit.session_id).await;
     execution_result
 }

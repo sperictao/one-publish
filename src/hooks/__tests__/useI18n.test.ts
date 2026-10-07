@@ -1,6 +1,11 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { act, renderHook, waitFor } from "@testing-library/react";
-import { t, useI18n, __setTranslationsCacheForTest } from "../useI18n";
+import {
+  getLanguageLocale,
+  t,
+  useI18n,
+  __setTranslationsCacheForTest,
+} from "../useI18n";
 
 const zh = {
   settings: {
@@ -94,6 +99,68 @@ describe("useI18n hook sync", () => {
 
     await waitFor(() => {
       expect(localStorage.getItem("app-language")).toBe("zh");
+    });
+  });
+});
+
+describe("useI18n document language", () => {
+  beforeEach(() => {
+    localStorage.clear();
+    document.documentElement.lang = "zh-CN";
+    __setTranslationsCacheForTest({ zh, en } as TestTranslationCache);
+  });
+
+  it("maps app languages to BCP 47 locale tags", () => {
+    expect(getLanguageLocale("zh")).toBe("zh-CN");
+    expect(getLanguageLocale("en")).toBe("en-US");
+  });
+
+  it("applies the stored language to <html lang> on mount", async () => {
+    localStorage.setItem("app-language", "en");
+
+    renderHook(() => useI18n());
+
+    await waitFor(() => {
+      expect(document.documentElement.lang).toBe("en-US");
+    });
+  });
+
+  it("updates <html lang> when switching language and back", async () => {
+    localStorage.setItem("app-language", "zh");
+    const { result } = renderHook(() => useI18n());
+
+    await waitFor(() => {
+      expect(document.documentElement.lang).toBe("zh-CN");
+    });
+
+    await act(async () => {
+      await result.current.setLanguage("en");
+    });
+    await waitFor(() => {
+      expect(document.documentElement.lang).toBe("en-US");
+    });
+
+    await act(async () => {
+      await result.current.setLanguage("zh");
+    });
+    await waitFor(() => {
+      expect(document.documentElement.lang).toBe("zh-CN");
+    });
+  });
+
+  it("follows language changes made in another window", async () => {
+    localStorage.setItem("app-language", "zh");
+    renderHook(() => useI18n());
+
+    act(() => {
+      localStorage.setItem("app-language", "en");
+      window.dispatchEvent(
+        new StorageEvent("storage", { key: "app-language", newValue: "en" })
+      );
+    });
+
+    await waitFor(() => {
+      expect(document.documentElement.lang).toBe("en-US");
     });
   });
 });

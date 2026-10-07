@@ -12,7 +12,7 @@ mod updater;
 pub(crate) use artifact::{__cmd__package_artifact, __cmd__sign_artifact};
 pub use artifact::{package_artifact, sign_artifact};
 pub(crate) use config::{__cmd__apply_imported_config, __cmd__export_config, __cmd__import_config};
-pub use config::{apply_imported_config, export_config, import_config};
+pub use config::{apply_imported_config, export_config, import_config, ImportedConfigSummary};
 pub(crate) use environment::{__cmd__apply_fix, __cmd__run_environment_check};
 pub use environment::{apply_fix, run_environment_check};
 pub(crate) use export::{
@@ -36,14 +36,13 @@ pub(crate) use provider::{
 pub use provider::{get_provider_schema, import_from_command, list_providers};
 pub(crate) use publish::{__cmd__describe_publish_output_target, __cmd__preflight_publish_output};
 pub use publish::{
-    cancel_provider_publish, describe_publish_output_target, execute_provider_publish,
-    preflight_publish_output, render_provider_publish, ProtectedDirectoryLocation,
-    PublishLogChunkEvent, PublishOutputAccess, PublishOutputAccessStatus,
-    PublishOutputPreflightResult, PublishOutputValidation, PublishOutputValidationIssue,
-    PublishOutputValidationStatus, PublishResult, PublishSessionStartedEvent, RemoteLocationKind,
-    RemoteLocationSummary, RenderedPublishCommand,
+    describe_publish_output_target, preflight_publish_output, render_provider_publish,
+    ProtectedDirectoryLocation, PublishLogChunkEvent, PublishOutputAccess,
+    PublishOutputAccessStatus, PublishOutputPreflightResult, PublishOutputValidation,
+    PublishOutputValidationIssue, PublishOutputValidationStatus, PublishResult,
+    PublishSessionStartedEvent, RemoteLocationKind, RemoteLocationSummary, RenderedPublishCommand,
 };
-pub(crate) use publish::{execute_sealed_build, SealedBuildCommand};
+pub(crate) use publish::{execute_provider_publish, execute_sealed_build, SealedBuildCommand};
 pub(crate) use repository::{
     __cmd__check_repository_branch_connectivity, __cmd__detect_repository_provider,
     __cmd__read_project_publish_profile, __cmd__resolve_project_info, __cmd__scan_project,

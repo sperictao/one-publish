@@ -1,6 +1,6 @@
 mod cargo;
 pub(crate) mod dotnet;
-mod go;
+pub(crate) mod go;
 mod java_gradle;
 pub(crate) mod tauri;
 

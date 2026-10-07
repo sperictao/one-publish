@@ -1219,17 +1219,21 @@ export async function installMockTauri(
 
             // ── Config ──
             case "export_config":
+              return args?.filePath as string;
+
+            case "import_config":
               return {
-                version: 1,
+                version: 2,
                 exported_at: new Date().toISOString(),
                 profiles: [],
               };
 
-            case "import_config":
-              return { imported: 0, skipped: 0, errors: [] };
-
             case "apply_imported_config":
-              return null;
+              return {
+                imported: 0,
+                skippedExisting: 0,
+                skippedProviderMismatch: 0,
+              };
 
             // ── Artifact ──
             case "package_artifact":

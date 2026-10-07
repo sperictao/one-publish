@@ -181,6 +181,9 @@ pub enum PublishError {
         failure.retry_after_seconds
     )]
     Classified { failure: PublishFailure },
+    /// 进行中的执行响应取消请求而停止（ADR-0041）：这是取消结果，不是执行失败。
+    #[error("adapter execution was cancelled: {0}")]
+    Cancelled(String),
     #[error("adapter execution failed: {0}")]
     Execution(String),
     #[error("I/O operation {operation} failed: {message}")]
@@ -291,6 +294,18 @@ impl AdapterSchema {
             AdapterSchemaField {
                 value_type: AdapterSchemaValueType::StringList,
                 required: true,
+            },
+        );
+        self
+    }
+
+    /// 可选字段：缺省合法，出现时仍按类型校验。
+    pub fn with_optional_string_list(mut self, key: impl Into<String>) -> Self {
+        self.fields.insert(
+            key.into(),
+            AdapterSchemaField {
+                value_type: AdapterSchemaValueType::StringList,
+                required: false,
             },
         );
         self

@@ -154,6 +154,7 @@ describe("useDialogsCompositionState", () => {
         configDialogOpen: false,
         profileManagement: {
           profiles: [],
+          repositoryProviderId: null,
           isRefreshing: false,
           refreshProfiles: vi.fn(),
           saveProfile: vi.fn(),

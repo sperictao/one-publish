@@ -1,4 +1,5 @@
 import { Dialog } from "@/components/ui/dialog";
+import { AppDialogBadge } from "@/components/ui/app-dialog-badge";
 import { AppDialogInset } from "@/components/ui/app-dialog-inset";
 import { AppDialogShell } from "@/components/ui/app-dialog-shell";
 import { Button } from "@/components/ui/button";
@@ -18,15 +19,21 @@ import {
   Layers3,
   Sparkles,
 } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   open as openDialog,
   save as saveDialog,
 } from "@tauri-apps/plugin-dialog";
 import { toast } from "sonner";
+import { isProviderCompatibleWithRepository } from "@/features/config/providerCompatibility";
+import type { TranslationMap } from "@/features/config/types";
+import type { ImportedConfigSummary } from "@/generated/tauri-contracts";
 import { importConfig } from "@/lib/store/api";
 import { type ConfigParameters, type ConfigProfile } from "@/lib/store/types";
-import { useI18n } from "@/hooks/useI18n";
+import { cn } from "@/lib/utils";
+import { getLanguageLocale, useI18n } from "@/hooks/useI18n";
+import { localizeInvokeError } from "@/lib/tauri/invokeErrors";
+import { DeleteProfileConfirmDialog } from "@/components/publish/DeleteProfileConfirmDialog";
 
 interface ConfigManagementContentProps {
   active: boolean;
@@ -39,10 +46,15 @@ interface ConfigManagementContentProps {
     parameters: ConfigParameters;
   }) => Promise<void>;
   onDeleteProfile: (profile: ConfigProfile) => Promise<void>;
-  onExportProfiles: (filePath: string) => Promise<void>;
-  onApplyImportedProfiles: (profiles: ConfigProfile[]) => Promise<void>;
-  onLoadProfile: (profile: ConfigProfile) => void;
+  onExportProfiles: (filePath: string) => Promise<string>;
+  onApplyImportedProfiles: (
+    profiles: ConfigProfile[]
+  ) => Promise<ImportedConfigSummary>;
+  /** 返回是否已加载；被拒绝（如 Provider 不一致）时保持对话框打开。 */
+  onLoadProfile: (profile: ConfigProfile) => boolean;
   currentProviderId: string;
+  /** 当前仓库声明的 Provider；导入预览据此标出不会导入的配置。 */
+  repositoryProviderId: string | null;
   repoId: string | null;
   currentParameters: ConfigParameters;
   closeOnLoad?: boolean;
@@ -51,6 +63,72 @@ interface ConfigManagementContentProps {
 
 interface PendingImportState {
   profiles: ConfigProfile[];
+}
+
+type ImportPreviewStatus = "importable" | "existing" | "providerMismatch";
+
+interface ImportPreviewItem {
+  profile: ConfigProfile;
+  status: ImportPreviewStatus;
+}
+
+/**
+ * 与后端 `merge_imported_profiles` 同序判定：先拒绝 Provider 与仓库不一致的，
+ * 再跳过同名的（含文件内重名），其余才会导入。
+ */
+function buildImportPreview(
+  importedProfiles: ConfigProfile[],
+  existingProfiles: ConfigProfile[],
+  repositoryProviderId: string | null
+): ImportPreviewItem[] {
+  const takenNames = new Set(existingProfiles.map((profile) => profile.name));
+  return importedProfiles.map((profile) => {
+    if (
+      !isProviderCompatibleWithRepository(
+        repositoryProviderId,
+        profile.providerId
+      )
+    ) {
+      return { profile, status: "providerMismatch" };
+    }
+    if (takenNames.has(profile.name)) {
+      return { profile, status: "existing" };
+    }
+    takenNames.add(profile.name);
+    return { profile, status: "importable" };
+  });
+}
+
+function formatImportSummary(
+  summary: ImportedConfigSummary,
+  profileT: TranslationMap
+): string {
+  const withCount = (template: string, count: number) =>
+    template.replace("{{count}}", String(count));
+  const parts = [
+    withCount(
+      profileT.importSummaryImported || "已导入：{{count}}",
+      summary.imported
+    ),
+  ];
+  if (summary.skippedExisting > 0) {
+    parts.push(
+      withCount(
+        profileT.importSummarySkippedExisting || "同名跳过：{{count}}",
+        summary.skippedExisting
+      )
+    );
+  }
+  if (summary.skippedProviderMismatch > 0) {
+    parts.push(
+      withCount(
+        profileT.importSummarySkippedProviderMismatch ||
+          "Provider 不一致未导入：{{count}}",
+        summary.skippedProviderMismatch
+      )
+    );
+  }
+  return parts.join(" · ");
 }
 
 interface ConfigDialogProps {
@@ -65,10 +143,15 @@ interface ConfigDialogProps {
     parameters: ConfigParameters;
   }) => Promise<void>;
   onDeleteProfile: (profile: ConfigProfile) => Promise<void>;
-  onExportProfiles: (filePath: string) => Promise<void>;
-  onApplyImportedProfiles: (profiles: ConfigProfile[]) => Promise<void>;
-  onLoadProfile: (profile: ConfigProfile) => void;
+  onExportProfiles: (filePath: string) => Promise<string>;
+  onApplyImportedProfiles: (
+    profiles: ConfigProfile[]
+  ) => Promise<ImportedConfigSummary>;
+  /** 返回是否已加载；被拒绝（如 Provider 不一致）时保持对话框打开。 */
+  onLoadProfile: (profile: ConfigProfile) => boolean;
   currentProviderId: string;
+  /** 当前仓库声明的 Provider；导入预览据此标出不会导入的配置。 */
+  repositoryProviderId: string | null;
   repoId: string | null;
   currentParameters: ConfigParameters;
 }
@@ -84,14 +167,18 @@ export function ConfigManagementContent({
   onApplyImportedProfiles,
   onLoadProfile,
   currentProviderId,
+  repositoryProviderId,
   repoId,
   currentParameters,
   closeOnLoad = false,
   onClose,
 }: ConfigManagementContentProps) {
   const { translations, language } = useI18n();
-  const profileT = translations.profiles || {};
-  const dateLocale = language === "en" ? "en-US" : "zh-CN";
+  const profileT = useMemo(
+    () => translations.profiles || {},
+    [translations.profiles]
+  );
+  const dateLocale = getLanguageLocale(language);
   const [newProfileName, setNewProfileName] = useState("");
   const [isSaving, setIsSaving] = useState(false);
   const [pendingImport, setPendingImport] = useState<PendingImportState | null>(
@@ -99,7 +186,26 @@ export function ConfigManagementContent({
   );
   const [isImportLoading, setIsImportLoading] = useState(false);
   const [isApplyingImport, setIsApplyingImport] = useState(false);
+  const [pendingDeleteProfile, setPendingDeleteProfile] =
+    useState<ConfigProfile | null>(null);
   const isLoading = isProfilesRefreshing || isImportLoading;
+  const importPreview = useMemo(
+    () =>
+      pendingImport
+        ? buildImportPreview(
+            pendingImport.profiles,
+            profiles,
+            repositoryProviderId
+          )
+        : [],
+    [pendingImport, profiles, repositoryProviderId]
+  );
+  const importableCount = importPreview.filter(
+    (item) => item.status === "importable"
+  ).length;
+  const providerMismatchCount = importPreview.filter(
+    (item) => item.status === "providerMismatch"
+  ).length;
 
   useEffect(() => {
     if (!active) {
@@ -126,7 +232,7 @@ export function ConfigManagementContent({
       setNewProfileName("");
     } catch (err) {
       toast.error(profileT.saveFailed || "保存配置文件失败", {
-        description: err instanceof Error ? err.message : String(err),
+        description: localizeInvokeError(err, translations),
       });
     } finally {
       setIsSaving(false);
@@ -145,19 +251,19 @@ export function ConfigManagementContent({
       toast.success(profileT.deleteSuccess || "配置已删除");
     } catch (err) {
       toast.error(profileT.deleteFailed || "删除配置文件失败", {
-        description: err instanceof Error ? err.message : String(err),
+        description: localizeInvokeError(err, translations),
       });
     }
   };
 
   const handleLoadSelectedProfile = (profile: ConfigProfile) => {
-    onLoadProfile(profile);
-    if (closeOnLoad) {
+    if (onLoadProfile(profile) && closeOnLoad) {
       onClose?.();
     }
   };
 
   const handleExportConfig = async () => {
+    if (!repoId) return;
     try {
       const filePath = await saveDialog({
         filters: [
@@ -170,12 +276,15 @@ export function ConfigManagementContent({
       });
 
       if (filePath) {
-        await onExportProfiles(filePath);
-        toast.success(profileT.exportSuccess || "配置已导出");
+        // 后端可能补齐 `.json` 扩展名，提示实际写入的路径。
+        const exportedPath = await onExportProfiles(filePath);
+        toast.success(profileT.exportSuccess || "配置已导出", {
+          description: exportedPath,
+        });
       }
     } catch (err) {
       toast.error(profileT.exportFailed || "导出配置失败", {
-        description: err instanceof Error ? err.message : String(err),
+        description: localizeInvokeError(err, translations),
       });
     }
   };
@@ -194,23 +303,25 @@ export function ConfigManagementContent({
 
     setIsApplyingImport(true);
     try {
-      await onApplyImportedProfiles(pendingImport.profiles);
-      toast.success(profileT.importSuccess || "配置已导入");
+      // 后端按同一规则最终裁决，提示以其返回的计数为准。
+      const summary = await onApplyImportedProfiles(pendingImport.profiles);
+      const description = formatImportSummary(summary, profileT);
+      if (summary.imported > 0) {
+        toast.success(profileT.importSuccess || "配置已导入", { description });
+      } else {
+        toast.warning(profileT.importNothingImported || "没有导入任何配置", {
+          description,
+        });
+      }
       setPendingImport(null);
     } catch (err) {
       toast.error(profileT.importFailed || "导入配置失败", {
-        description: err instanceof Error ? err.message : String(err),
+        description: localizeInvokeError(err, translations),
       });
     } finally {
       setIsApplyingImport(false);
     }
-  }, [
-    onApplyImportedProfiles,
-    pendingImport,
-    profileT.importFailed,
-    profileT.importSuccess,
-    repoId,
-  ]);
+  }, [onApplyImportedProfiles, pendingImport, profileT, repoId, translations]);
 
   const handleImportConfig = async () => {
     if (!repoId) return;
@@ -233,7 +344,7 @@ export function ConfigManagementContent({
           });
         } catch (err) {
           toast.error(profileT.importFailed || "导入配置失败", {
-            description: err instanceof Error ? err.message : String(err),
+            description: localizeInvokeError(err, translations),
           });
         } finally {
           setIsImportLoading(false);
@@ -241,7 +352,7 @@ export function ConfigManagementContent({
       }
     } catch (err) {
       toast.error(profileT.importFailed || "导入配置失败", {
-        description: err instanceof Error ? err.message : String(err),
+        description: localizeInvokeError(err, translations),
       });
     }
   };
@@ -261,6 +372,7 @@ export function ConfigManagementContent({
             variant="outline"
             onClick={handleExportConfig}
             className="justify-start"
+            disabled={!repoId}
           >
             <Download className="mr-2 size-4" />
             {profileT.export || "导出配置"}
@@ -387,7 +499,7 @@ export function ConfigManagementContent({
                     {!profile.isSystemDefault ? (
                       <Button
                         variant="ghost"
-                        onClick={() => void handleDeleteProfile(profile)}
+                        onClick={() => setPendingDeleteProfile(profile)}
                         aria-label={`${profileT.deleteProfileAction || "删除配置"}${profile.name ? `: ${profile.name}` : ""}`}
                         className="h-10 px-3 text-destructive hover:text-destructive"
                       >
@@ -416,7 +528,7 @@ export function ConfigManagementContent({
             title={profileT.importConfirmTitle || "确认导入配置"}
             description={(
               profileT.importConfirmDescription ||
-              "将把以下 {{count}} 个配置导入当前仓库，并按现有规则进行合并或覆盖。"
+              "文件中共有 {{count}} 个配置。同名配置会被跳过，不会覆盖当前仓库已有的配置。"
             ).replace("{{count}}", String(pendingImport.profiles.length))}
             icon={<Upload className="size-4" />}
             bodyInnerClassName="space-y-4"
@@ -433,7 +545,7 @@ export function ConfigManagementContent({
                 <Button
                   type="button"
                   onClick={() => void confirmImportConfig()}
-                  disabled={isApplyingImport}
+                  disabled={isApplyingImport || importableCount === 0}
                 >
                   {isApplyingImport ? (
                     <>
@@ -450,6 +562,22 @@ export function ConfigManagementContent({
             }
           >
             <AppDialogInset className="space-y-3">
+              {providerMismatchCount > 0 ? (
+                <div
+                  role="alert"
+                  className="flex items-start gap-2 rounded-sm border border-destructive/20 bg-destructive/5 px-3 py-2 text-copy-14 text-destructive"
+                >
+                  <AlertCircle className="mt-0.5 size-4 flex-shrink-0" />
+                  <p>
+                    {(
+                      profileT.importProviderMismatchWarning ||
+                      "{{count}} 个配置属于其他 Provider，与当前仓库的 Provider（{{provider}}）不一致，不会导入。"
+                    )
+                      .replace("{{count}}", String(providerMismatchCount))
+                      .replace("{{provider}}", repositoryProviderId ?? "")}
+                  </p>
+                </div>
+              ) : null}
               <div className="flex items-start gap-3">
                 <AlertCircle className="mt-0.5 size-4 text-warning" />
                 <div className="space-y-1 text-copy-14">
@@ -457,22 +585,43 @@ export function ConfigManagementContent({
                     {profileT.importConfirmListTitle || "待导入配置"}
                   </p>
                   <p className="text-muted-foreground">
-                    {profileT.importConfirmHint ||
-                      "导入后会立即刷新当前仓库的配置列表。"}
+                    {importableCount === 0
+                      ? profileT.importNothingToImport || "没有可导入的配置。"
+                      : profileT.importConfirmHint ||
+                        "导入后会立即刷新当前仓库的配置列表。"}
                   </p>
                 </div>
               </div>
               <div className="rounded-sm border border-border bg-muted p-3">
                 <ul className="max-h-52 space-y-2 overflow-y-auto text-copy-14">
-                  {pendingImport.profiles.map((profile) => (
+                  {importPreview.map(({ profile, status }, index) => (
                     <li
-                      key={`${profile.providerId}:${profile.name}`}
+                      key={`${index}:${profile.providerId}:${profile.name}`}
                       className="flex items-center justify-between gap-3 rounded-sm px-2 py-1.5"
                     >
-                      <span className="truncate font-semibold text-foreground">
+                      <span
+                        className={cn(
+                          "truncate font-semibold",
+                          status === "importable"
+                            ? "text-foreground"
+                            : "text-muted-foreground"
+                        )}
+                      >
                         {profile.name}
                       </span>
-                      <span className="flex-shrink-0 text-label-12 text-muted-foreground">
+                      <span className="flex flex-shrink-0 items-center gap-2 text-label-12 text-muted-foreground">
+                        {status === "providerMismatch" ? (
+                          <AppDialogBadge variant="danger">
+                            {profileT.importStatusProviderMismatch ||
+                              "Provider 不一致，不导入"}
+                          </AppDialogBadge>
+                        ) : null}
+                        {status === "existing" ? (
+                          <AppDialogBadge variant="warning">
+                            {profileT.importStatusExisting ||
+                              "同名已存在，跳过"}
+                          </AppDialogBadge>
+                        ) : null}
                         {profile.providerId}
                       </span>
                     </li>
@@ -483,6 +632,12 @@ export function ConfigManagementContent({
           </AppDialogShell>
         ) : null}
       </Dialog>
+
+      <DeleteProfileConfirmDialog
+        profile={pendingDeleteProfile}
+        onClose={() => setPendingDeleteProfile(null)}
+        onConfirm={handleDeleteProfile}
+      />
     </div>
   );
 }
@@ -499,6 +654,7 @@ export function ConfigDialog({
   onApplyImportedProfiles,
   onLoadProfile,
   currentProviderId,
+  repositoryProviderId,
   repoId,
   currentParameters,
 }: ConfigDialogProps) {
@@ -544,6 +700,7 @@ export function ConfigDialog({
           onApplyImportedProfiles={onApplyImportedProfiles}
           onLoadProfile={onLoadProfile}
           currentProviderId={currentProviderId}
+          repositoryProviderId={repositoryProviderId}
           repoId={repoId}
           currentParameters={currentParameters}
           closeOnLoad

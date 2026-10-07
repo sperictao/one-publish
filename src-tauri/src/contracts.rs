@@ -82,6 +82,7 @@ pub fn generate_tauri_contracts() -> String {
     push_contract::<crate::commands::UpdaterHelpPaths>(&mut declarations);
     push_contract::<crate::config_export::ConfigExport>(&mut declarations);
     push_contract::<crate::config_export::ConfigProfile>(&mut declarations);
+    push_contract::<crate::commands::ImportedConfigSummary>(&mut declarations);
     push_contract::<crate::environment::EnvironmentCheckResult>(&mut declarations);
     push_contract::<crate::environment::EnvironmentIssue>(&mut declarations);
     push_contract::<crate::environment::FixAction>(&mut declarations);
@@ -139,6 +140,7 @@ pub fn generate_tauri_contracts() -> String {
     push_contract::<crate::store::RevisionAdapterBinding>(&mut declarations);
     push_contract::<crate::store::RevisionDeliveryRoute>(&mut declarations);
     push_contract::<crate::tauri_release::ReleaseGate>(&mut declarations);
+    push_contract::<crate::tauri_release::ReleaseSettingsDraft>(&mut declarations);
     push_contract::<crate::tauri_release::TauriBuildDriver>(&mut declarations);
     push_contract::<crate::tauri_release::TauriDesktopTarget>(&mut declarations);
     push_contract::<crate::tauri_release::TauriReleaseConfig>(&mut declarations);

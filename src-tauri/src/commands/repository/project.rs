@@ -538,10 +538,10 @@ pub fn scan_provider_project_candidates_from_path(
     provider_id: Option<&str>,
 ) -> Result<ProjectScanCandidates, crate::errors::AppError> {
     if !start_path.exists() {
-        return Err(repository_error(
-            format!("scan start path does not exist: {}", start_path.display()),
-            "path_not_found",
-        ));
+        return Err(
+            repository_error("scan start path does not exist", "path_not_found")
+                .with_details(start_path.display().to_string()),
+        );
     }
     let root = normalize_scan_root(start_path)?;
     let registry = crate::provider::registry::provider_registry();
@@ -709,13 +709,10 @@ pub fn read_target_frameworks(
 ) -> Result<Vec<String>, crate::errors::AppError> {
     let content = std::fs::read_to_string(project_file).map_err(|error| {
         repository_error(
-            format!(
-                "failed to read project file {}: {}",
-                project_file.to_string_lossy(),
-                error
-            ),
+            "failed to read project file",
             classify_repository_path_error(error.kind()),
         )
+        .with_details(format!("{}: {}", project_file.to_string_lossy(), error))
     })?;
 
     Ok(extract_target_frameworks_from_project_xml(
@@ -740,30 +737,26 @@ pub fn resolve_publish_profile_path(
         || normalized_profile_name.contains('/')
         || normalized_profile_name.contains('\\')
     {
-        return Err(repository_error(
-            format!("invalid publish profile name: {normalized_profile_name}"),
-            "invalid_profile_name",
-        ));
+        return Err(
+            repository_error("invalid publish profile name", "invalid_profile_name")
+                .with_details(normalized_profile_name),
+        );
     }
 
     let profiles = project_profiles_declaration(project_file).ok_or_else(|| {
         repository_error(
-            format!(
-                "project file does not support publish profiles: {}",
-                project_file.display()
-            ),
+            "project file does not support publish profiles",
             "publish_profiles_unsupported",
         )
+        .with_details(project_file.display().to_string())
     })?;
 
     let project_dir = project_file.parent().ok_or_else(|| {
         repository_error(
-            format!(
-                "cannot resolve parent directory for project file: {}",
-                project_file.display()
-            ),
+            "cannot resolve parent directory for project file",
             "project_dir_not_found",
         )
+        .with_details(project_file.display().to_string())
     })?;
 
     let profile_path = project_dir
@@ -771,13 +764,10 @@ pub fn resolve_publish_profile_path(
         .join(format!("{}.{}", normalized_profile_name, profiles.extension));
 
     if !profile_path.is_file() {
-        return Err(repository_error(
-            format!(
-                "publish profile does not exist: {}",
-                profile_path.to_string_lossy()
-            ),
-            "profile_not_found",
-        ));
+        return Err(
+            repository_error("publish profile does not exist", "profile_not_found")
+                .with_details(profile_path.to_string_lossy()),
+        );
     }
 
     Ok(profile_path)

@@ -9,7 +9,7 @@ const PROVIDER_ID: &str = "java";
 const JAVA_PROBE: ToolProbe = ToolProbe {
     provider_id: PROVIDER_ID,
     command: "java",
-    version_arg: "-version",
+    version_args: &["-version"],
     version_source: VersionSource::Stderr,
     min_version: MIN_JAVA_VERSION,
 };

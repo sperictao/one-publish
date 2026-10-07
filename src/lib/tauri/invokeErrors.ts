@@ -127,6 +127,30 @@ export function extractInvokeErrorDetails(error: unknown): string | null {
   return extractDetailsFromObject(error);
 }
 
+/** 只依赖翻译树中的 `errors` 分支，兼容 useI18n().translations。 */
+export interface InvokeErrorTranslations {
+  errors?: Record<string, unknown>;
+}
+
+/**
+ * 按后端稳定错误码（AppError.code / 阻断诊断 code）取 `errors.<code>` 文案；
+ * 后端 message 语言不受界面语言控制，只作为未登记错误码时的兜底。
+ * details 约定为语言中立的技术细节（路径、分支、底层错误），本地化后原样附加。
+ */
+export function localizeInvokeError(
+  error: unknown,
+  translations: InvokeErrorTranslations | null | undefined
+): string {
+  const code = extractInvokeErrorCode(error);
+  const localized = code ? translations?.errors?.[code] : undefined;
+  if (typeof localized !== "string" || localized.length === 0) {
+    return extractInvokeErrorMessage(error);
+  }
+
+  const details = extractInvokeErrorDetails(error);
+  return details ? `${localized} | ${details}` : localized;
+}
+
 export function analyzeBranchRefreshFailure(
   error: unknown
 ): BranchRefreshFailureReason {
@@ -320,7 +344,7 @@ export type RepositoryWriteFailureReason =
  * 分类 add / update / remove 仓库这类写操作的失败原因。
  *
  * 与 detect / refresh branches 路径保持同一套写法：优先看后端 error code，
- * 再做一次文案兜底，最后落到 "unknown"（调用方用 extractInvokeErrorMessage
+ * 再做一次文案兜底，最后落到 "unknown"（调用方用 localizeInvokeError
  * 兜底展示，禁止直接把序列化负载塞进 toast）。
  */
 export function analyzeRepositoryWriteFailure(
@@ -482,7 +506,14 @@ export function analyzePublishExecutionFailure(
       return "project_path_not_found";
     }
 
-    if (errorCode === "publish_output_windows_drive_root_missing") {
+    if (
+      errorCode === "publish_output_windows_drive_root_missing" ||
+      errorCode === "publish_runtime_provider_output_name_missing" ||
+      errorCode === "publish_runtime_provider_output_contains_source" ||
+      errorCode === "publish_runtime_provider_output_escapes_root" ||
+      errorCode === "publish_runtime_provider_output_ancestor_missing" ||
+      errorCode === "publish_runtime_provider_output_ancestor_unresolved"
+    ) {
       return "output_path_invalid";
     }
 

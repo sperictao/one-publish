@@ -8,14 +8,25 @@ use tokio::time::{timeout, Duration};
 
 use super::*;
 
-pub fn format_git_command_failure(command: &str, stderr: &[u8]) -> String {
-    let error = String::from_utf8_lossy(stderr).trim().to_string();
+/// Git 的 stderr 进 details：未分类（code = unknown）时前端仍能附加原始输出。
+pub fn git_command_failure_error(command: &str, stderr: &[u8]) -> crate::errors::AppError {
+    let stderr = String::from_utf8_lossy(stderr).trim().to_string();
+    let error = repository_error(
+        format!("git {command} command failed"),
+        classify_git_branch_scan_error(&stderr),
+    );
 
-    if error.is_empty() {
-        return format!("git {} command failed", command);
+    if stderr.is_empty() {
+        error
+    } else {
+        error.with_details(stderr)
     }
+}
 
-    format!("git {} command failed: {}", command, error)
+/// 启动 git 失败：message 保持静态，底层 IO 错误进 details。
+fn git_execution_error(message: &'static str, error: std::io::Error) -> crate::errors::AppError {
+    repository_error(message, classify_git_execution_error(error.kind()))
+        .with_details(error.to_string())
 }
 
 pub fn classify_repository_path_error(kind: IoErrorKind) -> &'static str {
@@ -199,17 +210,16 @@ async fn scan_repository_branches_internal(
     let repo_path = PathBuf::from(&path);
 
     if !repo_path.exists() {
-        return Err(repository_error(
-            format!("repository path does not exist: {}", path),
-            "path_not_found",
-        ));
+        return Err(
+            repository_error("repository path does not exist", "path_not_found").with_details(path),
+        );
     }
 
     if !repo_path.is_dir() {
-        return Err(repository_error(
-            format!("repository path is not a directory: {}", path),
-            "not_directory",
-        ));
+        return Err(
+            repository_error("repository path is not a directory", "not_directory")
+                .with_details(path),
+        );
     }
 
     // `refresh_remote = false` is the passive path used by the repository list
@@ -230,21 +240,10 @@ async fn scan_repository_branches_internal(
     )
     .await
     .map_err(|_| repository_error("git remote timed out after 5s", "timeout"))?
-    .map_err(|err| {
-        repository_error(
-            format!("failed to execute git remote: {}", err),
-            classify_git_execution_error(err.kind()),
-        )
-    })?;
+    .map_err(|err| git_execution_error("failed to execute git remote", err))?;
 
     if !remote_output.status.success() {
-        let stderr = String::from_utf8_lossy(&remote_output.stderr)
-            .trim()
-            .to_string();
-        return Err(repository_error(
-            format_git_command_failure("remote", &remote_output.stderr),
-            classify_git_branch_scan_error(&stderr),
-        ));
+        return Err(git_command_failure_error("remote", &remote_output.stderr));
     }
 
     let has_remote = String::from_utf8_lossy(&remote_output.stdout)
@@ -264,21 +263,10 @@ async fn scan_repository_branches_internal(
         )
         .await
         .map_err(|_| repository_error("git fetch timed out after 5s", "timeout"))?
-        .map_err(|err| {
-            repository_error(
-                format!("failed to execute git fetch: {}", err),
-                classify_git_execution_error(err.kind()),
-            )
-        })?;
+        .map_err(|err| git_execution_error("failed to execute git fetch", err))?;
 
         if !fetch_output.status.success() {
-            let stderr = String::from_utf8_lossy(&fetch_output.stderr)
-                .trim()
-                .to_string();
-            return Err(repository_error(
-                format_git_command_failure("fetch", &fetch_output.stderr),
-                classify_git_branch_scan_error(&stderr),
-            ));
+            return Err(git_command_failure_error("fetch", &fetch_output.stderr));
         }
     }
 
@@ -294,19 +282,10 @@ async fn scan_repository_branches_internal(
     )
     .await
     .map_err(|_| repository_error("git branch timed out after 5s", "timeout"))?
-    .map_err(|err| {
-        repository_error(
-            format!("failed to execute git branch: {}", err),
-            classify_git_execution_error(err.kind()),
-        )
-    })?;
+    .map_err(|err| git_execution_error("failed to execute git branch", err))?;
 
     if !output.status.success() {
-        let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
-        return Err(repository_error(
-            format_git_command_failure("branch", &output.stderr),
-            classify_git_branch_scan_error(&stderr),
-        ));
+        return Err(git_command_failure_error("branch", &output.stderr));
     }
 
     let stdout = String::from_utf8_lossy(&output.stdout);
@@ -360,12 +339,7 @@ async fn scan_repository_branches_internal(
         )
         .await
         .map_err(|_| repository_error("git rev-parse timed out after 5s", "timeout"))?
-        .map_err(|err| {
-            repository_error(
-                format!("failed to detect current branch: {}", err),
-                classify_git_execution_error(err.kind()),
-            )
-        })?;
+        .map_err(|err| git_execution_error("failed to detect current branch", err))?;
 
         if head_output.status.success() {
             current_branch = String::from_utf8_lossy(&head_output.stdout)

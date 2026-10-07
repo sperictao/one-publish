@@ -8,20 +8,21 @@ fn export_error(message: impl Into<String>, code: impl Into<String>) -> crate::e
     crate::errors::AppError::export_with_code(message, code)
 }
 
+/// message 保持静态、底层错误进 details：前端按 code 取 `errors.<code>` 后仍可附加原因。
 fn export_source_error(
-    prefix: &str,
+    message: &'static str,
     source: impl std::fmt::Display,
     code: &'static str,
 ) -> crate::errors::AppError {
-    export_error(format!("{prefix}: {source}"), code)
+    export_error(message, code).with_details(source.to_string())
 }
 
 fn export_open_error(
-    prefix: &str,
+    message: &'static str,
     source: impl std::fmt::Display,
     code: &'static str,
 ) -> crate::errors::AppError {
-    crate::errors::AppError::external_open_with_code(format!("{prefix}: {source}"), code)
+    crate::errors::AppError::external_open_with_code(message, code).with_details(source.to_string())
 }
 
 #[tauri::command]
@@ -251,9 +252,10 @@ fn find_latest_snapshot_for_output_dir(
     let dir = execution_snapshot_bucket(root, output_dir)?;
     let not_found = || {
         export_error(
-            format!("未找到输出目录的执行快照: {}", output_dir.trim()),
+            "未找到输出目录的执行快照",
             "snapshot_not_found_for_output_dir",
         )
+        .with_details(output_dir.trim())
     };
     if !dir.is_dir() {
         return Err(not_found());
@@ -309,7 +311,7 @@ fn resolve_execution_snapshot(
     }
 
     Err(match recorded {
-        Some(path) => export_error(format!("快照文件不存在: {path}"), "snapshot_file_not_found"),
+        Some(path) => export_error("快照文件不存在", "snapshot_file_not_found").with_details(path),
         None if snapshot_path.is_some() => {
             export_error("记录中没有快照路径", "snapshot_path_missing")
         }
@@ -345,17 +347,11 @@ pub async fn open_directory(path: String) -> Result<String, crate::errors::AppEr
 
     let directory = PathBuf::from(trimmed);
     if !directory.exists() {
-        return Err(export_error(
-            format!("目录不存在: {}", trimmed),
-            "directory_not_found",
-        ));
+        return Err(export_error("目录不存在", "directory_not_found").with_details(trimmed));
     }
 
     if !directory.is_dir() {
-        return Err(export_error(
-            format!("路径不是文件夹: {}", trimmed),
-            "directory_not_directory",
-        ));
+        return Err(export_error("路径不是文件夹", "directory_not_directory").with_details(trimmed));
     }
 
     open::that(&directory)
@@ -368,6 +364,18 @@ pub async fn open_directory(path: String) -> Result<String, crate::errors::AppEr
 pub async fn open_output_directory(output_dir: String) -> Result<String, crate::errors::AppError> {
     let _timer =
         crate::commands::middleware::CommandTimer::new("commands::export::open_output_directory");
+    let path = output_directory_to_open(&output_dir)?;
+
+    open::that(&path).map_err(|source| {
+        export_open_error("打开输出目录失败", source, "open_output_directory_failed")
+    })?;
+
+    Ok(path.to_string_lossy().to_string())
+}
+
+/// 输出可以是目录，也可以是单个文件（例如 `go build -o` 写出的二进制）；
+/// 文件输出打开其所在文件夹。
+fn output_directory_to_open(output_dir: &str) -> Result<PathBuf, crate::errors::AppError> {
     let trimmed = output_dir.trim();
     if trimmed.is_empty() {
         return Err(export_error("输出目录为空", "output_dir_empty"));
@@ -375,24 +383,20 @@ pub async fn open_output_directory(output_dir: String) -> Result<String, crate::
 
     let path = PathBuf::from(trimmed);
     if !path.exists() {
-        return Err(export_error(
-            format!("输出目录不存在: {}", trimmed),
-            "output_dir_not_found",
-        ));
+        return Err(export_error("输出目录不存在", "output_dir_not_found").with_details(trimmed));
     }
 
-    if !path.is_dir() {
-        return Err(export_error(
-            format!("输出目录不是文件夹: {}", trimmed),
-            "output_dir_not_directory",
-        ));
+    if path.is_dir() {
+        return Ok(path);
     }
-
-    open::that(&path).map_err(|source| {
-        export_open_error("打开输出目录失败", source, "open_output_directory_failed")
-    })?;
-
-    Ok(path.to_string_lossy().to_string())
+    match path.parent() {
+        Some(parent) if path.is_file() && !parent.as_os_str().is_empty() => {
+            Ok(parent.to_path_buf())
+        }
+        _ => Err(
+            export_error("输出目录不是文件夹", "output_dir_not_directory").with_details(trimmed),
+        ),
+    }
 }
 
 #[cfg(test)]
@@ -733,5 +737,86 @@ mod tests {
             error_code(None).as_deref(),
             Some("snapshot_and_output_dir_missing")
         );
+    }
+
+    #[test]
+    fn opening_a_file_output_reveals_its_parent_folder() {
+        let temp = tempfile::tempdir().expect("temp dir");
+        let binary = temp.path().join("dist").join("app");
+        std::fs::create_dir_all(binary.parent().expect("binary parent")).expect("create dist");
+        std::fs::write(&binary, "binary").expect("write binary");
+
+        assert_eq!(
+            output_directory_to_open(&binary.to_string_lossy()).expect("file output"),
+            temp.path().join("dist")
+        );
+        assert_eq!(
+            output_directory_to_open(&format!(" {} ", temp.path().display()))
+                .expect("directory output"),
+            temp.path()
+        );
+        let error_code = |output: &str| output_directory_to_open(output).unwrap_err().code;
+        assert_eq!(error_code("  ").as_deref(), Some("output_dir_empty"));
+        assert_eq!(
+            error_code(&temp.path().join("missing").to_string_lossy()).as_deref(),
+            Some("output_dir_not_found")
+        );
+    }
+
+    #[test]
+    fn not_found_errors_keep_the_path_in_details() {
+        let temp = tempfile::tempdir().expect("temp dir");
+        let missing = temp.path().join("missing").to_string_lossy().to_string();
+
+        let output_error = output_directory_to_open(&missing).unwrap_err();
+        assert_eq!(output_error.message, "输出目录不存在");
+        assert_eq!(output_error.details.as_deref(), Some(missing.as_str()));
+
+        let directory_error =
+            tauri::async_runtime::block_on(open_directory(format!(" {missing} "))).unwrap_err();
+        assert_eq!(directory_error.code.as_deref(), Some("directory_not_found"));
+        assert_eq!(directory_error.details.as_deref(), Some(missing.as_str()));
+
+        let snapshot_error =
+            resolve_execution_snapshot(temp.path(), Some(missing.clone()), None).unwrap_err();
+        assert_eq!(snapshot_error.message, "快照文件不存在");
+        assert_eq!(snapshot_error.details.as_deref(), Some(missing.as_str()));
+
+        let lookup_error = find_latest_snapshot_for_output_dir(temp.path(), &missing).unwrap_err();
+        assert_eq!(lookup_error.message, "未找到输出目录的执行快照");
+        assert_eq!(lookup_error.details.as_deref(), Some(missing.as_str()));
+    }
+
+    #[test]
+    fn write_failures_keep_the_io_error_in_details() {
+        let temp = tempfile::tempdir().expect("temp dir");
+        // 快照根目录被同名文件占据，创建 bucket 目录必然失败。
+        let root = temp.path().join("snapshots");
+        std::fs::write(&root, "not a directory").expect("occupy snapshot root");
+
+        let error = write_execution_snapshot(&root, "/tmp/out", snapshot_payload())
+            .expect_err("snapshot root is a file");
+        assert_eq!(
+            error.code.as_deref(),
+            Some("execution_snapshot_write_failed")
+        );
+        assert_eq!(error.message, "write error");
+        assert!(error
+            .details
+            .as_deref()
+            .is_some_and(|details| !details.is_empty()));
+    }
+
+    #[tokio::test]
+    async fn open_directory_rejects_a_file_with_the_path_in_details() {
+        let temp = tempfile::tempdir().expect("temp dir");
+        let file = temp.path().join("file.txt");
+        std::fs::write(&file, "not a directory").expect("write file");
+        let file = file.to_string_lossy().to_string();
+
+        let error = open_directory(file.clone()).await.unwrap_err();
+        assert_eq!(error.code.as_deref(), Some("directory_not_directory"));
+        assert_eq!(error.message, "路径不是文件夹");
+        assert_eq!(error.details.as_deref(), Some(file.as_str()));
     }
 }

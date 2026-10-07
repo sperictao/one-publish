@@ -1,16 +1,19 @@
-import { useCallback, useMemo } from "react";
+import { useCallback } from "react";
 import { toast } from "sonner";
 import type { Dispatch, SetStateAction } from "react";
 
-import type { PublishEditStateUpdate } from "@/generated/tauri-contracts";
+import type {
+  ImportedConfigSummary,
+  PublishEditStateUpdate,
+} from "@/generated/tauri-contracts";
 import type { ConfigParameters, ConfigProfile } from "@/lib/store/types";
 import type { ParameterSchema, ParameterValue } from "@/types/parameters";
 import { buildCopiedProfileName } from "@/lib/profileListSnapshot";
+import { isProviderCompatibleWithRepository } from "./providerCompatibility";
 import type {
   TranslationMap,
   LoadableProfile,
   ProfileManagementSaveParams,
-  ProfileManagementActions,
 } from "./types";
 
 interface StoreMutationResult {
@@ -39,6 +42,8 @@ function filterParametersBySchema(
 
 export interface UseProfileCrudParams {
   selectedRepoId: string | null;
+  /** 当前仓库声明的 Provider；不一致的配置拒绝加载。 */
+  repositoryProviderId: string | null;
   profiles: ConfigProfile[];
   activeProfileId: string | null;
   updatePublishEditState: (update: PublishEditStateUpdate) => void;
@@ -74,26 +79,29 @@ export interface UseProfileCrudParams {
   applyImportedConfigFn: (
     repoId: string,
     profiles: ConfigProfile[]
-  ) => Promise<void>;
+  ) => Promise<ImportedConfigSummary>;
 }
 
 export interface UseProfileCrudReturn {
-  applyProfile: (profile: LoadableProfile) => void;
-  handleLoadProfile: (profile: LoadableProfile) => void;
+  /** 返回是否已加载；Provider 与仓库不一致时拒绝并提示。 */
+  applyProfile: (profile: LoadableProfile) => boolean;
+  handleLoadProfile: (profile: LoadableProfile) => boolean;
   saveProfile: (params: ProfileManagementSaveParams) => Promise<void>;
   deleteProfile: (profile: ConfigProfile) => Promise<void>;
   deleteProfileById: (repoId: string, profileId: string) => Promise<void>;
-  exportProfiles: (filePath: string) => Promise<void>;
-  applyImportedProfiles: (profiles: ConfigProfile[]) => Promise<void>;
+  exportProfiles: (filePath: string) => Promise<string>;
+  applyImportedProfiles: (
+    profiles: ConfigProfile[]
+  ) => Promise<ImportedConfigSummary>;
   handleCreateProfileFromProjectProfile: (
     sourceProfileName: string,
     parameters: Record<string, ParameterValue>
   ) => Promise<string>;
-  profileManagement: ProfileManagementActions;
 }
 
 export function useProfileCrud({
   selectedRepoId,
+  repositoryProviderId,
   profiles,
   activeProfileId,
   updatePublishEditState,
@@ -115,6 +123,24 @@ export function useProfileCrud({
     (profile: LoadableProfile) => {
       const profileProviderId =
         profile.providerId || profile.provider_id || activeProviderId;
+
+      if (
+        !isProviderCompatibleWithRepository(
+          repositoryProviderId,
+          profileProviderId
+        )
+      ) {
+        toast.error(profileT.providerMismatchLoadTitle || "无法加载配置", {
+          description: (
+            profileT.providerMismatchLoadDescription ||
+            "配置“{{name}}”属于 {{provider}}，当前仓库的 Provider 是 {{repositoryProvider}}。"
+          )
+            .replace("{{name}}", profile.name)
+            .replace("{{provider}}", profileProviderId)
+            .replace("{{repositoryProvider}}", repositoryProviderId ?? ""),
+        });
+        return false;
+      }
 
       if (profileProviderId !== activeProviderId) {
         applyProfileProvider(profileProviderId);
@@ -143,12 +169,16 @@ export function useProfileCrud({
       toast.success(appT.profileLoaded || "配置文件已加载", {
         description: `${appT.loadedProfile || "已加载配置文件"}: ${profile.name}`,
       });
+      return true;
     },
     [
       activeProviderId,
       applyProfileProvider,
       appT,
+      profileT.providerMismatchLoadDescription,
+      profileT.providerMismatchLoadTitle,
       providerSchemas,
+      repositoryProviderId,
       setActiveProfileName,
       setProviderParameters,
       updatePublishEditState,
@@ -156,9 +186,7 @@ export function useProfileCrud({
   );
 
   const handleLoadProfile = useCallback(
-    (profile: LoadableProfile) => {
-      applyProfile(profile);
-    },
+    (profile: LoadableProfile) => applyProfile(profile),
     [applyProfile]
   );
 
@@ -233,7 +261,7 @@ export function useProfileCrud({
       if (!selectedRepoId) {
         throw new Error(profileT.exportFailed || "导出配置失败");
       }
-      await exportConfigFn({
+      return await exportConfigFn({
         repoId: selectedRepoId,
         filePath,
       });
@@ -249,8 +277,9 @@ export function useProfileCrud({
 
       const repoId = selectedRepoId;
 
-      await applyImportedConfigFn(repoId, importedProfiles);
+      const summary = await applyImportedConfigFn(repoId, importedProfiles);
       await refreshProfilesAfterMutation(repoId);
+      return summary;
     },
     [
       profileT.importFailed,
@@ -317,25 +346,6 @@ export function useProfileCrud({
     ]
   );
 
-  const profileManagement = useMemo<ProfileManagementActions>(
-    () => ({
-      profiles,
-      isRefreshing: false,
-      refreshProfiles: async () => [],
-      saveProfile,
-      deleteProfile,
-      exportProfiles,
-      applyImportedProfiles,
-    }),
-    [
-      applyImportedProfiles,
-      deleteProfile,
-      exportProfiles,
-      profiles,
-      saveProfile,
-    ]
-  );
-
   return {
     applyProfile,
     handleLoadProfile,
@@ -345,6 +355,5 @@ export function useProfileCrud({
     exportProfiles,
     applyImportedProfiles,
     handleCreateProfileFromProjectProfile,
-    profileManagement,
   };
 }

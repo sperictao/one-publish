@@ -180,6 +180,8 @@ pub fn run() {
             store::get_profiles,
             store::save_profile,
             store::update_profile,
+            store::load_release_settings_draft,
+            store::update_profile_release_settings,
             store::rebind_profile_project,
             store::delete_profile,
             store::push_recent_publish_config,

@@ -26,16 +26,19 @@ import type {
   AppState as TauriAppState,
   ConfigExport as TauriConfigExport,
   ExecutionRecord as TauriExecutionRecord,
+  ImportedConfigSummary,
   ProjectInfo,
   ProjectPublishProfileFile,
   ProjectScanCandidates as TauriProjectScanCandidates,
   ProviderCatalogEntry as TauriProviderCatalogEntry,
   PublishAdapterCatalog,
   PublishComposition,
+  ReleaseSettingsDraft,
   Repository as TauriRepository,
   RepositoryBranchConnectivityResult,
   RepositoryBranchScanResult,
   ShortcutHelp,
+  TauriReleaseConfig,
   UpdateInfo as TauriUpdateInfo,
   UpdaterConfigHealth,
   UpdaterHelpPaths,
@@ -327,6 +330,27 @@ export async function updateProfile(params: {
   return normalizeAppState(state);
 }
 
+/** 发布设置表单初值（ADR-0060）：修订已有设置或默认值加项目探测，不写入修订。 */
+export async function loadReleaseSettingsDraft(params: {
+  repoId: string;
+  profileId: string;
+}): Promise<ReleaseSettingsDraft> {
+  return invoke<ReleaseSettingsDraft>("load_release_settings_draft", params);
+}
+
+/** 保存发布设置（ADR-0060）：后端校验通过才产生新修订。 */
+export async function updateProfileReleaseSettings(params: {
+  repoId: string;
+  profileId: string;
+  settings: TauriReleaseConfig;
+}): Promise<AppState> {
+  const state = await invoke<TauriAppState>(
+    "update_profile_release_settings",
+    params
+  );
+  return normalizeAppState(state);
+}
+
 /** 本机注册表实际支持的组合 Adapter 目录（决议 #79：未支持项隐藏）。 */
 export async function listPublishAdapterCatalog(): Promise<PublishAdapterCatalog> {
   return invoke<PublishAdapterCatalog>("list_publish_adapter_catalog");
@@ -388,8 +412,8 @@ export async function importConfig(filePath: string): Promise<ConfigExport> {
 export async function applyImportedConfig(
   repoId: string,
   profiles: ConfigProfile[]
-): Promise<void> {
-  await invoke("apply_imported_config", {
+): Promise<ImportedConfigSummary> {
+  return await invoke<ImportedConfigSummary>("apply_imported_config", {
     repoId,
     profiles: profiles.map(toExportConfigProfile),
   });

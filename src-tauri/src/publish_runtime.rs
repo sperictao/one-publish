@@ -9,9 +9,9 @@ use std::thread::{self, JoinHandle};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use publish_adapters::{
-    tauri::RELEASE_GATES_INPUT, AdapterRegistry, ProjectProvider, ProviderExecution,
-    ProviderExecutionOutcome, ProviderExecutionPort, TauriBuildDriver, TauriProjectProvider,
-    CHECKSUM_PROCESSOR_ID, GITHUB_RELEASE_DESTINATION_ID,
+    tauri::RELEASE_GATES_INPUT, AdapterRegistry, CancellationSignal, ProjectProvider,
+    ProviderExecution, ProviderExecutionOutcome, ProviderExecutionPort, TauriBuildDriver,
+    TauriProjectProvider, CHECKSUM_PROCESSOR_ID, GITHUB_RELEASE_DESTINATION_ID,
     SELECTED_PROVIDER_ID, SFTP_DESTINATION_ID, TAURI_PROVIDER_ID,
 };
 use publish_domain::{
@@ -130,9 +130,10 @@ impl RegisteredAttemptOperation {
         })?;
         if !active.insert(attempt_id.to_string()) {
             return Err(AppError::publish_with_code(
-                format!("publish attempt {attempt_id} already has an active operation"),
+                "publish attempt already has an active operation",
                 "publish_runtime_attempt_busy",
-            ));
+            )
+            .with_details(attempt_id));
         }
         Ok(Self {
             attempt_id: attempt_id.to_string(),
@@ -336,8 +337,9 @@ pub struct CancelPublishRuntimeRequest {
     pub attempt_id: Option<String>,
 }
 
-/// 按密封令牌或 Attempt ID 请求协作取消（ADR-0041）：已开始的节点不被
-/// 中断，Submitted/Published 路线保持不变。返回是否存在被请求的执行。
+/// 按密封令牌或 Attempt ID 请求取消（ADR-0041）：未开始的节点不再执行，
+/// 进行中的 Provider 构建经执行端口终止其进程树；Submitted/Published 路线
+/// 保持不变。返回是否存在被请求的执行。
 #[tauri::command]
 pub fn cancel_publish_runtime(request: CancelPublishRuntimeRequest) -> Result<bool, AppError> {
     let runtime_token = request
@@ -987,15 +989,7 @@ pub(crate) fn prepare_runtime(
         }
     }
     if blocked.is_none() {
-        blocked = preflight_blocked_reason(&preflight).map(|reason| {
-            let access_only = preflight.validation.status != PublishOutputValidationStatus::Incompatible
-                && preflight.access.status == PublishOutputAccessStatus::Denied
-                && !preflight.access.remote_location.as_ref().is_some_and(|location| location.kind == RemoteLocationKind::Remote);
-            (
-                if access_only { "publish_output_access_denied" } else { "publish_runtime_output_preflight_blocked" },
-                reason,
-            )
-        });
+        blocked = preflight_blocked_reason(&preflight);
     }
 
     let spec_json = serde_json::to_string(&request.spec).map_err(runtime_serialization_error)?;
@@ -1447,23 +1441,20 @@ fn sensitive_publish_input(
     crate::security::sanitize_publish_recovery_snapshot(&mut snapshot)
 }
 
-fn has_explicit_declared_output(
-    parameters: &BTreeMap<String, SpecValue>,
-    output_layout: &crate::provider::ProviderOutputLayout,
-) -> bool {
+fn has_explicit_declared_output(parameters: &BTreeMap<String, SpecValue>, parameter: &str) -> bool {
     matches!(
-        parameters.get(&output_layout.parameter),
+        parameters.get(parameter),
         Some(SpecValue::String(output)) if !output.trim().is_empty()
     )
 }
 
 fn insert_declared_output(
     parameters: &mut BTreeMap<String, SpecValue>,
-    output_layout: &crate::provider::ProviderOutputLayout,
-    output: PathBuf,
+    parameter: &str,
+    output: &Path,
 ) {
     parameters.insert(
-        output_layout.parameter.clone(),
+        parameter.to_string(),
         SpecValue::String(output.to_string_lossy().to_string()),
     );
 }
@@ -1529,12 +1520,15 @@ fn build_resolved_spec(
     };
 
     // 命令参数投影：保留键不进入命令；false/null/空值原样保留。
-    let mut parameters: BTreeMap<String, SpecValue> =
+    let parameters: BTreeMap<String, SpecValue> =
         serde_json::from_value(command_parameters(&content.parameters)).map_err(|error| {
-            PublishBuildFailure::Fatal(AppError::validation_with_code(
-                format!("configuration parameters must be a JSON object of schema values: {error}"),
-                "publish_runtime_parameter_shape_invalid",
-            ))
+            PublishBuildFailure::Fatal(
+                AppError::validation_with_code(
+                    "configuration parameters must be a JSON object of schema values",
+                    "publish_runtime_parameter_shape_invalid",
+                )
+                .with_details(error.to_string()),
+            )
         })?;
     // 在草稿落盘和 journal 封存前拒绝凭据值；不能用脱敏值代替实际执行参数。
     if sensitive_publish_input(content, &parameters) {
@@ -1544,68 +1538,97 @@ fn build_resolved_spec(
         }));
     }
 
-    // 默认输出目录派生（唯一后端实现，按 Provider 声明的目标参数 + 布局模板求值）：
-    // 模板、普通配置与草稿按当前默认目录派生；直接项目配置与历史来源使用
-    // 各自明确的输出，不重套当前默认。
-    let output_layout = provider.capabilities().output_layout.clone();
-    let derives_default_output = output_layout.is_some()
-        && !matches!(
-            source,
-            PublishSource::ProjectProfile { .. } | PublishSource::History { .. }
-        );
-    let has_explicit_output = output_layout
-        .as_ref()
-        .is_some_and(|layout| has_explicit_declared_output(&parameters, layout));
-    if derives_default_output
-        && !has_explicit_output
-        && !run_inputs.default_output_dir.trim().is_empty()
-    {
-        let output_layout = output_layout
-            .as_ref()
-            .expect("derives_default_output requires an output declaration");
-        let schema = provider.get_schema().map_err(|error| {
-            PublishBuildFailure::Fatal(AppError::validation_with_code(
-                error.to_string(),
-                "publish_runtime_schema_load_failed",
-            ))
-        })?;
-        let project_stem = Path::new(&project_path)
-            .file_stem()
-            .map(|name| name.to_string_lossy().to_string())
-            .unwrap_or_default();
-        let parameter_value = |key: &str| -> Option<String> {
-            match parameters.get(key) {
-                Some(SpecValue::String(value)) if !value.trim().is_empty() => {
-                    Some(value.trim().to_string())
-                }
-                _ => schema
-                    .parameters
-                    .get(key)
-                    .and_then(|def| def.default.as_ref())
-                    .and_then(|value| value.as_str())
-                    .filter(|value| !value.trim().is_empty())
-                    .map(str::to_string),
-            }
-        };
-        let segments = evaluate_output_layout(
-            &output_layout.template,
-            run_inputs.default_output_dir.trim(),
-            Some(project_stem.as_str()),
-            &parameter_value,
-        );
-        let mut scoped_output = PathBuf::new();
-        for segment in segments {
-            scoped_output.push(segment);
-        }
-        insert_declared_output(&mut parameters, output_layout, scoped_output);
-    }
-
-    Ok(PublishSpec {
+    let mut spec = PublishSpec {
         version: SPEC_VERSION,
         provider_id: content.provider_id.clone(),
         project_path,
         parameters,
-    })
+    };
+    // 默认输出派生（唯一后端实现）：模板、普通配置与草稿按当前默认目录派生；
+    // 直接项目配置与历史来源使用各自明确的输出，不重套当前默认。
+    if !matches!(
+        source,
+        PublishSource::ProjectProfile { .. } | PublishSource::History { .. }
+    ) {
+        derive_default_output(provider, &mut spec, run_inputs.default_output_dir.trim())?;
+    }
+    Ok(spec)
+}
+
+/// 配置未显式给出输出时写入 OnePublish 派生的缺省输出：声明了布局模板的 Provider
+/// 按模板求值（未设置默认发布目录时沿用原生输出），其余由 Provider 自行派生。
+fn derive_default_output(
+    provider: &dyn crate::provider::Provider,
+    spec: &mut PublishSpec,
+    default_output_dir: &str,
+) -> Result<(), PublishBuildFailure> {
+    let Some(output_layout) = provider.capabilities().output_layout.as_ref() else {
+        if let Some(output) = provider
+            .default_output(spec, default_output_dir)
+            .filter(|output| !has_explicit_declared_output(&spec.parameters, &output.parameter))
+        {
+            insert_declared_output(&mut spec.parameters, &output.parameter, &output.path);
+        }
+        return Ok(());
+    };
+    if default_output_dir.is_empty()
+        || has_explicit_declared_output(&spec.parameters, &output_layout.parameter)
+    {
+        return Ok(());
+    }
+
+    let schema = provider.get_schema().map_err(|error| {
+        PublishBuildFailure::Fatal(AppError::validation_with_code(
+            error.to_string(),
+            "publish_runtime_schema_load_failed",
+        ))
+    })?;
+    let project_stem = Path::new(&spec.project_path)
+        .file_stem()
+        .map(|name| name.to_string_lossy().to_string())
+        .unwrap_or_default();
+    let parameter_value = |key: &str| -> Option<String> {
+        match spec.parameters.get(key) {
+            Some(SpecValue::String(value)) if !value.trim().is_empty() => {
+                Some(value.trim().to_string())
+            }
+            _ => schema
+                .parameters
+                .get(key)
+                .and_then(|def| def.default.as_ref())
+                .and_then(|value| value.as_str())
+                .filter(|value| !value.trim().is_empty())
+                .map(str::to_string),
+        }
+    };
+    let scoped_output: PathBuf = evaluate_output_layout(
+        &output_layout.template,
+        default_output_dir,
+        Some(project_stem.as_str()),
+        &parameter_value,
+    )
+    .into_iter()
+    .collect();
+    insert_declared_output(
+        &mut spec.parameters,
+        &output_layout.parameter,
+        &scoped_output,
+    );
+
+    // 派生目录在项目源码树之外才归 OnePublish 独占：缺省清理上次发布的残留文件；
+    // 落在源码树内时交给用户决定（清理安全规则会拒绝未认可的源码子目录）。
+    // 相对的默认发布目录按项目目录解析，与 Provider 推断输出目录一致。
+    if let Some(cleanup_parameter) = output_layout.cleanup_parameter.as_ref() {
+        let inside_project = provider
+            .resolve_working_dir(spec)
+            .is_some_and(|project_dir| project_dir.join(&scoped_output).starts_with(&project_dir));
+        if !inside_project {
+            spec.parameters
+                .entry(cleanup_parameter.clone())
+                .or_insert(SpecValue::Bool(true));
+        }
+    }
+    Ok(())
 }
 
 /// 输出布局模板求值：按 `/` 分段，段内令牌 `{default_output_dir}`、
@@ -1781,7 +1804,11 @@ impl TauriProviderExecutionPort {
 }
 
 impl ProviderExecutionPort for TauriProviderExecutionPort {
-    fn execute_spec(&self, spec_json: &str) -> Result<ProviderExecutionOutcome, PublishError> {
+    fn execute_spec(
+        &self,
+        spec_json: &str,
+        cancellation: &CancellationSignal,
+    ) -> Result<ProviderExecutionOutcome, PublishError> {
         let spec: PublishSpec = serde_json::from_str(spec_json).map_err(|error| {
             PublishError::Execution(format!("cannot decode sealed publish spec: {error}"))
         })?;
@@ -1790,6 +1817,7 @@ impl ProviderExecutionPort for TauriProviderExecutionPort {
                 .block_on(crate::commands::execute_provider_publish(
                     self.app.clone(),
                     spec,
+                    cancellation,
                 )),
         )
     }
@@ -1797,6 +1825,7 @@ impl ProviderExecutionPort for TauriProviderExecutionPort {
     fn execute_build(
         &self,
         request: publish_adapters::SealedBuildCommand,
+        cancellation: &CancellationSignal,
     ) -> Result<ProviderExecutionOutcome, PublishError> {
         let request = SealedBuildCommand {
             provider_id: request.provider_id,
@@ -1805,10 +1834,11 @@ impl ProviderExecutionPort for TauriProviderExecutionPort {
             working_directory: request.working_directory,
             output_directory: request.output_directory,
         };
-        self.capture(
-            self.runtime
-                .block_on(crate::commands::execute_sealed_build(&self.app, &request)),
-        )
+        self.capture(self.runtime.block_on(crate::commands::execute_sealed_build(
+            &self.app,
+            &request,
+            cancellation,
+        )))
     }
 }
 
@@ -1829,10 +1859,8 @@ pub async fn start_publish_runtime(
     })
     .await
     .map_err(|error| {
-        AppError::publish_with_code(
-            format!("publish runtime task failed: {error}"),
-            "publish_runtime_task_failed",
-        )
+        AppError::publish_with_code("publish runtime task failed", "publish_runtime_task_failed")
+            .with_details(error.to_string())
     })?
 }
 
@@ -1901,9 +1929,10 @@ fn unix_now_duration() -> Result<std::time::Duration, AppError> {
         .duration_since(UNIX_EPOCH)
         .map_err(|error| {
             AppError::publish_with_code(
-                format!("system clock is before the unix epoch: {error}"),
+                "system clock is before the unix epoch",
                 "publish_runtime_clock_invalid",
             )
+            .with_details(error.to_string())
         })
 }
 
@@ -1958,21 +1987,22 @@ fn start_runtime_with_repository(
             )
         })?
         .to_string();
-    // 产物筛选与原生输出目录同属 Provider 知识，按密封的 provider_id 读取声明。
-    let artifact_filter = prepared
+    // 产物筛选与旧产物清理同原生输出目录一样属 Provider 知识，按密封的 provider_id 读取声明。
+    let provider = prepared
         .snapshot
         .release_input
         .get("provider_id")
         .and_then(Value::as_str)
-        .and_then(|provider_id| provider_registry().get(provider_id).ok())
-        .and_then(|provider| provider.artifact_filter());
+        .and_then(|provider_id| provider_registry().get(provider_id).ok());
     let repository_path = source_guard.repository.to_string_lossy().to_string();
     let registry = build_registry(
         &prepared.snapshot,
         Some(ProviderExecution {
             port: execution_port,
             output_directory: PathBuf::from(&provider_output_directory),
-            artifact_filter,
+            artifact_filter: provider.and_then(|provider| provider.artifact_filter()),
+            clear_stale_artifacts: provider
+                .is_some_and(|provider| provider.clears_stale_artifacts()),
             source_guard: Arc::new(source_guard),
         }),
     )?;
@@ -2086,9 +2116,10 @@ fn prepared_release_input(prepared: &PreparedPublishPlan, key: &str) -> Result<S
         .map(ToString::to_string)
         .ok_or_else(|| {
             AppError::publish_with_code(
-                format!("prepared runtime has no {key}"),
+                "prepared runtime is missing a release input",
                 "publish_runtime_release_input_missing",
             )
+            .with_details(key)
         })
 }
 
@@ -2182,9 +2213,10 @@ pub async fn resume_publish_runtime(
     .await
     .map_err(|error| {
         AppError::publish_with_code(
-            format!("publish runtime resume task failed: {error}"),
+            "publish runtime resume task failed",
             "publish_runtime_resume_task_failed",
         )
+        .with_details(error.to_string())
     })?
 }
 
@@ -2623,12 +2655,10 @@ pub(crate) fn composition_binding(
 ) -> Result<AdapterBinding, AppError> {
     let Value::Object(values) = &revision.settings else {
         return Err(AppError::validation_with_code(
-            format!(
-                "adapter {} settings must be a JSON object",
-                revision.adapter_id
-            ),
+            "adapter settings must be a JSON object",
             "publish_runtime_composition_settings_invalid",
-        ));
+        )
+        .with_details(revision.adapter_id.as_str()));
     };
     let mut settings = AdapterSettings::new(revision.settings_version);
     for (key, value) in values {
@@ -2721,9 +2751,10 @@ fn adapter_kind_label(kind: AdapterKind) -> &'static str {
 /// 不静默替换实现、跳过步骤或降低目标集合。
 fn unsupported_adapter(kind: &str, adapter_id: &str) -> AppError {
     AppError::validation_with_code(
-        format!("publish composition requires {kind} adapter {adapter_id}, which is not built into this runtime"),
+        "publish composition requires an adapter that is not built into this runtime",
         "publish_runtime_adapter_unavailable",
     )
+    .with_details(format!("{kind}: {adapter_id}"))
 }
 
 fn release_identity(snapshot: &PlanningInputSnapshot) -> Result<ReleaseIdentity, AppError> {
@@ -2735,9 +2766,10 @@ fn release_identity(snapshot: &PlanningInputSnapshot) -> Result<ReleaseIdentity,
             .filter(|value| !value.trim().is_empty())
             .ok_or_else(|| {
                 AppError::publish_with_code(
-                    format!("prepared runtime release identity is missing {key}"),
+                    "prepared runtime release identity is missing a field",
                     "publish_runtime_release_identity_missing",
                 )
+                .with_details(key)
             })
     };
     Ok(ReleaseIdentity::new(
@@ -2927,37 +2959,52 @@ fn runtime_stage(stage: PlanStage) -> RuntimePlanStage {
     }
 }
 
+/// 输出预检阻断：返回（诊断码, 原因）。访问被拒单独编码，前端据此发起目录授权；
+/// 无法确定输出位置单独编码，前端据此给出可操作的本地化提示。
 fn preflight_blocked_reason(
     preflight: &crate::commands::PublishOutputPreflightResult,
-) -> Option<String> {
+) -> Option<(&'static str, String)> {
+    const BLOCKED: &str = "publish_runtime_output_preflight_blocked";
     if preflight.validation.status == PublishOutputValidationStatus::Incompatible {
-        return Some(
+        return Some((
+            BLOCKED,
             preflight
                 .validation
                 .issue
                 .map(|issue| format!("publish output is incompatible: {issue:?}"))
                 .unwrap_or_else(|| "publish output is incompatible".to_string()),
-        );
+        ));
     }
+    let remote = preflight
+        .access
+        .remote_location
+        .as_ref()
+        .is_some_and(|location| location.kind == RemoteLocationKind::Remote);
     if preflight.access.status == PublishOutputAccessStatus::Denied {
-        return Some(
+        return Some((
+            if remote {
+                BLOCKED
+            } else {
+                "publish_output_access_denied"
+            },
             preflight
                 .access
                 .detail
                 .clone()
                 .unwrap_or_else(|| "publish output access is denied".to_string()),
-        );
+        ));
     }
-    if preflight
-        .access
-        .remote_location
-        .as_ref()
-        .is_some_and(|location| location.kind == RemoteLocationKind::Remote)
-    {
-        return Some("remote publish output is not supported by the local destination".to_string());
+    if remote {
+        return Some((
+            BLOCKED,
+            "remote publish output is not supported by the local destination".to_string(),
+        ));
     }
     if preflight.output_dir.trim().is_empty() {
-        return Some("publish output directory is empty".to_string());
+        return Some((
+            "publish_runtime_output_unresolved",
+            "publish output location could not be determined; set an output path in the configuration or a default publish directory in Settings".to_string(),
+        ));
     }
     None
 }
@@ -2971,8 +3018,9 @@ fn local_delivery_root(provider_output_directory: &str) -> Result<String, AppErr
         .ok_or_else(|| {
             AppError::validation_with_code(
                 "provider output directory must have a terminal path component",
-                "publish_runtime_provider_output_invalid",
+                "publish_runtime_provider_output_name_missing",
             )
+            .with_details(provider_output_directory)
         })?;
     Ok(output
         .with_file_name(format!("{name}.one-publish-deliveries"))
@@ -3046,12 +3094,9 @@ fn project_identity(repository_path: &str, spec: &PublishSpec) -> Result<String,
         repository.join(project)
     };
     let project = fs::canonicalize(&project).map_err(|error| {
-        AppError::validation_with_code(
-            format!(
-                "failed to resolve publish project {}: {error}",
-                project.display()
-            ),
-            "publish_runtime_project_unavailable",
+        project_unavailable_error(
+            "failed to resolve publish project",
+            format!("{}: {error}", project.display()),
         )
     })?;
     let relative = project.strip_prefix(&repository).map_err(|_| {
@@ -3133,12 +3178,9 @@ fn provider_source_root(repository: &Path, spec: &PublishSpec) -> Result<PathBuf
         .get(&spec.provider_id)
         .map_err(AppError::from)?;
     let working_directory = provider.resolve_working_dir(spec).ok_or_else(|| {
-        AppError::validation_with_code(
-            format!(
-                "provider {} did not resolve a project working directory",
-                spec.provider_id
-            ),
-            "publish_runtime_project_unavailable",
+        project_unavailable_error(
+            "provider did not resolve a project working directory",
+            spec.provider_id.clone(),
         )
     })?;
     let working_directory = if working_directory.is_absolute() {
@@ -3147,21 +3189,15 @@ fn provider_source_root(repository: &Path, spec: &PublishSpec) -> Result<PathBuf
         repository.join(working_directory)
     };
     let source_root = fs::canonicalize(&working_directory).map_err(|error| {
-        AppError::validation_with_code(
-            format!(
-                "failed to resolve publish project directory {}: {error}",
-                working_directory.display()
-            ),
-            "publish_runtime_project_unavailable",
+        project_unavailable_error(
+            "failed to resolve publish project directory",
+            format!("{}: {error}", working_directory.display()),
         )
     })?;
     if !source_root.is_dir() {
-        return Err(AppError::validation_with_code(
-            format!(
-                "publish project directory {} is not a directory",
-                source_root.display()
-            ),
-            "publish_runtime_project_unavailable",
+        return Err(project_unavailable_error(
+            "publish project directory is not a directory",
+            source_root.display().to_string(),
         ));
     }
     if !source_root.starts_with(repository) {
@@ -3175,24 +3211,29 @@ fn provider_source_root(repository: &Path, spec: &PublishSpec) -> Result<PathBuf
 
 fn canonical_repository(repository: &Path) -> Result<PathBuf, AppError> {
     let repository = fs::canonicalize(repository).map_err(|error| {
-        AppError::repository_with_code(
-            format!(
-                "failed to resolve selected repository {}: {error}",
-                repository.display()
-            ),
-            "publish_runtime_repository_unavailable",
+        repository_unavailable_error(
+            "failed to resolve selected repository",
+            format!("{}: {error}", repository.display()),
         )
     })?;
     if !repository.is_dir() {
-        return Err(AppError::repository_with_code(
-            format!(
-                "selected repository {} is not a directory",
-                repository.display()
-            ),
-            "publish_runtime_repository_unavailable",
+        return Err(repository_unavailable_error(
+            "selected repository is not a directory",
+            repository.display().to_string(),
         ));
     }
     Ok(repository)
+}
+
+// message 保持静态、路径与底层错误进 details：前端按 code 取 `errors.<code>` 后仍可附加原因。
+fn project_unavailable_error(message: &'static str, details: String) -> AppError {
+    AppError::validation_with_code(message, "publish_runtime_project_unavailable")
+        .with_details(details)
+}
+
+fn repository_unavailable_error(message: &'static str, details: String) -> AppError {
+    AppError::repository_with_code(message, "publish_runtime_repository_unavailable")
+        .with_details(details)
 }
 
 #[derive(Clone)]
@@ -3220,19 +3261,21 @@ impl PreparedSourceGuard {
                 .filter(|value| !value.trim().is_empty())
                 .ok_or_else(|| {
                     AppError::publish_with_code(
-                        format!("prepared runtime source identity is missing {key}"),
+                        "prepared runtime source identity is missing a field",
                         "publish_runtime_source_identity_missing",
                     )
+                    .with_details(key)
                 })
         };
         let repository = canonical_repository(Path::new(release_value("repository_path")?))?;
-        let source_root = fs::canonicalize(repository.join(release_value("source_root")?))
-            .map_err(|error| {
-                AppError::publish_with_code(
-                    format!("prepared runtime source root is unavailable: {error}"),
-                    "publish_runtime_source_identity_missing",
-                )
-            })?;
+        let source_root_path = repository.join(release_value("source_root")?);
+        let source_root = fs::canonicalize(&source_root_path).map_err(|error| {
+            AppError::publish_with_code(
+                "prepared runtime source root is unavailable",
+                "publish_runtime_source_identity_missing",
+            )
+            .with_details(format!("{}: {error}", source_root_path.display()))
+        })?;
         if !source_root.is_dir() || !source_root.starts_with(&repository) {
             return Err(AppError::publish_with_code(
                 "prepared runtime source root is outside the selected repository",
@@ -3395,13 +3438,14 @@ fn source_excluded_roots(
             result.and_then(|root| {
                 if repository.starts_with(&root) || source_root.starts_with(&root) {
                     Err(AppError::validation_with_code(
-                        format!(
-                            "publish output {} cannot contain the selected source root {}",
-                            root.display(),
-                            source_root.display()
-                        ),
-                        "publish_runtime_provider_output_invalid",
-                    ))
+                        "publish output cannot contain the selected source root",
+                        "publish_runtime_provider_output_contains_source",
+                    )
+                    .with_details(format!(
+                        "{} ⊇ {}",
+                        root.display(),
+                        source_root.display()
+                    )))
                 } else {
                     Ok(root)
                 }
@@ -3425,12 +3469,10 @@ fn normalize_execution_path(repository: &Path, path: &Path) -> Result<PathBuf, A
             Component::ParentDir => {
                 if !normalized.pop() {
                     return Err(AppError::validation_with_code(
-                        format!(
-                            "publish path {} escapes the filesystem root",
-                            path.display()
-                        ),
-                        "publish_runtime_provider_output_invalid",
-                    ));
+                        "publish path escapes the filesystem root",
+                        "publish_runtime_provider_output_escapes_root",
+                    )
+                    .with_details(path.display().to_string()));
                 }
             }
             Component::Normal(value) => normalized.push(value),
@@ -3438,29 +3480,24 @@ fn normalize_execution_path(repository: &Path, path: &Path) -> Result<PathBuf, A
     }
     let mut existing = normalized.as_path();
     let mut missing = Vec::new();
+    let ancestor_missing = || {
+        AppError::validation_with_code(
+            "publish path has no existing ancestor",
+            "publish_runtime_provider_output_ancestor_missing",
+        )
+        .with_details(path.display().to_string())
+    };
     while !existing.exists() {
-        let name = existing.file_name().ok_or_else(|| {
-            AppError::validation_with_code(
-                format!("publish path {} has no existing ancestor", path.display()),
-                "publish_runtime_provider_output_invalid",
-            )
-        })?;
+        let name = existing.file_name().ok_or_else(ancestor_missing)?;
         missing.push(name.to_os_string());
-        existing = existing.parent().ok_or_else(|| {
-            AppError::validation_with_code(
-                format!("publish path {} has no existing ancestor", path.display()),
-                "publish_runtime_provider_output_invalid",
-            )
-        })?;
+        existing = existing.parent().ok_or_else(ancestor_missing)?;
     }
     let mut canonical = fs::canonicalize(existing).map_err(|error| {
         AppError::validation_with_code(
-            format!(
-                "failed to resolve publish path ancestor {}: {error}",
-                existing.display()
-            ),
-            "publish_runtime_provider_output_invalid",
+            "failed to resolve publish path ancestor",
+            "publish_runtime_provider_output_ancestor_unresolved",
         )
+        .with_details(format!("{}: {error}", existing.display()))
     })?;
     for component in missing.into_iter().rev() {
         canonical.push(component);
@@ -3720,9 +3757,10 @@ fn runtime_attempt_uncertain_error(attempt_id: &str, error: impl std::fmt::Displ
 
 fn runtime_serialization_error(error: serde_json::Error) -> AppError {
     AppError::publish_with_code(
-        format!("failed to serialize publish runtime contract: {error}"),
+        "failed to serialize or parse publish runtime contract",
         "publish_runtime_serialization_failed",
     )
+    .with_details(error.to_string())
 }
 
 #[cfg(test)]
@@ -3740,8 +3778,9 @@ mod tests {
     use crate::tauri_release::{ReleaseGate, TauriReleaseConfig};
 
     use super::{
-        capture_source_snapshot, normalize_remote_namespace, project_identity, AttemptIdentity,
-        ProviderExecutionPort, RuntimeAttemptStatus, RuntimePlanStage, StartPublishRuntimeRequest,
+        canonical_repository, capture_source_snapshot, normalize_remote_namespace,
+        project_identity, AttemptIdentity, ProviderExecutionPort, RuntimeAttemptStatus,
+        RuntimePlanStage, StartPublishRuntimeRequest,
     };
 
     /// 测试隔离：每次调用使用独立的租约协调器，避免并行测试因相同内容
@@ -3773,6 +3812,7 @@ mod tests {
         fn execute_spec(
             &self,
             spec_json: &str,
+            _cancellation: &publish_adapters::CancellationSignal,
         ) -> Result<super::ProviderExecutionOutcome, publish_domain::PublishError> {
             let _spec: PublishSpec =
                 serde_json::from_str(spec_json).expect("decode sealed publish spec");
@@ -3820,6 +3860,7 @@ mod tests {
         fn execute_build(
             &self,
             request: publish_adapters::SealedBuildCommand,
+            _cancellation: &publish_adapters::CancellationSignal,
         ) -> Result<super::ProviderExecutionOutcome, publish_domain::PublishError> {
             panic!(
                 "non-tauri providers must not execute sealed build commands: {}",
@@ -3837,8 +3878,9 @@ mod tests {
         fn execute_spec(
             &self,
             spec_json: &str,
+            cancellation: &publish_adapters::CancellationSignal,
         ) -> Result<super::ProviderExecutionOutcome, publish_domain::PublishError> {
-            let outcome = self.delegate.execute_spec(spec_json)?;
+            let outcome = self.delegate.execute_spec(spec_json, cancellation)?;
             let displaced = self
                 .events_directory
                 .with_file_name("events-before-persistence-failure");
@@ -3852,8 +3894,9 @@ mod tests {
         fn execute_build(
             &self,
             request: publish_adapters::SealedBuildCommand,
+            cancellation: &publish_adapters::CancellationSignal,
         ) -> Result<super::ProviderExecutionOutcome, publish_domain::PublishError> {
-            self.delegate.execute_build(request)
+            self.delegate.execute_build(request, cancellation)
         }
     }
 
@@ -3890,6 +3933,7 @@ mod tests {
         fn execute_spec(
             &self,
             _spec_json: &str,
+            _cancellation: &publish_adapters::CancellationSignal,
         ) -> Result<super::ProviderExecutionOutcome, publish_domain::PublishError> {
             panic!("tauri runtime must not fall back to the legacy publish spec pipeline");
         }
@@ -3897,6 +3941,7 @@ mod tests {
         fn execute_build(
             &self,
             request: publish_adapters::SealedBuildCommand,
+            _cancellation: &publish_adapters::CancellationSignal,
         ) -> Result<super::ProviderExecutionOutcome, publish_domain::PublishError> {
             self.requests
                 .lock()
@@ -3953,6 +3998,7 @@ mod tests {
         fn execute_spec(
             &self,
             _spec_json: &str,
+            _cancellation: &publish_adapters::CancellationSignal,
         ) -> Result<super::ProviderExecutionOutcome, publish_domain::PublishError> {
             use std::os::unix::fs::PermissionsExt;
 
@@ -3996,9 +4042,104 @@ mod tests {
         fn execute_build(
             &self,
             request: publish_adapters::SealedBuildCommand,
+            _cancellation: &publish_adapters::CancellationSignal,
         ) -> Result<super::ProviderExecutionOutcome, publish_domain::PublishError> {
             panic!(
                 "cargo publishes through the sealed spec, not sealed build commands: {}",
+                request.program
+            );
+        }
+    }
+
+    /// 复现 Gradle 在 `build/libs` 的输出：新版本 jar 与 `tmp/` 等中间目录；
+    /// 构建前遗留的旧版本 jar 必须已被运行时清理。
+    #[cfg(unix)]
+    struct FakeGradleBuild {
+        libs_directory: std::path::PathBuf,
+        stale_jar: std::path::PathBuf,
+    }
+
+    #[cfg(unix)]
+    impl ProviderExecutionPort for FakeGradleBuild {
+        fn execute_spec(
+            &self,
+            _spec_json: &str,
+            _cancellation: &publish_adapters::CancellationSignal,
+        ) -> Result<super::ProviderExecutionOutcome, publish_domain::PublishError> {
+            assert!(
+                !self.stale_jar.exists(),
+                "stale jars are removed before the build starts"
+            );
+            let libs = &self.libs_directory;
+            std::fs::create_dir_all(libs.join("tmp")).expect("create gradle libs subdirectory");
+            for (name, contents) in [
+                ("demo-1.1.jar", "current"),
+                (".demo-1.1.jar.lock", ""),
+                ("tmp/staging.jar", "intermediate"),
+            ] {
+                std::fs::write(libs.join(name), contents).expect("write gradle output");
+            }
+            Ok(super::ProviderExecutionOutcome {
+                success: true,
+                cancelled: false,
+                error: None,
+                output_dir: libs.to_string_lossy().to_string(),
+            })
+        }
+
+        fn execute_build(
+            &self,
+            request: publish_adapters::SealedBuildCommand,
+            _cancellation: &publish_adapters::CancellationSignal,
+        ) -> Result<super::ProviderExecutionOutcome, publish_domain::PublishError> {
+            panic!(
+                "gradle publishes through the sealed spec, not sealed build commands: {}",
+                request.program
+            );
+        }
+    }
+
+    /// `go build -o <file>`：二进制写到密封 spec 的 `output` 参数（prepare 时派生），
+    /// 同目录另有无关文件，单文件输出只交付该二进制。
+    #[cfg(unix)]
+    struct FakeGoBuild;
+
+    #[cfg(unix)]
+    impl ProviderExecutionPort for FakeGoBuild {
+        fn execute_spec(
+            &self,
+            spec_json: &str,
+            _cancellation: &publish_adapters::CancellationSignal,
+        ) -> Result<super::ProviderExecutionOutcome, publish_domain::PublishError> {
+            use std::os::unix::fs::PermissionsExt;
+
+            let spec: PublishSpec =
+                serde_json::from_str(spec_json).expect("decode sealed publish spec");
+            let Some(SpecValue::String(output)) = spec.parameters.get("output") else {
+                panic!("the sealed Go spec must carry the derived -o output");
+            };
+            let binary = std::path::PathBuf::from(output);
+            let directory = binary.parent().expect("go output file parent");
+            std::fs::create_dir_all(directory).expect("create go output directory");
+            std::fs::write(directory.join("notes.txt"), "unrelated").expect("write stray file");
+            std::fs::write(&binary, "binary").expect("write go binary");
+            std::fs::set_permissions(&binary, std::fs::Permissions::from_mode(0o755))
+                .expect("mark go binary executable");
+            Ok(super::ProviderExecutionOutcome {
+                success: true,
+                cancelled: false,
+                error: None,
+                output_dir: output.clone(),
+            })
+        }
+
+        fn execute_build(
+            &self,
+            request: publish_adapters::SealedBuildCommand,
+            _cancellation: &publish_adapters::CancellationSignal,
+        ) -> Result<super::ProviderExecutionOutcome, publish_domain::PublishError> {
+            panic!(
+                "go publishes through the sealed spec, not sealed build commands: {}",
                 request.program
             );
         }
@@ -4092,17 +4233,17 @@ mod tests {
 
     #[test]
     fn declared_output_parameter_name_is_not_hardcoded() {
-        let declaration = crate::provider::ProviderOutputLayout {
-            parameter: "target_dir".to_string(),
-            template: "{default_output_dir}".to_string(),
-        };
+        let declaration = "target_dir";
         let mut parameters = BTreeMap::new();
-        assert!(!super::has_explicit_declared_output(&parameters, &declaration));
+        assert!(!super::has_explicit_declared_output(
+            &parameters,
+            declaration
+        ));
 
         super::insert_declared_output(
             &mut parameters,
-            &declaration,
-            std::path::PathBuf::from("/tmp/custom-output"),
+            declaration,
+            std::path::Path::new("/tmp/custom-output"),
         );
 
         assert_eq!(
@@ -4113,7 +4254,10 @@ mod tests {
                     .to_string()
             ))
         );
-        assert!(super::has_explicit_declared_output(&parameters, &declaration));
+        assert!(super::has_explicit_declared_output(
+            &parameters,
+            declaration
+        ));
         assert!(!parameters.contains_key("output"));
     }
 
@@ -4206,6 +4350,114 @@ mod tests {
             &source,
         ));
         assert!(!no_default.parameters.contains_key("output"));
+    }
+
+    #[test]
+    fn resolved_spec_cleans_only_dotnet_output_owned_by_one_publish() {
+        let (dir, repository) = spec_builder_repository();
+        let source = super::PublishSource::Empty {
+            provider_id: "dotnet".to_string(),
+            project_binding: None,
+        };
+        let build = |parameters: serde_json::Value, default_output_dir: &str| {
+            built_spec(super::build_resolved_spec(
+                &repository,
+                &revision_content("dotnet", parameters, None),
+                &super::PublishRunInputs {
+                    default_output_dir: default_output_dir.to_string(),
+                    promoted_manifest_digest: None,
+                },
+                &source,
+            ))
+        };
+        let cleanup = |spec: &PublishSpec| spec.parameters.get("delete_existing_files").cloned();
+
+        // 派生目录在项目源码树之外：OnePublish 独占，缺省清理上次残留。
+        let owned = build(
+            serde_json::json!({ "configuration": "Release" }),
+            "/default-out",
+        );
+        assert_eq!(cleanup(&owned), Some(SpecValue::Bool(true)));
+        // 用户显式关闭清理时保留选择。
+        let opted_out = build(
+            serde_json::json!({ "configuration": "Release", "delete_existing_files": false }),
+            "/default-out",
+        );
+        assert_eq!(cleanup(&opted_out), Some(SpecValue::Bool(false)));
+        // 显式输出与原生输出（未设置默认目录）不归 OnePublish 所有。
+        let explicit = build(
+            serde_json::json!({ "configuration": "Release", "output": "/explicit-out" }),
+            "/default-out",
+        );
+        assert_eq!(cleanup(&explicit), None);
+        assert_eq!(cleanup(&build(serde_json::json!({}), "")), None);
+        // 默认发布目录落在项目源码树内（绝对或相对项目目录）：不缺省清理。
+        for inside_default in [
+            dir.path().join("dist").to_string_lossy().to_string(),
+            "./dist".to_string(),
+        ] {
+            let inside = build(
+                serde_json::json!({ "configuration": "Release" }),
+                &inside_default,
+            );
+            assert!(inside.parameters.contains_key("output"), "{inside_default}");
+            assert_eq!(cleanup(&inside), None, "{inside_default}");
+        }
+    }
+
+    #[test]
+    fn resolved_spec_derives_a_go_output_file_without_a_default_directory() {
+        let dir = tempfile::tempdir().expect("create repository dir");
+        std::fs::write(dir.path().join("go.mod"), "module example.com/tool\n")
+            .expect("write go.mod");
+        let repository = crate::store::Repository {
+            path: dir.path().to_string_lossy().to_string(),
+            project_file: None,
+            ..spec_builder_repository().1
+        };
+        let source = super::PublishSource::Empty {
+            provider_id: "go".to_string(),
+            project_binding: None,
+        };
+        let build = |parameters: serde_json::Value, default_output_dir: &str| {
+            built_spec(super::build_resolved_spec(
+                &repository,
+                &revision_content("go", parameters, None),
+                &super::PublishRunInputs {
+                    default_output_dir: default_output_dir.to_string(),
+                    promoted_manifest_digest: None,
+                },
+                &source,
+            ))
+        };
+        let output = |spec: &PublishSpec| match spec.parameters.get("output") {
+            Some(SpecValue::String(output)) => std::path::PathBuf::from(output),
+            other => panic!("expected a derived Go output, got {other:?}"),
+        };
+
+        let fallback = build(
+            serde_json::json!({ "target": "linux", "arch": "arm64" }),
+            "",
+        );
+        assert_eq!(
+            output(&fallback),
+            dir.path().join("dist").join("tool-linux-arm64")
+        );
+        let defaulted = build(serde_json::json!({ "target": "linux" }), "/default-out");
+        assert_eq!(
+            output(&defaulted),
+            std::path::Path::new("/default-out")
+                .join("tool")
+                .join("tool-linux")
+        );
+        let explicit = build(
+            serde_json::json!({ "output": "./bin/tool" }),
+            "/default-out",
+        );
+        assert_eq!(
+            explicit.parameters.get("output"),
+            Some(&SpecValue::String("./bin/tool".to_string()))
+        );
     }
 
     #[test]
@@ -4587,9 +4839,13 @@ mod tests {
         ))
         .expect("blocked configuration still has a deterministic preview");
 
-        assert!(prepared
-            .blocked_reason()
-            .is_some_and(|reason| reason.contains("output directory is empty")));
+        // 无法确定输出位置有独立诊断码，前端据此给出本地化的可操作提示。
+        match &prepared {
+            super::PreparedPublishRuntime::Blocked { diagnostics, .. } => {
+                assert_eq!(diagnostics[0].code, "publish_runtime_output_unresolved");
+            }
+            _ => panic!("an unresolved output must block the runtime"),
+        }
         assert!(prepared.plan().is_none());
         assert!(prepared.runtime_token().is_empty());
     }
@@ -5106,6 +5362,7 @@ mod tests {
                     "provider_output_directory",
                 )),
                 artifact_filter: None,
+                clear_stale_artifacts: false,
                 source_guard: Arc::new(source_guard),
             }),
         )
@@ -5330,6 +5587,7 @@ mod tests {
             envelopes: &[],
             receipts: &[],
             credentials: &credentials,
+            cancellation: publish_adapters::CancellationSignal::new(),
         };
 
         let error = publish_adapters::AdapterContract::execute_node(&provider, &drifted, &context)
@@ -5715,7 +5973,77 @@ mod tests {
 
         assert_eq!(
             error.code.as_deref(),
-            Some("publish_runtime_provider_output_invalid")
+            Some("publish_runtime_provider_output_contains_source")
+        );
+        assert_eq!(
+            error.message,
+            "publish output cannot contain the selected source root"
+        );
+        let canonical = |path: &std::path::Path| {
+            std::fs::canonicalize(path)
+                .expect("canonical path")
+                .display()
+                .to_string()
+        };
+        assert_eq!(
+            error.details,
+            Some(format!("{} ⊇ {}", canonical(&output), canonical(&project)))
+        );
+    }
+
+    #[test]
+    fn provider_output_path_errors_name_each_reason_and_keep_paths_in_details() {
+        let error = super::local_delivery_root("/").expect_err("root has no terminal component");
+        assert_eq!(
+            error.code.as_deref(),
+            Some("publish_runtime_provider_output_name_missing")
+        );
+        assert_eq!(
+            error.message,
+            "provider output directory must have a terminal path component"
+        );
+        assert_eq!(error.details.as_deref(), Some("/"));
+
+        let repository = tempfile::tempdir().expect("create repository");
+        let escaping = std::path::PathBuf::from_iter(std::iter::repeat_n("..", 256));
+        let error = super::normalize_execution_path(repository.path(), &escaping)
+            .expect_err("parent segments cannot climb above the filesystem root");
+        assert_eq!(
+            error.code.as_deref(),
+            Some("publish_runtime_provider_output_escapes_root")
+        );
+        assert_eq!(error.message, "publish path escapes the filesystem root");
+        assert_eq!(error.details, Some(escaping.display().to_string()));
+    }
+
+    #[test]
+    fn unavailable_repository_keeps_the_path_in_details() {
+        let temp = tempfile::tempdir().expect("temp dir");
+        let missing = temp.path().join("missing");
+        let file = temp.path().join("file.txt");
+        std::fs::write(&file, "not a directory").expect("write file");
+
+        let error = canonical_repository(&missing).expect_err("missing repository");
+        assert_eq!(
+            error.code.as_deref(),
+            Some("publish_runtime_repository_unavailable")
+        );
+        assert_eq!(error.message, "failed to resolve selected repository");
+        assert!(error
+            .details
+            .as_deref()
+            .is_some_and(|details| details.starts_with(&missing.display().to_string())));
+
+        let error = canonical_repository(&file).expect_err("file is not a repository");
+        assert_eq!(error.message, "selected repository is not a directory");
+        assert_eq!(
+            error.details,
+            Some(
+                std::fs::canonicalize(&file)
+                    .expect("canonical file")
+                    .display()
+                    .to_string()
+            )
         );
     }
 
@@ -5892,7 +6220,56 @@ mod tests {
             Ok(_) => panic!("unknown backend must be a specific capability error"),
             Err(error) => error,
         };
-        assert!(error.to_string().contains("jenkins"));
+        assert_eq!(
+            error.code.as_deref(),
+            Some("publish_runtime_adapter_unavailable")
+        );
+        assert_eq!(error.details.as_deref(), Some("execution backend: jenkins"));
+
+        // 计划输入快照缺字段时：message 静态，缺失的键进 details。
+        let error = match super::release_identity(&snapshot) {
+            Ok(_) => panic!("empty release input has no release identity"),
+            Err(error) => error,
+        };
+        assert_eq!(
+            error.code.as_deref(),
+            Some("publish_runtime_release_identity_missing")
+        );
+        assert_eq!(
+            error.message,
+            "prepared runtime release identity is missing a field"
+        );
+        assert_eq!(error.details.as_deref(), Some("project_identity"));
+        let error = match super::PreparedSourceGuard::from_snapshot(&snapshot) {
+            Ok(_) => panic!("empty release input has no source identity"),
+            Err(error) => error,
+        };
+        assert_eq!(
+            error.code.as_deref(),
+            Some("publish_runtime_source_identity_missing")
+        );
+        assert_eq!(error.details.as_deref(), Some("repository_path"));
+    }
+
+    #[test]
+    fn non_object_adapter_settings_keep_the_adapter_id_in_details() {
+        let error = super::composition_binding(
+            "destination",
+            super::AdapterKind::DeliveryDestination,
+            &crate::store::RevisionAdapterBinding {
+                adapter_id: super::SFTP_DESTINATION_ID.to_string(),
+                settings_version: 1,
+                settings: serde_json::json!(["not", "an", "object"]),
+                credentials: BTreeMap::new(),
+            },
+        )
+        .expect_err("array settings are rejected");
+        assert_eq!(
+            error.code.as_deref(),
+            Some("publish_runtime_composition_settings_invalid")
+        );
+        assert_eq!(error.message, "adapter settings must be a JSON object");
+        assert_eq!(error.details.as_deref(), Some(super::SFTP_DESTINATION_ID));
     }
 
     #[test]
@@ -6340,6 +6717,11 @@ mod tests {
             Err(error) => error,
         };
         assert_eq!(error.code.as_deref(), Some("publish_runtime_attempt_busy"));
+        assert_eq!(
+            error.message,
+            "publish attempt already has an active operation"
+        );
+        assert_eq!(error.details, Some(attempt_id.clone()));
         drop(first);
         super::RegisteredAttemptOperation::acquire(&attempt_id)
             .expect("released operation slot can be reacquired");
@@ -7521,15 +7903,9 @@ mod tests {
         );
         assert_eq!(result.attempt.receipts.len(), 1);
         let delivered = std::path::PathBuf::from(&result.attempt.receipts[0].external_reference);
-        let mut delivered_entries = std::fs::read_dir(&delivered)
-            .expect("read cargo delivery")
-            .flatten()
-            .map(|entry| entry.file_name().to_string_lossy().to_string())
-            .collect::<Vec<_>>();
-        delivered_entries.sort();
         // 除本地交付目标自身的清单摘要标记外，只有提升产物与校验和清单。
         assert_eq!(
-            delivered_entries,
+            delivered_entry_names(&delivered),
             [
                 ".one-publish-manifest-digest",
                 "SHA256SUMS",
@@ -7537,13 +7913,167 @@ mod tests {
                 "libdemo.rlib"
             ]
         );
-        let checksums =
-            std::fs::read_to_string(delivered.join("SHA256SUMS")).expect("read cargo checksums");
-        let listed = checksums
-            .lines()
-            .filter_map(|line| line.split_once("  ").map(|(_, name)| name))
+        assert_eq!(checksum_listing(&delivered), ["demo", "libdemo.rlib"]);
+    }
+
+    #[cfg(unix)]
+    fn delivered_entry_names(delivered: &std::path::Path) -> Vec<String> {
+        let mut entries = std::fs::read_dir(delivered)
+            .expect("read delivery")
+            .flatten()
+            .map(|entry| entry.file_name().to_string_lossy().to_string())
             .collect::<Vec<_>>();
-        assert_eq!(listed, ["demo", "libdemo.rlib"]);
+        entries.sort();
+        entries
+    }
+
+    #[cfg(unix)]
+    fn checksum_listing(delivered: &std::path::Path) -> Vec<String> {
+        std::fs::read_to_string(delivered.join("SHA256SUMS"))
+            .expect("read delivered checksums")
+            .lines()
+            .filter_map(|line| line.split_once("  ").map(|(_, name)| name.to_string()))
+            .collect()
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn gradle_delivery_contains_only_archives_from_this_build() {
+        let repository = tempfile::tempdir().expect("create repository");
+        std::fs::write(
+            repository.path().join("build.gradle"),
+            "plugins { id 'java' }\n",
+        )
+        .expect("write gradle build");
+        // prepare 解析 Gradle wrapper；测试环境不依赖真实 gradle。
+        std::fs::write(repository.path().join("gradlew"), "#!/bin/sh\n").expect("write wrapper");
+        initialize_git_repository(repository.path());
+        // 上一次构建遗留的旧版本 jar（升级版本号后 Gradle 不会删除）。
+        let libs = repository.path().join("build").join("libs");
+        std::fs::create_dir_all(&libs).expect("create build/libs");
+        let stale_jar = libs.join("demo-1.0.jar");
+        std::fs::write(&stale_jar, "stale").expect("write stale jar");
+        let spec = PublishSpec {
+            version: SPEC_VERSION,
+            provider_id: "java".to_string(),
+            project_path: repository.path().to_string_lossy().to_string(),
+            parameters: BTreeMap::new(),
+        };
+        let prepared = super::prepare_runtime(prepare_invocation(
+            repository.path(),
+            "java",
+            serde_json::json!({}),
+            spec,
+        ))
+        .expect("prepare gradle runtime");
+
+        let result = start_runtime_with_port(
+            StartPublishRuntimeRequest {
+                runtime_token: prepared.runtime_token().to_string(),
+            },
+            Arc::new(FakeGradleBuild {
+                libs_directory: libs.clone(),
+                stale_jar: stale_jar.clone(),
+            }),
+            AttemptIdentity {
+                attempt_id: "attempt-gradle".to_string(),
+                backend_run_id: "backend-gradle".to_string(),
+            },
+        )
+        .expect("run gradle runtime");
+
+        assert_eq!(result.attempt.status, RuntimeAttemptStatus::Published);
+        assert!(!stale_jar.exists());
+        assert_eq!(result.attempt.receipts.len(), 1);
+        let delivered = std::path::PathBuf::from(&result.attempt.receipts[0].external_reference);
+        assert_eq!(
+            delivered_entry_names(&delivered),
+            [".one-publish-manifest-digest", "SHA256SUMS", "demo-1.1.jar"]
+        );
+        assert_eq!(checksum_listing(&delivered), ["demo-1.1.jar"]);
+        assert_eq!(
+            std::fs::read(delivered.join("demo-1.1.jar")).expect("read delivered jar"),
+            b"current"
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn go_without_an_output_publishes_a_single_binary_into_the_default_directory() {
+        let repository = tempfile::tempdir().expect("create repository");
+        let publish_root = tempfile::tempdir().expect("create default publish directory");
+        std::fs::write(
+            repository.path().join("go.mod"),
+            "module example.com/demo/v2\n\ngo 1.22\n",
+        )
+        .expect("write go.mod");
+        std::fs::write(
+            repository.path().join("main.go"),
+            "package main\n\nfunc main() {}\n",
+        )
+        .expect("write main.go");
+        initialize_git_repository(repository.path());
+        let store_repository = crate::store::Repository {
+            path: repository.path().to_string_lossy().to_string(),
+            project_file: None,
+            ..spec_builder_repository().1
+        };
+        // 没有发布配置（profile）：空来源 + 设置中的默认发布目录。
+        let content = revision_content("go", serde_json::json!({ "target": "linux" }), None);
+        let spec = built_spec(super::build_resolved_spec(
+            &store_repository,
+            &content,
+            &super::PublishRunInputs {
+                default_output_dir: publish_root.path().to_string_lossy().to_string(),
+                promoted_manifest_digest: None,
+            },
+            &super::PublishSource::Empty {
+                provider_id: "go".to_string(),
+                project_binding: None,
+            },
+        ));
+        let binary = publish_root.path().join("demo").join("demo-linux");
+        let prepared = super::prepare_runtime(prepare_invocation(
+            repository.path(),
+            "go",
+            content.parameters.clone(),
+            spec,
+        ))
+        .expect("prepare go runtime");
+        match &prepared {
+            super::PreparedPublishRuntime::Ready { command, .. } => {
+                let output_flag = command
+                    .args
+                    .iter()
+                    .position(|arg| arg == "-o")
+                    .expect("the derived output is passed as -o");
+                assert_eq!(command.args[output_flag + 1], binary.to_string_lossy());
+            }
+            _ => panic!("a Go repository without an output must be publishable"),
+        }
+
+        let result = start_runtime_with_port(
+            StartPublishRuntimeRequest {
+                runtime_token: prepared.runtime_token().to_string(),
+            },
+            Arc::new(FakeGoBuild),
+            AttemptIdentity {
+                attempt_id: "attempt-go-default".to_string(),
+                backend_run_id: "backend-go-default".to_string(),
+            },
+        )
+        .expect("run go runtime");
+
+        assert_eq!(result.attempt.status, RuntimeAttemptStatus::Published);
+        assert!(binary.is_file());
+        assert_eq!(result.attempt.receipts.len(), 1);
+        let delivered = std::path::PathBuf::from(&result.attempt.receipts[0].external_reference);
+        assert!(delivered.starts_with(publish_root.path().join("demo")));
+        assert_eq!(
+            delivered_entry_names(&delivered),
+            [".one-publish-manifest-digest", "SHA256SUMS", "demo-linux"]
+        );
+        assert_eq!(checksum_listing(&delivered), ["demo-linux"]);
     }
 
     #[test]
