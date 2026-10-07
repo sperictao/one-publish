@@ -1329,6 +1329,7 @@ export const PublishConfigPanel = memo(function PublishConfigPanel({
               setCompositionProfile(profile);
             }
           }}
+          onCreateProfile={onCreateProfile}
         />
       </div>
 
