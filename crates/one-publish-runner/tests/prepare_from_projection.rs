@@ -11,6 +11,7 @@ use one_publish_runner::{
     TriggerInput,
 };
 use publish_domain::{AutomationTriggerPolicy, PlanNodePlatform};
+use publish_runner_core::ShardHandoff;
 use serde_json::Value;
 
 #[test]
@@ -82,7 +83,7 @@ fn shard_execution_skips_unassigned_nodes_instead_of_failing() {
     };
     let segment = installed_runner(&attempt)
         .expect("assemble the installed runner")
-        .execute_shard(&attempt, "attempt-shard", absent, Vec::new())
+        .execute_shard(&attempt, "attempt-shard", absent, ShardHandoff::default())
         .expect("an unassigned shard completes without executing anything");
     assert!(segment.events.is_empty());
     assert!(segment.manifest.is_none());
