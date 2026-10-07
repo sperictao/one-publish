@@ -1112,6 +1112,11 @@
     "project_dir_not_found": "无法解析项目文件所在目录",
     "publish_runtime_project_unavailable": "无法解析发布项目路径，请确认项目文件仍在仓库中",
     "publish_runtime_repository_unavailable": "无法解析所选仓库路径，请确认仓库目录存在",
-    "publish_runtime_project_outside_repository": "发布项目必须位于所选仓库内"
+    "publish_runtime_project_outside_repository": "发布项目必须位于所选仓库内",
+    "provider_schema_load_failed": "无法加载 Provider 参数定义",
+    "updater_not_configured": "更新源未配置或不可用",
+    "check_update_failed": "检查更新失败",
+    "download_update_failed": "下载更新失败",
+    "install_update_failed": "安装更新失败"
   }
 }

@@ -1112,6 +1112,11 @@
     "project_dir_not_found": "Couldn't resolve the project file's directory.",
     "publish_runtime_project_unavailable": "Couldn't resolve the publish project path. Make sure the project file is still in the repository.",
     "publish_runtime_repository_unavailable": "Couldn't resolve the selected repository path. Make sure the repository directory exists.",
-    "publish_runtime_project_outside_repository": "The publish project must be inside the selected repository."
+    "publish_runtime_project_outside_repository": "The publish project must be inside the selected repository.",
+    "provider_schema_load_failed": "Couldn't load the provider's parameter schema.",
+    "updater_not_configured": "The update source isn't configured or is unavailable.",
+    "check_update_failed": "Couldn't check for updates.",
+    "download_update_failed": "Couldn't download the update.",
+    "install_update_failed": "Couldn't install the update."
   }
 }

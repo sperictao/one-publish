@@ -3,6 +3,8 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 
 import { CompositionEditorDialog } from "@/components/publish/CompositionEditorDialog";
 import type { PublishComposition } from "@/generated/tauri-contracts";
+import { __setTranslationsCacheForTest } from "@/hooks/useI18n";
+import zh from "@/i18n/zh.json";
 import type { ConfigProfile } from "@/lib/store/types";
 
 const { listPublishAdapterCatalogMock, toastErrorMock, toastSuccessMock } =
@@ -88,6 +90,8 @@ function renderDialog(overrides: { profile?: ConfigProfile } = {}) {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  // 预置 zh 翻译，首帧即可按错误码本地化，不依赖异步加载时序。
+  __setTranslationsCacheForTest({ zh });
   listPublishAdapterCatalogMock.mockResolvedValue({
     executionBackends: ["local-execution"],
     artifactStores: ["temporary-artifact-store"],
@@ -184,6 +188,54 @@ describe("CompositionEditorDialog", () => {
     });
     expect(toastSuccessMock).toHaveBeenCalled();
     expect(props.onOpenChange).toHaveBeenCalledWith(false);
+  });
+
+  it("localizes save and rebind failures by error code", async () => {
+    const { props } = renderDialog();
+    // Tauri invoke 以 AppError 对象 reject，而不是 Error 实例。
+    props.onSaveComposition.mockRejectedValue({
+      kind: "validation",
+      message: "cannot edit system profile",
+      details: null,
+      code: "system_profile_immutable",
+    });
+    props.onRebindProject.mockRejectedValue({
+      kind: "validation",
+      message: "profile lookup failed",
+      details: "configuration-1",
+      code: "profile_not_found",
+    });
+
+    fireEvent.click(await screen.findByTestId("composition-save"));
+    await waitFor(() => {
+      expect(toastErrorMock).toHaveBeenCalledWith("保存发布组合失败", {
+        description: "系统默认配置文件不能编辑或删除",
+      });
+    });
+
+    fireEvent.click(screen.getByTestId("composition-rebind"));
+    await waitFor(() => {
+      expect(toastErrorMock).toHaveBeenCalledWith("重新绑定失败", {
+        description: "未找到配置文件 | configuration-1",
+      });
+    });
+    expect(props.onOpenChange).not.toHaveBeenCalled();
+  });
+
+  it("describes catalog load failures without rendering [object Object]", async () => {
+    listPublishAdapterCatalogMock.mockRejectedValue({
+      kind: "unknown",
+      message: "catalog unavailable",
+      details: null,
+      code: null,
+    });
+    renderDialog();
+
+    await waitFor(() => {
+      expect(toastErrorMock).toHaveBeenCalledWith(expect.any(String), {
+        description: "catalog unavailable",
+      });
+    });
   });
 
   it("rebinds the project explicitly and closes the editor", async () => {

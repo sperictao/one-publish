@@ -240,6 +240,7 @@ mod tests {
         let e: AppError = CompileError::UnsupportedProvider("x".to_string()).into();
         assert_eq!(e.kind, ErrorKind::UnsupportedProvider);
         assert_eq!(e.code.as_deref(), Some("unsupported_provider"));
+        assert_eq!(e.message, "unsupported provider");
         assert_eq!(e.details.as_deref(), Some("x"));
 
         let e: AppError = CompileError::UnsupportedSpecVersion(999).into();

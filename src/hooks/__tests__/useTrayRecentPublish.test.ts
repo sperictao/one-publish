@@ -39,6 +39,12 @@ vi.mock("@/lib/systemNotification", () => ({
   showSystemNotification: mocks.showSystemNotification,
 }));
 
+// 用真实 zh 文案，顺带校验后端错误码已在 `errors.<code>` 登记。
+vi.mock("@/hooks/useI18n", async () => {
+  const zh = (await import("@/i18n/zh.json")).default;
+  return { useI18n: () => ({ translations: zh }) };
+});
+
 import {
   useTrayRecentPublish,
   resolveTrayPublishRequest,
@@ -326,7 +332,7 @@ describe("useTrayRecentPublish", () => {
     );
   });
 
-  it("后端仓库快照缺失时会反馈原始错误", async () => {
+  it("后端仓库快照缺失时按错误码本地化通知", async () => {
     const runPublishSpec = vi.fn().mockResolvedValue(undefined);
     let handler:
       | ((event: { payload: TrayPublishRequestPayload }) => Promise<void>)
@@ -335,7 +341,13 @@ describe("useTrayRecentPublish", () => {
       handler = callback;
       return () => {};
     });
-    mocks.getRepository.mockRejectedValue(new Error("未找到仓库: repo-404"));
+    // Tauri invoke 以 AppError 对象 reject，而不是 Error 实例。
+    mocks.getRepository.mockRejectedValue({
+      kind: "validation",
+      message: "repository lookup failed",
+      details: "repo-404",
+      code: "repository_not_found",
+    });
 
     renderHook(() =>
       useTrayRecentPublish({
@@ -368,7 +380,7 @@ describe("useTrayRecentPublish", () => {
     expect(mocks.setTrayPublishStatus).toHaveBeenCalledWith("failure");
     expect(mocks.showSystemNotification).toHaveBeenCalledWith({
       title: "状态栏发布启动失败",
-      body: "未找到仓库: repo-404",
+      body: "未找到仓库 | repo-404",
     });
   });
 
