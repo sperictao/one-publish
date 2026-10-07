@@ -146,7 +146,7 @@ export interface AppDialogsProps {
     open: boolean;
     onOpenChange: (open: boolean) => void;
     profileManagement: ProfileManagementActions;
-    onLoadProfile: (profile: ConfigProfile) => void;
+    onLoadProfile: (profile: ConfigProfile) => boolean;
     currentProviderId: string;
     repoId: string | null;
     currentParameters: ConfigParameters;
@@ -300,6 +300,9 @@ export function AppDialogs(props: AppDialogsProps) {
             }
             onLoadProfile={props.config.onLoadProfile}
             currentProviderId={props.config.currentProviderId}
+            repositoryProviderId={
+              props.config.profileManagement.repositoryProviderId
+            }
             repoId={props.config.repoId}
             currentParameters={props.config.currentParameters}
           />

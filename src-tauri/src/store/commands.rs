@@ -347,11 +347,37 @@ pub async fn update_publish_edit_state(
             project_binding,
         });
     } else if let Some(selection) = update.selection {
+        ensure_selection_matches_repository_provider(repo, &selection)?;
         repo.publish_config.selection = Some(selection);
     }
 
     update_state(state)?;
     Ok(get_bootstrap_state())
+}
+
+/// 命名配置的当前修订必须属于仓库声明的 Provider；跨 Provider 导入的存量
+/// 配置不能被选为当前发布配置。
+fn ensure_selection_matches_repository_provider(
+    repo: &Repository,
+    selection: &PublishSelectionRef,
+) -> Result<(), AppError> {
+    let PublishSelectionRef::Revision { configuration_id } = selection else {
+        return Ok(());
+    };
+    let Some(revision) = repo
+        .publish_config
+        .profile(configuration_id)
+        .and_then(ConfigProfile::current_revision)
+    else {
+        return Ok(());
+    };
+    match repo.provider_mismatch_reason(&revision.provider_id) {
+        Some(reason) => Err(AppError::validation_with_code(
+            format!("配置的 Provider 与仓库不一致，不能选择：{reason}"),
+            "publish_selection_provider_mismatch",
+        )),
+        None => Ok(()),
+    }
 }
 
 fn upsert_edit_draft(
@@ -1063,5 +1089,68 @@ mod tests {
         assert_eq!(record.spec, original.spec);
         assert_eq!(record.file_count, original.file_count);
         assert_eq!(record.warnings, original.warnings);
+    }
+
+    #[test]
+    fn revision_selection_refuses_profiles_from_another_repository_provider() {
+        use super::ensure_selection_matches_repository_provider;
+        use crate::store::PublishSelectionRef;
+
+        let mut publish_config = RepoPublishConfig::default();
+        let go_profile_id = publish_config
+            .create_profile(
+                "Linux".to_string(),
+                "go".to_string(),
+                json!({ "goos": "linux", "goarch": "amd64" }),
+                None,
+                None,
+                "2026-10-06T10:00:00Z".to_string(),
+            )
+            .expect("create go profile")
+            .id
+            .clone();
+        let cargo_profile_id = publish_config
+            .create_profile(
+                "Release".to_string(),
+                "cargo".to_string(),
+                json!({ "release": true }),
+                None,
+                None,
+                "2026-10-06T10:00:00Z".to_string(),
+            )
+            .expect("create cargo profile")
+            .id
+            .clone();
+        let mut repo = Repository {
+            id: "rust-repo".to_string(),
+            name: "Rust".to_string(),
+            path: "/rust-repo".to_string(),
+            project_file: None,
+            current_branch: "main".to_string(),
+            branches: Vec::new(),
+            is_main: true,
+            provider_id: Some("cargo".to_string()),
+            publish_config,
+        };
+        let select = |configuration_id: &str| PublishSelectionRef::Revision {
+            configuration_id: configuration_id.to_string(),
+        };
+
+        let error = ensure_selection_matches_repository_provider(&repo, &select(&go_profile_id))
+            .expect_err("go profile must not be selectable in a cargo repository");
+        assert_eq!(
+            error.code.as_deref(),
+            Some("publish_selection_provider_mismatch")
+        );
+        assert!(error
+            .message
+            .contains("repository_provider_mismatch:go:cargo"));
+
+        ensure_selection_matches_repository_provider(&repo, &select(&cargo_profile_id))
+            .expect("matching provider stays selectable");
+
+        repo.provider_id = None;
+        ensure_selection_matches_repository_provider(&repo, &select(&go_profile_id))
+            .expect("repositories without a declared provider stay unrestricted");
     }
 }

@@ -49,6 +49,20 @@ pub struct Repository {
     pub publish_config: RepoPublishConfig,
 }
 
+impl Repository {
+    /// 配置 Provider 与仓库声明的 Provider 不一致时返回阻断原因；仓库未声明
+    /// Provider 时不限制。导入、选择与发布准备共用这一条判定。
+    pub fn provider_mismatch_reason(&self, provider_id: &str) -> Option<String> {
+        let repository_provider = self
+            .provider_id
+            .as_deref()
+            .map(str::trim)
+            .filter(|value| !value.is_empty())?;
+        (repository_provider != provider_id)
+            .then(|| format!("repository_provider_mismatch:{provider_id}:{repository_provider}"))
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
 #[serde(rename_all = "camelCase", default)]
 #[ts(rename_all = "camelCase")]

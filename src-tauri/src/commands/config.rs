@@ -1,9 +1,37 @@
 use crate::config_export::{
     build_config_export, validate_import, ConfigExport, ConfigProfile, CONFIG_VERSION,
 };
-use std::path::Path;
+use std::path::PathBuf;
+use ts_rs::TS;
 
-/// 导出配置到文件
+/// 导入配置的应用结果：按处理方式分别计数，供界面如实反馈。
+#[derive(Debug, Clone, Default, PartialEq, Eq, serde::Serialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(rename_all = "camelCase")]
+pub struct ImportedConfigSummary {
+    pub imported: usize,
+    /// 仓库内已有同名配置，保留原配置、不覆盖。
+    pub skipped_existing: usize,
+    /// 配置 Provider 与仓库声明的 Provider 不一致，拒绝导入。
+    pub skipped_provider_mismatch: usize,
+}
+
+/// 导入对话框只列出 `.json` 文件；Linux (GTK) 保存对话框不会按过滤器补扩展名，
+/// 因此导出时统一补齐，保证导出的文件能被再次导入。
+fn ensure_json_extension(file_path: &str) -> PathBuf {
+    let path = PathBuf::from(file_path);
+    let has_json_extension = path
+        .extension()
+        .and_then(|extension| extension.to_str())
+        .is_some_and(|extension| extension.eq_ignore_ascii_case("json"));
+    if has_json_extension {
+        path
+    } else {
+        PathBuf::from(format!("{file_path}.json"))
+    }
+}
+
+/// 导出配置到文件，返回实际写入的路径（可能补齐了 `.json` 扩展名）。
 #[tauri::command]
 pub async fn export_config(
     repo_id: String,
@@ -34,13 +62,14 @@ pub async fn export_config(
             "export_config_serialize_failed",
         )
     })?;
-    crate::security::write_private_text_file(Path::new(&file_path), &json).map_err(|source| {
+    let file_path = ensure_json_extension(&file_path);
+    crate::security::write_private_text_file(&file_path, &json).map_err(|source| {
         crate::errors::AppError::config_with_code(
             format!("write error: {}", source),
             "export_config_write_failed",
         )
     })?;
-    Ok(file_path)
+    Ok(file_path.to_string_lossy().into_owned())
 }
 
 /// 导入配置从文件
@@ -86,19 +115,23 @@ fn validate_profiles_for_apply(
     Ok(config.profiles)
 }
 
-/// 将导入的 profile 合并进指定仓库，同名 profile 静默跳过（仅 log::warn）。
+/// 将导入的 profile 合并进指定仓库：Provider 与仓库不一致的拒绝导入，同名的
+/// 保留原配置、不覆盖，其余追加。
 ///
-/// 纯函数：仅操作传入的 `Repository`，返回实际追加的条数。BTreeMap->serde_json::Value 的
-/// 参数转换、跳过语义与原 `apply_imported_config` 循环体保持一致。
+/// 纯函数：仅操作传入的 `Repository`，返回各处理方式的计数。
 pub(crate) fn merge_imported_profiles(
     repo: &mut crate::store::Repository,
     profiles: Vec<ConfigProfile>,
-) -> usize {
-    let mut imported = 0usize;
+) -> Result<ImportedConfigSummary, crate::errors::AppError> {
+    let mut summary = ImportedConfigSummary::default();
     for profile in profiles {
-        let profile_name = profile.name.clone();
+        if let Some(reason) = repo.provider_mismatch_reason(&profile.provider_id) {
+            log::warn!("配置文件 '{}' 拒绝导入: {}", profile.name, reason);
+            summary.skipped_provider_mismatch += 1;
+            continue;
+        }
         let parameters = serde_json::Value::Object(profile.parameters.into_iter().collect());
-        let result = repo
+        let imported = repo
             .publish_config
             .import_profile(crate::store::ConfigurationImport {
                 name: profile.name,
@@ -115,23 +148,24 @@ pub(crate) fn merge_imported_profiles(
                 profile_group: profile.profile_group,
                 created_at: profile.created_at.to_rfc3339(),
                 is_system_default: profile.is_system_default,
-            });
-        match result {
-            Ok(Some(_)) => imported += 1,
-            Ok(None) => log::warn!("配置文件 '{}' 已存在，跳过导入", profile_name),
-            Err(error) => log::warn!("导入配置文件 '{}' 失败: {}", profile_name, error),
+            })?
+            .is_some();
+        if imported {
+            summary.imported += 1;
+        } else {
+            summary.skipped_existing += 1;
         }
     }
-    imported
+    Ok(summary)
 }
 
-/// 应用导入的配置（按仓库隔离）
+/// 应用导入的配置（按仓库隔离）；任一配置写入失败时整体不落盘。
 #[tauri::command]
 pub async fn apply_imported_config(
     app: tauri::AppHandle,
     repo_id: String,
     profiles: Vec<ConfigProfile>,
-) -> Result<(), crate::errors::AppError> {
+) -> Result<ImportedConfigSummary, crate::errors::AppError> {
     let _timer =
         crate::commands::middleware::CommandTimer::new("commands::config::apply_imported_config");
     let profiles = validate_profiles_for_apply(profiles)?;
@@ -147,7 +181,10 @@ pub async fn apply_imported_config(
             )
         })?;
 
-    merge_imported_profiles(repo, profiles);
+    let summary = merge_imported_profiles(repo, profiles)?;
+    if summary.imported == 0 {
+        return Ok(summary);
+    }
 
     crate::store::update_state(state).map_err(|source| {
         crate::errors::AppError::config_with_code(
@@ -158,7 +195,7 @@ pub async fn apply_imported_config(
     if let Err(err) = crate::tray::update_tray_menu(app.clone()).await {
         log::warn!("刷新托盘菜单失败: {}", err);
     }
-    Ok(())
+    Ok(summary)
 }
 
 #[cfg(test)]
@@ -219,6 +256,8 @@ mod tests {
     #[test]
     fn merge_imports_all_new_profiles_and_preserves_fields() {
         let mut repo = test_repo("repo-1");
+        // 仓库未声明 Provider 时不限制导入配置的 Provider。
+        repo.provider_id = None;
 
         let mut parameters = BTreeMap::new();
         parameters.insert(
@@ -250,9 +289,15 @@ mod tests {
             },
         ];
 
-        let imported = merge_imported_profiles(&mut repo, profiles);
+        let summary = merge_imported_profiles(&mut repo, profiles).expect("merge profiles");
 
-        assert_eq!(imported, 2);
+        assert_eq!(
+            summary,
+            ImportedConfigSummary {
+                imported: 2,
+                ..ImportedConfigSummary::default()
+            }
+        );
         assert_eq!(repo.publish_config.profiles.len(), 2);
 
         let alpha = &repo.publish_config.profiles[0];
@@ -320,9 +365,17 @@ mod tests {
             import_profile("new"),
         ];
 
-        let imported = merge_imported_profiles(&mut repo, profiles);
+        let summary = merge_imported_profiles(&mut repo, profiles).expect("merge profiles");
 
-        assert_eq!(imported, 1, "仅新名 profile 应被导入");
+        assert_eq!(
+            summary,
+            ImportedConfigSummary {
+                imported: 1,
+                skipped_existing: 1,
+                skipped_provider_mismatch: 0,
+            },
+            "仅新名 profile 应被导入，重名计入跳过"
+        );
         assert_eq!(repo.publish_config.profiles.len(), 2, "重名保留 + 新名追加");
 
         let original = &repo.publish_config.profiles[0];
@@ -361,9 +414,10 @@ mod tests {
         // 两个导入项均与已存在的 "dup" 重名
         let profiles = vec![import_profile("dup"), import_profile("dup")];
 
-        let imported = merge_imported_profiles(&mut repo, profiles);
+        let summary = merge_imported_profiles(&mut repo, profiles).expect("merge profiles");
 
-        assert_eq!(imported, 0, "全部重名应返回 0");
+        assert_eq!(summary.imported, 0, "全部重名应返回 0");
+        assert_eq!(summary.skipped_existing, 2);
         assert_eq!(
             repo.publish_config.profiles.len(),
             1,
@@ -387,11 +441,80 @@ mod tests {
                 false,
             ));
 
-        let imported = merge_imported_profiles(&mut repo, Vec::new());
+        let summary = merge_imported_profiles(&mut repo, Vec::new()).expect("merge profiles");
 
-        assert_eq!(imported, 0);
+        assert_eq!(summary, ImportedConfigSummary::default());
         assert_eq!(repo.publish_config.profiles.len(), 1);
         assert_eq!(repo.publish_config.profiles[0].name, "existing");
+    }
+
+    #[test]
+    fn merge_refuses_profiles_from_another_repository_provider() {
+        // 复现：Go 仓库导出的配置导入 Rust 仓库，Go 配置不得进入列表。
+        let mut repo = Repository {
+            provider_id: Some("cargo".to_string()),
+            ..test_repo("rust-repo")
+        };
+        let profiles = vec![
+            ConfigProfile {
+                provider_id: "go".to_string(),
+                parameters: BTreeMap::from([
+                    ("goos".to_string(), serde_json::json!("linux")),
+                    ("goarch".to_string(), serde_json::json!("amd64")),
+                ]),
+                ..import_profile("linux-amd64")
+            },
+            ConfigProfile {
+                provider_id: "cargo".to_string(),
+                ..import_profile("release")
+            },
+        ];
+
+        let summary = merge_imported_profiles(&mut repo, profiles).expect("merge profiles");
+
+        assert_eq!(
+            summary,
+            ImportedConfigSummary {
+                imported: 1,
+                skipped_existing: 0,
+                skipped_provider_mismatch: 1,
+            }
+        );
+        let names = repo
+            .publish_config
+            .profiles
+            .iter()
+            .map(|profile| profile.name.as_str())
+            .collect::<Vec<_>>();
+        assert_eq!(names, ["release"], "Go 配置不应写入 Rust 仓库");
+    }
+
+    #[test]
+    fn export_path_gets_json_extension_when_missing() {
+        assert_eq!(
+            ensure_json_extension("/tmp/backup"),
+            PathBuf::from("/tmp/backup.json"),
+            "GTK 保存对话框不补扩展名时应补齐"
+        );
+        assert_eq!(
+            ensure_json_extension("/tmp/backup.txt"),
+            PathBuf::from("/tmp/backup.txt.json"),
+            "非 json 扩展名也要补齐，否则导入对话框看不到"
+        );
+        assert_eq!(
+            ensure_json_extension("/tmp/backup.json"),
+            PathBuf::from("/tmp/backup.json")
+        );
+        assert_eq!(
+            ensure_json_extension("/tmp/Backup.JSON"),
+            PathBuf::from("/tmp/Backup.JSON"),
+            "已有 json 扩展名（大小写不敏感）时保持原样"
+        );
+        assert_eq!(
+            ensure_json_extension("/tmp/one.publish/backup"),
+            PathBuf::from("/tmp/one.publish/backup.json"),
+            "目录名中的点不算扩展名"
+        );
     }
 
     #[test]
@@ -428,9 +551,9 @@ mod tests {
             ..ConfigProfile::default()
         }];
 
-        let imported = merge_imported_profiles(&mut repo, profiles);
+        let summary = merge_imported_profiles(&mut repo, profiles).expect("merge profiles");
 
-        assert_eq!(imported, 1);
+        assert_eq!(summary.imported, 1);
         let stored = &repo.publish_config.profiles[0];
         let stored_parameters = &stored
             .current_revision()
