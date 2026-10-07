@@ -130,9 +130,10 @@ impl RegisteredAttemptOperation {
         })?;
         if !active.insert(attempt_id.to_string()) {
             return Err(AppError::publish_with_code(
-                format!("publish attempt {attempt_id} already has an active operation"),
+                "publish attempt already has an active operation",
                 "publish_runtime_attempt_busy",
-            ));
+            )
+            .with_details(attempt_id));
         }
         Ok(Self {
             attempt_id: attempt_id.to_string(),
@@ -1516,10 +1517,13 @@ fn build_resolved_spec(
     // 命令参数投影：保留键不进入命令；false/null/空值原样保留。
     let parameters: BTreeMap<String, SpecValue> =
         serde_json::from_value(command_parameters(&content.parameters)).map_err(|error| {
-            PublishBuildFailure::Fatal(AppError::validation_with_code(
-                format!("configuration parameters must be a JSON object of schema values: {error}"),
-                "publish_runtime_parameter_shape_invalid",
-            ))
+            PublishBuildFailure::Fatal(
+                AppError::validation_with_code(
+                    "configuration parameters must be a JSON object of schema values",
+                    "publish_runtime_parameter_shape_invalid",
+                )
+                .with_details(error.to_string()),
+            )
         })?;
     // 在草稿落盘和 journal 封存前拒绝凭据值；不能用脱敏值代替实际执行参数。
     if sensitive_publish_input(content, &parameters) {
@@ -1850,10 +1854,8 @@ pub async fn start_publish_runtime(
     })
     .await
     .map_err(|error| {
-        AppError::publish_with_code(
-            format!("publish runtime task failed: {error}"),
-            "publish_runtime_task_failed",
-        )
+        AppError::publish_with_code("publish runtime task failed", "publish_runtime_task_failed")
+            .with_details(error.to_string())
     })?
 }
 
@@ -1922,9 +1924,10 @@ fn unix_now_duration() -> Result<std::time::Duration, AppError> {
         .duration_since(UNIX_EPOCH)
         .map_err(|error| {
             AppError::publish_with_code(
-                format!("system clock is before the unix epoch: {error}"),
+                "system clock is before the unix epoch",
                 "publish_runtime_clock_invalid",
             )
+            .with_details(error.to_string())
         })
 }
 
@@ -2108,9 +2111,10 @@ fn prepared_release_input(prepared: &PreparedPublishPlan, key: &str) -> Result<S
         .map(ToString::to_string)
         .ok_or_else(|| {
             AppError::publish_with_code(
-                format!("prepared runtime has no {key}"),
+                "prepared runtime is missing a release input",
                 "publish_runtime_release_input_missing",
             )
+            .with_details(key)
         })
 }
 
@@ -2204,9 +2208,10 @@ pub async fn resume_publish_runtime(
     .await
     .map_err(|error| {
         AppError::publish_with_code(
-            format!("publish runtime resume task failed: {error}"),
+            "publish runtime resume task failed",
             "publish_runtime_resume_task_failed",
         )
+        .with_details(error.to_string())
     })?
 }
 
@@ -2645,12 +2650,10 @@ pub(crate) fn composition_binding(
 ) -> Result<AdapterBinding, AppError> {
     let Value::Object(values) = &revision.settings else {
         return Err(AppError::validation_with_code(
-            format!(
-                "adapter {} settings must be a JSON object",
-                revision.adapter_id
-            ),
+            "adapter settings must be a JSON object",
             "publish_runtime_composition_settings_invalid",
-        ));
+        )
+        .with_details(revision.adapter_id.as_str()));
     };
     let mut settings = AdapterSettings::new(revision.settings_version);
     for (key, value) in values {
@@ -2743,9 +2746,10 @@ fn adapter_kind_label(kind: AdapterKind) -> &'static str {
 /// 不静默替换实现、跳过步骤或降低目标集合。
 fn unsupported_adapter(kind: &str, adapter_id: &str) -> AppError {
     AppError::validation_with_code(
-        format!("publish composition requires {kind} adapter {adapter_id}, which is not built into this runtime"),
+        "publish composition requires an adapter that is not built into this runtime",
         "publish_runtime_adapter_unavailable",
     )
+    .with_details(format!("{kind}: {adapter_id}"))
 }
 
 fn release_identity(snapshot: &PlanningInputSnapshot) -> Result<ReleaseIdentity, AppError> {
@@ -2757,9 +2761,10 @@ fn release_identity(snapshot: &PlanningInputSnapshot) -> Result<ReleaseIdentity,
             .filter(|value| !value.trim().is_empty())
             .ok_or_else(|| {
                 AppError::publish_with_code(
-                    format!("prepared runtime release identity is missing {key}"),
+                    "prepared runtime release identity is missing a field",
                     "publish_runtime_release_identity_missing",
                 )
+                .with_details(key)
             })
     };
     Ok(ReleaseIdentity::new(
@@ -3008,8 +3013,9 @@ fn local_delivery_root(provider_output_directory: &str) -> Result<String, AppErr
         .ok_or_else(|| {
             AppError::validation_with_code(
                 "provider output directory must have a terminal path component",
-                "publish_runtime_provider_output_invalid",
+                "publish_runtime_provider_output_name_missing",
             )
+            .with_details(provider_output_directory)
         })?;
     Ok(output
         .with_file_name(format!("{name}.one-publish-deliveries"))
@@ -3250,19 +3256,21 @@ impl PreparedSourceGuard {
                 .filter(|value| !value.trim().is_empty())
                 .ok_or_else(|| {
                     AppError::publish_with_code(
-                        format!("prepared runtime source identity is missing {key}"),
+                        "prepared runtime source identity is missing a field",
                         "publish_runtime_source_identity_missing",
                     )
+                    .with_details(key)
                 })
         };
         let repository = canonical_repository(Path::new(release_value("repository_path")?))?;
-        let source_root = fs::canonicalize(repository.join(release_value("source_root")?))
-            .map_err(|error| {
-                AppError::publish_with_code(
-                    format!("prepared runtime source root is unavailable: {error}"),
-                    "publish_runtime_source_identity_missing",
-                )
-            })?;
+        let source_root_path = repository.join(release_value("source_root")?);
+        let source_root = fs::canonicalize(&source_root_path).map_err(|error| {
+            AppError::publish_with_code(
+                "prepared runtime source root is unavailable",
+                "publish_runtime_source_identity_missing",
+            )
+            .with_details(format!("{}: {error}", source_root_path.display()))
+        })?;
         if !source_root.is_dir() || !source_root.starts_with(&repository) {
             return Err(AppError::publish_with_code(
                 "prepared runtime source root is outside the selected repository",
@@ -3425,13 +3433,14 @@ fn source_excluded_roots(
             result.and_then(|root| {
                 if repository.starts_with(&root) || source_root.starts_with(&root) {
                     Err(AppError::validation_with_code(
-                        format!(
-                            "publish output {} cannot contain the selected source root {}",
-                            root.display(),
-                            source_root.display()
-                        ),
-                        "publish_runtime_provider_output_invalid",
-                    ))
+                        "publish output cannot contain the selected source root",
+                        "publish_runtime_provider_output_contains_source",
+                    )
+                    .with_details(format!(
+                        "{} ⊇ {}",
+                        root.display(),
+                        source_root.display()
+                    )))
                 } else {
                     Ok(root)
                 }
@@ -3455,12 +3464,10 @@ fn normalize_execution_path(repository: &Path, path: &Path) -> Result<PathBuf, A
             Component::ParentDir => {
                 if !normalized.pop() {
                     return Err(AppError::validation_with_code(
-                        format!(
-                            "publish path {} escapes the filesystem root",
-                            path.display()
-                        ),
-                        "publish_runtime_provider_output_invalid",
-                    ));
+                        "publish path escapes the filesystem root",
+                        "publish_runtime_provider_output_escapes_root",
+                    )
+                    .with_details(path.display().to_string()));
                 }
             }
             Component::Normal(value) => normalized.push(value),
@@ -3468,29 +3475,24 @@ fn normalize_execution_path(repository: &Path, path: &Path) -> Result<PathBuf, A
     }
     let mut existing = normalized.as_path();
     let mut missing = Vec::new();
+    let ancestor_missing = || {
+        AppError::validation_with_code(
+            "publish path has no existing ancestor",
+            "publish_runtime_provider_output_ancestor_missing",
+        )
+        .with_details(path.display().to_string())
+    };
     while !existing.exists() {
-        let name = existing.file_name().ok_or_else(|| {
-            AppError::validation_with_code(
-                format!("publish path {} has no existing ancestor", path.display()),
-                "publish_runtime_provider_output_invalid",
-            )
-        })?;
+        let name = existing.file_name().ok_or_else(ancestor_missing)?;
         missing.push(name.to_os_string());
-        existing = existing.parent().ok_or_else(|| {
-            AppError::validation_with_code(
-                format!("publish path {} has no existing ancestor", path.display()),
-                "publish_runtime_provider_output_invalid",
-            )
-        })?;
+        existing = existing.parent().ok_or_else(ancestor_missing)?;
     }
     let mut canonical = fs::canonicalize(existing).map_err(|error| {
         AppError::validation_with_code(
-            format!(
-                "failed to resolve publish path ancestor {}: {error}",
-                existing.display()
-            ),
-            "publish_runtime_provider_output_invalid",
+            "failed to resolve publish path ancestor",
+            "publish_runtime_provider_output_ancestor_unresolved",
         )
+        .with_details(format!("{}: {error}", existing.display()))
     })?;
     for component in missing.into_iter().rev() {
         canonical.push(component);
@@ -3750,9 +3752,10 @@ fn runtime_attempt_uncertain_error(attempt_id: &str, error: impl std::fmt::Displ
 
 fn runtime_serialization_error(error: serde_json::Error) -> AppError {
     AppError::publish_with_code(
-        format!("failed to serialize publish runtime contract: {error}"),
+        "failed to serialize or parse publish runtime contract",
         "publish_runtime_serialization_failed",
     )
+    .with_details(error.to_string())
 }
 
 #[cfg(test)]
@@ -5965,8 +5968,47 @@ mod tests {
 
         assert_eq!(
             error.code.as_deref(),
-            Some("publish_runtime_provider_output_invalid")
+            Some("publish_runtime_provider_output_contains_source")
         );
+        assert_eq!(
+            error.message,
+            "publish output cannot contain the selected source root"
+        );
+        let canonical = |path: &std::path::Path| {
+            std::fs::canonicalize(path)
+                .expect("canonical path")
+                .display()
+                .to_string()
+        };
+        assert_eq!(
+            error.details,
+            Some(format!("{} ⊇ {}", canonical(&output), canonical(&project)))
+        );
+    }
+
+    #[test]
+    fn provider_output_path_errors_name_each_reason_and_keep_paths_in_details() {
+        let error = super::local_delivery_root("/").expect_err("root has no terminal component");
+        assert_eq!(
+            error.code.as_deref(),
+            Some("publish_runtime_provider_output_name_missing")
+        );
+        assert_eq!(
+            error.message,
+            "provider output directory must have a terminal path component"
+        );
+        assert_eq!(error.details.as_deref(), Some("/"));
+
+        let repository = tempfile::tempdir().expect("create repository");
+        let escaping = std::path::PathBuf::from_iter(std::iter::repeat_n("..", 256));
+        let error = super::normalize_execution_path(repository.path(), &escaping)
+            .expect_err("parent segments cannot climb above the filesystem root");
+        assert_eq!(
+            error.code.as_deref(),
+            Some("publish_runtime_provider_output_escapes_root")
+        );
+        assert_eq!(error.message, "publish path escapes the filesystem root");
+        assert_eq!(error.details, Some(escaping.display().to_string()));
     }
 
     #[test]
@@ -6173,7 +6215,56 @@ mod tests {
             Ok(_) => panic!("unknown backend must be a specific capability error"),
             Err(error) => error,
         };
-        assert!(error.to_string().contains("jenkins"));
+        assert_eq!(
+            error.code.as_deref(),
+            Some("publish_runtime_adapter_unavailable")
+        );
+        assert_eq!(error.details.as_deref(), Some("execution backend: jenkins"));
+
+        // 计划输入快照缺字段时：message 静态，缺失的键进 details。
+        let error = match super::release_identity(&snapshot) {
+            Ok(_) => panic!("empty release input has no release identity"),
+            Err(error) => error,
+        };
+        assert_eq!(
+            error.code.as_deref(),
+            Some("publish_runtime_release_identity_missing")
+        );
+        assert_eq!(
+            error.message,
+            "prepared runtime release identity is missing a field"
+        );
+        assert_eq!(error.details.as_deref(), Some("project_identity"));
+        let error = match super::PreparedSourceGuard::from_snapshot(&snapshot) {
+            Ok(_) => panic!("empty release input has no source identity"),
+            Err(error) => error,
+        };
+        assert_eq!(
+            error.code.as_deref(),
+            Some("publish_runtime_source_identity_missing")
+        );
+        assert_eq!(error.details.as_deref(), Some("repository_path"));
+    }
+
+    #[test]
+    fn non_object_adapter_settings_keep_the_adapter_id_in_details() {
+        let error = super::composition_binding(
+            "destination",
+            super::AdapterKind::DeliveryDestination,
+            &crate::store::RevisionAdapterBinding {
+                adapter_id: super::SFTP_DESTINATION_ID.to_string(),
+                settings_version: 1,
+                settings: serde_json::json!(["not", "an", "object"]),
+                credentials: BTreeMap::new(),
+            },
+        )
+        .expect_err("array settings are rejected");
+        assert_eq!(
+            error.code.as_deref(),
+            Some("publish_runtime_composition_settings_invalid")
+        );
+        assert_eq!(error.message, "adapter settings must be a JSON object");
+        assert_eq!(error.details.as_deref(), Some(super::SFTP_DESTINATION_ID));
     }
 
     #[test]
@@ -6620,6 +6711,11 @@ mod tests {
             Err(error) => error,
         };
         assert_eq!(error.code.as_deref(), Some("publish_runtime_attempt_busy"));
+        assert_eq!(
+            error.message,
+            "publish attempt already has an active operation"
+        );
+        assert_eq!(error.details, Some(attempt_id.clone()));
         drop(first);
         super::RegisteredAttemptOperation::acquire(&attempt_id)
             .expect("released operation slot can be reacquired");

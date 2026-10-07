@@ -31,6 +31,9 @@ vi.mock("@/lib/store/api", async () => {
   };
 });
 
+import en from "@/i18n/en.json";
+import zh from "@/i18n/zh.json";
+import { __setTranslationsCacheForTest } from "@/hooks/useI18n";
 import { defaultAppState, type AppState } from "@/lib/store/types";
 import { useAppStore } from "@/stores/appStore";
 import { useAppState } from "@/hooks/useAppState";
@@ -75,6 +78,8 @@ describe("useAppState", () => {
   beforeEach(() => {
     vi.useFakeTimers();
     vi.clearAllMocks();
+    __setTranslationsCacheForTest({ zh, en });
+    localStorage.removeItem("app-language");
     // 重置 Zustand 单例 store，保证测试隔离
     useAppStore.setState({ ...defaultAppState, isLoading: true, error: null });
     mocks.getAppState.mockResolvedValue(createAppState());
@@ -88,6 +93,7 @@ describe("useAppState", () => {
   afterEach(() => {
     vi.runOnlyPendingTimers();
     vi.useRealTimers();
+    localStorage.removeItem("app-language");
   });
 
   it("会合并同一仓库连续的发布配置 patch", async () => {
@@ -269,6 +275,36 @@ describe("useAppState", () => {
     expect(mocks.reorderRecentPublishConfigs).toHaveBeenCalledWith({
       repoId: "repo-1",
       configKeys: ["userprofile:beta", "userprofile:alpha"],
+    });
+  });
+
+  it("持久化失败提示的标题跟随当前界面语言", async () => {
+    localStorage.setItem("app-language", "en");
+    mocks.reorderRepositories.mockRejectedValueOnce(
+      new Error("reorder failed")
+    );
+    mocks.reorderRecentPublishConfigs.mockRejectedValueOnce(
+      new Error("recent failed")
+    );
+
+    const { result } = renderHook(() => useAppState());
+
+    await waitForAppStateLoad();
+
+    await act(async () => {
+      result.current.reorderRepositories(["repo-1"]);
+      result.current.reorderRecentPublishConfigs(["userprofile:alpha"]);
+    });
+
+    await vi.waitFor(() => {
+      expect(mocks.toastError).toHaveBeenCalledWith(
+        en.app.saveRepositoryOrderFailed,
+        { description: "reorder failed" }
+      );
+      expect(mocks.toastError).toHaveBeenCalledWith(
+        en.app.saveRecentPublishConfigOrderFailed,
+        { description: "recent failed" }
+      );
     });
   });
 });

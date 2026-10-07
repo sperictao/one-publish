@@ -5,6 +5,8 @@ import type {
   PreparedPublishRuntime,
 } from "@/generated/tauri-contracts";
 import {
+  describePublishSourceSelectionError,
+  PublishSourceSelectionError,
   resolveSelectedPublishSource,
   usePublishValidate,
   type UsePublishValidateParams,
@@ -119,16 +121,16 @@ describe("stored publish source", () => {
     const repository = repo();
     repository.publishConfig.drafts = [draft()];
     expect(() => resolveSelectedPublishSource(repository, "dotnet")).toThrow(
-      "不存在"
+      new PublishSourceSelectionError("draftUnresolved")
     );
     repository.publishConfig.drafts = [draft("project-b"), draft("project-b")];
     expect(() => resolveSelectedPublishSource(repository, "dotnet")).toThrow(
-      "不唯一"
+      new PublishSourceSelectionError("draftUnresolved")
     );
     repository.publishConfig.drafts = [draft("project-b")];
     repository.publishConfig.drafts[0].content.projectBinding = "project-a";
     expect(() => resolveSelectedPublishSource(repository, "dotnet")).toThrow(
-      "作用域不一致"
+      new PublishSourceSelectionError("draftScopeMismatch")
     );
   });
   it("blocks missing revision references and initializes absent selections through backend", () => {
@@ -144,7 +146,7 @@ describe("stored publish source", () => {
         },
         "npm"
       )
-    ).toThrow("修订不存在");
+    ).toThrow(new PublishSourceSelectionError("revisionMissing"));
     expect(
       resolveSelectedPublishSource(
         {
@@ -200,6 +202,54 @@ describe("stored publish source", () => {
     expect(result.current.runtimePreparationError).toContain("草稿不存在");
     expect(await result.current.resolvePublishRequest()).toBeNull();
     expect(prepare).not.toHaveBeenCalled();
+  });
+  it("localizes unresolved selections with the current UI language", () => {
+    const input = props();
+    input.selectedRepo!.publishConfig.drafts = [];
+    input.appT = en.app;
+    const { result, rerender } = renderHook(
+      (params: UsePublishValidateParams) => usePublishValidate(params),
+      { initialProps: input }
+    );
+    expect(result.current.runtimePreparationError).toBe(
+      en.app.publishSourceDraftUnresolved
+    );
+
+    rerender({ ...input, appT: zh.app });
+    expect(result.current.runtimePreparationError).toBe(
+      zh.app.publishSourceDraftUnresolved
+    );
+    expect(prepare).not.toHaveBeenCalled();
+
+    expect(
+      describePublishSourceSelectionError(
+        new PublishSourceSelectionError("revisionMissing"),
+        en.app
+      )
+    ).toBe(en.app.publishSourceRevisionMissing);
+    expect(
+      describePublishSourceSelectionError(
+        new PublishSourceSelectionError("draftScopeMismatch"),
+        en.app
+      )
+    ).toBe(en.app.publishSourceDraftScopeMismatch);
+    expect(
+      describePublishSourceSelectionError({ message: "raw failure" }, en.app)
+    ).toBe("raw failure");
+  });
+  it("does not prepare again when only the UI language changes", async () => {
+    prepare.mockResolvedValue(blocked);
+    const input = { ...props(), appT: en.app };
+    const { rerender } = renderHook(
+      (params: UsePublishValidateParams) => usePublishValidate(params),
+      { initialProps: input }
+    );
+    await waitFor(() => expect(prepare).toHaveBeenCalledOnce());
+
+    rerender({ ...input, appT: zh.app });
+    await act(async () => Promise.resolve());
+
+    expect(prepare).toHaveBeenCalledOnce();
   });
   it("retires the previous result immediately when run inputs change and ignores old responses", async () => {
     let finish!: (result: PreparedPublishRuntime) => void;

@@ -293,6 +293,53 @@ describe("localizeInvokeError", () => {
     );
   });
 
+  it.each([
+    ["publish_runtime_provider_output_name_missing", "/"],
+    ["publish_runtime_provider_output_contains_source", "/repo ⊇ /repo/app"],
+    ["publish_runtime_provider_output_escapes_root", "../../.."],
+    ["publish_runtime_provider_output_ancestor_missing", "/Volumes/Gone/out"],
+    [
+      "publish_runtime_provider_output_ancestor_unresolved",
+      "/locked: Permission denied (os error 13)",
+    ],
+    ["publish_runtime_attempt_busy", "attempt-123"],
+    [
+      "publish_runtime_parameter_shape_invalid",
+      "invalid type: string, expected a map",
+    ],
+    ["publish_runtime_task_failed", "task 7 panicked"],
+    ["publish_runtime_resume_task_failed", "task 8 panicked"],
+    ["publish_runtime_clock_invalid", "second time provided was later"],
+    ["publish_runtime_release_identity_missing", "version"],
+    ["publish_runtime_source_identity_missing", "source_root"],
+    ["publish_runtime_composition_settings_invalid", "sftp"],
+    ["publish_runtime_adapter_unavailable", "execution backend: jenkins"],
+    ["publish_runtime_serialization_failed", "EOF while parsing a value"],
+    ["remote_evidence_sync_failed", "dispatch rejected"],
+    ["remote_evidence_repository_unavailable", "/missing/repo"],
+    ["automation_binding_not_found", "binding-stable"],
+    ["remote_dispatch_backend_unsupported", "binding-stable"],
+    ["remote_dispatch_trigger_mismatch", "binding-stable"],
+    ["remote_dispatch_projection_not_installed", "binding-stable"],
+  ])(
+    "PublishRuntime 错误码 %s 在两种语言下本地化并附加 details",
+    (code, details) => {
+      const error = {
+        kind: "publish",
+        code,
+        message: "static message",
+        details,
+      };
+      for (const locale of [zh, en]) {
+        const text = (locale.errors as Record<string, string | undefined>)[
+          code
+        ];
+        expect(text, code).toBeTruthy();
+        expect(localizeInvokeError(error, locale)).toBe(`${text} | ${details}`);
+      }
+    }
+  );
+
   it("en.json 的 errors 文案不含中文，且与 zh.json 的错误码一一对应", () => {
     expect(Object.keys(en.errors).sort()).toEqual(
       Object.keys(zh.errors).sort()
@@ -457,6 +504,14 @@ describe("analyzePublishExecutionFailure", () => {
     ["publish_already_running", "already_running"],
     ["project_path_not_found", "project_path_not_found"],
     ["publish_output_windows_drive_root_missing", "output_path_invalid"],
+    ["publish_runtime_provider_output_name_missing", "output_path_invalid"],
+    ["publish_runtime_provider_output_contains_source", "output_path_invalid"],
+    ["publish_runtime_provider_output_escapes_root", "output_path_invalid"],
+    ["publish_runtime_provider_output_ancestor_missing", "output_path_invalid"],
+    [
+      "publish_runtime_provider_output_ancestor_unresolved",
+      "output_path_invalid",
+    ],
     ["publish_output_windows_style_path_on_posix", "output_path_incompatible"],
     [
       "publish_output_posix_absolute_path_on_windows",

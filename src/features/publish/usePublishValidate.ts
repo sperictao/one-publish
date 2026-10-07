@@ -87,6 +87,46 @@ export interface UsePublishValidateParams {
   setEnvironmentLastCheck: (snapshot: EnvironmentCheckSnapshot | null) => void;
 }
 
+export type PublishSourceSelectionFailure =
+  "revisionMissing" | "draftUnresolved" | "draftScopeMismatch";
+
+/** 持久化选择无法解析为发布来源；文案在渲染时按当前语言取 appT，切换语言即时生效。 */
+export class PublishSourceSelectionError extends Error {
+  readonly reason: PublishSourceSelectionFailure;
+
+  constructor(reason: PublishSourceSelectionFailure) {
+    super(`publish source selection is unresolved: ${reason}`);
+    this.name = "PublishSourceSelectionError";
+    this.reason = reason;
+  }
+}
+
+export function describePublishSourceSelectionError(
+  error: unknown,
+  appT: TranslationMap
+): string {
+  if (!(error instanceof PublishSourceSelectionError)) {
+    return extractInvokeErrorMessage(error);
+  }
+  switch (error.reason) {
+    case "revisionMissing":
+      return (
+        appT.publishSourceRevisionMissing ||
+        "所选发布配置或修订不存在，请重新选择配置"
+      );
+    case "draftUnresolved":
+      return (
+        appT.publishSourceDraftUnresolved ||
+        "所选项目草稿不存在或不唯一，请重新选择配置"
+      );
+    case "draftScopeMismatch":
+      return (
+        appT.publishSourceDraftScopeMismatch ||
+        "草稿内容与所选项目作用域不一致，请重新绑定项目"
+      );
+  }
+}
+
 export function resolveSelectedPublishSource(
   repository: NonNullable<UsePublishValidateParams["selectedRepo"]>,
   activeProviderId: string
@@ -105,7 +145,7 @@ export function resolveSelectedPublishSource(
         (item) => item.id === selection.configurationId
       );
       if (!profile?.revisionId) {
-        throw new Error("所选发布配置或修订不存在，请重新选择配置");
+        throw new PublishSourceSelectionError("revisionMissing");
       }
       return {
         kind: "revision",
@@ -120,7 +160,7 @@ export function resolveSelectedPublishSource(
           (draft.projectBinding ?? null) === selection.projectBinding
       );
       if (matches.length !== 1) {
-        throw new Error("所选项目草稿不存在或不唯一，请重新选择配置");
+        throw new PublishSourceSelectionError("draftUnresolved");
       }
       const draft = matches[0];
       if (
@@ -128,7 +168,7 @@ export function resolveSelectedPublishSource(
         (draft.content.projectBinding ?? null) !==
           (draft.projectBinding ?? null)
       ) {
-        throw new Error("草稿内容与所选项目作用域不一致，请重新绑定项目");
+        throw new PublishSourceSelectionError("draftScopeMismatch");
       }
       return {
         kind: "draft",
@@ -226,10 +266,15 @@ export function usePublishValidate({
         error: null,
       };
     } catch (error) {
-      return { source: null, error: extractInvokeErrorMessage(error) };
+      return { source: null, error };
     }
   }, [selectedRepo, activeProviderId]);
   const currentPublishSource = selectedSource.source;
+  // 选择解析错误在渲染时本地化：appT 不进 selectedSource 的依赖，
+  // 切换语言不会重建来源对象、触发重新准备。
+  const selectedSourceError = selectedSource.error
+    ? describePublishSourceSelectionError(selectedSource.error, appT)
+    : null;
   const publishPresentationSelectionKey = selectionKey;
 
   // plan 033 路线 B：无命名配置时经自动草稿配置准备，发布总是需要 Runtime。
@@ -247,7 +292,7 @@ export function usePublishValidate({
       ? preparedRuntimeState.value
       : null;
   const runtimePreparationError =
-    selectedSource.error ??
+    selectedSourceError ??
     (runtimePreparationKey &&
     runtimePreparationErrorState?.key === runtimePreparationKey
       ? localizeInvokeError(runtimePreparationErrorState.error, translations)
