@@ -1,4 +1,5 @@
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { useI18n } from "@/hooks/useI18n";
 import type {
   ProjectScanCandidates,
   ProviderManifest,
@@ -41,6 +42,13 @@ export function useRepositoryActions({
   updateRepository,
   applySelectedRepositoryProvider,
 }: UseRepositoryActionsParams) {
+  const { translations } = useI18n();
+  // 失败文案只在 toast 时读取最新翻译；detect / refresh 回调会进入编辑窗口的
+  // useEffect 依赖，translations 不进依赖，避免翻译加载完成时重复自动探测。
+  const translationsRef = useRef(translations);
+  useEffect(() => {
+    translationsRef.current = translations;
+  }, [translations]);
   // 添加流程是「选目录 → 检测 → 扫描分支 → 写库」的长链路，
   // 期间必须让入口可见地进入进行中状态，并禁止并发触发第二次目录选择。
   const [isAddingRepo, setIsAddingRepo] = useState(false);
@@ -58,6 +66,7 @@ export function useRepositoryActions({
       const { handleAddRepoRuntime } = await loadRepositoryActionsRuntime();
       return await handleAddRepoRuntime({
         appT,
+        translations: translationsRef.current,
         providers,
         repositories,
         addRepository,
@@ -71,7 +80,12 @@ export function useRepositoryActions({
   const handleRemoveRepo = useCallback(
     async (repo: Repository) => {
       const { handleRemoveRepoRuntime } = await loadRepositoryActionsRuntime();
-      await handleRemoveRepoRuntime({ appT, repo, removeRepository });
+      await handleRemoveRepoRuntime({
+        appT,
+        translations: translationsRef.current,
+        repo,
+        removeRepository,
+      });
     },
     [appT, removeRepository]
   );
@@ -80,7 +94,11 @@ export function useRepositoryActions({
     async (repo: Repository) => {
       const { handleOpenRepoDirectoryRuntime } =
         await loadRepositoryActionsRuntime();
-      await handleOpenRepoDirectoryRuntime({ appT, repo });
+      await handleOpenRepoDirectoryRuntime({
+        appT,
+        translations: translationsRef.current,
+        repo,
+      });
     },
     [appT]
   );
@@ -90,6 +108,7 @@ export function useRepositoryActions({
       const { handleEditRepoRuntime } = await loadRepositoryActionsRuntime();
       return await handleEditRepoRuntime({
         appT,
+        translations: translationsRef.current,
         repo,
         repositories,
         selectedRepoId,
@@ -113,7 +132,12 @@ export function useRepositoryActions({
     ) => {
       const { handleDetectRepoProviderRuntime } =
         await loadRepositoryActionsRuntime();
-      return await handleDetectRepoProviderRuntime({ appT, path, options });
+      return await handleDetectRepoProviderRuntime({
+        appT,
+        translations: translationsRef.current,
+        path,
+        options,
+      });
     },
     [appT]
   );
@@ -137,7 +161,12 @@ export function useRepositoryActions({
     ): Promise<RefreshBranchesResult | null> => {
       const { handleRefreshRepoBranchesRuntime } =
         await loadRepositoryActionsRuntime();
-      return await handleRefreshRepoBranchesRuntime({ appT, path, options });
+      return await handleRefreshRepoBranchesRuntime({
+        appT,
+        translations: translationsRef.current,
+        path,
+        options,
+      });
     },
     [appT]
   );

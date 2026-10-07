@@ -14,9 +14,13 @@ import type {
   PublishSelectionRef,
   ScopedPublishDraft,
 } from "@/generated/tauri-contracts";
+import { useI18n } from "@/hooks/useI18n";
 import type { ProjectInfo } from "@/lib/store/types";
 import type { ParameterValue } from "@/types/parameters";
-import { extractInvokeErrorMessage } from "@/lib/tauri/invokeErrors";
+import {
+  extractInvokeErrorMessage,
+  localizeInvokeError,
+} from "@/lib/tauri/invokeErrors";
 
 export function buildPublishPresentationScopeKey(params: {
   selectedRepoId: string | null;
@@ -232,13 +236,22 @@ export function usePublishValidate({
   openEnvironmentDialog,
   setEnvironmentLastCheck,
 }: UsePublishValidateParams): UsePublishValidateResult {
+  const { translations } = useI18n();
+  // 预检管线会进入 runPublishSpec（托盘监听 useEffect 的依赖）：经稳定 getter
+  // 在 toast 时读取最新翻译，translations 不进管线的 useMemo 依赖。
+  const translationsRef = useRef(translations);
+  useEffect(() => {
+    translationsRef.current = translations;
+  }, [translations]);
+  const getTranslations = useCallback(() => translationsRef.current, []);
   const presentationRevisionRef = useRef(0);
   const [preparedRuntimeState, setPreparedRuntimeState] = useState<{
     key: string;
     value: PreparedPublishRuntime;
   } | null>(null);
+  // 保存原始 invoke 错误而非文案：渲染时按当前语言本地化，切换语言即时生效。
   const [runtimePreparationErrorState, setRuntimePreparationErrorState] =
-    useState<{ key: string; message: string } | null>(null);
+    useState<{ key: string; error: unknown } | null>(null);
   const selectedRepoPath = selectedRepo?.path ?? null;
   const deferRuntimePreparationOnStartup = useMemo(
     () => shouldDeferRuntimePreparationOnStartup(),
@@ -282,7 +295,7 @@ export function usePublishValidate({
     selectedSourceError ??
     (runtimePreparationKey &&
     runtimePreparationErrorState?.key === runtimePreparationKey
-      ? runtimePreparationErrorState.message
+      ? localizeInvokeError(runtimePreparationErrorState.error, translations)
       : null);
   const publishPreviewCommand =
     preparedRuntime?.status === "ready"
@@ -348,10 +361,7 @@ export function usePublishValidate({
         setRuntimePreparationErrorState(null);
       } catch (error) {
         setPreparedRuntimeState(null);
-        setRuntimePreparationErrorState({
-          key: runtimePreparationKey,
-          message: extractInvokeErrorMessage(error),
-        });
+        setRuntimePreparationErrorState({ key: runtimePreparationKey, error });
         return null;
       }
     }
@@ -437,7 +447,7 @@ export function usePublishValidate({
             setPreparedRuntimeState(null);
             setRuntimePreparationErrorState({
               key: runtimePreparationKey,
-              message: extractInvokeErrorMessage(error),
+              error,
             });
           }
         });
@@ -463,6 +473,7 @@ export function usePublishValidate({
     () =>
       createPublishPreflightPipeline({
         appT,
+        getTranslations,
         notifyFeedback,
         syncTrayPublishStatus,
         restoreMainWindowIfNeeded,
@@ -473,6 +484,7 @@ export function usePublishValidate({
       }),
     [
       appT,
+      getTranslations,
       notifyFeedback,
       syncTrayPublishStatus,
       restoreMainWindowIfNeeded,

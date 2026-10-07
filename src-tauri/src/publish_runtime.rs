@@ -3089,12 +3089,9 @@ fn project_identity(repository_path: &str, spec: &PublishSpec) -> Result<String,
         repository.join(project)
     };
     let project = fs::canonicalize(&project).map_err(|error| {
-        AppError::validation_with_code(
-            format!(
-                "failed to resolve publish project {}: {error}",
-                project.display()
-            ),
-            "publish_runtime_project_unavailable",
+        project_unavailable_error(
+            "failed to resolve publish project",
+            format!("{}: {error}", project.display()),
         )
     })?;
     let relative = project.strip_prefix(&repository).map_err(|_| {
@@ -3176,12 +3173,9 @@ fn provider_source_root(repository: &Path, spec: &PublishSpec) -> Result<PathBuf
         .get(&spec.provider_id)
         .map_err(AppError::from)?;
     let working_directory = provider.resolve_working_dir(spec).ok_or_else(|| {
-        AppError::validation_with_code(
-            format!(
-                "provider {} did not resolve a project working directory",
-                spec.provider_id
-            ),
-            "publish_runtime_project_unavailable",
+        project_unavailable_error(
+            "provider did not resolve a project working directory",
+            spec.provider_id.clone(),
         )
     })?;
     let working_directory = if working_directory.is_absolute() {
@@ -3190,21 +3184,15 @@ fn provider_source_root(repository: &Path, spec: &PublishSpec) -> Result<PathBuf
         repository.join(working_directory)
     };
     let source_root = fs::canonicalize(&working_directory).map_err(|error| {
-        AppError::validation_with_code(
-            format!(
-                "failed to resolve publish project directory {}: {error}",
-                working_directory.display()
-            ),
-            "publish_runtime_project_unavailable",
+        project_unavailable_error(
+            "failed to resolve publish project directory",
+            format!("{}: {error}", working_directory.display()),
         )
     })?;
     if !source_root.is_dir() {
-        return Err(AppError::validation_with_code(
-            format!(
-                "publish project directory {} is not a directory",
-                source_root.display()
-            ),
-            "publish_runtime_project_unavailable",
+        return Err(project_unavailable_error(
+            "publish project directory is not a directory",
+            source_root.display().to_string(),
         ));
     }
     if !source_root.starts_with(repository) {
@@ -3218,24 +3206,29 @@ fn provider_source_root(repository: &Path, spec: &PublishSpec) -> Result<PathBuf
 
 fn canonical_repository(repository: &Path) -> Result<PathBuf, AppError> {
     let repository = fs::canonicalize(repository).map_err(|error| {
-        AppError::repository_with_code(
-            format!(
-                "failed to resolve selected repository {}: {error}",
-                repository.display()
-            ),
-            "publish_runtime_repository_unavailable",
+        repository_unavailable_error(
+            "failed to resolve selected repository",
+            format!("{}: {error}", repository.display()),
         )
     })?;
     if !repository.is_dir() {
-        return Err(AppError::repository_with_code(
-            format!(
-                "selected repository {} is not a directory",
-                repository.display()
-            ),
-            "publish_runtime_repository_unavailable",
+        return Err(repository_unavailable_error(
+            "selected repository is not a directory",
+            repository.display().to_string(),
         ));
     }
     Ok(repository)
+}
+
+// message 保持静态、路径与底层错误进 details：前端按 code 取 `errors.<code>` 后仍可附加原因。
+fn project_unavailable_error(message: &'static str, details: String) -> AppError {
+    AppError::validation_with_code(message, "publish_runtime_project_unavailable")
+        .with_details(details)
+}
+
+fn repository_unavailable_error(message: &'static str, details: String) -> AppError {
+    AppError::repository_with_code(message, "publish_runtime_repository_unavailable")
+        .with_details(details)
 }
 
 #[derive(Clone)]
@@ -3780,8 +3773,9 @@ mod tests {
     use crate::tauri_release::{ReleaseGate, TauriReleaseConfig};
 
     use super::{
-        capture_source_snapshot, normalize_remote_namespace, project_identity, AttemptIdentity,
-        ProviderExecutionPort, RuntimeAttemptStatus, RuntimePlanStage, StartPublishRuntimeRequest,
+        canonical_repository, capture_source_snapshot, normalize_remote_namespace,
+        project_identity, AttemptIdentity, ProviderExecutionPort, RuntimeAttemptStatus,
+        RuntimePlanStage, StartPublishRuntimeRequest,
     };
 
     /// 测试隔离：每次调用使用独立的租约协调器，避免并行测试因相同内容
@@ -6015,6 +6009,37 @@ mod tests {
         );
         assert_eq!(error.message, "publish path escapes the filesystem root");
         assert_eq!(error.details, Some(escaping.display().to_string()));
+    }
+
+    #[test]
+    fn unavailable_repository_keeps_the_path_in_details() {
+        let temp = tempfile::tempdir().expect("temp dir");
+        let missing = temp.path().join("missing");
+        let file = temp.path().join("file.txt");
+        std::fs::write(&file, "not a directory").expect("write file");
+
+        let error = canonical_repository(&missing).expect_err("missing repository");
+        assert_eq!(
+            error.code.as_deref(),
+            Some("publish_runtime_repository_unavailable")
+        );
+        assert_eq!(error.message, "failed to resolve selected repository");
+        assert!(error
+            .details
+            .as_deref()
+            .is_some_and(|details| details.starts_with(&missing.display().to_string())));
+
+        let error = canonical_repository(&file).expect_err("file is not a repository");
+        assert_eq!(error.message, "selected repository is not a directory");
+        assert_eq!(
+            error.details,
+            Some(
+                std::fs::canonicalize(&file)
+                    .expect("canonical file")
+                    .display()
+                    .to_string()
+            )
+        );
     }
 
     #[test]

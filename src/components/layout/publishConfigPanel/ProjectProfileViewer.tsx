@@ -10,8 +10,9 @@ import {
   ProjectPublishProfileViewerDialog,
   type ProjectProfileViewerState,
 } from "@/components/publish/ProjectPublishProfileViewerDialog";
+import { useI18n } from "@/hooks/useI18n";
 import { resolveDotnetProjectProfile } from "@/lib/dotnetProjectProfile";
-import { extractInvokeErrorMessage } from "@/lib/tauri/invokeErrors";
+import { localizeInvokeError } from "@/lib/tauri/invokeErrors";
 import type { ParameterSchema } from "@/types/parameters";
 
 type ViewerTranslations = Record<string, string | undefined>;
@@ -50,6 +51,8 @@ export const ProjectProfileViewer = forwardRef<
   },
   ref
 ) {
+  // viewProfile 只经 ref handle 由点击触发，不驱动 useEffect，translations 可进依赖。
+  const { translations } = useI18n();
   const [open, setOpen] = useState(false);
   const [viewerState, setViewerState] = useState<ProjectProfileViewerState>({
     status: "idle",
@@ -109,10 +112,7 @@ export const ProjectProfileViewer = forwardRef<
             return;
           }
 
-          const errorMessage =
-            error instanceof Error
-              ? error.message
-              : extractInvokeErrorMessage(error);
+          const errorMessage = localizeInvokeError(error, translations);
 
           setViewerState({
             status: "error",
@@ -129,6 +129,7 @@ export const ProjectProfileViewer = forwardRef<
       projectFrameworkOptions,
       configPanelT.loadConfigFailed,
       configPanelT.loadConfigFailedDescription,
+      translations,
     ]
   );
 
