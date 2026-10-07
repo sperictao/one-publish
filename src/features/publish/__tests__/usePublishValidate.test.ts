@@ -9,8 +9,16 @@ import {
   usePublishValidate,
   type UsePublishValidateParams,
 } from "../usePublishValidate";
+import en from "@/i18n/en.json";
+import zh from "@/i18n/zh.json";
 
 const prepare = vi.hoisted(() => vi.fn());
+const i18n = vi.hoisted(() => ({
+  translations: {} as Record<string, unknown>,
+}));
+vi.mock("@/hooks/useI18n", () => ({
+  useI18n: () => ({ translations: i18n.translations }),
+}));
 vi.mock("../publishRuntime", async () => ({
   ...(await vi.importActual<typeof import("../publishRuntime")>(
     "../publishRuntime"
@@ -213,5 +221,40 @@ describe("stored publish source", () => {
     expect(result.current.preparedRuntime).toBeNull();
     await act(async () => finish(blocked));
     expect(result.current.preparedRuntime).toEqual(blocked);
+  });
+});
+
+describe("runtime preparation error localization", () => {
+  beforeEach(() => {
+    prepare.mockReset();
+    i18n.translations = en;
+  });
+
+  it("localizes the invoke error at render time and follows language switches", async () => {
+    prepare.mockRejectedValue({
+      kind: "repository",
+      message: "selected repository is not a directory",
+      details: "/repo",
+      code: "publish_runtime_repository_unavailable",
+    });
+    const input = props();
+    const { result, rerender } = renderHook(() => usePublishValidate(input));
+
+    await waitFor(() =>
+      expect(result.current.runtimePreparationError).toBe(
+        "Couldn't resolve the selected repository path. Make sure the repository directory exists. | /repo"
+      )
+    );
+    const runPublishPreflight = result.current.runPublishPreflight;
+
+    i18n.translations = zh;
+    rerender();
+
+    expect(result.current.runtimePreparationError).toBe(
+      "无法解析所选仓库路径，请确认仓库目录存在 | /repo"
+    );
+    // 预检管线进入 runPublishSpec（托盘监听 effect 的依赖），翻译切换不得重建。
+    expect(result.current.runPublishPreflight).toBe(runPublishPreflight);
+    expect(prepare).toHaveBeenCalledOnce();
   });
 });

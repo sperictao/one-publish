@@ -1,5 +1,7 @@
-import { useCallback } from "react";
+import { useCallback, useEffect, useRef } from "react";
 import { toast } from "sonner";
+
+import { useI18n } from "@/hooks/useI18n";
 
 import {
   scanProject as scanProjectRequest,
@@ -16,6 +18,13 @@ interface TranslationMap {
 
 export function useProjectScanner(params: { appT: TranslationMap }) {
   const { appT } = params;
+  const { translations } = useI18n();
+  // scanProject 会进入 useEffect 依赖；失败文案在 toast 时读取最新翻译，
+  // translations 不进依赖，避免翻译加载完成时重复扫描项目。
+  const translationsRef = useRef(translations);
+  useEffect(() => {
+    translationsRef.current = translations;
+  }, [translations]);
 
   const handleProjectScanFailure = useCallback(
     async (err: unknown, silentFailure: boolean) => {
@@ -23,9 +32,8 @@ export function useProjectScanner(params: { appT: TranslationMap }) {
         return;
       }
 
-      const { analyzeProjectScanFailure, extractInvokeErrorMessage } =
+      const { analyzeProjectScanFailure, localizeInvokeError } =
         await loadInvokeErrors();
-      const rawErrorMessage = extractInvokeErrorMessage(err);
       const failureReason = analyzeProjectScanFailure(err);
 
       if (failureReason === "path_not_found") {
@@ -86,7 +94,7 @@ export function useProjectScanner(params: { appT: TranslationMap }) {
       }
 
       toast.error(appT.scanProjectFailed || "项目检测失败", {
-        description: rawErrorMessage,
+        description: localizeInvokeError(err, translationsRef.current),
       });
     },
     [appT]

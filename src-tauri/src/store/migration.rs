@@ -671,7 +671,7 @@ fn merge_tauri_release_settings(
             now.to_string(),
         );
         if let Err(error) = created {
-            log::error!("迁移旧 Tauri 发布设置失败: {}", error.message);
+            log::error!("迁移旧 Tauri 发布设置失败: {:?}", error);
             return None;
         }
         return Some(true);
@@ -706,7 +706,7 @@ fn merge_tauri_release_settings(
     ) {
         Ok(()) => Some(true),
         Err(error) => {
-            log::error!("迁移旧 Tauri 发布设置失败: {}", error.message);
+            log::error!("迁移旧 Tauri 发布设置失败: {:?}", error);
             None
         }
     }

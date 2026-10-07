@@ -1224,7 +1224,8 @@ fn find_repository_returns_consistent_not_found_error() {
 
     assert_eq!(error.kind, crate::errors::ErrorKind::Validation);
     assert_eq!(error.code.as_deref(), Some("repository_not_found"));
-    assert_eq!(error.message, "未找到仓库: repo-2");
+    assert_eq!(error.message, "未找到仓库");
+    assert_eq!(error.details.as_deref(), Some("repo-2"));
 }
 
 #[test]

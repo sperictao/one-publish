@@ -108,8 +108,14 @@ export function usePublishExecute({
   currentConfigurationRevisionId,
   currentConfigurationBlockedReason,
 }: UsePublishExecuteParams): UsePublishExecuteResult {
-  // 阻断诊断按 `errors.<code>` 本地化，该分支不在 appT 内。
+  // 阻断诊断与 invoke 失败按 `errors.<code>` 本地化，该分支不在 appT 内。
+  // runPublishSpec 会进入托盘监听的 useEffect 依赖，恢复失败提示也发生在
+  // effect 内：统一在使用时读取最新翻译，translations 不进任何依赖。
   const { translations } = useI18n();
+  const translationsRef = useRef(translations);
+  useEffect(() => {
+    translationsRef.current = translations;
+  }, [translations]);
   const presentationRevisionRef = useRef(0);
   const activeRunRef = useRef<ActivePublishRun | null>(null);
   const [activeRuntime, setActiveRuntime] =
@@ -226,14 +232,14 @@ export function usePublishExecute({
         setIsPublishing(false);
       })
       .catch(async (error) => {
-        const { extractInvokeErrorCode, extractInvokeErrorMessage } =
+        const { extractInvokeErrorCode, localizeInvokeError } =
           await loadInvokeErrors();
         if (
           !disposed &&
           extractInvokeErrorCode(error) !== "publish_runtime_attempt_not_found"
         ) {
           toast.error(appT.publishRuntimeRecoveryFailed || "恢复发布状态失败", {
-            description: extractInvokeErrorMessage(error),
+            description: localizeInvokeError(error, translationsRef.current),
           });
         }
       });
@@ -309,7 +315,7 @@ export function usePublishExecute({
         if (!ready) {
           throw new Error(
             prepared && prepared.status === "blocked"
-              ? describeBlockedRuntime(prepared, translations) ||
+              ? describeBlockedRuntime(prepared, translationsRef.current) ||
                   appT.publishRuntimeBlocked ||
                   "本地发布计划存在阻塞项"
               : "PublishRuntime preparation returned no result"
@@ -475,6 +481,7 @@ export function usePublishExecute({
             extractInvokeErrorCode,
             extractInvokeErrorDetails,
             extractInvokeErrorMessage,
+            localizeInvokeError,
           },
           { getPublishFailureFeedback },
         ] = await Promise.all([
@@ -513,7 +520,10 @@ export function usePublishExecute({
             toast.error(
               appT.publishRuntimeRecoveryFailed || "恢复发布状态失败",
               {
-                description: extractInvokeErrorMessage(recoveryError),
+                description: localizeInvokeError(
+                  recoveryError,
+                  translationsRef.current
+                ),
               }
             );
           }
@@ -540,10 +550,16 @@ export function usePublishExecute({
           setPublishResult(failedResult);
         }
 
+        // 历史记录与结果面板保留后端原文（失败签名依赖它）；反馈按错误码本地化，
+        // 仅当失败信息已被输出日志中更具体的上下文替换时沿用替换后的文本。
+        const feedbackErrorMessage =
+          failedResult.error === rawErrorMessage.trim()
+            ? localizeInvokeError(err, translationsRef.current)
+            : failedResult.error;
         const feedback = getPublishFailureFeedback(
           failureReason,
           appT,
-          failedResult.error ?? rawErrorMessage
+          feedbackErrorMessage ?? rawErrorMessage
         );
 
         const record = createPublishExecutionRecord({
@@ -571,7 +587,7 @@ export function usePublishExecute({
           error: failedResult.error || rawErrorMessage || "",
           outputLog: outputLogSnapshot,
           feedbackTitle: feedback.title,
-          feedbackDescription: failedResult.error || feedback.description,
+          feedbackDescription: feedbackErrorMessage || feedback.description,
           feedbackMode: transaction.feedbackMode,
           trayStatusEffect: transaction.trayStatusEffect,
           restoreWindowOnFailure: transaction.restoreWindowOnFailure,
@@ -603,7 +619,6 @@ export function usePublishExecute({
       setCurrentPublishRecordId,
       replaceCapturedOutputLog,
       startPublishPresentationRun,
-      translations,
       waitForOutputLogSnapshot,
     ]
   );
@@ -631,9 +646,9 @@ export function usePublishExecute({
         activeRunRef.current = null;
       }
     } catch (error) {
-      const { extractInvokeErrorMessage } = await loadInvokeErrors();
+      const { localizeInvokeError } = await loadInvokeErrors();
       toast.error(appT.publishRuntimeRecoveryFailed || "继续发布失败", {
-        description: extractInvokeErrorMessage(error),
+        description: localizeInvokeError(error, translationsRef.current),
       });
     } finally {
       setIsPublishing(false);
@@ -677,7 +692,10 @@ export function usePublishExecute({
     if (blocker === "runtime-blocked") {
       toast.error(publishT.configurationBlocked || "当前发布配置不可执行", {
         description:
-          describeBlockedRuntime(validate.preparedRuntime, translations) ||
+          describeBlockedRuntime(
+            validate.preparedRuntime,
+            translationsRef.current
+          ) ||
           appT.publishRuntimeBlocked ||
           "本地发布计划存在阻塞项",
       });
@@ -705,7 +723,6 @@ export function usePublishExecute({
     runPublishSpec,
     runtimeResult,
     selectedRepoId,
-    translations,
     validate,
   ]);
 
@@ -759,14 +776,14 @@ export function usePublishExecute({
       }
     } catch (err) {
       const [
-        { extractInvokeErrorCode, extractInvokeErrorMessage },
+        { extractInvokeErrorCode, localizeInvokeError },
         { getCancelPublishFeedback },
       ] = await Promise.all([loadInvokeErrors(), loadCancelPublishFeedback()]);
       const errorCode = extractInvokeErrorCode(err);
       const feedback = getCancelPublishFeedback(
         appT,
         errorCode,
-        extractInvokeErrorMessage(err)
+        localizeInvokeError(err, translationsRef.current)
       );
       toast.error(feedback.title, {
         description: feedback.description,

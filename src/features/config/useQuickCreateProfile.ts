@@ -4,7 +4,7 @@ import { toast } from "sonner";
 import { resolvePublishSource } from "@/features/publish/publishRuntime";
 import type { ConfigParameters, ConfigProfile } from "@/lib/store/types";
 import { toSpecValue, type ParameterValue } from "@/types/parameters";
-import type { Language } from "@/hooks/useI18n";
+import { useI18n, type Language } from "@/hooks/useI18n";
 import type { TranslationMap, QuickCreateTemplateOption } from "./types";
 import {
   QUICK_CREATE_CUSTOM_TEMPLATE_ID,
@@ -110,6 +110,8 @@ export function useQuickCreateProfile({
   updateProfile,
   onProfileSaved,
 }: UseQuickCreateProfileParams): UseQuickCreateProfileReturn {
+  // 模板加载与保存只作为用户操作 handler，不驱动 useEffect，translations 可进依赖。
+  const { translations } = useI18n();
   const [quickCreateProfileOpen, setQuickCreateProfileOpen] = useState(false);
   const [quickCreateProfileName, setQuickCreateProfileName] = useState("");
   const [quickCreateTemplateId, setQuickCreateTemplateId] = useState(
@@ -295,10 +297,10 @@ export function useQuickCreateProfile({
           createDraftForProvider(content.providerId, content.parameters)
         );
       } catch (error) {
-        const { extractInvokeErrorMessage } = await loadInvokeErrors();
+        const { localizeInvokeError } = await loadInvokeErrors();
         if (request !== templateRequestRef.current) return;
         setQuickCreateTemplateId(QUICK_CREATE_CUSTOM_TEMPLATE_ID);
-        toast.error(extractInvokeErrorMessage(error) || "加载模板失败");
+        toast.error(localizeInvokeError(error, translations) || "加载模板失败");
       } finally {
         if (request === templateRequestRef.current) {
           templateLoadingRef.current = false;
@@ -312,6 +314,7 @@ export function useQuickCreateProfile({
       quickCreateProfileDraft.providerId,
       quickCreateProfileOpen,
       selectedRepoId,
+      translations,
     ]
   );
 
@@ -407,10 +410,10 @@ export function useQuickCreateProfile({
       );
       handleQuickCreateProfileOpenChange(false);
     } catch (err) {
-      const { extractInvokeErrorMessage } = await loadInvokeErrors();
+      const { localizeInvokeError } = await loadInvokeErrors();
       console.error("保存配置文件失败:", err);
       toast.error(
-        extractInvokeErrorMessage(err) ||
+        localizeInvokeError(err, translations) ||
           (editingProfileId
             ? profileT.quickEditFailed || "更新配置文件失败"
             : profileT.saveFailed || "保存配置文件失败")
@@ -431,6 +434,7 @@ export function useQuickCreateProfile({
     refreshProfilesAfterMutation,
     saveProfileToStore,
     selectedRepoId,
+    translations,
     updateProfile,
   ]);
 

@@ -110,7 +110,6 @@ export function useProfiles({
     commitProfilesSnapshot,
   } = useProfileListState({
     selectedRepoId,
-    profileT,
     onRepositoryScopeChange: handleRepositoryScopeChange,
   });
   // 高亮名优先跟随持久化选择（跨仓库切换可恢复）；无匹配选择时

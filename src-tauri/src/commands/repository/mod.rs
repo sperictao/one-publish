@@ -92,27 +92,21 @@ pub async fn read_project_publish_profile(
     let _timer = crate::commands::middleware::CommandTimer::new(
         "commands::repository::mod::read_project_publish_profile",
     );
-    let project_file_path = PathBuf::from(project_file);
+    let project_file_path = PathBuf::from(&project_file);
     if !project_file_path.is_file() {
-        return Err(repository_error(
-            format!(
-                "project file does not exist: {}",
-                project_file_path.to_string_lossy()
-            ),
-            "project_file_not_found",
-        ));
+        return Err(
+            repository_error("project file does not exist", "project_file_not_found")
+                .with_details(project_file),
+        );
     }
 
     let profile_path = resolve_publish_profile_path(&project_file_path, &profile_name)?;
     let content = std::fs::read_to_string(&profile_path).map_err(|error| {
         repository_error(
-            format!(
-                "failed to read publish profile {}: {}",
-                profile_path.to_string_lossy(),
-                error
-            ),
+            "failed to read publish profile",
             classify_repository_path_error(error.kind()),
         )
+        .with_details(format!("{}: {}", profile_path.to_string_lossy(), error))
     })?;
 
     Ok(ProjectPublishProfileFile {

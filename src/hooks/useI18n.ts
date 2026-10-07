@@ -114,6 +114,14 @@ function t(key: string, params?: Record<string, string | number>): string {
 }
 
 /**
+ * 当前语言的完整翻译树，供组件外（如 Zustand store）按错误码本地化；
+ * 翻译尚未加载时返回空树，调用方应回落到后端 message。
+ */
+function getCurrentTranslations(): TranslationTree {
+  return translationsCache[getStoredLanguage()] || {};
+}
+
+/**
  * 国际化 Hook
  */
 export function useI18n() {
@@ -199,4 +207,4 @@ export function useI18n() {
 }
 
 // 导出翻译函数以便在组件外使用
-export { t };
+export { getCurrentTranslations, t };
