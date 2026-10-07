@@ -13,10 +13,8 @@ pub async fn scan_project_candidates(
     let search_path = match start_path {
         Some(path) => PathBuf::from(path),
         None => std::env::current_dir().map_err(|error| {
-            repository_error(
-                format!("failed to resolve current directory: {}", error),
-                "current_dir_failed",
-            )
+            repository_error("failed to resolve current directory", "current_dir_failed")
+                .with_details(error.to_string())
         })?,
     };
     scan_provider_project_candidates_from_path(&search_path, provider_id.as_deref())
@@ -31,13 +29,10 @@ pub async fn resolve_project_info(
     );
     let project_file_path = PathBuf::from(&project_file);
     if !project_file_path.is_file() {
-        return Err(repository_error(
-            format!(
-                "project file does not exist: {}",
-                project_file_path.display()
-            ),
-            "project_file_not_found",
-        ));
+        return Err(
+            repository_error("project file does not exist", "project_file_not_found")
+                .with_details(project_file),
+        );
     }
 
     let registry = crate::provider::registry::provider_registry();
@@ -50,16 +45,16 @@ pub async fn resolve_project_info(
                 .any(|matcher| super::matches_project_file(&project_file_path, matcher))
         })
     else {
-        return Err(repository_error(
-            format!("unsupported project file: {}", project_file_path.display()),
-            "project_file_not_found",
-        ));
+        return Err(
+            repository_error("unsupported project file", "project_file_not_found")
+                .with_details(project_file),
+        );
     };
     let Ok(provider) = registry.get(&discovery.provider_id) else {
-        return Err(repository_error(
-            format!("unsupported project file: {}", project_file_path.display()),
-            "project_file_not_found",
-        ));
+        return Err(
+            repository_error("unsupported project file", "project_file_not_found")
+                .with_details(project_file),
+        );
     };
     let capabilities = provider.capabilities();
     // 解决方案文件不是项目配置宿主：按无项目语义的普通文件处理。

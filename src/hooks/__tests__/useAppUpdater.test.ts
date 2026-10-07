@@ -29,10 +29,15 @@ vi.mock("@/lib/store/api", () => ({
   openUpdaterHelp: mocks.openUpdaterHelp,
 }));
 
-vi.mock("@/hooks/useI18n", () => ({
-  useI18n: () => ({ translations: {} }),
-  t: (key: string) => key,
-}));
+// 只给真实 zh 的 errors 分支：其余文案走 hook 内兜底，错误码文案校验已登记。
+vi.mock("@/hooks/useI18n", async () => {
+  const zh = (await import("@/i18n/zh.json")).default;
+  const translations = { errors: zh.errors };
+  return {
+    useI18n: () => ({ translations }),
+    t: (key: string) => key,
+  };
+});
 
 vi.mock("sonner", () => ({
   toast: Object.assign(vi.fn(), {
@@ -72,5 +77,29 @@ describe("useAppUpdater", () => {
     });
 
     expect(dispose).toHaveBeenCalledTimes(1);
+  });
+
+  it("安装失败按错误码本地化更新提示，而不是只展示后端原文", async () => {
+    mocks.listen.mockResolvedValue(() => {});
+    // Tauri invoke 以 AppError 对象 reject，而不是 Error 实例。
+    mocks.installUpdate.mockRejectedValue({
+      kind: "updater",
+      message: "download failed",
+      details: "status: 503 (retries: 2)",
+      code: "download_update_failed",
+    });
+    const consoleError = vi
+      .spyOn(console, "error")
+      .mockImplementation(() => {});
+
+    const { result } = renderHook(() => useAppUpdater());
+    await act(async () => {
+      await result.current.installAvailableUpdate();
+    });
+
+    expect(result.current.updaterState.updateInfo?.message).toBe(
+      "下载更新失败 | status: 503 (retries: 2)"
+    );
+    consoleError.mockRestore();
   });
 });

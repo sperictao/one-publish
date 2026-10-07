@@ -21,6 +21,7 @@ import type {
   HistoryFilterWindow,
 } from "@/features/history/historyFilterPresets";
 import type { HandoffSnippetFormat } from "@/lib/handoffSnippet";
+import { getLanguageLocale, useI18n } from "@/hooks/useI18n";
 
 function getExecutionFailureReason(record: ExecutionRecord): string | null {
   if (record.success || record.cancelled) {
@@ -93,6 +94,9 @@ export function ExecutionHistoryCard({
   onRerunFromHistory,
   onCopyHandoffSnippet,
 }: ExecutionHistoryCardProps) {
+  const { language } = useI18n();
+  const dateLocale = getLanguageLocale(language);
+
   if (scopedExecutionHistory.length === 0) {
     return null;
   }
@@ -111,14 +115,6 @@ export function ExecutionHistoryCard({
             ? ` · ${historyT.currentFilter || "当前筛选"} ${filteredExecutionHistory.length}/${scopedExecutionHistory.length}`
             : ""}
         </CardDescription>
-        {/* 009 落地前的历史记录可能含明文密钥，提示用户清理 */}
-        <div className="mt-1 flex items-start gap-1.5 rounded-sm border border-warning/20 bg-warning/5 px-2.5 py-1.5 text-label-12 text-warning">
-          <AlertTriangle className="mt-0.5 size-3.5 flex-shrink-0" />
-          <span className="break-words">
-            {historyT.legacyPlaintextHint ||
-              "较早的记录在密钥脱敏功能上线前保存，命令行可能含明文密钥。如担心泄露，可在设置中将保留上限调到 5 触发裁剪，或重新执行覆盖历史。"}
-          </span>
-        </div>
       </CardHeader>
       <CardContent className="space-y-4">
         <div className="grid gap-2 md:grid-cols-4">
@@ -295,7 +291,7 @@ export function ExecutionHistoryCard({
                 </div>
                 <div className="text-label-12 text-muted-foreground">
                   {historyT.completedAt || "完成时间"}:{" "}
-                  {new Date(record.finishedAt).toLocaleString()}
+                  {new Date(record.finishedAt).toLocaleString(dateLocale)}
                 </div>
                 {failureReason && (
                   <div className="mt-2 rounded-sm border border-destructive/20 bg-destructive/5 px-2.5 py-2 text-label-12 text-destructive">

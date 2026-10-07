@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import type { ComponentPropsWithoutRef, ReactNode } from "react";
 
 import { cn } from "@/lib/utils";
 import {
@@ -50,6 +50,13 @@ interface AppDialogShellProps {
   overlayClassName?: string;
   closeButtonClassName?: string;
   headerAside?: ReactNode;
+  /**
+   * 打开时的初始焦点。默认落在首个可聚焦元素上；标题含 HelpTip 时会
+   * 聚焦到它并自动弹出提示，此时应改为聚焦主输入框。
+   */
+  onOpenAutoFocus?: ComponentPropsWithoutRef<
+    typeof DialogContent
+  >["onOpenAutoFocus"];
 }
 
 export function AppDialogShell({
@@ -73,6 +80,7 @@ export function AppDialogShell({
   overlayClassName = "bg-black/50",
   closeButtonClassName = "right-6 top-6",
   headerAside,
+  onOpenAutoFocus,
 }: AppDialogShellProps): ReactNode {
   const isFixedSecondaryHeight = size === "workspace" || size === "responsive";
 
@@ -81,6 +89,7 @@ export function AppDialogShell({
       chrome="bare"
       overlayClassName={overlayClassName}
       closeButtonClassName={closeButtonClassName}
+      onOpenAutoFocus={onOpenAutoFocus}
       className={cn(
         "overflow-visible border-none bg-transparent p-0 shadow-none ",
         contentSizeClassName[size],

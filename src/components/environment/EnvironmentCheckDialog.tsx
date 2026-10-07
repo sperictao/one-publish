@@ -33,6 +33,7 @@ import {
   type IssueSeverity,
 } from "@/features/environment/environment";
 import { useI18n } from "@/hooks/useI18n";
+import { localizeInvokeError } from "@/lib/tauri/invokeErrors";
 import { resolveEnvironmentProviderOptions } from "@/features/provider/providers";
 import type { ProviderManifest } from "@/lib/store/types";
 
@@ -189,7 +190,7 @@ export function EnvironmentCheckContent({
       setResult(snapshot.result);
       onChecked?.(snapshot);
     } catch (err) {
-      const msg = String(err);
+      const msg = localizeInvokeError(err, translations);
       setError(msg);
       toast.error(translations.environment?.checkFailed || "环境检查失败", {
         description: msg,
@@ -236,7 +237,9 @@ export function EnvironmentCheckContent({
   const handleApplyFix = async (fix: FixAction) => {
     if (fix.action_type === "copy_command") {
       if (!fix.command) {
-        toast.error("Command is missing");
+        toast.error(
+          translations.errors?.missing_fix_command || "该修复缺少命令"
+        );
         return;
       }
       await handleCopy(fix.command);
@@ -260,7 +263,7 @@ export function EnvironmentCheckContent({
       toast.success(translations.environment?.opened || "已打开页面");
     } catch (err) {
       toast.error(translations.environment?.fixFailed || "修复失败", {
-        description: String(err),
+        description: localizeInvokeError(err, translations),
       });
     } finally {
       setRunningFix(false);
@@ -281,7 +284,7 @@ export function EnvironmentCheckContent({
       await handleCheck();
     } catch (err) {
       toast.error(translations.environment?.runFailed || "命令执行失败", {
-        description: String(err),
+        description: localizeInvokeError(err, translations),
       });
     } finally {
       setRunningFix(false);

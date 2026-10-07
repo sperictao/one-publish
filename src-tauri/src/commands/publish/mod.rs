@@ -1,4 +1,5 @@
 use crate::spec::PublishSpec;
+use publish_adapters::CancellationSignal;
 use std::path::PathBuf;
 use tauri::AppHandle;
 
@@ -27,14 +28,15 @@ use self::execution::render_publish_command;
 pub(crate) use self::execution::{execute_sealed_build, SealedBuildCommand};
 #[cfg(test)]
 use self::output::{infer_output_dir, resolve_plan_command, resolve_runtime_program};
-use self::session::cancel_running_execution;
 #[cfg(test)]
 use self::session::{clear_running_execution, force_clear_running_execution, reserve_execution};
 
-#[tauri::command]
-pub async fn execute_provider_publish(
+/// 遗留 Provider 发布规格的执行入口：只由发布运行时的执行端口调用，
+/// 取消信号来自该次 Attempt（ADR-0041）。
+pub(crate) async fn execute_provider_publish(
     app: AppHandle,
     spec: PublishSpec,
+    cancellation: &CancellationSignal,
 ) -> Result<PublishResult, crate::errors::AppError> {
     let _timer = crate::commands::middleware::CommandTimer::new(
         "commands::publish::mod::execute_provider_publish",
@@ -47,7 +49,7 @@ pub async fn execute_provider_publish(
         ));
     }
 
-    execute_publish_spec(&app, spec).await
+    execute_publish_spec(&app, spec, cancellation).await
 }
 
 #[tauri::command]
@@ -82,14 +84,6 @@ pub fn describe_publish_output_target(raw: String) -> crate::output_target::Outp
         "commands::publish::mod::describe_publish_output_target",
     );
     crate::output_target::describe_output_target(&raw)
-}
-
-#[tauri::command]
-pub async fn cancel_provider_publish() -> Result<bool, crate::errors::AppError> {
-    let _timer = crate::commands::middleware::CommandTimer::new(
-        "commands::publish::mod::cancel_provider_publish",
-    );
-    cancel_running_execution().await
 }
 
 #[cfg(test)]

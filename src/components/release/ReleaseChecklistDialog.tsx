@@ -22,6 +22,7 @@ import type { PackageResult, SignResult } from "@/lib/artifact";
 import type { EnvironmentCheckResult } from "@/features/environment/environment";
 import { getUpdaterConfigHealth } from "@/lib/store/api";
 import { type UpdaterConfigHealth } from "@/lib/store/types";
+import { localizeInvokeError } from "@/lib/tauri/invokeErrors";
 import {
   exportPreflightReport,
   type PreflightChecklistItem,
@@ -101,6 +102,11 @@ export function ReleaseChecklistDialog({
   onOpenSettings,
 }: ReleaseChecklistDialogProps) {
   const { translations } = useI18n();
+  // updater 检测 effect 只依赖 open；翻译加载完成不应触发重新检测。
+  const translationsRef = useRef(translations);
+  useEffect(() => {
+    translationsRef.current = translations;
+  }, [translations]);
   const [updaterHealth, setUpdaterHealth] =
     useState<UpdaterConfigHealth | null>(null);
   const [updaterLoading, setUpdaterLoading] = useState(false);
@@ -128,7 +134,7 @@ export function ReleaseChecklistDialog({
         setUpdaterHealth(health);
       })
       .catch((err) => {
-        setUpdaterError(String(err));
+        setUpdaterError(localizeInvokeError(err, translationsRef.current));
       })
       .finally(() => {
         setUpdaterLoading(false);
@@ -385,7 +391,7 @@ export function ReleaseChecklistDialog({
       });
     } catch (err) {
       toast.error(checklistTranslations.exportFailed || "导出预检报告失败", {
-        description: String(err),
+        description: localizeInvokeError(err, translations),
       });
     } finally {
       setExporting(false);

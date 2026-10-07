@@ -139,16 +139,29 @@ fn package_zip_sync(
 ) -> Result<PackageResult> {
     if !input_dir.exists() {
         return Err(validation_error(format!(
-            "input directory does not exist: {}",
+            "input path does not exist: {}",
             input_dir.display()
         )));
     }
-    if !input_dir.is_dir() {
+    let single_file = input_dir.is_file();
+    if !single_file && !input_dir.is_dir() {
         return Err(validation_error(format!(
-            "input path is not a directory: {}",
+            "input path is not a file or directory: {}",
             input_dir.display()
         )));
     }
+    // 单文件输出（例如 `go build -o` 的二进制）以文件名作为归档内唯一条目，没有可包裹的根目录。
+    let entry_root = if single_file {
+        input_dir.parent().ok_or_else(|| {
+            validation_error(format!(
+                "input file has no parent directory: {}",
+                input_dir.display()
+            ))
+        })?
+    } else {
+        input_dir
+    };
+    let include_root_dir = include_root_dir && !single_file;
 
     if let Some(parent) = output_path.parent() {
         fs::create_dir_all(parent).map_err(|source| {
@@ -190,7 +203,7 @@ fn package_zip_sync(
 
         let rel = entry
             .path()
-            .strip_prefix(input_dir)
+            .strip_prefix(entry_root)
             .map_err(|source| path_error("failed to compute relative path", source))?;
         if rel.as_os_str().is_empty() {
             continue;
@@ -414,5 +427,35 @@ mod tests {
         let mut buf = String::new();
         a.read_to_string(&mut buf).expect("read");
         assert_eq!(buf, "hello");
+    }
+
+    #[test]
+    fn packages_a_single_file_output_under_its_own_name() {
+        let dir = tempdir().expect("tempdir");
+        let binary = dir.path().join("dist").join("app-linux-amd64");
+        fs::create_dir_all(binary.parent().expect("binary parent")).expect("create dist");
+        fs::write(&binary, "binary").expect("write binary");
+        fs::write(dir.path().join("dist").join("notes.txt"), "sibling").expect("write sibling");
+        let output = dir.path().join("dist").join("app-linux-amd64.zip");
+
+        let rt = tokio::runtime::Runtime::new().expect("runtime");
+        // 文件输出没有可包裹的根目录，include_root_dir 不生效。
+        let result = rt
+            .block_on(package_directory(
+                &binary,
+                &output,
+                PackageFormat::Zip,
+                true,
+            ))
+            .expect("package single file");
+
+        assert_eq!(result.file_count, 1);
+        let mut archive =
+            zip::ZipArchive::new(File::open(&output).expect("open zip")).expect("zip archive");
+        assert_eq!(archive.len(), 1);
+        let mut entry = archive.by_name("app-linux-amd64").expect("binary entry");
+        let mut buf = String::new();
+        entry.read_to_string(&mut buf).expect("read");
+        assert_eq!(buf, "binary");
     }
 }

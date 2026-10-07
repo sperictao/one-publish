@@ -28,7 +28,25 @@ vi.mock("@/features/history/diagnosticsExportRuntime", () => ({
   exportFailureGroupBundleFile: mocks.exportFailureGroupBundleFile,
 }));
 
+// 用真实 zh 文案，顺带校验后端错误码已在 `errors.<code>` 登记。
+vi.mock("@/hooks/useI18n", async () => {
+  const zh = (await import("@/i18n/zh.json")).default;
+  return { useI18n: () => ({ translations: zh }) };
+});
+
 import { useDiagnosticsExports } from "@/hooks/useDiagnosticsExports";
+
+type DiagnosticsExports = ReturnType<typeof useDiagnosticsExports>;
+
+// Tauri invoke 以 AppError 对象 reject，而不是 Error 实例。
+function exportWriteError(code: string) {
+  return {
+    kind: "export",
+    message: "write error",
+    details: "Permission denied (os error 13)",
+    code,
+  };
+}
 
 function createExecutionRecord(
   overrides: Partial<ExecutionRecord> = {}
@@ -240,5 +258,64 @@ describe("useDiagnosticsExports", () => {
     expect(mocks.save).not.toHaveBeenCalled();
     expect(mocks.exportFailureGroupBundleFile).not.toHaveBeenCalled();
     expect(mocks.toast.error).toHaveBeenCalled();
+  });
+
+  it.each([
+    {
+      name: "failure group bundle",
+      runtime: mocks.exportFailureGroupBundleFile,
+      run: (exports: DiagnosticsExports) => exports.exportFailureGroupBundle(),
+      code: "failure_group_bundle_write_failed",
+      title: "导出失败分组失败",
+      description: "无法写入失败分组文件 | Permission denied (os error 13)",
+    },
+    {
+      name: "execution history",
+      runtime: mocks.exportExecutionHistoryFile,
+      run: (exports: DiagnosticsExports) => exports.exportExecutionHistory(),
+      code: "execution_history_write_failed",
+      title: "导出执行历史失败",
+      description: "无法写入执行历史文件 | Permission denied (os error 13)",
+    },
+    {
+      name: "diagnostics index",
+      runtime: mocks.exportDiagnosticsIndexFile,
+      run: (exports: DiagnosticsExports) => exports.exportDiagnosticsIndex(),
+      code: "diagnostics_index_write_failed",
+      title: "导出诊断索引失败",
+      description: "无法写入诊断索引文件 | Permission denied (os error 13)",
+    },
+  ])(
+    "localizes the $name export failure instead of stringifying the AppError",
+    async ({ runtime, run, code, title, description }) => {
+      mocks.save.mockResolvedValue("/repo/export.md");
+      runtime.mockRejectedValue(exportWriteError(code));
+
+      const { result } = renderDiagnosticsExports();
+
+      await act(async () => {
+        await run(result.current);
+      });
+
+      expect(mocks.toast.error).toHaveBeenCalledWith(title, { description });
+      expect(mocks.toast.success).not.toHaveBeenCalled();
+    }
+  );
+
+  it("falls back to the backend message and details for unregistered codes", async () => {
+    mocks.save.mockResolvedValue("/repo/history.json");
+    mocks.exportExecutionHistoryFile.mockRejectedValue(
+      exportWriteError("unregistered_export_failure")
+    );
+
+    const { result } = renderDiagnosticsExports();
+
+    await act(async () => {
+      await result.current.exportExecutionHistory();
+    });
+
+    expect(mocks.toast.error).toHaveBeenCalledWith("导出执行历史失败", {
+      description: "write error | Permission denied (os error 13)",
+    });
   });
 });

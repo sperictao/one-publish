@@ -52,22 +52,22 @@ pub async fn export_config(
     let config =
         build_config_export(&repo.publish_config, chrono::Utc::now()).map_err(|source| {
             crate::errors::AppError::config_with_code(
-                format!("export projection error: {source}"),
+                "export projection error",
                 "export_config_projection_failed",
             )
+            .with_details(source.to_string())
         })?;
     let json = serde_json::to_string_pretty(&config).map_err(|source| {
         crate::errors::AppError::config_with_code(
-            format!("serialization error: {}", source),
+            "serialization error",
             "export_config_serialize_failed",
         )
+        .with_details(source.to_string())
     })?;
     let file_path = ensure_json_extension(&file_path);
     crate::security::write_private_text_file(&file_path, &json).map_err(|source| {
-        crate::errors::AppError::config_with_code(
-            format!("write error: {}", source),
-            "export_config_write_failed",
-        )
+        crate::errors::AppError::config_with_code("write error", "export_config_write_failed")
+            .with_details(source.to_string())
     })?;
     Ok(file_path.to_string_lossy().into_owned())
 }
@@ -77,23 +77,20 @@ pub async fn export_config(
 pub async fn import_config(file_path: String) -> Result<ConfigExport, crate::errors::AppError> {
     let _timer = crate::commands::middleware::CommandTimer::new("commands::config::import_config");
     let content = std::fs::read_to_string(&file_path).map_err(|source| {
-        crate::errors::AppError::config_with_code(
-            format!("read error: {}", source),
-            "import_config_read_failed",
-        )
+        crate::errors::AppError::config_with_code("read error", "import_config_read_failed")
+            .with_details(source.to_string())
     })?;
     let config: ConfigExport = serde_json::from_str(&content).map_err(|source| {
-        crate::errors::AppError::config_with_code(
-            format!("parse error: {}", source),
-            "import_config_parse_failed",
-        )
+        crate::errors::AppError::config_with_code("parse error", "import_config_parse_failed")
+            .with_details(source.to_string())
     })?;
     // Validate the imported configuration
     validate_import(&config).map_err(|source| {
         crate::errors::AppError::config_with_code(
-            format!("validation error: {}", source),
+            "validation error",
             "import_config_validation_failed",
         )
+        .with_details(source.to_string())
     })?;
     Ok(config)
 }
@@ -108,9 +105,10 @@ fn validate_profiles_for_apply(
     };
     validate_import(&config).map_err(|source| {
         crate::errors::AppError::config_with_code(
-            format!("validation error: {}", source),
+            "validation error",
             "import_config_validation_failed",
         )
+        .with_details(source.to_string())
     })?;
     Ok(config.profiles)
 }
@@ -188,9 +186,10 @@ pub async fn apply_imported_config(
 
     crate::store::update_state(state).map_err(|source| {
         crate::errors::AppError::config_with_code(
-            format!("保存配置失败: {}", source),
+            "保存配置失败",
             "apply_imported_config_save_failed",
         )
+        .with_details(source.to_string())
     })?;
     if let Err(err) = crate::tray::update_tray_menu(app.clone()).await {
         log::warn!("刷新托盘菜单失败: {}", err);
@@ -247,6 +246,87 @@ mod tests {
         let error = validate_profiles_for_apply(vec![profile])
             .expect_err("apply boundary must reject credentials");
 
+        assert_eq!(
+            error.code.as_deref(),
+            Some("import_config_validation_failed")
+        );
+    }
+
+    /// ADR-0060：配置备份按敏感键策略剥离发布设置中的 Secret 名称，其余字段
+    /// （含 Updater 公钥）原样往返；导入后的设置仍可解析，Secret 名称需在
+    /// 发布设置表单中补齐。保留 Secret 名称键的备份被整份拒绝。
+    #[test]
+    fn backup_round_trip_strips_secret_names_from_release_settings() {
+        use crate::tauri_release::{
+            release_settings_from_parameters, TauriReleaseConfig, TauriUpdaterSettings,
+        };
+
+        let settings = TauriReleaseConfig {
+            tag_prefix: "app-v".to_string(),
+            required_actions_secret_names: vec!["APPLE_CERTIFICATE".to_string()],
+            actions_secret_environment: BTreeMap::from([(
+                "APPLE_PASSWORD".to_string(),
+                "APPLE_CERTIFICATE_PASSWORD".to_string(),
+            )]),
+            updater: TauriUpdaterSettings {
+                enabled: true,
+                endpoint: Some("https://updates.example.com/latest.json".to_string()),
+                public_key: Some("dW50cnVzdGVkIGNvbW1lbnQ=".to_string()),
+                private_key_secret_name: Some("TAURI_SIGNING_PRIVATE_KEY".to_string()),
+            },
+            ..TauriReleaseConfig::default()
+        };
+        let mut source = RepoPublishConfig::default();
+        source
+            .create_profile(
+                "Desktop".to_string(),
+                "tauri".to_string(),
+                serde_json::json!({ "releaseSettings": settings.clone() }),
+                None,
+                None,
+                "2026-10-07T10:00:00+00:00".to_string(),
+            )
+            .expect("create tauri profile");
+
+        let exported = build_config_export(&source, chrono::Utc::now()).expect("export");
+        let backup: ConfigExport =
+            serde_json::from_str(&serde_json::to_string(&exported).expect("serialize backup"))
+                .expect("parse backup");
+        let profiles = validate_profiles_for_apply(backup.profiles).expect("backup imports");
+        // Tauri 配置只能导入同 Provider 的仓库。
+        let mut target = Repository {
+            provider_id: Some("tauri".to_string()),
+            ..test_repo("repo-2")
+        };
+        let summary = merge_imported_profiles(&mut target, profiles).expect("merge backup");
+        assert_eq!(summary.imported, 1);
+
+        let revision = target.publish_config.profiles[0]
+            .current_revision()
+            .expect("imported revision");
+        let imported = release_settings_from_parameters(&revision.parameters)
+            .expect("imported settings parse")
+            .expect("imported settings are present");
+        assert!(imported.required_actions_secret_names.is_empty());
+        assert!(imported.actions_secret_environment.is_empty());
+        assert_eq!(imported.updater.private_key_secret_name, None);
+        assert_eq!(imported.updater.public_key, settings.updater.public_key);
+        assert_eq!(imported.updater.endpoint, settings.updater.endpoint);
+        assert_eq!(imported.tag_prefix, "app-v");
+        assert_eq!(imported.app_config_path, settings.app_config_path);
+        assert_eq!(imported.enabled_targets, settings.enabled_targets);
+
+        let hand_edited = ConfigProfile {
+            name: "Hand Edited".to_string(),
+            provider_id: "tauri".to_string(),
+            parameters: BTreeMap::from([(
+                "releaseSettings".to_string(),
+                serde_json::to_value(&settings).expect("serialize settings"),
+            )]),
+            ..import_profile("Hand Edited")
+        };
+        let error = validate_profiles_for_apply(vec![hand_edited])
+            .expect_err("secret-name keys count as credential fields");
         assert_eq!(
             error.code.as_deref(),
             Some("import_config_validation_failed")

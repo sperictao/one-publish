@@ -111,11 +111,12 @@ fn ensure_writable_store_schema(path: &Path) -> Result<(), crate::errors::AppErr
     };
 
     Err(crate::errors::AppError::store_with_code(
-        format!(
-            "配置文件 schemaVersion {schema_version} 高于当前支持的 {CURRENT_STORE_SCHEMA_VERSION}，已拒绝覆盖以避免数据丢失"
-        ),
+        "配置文件 schemaVersion 高于当前支持的版本，已拒绝覆盖以避免数据丢失",
         "store_schema_version_newer",
-    ))
+    )
+    .with_details(format!(
+        "schemaVersion {schema_version} > {CURRENT_STORE_SCHEMA_VERSION}"
+    )))
 }
 
 /// 正常加载成功后的收尾：执行旧 Tauri 发布状态的一次性迁移，仅在持久化
@@ -135,8 +136,9 @@ fn finalize_loaded_state(
             backup_before_migration(path);
         }
         if let Err(error) = save_to_path(&state, path) {
+            // Debug 输出同时保留 message 与 details（底层 IO 错误）。
             log::warn!(
-                "写回迁移后的配置失败。路径: {}, 错误: {}",
+                "写回迁移后的配置失败。路径: {}, 错误: {:?}",
                 path.display(),
                 error
             );
@@ -294,57 +296,44 @@ fn replace_file_atomically(source: &Path, target: &Path) -> std::io::Result<()> 
     fs::rename(source, target)
 }
 
+/// message 保持静态、底层错误进 details：前端按 code 取 `errors.<code>` 后仍可附加原因。
+fn store_source_error(
+    message: &'static str,
+    source: impl std::fmt::Display,
+    code: &'static str,
+) -> crate::errors::AppError {
+    crate::errors::AppError::store_with_code(message, code).with_details(source.to_string())
+}
+
 pub(crate) fn write_json_atomically(
     path: &Path,
     json: &[u8],
 ) -> Result<(), crate::errors::AppError> {
-    crate::security::ensure_private_parent_dir(path).map_err(|error| {
-        crate::errors::AppError::store_with_code(
-            format!("创建目录失败: {}", error),
-            "store_create_dir_failed",
-        )
-    })?;
+    crate::security::ensure_private_parent_dir(path)
+        .map_err(|error| store_source_error("创建目录失败", error, "store_create_dir_failed"))?;
 
     let temp_path = build_temp_config_path(path);
     let mut temp_file =
         crate::security::open_private_file(&temp_path, true, false).map_err(|error| {
-            crate::errors::AppError::store_with_code(
-                format!("创建临时文件失败: {}", error),
-                "store_temp_create_failed",
-            )
+            store_source_error("创建临时文件失败", error, "store_temp_create_failed")
         })?;
-    temp_file.write_all(json).map_err(|error| {
-        crate::errors::AppError::store_with_code(
-            format!("写入临时文件失败: {}", error),
-            "store_write_failed",
-        )
-    })?;
-    temp_file.flush().map_err(|error| {
-        crate::errors::AppError::store_with_code(
-            format!("刷新临时文件失败: {}", error),
-            "store_flush_failed",
-        )
-    })?;
-    temp_file.sync_all().map_err(|error| {
-        crate::errors::AppError::store_with_code(
-            format!("同步临时文件失败: {}", error),
-            "store_sync_failed",
-        )
-    })?;
+    temp_file
+        .write_all(json)
+        .map_err(|error| store_source_error("写入临时文件失败", error, "store_write_failed"))?;
+    temp_file
+        .flush()
+        .map_err(|error| store_source_error("刷新临时文件失败", error, "store_flush_failed"))?;
+    temp_file
+        .sync_all()
+        .map_err(|error| store_source_error("同步临时文件失败", error, "store_sync_failed"))?;
     drop(temp_file);
 
     replace_file_atomically(&temp_path, path).map_err(|error| {
         let _ = fs::remove_file(&temp_path);
-        crate::errors::AppError::store_with_code(
-            format!("替换配置文件失败: {}", error),
-            "store_rename_failed",
-        )
+        store_source_error("替换配置文件失败", error, "store_rename_failed")
     })?;
     crate::security::harden_private_path(path).map_err(|error| {
-        crate::errors::AppError::store_with_code(
-            format!("更新配置文件权限失败: {}", error),
-            "store_permission_failed",
-        )
+        store_source_error("更新配置文件权限失败", error, "store_permission_failed")
     })?;
 
     Ok(())
@@ -352,12 +341,8 @@ pub(crate) fn write_json_atomically(
 
 pub(crate) fn save_to_path(state: &AppState, path: &Path) -> Result<(), crate::errors::AppError> {
     ensure_writable_store_schema(path)?;
-    let json = serde_json::to_vec_pretty(&StoredAppState::from(state)).map_err(|error| {
-        crate::errors::AppError::store_with_code(
-            format!("序列化失败: {}", error),
-            "store_serialize_failed",
-        )
-    })?;
+    let json = serde_json::to_vec_pretty(&StoredAppState::from(state))
+        .map_err(|error| store_source_error("序列化失败", error, "store_serialize_failed"))?;
     write_json_atomically(path, &json)
 }
 
@@ -406,6 +391,12 @@ mod tests {
             .expect_err("future schema must be write protected");
 
         assert_eq!(error.code.as_deref(), Some("store_schema_version_newer"));
+        assert_eq!(
+            error.details,
+            Some(format!(
+                "schemaVersion {future_version} > {CURRENT_STORE_SCHEMA_VERSION}"
+            ))
+        );
         assert_eq!(
             fs::read_to_string(&path).expect("read future config"),
             original

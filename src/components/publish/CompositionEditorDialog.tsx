@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import {
   ArrowDown,
@@ -40,6 +40,7 @@ import type {
   RevisionDeliveryRoute,
 } from "@/generated/tauri-contracts";
 import { useI18n } from "@/hooks/useI18n";
+import { localizeInvokeError } from "@/lib/tauri/invokeErrors";
 
 /** Credential fields store references (`<scheme>:<locator>`), never secret values; each credential source defines its reference semantics. */
 const CREDENTIAL_REFERENCE_PATTERN = /^[a-z][a-z0-9+.-]*:\S+$/i;
@@ -176,6 +177,11 @@ export function CompositionEditorDialog({
   const { translations } = useI18n();
   const t = translations.composition || {};
   const commonT = translations.common || {};
+  // 目录加载失败只在 toast 时读取最新翻译；不进入 effect 依赖，避免翻译加载完成时重拉目录。
+  const translationsRef = useRef(translations);
+  useEffect(() => {
+    translationsRef.current = translations;
+  }, [translations]);
 
   const [catalog, setCatalog] = useState<PublishAdapterCatalog | null>(null);
   const [draft, setDraft] = useState<PublishComposition | null>(null);
@@ -208,7 +214,7 @@ export function CompositionEditorDialog({
       })
       .catch((error: unknown) => {
         toast.error(t.catalogFailed || "加载可用 Adapter 目录失败", {
-          description: error instanceof Error ? error.message : String(error),
+          description: localizeInvokeError(error, translationsRef.current),
         });
       });
     return () => {
@@ -289,7 +295,7 @@ export function CompositionEditorDialog({
       onOpenChange(false);
     } catch (error) {
       toast.error(t.saveFailed || "保存发布组合失败", {
-        description: error instanceof Error ? error.message : String(error),
+        description: localizeInvokeError(error, translations),
       });
     } finally {
       setIsSaving(false);
@@ -304,7 +310,7 @@ export function CompositionEditorDialog({
       onOpenChange(false);
     } catch (error) {
       toast.error(t.rebindFailed || "重新绑定失败", {
-        description: error instanceof Error ? error.message : String(error),
+        description: localizeInvokeError(error, translations),
       });
     } finally {
       setIsRebinding(false);

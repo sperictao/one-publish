@@ -9,6 +9,9 @@ const DOTNET_PROJECT_EXTENSIONS: &[&str] = &["csproj", "fsproj", "vbproj"];
 const DOTNET_SOLUTION_EXTENSION: &str = "sln";
 const DOTNET_NESTED_PROJECT_DIRECTORIES: &[&str] = &["src", "UI"];
 const DOTNET_OUTPUT_PARAMETER: &str = "output";
+/// `dotnet publish` 只覆盖不删除：派生目录归 OnePublish 独占时缺省清空，
+/// 已移除的依赖不会残留进下一次交付。
+const DOTNET_CLEANUP_PARAMETER: &str = "delete_existing_files";
 
 /// 项目发布配置（.pubxml）声明：目录、扩展名与引用参数固化位置。
 pub(crate) fn dotnet_project_profiles() -> ProviderProjectProfiles {
@@ -70,6 +73,7 @@ impl BuiltInProvider {
                 output_layout: Some(ProviderOutputLayout {
                     parameter: DOTNET_OUTPUT_PARAMETER.to_string(),
                     template: DOTNET_OUTPUT_LAYOUT.to_string(),
+                    cleanup_parameter: Some(DOTNET_CLEANUP_PARAMETER.to_string()),
                 }),
                 project_profiles: Some(dotnet_project_profiles()),
                 framework_tags: vec!["TargetFramework".to_string(), "TargetFrameworks".to_string()],

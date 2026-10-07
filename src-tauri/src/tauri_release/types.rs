@@ -99,6 +99,9 @@ pub struct TauriReleaseConfig {
     pub release_asset_patterns: Vec<String>,
     pub updater: TauriUpdaterSettings,
     pub allow_unsigned_release: bool,
+    /// 配置备份按敏感键策略剥离 Secret 名称（ADR-0060）；缺省视为空，
+    /// 导入的设置仍可解析，由使用者在发布设置表单中补齐。
+    #[serde(default)]
     pub required_actions_secret_names: Vec<String>,
     #[serde(default)]
     pub actions_secret_environment: BTreeMap<String, String>,
@@ -107,6 +110,16 @@ pub struct TauriReleaseConfig {
     pub local_delivery_dir: String,
     pub version_mirrors: Vec<VersionMirror>,
     pub managed_workflow_version: u32,
+}
+
+/// 发布设置表单的初值（ADR-0060）。`stored` 为 false 表示修订没有可读的
+/// 发布设置，初值来自默认值与项目探测，用户保存前不写入修订。
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(rename_all = "camelCase")]
+pub struct ReleaseSettingsDraft {
+    pub settings: TauriReleaseConfig,
+    pub stored: bool,
 }
 
 impl Default for TauriReleaseConfig {

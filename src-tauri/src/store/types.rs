@@ -112,8 +112,9 @@ pub(crate) const LOCAL_BACKEND_ID: &str = "local-execution";
 pub(crate) const TEMPORARY_STORE_ID: &str = "temporary-artifact-store";
 pub(crate) use publish_adapters::LOCAL_DESTINATION_ID;
 
-/// 草稿配置的显示名（隐藏于 UI，仅调试可见）；按 (repo, provider) 各持一份。
-pub(crate) const DRAFT_PROFILE_NAME: &str = "本地草稿";
+/// 草稿配置的内部名（隐藏于 UI，但会出现在导出 JSON 中）；按 (repo, provider)
+/// 各持一份。使用语言中立的标识，避免导出内容随界面语言混杂。
+pub(crate) const DRAFT_PROFILE_NAME: &str = "local-draft";
 /// 草稿修订 GC 上限：只保留最近 N 个，超出删最旧。进行中的 Attempt 引用的是
 /// 最新（当前）修订，不受影响；更早的草稿 Attempt 在 GC 后失去恢复能力——
 /// 这是草稿语义的可接受上限（真有恢复诉求应保存为命名配置）。
@@ -466,6 +467,11 @@ impl ConfigProfile {
                 migrated = true;
             }
         }
+        // 旧版本草稿使用中文显示名（"本地草稿"）；草稿只按 is_draft 查找，统一改为内部名。
+        if self.is_draft && self.name != DRAFT_PROFILE_NAME {
+            self.name = DRAFT_PROFILE_NAME.to_string();
+            migrated = true;
+        }
         self.blocked_reason = self
             .current_revision()
             .and_then(Self::revision_blocked_reason);
@@ -474,7 +480,7 @@ impl ConfigProfile {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
 #[serde(rename_all = "camelCase")]
 #[ts(rename_all = "camelCase")]
 pub struct ExecutionRecord {
@@ -697,6 +703,25 @@ pub struct RepoPublishConfig {
     pub applied_bundles: Vec<AppliedProjectionBundle>,
 }
 
+// message 保持静态、标识进 details：前端按 code 取 `errors.<code>` 后仍可附加名称或 id。
+pub(crate) fn profile_not_found_error(profile_id: &str) -> crate::errors::AppError {
+    crate::errors::AppError::validation_with_code("未找到配置文件", "profile_not_found")
+        .with_details(profile_id)
+}
+
+fn profile_exists_error(name: &str) -> crate::errors::AppError {
+    crate::errors::AppError::validation_with_code("配置文件已存在", "profile_exists")
+        .with_details(name)
+}
+
+fn profile_revision_not_found_error(profile_id: &str) -> crate::errors::AppError {
+    crate::errors::AppError::validation_with_code(
+        "配置文件缺少当前修订",
+        "profile_revision_not_found",
+    )
+    .with_details(profile_id)
+}
+
 impl RepoPublishConfig {
     pub(crate) fn is_default(&self) -> bool {
         self.selection.is_none() && self.drafts.is_empty() && self.profiles.is_empty()
@@ -717,10 +742,7 @@ impl RepoPublishConfig {
             .iter()
             .any(|profile| profile.deleted_at.is_none() && profile.name == name)
         {
-            return Err(crate::errors::AppError::validation_with_code(
-                format!("配置文件 '{}' 已存在", name),
-                "profile_exists",
-            ));
+            return Err(profile_exists_error(&name));
         }
 
         let profile = ConfigProfile::new(
@@ -899,10 +921,7 @@ impl RepoPublishConfig {
             .iter()
             .any(|profile| profile.id == profile_id && profile.deleted_at.is_none())
         {
-            return Err(crate::errors::AppError::validation_with_code(
-                format!("未找到配置文件: {profile_id}"),
-                "profile_not_found",
-            ));
+            return Err(profile_not_found_error(profile_id));
         }
 
         self.selection = Some(PublishSelectionRef::Revision {
@@ -931,12 +950,7 @@ impl RepoPublishConfig {
             .profiles
             .iter_mut()
             .find(|profile| profile.id == profile_id && profile.deleted_at.is_none())
-            .ok_or_else(|| {
-                crate::errors::AppError::validation_with_code(
-                    format!("未找到配置文件: {profile_id}"),
-                    "profile_not_found",
-                )
-            })?;
+            .ok_or_else(|| profile_not_found_error(profile_id))?;
 
         if profile.is_system_default {
             return Err(crate::errors::AppError::validation_with_code(
@@ -956,6 +970,85 @@ impl RepoPublishConfig {
         Ok(())
     }
 
+    /// 同 Provider 更新可继承的发布设置：当前修订 `releaseSettings` 键的原值
+    /// （含显式 null）；Provider 切换时为 None（ADR-0058）。
+    pub(crate) fn inherited_release_settings(
+        &self,
+        profile_id: &str,
+        provider_id: &str,
+    ) -> Option<&serde_json::Value> {
+        self.profile(profile_id)
+            .and_then(ConfigProfile::current_revision)
+            .filter(|revision| revision.provider_id == provider_id)
+            .and_then(|revision| {
+                revision
+                    .parameters
+                    .get(crate::tauri_release::RELEASE_SETTINGS_PARAMETER)
+            })
+    }
+
+    /// 发布设置表单只服务 Tauri 配置的当前修订（ADR-0060）。
+    pub(crate) fn release_settings_revision(
+        &self,
+        profile_id: &str,
+    ) -> Result<&PublishConfigurationRevision, crate::errors::AppError> {
+        let revision = self
+            .profile(profile_id)
+            .filter(|profile| profile.deleted_at.is_none())
+            .ok_or_else(|| profile_not_found_error(profile_id))?
+            .current_revision()
+            .ok_or_else(|| profile_revision_not_found_error(profile_id))?;
+        if revision.provider_id != publish_adapters::TAURI_PROVIDER_ID {
+            return Err(crate::errors::AppError::validation_with_code(
+                format!("Provider {} 没有发布设置", revision.provider_id),
+                "release_settings_provider_unsupported",
+            ));
+        }
+        Ok(revision)
+    }
+
+    /// 发布设置表单的保存入口（ADR-0060）：受系统管理的托管 workflow 版本由
+    /// 后端钉住，写入前通过与自动化绑定相同的校验，再作为新修订保存；命令
+    /// 参数、发布组合与项目绑定沿用当前修订。
+    pub fn update_release_settings(
+        &mut self,
+        profile_id: &str,
+        mut settings: crate::tauri_release::TauriReleaseConfig,
+        updated_at: String,
+    ) -> Result<(), crate::errors::AppError> {
+        let revision = self.release_settings_revision(profile_id)?;
+        settings.managed_workflow_version = crate::tauri_release::MANAGED_WORKFLOW_VERSION;
+        crate::tauri_release::validate_release_config(&settings)?;
+        let mut parameters = match &revision.parameters {
+            serde_json::Value::Object(map) => map.clone(),
+            _ => serde_json::Map::new(),
+        };
+        parameters.insert(
+            crate::tauri_release::RELEASE_SETTINGS_PARAMETER.to_string(),
+            serde_json::to_value(&settings).map_err(|error| {
+                crate::errors::AppError::config_with_code(
+                    format!("无法序列化发布设置: {error}"),
+                    "tauri_release_settings_invalid",
+                )
+            })?,
+        );
+        let provider_id = revision.provider_id.clone();
+        let profile = self
+            .profile(profile_id)
+            .ok_or_else(|| profile_not_found_error(profile_id))?;
+        let (name, profile_group) = (profile.name.clone(), profile.profile_group.clone());
+        self.update_profile(
+            profile_id,
+            name,
+            provider_id,
+            serde_json::Value::Object(parameters),
+            profile_group,
+            None,
+            None,
+            updated_at,
+        )
+    }
+
     #[allow(clippy::too_many_arguments)]
     pub fn update_profile(
         &mut self,
@@ -971,17 +1064,10 @@ impl RepoPublishConfig {
         // 参数编辑器只管理 schema 声明的命令参数；未显式携带 `releaseSettings`
         // 的更新从当前修订继承发布设置，保存不得静默清除它们。发布设置属于
         // 原 Provider，切换 Provider 的修订不再携带；显式传 null 表示清除。
-        if let Some(settings) = self.profile(profile_id).and_then(|profile| {
-            profile
-                .current_revision()
-                .filter(|revision| revision.provider_id == provider_id)
-                .and_then(|revision| {
-                    revision
-                        .parameters
-                        .get(crate::tauri_release::RELEASE_SETTINGS_PARAMETER)
-                })
-                .cloned()
-        }) {
+        if let Some(settings) = self
+            .inherited_release_settings(profile_id, &provider_id)
+            .cloned()
+        {
             if let Some(object) = parameters.as_object_mut() {
                 object
                     .entry(crate::tauri_release::RELEASE_SETTINGS_PARAMETER)
@@ -992,22 +1078,14 @@ impl RepoPublishConfig {
         if self.profiles.iter().any(|profile| {
             profile.deleted_at.is_none() && profile.id != profile_id && profile.name == name
         }) {
-            return Err(crate::errors::AppError::validation_with_code(
-                format!("配置文件 '{}' 已存在", name),
-                "profile_exists",
-            ));
+            return Err(profile_exists_error(&name));
         }
 
         let profile = self
             .profiles
             .iter_mut()
             .find(|profile| profile.id == profile_id && profile.deleted_at.is_none())
-            .ok_or_else(|| {
-                crate::errors::AppError::validation_with_code(
-                    format!("未找到配置文件: {profile_id}"),
-                    "profile_not_found",
-                )
-            })?;
+            .ok_or_else(|| profile_not_found_error(profile_id))?;
 
         if profile.is_system_default {
             return Err(crate::errors::AppError::validation_with_code(
@@ -1016,12 +1094,10 @@ impl RepoPublishConfig {
             ));
         }
 
-        let current_revision = profile.current_revision().cloned().ok_or_else(|| {
-            crate::errors::AppError::validation_with_code(
-                format!("配置文件缺少当前修订: {profile_id}"),
-                "profile_revision_not_found",
-            )
-        })?;
+        let current_revision = profile
+            .current_revision()
+            .cloned()
+            .ok_or_else(|| profile_revision_not_found_error(profile_id))?;
         // 组合与参数一样属于修订：未显式携带的更新从当前修订继承，保存不得
         // 把 Backend、Store、Processor 或 Delivery Route 静默重置回默认组合。
         let composition = composition.unwrap_or_else(|| current_revision.composition.clone());
@@ -1087,24 +1163,17 @@ impl RepoPublishConfig {
             .profiles
             .iter_mut()
             .find(|profile| profile.id == profile_id && profile.deleted_at.is_none())
-            .ok_or_else(|| {
-                crate::errors::AppError::validation_with_code(
-                    format!("未找到配置文件: {profile_id}"),
-                    "profile_not_found",
-                )
-            })?;
+            .ok_or_else(|| profile_not_found_error(profile_id))?;
         if profile.is_system_default {
             return Err(crate::errors::AppError::validation_with_code(
                 "不能编辑系统默认配置文件",
                 "system_profile_immutable",
             ));
         }
-        let current = profile.current_revision().cloned().ok_or_else(|| {
-            crate::errors::AppError::validation_with_code(
-                format!("配置文件缺少当前修订: {profile_id}"),
-                "profile_revision_not_found",
-            )
-        })?;
+        let current = profile
+            .current_revision()
+            .cloned()
+            .ok_or_else(|| profile_revision_not_found_error(profile_id))?;
         if current.project_binding.as_deref() == Some(project_binding.as_str()) {
             return Ok(false);
         }

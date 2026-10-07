@@ -1,5 +1,11 @@
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 
 const mocks = vi.hoisted(() => ({
   openDialog: vi.fn(),
@@ -28,7 +34,8 @@ vi.mock("sonner", () => ({
   },
 }));
 
-vi.mock("@/hooks/useI18n", () => ({
+vi.mock("@/hooks/useI18n", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/hooks/useI18n")>()),
   useI18n: () => ({
     language: "zh",
     translations: {
@@ -486,5 +493,52 @@ describe("ConfigManagementContent", () => {
     fireEvent.click(screen.getByRole("button", { name: "加载" }));
 
     expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it("删除配置时先显示应用内确认对话框，取消不删除，确认后才删除", async () => {
+    const profile: ConfigProfile = {
+      id: "profile-release",
+      revisionId: "revision-release",
+      name: "Release",
+      providerId: "dotnet",
+      parameters: {},
+      profileGroup: null,
+      createdAt: "2026-04-02T12:00:00.000Z",
+      isSystemDefault: false,
+      externalBindingIds: [],
+    };
+    renderConfigManagementContent({ profiles: [profile] });
+
+    fireEvent.click(screen.getByRole("button", { name: "删除配置: Release" }));
+
+    const dialog = await screen.findByRole("dialog", { name: "删除配置" });
+    expect(within(dialog).getByText("确定删除配置「Release」？")).toBeVisible();
+    expect(mocks.deleteProfile).not.toHaveBeenCalled();
+
+    fireEvent.click(within(dialog).getByRole("button", { name: "取消" }));
+    await waitFor(() => {
+      expect(
+        screen.queryByRole("dialog", { name: "删除配置" })
+      ).not.toBeInTheDocument();
+    });
+    expect(mocks.deleteProfile).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole("button", { name: "删除配置: Release" }));
+    const confirmDialog = await screen.findByRole("dialog", {
+      name: "删除配置",
+    });
+    fireEvent.click(
+      within(confirmDialog).getByRole("button", { name: "删除" })
+    );
+
+    await waitFor(() => {
+      expect(mocks.deleteProfile).toHaveBeenCalledWith(profile);
+    });
+    expect(mocks.toastSuccess).toHaveBeenCalledWith("配置已删除");
+    await waitFor(() => {
+      expect(
+        screen.queryByRole("dialog", { name: "删除配置" })
+      ).not.toBeInTheDocument();
+    });
   });
 });

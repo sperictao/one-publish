@@ -11,6 +11,10 @@ vi.mock("@/features/publish/publishRuntime", () => ({
   resolvePublishSource: mocks.resolve,
 }));
 vi.mock("sonner", () => ({ toast: { error: mocks.error, success: vi.fn() } }));
+vi.mock("@/hooks/useI18n", async () => {
+  const translations = (await import("@/i18n/en.json")).default;
+  return { useI18n: () => ({ translations }) };
+});
 
 function deferred() {
   let resolve!: (value: ResolvedPublishSource) => void;
@@ -181,5 +185,51 @@ describe("quick create backend templates", () => {
       release: false,
     });
     expect(result.current.quickCreateTemplateId).toBe("debug");
+  });
+});
+
+describe("quick create invoke failures", () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it("localizes template resolution failures by error code", async () => {
+    mocks.resolve.mockRejectedValue({
+      kind: "validation",
+      message: "未找到仓库",
+      details: "repo-a",
+      code: "repository_not_found",
+    });
+    const { result } = renderHook(() => useQuickCreateProfile(props()));
+    act(() => result.current.openQuickCreateProfileDialog());
+
+    await act(async () => {
+      await result.current.applyQuickCreateTemplate("release");
+    });
+
+    expect(mocks.error).toHaveBeenCalledWith("Repository not found. | repo-a");
+    expect(result.current.quickCreateTemplateId).toBe("custom");
+  });
+
+  it("localizes save failures by error code", async () => {
+    const input = props();
+    vi.mocked(input.saveProfileToStore).mockRejectedValue({
+      kind: "validation",
+      message: "配置文件已存在",
+      details: "Build",
+      code: "profile_exists",
+    });
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    const { result } = renderHook(() => useQuickCreateProfile(input));
+    act(() => {
+      result.current.openQuickCreateProfileDialog();
+      result.current.setQuickCreateProfileName("Build");
+    });
+
+    await act(async () => {
+      await result.current.handleQuickCreateProfileSave();
+    });
+
+    expect(mocks.error).toHaveBeenCalledWith(
+      "A configuration profile with this name already exists. | Build"
+    );
   });
 });

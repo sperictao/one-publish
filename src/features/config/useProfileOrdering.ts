@@ -1,5 +1,6 @@
 import { useCallback } from "react";
 
+import { useI18n } from "@/hooks/useI18n";
 import { useLazyRef } from "@/hooks/useLazyRef";
 import { toast } from "sonner";
 
@@ -32,6 +33,8 @@ export function useProfileOrdering({
   reorderProfilesFn,
   profileT,
 }: UseProfileOrderingParams): UseProfileOrderingReturn {
+  // 拖拽排序 handler 不驱动 useEffect，translations 可直接进依赖。
+  const { translations } = useI18n();
   const reorderProfilesQueueRef = useLazyRef<Promise<void>>(() =>
     Promise.resolve()
   );
@@ -69,9 +72,9 @@ export function useProfileOrdering({
               await onReorderFailed();
             }
 
-            const { extractInvokeErrorMessage } = await loadInvokeErrors();
+            const { localizeInvokeError } = await loadInvokeErrors();
             toast.error(profileT.quickEditFailed || "更新配置文件失败", {
-              description: extractInvokeErrorMessage(err),
+              description: localizeInvokeError(err, translations),
             });
           }
         });
@@ -82,6 +85,7 @@ export function useProfileOrdering({
       profileT.quickEditFailed,
       reorderProfilesFn,
       selectedRepoId,
+      translations,
     ]
   );
 

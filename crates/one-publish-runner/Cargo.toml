@@ -11,6 +11,9 @@ publish-runner-core = { path = "../publish-runner-core" }
 serde.workspace = true
 serde_json.workspace = true
 
+[target.'cfg(unix)'.dependencies]
+libc.workspace = true
+
 [build-dependencies]
 hex.workspace = true
 sha2.workspace = true

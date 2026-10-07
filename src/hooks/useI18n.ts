@@ -28,6 +28,14 @@ function normalizeLanguage(value: string | null): Language {
   return value === "en" ? "en" : DEFAULT_LANGUAGE;
 }
 
+/**
+ * 应用语言对应的 BCP 47 标签：供日期格式化与 `<html lang>` 使用，
+ * 避免回落到系统语言造成界面混排。
+ */
+export function getLanguageLocale(language: Language): string {
+  return language === "en" ? "en-US" : "zh-CN";
+}
+
 function getStoredLanguage(): Language {
   return normalizeLanguage(localStorage.getItem(LANGUAGE_STORAGE_KEY));
 }
@@ -106,6 +114,14 @@ function t(key: string, params?: Record<string, string | number>): string {
 }
 
 /**
+ * 当前语言的完整翻译树，供组件外（如 Zustand store）按错误码本地化；
+ * 翻译尚未加载时返回空树，调用方应回落到后端 message。
+ */
+function getCurrentTranslations(): TranslationTree {
+  return translationsCache[getStoredLanguage()] || {};
+}
+
+/**
  * 国际化 Hook
  */
 export function useI18n() {
@@ -129,9 +145,10 @@ export function useI18n() {
     };
   }, [language]);
 
-  // 首次加载或外部同步后，统一修正本地存储中的语言值
+  // 首次加载或外部同步后，统一修正本地存储中的语言值与文档语言
   useEffect(() => {
     writeStoredLanguage(language);
+    document.documentElement.lang = getLanguageLocale(language);
   }, [language]);
 
   useEffect(() => {
@@ -190,4 +207,4 @@ export function useI18n() {
 }
 
 // 导出翻译函数以便在组件外使用
-export { t };
+export { getCurrentTranslations, t };

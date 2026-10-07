@@ -140,6 +140,7 @@ pub fn generate_tauri_contracts() -> String {
     push_contract::<crate::store::RevisionAdapterBinding>(&mut declarations);
     push_contract::<crate::store::RevisionDeliveryRoute>(&mut declarations);
     push_contract::<crate::tauri_release::ReleaseGate>(&mut declarations);
+    push_contract::<crate::tauri_release::ReleaseSettingsDraft>(&mut declarations);
     push_contract::<crate::tauri_release::TauriBuildDriver>(&mut declarations);
     push_contract::<crate::tauri_release::TauriDesktopTarget>(&mut declarations);
     push_contract::<crate::tauri_release::TauriReleaseConfig>(&mut declarations);

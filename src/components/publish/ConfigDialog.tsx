@@ -31,7 +31,9 @@ import type { ImportedConfigSummary } from "@/generated/tauri-contracts";
 import { importConfig } from "@/lib/store/api";
 import { type ConfigParameters, type ConfigProfile } from "@/lib/store/types";
 import { cn } from "@/lib/utils";
-import { useI18n } from "@/hooks/useI18n";
+import { getLanguageLocale, useI18n } from "@/hooks/useI18n";
+import { localizeInvokeError } from "@/lib/tauri/invokeErrors";
+import { DeleteProfileConfirmDialog } from "@/components/publish/DeleteProfileConfirmDialog";
 
 interface ConfigManagementContentProps {
   active: boolean;
@@ -176,7 +178,7 @@ export function ConfigManagementContent({
     () => translations.profiles || {},
     [translations.profiles]
   );
-  const dateLocale = language === "en" ? "en-US" : "zh-CN";
+  const dateLocale = getLanguageLocale(language);
   const [newProfileName, setNewProfileName] = useState("");
   const [isSaving, setIsSaving] = useState(false);
   const [pendingImport, setPendingImport] = useState<PendingImportState | null>(
@@ -184,6 +186,8 @@ export function ConfigManagementContent({
   );
   const [isImportLoading, setIsImportLoading] = useState(false);
   const [isApplyingImport, setIsApplyingImport] = useState(false);
+  const [pendingDeleteProfile, setPendingDeleteProfile] =
+    useState<ConfigProfile | null>(null);
   const isLoading = isProfilesRefreshing || isImportLoading;
   const importPreview = useMemo(
     () =>
@@ -228,7 +232,7 @@ export function ConfigManagementContent({
       setNewProfileName("");
     } catch (err) {
       toast.error(profileT.saveFailed || "保存配置文件失败", {
-        description: err instanceof Error ? err.message : String(err),
+        description: localizeInvokeError(err, translations),
       });
     } finally {
       setIsSaving(false);
@@ -247,7 +251,7 @@ export function ConfigManagementContent({
       toast.success(profileT.deleteSuccess || "配置已删除");
     } catch (err) {
       toast.error(profileT.deleteFailed || "删除配置文件失败", {
-        description: err instanceof Error ? err.message : String(err),
+        description: localizeInvokeError(err, translations),
       });
     }
   };
@@ -280,7 +284,7 @@ export function ConfigManagementContent({
       }
     } catch (err) {
       toast.error(profileT.exportFailed || "导出配置失败", {
-        description: err instanceof Error ? err.message : String(err),
+        description: localizeInvokeError(err, translations),
       });
     }
   };
@@ -312,12 +316,12 @@ export function ConfigManagementContent({
       setPendingImport(null);
     } catch (err) {
       toast.error(profileT.importFailed || "导入配置失败", {
-        description: err instanceof Error ? err.message : String(err),
+        description: localizeInvokeError(err, translations),
       });
     } finally {
       setIsApplyingImport(false);
     }
-  }, [onApplyImportedProfiles, pendingImport, profileT, repoId]);
+  }, [onApplyImportedProfiles, pendingImport, profileT, repoId, translations]);
 
   const handleImportConfig = async () => {
     if (!repoId) return;
@@ -340,7 +344,7 @@ export function ConfigManagementContent({
           });
         } catch (err) {
           toast.error(profileT.importFailed || "导入配置失败", {
-            description: err instanceof Error ? err.message : String(err),
+            description: localizeInvokeError(err, translations),
           });
         } finally {
           setIsImportLoading(false);
@@ -348,7 +352,7 @@ export function ConfigManagementContent({
       }
     } catch (err) {
       toast.error(profileT.importFailed || "导入配置失败", {
-        description: err instanceof Error ? err.message : String(err),
+        description: localizeInvokeError(err, translations),
       });
     }
   };
@@ -495,7 +499,7 @@ export function ConfigManagementContent({
                     {!profile.isSystemDefault ? (
                       <Button
                         variant="ghost"
-                        onClick={() => void handleDeleteProfile(profile)}
+                        onClick={() => setPendingDeleteProfile(profile)}
                         aria-label={`${profileT.deleteProfileAction || "删除配置"}${profile.name ? `: ${profile.name}` : ""}`}
                         className="h-10 px-3 text-destructive hover:text-destructive"
                       >
@@ -628,6 +632,12 @@ export function ConfigManagementContent({
           </AppDialogShell>
         ) : null}
       </Dialog>
+
+      <DeleteProfileConfirmDialog
+        profile={pendingDeleteProfile}
+        onClose={() => setPendingDeleteProfile(null)}
+        onConfirm={handleDeleteProfile}
+      />
     </div>
   );
 }

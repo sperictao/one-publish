@@ -2,6 +2,7 @@ use std::collections::BTreeMap;
 use std::path::Path;
 use std::sync::Arc;
 
+use publish_adapters::tauri::ENABLED_TARGETS_SETTING;
 use publish_adapters::{
     AdapterConformanceFixture, AdapterContract, AdapterRegistry, ProjectProvider, TauriBuildDriver,
     TauriProjectProvider, TauriVersionSourceKind, VersionMirrorKind, TAURI_PROVIDER_ID,
@@ -11,7 +12,7 @@ use publish_domain::{
     PlanOperation, PlanStage, PlanningInputSnapshot, SourceSnapshot,
     PLANNING_INPUT_SNAPSHOT_VERSION,
 };
-use serde_json::Value;
+use serde_json::{json, Value};
 
 fn write_file(path: &Path, content: &str) {
     if let Some(parent) = path.parent() {
@@ -409,6 +410,39 @@ fn tauri_provider_passes_adapter_conformance_registration() {
 
     let identity = AdapterIdentity::new(AdapterKind::ProjectProvider, TAURI_PROVIDER_ID, 1);
     assert!(registry.descriptor(&identity).is_ok());
+}
+
+/// 远端绑定总是写入启用目标（决议 #85）：规划入口必须把它当作已声明的可选
+/// 字符串列表，而不是未知设置；本地绑定缺省该键。
+#[test]
+fn enabled_targets_are_an_optional_string_list_setting() {
+    let fixture = AdapterConformanceFixture::new(fixture_snapshot());
+    let mut registry = AdapterRegistry::new();
+    registry
+        .register_project_provider(Arc::new(TauriProjectProvider::new()), &fixture)
+        .expect("register tauri provider");
+    let identity = AdapterIdentity::new(AdapterKind::ProjectProvider, TAURI_PROVIDER_ID, 1);
+    let local = TauriProjectProvider::new().default_settings();
+
+    registry
+        .migrate_and_validate_settings(&identity, &local)
+        .expect("local bindings omit enabled targets");
+    registry
+        .migrate_and_validate_settings(
+            &identity,
+            &local
+                .clone()
+                .with_value(ENABLED_TARGETS_SETTING, json!(["x86_64-unknown-linux-gnu"])),
+        )
+        .expect("remote bindings carry enabled targets");
+
+    let error = registry
+        .migrate_and_validate_settings(
+            &identity,
+            &local.with_value(ENABLED_TARGETS_SETTING, json!("x86_64-unknown-linux-gnu")),
+        )
+        .expect_err("a bare target string is not a target list");
+    assert!(error.to_string().contains(ENABLED_TARGETS_SETTING));
 }
 
 fn fixture_snapshot() -> PlanningInputSnapshot {

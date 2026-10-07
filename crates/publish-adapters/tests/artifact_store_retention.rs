@@ -83,6 +83,7 @@ fn persist_artifacts(
         envelopes: &[],
         receipts: &[],
         credentials: &EMPTY_CREDENTIALS,
+        cancellation: publish_adapters::CancellationSignal::new(),
     };
     let output = store.execute_node(&node, &context)?;
     Ok(output.manifest.expect("persist seals a manifest"))

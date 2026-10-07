@@ -1,7 +1,14 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
 import { PublishRunCard } from "@/components/publish/PublishRunCard";
+import { __setTranslationsCacheForTest } from "@/hooks/useI18n";
+import en from "@/i18n/en.json";
+import zh from "@/i18n/zh.json";
+import { openOutputDirectory } from "@/lib/store/api";
+
+const toast = vi.hoisted(() => ({ success: vi.fn(), error: vi.fn() }));
+vi.mock("sonner", () => ({ toast }));
 
 vi.mock("@/lib/store/api", async () => {
   const actual =
@@ -408,7 +415,7 @@ describe("PublishRunCard", () => {
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
   });
 
-  it("prepare 被阻断时展示诊断且不展示计划摘要", () => {
+  it("prepare 被阻断时按 code 本地化诊断且不展示计划摘要", async () => {
     render(
       <PublishRunCard
         outputLog=""
@@ -420,6 +427,11 @@ describe("PublishRunCard", () => {
             {
               code: "publish_output_access_denied",
               message: "publish output access is denied",
+            },
+            {
+              code: "publish_runtime_delivery_blocked",
+              message:
+                "local delivery destination /repo/out is not a directory",
             },
           ],
           outputPreflight: {
@@ -437,12 +449,52 @@ describe("PublishRunCard", () => {
       />
     );
 
-    expect(screen.getByRole("alert")).toHaveTextContent(
-      "publish output access is denied"
+    const alert = screen.getByRole("alert");
+    await waitFor(() => {
+      expect(alert).toHaveTextContent(zh.errors.publish_output_access_denied);
+    });
+    expect(alert).not.toHaveTextContent("publish output access is denied");
+    // 未登记的诊断码保留后端原文（语言中立的技术细节）。
+    expect(alert).toHaveTextContent(
+      "local delivery destination /repo/out is not a directory"
     );
     expect(
       screen.queryByTestId("publish-runtime-plan")
     ).not.toBeInTheDocument();
+  });
+
+  it("无法确定输出位置时展示本地化的可操作提示而非后端原文", async () => {
+    render(
+      <PublishRunCard
+        outputLog=""
+        publishResult={null}
+        appT={{ outputLogTitle: "执行发布", noOutput: "无输出" }}
+        preparedRuntime={{
+          status: "blocked",
+          diagnostics: [
+            {
+              code: "publish_runtime_output_unresolved",
+              message: "publish output location could not be determined",
+            },
+          ],
+        }}
+        publishActions={{
+          isPublishing: false,
+          isCancellingPublish: false,
+          startDisabled: true,
+          onStartPublish: vi.fn(),
+          onCancelPublish: vi.fn(),
+        }}
+      />
+    );
+
+    const alert = screen.getByRole("alert");
+    await waitFor(() => {
+      expect(alert).toHaveTextContent(
+        zh.errors.publish_runtime_output_unresolved
+      );
+    });
+    expect(alert).not.toHaveTextContent("could not be determined");
   });
 
   it("选中 Tauri 配置时右侧用通用计划展示 Provider 阶段与驱动命令", () => {
@@ -581,6 +633,91 @@ describe("PublishRunCard", () => {
       "tauri_build_driver_conflict"
     );
     expect(screen.getByTestId("publish-execute-btn")).toBeDisabled();
+  });
+
+  describe("准备被阻断时的状态文案", () => {
+    const blockedPublishActions = {
+      isPublishing: false,
+      isCancellingPublish: false,
+      startDisabled: true,
+      onStartPublish: vi.fn(),
+      onCancelPublish: vi.fn(),
+    };
+
+    it.each([
+      ["zh", zh.app],
+      ["en", en.app],
+    ])("%s：阻断态使用独立文案，不再宣称已准备完成", (_language, appT) => {
+      render(
+        <PublishRunCard
+          outputLog=""
+          publishResult={null}
+          appT={appT}
+          preparedRuntime={{
+            status: "blocked",
+            diagnostics: [
+              {
+                code: "project_binding_required",
+                message: "请先绑定 Tauri 项目",
+              },
+            ],
+          }}
+          publishActions={blockedPublishActions}
+        />
+      );
+
+      const statusPanel = screen.getByTestId("publish-status-panel");
+      expect(statusPanel).toHaveTextContent(appT.publishStatusBlocked);
+      expect(statusPanel).toHaveTextContent(appT.publishStatusBlockedDetail);
+      expect(statusPanel).not.toHaveTextContent(appT.publishStatusIdleDetail);
+    });
+
+    it("准备请求本身失败时同样进入阻断态", () => {
+      render(
+        <PublishRunCard
+          outputLog=""
+          publishResult={null}
+          appT={zh.app}
+          runtimePreparationError="Go 发布需要输出目录"
+          publishActions={blockedPublishActions}
+        />
+      );
+
+      expect(screen.getByRole("alert")).toHaveTextContent(
+        "Go 发布需要输出目录"
+      );
+      expect(screen.getByTestId("publish-status-panel")).toHaveTextContent(
+        zh.app.publishStatusBlocked
+      );
+    });
+
+    it("仅缺输出目录授权时可在开始发布时申请授权，保持待执行", () => {
+      render(
+        <PublishRunCard
+          outputLog=""
+          publishResult={null}
+          appT={zh.app}
+          preparedRuntime={{
+            status: "blocked",
+            diagnostics: [
+              {
+                code: "publish_output_access_denied",
+                message: "publish output access is denied",
+              },
+            ],
+            outputPreflight: {
+              outputDir: "/repo/publish-output",
+              accessStatus: "denied",
+            },
+          }}
+          publishActions={{ ...blockedPublishActions, startDisabled: false }}
+        />
+      );
+
+      const statusPanel = screen.getByTestId("publish-status-panel");
+      expect(statusPanel).toHaveTextContent(zh.app.publishStatusIdle);
+      expect(statusPanel).not.toHaveTextContent(zh.app.publishStatusBlocked);
+    });
   });
 
   it("展示 Manifest、稳定 Receipt ID 与最终 Delivery Lifecycle", () => {
@@ -978,5 +1115,56 @@ describe("PublishRunCard", () => {
     expect(screen.getByTestId("publish-route-mirror")).toHaveTextContent(
       "simulated delivery failure at mirror.stage"
     );
+  });
+
+  it("打开输出目录失败时按界面语言描述 AppError，而不是渲染 [object Object]", async () => {
+    // 预置翻译缓存，确保点击时 useI18n 已是英文。
+    __setTranslationsCacheForTest({ zh, en });
+    localStorage.setItem("app-language", "en");
+    // Tauri invoke 以 AppError 对象 reject；后端 message 固定为中文。
+    vi.mocked(openOutputDirectory).mockRejectedValue({
+      kind: "export",
+      message: "输出目录不存在",
+      details: "/tmp/output",
+      code: "output_dir_not_found",
+    });
+
+    try {
+      render(
+        <PublishRunCard
+          outputLog=""
+          publishResult={{
+            provider_id: "dotnet",
+            success: true,
+            cancelled: false,
+            error: null,
+            command: {
+              program: "dotnet",
+              args: ["publish"],
+              working_dir: "/tmp",
+              display_command: "dotnet publish",
+              env: [],
+            },
+            output_log: "",
+            output_dir: "/tmp/output",
+            file_count: 3,
+            warnings: null,
+          }}
+          appT={en.app}
+          publishActions={null}
+        />
+      );
+
+      fireEvent.click(screen.getByText("/tmp/output"));
+
+      await waitFor(() =>
+        expect(toast.error).toHaveBeenCalledWith(
+          en.app.openOutputDirectoryFailed,
+          { description: `${en.errors.output_dir_not_found} | /tmp/output` }
+        )
+      );
+    } finally {
+      localStorage.setItem("app-language", "zh");
+    }
   });
 });

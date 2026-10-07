@@ -83,6 +83,21 @@ function renderDialog(overrides?: {
   return { onScanProjectCandidates };
 }
 
+describe("EditRepositoryDialog 初始焦点", () => {
+  it("打开后聚焦仓库名称输入框，标题 HelpTip 不抢焦点也不自动弹出提示", async () => {
+    renderDialog();
+
+    const nameInput = await screen.findByLabelText("仓库名称");
+    await waitFor(() => {
+      expect(nameInput).toHaveFocus();
+    });
+    expect(
+      screen.getByRole("button", { name: "编辑项目信息" })
+    ).not.toHaveFocus();
+    expect(screen.queryByRole("tooltip")).not.toBeInTheDocument();
+  });
+});
+
 describe("EditRepositoryDialog 自动绑定推荐项目文件", () => {
   it("无绑定的多项目仓库打开后应回填推荐 Project File 并允许保存", async () => {
     renderDialog();

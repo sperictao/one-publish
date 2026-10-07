@@ -36,14 +36,13 @@ pub(crate) use provider::{
 pub use provider::{get_provider_schema, import_from_command, list_providers};
 pub(crate) use publish::{__cmd__describe_publish_output_target, __cmd__preflight_publish_output};
 pub use publish::{
-    cancel_provider_publish, describe_publish_output_target, execute_provider_publish,
-    preflight_publish_output, render_provider_publish, ProtectedDirectoryLocation,
-    PublishLogChunkEvent, PublishOutputAccess, PublishOutputAccessStatus,
-    PublishOutputPreflightResult, PublishOutputValidation, PublishOutputValidationIssue,
-    PublishOutputValidationStatus, PublishResult, PublishSessionStartedEvent, RemoteLocationKind,
-    RemoteLocationSummary, RenderedPublishCommand,
+    describe_publish_output_target, preflight_publish_output, render_provider_publish,
+    ProtectedDirectoryLocation, PublishLogChunkEvent, PublishOutputAccess,
+    PublishOutputAccessStatus, PublishOutputPreflightResult, PublishOutputValidation,
+    PublishOutputValidationIssue, PublishOutputValidationStatus, PublishResult,
+    PublishSessionStartedEvent, RemoteLocationKind, RemoteLocationSummary, RenderedPublishCommand,
 };
-pub(crate) use publish::{execute_sealed_build, SealedBuildCommand};
+pub(crate) use publish::{execute_provider_publish, execute_sealed_build, SealedBuildCommand};
 pub(crate) use repository::{
     __cmd__check_repository_branch_connectivity, __cmd__detect_repository_provider,
     __cmd__read_project_publish_profile, __cmd__resolve_project_info, __cmd__scan_project,

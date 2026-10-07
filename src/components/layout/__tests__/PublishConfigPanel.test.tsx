@@ -17,6 +17,7 @@ import {
 } from "@testing-library/react";
 import { PublishConfigPanel } from "@/components/layout/PublishConfigPanel";
 import { __setTranslationsCacheForTest } from "@/hooks/useI18n";
+import zhLocale from "@/i18n/zh.json";
 import type { ConfigProfile } from "@/lib/store/types";
 import type { ParameterSchema } from "@/types/parameters";
 
@@ -53,9 +54,12 @@ function getRenderedConfigIds(
 
 let getBoundingClientRectSpy: ReturnType<typeof vi.spyOn> | null = null;
 
-const { resolveDotnetProjectProfileMock } = vi.hoisted(() => ({
+const { resolveDotnetProjectProfileMock, toastMock } = vi.hoisted(() => ({
   resolveDotnetProjectProfileMock: vi.fn(),
+  toastMock: { error: vi.fn(), success: vi.fn() },
 }));
+
+vi.mock("sonner", () => ({ toast: toastMock }));
 
 vi.mock("@/lib/dotnetProjectProfile", () => ({
   resolveDotnetProjectProfile: resolveDotnetProjectProfileMock,
@@ -215,6 +219,8 @@ beforeAll(() => {
         refreshingProjectProfiles: "正在刷新项目发布配置...",
         refreshingCustomProfiles: "正在刷新自定义配置...",
       },
+      // 后端错误码文案用真实 zh 条目，顺带校验 `errors.<code>` 已登记。
+      errors: zhLocale.errors,
       profiles: {
         providerParametersSection: "发布参数",
         providerParametersSectionDescription:
@@ -233,6 +239,8 @@ afterAll(() => {
 beforeEach(() => {
   localStorage.setItem("app-language", "zh");
   resolveDotnetProjectProfileMock.mockReset();
+  toastMock.error.mockReset();
+  toastMock.success.mockReset();
 });
 
 describe("PublishConfigPanel", () => {
@@ -360,6 +368,74 @@ describe("PublishConfigPanel", () => {
     fireEvent.click(tauriTrigger);
     fireEvent.click(await screen.findByRole("menuitem", { name: "更新配置" }));
     expect(onEditProfile).toHaveBeenCalledWith(driftedTauri);
+  });
+
+  it("菜单删除配置先弹出应用内确认，取消不删除，确认后才删除", async () => {
+    const editable = createProfile("Alpha", undefined, { id: "profile-42" });
+    const onDeleteProfile = vi.fn();
+    const { container } = render(
+      <PublishConfigPanel
+        selection={{ kind: "revision" as const, configurationId: "profile-42" }}
+        profiles={[editable]}
+        activeProfileName="Alpha"
+        onSelectProfile={() => {}}
+        onCreateProfile={() => {}}
+        onEditProfile={() => {}}
+        onViewProfile={() => {}}
+        onSaveProfileComposition={async () => {}}
+        onRebindProfileProject={async () => {}}
+        onRefreshProfiles={() => {}}
+        onOpenConfigDialog={() => {}}
+        onDeleteProfile={onDeleteProfile}
+        dotnetSchema={dotnetSchema}
+        projectPublishProfiles={[]}
+        onSelectProjectProfile={() => {}}
+        onCopyProjectProfileToCustom={async () => "copied"}
+        recentConfigKeys={[]}
+        favoriteConfigKeys={[]}
+        onToggleFavoriteConfig={() => {}}
+        onRemoveRecentConfig={() => {}}
+        onReorderRecentConfigs={() => {}}
+        onReorderProjectProfiles={() => {}}
+        onReorderProfiles={() => {}}
+      />
+    );
+    const row = container.querySelector<HTMLElement>(
+      '[data-list-item-id="userprofile:profile-42"]'
+    );
+    const openDeleteConfirm = async () => {
+      const trigger = within(row!).getByRole("button", {
+        name: "更多操作: Alpha",
+      });
+      fireEvent.pointerDown(trigger, { button: 0, ctrlKey: false });
+      fireEvent.click(trigger);
+      fireEvent.click(
+        await screen.findByRole("menuitem", { name: "删除配置" })
+      );
+      return screen.findByRole("dialog", { name: "删除配置" });
+    };
+
+    const dialog = await openDeleteConfirm();
+    expect(within(dialog).getByText("确定删除配置「Alpha」？")).toBeVisible();
+    expect(onDeleteProfile).not.toHaveBeenCalled();
+
+    fireEvent.click(within(dialog).getByRole("button", { name: "取消" }));
+    await waitFor(() => {
+      expect(
+        screen.queryByRole("dialog", { name: "删除配置" })
+      ).not.toBeInTheDocument();
+    });
+    expect(onDeleteProfile).not.toHaveBeenCalled();
+
+    const confirmDialog = await openDeleteConfirm();
+    fireEvent.click(
+      within(confirmDialog).getByRole("button", { name: "删除" })
+    );
+
+    await waitFor(() => {
+      expect(onDeleteProfile).toHaveBeenCalledWith("profile-42");
+    });
+    expect(onDeleteProfile).toHaveBeenCalledTimes(1);
   });
 
   it("重命名后选中、收藏和最近使用继续引用同一 profile ID", async () => {
@@ -1552,6 +1628,91 @@ describe("PublishConfigPanel", () => {
         name: /完整解析参数/,
       })
     ).not.toBeInTheDocument();
+  });
+});
+
+describe("PublishConfigPanel — project profile invoke failures", () => {
+  // read_project_publish_profile 以 AppError 对象 reject，后端 message 为英文。
+  const missingProfile = {
+    kind: "repository",
+    message: "publish profile does not exist",
+    details: "/repo/Properties/PublishProfiles/FolderProfile.pubxml",
+    code: "profile_not_found",
+  };
+
+  function renderPanel() {
+    return render(
+      <PublishConfigPanel
+        selection={null}
+        profiles={[]}
+        activeProfileName={null}
+        onSelectProfile={() => {}}
+        onCreateProfile={() => {}}
+        onEditProfile={() => {}}
+        onViewProfile={() => {}}
+        onSaveProfileComposition={async () => {}}
+        onRebindProfileProject={async () => {}}
+        onRefreshProfiles={() => {}}
+        onOpenConfigDialog={() => {}}
+        onDeleteProfile={() => {}}
+        dotnetSchema={dotnetSchema}
+        projectPublishProfiles={["FolderProfile"]}
+        projectFilePath="/repo/Project.csproj"
+        projectFrameworkOptions={["net8.0"]}
+        onSelectProjectProfile={() => {}}
+        onCopyProjectProfileToCustom={async () => "copied"}
+        recentConfigKeys={[]}
+        favoriteConfigKeys={[]}
+        onToggleFavoriteConfig={() => {}}
+        onRemoveRecentConfig={() => {}}
+        onReorderRecentConfigs={() => {}}
+        onReorderProjectProfiles={() => {}}
+        onReorderProfiles={() => {}}
+      />
+    );
+  }
+
+  async function chooseProjectProfileAction(
+    container: HTMLElement,
+    action: string
+  ) {
+    const projectRow = container.querySelector<HTMLElement>(
+      '[data-list-item-id="pubxml:FolderProfile"]'
+    );
+    const trigger = within(projectRow!).getByRole("button", {
+      name: "更多操作: FolderProfile",
+    });
+    fireEvent.pointerDown(trigger, { button: 0, ctrlKey: false });
+    fireEvent.click(trigger);
+    fireEvent.click(await screen.findByRole("menuitem", { name: action }));
+  }
+
+  it("查看 pubxml 失败时按 errors.<code> 本地化 toast 描述", async () => {
+    resolveDotnetProjectProfileMock.mockRejectedValue(missingProfile);
+    const { container } = renderPanel();
+
+    await chooseProjectProfileAction(container, "查看配置");
+
+    await waitFor(() =>
+      expect(toastMock.error).toHaveBeenCalledWith("加载配置失败", {
+        description:
+          "未找到配置文件 | /repo/Properties/PublishProfiles/FolderProfile.pubxml",
+      })
+    );
+  });
+
+  it("复制为自定义配置失败时按 errors.<code> 本地化 toast 描述", async () => {
+    resolveDotnetProjectProfileMock.mockRejectedValue(missingProfile);
+    const { container } = renderPanel();
+
+    await chooseProjectProfileAction(container, "复制为自定义配置");
+
+    await waitFor(() =>
+      expect(toastMock.error).toHaveBeenCalledWith("复制为自定义配置失败", {
+        description:
+          "未找到配置文件 | /repo/Properties/PublishProfiles/FolderProfile.pubxml",
+      })
+    );
   });
 });
 

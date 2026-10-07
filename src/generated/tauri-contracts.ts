@@ -396,11 +396,18 @@ export type RevisionDeliveryRoute = { routeId: string, required: boolean, destin
 
 export type ReleaseGate = { program: string, args: Array<string>, };
 
+export type ReleaseSettingsDraft = { settings: TauriReleaseConfig, stored: boolean, };
+
 export type TauriBuildDriver = "pnpm" | "npm" | "yarn" | "bun" | "cargo";
 
 export type TauriDesktopTarget = "windows_x64" | "linux_x64" | "macos_x64" | "macos_arm64" | "macos_universal";
 
-export type TauriReleaseConfig = { appConfigPath: string, appName: string, buildDriver: TauriBuildDriver, enabledTargets: Array<TauriDesktopTarget>, releaseAssetPatterns: Array<string>, updater: TauriUpdaterSettings, allowUnsignedRelease: boolean, requiredActionsSecretNames: Array<string>, actionsSecretEnvironment: { [key: string]: string }, tagPrefix: string, releaseGates: Array<ReleaseGate>, localDeliveryDir: string, versionMirrors: Array<VersionMirror>, managedWorkflowVersion: number, };
+export type TauriReleaseConfig = { appConfigPath: string, appName: string, buildDriver: TauriBuildDriver, enabledTargets: Array<TauriDesktopTarget>, releaseAssetPatterns: Array<string>, updater: TauriUpdaterSettings, allowUnsignedRelease: boolean, 
+/**
+ * 配置备份按敏感键策略剥离 Secret 名称（ADR-0060）；缺省视为空，
+ * 导入的设置仍可解析，由使用者在发布设置表单中补齐。
+ */
+requiredActionsSecretNames: Array<string>, actionsSecretEnvironment: { [key: string]: string }, tagPrefix: string, releaseGates: Array<ReleaseGate>, localDeliveryDir: string, versionMirrors: Array<VersionMirror>, managedWorkflowVersion: number, };
 
 export type TauriUpdaterSettings = { enabled: boolean, endpoint: string | null, publicKey: string | null, privateKeySecretName: string | null, };
 

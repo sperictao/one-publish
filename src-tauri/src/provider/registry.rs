@@ -247,18 +247,53 @@ impl Provider for BuiltInProvider {
         }
     }
 
+    fn default_output(
+        &self,
+        spec: &PublishSpec,
+        default_output_dir: &str,
+    ) -> Option<super::ProviderDefaultOutput> {
+        match self.kind {
+            BuiltInProviderKind::Go => super::providers::go::default_output(
+                spec,
+                &self.resolve_working_dir(spec)?,
+                default_output_dir,
+            ),
+            _ => None,
+        }
+    }
+
     fn verify_build_output(&self, output_dir: &Path) -> Result<(), String> {
         match self.kind {
-            BuiltInProviderKind::Cargo => verify_cargo_build_output(output_dir),
+            // cargo 只把最终产物提升到 profile 目录顶层；顶层只剩锁文件、dep-info 时
+            // 说明输出目录与实际构建布局不符。
+            BuiltInProviderKind::Cargo => require_build_product(
+                output_dir,
+                is_native_build_product,
+                "cargo build produced no executable or library",
+            ),
+            // 旧 jar 已在构建前清理；build/libs 顶层没有归档说明所选任务不产出 jar。
+            BuiltInProviderKind::JavaGradle => require_build_product(
+                output_dir,
+                is_gradle_archive,
+                "gradle build produced no jar, war or ear",
+            ),
             _ => Ok(()),
         }
     }
 
     fn artifact_filter(&self) -> Option<publish_adapters::ArtifactEntryFilter> {
         match self.kind {
-            BuiltInProviderKind::Cargo => Some(is_cargo_build_product),
+            // Go 的缺省输出是单个文件（不经筛选）；显式 `-o <dir>/` 时只交付顶层二进制。
+            BuiltInProviderKind::Cargo | BuiltInProviderKind::Go => Some(is_native_build_product),
+            BuiltInProviderKind::JavaGradle => Some(is_gradle_archive),
             _ => None,
         }
+    }
+
+    fn clears_stale_artifacts(&self) -> bool {
+        // build/libs 跨构建保留旧版本 jar（app-1.0.jar 与 app-1.1.jar 并存）；
+        // 删除后 Gradle 视输出缺失而重新生成，不会误删本次产物。
+        matches!(self.kind, BuiltInProviderKind::JavaGradle)
     }
 
     fn resolve_runtime_program(
@@ -500,7 +535,10 @@ fn resolve_output_path(path: String, base_dir: Option<PathBuf>) -> String {
         .unwrap_or(path)
 }
 
-fn read_parameter_string(parameters: &BTreeMap<String, SpecValue>, key: &str) -> Option<String> {
+pub(crate) fn read_parameter_string(
+    parameters: &BTreeMap<String, SpecValue>,
+    key: &str,
+) -> Option<String> {
     match parameters.get(key) {
         Some(SpecValue::String(value)) if !value.is_empty() => Some(value.clone()),
         Some(SpecValue::Number(value)) => Some(value.to_string()),
@@ -550,44 +588,54 @@ fn resolve_gradle_program(
     ))
 }
 
-/// cargo 只把最终产物（可执行文件、库）提升到 profile 目录顶层；顶层只剩
-/// `.cargo-lock`、dep-info 或其他无关文件时，说明输出目录与实际构建布局不符。
-fn verify_cargo_build_output(output_dir: &Path) -> Result<(), String> {
-    let has_build_product = std::fs::read_dir(output_dir).is_ok_and(|entries| {
-        entries
-            .flatten()
-            .any(|entry| is_cargo_build_product(&entry))
-    });
+/// 构建进程成功退出后，输出目录顶层至少要有一个被产物规则接受的条目。
+fn require_build_product(
+    output_dir: &Path,
+    accept: publish_adapters::ArtifactEntryFilter,
+    failure: &str,
+) -> Result<(), String> {
+    let has_build_product = std::fs::read_dir(output_dir)
+        .is_ok_and(|entries| entries.flatten().any(|entry| accept(&entry)));
     if has_build_product {
         Ok(())
     } else {
-        Err(format!(
-            "cargo build produced no executable or library in {}",
-            output_dir.display()
-        ))
+        Err(format!("{failure} in {}", output_dir.display()))
     }
 }
 
-/// cargo 提升到 profile 目录顶层的最终产物；构建校验与交付筛选共用此规则，
-/// 锁文件、dep-info（`.d`）以及 `deps/`、`build/`、`incremental/` 等子目录都不是产物。
-fn is_cargo_build_product(entry: &std::fs::DirEntry) -> bool {
+/// 输出目录顶层的非隐藏普通文件；子目录一律不是产物（筛选拒绝即不再递归）。
+fn top_level_file(entry: &std::fs::DirEntry) -> Option<std::fs::Metadata> {
     if entry.file_name().to_string_lossy().starts_with('.') {
-        return false;
+        return None;
     }
-    let metadata = match entry.metadata() {
-        Ok(metadata) if metadata.is_file() => metadata,
-        _ => return false,
-    };
-    let extension = entry
+    entry.metadata().ok().filter(std::fs::Metadata::is_file)
+}
+
+fn lowercase_extension(entry: &std::fs::DirEntry) -> String {
+    entry
         .path()
         .extension()
         .and_then(|extension| extension.to_str())
         .unwrap_or_default()
-        .to_ascii_lowercase();
+        .to_ascii_lowercase()
+}
+
+/// 原生工具链（cargo、go）的最终产物：可执行文件与库。构建校验与交付筛选共用此规则，
+/// 锁文件、dep-info（`.d`）以及 `deps/`、`build/`、`incremental/` 等子目录都不是产物。
+fn is_native_build_product(entry: &std::fs::DirEntry) -> bool {
+    let Some(metadata) = top_level_file(entry) else {
+        return false;
+    };
     matches!(
-        extension.as_str(),
+        lowercase_extension(entry).as_str(),
         "exe" | "wasm" | "dll" | "so" | "dylib" | "rlib" | "a" | "lib"
     ) || is_executable_file(&metadata)
+}
+
+/// Gradle `build/libs` 顶层的归档产物；`tmp/` 等子目录与隐藏文件不是产物。
+fn is_gradle_archive(entry: &std::fs::DirEntry) -> bool {
+    top_level_file(entry).is_some()
+        && matches!(lowercase_extension(entry).as_str(), "jar" | "war" | "ear")
 }
 
 #[cfg(unix)]
@@ -851,23 +899,109 @@ mod tests {
     }
 
     #[test]
-    fn non_cargo_providers_skip_build_output_verification_and_filtering() {
+    fn providers_declare_build_verification_filtering_and_stale_cleanup() {
         let registry = ProviderRegistry::new();
         let missing = Path::new("/nonexistent/one-publish-output");
-        for id in ["dotnet", "go", "java", "tauri"] {
+        // (id, 校验构建输出, 声明筛选, 构建前清理旧产物)
+        for (id, verifies, filters, clears) in [
+            ("cargo", true, true, false),
+            ("java", true, true, true),
+            ("go", false, true, false),
+            ("dotnet", false, false, false),
+            ("tauri", false, false, false),
+        ] {
             let provider = registry.get(id).expect("provider");
-            assert_eq!(provider.verify_build_output(missing), Ok(()), "{id}");
-            assert!(provider.artifact_filter().is_none(), "{id}");
+            assert_eq!(
+                provider.verify_build_output(missing).is_err(),
+                verifies,
+                "{id}"
+            );
+            assert_eq!(provider.artifact_filter().is_some(), filters, "{id}");
+            assert_eq!(provider.clears_stale_artifacts(), clears, "{id}");
         }
+    }
+
+    fn accepted_names(provider: &dyn Provider, directory: &Path) -> Vec<String> {
+        let accept = provider
+            .artifact_filter()
+            .expect("provider declares a filter");
+        let mut accepted = std::fs::read_dir(directory)
+            .expect("read output dir")
+            .flatten()
+            .filter(accept)
+            .map(|entry| entry.file_name().to_string_lossy().to_string())
+            .collect::<Vec<_>>();
+        accepted.sort();
+        accepted
+    }
+
+    #[test]
+    fn gradle_artifact_filter_keeps_only_top_level_archives() {
+        let registry = ProviderRegistry::new();
+        let provider = registry.get("java").expect("provider");
+        let libs_dir = tempfile::tempdir().expect("create build/libs");
+        let libs = libs_dir.path();
+
+        for name in [".app.jar.lock", "README.txt", "app.pom", "app.module"] {
+            std::fs::write(libs.join(name), "").expect("write non-archive file");
+        }
+        // 子目录里的 jar 不会被遍历（筛选拒绝目录）。
+        std::fs::create_dir_all(libs.join("tmp")).expect("create subdirectory");
+        std::fs::write(libs.join("tmp").join("nested.jar"), "").expect("write nested jar");
+        for name in ["app-1.1-plain.jar", "app-1.1.JAR", "app.ear", "app.war"] {
+            std::fs::write(libs.join(name), "").expect("write archive");
+        }
+
+        assert_eq!(
+            accepted_names(provider, libs),
+            ["app-1.1-plain.jar", "app-1.1.JAR", "app.ear", "app.war"]
+        );
+    }
+
+    #[test]
+    fn gradle_build_output_requires_a_top_level_archive() {
+        let registry = ProviderRegistry::new();
+        let provider = registry.get("java").expect("provider");
+        let libs_dir = tempfile::tempdir().expect("create build/libs");
+        let libs = libs_dir.path();
+
+        std::fs::create_dir_all(libs.join("tmp")).expect("create subdirectory");
+        std::fs::write(libs.join("tmp").join("nested.jar"), "").expect("write nested jar");
+        let error = provider
+            .verify_build_output(libs)
+            .expect_err("no top-level archive");
+        assert!(error.contains("gradle build produced no jar"), "{error}");
+
+        std::fs::write(libs.join("app.jar"), "").expect("write jar");
+        assert_eq!(provider.verify_build_output(libs), Ok(()));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn go_artifact_filter_keeps_only_top_level_binaries_of_a_directory_output() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let registry = ProviderRegistry::new();
+        let provider = registry.get("go").expect("provider");
+        let output_dir = tempfile::tempdir().expect("create -o directory");
+        let output = output_dir.path();
+
+        std::fs::write(output.join("notes.txt"), "").expect("write unrelated file");
+        std::fs::create_dir_all(output.join("cache")).expect("create subdirectory");
+        std::fs::write(output.join("cache").join("tool.exe"), "").expect("write nested binary");
+        std::fs::write(output.join("app.exe"), "").expect("write windows binary");
+        let unix_binary = output.join("app");
+        std::fs::write(&unix_binary, "").expect("write unix binary");
+        std::fs::set_permissions(&unix_binary, std::fs::Permissions::from_mode(0o755))
+            .expect("mark binary executable");
+
+        assert_eq!(accepted_names(provider, output), ["app", "app.exe"]);
     }
 
     #[test]
     fn cargo_artifact_filter_keeps_only_uplifted_products() {
         let registry = ProviderRegistry::new();
         let provider = registry.get("cargo").expect("provider");
-        let accept = provider
-            .artifact_filter()
-            .expect("cargo declares an artifact filter");
         let profile_dir = tempfile::tempdir().expect("create profile dir");
         let profile = profile_dir.path();
 
@@ -898,25 +1032,34 @@ mod tests {
             std::fs::write(profile.join(name), "").expect("write build product");
         }
 
-        let mut accepted = std::fs::read_dir(profile)
-            .expect("read profile dir")
-            .flatten()
-            .filter(|entry| accept(entry))
-            .map(|entry| entry.file_name().to_string_lossy().to_string())
-            .collect::<Vec<_>>();
-        accepted.sort();
-        assert_eq!(accepted, products);
+        assert_eq!(accepted_names(provider, profile), products);
     }
 
     #[test]
-    fn go_only_uses_an_explicit_output_directory() {
+    fn go_derives_a_default_output_file_instead_of_inferring_one() {
         let repository = tempfile::tempdir().expect("create repository");
         std::fs::write(repository.path().join("go.mod"), "module demo").expect("write go.mod");
         let registry = ProviderRegistry::new();
         let provider = registry.get("go").expect("provider");
 
+        // 推断只认显式输出；缺省输出在 prepare 时派生并写入 `-o`。
         let implicit = output_dir_spec(repository.path(), &[]);
         assert_eq!(provider.infer_output_dir(&implicit), "");
+        let derived = provider
+            .default_output(&implicit, "")
+            .expect("go derives a default output");
+        assert_eq!(derived.parameter, "output");
+        assert!(derived.path.starts_with(repository.path().join("dist")));
+        // 项目路径指向 go.mod 时以其所在目录为模块目录。
+        let module_file = output_dir_spec(&repository.path().join("go.mod"), &[]);
+        assert_eq!(provider.default_output(&module_file, ""), Some(derived));
+        // 声明模板的 Provider 不走自行派生。
+        assert!(registry
+            .get("dotnet")
+            .expect("provider")
+            .default_output(&implicit, "/default-out")
+            .is_none());
+
         let explicit = output_dir_spec(
             repository.path(),
             &[(

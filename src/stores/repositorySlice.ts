@@ -1,4 +1,5 @@
 import type { StateCreator } from "zustand";
+import { t } from "@/hooks/useI18n";
 import type { AppState, Repository } from "@/lib/store/types";
 import {
   addRepository as apiAddRepository,
@@ -95,7 +96,7 @@ export const createRepositorySlice: StateCreator<
 
       enqueueRepositoryMutation(
         () => apiReorderRepositories(repoIds),
-        "保存仓库排序失败"
+        t("app.saveRepositoryOrderFailed")
       );
     },
 
