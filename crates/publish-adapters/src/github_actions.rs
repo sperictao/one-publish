@@ -317,6 +317,10 @@ fn render_thin_shell_workflow(
         }
     };
 
+    // 现场规划要求干净 checkout（决议 #87）：外壳自有文件（runner 资产、
+    // prepared attempt）都落在 $RUNNER_TEMP，规划前不得写进 checkout。安装
+    // 步骤以相对名在 runner.temp 内下载解包，避免 Windows 上 GNU tar 把盘符
+    // 绝对路径解析成远端主机。
     let install_step = |platform: &str| -> Result<String, PublishError> {
         let (_, triple, _) = shard_runner(platform);
         let digest = runtime.runner.binary_digests.get(triple).ok_or_else(|| {
@@ -330,6 +334,7 @@ fn render_thin_shell_workflow(
         Ok(format!(
             r#"      - name: Install the pinned One Publish runner
         shell: bash
+        working-directory: ${{{{ runner.temp }}}}
         run: |
           set -euo pipefail
           curl -fL --retry 3 -o "{asset}" "{url}"
@@ -345,15 +350,15 @@ fn render_thin_shell_workflow(
         shell: bash
 {env_block}        run: |
           set -euo pipefail
-          ./{binary} verify "{runtime_path}"
-          ./{binary} prepare-from-projection "{runtime_path}" . "{trigger_descriptor}" > prepared-attempt.json
-          ./{binary} execute prepared-attempt.json "{attempt_expression}" {affinity} > "one-publish-events-{affinity}.json"
+          "$RUNNER_TEMP/{binary}" verify "{runtime_path}"
+          "$RUNNER_TEMP/{binary}" prepare-from-projection "{runtime_path}" . "{trigger_descriptor}" > "$RUNNER_TEMP/prepared-attempt.json"
+          "$RUNNER_TEMP/{binary}" execute "$RUNNER_TEMP/prepared-attempt.json" "{attempt_expression}" {affinity} > "one-publish-events-{affinity}.json"
       - name: Upload the {affinity} prepared attempt
         if: always()
         uses: {UPLOAD_ARTIFACT_ACTION}
         with:
           name: one-publish-prepared-${{{{ github.run_id }}}}-${{{{ github.run_attempt }}}}-{affinity}
-          path: prepared-attempt.json
+          path: ${{{{ runner.temp }}}}/prepared-attempt.json
           if-no-files-found: ignore
       - name: Upload the {affinity} event segment
         if: always()
@@ -668,8 +673,26 @@ mod tests {
         assert!(workflow
             .content
             .contains("needs: [build-linux, build-macos, build-windows]"));
-        assert!(workflow.content.contains("execute prepared-attempt.json \"gh-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}\" windows"));
-        assert!(workflow.content.contains("execute prepared-attempt.json \"gh-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}\" any"));
+        assert!(workflow.content.contains("execute \"$RUNNER_TEMP/prepared-attempt.json\" \"gh-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}\" windows"));
+        assert!(workflow.content.contains("execute \"$RUNNER_TEMP/prepared-attempt.json\" \"gh-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}\" any"));
+        // 现场规划要求干净 checkout（决议 #87）：每个 job 的 runner 资产与
+        // prepared attempt 都落在 runner.temp，规划前不写进 checkout。
+        assert_eq!(
+            workflow
+                .content
+                .matches("working-directory: ${{ runner.temp }}")
+                .count(),
+            4
+        );
+        assert_eq!(
+            workflow
+                .content
+                .matches("path: ${{ runner.temp }}/prepared-attempt.json")
+                .count(),
+            4
+        );
+        assert!(!workflow.content.contains("./one-publish-runner"));
+        assert!(!workflow.content.contains("> prepared-attempt.json"));
         assert!(workflow
             .content
             .contains("one-publish-events-${{ github.run_id }}-${{ github.run_attempt }}-macos"));
@@ -698,7 +721,9 @@ mod tests {
             "one-publish-staging-${{ github.run_id }}-${{ github.run_attempt }}-windows"
         ));
         assert!(workflow.content.contains("Unpack the staging areas"));
-        assert!(workflow.content.contains("./one-publish-runner.exe verify"));
+        assert!(workflow
+            .content
+            .contains("\"$RUNNER_TEMP/one-publish-runner.exe\" verify"));
         assert!(workflow.content.contains("sha256sum -c -"));
         assert!(workflow.content.contains(
             "ONE_PUBLISH_CI_GITHUB_TOKEN: ${{ secrets.ONE_PUBLISH_CI_GITHUB_TOKEN }}"
@@ -707,7 +732,7 @@ mod tests {
             .content
             .contains("verify \".one-publish/automation/runtime/stable.json\""));
         assert!(workflow.content.contains(
-            "prepare-from-projection \".one-publish/automation/runtime/stable.json\" . \"tag:${GITHUB_REF_NAME}\""
+            "prepare-from-projection \".one-publish/automation/runtime/stable.json\" . \"tag:${GITHUB_REF_NAME}\" > \"$RUNNER_TEMP/prepared-attempt.json\""
         ));
         for line in workflow
             .content
@@ -774,7 +799,7 @@ mod tests {
             .contains("\"version:${ONE_PUBLISH_VERSION}\""));
         assert!(workflow
             .content
-            .contains("execute prepared-attempt.json \"${ONE_PUBLISH_ATTEMPT_ID}\""));
+            .contains("execute \"$RUNNER_TEMP/prepared-attempt.json\" \"${ONE_PUBLISH_ATTEMPT_ID}\""));
         assert!(!workflow.content.contains("push:"));
 
         let mut missing_template = binding("stable", "v", "revision-stable");

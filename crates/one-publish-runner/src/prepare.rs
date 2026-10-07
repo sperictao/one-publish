@@ -40,6 +40,10 @@ pub enum TriggerInput {
 const RUNNER_STORE_DIRECTORY: &str = ".one-publish-work/store";
 const RUNNER_DELIVERY_DIRECTORY: &str = ".one-publish-work/delivery";
 const RUNNER_ARTIFACT_RETENTION_SECONDS: u64 = 604_800;
+/// Runner 运行时目录的公共根（存储、交付、分片暂存与 Provider 输出都在其下），
+/// 由 runner 与外壳拓扑写入、不是源码输入。干净检查只豁免该根下的未跟踪
+/// 条目：已跟踪文件的修改与其它位置的未跟踪文件仍视为脏 checkout。
+const RUNNER_WORK_ROOT: &str = ".one-publish-work/";
 
 pub fn prepare_from_projection(
     projection: &RunnerProjection,
@@ -143,8 +147,9 @@ fn trigger_version(
     }
 }
 
-/// 触发时源快照：远端规划要求干净 checkout，快照引用不可变 VCS revision，
-/// 时间取自提交对象（committer 时间）保证重放摘要稳定。
+/// 触发时源快照：远端规划要求干净 checkout（runner 运行时根下的未跟踪条目
+/// 除外），快照引用不可变 VCS revision，时间取自提交对象（committer 时间）
+/// 保证重放摘要稳定。
 fn capture_clean_source(repository_root: &Path) -> Result<SourceSnapshot, PublishError> {
     let revision = git(repository_root, &["rev-parse", "--verify", "HEAD"])?;
     if revision.is_empty() {
@@ -153,9 +158,18 @@ fn capture_clean_source(repository_root: &Path) -> Result<SourceSnapshot, Publis
         ));
     }
     let status = git(repository_root, &["status", "--porcelain=v1"])?;
-    if !status.is_empty() {
+    let dirty = status
+        .lines()
+        .filter(|line| {
+            !line
+                .strip_prefix("?? ")
+                .is_some_and(|path| path.starts_with(RUNNER_WORK_ROOT))
+        })
+        .collect::<Vec<_>>();
+    if !dirty.is_empty() {
         return Err(PublishError::Execution(format!(
-            "on-site planning requires a clean checkout:\n{status}"
+            "on-site planning requires a clean checkout:\n{}",
+            dirty.join("\n")
         )));
     }
     let captured_at = git(repository_root, &["show", "-s", "--format=%cI", "HEAD"])?;
