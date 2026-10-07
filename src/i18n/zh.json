@@ -1091,6 +1091,7 @@
     "remote_evidence_sync_failed": "远端证据同步失败",
     "remote_evidence_repository_unavailable": "仓库路径不可用",
     "profile_not_found": "未找到配置文件",
+    "publish_selection_provider_mismatch": "配置的 Provider 与当前仓库不一致，不能选为发布配置",
     "config_repo_not_found": "未找到仓库",
     "export_config_projection_failed": "无法生成配置导出内容",
     "export_config_serialize_failed": "无法序列化配置导出内容",

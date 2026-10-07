@@ -1091,6 +1091,7 @@
     "remote_evidence_sync_failed": "Couldn't sync remote publish evidence.",
     "remote_evidence_repository_unavailable": "The repository path is unavailable.",
     "profile_not_found": "Configuration profile not found.",
+    "publish_selection_provider_mismatch": "This profile targets a different provider than the repository and cannot be selected.",
     "config_repo_not_found": "Repository not found.",
     "export_config_projection_failed": "Couldn't build the configuration export.",
     "export_config_serialize_failed": "Couldn't serialize the configuration export.",

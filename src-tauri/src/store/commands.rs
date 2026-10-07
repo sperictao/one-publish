@@ -373,9 +373,10 @@ fn ensure_selection_matches_repository_provider(
     };
     match repo.provider_mismatch_reason(&revision.provider_id) {
         Some(reason) => Err(AppError::validation_with_code(
-            format!("配置的 Provider 与仓库不一致，不能选择：{reason}"),
+            "配置的 Provider 与仓库不一致，不能选择",
             "publish_selection_provider_mismatch",
-        )),
+        )
+        .with_details(reason)),
         None => Ok(()),
     }
 }
@@ -1207,9 +1208,10 @@ mod tests {
             error.code.as_deref(),
             Some("publish_selection_provider_mismatch")
         );
-        assert!(error
-            .message
-            .contains("repository_provider_mismatch:go:cargo"));
+        assert_eq!(
+            error.details.as_deref(),
+            Some("repository_provider_mismatch:go:cargo")
+        );
 
         ensure_selection_matches_repository_provider(&repo, &select(&cargo_profile_id))
             .expect("matching provider stays selectable");
