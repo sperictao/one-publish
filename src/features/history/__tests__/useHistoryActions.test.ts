@@ -28,6 +28,12 @@ vi.mock("@/stores/appStore", () => ({
   ) => selector({ setExecutionSnapshotPath: mocks.setExecutionSnapshotPath }),
 }));
 
+// 用真实 zh 文案，顺带校验后端错误码已在 `errors.<code>` 登记。
+vi.mock("@/hooks/useI18n", async () => {
+  const zh = (await import("@/i18n/zh.json")).default;
+  return { useI18n: () => ({ translations: zh }) };
+});
+
 import { useHistoryActions } from "@/features/history/useHistoryActions";
 
 const APP_STATE_SNAPSHOT =
@@ -111,21 +117,43 @@ describe("useHistoryActions.openSnapshotFromRecord", () => {
     );
   });
 
-  it("打开失败时提示错误且不回写记录", async () => {
-    mocks.openExecutionSnapshot.mockRejectedValue(
-      new Error("未找到输出目录的执行快照: /exports/App/Release")
-    );
-    const result = renderHistoryActions();
+  // Tauri invoke 以 AppError 对象 reject，而不是 Error 实例。
+  it.each([
+    {
+      error: {
+        kind: "export",
+        message: "未找到输出目录的执行快照",
+        details: "/exports/App/Release",
+        code: "snapshot_not_found_for_output_dir",
+      },
+      description: "未找到该输出目录的执行快照 | /exports/App/Release",
+    },
+    {
+      error: {
+        kind: "external_open",
+        message: "打开快照失败",
+        details: "No application knows how to open the file",
+        code: "open_snapshot_failed",
+      },
+      description:
+        "无法打开执行快照 | No application knows how to open the file",
+    },
+  ])(
+    "打开失败（$error.code）时提示本地化错误且不回写记录",
+    async ({ error, description }) => {
+      mocks.openExecutionSnapshot.mockRejectedValue(error);
+      const result = renderHistoryActions();
 
-    await act(async () => {
-      await result.current.openSnapshotFromRecord(
-        createRecord({ snapshotPath: null })
-      );
-    });
+      await act(async () => {
+        await result.current.openSnapshotFromRecord(
+          createRecord({ snapshotPath: null })
+        );
+      });
 
-    expect(mocks.setExecutionSnapshotPath).not.toHaveBeenCalled();
-    expect(mocks.toast.error).toHaveBeenCalledWith("打开执行快照失败", {
-      description: expect.stringContaining("未找到输出目录的执行快照"),
-    });
-  });
+      expect(mocks.setExecutionSnapshotPath).not.toHaveBeenCalled();
+      expect(mocks.toast.error).toHaveBeenCalledWith("打开执行快照失败", {
+        description,
+      });
+    }
+  );
 });
