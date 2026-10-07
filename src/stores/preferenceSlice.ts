@@ -1,4 +1,5 @@
 import type { StateCreator } from "zustand";
+import { t } from "@/hooks/useI18n";
 import { updatePreferences as apiUpdatePreferences } from "@/lib/store/api";
 import {
   applyPreferenceStateMutation,
@@ -71,7 +72,7 @@ export const createPreferenceSlice: StateCreator<
       if (preferenceDebounceTimer) clearTimeout(preferenceDebounceTimer);
       preferenceDebounceTimer = setTimeout(() => {
         void apiUpdatePreferences(params).catch((err) => {
-          void handlePersistenceFailure("保存偏好设置失败", err);
+          void handlePersistenceFailure(t("app.savePreferencesFailed"), err);
         });
       }, DEBOUNCE_DELAY);
     },

@@ -62,7 +62,9 @@ export const ProjectProfileViewer = forwardRef<
       setOpen(true);
 
       if (!projectFilePath) {
-        const errorMessage = "当前项目文件路径不可用，无法读取发布配置。";
+        const errorMessage =
+          configPanelT.loadConfigFailedDescription ||
+          "当前项目文件路径不可用，无法读取发布配置。";
         setViewerState({
           status: "error",
           profileName,
@@ -122,7 +124,12 @@ export const ProjectProfileViewer = forwardRef<
           });
         });
     },
-    [projectFilePath, projectFrameworkOptions, configPanelT.loadConfigFailed]
+    [
+      projectFilePath,
+      projectFrameworkOptions,
+      configPanelT.loadConfigFailed,
+      configPanelT.loadConfigFailedDescription,
+    ]
   );
 
   useImperativeHandle(

@@ -506,7 +506,14 @@ export function analyzePublishExecutionFailure(
       return "project_path_not_found";
     }
 
-    if (errorCode === "publish_output_windows_drive_root_missing") {
+    if (
+      errorCode === "publish_output_windows_drive_root_missing" ||
+      errorCode === "publish_runtime_provider_output_name_missing" ||
+      errorCode === "publish_runtime_provider_output_contains_source" ||
+      errorCode === "publish_runtime_provider_output_escapes_root" ||
+      errorCode === "publish_runtime_provider_output_ancestor_missing" ||
+      errorCode === "publish_runtime_provider_output_ancestor_unresolved"
+    ) {
       return "output_path_invalid";
     }
 
