@@ -6,10 +6,10 @@ use crate::environment::types::*;
 const MIN_CARGO_VERSION: &str = "1.70.0";
 const PROVIDER_ID: &str = "cargo";
 
-const CARGO_PROBE: ToolProbe = ToolProbe {
+pub(crate) const CARGO_PROBE: ToolProbe = ToolProbe {
     provider_id: PROVIDER_ID,
     command: "cargo",
-    version_arg: "--version",
+    version_args: &["--version"],
     version_source: VersionSource::Stdout,
     min_version: MIN_CARGO_VERSION,
 };
@@ -19,7 +19,7 @@ const CARGO_PROBE: ToolProbe = ToolProbe {
 /// Returns `Some("unknown")` (rather than `None`) when the prefix doesn't
 /// match, preserving the prior fallback that reported `installed: true`
 /// with `version: "unknown"` on a successful-but-unparseable run.
-fn parse_cargo_version(output: &[u8]) -> Option<String> {
+pub(crate) fn parse_cargo_version(output: &[u8]) -> Option<String> {
     Some(parse_version(output, "cargo").unwrap_or_else(|| "unknown".to_string()))
 }
 

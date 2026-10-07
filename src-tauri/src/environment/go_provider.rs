@@ -9,7 +9,7 @@ const PROVIDER_ID: &str = "go";
 const GO_PROBE: ToolProbe = ToolProbe {
     provider_id: PROVIDER_ID,
     command: "go",
-    version_arg: "version",
+    version_args: &["version"],
     version_source: VersionSource::Stdout,
     min_version: MIN_GO_VERSION,
 };
