@@ -956,6 +956,85 @@ impl RepoPublishConfig {
         Ok(())
     }
 
+    /// 同 Provider 更新可继承的发布设置：当前修订 `releaseSettings` 键的原值
+    /// （含显式 null）；Provider 切换时为 None（ADR-0058）。
+    pub(crate) fn inherited_release_settings(
+        &self,
+        profile_id: &str,
+        provider_id: &str,
+    ) -> Option<&serde_json::Value> {
+        self.profile(profile_id)
+            .and_then(ConfigProfile::current_revision)
+            .filter(|revision| revision.provider_id == provider_id)
+            .and_then(|revision| {
+                revision
+                    .parameters
+                    .get(crate::tauri_release::RELEASE_SETTINGS_PARAMETER)
+            })
+    }
+
+    /// 发布设置表单只服务 Tauri 配置的当前修订（ADR-0060）。
+    pub(crate) fn release_settings_revision(
+        &self,
+        profile_id: &str,
+    ) -> Result<&PublishConfigurationRevision, crate::errors::AppError> {
+        let revision = self
+            .profile(profile_id)
+            .filter(|profile| profile.deleted_at.is_none())
+            .ok_or_else(|| profile_not_found_error(profile_id))?
+            .current_revision()
+            .ok_or_else(|| profile_revision_not_found_error(profile_id))?;
+        if revision.provider_id != publish_adapters::TAURI_PROVIDER_ID {
+            return Err(crate::errors::AppError::validation_with_code(
+                format!("Provider {} 没有发布设置", revision.provider_id),
+                "release_settings_provider_unsupported",
+            ));
+        }
+        Ok(revision)
+    }
+
+    /// 发布设置表单的保存入口（ADR-0060）：受系统管理的托管 workflow 版本由
+    /// 后端钉住，写入前通过与自动化绑定相同的校验，再作为新修订保存；命令
+    /// 参数、发布组合与项目绑定沿用当前修订。
+    pub fn update_release_settings(
+        &mut self,
+        profile_id: &str,
+        mut settings: crate::tauri_release::TauriReleaseConfig,
+        updated_at: String,
+    ) -> Result<(), crate::errors::AppError> {
+        let revision = self.release_settings_revision(profile_id)?;
+        settings.managed_workflow_version = crate::tauri_release::MANAGED_WORKFLOW_VERSION;
+        crate::tauri_release::validate_release_config(&settings)?;
+        let mut parameters = match &revision.parameters {
+            serde_json::Value::Object(map) => map.clone(),
+            _ => serde_json::Map::new(),
+        };
+        parameters.insert(
+            crate::tauri_release::RELEASE_SETTINGS_PARAMETER.to_string(),
+            serde_json::to_value(&settings).map_err(|error| {
+                crate::errors::AppError::config_with_code(
+                    format!("无法序列化发布设置: {error}"),
+                    "tauri_release_settings_invalid",
+                )
+            })?,
+        );
+        let provider_id = revision.provider_id.clone();
+        let profile = self
+            .profile(profile_id)
+            .ok_or_else(|| profile_not_found_error(profile_id))?;
+        let (name, profile_group) = (profile.name.clone(), profile.profile_group.clone());
+        self.update_profile(
+            profile_id,
+            name,
+            provider_id,
+            serde_json::Value::Object(parameters),
+            profile_group,
+            None,
+            None,
+            updated_at,
+        )
+    }
+
     #[allow(clippy::too_many_arguments)]
     pub fn update_profile(
         &mut self,
@@ -971,17 +1050,10 @@ impl RepoPublishConfig {
         // 参数编辑器只管理 schema 声明的命令参数；未显式携带 `releaseSettings`
         // 的更新从当前修订继承发布设置，保存不得静默清除它们。发布设置属于
         // 原 Provider，切换 Provider 的修订不再携带；显式传 null 表示清除。
-        if let Some(settings) = self.profile(profile_id).and_then(|profile| {
-            profile
-                .current_revision()
-                .filter(|revision| revision.provider_id == provider_id)
-                .and_then(|revision| {
-                    revision
-                        .parameters
-                        .get(crate::tauri_release::RELEASE_SETTINGS_PARAMETER)
-                })
-                .cloned()
-        }) {
+        if let Some(settings) = self
+            .inherited_release_settings(profile_id, &provider_id)
+            .cloned()
+        {
             if let Some(object) = parameters.as_object_mut() {
                 object
                     .entry(crate::tauri_release::RELEASE_SETTINGS_PARAMETER)

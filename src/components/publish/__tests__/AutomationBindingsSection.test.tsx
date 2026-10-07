@@ -15,7 +15,6 @@ const {
   synchronizeRemoteEvidenceMock,
   dispatchManualPublishRunMock,
   cancelRemotePublishRunMock,
-  applyFixMock,
 } = vi.hoisted(() => ({
   listAutomationBindingsMock: vi.fn(),
   previewAutomationChangeMock: vi.fn(),
@@ -23,7 +22,6 @@ const {
   synchronizeRemoteEvidenceMock: vi.fn(),
   dispatchManualPublishRunMock: vi.fn(),
   cancelRemotePublishRunMock: vi.fn(),
-  applyFixMock: vi.fn(),
 }));
 
 vi.mock("@/lib/automationBindings", () => ({
@@ -33,10 +31,6 @@ vi.mock("@/lib/automationBindings", () => ({
   synchronizeRemoteEvidence: synchronizeRemoteEvidenceMock,
   dispatchManualPublishRun: dispatchManualPublishRunMock,
   cancelRemotePublishRun: cancelRemotePublishRunMock,
-}));
-
-vi.mock("@/features/environment/environment", () => ({
-  applyFix: applyFixMock,
 }));
 
 vi.mock("sonner", () => ({
@@ -173,7 +167,8 @@ function installPreview(): AutomationProjectionPreview {
 function renderSection(
   profiles: ConfigProfile[] = [createProfile("profile-1", "Stable")],
   onGuideComposition?: (profileId: string) => void,
-  onCreateProfile?: () => void
+  onCreateProfile?: () => void,
+  onGuideReleaseSettings?: (profileId: string) => void
 ) {
   return render(
     <AutomationBindingsSection
@@ -181,6 +176,7 @@ function renderSection(
       profiles={profiles}
       configPanelT={{}}
       onGuideComposition={onGuideComposition}
+      onGuideReleaseSettings={onGuideReleaseSettings}
       onCreateProfile={onCreateProfile}
     />
   );
@@ -445,37 +441,35 @@ describe("AutomationBindingsSection", () => {
     expect(screen.queryByTestId("automation-no-tauri-profile")).toBeNull();
   });
 
-  it("pre-checks missing Tauri release settings and links to the docs instead of previewing", async () => {
+  it("pre-checks missing Tauri release settings and guides to the release settings form", async () => {
     listAutomationBindingsMock.mockResolvedValue(emptyView());
-    applyFixMock.mockResolvedValue({ result: "OpenedUrl", data: "" });
+    const onGuideReleaseSettings = vi.fn();
 
-    renderSection([
-      createProfile("profile-1", "Stable", { withReleaseSettings: false }),
-    ]);
+    renderSection(
+      [createProfile("profile-1", "Stable", { withReleaseSettings: false })],
+      undefined,
+      undefined,
+      onGuideReleaseSettings
+    );
     await screen.findByTestId("automation-bindings-section");
     fireEvent.click(screen.getByRole("button", { name: "绑定自动化" }));
 
-    // ADR-0058：发布设置在界面只读，前端预检代替后端
-    // github_actions_release_config_missing 的预览失败。
+    // ADR-0060：前端预检代替后端 github_actions_release_config_missing 的
+    // 预览失败，并一键拉起发布设置表单补齐。
     const guide = await screen.findByTestId(
       "automation-release-settings-guide"
     );
     expect(guide).toHaveTextContent("没有 Tauri 发布设置");
-    expect(guide).toHaveTextContent("目前无法在应用内补齐");
+    expect(guide).toHaveTextContent("请先填写并保存发布设置");
+    expect(guide).not.toHaveTextContent("只读");
     expect(screen.queryByTestId("automation-composition-guide")).toBeNull();
     expect(screen.getByRole("button", { name: "预览投影差异" })).toBeDisabled();
 
-    fireEvent.click(screen.getByRole("button", { name: "查看发布设置说明" }));
-    await waitFor(() =>
-      expect(applyFixMock).toHaveBeenCalledWith(
-        expect.objectContaining({
-          action_type: "open_url",
-          url: expect.stringContaining(
-            "docs/adr/0058-store-provider-release-settings-in-revision-parameters.md"
-          ),
-        })
-      )
-    );
+    fireEvent.click(screen.getByRole("button", { name: "去填写发布设置" }));
+    expect(onGuideReleaseSettings).toHaveBeenCalledWith("profile-1");
+    expect(
+      screen.queryByTestId("automation-release-settings-guide")
+    ).toBeNull();
     expect(previewAutomationChangeMock).not.toHaveBeenCalled();
   });
 

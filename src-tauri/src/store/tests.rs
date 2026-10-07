@@ -1834,6 +1834,127 @@ fn update_profile_does_not_carry_release_settings_across_providers() {
 }
 
 #[test]
+fn release_settings_form_validates_before_saving_a_new_revision() {
+    use crate::tauri_release::{TauriDesktopTarget, TauriReleaseConfig};
+
+    let mut config = RepoPublishConfig::default();
+    let profile = config
+        .create_profile(
+            "Desktop".to_string(),
+            "tauri".to_string(),
+            serde_json::json!({ "target": "x86_64-unknown-linux-gnu" }),
+            None,
+            Some("tauri:src-tauri/tauri.conf.json".to_string()),
+            "2026-10-07T10:00:00Z".to_string(),
+        )
+        .expect("create profile")
+        .clone();
+    let original_composition = profile
+        .current_revision()
+        .expect("revision")
+        .composition
+        .clone();
+
+    // ADR-0006：默认值没有签名决定，保存前显式失败且不产生修订。
+    let error = config
+        .update_release_settings(
+            &profile.id,
+            TauriReleaseConfig::default(),
+            "2026-10-07T10:01:00Z".to_string(),
+        )
+        .expect_err("defaults need a signing decision");
+    assert_eq!(
+        error.code.as_deref(),
+        Some("tauri_release_platform_signing_required")
+    );
+    assert_eq!(
+        config
+            .profile(&profile.id)
+            .expect("profile")
+            .revisions
+            .len(),
+        1
+    );
+
+    let settings = TauriReleaseConfig {
+        enabled_targets: vec![TauriDesktopTarget::LinuxX64],
+        tag_prefix: "app-v".to_string(),
+        // 托管 workflow 版本由系统钉住，表单传入的值不生效。
+        managed_workflow_version: 99,
+        ..TauriReleaseConfig::default()
+    };
+    config
+        .update_release_settings(&profile.id, settings, "2026-10-07T10:02:00Z".to_string())
+        .expect("save release settings");
+
+    let updated = config.profile(&profile.id).expect("profile");
+    assert_eq!(updated.revisions.len(), 2);
+    let current = updated.current_revision().expect("current revision");
+    assert_eq!(current.parameters["target"], "x86_64-unknown-linux-gnu");
+    assert_eq!(current.parameters["releaseSettings"]["tagPrefix"], "app-v");
+    assert_eq!(
+        current.parameters["releaseSettings"]["managedWorkflowVersion"],
+        crate::tauri_release::MANAGED_WORKFLOW_VERSION
+    );
+    assert_eq!(current.composition, original_composition);
+    assert_eq!(
+        current.project_binding.as_deref(),
+        Some("tauri:src-tauri/tauri.conf.json")
+    );
+
+    // 之后的普通参数编辑继续继承表单写入的设置（ADR-0058）。
+    config
+        .update_profile(
+            &profile.id,
+            "Desktop".to_string(),
+            "tauri".to_string(),
+            serde_json::json!({ "target": "aarch64-apple-darwin" }),
+            None,
+            None,
+            None,
+            "2026-10-07T10:03:00Z".to_string(),
+        )
+        .expect("ordinary edit");
+    let inherited = config
+        .profile(&profile.id)
+        .expect("profile")
+        .current_revision()
+        .expect("current revision");
+    assert_eq!(
+        inherited.parameters["releaseSettings"]["tagPrefix"],
+        "app-v"
+    );
+}
+
+#[test]
+fn release_settings_form_only_serves_tauri_configurations() {
+    let mut config = RepoPublishConfig::default();
+    let profile = config
+        .create_profile(
+            "Server".to_string(),
+            "dotnet".to_string(),
+            serde_json::json!({}),
+            None,
+            None,
+            "2026-10-07T10:00:00Z".to_string(),
+        )
+        .expect("create profile")
+        .clone();
+
+    let error = config
+        .update_release_settings(
+            &profile.id,
+            crate::tauri_release::TauriReleaseConfig::default(),
+            "2026-10-07T10:01:00Z".to_string(),
+        )
+        .expect_err("dotnet has no release settings");
+    assert_eq!(
+        error.code.as_deref(),
+        Some("release_settings_provider_unsupported")
+    );
+}
+
+#[test]
 fn a_failed_release_settings_merge_keeps_the_legacy_file_for_retry() {
     let temp_dir = TempDir::new().expect("temp dir");
     let config_path = temp_dir.path().join("config.json");

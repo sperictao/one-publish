@@ -480,6 +480,7 @@ pub async fn save_profile(
     let mut state = get_state();
     let repo = find_repository_mut(&mut state.repositories, &repo_id)?;
 
+    crate::tauri_release::validate_supplied_release_settings(&parameters, None)?;
     let project_binding = repository_project_binding(repo, &provider_id);
     repo.publish_config.create_profile(
         name,
@@ -510,6 +511,11 @@ pub async fn update_profile(
     let mut state = get_state();
     let repo = find_repository_mut(&mut state.repositories, &repo_id)?;
 
+    crate::tauri_release::validate_supplied_release_settings(
+        &parameters,
+        repo.publish_config
+            .inherited_release_settings(&profile_id, &provider_id),
+    )?;
     let project_binding = repository_project_binding(repo, &provider_id);
     repo.publish_config.update_profile(
         &profile_id,
@@ -519,6 +525,70 @@ pub async fn update_profile(
         profile_group,
         composition,
         project_binding,
+        chrono::Utc::now().to_rfc3339(),
+    )?;
+
+    let response = state.clone();
+    persist_state_and_refresh_tray(&app, state).await?;
+    Ok(response)
+}
+
+/// 发布设置表单的初值（ADR-0060）：修订已有可读设置时原样返回；否则按
+/// 项目绑定（存量修订退回仓库当前候选）探测建议值，不写入修订。
+#[tauri::command]
+pub async fn load_release_settings_draft(
+    repo_id: String,
+    profile_id: String,
+) -> Result<crate::tauri_release::ReleaseSettingsDraft, AppError> {
+    let _timer = crate::commands::middleware::CommandTimer::new(
+        "store::commands::load_release_settings_draft",
+    );
+    let state = get_state();
+    let repo = find_repository(&state.repositories, &repo_id)?;
+    let revision = repo.publish_config.release_settings_revision(&profile_id)?;
+    if let Ok(Some(settings)) =
+        crate::tauri_release::release_settings_from_parameters(&revision.parameters)
+    {
+        return Ok(crate::tauri_release::ReleaseSettingsDraft {
+            settings,
+            stored: true,
+        });
+    }
+    let project_binding = revision
+        .project_binding
+        .clone()
+        .or_else(|| repository_project_binding(repo, publish_adapters::TAURI_PROVIDER_ID));
+    let config_path = project_binding.as_deref().and_then(|binding| {
+        crate::publish_runtime::project_binding_selector(
+            publish_adapters::TAURI_PROVIDER_ID,
+            binding,
+        )
+    });
+    Ok(crate::tauri_release::ReleaseSettingsDraft {
+        settings: crate::tauri_release::suggested_release_settings(
+            std::path::Path::new(&repo.path),
+            config_path,
+        ),
+        stored: false,
+    })
+}
+
+/// 发布设置表单的保存命令（ADR-0060）：校验通过才产生新修订。
+#[tauri::command]
+pub async fn update_profile_release_settings(
+    app: tauri::AppHandle,
+    repo_id: String,
+    profile_id: String,
+    settings: crate::tauri_release::TauriReleaseConfig,
+) -> Result<AppState, AppError> {
+    let _timer = crate::commands::middleware::CommandTimer::new(
+        "store::commands::update_profile_release_settings",
+    );
+    let mut state = get_state();
+    let repo = find_repository_mut(&mut state.repositories, &repo_id)?;
+    repo.publish_config.update_release_settings(
+        &profile_id,
+        settings,
         chrono::Utc::now().to_rfc3339(),
     )?;
 

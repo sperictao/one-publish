@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   ArrowUpCircle,
-  ExternalLink,
   GitBranchPlus,
   Loader2,
   Play,
@@ -33,7 +32,6 @@ import {
 import { SectionLabel } from "@/components/ui/section-label";
 import { useI18n } from "@/hooks/useI18n";
 import { localizeInvokeError } from "@/lib/tauri/invokeErrors";
-import { applyFix } from "@/features/environment/environment";
 import { RemoteEvidenceSection } from "@/components/publish/RemoteEvidenceSection";
 import {
   applyAutomationChange,
@@ -50,9 +48,6 @@ import {
 import type { ConfigProfile } from "@/lib/store/types";
 
 const DEFAULT_TAG_PREFIX = "v";
-// ADR-0058：Tauri 发布设置在 schema 驱动编辑器上线前于界面只读。
-const RELEASE_SETTINGS_DOCS_URL =
-  "https://github.com/sperictao/one-publish/blob/main/docs/adr/0058-store-provider-release-settings-in-revision-parameters.md";
 
 interface RuntimeRevisionSection {
   runnerVersion: string;
@@ -100,6 +95,8 @@ export interface AutomationBindingsSectionProps {
   configPanelT: Record<string, string | undefined>;
   /** 决议 #91：修订 Backend 不可投影时引导拉起组合编辑器（预填 github-actions）。 */
   onGuideComposition?: (profileId: string) => void;
+  /** ADR-0060：修订缺少发布设置时引导拉起发布设置表单。 */
+  onGuideReleaseSettings?: (profileId: string) => void;
   /** 仓库没有可绑定的 Tauri 配置时引导新建配置。 */
   onCreateProfile?: () => void;
 }
@@ -114,6 +111,7 @@ export function AutomationBindingsSection({
   profiles,
   configPanelT,
   onGuideComposition,
+  onGuideReleaseSettings,
   onCreateProfile,
 }: AutomationBindingsSectionProps) {
   const { translations } = useI18n();
@@ -292,20 +290,6 @@ export function AutomationBindingsSection({
       confirmedConflictPaths: [],
     });
   }, [installProfileId, installTagPrefix, requestPreview]);
-
-  const openReleaseSettingsDocs = useCallback(async () => {
-    try {
-      await applyFix({
-        action_type: "open_url",
-        label: RELEASE_SETTINGS_DOCS_URL,
-        url: RELEASE_SETTINGS_DOCS_URL,
-      });
-    } catch (error) {
-      toast.error(configPanelT.automationDocsOpenFailed || "无法打开文档", {
-        description: localizeInvokeError(error, translationsRef.current),
-      });
-    }
-  }, [configPanelT]);
 
   if (!repoId) {
     return null;
@@ -703,18 +687,22 @@ export function AutomationBindingsSection({
               >
                 <p className="text-label-12 text-amber-700 dark:text-amber-400">
                   {configPanelT.automationReleaseSettingsMissing ||
-                    "该配置的当前修订没有 Tauri 发布设置（构建目标、标签前缀、Updater、Secret 名称等），GitHub Actions 自动化需要它们来生成托管 workflow。发布设置在 schema 驱动的编辑器上线前于界面中只读，目前无法在应用内补齐。"}
+                    "该配置的当前修订没有 Tauri 发布设置（构建目标、标签前缀、Updater、Secret 名称等），GitHub Actions 自动化需要它们来生成托管 workflow。请先填写并保存发布设置，再回到这里绑定。"}
                 </p>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="mt-2 h-7 px-2 text-label-12"
-                  onClick={() => void openReleaseSettingsDocs()}
-                >
-                  <ExternalLink className="mr-1 size-3.5" />
-                  {configPanelT.automationReleaseSettingsDocs ||
-                    "查看发布设置说明"}
-                </Button>
+                {onGuideReleaseSettings ? (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="mt-2 h-7 px-2 text-label-12"
+                    onClick={() => {
+                      setInstallOpen(false);
+                      onGuideReleaseSettings(installProfileId);
+                    }}
+                  >
+                    {configPanelT.automationEditReleaseSettings ||
+                      "去填写发布设置"}
+                  </Button>
+                ) : null}
               </div>
             ) : null}
           </div>
