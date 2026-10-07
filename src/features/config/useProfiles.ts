@@ -118,8 +118,10 @@ export function useProfiles({
     profiles.find((profile) => profile.id === persistedActiveProfileId)?.name ??
     localActiveProfileName;
 
+  const repositoryProviderId = selectedRepo?.providerId ?? null;
   const crud = useProfileCrud({
     selectedRepoId,
+    repositoryProviderId,
     profiles,
     activeProfileId: persistedActiveProfileId,
     profileT,
@@ -201,6 +203,7 @@ export function useProfiles({
   const profileManagement = useMemo<ProfileManagementActions>(
     () => ({
       profiles,
+      repositoryProviderId,
       isRefreshing: isProfilesRefreshing,
       refreshProfiles: loadProfiles,
       saveProfile: crud.saveProfile,
@@ -216,6 +219,7 @@ export function useProfiles({
       isProfilesRefreshing,
       loadProfiles,
       profiles,
+      repositoryProviderId,
     ]
   );
 

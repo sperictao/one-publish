@@ -26,6 +26,7 @@ import type {
   AppState as TauriAppState,
   ConfigExport as TauriConfigExport,
   ExecutionRecord as TauriExecutionRecord,
+  ImportedConfigSummary,
   ProjectInfo,
   ProjectPublishProfileFile,
   ProjectScanCandidates as TauriProjectScanCandidates,
@@ -411,8 +412,8 @@ export async function importConfig(filePath: string): Promise<ConfigExport> {
 export async function applyImportedConfig(
   repoId: string,
   profiles: ConfigProfile[]
-): Promise<void> {
-  await invoke("apply_imported_config", {
+): Promise<ImportedConfigSummary> {
+  return await invoke<ImportedConfigSummary>("apply_imported_config", {
     repoId,
     profiles: profiles.map(toExportConfigProfile),
   });

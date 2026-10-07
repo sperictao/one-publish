@@ -82,6 +82,7 @@ pub fn generate_tauri_contracts() -> String {
     push_contract::<crate::commands::UpdaterHelpPaths>(&mut declarations);
     push_contract::<crate::config_export::ConfigExport>(&mut declarations);
     push_contract::<crate::config_export::ConfigProfile>(&mut declarations);
+    push_contract::<crate::commands::ImportedConfigSummary>(&mut declarations);
     push_contract::<crate::environment::EnvironmentCheckResult>(&mut declarations);
     push_contract::<crate::environment::EnvironmentIssue>(&mut declarations);
     push_contract::<crate::environment::FixAction>(&mut declarations);

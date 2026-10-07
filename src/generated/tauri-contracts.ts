@@ -220,6 +220,16 @@ composition: PublishComposition | null,
  */
 project_binding: string | null, profile_group: string | null, created_at: string, is_system_default: boolean, };
 
+export type ImportedConfigSummary = { imported: number, 
+/**
+ * 仓库内已有同名配置，保留原配置、不覆盖。
+ */
+skippedExisting: number, 
+/**
+ * 配置 Provider 与仓库声明的 Provider 不一致，拒绝导入。
+ */
+skippedProviderMismatch: number, };
+
 export type EnvironmentCheckResult = { is_ready: boolean, providers: Array<ProviderStatus>, issues: Array<EnvironmentIssue>, checked_at: string, };
 
 export type EnvironmentIssue = { severity: IssueSeverity, provider_id: string, issue_type: IssueType, description: string, current_value: string | null, expected_value: string | null, fixes: Array<FixAction>, };

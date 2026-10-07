@@ -189,8 +189,19 @@ describe("store api wrappers", () => {
     });
   });
 
-  // Tauri v2 把 Rust 命令参数（snake_case）映射为 camelCase 键；
-  // 键名写错只会在运行时报 "missing required key"，因此逐条锁定 IPC 契约。
+  it("applyImportedConfig returns the per-outcome counts from the backend", async () => {
+    const summary = {
+      imported: 1,
+      skippedExisting: 2,
+      skippedProviderMismatch: 3,
+    };
+    invokeMock.mockResolvedValue(summary);
+
+    await expect(applyImportedConfig("repo-1", [])).resolves.toEqual(summary);
+  });
+
+  // 键名覆盖由 tauriCommandContract.test.ts 从 Rust 签名自动推导；
+  // 这里只锁定包装层对实参值的变换（规范化、省略 undefined 等）。
   it.each([
     {
       name: "exportConfig",
@@ -214,7 +225,7 @@ describe("store api wrappers", () => {
     {
       name: "applyImportedConfig",
       call: () => applyImportedConfig("repo-1", []),
-      response: null,
+      response: { imported: 0, skippedExisting: 0, skippedProviderMismatch: 0 },
       command: "apply_imported_config",
       args: { repoId: "repo-1", profiles: [] },
     },

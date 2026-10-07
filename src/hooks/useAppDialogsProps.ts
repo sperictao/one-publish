@@ -102,7 +102,7 @@ export interface UseAppDialogsPropsParams {
   handleQuickCreateProfileSave: () => void;
   configDialogOpen: boolean;
   profileManagement: ProfileManagementActions;
-  handleLoadProfile: (profile: ConfigProfile) => void;
+  handleLoadProfile: (profile: ConfigProfile) => boolean;
   selectedRepoId: string | null;
   currentConfigParameters: ConfigParameters;
 }

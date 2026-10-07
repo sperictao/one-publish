@@ -12,7 +12,7 @@ mod updater;
 pub(crate) use artifact::{__cmd__package_artifact, __cmd__sign_artifact};
 pub use artifact::{package_artifact, sign_artifact};
 pub(crate) use config::{__cmd__apply_imported_config, __cmd__export_config, __cmd__import_config};
-pub use config::{apply_imported_config, export_config, import_config};
+pub use config::{apply_imported_config, export_config, import_config, ImportedConfigSummary};
 pub(crate) use environment::{__cmd__apply_fix, __cmd__run_environment_check};
 pub use environment::{apply_fix, run_environment_check};
 pub(crate) use export::{

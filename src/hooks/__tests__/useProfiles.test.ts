@@ -102,7 +102,11 @@ describe("useProfiles", () => {
     mocks.updateProfile.mockResolvedValue({ repositories: [] });
     mocks.deleteProfile.mockResolvedValue({ repositories: [] });
     mocks.exportConfig.mockResolvedValue("/tmp/one-publish-config.json");
-    mocks.applyImportedConfig.mockResolvedValue(undefined);
+    mocks.applyImportedConfig.mockResolvedValue({
+      imported: 1,
+      skippedExisting: 0,
+      skippedProviderMismatch: 0,
+    });
   });
 
   it("会忽略旧仓库晚到的配置列表响应", async () => {
@@ -640,20 +644,142 @@ describe("useProfiles", () => {
       expect(mocks.getProfiles).toHaveBeenCalledWith("repo-1");
     });
 
+    let summary: unknown;
     await act(async () => {
-      await result.current.profileManagement.applyImportedProfiles(
-        importedProfiles
-      );
+      summary =
+        await result.current.profileManagement.applyImportedProfiles(
+          importedProfiles
+        );
     });
 
     expect(mocks.applyImportedConfig).toHaveBeenCalledWith(
       "repo-1",
       importedProfiles
     );
+    // 后端计数原样返回给对话框展示，不再被丢弃。
+    expect(summary).toEqual({
+      imported: 1,
+      skippedExisting: 0,
+      skippedProviderMismatch: 0,
+    });
     await waitFor(() => {
       expect(result.current.profiles.map((profile) => profile.name)).toEqual([
         "Imported",
       ]);
     });
+  });
+
+  it("拒绝选择 Provider 与仓库不一致的配置（跨仓库导入的 Go 配置不能在 Rust 仓库加载）", async () => {
+    const goProfile = {
+      ...createProfile("linux-amd64"),
+      providerId: "go",
+      parameters: { goos: "linux", goarch: "amd64" },
+    };
+    mocks.getProfiles.mockResolvedValue([goProfile]);
+    const updatePublishEditState = vi.fn();
+    const applyProfileProvider = vi.fn();
+    const setProviderParameters = vi.fn();
+
+    const { result } = renderHook(() =>
+      useProfiles({
+        appT: {},
+        profileT: {},
+        language: "zh",
+        selectedRepoId: "repo-a",
+        activeProviderId: "cargo",
+        providerSchemas: {},
+        applyProfileProvider,
+        updatePublishEditState,
+        selectedRepo: { ...createSelectedRepo(null), providerId: "cargo" },
+        setProviderParameters,
+        replaceScopedConfigKey: vi.fn(),
+      })
+    );
+    await waitFor(() => expect(result.current.profiles).toEqual([goProfile]));
+    expect(result.current.profileManagement.repositoryProviderId).toBe("cargo");
+
+    act(() => {
+      result.current.handleSelectProfileFromPanel(goProfile);
+    });
+    let loaded: boolean | undefined;
+    act(() => {
+      loaded = result.current.handleLoadProfile(goProfile);
+    });
+
+    expect(loaded).toBe(false);
+    expect(updatePublishEditState).not.toHaveBeenCalled();
+    expect(applyProfileProvider).not.toHaveBeenCalled();
+    expect(setProviderParameters).not.toHaveBeenCalled();
+    expect(result.current.activeProfileName).toBeNull();
+    expect(mocks.toast.success).not.toHaveBeenCalled();
+    expect(mocks.toast.error).toHaveBeenCalledWith("无法加载配置", {
+      description: "配置“linux-amd64”属于 go，当前仓库的 Provider 是 cargo。",
+    });
+  });
+
+  it("仓库未声明 Provider 时不限制加载配置", async () => {
+    const goProfile = { ...createProfile("linux-amd64"), providerId: "go" };
+    mocks.getProfiles.mockResolvedValue([goProfile]);
+    const updatePublishEditState = vi.fn();
+
+    const { result } = renderHook(() =>
+      useProfiles({
+        appT: {},
+        profileT: {},
+        language: "zh",
+        selectedRepoId: "repo-a",
+        activeProviderId: "cargo",
+        providerSchemas: {},
+        applyProfileProvider: vi.fn(),
+        updatePublishEditState,
+        selectedRepo: { ...createSelectedRepo(null), providerId: null },
+        setProviderParameters: vi.fn(),
+        replaceScopedConfigKey: vi.fn(),
+      })
+    );
+    await waitFor(() => expect(result.current.profiles).toEqual([goProfile]));
+
+    let loaded: boolean | undefined;
+    act(() => {
+      loaded = result.current.handleLoadProfile(goProfile);
+    });
+
+    expect(loaded).toBe(true);
+    expect(updatePublishEditState).toHaveBeenCalledWith({
+      selection: { kind: "revision", configurationId: "linux-amd64" },
+    });
+  });
+
+  it("导出返回后端实际写入的路径", async () => {
+    mocks.getProfiles.mockResolvedValue([]);
+    mocks.exportConfig.mockResolvedValue("/tmp/backup.json");
+
+    const { result } = renderHook(() =>
+      useProfiles({
+        appT: {},
+        profileT: {},
+        language: "zh",
+        selectedRepoId: "repo-1",
+        activeProviderId: "dotnet",
+        providerSchemas: {},
+        applyProfileProvider: vi.fn(),
+        updatePublishEditState: vi.fn(),
+        selectedRepo: null,
+        setProviderParameters: vi.fn(),
+        replaceScopedConfigKey: vi.fn(),
+      })
+    );
+
+    let exportedPath: string | undefined;
+    await act(async () => {
+      exportedPath =
+        await result.current.profileManagement.exportProfiles("/tmp/backup");
+    });
+
+    expect(mocks.exportConfig).toHaveBeenCalledWith({
+      repoId: "repo-1",
+      filePath: "/tmp/backup",
+    });
+    expect(exportedPath).toBe("/tmp/backup.json");
   });
 });
