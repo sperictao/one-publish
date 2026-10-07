@@ -196,6 +196,9 @@ impl Provider for BuiltInProvider {
                     return resolve_output_path(output, self.resolve_working_dir(spec));
                 }
 
+                // 项目内默认输出 {project_dir}/bin/{configuration}/publish：这是 OnePublish
+                // 选定的位置，而非 SDK 默认布局（后者含 TFM/RID 段）；prepare 会把它作为
+                // 显式 --output 传入，构建写入位置与产物收集位置因此一致。
                 if let Some(parent) = Path::new(&spec.project_path).parent() {
                     let configuration = read_parameter_string(&spec.parameters, "configuration")
                         .unwrap_or_else(|| "Release".to_string());
@@ -688,7 +691,8 @@ mod tests {
         let registry = ProviderRegistry::new();
         let provider = registry.get("dotnet").expect("provider");
 
-        // 无 output 参数：{project_dir}/bin/{configuration}/publish，缺省 Release。
+        // 无 output 参数：{project_dir}/bin/{configuration}/publish，缺省 Release；
+        // prepare 把该路径作为显式 --output 下发（见 publish_runtime::build_resolved_spec）。
         let spec = output_dir_spec(
             &project_path,
             &[("configuration", SpecValue::String("Debug".to_string()))],

@@ -1556,7 +1556,7 @@ fn build_resolved_spec(
 }
 
 /// 配置未显式给出输出时写入 OnePublish 派生的缺省输出：声明了布局模板的 Provider
-/// 按模板求值（未设置默认发布目录时沿用原生输出），其余由 Provider 自行派生。
+/// 按模板求值（未设置默认发布目录时写入 Provider 的项目内默认输出），其余由 Provider 自行派生。
 fn derive_default_output(
     provider: &dyn crate::provider::Provider,
     spec: &mut PublishSpec,
@@ -1571,9 +1571,21 @@ fn derive_default_output(
         }
         return Ok(());
     };
-    if default_output_dir.is_empty()
-        || has_explicit_declared_output(&spec.parameters, &output_layout.parameter)
-    {
+    if has_explicit_declared_output(&spec.parameters, &output_layout.parameter) {
+        return Ok(());
+    }
+    if default_output_dir.is_empty() {
+        // 未设置默认发布目录：把 Provider 的项目内默认输出作为显式输出传给构建。
+        // 工具链自身的默认布局随目标框架/RID 变化（如 bin/Release/net8.0/publish），
+        // 由 OnePublish 指定输出才能保证构建写入位置就是产物收集位置。
+        let project_output = provider.infer_output_dir(spec);
+        if !project_output.is_empty() {
+            insert_declared_output(
+                &mut spec.parameters,
+                &output_layout.parameter,
+                Path::new(&project_output),
+            );
+        }
         return Ok(());
     }
 
@@ -2785,6 +2797,8 @@ fn release_identity(snapshot: &PlanningInputSnapshot) -> Result<ReleaseIdentity,
     ))
 }
 
+/// 本地界面结果：错误与警告只遮蔽密钥，保留本机路径以便诊断；
+/// 路径遮蔽只在导出（`sanitize_export_value`）时进行。
 fn summarize_attempt(view: PublishAttemptView) -> RuntimeAttemptResult {
     RuntimeAttemptResult {
         attempt_id: view.attempt.attempt_id,
@@ -2829,13 +2843,13 @@ fn summarize_attempt(view: PublishAttemptView) -> RuntimeAttemptResult {
                 external_reference: route.external_reference,
                 error: route
                     .error
-                    .map(|error| crate::security::sanitize_freeform_text(&error)),
+                    .map(|error| crate::security::sanitize_secrets_in_text(&error)),
             })
             .collect(),
         warnings: view
             .warnings
             .into_iter()
-            .map(|warning| crate::security::sanitize_freeform_text(&warning))
+            .map(|warning| crate::security::sanitize_secrets_in_text(&warning))
             .collect(),
         events: view
             .events
@@ -2883,13 +2897,13 @@ fn summarize_attempt(view: PublishAttemptView) -> RuntimeAttemptResult {
                         .payload
                         .get("error")
                         .and_then(Value::as_str)
-                        .map(crate::security::sanitize_freeform_text),
+                        .map(crate::security::sanitize_secrets_in_text),
                 }
             })
             .collect(),
         error: view
             .error
-            .map(|error| crate::security::sanitize_freeform_text(&error)),
+            .map(|error| crate::security::sanitize_secrets_in_text(&error)),
     }
 }
 
@@ -4342,14 +4356,72 @@ mod tests {
             Some(&SpecValue::String("/explicit-out".to_string()))
         );
 
-        // 默认输出目录未设置：不派生，交给 Provider 推断（bin/{configuration}/publish）。
+        // 默认输出目录未设置：显式下发项目内默认输出（bin/{configuration}/publish）。
         let no_default = built_spec(super::build_resolved_spec(
             &repository,
             &content,
             &super::PublishRunInputs::default(),
             &source,
         ));
-        assert!(!no_default.parameters.contains_key("output"));
+        assert_eq!(
+            no_default.parameters.get("output"),
+            Some(&SpecValue::String(
+                std::path::Path::new(&repository.path)
+                    .join("bin")
+                    .join("Release")
+                    .join("publish")
+                    .to_string_lossy()
+                    .to_string()
+            ))
+        );
+    }
+
+    #[test]
+    fn resolved_spec_passes_the_collected_dotnet_output_to_the_build_without_a_default_dir() {
+        let (_dir, repository) = spec_builder_repository();
+        let source = super::PublishSource::Empty {
+            provider_id: "dotnet".to_string(),
+            project_binding: None,
+        };
+        let project_dir = std::path::Path::new(&repository.path);
+        let provider = crate::provider::registry::provider_registry()
+            .get("dotnet")
+            .expect("dotnet provider");
+
+        // SDK 默认布局是 bin/{configuration}/{TFM}/[{RID}/]publish；无论是否指定
+        // 配置、RID，构建都必须写入收集位置，因此 --output 与推断目录逐字相同。
+        for (parameters, expected) in [
+            (
+                serde_json::json!({}),
+                project_dir.join("bin").join("Release").join("publish"),
+            ),
+            (
+                serde_json::json!({ "configuration": "Debug", "runtime": "osx-arm64" }),
+                project_dir.join("bin").join("Debug").join("publish"),
+            ),
+        ] {
+            let spec = built_spec(super::build_resolved_spec(
+                &repository,
+                &revision_content("dotnet", parameters, None),
+                &super::PublishRunInputs::default(),
+                &source,
+            ));
+            let expected = expected.to_string_lossy().to_string();
+
+            let collected = provider.infer_output_dir(&spec);
+            assert_eq!(collected, expected);
+            assert_eq!(
+                provider.configured_output_dir(&spec),
+                Some(expected.clone())
+            );
+            let command = super::render_provider_publish(spec).expect("render dotnet publish");
+            let output_flag = command
+                .args
+                .iter()
+                .position(|arg| arg == "--output")
+                .expect("the build must receive an explicit --output");
+            assert_eq!(command.args.get(output_flag + 1), Some(&collected));
+        }
     }
 
     #[test]
@@ -8183,6 +8255,44 @@ mod tests {
             .error
             .as_deref()
             .is_some_and(|error| error.contains("source changed")));
+    }
+
+    #[test]
+    fn local_attempt_errors_keep_real_paths_and_redact_secrets() {
+        let repository = tempfile::tempdir().expect("create repository");
+        let delivery = tempfile::tempdir().expect("create delivery parent");
+        let output_directory = delivery.path().join("publish-output");
+        let prepared = prepare_test_runtime(repository.path(), &output_directory);
+        let output_text = output_directory.to_string_lossy().to_string();
+
+        let result = start_runtime_with_port(
+            StartPublishRuntimeRequest {
+                runtime_token: prepared.runtime_token().to_string(),
+            },
+            Arc::new(FakeProviderExecution {
+                output_directory: output_directory.clone(),
+                output_is_file: false,
+                failure: Some(format!(
+                    "I/O operation inspect provider output {output_text} failed -p:ApiToken=hunter2"
+                )),
+                source_change: None,
+            }),
+            AttemptIdentity {
+                attempt_id: "attempt-local-path".to_string(),
+                backend_run_id: "backend-local-path".to_string(),
+            },
+        )
+        .expect("provider failure must reduce to a failed attempt");
+
+        assert_eq!(result.attempt.status, RuntimeAttemptStatus::Failed);
+        let error = result.attempt.error.expect("failed attempt error");
+        assert!(error.contains(&output_text), "{error}");
+        assert!(
+            !error.contains(crate::security::LOCAL_PATH_VALUE),
+            "{error}"
+        );
+        assert!(error.contains("-p:ApiToken=<redacted>"), "{error}");
+        assert!(!error.contains("hunter2"), "{error}");
     }
 
     fn prepare_test_runtime(
