@@ -1,9 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   ArrowUpCircle,
+  ExternalLink,
   GitBranchPlus,
   Loader2,
   Play,
+  Plus,
   RefreshCw,
   ShieldAlert,
   Unlink,
@@ -31,6 +33,7 @@ import {
 import { SectionLabel } from "@/components/ui/section-label";
 import { useI18n } from "@/hooks/useI18n";
 import { localizeInvokeError } from "@/lib/tauri/invokeErrors";
+import { applyFix } from "@/features/environment/environment";
 import { RemoteEvidenceSection } from "@/components/publish/RemoteEvidenceSection";
 import {
   applyAutomationChange,
@@ -47,6 +50,9 @@ import {
 import type { ConfigProfile } from "@/lib/store/types";
 
 const DEFAULT_TAG_PREFIX = "v";
+// ADR-0058：Tauri 发布设置在 schema 驱动编辑器上线前于界面只读。
+const RELEASE_SETTINGS_DOCS_URL =
+  "https://github.com/sperictao/one-publish/blob/main/docs/adr/0058-store-provider-release-settings-in-revision-parameters.md";
 
 interface RuntimeRevisionSection {
   runnerVersion: string;
@@ -94,6 +100,8 @@ export interface AutomationBindingsSectionProps {
   configPanelT: Record<string, string | undefined>;
   /** 决议 #91：修订 Backend 不可投影时引导拉起组合编辑器（预填 github-actions）。 */
   onGuideComposition?: (profileId: string) => void;
+  /** 仓库没有可绑定的 Tauri 配置时引导新建配置。 */
+  onCreateProfile?: () => void;
 }
 
 interface PendingPreview {
@@ -106,6 +114,7 @@ export function AutomationBindingsSection({
   profiles,
   configPanelT,
   onGuideComposition,
+  onCreateProfile,
 }: AutomationBindingsSectionProps) {
   const { translations } = useI18n();
   // 错误文案只在 toast 时读取最新翻译；不进入回调依赖，避免翻译加载完成时
@@ -284,6 +293,20 @@ export function AutomationBindingsSection({
     });
   }, [installProfileId, installTagPrefix, requestPreview]);
 
+  const openReleaseSettingsDocs = useCallback(async () => {
+    try {
+      await applyFix({
+        action_type: "open_url",
+        label: RELEASE_SETTINGS_DOCS_URL,
+        url: RELEASE_SETTINGS_DOCS_URL,
+      });
+    } catch (error) {
+      toast.error(configPanelT.automationDocsOpenFailed || "无法打开文档", {
+        description: localizeInvokeError(error, translationsRef.current),
+      });
+    }
+  }, [configPanelT]);
+
   if (!repoId) {
     return null;
   }
@@ -299,6 +322,15 @@ export function AutomationBindingsSection({
     selectedInstallProfile !== undefined &&
     selectedInstallProfile.composition?.executionBackend.adapterId !==
       "github-actions";
+  // 与后端 github_actions_release_config_missing 同构：保留键缺失或显式
+  // null 都表示修订没有 Tauri 发布设置；形状校验仍由后端预览负责。
+  const missingReleaseSettings =
+    selectedInstallProfile !== undefined &&
+    selectedInstallProfile.parameters.releaseSettings == null;
+  const hasNoTauriProfile = activeProfiles.length === 0;
+  const noTauriProfileHint =
+    configPanelT.automationNoTauriProfile ||
+    "远端自动化目前只支持 Tauri 发布配置。请先选中仓库中的 Tauri 项目，再新建配置。";
   const changeKindLabel = (kind: string) =>
     kind === "added"
       ? configPanelT.automationChangeAdded || "新增"
@@ -335,13 +367,42 @@ export function AutomationBindingsSection({
               setInstallTagPrefix(DEFAULT_TAG_PREFIX);
               setInstallOpen(true);
             }}
-            disabled={activeProfiles.length === 0}
+            disabled={hasNoTauriProfile}
+            title={hasNoTauriProfile ? noTauriProfileHint : undefined}
+            aria-describedby={
+              hasNoTauriProfile ? "automation-no-tauri-profile-hint" : undefined
+            }
           >
             <GitBranchPlus className="mr-1 size-3.5" />
             {configPanelT.automationInstall || "绑定自动化"}
           </Button>
         </div>
       </div>
+
+      {hasNoTauriProfile ? (
+        <div
+          className="mt-2 rounded-sm border border-border px-3 py-2"
+          data-testid="automation-no-tauri-profile"
+        >
+          <p
+            id="automation-no-tauri-profile-hint"
+            className="text-label-12 text-muted-foreground"
+          >
+            {noTauriProfileHint}
+          </p>
+          {onCreateProfile ? (
+            <Button
+              variant="outline"
+              size="sm"
+              className="mt-2 h-7 px-2 text-label-12"
+              onClick={onCreateProfile}
+            >
+              <Plus className="mr-1 size-3.5" />
+              {configPanelT.newConfig || "新建配置"}
+            </Button>
+          ) : null}
+        </div>
+      ) : null}
 
       {drift.length > 0 ? (
         <div
@@ -635,6 +696,27 @@ export function AutomationBindingsSection({
                 ) : null}
               </div>
             ) : null}
+            {missingReleaseSettings ? (
+              <div
+                className="rounded-sm border border-amber-600/40 bg-amber-500/10 px-3 py-2"
+                data-testid="automation-release-settings-guide"
+              >
+                <p className="text-label-12 text-amber-700 dark:text-amber-400">
+                  {configPanelT.automationReleaseSettingsMissing ||
+                    "该配置的当前修订没有 Tauri 发布设置（构建目标、标签前缀、Updater、Secret 名称等），GitHub Actions 自动化需要它们来生成托管 workflow。发布设置在 schema 驱动的编辑器上线前于界面中只读，目前无法在应用内补齐。"}
+                </p>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="mt-2 h-7 px-2 text-label-12"
+                  onClick={() => void openReleaseSettingsDocs()}
+                >
+                  <ExternalLink className="mr-1 size-3.5" />
+                  {configPanelT.automationReleaseSettingsDocs ||
+                    "查看发布设置说明"}
+                </Button>
+              </div>
+            ) : null}
           </div>
           <DialogFooter>
             <Button
@@ -647,7 +729,11 @@ export function AutomationBindingsSection({
             <Button
               size="sm"
               onClick={startInstallPreview}
-              disabled={!installProfileId || needsCompositionGuide}
+              disabled={
+                !installProfileId ||
+                needsCompositionGuide ||
+                missingReleaseSettings
+              }
             >
               {configPanelT.automationPreviewDiff || "预览投影差异"}
             </Button>

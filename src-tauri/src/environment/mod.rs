@@ -3,12 +3,14 @@ pub mod dotnet_provider;
 pub mod go_provider;
 pub mod java_provider;
 pub mod probe;
+pub mod tauri_provider;
 pub mod types;
 
 pub use cargo_provider::check_cargo;
 pub use dotnet_provider::check_dotnet;
 pub use go_provider::check_go;
 pub use java_provider::check_java;
+pub use tauri_provider::check_tauri;
 pub use types::*;
 
 use std::collections::{HashMap, HashSet};
@@ -99,6 +101,10 @@ async fn check_provider_runtime_environment(
             let issues = java_provider::detect_java_issues(&status);
             Ok(ProviderEnvironmentCheck { status, issues })
         }
+        "tauri" => {
+            let (status, issues) = check_tauri().await;
+            Ok(ProviderEnvironmentCheck { status, issues })
+        }
         _ => Err(Box::new(unsupported_environment_provider_issue(provider_id))),
     }
 }
@@ -171,5 +177,18 @@ mod tests {
         assert!(result.providers.is_empty());
         assert_eq!(result.issues.len(), 1);
         assert_eq!(result.issues[0].provider_id, "unknown");
+    }
+
+    #[tokio::test]
+    async fn tauri_is_checked_instead_of_reported_unsupported() {
+        let result = check_environment(Some(vec!["tauri".to_string()])).await;
+
+        assert_eq!(result.providers.len(), 1);
+        assert_eq!(result.providers[0].provider_id, "tauri");
+        assert!(result
+            .issues
+            .iter()
+            .all(|issue| issue.provider_id == "tauri"
+                && !issue.description.starts_with("Unsupported provider_id")));
     }
 }

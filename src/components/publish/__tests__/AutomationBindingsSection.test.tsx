@@ -15,6 +15,7 @@ const {
   synchronizeRemoteEvidenceMock,
   dispatchManualPublishRunMock,
   cancelRemotePublishRunMock,
+  applyFixMock,
 } = vi.hoisted(() => ({
   listAutomationBindingsMock: vi.fn(),
   previewAutomationChangeMock: vi.fn(),
@@ -22,6 +23,7 @@ const {
   synchronizeRemoteEvidenceMock: vi.fn(),
   dispatchManualPublishRunMock: vi.fn(),
   cancelRemotePublishRunMock: vi.fn(),
+  applyFixMock: vi.fn(),
 }));
 
 vi.mock("@/lib/automationBindings", () => ({
@@ -33,6 +35,10 @@ vi.mock("@/lib/automationBindings", () => ({
   cancelRemotePublishRun: cancelRemotePublishRunMock,
 }));
 
+vi.mock("@/features/environment/environment", () => ({
+  applyFix: applyFixMock,
+}));
+
 vi.mock("sonner", () => ({
   toast: { success: vi.fn(), error: vi.fn() },
 }));
@@ -40,14 +46,20 @@ vi.mock("sonner", () => ({
 function createProfile(
   id: string,
   name: string,
-  executionBackendId = "github-actions"
+  {
+    executionBackendId = "github-actions",
+    withReleaseSettings = true,
+  }: { executionBackendId?: string; withReleaseSettings?: boolean } = {}
 ): ConfigProfile {
   return {
     id,
     revisionId: `${id}-revision-1`,
     name,
     providerId: "tauri",
-    parameters: { configuration: "Release" },
+    // ADR-0058：GitHub Actions 投影要求修订携带 releaseSettings 保留键。
+    parameters: withReleaseSettings
+      ? { configuration: "Release", releaseSettings: { tagPrefix: "v" } }
+      : { configuration: "Release" },
     // 决议 #90/#91：自动化 Backend 从修订组合推导；安装引导以此判定。
     composition: {
       executionBackend: {
@@ -160,7 +172,8 @@ function installPreview(): AutomationProjectionPreview {
 
 function renderSection(
   profiles: ConfigProfile[] = [createProfile("profile-1", "Stable")],
-  onGuideComposition?: (profileId: string) => void
+  onGuideComposition?: (profileId: string) => void,
+  onCreateProfile?: () => void
 ) {
   return render(
     <AutomationBindingsSection
@@ -168,6 +181,7 @@ function renderSection(
       profiles={profiles}
       configPanelT={{}}
       onGuideComposition={onGuideComposition}
+      onCreateProfile={onCreateProfile}
     />
   );
 }
@@ -366,7 +380,11 @@ describe("AutomationBindingsSection", () => {
     const onGuideComposition = vi.fn();
 
     renderSection(
-      [createProfile("profile-1", "Stable", "local-execution")],
+      [
+        createProfile("profile-1", "Stable", {
+          executionBackendId: "local-execution",
+        }),
+      ],
       onGuideComposition
     );
     await screen.findByTestId("automation-bindings-section");
@@ -380,7 +398,106 @@ describe("AutomationBindingsSection", () => {
     expect(screen.getByRole("button", { name: "预览投影差异" })).toBeDisabled();
     fireEvent.click(screen.getByRole("button", { name: "去编辑发布组合" }));
     expect(onGuideComposition).toHaveBeenCalledWith("profile-1");
+    expect(
+      screen.queryByTestId("automation-release-settings-guide")
+    ).toBeNull();
     expect(previewAutomationChangeMock).not.toHaveBeenCalled();
+  });
+
+  it("explains the disabled bind button and offers a new profile when no Tauri profile exists", async () => {
+    listAutomationBindingsMock.mockResolvedValue(emptyView());
+    const onCreateProfile = vi.fn();
+
+    renderSection(
+      [{ ...createProfile("profile-1", "Dotnet"), providerId: "dotnet" }],
+      undefined,
+      onCreateProfile
+    );
+    await waitFor(() =>
+      expect(listAutomationBindingsMock).toHaveBeenCalledWith("repo-1")
+    );
+
+    const hint =
+      "远端自动化目前只支持 Tauri 发布配置。请先选中仓库中的 Tauri 项目，再新建配置。";
+    const bindButton = screen.getByRole("button", { name: "绑定自动化" });
+    expect(bindButton).toBeDisabled();
+    expect(bindButton).toHaveAttribute("title", hint);
+    expect(bindButton).toHaveAccessibleDescription(hint);
+    expect(screen.getByTestId("automation-no-tauri-profile")).toHaveTextContent(
+      hint
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "新建配置" }));
+    expect(onCreateProfile).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps the bind button free of the no-profile hint once a Tauri profile exists", async () => {
+    listAutomationBindingsMock.mockResolvedValue(emptyView());
+
+    renderSection();
+    await waitFor(() =>
+      expect(listAutomationBindingsMock).toHaveBeenCalledWith("repo-1")
+    );
+
+    const bindButton = screen.getByRole("button", { name: "绑定自动化" });
+    expect(bindButton).toBeEnabled();
+    expect(bindButton).not.toHaveAttribute("title");
+    expect(screen.queryByTestId("automation-no-tauri-profile")).toBeNull();
+  });
+
+  it("pre-checks missing Tauri release settings and links to the docs instead of previewing", async () => {
+    listAutomationBindingsMock.mockResolvedValue(emptyView());
+    applyFixMock.mockResolvedValue({ result: "OpenedUrl", data: "" });
+
+    renderSection([
+      createProfile("profile-1", "Stable", { withReleaseSettings: false }),
+    ]);
+    await screen.findByTestId("automation-bindings-section");
+    fireEvent.click(screen.getByRole("button", { name: "绑定自动化" }));
+
+    // ADR-0058：发布设置在界面只读，前端预检代替后端
+    // github_actions_release_config_missing 的预览失败。
+    const guide = await screen.findByTestId(
+      "automation-release-settings-guide"
+    );
+    expect(guide).toHaveTextContent("没有 Tauri 发布设置");
+    expect(guide).toHaveTextContent("目前无法在应用内补齐");
+    expect(screen.queryByTestId("automation-composition-guide")).toBeNull();
+    expect(screen.getByRole("button", { name: "预览投影差异" })).toBeDisabled();
+
+    fireEvent.click(screen.getByRole("button", { name: "查看发布设置说明" }));
+    await waitFor(() =>
+      expect(applyFixMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          action_type: "open_url",
+          url: expect.stringContaining(
+            "docs/adr/0058-store-provider-release-settings-in-revision-parameters.md"
+          ),
+        })
+      )
+    );
+    expect(previewAutomationChangeMock).not.toHaveBeenCalled();
+  });
+
+  it("lists every missing requirement of a revision that is not bindable", async () => {
+    listAutomationBindingsMock.mockResolvedValue(emptyView());
+
+    renderSection([
+      createProfile("profile-1", "Stable", {
+        executionBackendId: "local-execution",
+        withReleaseSettings: false,
+      }),
+    ]);
+    await screen.findByTestId("automation-bindings-section");
+    fireEvent.click(screen.getByRole("button", { name: "绑定自动化" }));
+
+    expect(
+      await screen.findByTestId("automation-composition-guide")
+    ).toBeTruthy();
+    expect(
+      screen.getByTestId("automation-release-settings-guide")
+    ).toBeTruthy();
+    expect(screen.getByRole("button", { name: "预览投影差异" })).toBeDisabled();
   });
 
   it("synchronizes remote evidence and surfaces expired attempts explicitly", async () => {

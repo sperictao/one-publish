@@ -8,16 +8,17 @@ test.describe("Custom Publish Mode", () => {
   test("custom mode toggle or option is present", async ({ page }) => {
     await gotoApp(page);
 
-    // The "新建配置" button is the entry point for custom configurations
-    const newConfigBtn = page.getByRole("button", { name: /新建配置/i });
+    // The toolbar "新建配置" button is the entry point for custom configurations;
+    // the automation section may show another button with the same name.
+    const newConfigBtn = page.getByTestId("new-config-btn");
     await expect(newConfigBtn).toBeVisible({ timeout: 10000 });
   });
 
   test("parameter form renders when in custom mode", async ({ page }) => {
     await gotoApp(page);
 
-    // Click "新建配置" to enter custom mode
-    const newConfigBtn = page.getByRole("button", { name: /新建配置/i });
+    // Click the toolbar "新建配置" to enter custom mode
+    const newConfigBtn = page.getByTestId("new-config-btn");
     if (await newConfigBtn.isVisible()) {
       await newConfigBtn.click();
       // Wait for the custom config form or command preview to appear
