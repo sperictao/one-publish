@@ -6,6 +6,12 @@ import type { ResourceState } from "@/features/provider/useProviderRuntime";
 import type { ProviderManifest } from "@/lib/store/types";
 import type { ParameterSchema } from "@/types/parameters";
 
+// 用真实 zh 文案，顺带校验后端错误码已在 `errors.<code>` 登记。
+vi.mock("@/hooks/useI18n", async () => {
+  const zh = (await import("@/i18n/zh.json")).default;
+  return { useI18n: () => ({ translations: zh }) };
+});
+
 const dotnetProvider: ProviderManifest = {
   id: "dotnet",
   displayName: ".NET (dotnet)",
@@ -129,8 +135,29 @@ describe("useProviderPresentationState", () => {
     expect(result.current.providerRuntimeBanner).toMatchObject({
       key: "provider-schema-error",
       title: "Provider schema failed",
-      description: "Error: schema unavailable",
+      description: "schema unavailable",
       onRetry: retryProviderSchema,
+    });
+
+    // Tauri invoke 以 AppError 对象 reject：按错误码本地化，而不是渲染 [object Object]。
+    rerender({
+      providerListState: readyProviders([dotnetProvider]),
+      activeProviderSchemaState: {
+        status: "error",
+        data: null,
+        error: {
+          kind: "provider",
+          message: "failed to load schema",
+          details: "schema.json: No such file or directory",
+          code: "provider_schema_load_failed",
+        },
+      },
+    });
+
+    expect(result.current.providerRuntimeBanner).toMatchObject({
+      key: "provider-schema-error",
+      description:
+        "无法加载 Provider 参数定义 | schema.json: No such file or directory",
     });
   });
 });

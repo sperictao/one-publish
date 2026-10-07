@@ -33,7 +33,8 @@ use publish_domain::{
     AdapterSettings, AutomationBindingProjection, AutomationProjection,
     AutomationRuntimeRevision, AutomationTriggerPolicy, CapabilityRequirement, CredentialKind,
     DeliveryRoute, DeliveryStatus, PlanNodeTemplate, PlanOperation, PlanStage,
-    PlanningInputSnapshot, PublishAttemptStatus, PublishError, PublishFailureCategory,
+    PlanningInputSnapshot, PublishAttemptStatus, PublishAttemptView, PublishError,
+    PublishFailureCategory,
     PublishingCapability, RuntimeAdapterRevision, RuntimeComponentRevision, sha256_hex,
 };
 use publish_runner_core::{AttemptExecutionContext, PublishRuntime};
@@ -303,6 +304,23 @@ fn write_file(path: &Path, content: &str) {
     fs::write(path, content).expect("write file");
 }
 
+/// Assert that `route_id` failed after the manifest was sealed. A build or
+/// artifact collection failure also ends the attempt as `Failed`, but leaves
+/// no manifest, so a later resume fails with `MissingArtifactManifest`.
+fn assert_delivery_failed(attempt: &PublishAttemptView, route_id: &str) {
+    assert!(
+        attempt.manifest.is_some(),
+        "manifest should be sealed before delivery fails (node states: {:?})",
+        attempt.node_states
+    );
+    let route = attempt
+        .routes
+        .iter()
+        .find(|r| r.route_id == route_id)
+        .expect("failed route");
+    assert_eq!(route.status, DeliveryStatus::Failed);
+}
+
 // ═══════════════════════════════════════════════════════════════════════
 // 8.1 Recovery
 // ═══════════════════════════════════════════════════════════════════════
@@ -412,6 +430,7 @@ fn cross_recovery_02_github_500_error() {
         "expected Failed, got {:?}",
         attempt.status
     );
+    assert_delivery_failed(&attempt, "github-route");
 
     // Resume -> Published
     let prepared = runtime
@@ -469,6 +488,7 @@ fn cross_recovery_03_sftp_file_corruption() {
         "expected Failed from corruption, got {:?}",
         attempt.status
     );
+    assert_delivery_failed(&attempt, "sftp-route");
 
     // Resume -> Published
     let prepared = runtime

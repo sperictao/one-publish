@@ -7,7 +7,9 @@ use sha2::{Digest, Sha256};
 pub const PLANNING_INPUT_SNAPSHOT_VERSION: u32 = 1;
 pub const PUBLISH_PLAN_VERSION: u32 = 3;
 pub const ADAPTER_CONTRACT_VERSION: u32 = 1;
-pub const ARTIFACT_MANIFEST_VERSION: u32 = 1;
+pub const ARTIFACT_MANIFEST_VERSION: u32 = 2;
+/// v1 清单（v1.0.3 及更早封存）没有记录执行位；它们仍可校验、推广与续传。
+pub const LEGACY_ARTIFACT_MANIFEST_VERSION: u32 = 1;
 pub const PUBLISH_EVENT_VERSION: u32 = 1;
 pub const DELIVERY_RECEIPT_VERSION: u32 = 1;
 pub const PUBLISH_FAILURE_VERSION: u32 = 1;
@@ -179,6 +181,9 @@ pub enum PublishError {
         failure.retry_after_seconds
     )]
     Classified { failure: PublishFailure },
+    /// 进行中的执行响应取消请求而停止（ADR-0041）：这是取消结果，不是执行失败。
+    #[error("adapter execution was cancelled: {0}")]
+    Cancelled(String),
     #[error("adapter execution failed: {0}")]
     Execution(String),
     #[error("I/O operation {operation} failed: {message}")]
@@ -289,6 +294,18 @@ impl AdapterSchema {
             AdapterSchemaField {
                 value_type: AdapterSchemaValueType::StringList,
                 required: true,
+            },
+        );
+        self
+    }
+
+    /// 可选字段：缺省合法，出现时仍按类型校验。
+    pub fn with_optional_string_list(mut self, key: impl Into<String>) -> Self {
+        self.fields.insert(
+            key.into(),
+            AdapterSchemaField {
+                value_type: AdapterSchemaValueType::StringList,
+                required: false,
             },
         );
         self
@@ -1030,6 +1047,10 @@ pub struct ArtifactManifestEntry {
     pub digest: String,
     pub locator: String,
     pub retention: String,
+    /// 封存的执行位（v2 起必填）。v1 条目为 `None` 且不序列化，
+    /// 旧清单的记录与 digest 因此保持原样。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub executable: Option<bool>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -1050,10 +1071,7 @@ impl ArtifactManifest {
                 "cannot seal an empty artifact manifest".to_string(),
             ));
         }
-        validate_unique_file_names(&artifacts)?;
-        for artifact in &artifacts {
-            artifact.validate()?;
-        }
+        validate_manifest_entries(ARTIFACT_MANIFEST_VERSION, &artifacts)?;
         let mut manifest = Self {
             version: ARTIFACT_MANIFEST_VERSION,
             planning_snapshot_digest: planning_snapshot_digest.into(),
@@ -1080,7 +1098,9 @@ impl ArtifactManifest {
     }
 
     pub fn validate(&self) -> Result<(), PublishError> {
-        if self.version != ARTIFACT_MANIFEST_VERSION {
+        if self.version != ARTIFACT_MANIFEST_VERSION
+            && self.version != LEGACY_ARTIFACT_MANIFEST_VERSION
+        {
             return Err(PublishError::Execution(format!(
                 "unsupported artifact manifest version {}",
                 self.version
@@ -1091,10 +1111,7 @@ impl ArtifactManifest {
                 "artifact manifest cannot be empty".to_string(),
             ));
         }
-        validate_unique_file_names(&self.artifacts)?;
-        for artifact in &self.artifacts {
-            artifact.validate()?;
-        }
+        validate_manifest_entries(self.version, &self.artifacts)?;
         let actual = self.recomputed_digest()?;
         if actual != self.digest {
             return Err(PublishError::Execution(format!(
@@ -1129,11 +1146,56 @@ impl ArtifactManifestEntry {
         }
         Ok(())
     }
+
+    /// 交付端应用的执行位：v2 条目按封存记录；v1 条目没有记录，按内容识别。
+    pub fn delivers_executable(&self, bytes: &[u8]) -> bool {
+        self.executable
+            .unwrap_or_else(|| looks_like_executable(bytes))
+    }
+}
+
+/// 内容即可执行：ELF、Mach-O（含通用二进制）映像或 `#!` 脚本。只用于没有
+/// 执行位可读的来源——非 Unix 主机上的构建输出与 v1 清单。
+pub fn looks_like_executable(bytes: &[u8]) -> bool {
+    match bytes {
+        [b'#', b'!', ..] | [0x7f, b'E', b'L', b'F', ..] => true,
+        [0xfe, 0xed, 0xfa, 0xce | 0xcf, ..] | [0xce | 0xcf, 0xfa, 0xed, 0xfe, ..] => true,
+        // 通用 Mach-O 与 Java class 共用 0xCAFEBABE：其后前者是架构数，
+        // 后者是 class 版本（≥ 45）。
+        [0xca, 0xfe, 0xba, 0xbe | 0xbf, a, b, c, d, ..] => {
+            (1..45).contains(&u32::from_be_bytes([*a, *b, *c, *d]))
+        }
+        _ => false,
+    }
 }
 
 /// 内容摘要的统一形状判定：64 位十六进制 SHA-256，供清单校验与推广输入共用。
 pub fn is_sha256_digest(value: &str) -> bool {
     value.len() == 64 && value.bytes().all(|byte| byte.is_ascii_hexdigit())
+}
+
+/// 条目规则随清单版本：v2 每个条目都封存执行位，v1 条目一律不带。
+fn validate_manifest_entries(
+    version: u32,
+    artifacts: &[ArtifactManifestEntry],
+) -> Result<(), PublishError> {
+    validate_unique_file_names(artifacts)?;
+    let records_executable = version != LEGACY_ARTIFACT_MANIFEST_VERSION;
+    let rule = if records_executable {
+        "requires"
+    } else {
+        "cannot carry"
+    };
+    for artifact in artifacts {
+        artifact.validate()?;
+        if artifact.executable.is_some() != records_executable {
+            return Err(PublishError::InvalidArtifact {
+                artifact: artifact.file_name.clone(),
+                message: format!("artifact manifest version {version} {rule} the executable flag"),
+            });
+        }
+    }
+    Ok(())
 }
 
 fn validate_unique_file_names(artifacts: &[ArtifactManifestEntry]) -> Result<(), PublishError> {

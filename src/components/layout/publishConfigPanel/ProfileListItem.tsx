@@ -8,6 +8,7 @@ import {
   FileText,
   Layers3,
   Pencil,
+  SlidersHorizontal,
   Trash2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -33,6 +34,9 @@ export interface ProfileListItemProps {
   onView: () => void;
   onEdit: () => void;
   onEditComposition: () => void;
+  /** ADR-0060：只有 Tauri 配置提供发布设置入口；缺省时不显示该菜单项。 */
+  onEditReleaseSettings?: () => void;
+  releaseSettingsTitle: string;
   canEdit: boolean;
   viewTitle: string;
   editTitle: string;
@@ -77,6 +81,8 @@ export function ProfileListItem({
   onView,
   onEdit,
   onEditComposition,
+  onEditReleaseSettings,
+  releaseSettingsTitle,
   canEdit,
   viewTitle,
   editTitle,
@@ -134,6 +140,14 @@ export function ProfileListItem({
       icon: <Layers3 className="size-3.5 text-muted-foreground" />,
       onSelect: onEditComposition,
     });
+    if (onEditReleaseSettings) {
+      actions.push({
+        key: "releaseSettings",
+        label: releaseSettingsTitle,
+        icon: <SlidersHorizontal className="size-3.5 text-muted-foreground" />,
+        onSelect: onEditReleaseSettings,
+      });
+    }
   }
 
   if (!profile.isSystemDefault) {

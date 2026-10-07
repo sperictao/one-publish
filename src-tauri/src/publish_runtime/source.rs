@@ -350,7 +350,11 @@ pub(crate) fn resolve_publish_source_scoped(
     }?;
 
     if resolved.blocked_reason.is_none() {
-        resolved.blocked_reason = configuration_content_blocked_reason(&resolved.draft.content);
+        // 跨仓库导入的配置可能属于别的 Provider（如 Go 配置进了 Rust 仓库），
+        // 不能在当前仓库里执行别的工具链。
+        resolved.blocked_reason = repository
+            .provider_mismatch_reason(&resolved.draft.content.provider_id)
+            .or_else(|| configuration_content_blocked_reason(&resolved.draft.content));
     }
 
     Ok(resolved)
@@ -988,6 +992,44 @@ mod tests {
                 revision_id: "revision-A".to_string(),
             })
         );
+    }
+
+    #[test]
+    fn revision_source_blocks_profiles_from_another_repository_provider() {
+        // 复现：Go 仓库导出的配置导入 Rust 仓库后，选择它不得准备 `go build`。
+        let (_dir, mut repository) =
+            repository_with_profile(serde_json::json!({ "goos": "linux" }), "revision-A");
+        repository.provider_id = Some("cargo".to_string());
+        let revision = &mut repository.publish_config.profiles[0].revisions[0];
+        revision.provider_id = "go".to_string();
+
+        let resolved = resolve_publish_source_scoped(
+            &repository,
+            &[],
+            &PublishSource::Revision {
+                configuration_id: "configuration-A".to_string(),
+                revision_id: "revision-A".to_string(),
+            },
+        )
+        .expect("resolve mismatched revision as a blocked source");
+
+        assert_eq!(
+            resolved.blocked_reason.as_deref(),
+            Some("repository_provider_mismatch:go:cargo")
+        );
+
+        // 仓库未声明 Provider 时不限制。
+        repository.provider_id = None;
+        let unrestricted = resolve_publish_source_scoped(
+            &repository,
+            &[],
+            &PublishSource::Revision {
+                configuration_id: "configuration-A".to_string(),
+                revision_id: "revision-A".to_string(),
+            },
+        )
+        .expect("resolve revision without a repository provider");
+        assert!(unrestricted.blocked_reason.is_none());
     }
 
     #[test]
@@ -1642,7 +1684,8 @@ mod tests {
 
     #[test]
     fn empty_source_generates_versioned_content_with_local_defaults() {
-        let (_dir, repository) = repository_with_profile(serde_json::json!({}), "revision-A");
+        let (_dir, mut repository) = repository_with_profile(serde_json::json!({}), "revision-A");
+        repository.provider_id = Some("cargo".to_string());
 
         let resolved = resolve_publish_source_scoped(
             &repository,

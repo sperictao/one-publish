@@ -196,10 +196,8 @@ pub(super) fn scan_repository_branches(
     repository_root: &Path,
 ) -> Result<RepositoryBranchScanResult, crate::errors::AppError> {
     let layout = resolve_git_layout(repository_root).ok_or_else(|| {
-        repository_error(
-            format!("not a git repository: {}", repository_root.display()),
-            "not_git_repo",
-        )
+        repository_error("not a git repository", "not_git_repo")
+            .with_details(repository_root.display().to_string())
     })?;
 
     let head_branch = current_branch(&layout);

@@ -948,6 +948,76 @@ fn load_from_path_recovers_from_corrupt_config_and_creates_backup() {
     assert_eq!(backup_files, 1);
 }
 
+#[test]
+fn load_from_path_scrubs_legacy_plaintext_history_once() {
+    let temp_dir = TempDir::new().expect("temp dir");
+    let config_path = temp_dir.path().join("config.json");
+    // 009 脱敏上线前的记录：命令行、输出摘录与 spec 参数均为明文。
+    let legacy_state = AppState {
+        execution_history: vec![ExecutionRecord {
+            id: "legacy-1".to_string(),
+            repo_id: None,
+            configuration_id: None,
+            configuration_revision_id: None,
+            provider_id: "dotnet".to_string(),
+            project_path: "/repo/App.csproj".to_string(),
+            started_at: "2025-01-01T10:00:00Z".to_string(),
+            finished_at: "2025-01-01T10:01:00Z".to_string(),
+            success: true,
+            cancelled: false,
+            output_dir: Some("/repo/publish".to_string()),
+            error: None,
+            command_line: Some("$ dotnet publish /repo/App.csproj -p:ApiToken=hunter2".to_string()),
+            snapshot_path: None,
+            failure_signature: None,
+            output_excerpt: Some("token=hunter2".to_string()),
+            spec: Some(serde_json::json!({
+                "parameters": { "properties": { "ClientSecret": "hunter2" } }
+            })),
+            attempt_id: None,
+            recovery_snapshot: None,
+            file_count: 0,
+            warnings: None,
+        }],
+        ..AppState::default()
+    };
+    save_to_path(&legacy_state, &config_path).expect("save legacy state");
+
+    let loaded = load_from_path(&config_path);
+
+    let record = &loaded.execution_history[0];
+    assert_eq!(
+        record.command_line.as_deref(),
+        Some("$ dotnet publish /repo/App.csproj -p:ApiToken=<redacted>")
+    );
+    assert_eq!(record.output_dir.as_deref(), Some("/repo/publish"));
+    let persisted = fs::read_to_string(&config_path).expect("read scrubbed config");
+    assert!(!persisted.contains("hunter2"));
+
+    // 已脱敏状态不再回写；v4 补做脱敏也不留下含明文的迁移备份。
+    let scrubbed_at = fs::metadata(&config_path)
+        .and_then(|metadata| metadata.modified())
+        .expect("scrubbed mtime");
+    let reloaded = load_from_path(&config_path);
+    assert_eq!(reloaded.execution_history, loaded.execution_history);
+    assert_eq!(
+        fs::metadata(&config_path)
+            .and_then(|metadata| metadata.modified())
+            .expect("reloaded mtime"),
+        scrubbed_at
+    );
+    let leftover_plaintext = fs::read_dir(temp_dir.path())
+        .expect("read temp dir")
+        .flatten()
+        .filter(|entry| entry.path() != config_path)
+        .any(|entry| {
+            fs::read_to_string(entry.path())
+                .map(|content| content.contains("hunter2"))
+                .unwrap_or(false)
+        });
+    assert!(!leftover_plaintext);
+}
+
 #[tokio::test]
 async fn validate_repository_project_binding_allows_adding_unbound_multi_app_repository() {
     let temp_dir = TempDir::new().unwrap();
@@ -1154,7 +1224,8 @@ fn find_repository_returns_consistent_not_found_error() {
 
     assert_eq!(error.kind, crate::errors::ErrorKind::Validation);
     assert_eq!(error.code.as_deref(), Some("repository_not_found"));
-    assert_eq!(error.message, "未找到仓库: repo-2");
+    assert_eq!(error.message, "未找到仓库");
+    assert_eq!(error.details.as_deref(), Some("repo-2"));
 }
 
 #[test]
@@ -1763,6 +1834,127 @@ fn update_profile_does_not_carry_release_settings_across_providers() {
 }
 
 #[test]
+fn release_settings_form_validates_before_saving_a_new_revision() {
+    use crate::tauri_release::{TauriDesktopTarget, TauriReleaseConfig};
+
+    let mut config = RepoPublishConfig::default();
+    let profile = config
+        .create_profile(
+            "Desktop".to_string(),
+            "tauri".to_string(),
+            serde_json::json!({ "target": "x86_64-unknown-linux-gnu" }),
+            None,
+            Some("tauri:src-tauri/tauri.conf.json".to_string()),
+            "2026-10-07T10:00:00Z".to_string(),
+        )
+        .expect("create profile")
+        .clone();
+    let original_composition = profile
+        .current_revision()
+        .expect("revision")
+        .composition
+        .clone();
+
+    // ADR-0006：默认值没有签名决定，保存前显式失败且不产生修订。
+    let error = config
+        .update_release_settings(
+            &profile.id,
+            TauriReleaseConfig::default(),
+            "2026-10-07T10:01:00Z".to_string(),
+        )
+        .expect_err("defaults need a signing decision");
+    assert_eq!(
+        error.code.as_deref(),
+        Some("tauri_release_platform_signing_required")
+    );
+    assert_eq!(
+        config
+            .profile(&profile.id)
+            .expect("profile")
+            .revisions
+            .len(),
+        1
+    );
+
+    let settings = TauriReleaseConfig {
+        enabled_targets: vec![TauriDesktopTarget::LinuxX64],
+        tag_prefix: "app-v".to_string(),
+        // 托管 workflow 版本由系统钉住，表单传入的值不生效。
+        managed_workflow_version: 99,
+        ..TauriReleaseConfig::default()
+    };
+    config
+        .update_release_settings(&profile.id, settings, "2026-10-07T10:02:00Z".to_string())
+        .expect("save release settings");
+
+    let updated = config.profile(&profile.id).expect("profile");
+    assert_eq!(updated.revisions.len(), 2);
+    let current = updated.current_revision().expect("current revision");
+    assert_eq!(current.parameters["target"], "x86_64-unknown-linux-gnu");
+    assert_eq!(current.parameters["releaseSettings"]["tagPrefix"], "app-v");
+    assert_eq!(
+        current.parameters["releaseSettings"]["managedWorkflowVersion"],
+        crate::tauri_release::MANAGED_WORKFLOW_VERSION
+    );
+    assert_eq!(current.composition, original_composition);
+    assert_eq!(
+        current.project_binding.as_deref(),
+        Some("tauri:src-tauri/tauri.conf.json")
+    );
+
+    // 之后的普通参数编辑继续继承表单写入的设置（ADR-0058）。
+    config
+        .update_profile(
+            &profile.id,
+            "Desktop".to_string(),
+            "tauri".to_string(),
+            serde_json::json!({ "target": "aarch64-apple-darwin" }),
+            None,
+            None,
+            None,
+            "2026-10-07T10:03:00Z".to_string(),
+        )
+        .expect("ordinary edit");
+    let inherited = config
+        .profile(&profile.id)
+        .expect("profile")
+        .current_revision()
+        .expect("current revision");
+    assert_eq!(
+        inherited.parameters["releaseSettings"]["tagPrefix"],
+        "app-v"
+    );
+}
+
+#[test]
+fn release_settings_form_only_serves_tauri_configurations() {
+    let mut config = RepoPublishConfig::default();
+    let profile = config
+        .create_profile(
+            "Server".to_string(),
+            "dotnet".to_string(),
+            serde_json::json!({}),
+            None,
+            None,
+            "2026-10-07T10:00:00Z".to_string(),
+        )
+        .expect("create profile")
+        .clone();
+
+    let error = config
+        .update_release_settings(
+            &profile.id,
+            crate::tauri_release::TauriReleaseConfig::default(),
+            "2026-10-07T10:01:00Z".to_string(),
+        )
+        .expect_err("dotnet has no release settings");
+    assert_eq!(
+        error.code.as_deref(),
+        Some("release_settings_provider_unsupported")
+    );
+}
+
+#[test]
 fn a_failed_release_settings_merge_keeps_the_legacy_file_for_retry() {
     let temp_dir = TempDir::new().expect("temp dir");
     let config_path = temp_dir.path().join("config.json");
@@ -1860,6 +2052,48 @@ fn upsert_draft_revision_creates_hidden_draft_profile_with_local_composition() {
         revision.composition,
         crate::store::PublishComposition::local_default()
     );
+}
+
+#[test]
+fn migrate_legacy_identity_renames_localized_draft_profiles_only() {
+    let mut config = RepoPublishConfig::default();
+    config
+        .create_profile(
+            "本地草稿".to_string(),
+            "dotnet".to_string(),
+            serde_json::json!({}),
+            None,
+            None,
+            "2026-08-03T09:00:00Z".to_string(),
+        )
+        .expect("create named profile");
+    let (draft_id, _) = upsert_test_draft(&mut config,
+        "dotnet".to_string(),
+        serde_json::json!({}),
+        None,
+        "2026-08-03T10:00:00Z".to_string(),
+    );
+    config
+        .profiles
+        .iter_mut()
+        .find(|profile| profile.id == draft_id)
+        .expect("draft profile")
+        .name = "本地草稿".to_string();
+
+    let mut migrated = false;
+    for profile in &mut config.profiles {
+        migrated |= profile.migrate_legacy_identity();
+    }
+
+    assert!(migrated);
+    let draft = config.profile(&draft_id).expect("draft profile");
+    assert_eq!(draft.name, DRAFT_PROFILE_NAME);
+    let named = config
+        .profiles
+        .iter()
+        .find(|profile| !profile.is_draft)
+        .expect("named profile");
+    assert_eq!(named.name, "本地草稿", "user-named profiles keep their name");
 }
 
 #[test]

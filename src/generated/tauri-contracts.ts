@@ -167,7 +167,11 @@ export type ResumePublishRuntimeRequest = { attemptId: string, };
 
 export type RuntimePublishEvent = { version: number, eventId: string, attemptId: string, backendRunId: string, sequence: number, planDigest: string, planNodeId: string, kind: string, payload: { [key: string]: JsonValue }, };
 
-export type RuntimeArtifactManifestEntry = { role: string, fileName: string, mediaType: string, platform: string, architecture: string, size: number, digest: string, locator: string, retention: string, };
+export type RuntimeArtifactManifestEntry = { role: string, fileName: string, mediaType: string, platform: string, architecture: string, size: number, digest: string, locator: string, retention: string, 
+/**
+ * v2 清单封存的执行位；v1 清单没有该字段。
+ */
+executable?: boolean, };
 
 export type RuntimeArtifactManifest = { version: number, planningSnapshotDigest: string, artifacts: Array<RuntimeArtifactManifestEntry>, digest: string, };
 
@@ -219,6 +223,16 @@ composition: PublishComposition | null,
  * 存量宽限导入为未绑定（决议 #78）。
  */
 project_binding: string | null, profile_group: string | null, created_at: string, is_system_default: boolean, };
+
+export type ImportedConfigSummary = { imported: number, 
+/**
+ * 仓库内已有同名配置，保留原配置、不覆盖。
+ */
+skippedExisting: number, 
+/**
+ * 配置 Provider 与仓库声明的 Provider 不一致，拒绝导入。
+ */
+skippedProviderMismatch: number, };
 
 export type EnvironmentCheckResult = { is_ready: boolean, providers: Array<ProviderStatus>, issues: Array<EnvironmentIssue>, checked_at: string, };
 
@@ -386,11 +400,18 @@ export type RevisionDeliveryRoute = { routeId: string, required: boolean, destin
 
 export type ReleaseGate = { program: string, args: Array<string>, };
 
+export type ReleaseSettingsDraft = { settings: TauriReleaseConfig, stored: boolean, };
+
 export type TauriBuildDriver = "pnpm" | "npm" | "yarn" | "bun" | "cargo";
 
 export type TauriDesktopTarget = "windows_x64" | "linux_x64" | "macos_x64" | "macos_arm64" | "macos_universal";
 
-export type TauriReleaseConfig = { appConfigPath: string, appName: string, buildDriver: TauriBuildDriver, enabledTargets: Array<TauriDesktopTarget>, releaseAssetPatterns: Array<string>, updater: TauriUpdaterSettings, allowUnsignedRelease: boolean, requiredActionsSecretNames: Array<string>, actionsSecretEnvironment: { [key: string]: string }, tagPrefix: string, releaseGates: Array<ReleaseGate>, localDeliveryDir: string, versionMirrors: Array<VersionMirror>, managedWorkflowVersion: number, };
+export type TauriReleaseConfig = { appConfigPath: string, appName: string, buildDriver: TauriBuildDriver, enabledTargets: Array<TauriDesktopTarget>, releaseAssetPatterns: Array<string>, updater: TauriUpdaterSettings, allowUnsignedRelease: boolean, 
+/**
+ * 配置备份按敏感键策略剥离 Secret 名称（ADR-0060）；缺省视为空，
+ * 导入的设置仍可解析，由使用者在发布设置表单中补齐。
+ */
+requiredActionsSecretNames: Array<string>, actionsSecretEnvironment: { [key: string]: string }, tagPrefix: string, releaseGates: Array<ReleaseGate>, localDeliveryDir: string, versionMirrors: Array<VersionMirror>, managedWorkflowVersion: number, };
 
 export type TauriUpdaterSettings = { enabled: boolean, endpoint: string | null, publicKey: string | null, privateKeySecretName: string | null, };
 

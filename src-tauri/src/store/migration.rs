@@ -400,10 +400,24 @@ pub(crate) fn sanitize_state(state: AppState) -> AppState {
     sanitize_state_with_migration(state).0
 }
 
-pub(crate) fn sanitize_stored_state(state: AppState) -> (AppState, bool) {
-    sanitize_state_with_migration(state)
+/// 密钥脱敏（009）上线前写入的历史记录可能含明文密钥：加载时按新记录的
+/// 持久化规则补做脱敏。规则幂等，仅首次加载会产生变化并触发回写。
+fn scrub_legacy_execution_history(history: &mut [ExecutionRecord]) -> bool {
+    let mut scrubbed = false;
+    for record in history {
+        let original = record.clone();
+        super::commands::sanitize_record_for_storage(record);
+        scrubbed |= *record != original;
+    }
+    scrubbed
 }
 
+/// 加载路径：常规清理 + 历史记录补做脱敏；返回值表示是否需要回写磁盘。
+pub(crate) fn sanitize_stored_state(state: AppState) -> (AppState, bool) {
+    let (mut state, profiles_migrated) = sanitize_state_with_migration(state);
+    let history_scrubbed = scrub_legacy_execution_history(&mut state.execution_history);
+    (state, profiles_migrated || history_scrubbed)
+}
 
 pub(crate) fn migrate_legacy_state(legacy: LegacyStoredAppState) -> AppState {
     let mut state = AppState {
@@ -448,7 +462,7 @@ pub(crate) fn migrate_legacy_state(legacy: LegacyStoredAppState) -> AppState {
     }
 
     // §4.2：更旧的全局配置先执行全局到仓库、名称到身份迁移，再转换编辑状态。
-    let mut state = sanitize_state(state);
+    let (mut state, _) = sanitize_stored_state(state);
     let mut edit_state_migrated = false;
     for repo in &mut state.repositories {
         edit_state_migrated |= migrate_repo_edit_state_v3_to_v4(repo);
@@ -657,7 +671,7 @@ fn merge_tauri_release_settings(
             now.to_string(),
         );
         if let Err(error) = created {
-            log::error!("迁移旧 Tauri 发布设置失败: {}", error.message);
+            log::error!("迁移旧 Tauri 发布设置失败: {:?}", error);
             return None;
         }
         return Some(true);
@@ -692,7 +706,7 @@ fn merge_tauri_release_settings(
     ) {
         Ok(()) => Some(true),
         Err(error) => {
-            log::error!("迁移旧 Tauri 发布设置失败: {}", error.message);
+            log::error!("迁移旧 Tauri 发布设置失败: {:?}", error);
             None
         }
     }

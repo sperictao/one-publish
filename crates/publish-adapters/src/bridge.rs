@@ -14,8 +14,9 @@ use publish_domain::{
 use serde_json::Value;
 
 use crate::{
-    AdapterContract, AdapterExecutionContext, AdapterExecutionOutput, ProjectProvider,
-    ARTIFACT_CANDIDATE_CAPABILITY, STRUCTURED_PLAN_EXECUTION_CAPABILITY,
+    process_tree, AdapterContract, AdapterExecutionContext, AdapterExecutionOutput,
+    CancellationSignal, ProjectProvider, ARTIFACT_CANDIDATE_CAPABILITY,
+    STRUCTURED_PLAN_EXECUTION_CAPABILITY,
 };
 
 pub const SELECTED_PROVIDER_ID: &str = "selected-project-provider";
@@ -57,17 +58,23 @@ pub struct ProviderExecutionOutcome {
     pub output_dir: String,
 }
 
-/// Provider 执行端口：桌面注入 Tauri 命令面实现（UI 流式输出与取消），
-/// headless 环境注入直接进程执行实现。
+/// Provider 执行端口：桌面注入 Tauri 命令面实现（UI 流式输出），headless
+/// 环境注入直接进程执行实现。两者都必须在 `cancellation` 被请求时终止构建
+/// 进程树，并以 `cancelled` 结果返回（ADR-0041）。
 pub trait ProviderExecutionPort: Send + Sync {
     /// 执行遗留 Provider 的完整发布规格；`spec_json` 是密封节点携带的规格原文，
     /// 实现方负责解码与校验。
-    fn execute_spec(&self, spec_json: &str) -> Result<ProviderExecutionOutcome, PublishError>;
+    fn execute_spec(
+        &self,
+        spec_json: &str,
+        cancellation: &CancellationSignal,
+    ) -> Result<ProviderExecutionOutcome, PublishError>;
 
     /// 运行密封计划节点物化出的结构化构建命令。
     fn execute_build(
         &self,
         request: SealedBuildCommand,
+        cancellation: &CancellationSignal,
     ) -> Result<ProviderExecutionOutcome, PublishError>;
 }
 
@@ -86,7 +93,53 @@ pub struct ProviderExecution {
     pub output_directory: PathBuf,
     /// `None` 表示整个输出目录都是产物。
     pub artifact_filter: Option<ArtifactEntryFilter>,
+    /// 原生输出目录跨构建累积旧产物（例如 Gradle 的 `build/libs` 保留旧版本 jar）：
+    /// 构建前移除顶层被 `artifact_filter` 接受的文件，交付只含本次构建的产物。
+    /// 未声明筛选时不生效。
+    pub clear_stale_artifacts: bool,
     pub source_guard: Arc<dyn ExecutionSourceGuard>,
+}
+
+impl ProviderExecution {
+    /// 构建前清理旧产物；只移除顶层普通文件，从不删除目录。
+    pub(crate) fn clear_stale_artifacts(&self) -> Result<(), PublishError> {
+        if !self.clear_stale_artifacts {
+            return Ok(());
+        }
+        let Some(accept) = self.artifact_filter else {
+            return Ok(());
+        };
+        let entries = match fs::read_dir(&self.output_directory) {
+            Ok(entries) => entries,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(()),
+            Err(error) => {
+                return Err(PublishError::Io {
+                    operation: format!(
+                        "read provider output directory {}",
+                        self.output_directory.display()
+                    ),
+                    message: error.to_string(),
+                })
+            }
+        };
+        for entry in entries {
+            let entry = entry.map_err(|error| PublishError::Io {
+                operation: format!(
+                    "read provider output entry in {}",
+                    self.output_directory.display()
+                ),
+                message: error.to_string(),
+            })?;
+            if !accept(&entry) || !entry.file_type().is_ok_and(|file_type| file_type.is_file()) {
+                continue;
+            }
+            fs::remove_file(entry.path()).map_err(|error| PublishError::Io {
+                operation: format!("remove stale provider artifact {}", entry.path().display()),
+                message: error.to_string(),
+            })?;
+        }
+        Ok(())
+    }
 }
 
 /// 遗留 Provider 的命令桥：计划与执行共享密封的发布规格这一个事实来源；
@@ -148,7 +201,7 @@ impl AdapterContract for SelectedProjectProvider {
     fn execute_node(
         &self,
         node: &PlanNode,
-        _context: &AdapterExecutionContext<'_>,
+        context: &AdapterExecutionContext<'_>,
     ) -> Result<AdapterExecutionOutput, PublishError> {
         match &node.operation {
             PlanOperation::RunProgram {
@@ -181,9 +234,10 @@ impl AdapterContract for SelectedProjectProvider {
                 "selected-provider execution port is unavailable for this runtime".to_string(),
             )
         })?;
+        execution.clear_stale_artifacts()?;
         let outcome = execution
             .port
-            .execute_spec(planned_spec)
+            .execute_spec(planned_spec, &context.cancellation)
             .map_err(|error| PublishError::Execution(error.to_string()))?;
         finish_provider_execution(execution, outcome, classify_generic_artifact)
     }
@@ -210,13 +264,14 @@ pub(crate) fn finish_provider_execution(
     })
 }
 
-/// 执行结果的合同校验：未取消、成功、且产物目录与约定一致。
+/// 执行结果的合同校验：未取消、成功、且产物目录与约定一致。取消以
+/// `Cancelled` 报告，运行核心据此把节点记为取消而不是失败。
 pub(crate) fn ensure_provider_outcome(
     outcome: &ProviderExecutionOutcome,
     expected_output: &Path,
 ) -> Result<(), PublishError> {
     if outcome.cancelled {
-        return Err(PublishError::Execution(
+        return Err(PublishError::Cancelled(
             outcome
                 .error
                 .clone()
@@ -339,6 +394,7 @@ pub(crate) fn collect_artifacts_with(
                 message: error.to_string(),
             })?;
             let (role, media_type) = classify(relative);
+            let executable = is_executable(&metadata, &bytes);
             Ok(ArtifactCandidate::new(
                 role,
                 relative.to_string_lossy().replace('\\', "/"),
@@ -347,21 +403,23 @@ pub(crate) fn collect_artifacts_with(
                 std::env::consts::ARCH,
                 bytes,
             )
-            .with_executable(is_executable(&metadata)))
+            .with_executable(executable))
         })
         .collect()
 }
 
-/// Unix 上任一执行位即视为可执行；其他平台没有执行位语义。
+/// Unix 上任一执行位即视为可执行。
 #[cfg(unix)]
-fn is_executable(metadata: &fs::Metadata) -> bool {
+fn is_executable(metadata: &fs::Metadata, _bytes: &[u8]) -> bool {
     use std::os::unix::fs::PermissionsExt;
     metadata.permissions().mode() & 0o111 != 0
 }
 
+/// 其他平台没有执行位语义：按内容识别，交叉编译出的 Linux/macOS 二进制
+/// 交付到 Unix 目标后仍可直接运行。
 #[cfg(not(unix))]
-fn is_executable(_metadata: &fs::Metadata) -> bool {
-    false
+fn is_executable(_metadata: &fs::Metadata, bytes: &[u8]) -> bool {
+    publish_domain::looks_like_executable(bytes)
 }
 
 // ===== Headless 直执行（决议 #80：headless 环境的默认执行实现）=====
@@ -383,7 +441,11 @@ impl ExecutionSourceGuard for CleanCheckoutGuard {
 pub struct DirectProviderExecutionPort;
 
 impl ProviderExecutionPort for DirectProviderExecutionPort {
-    fn execute_spec(&self, _spec_json: &str) -> Result<ProviderExecutionOutcome, PublishError> {
+    fn execute_spec(
+        &self,
+        _spec_json: &str,
+        _cancellation: &CancellationSignal,
+    ) -> Result<ProviderExecutionOutcome, PublishError> {
         Err(PublishError::Execution(
             "legacy provider spec execution is not available in headless runners".to_string(),
         ))
@@ -392,21 +454,36 @@ impl ProviderExecutionPort for DirectProviderExecutionPort {
     fn execute_build(
         &self,
         request: SealedBuildCommand,
+        cancellation: &CancellationSignal,
     ) -> Result<ProviderExecutionOutcome, PublishError> {
-        let status = std::process::Command::new(&request.program)
+        let run_error = |error: std::io::Error| {
+            PublishError::Execution(format!(
+                "failed to run sealed build {}: {error}",
+                request.program
+            ))
+        };
+        let mut command = std::process::Command::new(&request.program);
+        command
             .args(&request.args)
             .current_dir(&request.working_directory)
-            .status()
-            .map_err(|error| {
-                PublishError::Execution(format!(
-                    "failed to run sealed build {}: {error}",
-                    request.program
-                ))
-            })?;
+            // 构建位于独立进程组，不得读取终端。
+            .stdin(std::process::Stdio::null())
+            // runner 的 stdout 只承载结构化结果（workflow 把它重定向为事件段），
+            // 构建自身输出一律转入 stderr，仍保留在 CI 日志中。
+            .stdout(std::io::stderr());
+        process_tree::isolate(&mut command);
+        let mut child = command.spawn().map_err(run_error)?;
+        let (status, cancelled) =
+            process_tree::wait_or_cancel(&mut child, cancellation).map_err(run_error)?;
+        let success = status.success() && !cancelled;
         Ok(ProviderExecutionOutcome {
-            success: status.success(),
-            cancelled: false,
-            error: (!status.success()).then(|| format!("sealed build exited with {status}")),
+            success,
+            cancelled,
+            error: if cancelled {
+                Some("sealed build was cancelled".to_string())
+            } else {
+                (!success).then(|| format!("sealed build exited with {status}"))
+            },
             output_dir: request.output_directory.to_string_lossy().to_string(),
         })
     }
@@ -423,31 +500,37 @@ mod direct_execution_tests {
         let output = temp.path().join("provider-output");
 
         let outcome = DirectProviderExecutionPort
-            .execute_build(SealedBuildCommand {
-                provider_id: "fixture-provider".to_string(),
-                program: "true".to_string(),
-                args: Vec::new(),
-                working_directory: temp.path().to_path_buf(),
-                output_directory: output.clone(),
-            })
+            .execute_build(
+                SealedBuildCommand {
+                    provider_id: "fixture-provider".to_string(),
+                    program: "true".to_string(),
+                    args: Vec::new(),
+                    working_directory: temp.path().to_path_buf(),
+                    output_directory: output.clone(),
+                },
+                &CancellationSignal::new(),
+            )
             .expect("run the sealed build directly");
         assert!(outcome.success);
         assert_eq!(outcome.output_dir, output.to_string_lossy());
 
         let failed = DirectProviderExecutionPort
-            .execute_build(SealedBuildCommand {
-                provider_id: "fixture-provider".to_string(),
-                program: "false".to_string(),
-                args: Vec::new(),
-                working_directory: temp.path().to_path_buf(),
-                output_directory: output,
-            })
+            .execute_build(
+                SealedBuildCommand {
+                    provider_id: "fixture-provider".to_string(),
+                    program: "false".to_string(),
+                    args: Vec::new(),
+                    working_directory: temp.path().to_path_buf(),
+                    output_directory: output,
+                },
+                &CancellationSignal::new(),
+            )
             .expect("a failing build is a reported outcome, not a port error");
         assert!(!failed.success);
         assert!(failed.error.is_some());
 
         DirectProviderExecutionPort
-            .execute_spec("{}")
+            .execute_spec("{}", &CancellationSignal::new())
             .expect_err("the legacy spec bridge has no headless semantics");
     }
 }
@@ -537,5 +620,46 @@ mod artifact_collection_tests {
                 "nested/meta.json"
             ]
         );
+    }
+
+    fn accept_jars(entry: &fs::DirEntry) -> bool {
+        entry.file_name().to_string_lossy().ends_with(".jar")
+    }
+
+    fn stale_cleanup_execution(output: &Path, clear: bool) -> ProviderExecution {
+        ProviderExecution {
+            port: Arc::new(DirectProviderExecutionPort),
+            output_directory: output.to_path_buf(),
+            artifact_filter: Some(accept_jars),
+            clear_stale_artifacts: clear,
+            source_guard: Arc::new(CleanCheckoutGuard),
+        }
+    }
+
+    #[test]
+    fn stale_artifact_cleanup_removes_only_accepted_top_level_files() {
+        let temp = tempfile::tempdir().expect("temp output");
+        let root = temp.path();
+        fs::create_dir_all(root.join("nested.jar")).expect("create accepted-looking directory");
+        fs::write(root.join("app-1.0.jar"), b"stale").expect("write stale jar");
+        fs::write(root.join("notes.txt"), b"notes").expect("write unrelated file");
+        fs::write(root.join("nested.jar").join("inner.jar"), b"inner").expect("write nested jar");
+
+        stale_cleanup_execution(root, false)
+            .clear_stale_artifacts()
+            .expect("cleanup not declared");
+        assert!(root.join("app-1.0.jar").exists());
+
+        stale_cleanup_execution(root, true)
+            .clear_stale_artifacts()
+            .expect("clear stale artifacts");
+        assert!(!root.join("app-1.0.jar").exists());
+        assert!(root.join("notes.txt").exists());
+        // 目录即使被筛选接受也不删除，也不递归。
+        assert!(root.join("nested.jar").join("inner.jar").exists());
+
+        stale_cleanup_execution(&root.join("missing"), true)
+            .clear_stale_artifacts()
+            .expect("a missing output directory has nothing stale");
     }
 }

@@ -85,12 +85,15 @@ pub trait SftpTransport: Send + Sync {
         path: &str,
     ) -> Result<Vec<u8>, SftpTransportFailure>;
 
+    /// 写入字节并把远端文件权限设为 `mode`：权限属于写入的一部分，
+    /// 不随客户端本地临时文件或服务器 umask 漂移。
     fn write(
         &self,
         key: &CredentialValue,
         endpoint: &SftpEndpoint,
         path: &str,
         bytes: &[u8],
+        mode: u32,
     ) -> Result<(), SftpTransportFailure>;
 
     /// 原子改名提交。实现不保证目标已存在时失败——openssh 客户端在服务器
@@ -630,9 +633,16 @@ impl SftpDeliveryDestination {
                     .remove(key, &endpoint, &temp_path)
                     .map_err(transport_failure)?;
             }
-            let bytes = file_bytes(file, envelope, manifest)?;
+            // 权限随临时文件写入落定，原子改名后最终路径一出现就带着封存执行位。
+            let (bytes, executable) = file_contents(file, envelope, manifest)?;
             self.transport
-                .write(key, &endpoint, &temp_path, &bytes)
+                .write(
+                    key,
+                    &endpoint,
+                    &temp_path,
+                    &bytes,
+                    crate::delivered_file_mode(executable),
+                )
                 .map_err(transport_failure)?;
             let uploaded = self
                 .transport
@@ -848,14 +858,15 @@ fn envelope_files(envelope: &DeliveryEnvelope) -> Result<Vec<EnvelopeFile>, Publ
     })
 }
 
-/// 解析一个条目的实际字节：Manifest 条目从 Artifact Store 定位符读取并验证
-/// 摘要，交付记录从路线封装重新序列化并比对 staging 时的摘要。
-fn file_bytes(
+/// 解析一个条目的实际字节与执行位：Manifest 条目从 Artifact Store 定位符读取、
+/// 验证摘要并按封存执行位交付；交付记录从路线封装重新序列化并比对 staging
+/// 时的摘要，它不是可执行文件。
+fn file_contents(
     file: &EnvelopeFile,
     envelope: &DeliveryEnvelope,
     manifest: &ArtifactManifest,
-) -> Result<Vec<u8>, PublishError> {
-    let bytes = match file.source {
+) -> Result<(Vec<u8>, bool), PublishError> {
+    let (bytes, entry) = match file.source {
         FileSource::Manifest => {
             let entry = manifest
                 .artifacts
@@ -871,16 +882,17 @@ fn file_bytes(
                 operation: format!("read sealed artifact {}", entry.locator),
                 message: error.to_string(),
             })?;
-            bytes
+            (bytes, Some(entry))
         }
-        FileSource::Record => serialize_delivery_record(
-            envelope.content.get("delivery_record").ok_or_else(|| {
+        FileSource::Record => {
+            let record = envelope.content.get("delivery_record").ok_or_else(|| {
                 PublishError::Execution(format!(
                     "staged file {} has no envelope content to upload",
                     file.name
                 ))
-            })?,
-        )?,
+            })?;
+            (serialize_delivery_record(record)?, None)
+        }
     };
     let digest = sha256_hex(&bytes);
     if digest != file.digest {
@@ -890,7 +902,8 @@ fn file_bytes(
             actual: digest,
         });
     }
-    Ok(bytes)
+    let executable = entry.is_some_and(|entry| entry.delivers_executable(&bytes));
+    Ok((bytes, executable))
 }
 
 impl DeliveryDestination for SftpDeliveryDestination {
@@ -990,6 +1003,8 @@ pub const FAKE_SFTP_OPERATION_REMOVE: &str = "remove";
 #[derive(Default)]
 struct FakeSftpState {
     files: BTreeMap<String, Vec<u8>>,
+    /// 经 write 设定的文件权限；预置文件与中断的部分写入没有设定权限。
+    modes: BTreeMap<String, u32>,
     directories: BTreeSet<String>,
     failures: BTreeMap<String, VecDeque<SftpTransportFailure>>,
     partial_writes: VecDeque<usize>,
@@ -1054,6 +1069,11 @@ impl FakeSftpServer {
 
     pub fn file(&self, path: &str) -> Option<Vec<u8>> {
         self.lock().files.get(&normalize(path)).cloned()
+    }
+
+    /// 远端文件经 write 设定的权限位；预置或中断写入的文件为 `None`。
+    pub fn mode(&self, path: &str) -> Option<u32> {
+        self.lock().modes.get(&normalize(path)).copied()
     }
 
     /// 全部远端文件路径，按字典序。
@@ -1182,6 +1202,7 @@ impl SftpTransport for FakeSftpServer {
         endpoint: &SftpEndpoint,
         path: &str,
         bytes: &[u8],
+        mode: u32,
     ) -> Result<(), SftpTransportFailure> {
         let mut state = self.enter(FAKE_SFTP_OPERATION_WRITE, endpoint, key)?;
         let path = normalize(path);
@@ -1194,11 +1215,13 @@ impl SftpTransport for FakeSftpServer {
         }
         if let Some(written) = state.partial_writes.pop_front() {
             let written = written.min(bytes.len());
+            state.modes.remove(&path);
             state.files.insert(path.clone(), bytes[..written].to_vec());
             return Err(SftpTransportFailure::Network {
                 message: format!("connection lost while uploading {path}"),
             });
         }
+        state.modes.insert(path.clone(), mode);
         if state.corrupt_writes.pop_front().is_some() {
             let mut corrupted = bytes.to_vec();
             match corrupted.first_mut() {
@@ -1233,6 +1256,9 @@ impl SftpTransport for FakeSftpServer {
             .ok_or_else(|| SftpTransportFailure::Protocol {
                 message: format!("no such file: {from}"),
             })?;
+        if let Some(mode) = state.modes.remove(&from) {
+            state.modes.insert(to.clone(), mode);
+        }
         state.files.insert(to, bytes);
         Ok(())
     }
@@ -1266,6 +1292,7 @@ impl SftpTransport for FakeSftpServer {
             .ok_or_else(|| SftpTransportFailure::Protocol {
                 message: format!("no such file: {path}"),
             })?;
+        state.modes.remove(&path);
         Ok(())
     }
 }
@@ -1391,6 +1418,17 @@ fn quoted(path: &str) -> String {
     format!("\"{path}\"")
 }
 
+/// 上传批处理：`put` 不带 `-p` 时远端文件取本地临时文件（0600）的权限再经
+/// 服务器 umask 收窄，因此同一连接里紧跟 `chmod` 把权限设为确定值。
+fn upload_batch(local_path: &str, remote_path: &str, mode: u32) -> String {
+    format!(
+        "put {} {}\nchmod {mode:o} {}\n",
+        quoted(local_path),
+        quoted(remote_path),
+        quoted(remote_path)
+    )
+}
+
 /// 判定 stderr 是否描述"远端路径不存在"；exists 用它区分缺失与真正失败。
 fn is_remote_missing(stderr: &str) -> bool {
     let lower = stderr.to_lowercase();
@@ -1479,6 +1517,7 @@ impl SftpTransport for OpenSshSftpTransport {
         endpoint: &SftpEndpoint,
         path: &str,
         bytes: &[u8],
+        mode: u32,
     ) -> Result<(), SftpTransportFailure> {
         use std::io::Write;
 
@@ -1493,11 +1532,7 @@ impl SftpTransport for OpenSshSftpTransport {
                 message: format!("cannot prepare the upload for {path}: {error}"),
             })?;
         let local_path = local.path().to_string_lossy().to_string();
-        self.expect_success(
-            key,
-            endpoint,
-            &format!("put {} {}\n", quoted(&local_path), quoted(path)),
-        )
+        self.expect_success(key, endpoint, &upload_batch(&local_path, path, mode))
     }
 
     fn rename(
@@ -1584,6 +1619,16 @@ mod tests {
             parse_sftp_cli_failure("File \"/srv/releases/x\" not found."),
             SftpTransportFailure::Protocol { .. }
         ));
+    }
+
+    #[test]
+    fn uploads_set_the_remote_mode_in_the_same_batch() {
+        assert_eq!(
+            upload_batch("/tmp/upload", "/srv/releases/1.2.3/app.part", 0o755),
+            "put \"/tmp/upload\" \"/srv/releases/1.2.3/app.part\"\n\
+             chmod 755 \"/srv/releases/1.2.3/app.part\"\n"
+        );
+        assert!(upload_batch("/tmp/upload", "/srv/notes.txt", 0o644).contains("chmod 644 "));
     }
 
     #[test]

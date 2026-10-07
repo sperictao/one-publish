@@ -158,6 +158,7 @@ fn premature_manifest(snapshot_digest: &str) -> Result<ArtifactManifest, Publish
             digest: sha256_hex(ARTIFACT_BYTES),
             locator: "/tmp/premature/app.bin".to_string(),
             retention: "temporary".to_string(),
+            executable: Some(false),
         }],
     )
 }

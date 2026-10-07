@@ -347,11 +347,38 @@ pub async fn update_publish_edit_state(
             project_binding,
         });
     } else if let Some(selection) = update.selection {
+        ensure_selection_matches_repository_provider(repo, &selection)?;
         repo.publish_config.selection = Some(selection);
     }
 
     update_state(state)?;
     Ok(get_bootstrap_state())
+}
+
+/// 命名配置的当前修订必须属于仓库声明的 Provider；跨 Provider 导入的存量
+/// 配置不能被选为当前发布配置。
+fn ensure_selection_matches_repository_provider(
+    repo: &Repository,
+    selection: &PublishSelectionRef,
+) -> Result<(), AppError> {
+    let PublishSelectionRef::Revision { configuration_id } = selection else {
+        return Ok(());
+    };
+    let Some(revision) = repo
+        .publish_config
+        .profile(configuration_id)
+        .and_then(ConfigProfile::current_revision)
+    else {
+        return Ok(());
+    };
+    match repo.provider_mismatch_reason(&revision.provider_id) {
+        Some(reason) => Err(AppError::validation_with_code(
+            "配置的 Provider 与仓库不一致，不能选择",
+            "publish_selection_provider_mismatch",
+        )
+        .with_details(reason)),
+        None => Ok(()),
+    }
 }
 
 fn upsert_edit_draft(
@@ -480,6 +507,7 @@ pub async fn save_profile(
     let mut state = get_state();
     let repo = find_repository_mut(&mut state.repositories, &repo_id)?;
 
+    crate::tauri_release::validate_supplied_release_settings(&parameters, None)?;
     let project_binding = repository_project_binding(repo, &provider_id);
     repo.publish_config.create_profile(
         name,
@@ -510,6 +538,11 @@ pub async fn update_profile(
     let mut state = get_state();
     let repo = find_repository_mut(&mut state.repositories, &repo_id)?;
 
+    crate::tauri_release::validate_supplied_release_settings(
+        &parameters,
+        repo.publish_config
+            .inherited_release_settings(&profile_id, &provider_id),
+    )?;
     let project_binding = repository_project_binding(repo, &provider_id);
     repo.publish_config.update_profile(
         &profile_id,
@@ -519,6 +552,70 @@ pub async fn update_profile(
         profile_group,
         composition,
         project_binding,
+        chrono::Utc::now().to_rfc3339(),
+    )?;
+
+    let response = state.clone();
+    persist_state_and_refresh_tray(&app, state).await?;
+    Ok(response)
+}
+
+/// 发布设置表单的初值（ADR-0060）：修订已有可读设置时原样返回；否则按
+/// 项目绑定（存量修订退回仓库当前候选）探测建议值，不写入修订。
+#[tauri::command]
+pub async fn load_release_settings_draft(
+    repo_id: String,
+    profile_id: String,
+) -> Result<crate::tauri_release::ReleaseSettingsDraft, AppError> {
+    let _timer = crate::commands::middleware::CommandTimer::new(
+        "store::commands::load_release_settings_draft",
+    );
+    let state = get_state();
+    let repo = find_repository(&state.repositories, &repo_id)?;
+    let revision = repo.publish_config.release_settings_revision(&profile_id)?;
+    if let Ok(Some(settings)) =
+        crate::tauri_release::release_settings_from_parameters(&revision.parameters)
+    {
+        return Ok(crate::tauri_release::ReleaseSettingsDraft {
+            settings,
+            stored: true,
+        });
+    }
+    let project_binding = revision
+        .project_binding
+        .clone()
+        .or_else(|| repository_project_binding(repo, publish_adapters::TAURI_PROVIDER_ID));
+    let config_path = project_binding.as_deref().and_then(|binding| {
+        crate::publish_runtime::project_binding_selector(
+            publish_adapters::TAURI_PROVIDER_ID,
+            binding,
+        )
+    });
+    Ok(crate::tauri_release::ReleaseSettingsDraft {
+        settings: crate::tauri_release::suggested_release_settings(
+            std::path::Path::new(&repo.path),
+            config_path,
+        ),
+        stored: false,
+    })
+}
+
+/// 发布设置表单的保存命令（ADR-0060）：校验通过才产生新修订。
+#[tauri::command]
+pub async fn update_profile_release_settings(
+    app: tauri::AppHandle,
+    repo_id: String,
+    profile_id: String,
+    settings: crate::tauri_release::TauriReleaseConfig,
+) -> Result<AppState, AppError> {
+    let _timer = crate::commands::middleware::CommandTimer::new(
+        "store::commands::update_profile_release_settings",
+    );
+    let mut state = get_state();
+    let repo = find_repository_mut(&mut state.repositories, &repo_id)?;
+    repo.publish_config.update_release_settings(
+        &profile_id,
+        settings,
         chrono::Utc::now().to_rfc3339(),
     )?;
 
@@ -546,12 +643,7 @@ pub async fn rebind_profile_project(
         .filter(|profile| profile.deleted_at.is_none())
         .and_then(|profile| profile.current_revision())
         .map(|revision| revision.provider_id.clone())
-        .ok_or_else(|| {
-            AppError::validation_with_code(
-                format!("未找到配置文件: {profile_id}"),
-                "profile_not_found",
-            )
-        })?;
+        .ok_or_else(|| super::types::profile_not_found_error(&profile_id))?;
     let project_binding = repository_project_binding(repo, &provider_id);
     repo.publish_config.rebind_profile_project(
         &profile_id,
@@ -752,7 +844,7 @@ fn redact_sensitive_spec_values(value: &mut serde_json::Value) {
     }
 }
 
-fn sanitize_record_for_storage(record: &mut ExecutionRecord) {
+pub(super) fn sanitize_record_for_storage(record: &mut ExecutionRecord) {
     if let Some(snapshot) = record.recovery_snapshot.as_mut() {
         crate::security::sanitize_publish_recovery_snapshot(snapshot);
     }
@@ -809,10 +901,10 @@ pub async fn set_execution_record_snapshot(
     }
 
     if !found {
-        return Err(AppError::validation_with_code(
-            format!("未找到执行记录: {}", record_id),
-            "execution_record_not_found",
-        ));
+        return Err(
+            AppError::validation_with_code("未找到执行记录", "execution_record_not_found")
+                .with_details(record_id),
+        );
     }
 
     let history = state.execution_history.clone();
@@ -1063,5 +1155,69 @@ mod tests {
         assert_eq!(record.spec, original.spec);
         assert_eq!(record.file_count, original.file_count);
         assert_eq!(record.warnings, original.warnings);
+    }
+
+    #[test]
+    fn revision_selection_refuses_profiles_from_another_repository_provider() {
+        use super::ensure_selection_matches_repository_provider;
+        use crate::store::PublishSelectionRef;
+
+        let mut publish_config = RepoPublishConfig::default();
+        let go_profile_id = publish_config
+            .create_profile(
+                "Linux".to_string(),
+                "go".to_string(),
+                json!({ "goos": "linux", "goarch": "amd64" }),
+                None,
+                None,
+                "2026-10-06T10:00:00Z".to_string(),
+            )
+            .expect("create go profile")
+            .id
+            .clone();
+        let cargo_profile_id = publish_config
+            .create_profile(
+                "Release".to_string(),
+                "cargo".to_string(),
+                json!({ "release": true }),
+                None,
+                None,
+                "2026-10-06T10:00:00Z".to_string(),
+            )
+            .expect("create cargo profile")
+            .id
+            .clone();
+        let mut repo = Repository {
+            id: "rust-repo".to_string(),
+            name: "Rust".to_string(),
+            path: "/rust-repo".to_string(),
+            project_file: None,
+            current_branch: "main".to_string(),
+            branches: Vec::new(),
+            is_main: true,
+            provider_id: Some("cargo".to_string()),
+            publish_config,
+        };
+        let select = |configuration_id: &str| PublishSelectionRef::Revision {
+            configuration_id: configuration_id.to_string(),
+        };
+
+        let error = ensure_selection_matches_repository_provider(&repo, &select(&go_profile_id))
+            .expect_err("go profile must not be selectable in a cargo repository");
+        assert_eq!(
+            error.code.as_deref(),
+            Some("publish_selection_provider_mismatch")
+        );
+        assert_eq!(
+            error.details.as_deref(),
+            Some("repository_provider_mismatch:go:cargo")
+        );
+
+        ensure_selection_matches_repository_provider(&repo, &select(&cargo_profile_id))
+            .expect("matching provider stays selectable");
+
+        repo.provider_id = None;
+        ensure_selection_matches_repository_provider(&repo, &select(&go_profile_id))
+            .expect("repositories without a declared provider stay unrestricted");
     }
 }

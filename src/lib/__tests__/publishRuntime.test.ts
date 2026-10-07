@@ -8,6 +8,7 @@ vi.mock("@tauri-apps/api/core", () => ({
 
 import {
   cancelPublishRuntime,
+  describeBlockedRuntime,
   importFromCommand,
   preparePublishRuntime,
   preflightProviderPublishOutput,
@@ -305,5 +306,40 @@ describe("publishRuntime", () => {
     expect(invokeMock).toHaveBeenNthCalledWith(3, "cancel_publish_runtime", {
       request: { runtimeToken: "sealed-runtime-A" },
     });
+  });
+
+  it("describes the first blocked diagnostic through the errors catalog", () => {
+    const unresolved = {
+      code: "publish_runtime_output_unresolved",
+      message: "publish output location could not be determined",
+    };
+    const unregistered = {
+      code: "publish_runtime_delivery_blocked",
+      message: "local delivery destination /repo/out is not a directory",
+    };
+    const translations = {
+      errors: { publish_runtime_output_unresolved: "Set an output path" },
+    };
+
+    expect(
+      describeBlockedRuntime(
+        { status: "blocked", diagnostics: [unresolved, unregistered] },
+        translations
+      )
+    ).toBe("Set an output path");
+    // 未登记的诊断码沿用后端原文。
+    expect(
+      describeBlockedRuntime(
+        { status: "blocked", diagnostics: [unregistered] },
+        translations
+      )
+    ).toBe(unregistered.message);
+    expect(
+      describeBlockedRuntime(
+        { status: "blocked", diagnostics: [] },
+        translations
+      )
+    ).toBeUndefined();
+    expect(describeBlockedRuntime(null, translations)).toBeUndefined();
   });
 });

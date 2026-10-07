@@ -5,7 +5,7 @@ interface TranslationMap {
 export function getPublishFailureFeedback(
   failureReason: string | null,
   appT: TranslationMap,
-  rawErrorMessage: string
+  errorMessage: string
 ): { title: string; description: string } {
   if (failureReason === "already_running") {
     return {
@@ -28,7 +28,7 @@ export function getPublishFailureFeedback(
   if (failureReason === "output_path_invalid") {
     return {
       title: appT.publishOutputPathInvalid || "发布目录无效",
-      description: rawErrorMessage,
+      description: errorMessage,
     };
   }
 
@@ -36,7 +36,7 @@ export function getPublishFailureFeedback(
     return {
       title:
         appT.publishOutputPathIncompatible || "发布目录路径与当前系统不兼容",
-      description: rawErrorMessage,
+      description: errorMessage,
     };
   }
 
@@ -45,7 +45,7 @@ export function getPublishFailureFeedback(
       title:
         appT.publishProtectedDirectoryAccessDenied ||
         "缺少 macOS 受保护目录访问权限",
-      description: rawErrorMessage,
+      description: errorMessage,
     };
   }
 
@@ -122,6 +122,6 @@ export function getPublishFailureFeedback(
 
   return {
     title: appT.publishExecutionError || "发布执行错误",
-    description: rawErrorMessage,
+    description: errorMessage,
   };
 }

@@ -176,6 +176,9 @@ pub fn build_config_export(
     let profiles = config
         .active_profiles()
         .into_iter()
+        // 隐藏草稿是临时发布的物化产物，不是可复用配置；导出后会在导入方
+        // 变成普通可见配置，因此不进入备份。
+        .filter(|profile| !profile.is_draft)
         .map(|profile| {
             let revision = profile.current_revision().ok_or_else(|| {
                 ImportError::InvalidFormat(format!(
@@ -374,6 +377,49 @@ mod tests {
     use crate::spec::{SpecValue, SPEC_VERSION};
     use crate::store::{AutomationBinding, AutomationTriggerPolicy, RepoPublishConfig};
     use chrono::TimeZone;
+
+    #[test]
+    fn backup_omits_hidden_draft_profiles() {
+        let mut repo_config = RepoPublishConfig::default();
+        repo_config
+            .create_profile(
+                "linux-amd64".to_string(),
+                "go".to_string(),
+                serde_json::json!({ "goos": "linux" }),
+                None,
+                None,
+                "2026-10-07T10:00:00Z".to_string(),
+            )
+            .expect("create profile");
+        repo_config.upsert_draft_revision(
+            crate::publish_runtime::PublishConfigurationContent {
+                provider_id: "go".to_string(),
+                contract_version: crate::store::PUBLISH_CONFIGURATION_CONTRACT_VERSION,
+                provider_version: "1".to_string(),
+                settings_version: crate::store::CURRENT_SETTINGS_VERSION,
+                project_binding: None,
+                parameters: serde_json::json!({}),
+                composition: crate::store::PublishComposition::local_default(),
+            },
+            "2026-10-07T10:01:00Z".to_string(),
+        );
+        assert!(
+            repo_config
+                .active_profiles()
+                .iter()
+                .any(|profile| profile.is_draft),
+            "fixture must contain a hidden draft profile"
+        );
+
+        let export = build_config_export(&repo_config, Utc::now()).expect("build export");
+
+        let names = export
+            .profiles
+            .iter()
+            .map(|profile| profile.name.as_str())
+            .collect::<Vec<_>>();
+        assert_eq!(names, ["linux-amd64"]);
+    }
 
     #[test]
     fn backup_projects_only_current_content_and_omits_identity_selection_bindings_and_secrets() {

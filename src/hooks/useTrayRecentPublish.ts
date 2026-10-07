@@ -1,9 +1,11 @@
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { isTauri } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 
 import { parsePublishConfigKey } from "@/features/config/publishConfigIdentity";
+import { useI18n } from "@/hooks/useI18n";
 import { showSystemNotification } from "@/lib/systemNotification";
+import { localizeInvokeError } from "@/lib/tauri/invokeErrors";
 import {
   getProfiles,
   getRepository,
@@ -97,6 +99,13 @@ export function useTrayRecentPublish(params: {
     options?: RunPublishOptions
   ) => Promise<void>;
 }) {
+  const { translations } = useI18n();
+  // 错误文案只在通知时读取最新翻译；不进入 effect 依赖，避免翻译加载完成时重新订阅托盘事件。
+  const translationsRef = useRef(translations);
+  useEffect(() => {
+    translationsRef.current = translations;
+  }, [translations]);
+
   useEffect(() => {
     if (!isTauri()) {
       return;
@@ -117,11 +126,9 @@ export function useTrayRecentPublish(params: {
           }
         } catch (error) {
           await setTrayPublishStatus("failure").catch(() => {});
-          const description =
-            error instanceof Error ? error.message : String(error);
           const notified = await showSystemNotification({
             title: params.appT.trayPublishFailed || "状态栏发布启动失败",
-            body: description,
+            body: localizeInvokeError(error, translationsRef.current),
           });
           if (!notified) {
             await showMainWindow().catch(() => {});

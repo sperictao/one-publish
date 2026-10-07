@@ -144,7 +144,9 @@ impl TauriProjectProvider {
             1,
             AdapterSchema::new(1)
                 .with_required_string(CONFIG_PATH_SETTING)
-                .with_required_string(BUILD_DRIVER_SETTING),
+                .with_required_string(BUILD_DRIVER_SETTING)
+                // 远端绑定总是写入启用目标（决议 #85），本地绑定缺省。
+                .with_optional_string_list(ENABLED_TARGETS_SETTING),
             PublishingCapability {
                 // 构建产物是未验证候选；摘要验证由 Artifact Processor 提供，
                 // Provider 不得越权声明已验证能力（ADR-0035、Issue T20）。
@@ -256,6 +258,7 @@ impl AdapterContract for TauriProjectProvider {
         crate::validate_settings_against_schema(self.descriptor(), settings)?;
         let adapter = self.descriptor.identity().display_name();
         bound_settings(settings, &adapter)?;
+        enabled_build_targets(settings, &adapter)?;
         Ok(())
     }
 
@@ -874,6 +877,7 @@ impl TauriRuntimeProvider {
         config_path: &str,
         driver: TauriBuildDriver,
         build_target: Option<&str>,
+        cancellation: &crate::CancellationSignal,
     ) -> Result<crate::AdapterExecutionOutput, PublishError> {
         let execution = self.execution.as_ref().ok_or_else(|| {
             PublishError::Execution(
@@ -898,6 +902,7 @@ impl TauriRuntimeProvider {
             args.push("--target".to_string());
             args.push(target.to_string());
         }
+        execution.clear_stale_artifacts()?;
         // 分片构建（决议 #85）：每个目标物化进输出目录的 per-target 子目录，
         // 同一 job 内多目标互不重复收集；产物结构知识（bundle 布局）属本
         // Provider，端口只负责跑命令。本地无目标路径保持桌面合同不变。
@@ -905,13 +910,16 @@ impl TauriRuntimeProvider {
             None => {
                 let outcome = execution
                     .port
-                    .execute_build(crate::bridge::SealedBuildCommand {
-                        provider_id: TAURI_PROVIDER_ID.to_string(),
-                        program: driver.name().to_string(),
-                        args,
-                        working_directory: app_root,
-                        output_directory: execution.output_directory.clone(),
-                    })
+                    .execute_build(
+                        crate::bridge::SealedBuildCommand {
+                            provider_id: TAURI_PROVIDER_ID.to_string(),
+                            program: driver.name().to_string(),
+                            args,
+                            working_directory: app_root,
+                            output_directory: execution.output_directory.clone(),
+                        },
+                        cancellation,
+                    )
                     .map_err(|error| PublishError::Execution(error.to_string()))?;
                 crate::bridge::finish_provider_execution(execution, outcome, classify_tauri_artifact)
             }
@@ -919,13 +927,16 @@ impl TauriRuntimeProvider {
                 let staged = execution.output_directory.join(target);
                 let outcome = execution
                     .port
-                    .execute_build(crate::bridge::SealedBuildCommand {
-                        provider_id: TAURI_PROVIDER_ID.to_string(),
-                        program: driver.name().to_string(),
-                        args,
-                        working_directory: app_root.clone(),
-                        output_directory: staged.clone(),
-                    })
+                    .execute_build(
+                        crate::bridge::SealedBuildCommand {
+                            provider_id: TAURI_PROVIDER_ID.to_string(),
+                            program: driver.name().to_string(),
+                            args,
+                            working_directory: app_root.clone(),
+                            output_directory: staged.clone(),
+                        },
+                        cancellation,
+                    )
                     .map_err(|error| PublishError::Execution(error.to_string()))?;
                 crate::bridge::ensure_provider_outcome(&outcome, &staged)?;
                 materialize_target_bundle(&app_root, target, &staged)?;
@@ -1047,7 +1058,7 @@ impl AdapterContract for TauriRuntimeProvider {
     fn execute_node(
         &self,
         node: &publish_domain::PlanNode,
-        _context: &crate::AdapterExecutionContext<'_>,
+        context: &crate::AdapterExecutionContext<'_>,
     ) -> Result<crate::AdapterExecutionOutput, PublishError> {
         let adapter = self.provider.descriptor().identity().display_name();
         let config_path = node.settings.string(CONFIG_PATH_SETTING, &adapter)?;
@@ -1093,7 +1104,13 @@ impl AdapterContract for TauriRuntimeProvider {
                         node.id
                     )));
                 }
-                self.run_sealed_build(node, config_path, driver, build_target.flatten().as_deref())
+                self.run_sealed_build(
+                    node,
+                    config_path,
+                    driver,
+                    build_target.flatten().as_deref(),
+                    &context.cancellation,
+                )
             }
             _ => Err(PublishError::Execution(format!(
                 "node {} is not a tauri provider operation",
@@ -1400,13 +1417,22 @@ mod plan_fragment_tests {
             serde_json::json!("x86_64-unknown-linux-gnu"),
             serde_json::json!([1, 2]),
         ] {
-            let error = provider
-                .plan_fragment(&snapshot(), &settings(Some(malformed.clone())))
-                .expect_err("malformed enabled targets must be rejected");
-            assert!(
-                error.to_string().contains(ENABLED_TARGETS_SETTING),
-                "unexpected error for {malformed}: {error}"
-            );
+            let malformed_settings = settings(Some(malformed.clone()));
+            // 设置校验（规划入口）与计划展开同样显式拒绝，而不是静默降级为本地单构建。
+            let errors = [
+                provider
+                    .validate_settings(&malformed_settings)
+                    .expect_err("settings validation must reject malformed enabled targets"),
+                provider
+                    .plan_fragment(&snapshot(), &malformed_settings)
+                    .expect_err("malformed enabled targets must be rejected"),
+            ];
+            for error in errors {
+                assert!(
+                    error.to_string().contains(ENABLED_TARGETS_SETTING),
+                    "unexpected error for {malformed}: {error}"
+                );
+            }
         }
     }
 

@@ -1,7 +1,8 @@
-import { useCallback, useEffect } from "react";
+import { useCallback, useEffect, useRef } from "react";
 import { toast } from "sonner";
 
 import type { TranslationMap } from "@/features/publish/publishTransaction";
+import { useI18n } from "@/hooks/useI18n";
 import {
   openOutputDirectory,
   setTrayPublishStatus,
@@ -9,6 +10,7 @@ import {
 } from "@/lib/store/api";
 import type { ExecutionRecord } from "@/lib/store/types";
 import { showSystemNotification } from "@/lib/systemNotification";
+import { localizeInvokeError } from "@/lib/tauri/invokeErrors";
 import { on } from "@/lib/eventBus";
 import type {
   PublishCancelledEvent,
@@ -46,6 +48,14 @@ export function usePublishNotify({
   publishT,
   savePublishRecord,
 }: UsePublishNotifyParams): UsePublishNotifyResult {
+  const { translations } = useI18n();
+  // 错误文案只在通知时读取最新翻译；不进入回调依赖，避免翻译加载完成时
+  // 重建 openOutputDirectoryIfNeeded 并重新订阅发布生命周期事件。
+  const translationsRef = useRef(translations);
+  useEffect(() => {
+    translationsRef.current = translations;
+  }, [translations]);
+
   const restoreMainWindowIfNeeded = useCallback(
     async (shouldRestore: boolean) => {
       if (!shouldRestore) return;
@@ -112,7 +122,7 @@ export function usePublishNotify({
         await notifyFeedback(
           "error",
           appT.openOutputDirectoryFailed || "打开输出目录失败",
-          String(err),
+          localizeInvokeError(err, translationsRef.current),
           feedbackMode
         );
       }

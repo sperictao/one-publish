@@ -45,7 +45,7 @@ import { isTauri } from "@tauri-apps/api/core";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import { relaunch } from "@tauri-apps/plugin-process";
 import type { AppUpdaterState } from "@/hooks/useAppUpdater";
-import { useI18n } from "@/hooks/useI18n";
+import { getLanguageLocale, useI18n } from "@/hooks/useI18n";
 import type { Language } from "@/hooks/useI18n";
 import type { EnvironmentCheckSnapshot } from "@/features/environment/environment";
 import { cn } from "@/lib/utils";
@@ -905,10 +905,10 @@ export function SettingsDialog({
     const isConfigUnhealthy =
       updaterConfigHealth && !updaterConfigHealth.configured;
     const versionT = translations.version || {};
-    const lastCheckedAt = new Date().toLocaleTimeString(undefined, {
-      hour: "2-digit",
-      minute: "2-digit",
-    });
+    const lastCheckedAt = new Date().toLocaleTimeString(
+      getLanguageLocale(language),
+      { hour: "2-digit", minute: "2-digit" }
+    );
 
     return (
       <div className="space-y-6">

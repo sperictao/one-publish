@@ -209,7 +209,7 @@ _Avoid_: 以名称作为唯一标识、重命名后新建配置
 _Avoid_: 原地改写配置、自动跟随最新值
 
 **发布设置（Release Settings）**:
-配置修订参数中以保留键 `releaseSettings` 承载的 Provider 发布期设置，例如 Tauri 的桌面目标、Tag 前缀、Updater、Secret 名称、发布门禁与版本镜像；它不属于命令参数，不参与命令渲染或参数匹配。
+配置修订参数中以保留键 `releaseSettings` 承载的 Provider 发布期设置，例如 Tauri 的桌面目标、Tag 前缀、Updater、Secret 名称、发布门禁与版本镜像；它不属于命令参数，不参与命令渲染或参数匹配。可通过发布设置表单编辑，保存前经后端校验并产生新修订。
 _Avoid_: 命令参数、Provider 专用配置存储
 
 **当前发布配置（Current Release Configuration）**:

@@ -10,7 +10,11 @@ import {
   scanRepositoryBranches,
 } from "@/lib/store/api";
 import type { ProviderManifest } from "@/lib/store/types";
-import { getPathBasename, isSameRepositoryPath } from "@/lib/paths";
+import {
+  getPathBasename,
+  isSameRepositoryPath,
+  stripTrailingPathSeparators,
+} from "@/lib/paths";
 import {
   providerRequiresProjectBinding,
   resolveProviderLabel,
@@ -20,9 +24,12 @@ import {
   analyzeBranchRefreshFailure,
   analyzeProviderDetectFailure,
   analyzeRepositoryWriteFailure,
-  extractInvokeErrorMessage,
+  localizeInvokeError,
 } from "@/lib/tauri/invokeErrors";
-import type { ProviderDetectFailureReason } from "@/lib/tauri/invokeErrors";
+import type {
+  InvokeErrorTranslations,
+  ProviderDetectFailureReason,
+} from "@/lib/tauri/invokeErrors";
 import type { ProjectScanCandidates } from "@/lib/store/types";
 import type { Branch, Repository } from "@/lib/store/types";
 import type { RepositoryBranchScanResult } from "@/lib/store/types";
@@ -80,9 +87,17 @@ function fillTemplate(
   );
 }
 
-/** 统一的可读错误兜底：优先取后端 message，禁止把序列化负载直接丢进 UI。 */
-function describeInvokeError(error: unknown): string {
-  return extractInvokeErrorMessage(error);
+/**
+ * 目录选择器选中仓库内的 `.git` 目录时，归一化为其所在的工作区根目录，
+ * 避免仓库被命名为 ".git" 且 Provider / 分支探测全部落空。
+ */
+function normalizeSelectedRepositoryPath(path: string): string {
+  const trimmed = stripTrailingPathSeparators(path.trim());
+  if (getPathBasename(trimmed).toLowerCase() !== ".git") {
+    return path;
+  }
+
+  return stripTrailingPathSeparators(trimmed.slice(0, -".git".length)) || path;
 }
 
 function createFallbackBranches(path: string, currentBranch: string): Branch[] {
@@ -185,7 +200,8 @@ async function resolveInitialRepositoryMetadata(
 function resolveProviderDetectFailureCopy(
   reason: ProviderDetectFailureReason,
   error: unknown,
-  appT: TranslationMap
+  appT: TranslationMap,
+  translations: InvokeErrorTranslations
 ): { title: string; description: string } {
   switch (reason) {
     case "path_not_found":
@@ -226,7 +242,7 @@ function resolveProviderDetectFailureCopy(
     default:
       return {
         title: appT.detectProviderFailed || "自动检测 Provider 失败",
-        description: describeInvokeError(error),
+        description: localizeInvokeError(error, translations),
       };
   }
 }
@@ -250,11 +266,12 @@ function buildAddedRepositoryDescription(
 
 export async function handleAddRepoRuntime(params: {
   appT: TranslationMap;
+  translations: InvokeErrorTranslations;
   providers: ProviderManifest[];
   repositories: Repository[];
   addRepository: (repo: Repository) => Promise<unknown>;
 }): Promise<AddRepositoryOutcome> {
-  const { appT, providers, repositories, addRepository } = params;
+  const { appT, translations, providers, repositories, addRepository } = params;
 
   // ── 1. 选择目录（自身失败也要有反馈，不能变成未处理的 rejection）──
   let selected: string | null;
@@ -267,7 +284,7 @@ export async function handleAddRepoRuntime(params: {
     selected = typeof picked === "string" ? picked : null;
   } catch (error) {
     toast.error(appT.selectRepositoryDirectoryFailed || "无法打开目录选择器", {
-      description: describeInvokeError(error),
+      description: localizeInvokeError(error, translations),
     });
     return { status: "failed" };
   }
@@ -276,7 +293,7 @@ export async function handleAddRepoRuntime(params: {
     return { status: "cancelled" };
   }
 
-  const path = selected;
+  const path = normalizeSelectedRepositoryPath(selected);
   const name = getPathBasename(path) || "Unknown";
   // 同一条 toast 随流程演进（loading → success / error），避免叠加两条互相矛盾
   const toastId = createRepositoryId();
@@ -296,7 +313,12 @@ export async function handleAddRepoRuntime(params: {
     const failureReason = analyzeProviderDetectFailure(error);
 
     if (failureReason !== "unsupported_provider") {
-      const copy = resolveProviderDetectFailureCopy(failureReason, error, appT);
+      const copy = resolveProviderDetectFailureCopy(
+        failureReason,
+        error,
+        appT,
+        translations
+      );
       toast.error(copy.title, { id: toastId, description: copy.description });
       return { status: "failed" };
     }
@@ -352,7 +374,7 @@ export async function handleAddRepoRuntime(params: {
 
     toast.error(appT.addRepositoryFailed || "添加仓库失败", {
       id: toastId,
-      description: describeInvokeError(error),
+      description: localizeInvokeError(error, translations),
     });
     return { status: "failed" };
   }
@@ -379,16 +401,23 @@ export async function handleAddRepoRuntime(params: {
 
 export async function handleRemoveRepoRuntime(params: {
   appT: TranslationMap;
+  translations: InvokeErrorTranslations;
   repo: Repository;
   removeRepository: (repoId: string) => Promise<unknown>;
 }) {
-  const { appT, repo, removeRepository } = params;
+  const { appT, translations, repo, removeRepository } = params;
   const confirmed = await ask(
     (appT.removeRepositoryConfirm || "确认移除仓库「{{name}}」？").replace(
       "{{name}}",
       repo.name
     ),
-    { title: appT.removeRepository || "移除仓库", kind: "warning" }
+    {
+      title: appT.removeRepository || "移除仓库",
+      kind: "warning",
+      // 原生对话框默认按钮跟随系统语言（Yes/No），显式传入界面语言文案
+      okLabel: appT.removeRepositoryConfirmOk || "移除",
+      cancelLabel: appT.removeRepositoryConfirmCancel || "取消",
+    }
   );
 
   if (!confirmed) {
@@ -402,16 +431,17 @@ export async function handleRemoveRepoRuntime(params: {
     });
   } catch (error) {
     toast.error(appT.removeRepositoryFailed || "移除仓库失败", {
-      description: describeInvokeError(error),
+      description: localizeInvokeError(error, translations),
     });
   }
 }
 
 export async function handleOpenRepoDirectoryRuntime(params: {
   appT: TranslationMap;
+  translations: InvokeErrorTranslations;
   repo: Repository;
 }) {
-  const { appT, repo } = params;
+  const { appT, translations, repo } = params;
   const repositoryPath = repo.path.trim();
 
   if (!repositoryPath) {
@@ -426,13 +456,14 @@ export async function handleOpenRepoDirectoryRuntime(params: {
     });
   } catch (error) {
     toast.error(appT.openRepositoryDirectoryFailed || "打开仓库目录失败", {
-      description: describeInvokeError(error),
+      description: localizeInvokeError(error, translations),
     });
   }
 }
 
 export async function handleEditRepoRuntime(params: {
   appT: TranslationMap;
+  translations: InvokeErrorTranslations;
   repo: Repository;
   repositories: Repository[];
   selectedRepoId: string | null;
@@ -441,6 +472,7 @@ export async function handleEditRepoRuntime(params: {
 }) {
   const {
     appT,
+    translations,
     repo,
     repositories,
     selectedRepoId,
@@ -497,7 +529,7 @@ export async function handleEditRepoRuntime(params: {
       description:
         failureReason === "repository_exists"
           ? appT.repositoryAlreadyExists || "该目录已添加为仓库"
-          : describeInvokeError(error),
+          : localizeInvokeError(error, translations),
     });
     return false;
   }
@@ -505,10 +537,11 @@ export async function handleEditRepoRuntime(params: {
 
 export async function handleDetectRepoProviderRuntime(params: {
   appT: TranslationMap;
+  translations: InvokeErrorTranslations;
   path: string;
   options?: { silentSuccess?: boolean; silentFailure?: boolean };
 }) {
-  const { appT, path, options } = params;
+  const { appT, translations, path, options } = params;
   const silentSuccess = options?.silentSuccess ?? false;
   // 自动检测（如编辑窗口打开时的首次探测）失败不必再弹一次错误：
   // 触发它的流程（添加仓库等）已经把结果告知用户了，重复弹会互相矛盾。
@@ -536,7 +569,12 @@ export async function handleDetectRepoProviderRuntime(params: {
     }
 
     const failureReason = analyzeProviderDetectFailure(error);
-    const copy = resolveProviderDetectFailureCopy(failureReason, error, appT);
+    const copy = resolveProviderDetectFailureCopy(
+      failureReason,
+      error,
+      appT,
+      translations
+    );
 
     toast.error(copy.title, { description: copy.description });
     return null;
@@ -561,10 +599,11 @@ export async function handleScanProjectCandidatesRuntime(
 
 export async function handleRefreshRepoBranchesRuntime(params: {
   appT: TranslationMap;
+  translations: InvokeErrorTranslations;
   path: string;
   options?: { silentSuccess?: boolean };
 }): Promise<RefreshBranchesResult | null> {
-  const { appT, path, options } = params;
+  const { appT, translations, path, options } = params;
   const silentSuccess = options?.silentSuccess ?? false;
   const nextPath = path.trim();
 
@@ -588,7 +627,6 @@ export async function handleRefreshRepoBranchesRuntime(params: {
       currentBranch: result.current_branch,
     };
   } catch (err) {
-    const rawErrorMessage = extractInvokeErrorMessage(err);
     const failureReason = analyzeBranchRefreshFailure(err);
 
     if (failureReason === "path_not_found") {
@@ -663,7 +701,7 @@ export async function handleRefreshRepoBranchesRuntime(params: {
     }
 
     toast.error(appT.refreshBranchesFailed || "拉取分支失败", {
-      description: rawErrorMessage,
+      description: localizeInvokeError(err, translations),
     });
     return null;
   }

@@ -2,14 +2,21 @@
 //! 外壳 artifacts 暂存交接（tar 保执行位、含 run_attempt 唯一命名），汇聚
 //! 段执行前导入。Artifact Store 抽象不变：导入候选重算内容摘要，Manifest
 //! 密封仍以内容为准。
+//!
+//! build 段的事件段同经外壳下载交给汇聚段，作为被依赖节点已在别处完成的
+//! 证据；证据校验（同一 attempt 与计划、段内序号、去重）在 runner-core。
 
 use std::path::{Path, PathBuf};
 
-use publish_domain::{ArtifactCandidate, PublishError};
+use publish_domain::{ArtifactCandidate, PublishError, PublishEvent};
+use publish_runner_core::ShardOutcome;
 use serde::{Deserialize, Serialize};
 
 /// 暂存根（相对 checkout 的确定性路径，与其它 runner 运行时目录同族）。
 pub const SHARD_STAGING_DIRECTORY: &str = ".one-publish-work/staged";
+
+/// 事件段下载根：download-artifact 按 artifact 名各建一层子目录。
+pub const SHARD_SEGMENTS_DIRECTORY: &str = ".one-publish-work/segments";
 
 #[derive(Serialize, Deserialize)]
 struct StagedCandidateRecord {
@@ -130,6 +137,49 @@ pub fn load_staged_artifacts(root: &Path) -> Result<Vec<ArtifactCandidate>, Publ
     Ok(artifacts)
 }
 
+/// 读回根下全部 `*.json` 事件段（按路径稳定排序、逐段保持段内顺序）；
+/// 缺根即无证据。无法解码的段（如失败 job 留下的空文件）显式报错。
+pub fn load_shard_segments(root: &Path) -> Result<Vec<PublishEvent>, PublishError> {
+    let mut files = Vec::new();
+    collect_segment_files(root, &mut files)?;
+    files.sort();
+    let mut events = Vec::new();
+    for file in files {
+        let bytes = std::fs::read(&file).map_err(|error| {
+            staging_io_error(format!("read shard segment {}", file.display()), error)
+        })?;
+        let segment: ShardOutcome = serde_json::from_slice(&bytes).map_err(|error| {
+            staging_io_error(format!("decode shard segment {}", file.display()), error)
+        })?;
+        events.extend(segment.events);
+    }
+    Ok(events)
+}
+
+fn collect_segment_files(directory: &Path, files: &mut Vec<PathBuf>) -> Result<(), PublishError> {
+    if !directory.is_dir() {
+        return Ok(());
+    }
+    let read_error = |error: std::io::Error| {
+        staging_io_error(
+            format!("read segment directory {}", directory.display()),
+            error,
+        )
+    };
+    for entry in std::fs::read_dir(directory).map_err(read_error)? {
+        let path = entry.map_err(read_error)?.path();
+        if path.is_dir() {
+            collect_segment_files(&path, files)?;
+        } else if path
+            .extension()
+            .is_some_and(|extension| extension == "json")
+        {
+            files.push(path);
+        }
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -197,5 +247,22 @@ mod tests {
         assert!(load_staged_artifacts(&temp.path().join("missing"))
             .expect("a missing staging root is an empty set")
             .is_empty());
+    }
+
+    #[test]
+    fn shard_segments_load_from_artifact_subdirectories_and_reject_empty_files() {
+        let temp = tempfile::tempdir().expect("segments root");
+        assert!(load_shard_segments(temp.path())
+            .expect("a root without segments carries no evidence")
+            .is_empty());
+
+        // 失败 job 的 `> one-publish-events-*.json` 重定向会留下空文件。
+        let artifact = temp.path().join("one-publish-events-1-1-linux");
+        std::fs::create_dir_all(&artifact).expect("artifact directory");
+        std::fs::write(artifact.join("one-publish-events-linux.json"), b"")
+            .expect("write an empty segment");
+        let error = load_shard_segments(temp.path())
+            .expect_err("an undecodable segment must not read as missing evidence");
+        assert!(error.to_string().contains("decode shard segment"));
     }
 }

@@ -18,6 +18,10 @@ import type {
   SynchronizePublishRuntimeRequest,
   SynchronizePublishRuntimeResult,
 } from "@/generated/tauri-contracts";
+import {
+  localizeInvokeError,
+  type InvokeErrorTranslations,
+} from "@/lib/tauri/invokeErrors";
 
 export type ProviderPublishSpec = TauriPublishSpec;
 export type PublishResult = TauriPublishResult;
@@ -116,6 +120,19 @@ export async function importFromCommand({
     providerId,
     projectPath,
   });
+}
+
+/**
+ * 阻断运行时首个诊断的展示文案（按诊断码取 `errors.<code>`，未登记时沿用后端原文）；
+ * 未阻断或没有诊断时为 undefined。
+ */
+export function describeBlockedRuntime(
+  prepared: PreparedPublishRuntime | null | undefined,
+  translations: InvokeErrorTranslations | null | undefined
+): string | undefined {
+  const diagnostic =
+    prepared?.status === "blocked" ? prepared.diagnostics[0] : undefined;
+  return diagnostic && localizeInvokeError(diagnostic, translations);
 }
 
 /** Only output access denial can be resolved by requesting directory access. */

@@ -135,6 +135,7 @@ function EditRepositoryDialogContent({
     repository.currentBranch?.trim() || DEFAULT_BRANCH_VALUE;
   const initialProviderId = repository.providerId?.trim() || "";
   const [editName, setEditName] = useState(() => repository.name);
+  const nameInputRef = useRef<HTMLInputElement>(null);
   const [editPath, setEditPath] = useState(() => repository.path);
   const [editProjectFile, setEditProjectFile] = useState(
     () => repository.projectFile || ""
@@ -562,6 +563,11 @@ function EditRepositoryDialogContent({
       bodyPadding="none"
       bodyScrollable={false}
       bodyInnerClassName="min-h-0 flex-1"
+      onOpenAutoFocus={(event) => {
+        // 默认焦点会落在标题 HelpTip 上并自动弹出提示，改为聚焦名称输入框。
+        event.preventDefault();
+        nameInputRef.current?.focus();
+      }}
       title={
         <div className="flex items-center gap-1.5">
           <span>{repoT.editRepository || "编辑项目信息"}</span>
@@ -708,6 +714,7 @@ function EditRepositoryDialogContent({
                   {repoT.repositoryName || "仓库名称"}
                 </Label>
                 <Input
+                  ref={nameInputRef}
                   id="repo-edit-name"
                   value={editName}
                   onChange={(event) => setEditName(event.target.value)}

@@ -110,7 +110,6 @@ export function useProfiles({
     commitProfilesSnapshot,
   } = useProfileListState({
     selectedRepoId,
-    profileT,
     onRepositoryScopeChange: handleRepositoryScopeChange,
   });
   // 高亮名优先跟随持久化选择（跨仓库切换可恢复）；无匹配选择时
@@ -119,8 +118,10 @@ export function useProfiles({
     profiles.find((profile) => profile.id === persistedActiveProfileId)?.name ??
     localActiveProfileName;
 
+  const repositoryProviderId = selectedRepo?.providerId ?? null;
   const crud = useProfileCrud({
     selectedRepoId,
+    repositoryProviderId,
     profiles,
     activeProfileId: persistedActiveProfileId,
     profileT,
@@ -202,6 +203,7 @@ export function useProfiles({
   const profileManagement = useMemo<ProfileManagementActions>(
     () => ({
       profiles,
+      repositoryProviderId,
       isRefreshing: isProfilesRefreshing,
       refreshProfiles: loadProfiles,
       saveProfile: crud.saveProfile,
@@ -217,6 +219,7 @@ export function useProfiles({
       isProfilesRefreshing,
       loadProfiles,
       profiles,
+      repositoryProviderId,
     ]
   );
 

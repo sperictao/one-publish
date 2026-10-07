@@ -7,6 +7,8 @@ import {
   setExecutionRecordSnapshot,
 } from "@/lib/store/api";
 import type { AppState, ExecutionRecord } from "@/lib/store/types";
+import { getCurrentTranslations } from "@/hooks/useI18n";
+import { localizeInvokeError } from "@/lib/tauri/invokeErrors";
 import {
   migrateLegacyFavorites,
   migrateNameBasedProfileFavorites,
@@ -102,7 +104,10 @@ export const useAppStore = create<AppStore>()((...args) => {
         );
       } catch (err) {
         console.error("加载应用状态失败:", err);
-        set({ isLoading: false, error: String(err) });
+        set({
+          isLoading: false,
+          error: localizeInvokeError(err, getCurrentTranslations()),
+        });
       }
     },
 
