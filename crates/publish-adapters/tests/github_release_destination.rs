@@ -212,6 +212,7 @@ fn manifest_with(root: &Path, entries: &[(&str, &str, &str, &str, &[u8])]) -> Ar
                 digest: sha256_hex(bytes),
                 locator: path.to_string_lossy().to_string(),
                 retention: "604800s".to_string(),
+                executable: Some(false),
             }
         })
         .collect();

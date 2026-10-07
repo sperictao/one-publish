@@ -394,6 +394,7 @@ pub(crate) fn collect_artifacts_with(
                 message: error.to_string(),
             })?;
             let (role, media_type) = classify(relative);
+            let executable = is_executable(&metadata, &bytes);
             Ok(ArtifactCandidate::new(
                 role,
                 relative.to_string_lossy().replace('\\', "/"),
@@ -402,21 +403,23 @@ pub(crate) fn collect_artifacts_with(
                 std::env::consts::ARCH,
                 bytes,
             )
-            .with_executable(is_executable(&metadata)))
+            .with_executable(executable))
         })
         .collect()
 }
 
-/// Unix 上任一执行位即视为可执行；其他平台没有执行位语义。
+/// Unix 上任一执行位即视为可执行。
 #[cfg(unix)]
-fn is_executable(metadata: &fs::Metadata) -> bool {
+fn is_executable(metadata: &fs::Metadata, _bytes: &[u8]) -> bool {
     use std::os::unix::fs::PermissionsExt;
     metadata.permissions().mode() & 0o111 != 0
 }
 
+/// 其他平台没有执行位语义：按内容识别，交叉编译出的 Linux/macOS 二进制
+/// 交付到 Unix 目标后仍可直接运行。
 #[cfg(not(unix))]
-fn is_executable(_metadata: &fs::Metadata) -> bool {
-    false
+fn is_executable(_metadata: &fs::Metadata, bytes: &[u8]) -> bool {
+    publish_domain::looks_like_executable(bytes)
 }
 
 // ===== Headless 直执行（决议 #80：headless 环境的默认执行实现）=====

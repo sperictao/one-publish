@@ -256,12 +256,7 @@ impl AdapterContract for TemporaryArtifactStore {
             if let Some(parent) = stored_path.parent() {
                 create_directory(parent)?;
             }
-            persist_content_addressed(
-                &stored_path,
-                &artifact.bytes,
-                &artifact.digest,
-                artifact.executable,
-            )?;
+            persist_content_addressed(&stored_path, &artifact.bytes, &artifact.digest)?;
             entries.push(ArtifactManifestEntry {
                 role: artifact.role.clone(),
                 file_name: artifact.file_name.clone(),
@@ -272,6 +267,7 @@ impl AdapterContract for TemporaryArtifactStore {
                 digest: artifact.digest.clone(),
                 locator: stored_path.to_string_lossy().to_string(),
                 retention: format!("{retention_seconds}s"),
+                executable: Some(artifact.executable),
             });
         }
 
@@ -496,12 +492,11 @@ impl AdapterContract for LocalDirectoryDestination {
         create_directory(&directory)?;
 
         for artifact in &manifest.artifacts {
-            let source = Path::new(&artifact.locator);
             let destination = directory.join(&artifact.file_name);
             if let Some(parent) = destination.parent() {
                 create_directory(parent)?;
             }
-            copy_verified(source, &destination, &artifact.digest)?;
+            deliver_verified(artifact, &destination)?;
         }
         fs::write(
             directory.join(DELIVERY_MANIFEST_MARKER),
@@ -663,7 +658,6 @@ fn persist_content_addressed(
     path: &Path,
     bytes: &[u8],
     expected_digest: &str,
-    executable: bool,
 ) -> Result<(), PublishError> {
     let actual_digest = sha256_hex(bytes);
     if actual_digest != expected_digest {
@@ -674,12 +668,7 @@ fn persist_content_addressed(
         });
     }
     if path.exists() {
-        verify_file(path, expected_digest)?;
-        // 可复现构建会命中旧版本以默认权限写入的同内容副本：复用时按本次产物校正。
-        return apply_artifact_permissions(path, executable).map_err(|error| PublishError::Io {
-            operation: format!("set permissions of artifact {}", path.display()),
-            message: error.to_string(),
-        });
+        return verify_file(path, expected_digest);
     }
 
     let sequence = CONTENT_TEMP_SEQUENCE.fetch_add(1, Ordering::Relaxed);
@@ -703,11 +692,7 @@ fn persist_content_addressed(
             operation: format!("create temporary artifact {}", temporary.display()),
             message: error.to_string(),
         })?;
-    // 权限在硬链接发布前落定，内容寻址路径一出现就带着正确的执行位。
-    let write_result = file
-        .write_all(bytes)
-        .and_then(|_| file.sync_all())
-        .and_then(|_| apply_artifact_permissions(&temporary, executable));
+    let write_result = file.write_all(bytes).and_then(|_| file.sync_all());
     drop(file);
     if let Err(error) = write_result {
         let _ = fs::remove_file(&temporary);
@@ -733,37 +718,48 @@ fn persist_content_addressed(
     verify_file(path, expected_digest)
 }
 
-/// Store 副本的权限只由产物决定、与写入进程的 umask 无关：可执行 0o755，其余 0o644。
+/// 交付一个封存条目：字节按摘要校验，权限位按封存执行位设置。Store 副本按
+/// 内容寻址、由同内容的多个集合共享，它的权限位不代表任何一个集合，所以
+/// 不继承；续传时已存在的交付副本同样按封存执行位校正。
+fn deliver_verified(entry: &ArtifactManifestEntry, destination: &Path) -> Result<(), PublishError> {
+    let source = Path::new(&entry.locator);
+    let bytes = read_verified(source, &entry.digest)?;
+    if destination.exists() {
+        verify_file(destination, &entry.digest)?;
+    } else {
+        fs::copy(source, destination).map_err(|error| PublishError::Io {
+            operation: format!("copy {} to {}", source.display(), destination.display()),
+            message: error.to_string(),
+        })?;
+        verify_file(destination, &entry.digest)?;
+    }
+    apply_delivered_mode(destination, entry.delivers_executable(&bytes)).map_err(|error| {
+        PublishError::Io {
+            operation: format!("set permissions of {}", destination.display()),
+            message: error.to_string(),
+        }
+    })
+}
+
 #[cfg(unix)]
-fn apply_artifact_permissions(path: &Path, executable: bool) -> std::io::Result<()> {
+fn apply_delivered_mode(path: &Path, executable: bool) -> std::io::Result<()> {
     use std::os::unix::fs::PermissionsExt;
-    let mode = if executable { 0o755 } else { 0o644 };
-    fs::set_permissions(path, fs::Permissions::from_mode(mode))
+    fs::set_permissions(
+        path,
+        fs::Permissions::from_mode(crate::delivered_file_mode(executable)),
+    )
 }
 
 #[cfg(not(unix))]
-fn apply_artifact_permissions(_path: &Path, _executable: bool) -> std::io::Result<()> {
+fn apply_delivered_mode(_path: &Path, _executable: bool) -> std::io::Result<()> {
     Ok(())
 }
 
-/// 交付副本经 `fs::copy` 继承 Store 副本的权限位（含执行位）。
-fn copy_verified(
-    source: &Path,
-    destination: &Path,
-    expected_digest: &str,
-) -> Result<(), PublishError> {
-    verify_file(source, expected_digest)?;
-    if destination.exists() {
-        return verify_file(destination, expected_digest);
-    }
-    fs::copy(source, destination).map_err(|error| PublishError::Io {
-        operation: format!("copy {} to {}", source.display(), destination.display()),
-        message: error.to_string(),
-    })?;
-    verify_file(destination, expected_digest)
+fn verify_file(path: &Path, expected_digest: &str) -> Result<(), PublishError> {
+    read_verified(path, expected_digest).map(drop)
 }
 
-fn verify_file(path: &Path, expected_digest: &str) -> Result<(), PublishError> {
+fn read_verified(path: &Path, expected_digest: &str) -> Result<Vec<u8>, PublishError> {
     let bytes = fs::read(path).map_err(|error| PublishError::Io {
         operation: format!("read artifact {}", path.display()),
         message: error.to_string(),
@@ -776,7 +772,7 @@ fn verify_file(path: &Path, expected_digest: &str) -> Result<(), PublishError> {
             actual,
         });
     }
-    Ok(())
+    Ok(bytes)
 }
 
 /// 按 Manifest digest 保存的产物集合记录：保留期限与集合内容一起可观察（ADR-0038）。

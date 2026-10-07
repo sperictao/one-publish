@@ -307,6 +307,7 @@ pub fn collect_artifacts(
                 message: error.to_string(),
             })?;
             let (role, media_type) = classify(relative);
+            let executable = is_executable(&metadata, &bytes);
             Ok(ArtifactCandidate::new(
                 role,
                 relative.to_string_lossy().replace('\\', "/"),
@@ -315,20 +316,20 @@ pub fn collect_artifacts(
                 std::env::consts::ARCH,
                 bytes,
             )
-            .with_executable(is_executable(&metadata)))
+            .with_executable(executable))
         })
         .collect()
 }
 
 #[cfg(unix)]
-fn is_executable(metadata: &fs::Metadata) -> bool {
+fn is_executable(metadata: &fs::Metadata, _bytes: &[u8]) -> bool {
     use std::os::unix::fs::PermissionsExt;
     metadata.permissions().mode() & 0o111 != 0
 }
 
 #[cfg(not(unix))]
-fn is_executable(_metadata: &fs::Metadata) -> bool {
-    false
+fn is_executable(_metadata: &fs::Metadata, bytes: &[u8]) -> bool {
+    publish_domain::looks_like_executable(bytes)
 }
 
 // ─── 产物分类函数 ───
