@@ -619,7 +619,7 @@ describe("invoke 失败按界面语言本地化 toast 描述", () => {
     });
 
     expect(mocks.toastError).toHaveBeenCalledWith("打开仓库目录失败", {
-      description: "该路径不是文件夹 | /tmp/file.txt",
+      description: "路径不是文件夹 | /tmp/file.txt",
     });
   });
 

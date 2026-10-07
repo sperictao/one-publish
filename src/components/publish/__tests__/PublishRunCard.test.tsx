@@ -2,8 +2,13 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
 import { PublishRunCard } from "@/components/publish/PublishRunCard";
+import { __setTranslationsCacheForTest } from "@/hooks/useI18n";
 import en from "@/i18n/en.json";
 import zh from "@/i18n/zh.json";
+import { openOutputDirectory } from "@/lib/store/api";
+
+const toast = vi.hoisted(() => ({ success: vi.fn(), error: vi.fn() }));
+vi.mock("sonner", () => ({ toast }));
 
 vi.mock("@/lib/store/api", async () => {
   const actual =
@@ -1110,5 +1115,56 @@ describe("PublishRunCard", () => {
     expect(screen.getByTestId("publish-route-mirror")).toHaveTextContent(
       "simulated delivery failure at mirror.stage"
     );
+  });
+
+  it("打开输出目录失败时按界面语言描述 AppError，而不是渲染 [object Object]", async () => {
+    // 预置翻译缓存，确保点击时 useI18n 已是英文。
+    __setTranslationsCacheForTest({ zh, en });
+    localStorage.setItem("app-language", "en");
+    // Tauri invoke 以 AppError 对象 reject；后端 message 固定为中文。
+    vi.mocked(openOutputDirectory).mockRejectedValue({
+      kind: "export",
+      message: "输出目录不存在",
+      details: "/tmp/output",
+      code: "output_dir_not_found",
+    });
+
+    try {
+      render(
+        <PublishRunCard
+          outputLog=""
+          publishResult={{
+            provider_id: "dotnet",
+            success: true,
+            cancelled: false,
+            error: null,
+            command: {
+              program: "dotnet",
+              args: ["publish"],
+              working_dir: "/tmp",
+              display_command: "dotnet publish",
+              env: [],
+            },
+            output_log: "",
+            output_dir: "/tmp/output",
+            file_count: 3,
+            warnings: null,
+          }}
+          appT={en.app}
+          publishActions={null}
+        />
+      );
+
+      fireEvent.click(screen.getByText("/tmp/output"));
+
+      await waitFor(() =>
+        expect(toast.error).toHaveBeenCalledWith(
+          en.app.openOutputDirectoryFailed,
+          { description: `${en.errors.output_dir_not_found} | /tmp/output` }
+        )
+      );
+    } finally {
+      localStorage.setItem("app-language", "zh");
+    }
   });
 });

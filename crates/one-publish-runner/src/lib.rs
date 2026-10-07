@@ -9,7 +9,10 @@ use std::sync::Arc;
 mod prepare;
 mod staging;
 pub use prepare::{prepare_from_projection, TriggerContext, TriggerInput};
-pub use staging::{load_staged_artifacts, stage_shard_artifacts, SHARD_STAGING_DIRECTORY};
+pub use staging::{
+    load_shard_segments, load_staged_artifacts, stage_shard_artifacts, SHARD_SEGMENTS_DIRECTORY,
+    SHARD_STAGING_DIRECTORY,
+};
 
 use publish_adapters::{
     AdapterConformanceFixture, AdapterRegistry, CancellationSignal, ChecksumProcessor,
@@ -194,14 +197,14 @@ impl StandaloneRunner {
         attempt: &PreparedAttempt,
         attempt_id: &str,
         platform: publish_domain::PlanNodePlatform,
-        staged_artifacts: Vec<publish_domain::ArtifactCandidate>,
+        handoff: publish_runner_core::ShardHandoff,
     ) -> Result<publish_runner_core::ShardOutcome, PublishError> {
         self.ensure_serviceable_attempt(attempt)?;
         self.runtime.start_prepared_shard_with_cancellation(
             &attempt.prepared,
             attempt_id,
             platform,
-            staged_artifacts,
+            handoff,
             &self.cancellation,
         )
     }

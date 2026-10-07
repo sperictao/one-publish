@@ -10,6 +10,7 @@ import {
 } from "@/lib/artifact";
 import { appendExtensionToPath } from "@/lib/paths";
 import { useI18n } from "@/hooks/useI18n";
+import { localizeInvokeError } from "@/lib/tauri/invokeErrors";
 
 function formatBytes(bytes: number) {
   if (!Number.isFinite(bytes)) return "-";
@@ -87,7 +88,7 @@ function ArtifactActionsContent({
       });
     } catch (err) {
       toast.error(artifactT.packageFailed || "打包失败", {
-        description: String(err),
+        description: localizeInvokeError(err, translations),
       });
     } finally {
       setPackaging(false);
@@ -116,7 +117,7 @@ function ArtifactActionsContent({
       }
     } catch (err) {
       toast.error(artifactT.signFailed || "签名失败", {
-        description: String(err),
+        description: localizeInvokeError(err, translations),
       });
     } finally {
       setSigning(false);

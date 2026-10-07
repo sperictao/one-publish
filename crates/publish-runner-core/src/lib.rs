@@ -40,6 +40,14 @@ pub struct ShardOutcome {
     pub artifacts: Vec<ArtifactCandidate>,
 }
 
+/// 外壳交给分片段的跨段输入（决议 #85）：其它段暂存的候选，以及其它段的
+/// 事件段——后者是被依赖节点已在别处完成的证据。build 段为空。
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct ShardHandoff {
+    pub artifacts: Vec<ArtifactCandidate>,
+    pub segment_events: Vec<PublishEvent>,
+}
+
 /// A newly sealed manifest belongs to the exact planning snapshot that produced
 /// it. Promotion is the only exception: it must bind the exact manifest digest
 /// selected in the sealed planning input, never another self-consistent set.
@@ -1857,7 +1865,8 @@ impl PublishRuntime {
     }
 
     /// 分片执行（决议 #85）：只执行分配给指定平台亲和的节点子集，未分配
-    /// 节点跳过而非失败；产出本段事件流与（汇聚段的）完整 Manifest——段
+    /// 节点跳过而非失败，但只有交接事件段里的完成证据能满足对它们的依赖；
+    /// 产出本段事件流与（汇聚段的）完整 Manifest——段
     /// artifact 是自足的远端证据（决议 #88 的传输单元）。Manifest 与
     /// Receipt 的完整性判定发生在全部事件段归约处，本段不做全计划完成
     /// 校验；凭据也只在本段涉及的绑定上解析（Secrets 按段注入）。
@@ -1866,13 +1875,13 @@ impl PublishRuntime {
         prepared: &PreparedPublishPlan,
         attempt_id: &str,
         platform: PlanNodePlatform,
-        staged_artifacts: Vec<ArtifactCandidate>,
+        handoff: ShardHandoff,
     ) -> Result<ShardOutcome, PublishError> {
         self.start_prepared_shard_with_cancellation(
             prepared,
             attempt_id,
             platform,
-            staged_artifacts,
+            handoff,
             &CancellationSignal::default(),
         )
     }
@@ -1884,7 +1893,7 @@ impl PublishRuntime {
         prepared: &PreparedPublishPlan,
         attempt_id: &str,
         platform: PlanNodePlatform,
-        staged_artifacts: Vec<ArtifactCandidate>,
+        handoff: ShardHandoff,
         cancellation: &CancellationSignal,
     ) -> Result<ShardOutcome, PublishError> {
         let current_plan = self.prepare(&prepared.snapshot)?;
@@ -1902,14 +1911,16 @@ impl PublishRuntime {
         validate_plan(plan)?;
         preflight_adapter_contracts(&self.registry, plan)?;
         verify_plan_credentials(&self.registry, plan, Some(platform))?;
+        let completed_elsewhere =
+            completed_in_other_segments(plan, attempt_id, platform, &handoff.segment_events)?;
         // 每段一个 backend run：段身份由 attempt 与亲和确定性推导，同一
         // attempt 的各段在归约处按 backend_run_id 分段合并。
         let backend_run_id = format!("{attempt_id}/{}", platform_segment_name(platform));
         let mut executor =
             RuntimeNodeExecutor::new(&self.registry, plan, attempt_id, &backend_run_id)
                 .with_promoted_manifest_digest(prepared.snapshot.promoted_manifest_digest.as_deref())
-                .with_assigned_platform(platform)
-                .with_staged_artifacts(staged_artifacts)
+                .with_assigned_platform(platform, completed_elsewhere)
+                .with_staged_artifacts(handoff.artifacts)
                 .with_cancellation(cancellation.clone());
         self.registry
             .execute_plan(&plan.execution_backend, plan, &mut executor)?;
@@ -2053,6 +2064,37 @@ pub fn platform_segment_name(platform: PlanNodePlatform) -> &'static str {
     }
 }
 
+/// 跨段依赖证据（决议 #85）：外壳交来的其它段事件经同一 reducer 归约（段内
+/// 序号连续、稳定 Event ID 去重），且必须属于本 attempt 与密封计划。只有分配给
+/// 其它亲和、在段证据中 Completed 的节点能满足本段节点的依赖；缺段或失败段
+/// 不提供证据，依赖它的节点随即失败关闭——与续传（ADR-0040）同一判据。
+fn completed_in_other_segments(
+    plan: &PublishPlan,
+    attempt_id: &str,
+    platform: PlanNodePlatform,
+    events: &[PublishEvent],
+) -> Result<BTreeSet<String>, PublishError> {
+    if let Some(foreign) = events
+        .iter()
+        .find(|event| event.attempt_id != attempt_id || event.plan_digest != plan.digest)
+    {
+        return Err(PublishError::Execution(format!(
+            "handed-off segment event {} belongs to attempt {} with plan {}, expected attempt {attempt_id} with plan {}",
+            foreign.event_id, foreign.attempt_id, foreign.plan_digest, plan.digest
+        )));
+    }
+    let node_states = reduce_publish_events(events, &plan.routes)?.node_states;
+    Ok(plan
+        .nodes
+        .iter()
+        .filter(|node| {
+            node.platform != platform
+                && node_states.get(&node.id) == Some(&PlanNodeExecutionState::Completed)
+        })
+        .map(|node| node.id.clone())
+        .collect())
+}
+
 fn validate_plan(plan: &PublishPlan) -> Result<(), PublishError> {
     if plan.version != PUBLISH_PLAN_VERSION {
         return Err(PublishError::UnsupportedPlanVersion {
@@ -2151,6 +2193,8 @@ struct RuntimeNodeExecutor<'a> {
     interrupted: bool,
     /// 分片执行（决议 #85）：只执行分配给该平台亲和的节点，其余跳过。
     assigned_platform: Option<PlanNodePlatform>,
+    /// 其它段事件证据覆盖的已完成节点：本段跳过它们，但它们能满足依赖。
+    completed_elsewhere: BTreeSet<String>,
     /// 可选的追加持久化边界；生产控制面注入，纯核心调用可保持内存执行。
     persistence: Option<Arc<dyn AttemptPersistencePort>>,
     lease_maintenance: Option<Arc<dyn AttemptLeaseMaintenancePort>>,
@@ -2200,6 +2244,7 @@ impl<'a> RuntimeNodeExecutor<'a> {
             cancellation: CancellationSignal::default(),
             interrupted: false,
             assigned_platform: None,
+            completed_elsewhere: BTreeSet::new(),
             persistence: None,
             lease_maintenance: None,
         }
@@ -2210,8 +2255,13 @@ impl<'a> RuntimeNodeExecutor<'a> {
         self
     }
 
-    fn with_assigned_platform(mut self, platform: PlanNodePlatform) -> Self {
+    fn with_assigned_platform(
+        mut self,
+        platform: PlanNodePlatform,
+        completed_elsewhere: BTreeSet<String>,
+    ) -> Self {
         self.assigned_platform = Some(platform);
+        self.completed_elsewhere = completed_elsewhere;
         self
     }
 
@@ -2901,15 +2951,28 @@ impl PlanNodeExecutor for RuntimeNodeExecutor<'_> {
             self.skipped_nodes.insert(node.id.clone());
             return Ok(());
         }
-        if let Some(missing_dependency) = node
-            .depends_on
-            .iter()
-            .find(|dependency| !self.executed_nodes.contains(*dependency))
-        {
-            return Err(PublishError::Execution(format!(
-                "plan node {} executed before dependency {missing_dependency}",
-                node.id
-            )));
+        if let Some(missing_dependency) = node.depends_on.iter().find(|dependency| {
+            !self.executed_nodes.contains(*dependency)
+                && !self.completed_elsewhere.contains(*dependency)
+        }) {
+            // 依赖分配在其它段：本段只认交接事件段里的完成证据（决议 #85）。
+            let assigned_elsewhere = self.assigned_platform.is_some_and(|platform| {
+                self.expected_nodes
+                    .get(missing_dependency.as_str())
+                    .is_some_and(|dependency| dependency.platform != platform)
+            });
+            let message = if assigned_elsewhere {
+                format!(
+                    "plan node {} depends on {missing_dependency}, which has no completed evidence in the handed-off segments",
+                    node.id
+                )
+            } else {
+                format!(
+                    "plan node {} executed before dependency {missing_dependency}",
+                    node.id
+                )
+            };
+            return Err(PublishError::Execution(message));
         }
 
         self.maintain_lease().map_err(attempt_state_uncertain)?;

@@ -383,10 +383,7 @@ fn output_directory_to_open(output_dir: &str) -> Result<PathBuf, crate::errors::
 
     let path = PathBuf::from(trimmed);
     if !path.exists() {
-        return Err(export_error(
-            format!("输出目录不存在: {}", trimmed),
-            "output_dir_not_found",
-        ));
+        return Err(export_error("输出目录不存在", "output_dir_not_found").with_details(trimmed));
     }
 
     if path.is_dir() {
@@ -396,10 +393,9 @@ fn output_directory_to_open(output_dir: &str) -> Result<PathBuf, crate::errors::
         Some(parent) if path.is_file() && !parent.as_os_str().is_empty() => {
             Ok(parent.to_path_buf())
         }
-        _ => Err(export_error(
-            format!("输出目录不是文件夹: {}", trimmed),
-            "output_dir_not_directory",
-        )),
+        _ => Err(
+            export_error("输出目录不是文件夹", "output_dir_not_directory").with_details(trimmed),
+        ),
     }
 }
 
@@ -768,6 +764,30 @@ mod tests {
     }
 
     #[test]
+    fn not_found_errors_keep_the_path_in_details() {
+        let temp = tempfile::tempdir().expect("temp dir");
+        let missing = temp.path().join("missing").to_string_lossy().to_string();
+
+        let output_error = output_directory_to_open(&missing).unwrap_err();
+        assert_eq!(output_error.message, "输出目录不存在");
+        assert_eq!(output_error.details.as_deref(), Some(missing.as_str()));
+
+        let directory_error =
+            tauri::async_runtime::block_on(open_directory(format!(" {missing} "))).unwrap_err();
+        assert_eq!(directory_error.code.as_deref(), Some("directory_not_found"));
+        assert_eq!(directory_error.details.as_deref(), Some(missing.as_str()));
+
+        let snapshot_error =
+            resolve_execution_snapshot(temp.path(), Some(missing.clone()), None).unwrap_err();
+        assert_eq!(snapshot_error.message, "快照文件不存在");
+        assert_eq!(snapshot_error.details.as_deref(), Some(missing.as_str()));
+
+        let lookup_error = find_latest_snapshot_for_output_dir(temp.path(), &missing).unwrap_err();
+        assert_eq!(lookup_error.message, "未找到输出目录的执行快照");
+        assert_eq!(lookup_error.details.as_deref(), Some(missing.as_str()));
+    }
+
+    #[test]
     fn write_failures_keep_the_io_error_in_details() {
         let temp = tempfile::tempdir().expect("temp dir");
         // 快照根目录被同名文件占据，创建 bucket 目录必然失败。
@@ -788,36 +808,15 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn open_directory_failures_keep_the_path_in_details() {
+    async fn open_directory_rejects_a_file_with_the_path_in_details() {
         let temp = tempfile::tempdir().expect("temp dir");
-        let missing = temp.path().join("missing").to_string_lossy().to_string();
         let file = temp.path().join("file.txt");
         std::fs::write(&file, "not a directory").expect("write file");
         let file = file.to_string_lossy().to_string();
-
-        let error = open_directory(format!(" {missing} ")).await.unwrap_err();
-        assert_eq!(error.code.as_deref(), Some("directory_not_found"));
-        assert_eq!(error.message, "目录不存在");
-        assert_eq!(error.details.as_deref(), Some(missing.as_str()));
 
         let error = open_directory(file.clone()).await.unwrap_err();
         assert_eq!(error.code.as_deref(), Some("directory_not_directory"));
         assert_eq!(error.message, "路径不是文件夹");
         assert_eq!(error.details.as_deref(), Some(file.as_str()));
-    }
-
-    #[test]
-    fn missing_snapshot_errors_keep_the_path_in_details() {
-        let temp = tempfile::tempdir().expect("temp dir");
-        let root = temp.path().join("execution-snapshots");
-
-        let error = resolve_execution_snapshot(&root, Some(" /missing/a.md ".to_string()), None)
-            .unwrap_err();
-        assert_eq!(error.message, "快照文件不存在");
-        assert_eq!(error.details.as_deref(), Some("/missing/a.md"));
-
-        let error = find_latest_snapshot_for_output_dir(&root, " /exports/App ").unwrap_err();
-        assert_eq!(error.message, "未找到输出目录的执行快照");
-        assert_eq!(error.details.as_deref(), Some("/exports/App"));
     }
 }

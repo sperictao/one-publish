@@ -60,7 +60,7 @@ export function useHistoryActions({
   historyT,
   extractSpecFromRecord,
 }: UseHistoryActionsParams) {
-  // 只作为按钮 handler 使用，不驱动 useEffect，translations 可直接进依赖。
+  // 快照回调只作为按钮 handler 使用，不驱动 useEffect，translations 可直接进依赖。
   const { translations } = useI18n();
   const setExecutionSnapshotPath = useAppStore(
     (s) => s.setExecutionSnapshotPath

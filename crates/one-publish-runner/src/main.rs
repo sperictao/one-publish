@@ -81,14 +81,20 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
                     let platform = parse_platform(platform)?;
                     let staging_root =
                         std::path::Path::new(one_publish_runner::SHARD_STAGING_DIRECTORY);
-                    // 产物交接（决议 #85）：汇聚段导入 build 段暂存的候选，
-                    // build 段把本段候选落盘供外壳上传；段 JSON 只含证据。
-                    let staged = if platform == publish_domain::PlanNodePlatform::Any {
-                        one_publish_runner::load_staged_artifacts(staging_root)?
+                    // 跨段交接（决议 #85）：汇聚段导入 build 段暂存的候选与
+                    // 事件段（依赖完成证据），build 段把本段候选落盘供外壳
+                    // 上传；段 JSON 只含证据。
+                    let handoff = if platform == publish_domain::PlanNodePlatform::Any {
+                        publish_runner_core::ShardHandoff {
+                            artifacts: one_publish_runner::load_staged_artifacts(staging_root)?,
+                            segment_events: one_publish_runner::load_shard_segments(
+                                std::path::Path::new(one_publish_runner::SHARD_SEGMENTS_DIRECTORY),
+                            )?,
+                        }
                     } else {
-                        Vec::new()
+                        publish_runner_core::ShardHandoff::default()
                     };
-                    let segment = runner.execute_shard(&attempt, &attempt_id, platform, staged)?;
+                    let segment = runner.execute_shard(&attempt, &attempt_id, platform, handoff)?;
                     if platform != publish_domain::PlanNodePlatform::Any {
                         one_publish_runner::stage_shard_artifacts(
                             staging_root,
