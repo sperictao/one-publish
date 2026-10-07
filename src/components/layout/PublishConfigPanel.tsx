@@ -42,6 +42,7 @@ import { type ConfigProfile } from "@/lib/store/types";
 import type { ParameterValue } from "@/types/parameters";
 import type { PublishComposition } from "@/generated/tauri-contracts";
 import { CompositionEditorDialog } from "@/components/publish/CompositionEditorDialog";
+import { ReleaseSettingsEditorDialog } from "@/components/publish/ReleaseSettingsEditorDialog";
 import { DeleteProfileConfirmDialog } from "@/components/publish/DeleteProfileConfirmDialog";
 import { resolveDotnetProjectProfile } from "@/lib/dotnetProjectProfile";
 import { localizeInvokeError } from "@/lib/tauri/invokeErrors";
@@ -235,6 +236,9 @@ export const PublishConfigPanel = memo(function PublishConfigPanel({
   const [showReorderControls, setShowReorderControls] = useState(false);
   const [compositionProfile, setCompositionProfile] =
     useState<ConfigProfile | null>(null);
+  // ADR-0060：Tauri 发布设置的过渡期表单。
+  const [releaseSettingsProfile, setReleaseSettingsProfile] =
+    useState<ConfigProfile | null>(null);
   const [pendingDeleteProfile, setPendingDeleteProfile] =
     useState<ConfigProfile | null>(null);
   // 决议 #91：安装向导拉起编辑器时预填 github-actions（仅表单初值）。
@@ -271,6 +275,7 @@ export const PublishConfigPanel = memo(function PublishConfigPanel({
   const updateUnavailableLabel =
     t.updateUnavailable || "更新配置（当前 Provider 暂无可用编辑器）";
   const compositionConfigLabel = t.compositionConfig || "发布组合";
+  const releaseSettingsConfigLabel = t.releaseSettingsConfig || "发布设置";
   const configurationBlockedLabel =
     t.configurationBlocked || "配置不可执行：{{reason}}";
   const noConfigsLabel = t.noConfigs || "暂无配置";
@@ -965,6 +970,12 @@ export const PublishConfigPanel = memo(function PublishConfigPanel({
                     onEdit={() => onEditProfile(profile)}
                     onEditComposition={() => setCompositionProfile(profile)}
                     compositionTitle={compositionConfigLabel}
+                    onEditReleaseSettings={
+                      profile.providerId === "tauri"
+                        ? () => setReleaseSettingsProfile(profile)
+                        : undefined
+                    }
+                    releaseSettingsTitle={releaseSettingsConfigLabel}
                     canEdit={!profile.isSystemDefault}
                     viewTitle={viewConfigLabel}
                     editTitle={editConfigLabel}
@@ -1091,6 +1102,7 @@ export const PublishConfigPanel = memo(function PublishConfigPanel({
     editConfigLabel,
     updateUnavailableLabel,
     compositionConfigLabel,
+    releaseSettingsConfigLabel,
     configurationBlockedLabel,
     noConfigsLabel,
     profileGroupLabel,
@@ -1329,6 +1341,12 @@ export const PublishConfigPanel = memo(function PublishConfigPanel({
               setCompositionProfile(profile);
             }
           }}
+          onGuideReleaseSettings={(profileId) => {
+            const profile = profiles.find((entry) => entry.id === profileId);
+            if (profile) {
+              setReleaseSettingsProfile(profile);
+            }
+          }}
           onCreateProfile={onCreateProfile}
         />
       </div>
@@ -1346,6 +1364,21 @@ export const PublishConfigPanel = memo(function PublishConfigPanel({
           initialBackendId={compositionPresetBackendId}
           onSaveComposition={onSaveProfileComposition}
           onRebindProject={onRebindProfileProject}
+        />
+      ) : null}
+
+      {releaseSettingsProfile && selectedRepoScopeId ? (
+        <ReleaseSettingsEditorDialog
+          key={releaseSettingsProfile.id}
+          open
+          onOpenChange={(open) => {
+            if (!open) {
+              setReleaseSettingsProfile(null);
+            }
+          }}
+          repoId={selectedRepoScopeId}
+          profile={releaseSettingsProfile}
+          onSaved={onRefreshProfiles}
         />
       ) : null}
 

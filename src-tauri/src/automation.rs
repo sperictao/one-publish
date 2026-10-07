@@ -2508,6 +2508,38 @@ mod tests {
     }
 
     #[test]
+    fn release_settings_saved_through_the_form_unblock_the_install_preview() {
+        // ADR-0060：新建的 Tauri 配置只经发布设置表单补齐设置，绑定预览即可
+        // 通过，不再报 github_actions_release_config_missing。
+        let (_temp, work) = fixture_repository();
+        let (mut config, profile_id) = fixture_config_for_provider("Stable", "tauri");
+        set_revision_backend(&mut config, &profile_id, GITHUB_ACTIONS_BACKEND_ID);
+        push_github_release_route(&mut config, &profile_id);
+        let install = github_actions_install_request(&profile_id, "binding-stable", "v");
+        let error = preview_change(&work, &config, &install, NOW)
+            .expect_err("a new configuration has no release settings");
+        assert_eq!(
+            error.code.as_deref(),
+            Some("github_actions_release_config_missing")
+        );
+
+        config
+            .update_release_settings(
+                &profile_id,
+                TauriReleaseConfig {
+                    enabled_targets: vec![crate::tauri_release::TauriDesktopTarget::LinuxX64],
+                    ..TauriReleaseConfig::default()
+                },
+                NOW.to_string(),
+            )
+            .expect("save release settings through the form");
+
+        let outcome = preview_change(&work, &config, &install, NOW)
+            .expect("preview after saving release settings");
+        assert_eq!(outcome.targets.len(), 1);
+    }
+
+    #[test]
     fn split_bindings_block_writes_until_an_explicit_consolidating_upgrade() {
         let (_temp, work) = fixture_repository();
         let (mut config, profile_id) = fixture_tauri_config("Stable");

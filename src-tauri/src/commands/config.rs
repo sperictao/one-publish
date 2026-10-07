@@ -215,6 +215,82 @@ mod tests {
         );
     }
 
+    /// ADR-0060：配置备份按敏感键策略剥离发布设置中的 Secret 名称，其余字段
+    /// （含 Updater 公钥）原样往返；导入后的设置仍可解析，Secret 名称需在
+    /// 发布设置表单中补齐。保留 Secret 名称键的备份被整份拒绝。
+    #[test]
+    fn backup_round_trip_strips_secret_names_from_release_settings() {
+        use crate::tauri_release::{
+            release_settings_from_parameters, TauriReleaseConfig, TauriUpdaterSettings,
+        };
+
+        let settings = TauriReleaseConfig {
+            tag_prefix: "app-v".to_string(),
+            required_actions_secret_names: vec!["APPLE_CERTIFICATE".to_string()],
+            actions_secret_environment: BTreeMap::from([(
+                "APPLE_PASSWORD".to_string(),
+                "APPLE_CERTIFICATE_PASSWORD".to_string(),
+            )]),
+            updater: TauriUpdaterSettings {
+                enabled: true,
+                endpoint: Some("https://updates.example.com/latest.json".to_string()),
+                public_key: Some("dW50cnVzdGVkIGNvbW1lbnQ=".to_string()),
+                private_key_secret_name: Some("TAURI_SIGNING_PRIVATE_KEY".to_string()),
+            },
+            ..TauriReleaseConfig::default()
+        };
+        let mut source = RepoPublishConfig::default();
+        source
+            .create_profile(
+                "Desktop".to_string(),
+                "tauri".to_string(),
+                serde_json::json!({ "releaseSettings": settings.clone() }),
+                None,
+                None,
+                "2026-10-07T10:00:00+00:00".to_string(),
+            )
+            .expect("create tauri profile");
+
+        let exported = build_config_export(&source, chrono::Utc::now()).expect("export");
+        let backup: ConfigExport =
+            serde_json::from_str(&serde_json::to_string(&exported).expect("serialize backup"))
+                .expect("parse backup");
+        let profiles = validate_profiles_for_apply(backup.profiles).expect("backup imports");
+        let mut target = test_repo("repo-2");
+        assert_eq!(merge_imported_profiles(&mut target, profiles), 1);
+
+        let revision = target.publish_config.profiles[0]
+            .current_revision()
+            .expect("imported revision");
+        let imported = release_settings_from_parameters(&revision.parameters)
+            .expect("imported settings parse")
+            .expect("imported settings are present");
+        assert!(imported.required_actions_secret_names.is_empty());
+        assert!(imported.actions_secret_environment.is_empty());
+        assert_eq!(imported.updater.private_key_secret_name, None);
+        assert_eq!(imported.updater.public_key, settings.updater.public_key);
+        assert_eq!(imported.updater.endpoint, settings.updater.endpoint);
+        assert_eq!(imported.tag_prefix, "app-v");
+        assert_eq!(imported.app_config_path, settings.app_config_path);
+        assert_eq!(imported.enabled_targets, settings.enabled_targets);
+
+        let hand_edited = ConfigProfile {
+            name: "Hand Edited".to_string(),
+            provider_id: "tauri".to_string(),
+            parameters: BTreeMap::from([(
+                "releaseSettings".to_string(),
+                serde_json::to_value(&settings).expect("serialize settings"),
+            )]),
+            ..import_profile("Hand Edited")
+        };
+        let error = validate_profiles_for_apply(vec![hand_edited])
+            .expect_err("secret-name keys count as credential fields");
+        assert_eq!(
+            error.code.as_deref(),
+            Some("import_config_validation_failed")
+        );
+    }
+
     #[test]
     fn merge_imports_all_new_profiles_and_preserves_fields() {
         let mut repo = test_repo("repo-1");
