@@ -147,6 +147,15 @@ fn build_progress_payload(
     }
 }
 
+/// 检查更新把失败折叠进 `UpdateInfo.message` 而非 reject，这里拼回 details，
+/// 避免静态 message 丢掉底层原因。
+fn updater_error_summary(err: &crate::errors::AppError) -> String {
+    match err.details.as_deref() {
+        Some(details) => format!("{}: {}", err.message, details),
+        None => err.message.clone(),
+    }
+}
+
 fn no_update_info(message: Option<String>) -> UpdateInfo {
     UpdateInfo {
         current_version: env!("CARGO_PKG_VERSION").to_string(),
@@ -175,9 +184,10 @@ fn build_updater(app: &AppHandle) -> Result<Updater, crate::errors::AppError> {
         .build()
         .map_err(|source| {
             crate::errors::AppError::updater_with_code(
-                format!("更新源未配置或不可用: {}", map_updater_error(source)),
+                "更新源未配置或不可用",
                 "updater_not_configured",
             )
+            .with_details(map_updater_error(source))
         })
 }
 
@@ -202,10 +212,8 @@ async fn fetch_remote_update(
 ) -> Result<Option<Update>, crate::errors::AppError> {
     let updater = build_updater(app)?;
     let maybe_update = updater.check().await.map_err(|source| {
-        crate::errors::AppError::updater_with_code(
-            format!("检查更新失败: {}", map_updater_error(source)),
-            "check_update_failed",
-        )
+        crate::errors::AppError::updater_with_code("检查更新失败", "check_update_failed")
+            .with_details(map_updater_error(source))
     })?;
 
     let maybe_update = maybe_update.map(into_downloadable_update);
@@ -354,20 +362,15 @@ async fn download_update_with_retry(
 }
 
 fn download_failure_to_app_error(failure: DownloadFailure) -> crate::errors::AppError {
-    let retry_note = if failure.attempts > 1 {
-        format!("（已自动重试 {} 次）", failure.attempts - 1)
+    let cause = map_updater_error(failure.error);
+    let details = if failure.attempts > 1 {
+        format!("{cause} (retries: {})", failure.attempts - 1)
     } else {
-        String::new()
+        cause
     };
 
-    crate::errors::AppError::updater_with_code(
-        format!(
-            "下载更新失败{}: {}",
-            retry_note,
-            map_updater_error(failure.error)
-        ),
-        "download_update_failed",
-    )
+    crate::errors::AppError::updater_with_code("下载更新失败", "download_update_failed")
+        .with_details(details)
 }
 
 async fn resolve_install_update(
@@ -569,7 +572,7 @@ pub async fn check_update(
         Ok(None) => Ok(no_update_info(None)),
         Err(err) => {
             set_pending_update(pending_update_state.inner(), None);
-            Ok(no_update_info(Some(err.message)))
+            Ok(no_update_info(Some(updater_error_summary(&err))))
         }
     }
 }
@@ -636,10 +639,8 @@ pub async fn install_update(
         ),
     );
     update.install(bytes).map_err(|source| {
-        crate::errors::AppError::updater_with_code(
-            format!("安装更新失败: {}", map_updater_error(source)),
-            "install_update_failed",
-        )
+        crate::errors::AppError::updater_with_code("安装更新失败", "install_update_failed")
+            .with_details(map_updater_error(source))
     })?;
 
     set_pending_update(pending_update_state.inner(), None);
@@ -678,8 +679,8 @@ mod tests {
         download_failure_to_app_error, download_with_retry, extract_http_status_code,
         is_retryable_download_error, is_retryable_status_code, map_updater_error,
         normalize_expected_version, refresh_after_failure_with_fetch, resolve_update_with_fetch,
-        update_metadata_changed, DownloadFailure, PendingUpdateState, UpdateMetadata,
-        UPDATE_DOWNLOAD_MAX_ATTEMPTS,
+        update_metadata_changed, updater_error_summary, DownloadFailure, PendingUpdateState,
+        UpdateMetadata, UPDATE_DOWNLOAD_MAX_ATTEMPTS,
     };
     use crate::errors::{AppError, ErrorKind};
     use std::sync::{Arc, Mutex};
@@ -769,18 +770,32 @@ mod tests {
         let err: AppError = download_failure_to_app_error(network_failure(1, 500));
         assert_eq!(err.kind, ErrorKind::Updater);
         assert_eq!(err.code.as_deref(), Some("download_update_failed"));
-        assert!(!err.message.contains("已自动重试"));
-        assert!(err.message.contains("500"));
+        assert_eq!(err.message, "下载更新失败");
+        let details = err.details.expect("download failure details");
+        assert!(!details.contains("retries"));
+        assert!(details.contains("500"));
     }
 
     #[test]
     fn download_failure_with_multiple_attempts_notes_retry_count() {
-        // attempts=3 -> "已自动重试 2 次"（attempts - 1）
+        // attempts=3 -> "retries: 2"（attempts - 1）
         let err: AppError = download_failure_to_app_error(network_failure(3, 503));
         assert_eq!(err.kind, ErrorKind::Updater);
         assert_eq!(err.code.as_deref(), Some("download_update_failed"));
-        assert!(err.message.contains("已自动重试 2 次"));
-        assert!(err.message.contains("503"));
+        assert_eq!(err.message, "下载更新失败");
+        let details = err.details.expect("download failure details");
+        assert!(details.contains("retries: 2"));
+        assert!(details.contains("503"));
+    }
+
+    #[test]
+    fn updater_error_summary_keeps_the_underlying_cause() {
+        let err = AppError::updater_with_code("检查更新失败", "check_update_failed")
+            .with_details("network down");
+        assert_eq!(updater_error_summary(&err), "检查更新失败: network down");
+
+        let err = AppError::updater_with_code("检查更新失败", "check_update_failed");
+        assert_eq!(updater_error_summary(&err), "检查更新失败");
     }
 
     fn retryable_network_error() -> UpdaterError {

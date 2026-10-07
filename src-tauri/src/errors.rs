@@ -217,8 +217,8 @@ impl From<CompileError> for AppError {
             },
             CompileError::UnsupportedProvider(p) => Self {
                 kind: ErrorKind::UnsupportedProvider,
-                message: format!("unsupported provider: {p}"),
-                details: None,
+                message: "unsupported provider".to_string(),
+                details: Some(p),
                 code: Some("unsupported_provider".to_string()),
             },
             CompileError::RenderError(msg) => Self {
@@ -240,6 +240,8 @@ mod tests {
         let e: AppError = CompileError::UnsupportedProvider("x".to_string()).into();
         assert_eq!(e.kind, ErrorKind::UnsupportedProvider);
         assert_eq!(e.code.as_deref(), Some("unsupported_provider"));
+        assert_eq!(e.message, "unsupported provider");
+        assert_eq!(e.details.as_deref(), Some("x"));
 
         let e: AppError = CompileError::UnsupportedSpecVersion(999).into();
         assert_eq!(e.kind, ErrorKind::UnsupportedSpecVersion);

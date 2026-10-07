@@ -1039,6 +1039,17 @@
     "output_dir_not_found": "The output directory doesn't exist.",
     "output_dir_not_directory": "The output path isn't a folder.",
     "artifact_package_failed": "Couldn't package the artifact.",
-    "artifact_sign_failed": "Couldn't sign the artifact."
+    "artifact_sign_failed": "Couldn't sign the artifact.",
+    "repository_not_found": "Repository not found.",
+    "profile_exists": "A configuration profile with this name already exists.",
+    "profile_revision_not_found": "The configuration profile has no current revision.",
+    "system_profile_immutable": "The system default profile can't be changed.",
+    "profile_rebind_candidate_unresolved": "This repository has no resolvable project candidate to rebind to.",
+    "unsupported_provider": "Unsupported provider.",
+    "provider_schema_load_failed": "Couldn't load the provider's parameter schema.",
+    "updater_not_configured": "The update source isn't configured or is unavailable.",
+    "check_update_failed": "Couldn't check for updates.",
+    "download_update_failed": "Couldn't download the update.",
+    "install_update_failed": "Couldn't install the update."
   }
 }

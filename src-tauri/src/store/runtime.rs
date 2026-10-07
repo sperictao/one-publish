@@ -23,7 +23,7 @@ pub(crate) fn with_read_state<T>(reader: impl FnOnce(&AppState) -> T) -> T {
 }
 
 fn repository_not_found_error(repo_id: &str) -> AppError {
-    AppError::validation_with_code(format!("未找到仓库: {}", repo_id), "repository_not_found")
+    AppError::validation_with_code("未找到仓库", "repository_not_found").with_details(repo_id)
 }
 
 fn provider_requires_project_binding(provider_id: Option<&str>) -> bool {

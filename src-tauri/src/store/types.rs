@@ -689,6 +689,25 @@ pub struct RepoPublishConfig {
     pub applied_bundles: Vec<AppliedProjectionBundle>,
 }
 
+/// 配置查找类错误：message 保持静态，配置 ID / 名称放进 details 供前端按 code 本地化后附加。
+pub(crate) fn profile_not_found_error(profile_id: &str) -> crate::errors::AppError {
+    crate::errors::AppError::validation_with_code("未找到配置文件", "profile_not_found")
+        .with_details(profile_id)
+}
+
+fn profile_exists_error(name: &str) -> crate::errors::AppError {
+    crate::errors::AppError::validation_with_code("配置文件已存在", "profile_exists")
+        .with_details(name)
+}
+
+fn profile_revision_not_found_error(profile_id: &str) -> crate::errors::AppError {
+    crate::errors::AppError::validation_with_code(
+        "配置文件缺少当前修订",
+        "profile_revision_not_found",
+    )
+    .with_details(profile_id)
+}
+
 impl RepoPublishConfig {
     pub(crate) fn is_default(&self) -> bool {
         self.selection.is_none() && self.drafts.is_empty() && self.profiles.is_empty()
@@ -709,10 +728,7 @@ impl RepoPublishConfig {
             .iter()
             .any(|profile| profile.deleted_at.is_none() && profile.name == name)
         {
-            return Err(crate::errors::AppError::validation_with_code(
-                format!("配置文件 '{}' 已存在", name),
-                "profile_exists",
-            ));
+            return Err(profile_exists_error(&name));
         }
 
         let profile = ConfigProfile::new(
@@ -891,10 +907,7 @@ impl RepoPublishConfig {
             .iter()
             .any(|profile| profile.id == profile_id && profile.deleted_at.is_none())
         {
-            return Err(crate::errors::AppError::validation_with_code(
-                format!("未找到配置文件: {profile_id}"),
-                "profile_not_found",
-            ));
+            return Err(profile_not_found_error(profile_id));
         }
 
         self.selection = Some(PublishSelectionRef::Revision {
@@ -923,12 +936,7 @@ impl RepoPublishConfig {
             .profiles
             .iter_mut()
             .find(|profile| profile.id == profile_id && profile.deleted_at.is_none())
-            .ok_or_else(|| {
-                crate::errors::AppError::validation_with_code(
-                    format!("未找到配置文件: {profile_id}"),
-                    "profile_not_found",
-                )
-            })?;
+            .ok_or_else(|| profile_not_found_error(profile_id))?;
 
         if profile.is_system_default {
             return Err(crate::errors::AppError::validation_with_code(
@@ -984,22 +992,14 @@ impl RepoPublishConfig {
         if self.profiles.iter().any(|profile| {
             profile.deleted_at.is_none() && profile.id != profile_id && profile.name == name
         }) {
-            return Err(crate::errors::AppError::validation_with_code(
-                format!("配置文件 '{}' 已存在", name),
-                "profile_exists",
-            ));
+            return Err(profile_exists_error(&name));
         }
 
         let profile = self
             .profiles
             .iter_mut()
             .find(|profile| profile.id == profile_id && profile.deleted_at.is_none())
-            .ok_or_else(|| {
-                crate::errors::AppError::validation_with_code(
-                    format!("未找到配置文件: {profile_id}"),
-                    "profile_not_found",
-                )
-            })?;
+            .ok_or_else(|| profile_not_found_error(profile_id))?;
 
         if profile.is_system_default {
             return Err(crate::errors::AppError::validation_with_code(
@@ -1008,12 +1008,10 @@ impl RepoPublishConfig {
             ));
         }
 
-        let current_revision = profile.current_revision().cloned().ok_or_else(|| {
-            crate::errors::AppError::validation_with_code(
-                format!("配置文件缺少当前修订: {profile_id}"),
-                "profile_revision_not_found",
-            )
-        })?;
+        let current_revision = profile
+            .current_revision()
+            .cloned()
+            .ok_or_else(|| profile_revision_not_found_error(profile_id))?;
         // 组合与参数一样属于修订：未显式携带的更新从当前修订继承，保存不得
         // 把 Backend、Store、Processor 或 Delivery Route 静默重置回默认组合。
         let composition = composition.unwrap_or_else(|| current_revision.composition.clone());
@@ -1079,24 +1077,17 @@ impl RepoPublishConfig {
             .profiles
             .iter_mut()
             .find(|profile| profile.id == profile_id && profile.deleted_at.is_none())
-            .ok_or_else(|| {
-                crate::errors::AppError::validation_with_code(
-                    format!("未找到配置文件: {profile_id}"),
-                    "profile_not_found",
-                )
-            })?;
+            .ok_or_else(|| profile_not_found_error(profile_id))?;
         if profile.is_system_default {
             return Err(crate::errors::AppError::validation_with_code(
                 "不能编辑系统默认配置文件",
                 "system_profile_immutable",
             ));
         }
-        let current = profile.current_revision().cloned().ok_or_else(|| {
-            crate::errors::AppError::validation_with_code(
-                format!("配置文件缺少当前修订: {profile_id}"),
-                "profile_revision_not_found",
-            )
-        })?;
+        let current = profile
+            .current_revision()
+            .cloned()
+            .ok_or_else(|| profile_revision_not_found_error(profile_id))?;
         if current.project_binding.as_deref() == Some(project_binding.as_str()) {
             return Ok(false);
         }

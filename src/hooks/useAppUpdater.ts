@@ -17,6 +17,7 @@ import {
   type UpdaterConfigHealth,
   type UpdaterHelpPaths,
 } from "@/lib/store/types";
+import { localizeInvokeError } from "@/lib/tauri/invokeErrors";
 
 function formatMessage(template: string, ...args: Array<string | number>) {
   let output = template;
@@ -24,23 +25,6 @@ function formatMessage(template: string, ...args: Array<string | number>) {
     output = output.replace("{}", String(arg));
   });
   return output;
-}
-
-function toErrorMessage(error: unknown) {
-  if (error instanceof Error) {
-    return error.message;
-  }
-
-  if (
-    error &&
-    typeof error === "object" &&
-    "message" in error &&
-    typeof error.message === "string"
-  ) {
-    return error.message;
-  }
-
-  return String(error);
 }
 
 interface RefreshOptions {
@@ -112,6 +96,12 @@ export function useAppUpdater() {
   const autoCheckStartedRef = useRef(false);
   const lastNotifiedVersionRef = useRef<string | null>(null);
   const { translations } = useI18n();
+  // 错误文案只在失败时读取最新翻译；不进入回调依赖，避免翻译加载完成时
+  // 重建 checkForUpdates（自动检查 effect 依赖它）。
+  const translationsRef = useRef(translations);
+  useEffect(() => {
+    translationsRef.current = translations;
+  }, [translations]);
   const resetDownloadProgress = useCallback(() => {
     setState((prev) => ({
       ...prev,
@@ -252,7 +242,10 @@ export function useAppUpdater() {
 
         return info;
       } catch (error) {
-        const errorMessage = toErrorMessage(error);
+        const errorMessage = localizeInvokeError(
+          error,
+          translationsRef.current
+        );
         console.error("检查更新失败:", error);
 
         if (!silent) {
@@ -318,7 +311,7 @@ export function useAppUpdater() {
         isRestartRequired,
       }));
     } catch (error) {
-      const errorMessage = toErrorMessage(error);
+      const errorMessage = localizeInvokeError(error, translationsRef.current);
       console.error("安装更新失败:", error);
 
       setState((prev) => ({

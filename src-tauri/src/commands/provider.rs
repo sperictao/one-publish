@@ -21,9 +21,10 @@ pub async fn get_provider_schema(
         .map_err(crate::errors::AppError::from)?;
     let schema = provider.get_schema().map_err(|source| {
         crate::errors::AppError::provider_with_code(
-            format!("failed to load schema: {}", source),
+            "failed to load schema",
             "provider_schema_load_failed",
         )
+        .with_details(source.to_string())
     })?;
     Ok(schema)
 }
@@ -44,9 +45,10 @@ pub async fn import_from_command(
         .map_err(crate::errors::AppError::from)?;
     let schema = provider.get_schema().map_err(|source| {
         crate::errors::AppError::provider_with_code(
-            format!("failed to load schema: {}", source),
+            "failed to load schema",
             "provider_schema_load_failed",
         )
+        .with_details(source.to_string())
     })?;
     let parser = CommandParser::new(provider_id);
     Ok(parser.parse(&command, &schema))

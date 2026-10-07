@@ -1039,6 +1039,17 @@
     "output_dir_not_found": "输出目录不存在",
     "output_dir_not_directory": "输出路径不是文件夹",
     "artifact_package_failed": "无法打包产物",
-    "artifact_sign_failed": "无法签名产物"
+    "artifact_sign_failed": "无法签名产物",
+    "repository_not_found": "未找到仓库",
+    "profile_exists": "已存在同名配置文件",
+    "profile_revision_not_found": "配置文件缺少当前修订",
+    "system_profile_immutable": "系统默认配置文件不可修改",
+    "profile_rebind_candidate_unresolved": "当前仓库没有可解析的项目候选，无法重新绑定",
+    "unsupported_provider": "不支持该 Provider",
+    "provider_schema_load_failed": "无法加载 Provider 参数定义",
+    "updater_not_configured": "更新源未配置或不可用",
+    "check_update_failed": "检查更新失败",
+    "download_update_failed": "下载更新失败",
+    "install_update_failed": "安装更新失败"
   }
 }
