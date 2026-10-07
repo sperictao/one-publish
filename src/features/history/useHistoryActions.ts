@@ -8,9 +8,10 @@ import {
   type HandoffSnippetFormat,
 } from "@/lib/handoffSnippet";
 import type { ProviderPublishSpec } from "@/features/publish/publishRuntime";
+import { useI18n } from "@/hooks/useI18n";
 import { openExecutionSnapshot } from "@/lib/store/api";
 import { type ExecutionRecord } from "@/lib/store/types";
-import { extractInvokeErrorMessage } from "@/lib/tauri/invokeErrors";
+import { localizeInvokeError } from "@/lib/tauri/invokeErrors";
 import { useAppStore } from "@/stores/appStore";
 
 interface TranslationMap {
@@ -59,6 +60,8 @@ export function useHistoryActions({
   historyT,
   extractSpecFromRecord,
 }: UseHistoryActionsParams) {
+  // 只作为按钮 handler 使用，不驱动 useEffect，translations 可直接进依赖。
+  const { translations } = useI18n();
   const setExecutionSnapshotPath = useAppStore(
     (s) => s.setExecutionSnapshotPath
   );
@@ -159,7 +162,7 @@ export function useHistoryActions({
         });
       } catch (err) {
         toast.error(historyT.openSnapshotFailed || "打开执行快照失败", {
-          description: extractInvokeErrorMessage(err),
+          description: localizeInvokeError(err, translations),
         });
       }
     },
@@ -167,6 +170,7 @@ export function useHistoryActions({
       historyT.openSnapshotFailed,
       historyT.snapshotOpened,
       setExecutionSnapshotPath,
+      translations,
     ]
   );
 

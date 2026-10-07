@@ -252,9 +252,10 @@ fn find_latest_snapshot_for_output_dir(
     let dir = execution_snapshot_bucket(root, output_dir)?;
     let not_found = || {
         export_error(
-            format!("未找到输出目录的执行快照: {}", output_dir.trim()),
+            "未找到输出目录的执行快照",
             "snapshot_not_found_for_output_dir",
         )
+        .with_details(output_dir.trim())
     };
     if !dir.is_dir() {
         return Err(not_found());
@@ -310,7 +311,7 @@ fn resolve_execution_snapshot(
     }
 
     Err(match recorded {
-        Some(path) => export_error(format!("快照文件不存在: {path}"), "snapshot_file_not_found"),
+        Some(path) => export_error("快照文件不存在", "snapshot_file_not_found").with_details(path),
         None if snapshot_path.is_some() => {
             export_error("记录中没有快照路径", "snapshot_path_missing")
         }
@@ -346,17 +347,11 @@ pub async fn open_directory(path: String) -> Result<String, crate::errors::AppEr
 
     let directory = PathBuf::from(trimmed);
     if !directory.exists() {
-        return Err(export_error(
-            format!("目录不存在: {}", trimmed),
-            "directory_not_found",
-        ));
+        return Err(export_error("目录不存在", "directory_not_found").with_details(trimmed));
     }
 
     if !directory.is_dir() {
-        return Err(export_error(
-            format!("路径不是文件夹: {}", trimmed),
-            "directory_not_directory",
-        ));
+        return Err(export_error("路径不是文件夹", "directory_not_directory").with_details(trimmed));
     }
 
     open::that(&directory)
@@ -790,5 +785,39 @@ mod tests {
             .details
             .as_deref()
             .is_some_and(|details| !details.is_empty()));
+    }
+
+    #[tokio::test]
+    async fn open_directory_failures_keep_the_path_in_details() {
+        let temp = tempfile::tempdir().expect("temp dir");
+        let missing = temp.path().join("missing").to_string_lossy().to_string();
+        let file = temp.path().join("file.txt");
+        std::fs::write(&file, "not a directory").expect("write file");
+        let file = file.to_string_lossy().to_string();
+
+        let error = open_directory(format!(" {missing} ")).await.unwrap_err();
+        assert_eq!(error.code.as_deref(), Some("directory_not_found"));
+        assert_eq!(error.message, "目录不存在");
+        assert_eq!(error.details.as_deref(), Some(missing.as_str()));
+
+        let error = open_directory(file.clone()).await.unwrap_err();
+        assert_eq!(error.code.as_deref(), Some("directory_not_directory"));
+        assert_eq!(error.message, "路径不是文件夹");
+        assert_eq!(error.details.as_deref(), Some(file.as_str()));
+    }
+
+    #[test]
+    fn missing_snapshot_errors_keep_the_path_in_details() {
+        let temp = tempfile::tempdir().expect("temp dir");
+        let root = temp.path().join("execution-snapshots");
+
+        let error = resolve_execution_snapshot(&root, Some(" /missing/a.md ".to_string()), None)
+            .unwrap_err();
+        assert_eq!(error.message, "快照文件不存在");
+        assert_eq!(error.details.as_deref(), Some("/missing/a.md"));
+
+        let error = find_latest_snapshot_for_output_dir(&root, " /exports/App ").unwrap_err();
+        assert_eq!(error.message, "未找到输出目录的执行快照");
+        assert_eq!(error.details.as_deref(), Some("/exports/App"));
     }
 }

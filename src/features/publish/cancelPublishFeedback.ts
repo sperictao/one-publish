@@ -3,7 +3,7 @@ import type { TranslationMap } from "@/features/publish/publishTransaction";
 export function getCancelPublishFeedback(
   appT: TranslationMap,
   errorCode: string | null,
-  rawErrorMessage: string
+  errorMessage: string
 ): { title: string; description: string } {
   if (errorCode === "publish_cancel_failed") {
     return {
@@ -15,6 +15,6 @@ export function getCancelPublishFeedback(
 
   return {
     title: appT.cancelPublishFailed || "取消发布失败",
-    description: rawErrorMessage,
+    description: errorMessage,
   };
 }

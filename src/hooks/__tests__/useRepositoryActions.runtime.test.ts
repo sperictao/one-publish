@@ -7,6 +7,7 @@ const mocks = vi.hoisted(() => ({
   listProviders: vi.fn(),
   scanProjectCandidates: vi.fn(),
   scanRepositoryBranches: vi.fn(),
+  openDirectory: vi.fn(),
   addRepository: vi.fn(),
   toastLoading: vi.fn(),
   toastSuccess: vi.fn(),
@@ -37,14 +38,20 @@ vi.mock("@/lib/store/api", async () => {
     listProviders: mocks.listProviders,
     scanProjectCandidates: mocks.scanProjectCandidates,
     scanRepositoryBranches: mocks.scanRepositoryBranches,
+    openDirectory: mocks.openDirectory,
   };
 });
 
 import {
   handleAddRepoRuntime,
   handleDetectRepoProviderRuntime,
+  handleEditRepoRuntime,
+  handleOpenRepoDirectoryRuntime,
+  handleRefreshRepoBranchesRuntime,
   handleRemoveRepoRuntime,
 } from "@/features/repository/useRepositoryActions.runtime";
+import en from "@/i18n/en.json";
+import zh from "@/i18n/zh.json";
 import { defaultRepoPublishConfig } from "@/lib/store/types";
 import type { Repository } from "@/lib/store/types";
 
@@ -110,6 +117,7 @@ describe("handleAddRepoRuntime", () => {
   function runAddRepo(overrides: Partial<AddRepoParams> = {}) {
     return handleAddRepoRuntime({
       appT,
+      translations: {},
       providers,
       repositories: [],
       addRepository: mocks.addRepository,
@@ -490,6 +498,7 @@ describe("handleDetectRepoProviderRuntime", () => {
 
     const result = await handleDetectRepoProviderRuntime({
       appT,
+      translations: {},
       path: "/tmp/demo-repo",
       options: { silentSuccess: true, silentFailure: true },
     });
@@ -505,6 +514,7 @@ describe("handleDetectRepoProviderRuntime", () => {
 
     const result = await handleDetectRepoProviderRuntime({
       appT,
+      translations: {},
       path: "/tmp/demo-repo",
     });
 
@@ -530,6 +540,7 @@ describe("handleRemoveRepoRuntime", () => {
         removeRepositoryConfirmOk: "Remove",
         removeRepositoryConfirmCancel: "Cancel",
       },
+      translations: {},
       repo: existingRepo(),
       removeRepository,
     });
@@ -552,6 +563,7 @@ describe("handleRemoveRepoRuntime", () => {
 
     await handleRemoveRepoRuntime({
       appT: {},
+      translations: {},
       repo: existingRepo(),
       removeRepository,
     });
@@ -561,5 +573,155 @@ describe("handleRemoveRepoRuntime", () => {
       cancelLabel: "取消",
     });
     expect(removeRepository).toHaveBeenCalledWith("repo-existing");
+  });
+});
+
+// Tauri invoke 以 AppError 对象 reject；后端 message 恒为中文，界面语言为英文时
+// toast 描述应取 `errors.<code>` 的英文文案并附加语言中立的 details。
+describe("invoke 失败按界面语言本地化 toast 描述", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.askDialog.mockResolvedValue(true);
+  });
+
+  it("打开仓库目录失败：directory_not_found 显示英文文案与路径", async () => {
+    mocks.openDirectory.mockRejectedValue({
+      kind: "export",
+      message: "目录不存在",
+      details: "/tmp/gone",
+      code: "directory_not_found",
+    });
+
+    await handleOpenRepoDirectoryRuntime({
+      appT: en.app,
+      translations: en,
+      repo: existingRepo({ path: "/tmp/gone" }),
+    });
+
+    expect(mocks.toastError).toHaveBeenCalledWith(
+      "Failed to open repository directory",
+      { description: "The directory doesn't exist. | /tmp/gone" }
+    );
+  });
+
+  it("打开仓库目录失败：中文界面显示中文文案", async () => {
+    mocks.openDirectory.mockRejectedValue({
+      kind: "export",
+      message: "路径不是文件夹",
+      details: "/tmp/file.txt",
+      code: "directory_not_directory",
+    });
+
+    await handleOpenRepoDirectoryRuntime({
+      appT: zh.app,
+      translations: zh,
+      repo: existingRepo({ path: "/tmp/file.txt" }),
+    });
+
+    expect(mocks.toastError).toHaveBeenCalledWith("打开仓库目录失败", {
+      description: "该路径不是文件夹 | /tmp/file.txt",
+    });
+  });
+
+  it("拉取分支的未分类失败（timeout）显示本地化文案", async () => {
+    mocks.scanRepositoryBranches.mockRejectedValue({
+      kind: "repository",
+      message: "git branch timed out after 5s",
+      code: "timeout",
+    });
+
+    const result = await handleRefreshRepoBranchesRuntime({
+      appT: zh.app,
+      translations: zh,
+      path: "/tmp/demo-repo",
+    });
+
+    expect(result).toBeNull();
+    expect(mocks.toastError).toHaveBeenCalledWith("拉取分支失败", {
+      description: "Git 命令超时",
+    });
+  });
+
+  it("添加仓库写库失败：store 错误码本地化并附加底层 IO 错误", async () => {
+    mocks.openDialog.mockResolvedValue("/tmp/demo-repo");
+    mocks.detectRepositoryProvider.mockResolvedValue("java");
+    mocks.listProviders.mockResolvedValue([]);
+    mocks.scanProjectCandidates.mockResolvedValue(null);
+    mocks.scanRepositoryBranches.mockResolvedValue({
+      branches: [],
+      current_branch: "main",
+    });
+    mocks.addRepository.mockRejectedValue({
+      kind: "store",
+      message: "写入临时文件失败",
+      details: "No space left on device (os error 28)",
+      code: "store_write_failed",
+    });
+
+    const outcome = await handleAddRepoRuntime({
+      appT: en.app,
+      translations: en,
+      providers: [],
+      repositories: [],
+      addRepository: mocks.addRepository,
+    });
+
+    expect(outcome).toEqual({ status: "failed" });
+    expect(mocks.toastError).toHaveBeenCalledWith("Failed to add repository", {
+      id: expect.any(String),
+      description:
+        "Couldn't write the settings file. | No space left on device (os error 28)",
+    });
+  });
+
+  it("更新仓库失败：repository_not_found 显示英文文案与仓库 id", async () => {
+    const repo = existingRepo();
+    const updateRepository = vi.fn().mockRejectedValue({
+      kind: "validation",
+      message: "未找到仓库",
+      details: "repo-existing",
+      code: "repository_not_found",
+    });
+
+    const updated = await handleEditRepoRuntime({
+      appT: en.app,
+      translations: en,
+      repo,
+      repositories: [repo],
+      selectedRepoId: null,
+      applySelectedRepositoryProvider: vi.fn(),
+      updateRepository,
+    });
+
+    expect(updated).toBe(false);
+    expect(mocks.toastError).toHaveBeenCalledWith(
+      "Failed to update repository",
+      {
+        description: "Repository not found. | repo-existing",
+      }
+    );
+  });
+
+  it("移除仓库失败：未登记的错误码回落到后端 message 与 details", async () => {
+    const removeRepository = vi.fn().mockRejectedValue({
+      kind: "store",
+      message: "未知存储错误",
+      details: "EIO",
+      code: "unregistered_store_failure",
+    });
+
+    await handleRemoveRepoRuntime({
+      appT: en.app,
+      translations: en,
+      repo: existingRepo(),
+      removeRepository,
+    });
+
+    expect(mocks.toastError).toHaveBeenCalledWith(
+      "Failed to remove repository",
+      {
+        description: "未知存储错误 | EIO",
+      }
+    );
   });
 });

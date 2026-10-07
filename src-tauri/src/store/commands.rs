@@ -546,12 +546,7 @@ pub async fn rebind_profile_project(
         .filter(|profile| profile.deleted_at.is_none())
         .and_then(|profile| profile.current_revision())
         .map(|revision| revision.provider_id.clone())
-        .ok_or_else(|| {
-            AppError::validation_with_code(
-                format!("未找到配置文件: {profile_id}"),
-                "profile_not_found",
-            )
-        })?;
+        .ok_or_else(|| super::types::profile_not_found_error(&profile_id))?;
     let project_binding = repository_project_binding(repo, &provider_id);
     repo.publish_config.rebind_profile_project(
         &profile_id,
@@ -809,10 +804,10 @@ pub async fn set_execution_record_snapshot(
     }
 
     if !found {
-        return Err(AppError::validation_with_code(
-            format!("未找到执行记录: {}", record_id),
-            "execution_record_not_found",
-        ));
+        return Err(
+            AppError::validation_with_code("未找到执行记录", "execution_record_not_found")
+                .with_details(record_id),
+        );
     }
 
     let history = state.execution_history.clone();
