@@ -4,6 +4,7 @@
  * 断言剪贴板内容与 handoffSnippet 构建器的契约（stage 段、cd、命令行）。
  */
 import { test, expect } from "@playwright/test";
+import type { JsonValue } from "@/generated/tauri-contracts";
 import { gotoApp } from "../fixtures/mock-tauri";
 
 test.use({ permissions: ["clipboard-read", "clipboard-write"] });
@@ -13,7 +14,7 @@ function successRecord(overrides: {
   providerId: string;
   projectPath: string;
   commandLine: string;
-  spec: object;
+  spec: { [key: string]: JsonValue };
 }) {
   return {
     id: overrides.id,
