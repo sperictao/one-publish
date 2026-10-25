@@ -222,6 +222,13 @@ pub trait Provider: Send + Sync {
         None
     }
 
+    /// 输出不由 OnePublish 指定时（项目配置直接发布、缺输出历史重跑），向
+    /// 工具链求值构建实际写入的输出目录，返回（保留参数名, 目录）写入 spec
+    /// 供产物收集与 preflight 使用；空实现表示沿用 `infer_output_dir` 静态推断。
+    fn resolve_implicit_output(&self, _spec: &PublishSpec) -> Option<(String, String)> {
+        None
+    }
+
     /// 构建进程成功退出后校验原生输出目录确实含有交付产物；返回 Err 时本次发布
     /// 按失败处理，避免把锁文件等无关内容当作产物交付。空实现表示不做额外校验。
     fn verify_build_output(&self, _output_dir: &Path) -> Result<(), String> {

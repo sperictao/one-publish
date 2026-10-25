@@ -56,6 +56,11 @@
       "flag": "",
       "description": "Delete existing files in the output directory before publishing (app-level behavior)"
     },
+    "publish_dir": {
+      "type": "string",
+      "flag": "",
+      "description": "MSBuild-resolved PublishDir used for artifact collection when the output is decided by the project profile or SDK defaults (app-level behavior; not passed to the build)"
+    },
     "properties": {
       "type": "map",
       "flag": "-p",
